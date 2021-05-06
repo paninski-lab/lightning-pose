@@ -1,0 +1,9 @@
+name: pose-estimation-nets
+channels:
+  - pytorch
+dependencies:
+  - pytorch-lightning
+  - scikit-learn
+  - scipy
+  - torchtyping
+
