@@ -5,7 +5,7 @@ from PIL import Image
 from typing import Callable, Optional, Tuple, List
 
 
-class DGPDataset(torch.utils.data.Dataset):
+class TrackingDataset(torch.utils.data.Dataset):
     def __init__(self,
                  root_directory: str,
                  csv_path: str,
@@ -13,7 +13,7 @@ class DGPDataset(torch.utils.data.Dataset):
                  transform: Optional[Callable] = None
                  ) -> None:
         """
-        Initializes the DGPDataset
+        Initializes the TrackingDataset
         Parameters:
             root_directory (str): path to data directory
             csv_path (str): path to CSV file (within root_directory). CSV file should be
