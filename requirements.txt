@@ -1,3 +1,5 @@
 torch
 torchvision
 pytorch-lightning
+pandas
+pillow
