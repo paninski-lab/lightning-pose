@@ -13,7 +13,7 @@ class TrackingDataset(torch.utils.data.Dataset):
                  transform: Optional[Callable] = None
                  ) -> None:
         """
-        Initializes the TrackingDataset
+        Initializes the Tracking Dataset
         Parameters:
             root_directory (str): path to data directory
             csv_path (str): path to CSV file (within root_directory). CSV file should be
