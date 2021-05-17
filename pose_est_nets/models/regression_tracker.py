@@ -64,8 +64,8 @@ class RegressionTracker(LightningModule):
 		:return: mse loss
 		"""
 		# apply mask
-		y_mask = torch.where(torch.isnan(y), 0.0, y)
-		y_hat_mask = torch.where(torch.isnan(y), 0.0, y_hat)
+		y_mask = torch.where(torch.isnan(y), torch.tensor(0.0, dtype = torch.float), y)
+		y_hat_mask = torch.where(torch.isnan(y), torch.tensor(0.0, dtype = torch.float), y_hat)
 
 		# compute loss
 		loss = F.mse_loss(y_hat_mask, y_mask)
