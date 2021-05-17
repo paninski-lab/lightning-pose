@@ -4,7 +4,7 @@ import pytorch_lightning as pl
 import torchvision.transforms as transforms 
 import argparse 
 parser = argparse.ArgumentParser()
-parser.add_argument("--data_root_dir", type=str, default="/Users/danbiderman/Dropbox/Columbia/1.Dan/Research/Paninski/Video_Datasets/mouseRunningData/", help="path to Rick data")
+parser.add_argument("--data_root_dir", type=str, default="/Users/danbiderman/Dropbox/Columbia/1.Dan/Research/Paninski/Video_Datasets/mouseRunningData", help="path to Rick data")
 args, _ = parser.parse_known_args()
 assert(os.path.isdir(args.data_root_dir))
 def test_init():

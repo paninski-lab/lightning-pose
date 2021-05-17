@@ -3,7 +3,7 @@ import pandas as pd
 from torch.utils.data import DataLoader
 from PIL import Image
 from typing import Callable, Optional, Tuple, List
-
+import os
 
 class TrackingDataset(torch.utils.data.Dataset):
     def __init__(self,
@@ -24,7 +24,7 @@ class TrackingDataset(torch.utils.data.Dataset):
         Returns:
             None
         """
-        csv_data = pd.read_csv(root_directory + csv_path, header=header_rows)
+        csv_data = pd.read_csv(os.path.join(root_directory, csv_path), header=header_rows)
         self.image_names = list(csv_data.iloc[:,0])
         self.labels = torch.tensor(csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32)
         self.transform = transform
@@ -38,7 +38,7 @@ class TrackingDataset(torch.utils.data.Dataset):
         # get img_name from self.image_names
         img_name = self.image_names[idx]
         # read image from file and apply transformations (if any)
-        x = Image.open(self.root_directory + img_name).convert('RGB')
+        x = Image.open(os.path.join(self.root_directory, img_name)).convert('RGB') # Rick's images have 1 color channel; change to 3.
         if self.transform:
             x = self.transform(x)
 
