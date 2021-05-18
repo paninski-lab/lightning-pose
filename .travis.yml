@@ -4,6 +4,7 @@ python:
 	- "3.9"
 os: osx
 install:
+	- pip instll -r requirements.txt
 	- pip install -e .
 script:
 	- pytest
