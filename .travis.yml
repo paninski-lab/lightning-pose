@@ -1,13 +1,16 @@
 language: python
 python:
-	- "3.8"
-	- "3.9"
-os: osx
+  - "3.7"
+os:
+  - osx
+  - linux
+# command to install dependencies
 install:
-	- pip instll -r requirements.txt
-	- pip install -e .
+  - pip install -e .
+# command to run tests
 script:
-	- pytest
+  - pytest
+# only build main
 branches:
-	only:
-	- main
+  only:
+  - main
