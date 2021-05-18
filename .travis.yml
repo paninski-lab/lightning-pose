@@ -1,0 +1,9 @@
+language: python
+os: osx
+install:
+	- pip install -e .
+script:
+	- pytest
+branches:
+	only:
+	- main
