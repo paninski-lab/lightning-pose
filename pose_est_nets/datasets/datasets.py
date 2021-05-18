@@ -5,6 +5,7 @@ from PIL import Image
 from typing import Callable, Optional, Tuple, List
 import os
 
+
 class TrackingDataset(torch.utils.data.Dataset):
     def __init__(self,
                  root_directory: str,
