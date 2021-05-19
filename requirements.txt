@@ -4,3 +4,4 @@ pytorch-lightning
 pandas
 pillow
 pytest
+matplotlib
