@@ -59,13 +59,6 @@ class HeatmapTracker(LightningModule):
         self.batch_size = 16
         self.num_workers = 0
 
-        # freeze all layers but the last
-        if transfer:
-            for child in list(self.feature_extractor.children())[:-1]:
-                for param in child.parameters():
-                    param.requires_grad = False
-            print("Froze all layers but the last.")
-
     def setup(self, stage: Optional[str] = None):
         datalen = self.dataset.__len__()
         self.train_set, self.valid_set, self.test_set = random_split(
