@@ -7,7 +7,6 @@ import torchvision.transforms as transforms
 import pytest
 print(os.getcwd())
 assert(os.path.isdir('toy_datasets'))
-assert(os.path.isfile('/Users/danbiderman/Dropbox/Columbia/1.Dan/Research/pose-estimation-nets/toy_datasets/toymouseRunningData/CollectedData_.csv'))
 @pytest.fixture
 def create_dataset():
 	from pose_est_nets.datasets.datasets import TrackingDataset
