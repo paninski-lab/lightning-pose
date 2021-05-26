@@ -54,8 +54,8 @@ class RegressionTracker(LightningModule):
 		return out
 
 	@staticmethod
-	def regression_loss(y: torch.tensor,
-						y_hat: torch.tensor
+	def regression_loss(labels: torch.tensor,
+						preds: torch.tensor
 						) -> torch.tensor:
 		"""
 		Computes mse loss between ground truth (x,y) coordinates and predicted (x^,y^) coordinates
@@ -63,12 +63,11 @@ class RegressionTracker(LightningModule):
 		:param y_hat: prediction. shape=(num_targets, 2)
 		:return: mse loss
 		"""
-		# apply mask
-		y_mask = torch.where(torch.isnan(y), torch.tensor(0.0, dtype = torch.float), y)
-		y_hat_mask = torch.where(torch.isnan(y), torch.tensor(0.0, dtype = torch.float), y_hat)
-
-		# compute loss
-		loss = F.mse_loss(y_hat_mask, y_mask)
+		# # apply mask
+		# y_mask = torch.where(torch.isnan(y), torch.tensor(0.0, dtype = torch.float), y)
+		# y_hat_mask = torch.where(torch.isnan(y), torch.tensor(0.0, dtype = torch.float), y_hat)
+		mask = labels == labels  # labels is not none, bool.
+		loss = F.mse_loss(torch.masked_select(labels, mask), torch.masked_select(preds, mask))
 
 		return loss
 
