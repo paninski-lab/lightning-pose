@@ -9,7 +9,11 @@ import pytorch_lightning as pl
 from pose_est_nets.models.regression_tracker import RegressionTracker
 from pose_est_nets.models.heatmap_tracker import HeatmapTracker
 
-from pose_est_nets.datasets.datasets import RegressionDataset, HeatmapDataset
+from pose_est_nets.datasets.datasets import (
+    RegressionDataset,
+    HeatmapDataset,
+    TrackingDataModule,
+)
 from typing import Any, Callable, Optional, Tuple, List
 import json
 import matplotlib.pyplot as plt
@@ -23,7 +27,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--train", action="store_true", help="whether or not to train the model"
+        "--no_train", action="store_true", help="whether or not to train the model"
     )
     parser.add_argument(
         "--load", action="store_true", help="set true to load model from checkpoint"
@@ -64,18 +68,29 @@ if __name__ == "__main__":
             "You should set num_workers equal to the number of cpus which is: "
             + str(os.cpu_count())
         )
-    # remember to add assert statements
-    tensortransform = transforms.Compose(
+
+    data_transform = transforms.Compose(
         [
-            transforms.ToTensor()
-            # transforms.ConvertImageDtype(dtype = torch.float64)
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.1636, 0.1636, 0.1636], std=[0.1240, 0.1240, 0.1240]
+            ),
         ]
     )
-    full_data = HeatmapDataset(
+
+    dataset = HeatmapDataset(
         root_directory="./data/mouseRunningData/",
         csv_path="CollectedData_.csv",
         header_rows=[1, 2, 3],
-        transform=tensortransform,
+        transform=data_transform,
+    )
+    
+    datamod = TrackingDataModule(
+        dataset,
+        train_batch_size=args.train_batch_size,
+        validation_batch_size=args.validation_batch_size,
+        test_batch_size=args.test_batch_size,
+        num_workers=args.num_workers,
     )
 
     """
@@ -85,16 +100,15 @@ if __name__ == "__main__":
     101: models.resnet101,
     152: models.resnet152,
     """
-    model = HeatmapTracker(
-        num_targets=17, dataset=full_data, resnet_version=152, transfer=False
-    )
+
+    model = HeatmapTracker(num_targets=17, resnet_version=101, transfer=False)
 
     if args.load:
         model = model.load_from_checkpoint(
             checkpoint_path=args.ckpt,
-            dataset=full_data,
+            dataset=dataset,
             num_targets=17,
-            resnet_version=152,
+            resnet_version=101,
         )
 
     early_stopping = pl.callbacks.EarlyStopping(
@@ -106,15 +120,14 @@ if __name__ == "__main__":
         callbacks=[early_stopping],
         auto_scale_batch_size=False,
     )
-    model.batch_size = args.train_batch_size
-    model.num_workers = args.num_workers
-    if args.train:
-        trainer.fit(model=model)
-    else:
+
+    if args.no_train:
         model.setup()
+    else:
+        trainer.fit(model=model, datamodule=datamod)
 
     if args.predict:
-        predict_dl = model.test_dataloader()
+        predict_dl = datamod.test_dataloader()
         for idx, batch in enumerate(predict_dl):
             x, y = batch
             out = model.forward(x)

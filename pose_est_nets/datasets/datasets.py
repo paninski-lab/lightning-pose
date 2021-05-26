@@ -1,12 +1,13 @@
 import torch
 import pandas as pd
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 import torch.nn.functional as F
 from PIL import Image
 from typing import Callable, Optional, Tuple, List
 import os
 import numpy as np
 from PIL import Image
+import pytorch_lightning as pl
 
 
 class RegressionDataset(torch.utils.data.Dataset):
@@ -145,3 +146,56 @@ class HeatmapDataset(torch.utils.data.Dataset):
             g_y[0] : g_y[1], g_x[0] : g_x[1]
         ]
         return img
+
+
+class TrackingDataModule(pl.LightningDataModule):
+    def __init__(
+        self,
+        dataset,
+        train_batch_size,
+        validation_batch_size,
+        test_batch_size,
+        num_workers,
+    ):
+        super().__init__()
+        self.fulldataset = dataset
+        self.train_batch_size = train_batch_size
+        self.validation_batch_size = validation_batch_size
+        self.test_batch_size = test_batch_size
+        self.num_workers = num_workers
+
+    def setup(self, stage: Optional[str] = None):
+        datalen = self.fulldataset.__len__()
+        self.train_set, self.valid_set, self.test_set = random_split(
+            self.fulldataset,
+            [round(datalen * 0.7), round(datalen * 0.1), round(datalen * 0.2)],
+            generator=torch.Generator().manual_seed(42),
+        )
+
+    def train_dataloader(self):
+        return DataLoader(
+            self.train_set,
+            batch_size=self.train_batch_size,
+            num_workers=self.num_workers,
+        )
+
+    def val_dataloader(self):
+        return DataLoader(
+            self.valid_set,
+            batch_size=self.validation_batch_size,
+            num_workers=self.num_workers,
+        )
+
+    def test_dataloader(self):
+        return DataLoader(
+            self.test_set, batch_size=self.test_batch_size, num_workers=self.num_workers
+        )
+
+    def predict_dataloader(
+        self,
+    ):  # change this, should go through the whole dataset, and maybe make an external function to work with an external dataset
+        # return [pair[0] for pair in DataLoader(self.test_set, batch_size = self.validation_batch_size)]
+        return DataLoader(
+            self.test_set, batch_size=self.test_batch_size, num_workers=0
+        )  # set to 1 for testing purposes
+

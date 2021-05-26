@@ -13,7 +13,6 @@ class HeatmapTracker(LightningModule):
     def __init__(
         self,
         num_targets: int,
-        dataset: str,
         resnet_version: int = 18,
         transfer: Optional[bool] = False,
     ) -> None:
@@ -55,17 +54,8 @@ class HeatmapTracker(LightningModule):
         ]
         self.upsampling_layers = nn.Sequential(*self.upsampling_layers)
 
-        self.dataset = dataset
         self.batch_size = 16
         self.num_workers = 0
-
-    def setup(self, stage: Optional[str] = None):
-        datalen = self.dataset.__len__()
-        self.train_set, self.valid_set, self.test_set = random_split(
-            self.dataset,
-            [round(datalen * 0.7), round(datalen * 0.1), round(datalen * 0.2)],
-            generator=torch.Generator().manual_seed(42),
-        )
 
     def forward(self, x: torch.tensor) -> torch.tensor:
         """
