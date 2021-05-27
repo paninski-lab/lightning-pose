@@ -76,7 +76,6 @@ class TrackingDataModule(pl.LightningDataModule):
         return DataLoader(self.test_set, batch_size=self.test_batch_size, num_workers=self.num_workers)
 
     def predict_dataloader(
-            self):  # TODO: change this, should go through the whole dataset, and maybe make an external function to work with an external dataset
-        # return [pair[0] for pair in DataLoader(self.test_set, batch_size = self.validation_batch_size)]
+            self):
         return DataLoader(self.test_set, batch_size=self.test_batch_size,
-                          num_workers=0)  # set to 1 for testing purposes
+                          num_workers=self.num_workers)

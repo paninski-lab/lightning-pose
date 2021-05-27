@@ -76,7 +76,7 @@ def test_training(initialize_model, initialize_data_module, create_dataset):
         gpus_to_use = 1
     model = initialize_model
     data_module = TrackingDataModule(create_dataset, train_batch_size=4,
-                                     validation_batch_size=2, test_batch_size=2,
+                                     validation_batch_size=2, test_batch_size=1,
                                      num_workers=8)
     trainer = pl.Trainer(gpus=gpus_to_use, max_epochs=1,
                          log_every_n_steps=1,
@@ -84,7 +84,7 @@ def test_training(initialize_model, initialize_data_module, create_dataset):
     trainer.fit(model=model, datamodule=data_module)
     assert(os.path.exists('lightning_logs/version_0/hparams.yaml'))
     assert(os.path.exists('lightning_logs/version_0/checkpoints'))
-    shutil.rmtree('lightning_logs')
+    shutil.rmtree('lightning_logs') # should be at teardown, we may not reach to this line if assert fails.
 
 def test_loss():
     from torch.nn import functional as F
