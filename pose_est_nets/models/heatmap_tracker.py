@@ -3,7 +3,6 @@ import torchvision.models as models
 from torch.nn import functional as F
 from torch import nn
 from pytorch_lightning.core.lightning import LightningModule
-from torch.utils.data import DataLoader, random_split
 from torch.optim import Adam
 from typing import Any, Callable, Optional, Tuple, List
 import numpy as np
@@ -42,7 +41,7 @@ class HeatmapTracker(LightningModule):
         self.upsampling_layers = []
         in_dim = num_filters // 16
         out_dim = 64
-        for i in range(3):
+        for i in range(5):
             self.upsampling_layers += [
                 nn.Conv2d(in_dim, out_dim, kernel_size=3, stride=1, padding=1),
                 nn.Upsample(scale_factor=2, mode="bilinear"),
@@ -50,7 +49,9 @@ class HeatmapTracker(LightningModule):
             in_dim = out_dim
 
         self.upsampling_layers += [
-            nn.Conv2d(in_dim, num_targets, kernel_size=3, stride=1, padding=1)
+            nn.Conv2d(in_dim, in_dim, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(in_dim, num_targets, kernel_size=3, stride=1, padding=1),
+            nn.Sigmoid(),
         ]
         self.upsampling_layers = nn.Sequential(*self.upsampling_layers)
 
@@ -83,7 +84,9 @@ class HeatmapTracker(LightningModule):
         """
         # apply mask
         # compute loss
-        loss = F.mse_loss(y_hat, y)
+        #loss = F.mse_loss(y_hat, y)
+        loss = F.binary_cross_entropy(y_hat, y)
+        
         return loss
 
     def training_step(self, data, batch_idx):
@@ -111,19 +114,3 @@ class HeatmapTracker(LightningModule):
 
     def configure_optimizers(self):
         return Adam(self.parameters(), lr=1e-3)
-
-    def train_dataloader(self):
-        return DataLoader(
-            self.train_set, batch_size=self.batch_size, num_workers=self.num_workers
-        )
-
-    def val_dataloader(self):
-        return DataLoader(
-            self.valid_set, batch_size=self.batch_size, num_workers=self.num_workers
-        )
-
-    def test_dataloader(self):
-        return DataLoader(self.test_set, batch_size=1, num_workers=self.num_workers)
-
-    # def predict(self, batch, batch_idx: int , dataloader_idx: int = None):
-

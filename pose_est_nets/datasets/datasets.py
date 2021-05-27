@@ -114,12 +114,10 @@ class HeatmapDataset(torch.utils.data.Dataset):
                         y[bp_idx].detach().cpu().numpy(),
                     )
                 )
-
         return x, y_heatmap
 
     def gaussian(self, img, pt, sigma=10):
         # Draw a 2D gaussian
-
         # Check that any part of the gaussian is in-bounds
         ul = [int(pt[0] - 3 * sigma), int(pt[1] - 3 * sigma)]
         br = [int(pt[0] + 3 * sigma + 1), int(pt[1] + 3 * sigma + 1)]
@@ -134,14 +132,12 @@ class HeatmapDataset(torch.utils.data.Dataset):
         x0 = y0 = size // 2
         # The gaussian is not normalized, we want the center value to equal 1
         g = np.exp(-((x - x0) ** 2 + (y - y0) ** 2) / (2 * sigma ** 2))
-
         # Usable gaussian range
         g_x = max(0, -ul[0]), min(br[0], img.shape[1]) - ul[0]
         g_y = max(0, -ul[1]), min(br[1], img.shape[0]) - ul[1]
         # Image range
         img_x = max(0, ul[0]), min(br[0], img.shape[1])
         img_y = max(0, ul[1]), min(br[1], img.shape[0])
-
         img[img_y[0] : img_y[1], img_x[0] : img_x[1]] = g[
             g_y[0] : g_y[1], g_x[0] : g_x[1]
         ]

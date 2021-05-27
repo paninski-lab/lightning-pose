@@ -19,7 +19,7 @@ import json
 import matplotlib.pyplot as plt
 import argparse
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageDraw
 import numpy as np
 
 
@@ -58,6 +58,24 @@ def parse_args():
     return args
 
 
+class UnNormalize(object):
+    def __init__(self, mean, std):
+        self.mean = mean
+        self.std = std
+
+    def __call__(self, tensor):
+        """
+        Args:
+            tensor (Tensor): Tensor image of size (C, H, W) to be normalized.
+        Returns:
+            Tensor: Normalized image.
+        """
+        for t, m, s in zip(tensor, self.mean, self.std):
+            t.mul_(s).add_(m)
+            # The normalize code -> t.sub_(m).div_(s)
+        return tensor
+
+
 if __name__ == "__main__":
     args = parse_args()
     output_dir = Path(args.output_dir).resolve()
@@ -78,13 +96,17 @@ if __name__ == "__main__":
         ]
     )
 
+    inverse_normalize = UnNormalize(
+        mean=[0.1636, 0.1636, 0.1636], std=[0.1240, 0.1240, 0.1240]
+    )
+
     dataset = HeatmapDataset(
         root_directory="./data/mouseRunningData/",
         csv_path="CollectedData_.csv",
         header_rows=[1, 2, 3],
         transform=data_transform,
     )
-    
+
     datamod = TrackingDataModule(
         dataset,
         train_batch_size=args.train_batch_size,
@@ -119,10 +141,11 @@ if __name__ == "__main__":
         log_every_n_steps=15,
         callbacks=[early_stopping],
         auto_scale_batch_size=False,
+        max_epochs=100,
     )
 
     if args.no_train:
-        model.setup()
+        datamod.setup()
     else:
         trainer.fit(model=model, datamodule=datamod)
 
@@ -131,30 +154,56 @@ if __name__ == "__main__":
         for idx, batch in enumerate(predict_dl):
             x, y = batch
             out = model.forward(x)
+            x = inverse_normalize(x)
             x = x.squeeze().numpy()
             y = y.squeeze().numpy()
 
             input_img = np.moveaxis(x, 0, -1) * 255
             input_img = input_img.astype(np.uint8)
             input_img = Image.fromarray(input_img)
-
-            idx_dir = output_dir / f"{idx}"
-            idx_dir.mkdir(exist_ok=True, parents=True)
-            input_img.save(idx_dir / "input.png")
+            draw = ImageDraw.Draw(input_img)
+            r = 5
 
             for bp_idx in range(y.shape[0]):
-                background = input_img.copy()
+                label_coords = np.unravel_index(y[bp_idx].argmax(), y[bp_idx].shape)
+                draw.ellipse(
+                    (
+                        label_coords[1] - r,
+                        label_coords[0] - r,
+                        label_coords[1] + r,
+                        label_coords[0] + r,
+                    ),
+                    fill=(255, 0, 0, 0),
+                )
+
+                out_heatmap = out.squeeze().detach().cpu().numpy()[bp_idx]
+                target_coords = np.unravel_index(out_heatmap.argmax(), out_heatmap.shape)
+                draw.ellipse(
+                    (
+                        target_coords[1] - r,
+                        target_coords[0] - r,
+                        target_coords[1] + r,
+                        target_coords[0] + r,
+                    ),
+                    fill=(0, 255, 0, 0),
+                )
+
+                """
                 label_heatmap = y[bp_idx] * 255
                 label_heatmap = label_heatmap.astype(np.uint8)
                 label_heatmap = Image.fromarray(label_heatmap)
                 label_heatmap.save(idx_dir / f"{bp_idx}_label.png")
 
-                background = input_img.copy()
                 out_heatmap = out.squeeze().detach().cpu().numpy()
                 out_heatmap = out_heatmap[bp_idx] * 255
                 out_heatmap = out_heatmap.astype(np.uint8)
                 out_heatmap = Image.fromarray(out_heatmap)
                 out_heatmap.save(idx_dir / f"{bp_idx}_prediction.png")
+                """
+
+
+            input_img.save(output_dir / f"{idx}_image.png")
+
 
     """
     if args.predict:
