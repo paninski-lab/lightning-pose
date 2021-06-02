@@ -39,8 +39,12 @@ class HeatmapTracker(LightningModule):
         self.feature_extractor = nn.Sequential(*layers)
 
         self.upsampling_layers = []
+        # TODO: See if a big image ends up with different spatial resolution
         in_dim = num_filters // 16
         out_dim = 64
+
+        # TODO: Add normalization
+        # TODO: Should depend on input size
         for i in range(5):
             self.upsampling_layers += [
                 nn.Conv2d(in_dim, out_dim, kernel_size=3, stride=1, padding=1),
@@ -48,16 +52,17 @@ class HeatmapTracker(LightningModule):
             ]
             in_dim = out_dim
 
+        # TODO: Move sigmoid after final upsampling
         self.upsampling_layers += [
             nn.Conv2d(in_dim, in_dim, kernel_size=3, stride=1, padding=1),
             nn.Conv2d(in_dim, num_targets, kernel_size=3, stride=1, padding=1),
             nn.Sigmoid(),
         ]
         self.upsampling_layers = nn.Sequential(*self.upsampling_layers)
-
         self.batch_size = 16
         self.num_workers = 0
 
+    # TODO: Separate from training step
     def forward(self, x: torch.tensor) -> torch.tensor:
         """
         Forward pass through the network

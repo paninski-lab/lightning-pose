@@ -84,6 +84,7 @@ class HeatmapDataset(torch.utils.data.Dataset):
         self.image_names = list(csv_data.iloc[:, 0])
         self.labels = torch.tensor(csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32)
         self.labels = torch.reshape(self.labels, (self.labels.shape[0], -1, 2))
+
         self.transform = transform
         self.root_directory = root_directory
         self.num_targets = self.labels.shape[1]
@@ -106,6 +107,7 @@ class HeatmapDataset(torch.utils.data.Dataset):
         y_heatmap = torch.zeros((y.shape[0], x.shape[-2], x.shape[-1]))
 
         # TODO: vectorize this operation
+        # TODO: Compute these in preprocessing rather than on the fly
         for bp_idx in range(y.shape[0]):
             if not torch.any(torch.isnan(y[bp_idx])):
                 y_heatmap[bp_idx] = torch.from_numpy(
@@ -116,11 +118,13 @@ class HeatmapDataset(torch.utils.data.Dataset):
                 )
         return x, y_heatmap
 
+    # TODO: Add link for function
     def gaussian(self, img, pt, sigma=10):
         # Draw a 2D gaussian
         # Check that any part of the gaussian is in-bounds
         ul = [int(pt[0] - 3 * sigma), int(pt[1] - 3 * sigma)]
         br = [int(pt[0] + 3 * sigma + 1), int(pt[1] + 3 * sigma + 1)]
+
         if ul[0] > img.shape[1] or ul[1] >= img.shape[0] or br[0] < 0 or br[1] < 0:
             # If not, just return the image as is
             return img
@@ -130,8 +134,10 @@ class HeatmapDataset(torch.utils.data.Dataset):
         x = np.arange(0, size, 1, float)
         y = x[:, np.newaxis]
         x0 = y0 = size // 2
+
         # The gaussian is not normalized, we want the center value to equal 1
         g = np.exp(-((x - x0) ** 2 + (y - y0) ** 2) / (2 * sigma ** 2))
+
         # Usable gaussian range
         g_x = max(0, -ul[0]), min(br[0], img.shape[1]) - ul[0]
         g_y = max(0, -ul[1]), min(br[1], img.shape[0]) - ul[1]

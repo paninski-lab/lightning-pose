@@ -100,6 +100,7 @@ if __name__ == "__main__":
         mean=[0.1636, 0.1636, 0.1636], std=[0.1240, 0.1240, 0.1240]
     )
 
+    # TODO: Check out label in top left corner
     dataset = HeatmapDataset(
         root_directory="./data/mouseRunningData/",
         csv_path="CollectedData_.csv",
@@ -134,14 +135,14 @@ if __name__ == "__main__":
         )
 
     early_stopping = pl.callbacks.EarlyStopping(
-        monitor="val_loss", patience=5, mode="min"
+        monitor="val_loss", patience=100, mode="min"
     )
     trainer = pl.Trainer(
         gpus=args.num_gpus,
         log_every_n_steps=15,
         callbacks=[early_stopping],
         auto_scale_batch_size=False,
-        max_epochs=100,
+        max_epochs=1000,
     )
 
     if args.no_train:
