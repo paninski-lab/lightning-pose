@@ -8,6 +8,7 @@ import os
 import numpy as np
 from PIL import Image
 import pytorch_lightning as pl
+from tqdm import tqdm
 
 
 class RegressionDataset(torch.utils.data.Dataset):
@@ -85,6 +86,26 @@ class HeatmapDataset(torch.utils.data.Dataset):
         self.labels = torch.tensor(csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32)
         self.labels = torch.reshape(self.labels, (self.labels.shape[0], -1, 2))
 
+        # Compute heatmaps as preprocessing step
+        label_heatmaps = []
+        for idx, y in enumerate(tqdm(self.labels)):
+            x = Image.open(os.path.join(root_directory, self.image_names[idx])).convert(
+                "RGB"
+            )  # Rick's images have 1 color channel; change to 3.
+            if transform:
+                x = transform(x)
+            y_heatmap = np.zeros((y.shape[0], x.shape[-2], x.shape[-1]))
+            # TODO: vectorize this operation
+            # TODO: Compute these in preprocessing rather than on the fly
+            for bp_idx in range(y.shape[0]):
+                if not np.any(np.isnan(y[bp_idx].detach().cpu().numpy())):
+                    y_heatmap[bp_idx] = self.gaussian(
+                        y_heatmap[bp_idx],
+                        y[bp_idx].detach().cpu().numpy(),
+                    )
+            label_heatmaps.append(y_heatmap)
+        self.label_heatmaps = torch.from_numpy(np.asarray(label_heatmaps)).float()
+
         self.transform = transform
         self.root_directory = root_directory
         self.num_targets = self.labels.shape[1]
@@ -101,21 +122,8 @@ class HeatmapDataset(torch.utils.data.Dataset):
         )  # Rick's images have 1 color channel; change to 3.
         if self.transform:
             x = self.transform(x)
-
-        # get labels from self.labels
-        y = self.labels[idx]
-        y_heatmap = torch.zeros((y.shape[0], x.shape[-2], x.shape[-1]))
-
-        # TODO: vectorize this operation
-        # TODO: Compute these in preprocessing rather than on the fly
-        for bp_idx in range(y.shape[0]):
-            if not torch.any(torch.isnan(y[bp_idx])):
-                y_heatmap[bp_idx] = torch.from_numpy(
-                    self.gaussian(
-                        y_heatmap[bp_idx].detach().cpu().numpy(),
-                        y[bp_idx].detach().cpu().numpy(),
-                    )
-                )
+        
+        y_heatmap = self.label_heatmaps[idx]
         return x, y_heatmap
 
     # TODO: Add link for function

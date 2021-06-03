@@ -45,9 +45,11 @@ class HeatmapTracker(LightningModule):
 
         # TODO: Add normalization
         # TODO: Should depend on input size
-        for i in range(5):
+        for i in range(8):
             self.upsampling_layers += [
                 nn.Conv2d(in_dim, out_dim, kernel_size=3, stride=1, padding=1),
+                nn.ReLU(),
+                nn.BatchNorm2d(out_dim),
                 nn.Upsample(scale_factor=2, mode="bilinear"),
             ]
             in_dim = out_dim
@@ -55,10 +57,12 @@ class HeatmapTracker(LightningModule):
         # TODO: Move sigmoid after final upsampling
         self.upsampling_layers += [
             nn.Conv2d(in_dim, in_dim, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(out_dim),
             nn.Conv2d(in_dim, num_targets, kernel_size=3, stride=1, padding=1),
-            nn.Sigmoid(),
         ]
         self.upsampling_layers = nn.Sequential(*self.upsampling_layers)
+        self.sigmoid = nn.Sigmoid()
         self.batch_size = 16
         self.num_workers = 0
 
@@ -69,14 +73,14 @@ class HeatmapTracker(LightningModule):
         :param x: input
         :return: output of network
         """
-        self.feature_extractor.eval()
-        with torch.no_grad():
-            representations = torch.reshape(
-                self.feature_extractor(x), (x.shape[0], -1, 4, 4)
-            )
+        #self.feature_extractor.eval()
+        #with torch.no_grad():
+        representations = torch.reshape(
+            self.feature_extractor(x), (x.shape[0], -1, 4, 4)
+        )
         out = self.upsampling_layers(representations)
         upsample_final = nn.Upsample(size=(x.shape[-2], x.shape[-1]), mode="bilinear")
-        out = upsample_final(out)
+        out = self.sigmoid(upsample_final(out))
         return out
 
     @staticmethod
@@ -89,9 +93,9 @@ class HeatmapTracker(LightningModule):
         """
         # apply mask
         # compute loss
-        #loss = F.mse_loss(y_hat, y)
+        # loss = F.mse_loss(y_hat, y)
         loss = F.binary_cross_entropy(y_hat, y)
-        
+
         return loss
 
     def training_step(self, data, batch_idx):
