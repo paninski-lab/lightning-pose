@@ -6,3 +6,4 @@ pillow
 pytest
 typeguard
 matplotlib
+torchtyping

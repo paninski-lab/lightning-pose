@@ -4,6 +4,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.tuner.tuning import Tuner
 from pose_est_nets.models.regression_tracker import RegressionTracker
 from pose_est_nets.datasets.datasets import TrackingDataset, TrackingDataModule
+from pose_est_nets.callbacks.freeze_unfreeze_callback import FeatureExtractorFreezeUnfreeze
 import matplotlib.pyplot as plt
 import json
 import argparse
@@ -28,6 +29,8 @@ parser.add_argument("--test_batch_size", type=int, default=32)
 parser.add_argument("--num_gpus", type=int, default=0)
 parser.add_argument("--max_epochs", type=int, default=1)
 parser.add_argument("--num_workers", type=int, default=2)
+parser.add_argument("--early_stop_patience", type=int, default=6)
+parser.add_argument("--unfreezing_epoch", type=int, default=50)
 
 args = parser.parse_args()
 
@@ -49,13 +52,16 @@ data_module = TrackingDataModule(dataset,
                                  num_workers=args.num_workers)
 
 early_stopping = pl.callbacks.EarlyStopping(
-    monitor="val_loss", patience=10, mode="min"
+    monitor="val_loss", patience=args.early_stop_patience, mode="min"
 )
 
-trainer = pl.Trainer(#gpus=args.num_gpus,
+transfer_unfreeze_callback = FeatureExtractorFreezeUnfreeze(args.unfreezing_epoch)
+
+trainer = pl.Trainer(gpus=args.num_gpus,
                      log_every_n_steps=15,
-                     callbacks=[early_stopping],
+                     callbacks=[early_stopping, transfer_unfreeze_callback],
                      auto_scale_batch_size=False,
+                     check_val_every_n_epoch=10,
                      max_epochs=args.max_epochs)  # auto_scale_batch_size not working
 
 trainer.fit(model=model, datamodule=data_module)
