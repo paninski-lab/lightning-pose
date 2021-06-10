@@ -58,7 +58,7 @@ class RegressionTracker(LightningModule):
 
     @property
     def final_layer(self):
-        return nn.Linear(self.backbone.fc.in_features, self.num_targets)
+        return nn.ModuleList(nn.Linear(self.backbone.fc.in_features, self.num_targets)) # to be able to send to cuda
 
     @staticmethod
     @typechecked
