@@ -52,13 +52,14 @@ class RegressionTracker(LightningModule):
         # self.feature_extractor = nn.Sequential(*layers)
         # self.final_layer = nn.Linear(num_filters, num_targets)
 
+
     @property
     def feature_extractor(self):
         return grab_layers_sequential(model=self.backbone, last_layer_ind=-2)
 
     @property
     def final_layer(self):
-        return nn.ModuleList(nn.Linear(self.backbone.fc.in_features, self.num_targets)) # to be able to send to cuda
+        return nn.Linear(self.backbone.fc.in_features, self.num_targets).to("cuda" if torch.cuda.is_available() else "cpu")
 
     @staticmethod
     @typechecked
