@@ -2,12 +2,14 @@ import torch
 import pandas as pd
 from torch.utils.data import DataLoader, random_split
 import torch.nn.functional as F
+from torchvision import transforms
 from PIL import Image
 from typing import Callable, Optional, Tuple, List
 import os
 import numpy as np
 from PIL import Image
 import pytorch_lightning as pl
+from deepposekit.utils.keypoints import draw_keypoints
 from tqdm import tqdm
 
 
@@ -157,6 +159,81 @@ class HeatmapDataset(torch.utils.data.Dataset):
         ]
         return img
 
+class DLCHeatmapDataset(torch.utils.data.Dataset):
+    def __init__(
+        self,
+        root_directory: str,
+        csv_path: str,
+        header_rows: Optional[List[int]] = None,
+        transform: Optional[Callable] = None,
+    ) -> None:
+        """
+        Initializes the Tracking Dataset
+        Parameters:
+            root_directory (str): path to data directory
+            csv_path (str): path to CSV file (within root_directory). CSV file should be
+                in the form (image_path, bodypart_1_x, bodypart_1_y, ..., bodypart_n_y)
+                Note: image_path is relative to the given root_directory
+            header_rows (List[int]): (optional) which rows in the csv are header rows
+            transform (torchvision.transforms): (optional) transform to apply to images
+        Returns:
+            None
+        """
+        csv_data = pd.read_csv(
+            os.path.join(root_directory, csv_path), header=header_rows
+        )
+        self.image_names = list(csv_data.iloc[:, 0])
+        self.labels = torch.tensor(csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32)
+        self.labels = torch.reshape(self.labels, (self.labels.shape[0], -1, 2))
+
+        self.downsample_factor = 2 #could change to 0, 2, 3, or 4
+        self.sigma = 5,
+        self.output_sigma = 0.625,
+
+        self.output_shape = (
+            self.height // 2 ** self.downsample_factor,
+            self.width // 2 ** self.downsample_factor,
+        )
+        imgnet_mean = [0.485, 0.456, 0.406]
+        imgnet_std = [0.229, 0.224, 0.225]
+        self.torch_transform = transforms.Compose([ #imagenet normalization
+            transforms.ToTensor(),
+            transforms.Normalize(mean = imgnet_mean, std = imgnet_std)
+        ])
+
+        # Compute heatmaps as preprocessing step
+        label_heatmaps = []
+        for idx, y in enumerate(tqdm(self.labels)):
+            x = Image.open(os.path.join(root_directory, self.image_names[idx])).convert(
+                "RGB" #didn't do this for DLC
+            )  # Rick's images have 1 color channel; change to 3.
+            if transform:
+                x, y = transform(images = np.expand_dims(x, axis = 0), keypoints = np.expand_dims(y, axis = 0)) #check transform and normalization
+            x = self.torch_transform(x)
+            y_heatmap = draw_keypoints(y.detach().cpu().numpy(), x.shape[-2], x.shape[-1], self.output_shape, sigma = self.output_sigma)
+            label_heatmaps.append(y_heatmap)
+       
+        self.label_heatmaps = torch.from_numpy(np.asarray(label_heatmaps)).float()
+        self.transform = transform
+        self.root_directory = root_directory
+        self.num_targets = self.labels.shape[1]
+
+    def __len__(self) -> int:
+        return len(self.image_names)
+
+    def __getitem__(self, idx: int) -> Tuple[torch.tensor, torch.tensor]:
+        # get img_name from self.image_names
+        img_name = self.image_names[idx]
+        # read image from file and apply transformations (if any)
+        x = Image.open(os.path.join(self.root_directory, img_name)).convert( #didn't do this for dlc
+            "RGB"
+        )  # Rick's images have 1 color channel; change to 3.
+        if self.transform:
+            x = self.transform(images = np.expand_dims(x, axis = 0))
+            x = self.torch_transform(x)
+        y_heatmap = self.label_heatmaps[idx]
+        return x, y_heatmap
+
 
 class TrackingDataModule(pl.LightningDataModule):
     def __init__(
@@ -178,7 +255,7 @@ class TrackingDataModule(pl.LightningDataModule):
         datalen = self.fulldataset.__len__()
         self.train_set, self.valid_set, self.test_set = random_split(
             self.fulldataset,
-            [round(datalen * 0.7), round(datalen * 0.1), round(datalen * 0.2)],
+            [round(datalen * 0.8), round(datalen * 0.1), round(datalen * 0.1)],
             generator=torch.Generator().manual_seed(42),
         )
 
