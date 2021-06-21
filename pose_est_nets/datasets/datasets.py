@@ -229,7 +229,7 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
             "RGB"
         )  # Rick's images have 1 color channel; change to 3.
         if self.transform:
-            x = self.transform(images = np.expand_dims(x, axis = 0))
+            x = self.transform(images = np.expand_dims(x, axis = 0)) #check this
             x = self.torch_transform(x)
         y_heatmap = self.label_heatmaps[idx]
         return x, y_heatmap

@@ -176,7 +176,7 @@ class DLC(LightningModule):
         """
         #self.feature_extractor.eval()
         #with torch.no_grad():
-        x = ImageNetPreprocess(network="resnet50", mode="torch")(x) #hopefully works
+        #x = ImageNetPreprocess(network="resnet50", mode="torch")(x) #hopefully works
         representations = self.feature_extractor(x)
         out = self.upsampling_layers(representations)
         return out
