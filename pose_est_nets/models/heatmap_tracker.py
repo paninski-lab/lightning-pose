@@ -5,6 +5,7 @@ from torch import nn
 from pytorch_lightning.core.lightning import LightningModule
 from torch.optim import Adam
 from typing import Any, Callable, Optional, Tuple, List
+from torchtyping import TensorType, patch_typeguard
 import numpy as np
 from tensorflow.keras.applications.resnet50 import preprocess_input #might want to change this
 #from deepposekit.models.layers.convolutional import SubPixelUpscaling
@@ -168,7 +169,7 @@ class DLC(LightningModule):
         self.num_workers = 0
 
     # TODO: Separate from training step
-    def forward(self, x: torch.tensor) -> torch.tensor:
+    def forward(self, x: TensorType["batch", 3, "Height", "Width"]) -> TensorType["batch", self.num_keypoints, "Out_Height", "Out_Width"]:
         """
         Forward pass through the network
         :param x: input
@@ -182,7 +183,7 @@ class DLC(LightningModule):
         return out
 
     @staticmethod
-    def heatmap_loss(y: torch.tensor, y_hat: torch.tensor) -> torch.tensor:
+    def heatmap_loss(y: TensorType["batch", self.num_keypoints, "Out_Height", "Out_Width"], y_hat: TensorType["batch", self.num_keypoints, "Out_Height", "Out_Width"]) -> TensorType[()]:
         """
         Computes mse loss between ground truth (x,y) coordinates and predicted (x^,y^) coordinates
         :param y: ground truth. shape=(num_targets, 2)
