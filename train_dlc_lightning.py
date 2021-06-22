@@ -61,31 +61,33 @@ if (not(args.no_train)):
 else:
 	datamod.setup()
 
-if (args.predict)
-	model.eval()
-    trainer.test(model = model, datamodule = datamod)
-    model.eval()
-    # preds = trainer.predict(model = model, datamodule = datamod, return_predictions = True)
-    preds = {}
-    i = 1
-    f = open('predictions.txt', 'w')
-    predict_dl = datamod.test_dataloader()
-    for batch in predict_dl:
-        if i > 10:
-            break
-        x, y = batch
-        plt.clf()
-        out = model.forward(x)
-        plt.imshow(x[0, 0])
-        preds[i] = out.numpy().tolist()
-        plt.scatter(out.numpy()[:,0::2], out.numpy()[:,1::2], c = 'blue')
-        plt.scatter(y.numpy()[:,0::2], y.numpy()[:,1::2], c = 'orange')
-        plt.savefig("predsdlc/test" + str(i) + ".png")
-        i += 1
-    f.write(json.dumps(preds))
-    f.close()
+# if (args.predict)
+# 	model.eval()
+#     trainer.test(model = model, datamodule = datamod)
+#     model.eval()
+#     # preds = trainer.predict(model = model, datamodule = datamod, return_predictions = True)
+#     preds = {}
+#     i = 1
+#     f = open('predictions.txt', 'w')
+#     predict_dl = datamod.test_dataloader()
+#     for batch in predict_dl:
+#         if i > 10:
+#             break
+#         x, y = batch
+#         plt.clf()
+#         out = model.forward(x)
+#         plt.imshow(x[0, 0])
+#         preds[i] = out.numpy().tolist()
+#         plt.scatter(out.numpy()[:,0::2], out.numpy()[:,1::2], c = 'blue')
+#         plt.scatter(y.numpy()[:,0::2], y.numpy()[:,1::2], c = 'orange')
+#         plt.savefig("predsdlc/test" + str(i) + ".png")
+#         i += 1
+#     f.write(json.dumps(preds))
+#     f.close()
 
 if args.predict:
+    preds = {}
+    f = open('predictions.txt', 'w')
 	model.eval()
     predict_dl = datamod.test_dataloader()
     for idx, batch in enumerate(predict_dl):
@@ -100,7 +102,7 @@ if args.predict:
         input_img = Image.fromarray(input_img)
         draw = ImageDraw.Draw(input_img)
         r = 5
-
+        keypoints = {}
         for bp_idx in range(y.shape[0]):
             label_coords = np.unravel_index(y[bp_idx].argmax(), y[bp_idx].shape)
             draw.ellipse(
@@ -138,7 +140,7 @@ if args.predict:
             """
 
 
-        input_img.save("predsdlc/{idx}_image.png")
+        input_img.save("predsdlclightning/{idx}_image.png")
 
 
 

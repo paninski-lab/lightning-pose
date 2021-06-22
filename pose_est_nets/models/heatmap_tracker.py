@@ -160,8 +160,10 @@ class DLC(LightningModule):
         # TODO: Add normalization
         # TODO: Should depend on input size
         self.num_keypoints = 17
+        padding_dims = compute_same_padding((384/(2**2), 384/(2**2)))
         self.upsampling_layers += [
             nn.PixelShuffle(2),
+            F.pad(padding_dims), #aims to mimic "same" padding from tensorflow
             nn.ConvTranspose2d(in_channels = num_filters, out_channels = self.num_keypoints, kernel_size = (3, 3), stride = (2,2))
         ]
         self.upsampling_layers = nn.Sequential(*self.upsampling_layers)
@@ -222,3 +224,33 @@ class DLC(LightningModule):
 
     def configure_optimizers(self):
         return Adam(self.parameters(), lr=1e-3)
+
+
+def compute_same_padding(img_dims, kernel_dims, stride):
+    in_height, in_width = img_dims
+    filter_height, filter_width = kernel_dims
+    strides=stride
+    out_height = np.ceil(float(in_height) / float(strides[1]))
+    out_width  = np.ceil(float(in_width) / float(strides[2]))
+
+    #The total padding applied along the height and width is computed as:
+
+    if (in_height % strides[1] == 0):
+      pad_along_height = max(filter_height - strides[1], 0)
+    else:
+      pad_along_height = max(filter_height - (in_height % strides[1]), 0)
+    if (in_width % strides[2] == 0):
+      pad_along_width = max(filter_width - strides[2], 0)
+    else:
+      pad_along_width = max(filter_width - (in_width % strides[2]), 0)
+
+    #print(pad_along_height, pad_along_width)
+      
+    #Finally, the padding on the top, bottom, left and right are:
+
+    pad_top = pad_along_height // 2
+    pad_bottom = pad_along_height - pad_top
+    pad_left = pad_along_width // 2
+    pad_right = pad_along_width - pad_left
+
+    return (pad_left, pad_right, pad_top, pad_bottom)
