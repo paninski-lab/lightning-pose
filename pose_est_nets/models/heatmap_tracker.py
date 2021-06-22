@@ -7,7 +7,7 @@ from torch.optim import Adam
 from typing import Any, Callable, Optional, Tuple, List
 from torchtyping import TensorType, patch_typeguard
 import numpy as np
-from tensorflow.keras.applications.resnet50 import preprocess_input #might want to change this
+#from tensorflow.keras.applications.resnet50 import preprocess_input #might want to change this
 #from deepposekit.models.layers.convolutional import SubPixelUpscaling
 
 
@@ -59,8 +59,10 @@ class HeatmapTracker(LightningModule):
 
         # TODO: Move sigmoid after final upsampling
         self.upsampling_layers += [
-            nn.PixelShuffle(2),
-            nn.ConvTranspose2d(stride = )
+            nn.Conv2d(in_dim, in_dim, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(out_dim),
+            nn.Conv2d(in_dim, num_targets, kernel_size=3, stride=1, padding=1),
         ]
         self.upsampling_layers = nn.Sequential(*self.upsampling_layers)
         self.sigmoid = nn.Sigmoid()
@@ -142,7 +144,7 @@ class DLC(LightningModule):
         :param transfer:  Flag to indicate whether this is a transfer learning task or not; defaults to false,
             meaning the entire model will be trained unless this flag is provided
         """
-        super(HeatmapTracker, self).__init__()
+        super(DLC, self).__init__()
         self.__dict__.update(locals())  # todo: what is this?
         resnets = {
             18: models.resnet18,
@@ -170,8 +172,7 @@ class DLC(LightningModule):
         self.batch_size = 16
         self.num_workers = 0
 
-    # TODO: Separate from training step
-    def forward(self, x: TensorType["batch", 3, "Height", "Width"]) -> TensorType["batch", self.num_keypoints, "Out_Height", "Out_Width"]:
+     def forward(self, x: TensorType["batch", 3, "Height", "Width"]) -> TensorType["batch", self.num_keypoints, "Out_Height", "Out_Width"]:
         """
         Forward pass through the network
         :param x: input

@@ -33,6 +33,18 @@ class UnNormalize(object):
             # The normalize code -> t.sub_(m).div_(s)
         return tensor
 
+parser = argparse.ArgumentParser()
+
+parser.add_argument("--no_train", help= "whether you want to skip training the model")
+parser.add_argument("--load", help = "set true to load model from checkpoint")
+parser.add_argument("--predict", help = "whether or not to generate predictions on test data")
+parser.add_argument("--ckpt", type = str, default = "lightning_logs2/version_1/checkpoints/epoch=271-step=12511.ckpt", help = "path to model checkpoint if you want to load model from checkpoint")
+parser.add_argument("--train_batch_size", type = int, default = 16)
+parser.add_argument("--validation_batch_size", type = int, default = 10)
+parser.add_argument("--test_batch_size", type = int, default = 1)
+parser.add_argument("--num_gpus", type = int, default = 1)
+parser.add_argument("--num_workers", type = int, default = 8)
+
 inverse_normalize = UnNormalize(
         mean=[0.1636, 0.1636, 0.1636], std=[0.1240, 0.1240, 0.1240]
     )
@@ -88,7 +100,7 @@ else:
 if args.predict:
     preds = {}
     f = open('predictions.txt', 'w')
-	model.eval()
+    model.eval()
     predict_dl = datamod.test_dataloader()
     for idx, batch in enumerate(predict_dl):
         x, y = batch
