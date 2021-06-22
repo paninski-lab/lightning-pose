@@ -172,7 +172,7 @@ class DLC(LightningModule):
         self.batch_size = 16
         self.num_workers = 0
 
-     def forward(self, x: TensorType["batch", 3, "Height", "Width"]) -> TensorType["batch", self.num_keypoints, "Out_Height", "Out_Width"]:
+    def forward(self, x: TensorType["batch", 3, "Height", "Width"]) -> TensorType["batch", self.num_keypoints, "Out_Height", "Out_Width"]:
         """
         Forward pass through the network
         :param x: input
