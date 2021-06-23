@@ -104,6 +104,9 @@ def test_training(initialize_model, initialize_data_module, create_dataset):
         def on_train_end(self, trainer, pl_module):
             print('training ended')
 
+    early_stopping = pl.callbacks.EarlyStopping(
+        monitor="val_loss", patience=3, mode="min"
+    )
     transfer_unfreeze_callback = FeatureExtractorFreezeUnfreeze(2)
     transfer_unfreeze_tester = FreezingUnfreezingTester()
     gpus_to_use = 0
@@ -116,7 +119,7 @@ def test_training(initialize_model, initialize_data_module, create_dataset):
     trainer = pl.Trainer(gpus=gpus_to_use, max_epochs=3,
                          log_every_n_steps=1,
                          auto_scale_batch_size=False,
-                         callbacks=[transfer_unfreeze_callback, transfer_unfreeze_tester])  # auto_scale_batch_size not working
+                         callbacks=[early_stopping, transfer_unfreeze_callback, transfer_unfreeze_tester])  # auto_scale_batch_size not working
     trainer.fit(model=model, datamodule=data_module)
     assert(os.path.exists('lightning_logs/version_0/hparams.yaml'))
     assert(os.path.exists('lightning_logs/version_0/checkpoints'))

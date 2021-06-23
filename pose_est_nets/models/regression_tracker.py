@@ -47,20 +47,13 @@ class RegressionTracker(LightningModule):
         self.num_targets = num_targets
         self.backbone = grab_resnet_backbone(resnet_version=self.resnet_version,
                                              pretrained=transfer)
-        # num_filters = backbone.fc.in_features  # number of inputs to final linear layer
-        # layers = list(backbone.children())[:-1]  # keeping all layers but the last
-        # self.feature_extractor = nn.Sequential(*layers)
-        # self.final_layer = nn.Linear(num_filters, num_targets)
-        self.feature_extractor = grab_layers_sequential(model=self.backbone, last_layer_ind=-2)
-        self.final_layer = nn.Linear(self.backbone.fc.in_features, self.num_targets).to("cuda" if torch.cuda.is_available() else "cpu")
+    @property
+    def feature_extractor(self):
+        return grab_layers_sequential(model=self.backbone, last_layer_ind=-2)
 
-    # @property
-    # def feature_extractor(self):
-    #     return grab_layers_sequential(model=self.backbone, last_layer_ind=-2)
-    #
-    # @property
-    # def final_layer(self):
-    #     return nn.Linear(self.backbone.fc.in_features, self.num_targets).to("cuda" if torch.cuda.is_available() else "cpu")
+    @property
+    def final_layer(self):
+        return nn.Linear(self.backbone.fc.in_features, self.num_targets).to("cuda" if torch.cuda.is_available() else "cpu")
 
     @staticmethod
     @typechecked
