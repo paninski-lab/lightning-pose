@@ -8,6 +8,7 @@ from pose_est_nets.callbacks.freeze_unfreeze_callback import FeatureExtractorFre
 import matplotlib.pyplot as plt
 import json
 import argparse
+import torch
 
 def set_or_open_folder(folder_path: str) -> str:
     if not os.path.isdir(folder_path):
@@ -61,7 +62,7 @@ callback_list = []
 if args.early_stop_patience<100:
     callback_list.append(early_stopping)
 if args.unfreezing_epoch>0:
-    callbacks_list.append(transfer_unfreeze_callback)
+    callback_list.append(transfer_unfreeze_callback)
 
 trainer = pl.Trainer(gpus=args.num_gpus,
                      log_every_n_steps=15,
@@ -76,7 +77,7 @@ if (args.predict):
     print("Starting to predict test images")
     predictions_folder = set_or_open_folder('preds')
     model.eval()
-    trainer.test(model = model, datamodule = datamod)
+    trainer.test(model = model, datamodule = data_module)
     model.eval()
     preds = {}
     i = 1
