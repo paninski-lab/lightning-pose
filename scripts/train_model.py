@@ -57,9 +57,15 @@ early_stopping = pl.callbacks.EarlyStopping(
 
 transfer_unfreeze_callback = FeatureExtractorFreezeUnfreeze(args.unfreezing_epoch)
 
+callback_list = []
+if args.early_stop_patience<100:
+    callback_list.append(early_stopping)
+if args.unfreezing_epoch>0:
+    callbacks_list.append(transfer_unfreeze_callback)
+
 trainer = pl.Trainer(gpus=args.num_gpus,
                      log_every_n_steps=15,
-                     callbacks=[early_stopping, transfer_unfreeze_callback],
+                     callbacks=callback_list,
                      auto_scale_batch_size=False,
                      check_val_every_n_epoch=10,
                      max_epochs=args.max_epochs)  # auto_scale_batch_size not working
@@ -70,6 +76,8 @@ if (args.predict):
     print("Starting to predict test images")
     predictions_folder = set_or_open_folder('preds')
     model.eval()
+    trainer.test(model = model, datamodule = datamod)
+    model.eval()
     preds = {}
     i = 1
     f = open(os.path.join(predictions_folder, 'predictions.txt'), 'w')
@@ -79,7 +87,7 @@ if (args.predict):
             break
         x, y = batch
         plt.clf()
-        out = model.forward(x)
+        out = model.forward(x.to("cuda" if torch.cuda.is_available() else "cpu"))
         plt.imshow(x[0, 0])
         preds[i] = out.numpy().tolist()
         assert(out == out).squeeze().all()
