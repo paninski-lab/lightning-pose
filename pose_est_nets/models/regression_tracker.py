@@ -53,7 +53,7 @@ class RegressionTracker(LightningModule):
 
     @property
     def final_layer(self):
-        return nn.Linear(self.backbone.fc.in_features, self.num_targets).to("cuda" if torch.cuda.is_available() else "cpu")
+        return nn.Linear(self.backbone.fc.in_features, self.num_targets)#.to("cuda" if torch.cuda.is_available() else "cpu")
 
     @staticmethod
     @typechecked
