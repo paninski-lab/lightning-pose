@@ -88,7 +88,7 @@ if (args.predict):
             break
         x, y = batch
         plt.clf()
-        out = model.forward(x.to("cuda" if torch.cuda.is_available() else "cpu"))
+        out = model.forward(x)
         plt.imshow(x[0, 0])
         preds[i] = out.numpy().tolist()
         assert(out == out).squeeze().all()
