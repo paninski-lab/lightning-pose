@@ -25,13 +25,13 @@ def grab_layers_sequential(model: models.resnet.ResNet,
     layers = list(model.children())[:last_layer_ind + 1]
     return nn.Sequential(*layers)
 
-
 # TODO: verify that the forward pass makes sense, add callback for freeze unfreeze.
 class RegressionTracker(LightningModule):
     def __init__(self,
                  num_targets: int,
                  resnet_version: int = 18,
-                 transfer: Optional[bool] = False
+                 transfer: Optional[bool] = False,
+                 representation_dropout_rate: Optional[float] = 0.2,
                  ) -> None:
         """
         Initializes regression tracker model with resnet backbone
@@ -49,14 +49,7 @@ class RegressionTracker(LightningModule):
                                              pretrained=transfer)
         self.feature_extractor = grab_layers_sequential(model=self.backbone, last_layer_ind=-2)
         self.final_layer = nn.Linear(self.backbone.fc.in_features, self.num_targets)
-
-    # @property
-    # def feature_extractor(self):
-    #     return grab_layers_sequential(model=self.backbone, last_layer_ind=-2)
-    #
-    # @property
-    # def final_layer(self):
-    #     return nn.Linear(self.backbone.fc.in_features, self.num_targets)#.to("cuda" if torch.cuda.is_available() else "cpu")
+        self.representation_dropout = nn.Dropout(p=representation_dropout_rate)
 
     @staticmethod
     @typechecked
@@ -99,7 +92,7 @@ class RegressionTracker(LightningModule):
         x, y = data
         # forward pass
         representation = self.feature_extractor(x)
-        y_hat = self.final_layer(self.reshape_representation(representation))
+        y_hat = self.final_layer(self.representation_dropout(self.reshape_representation(representation)))
         # compute loss
         loss = self.regression_loss(y, y_hat)
         # log training loss

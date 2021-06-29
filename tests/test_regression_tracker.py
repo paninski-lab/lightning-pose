@@ -4,8 +4,10 @@ import torchvision.transforms as transforms
 import pytest
 import pytorch_lightning as pl
 import shutil
+from pose_est_nets.utils.wrappers import predict_plot_test_epoch
+from pose_est_nets.utils.IO import set_or_open_folder, load_object
 
-assert (os.path.isdir('toy_datasets'))
+#assert (os.path.isdir('toy_datasets'))
 
 @pytest.fixture
 def create_dataset():
@@ -32,7 +34,7 @@ def initialize_data_module(create_dataset):
                                      num_workers=8)
     return data_module
 
-def test_preds(initialize_model, create_dataset):
+def test_forward(initialize_model, create_dataset):
     #TODO: separate from specific dataset, push random tensors
     model = initialize_model
     dataset = create_dataset
@@ -40,12 +42,34 @@ def test_preds(initialize_model, create_dataset):
     images, labels = next(iter(dataloader))
     preds = model(images)  # using the forward method without taking grads
     assert (preds.dtype == torch.float)
+    assert (images.shape == (1,3, 406, 396))
     loss = model.regression_loss(labels, preds)
     assert (loss.detach().numpy() > -0.00000001)
     assert (loss.shape == torch.Size([]))  # scalar has size zero in torch
     assert (preds.shape == (1, 34))
     data = torch.ones(size=(1, 3, 2000, 2000)) # huge image
     assert(model.feature_extractor(data).shape==torch.Size([1, 512, 1, 1]))
+
+def test_preds(initialize_model, create_dataset):
+    model = initialize_model
+    dataset = create_dataset
+    dataloader = torch.utils.data.DataLoader(dataset)
+    preds_folder = set_or_open_folder('preds_test')
+    preds_dict = predict_plot_test_epoch(model, dataloader, preds_folder)
+    assert(preds_dict.keys() is not None)
+    assert(len(dataset)+1 == len(os.listdir(preds_folder))) # added 1 for the pkl file
+    preds_dict_loaded = load_object(os.path.join(preds_folder, 'preds'))
+    assert(preds_dict_loaded.keys() == preds_dict.keys())
+
+def test_reprs_dropout(initialize_model, create_dataset):
+    model = initialize_model
+    x = torch.randn(size=(2, 3, 406, 396))
+    representation = model.feature_extractor(x)
+    assert(representation.shape == (2,512,1,1))
+    reshaped_representation = model.reshape_representation(representation)
+    assert(reshaped_representation.shape == (2, 512))
+    drop = model.representation_dropout(reshaped_representation)
+    assert(torch.sum(drop==0.)>1)
 
 
 def test_archi(initialize_model):
