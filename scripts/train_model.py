@@ -9,14 +9,8 @@ import matplotlib.pyplot as plt
 import json
 import argparse
 import torch
-
-def set_or_open_folder(folder_path: str) -> str:
-    if not os.path.isdir(folder_path):
-        os.makedirs(folder_path, exist_ok=True)
-        print("Opened a new folder at: {}".format(folder_path))
-    else:
-        print("The folder already exists at: {}".format(folder_path))
-    return folder_path
+from pose_est_nets.utils.IO import set_or_open_folder
+from pose_est_nets.utils.wrappers import predict_plot_test_epoch
 
 parser = argparse.ArgumentParser()
 
@@ -32,10 +26,15 @@ parser.add_argument("--max_epochs", type=int, default=1)
 parser.add_argument("--num_workers", type=int, default=2)
 parser.add_argument("--early_stop_patience", type=int, default=6)
 parser.add_argument("--unfreezing_epoch", type=int, default=50)
+parser.add_argument("--dropout_rate", type=float, default=0.2)
+
 
 args = parser.parse_args()
 
-model = RegressionTracker(num_targets=34, resnet_version=50, transfer=True)
+model = RegressionTracker(num_targets=34,
+                          resnet_version=50,
+                          transfer=True,
+                          representation_dropout_rate=args.dropout_rate)
 
 # specific to the mouseRunningData
 data_transform = transforms.Compose([
@@ -59,9 +58,9 @@ early_stopping = pl.callbacks.EarlyStopping(
 transfer_unfreeze_callback = FeatureExtractorFreezeUnfreeze(args.unfreezing_epoch)
 
 callback_list = []
-if args.early_stop_patience<100:
+if args.early_stop_patience<100: # patience values above 100 are impractical, train to convergence
     callback_list.append(early_stopping)
-if args.unfreezing_epoch>0:
+if args.unfreezing_epoch>0: # if unfreezing_epoch=0, don't use the callback
     callback_list.append(transfer_unfreeze_callback)
 
 trainer = pl.Trainer(gpus=args.num_gpus,
@@ -74,27 +73,30 @@ trainer = pl.Trainer(gpus=args.num_gpus,
 trainer.fit(model=model, datamodule=data_module)
 
 if (args.predict):
-    print("Starting to predict test images")
-    predictions_folder = set_or_open_folder('preds')
-    model.eval()
-    trainer.test(model = model, datamodule = data_module)
-    model.eval()
-    preds = {}
-    i = 1
-    f = open(os.path.join(predictions_folder, 'predictions.txt'), 'w')
-    predict_dl = data_module.test_dataloader()
-    for batch in predict_dl:
-        if i > 10:
-            break
-        x, y = batch
-        plt.clf()
-        out = model.forward(x)
-        plt.imshow(x[0, 0])
-        preds[i] = out.numpy().tolist()
-        assert(out == out).squeeze().all()
-        plt.scatter(out.numpy()[:,0::2], out.numpy()[:,1::2], c = 'blue')
-        plt.scatter(y.numpy()[:,0::2], y.numpy()[:,1::2], c = 'orange')
-        plt.savefig(os.path.join(predictions_folder, "test" + str(i) + ".png"))
-        i += 1
-    f.write(json.dumps(preds))
-    f.close()
+    print("Finished Training! Starting to predict test images...")
+    preds_folder = set_or_open_folder('preds')
+    preds_dict = predict_plot_test_epoch(model,
+                                         data_module.test_dataloader(),
+                                         preds_folder)
+    # model.eval()
+    # trainer.test(model = model, datamodule = data_module)
+    # model.eval()
+    # preds = {}
+    # i = 1
+    # f = open(os.path.join(predictions_folder, 'predictions.txt'), 'w')
+    # predict_dl = data_module.test_dataloader()
+    # for batch in predict_dl:
+    #     if i > 10:
+    #         break
+    #     x, y = batch
+    #     plt.clf()
+    #     out = model.forward(x)
+    #     plt.imshow(x[0, 0])
+    #     preds[i] = out.numpy().tolist()
+    #     assert(out == out).squeeze().all()
+    #     plt.scatter(out.numpy()[:,0::2], out.numpy()[:,1::2], c = 'blue')
+    #     plt.scatter(y.numpy()[:,0::2], y.numpy()[:,1::2], c = 'orange')
+    #     plt.savefig(os.path.join(predictions_folder, "test" + str(i) + ".png"))
+    #     i += 1
+    # f.write(json.dumps(preds))
+    # f.close()
