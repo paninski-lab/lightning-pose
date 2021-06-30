@@ -156,23 +156,22 @@ class DLC(LightningModule):
         # Using a pretrained ResNet backbone
         backbone = resnets[resnet_version](pretrained=True)
         num_filters = backbone.fc.in_features
-        layers = list(backbone.children())[:-1]
+        layers = list(backbone.children())[:-2] #also excluding the penultimate pooling layer
         self.feature_extractor = nn.Sequential(*layers)
         self.upsampling_layers = []
         # TODO: Add normalization
         # TODO: Should depend on input size
-        self.num_keypoints = 17
-        padding_dims = compute_same_padding((384/(2**2), 384/(2**2)))
-        self.upsampling_layers += [
-            nn.PixelShuffle(2),
-            F.pad(padding_dims), #aims to mimic "same" padding from tensorflow
-            nn.ConvTranspose2d(in_channels = num_filters, out_channels = self.num_keypoints, kernel_size = (3, 3), stride = (2,2))
+        self.num_keypoints = 17 #HARDCODED
+        self.upsampling_layers += [ #shape = [batch, 2048, 12, 12]
+            nn.Upsample(scale_factor = 2), # [batch, 2048, 24, 24]
+            nn.PixelShuffle(2),            # [batch, 512,  48, 48]
+            nn.ConvTranspose2d(in_channels = int(num_filters/4), out_channels = self.num_keypoints, kernel_size = (3, 3), stride = (2,2), padding = (1,1), output_padding = (1,1)) # [batch, 17, 96, 96]
         ]
         self.upsampling_layers = nn.Sequential(*self.upsampling_layers)
         self.batch_size = 16
         self.num_workers = 0
 
-    def forward(self, x: TensorType["batch", 3, "Height", "Width"]) -> TensorType["batch", self.num_keypoints, "Out_Height", "Out_Width"]:
+    def forward(self, x: TensorType["batch", 3, "Height", "Width"]) -> TensorType["batch", 17, "Out_Height", "Out_Width"]:
         """
         Forward pass through the network
         :param x: input
@@ -180,13 +179,12 @@ class DLC(LightningModule):
         """
         #self.feature_extractor.eval()
         #with torch.no_grad():
-        #x = ImageNetPreprocess(network="resnet50", mode="torch")(x) #hopefully works
         representations = self.feature_extractor(x)
         out = self.upsampling_layers(representations)
         return out
 
     @staticmethod
-    def heatmap_loss(y: TensorType["batch", self.num_keypoints, "Out_Height", "Out_Width"], y_hat: TensorType["batch", self.num_keypoints, "Out_Height", "Out_Width"]) -> TensorType[()]:
+    def heatmap_loss(y: TensorType["batch", 17, "Out_Height", "Out_Width"], y_hat: TensorType["batch", 17, "Out_Height", "Out_Width"]) -> TensorType[()]:
         """
         Computes mse loss between ground truth (x,y) coordinates and predicted (x^,y^) coordinates
         :param y: ground truth. shape=(num_targets, 2)
@@ -195,9 +193,9 @@ class DLC(LightningModule):
         """
         # apply mask
         # compute loss
-        loss = F.mse_loss(y_hat, y)
+        mask = y == y # labels is not none, bool.
+        loss = F.mse_loss(torch.masked_select(y_hat, mask), torch.masked_select(y, mask))
         #loss = F.binary_cross_entropy(y_hat, y)
-
         return loss
 
     def training_step(self, data, batch_idx):
@@ -226,7 +224,7 @@ class DLC(LightningModule):
     def configure_optimizers(self):
         return Adam(self.parameters(), lr=1e-3)
 
-
+#NOT USED AT THE MOMENT, BUT WOULD BE GOOD TO FIND SOMETHING SIMILIAR SO CODE IN MORE GENERAL TO OTHER INPUT SIZES BESIDES (384, 384)
 def compute_same_padding(img_dims, kernel_dims, stride):
     in_height, in_width = img_dims
     filter_height, filter_width = kernel_dims

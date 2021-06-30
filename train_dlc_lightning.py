@@ -15,6 +15,9 @@ import argparse
 import pandas as pd
 import imgaug.augmenters as iaa
 from PIL import Image, ImageDraw
+from deepposekit.utils.image import largest_factor
+from deepposekit.models.backend.backend import find_subpixel_maxima
+import numpy as np
 
 class UnNormalize(object):
     def __init__(self, mean, std):
@@ -45,10 +48,7 @@ parser.add_argument("--test_batch_size", type = int, default = 1)
 parser.add_argument("--num_gpus", type = int, default = 1)
 parser.add_argument("--num_workers", type = int, default = 8)
 
-inverse_normalize = UnNormalize(
-        mean=[0.1636, 0.1636, 0.1636], std=[0.1240, 0.1240, 0.1240]
-    )
-
+args = parser.parse_args()
 
 model = DLC(num_targets = 34, resnet_version = 50, transfer = False)
 
@@ -57,14 +57,14 @@ if (args.load):
 
 data_transform = []
 data_transform.append(iaa.Resize({"height": 384, "width": 384})) #dlc dimensions need to be repeatably divisable by 2
-data_transform = iaa.Sequential(transform)
+data_transform = iaa.Sequential(data_transform)
 
-full_data = DLCHeatmapDataset(root_directory= 'mouse_data/data', csv_path='CollectedData_.csv', header_rows=[1, 2], transform=data_transform)
+full_data = DLCHeatmapDataset(root_directory= '../deepposekit-tests/dlc_test/mouse_data/data', csv_path='CollectedData_.csv', header_rows=[1, 2], transform=data_transform)
 datamod = TrackingDataModule(full_data, train_batch_size = 16, validation_batch_size = 10, test_batch_size = 1, num_workers = 8) #dlc configs
 
 
 early_stopping = pl.callbacks.EarlyStopping(
-    monitor="val_loss", patience=100, mode="min"
+    monitor="val_loss", patience=50, mode="min"
 )
 
 trainer = pl.Trainer(gpus=args.num_gpus, log_every_n_steps = 15, callbacks=[early_stopping], auto_scale_batch_size = False, reload_dataloaders_every_epoch=True)
@@ -73,87 +73,45 @@ if (not(args.no_train)):
 else:
 	datamod.setup()
 
-# if (args.predict)
-# 	model.eval()
-#     trainer.test(model = model, datamodule = datamod)
-#     model.eval()
-#     # preds = trainer.predict(model = model, datamodule = datamod, return_predictions = True)
-#     preds = {}
-#     i = 1
-#     f = open('predictions.txt', 'w')
-#     predict_dl = datamod.test_dataloader()
-#     for batch in predict_dl:
-#         if i > 10:
-#             break
-#         x, y = batch
-#         plt.clf()
-#         out = model.forward(x)
-#         plt.imshow(x[0, 0])
-#         preds[i] = out.numpy().tolist()
-#         plt.scatter(out.numpy()[:,0::2], out.numpy()[:,1::2], c = 'blue')
-#         plt.scatter(y.numpy()[:,0::2], y.numpy()[:,1::2], c = 'orange')
-#         plt.savefig("predsdlc/test" + str(i) + ".png")
-#         i += 1
-#     f.write(json.dumps(preds))
-#     f.close()
-
 if args.predict:
     preds = {}
     f = open('predictions.txt', 'w')
     model.eval()
+    trainer.test(model = model, datamodule = datamod)
+    model.eval()
     predict_dl = datamod.test_dataloader()
+    i = 0
     for idx, batch in enumerate(predict_dl):
         x, y = batch
-        out = model.forward(x)
-        x = inverse_normalize(x)
-        x = x.squeeze().numpy()
-        y = y.squeeze().numpy()
-
-        input_img = np.moveaxis(x, 0, -1) * 255
-        input_img = input_img.astype(np.uint8)
-        input_img = Image.fromarray(input_img)
-        draw = ImageDraw.Draw(input_img)
-        r = 5
-        keypoints = {}
+        heatmap_pred = model.forward(x)
+        plt.imshow(heatmap_pred[0, 4])
+        plt.savefig('pred_heatmaps/pred_map' + str(i) + '.png')
+        plt.clf()
+        heatmap_pred = nn.Upsample(scale_factor = 4)(heatmap_pred)
+        heatmap_pred = heatmap_pred[0]
+        plt.imshow(y[0, 4])
+        plt.savefig('gt_heatmaps/gt_map' + str(i) + '.png')
+        plt.clf()
+        y = nn.Upsample(scale_factor = 4)(y)
+        y = y[0]
+        pred_keypoints = torch.empty(size = (y.shape[0], 2))
+        y_keypoints = torch.empty(size = (y.shape[0], 2))
         for bp_idx in range(y.shape[0]):
-            label_coords = np.unravel_index(y[bp_idx].argmax(), y[bp_idx].shape)
-            draw.ellipse(
-                (
-                    label_coords[1] - r,
-                    label_coords[0] - r,
-                    label_coords[1] + r,
-                    label_coords[0] + r,
-                ),
-                fill=(255, 0, 0, 0),
-            )
+            pred_keypoints[bp_idx] = torch.tensor(np.unravel_index(heatmap_pred[bp_idx].argmax(), heatmap_pred[bp_idx].shape))
+            y_keypoints[bp_idx] = torch.tensor(np.unravel_index(y[bp_idx].argmax(), y[bp_idx].shape))
+        
+        #output_shape = full_data.output_shape
+        #kernel_size = np.min(output_shape)
+        #kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
+        #y_hat = find_subpixel_maxima(heatmap_pred.detach(), kernel_size, full_data.output_sigma, upsample_factor=100, coordinate_scale=4.0, confidence_scale = 255.0, data_format = "channels_first")
+        #y_gt = find_subpixel_maxima(y.detach(), kernel_size, full_data.output_sigma, upsample_factor=100, coordinate_scale=4.0, confidence_scale = 255.0, data_format = "channels_first") 
+        #y_hat = y_hat[1:]
+        #y_gt = y_gt[1:]
 
-            out_heatmap = out.squeeze().detach().cpu().numpy()[bp_idx]
-            target_coords = np.unravel_index(out_heatmap.argmax(), out_heatmap.shape)
-            draw.ellipse(
-                (
-                    target_coords[1] - r,
-                    target_coords[0] - r,
-                    target_coords[1] + r,
-                    target_coords[0] + r,
-                ),
-                fill=(0, 255, 0, 0),
-            )
-
-            """
-            label_heatmap = y[bp_idx] * 255
-            label_heatmap = label_heatmap.astype(np.uint8)
-            label_heatmap = Image.fromarray(label_heatmap)
-            label_heatmap.save(idx_dir / f"{bp_idx}_label.png")
-            out_heatmap = out.squeeze().detach().cpu().numpy()
-            out_heatmap = out_heatmap[bp_idx] * 255
-            out_heatmap = out_heatmap.astype(np.uint8)
-            out_heatmap = Image.fromarray(out_heatmap)
-            out_heatmap.save(idx_dir / f"{bp_idx}_prediction.png")
-            """
-
-
-        input_img.save("predsdlclightning/{idx}_image.png")
-
-
-
-
+        plt.imshow(x[0][0])
+        plt.scatter(pred_keypoints[:,1], pred_keypoints[:,0], c = 'blue')
+        plt.scatter(y_keypoints[:,1], y_keypoints[:,0], c = 'orange')
+        plt.savefig('preds_dlc_ptl2/pred' + str(i) + '.png')
+        plt.clf()
+        i += 1
+        

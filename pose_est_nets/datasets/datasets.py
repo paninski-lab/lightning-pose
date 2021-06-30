@@ -186,10 +186,29 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
         self.labels = torch.tensor(csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32)
         self.labels = torch.reshape(self.labels, (self.labels.shape[0], -1, 2))
 
+        #Checks for images with set of keypoints that include any nan, so that they can be excluded from the data entirely
+        #nan_check = torch.isnan(self.labels)
+        #print(nan_check.shape)
+        #nan_check = nan_check[:,:,0]
+        #nan_check = ~nan_check
+        #annotated = torch.all(nan_check, dim = 1)
+        #print(annotated.shape)
+        #annotated_index = torch.where(annotated)
+        #print(annotated_index)
+        #print(self.labels.shape)
+        #self.labels = self.labels[annotated_index]
+        #print(self.labels.shape)
+        #print(len(self.image_names))
+        #self.image_names = [self.image_names[idx] for idx in annotated_index]
+        #print(len(self.image_names))
+        #exit()
+
         self.downsample_factor = 2 #could change to 0, 2, 3, or 4
         self.sigma = 5,
-        self.output_sigma = 0.625,
-
+        #self.output_sigma = 0.625, #might want to check this
+        self.output_sigma = 5
+        self.height = 384
+        self.width = 384
         self.output_shape = (
             self.height // 2 ** self.downsample_factor,
             self.width // 2 ** self.downsample_factor,
@@ -209,11 +228,15 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
             )  # Rick's images have 1 color channel; change to 3.
             if transform:
                 x, y = transform(images = np.expand_dims(x, axis = 0), keypoints = np.expand_dims(y, axis = 0)) #check transform and normalization
+            x = x.squeeze(0)
+            y = y.squeeze(0)
             x = self.torch_transform(x)
-            y_heatmap = draw_keypoints(y.detach().cpu().numpy(), x.shape[-2], x.shape[-1], self.output_shape, sigma = self.output_sigma)
+            y_heatmap = draw_keypoints(y, x.shape[-2], x.shape[-1], self.output_shape, sigma = 5)
             label_heatmaps.append(y_heatmap)
-       
         self.label_heatmaps = torch.from_numpy(np.asarray(label_heatmaps)).float()
+        self.label_heatmaps = self.label_heatmaps.permute(0, 3, 1, 2)
+        #check that nan keypoints are producing heatmaps of zeros
+        #check that max of heatmaps look good
         self.transform = transform
         self.root_directory = root_directory
         self.num_targets = self.labels.shape[1]
@@ -230,10 +253,36 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
         )  # Rick's images have 1 color channel; change to 3.
         if self.transform:
             x = self.transform(images = np.expand_dims(x, axis = 0)) #check this
+            x = x.squeeze(0)
             x = self.torch_transform(x)
         y_heatmap = self.label_heatmaps[idx]
         return x, y_heatmap
 
+
+def draw_keypoints(keypoints, height, width, output_shape, sigma=1, normalize=True):
+    keypoints = keypoints.copy()
+    n_keypoints = keypoints.shape[0]
+    out_height = output_shape[0]
+    out_width = output_shape[1]
+    keypoints[:, 1] *= out_height / height
+    keypoints[:, 0] *= out_width / width
+    confidence = np.zeros((out_height, out_width, n_keypoints))
+    xv = np.arange(out_width)
+    yv = np.arange(out_height)
+    xx, yy = np.meshgrid(xv, yv)
+    for idx in range(n_keypoints):
+        keypoint = keypoints[idx]
+        if np.any(keypoint != keypoint): #keeps heatmaps with nans as all zeros
+            continue
+        gaussian = (yy - keypoint[1]) ** 2
+        gaussian += (xx - keypoint[0]) ** 2
+        gaussian *= -1
+        gaussian /= 2 * sigma ** 2
+        gaussian = np.exp(gaussian)
+        confidence[..., idx] = gaussian
+    if not normalize:
+        confidence /= sigma * np.sqrt(2 * np.pi)
+    return confidence
 
 class TrackingDataModule(pl.LightningDataModule):
     def __init__(
@@ -253,9 +302,11 @@ class TrackingDataModule(pl.LightningDataModule):
 
     def setup(self, stage: Optional[str] = None):
         datalen = self.fulldataset.__len__()
+        print(datalen)
+        print(round(datalen * 0.8) + round(datalen * 0.1) + round(datalen * 0.1))
         self.train_set, self.valid_set, self.test_set = random_split(
             self.fulldataset,
-            [round(datalen * 0.8), round(datalen * 0.1), round(datalen * 0.1)],
+            [round(datalen * 0.8) + 1, round(datalen * 0.1), round(datalen * 0.1)], #hardcoded solution to rounding error
             generator=torch.Generator().manual_seed(42),
         )
 
