@@ -36,6 +36,91 @@ class UnNormalize(object):
             # The normalize code -> t.sub_(m).div_(s)
         return tensor
 
+def upsampleArgmax(heatmap_pred, heatmap_y):
+    heatmap_pred = nn.Upsample(scale_factor = 4)(heatmap_pred)
+    heatmap_pred = heatmap_pred[0]
+    y = nn.Upsample(scale_factor = 4)(heatmap_y)
+    y = y[0]
+    pred_keypoints = torch.empty(size = (y.shape[0], 2))
+    y_keypoints = torch.empty(size = (y.shape[0], 2))
+    for bp_idx in range(y.shape[0]):
+        pred_keypoints[bp_idx] = torch.tensor(np.unravel_index(heatmap_pred[bp_idx].argmax(), heatmap_pred[bp_idx].shape))
+        y_keypoints[bp_idx] = torch.tensor(np.unravel_index(y[bp_idx].argmax(), y[bp_idx].shape))    
+    return pred_keypoints, y_keypoints
+ 
+def computeSubPixMax(heatmaps_pred, heatmaps_y, output_shape):
+    kernel_size = np.min(output_shape)
+    kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
+    pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), kernel_size, 5, 100, 4, 255.0, "channels_first")
+    y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), kernel_size, 5, 100, 4, 255.0, "channels_first")
+    pred_keypoints = pred_keypoints[0,:,:2] #getting rid of the actual max value
+    y_keypoints = y_keypoints[0,:,:2]
+    return pred_keypoints, y_keypoints
+
+def saveNumericalPredictions():
+    i = 0
+    rev_augmenter = []
+    rev_augmenter.append(iaa.Resize({"height": 406, "width": 396}))
+    rev_augmenter = iaa.Sequential(rev_augmenter)
+
+    model.eval()
+    full_dl = datamod.full_dataloader()
+    fully_labeled_idxs = full_data.get_fully_labeled_idxs()
+    print(fully_labeled_idxs)
+    final_gt_keypoints = np.empty(shape = (227, 17, 2))
+    final_imgs = np.empty(shape = (227, 406, 396, 1))
+    final_preds = np.empty(shape = (227, 17, 2))
+    for idx, batch in enumerate(full_dl):
+        if (idx not in fully_labeled_idxs):
+            continue
+        x, y = batch
+        heatmap_pred = model.forward(x)
+        #pred_keypoints, y_keypoints = upsampleArgmax(heatmap_pred, y)
+        output_shape = full_data.output_shape
+        pred_keypoints, y_keypoints = computeSubPixMax(heatmap_pred, y, output_shape)
+
+        x = x[:,0,:,:] #only taking one image dimension
+        x = np.expand_dims(x, axis = 3)
+        final_imgs[i], final_gt_keypoints[i] = rev_augmenter(images = x, keypoints = np.expand_dims(y_keypoints, axis = 0))
+        final_imgs[i], final_preds[i] = rev_augmenter(images = x, keypoints = np.expand_dims(pred_keypoints, axis = 0))
+        i += 1
+
+    final_gt_keypoints = np.reshape(final_gt_keypoints, newshape = (227, 34))
+    final_preds = np.reshape(final_preds, newshape = (227, 34))
+
+    np.savetxt('ptl_dlc_spm_reconstructed_gt_keypoints.csv', final_gt_keypoints, delimiter = ',', newline = '\n')
+    np.savetxt('ptl_dlc_spm_pred_keypoints.csv', final_preds, delimiter = ',', newline = '\n')
+
+    return
+
+def plotPredictions(save_heatmaps):
+    model.eval()
+    predict_dl = datamod.test_dataloader()    
+    i = 0
+    for idx, batch in enumerate(predict_dl):
+        x, y = batch
+        heatmap_pred = model.forward(x)
+        
+        if (save_heatmaps):
+            plt.imshow(heatmap_pred[0, 4].detach())
+            plt.savefig('pred_heatmaps/pred_map' + str(i) + '.png')
+            plt.clf()
+            plt.imshow(y[0, 4].detach())
+            plt.savefig('gt_heatmaps/gt_map' + str(i) + '.png')
+            plt.clf()
+
+        #pred_keypoints, y_keypoints = upsampleArgmax(heatmap_pred, y)
+        output_shape = full_data.output_shape
+        pred_keypoints, y_keypoints = computeSubPixMax(heatmap_pred, y, output_shape)
+
+        plt.imshow(x[0][0])
+        plt.scatter(pred_keypoints[:,0], pred_keypoints[:,1], c = 'blue')
+        plt.scatter(y_keypoints[:,0], y_keypoints[:,1], c = 'orange')
+        plt.savefig('preds_dlc_ptl_SUBPIXMAX/pred' + str(i) + '.png')
+        plt.clf()
+        i += 1
+
+
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--no_train", help= "whether you want to skip training the model")
@@ -62,7 +147,6 @@ data_transform = iaa.Sequential(data_transform)
 full_data = DLCHeatmapDataset(root_directory= '../deepposekit-tests/dlc_test/mouse_data/data', csv_path='CollectedData_.csv', header_rows=[1, 2], transform=data_transform)
 datamod = TrackingDataModule(full_data, train_batch_size = 16, validation_batch_size = 10, test_batch_size = 1, num_workers = 8) #dlc configs
 
-
 early_stopping = pl.callbacks.EarlyStopping(
     monitor="val_loss", patience=50, mode="min"
 )
@@ -71,94 +155,13 @@ trainer = pl.Trainer(gpus=args.num_gpus, log_every_n_steps = 15, callbacks=[earl
 if (not(args.no_train)):
     trainer.fit(model = model, datamodule = datamod)
 else:
-	datamod.setup()
+    datamod.setup()
 
 if args.predict:
     model.eval()
     #trainer.test(model = model, datamodule = datamod)
-
-    i = 0
-    rev_augmenter = []
-    rev_augmenter.append(iaa.Resize({"height": 406, "width": 396}))
-    rev_augmenter = iaa.Sequential(rev_augmenter)
-
-    model.eval()
-    full_dl = datamod.full_dataloader()
-    fully_labeled_idxs = full_data.get_fully_labeled_idxs()
-    print(fully_labeled_idxs)
-    final_gt_keypoints = np.empty(shape = (227, 17, 2))
-    final_imgs = np.empty(shape = (227, 406, 396, 1))
-    final_preds = np.empty(shape = (227, 17, 2))
-    for idx, batch in enumerate(full_dl):
-        if (idx not in fully_labeled_idxs):
-            continue
-        print(idx)
-        x, y = batch
-        heatmap_pred = model.forward(x)
-        heatmap_pred = nn.Upsample(scale_factor = 4)(heatmap_pred)
-        heatmap_pred = heatmap_pred[0]
-        y = nn.Upsample(scale_factor = 4)(y)
-        y = y[0]
-        pred_keypoints = torch.empty(size = (y.shape[0], 2))
-        y_keypoints = torch.empty(size = (y.shape[0], 2))
-        for bp_idx in range(y.shape[0]):
-            pred_keypoints[bp_idx] = torch.tensor(np.unravel_index(heatmap_pred[bp_idx].argmax(), heatmap_pred[bp_idx].shape))
-            y_keypoints[bp_idx] = torch.tensor(np.unravel_index(y[bp_idx].argmax(), y[bp_idx].shape))
-        print(x.shape)
-        print(type(x))
-        print(type(y_keypoints))
-        print(y_keypoints.shape)
-        x = x[:,0,:,:] #only taking one image dimension
-        x = np.expand_dims(x, axis = 3)
-        print(type(x))
-        print(x.shape)
-        final_imgs[i], final_gt_keypoints[i] = rev_augmenter(images = x, keypoints = np.expand_dims(y_keypoints, axis = 0))
-        final_imgs[i], final_preds[i] = rev_augmenter(images = x, keypoints = np.expand_dims(pred_keypoints, axis = 0))
-        i += 1
-
-    final_gt_keypoints = np.reshape(final_gt_keypoints, newshape = (227, 34))
-    final_preds = np.reshape(final_preds, newshape = (227, 34))
-
-    np.savetxt('ptl_dlc_reconstructed_gt_keypoints.csv', final_gt_keypoints, delimiter = ',', newline = '\n')
-    np.savetxt('ptl_dlc_pred_keypoints.csv', final_preds, delimiter = ',', newline = '\n')
-
-    exit()
+    save_heatmaps = False
+    #plotPredictions(save_heatmaps)
+    saveNumericalPredictions()
     
-###########################################################
-    model.eval()
-    predict_dl = datamod.test_dataloader()    
-    i = 0
-    for idx, batch in enumerate(predict_dl):
-        x, y = batch
-        heatmap_pred = model.forward(x)
-        plt.imshow(heatmap_pred[0, 4].detach())
-        plt.savefig('pred_heatmaps/pred_map' + str(i) + '.png')
-        plt.clf()
-        heatmap_pred = nn.Upsample(scale_factor = 4)(heatmap_pred)
-        heatmap_pred = heatmap_pred[0]
-        plt.imshow(y[0, 4].detach())
-        plt.savefig('gt_heatmaps/gt_map' + str(i) + '.png')
-        plt.clf()
-        y = nn.Upsample(scale_factor = 4)(y)
-        y = y[0]
-        pred_keypoints = torch.empty(size = (y.shape[0], 2))
-        y_keypoints = torch.empty(size = (y.shape[0], 2))
-        for bp_idx in range(y.shape[0]):
-            pred_keypoints[bp_idx] = torch.tensor(np.unravel_index(heatmap_pred[bp_idx].argmax(), heatmap_pred[bp_idx].shape))
-            y_keypoints[bp_idx] = torch.tensor(np.unravel_index(y[bp_idx].argmax(), y[bp_idx].shape))
-        
-        #output_shape = full_data.output_shape
-        #kernel_size = np.min(output_shape)
-        #kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
-        #y_hat = find_subpixel_maxima(heatmap_pred.detach(), kernel_size, full_data.output_sigma, upsample_factor=100, coordinate_scale=4.0, confidence_scale = 255.0, data_format = "channels_first")
-        #y_gt = find_subpixel_maxima(y.detach(), kernel_size, full_data.output_sigma, upsample_factor=100, coordinate_scale=4.0, confidence_scale = 255.0, data_format = "channels_first") 
-        #y_hat = y_hat[1:]
-        #y_gt = y_gt[1:]
 
-        plt.imshow(x[0][0])
-        plt.scatter(pred_keypoints[:,1], pred_keypoints[:,0], c = 'blue')
-        plt.scatter(y_keypoints[:,1], y_keypoints[:,0], c = 'orange')
-        plt.savefig('preds_dlc_ptl2/pred' + str(i) + '.png')
-        plt.clf()
-        i += 1
-        
