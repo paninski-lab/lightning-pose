@@ -257,7 +257,17 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
             x = self.torch_transform(x)
         y_heatmap = self.label_heatmaps[idx]
         return x, y_heatmap
-
+    def get_fully_labeled_idxs(self):
+        nan_check = torch.isnan(self.labels)
+        nan_check = nan_check[:,:,0]
+        nan_check = ~nan_check
+        annotated = torch.all(nan_check, dim = 1)
+        annotated_index = torch.where(annotated)
+        return annotated_index[0].tolist()
+        #self.labels = self.labels[annotated_index]
+        #print(self.labels.shape)
+        #print(len(self.image_names))
+        #self.image_names = [self.image_names[idx] for idx in annotated_index]
 
 def draw_keypoints(keypoints, height, width, output_shape, sigma=1, normalize=True):
     keypoints = keypoints.copy()
@@ -309,6 +319,8 @@ class TrackingDataModule(pl.LightningDataModule):
             [round(datalen * 0.8) + 1, round(datalen * 0.1), round(datalen * 0.1)], #hardcoded solution to rounding error
             generator=torch.Generator().manual_seed(42),
         )
+    def full_dataloader(self):
+        return DataLoader(self.fulldataset, batch_size = 1, num_workers = self.num_workers)
 
     def train_dataloader(self):
         return DataLoader(

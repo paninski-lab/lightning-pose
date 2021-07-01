@@ -74,22 +74,69 @@ else:
 	datamod.setup()
 
 if args.predict:
-    preds = {}
-    f = open('predictions.txt', 'w')
     model.eval()
-    trainer.test(model = model, datamodule = datamod)
+    #trainer.test(model = model, datamodule = datamod)
+
+    i = 0
+    rev_augmenter = []
+    rev_augmenter.append(iaa.Resize({"height": 406, "width": 396}))
+    rev_augmenter = iaa.Sequential(rev_augmenter)
+
     model.eval()
-    predict_dl = datamod.test_dataloader()
+    full_dl = datamod.full_dataloader()
+    fully_labeled_idxs = full_data.get_fully_labeled_idxs()
+    print(fully_labeled_idxs)
+    final_gt_keypoints = np.empty(shape = (227, 17, 2))
+    final_imgs = np.empty(shape = (227, 406, 396, 1))
+    final_preds = np.empty(shape = (227, 17, 2))
+    for idx, batch in enumerate(full_dl):
+        if (idx not in fully_labeled_idxs):
+            continue
+        print(idx)
+        x, y = batch
+        heatmap_pred = model.forward(x)
+        heatmap_pred = nn.Upsample(scale_factor = 4)(heatmap_pred)
+        heatmap_pred = heatmap_pred[0]
+        y = nn.Upsample(scale_factor = 4)(y)
+        y = y[0]
+        pred_keypoints = torch.empty(size = (y.shape[0], 2))
+        y_keypoints = torch.empty(size = (y.shape[0], 2))
+        for bp_idx in range(y.shape[0]):
+            pred_keypoints[bp_idx] = torch.tensor(np.unravel_index(heatmap_pred[bp_idx].argmax(), heatmap_pred[bp_idx].shape))
+            y_keypoints[bp_idx] = torch.tensor(np.unravel_index(y[bp_idx].argmax(), y[bp_idx].shape))
+        print(x.shape)
+        print(type(x))
+        print(type(y_keypoints))
+        print(y_keypoints.shape)
+        x = x[:,0,:,:] #only taking one image dimension
+        x = np.expand_dims(x, axis = 3)
+        print(type(x))
+        print(x.shape)
+        final_imgs[i], final_gt_keypoints[i] = rev_augmenter(images = x, keypoints = np.expand_dims(y_keypoints, axis = 0))
+        final_imgs[i], final_preds[i] = rev_augmenter(images = x, keypoints = np.expand_dims(pred_keypoints, axis = 0))
+        i += 1
+
+    final_gt_keypoints = np.reshape(final_gt_keypoints, newshape = (227, 34))
+    final_preds = np.reshape(final_preds, newshape = (227, 34))
+
+    np.savetxt('ptl_dlc_reconstructed_gt_keypoints.csv', final_gt_keypoints, delimiter = ',', newline = '\n')
+    np.savetxt('ptl_dlc_pred_keypoints.csv', final_preds, delimiter = ',', newline = '\n')
+
+    exit()
+    
+###########################################################
+    model.eval()
+    predict_dl = datamod.test_dataloader()    
     i = 0
     for idx, batch in enumerate(predict_dl):
         x, y = batch
         heatmap_pred = model.forward(x)
-        plt.imshow(heatmap_pred[0, 4])
+        plt.imshow(heatmap_pred[0, 4].detach())
         plt.savefig('pred_heatmaps/pred_map' + str(i) + '.png')
         plt.clf()
         heatmap_pred = nn.Upsample(scale_factor = 4)(heatmap_pred)
         heatmap_pred = heatmap_pred[0]
-        plt.imshow(y[0, 4])
+        plt.imshow(y[0, 4].detach())
         plt.savefig('gt_heatmaps/gt_map' + str(i) + '.png')
         plt.clf()
         y = nn.Upsample(scale_factor = 4)(y)
