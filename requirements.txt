@@ -1,4 +1,3 @@
-torch
 torchvision
 pytorch-lightning
 pandas
@@ -9,4 +8,4 @@ typeguard
 torchtyping
 deepposekit
 imgaug
-numpy
+

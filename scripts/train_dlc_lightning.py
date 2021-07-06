@@ -122,7 +122,7 @@ def plotPredictions(save_heatmaps, threshold):
         plt.imshow(x[0][0])
         plt.scatter(pred_keypoints[:,0], pred_keypoints[:,1], c = 'blue')
         plt.scatter(y_keypoints[:,0], y_keypoints[:,1], c = 'orange')
-        plt.savefig('preds_dlc_ptl_noNan2b/pred' + str(i) + '.png')
+        plt.savefig('../preds/preds_dlc_ptl_noNan2b/pred' + str(i) + '.png')
         plt.clf()
         i += 1
 
@@ -150,14 +150,14 @@ data_transform = []
 data_transform.append(iaa.Resize({"height": 384, "width": 384})) #dlc dimensions need to be repeatably divisable by 2
 data_transform = iaa.Sequential(data_transform)
 
-full_data = DLCHeatmapDataset(root_directory= '../deepposekit-tests/dlc_test/mouse_data/data', csv_path='CollectedData_.csv', header_rows=[1, 2], transform=data_transform)
+full_data = DLCHeatmapDataset(root_directory= '../../deepposekit-tests/dlc_test/mouse_data/data', csv_path='CollectedData_.csv', header_rows=[1, 2], transform=data_transform)
 datamod = TrackingDataModule(full_data, train_batch_size = 16, validation_batch_size = 10, test_batch_size = 1, num_workers = args.num_workers) #dlc configs
 
 early_stopping = pl.callbacks.EarlyStopping(
     monitor="val_loss", patience=50, mode="min"
 )
 
-trainer = pl.Trainer(gpus=args.num_gpus, log_every_n_steps = 15, callbacks=[early_stopping], auto_scale_batch_size = False, reload_dataloaders_every_epoch=False) #changed rldl
+trainer = pl.Trainer(gpus=args.num_gpus, log_every_n_steps = 15, callbacks=[early_stopping], auto_scale_batch_size = False, reload_dataloaders_every_epoch=False)
 if (not(args.no_train)):
     trainer.fit(model = model, datamodule = datamod)
 else:

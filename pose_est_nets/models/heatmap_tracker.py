@@ -77,10 +77,8 @@ class DLC(LightningModule):
         :return: mse loss
         """
         # apply mask, only computes loss on heatmaps where the ground truth heatmap is not all zeros (aka not an occluded keypoint)
-        print(y.device, y_hat.device)
         max_vals = torch.amax(y, dim = (2,3))
         zeros = torch.zeros(size = (y.shape[0], y.shape[1]), device = y_hat.device)
-        print(max_vals.device, zeros.device)
         mask = torch.eq(max_vals, zeros)
         mask = ~mask
         mask = torch.unsqueeze(mask, 2)
