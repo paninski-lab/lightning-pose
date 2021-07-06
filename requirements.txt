@@ -5,3 +5,5 @@ pandas
 pillow
 pytest
 matplotlib
+typeguard
+torchtyping
