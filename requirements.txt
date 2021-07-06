@@ -7,3 +7,6 @@ pytest
 matplotlib
 typeguard
 torchtyping
+deepposekit
+imgaug
+numpy

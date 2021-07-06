@@ -14,11 +14,11 @@ import matplotlib.pyplot as plt
 import argparse
 import pandas as pd
 import imgaug.augmenters as iaa
-from PIL import Image, ImageDraw
+#from PIL import Image, ImageDraw
 from deepposekit.utils.image import largest_factor
 from deepposekit.models.backend.backend import find_subpixel_maxima
 import numpy as np
-import tensorflow as tf
+#import tensorflow as tf
 
 class UnNormalize(object):
     def __init__(self, mean, std):
