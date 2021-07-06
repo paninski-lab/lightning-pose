@@ -1,9 +1,11 @@
-torch
 torchvision
 pytorch-lightning
 pandas
 pillow
 pytest
-typeguard
 matplotlib
+typeguard
 torchtyping
+deepposekit
+imgaug
+
