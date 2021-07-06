@@ -9,7 +9,7 @@ import os
 import numpy as np
 from PIL import Image
 from deepposekit.utils.keypoints import draw_keypoints
-from tqdm import tqdm
+#from tqdm import tqdm
 
 
 class TrackingDataset(torch.utils.data.Dataset):
