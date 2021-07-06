@@ -4,6 +4,7 @@ import torchvision.transforms as transforms
 import pytest
 import pytorch_lightning as pl
 import shutil
+import imgaug.augmenters as iaa
 #from pose_est_nets.utils.wrappers import predict_plot_test_epoch
 #from pose_est_nets.utils.IO import set_or_open_folder, load_object
 
@@ -28,8 +29,8 @@ def initialize_model():
 @pytest.fixture
 def initialize_data_module(create_dataset):
     from pose_est_nets.datasets.datasets import TrackingDataModule
-    data_module = TrackingDataModule(create_dataset, train_batch_size=4,
-                                     validation_batch_size=2, test_batch_size=2,
+    data_module = TrackingDataModule(create_dataset, train_batch_size=16,
+                                     validation_batch_size=10, test_batch_size=1,
                                      num_workers=8)
     return data_module
 
@@ -45,7 +46,7 @@ def test_forward(initialize_model, create_dataset):
     assert (pred_heatmaps.shape == (1, 17, 96, 96))
     loss = model.heatmap_loss(y_heatmaps, pred_heatmaps)
     assert (loss.detach().numpy() > -0.00000001)
-    loss = model.regression_loss(pred_heatmaps, pred_heatmaps)
+    loss = model.heatmap_loss(pred_heatmaps, pred_heatmaps)
     assert (loss.detach().numpy() == float(0))
     assert (loss.shape == torch.Size([]))
 
@@ -68,9 +69,9 @@ def test_loss(initialize_model, initialize_data_module):
     data_module.setup()
     dataloader = data_module.train_dataloader()
     image, y_heatmap = next(iter(dataloader))
-    assert(y_heatmap.shape == (1, 17, 96, 96))
+    assert(y_heatmap.shape == (16, 17, 96, 96))
     pred_heatmap = torch.clone(y_heatmap)
-    zero_heatmap = torch.zeros(size = (96, 96))
+    zero_heatmap = torch.zeros(size = (96, 96), device = 'cuda')
     y_heatmap[0, 1] = zero_heatmap
     y_heatmap[0, 3] = zero_heatmap
     y_heatmap[0, 5] = zero_heatmap

@@ -12,8 +12,8 @@ from deepposekit.utils.keypoints import draw_keypoints
 from tqdm import tqdm
 
 
-class RegressionDataset(torch.utils.data.Dataset):
-   def __init__(self,
+class TrackingDataset(torch.utils.data.Dataset):
+    def __init__(self,
                  root_directory: str,
                  csv_path: str,
                  header_rows: Optional[List[int]] = None,
@@ -37,8 +37,7 @@ class RegressionDataset(torch.utils.data.Dataset):
         self.transform = transform
         self.root_directory = root_directory
         self.num_targets = self.labels.shape[1]
-
-    def __len__(self) -> int:
+    def __len__(self) -> int: #something is wrong here
         return len(self.image_names)
 
     def __getitem__(self, idx: int) -> Tuple[torch.tensor, torch.tensor]:
@@ -200,12 +199,17 @@ class TrackingDataModule(pl.LightningDataModule):
     def setup(self, stage: Optional[str] = None):
         datalen = self.fulldataset.__len__()
         #print(datalen)
-        #print(round(datalen * 0.8) + round(datalen * 0.1) + round(datalen * 0.1))
-        self.train_set, self.valid_set, self.test_set = random_split(
-            self.fulldataset,
-            [round(datalen * 0.8) + 1, round(datalen * 0.1), round(datalen * 0.1)], #hardcoded solution to rounding error
-            generator=torch.Generator().manual_seed(42),
-        )
+        if ((round(datalen * 0.8) + round(datalen * 0.1) + round(datalen * 0.1)) != datalen):
+            self.train_set, self.valid_set, self.test_set = random_split(
+                self.fulldataset, [round(datalen * 0.8) + 1, round(datalen * 0.1), round(datalen * 0.1)], #hardcoded solution to rounding error
+                generator=torch.Generator().manual_seed(42)
+            )
+        else:
+            self.train_set, self.valid_set, self.test_set = random_split(
+                self.fulldataset, [round(datalen * 0.8), round(datalen * 0.1), round(datalen * 0.1)],
+                generator=torch.Generator().manual_seed(42)
+            )
+
     def full_dataloader(self):
         return DataLoader(self.fulldataset, batch_size = 1, num_workers = self.num_workers)
         
