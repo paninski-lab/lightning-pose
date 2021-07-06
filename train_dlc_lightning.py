@@ -18,6 +18,7 @@ from PIL import Image, ImageDraw
 from deepposekit.utils.image import largest_factor
 from deepposekit.models.backend.backend import find_subpixel_maxima
 import numpy as np
+import tensorflow as tf
 
 class UnNormalize(object):
     def __init__(self, mean, std):
@@ -48,16 +49,24 @@ def upsampleArgmax(heatmap_pred, heatmap_y):
         y_keypoints[bp_idx] = torch.tensor(np.unravel_index(y[bp_idx].argmax(), y[bp_idx].shape))    
     return pred_keypoints, y_keypoints
  
-def computeSubPixMax(heatmaps_pred, heatmaps_y, output_shape):
+def computeSubPixMax(heatmaps_pred, heatmaps_y, output_shape, threshold):
     kernel_size = np.min(output_shape)
     kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
     pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), kernel_size, 5, 100, 4, 255.0, "channels_first")
     y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), kernel_size, 5, 100, 4, 255.0, "channels_first")
+    if threshold:
+        pred_kpts_list = []
+        y_kpts_list = []
+        for i in range(pred_keypoints.shape[1]):
+            if pred_keypoints[0, i, 2] > 0.001: #threshold for low confidence predictions
+                pred_kpts_list.append(pred_keypoints[0, i, :2].numpy())
+                y_kpts_list.append(y_keypoints[0, i, :2].numpy())
+        return torch.tensor(pred_kpts_list), torch.tensor(y_kpts_list)
     pred_keypoints = pred_keypoints[0,:,:2] #getting rid of the actual max value
     y_keypoints = y_keypoints[0,:,:2]
     return pred_keypoints, y_keypoints
 
-def saveNumericalPredictions():
+def saveNumericalPredictions(threshold):
     i = 0
     rev_augmenter = []
     rev_augmenter.append(iaa.Resize({"height": 406, "width": 396}))
@@ -66,7 +75,6 @@ def saveNumericalPredictions():
     model.eval()
     full_dl = datamod.full_dataloader()
     fully_labeled_idxs = full_data.get_fully_labeled_idxs()
-    print(fully_labeled_idxs)
     final_gt_keypoints = np.empty(shape = (227, 17, 2))
     final_imgs = np.empty(shape = (227, 406, 396, 1))
     final_preds = np.empty(shape = (227, 17, 2))
@@ -77,7 +85,7 @@ def saveNumericalPredictions():
         heatmap_pred = model.forward(x)
         #pred_keypoints, y_keypoints = upsampleArgmax(heatmap_pred, y)
         output_shape = full_data.output_shape
-        pred_keypoints, y_keypoints = computeSubPixMax(heatmap_pred, y, output_shape)
+        pred_keypoints, y_keypoints = computeSubPixMax(heatmap_pred, y, output_shape, threshold)
 
         x = x[:,0,:,:] #only taking one image dimension
         x = np.expand_dims(x, axis = 3)
@@ -88,19 +96,18 @@ def saveNumericalPredictions():
     final_gt_keypoints = np.reshape(final_gt_keypoints, newshape = (227, 34))
     final_preds = np.reshape(final_preds, newshape = (227, 34))
 
-    np.savetxt('ptl_dlc_spm_reconstructed_gt_keypoints.csv', final_gt_keypoints, delimiter = ',', newline = '\n')
-    np.savetxt('ptl_dlc_spm_pred_keypoints.csv', final_preds, delimiter = ',', newline = '\n')
+    np.savetxt('ptl_dlc_spm_nonan_reconstructed_gt_keypoints.csv', final_gt_keypoints, delimiter = ',', newline = '\n')
+    np.savetxt('ptl_dlc_spm_nonan_pred_keypoints.csv', final_preds, delimiter = ',', newline = '\n')
 
     return
 
-def plotPredictions(save_heatmaps):
+def plotPredictions(save_heatmaps, threshold):
     model.eval()
     predict_dl = datamod.test_dataloader()    
     i = 0
     for idx, batch in enumerate(predict_dl):
         x, y = batch
         heatmap_pred = model.forward(x)
-        
         if (save_heatmaps):
             plt.imshow(heatmap_pred[0, 4].detach())
             plt.savefig('pred_heatmaps/pred_map' + str(i) + '.png')
@@ -108,15 +115,13 @@ def plotPredictions(save_heatmaps):
             plt.imshow(y[0, 4].detach())
             plt.savefig('gt_heatmaps/gt_map' + str(i) + '.png')
             plt.clf()
-
         #pred_keypoints, y_keypoints = upsampleArgmax(heatmap_pred, y)
         output_shape = full_data.output_shape
-        pred_keypoints, y_keypoints = computeSubPixMax(heatmap_pred, y, output_shape)
-
+        pred_keypoints, y_keypoints = computeSubPixMax(heatmap_pred, y, output_shape, threshold)
         plt.imshow(x[0][0])
         plt.scatter(pred_keypoints[:,0], pred_keypoints[:,1], c = 'blue')
         plt.scatter(y_keypoints[:,0], y_keypoints[:,1], c = 'orange')
-        plt.savefig('preds_dlc_ptl_SUBPIXMAX/pred' + str(i) + '.png')
+        plt.savefig('preds_dlc_ptl_noNan2b/pred' + str(i) + '.png')
         plt.clf()
         i += 1
 
@@ -145,13 +150,13 @@ data_transform.append(iaa.Resize({"height": 384, "width": 384})) #dlc dimensions
 data_transform = iaa.Sequential(data_transform)
 
 full_data = DLCHeatmapDataset(root_directory= '../deepposekit-tests/dlc_test/mouse_data/data', csv_path='CollectedData_.csv', header_rows=[1, 2], transform=data_transform)
-datamod = TrackingDataModule(full_data, train_batch_size = 16, validation_batch_size = 10, test_batch_size = 1, num_workers = 8) #dlc configs
+datamod = TrackingDataModule(full_data, train_batch_size = 16, validation_batch_size = 10, test_batch_size = 1, num_workers = args.num_workers) #dlc configs
 
 early_stopping = pl.callbacks.EarlyStopping(
     monitor="val_loss", patience=50, mode="min"
 )
 
-trainer = pl.Trainer(gpus=args.num_gpus, log_every_n_steps = 15, callbacks=[early_stopping], auto_scale_batch_size = False, reload_dataloaders_every_epoch=True)
+trainer = pl.Trainer(gpus=args.num_gpus, log_every_n_steps = 15, callbacks=[early_stopping], auto_scale_batch_size = False, reload_dataloaders_every_epoch=False) #changed rldl
 if (not(args.no_train)):
     trainer.fit(model = model, datamodule = datamod)
 else:
@@ -159,9 +164,10 @@ else:
 
 if args.predict:
     model.eval()
-    #trainer.test(model = model, datamodule = datamod)
-    save_heatmaps = False
-    #plotPredictions(save_heatmaps)
-    saveNumericalPredictions()
+    trainer.test(model = model, datamodule = datamod)
+    threshold = True #whether or not to refrain from plotting a keypoint if the max value of the heatmap is below a certain threshold
+    save_heatmaps = False #whether or not to save heatmap images, note they will be in the downsampled dimensions
+    plotPredictions(save_heatmaps, threshold)
+    #saveNumericalPredictions(threshold)
     
 
