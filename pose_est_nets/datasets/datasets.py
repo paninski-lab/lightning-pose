@@ -3,12 +3,11 @@ import pandas as pd
 from torch.utils.data import DataLoader, random_split
 import torch.nn.functional as F
 from torchvision import transforms
-from PIL import Image
+import pytorch_lightning as pl
 from typing import Callable, Optional, Tuple, List
 import os
 import numpy as np
 from PIL import Image
-import pytorch_lightning as pl
 from deepposekit.utils.keypoints import draw_keypoints
 from tqdm import tqdm
 
@@ -190,14 +189,7 @@ def draw_keypoints(keypoints, height, width, output_shape, sigma=1, normalize=Tr
     return confidence
 
 class TrackingDataModule(pl.LightningDataModule):
-    def __init__(
-        self,
-        dataset,
-        train_batch_size,
-        validation_batch_size,
-        test_batch_size,
-        num_workers,
-    ):
+    def __init__(self, dataset, train_batch_size, validation_batch_size, test_batch_size, num_workers):
         super().__init__()
         self.fulldataset = dataset
         self.train_batch_size = train_batch_size
@@ -216,7 +208,7 @@ class TrackingDataModule(pl.LightningDataModule):
         )
     def full_dataloader(self):
         return DataLoader(self.fulldataset, batch_size = 1, num_workers = self.num_workers)
-
+        
     def train_dataloader(self):
         return DataLoader(self.train_set, batch_size=self.train_batch_size, num_workers=self.num_workers)
 
