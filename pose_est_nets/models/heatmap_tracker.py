@@ -6,8 +6,11 @@ from pytorch_lightning.core.lightning import LightningModule
 from torch.optim import Adam
 from typing import Any, Callable, Optional, Tuple, List
 from torchtyping import TensorType, patch_typeguard
+from typeguard import typechecked
 import numpy as np
 #from deepposekit.models.layers.convolutional import SubPixelUpscaling
+
+patch_typeguard()
 
 class DLC(LightningModule):
     def __init__(
@@ -50,7 +53,8 @@ class DLC(LightningModule):
         self.upsampling_layers = nn.Sequential(*self.upsampling_layers)
         self.batch_size = 16
         self.num_workers = 0
-
+    
+    @typechecked
     def forward(self, x: TensorType["batch", 3, "Height", "Width"]) -> TensorType["batch", 17, "Out_Height", "Out_Width"]:
         """
         Forward pass through the network
@@ -64,6 +68,7 @@ class DLC(LightningModule):
         return out
 
     @staticmethod
+    @typechecked
     def heatmap_loss(y: TensorType["batch", 17, "Out_Height", "Out_Width"], y_hat: TensorType["batch", 17, "Out_Height", "Out_Width"]) -> TensorType[()]:
         """
         Computes mse loss between ground truth (x,y) coordinates and predicted (x^,y^) coordinates
@@ -72,8 +77,10 @@ class DLC(LightningModule):
         :return: mse loss
         """
         # apply mask, only computes loss on heatmaps where the ground truth heatmap is not all zeros (aka not an occluded keypoint)
+        print(y.device, y_hat.device)
         max_vals = torch.amax(y, dim = (2,3))
-        zeros = torch.zeros(size = (y.shape[0], y.shape[1]), device = 'cuda')
+        zeros = torch.zeros(size = (y.shape[0], y.shape[1]), device = y_hat.device)
+        print(max_vals.device, zeros.device)
         mask = torch.eq(max_vals, zeros)
         mask = ~mask
         mask = torch.unsqueeze(mask, 2)

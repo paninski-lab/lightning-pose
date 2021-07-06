@@ -60,6 +60,7 @@ def computeSubPixMax(heatmaps_pred, heatmaps_y, output_shape, threshold):
         for i in range(pred_keypoints.shape[1]):
             if pred_keypoints[0, i, 2] > 0.001: #threshold for low confidence predictions
                 pred_kpts_list.append(pred_keypoints[0, i, :2].numpy())
+            if y_keypoints[0, i, 2] > 0.001:
                 y_kpts_list.append(y_keypoints[0, i, :2].numpy())
         return torch.tensor(pred_kpts_list), torch.tensor(y_kpts_list)
     pred_keypoints = pred_keypoints[0,:,:2] #getting rid of the actual max value
