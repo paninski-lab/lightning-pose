@@ -18,7 +18,6 @@ import imgaug.augmenters as iaa
 from deepposekit.utils.image import largest_factor
 from deepposekit.models.backend.backend import find_subpixel_maxima
 import numpy as np
-#import tensorflow as tf
 
 class UnNormalize(object):
     def __init__(self, mean, std):
@@ -52,8 +51,8 @@ def upsampleArgmax(heatmap_pred, heatmap_y):
 def computeSubPixMax(heatmaps_pred, heatmaps_y, output_shape, threshold):
     kernel_size = np.min(output_shape)
     kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
-    pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), kernel_size, 5, 100, 4, 255.0, "channels_first")
-    y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), kernel_size, 5, 100, 4, 255.0, "channels_first")
+    pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), kernel_size, 1.25, 100, 4, 255.0, "channels_first")
+    y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), kernel_size, 1.25, 100, 4, 255.0, "channels_first")
     if threshold:
         pred_kpts_list = []
         y_kpts_list = []
@@ -75,17 +74,19 @@ def saveNumericalPredictions(threshold):
 
     model.eval()
     full_dl = datamod.full_dataloader()
-    fully_labeled_idxs = full_data.get_fully_labeled_idxs()
-    final_gt_keypoints = np.empty(shape = (227, 17, 2))
-    final_imgs = np.empty(shape = (227, 406, 396, 1))
-    final_preds = np.empty(shape = (227, 17, 2))
-    for idx, batch in enumerate(full_dl):
-        if (idx not in fully_labeled_idxs):
-            continue
+    test_dl = datamod.test_dataloader()
+    print(len(test_dl))
+    #fully_labeled_idxs = full_data.get_fully_labeled_idxs()
+    final_gt_keypoints = np.empty(shape = (22, 17, 2))
+    final_imgs = np.empty(shape = (22, 406, 396, 1))
+    final_preds = np.empty(shape = (22, 17, 2))
+    for idx, batch in enumerate(test_dl):
+        #if (idx not in fully_labeled_idxs):
+        #    continue
         x, y = batch
         heatmap_pred = model.forward(x)
         #pred_keypoints, y_keypoints = upsampleArgmax(heatmap_pred, y)
-        output_shape = full_data.output_shape
+        output_shape = train_data.output_shape #changed from full_data
         pred_keypoints, y_keypoints = computeSubPixMax(heatmap_pred, y, output_shape, threshold)
 
         x = x[:,0,:,:] #only taking one image dimension
@@ -94,11 +95,11 @@ def saveNumericalPredictions(threshold):
         final_imgs[i], final_preds[i] = rev_augmenter(images = x, keypoints = np.expand_dims(pred_keypoints, axis = 0))
         i += 1
 
-    final_gt_keypoints = np.reshape(final_gt_keypoints, newshape = (227, 34))
-    final_preds = np.reshape(final_preds, newshape = (227, 34))
+    final_gt_keypoints = np.reshape(final_gt_keypoints, newshape = (22, 34))
+    final_preds = np.reshape(final_preds, newshape = (22, 34))
 
-    np.savetxt('ptl_dlc_spm_nonan_reconstructed_gt_keypoints.csv', final_gt_keypoints, delimiter = ',', newline = '\n')
-    np.savetxt('ptl_dlc_spm_nonan_pred_keypoints.csv', final_preds, delimiter = ',', newline = '\n')
+    np.savetxt('../preds/ptl_test_labels7.csv', final_gt_keypoints, delimiter = ',', newline = '\n')
+    np.savetxt('../preds/ptl_test_predictions7.csv', final_preds, delimiter = ',', newline = '\n')
 
     return
 
@@ -111,18 +112,18 @@ def plotPredictions(save_heatmaps, threshold):
         heatmap_pred = model.forward(x)
         if (save_heatmaps):
             plt.imshow(heatmap_pred[0, 4].detach())
-            plt.savefig('pred_heatmaps/pred_map' + str(i) + '.png')
+            plt.savefig('../preds/test_pred_heatmaps7/pred_map' + str(i) + '.png')
             plt.clf()
             plt.imshow(y[0, 4].detach())
-            plt.savefig('gt_heatmaps/gt_map' + str(i) + '.png')
+            plt.savefig('../preds/test_gt_heatmaps7/gt_map' + str(i) + '.png')
             plt.clf()
         #pred_keypoints, y_keypoints = upsampleArgmax(heatmap_pred, y)
-        output_shape = full_data.output_shape
+        output_shape = train_data.output_shape #changed from full_data
         pred_keypoints, y_keypoints = computeSubPixMax(heatmap_pred, y, output_shape, threshold)
         plt.imshow(x[0][0])
         plt.scatter(pred_keypoints[:,0], pred_keypoints[:,1], c = 'blue')
         plt.scatter(y_keypoints[:,0], y_keypoints[:,1], c = 'orange')
-        plt.savefig('../preds/preds_dlc_ptl_noNan2b/pred' + str(i) + '.png')
+        #plt.savefig('../preds/test_preds_ptl7/pred' + str(i) + '.png')
         plt.clf()
         i += 1
 
@@ -141,6 +142,8 @@ parser.add_argument("--num_workers", type = int, default = 8)
 
 args = parser.parse_args()
 
+torch.manual_seed(11)
+
 model = DLC(num_targets = 34, resnet_version = 50, transfer = False)
 
 if (args.load):
@@ -150,14 +153,37 @@ data_transform = []
 data_transform.append(iaa.Resize({"height": 384, "width": 384})) #dlc dimensions need to be repeatably divisable by 2
 data_transform = iaa.Sequential(data_transform)
 
-full_data = DLCHeatmapDataset(root_directory= '../../deepposekit-tests/dlc_test/mouse_data/data', csv_path='CollectedData_.csv', header_rows=[1, 2], transform=data_transform)
-datamod = TrackingDataModule(full_data, train_batch_size = 16, validation_batch_size = 10, test_batch_size = 1, num_workers = args.num_workers) #dlc configs
+
+train_data = DLCHeatmapDataset(root_directory= '../../deepposekit-tests/dlc_test/mouse_data/data', csv_path='CollectedData_.csv', header_rows=[1, 2], transform=data_transform)
+print(train_data.image_names)
+train_data.image_names = train_data.image_names[:183]
+train_data.labels = train_data.labels[:183]
+train_data.compute_heatmaps()
+val_data = DLCHeatmapDataset(root_directory= '../../deepposekit-tests/dlc_test/mouse_data/data', csv_path='CollectedData_.csv', header_rows=[1, 2], transform=data_transform)
+val_data.image_names = val_data.image_names[183:183+22]
+val_data.labels = val_data.labels[183:183+22]
+val_data.compute_heatmaps()
+test_data = DLCHeatmapDataset(root_directory= '../../deepposekit-tests/dlc_test/mouse_data/data', csv_path='CollectedData_.csv', header_rows=[1, 2], transform=data_transform)
+test_data.image_names = test_data.image_names[205:]
+test_data.labels = test_data.labels[205:]
+test_data.compute_heatmaps()
+
+datamod = TrackingDataModule(train_data, train_batch_size = 16, validation_batch_size = 10, test_batch_size = 1, num_workers = args.num_workers) #dlc configs
+datamod.train_set = train_data
+datamod.valid_set = val_data
+datamod.test_set = test_data
+
+#datamod = TrackingDataModule(full_data, train_batch_size = 16, validation_batch_size = 10, test_batch_size = 1, num_workers = args.num_workers) #dlc configs
 
 early_stopping = pl.callbacks.EarlyStopping(
-    monitor="val_loss", patience=50, mode="min"
+    monitor="val_loss", patience=100, mode="min"
 )
+lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval = 'epoch')
 
-trainer = pl.Trainer(gpus=args.num_gpus, log_every_n_steps = 15, callbacks=[early_stopping], auto_scale_batch_size = False, reload_dataloaders_every_epoch=False)
+#datamod.setup()
+
+trainer = pl.Trainer(gpus=args.num_gpus, log_every_n_steps = 15, callbacks=[early_stopping, lr_monitor], auto_scale_batch_size = False, reload_dataloaders_every_epoch=False)
+
 if (not(args.no_train)):
     trainer.fit(model = model, datamodule = datamod)
 else:
@@ -166,9 +192,10 @@ else:
 if args.predict:
     model.eval()
     trainer.test(model = model, datamodule = datamod)
-    threshold = True #whether or not to refrain from plotting a keypoint if the max value of the heatmap is below a certain threshold
-    save_heatmaps = False #whether or not to save heatmap images, note they will be in the downsampled dimensions
+    threshold = False #whether or not to refrain from plotting a keypoint if the max value of the heatmap is below a certain threshold
+    save_heatmaps = True #whether or not to save heatmap images, note they will be in the downsampled dimensions
     plotPredictions(save_heatmaps, threshold)
+    threshold = False
     #saveNumericalPredictions(threshold)
     
 

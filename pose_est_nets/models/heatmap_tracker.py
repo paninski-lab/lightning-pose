@@ -4,10 +4,13 @@ from torch.nn import functional as F
 from torch import nn
 from pytorch_lightning.core.lightning import LightningModule
 from torch.optim import Adam
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from typing import Any, Callable, Optional, Tuple, List
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 import numpy as np
+from deepposekit.utils.image import largest_factor
+from deepposekit.models.backend.backend import find_subpixel_maxima
 #from deepposekit.models.layers.convolutional import SubPixelUpscaling
 
 patch_typeguard()
@@ -50,7 +53,11 @@ class DLC(LightningModule):
             nn.PixelShuffle(2),            # [batch, 512,  48, 48]
             nn.ConvTranspose2d(in_channels = int(num_filters/4), out_channels = self.num_keypoints, kernel_size = (3, 3), stride = (2,2), padding = (1,1), output_padding = (1,1)) # [batch, 17, 96, 96]
         ]
+        #print(self.upsampling_layers[-1].weight)
         self.upsampling_layers = nn.Sequential(*self.upsampling_layers)
+        torch.nn.init.xavier_uniform_(self.upsampling_layers[-1].weight)
+        torch.nn.init.zeros_(self.upsampling_layers[-1].bias)
+        
         self.batch_size = 16
         self.num_workers = 0
     
@@ -109,9 +116,29 @@ class DLC(LightningModule):
 
     def test_step(self, data, batch_idx):
         self.validation_step(data, batch_idx)
+    
+    def computeSubPixMax(self, heatmaps_pred, heatmaps_y, output_shape, threshold):
+        kernel_size = np.min(output_shape)
+        kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
+        pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), kernel_size, 5, 100, 4, 255.0, "channels_first")
+        y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), kernel_size, 5, 100, 4, 255.0, "channels_first")
+        if threshold:
+            pred_kpts_list = []
+            y_kpts_list = []
+            for i in range(pred_keypoints.shape[1]):
+                if pred_keypoints[0, i, 2] > 0.001: #threshold for low confidence predictions
+                    pred_kpts_list.append(pred_keypoints[0, i, :2].numpy())
+                if y_keypoints[0, i, 2] > 0.001:
+                    y_kpts_list.append(y_keypoints[0, i, :2].numpy())
+            return torch.tensor(pred_kpts_list), torch.tensor(y_kpts_list)
+        pred_keypoints = pred_keypoints[0,:,:2] #getting rid of the actual max value
+        y_keypoints = y_keypoints[0,:,:2]
+        return pred_keypoints, y_keypoints
 
     def configure_optimizers(self):
-        return Adam(self.parameters(), lr=1e-3)
+        optimizer = Adam(self.parameters(), lr=1e-3)
+        scheduler = ReduceLROnPlateau(optimizer, factor = 0.2, patience = 20, verbose = True)
+        return {'optimizer' : optimizer, 'lr_scheduler': scheduler, 'monitor': 'val_loss'}
 
 #NOT USED AT THE MOMENT, BUT WOULD BE GOOD TO FIND SOMETHING SIMILIAR SO CODE IN MORE GENERAL TO OTHER INPUT SIZES BESIDES (384, 384)
 def compute_same_padding(img_dims, kernel_dims, stride):

@@ -78,30 +78,22 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
             os.path.join(root_directory, csv_path), header=header_rows
         )
         self.image_names = list(csv_data.iloc[:, 0])
+        self.root_directory = root_directory
         self.labels = torch.tensor(csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32)
-        self.labels = torch.reshape(self.labels, (self.labels.shape[0], -1, 2))
-
+        self.labels = torch.reshape(self.labels, (self.labels.shape[0], -1, 2)) 
+        self.transform = transform
         #Checks for images with set of keypoints that include any nan, so that they can be excluded from the data entirely, like DeepPoseKit does
-        #nan_check = torch.isnan(self.labels)
-        #print(nan_check.shape)
-        #nan_check = nan_check[:,:,0]
-        #nan_check = ~nan_check
-        #annotated = torch.all(nan_check, dim = 1)
-        #print(annotated.shape)
-        #annotated_index = torch.where(annotated)
-        #print(annotated_index)
-        #print(self.labels.shape)
-        #self.labels = self.labels[annotated_index]
-        #print(self.labels.shape)
-        #print(len(self.image_names))
-        #self.image_names = [self.image_names[idx] for idx in annotated_index]
-        #print(len(self.image_names))
-        #exit()
+        ##########################################################
+        self.fully_labeled_idxs = self.get_fully_labeled_idxs()
+        print(self.fully_labeled_idxs)
+        self.image_names = [self.image_names[idx] for idx in self.fully_labeled_idxs]
+        self.labels = [self.labels[idx] for idx in self.fully_labeled_idxs]
+        print(len(self.image_names), len(self.labels))
+        ##########################################################
 
         self.downsample_factor = 2 #could change to 0, 2, 3, or 4
-        self.sigma = 5,
-        #self.output_sigma = 0.625, #might want to check this
-        self.output_sigma = 5
+        self.sigma = 5
+        self.output_sigma = 1.25
         self.height = 384
         self.width = 384
         self.output_shape = (
@@ -116,25 +108,26 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
         ])
 
         # Compute heatmaps as preprocessing step
+        #check that max of heatmaps look good
+        self.compute_heatmaps()
+        self.num_targets = self.labels[0].shape[0]
+        print(self.num_targets)
+
+    def compute_heatmaps(self):
         label_heatmaps = []
         for idx, y in enumerate(tqdm(self.labels)):
-            x = Image.open(os.path.join(root_directory, self.image_names[idx])).convert(
+            x = Image.open(os.path.join(self.root_directory, self.image_names[idx])).convert(
                 "RGB" #didn't do this for DLC
             )  # Rick's images have 1 color channel; change to 3.
-            if transform:
-                x, y = transform(images = np.expand_dims(x, axis = 0), keypoints = np.expand_dims(y, axis = 0)) #check transform and normalization
+            if self.transform:
+                x, y = self.transform(images = np.expand_dims(x, axis = 0), keypoints = np.expand_dims(y, axis = 0)) #check transform and normalization
             x = x.squeeze(0)
             y = y.squeeze(0)
             x = self.torch_transform(x)
-            y_heatmap = draw_keypoints(y, x.shape[-2], x.shape[-1], self.output_shape, sigma = 5)
+            y_heatmap = draw_keypoints(y, x.shape[-2], x.shape[-1], self.output_shape, sigma = self.output_sigma) #sigma = 5/4
             label_heatmaps.append(y_heatmap)
         self.label_heatmaps = torch.from_numpy(np.asarray(label_heatmaps)).float()
         self.label_heatmaps = self.label_heatmaps.permute(0, 3, 1, 2)
-        #check that nan keypoints are producing heatmaps of zeros
-        #check that max of heatmaps look good
-        self.transform = transform
-        self.root_directory = root_directory
-        self.num_targets = self.labels.shape[1]
 
     def __len__(self) -> int:
         return len(self.image_names)
@@ -195,21 +188,37 @@ class TrackingDataModule(pl.LightningDataModule):
         self.validation_batch_size = validation_batch_size
         self.test_batch_size = test_batch_size
         self.num_workers = num_workers
+        #self.train_set = dataset
+        #self.valid_set = dataset
+        #self.test_set = dataset
 
-    def setup(self, stage: Optional[str] = None):
+    def setup(self, stage: Optional[str] = None): 
         datalen = self.fulldataset.__len__()
-        #print(datalen)
-        if ((round(datalen * 0.8) + round(datalen * 0.1) + round(datalen * 0.1)) != datalen):
-            self.train_set, self.valid_set, self.test_set = random_split(
-                self.fulldataset, [round(datalen * 0.8) + 1, round(datalen * 0.1), round(datalen * 0.1)], #hardcoded solution to rounding error
-                generator=torch.Generator().manual_seed(42)
-            )
-        else:
-            self.train_set, self.valid_set, self.test_set = random_split(
-                self.fulldataset, [round(datalen * 0.8), round(datalen * 0.1), round(datalen * 0.1)],
-                generator=torch.Generator().manual_seed(42)
-            )
-
+        print("datalen:")
+        print(datalen)
+        return
+#        self.train_set, self.valid_set, self.test_set = random_split(
+#                self.fulldataset, [183, 22, 22], #hardcoded solution to rounding error
+#                generator=torch.Generator().manual_seed(10) #changed random_seed
+#        )
+#        
+#        return
+#        if ((round(datalen * 0.8) + round(datalen * 0.1) + round(datalen * 0.1)) > datalen):
+#            self.train_set, self.valid_set, self.test_set = random_split(
+#                self.fulldataset, [round(datalen * 0.8) - 1, round(datalen * 0.1), round(datalen * 0.1)], #hardcoded solution to rounding error
+#                generator=torch.Generator().manual_seed(42)
+#            )
+#        elif ((round(datalen * 0.8) + round(datalen * 0.1) + round(datalen * 0.1)) < datalen):
+#            self.train_set, self.valid_set, self.test_set = random_split(
+#                self.fulldataset, [round(datalen * 0.8) + 1, round(datalen * 0.1), round(datalen * 0.1)], #hardcoded solution to rounding error
+#                generator=torch.Generator().manual_seed(42)
+#            )
+#        else:
+#            self.train_set, self.valid_set, self.test_set = random_split(
+#                self.fulldataset, [round(datalen * 0.8), round(datalen * 0.1), round(datalen * 0.1)],
+#                generator=torch.Generator().manual_seed(42)
+#            )
+#
     def full_dataloader(self):
         return DataLoader(self.fulldataset, batch_size = 1, num_workers = self.num_workers)
         
