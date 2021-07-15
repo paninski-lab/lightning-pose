@@ -49,11 +49,10 @@ class DLC(LightningModule):
         # TODO: Should depend on input size
         self.num_keypoints = 17 #HARDCODED
         self.upsampling_layers += [ #shape = [batch, 2048, 12, 12]
-            nn.Upsample(scale_factor = 2), # [batch, 2048, 24, 24]
-            nn.PixelShuffle(2),            # [batch, 512,  48, 48]
-            nn.ConvTranspose2d(in_channels = int(num_filters/4), out_channels = self.num_keypoints, kernel_size = (3, 3), stride = (2,2), padding = (1,1), output_padding = (1,1)) # [batch, 17, 96, 96]
+            #nn.Upsample(scale_factor = 2, mode = 'bilinear'),
+            nn.PixelShuffle(2), 
+            nn.ConvTranspose2d(in_channels = int(num_filters/4), out_channels = self.num_keypoints, kernel_size = (3, 3), stride = (2,2), padding = (1,1), output_padding = (1,1)) # [batch, 17, 48, 48]
         ]
-        #print(self.upsampling_layers[-1].weight)
         self.upsampling_layers = nn.Sequential(*self.upsampling_layers)
         torch.nn.init.xavier_uniform_(self.upsampling_layers[-1].weight)
         torch.nn.init.zeros_(self.upsampling_layers[-1].bias)
@@ -120,8 +119,8 @@ class DLC(LightningModule):
     def computeSubPixMax(self, heatmaps_pred, heatmaps_y, output_shape, threshold):
         kernel_size = np.min(output_shape)
         kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
-        pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), kernel_size, 5, 100, 4, 255.0, "channels_first")
-        y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), kernel_size, 5, 100, 4, 255.0, "channels_first")
+        pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), kernel_size, 5, 100, 8, 255.0, "channels_first") #changed from 4 to 8
+        y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), kernel_size, 5, 100, 8, 255.0, "channels_first") #changed from 4 to 8
         if threshold:
             pred_kpts_list = []
             y_kpts_list = []

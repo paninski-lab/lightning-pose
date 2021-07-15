@@ -93,13 +93,16 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
 
         self.downsample_factor = 2 #could change to 0, 2, 3, or 4
         self.sigma = 5
-        self.output_sigma = 1.25
+        self.output_sigma = 1.25 #should be sigma/2 ^downsample factor
         self.height = 384
         self.width = 384
         self.output_shape = (
             self.height // 2 ** self.downsample_factor,
             self.width // 2 ** self.downsample_factor,
         )
+        self.half_output_shape = (int(self.output_shape[0] / 2), int(self.output_shape[1] / 2))
+        print(self.half_output_shape)
+
         imgnet_mean = [0.485, 0.456, 0.406]
         imgnet_std = [0.229, 0.224, 0.225]
         self.torch_transform = transforms.Compose([ #imagenet normalization
@@ -124,7 +127,7 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
             x = x.squeeze(0)
             y = y.squeeze(0)
             x = self.torch_transform(x)
-            y_heatmap = draw_keypoints(y, x.shape[-2], x.shape[-1], self.output_shape, sigma = self.output_sigma) #sigma = 5/4
+            y_heatmap = draw_keypoints(y, x.shape[-2], x.shape[-1], self.half_output_shape, sigma = self.output_sigma) #output shape is smaller
             label_heatmaps.append(y_heatmap)
         self.label_heatmaps = torch.from_numpy(np.asarray(label_heatmaps)).float()
         self.label_heatmaps = self.label_heatmaps.permute(0, 3, 1, 2)
