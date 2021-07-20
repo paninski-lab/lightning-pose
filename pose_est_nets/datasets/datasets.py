@@ -10,6 +10,8 @@ import numpy as np
 from PIL import Image
 from deepposekit.utils.keypoints import draw_keypoints
 from tqdm import tqdm
+from sklearn.decomposition import PCA
+import h5py
 
 
 class TrackingDataset(torch.utils.data.Dataset):
@@ -58,38 +60,55 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         root_directory: str,
-        csv_path: str,
+        data_path: str,
+        mode: str,
         header_rows: Optional[List[int]] = None,
         transform: Optional[Callable] = None,
+        noNans: Optional[bool] = False
     ) -> None:
         """
         Initializes the DLC Heatmap Dataset
         Parameters:
             root_directory (str): path to data directory
-            csv_path (str): path to CSV file (within root_directory). CSV file should be
+            data_path (str): path to CSV or h5 file  (within root_directory). CSV file should be
                 in the form (image_path, bodypart_1_x, bodypart_1_y, ..., bodypart_n_y)
                 Note: image_path is relative to the given root_directory
+            mode (str): 'csv' or 'h5'
             header_rows (List[int]): (optional) which rows in the csv are header rows
             transform (torchvision.transforms): (optional) transform to resize the images, image dimensions must be repeatably divisible by 2
+            noNans (bool): whether or not to throw out all frames that have occluded keypoints
         Returns:
             None
         """
-        csv_data = pd.read_csv(
-            os.path.join(root_directory, csv_path), header=header_rows
-        )
-        self.image_names = list(csv_data.iloc[:, 0])
+        if (mode == 'csv'):
+            csv_data = pd.read_csv(
+                os.path.join(root_directory, data_path), header=header_rows     
+            )
+            self.image_names = list(csv_data.iloc[:, 0])
+            self.labels = torch.tensor(csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32)
+        elif (mode == 'h5'):
+            hf = h5py.File(os.path.join(root_directory, data_path), 'r')
+            self.images = hf['images']
+            self.labels = hf["annotations"]
+        else:
+            raise ValueError("mode must be 'csv' or 'h5'")
+        
         self.root_directory = root_directory
-        self.labels = torch.tensor(csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32)
         self.labels = torch.reshape(self.labels, (self.labels.shape[0], -1, 2)) 
         self.transform = transform
-        #Checks for images with set of keypoints that include any nan, so that they can be excluded from the data entirely, like DeepPoseKit does
-        ##########################################################
-        self.fully_labeled_idxs = self.get_fully_labeled_idxs()
-        print(self.fully_labeled_idxs)
-        self.image_names = [self.image_names[idx] for idx in self.fully_labeled_idxs]
-        self.labels = [self.labels[idx] for idx in self.fully_labeled_idxs]
-        print(len(self.image_names), len(self.labels))
-        ##########################################################
+        
+        if nonNans:
+            #Checks for images with set of keypoints that include any nan, so that they can be excluded from the data entirely, like DeepPoseKit does
+            ##########################################################
+            self.fully_labeled_idxs = self.get_fully_labeled_idxs()
+            print(self.fully_labeled_idxs)
+            if (mode == 'csv'):
+                self.image_names = [self.image_names[idx] for idx in self.fully_labeled_idxs]
+            else:
+                self.images = [self.images[idx] for idx in self.fully_labeled_idxs]
+            self.labels = [self.labels[idx] for idx in self.fully_labeled_idxs]
+            print(len(self.image_names), len(self.labels))
+            ##########################################################
 
         self.downsample_factor = 2 #could change to 0, 2, 3, or 4
         self.sigma = 5
@@ -136,12 +155,17 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
         return len(self.image_names)
 
     def __getitem__(self, idx: int) -> Tuple[torch.tensor, torch.tensor]:
-        # get img_name from self.image_names
-        img_name = self.image_names[idx]
+        
         # read image from file and apply transformations (if any)
-        x = Image.open(os.path.join(self.root_directory, img_name)).convert( #didn't do this for dlc
-            "RGB"
-        )  # Rick's images have 1 color channel; change to 3.
+        if (mode == 'csv'):
+            # get img_name from self.image_names
+            img_name = self.image_names[idx]
+            x = Image.open(os.path.join(self.root_directory, img_name)).convert( #didn't do this for dlc
+                "RGB"
+            )  # Rick's images have 1 color channel; change to 3.
+        else:
+            x = self.images[idx] #make sure this works with the transformations
+
         if self.transform:
             x = self.transform(images = np.expand_dims(x, axis = 0)) #check this
             x = x.squeeze(0)
@@ -222,6 +246,18 @@ class TrackingDataModule(pl.LightningDataModule):
 #                generator=torch.Generator().manual_seed(42)
 #            )
 #
+
+    # def computePPCA_params(self, num_views):
+    #     data_arr = train_set.labels
+    #     print(data_arr.shape)
+    #     num_body_parts = self.train_set.num_targets
+    #     arr_for_pca = torch.reshape(data_arr, shape = (num_views, num_body_parts * len(self.train_set)))
+    #     pca = PCA(num_components = 3, svd_solver = 'full')
+    #     pca.fit(arr_for_pca.T)
+    #     mu = torch.mean(arr_for_pca, axis=1)
+
+
+
     def full_dataloader(self):
         return DataLoader(self.fulldataset, batch_size = 1, num_workers = self.num_workers)
         
