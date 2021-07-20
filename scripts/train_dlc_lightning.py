@@ -74,7 +74,6 @@ def saveNumericalPredictions(threshold):
     model.eval()
     full_dl = datamod.full_dataloader()
     test_dl = datamod.test_dataloader()
-    print(len(test_dl))
     #fully_labeled_idxs = full_data.get_fully_labeled_idxs()
     final_gt_keypoints = np.empty(shape = (22, 17, 2))
     final_imgs = np.empty(shape = (22, 406, 396, 1))
@@ -109,9 +108,6 @@ def plotPredictions(save_heatmaps, threshold, mode):
     else:
         dl = datamod.test_dataloader()
     i = 0
-    print("____________________")
-    print(len(dl))
-    print("_____________________")
     for idx, batch in enumerate(dl):
         x, y = batch
         heatmap_pred = model.forward(x)
@@ -154,31 +150,16 @@ model = DLC(num_targets = 34, resnet_version = 50, transfer = False)
 if (args.load):
     model = model.load_from_checkpoint(checkpoint_path = args.ckpt, num_targets = 34, resnet_version = 50, transfer = False)
 
+#model.num_features = 
+
 data_transform = []
 data_transform.append(iaa.Resize({"height": 384, "width": 384})) #dlc dimensions need to be repeatably divisable by 2
 data_transform = iaa.Sequential(data_transform)
 
 
-train_data = DLCHeatmapDataset(root_directory= '../../deepposekit-tests/dlc_test/mouse_data/data', csv_path='CollectedData_.csv', header_rows=[1, 2], transform=data_transform)
-print(train_data.image_names)
-train_data.image_names = train_data.image_names[:183]
-train_data.labels = train_data.labels[:183]
-train_data.compute_heatmaps()
-val_data = DLCHeatmapDataset(root_directory= '../../deepposekit-tests/dlc_test/mouse_data/data', csv_path='CollectedData_.csv', header_rows=[1, 2], transform=data_transform)
-val_data.image_names = val_data.image_names[183:183+22]
-val_data.labels = val_data.labels[183:183+22]
-val_data.compute_heatmaps()
-test_data = DLCHeatmapDataset(root_directory= '../../deepposekit-tests/dlc_test/mouse_data/data', csv_path='CollectedData_.csv', header_rows=[1, 2], transform=data_transform)
-test_data.image_names = test_data.image_names[205:]
-test_data.labels = test_data.labels[205:]
-test_data.compute_heatmaps()
+full_data = DLCHeatmapDataset(root_directory= '../data', csv_path='tank_dataset_13.h5', transform=data_transform, mode = 'h5') #fish data
 
-datamod = TrackingDataModule(train_data, train_batch_size = 16, validation_batch_size = 10, test_batch_size = 1, num_workers = args.num_workers) #dlc configs
-datamod.train_set = train_data
-datamod.valid_set = val_data
-datamod.test_set = test_data
-
-#datamod = TrackingDataModule(full_data, train_batch_size = 16, validation_batch_size = 10, test_batch_size = 1, num_workers = args.num_workers) #dlc configs
+datamod = TrackingDataModule(full_data, train_batch_size = 16, validation_batch_size = 10, test_batch_size = 1, num_workers = args.num_workers) #dlc configs
 
 early_stopping = pl.callbacks.EarlyStopping(
     monitor="val_loss", patience=100, mode="min"
