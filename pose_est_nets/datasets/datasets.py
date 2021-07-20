@@ -90,6 +90,9 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
             hf = h5py.File(os.path.join(root_directory, data_path), 'r')
             self.images = hf['images']
             self.labels = hf["annotations"]
+            print(self.images.shape)
+            print(self.labels.shape)
+            exit()
         else:
             raise ValueError("mode must be 'csv' or 'h5'")
         
@@ -138,9 +141,12 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
     def compute_heatmaps(self):
         label_heatmaps = []
         for idx, y in enumerate(tqdm(self.labels)):
-            x = Image.open(os.path.join(self.root_directory, self.image_names[idx])).convert(
-                "RGB" #didn't do this for DLC
-            )  # Rick's images have 1 color channel; change to 3.
+            if (mode == 'csv'):
+                x = Image.open(os.path.join(self.root_directory, self.image_names[idx])).convert(
+                    "RGB" #didn't do this for DLC
+                )  # Rick's images have 1 color channel; change to 3.
+            else:
+                x = self.images[idx]
             if self.transform:
                 x, y = self.transform(images = np.expand_dims(x, axis = 0), keypoints = np.expand_dims(y, axis = 0)) #check transform and normalization
             x = x.squeeze(0)
@@ -171,7 +177,9 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
             x = x.squeeze(0)
             x = self.torch_transform(x)
         y_heatmap = self.label_heatmaps[idx]
+        #y_keypoint = self.labels[idx]
         return x, y_heatmap
+        #return x, y_heatmap, y_keypoint
 
     def get_fully_labeled_idxs(self):
         nan_check = torch.isnan(self.labels)
@@ -247,14 +255,14 @@ class TrackingDataModule(pl.LightningDataModule):
 #            )
 #
 
-    # def computePPCA_params(self, num_views):
-    #     data_arr = train_set.labels
-    #     print(data_arr.shape)
-    #     num_body_parts = self.train_set.num_targets
-    #     arr_for_pca = torch.reshape(data_arr, shape = (num_views, num_body_parts * len(self.train_set)))
-    #     pca = PCA(num_components = 3, svd_solver = 'full')
-    #     pca.fit(arr_for_pca.T)
-    #     mu = torch.mean(arr_for_pca, axis=1)
+    def computePPCA_params(self, num_views):
+        data_arr = train_set.labels
+        print(data_arr.shape)
+        num_body_parts = self.train_set.num_targets
+        arr_for_pca = torch.reshape(data_arr, shape = (num_views, num_body_parts * len(self.train_set)))
+        pca = PCA(num_components = 3, svd_solver = 'full')
+        pca.fit(arr_for_pca.T)
+        mu = torch.mean(arr_for_pca, axis=1)
 
 
 

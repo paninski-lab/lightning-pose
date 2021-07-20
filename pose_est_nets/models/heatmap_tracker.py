@@ -94,11 +94,14 @@ class DLC(LightningModule):
         return loss
 
     def training_step(self, data, batch_idx):
+        #x, y_heatmap, y_keypoints = data
         x, y = data
         # forward pass
         y_hat = self.forward(x)
         # compute loss
         loss = self.heatmap_loss(y, y_hat)
+        #heatmap_loss = self.heatmap_loss(y_heatmap, y_hat)
+        #ppca_loss = 
         # log training loss
         self.log(
             "train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
