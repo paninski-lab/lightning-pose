@@ -47,7 +47,7 @@ class DLC(LightningModule):
         self.upsampling_layers = []
         # TODO: Add normalization
         # TODO: Should depend on input size
-        self.num_keypoints = 17 #HARDCODED
+        self.num_keypoints = num_targets//2
         self.upsampling_layers += [ #shape = [batch, 2048, 12, 12]
             #nn.Upsample(scale_factor = 2, mode = 'bilinear'),
             nn.PixelShuffle(2), 
@@ -61,7 +61,7 @@ class DLC(LightningModule):
         self.num_workers = 0
     
     @typechecked
-    def forward(self, x: TensorType["batch", 3, "Height", "Width"]) -> TensorType["batch", 17, "Out_Height", "Out_Width"]:
+    def forward(self, x: TensorType["batch", 3, "Height", "Width"]) -> TensorType["batch", 108, "Out_Height", "Out_Width"]: #how do I use a variable to indicate number of keypoints
         """
         Forward pass through the network
         :param x: input
@@ -75,7 +75,7 @@ class DLC(LightningModule):
 
     @staticmethod
     @typechecked
-    def heatmap_loss(y: TensorType["batch", 17, "Out_Height", "Out_Width"], y_hat: TensorType["batch", 17, "Out_Height", "Out_Width"]) -> TensorType[()]:
+    def heatmap_loss(y: TensorType["batch", 108, "Out_Height", "Out_Width"], y_hat: TensorType["batch", 108, "Out_Height", "Out_Width"]) -> TensorType[()]:
         """
         Computes mse loss between ground truth (x,y) coordinates and predicted (x^,y^) coordinates
         :param y: ground truth. shape=(num_targets, 2)
