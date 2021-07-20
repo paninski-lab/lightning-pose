@@ -51,8 +51,10 @@ def upsampleArgmax(heatmap_pred, heatmap_y):
 def computeSubPixMax(heatmaps_pred, heatmaps_y, output_shape, threshold):
     kernel_size = np.min(output_shape)
     kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
-    pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), kernel_size, train_data.output_sigma, 100, 8, 255.0, "channels_first")
-    y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), kernel_size, train_data.output_sigma, 100, 8, 255.0, "channels_first")
+    pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), kernel_size, full_data.output_sigma, 100, 8, 255.0, "channels_first")
+    print(pred_keypoints.shape)
+    print(pred_keypoints[0, :4])
+    y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), kernel_size, full_data.output_sigma, 100, 8, 255.0, "channels_first")
     if threshold:
         pred_kpts_list = []
         y_kpts_list = []
@@ -69,7 +71,7 @@ def computeSubPixMax(heatmaps_pred, heatmaps_y, output_shape, threshold):
 def saveNumericalPredictions(threshold):
     i = 0
     rev_augmenter = []
-    rev_augmenter.append(iaa.Resize({"height": 406, "width": 396}))
+    rev_augmenter.append(iaa.Resize({"height": 406, "width": 396})) #get rid of this for the fish
     rev_augmenter = iaa.Sequential(rev_augmenter)
     model.eval()
     full_dl = datamod.full_dataloader()
@@ -119,12 +121,12 @@ def plotPredictions(save_heatmaps, threshold, mode):
             plt.savefig('../preds/test_gt_heatmaps10/gt_map' + str(i) + '.png')
             plt.clf()
         #pred_keypoints, y_keypoints = upsampleArgmax(heatmap_pred, y)
-        output_shape = train_data.half_output_shape #changed from full_data
+        output_shape = full_data.half_output_shape #changed from train_data
         pred_keypoints, y_keypoints = computeSubPixMax(heatmap_pred, y, output_shape, threshold)
         plt.imshow(x[0][0])
         plt.scatter(pred_keypoints[:,0], pred_keypoints[:,1], c = 'blue')
         plt.scatter(y_keypoints[:,0], y_keypoints[:,1], c = 'orange')
-        plt.savefig('../preds/test_preds_ptl10/pred' + str(i) + '.png')
+        plt.savefig('../preds/fish_preds_threshold/pred' + str(i) + '.png')
         plt.clf()
         i += 1
 
@@ -140,33 +142,36 @@ parser.add_argument("--validation_batch_size", type = int, default = 10)
 parser.add_argument("--test_batch_size", type = int, default = 1)
 parser.add_argument("--num_gpus", type = int, default = 1)
 parser.add_argument("--num_workers", type = int, default = 8)
-
+parser.add_argument("--num_keypoints", type = int, default = 108) #fish data default
 args = parser.parse_args()
 
 torch.manual_seed(11)
 
-model = DLC(num_targets = 34, resnet_version = 50, transfer = False)
+model = DLC(num_targets = args.num_keypoints * 2, resnet_version = 50, transfer = False)
 
 if (args.load):
-    model = model.load_from_checkpoint(checkpoint_path = args.ckpt, num_targets = 34, resnet_version = 50, transfer = False)
+    model = model.load_from_checkpoint(checkpoint_path = args.ckpt, num_targets = args.num_keypoints * 2, resnet_version = 50, transfer = False)
 
-#model.num_features = 
+#WE DON'T NEED DATA TRANSFORM BECAUSE IMAGE IS ALREADY IN APPROPRIATE DIMENSIONS (384, 512)
 
-data_transform = []
-data_transform.append(iaa.Resize({"height": 384, "width": 384})) #dlc dimensions need to be repeatably divisable by 2
-data_transform = iaa.Sequential(data_transform)
+#data_transform = []
+#data_transform.append(iaa.Resize({"height": 384, "width": 384})) #dlc dimensions need to be repeatably divisable by 2
+#data_transform = iaa.Sequential(data_transform)
 
 
-full_data = DLCHeatmapDataset(root_directory= '../data', csv_path='tank_dataset_13.h5', transform=data_transform, mode = 'h5') #fish data
+
+full_data = DLCHeatmapDataset(root_directory= '../data', data_path='tank_dataset_13.h5', mode = 'h5', noNans = False) #fish data
 
 datamod = TrackingDataModule(full_data, train_batch_size = 16, validation_batch_size = 10, test_batch_size = 1, num_workers = args.num_workers) #dlc configs
+datamod.setup()
+
+print(len(datamod.train_set), len(datamod.valid_set), len(datamod.test_set))
 
 early_stopping = pl.callbacks.EarlyStopping(
     monitor="val_loss", patience=100, mode="min"
 )
 lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval = 'epoch')
 
-#datamod.setup()
 
 trainer = pl.Trainer(gpus=args.num_gpus, log_every_n_steps = 15, callbacks=[early_stopping, lr_monitor], auto_scale_batch_size = False, reload_dataloaders_every_epoch=False)
 
@@ -178,11 +183,11 @@ else:
 if args.predict:
     model.eval()
     trainer.test(model = model, datamodule = datamod)
-    threshold = False #whether or not to refrain from plotting a keypoint if the max value of the heatmap is below a certain threshold
-    save_heatmaps = True #whether or not to save heatmap images, note they will be in the downsampled dimensions
+    threshold = True #whether or not to refrain from plotting a keypoint if the max value of the heatmap is below a certain threshold
+    save_heatmaps = False #whether or not to save heatmap images, note they will be in the downsampled dimensions
     mode = 'test'
     plotPredictions(save_heatmaps, threshold, mode)
     threshold = False
-    saveNumericalPredictions(threshold)
+    #saveNumericalPredictions(threshold)
     
 

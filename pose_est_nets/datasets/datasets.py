@@ -88,11 +88,13 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
             self.labels = torch.tensor(csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32)
         elif (mode == 'h5'):
             hf = h5py.File(os.path.join(root_directory, data_path), 'r')
-            self.images = hf['images']
-            self.labels = hf["annotations"]
+            print(hf['images'].dtype)
+            self.images = np.array(hf['images'])
+            self.images = self.images[:,:,:,0]
+            print(self.images.dtype)
+            self.labels = torch.tensor(hf["annotations"])
             print(self.images.shape)
             print(self.labels.shape)
-            exit()
         else:
             raise ValueError("mode must be 'csv' or 'h5'")
         
@@ -100,7 +102,7 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
         self.labels = torch.reshape(self.labels, (self.labels.shape[0], -1, 2)) 
         self.transform = transform
         
-        if nonNans:
+        if noNans:
             #Checks for images with set of keypoints that include any nan, so that they can be excluded from the data entirely, like DeepPoseKit does
             ##########################################################
             self.fully_labeled_idxs = self.get_fully_labeled_idxs()
@@ -110,14 +112,17 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
             else:
                 self.images = [self.images[idx] for idx in self.fully_labeled_idxs]
             self.labels = [self.labels[idx] for idx in self.fully_labeled_idxs]
-            print(len(self.image_names), len(self.labels))
+            if (mode == 'csv'):
+                print(len(self.image_names), len(self.labels))
+            else:
+                print(len(self.images), len(self.labels))
             ##########################################################
 
         self.downsample_factor = 2 #could change to 0, 2, 3, or 4
         self.sigma = 5
         self.output_sigma = 1.25 #should be sigma/2 ^downsample factor
         self.height = 384
-        self.width = 384
+        self.width = 512
         self.output_shape = (
             self.height // 2 ** self.downsample_factor,
             self.width // 2 ** self.downsample_factor,
@@ -131,7 +136,7 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
             transforms.ToTensor(),
             transforms.Normalize(mean = imgnet_mean, std = imgnet_std)
         ])
-
+        self.mode = mode
         # Compute heatmaps as preprocessing step
         #check that max of heatmaps look good
         self.compute_heatmaps()
@@ -141,16 +146,18 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
     def compute_heatmaps(self):
         label_heatmaps = []
         for idx, y in enumerate(tqdm(self.labels)):
-            if (mode == 'csv'):
+            if (self.mode == 'csv'):
                 x = Image.open(os.path.join(self.root_directory, self.image_names[idx])).convert(
                     "RGB" #didn't do this for DLC
                 )  # Rick's images have 1 color channel; change to 3.
             else:
-                x = self.images[idx]
+                x = Image.fromarray(self.images[idx]).convert("RGB")
             if self.transform:
                 x, y = self.transform(images = np.expand_dims(x, axis = 0), keypoints = np.expand_dims(y, axis = 0)) #check transform and normalization
-            x = x.squeeze(0)
-            y = y.squeeze(0)
+                x = x.squeeze(0)
+                y = y.squeeze(0)
+            else:
+                y = y.numpy()
             x = self.torch_transform(x)
             y_heatmap = draw_keypoints(y, x.shape[-2], x.shape[-1], self.half_output_shape, sigma = self.output_sigma) #output shape is smaller
             label_heatmaps.append(y_heatmap)
@@ -158,24 +165,24 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
         self.label_heatmaps = self.label_heatmaps.permute(0, 3, 1, 2)
 
     def __len__(self) -> int:
-        return len(self.image_names)
+        return self.labels.shape[0]
 
     def __getitem__(self, idx: int) -> Tuple[torch.tensor, torch.tensor]:
         
         # read image from file and apply transformations (if any)
-        if (mode == 'csv'):
+        if (self.mode == 'csv'):
             # get img_name from self.image_names
             img_name = self.image_names[idx]
             x = Image.open(os.path.join(self.root_directory, img_name)).convert( #didn't do this for dlc
                 "RGB"
             )  # Rick's images have 1 color channel; change to 3.
         else:
-            x = self.images[idx] #make sure this works with the transformations
+            x = Image.fromarray(self.images[idx]).convert("RGB") #make sure this works with the transformations
 
         if self.transform:
             x = self.transform(images = np.expand_dims(x, axis = 0)) #check this
             x = x.squeeze(0)
-            x = self.torch_transform(x)
+        x = self.torch_transform(x)
         y_heatmap = self.label_heatmaps[idx]
         #y_keypoint = self.labels[idx]
         return x, y_heatmap
@@ -223,46 +230,52 @@ class TrackingDataModule(pl.LightningDataModule):
         self.validation_batch_size = validation_batch_size
         self.test_batch_size = test_batch_size
         self.num_workers = num_workers
-        #self.train_set = dataset
-        #self.valid_set = dataset
-        #self.test_set = dataset
-
+        self.num_views = 3 #changes with dataset
+        #self.ppca_params = self.computePPCA_params(self.num_views)
+    
+    
     def setup(self, stage: Optional[str] = None): 
         datalen = self.fulldataset.__len__()
         print("datalen:")
         print(datalen)
-        return
 #        self.train_set, self.valid_set, self.test_set = random_split(
 #                self.fulldataset, [183, 22, 22], #hardcoded solution to rounding error
 #                generator=torch.Generator().manual_seed(10) #changed random_seed
 #        )
 #        
 #        return
-#        if ((round(datalen * 0.8) + round(datalen * 0.1) + round(datalen * 0.1)) > datalen):
-#            self.train_set, self.valid_set, self.test_set = random_split(
-#                self.fulldataset, [round(datalen * 0.8) - 1, round(datalen * 0.1), round(datalen * 0.1)], #hardcoded solution to rounding error
-#                generator=torch.Generator().manual_seed(42)
-#            )
-#        elif ((round(datalen * 0.8) + round(datalen * 0.1) + round(datalen * 0.1)) < datalen):
-#            self.train_set, self.valid_set, self.test_set = random_split(
-#                self.fulldataset, [round(datalen * 0.8) + 1, round(datalen * 0.1), round(datalen * 0.1)], #hardcoded solution to rounding error
-#                generator=torch.Generator().manual_seed(42)
-#            )
-#        else:
-#            self.train_set, self.valid_set, self.test_set = random_split(
-#                self.fulldataset, [round(datalen * 0.8), round(datalen * 0.1), round(datalen * 0.1)],
-#                generator=torch.Generator().manual_seed(42)
-#            )
-#
+        if ((round(datalen * 0.8) + round(datalen * 0.1) + round(datalen * 0.1)) > datalen):
+            self.train_set, self.valid_set, self.test_set = random_split(
+                self.fulldataset, [round(datalen * 0.8) - 1, round(datalen * 0.1), round(datalen * 0.1)], #hardcoded solution to rounding error
+                generator=torch.Generator().manual_seed(42)
+            )
+        elif ((round(datalen * 0.8) + round(datalen * 0.1) + round(datalen * 0.1)) < datalen):
+            self.train_set, self.valid_set, self.test_set = random_split(
+                self.fulldataset, [round(datalen * 0.8) + 1, round(datalen * 0.1), round(datalen * 0.1)], #hardcoded solution to rounding error
+                generator=torch.Generator().manual_seed(42)
+            )
+        else:
+            self.train_set, self.valid_set, self.test_set = random_split(
+                self.fulldataset, [round(datalen * 0.8), round(datalen * 0.1), round(datalen * 0.1)],
+                generator=torch.Generator().manual_seed(42)
+            )
 
     def computePPCA_params(self, num_views):
-        data_arr = train_set.labels
+        param_dict = {}
+        data_arr = self.train_set.labels
         print(data_arr.shape)
         num_body_parts = self.train_set.num_targets
         arr_for_pca = torch.reshape(data_arr, shape = (num_views, num_body_parts * len(self.train_set)))
         pca = PCA(num_components = 3, svd_solver = 'full')
         pca.fit(arr_for_pca.T)
         mu = torch.mean(arr_for_pca, axis=1)
+        print(mu.shape)
+        print(mu)
+        param_dict["obs_offset"] = mu
+
+        return param_dict
+        
+
 
 
 
