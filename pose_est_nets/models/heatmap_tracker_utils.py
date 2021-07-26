@@ -1,3 +1,8 @@
+import torch
+import numpy as np
+import math
+from torch.nn import functional as F
+
 def find_maxima(x):
     col_max = torch.amax(x, axis=1)
     row_max = torch.amax(x, axis=2)
@@ -72,11 +77,11 @@ def _col_kernel(upsampled_region_size, upsample_factor, axis_offsets, data_shape
     col_kernel_a = torch.reshape(col_kernel_a, (-1, 1))
     col_kernel_a -= torch.floor(data_shape_float[2] / 2.0)
     col_kernel_a = torch.reshape(col_kernel_a, (1, -1))
-    col_kernel_a = torch.tile(col_kernel_a, (data_shape[0], 1))
+    col_kernel_a = col_kernel_a.repeat(data_shape[0], 1)
 
     col_kernel_b = torch.range(0, upsampled_region_size, dtype=torch.float32)
     col_kernel_b = torch.reshape(col_kernel_b, (1, -1))
-    col_kernel_b = torch.tile(col_kernel_b, (data_shape[0], 1))
+    col_kernel_b = col_kernel_b.repeat(data_shape[0], 1)
     col_kernel_b = torch.transpose(col_kernel_b)
     col_kernel_b -= torch.transpose(axis_offsets[:, 1])
     col_kernel_b = torch.transpose(col_kernel_b)
@@ -99,14 +104,14 @@ def _row_kernel(upsampled_region_size, upsample_factor, axis_offsets, data_shape
 
     row_kernel_a = torch.range(0, upsampled_region_size, dtype=torch.float32)
     row_kernel_a = torch.reshape(row_kernel_a, (1, -1))
-    row_kernel_a = torch.tile(row_kernel_a, (data_shape[0], 1))
+    row_kernel_a = row_kernel_a.repeat(data_shape[0], 1)
     row_kernel_a = torch.transpose(row_kernel_a)
     row_kernel_a = row_kernel_a - axis_offsets[:, 0]
 
     row_kernel_b = torch.range(0, data_shape_float[1], dtype=torch.float32)
     row_kernel_b = torch.fft.fftshift(row_kernel_b)
     row_kernel_b = torch.reshape(row_kernel_b, (1, -1))
-    row_kernel_b = torch.tile(row_kernel_b, (data_shape[0], 1))
+    row_kernel_b = row_kernel_b.repeat(data_shape[0], 1)
     row_kernel_b = row_kernel_b - torch.floor(data_shape_float[1] / 2.0)
 
     row_kernel_a = torch.unsqueeze(row_kernel_a, 1)
@@ -136,42 +141,45 @@ def _upsampled_dft(data, upsampled_region_size, upsample_factor, axis_offsets):
     return upsampled_dft
 
 #tensorflow source: https://github.com/jgraving/DeepPoseKit/blob/cecdb0c8c364ea049a3b705275ae71a2f366d4da/deepposekit/models/backend/backend.py#L176
-def find_subpixel_maxima(self, heatmaps, kernel_size, sigma, upsample_factor, coordinate_scale, confidence_scale): #data format implictly channels_first
+def find_subpixel_maxima(heatmaps, kernel_size, sigma, upsample_factor, coordinate_scale, confidence_scale): #data format implictly channels_first
     map_shape = heatmaps.shape
     batch = map_shape[0]
     channels = map_shape[1]
     row = map_shape[2]
     col = map_shape[3]
     heatmaps = heatmaps.reshape(shape = (batch * channels, row, col)) #check data types
-    x = torch.range( -(kernel_size // 2), (kernel_size // 2) + 1, dtype = torch.float32, device = 'cuda')
-    kernel = 1 / (sigma * torch.sqrt(2 * np.pi))
+    x = torch.arange( -(kernel_size // 2), (kernel_size // 2) + 1, dtype = torch.float32, device = 'cuda')
+    kernel = 1 / (sigma * math.sqrt(2 * np.pi))
     kernel *= torch.exp(-0.5 * (x / sigma) ** 2)
     kernel = torch.unsqueeze(kernel, -1)
-    kernel = kernel @ torch.transpose(kernel)
+    kernel = kernel @ torch.transpose(kernel, 0, 1) #check dims
     kernel = torch.unsqueeze(kernel, 0)
-    max_vals = torch.amax(heatmaps.reshape(shape = (-1, rows * cols)))
+    max_vals = torch.amax(heatmaps.reshape(shape = (-1, row * col)))
     max_vals = max_vals.reshape(shape = (-1, 1)) / confidence_scale
-    row_pad = rows // 2 - kernel_size // 2
-    col_pad = cols // 2 - kernel_size // 2
+    row_pad = row // 2 - kernel_size // 2
+    col_pad = col // 2 - kernel_size // 2
     padding = (row_pad, row_pad - 1, col_pad, col_pad - 1)
     kernel = F.pad(kernel, padding)
     row_center = row_pad + (kernel_size // 2)
     col_center = col_pad + (kernel_size // 2)
-    center = torch.stack([row_center, col_center])
+    center = torch.stack([torch.tensor(row_center), torch.tensor(col_center)])
     center = torch.unsqueeze(center, 0)
-    center.dtype = torch.float32
+    center = center.to(torch.float32)
+    map_shape = heatmaps.shape
     target_image = heatmaps.reshape(map_shape[:3])
     src_shape = kernel.shape
-    kernel = kernel.reshape(src_shape)
+    print(map_shape, src_shape)
+    kernel = kernel.reshape(src_shape[:3])
     src_image = kernel.to(torch.complex64)
     target_image = heatmaps.to(torch.complex64)
-    src_freq = torch.fft.fft2(scr_image)
+    src_freq = torch.fft.fft2(src_image)
     target_freq = torch.fft.fft2(target_image)
 
-    shape = src_freq.shape[1:3]
+    shape = torch.tensor(src_freq.shape[1:3])
     shape = shape.reshape(shape = (1,2))
-    shape = torch.to(torch.float32)
-    shape = torch.tile(input = shape, shape = (target_freq.shape[0], 1))
+    shape = shape.to(torch.float32)
+    shape = shape.repeat(target_freq.shape[0], 1) #check repeat vs tile
+    print(src_freq.shape, target_freq.shape)
     image_product = src_freq * torch.conj(target_freq)
     cross_correlation = torch.fft.ifft2(image_product)
 
