@@ -87,7 +87,7 @@ def saveNumericalPredictions(threshold):
         heatmap_pred = model.forward(x)
         #pred_keypoints, y_keypoints = upsampleArgmax(heatmap_pred, y)
         output_shape = train_data.half_output_shape #changed to small
-        pred_keypoints, y_keypoints = computeSubPixMax(heatmap_pred, y, output_shape, threshold)
+        pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred, y, output_shape, full_data.output_sigma, threshold)
 
         x = x[:,0,:,:] #only taking one image dimension
         x = np.expand_dims(x, axis = 3)
@@ -122,7 +122,7 @@ def plotPredictions(save_heatmaps, threshold, mode):
             plt.clf()
         #pred_keypoints, y_keypoints = upsampleArgmax(heatmap_pred, y)
         output_shape = full_data.half_output_shape #changed from train_data
-        pred_keypoints, y_keypoints = computeSubPixMax(heatmap_pred, y, output_shape, threshold)
+        pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred, y, output_shape, full_data.output_sigma, threshold)
         plt.imshow(x[0][0])
         plt.scatter(pred_keypoints[:,0], pred_keypoints[:,1], c = 'blue')
         plt.scatter(y_keypoints[:,0], y_keypoints[:,1], c = 'orange')
@@ -157,8 +157,6 @@ if (args.load):
 #data_transform = []
 #data_transform.append(iaa.Resize({"height": 384, "width": 384})) #dlc dimensions need to be repeatably divisable by 2
 #data_transform = iaa.Sequential(data_transform)
-
-
 
 full_data = DLCHeatmapDataset(root_directory= '../data', data_path='tank_dataset_13.h5', mode = 'h5', noNans = False) #fish data
 
