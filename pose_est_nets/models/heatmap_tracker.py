@@ -123,8 +123,8 @@ class DLC(LightningModule):
     def computeSubPixMax(self, heatmaps_pred, heatmaps_y, output_shape, output_sigma, threshold):
         kernel_size = np.min(output_shape)
         kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
-        pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), kernel_size, output_sigma, 100, 8, 255.0, "channels_first") #changed from 4 to 8
-        y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), kernel_size, output_sigma, 100, 8, 255.0, "channels_first") #changed from 4 to 8
+        pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), kernel_size, output_sigma, 100, 8, 255.0)
+        y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), kernel_size, output_sigma, 100, 8, 255.0)
         if threshold:
             pred_kpts_list = []
             y_kpts_list = []

@@ -126,7 +126,7 @@ def plotPredictions(save_heatmaps, threshold, mode):
         plt.imshow(x[0][0])
         plt.scatter(pred_keypoints[:,0], pred_keypoints[:,1], c = 'blue')
         plt.scatter(y_keypoints[:,0], y_keypoints[:,1], c = 'orange')
-        plt.savefig('../preds/fish_preds_threshold/pred' + str(i) + '.png')
+        plt.savefig('../preds/fish_preds_noDPK/pred' + str(i) + '.png')
         plt.clf()
         i += 1
 
