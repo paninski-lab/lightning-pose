@@ -52,8 +52,8 @@ def computeSubPixMax(heatmaps_pred, heatmaps_y, output_shape, threshold):
     kernel_size = np.min(output_shape)
     kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
     pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), kernel_size, full_data.output_sigma, 100, 8, 255.0, "channels_first")
-    print(pred_keypoints.shape)
-    print(pred_keypoints[0, :4])
+    #print(pred_keypoints.shape)
+    #print(pred_keypoints[0, :4])
     y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), kernel_size, full_data.output_sigma, 100, 8, 255.0, "channels_first")
     if threshold:
         pred_kpts_list = []
@@ -70,37 +70,44 @@ def computeSubPixMax(heatmaps_pred, heatmaps_y, output_shape, threshold):
 
 def saveNumericalPredictions(threshold):
     i = 0
-    rev_augmenter = []
-    rev_augmenter.append(iaa.Resize({"height": 406, "width": 396})) #get rid of this for the fish
-    rev_augmenter = iaa.Sequential(rev_augmenter)
+    #rev_augmenter = []
+    #rev_augmenter.append(iaa.Resize({"height": 406, "width": 396})) #get rid of this for the fish
+    #rev_augmenter = iaa.Sequential(rev_augmenter)
     model.eval()
     full_dl = datamod.full_dataloader()
     test_dl = datamod.test_dataloader()
     #fully_labeled_idxs = full_data.get_fully_labeled_idxs()
-    final_gt_keypoints = np.empty(shape = (22, 17, 2))
-    final_imgs = np.empty(shape = (22, 406, 396, 1))
-    final_preds = np.empty(shape = (22, 17, 2))
+    final_gt_keypoints = np.empty(shape = (len(test_dl), model.num_keypoints, 2))
+    #final_imgs = np.empty(shape = (22, 406, 396, 1))
+    final_preds = np.empty(shape = (len(test_dl), model.num_keypoints, 2))
+
+    dpk_final_preds = np.empty(shape = (len(test_dl), model.num_keypoints, 2))
+
     for idx, batch in enumerate(test_dl):
         #if (idx not in fully_labeled_idxs):
         #    continue
         x, y = batch
         heatmap_pred = model.forward(x)
         #pred_keypoints, y_keypoints = upsampleArgmax(heatmap_pred, y)
-        output_shape = train_data.half_output_shape #changed to small
+        output_shape = full_data.half_output_shape #changed to small
+        dpk_pred_keypoints, dpk_y_keypoints = computeSubPixMax(heatmap_pred, y, output_shape, threshold)
         pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred, y, output_shape, full_data.output_sigma, threshold)
-
+        dpk_final_preds[i] = pred_keypoints
         x = x[:,0,:,:] #only taking one image dimension
         x = np.expand_dims(x, axis = 3)
-        final_imgs[i], final_gt_keypoints[i] = rev_augmenter(images = x, keypoints = np.expand_dims(y_keypoints, axis = 0))
-        final_imgs[i], final_preds[i] = rev_augmenter(images = x, keypoints = np.expand_dims(pred_keypoints, axis = 0))
+        #final_imgs[i], final_gt_keypoints[i] = rev_augmenter(images = x, keypoints = np.expand_dims(y_keypoints, axis = 0))
+        #final_imgs[i], final_preds[i] = rev_augmenter(images = x, keypoints = np.expand_dims(pred_keypoints, axis = 0))
+        final_gt_keypoints[i] = y_keypoints
+        final_preds[i] = pred_keypoints
         i += 1
 
-    final_gt_keypoints = np.reshape(final_gt_keypoints, newshape = (22, 34))
-    final_preds = np.reshape(final_preds, newshape = (22, 34))
+    final_gt_keypoints = np.reshape(final_gt_keypoints, newshape = (len(test_dl), model.num_targets))
+    final_preds = np.reshape(final_preds, newshape = (len(test_dl), model.num_targets))
+    dpk_final_preds = np.reshape(dpk_final_preds, newshape = (len(test_dl), model.num_targets))
 
-    np.savetxt('../preds/ptl_test_labels10.csv', final_gt_keypoints, delimiter = ',', newline = '\n')
-    np.savetxt('../preds/ptl_test_predictions10.csv', final_preds, delimiter = ',', newline = '\n')
-
+    np.savetxt('../preds/fish_label.csv', final_gt_keypoints, delimiter = ',', newline = '\n')
+    np.savetxt('../preds/fish_predictions.csv', final_preds, delimiter = ',', newline = '\n')
+    np.savetxt('../preds/dpk_fish_predictions.csv', dpk_final_preds, delimiter = ',', newline = '\n')
     return
 
 def plotPredictions(save_heatmaps, threshold, mode):
@@ -122,7 +129,8 @@ def plotPredictions(save_heatmaps, threshold, mode):
             plt.clf()
         #pred_keypoints, y_keypoints = upsampleArgmax(heatmap_pred, y)
         output_shape = full_data.half_output_shape #changed from train_data
-        pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred, y, output_shape, full_data.output_sigma, threshold)
+        #print(heatmap_pred.device, y.device)
+        pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred.cuda(), y.cuda(), output_shape, full_data.output_sigma, threshold)
         plt.imshow(x[0][0])
         plt.scatter(pred_keypoints[:,0], pred_keypoints[:,1], c = 'blue')
         plt.scatter(y_keypoints[:,0], y_keypoints[:,1], c = 'orange')
@@ -186,6 +194,6 @@ if args.predict:
     mode = 'test'
     plotPredictions(save_heatmaps, threshold, mode)
     threshold = False
-    #saveNumericalPredictions(threshold)
+    saveNumericalPredictions(threshold)
     
 
