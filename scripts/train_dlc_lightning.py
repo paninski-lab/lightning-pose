@@ -112,6 +112,7 @@ def saveNumericalPredictions(threshold):
 
 def plotPredictions(save_heatmaps, threshold, mode):
     model.eval()
+    #model.to(
     if mode == 'train':
         dl = datamod.train_dataloader()
     else:
@@ -129,7 +130,8 @@ def plotPredictions(save_heatmaps, threshold, mode):
             plt.clf()
         #pred_keypoints, y_keypoints = upsampleArgmax(heatmap_pred, y)
         output_shape = full_data.half_output_shape #changed from train_data
-        #print(heatmap_pred.device, y.device)
+        print(heatmap_pred.device, y.device, model.device)
+        exit()
         pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred.cuda(), y.cuda(), output_shape, full_data.output_sigma, threshold)
         plt.imshow(x[0][0])
         plt.scatter(pred_keypoints[:,0], pred_keypoints[:,1], c = 'blue')
@@ -157,6 +159,7 @@ torch.manual_seed(11)
 
 model = DLC(num_targets = args.num_keypoints * 2, resnet_version = 50, transfer = False)
 
+
 if (args.load):
     model = model.load_from_checkpoint(checkpoint_path = args.ckpt, num_targets = args.num_keypoints * 2, resnet_version = 50, transfer = False)
 
@@ -169,9 +172,9 @@ if (args.load):
 full_data = DLCHeatmapDataset(root_directory= '../data', data_path='tank_dataset_13.h5', mode = 'h5', noNans = False) #fish data
 
 datamod = TrackingDataModule(full_data, train_batch_size = 16, validation_batch_size = 10, test_batch_size = 1, num_workers = args.num_workers) #dlc configs
-datamod.setup()
+#datamod.setup()
 
-print(len(datamod.train_set), len(datamod.valid_set), len(datamod.test_set))
+#print(len(datamod.train_set), len(datamod.valid_set), len(datamod.test_set))
 
 early_stopping = pl.callbacks.EarlyStopping(
     monitor="val_loss", patience=100, mode="min"
@@ -184,7 +187,7 @@ trainer = pl.Trainer(gpus=args.num_gpus, log_every_n_steps = 15, callbacks=[earl
 if (not(args.no_train)):
     trainer.fit(model = model, datamodule = datamod)
 else:
-    datamod.setup()
+    datamod.setup(stage = 'test')
 
 if args.predict:
     model.eval()
