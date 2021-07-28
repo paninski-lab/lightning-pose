@@ -70,9 +70,9 @@ def computeSubPixMax(heatmaps_pred, heatmaps_y, output_shape, threshold):
 
 def saveNumericalPredictions(threshold):
     i = 0
-    #rev_augmenter = []
-    #rev_augmenter.append(iaa.Resize({"height": 406, "width": 396})) #get rid of this for the fish
-    #rev_augmenter = iaa.Sequential(rev_augmenter)
+    rev_augmenter = []
+    rev_augmenter.append(iaa.Resize({"height": 406, "width": 396})) #get rid of this for the fish
+    rev_augmenter = iaa.Sequential(rev_augmenter)
     model.eval()
     full_dl = datamod.full_dataloader()
     test_dl = datamod.test_dataloader()
@@ -81,8 +81,8 @@ def saveNumericalPredictions(threshold):
     #final_imgs = np.empty(shape = (22, 406, 396, 1))
     final_preds = np.empty(shape = (len(test_dl), model.num_keypoints, 2))
 
-    dpk_final_preds = np.empty(shape = (len(test_dl), model.num_keypoints, 2))
-
+    #dpk_final_preds = np.empty(shape = (len(test_dl), model.num_keypoints, 2))
+    
     for idx, batch in enumerate(test_dl):
         #if (idx not in fully_labeled_idxs):
         #    continue
@@ -90,29 +90,28 @@ def saveNumericalPredictions(threshold):
         heatmap_pred = model.forward(x)
         #pred_keypoints, y_keypoints = upsampleArgmax(heatmap_pred, y)
         output_shape = full_data.half_output_shape #changed to small
-        dpk_pred_keypoints, dpk_y_keypoints = computeSubPixMax(heatmap_pred, y, output_shape, threshold)
+        #dpk_pred_keypoints, dpk_y_keypoints = computeSubPixMax(heatmap_pred, y, output_shape, threshold)
         pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred, y, output_shape, full_data.output_sigma, threshold)
-        dpk_final_preds[i] = pred_keypoints
+        #dpk_final_preds[i] = pred_keypoints
         x = x[:,0,:,:] #only taking one image dimension
         x = np.expand_dims(x, axis = 3)
-        #final_imgs[i], final_gt_keypoints[i] = rev_augmenter(images = x, keypoints = np.expand_dims(y_keypoints, axis = 0))
-        #final_imgs[i], final_preds[i] = rev_augmenter(images = x, keypoints = np.expand_dims(pred_keypoints, axis = 0))
-        final_gt_keypoints[i] = y_keypoints
-        final_preds[i] = pred_keypoints
+        final_imgs[i], final_gt_keypoints[i] = rev_augmenter(images = x, keypoints = np.expand_dims(y_keypoints, axis = 0))
+        final_imgs[i], final_preds[i] = rev_augmenter(images = x, keypoints = np.expand_dims(pred_keypoints, axis = 0))
+        #final_gt_keypoints[i] = y_keypoints
+        #final_preds[i] = pred_keypoints
         i += 1
 
     final_gt_keypoints = np.reshape(final_gt_keypoints, newshape = (len(test_dl), model.num_targets))
     final_preds = np.reshape(final_preds, newshape = (len(test_dl), model.num_targets))
-    dpk_final_preds = np.reshape(dpk_final_preds, newshape = (len(test_dl), model.num_targets))
+    #dpk_final_preds = np.reshape(dpk_final_preds, newshape = (len(test_dl), model.num_targets))
 
     np.savetxt('../preds/fish_label.csv', final_gt_keypoints, delimiter = ',', newline = '\n')
     np.savetxt('../preds/fish_predictions.csv', final_preds, delimiter = ',', newline = '\n')
-    np.savetxt('../preds/dpk_fish_predictions.csv', dpk_final_preds, delimiter = ',', newline = '\n')
+    #np.savetxt('../preds/dpk_fish_predictions.csv', dpk_final_preds, delimiter = ',', newline = '\n')
     return
 
 def plotPredictions(save_heatmaps, threshold, mode):
     model.eval()
-    #model.to(
     if mode == 'train':
         dl = datamod.train_dataloader()
     else:
@@ -130,8 +129,8 @@ def plotPredictions(save_heatmaps, threshold, mode):
             plt.clf()
         #pred_keypoints, y_keypoints = upsampleArgmax(heatmap_pred, y)
         output_shape = full_data.half_output_shape #changed from train_data
-        print(heatmap_pred.device, y.device, model.device)
-        exit()
+        #print(heatmap_pred.device, y.device, model.device)
+        #exit()
         pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred.cuda(), y.cuda(), output_shape, full_data.output_sigma, threshold)
         plt.imshow(x[0][0])
         plt.scatter(pred_keypoints[:,0], pred_keypoints[:,1], c = 'blue')
@@ -152,29 +151,31 @@ parser.add_argument("--validation_batch_size", type = int, default = 10)
 parser.add_argument("--test_batch_size", type = int, default = 1)
 parser.add_argument("--num_gpus", type = int, default = 1)
 parser.add_argument("--num_workers", type = int, default = 8)
-parser.add_argument("--num_keypoints", type = int, default = 108) #fish data default
+#parser.add_argument("--num_keypoints", type = int, default = 108) #fish data default
+parser.add_argument("--data_dir", type = str, default = '../../deepposekit-tests/dlc_test/mouse_data/data')
+#fish = '../data'
+#mouse = '../../deepposekit-tests/dlc_test/mouse_data/data'
+parser.add_argument("--data_path", type = str, default = 'CollectedData_.csv')
+#fish = 'tank_dataset_13.h5'
+#mouse = 'CollectedData_.csv'
 args = parser.parse_args()
 
 torch.manual_seed(11)
 
-model = DLC(num_targets = args.num_keypoints * 2, resnet_version = 50, transfer = False)
+#Hardcoded for fish data for now, in the future we can have feature which will automatically check if a data_transform needs to be applied and select the right transformation
+data_transform = []
+data_transform.append(iaa.Resize({"height": 384, "width": 384})) #dlc dimensions need to be repeatably divisable by 2
+data_transform = iaa.Sequential(data_transform)
 
+
+full_data = DLCHeatmapDataset(root_directory= args.data_dir, data_path=args.data_path, mode = 'h5', noNans = False, transform = data_transform)
+
+model = DLC(num_targets = full_data.num_targets, resnet_version = 50, transfer = False)
 
 if (args.load):
-    model = model.load_from_checkpoint(checkpoint_path = args.ckpt, num_targets = args.num_keypoints * 2, resnet_version = 50, transfer = False)
-
-#WE DON'T NEED DATA TRANSFORM BECAUSE IMAGE IS ALREADY IN APPROPRIATE DIMENSIONS (384, 512)
-
-#data_transform = []
-#data_transform.append(iaa.Resize({"height": 384, "width": 384})) #dlc dimensions need to be repeatably divisable by 2
-#data_transform = iaa.Sequential(data_transform)
-
-full_data = DLCHeatmapDataset(root_directory= '../data', data_path='tank_dataset_13.h5', mode = 'h5', noNans = False) #fish data
+    model = model.load_from_checkpoint(checkpoint_path = args.ckpt, num_targets = full_data.num_targets, resnet_version = 50, transfer = False)
 
 datamod = TrackingDataModule(full_data, train_batch_size = 16, validation_batch_size = 10, test_batch_size = 1, num_workers = args.num_workers) #dlc configs
-#datamod.setup()
-
-#print(len(datamod.train_set), len(datamod.valid_set), len(datamod.test_set))
 
 early_stopping = pl.callbacks.EarlyStopping(
     monitor="val_loss", patience=100, mode="min"
