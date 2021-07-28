@@ -51,10 +51,8 @@ def upsampleArgmax(heatmap_pred, heatmap_y):
 def computeSubPixMax(heatmaps_pred, heatmaps_y, output_shape, threshold):
     kernel_size = np.min(output_shape)
     kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
-    pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), kernel_size, full_data.output_sigma, 100, 8, 255.0, "channels_first")
-    #print(pred_keypoints.shape)
-    #print(pred_keypoints[0, :4])
-    y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), kernel_size, full_data.output_sigma, 100, 8, 255.0, "channels_first")
+    pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), kernel_size, data.output_sigma, 100, 8, 255.0, "channels_first")
+    y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), kernel_size, data.output_sigma, 100, 8, 255.0, "channels_first")
     if threshold:
         pred_kpts_list = []
         y_kpts_list = []
@@ -70,28 +68,25 @@ def computeSubPixMax(heatmaps_pred, heatmaps_y, output_shape, threshold):
 
 def saveNumericalPredictions(threshold):
     i = 0
+    #hardcoded for mouse data
     rev_augmenter = []
     rev_augmenter.append(iaa.Resize({"height": 406, "width": 396})) #get rid of this for the fish
     rev_augmenter = iaa.Sequential(rev_augmenter)
     model.eval()
     full_dl = datamod.full_dataloader()
     test_dl = datamod.test_dataloader()
-    #fully_labeled_idxs = full_data.get_fully_labeled_idxs()
     final_gt_keypoints = np.empty(shape = (len(test_dl), model.num_keypoints, 2))
-    #final_imgs = np.empty(shape = (22, 406, 396, 1))
+    final_imgs = np.empty(shape = (len(test_dl), 406, 396, 1))
     final_preds = np.empty(shape = (len(test_dl), model.num_keypoints, 2))
 
     #dpk_final_preds = np.empty(shape = (len(test_dl), model.num_keypoints, 2))
-    
+
     for idx, batch in enumerate(test_dl):
-        #if (idx not in fully_labeled_idxs):
-        #    continue
         x, y = batch
         heatmap_pred = model.forward(x)
-        #pred_keypoints, y_keypoints = upsampleArgmax(heatmap_pred, y)
-        output_shape = full_data.half_output_shape #changed to small
+        output_shape = data.half_output_shape #changed to small
         #dpk_pred_keypoints, dpk_y_keypoints = computeSubPixMax(heatmap_pred, y, output_shape, threshold)
-        pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred, y, output_shape, full_data.output_sigma, threshold)
+        pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred, y, output_shape, data.output_sigma, threshold)
         #dpk_final_preds[i] = pred_keypoints
         x = x[:,0,:,:] #only taking one image dimension
         x = np.expand_dims(x, axis = 3)
@@ -127,11 +122,10 @@ def plotPredictions(save_heatmaps, threshold, mode):
             plt.imshow(y[0, 4].detach())
             plt.savefig('../preds/test_gt_heatmaps10/gt_map' + str(i) + '.png')
             plt.clf()
-        #pred_keypoints, y_keypoints = upsampleArgmax(heatmap_pred, y)
-        output_shape = full_data.half_output_shape #changed from train_data
+        output_shape = data.half_output_shape #changed from train_data
         #print(heatmap_pred.device, y.device, model.device)
         #exit()
-        pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred.cuda(), y.cuda(), output_shape, full_data.output_sigma, threshold)
+        pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred.cuda(), y.cuda(), output_shape, data.output_sigma, threshold)
         plt.imshow(x[0][0])
         plt.scatter(pred_keypoints[:,0], pred_keypoints[:,1], c = 'blue')
         plt.scatter(y_keypoints[:,0], y_keypoints[:,1], c = 'orange')
@@ -158,6 +152,7 @@ parser.add_argument("--data_dir", type = str, default = '../../deepposekit-tests
 parser.add_argument("--data_path", type = str, default = 'CollectedData_.csv')
 #fish = 'tank_dataset_13.h5'
 #mouse = 'CollectedData_.csv'
+parser.add_argument("--select_data_mode", type = str, default = 'random', help = "set to deterministic if you want to train and test on specific data for mouse dataset, set to random if you want a random train/test split") 
 args = parser.parse_args()
 
 torch.manual_seed(11)
@@ -167,15 +162,37 @@ data_transform = []
 data_transform.append(iaa.Resize({"height": 384, "width": 384})) #dlc dimensions need to be repeatably divisable by 2
 data_transform = iaa.Sequential(data_transform)
 
+mode = args.data_path.split('.')[-1]
+#header rows are hardcoded
+header_rows = [1, 2]
 
-full_data = DLCHeatmapDataset(root_directory= args.data_dir, data_path=args.data_path, mode = 'h5', noNans = False, transform = data_transform)
+if args.select_data_mode == 'deterministic':
+    train_data = DLCHeatmapDataset(root_directory= args.data_dir, data_path=args.data_path, header_rows=header_rows, mode = mode, transform=data_transform, noNans = True)
+    train_data.image_names = train_data.image_names[:183]
+    train_data.labels = train_data.labels[:183]
+    train_data.compute_heatmaps()
+    val_data = DLCHeatmapDataset(root_directory= args.data_dir, data_path=args.data_path, header_rows=header_rows, mode = mode, transform=data_transform, noNans = True)
+    val_data.image_names = val_data.image_names[183:183+22]
+    val_data.labels = val_data.labels[183:183+22]
+    val_data.compute_heatmaps()
+    test_data = DLCHeatmapDataset(root_directory= args.data_dir, data_path=args.data_path, header_rows=header_rows, mode = mode, transform=data_transform, noNans = True)
+    test_data.image_names = test_data.image_names[205:]
+    test_data.labels = test_data.labels[205:]
+    test_data.compute_heatmaps()
+    datamod = TrackingDataModule(train_data, mode = args.args.select_data_mode, train_batch_size = 16, validation_batch_size = 10, test_batch_size = 1, num_workers = args.num_workers) #dlc configs
+    datamod.train_set = train_data
+    datamod.valid_set = val_data
+    datamod.test_set = test_data
+    data = train_data
+else:
+    full_data = DLCHeatmapDataset(root_directory= args.data_dir, data_path=args.data_path, mode = mode, noNans = False, transform = data_transform)
+    datamod = TrackingDataModule(data, mode = args.args.select_data_mode, train_batch_size = 16, validation_batch_size = 10, test_batch_size = 1, num_workers = args.num_workers) #dlc configs
+    data = full_data
 
-model = DLC(num_targets = full_data.num_targets, resnet_version = 50, transfer = False)
+model = DLC(num_targets = data.num_targets, resnet_version = 50, transfer = False)
 
 if (args.load):
-    model = model.load_from_checkpoint(checkpoint_path = args.ckpt, num_targets = full_data.num_targets, resnet_version = 50, transfer = False)
-
-datamod = TrackingDataModule(full_data, train_batch_size = 16, validation_batch_size = 10, test_batch_size = 1, num_workers = args.num_workers) #dlc configs
+    model = model.load_from_checkpoint(checkpoint_path = args.ckpt, num_targets = data.num_targets, resnet_version = 50, transfer = False)
 
 early_stopping = pl.callbacks.EarlyStopping(
     monitor="val_loss", patience=100, mode="min"
@@ -188,7 +205,7 @@ trainer = pl.Trainer(gpus=args.num_gpus, log_every_n_steps = 15, callbacks=[earl
 if (not(args.no_train)):
     trainer.fit(model = model, datamodule = datamod)
 else:
-    datamod.setup(stage = 'test')
+    datamod.setup()
 
 if args.predict:
     model.eval()

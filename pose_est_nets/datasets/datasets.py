@@ -238,14 +238,15 @@ def draw_keypoints(keypoints, height, width, output_shape, sigma=1, normalize=Tr
     return confidence
 
 class TrackingDataModule(pl.LightningDataModule):
-    def __init__(self, dataset, train_batch_size, validation_batch_size, test_batch_size, num_workers):
+    def __init__(self, dataset, mode, train_batch_size, validation_batch_size, test_batch_size, num_workers):
         super().__init__()
         self.fulldataset = dataset
         self.train_batch_size = train_batch_size
         self.validation_batch_size = validation_batch_size
         self.test_batch_size = test_batch_size
         self.num_workers = num_workers
-        self.num_views = 3 #changes with dataset
+        self.num_views = 2 #changes with dataset, 2 for mouse, 3 for fish
+        self.mode = mode
         #self.ppca_params = self.computePPCA_params(self.num_views)
     
     
@@ -253,12 +254,9 @@ class TrackingDataModule(pl.LightningDataModule):
         datalen = self.fulldataset.__len__()
         print("datalen:")
         print(datalen)
-#        self.train_set, self.valid_set, self.test_set = random_split(
-#                self.fulldataset, [183, 22, 22], #hardcoded solution to rounding error
-#                generator=torch.Generator().manual_seed(10) #changed random_seed
-#        )
-#        
-#        return
+        if (self.mode == 'deterministic'):
+            return  
+
         if ((round(datalen * 0.8) + round(datalen * 0.1) + round(datalen * 0.1)) > datalen):
             self.train_set, self.valid_set, self.test_set = random_split(
                 self.fulldataset, [round(datalen * 0.8) - 1, round(datalen * 0.1), round(datalen * 0.1)], #hardcoded solution to rounding error
