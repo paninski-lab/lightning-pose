@@ -179,15 +179,18 @@ if args.select_data_mode == 'deterministic':
     test_data.image_names = test_data.image_names[205:]
     test_data.labels = test_data.labels[205:]
     test_data.compute_heatmaps()
-    datamod = TrackingDataModule(train_data, mode = args.args.select_data_mode, train_batch_size = 16, validation_batch_size = 10, test_batch_size = 1, num_workers = args.num_workers) #dlc configs
+    datamod = TrackingDataModule(train_data, mode = args.select_data_mode, train_batch_size = 16, validation_batch_size = 10, test_batch_size = 1, num_workers = args.num_workers) #dlc configs
     datamod.train_set = train_data
     datamod.valid_set = val_data
     datamod.test_set = test_data
     data = train_data
 else:
-    full_data = DLCHeatmapDataset(root_directory= args.data_dir, data_path=args.data_path, mode = mode, noNans = False, transform = data_transform)
-    datamod = TrackingDataModule(data, mode = args.args.select_data_mode, train_batch_size = 16, validation_batch_size = 10, test_batch_size = 1, num_workers = args.num_workers) #dlc configs
+    full_data = DLCHeatmapDataset(root_directory= args.data_dir, data_path=args.data_path, header_rows=header_rows, mode = mode, noNans = True, transform = data_transform)
+    datamod = TrackingDataModule(full_data, mode = args.select_data_mode, train_batch_size = 16, validation_batch_size = 10, test_batch_size = 1, num_workers = args.num_workers) #dlc configs
     data = full_data
+
+datamod.setup()
+datamod.computePPCA_params()
 
 model = DLC(num_targets = data.num_targets, resnet_version = 50, transfer = False)
 

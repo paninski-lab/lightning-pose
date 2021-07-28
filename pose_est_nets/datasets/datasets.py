@@ -103,15 +103,16 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
             raise ValueError("mode must be 'csv' or 'h5'")
 
         self.labels = torch.reshape(self.labels, (self.labels.shape[0], -1, 2)) 
-        print(test_img.shape)
+        print(test_img.size)
         test_label = self.labels[0]
 
         if self.transform:
             test_img_transformed, test_label_transformed = self.transform(images = np.expand_dims(test_img, axis = 0), keypoints = np.expand_dims(test_label, axis = 0))
             test_img_transformed = test_img_transformed.squeeze(0)
             test_label_transformed = test_label_transformed.squeeze(0)
-
-        self.height, self.width = test_img_transformed.shape[:2]
+        print(test_img_transformed.shape)
+        self.height = test_img_transformed.shape[0] 
+        self.width = test_img_transformed.shape[1]
 
         if (self.height % 128 != 0 or self.height % 128 != 0):
             print("image dimensions (after transformation) must be repeatably divisible by 2!")
@@ -128,11 +129,14 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
                 self.image_names = [self.image_names[idx] for idx in self.fully_labeled_idxs]
             else:
                 self.images = [self.images[idx] for idx in self.fully_labeled_idxs]
-            self.labels = [self.labels[idx] for idx in self.fully_labeled_idxs]
+            #self.labels = [self.labels[idx] for idx in self.fully_labeled_idxs]
+            self.labels = torch.index_select(self.labels, 0, self.fully_labeled_idxs)
             if (mode == 'csv'):
                 print(len(self.image_names), len(self.labels))
             else:
                 print(len(self.images), len(self.labels))
+            self.labels = torch.tensor(self.labels)
+            print(self.labels.shape)
             ##########################################################
 
         self.downsample_factor = 2 #could change to 0, 2, 3, or 4
@@ -209,7 +213,7 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
         nan_check = ~nan_check
         annotated = torch.all(nan_check, dim = 1)
         annotated_index = torch.where(annotated)
-        return annotated_index[0].tolist()
+        return annotated_index[0]
 
 #taken from https://github.com/jgraving/DeepPoseKit/blob/master/deepposekit/utils/keypoints.py
 def draw_keypoints(keypoints, height, width, output_shape, sigma=1, normalize=True):
@@ -247,7 +251,7 @@ class TrackingDataModule(pl.LightningDataModule):
         self.num_workers = num_workers
         self.num_views = 2 #changes with dataset, 2 for mouse, 3 for fish
         self.mode = mode
-        self.ppca_params = self.computePPCA_params(self.num_views)
+        #self.ppca_params = self.computePPCA_params(self.num_views)
     
     
     def setup(self, stage: Optional[str] = None): 
@@ -273,12 +277,12 @@ class TrackingDataModule(pl.LightningDataModule):
                 generator=torch.Generator().manual_seed(42)
             )
 
-    def computePPCA_params(self, num_views):
+    def computePPCA_params(self):
         param_dict = {}
-        data_arr = self.train_set.labels
+        data_arr = self.train_set.labels #won't work for random splitting
         print(data_arr.shape)
         num_body_parts = self.train_set.num_targets
-        arr_for_pca = torch.reshape(data_arr, shape = (2 * num_views, num_body_parts * len(self.train_set)))
+        arr_for_pca = torch.reshape(data_arr, shape = (2 * self.num_views, num_body_parts * len(self.train_set)))
         pca = PCA(num_components = 6, svd_solver = 'full')
         pca.fit(arr_for_pca.T)
         mu = torch.mean(arr_for_pca, axis=1)
@@ -288,8 +292,8 @@ class TrackingDataModule(pl.LightningDataModule):
         exit()
         param_dict["top_3_eigenvectors"] 
         param_dict["bot_3_eigenvectors"] = e
-
-        return param_dict
+        self.param_dict = param_dict
+        #return param_dict
         
 
     def full_dataloader(self):
