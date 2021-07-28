@@ -32,59 +32,25 @@ def n_downsample(x):
         x /= 2.0
     return n
 
-#not used for now
-def fftshift1d(x, axis=0):
-
-    x_shape = torch.shape(x)
-    x = torch.reshape(x, (-1, 1))
-    n_samples = torch.cast(torch.shape(x)[0], torch.float32)
-    even = n_samples / 2.0
-    even = torch.round(even)
-    even = even * 2.0
-    even = torch.equal(n_samples, even)
-
-    def true_fn():
-        return x
-
-    def false_fn():
-        x_padded = torch.concat([x, torch.zeros((1, 1))], axis=0)
-        return x_padded
-
-    x = torch.cond(even, true_fn, false_fn)
-    x1, x2 = torch.split(x, 2, axis=axis)
-
-    def true_fn():
-        return x2
-
-    def false_fn():
-        x2_unpadded = x2[:-1]
-        return x2_unpadded
-
-    x2 = torch.cond(even, true_fn, false_fn)
-    x = torch.concat((x2, x1), axis=axis)
-    x = torch.reshape(x, x_shape)
-
-    return x
-
 def _col_kernel(upsampled_region_size, upsample_factor, axis_offsets, data_shape):
 
     data_shape_float = data_shape.to(torch.float32)
     col_constant = (data_shape_float[2] * upsample_factor).to(torch.complex64)
     col_constant = -1j * 2 * np.pi / col_constant
 
-    col_kernel_a = torch.range(0, data_shape_float[2], dtype=torch.float32)
+    col_kernel_a = torch.arange(0, data_shape_float[2], device = data_shape.device, dtype=torch.float32)
     col_kernel_a = torch.fft.fftshift(col_kernel_a)
     col_kernel_a = torch.reshape(col_kernel_a, (-1, 1))
     col_kernel_a -= torch.floor(data_shape_float[2] / 2.0)
     col_kernel_a = torch.reshape(col_kernel_a, (1, -1))
     col_kernel_a = col_kernel_a.repeat(data_shape[0], 1)
 
-    col_kernel_b = torch.range(0, upsampled_region_size, dtype=torch.float32)
+    col_kernel_b = torch.arange(0, upsampled_region_size, device = data_shape.device, dtype=torch.float32)
     col_kernel_b = torch.reshape(col_kernel_b, (1, -1))
     col_kernel_b = col_kernel_b.repeat(data_shape[0], 1)
-    col_kernel_b = torch.transpose(col_kernel_b)
-    col_kernel_b -= torch.transpose(axis_offsets[:, 1])
-    col_kernel_b = torch.transpose(col_kernel_b)
+    col_kernel_b = torch.transpose(col_kernel_b, 0, 1)
+    col_kernel_b -= torch.transpose(axis_offsets[:, 1].unsqueeze(-1), 0, 1) #double check the unsqueezing so the transpose dims work out
+    col_kernel_b = torch.transpose(col_kernel_b, 0, 1)
 
     col_kernel_a = torch.unsqueeze(col_kernel_a, 1)
     col_kernel_b = torch.unsqueeze(col_kernel_b, -1)
@@ -98,17 +64,17 @@ def _col_kernel(upsampled_region_size, upsample_factor, axis_offsets, data_shape
 
 def _row_kernel(upsampled_region_size, upsample_factor, axis_offsets, data_shape):
 
-    data_shape_float = torch.cast(data_shape, torch.float32)
-    row_constant = torch.cast(data_shape_float[1] * upsample_factor, torch.complex64)
+    data_shape_float = data_shape.to(torch.float32)
+    row_constant = (data_shape_float[1] * upsample_factor).to(torch.complex64)
     row_constant = -1j * 2 * np.pi / row_constant
 
-    row_kernel_a = torch.range(0, upsampled_region_size, dtype=torch.float32)
+    row_kernel_a = torch.arange(0, upsampled_region_size, device = data_shape.device, dtype=torch.float32)
     row_kernel_a = torch.reshape(row_kernel_a, (1, -1))
     row_kernel_a = row_kernel_a.repeat(data_shape[0], 1)
-    row_kernel_a = torch.transpose(row_kernel_a)
+    row_kernel_a = torch.transpose(row_kernel_a, 0, 1)
     row_kernel_a = row_kernel_a - axis_offsets[:, 0]
 
-    row_kernel_b = torch.range(0, data_shape_float[1], dtype=torch.float32)
+    row_kernel_b = torch.arange(0, data_shape_float[1], device = data_shape.device, dtype=torch.float32)
     row_kernel_b = torch.fft.fftshift(row_kernel_b)
     row_kernel_b = torch.reshape(row_kernel_b, (1, -1))
     row_kernel_b = row_kernel_b.repeat(data_shape[0], 1)
@@ -117,8 +83,8 @@ def _row_kernel(upsampled_region_size, upsample_factor, axis_offsets, data_shape
     row_kernel_a = torch.unsqueeze(row_kernel_a, 1)
     row_kernel_b = torch.unsqueeze(row_kernel_b, -1)
 
-    row_kernel = torch.transpose(row_kernel_a) * row_kernel_b
-    row_kernel = row_kernel.permute(perm=(0, 2, 1))
+    row_kernel = row_kernel_a.permute((2, 1, 0)) * row_kernel_b
+    row_kernel = row_kernel.permute((0, 2, 1))
     row_kernel = row_constant * row_kernel.to(torch.complex64)
 
     row_kernel = torch.exp(row_kernel)
@@ -127,7 +93,7 @@ def _row_kernel(upsampled_region_size, upsample_factor, axis_offsets, data_shape
 
 
 def _upsampled_dft(data, upsampled_region_size, upsample_factor, axis_offsets):
-    data_shape = data.shape
+    data_shape = torch.tensor(data.shape, device = data.device)
 
     col_kernel = _col_kernel(
         upsampled_region_size, upsample_factor, axis_offsets, data_shape
@@ -148,38 +114,45 @@ def find_subpixel_maxima(heatmaps, kernel_size, sigma, upsample_factor, coordina
     row = map_shape[2]
     col = map_shape[3]
     heatmaps = heatmaps.reshape(shape = (batch * channels, row, col)) #check data types
-    x = torch.arange( -(kernel_size // 2), (kernel_size // 2) + 1, dtype = torch.float32, device = 'cuda')
-    kernel = 1 / (sigma * math.sqrt(2 * np.pi))
-    kernel *= torch.exp(-0.5 * (x / sigma) ** 2)
+    
+    
+    #dpk_kernel = dpk.models.backend.utils.gaussian_kernel_2d(kernel_size.cpu(), sigma.cpu())
+    size = kernel_size
+    x = torch.arange( -(size // 2), (size // 2) + 1, dtype = torch.float32, device = heatmaps.device)
+    kernel = torch.tensor(1 / (sigma * math.sqrt(2 * np.pi)), device = heatmaps.device)
+    kernel = torch.exp(-0.5 * (x / sigma) ** 2) * kernel #could be fishy
     kernel = torch.unsqueeze(kernel, -1)
     kernel = kernel @ torch.transpose(kernel, 0, 1) #check dims
+
     kernel = torch.unsqueeze(kernel, 0)
-    max_vals = torch.amax(heatmaps.reshape(shape = (-1, row * col)))
+    max_vals = torch.amax(heatmaps.reshape(shape = (-1, row * col)), dim = 1)
     max_vals = max_vals.reshape(shape = (-1, 1)) / confidence_scale
     row_pad = row // 2 - kernel_size // 2
     col_pad = col // 2 - kernel_size // 2
-    padding = (row_pad, row_pad - 1, col_pad, col_pad - 1)
+    padding = (col_pad, col_pad - 1, row_pad, row_pad - 1) #padding order goes last dim, second to last dim, ...
     kernel = F.pad(kernel, padding)
     row_center = row_pad + (kernel_size // 2)
     col_center = col_pad + (kernel_size // 2)
     center = torch.stack([torch.tensor(row_center), torch.tensor(col_center)])
     center = torch.unsqueeze(center, 0)
     center = center.to(torch.float32)
-    map_shape = heatmaps.shape
-    target_image = heatmaps.reshape(map_shape[:3])
+    #dpk_registration = dpk.models.backend.registration._upsampled_registration(heatmaps.cpu(), kernel.cpu(), upsample_factor.cpu())
+    
+    target_shape = heatmaps.shape
+    target_image = heatmaps.reshape(target_shape[:3])
     src_shape = kernel.shape
-    print(map_shape, src_shape)
     kernel = kernel.reshape(src_shape[:3])
+
     src_image = kernel.to(torch.complex64)
     target_image = heatmaps.to(torch.complex64)
     src_freq = torch.fft.fft2(src_image)
+    
     target_freq = torch.fft.fft2(target_image)
 
-    shape = torch.tensor(src_freq.shape[1:3])
+    shape = torch.tensor(src_freq.shape[1:3], device = heatmaps.device)
     shape = shape.reshape(shape = (1,2))
     shape = shape.to(torch.float32)
     shape = shape.repeat(target_freq.shape[0], 1) #check repeat vs tile
-    print(src_freq.shape, target_freq.shape)
     image_product = src_freq * torch.conj(target_freq)
     cross_correlation = torch.fft.ifft2(image_product)
 
@@ -192,7 +165,7 @@ def find_subpixel_maxima(heatmaps, kernel_size, sigma, upsample_factor, coordina
 
     upsampled_region_size = torch.ceil(upsample_factor * 1.5)
     dftshift = fix(upsampled_region_size / 2.0)
-    normalization = src_freq[0].size.to(torch.float32)
+    normalization = torch.tensor(torch.numel(src_freq[0]), device = heatmaps.device, dtype = torch.float32)
     normalization *= upsample_factor ** 2
     sample_region_offset = dftshift - shifts * upsample_factor
 
@@ -201,7 +174,6 @@ def find_subpixel_maxima(heatmaps, kernel_size, sigma, upsample_factor, coordina
     upsampled_dft = _upsampled_dft(
         data, upsampled_region_size, upsample_factor, sample_region_offset
     )
-
     cross_correlation = torch.conj(upsampled_dft)
     cross_correlation /= normalization.to(torch.complex64)
     cross_correlation = torch.abs(cross_correlation)
@@ -210,4 +182,10 @@ def find_subpixel_maxima(heatmaps, kernel_size, sigma, upsample_factor, coordina
     maxima = maxima - dftshift
     shifts = shifts + maxima / upsample_factor
 
-    return shifts
+    shifts = center - shifts
+    shifts *= coordinate_scale
+    shifts = torch.flip(shifts, [-1]) #CHECK BEHAVIOR IS SAME AS TENSORFLOW INDEXING
+    maxima = torch.cat([shifts, max_vals], -1)
+
+    maxima = maxima.reshape((batch, channels, 3))
+    return maxima

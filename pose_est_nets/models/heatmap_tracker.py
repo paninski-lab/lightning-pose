@@ -11,7 +11,7 @@ from typeguard import typechecked
 import numpy as np
 from pose_est_nets.models.heatmap_tracker_utils import find_subpixel_maxima, largest_factor
 #from deepposekit.utils.image import largest_factor
-#from deepposekit.models.backend.backend import find_subpixel_maxima
+#from deepposekit.models.backend.backend import find_subpixel_maxima as dpk_find_subpixel_maxima
 #from deepposekit.models.layers.convolutional import SubPixelUpscaling
 
 patch_typeguard()
@@ -123,16 +123,18 @@ class DLC(LightningModule):
     def computeSubPixMax(self, heatmaps_pred, heatmaps_y, output_shape, output_sigma, threshold):
         kernel_size = np.min(output_shape)
         kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
-        pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), kernel_size, output_sigma, 100, 8, 255.0)
-        y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), kernel_size, output_sigma, 100, 8, 255.0)
+        #dpk_pred_keypoints = dpk_find_subpixel_maxima(heatmaps_pred.detach().cpu(), torch.tensor(kernel_size), output_sigma, torch.tensor(100), torch.tensor(8), torch.tensor(255.0), data_format = "channels_first")
+        #print(dpk_pred_keypoints.shape)
+        pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), torch.tensor(kernel_size, device = heatmaps_pred.device), torch.tensor(output_sigma, device = heatmaps_pred.device), torch.tensor(100, device = heatmaps_pred.device), torch.tensor(8, device = heatmaps_pred.device), torch.tensor(255.0, device = heatmaps_pred.device))
+        y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), torch.tensor(kernel_size, device = heatmaps_pred.device), torch.tensor(output_sigma, device = heatmaps_pred.device), torch.tensor(100, device = heatmaps_pred.device), torch.tensor(8, device = heatmaps_pred.device), torch.tensor(255.0, device = heatmaps_pred.device))
         if threshold:
             pred_kpts_list = []
             y_kpts_list = []
             for i in range(pred_keypoints.shape[1]):
                 if pred_keypoints[0, i, 2] > 0.001: #threshold for low confidence predictions
-                    pred_kpts_list.append(pred_keypoints[0, i, :2].numpy())
+                    pred_kpts_list.append(pred_keypoints[0, i, :2].cpu().numpy())
                 if y_keypoints[0, i, 2] > 0.001:
-                    y_kpts_list.append(y_keypoints[0, i, :2].numpy())
+                    y_kpts_list.append(y_keypoints[0, i, :2].cpu().numpy())
             return torch.tensor(pred_kpts_list), torch.tensor(y_kpts_list)
         pred_keypoints = pred_keypoints[0,:,:2] #getting rid of the actual max value
         y_keypoints = y_keypoints[0,:,:2]
