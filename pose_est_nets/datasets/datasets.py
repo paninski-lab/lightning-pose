@@ -247,7 +247,7 @@ class TrackingDataModule(pl.LightningDataModule):
         self.num_workers = num_workers
         self.num_views = 2 #changes with dataset, 2 for mouse, 3 for fish
         self.mode = mode
-        #self.ppca_params = self.computePPCA_params(self.num_views)
+        self.ppca_params = self.computePPCA_params(self.num_views)
     
     
     def setup(self, stage: Optional[str] = None): 
@@ -278,13 +278,16 @@ class TrackingDataModule(pl.LightningDataModule):
         data_arr = self.train_set.labels
         print(data_arr.shape)
         num_body_parts = self.train_set.num_targets
-        arr_for_pca = torch.reshape(data_arr, shape = (num_views, num_body_parts * len(self.train_set)))
-        pca = PCA(num_components = 3, svd_solver = 'full')
+        arr_for_pca = torch.reshape(data_arr, shape = (2 * num_views, num_body_parts * len(self.train_set)))
+        pca = PCA(num_components = 6, svd_solver = 'full')
         pca.fit(arr_for_pca.T)
         mu = torch.mean(arr_for_pca, axis=1)
         print(mu.shape)
         print(mu)
         param_dict["obs_offset"] = mu
+        exit()
+        param_dict["top_3_eigenvectors"] 
+        param_dict["bot_3_eigenvectors"] = e
 
         return param_dict
         
