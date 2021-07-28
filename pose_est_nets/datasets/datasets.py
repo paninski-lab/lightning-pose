@@ -80,28 +80,45 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
         Returns:
             None
         """
+        self.root_directory = root_directory
+        self.transform = transform
         if (mode == 'csv'):
             csv_data = pd.read_csv(
                 os.path.join(root_directory, data_path), header=header_rows     
             )
             self.image_names = list(csv_data.iloc[:, 0])
             self.labels = torch.tensor(csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32)
+            test_img = Image.open(os.path.join(self.root_directory, self.image_names[0])).convert(
+                    "RGB" #didn't do this for DLC
+            )  # Rick's images have 1 color channel; change to 3.
+            
         elif (mode == 'h5'):
             hf = h5py.File(os.path.join(root_directory, data_path), 'r')
-            print(hf['images'].dtype)
             self.images = np.array(hf['images'])
             self.images = self.images[:,:,:,0]
-            print(self.images.dtype)
             self.labels = torch.tensor(hf["annotations"])
-            print(self.images.shape)
-            print(self.labels.shape)
+            test_img = Image.fromarray(self.images[idx]).convert("RGB")
+            
         else:
             raise ValueError("mode must be 'csv' or 'h5'")
-        
-        self.root_directory = root_directory
+
         self.labels = torch.reshape(self.labels, (self.labels.shape[0], -1, 2)) 
-        self.transform = transform
-        
+        print(test_img.shape)
+        test_label = self.labels[0]
+
+        if self.transform:
+            test_img_transformed, test_label_transformed = self.transform(images = np.expand_dims(test_img, axis = 0), keypoints = np.expand_dims(test_label, axis = 0))
+            test_img_transformed = test_img_transformed.squeeze(0)
+            test_label_transformed = test_label_transformed.squeeze(0)
+
+        self.height, self.width = test_img_transformed.shape[:2]
+
+        if (self.height % 128 != 0 or self.height % 128 != 0):
+            print("image dimensions (after transformation) must be repeatably divisible by 2!")
+            print("current image dimensions after transformation are:")
+            print(test_img_transformed.shape[:2])
+            exit()
+   
         if noNans:
             #Checks for images with set of keypoints that include any nan, so that they can be excluded from the data entirely, like DeepPoseKit does
             ##########################################################
@@ -121,8 +138,6 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
         self.downsample_factor = 2 #could change to 0, 2, 3, or 4
         self.sigma = 5
         self.output_sigma = 1.25 #should be sigma/2 ^downsample factor
-        self.height = 384
-        self.width = 512
         self.output_shape = (
             self.height // 2 ** self.downsample_factor,
             self.width // 2 ** self.downsample_factor,
@@ -275,9 +290,6 @@ class TrackingDataModule(pl.LightningDataModule):
 
         return param_dict
         
-
-
-
 
     def full_dataloader(self):
         return DataLoader(self.fulldataset, batch_size = 1, num_workers = self.num_workers)
