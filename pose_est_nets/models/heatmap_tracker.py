@@ -9,7 +9,7 @@ from typing import Any, Callable, Optional, Tuple, List
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 import numpy as np
-from pose_est_nets.models.heatmap_tracker_utils import find_subpixel_maxima, largest_factor
+from pose_est_nets.models.heatmap_tracker_utils import find_subpixel_maxima, largest_factor, format_mouse_data
 #from deepposekit.utils.image import largest_factor
 #from deepposekit.models.backend.backend import find_subpixel_maxima as dpk_find_subpixel_maxima
 #from deepposekit.models.layers.convolutional import SubPixelUpscaling
@@ -24,7 +24,7 @@ class DLC(LightningModule):
         transfer: Optional[bool] = False,
     ) -> None:
         """
-        Initializes regression tracker model with resnet backbone
+        Initializes DLC model with resnet backbone
         :param num_targets: number of body parts
         :param resnet_version: The ResNet variant to be used (e.g. 18, 34, 50, 101, or 152). Essentially specifies how
             large the resnet will be.
@@ -60,9 +60,8 @@ class DLC(LightningModule):
         
         self.batch_size = 16
         self.num_workers = 0
-    
     @typechecked
-    def forward(self, x: TensorType["batch", 3, "Height", "Width"]) -> TensorType["batch", 108, "Out_Height", "Out_Width"]: #how do I use a variable to indicate number of keypoints
+    def forward(self, x: TensorType["batch", 3, "Height", "Width"]) -> TensorType["batch", 17, "Out_Height", "Out_Width"]: #how do I use a variable to indicate number of keypoints
         """
         Forward pass through the network
         :param x: input
@@ -76,7 +75,7 @@ class DLC(LightningModule):
 
     @staticmethod
     @typechecked
-    def heatmap_loss(y: TensorType["batch", 108, "Out_Height", "Out_Width"], y_hat: TensorType["batch", 108, "Out_Height", "Out_Width"]) -> TensorType[()]:
+    def heatmap_loss(y: TensorType["batch", 17, "Out_Height", "Out_Width"], y_hat: TensorType["batch", 17, "Out_Height", "Out_Width"]) -> TensorType[()]:
         """
         Computes mse loss between ground truth (x,y) coordinates and predicted (x^,y^) coordinates
         :param y: ground truth. shape=(num_targets, 2)
@@ -93,7 +92,18 @@ class DLC(LightningModule):
         # compute loss
         loss = F.mse_loss(torch.masked_select(y_hat, mask), torch.masked_select(y, mask))
         return loss
-
+    
+    @typechecked
+    def pca_2view_loss(self, y_hat: TensorType["batch", 17, "Out_Height", "Out_Width"]) -> TensorType[()]:
+        kernel_size = np.min(self.output_shape) #change from numpy to torch
+        kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
+        keypoints = find_subpixel_maxima(y_hat.detach(), torch.tensor(kernel_size, device = 'cuda'), torch.tensor(self.output_sigma, device = 'cuda'), self.upsample_factor, self.coordinate_scale, self.confidence_scale)
+        keypoints = keypoints[:,:,:2]
+        data_arr = format_mouse_data(keypoints)
+        garbage_component = self.pca_param_dict["bot_1_eigenvector"]
+        garbage_variance = torch.matmul(data_arr.T, garbage_component.T)
+        return torch.sum(garbage_variance)
+               
     def training_step(self, data, batch_idx):
         #x, y_heatmap, y_keypoints = data
         x, y = data
@@ -102,6 +112,8 @@ class DLC(LightningModule):
         # compute loss
         loss = self.heatmap_loss(y, y_hat)
         #heatmap_loss = self.heatmap_loss(y_heatmap, y_hat)
+        pca_view_loss = self.pca_2view_loss(y_hat)
+        loss += pca_view_loss
         #ppca_loss = 
         # log training loss
         self.log(
@@ -120,13 +132,13 @@ class DLC(LightningModule):
     def test_step(self, data, batch_idx):
         self.validation_step(data, batch_idx)
     
-    def computeSubPixMax(self, heatmaps_pred, heatmaps_y, output_shape, output_sigma, threshold):
-        kernel_size = np.min(output_shape)
+    def computeSubPixMax(self, heatmaps_pred, heatmaps_y, threshold):
+        kernel_size = np.min(self.output_shape)
         kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
         #dpk_pred_keypoints = dpk_find_subpixel_maxima(heatmaps_pred.detach().cpu(), torch.tensor(kernel_size), output_sigma, torch.tensor(100), torch.tensor(8), torch.tensor(255.0), data_format = "channels_first")
         #print(dpk_pred_keypoints.shape)
-        pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), torch.tensor(kernel_size, device = heatmaps_pred.device), torch.tensor(output_sigma, device = heatmaps_pred.device), torch.tensor(100, device = heatmaps_pred.device), torch.tensor(8, device = heatmaps_pred.device), torch.tensor(255.0, device = heatmaps_pred.device))
-        y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), torch.tensor(kernel_size, device = heatmaps_pred.device), torch.tensor(output_sigma, device = heatmaps_pred.device), torch.tensor(100, device = heatmaps_pred.device), torch.tensor(8, device = heatmaps_pred.device), torch.tensor(255.0, device = heatmaps_pred.device))
+        pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), torch.tensor(kernel_size, device = heatmaps_pred.device), torch.tensor(self.output_sigma, device = heatmaps_pred.device), self.upsample_factor, self.coordinate_scale, self.confindence_scale)
+        y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), torch.tensor(kernel_size, device = heatmaps_pred.device), torch.tensor(output_sigma, device = heatmaps_pred.device), self.upsample_factor, self.coordinate_scale, self.confindence_scale)
         if threshold:
             pred_kpts_list = []
             y_kpts_list = []

@@ -11,8 +11,8 @@ from PIL import Image
 from deepposekit.utils.keypoints import draw_keypoints
 from tqdm import tqdm
 from sklearn.decomposition import PCA
+from pose_est_nets.models.heatmap_tracker_utils import format_mouse_data
 import h5py
-
 
 class TrackingDataset(torch.utils.data.Dataset):
     def __init__(self,
@@ -159,7 +159,7 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
         # Compute heatmaps as preprocessing step
         #check that max of heatmaps look good
         self.compute_heatmaps()
-        self.num_targets = self.labels[0].shape[0]
+        self.num_targets = torch.numel(self.labels[0])
         print(self.num_targets)
 
     def compute_heatmaps(self):
@@ -276,26 +276,27 @@ class TrackingDataModule(pl.LightningDataModule):
                 self.fulldataset, [round(datalen * 0.8), round(datalen * 0.1), round(datalen * 0.1)],
                 generator=torch.Generator().manual_seed(42)
             )
+        self.train_set = self.train_set.dataset
+        self.valid_set = self.valid_set.dataset
+        self.test_set = self.test_set.dataset
 
     def computePPCA_params(self):
         param_dict = {}
         data_arr = self.train_set.labels #won't work for random splitting
-        print(data_arr.shape)
+        #data_arr = self.train_set.dataset
         num_body_parts = self.train_set.num_targets
-        arr_for_pca = torch.reshape(data_arr, shape = (2 * self.num_views, num_body_parts * len(self.train_set)))
-        pca = PCA(num_components = 6, svd_solver = 'full')
+        arr_for_pca = format_mouse_data(data_arr)
+        pca = PCA(n_components = 4, svd_solver = 'full')
         pca.fit(arr_for_pca.T)
         mu = torch.mean(arr_for_pca, axis=1)
-        print(mu.shape)
-        print(mu)
+        print(pca.explained_variance_ratio_)
+        explained_var = pca.explained_variance_ratio_
+        print(np.sum(explained_var[:3]))
         param_dict["obs_offset"] = mu
-        exit()
-        param_dict["top_3_eigenvectors"] 
-        param_dict["bot_3_eigenvectors"] = e
-        self.param_dict = param_dict
-        #return param_dict
+        param_dict["top_3_eigenvectors"] = torch.from_numpy(pca.components_[:3]).cuda().to(torch.float32)
+        param_dict["bot_1_eigenvector"] = torch.from_numpy(pca.components_[3:]).cuda().to(torch.float32)
+        self.pca_param_dict = param_dict
         
-
     def full_dataloader(self):
         return DataLoader(self.fulldataset, batch_size = 1, num_workers = self.num_workers)
         

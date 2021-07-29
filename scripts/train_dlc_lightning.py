@@ -86,7 +86,7 @@ def saveNumericalPredictions(threshold):
         heatmap_pred = model.forward(x)
         output_shape = data.half_output_shape #changed to small
         #dpk_pred_keypoints, dpk_y_keypoints = computeSubPixMax(heatmap_pred, y, output_shape, threshold)
-        pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred, y, output_shape, data.output_sigma, threshold)
+        pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred, y, threshold)
         #dpk_final_preds[i] = pred_keypoints
         x = x[:,0,:,:] #only taking one image dimension
         x = np.expand_dims(x, axis = 3)
@@ -125,7 +125,7 @@ def plotPredictions(save_heatmaps, threshold, mode):
         output_shape = data.half_output_shape #changed from train_data
         #print(heatmap_pred.device, y.device, model.device)
         #exit()
-        pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred.cuda(), y.cuda(), output_shape, data.output_sigma, threshold)
+        pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred.cuda(), y.cuda(), threshold)
         plt.imshow(x[0][0])
         plt.scatter(pred_keypoints[:,0], pred_keypoints[:,1], c = 'blue')
         plt.scatter(y_keypoints[:,0], y_keypoints[:,1], c = 'orange')
@@ -193,9 +193,15 @@ datamod.setup()
 datamod.computePPCA_params()
 
 model = DLC(num_targets = data.num_targets, resnet_version = 50, transfer = False)
-
 if (args.load):
     model = model.load_from_checkpoint(checkpoint_path = args.ckpt, num_targets = data.num_targets, resnet_version = 50, transfer = False)
+
+model.pca_param_dict = datamod.pca_param_dict
+model.output_shape = data.half_output_shape
+model.output_sigma = data.output_sigma
+model.upsample_factor = torch.tensor(100, device = 'cuda')
+model.coordinate_scale = torch.tensor(8, device = 'cuda')
+model.confidence_scale = torch.tensor(255.0, device = 'cuda')
 
 early_stopping = pl.callbacks.EarlyStopping(
     monitor="val_loss", patience=100, mode="min"

@@ -114,8 +114,7 @@ def find_subpixel_maxima(heatmaps, kernel_size, sigma, upsample_factor, coordina
     row = map_shape[2]
     col = map_shape[3]
     heatmaps = heatmaps.reshape(shape = (batch * channels, row, col)) #check data types
-    
-    
+     
     #dpk_kernel = dpk.models.backend.utils.gaussian_kernel_2d(kernel_size.cpu(), sigma.cpu())
     size = kernel_size
     x = torch.arange( -(size // 2), (size // 2) + 1, dtype = torch.float32, device = heatmaps.device)
@@ -189,3 +188,11 @@ def find_subpixel_maxima(heatmaps, kernel_size, sigma, upsample_factor, coordina
 
     maxima = maxima.reshape((batch, channels, 3))
     return maxima
+
+def format_mouse_data(data_arr):
+    data_arr_top = data_arr[:,:7,:] #mouse data info hardcoded here
+    data_arr_bot = data_arr[:,8:15,:]
+    data_arr_top = data_arr_top.permute(2,0,1).reshape(2,-1) 
+    data_arr_bot = data_arr_bot.permute(2,0,1).reshape(2,-1)
+    data_arr = torch.cat([data_arr_top, data_arr_bot], dim = 0)
+    return data_arr
