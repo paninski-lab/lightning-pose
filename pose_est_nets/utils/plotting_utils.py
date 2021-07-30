@@ -2,7 +2,7 @@ import imgaug.augmenters as iaa
 import numpy as np
 from pose_est_nets.utils.IO import set_or_open_folder
 import matplotlib.pyplot as plt
-
+import os
 
 def saveNumericalPredictions(model, datamod, threshold):
     i = 0
@@ -22,8 +22,6 @@ def saveNumericalPredictions(model, datamod, threshold):
     for idx, batch in enumerate(test_dl):
         x, y = batch
         heatmap_pred = model.forward(x)
-        output_shape = data.output_shape #changed to small
-        #dpk_pred_keypoints, dpk_y_keypoints = computeSubPixMax(heatmap_pred, y, output_shape, threshold)
         pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred.cuda(), y.cuda(), threshold)
         #dpk_final_preds[i] = pred_keypoints
         pred_keypoints = pred_keypoints.cpu()
@@ -40,15 +38,15 @@ def saveNumericalPredictions(model, datamod, threshold):
     final_preds = np.reshape(final_preds, newshape = (len(test_dl), model.num_targets))
     #dpk_final_preds = np.reshape(dpk_final_preds, newshape = (len(test_dl), model.num_targets))
 
-    #np.savetxt('../preds/mouse_gt.csv', final_gt_keypoints, delimiter = ',', newline = '\n')
-    np.savetxt('../preds/mouse_pca2view_larger_preds.csv', final_preds, delimiter = ',', newline = '\n')
+    #np.savetxt('../../preds/mouse_gt.csv', final_gt_keypoints, delimiter = ',', newline = '\n')
+    np.savetxt('../preds/ptl_mouse_pca_100preds.csv', final_preds, delimiter = ',', newline = '\n')
     #np.savetxt('../preds/dpk_fish_predictions.csv', dpk_final_preds, delimiter = ',', newline = '\n')
     return
 
 def plotPredictions(model, datamod, save_heatmaps, threshold, mode):
     if (save_heatmaps):
         heatmap_folder = set_or_open_folder("preds/heatmaps")
-    img_folder = set_or_open_folder("preds/images")
+    img_folder = set_or_open_folder("preds/ptl_mouse_100")
 
     model.eval()
     if mode == 'train':
@@ -66,9 +64,6 @@ def plotPredictions(model, datamod, save_heatmaps, threshold, mode):
             plt.imshow(y[0, 4].detach())
             plt.savefig(os.path.join(heatmap_folder, 'gt_map_%i' % i + '.png'))
             plt.clf()
-        output_shape = data.output_shape #changed from train_data
-        #print(heatmap_pred.device, y.device, model.device)
-        #exit()
         pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred.cuda(), y.cuda(), threshold)
         plt.imshow(x[0][0])
         pred_keypoints = pred_keypoints.cpu()

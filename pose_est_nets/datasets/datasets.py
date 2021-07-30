@@ -10,7 +10,7 @@ import numpy as np
 from PIL import Image
 from tqdm import tqdm
 from sklearn.decomposition import PCA
-from pose_est_nets.models.heatmap_tracker_utils import format_mouse_data
+from pose_est_nets.utils.heatmap_tracker_utils import format_mouse_data
 import h5py
 
 class DLCHeatmapDataset(torch.utils.data.Dataset):
