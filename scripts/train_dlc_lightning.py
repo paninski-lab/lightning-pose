@@ -10,92 +10,18 @@ from pose_est_nets.models.heatmap_tracker import DLC
 from pose_est_nets.datasets.datasets import DLCHeatmapDataset, TrackingDataModule
 from typing import Any, Callable, Optional, Tuple, List
 import json
-import matplotlib.pyplot as plt
 import argparse
 import pandas as pd
 import imgaug.augmenters as iaa
-#from PIL import Image, ImageDraw
-from deepposekit.utils.image import largest_factor
-from deepposekit.models.backend.backend import find_subpixel_maxima
 import numpy as np
-
-def saveNumericalPredictions(threshold):
-    i = 0
-    #hardcoded for mouse data
-    rev_augmenter = []
-    rev_augmenter.append(iaa.Resize({"height": 406, "width": 396})) #get rid of this for the fish
-    rev_augmenter = iaa.Sequential(rev_augmenter)
-    model.eval()
-    full_dl = datamod.full_dataloader()
-    test_dl = datamod.test_dataloader()
-    final_gt_keypoints = np.empty(shape = (len(test_dl), model.num_keypoints, 2))
-    final_imgs = np.empty(shape = (len(test_dl), 406, 396, 1))
-    final_preds = np.empty(shape = (len(test_dl), model.num_keypoints, 2))
-
-    #dpk_final_preds = np.empty(shape = (len(test_dl), model.num_keypoints, 2))
-
-    for idx, batch in enumerate(test_dl):
-        x, y = batch
-        heatmap_pred = model.forward(x)
-        output_shape = data.output_shape #changed to small
-        #dpk_pred_keypoints, dpk_y_keypoints = computeSubPixMax(heatmap_pred, y, output_shape, threshold)
-        pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred.cuda(), y.cuda(), threshold)
-        #dpk_final_preds[i] = pred_keypoints
-        pred_keypoints = pred_keypoints.cpu()
-        y_keypoints = y_keypoints.cpu()
-        x = x[:,0,:,:] #only taking one image dimension
-        x = np.expand_dims(x, axis = 3)
-        final_imgs[i], final_gt_keypoints[i] = rev_augmenter(images = x, keypoints = np.expand_dims(y_keypoints, axis = 0))
-        final_imgs[i], final_preds[i] = rev_augmenter(images = x, keypoints = np.expand_dims(pred_keypoints, axis = 0))
-        #final_gt_keypoints[i] = y_keypoints
-        #final_preds[i] = pred_keypoints
-        i += 1
-
-    final_gt_keypoints = np.reshape(final_gt_keypoints, newshape = (len(test_dl), model.num_targets))
-    final_preds = np.reshape(final_preds, newshape = (len(test_dl), model.num_targets))
-    #dpk_final_preds = np.reshape(dpk_final_preds, newshape = (len(test_dl), model.num_targets))
-
-    #np.savetxt('../preds/mouse_gt.csv', final_gt_keypoints, delimiter = ',', newline = '\n')
-    np.savetxt('../preds/mouse_pca2view_larger_preds.csv', final_preds, delimiter = ',', newline = '\n')
-    #np.savetxt('../preds/dpk_fish_predictions.csv', dpk_final_preds, delimiter = ',', newline = '\n')
-    return
-
-def plotPredictions(save_heatmaps, threshold, mode):
-    model.eval()
-    if mode == 'train':
-        dl = datamod.train_dataloader()
-    else:
-        dl = datamod.test_dataloader()
-    i = 0
-    for idx, batch in enumerate(dl):
-        x, y = batch
-        heatmap_pred = model.forward(x)
-        if (save_heatmaps):
-            plt.imshow(heatmap_pred[0, 4].detach())
-            plt.savefig('../preds/mouse_pca2view_maps/pred_map' + str(i) + '.png')
-            plt.clf()
-            plt.imshow(y[0, 4].detach())
-            plt.savefig('../preds/mouse_pca2view_maps/gt_map' + str(i) + '.png')
-            plt.clf()
-        output_shape = data.output_shape #changed from train_data
-        #print(heatmap_pred.device, y.device, model.device)
-        #exit()
-        pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred.cuda(), y.cuda(), threshold)
-        plt.imshow(x[0][0])
-        pred_keypoints = pred_keypoints.cpu()
-        y_keypoints = y_keypoints.cpu()
-        plt.scatter(pred_keypoints[:,0], pred_keypoints[:,1], c = 'blue')
-        plt.scatter(y_keypoints[:,0], y_keypoints[:,1], c = 'orange')
-        plt.savefig('../preds/mouse_pca2view_larger_preds/pred' + str(i) + '.png')
-        plt.clf()
-        i += 1
-
+from pose_est_nets.utils.plotting_utils import saveNumericalPredictions, plotPredictions
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--no_train", help= "whether you want to skip training the model")
 parser.add_argument("--load", help = "set true to load model from checkpoint")
 parser.add_argument("--predict", help = "whether or not to generate predictions on test data")
+parser.add_argument("--max_epochs", type=int, default=500, help = "when to stop training")
 parser.add_argument("--ckpt", type = str, default = "lightning_logs2/version_1/checkpoints/epoch=271-step=12511.ckpt", help = "path to model checkpoint if you want to load model from checkpoint")
 parser.add_argument("--train_batch_size", type = int, default = 16)
 parser.add_argument("--validation_batch_size", type = int, default = 10)
@@ -111,6 +37,7 @@ parser.add_argument("--data_path", type = str, default = 'CollectedData_.csv')
 #mouse = 'CollectedData_.csv'
 parser.add_argument("--select_data_mode", type = str, default = 'random', help = "set to deterministic if you want to train and test on specific data for mouse dataset, set to random if you want a random train/test split") 
 parser.add_argument("--downsample_factor", type = int, default = 3)
+parser.add_argument("--num_train_examples", type = int, default = 183)
 args = parser.parse_args()
 
 torch.manual_seed(11)
@@ -126,8 +53,8 @@ header_rows = [1, 2]
 
 if args.select_data_mode == 'deterministic':
     train_data = DLCHeatmapDataset(root_directory= args.data_dir, data_path=args.data_path, header_rows=header_rows, mode = mode, transform=data_transform, noNans = True, downsample_factor = args.downsample_factor)
-    train_data.image_names = train_data.image_names[:183]
-    train_data.labels = train_data.labels[:183]
+    train_data.image_names = train_data.image_names[:args.num_train_examples]
+    train_data.labels = train_data.labels[:args.num_train_examples]
     train_data.compute_heatmaps()
     val_data = DLCHeatmapDataset(root_directory= args.data_dir, data_path=args.data_path, header_rows=header_rows, mode = mode, transform=data_transform, noNans = True, downsample_factor = args.downsample_factor)
     val_data.image_names = val_data.image_names[183:183+22]
@@ -158,7 +85,6 @@ model.pca_param_dict = datamod.pca_param_dict
 model.output_shape = data.output_shape
 model.output_sigma = data.output_sigma
 model.upsample_factor = torch.tensor(100, device = 'cuda')
-#model.coordinate_scale = torch.tensor(8, device = 'cuda')
 model.confidence_scale = torch.tensor(255.0, device = 'cuda')
 
 early_stopping = pl.callbacks.EarlyStopping(
@@ -166,8 +92,12 @@ early_stopping = pl.callbacks.EarlyStopping(
 )
 lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval = 'epoch')
 
-
-trainer = pl.Trainer(gpus=args.num_gpus, log_every_n_steps = 15, callbacks=[early_stopping, lr_monitor], auto_scale_batch_size = False, reload_dataloaders_every_epoch=False)
+trainer = pl.Trainer(gpus=args.num_gpus, 
+                    log_every_n_steps = 15, 
+                    callbacks=[early_stopping, lr_monitor], 
+                    auto_scale_batch_size = False, 
+                    reload_dataloaders_every_epoch=False,
+                    max_epochs=args.max_epochs)
 
 if (not(args.no_train)):
     trainer.fit(model = model, datamodule = datamod)
@@ -180,8 +110,8 @@ if args.predict:
     threshold = False #whether or not to refrain from plotting a keypoint if the max value of the heatmap is below a certain threshold
     save_heatmaps = False #whether or not to save heatmap images, note they will be in the downsampled dimensions
     mode = 'test'
-    plotPredictions(save_heatmaps, threshold, mode)
+    plotPredictions(model, datamod, save_heatmaps, threshold, mode)
     threshold = False
-    saveNumericalPredictions(threshold)
+    saveNumericalPredictions(model, datamod, threshold)
     
 

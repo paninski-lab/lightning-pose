@@ -9,10 +9,7 @@ from typing import Any, Callable, Optional, Tuple, List
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 import numpy as np
-from pose_est_nets.models.heatmap_tracker_utils import find_subpixel_maxima, largest_factor, format_mouse_data
-#from deepposekit.utils.image import largest_factor
-#from deepposekit.models.backend.backend import find_subpixel_maxima as dpk_find_subpixel_maxima
-#from deepposekit.models.layers.convolutional import SubPixelUpscaling
+from pose_est_nets.utils.heatmap_tracker_utils import find_subpixel_maxima, largest_factor, format_mouse_data
 
 patch_typeguard()
 
@@ -112,6 +109,7 @@ class DLC(LightningModule):
         return loss
     
     @typechecked
+    #what are we doing about NANS?
     def pca_2view_loss(self, y_hat: TensorType["batch", 17, "Out_Height", "Out_Width"]) -> TensorType[()]:
         kernel_size = np.min(self.output_shape) #change from numpy to torch
         kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
@@ -156,9 +154,6 @@ class DLC(LightningModule):
     def computeSubPixMax(self, heatmaps_pred, heatmaps_y, threshold):
         kernel_size = np.min(self.output_shape)
         kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
-        #print(self.output_shape, self.
-        #dpk_pred_keypoints = dpk_find_subpixel_maxima(heatmaps_pred.detach().cpu(), torch.tensor(kernel_size), output_sigma, torch.tensor(100), torch.tensor(8), torch.tensor(255.0), data_format = "channels_first")
-        #print(dpk_pred_keypoints.shape)
         pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), torch.tensor(kernel_size, device = heatmaps_pred.device), torch.tensor(self.output_sigma, device = heatmaps_pred.device), self.upsample_factor, self.coordinate_scale, self.confidence_scale)
         y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), torch.tensor(kernel_size, device = heatmaps_pred.device), torch.tensor(self.output_sigma, device = heatmaps_pred.device), self.upsample_factor, self.coordinate_scale, self.confidence_scale)
         if threshold:
@@ -179,32 +174,5 @@ class DLC(LightningModule):
         scheduler = ReduceLROnPlateau(optimizer, factor = 0.2, patience = 20, verbose = True)
         return {'optimizer' : optimizer, 'lr_scheduler': scheduler, 'monitor': 'val_loss'}
 
-#NOT USED AT THE MOMENT, BUT WOULD BE GOOD TO FIND SOMETHING SIMILIAR SO CODE IN MORE GENERAL TO OTHER INPUT SIZES BESIDES (384, 384)
-def compute_same_padding(img_dims, kernel_dims, stride):
-    in_height, in_width = img_dims
-    filter_height, filter_width = kernel_dims
-    strides=stride
-    out_height = np.ceil(float(in_height) / float(strides[1]))
-    out_width  = np.ceil(float(in_width) / float(strides[2]))
+#Might be good to write compute same padding function
 
-    #The total padding applied along the height and width is computed as:
-
-    if (in_height % strides[1] == 0):
-      pad_along_height = max(filter_height - strides[1], 0)
-    else:
-      pad_along_height = max(filter_height - (in_height % strides[1]), 0)
-    if (in_width % strides[2] == 0):
-      pad_along_width = max(filter_width - strides[2], 0)
-    else:
-      pad_along_width = max(filter_width - (in_width % strides[2]), 0)
-
-    #print(pad_along_height, pad_along_width)
-      
-    #Finally, the padding on the top, bottom, left and right are:
-
-    pad_top = pad_along_height // 2
-    pad_bottom = pad_along_height - pad_top
-    pad_left = pad_along_width // 2
-    pad_right = pad_along_width - pad_left
-
-    return (pad_left, pad_right, pad_top, pad_bottom)
