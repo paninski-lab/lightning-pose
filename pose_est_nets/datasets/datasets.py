@@ -8,7 +8,6 @@ from typing import Callable, Optional, Tuple, List
 import os
 import numpy as np
 from PIL import Image
-#from deepposekit.utils.keypoints import draw_keypoints
 from tqdm import tqdm
 from sklearn.decomposition import PCA
 from pose_est_nets.models.heatmap_tracker_utils import format_mouse_data
@@ -83,7 +82,6 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
             #Checks for images with set of keypoints that include any nan, so that they can be excluded from the data entirely, like DeepPoseKit does
             ##########################################################
             self.fully_labeled_idxs = self.get_fully_labeled_idxs()
-            print(self.fully_labeled_idxs)
             if (mode == 'csv'):
                 self.image_names = [self.image_names[idx] for idx in self.fully_labeled_idxs]
             else:
@@ -122,7 +120,6 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
         print(self.num_targets)
 
     def compute_heatmaps(self):
-        print(self.downsample_factor)
         label_heatmaps = []
         for idx, y in enumerate(tqdm(self.labels)):
             if (self.mode == 'csv'):
@@ -210,9 +207,7 @@ class TrackingDataModule(pl.LightningDataModule):
         self.test_batch_size = test_batch_size
         self.num_workers = num_workers
         self.num_views = 2 #changes with dataset, 2 for mouse, 3 for fish
-        self.mode = mode
-        #self.ppca_params = self.computePPCA_params(self.num_views)
-    
+        self.mode = mode    
     
     def setup(self, stage: Optional[str] = None): 
         datalen = self.fulldataset.__len__()
