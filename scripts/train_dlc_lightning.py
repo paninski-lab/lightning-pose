@@ -19,18 +19,6 @@ from deepposekit.utils.image import largest_factor
 from deepposekit.models.backend.backend import find_subpixel_maxima
 import numpy as np
 
-def upsampleArgmax(heatmap_pred, heatmap_y):
-    heatmap_pred = nn.Upsample(scale_factor = 4)(heatmap_pred)
-    heatmap_pred = heatmap_pred[0]
-    y = nn.Upsample(scale_factor = 4)(heatmap_y)
-    y = y[0]
-    pred_keypoints = torch.empty(size = (y.shape[0], 2))
-    y_keypoints = torch.empty(size = (y.shape[0], 2))
-    for bp_idx in range(y.shape[0]):
-        pred_keypoints[bp_idx] = torch.tensor(np.unravel_index(heatmap_pred[bp_idx].argmax(), heatmap_pred[bp_idx].shape))
-        y_keypoints[bp_idx] = torch.tensor(np.unravel_index(y[bp_idx].argmax(), y[bp_idx].shape))    
-    return pred_keypoints, y_keypoints
-
 def saveNumericalPredictions(threshold):
     i = 0
     #hardcoded for mouse data
