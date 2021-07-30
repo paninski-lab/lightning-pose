@@ -21,6 +21,7 @@ class DLC(LightningModule):
         self,
         num_targets: int,
         resnet_version: int = 18,
+        downsample_factor: Optional[int] = 3,
         transfer: Optional[bool] = False,
     ) -> None:
         """
@@ -49,15 +50,32 @@ class DLC(LightningModule):
         # TODO: Add normalization
         # TODO: Should depend on input size
         self.num_keypoints = num_targets//2
-        self.upsampling_layers += [ #shape = [batch, 2048, 12, 12]
-            #nn.Upsample(scale_factor = 2, mode = 'bilinear'),
-            nn.PixelShuffle(2), 
-            nn.ConvTranspose2d(in_channels = int(num_filters/4), out_channels = self.num_keypoints, kernel_size = (3, 3), stride = (2,2), padding = (1,1), output_padding = (1,1)) # [batch, 17, 48, 48]
-        ]
-        self.upsampling_layers = nn.Sequential(*self.upsampling_layers)
-        torch.nn.init.xavier_uniform_(self.upsampling_layers[-1].weight)
-        torch.nn.init.zeros_(self.upsampling_layers[-1].bias)
-        
+        self.downsample_factor = downsample_factor
+        self.coordinate_scale = torch.tensor(2 ** downsample_factor, device = 'cuda')
+        if (downsample_factor == 3):
+            self.upsampling_layers += [ #shape = [batch, 2048, 12, 12]
+                #nn.Upsample(scale_factor = 2, mode = 'bilinear'),
+                nn.PixelShuffle(2), 
+                nn.ConvTranspose2d(in_channels = int(num_filters/4), out_channels = self.num_keypoints, kernel_size = (3, 3), stride = (2,2), padding = (1,1), output_padding = (1,1)) # [batch, 17, 48, 48]
+            ]
+            self.upsampling_layers = nn.Sequential(*self.upsampling_layers)
+            torch.nn.init.xavier_uniform_(self.upsampling_layers[-1].weight)
+            torch.nn.init.zeros_(self.upsampling_layers[-1].bias)
+        elif (downsample_factor == 2):
+            self.upsampling_layers += [ #shape = [batch, 2048, 12, 12]
+                nn.PixelShuffle(2),
+                nn.ConvTranspose2d(in_channels = int(num_filters/4), out_channels = self.num_keypoints, kernel_size = (3, 3), stride = (2,2), padding = (1,1), output_padding = (1,1)),#[batch, 17, 48, 48]
+                nn.ConvTranspose2d(in_channels = self.num_keypoints, out_channels = self.num_keypoints, kernel_size = (3, 3), stride = (2,2), padding = (1,1), output_padding = (1,1)) #[batch, 17, 96, 96]
+            ]
+            self.upsampling_layers = nn.Sequential(*self.upsampling_layers)
+            torch.nn.init.xavier_uniform_(self.upsampling_layers[-1].weight)
+            torch.nn.init.zeros_(self.upsampling_layers[-1].bias)
+            torch.nn.init.xavier_uniform_(self.upsampling_layers[-2].weight)
+            torch.nn.init.zeros_(self.upsampling_layers[-2].bias)
+        else:
+            print("downsample factor not supported!")
+            exit()
+ 
         self.batch_size = 16
         self.num_workers = 0
     @typechecked
@@ -102,7 +120,7 @@ class DLC(LightningModule):
         data_arr = format_mouse_data(keypoints)
         garbage_component = self.pca_param_dict["bot_1_eigenvector"]
         garbage_variance = torch.matmul(data_arr.T, garbage_component.T)
-        return torch.sum(garbage_variance)
+        return torch.linalg.norm(garbage_variance)
                
     def training_step(self, data, batch_idx):
         #x, y_heatmap, y_keypoints = data
@@ -113,11 +131,14 @@ class DLC(LightningModule):
         loss = self.heatmap_loss(y, y_hat)
         #heatmap_loss = self.heatmap_loss(y_heatmap, y_hat)
         pca_view_loss = self.pca_2view_loss(y_hat)
-        loss += pca_view_loss
+        loss += (pca_view_loss/10000) #can improve scaling
         #ppca_loss = 
         # log training loss
         self.log(
             "train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
+        )
+        self.log(
+            "pca_loss", pca_view_loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
         )
         return {"loss": loss}
 
@@ -137,8 +158,8 @@ class DLC(LightningModule):
         kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
         #dpk_pred_keypoints = dpk_find_subpixel_maxima(heatmaps_pred.detach().cpu(), torch.tensor(kernel_size), output_sigma, torch.tensor(100), torch.tensor(8), torch.tensor(255.0), data_format = "channels_first")
         #print(dpk_pred_keypoints.shape)
-        pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), torch.tensor(kernel_size, device = heatmaps_pred.device), torch.tensor(self.output_sigma, device = heatmaps_pred.device), self.upsample_factor, self.coordinate_scale, self.confindence_scale)
-        y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), torch.tensor(kernel_size, device = heatmaps_pred.device), torch.tensor(output_sigma, device = heatmaps_pred.device), self.upsample_factor, self.coordinate_scale, self.confindence_scale)
+        pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), torch.tensor(kernel_size, device = heatmaps_pred.device), torch.tensor(self.output_sigma, device = heatmaps_pred.device), self.coordinate_scale, self.downsample_factor, self.confidence_scale)
+        y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), torch.tensor(kernel_size, device = heatmaps_pred.device), torch.tensor(self.output_sigma, device = heatmaps_pred.device), self.coordinate_scale, self.downsample_factor, self.confidence_scale)
         if threshold:
             pred_kpts_list = []
             y_kpts_list = []
