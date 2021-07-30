@@ -156,10 +156,11 @@ class DLC(LightningModule):
     def computeSubPixMax(self, heatmaps_pred, heatmaps_y, threshold):
         kernel_size = np.min(self.output_shape)
         kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
+        #print(self.output_shape, self.
         #dpk_pred_keypoints = dpk_find_subpixel_maxima(heatmaps_pred.detach().cpu(), torch.tensor(kernel_size), output_sigma, torch.tensor(100), torch.tensor(8), torch.tensor(255.0), data_format = "channels_first")
         #print(dpk_pred_keypoints.shape)
-        pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), torch.tensor(kernel_size, device = heatmaps_pred.device), torch.tensor(self.output_sigma, device = heatmaps_pred.device), self.coordinate_scale, self.downsample_factor, self.confidence_scale)
-        y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), torch.tensor(kernel_size, device = heatmaps_pred.device), torch.tensor(self.output_sigma, device = heatmaps_pred.device), self.coordinate_scale, self.downsample_factor, self.confidence_scale)
+        pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), torch.tensor(kernel_size, device = heatmaps_pred.device), torch.tensor(self.output_sigma, device = heatmaps_pred.device), self.upsample_factor, self.coordinate_scale, self.confidence_scale)
+        y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), torch.tensor(kernel_size, device = heatmaps_pred.device), torch.tensor(self.output_sigma, device = heatmaps_pred.device), self.upsample_factor, self.coordinate_scale, self.confidence_scale)
         if threshold:
             pred_kpts_list = []
             y_kpts_list = []
