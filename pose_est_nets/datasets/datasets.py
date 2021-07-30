@@ -8,54 +8,12 @@ from typing import Callable, Optional, Tuple, List
 import os
 import numpy as np
 from PIL import Image
-from deepposekit.utils.keypoints import draw_keypoints
+#from deepposekit.utils.keypoints import draw_keypoints
 from tqdm import tqdm
 from sklearn.decomposition import PCA
 from pose_est_nets.models.heatmap_tracker_utils import format_mouse_data
 import h5py
 
-class TrackingDataset(torch.utils.data.Dataset):
-    def __init__(self,
-                 root_directory: str,
-                 csv_path: str,
-                 header_rows: Optional[List[int]] = None,
-                 transform: Optional[Callable] = None
-                 ) -> None:
-        """
-        Initializes the Regression Dataset
-        Parameters:
-            root_directory (str): path to data directory
-            csv_path (str): path to CSV file (within root_directory). CSV file should be
-                in the form (image_path, bodypart_1_x, bodypart_1_y, ..., bodypart_n_y)
-                Note: image_path is relative to the given root_directory
-            header_rows (List[int]): (optional) which rows in the csv are header rows
-            transform (torchvision.transforms): (optional) transform to apply to images
-        Returns:
-            None
-        """
-        csv_data = pd.read_csv(os.path.join(root_directory, csv_path), header=header_rows)
-        self.image_names = list(csv_data.iloc[:, 0])
-        self.labels = torch.tensor(csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32)
-        self.transform = transform
-        self.root_directory = root_directory
-        self.num_targets = self.labels.shape[1]
-    def __len__(self) -> int: #something is wrong here
-        return len(self.image_names)
-
-    def __getitem__(self, idx: int) -> Tuple[torch.tensor, torch.tensor]:
-        # get img_name from self.image_names
-        img_name = self.image_names[idx]
-        # read image from file and apply transformations (if any)
-        x = Image.open(os.path.join(self.root_directory, img_name)).convert(
-            'RGB')  # Rick's images have 1 color channel; change to 3.
-        if self.transform:
-            x = self.transform(x)
-
-        # get labels from self.labels
-        y = self.labels[idx]
-
-        return x, y
- 
 class DLCHeatmapDataset(torch.utils.data.Dataset):
     def __init__(
         self,
@@ -64,7 +22,8 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
         mode: str,
         header_rows: Optional[List[int]] = None,
         transform: Optional[Callable] = None,
-        noNans: Optional[bool] = False
+        noNans: Optional[bool] = False,
+        downsample_factor: Optional[int] = 3,
     ) -> None:
         """
         Initializes the DLC Heatmap Dataset
@@ -97,7 +56,7 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
             self.images = np.array(hf['images'])
             self.images = self.images[:,:,:,0]
             self.labels = torch.tensor(hf["annotations"])
-            test_img = Image.fromarray(self.images[idx]).convert("RGB")
+            test_img = Image.fromarray(self.images[0]).convert("RGB")
             
         else:
             raise ValueError("mode must be 'csv' or 'h5'")
@@ -139,15 +98,15 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
             print(self.labels.shape)
             ##########################################################
 
-        self.downsample_factor = 2 #could change to 0, 2, 3, or 4
+        self.downsample_factor = downsample_factor
         self.sigma = 5
         self.output_sigma = 1.25 #should be sigma/2 ^downsample factor
         self.output_shape = (
             self.height // 2 ** self.downsample_factor,
             self.width // 2 ** self.downsample_factor,
         )
-        self.half_output_shape = (int(self.output_shape[0] / 2), int(self.output_shape[1] / 2))
-        print(self.half_output_shape)
+        #self.half_output_shape = (int(self.output_shape[0] / 2), int(self.output_shape[1] / 2))
+        #print(self.half_output_shape)
 
         imgnet_mean = [0.485, 0.456, 0.406]
         imgnet_std = [0.229, 0.224, 0.225]
@@ -163,6 +122,7 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
         print(self.num_targets)
 
     def compute_heatmaps(self):
+        print(self.downsample_factor)
         label_heatmaps = []
         for idx, y in enumerate(tqdm(self.labels)):
             if (self.mode == 'csv'):
@@ -178,7 +138,7 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
             else:
                 y = y.numpy()
             x = self.torch_transform(x)
-            y_heatmap = draw_keypoints(y, x.shape[-2], x.shape[-1], self.half_output_shape, sigma = self.output_sigma) #output shape is smaller
+            y_heatmap = draw_keypoints(y, x.shape[-2], x.shape[-1], self.output_shape, sigma = self.output_sigma)
             label_heatmaps.append(y_heatmap)
         self.label_heatmaps = torch.from_numpy(np.asarray(label_heatmaps)).float()
         self.label_heatmaps = self.label_heatmaps.permute(0, 3, 1, 2)
