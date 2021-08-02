@@ -48,7 +48,7 @@ class DLC(LightningModule):
         # TODO: Should depend on input size
         self.num_keypoints = num_targets//2
         self.downsample_factor = downsample_factor
-        self.coordinate_scale = torch.tensor(2 ** downsample_factor, device = 'cuda')
+        self.coordinate_scale = torch.tensor(2 ** downsample_factor, device = self.device)
         if (downsample_factor == 3):
             self.upsampling_layers += [ #shape = [batch, 2048, 12, 12]
                 #nn.Upsample(scale_factor = 2, mode = 'bilinear'),
@@ -73,8 +73,8 @@ class DLC(LightningModule):
             print("downsample factor not supported!")
             exit()
  
-        self.batch_size = 16
-        self.num_workers = 0
+        #self.batch_size = 16 #for autoscale batchsize
+        #self.num_workers = 0
     @typechecked
     def forward(self, x: TensorType["batch", 3, "Height", "Width"]) -> TensorType["batch", 17, "Out_Height", "Out_Width"]: #how do I use a variable to indicate number of keypoints
         """
@@ -113,7 +113,7 @@ class DLC(LightningModule):
     def pca_2view_loss(self, y_hat: TensorType["batch", 17, "Out_Height", "Out_Width"]) -> TensorType[()]:
         kernel_size = np.min(self.output_shape) #change from numpy to torch
         kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
-        keypoints = find_subpixel_maxima(y_hat.detach(), torch.tensor(kernel_size, device = 'cuda'), torch.tensor(self.output_sigma, device = 'cuda'), self.upsample_factor, self.coordinate_scale, self.confidence_scale)
+        keypoints = find_subpixel_maxima(y_hat.detach(), torch.tensor(kernel_size, device = self.device), torch.tensor(self.output_sigma, device = self.device), self.upsample_factor, self.coordinate_scale, self.confidence_scale)
         keypoints = keypoints[:,:,:2]
         data_arr = format_mouse_data(keypoints)
         garbage_component = self.pca_param_dict["bot_1_eigenvector"]
@@ -158,20 +158,21 @@ class DLC(LightningModule):
         y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), torch.tensor(kernel_size, device = heatmaps_pred.device), torch.tensor(self.output_sigma, device = heatmaps_pred.device), self.upsample_factor, self.coordinate_scale, self.confidence_scale)
         pred_keypoints = pred_keypoints[0]
         y_keypoints = y_keypoints[0]
-        if threshold: # TODO: convert to vectorized selection based on bool ops
+        if threshold:
+            # for i in range(pred_keypoints.shape[0]): # pred_keypoints is shape(num_keypoints, 3) the last entry being (x,y, confidence)
+            #     if pred_keypoints[i, 2] > 0.008: #threshold for low confidence predictions
+            #         pred_kpts_list.append(pred_keypoints[i, :2].cpu().numpy())
+            #     if y_keypoints[i, 2] > 0.008:
+            #         y_kpts_list.append(y_keypoints[i, :2].cpu().numpy())
+            # print(pred_kpts_list, y_kpts_list)
             num_threshold = torch.tensor(0.001, device = heatmaps_pred.device)
             pred_mask = torch.gt(pred_keypoints[:, 2], num_threshold)
+            pred_mask = pred_mask.unsqueeze(-1)
             y_mask = torch.gt(y_keypoints[:, 2], num_threshold)
-            pred_keypoints = torch.masked_select(pred_keypoints, pred_mask)
-            y_keypoints = torch.masked_select(y_keypoints, y_mask)
-            # pred_kpts_list = []
-            # y_kpts_list = []
-            # for i in range(pred_keypoints.shape[1]): # pred_keypoints is shape(1, num_keypoints, 3) the last entry being (x,y, confidence)
-            #     if pred_keypoints[0, i, 2] > 0.001: #threshold for low confidence predictions
-            #         pred_kpts_list.append(pred_keypoints[0, i, :2].cpu().numpy())
-            #     if y_keypoints[0, i, 2] > 0.001:
-            #         y_kpts_list.append(y_keypoints[0, i, :2].cpu().numpy())
-            # return torch.tensor(pred_kpts_list), torch.tensor(y_kpts_list)
+            y_mask = y_mask.unsqueeze(-1)
+            pred_keypoints = torch.masked_select(pred_keypoints, pred_mask).reshape(-1, 3)
+            y_keypoints = torch.masked_select(y_keypoints, y_mask).reshape(-1,3)
+            
         pred_keypoints = pred_keypoints[:,:2] #getting rid of the actual max value
         y_keypoints = y_keypoints[:,:2]
         return pred_keypoints, y_keypoints
