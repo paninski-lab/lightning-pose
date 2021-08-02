@@ -15,6 +15,7 @@ import pandas as pd
 import imgaug.augmenters as iaa
 import numpy as np
 from pose_est_nets.utils.plotting_utils import saveNumericalPredictions, plotPredictions
+from pose_est_nets.utils.IO import get_latest_version
 
 parser = argparse.ArgumentParser()
 
