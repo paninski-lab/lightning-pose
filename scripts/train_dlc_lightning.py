@@ -16,12 +16,14 @@ import imgaug.augmenters as iaa
 import numpy as np
 from pose_est_nets.utils.plotting_utils import saveNumericalPredictions, plotPredictions
 from pose_est_nets.utils.IO import get_latest_version
+from pose_est_nets.utils.wrappers import predict_plot_test_epoch
+
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--no_train", help= "whether you want to skip training the model")
 parser.add_argument("--load", help = "set true to load model from checkpoint")
-parser.add_argument("--predict", help = "whether or not to generate predictions on test data")
+parser.add_argument("--predict", action='store_true', help="whether or not to generate predictions on test data")
 parser.add_argument("--max_epochs", type=int, default=500, help = "when to stop training")
 parser.add_argument("--ckpt", type = str, default = "lightning_logs2/version_1/checkpoints/epoch=271-step=12511.ckpt", help = "path to model checkpoint if you want to load model from checkpoint")
 parser.add_argument("--train_batch_size", type = int, default = 16)
@@ -106,13 +108,22 @@ else:
     datamod.setup()
 
 if args.predict:
-    model.eval()
-    trainer.test(model = model, datamodule = datamod)
-    threshold = False #whether or not to refrain from plotting a keypoint if the max value of the heatmap is below a certain threshold
-    save_heatmaps = False #whether or not to save heatmap images, note they will be in the downsampled dimensions
-    mode = 'test'
-    plotPredictions(model, datamod, save_heatmaps, threshold, mode)
-    threshold = False
-    saveNumericalPredictions(model, datamod, threshold)
+    print("Finished Training! Starting to predict test images...")
+    # # Nick's version
+    # model.eval()
+    # trainer.test(model = model, datamodule = datamod)
+    # threshold = False #whether or not to refrain from plotting a keypoint if the max value of the heatmap is below a certain threshold
+    # save_heatmaps = False #whether or not to save heatmap images, note they will be in the downsampled dimensions
+    # mode = 'test'
+    # plotPredictions(model, datamod, save_heatmaps, threshold, mode)
+    # saveNumericalPredictions(model, datamod, threshold)
+    # # Dan's version below:
+    print('entering dans version')
+    folder_name = get_latest_version("lightning_logs")
+    preds_folder = set_or_open_folder(os.path.join("preds", folder_name))
+    preds_dict = predict_plot_test_epoch(model,
+                                         data_module.test_dataloader(),
+                                         preds_folder)
+
     
 
