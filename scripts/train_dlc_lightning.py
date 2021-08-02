@@ -56,6 +56,7 @@ mode = args.data_path.split('.')[-1]
 header_rows = [1, 2]
 
 if args.select_data_mode == 'deterministic':
+    print("deterministic")
     train_data = DLCHeatmapDataset(root_directory= args.data_dir, data_path=args.data_path, header_rows=header_rows, mode = mode, transform=data_transform, noNans = True, downsample_factor = args.downsample_factor)
     train_data.image_names = train_data.image_names[:args.num_train_examples]
     train_data.labels = train_data.labels[:args.num_train_examples]
@@ -73,7 +74,6 @@ if args.select_data_mode == 'deterministic':
     datamod.valid_set = val_data
     datamod.test_set = test_data
     data = train_data
-    print("deterministic")
 else:
     print("not deterministic")
     full_data = DLCHeatmapDataset(root_directory= args.data_dir, data_path=args.data_path, header_rows=header_rows, mode = mode, noNans = True, transform = data_transform)
@@ -85,7 +85,6 @@ datamod.computePPCA_params()
 
 model = DLC(num_targets = data.num_targets, resnet_version = 50, transfer = False, downsample_factor = args.downsample_factor)
 if (args.load):
-    prin
     model = model.load_from_checkpoint(checkpoint_path = args.ckpt, num_targets = data.num_targets, resnet_version = 50, transfer = False, downsample_factor = args.downsample_factor)
 
 model.pca_param_dict = datamod.pca_param_dict
@@ -124,7 +123,7 @@ if args.predict:
     #trainer.test(model = model, datamodule = datamod)
     threshold = True #whether or not to refrain from plotting a keypoint if the max value of the heatmap is below a certain threshold
     mode = 'test'
-    #plotPredictions(model, datamod, args.save_heatmaps, threshold, mode)
+    plotPredictions(model, datamod, args.save_heatmaps, threshold, mode)
     threshold = False
     saveNumericalPredictions(model, datamod, threshold) #assumes no thresholding for now
     # # Dan's version below:
