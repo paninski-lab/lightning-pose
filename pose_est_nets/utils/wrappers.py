@@ -3,14 +3,6 @@ import matplotlib.pyplot as plt
 import os
 from pose_est_nets.utils.IO import save_object
 
-def get_latest_version(lightning_logs_path):
-    # TODO: add what's needed to pull out ckpts
-    ints = [int(l.split('_')[-1]) for l in os.listdir(lightning_logs_path)]
-    latest_version = lightning_logs_path[ints.index(max(ints))]
-    print("version used: %s" %latest_version)
-    return latest_version
-
-
 def predict_plot_test_epoch(model,
                   dataloader,
                   preds_folder):

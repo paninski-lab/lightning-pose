@@ -23,3 +23,11 @@ def save_object(obj: Any, filename: str) -> None:
 def load_object(filename: str) -> Any:
     with open(filename, "rb") as input:  # note rb and not wb
         return pickle.load(input)
+@typechecked
+def get_latest_version(lightning_logs_path: str) -> str:
+    # TODO: add what's needed to pull out ckpts
+    subfolders = os.listdir(lightning_logs_path)
+    ints = [int(l.split('_')[-1]) for l in subfolders]
+    latest_version = subfolders[ints.index(max(ints))]
+    print("version used: %s" %latest_version)
+    return latest_version
