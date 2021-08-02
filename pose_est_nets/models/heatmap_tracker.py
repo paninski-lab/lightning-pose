@@ -156,18 +156,24 @@ class DLC(LightningModule):
         kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
         pred_keypoints = find_subpixel_maxima(heatmaps_pred.detach(), torch.tensor(kernel_size, device = heatmaps_pred.device), torch.tensor(self.output_sigma, device = heatmaps_pred.device), self.upsample_factor, self.coordinate_scale, self.confidence_scale)
         y_keypoints = find_subpixel_maxima(heatmaps_y.detach(), torch.tensor(kernel_size, device = heatmaps_pred.device), torch.tensor(self.output_sigma, device = heatmaps_pred.device), self.upsample_factor, self.coordinate_scale, self.confidence_scale)
+        pred_keypoints = pred_keypoints[0]
+        y_keypoints = y_keypoints[0]
         if threshold: # TODO: convert to vectorized selection based on bool ops
-            pred_kpts_list = []
-            y_kpts_list = []
-            for i in range(pred_keypoints.shape[1]): # pred_keypoints is shape(1, num_keypoints, 3) the last entry being (x,y, confidence)
-                if pred_keypoints[0, i, 2] > 0.001: #threshold for low confidence predictions
-                    pred_kpts_list.append(pred_keypoints[0, i, :2].cpu().numpy())
-                if y_keypoints[0, i, 2] > 0.001:
-                    y_kpts_list.append(y_keypoints[0, i, :2].cpu().numpy())
-            return torch.tensor(pred_kpts_list), torch.tensor(y_kpts_list)
-
-        pred_keypoints = pred_keypoints[0,:,:2] #getting rid of the actual max value
-        y_keypoints = y_keypoints[0,:,:2]
+            num_threshold = torch.tensor(0.001, device = heatmaps_pred.device)
+            pred_mask = torch.gt(pred_keypoints[:, 2], num_threshold)
+            y_mask = torch.gt(y_keypoints[:, 2], num_threshold)
+            pred_keypoints = torch.masked_select(pred_keypoints, pred_mask)
+            y_keypoints = torch.masked_select(y_keypoints, y_mask)
+            # pred_kpts_list = []
+            # y_kpts_list = []
+            # for i in range(pred_keypoints.shape[1]): # pred_keypoints is shape(1, num_keypoints, 3) the last entry being (x,y, confidence)
+            #     if pred_keypoints[0, i, 2] > 0.001: #threshold for low confidence predictions
+            #         pred_kpts_list.append(pred_keypoints[0, i, :2].cpu().numpy())
+            #     if y_keypoints[0, i, 2] > 0.001:
+            #         y_kpts_list.append(y_keypoints[0, i, :2].cpu().numpy())
+            # return torch.tensor(pred_kpts_list), torch.tensor(y_kpts_list)
+        pred_keypoints = pred_keypoints[:,:2] #getting rid of the actual max value
+        y_keypoints = y_keypoints[:,:2]
         return pred_keypoints, y_keypoints
 
     def configure_optimizers(self):
