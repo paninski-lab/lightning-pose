@@ -27,6 +27,14 @@ def load_object(filename: str) -> Any:
 def get_latest_version(lightning_logs_path: str) -> str:
     # TODO: add what's needed to pull out ckpts
     subfolders = os.listdir(lightning_logs_path)
+    subfolders.remove('.DS_Store')
+    # ints = []
+    # for l in subfolders:
+    #     print(l)
+    #     if l != '.DS_Store':
+    #         ints.append(int(l.split('_')[-1]))
+    #     else:
+    #         subfolders.remove(l)
     ints = [int(l.split('_')[-1]) for l in subfolders]
     latest_version = subfolders[ints.index(max(ints))]
     print("version used: %s" %latest_version)
