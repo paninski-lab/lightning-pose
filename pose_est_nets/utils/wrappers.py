@@ -1,7 +1,7 @@
 import torch
 import matplotlib.pyplot as plt
 import os
-from pose_est_nets.utils.IO import save_object
+from pose_est_nets.utils.IO import save_object, get_latest_version
 
 def predict_plot_test_epoch(model,
                   dataloader,

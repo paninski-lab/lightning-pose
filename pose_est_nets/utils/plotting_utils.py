@@ -1,6 +1,6 @@
 import imgaug.augmenters as iaa
 import numpy as np
-from pose_est_nets.utils.IO import set_or_open_folder
+from pose_est_nets.utils.IO import set_or_open_folder, get_latest_version
 import matplotlib.pyplot as plt
 import os
 
@@ -39,14 +39,19 @@ def saveNumericalPredictions(model, datamod, threshold):
     #dpk_final_preds = np.reshape(dpk_final_preds, newshape = (len(test_dl), model.num_targets))
 
     #np.savetxt('../../preds/mouse_gt.csv', final_gt_keypoints, delimiter = ',', newline = '\n')
-    np.savetxt('../preds/ptl_mouse_pca_100preds.csv', final_preds, delimiter = ',', newline = '\n')
+    folder_name = get_latest_version("lightning_logs")
+    csv_folder = set_or_open_folder(os.path.join("preds", folder_name))
+
+    np.savetxt(os.path.join(csv_folder, 'preds.csv'), final_preds, delimiter = ',', newline = '\n')
     #np.savetxt('../preds/dpk_fish_predictions.csv', dpk_final_preds, delimiter = ',', newline = '\n')
     return
 
 def plotPredictions(model, datamod, save_heatmaps, threshold, mode):
+    folder_name = get_latest_version("lightning_logs")
+    img_folder = set_or_open_folder(os.path.join("preds", folder_name, "images"))
+
     if (save_heatmaps):
-        heatmap_folder = set_or_open_folder("preds/heatmaps")
-    img_folder = set_or_open_folder("preds/ptl_mouse_100")
+        heatmap_folder = set_or_open_folder(os.path.join("preds", folder_name, "heatmaps"))
 
     model.eval()
     if mode == 'train':
