@@ -122,7 +122,7 @@ if args.predict:
     folder_name = get_latest_version("lightning_logs")
     preds_folder = set_or_open_folder(os.path.join("preds", folder_name))
     preds_dict = predict_plot_test_epoch(model,
-                                         data_module.test_dataloader(),
+                                         datamod.test_dataloader(),
                                          preds_folder)
 
     
