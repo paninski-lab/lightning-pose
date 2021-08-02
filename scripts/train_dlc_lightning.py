@@ -114,9 +114,8 @@ if args.predict:
     model.eval()
     trainer.test(model = model, datamodule = datamod)
     threshold = False #whether or not to refrain from plotting a keypoint if the max value of the heatmap is below a certain threshold
-    save_heatmaps = False #whether or not to save heatmap images, note they will be in the downsampled dimensions
     mode = 'test'
-    plotPredictions(model, datamod, save_heatmaps, threshold, mode)
+    plotPredictions(model, datamod, args.save_heatmaps, threshold, mode)
     saveNumericalPredictions(model, datamod, threshold)
     # # Dan's version below:
     # print('entering dans version')
