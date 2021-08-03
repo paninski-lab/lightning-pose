@@ -1,5 +1,6 @@
 import imgaug.augmenters as iaa
 import numpy as np
+import torch
 from pose_est_nets.utils.IO import set_or_open_folder, get_latest_version
 import matplotlib.pyplot as plt
 import os
@@ -22,7 +23,10 @@ def saveNumericalPredictions(model, datamod, threshold):
     for idx, batch in enumerate(test_dl):
         x, y = batch
         heatmap_pred = model.forward(x)
-        pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred.cuda(), y.cuda(), threshold)
+        if torch.cuda.is_available():
+            heatmap_pred = heatmap_pred.cuda()
+            y = y.cuda()
+        pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred, y, threshold)
         #dpk_final_preds[i] = pred_keypoints
         pred_keypoints = pred_keypoints.cpu()
         y_keypoints = y_keypoints.cpu()
@@ -69,7 +73,10 @@ def plotPredictions(model, datamod, save_heatmaps, threshold, mode):
             plt.imshow(y[0, 4].detach())
             plt.savefig(os.path.join(heatmap_folder, 'gt_map_%i' % i + '.png'))
             plt.clf()
-        pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred.cuda(), y.cuda(), threshold)
+        if torch.cuda.is_available():
+            heatmap_pred = heatmap_pred.cuda()
+            y = y.cuda()
+        pred_keypoints, y_keypoints = model.computeSubPixMax(heatmap_pred, y, threshold)
         plt.imshow(x[0][0])
         pred_keypoints = pred_keypoints.cpu()
         y_keypoints = y_keypoints.cpu()
