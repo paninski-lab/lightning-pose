@@ -231,15 +231,20 @@ class TrackingDataModule(pl.LightningDataModule):
                 self.fulldataset, [round(datalen * 0.8), round(datalen * 0.1), round(datalen * 0.1)],
                 generator=torch.Generator().manual_seed(42)
             )
-        self.train_set = self.train_set.dataset
-        self.valid_set = self.valid_set.dataset
-        self.test_set = self.test_set.dataset
+        # self.train_set = self.train_set.dataset
+        # self.valid_set = self.valid_set.dataset
+        # self.test_set = self.test_set.dataset
+        print(len(self.train_set), len(self.valid_set), len(self.test_set))
 
     def computePPCA_params(self):
         param_dict = {}
-        data_arr = self.train_set.labels #won't work for random splitting
-        #data_arr = self.train_set.dataset
-        num_body_parts = self.train_set.num_targets
+        if (type(self.train_set) == torch.utils.data.dataset.Subset):
+            indxs = torch.tensor(self.train_set.indices)
+            data_arr = torch.index_select(self.train_set.dataset.labels, 0, indxs)
+            num_body_parts = self.train_set.dataset.num_targets
+        else:
+            data_arr = self.train_set.labels #won't work for random splitting
+            num_body_parts = self.train_set.num_targets
         arr_for_pca = format_mouse_data(data_arr)
         pca = PCA(n_components = 4, svd_solver = 'full')
         pca.fit(arr_for_pca.T)
@@ -248,8 +253,11 @@ class TrackingDataModule(pl.LightningDataModule):
         explained_var = pca.explained_variance_ratio_
         print(np.sum(explained_var[:3]))
         param_dict["obs_offset"] = mu
-        param_dict["top_3_eigenvectors"] = torch.from_numpy(pca.components_[:3]).cuda().to(torch.float32)
-        param_dict["bot_1_eigenvector"] = torch.from_numpy(pca.components_[3:]).cuda().to(torch.float32)
+        param_dict["top_3_eigenvectors"] = torch.from_numpy(pca.components_[:3]).to(torch.float32)
+        param_dict["bot_1_eigenvector"] = torch.from_numpy(pca.components_[3:]).to(torch.float32)
+        if torch.cuda.is_available():
+            param_dict["top_3_eigenvectors"].cuda()
+            param_dict["bot_1_eigenvector"].cuda()
         self.pca_param_dict = param_dict
         
     def full_dataloader(self):
