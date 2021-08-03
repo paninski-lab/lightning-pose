@@ -2,6 +2,7 @@ lightning_logs/
 .vscode/
 data/
 outputs/
+preds/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

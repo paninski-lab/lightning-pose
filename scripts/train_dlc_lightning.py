@@ -18,7 +18,6 @@ from pose_est_nets.utils.plotting_utils import saveNumericalPredictions, plotPre
 from pose_est_nets.utils.IO import set_or_open_folder, get_latest_version
 from pose_est_nets.utils.wrappers import predict_plot_test_epoch
 
-
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--no_train", help= "whether you want to skip training the model")
