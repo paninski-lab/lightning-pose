@@ -154,10 +154,10 @@ class DLC(LightningModule):
         kernel_size = np.min(self.output_shape)  # change from numpy to torch
         kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
         keypoints = find_subpixel_maxima(
-            y_hat.detach(),
+            y_hat.detach(),  # TODO: why detach? could keep everything on GPU?
             torch.tensor(kernel_size, device=self.device),
             torch.tensor(self.output_sigma, device=self.device),
-            self.upsample_factor,
+            self.upsample_factor,  # TODO: these are coming from self, shouldn't be inputs?
             self.coordinate_scale,
             self.confidence_scale,
         )
@@ -204,6 +204,7 @@ class DLC(LightningModule):
         self.validation_step(data, batch_idx)
 
     def computeSubPixMax(self, heatmaps_pred, heatmaps_y, threshold):
+        assert hasattr(self, "output_shape")
         kernel_size = np.min(self.output_shape)
         kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
         pred_keypoints = find_subpixel_maxima(
