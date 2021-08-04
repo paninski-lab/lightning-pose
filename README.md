@@ -12,5 +12,12 @@ then `cd` into the new directory called `pose-estimation-nets` like so
 `cd pose-estimation-nets`
 and install our package and its dependencies like so
 `pip install -e .`
+If you use CUDA 11.0, please install `nvidia-dali` as follows (for other CUDA versions, check out https://docs.nvidia.com/deeplearning/dali/user-guide/docs/installation.html):
+
+```pip install --extra-index-url https://developer.download.nvidia.com/compute/redist --upgrade nvidia-dali-cuda110
+```
+
 then you can verify that all the tests are passing on your machine by running
 `pytest`
+
+
