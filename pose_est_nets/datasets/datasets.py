@@ -13,6 +13,38 @@ from tqdm import tqdm
 from sklearn.decomposition import PCA
 from pose_est_nets.utils.heatmap_tracker_utils import format_mouse_data
 import h5py
+from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
+from nvidia.dali import pipeline_def
+import nvidia.dali.fn as fn
+import nvidia.dali.types as types
+
+# set the random seed as input here.
+# TODO: when moving to runs, we would like different random seeds, so consider eliminating.
+TORCH_MANUAL_SEED = 42
+# statistics of imagenet dataset on which the resnet was trained on
+IMAGENET_MEAN = [0.485, 0.456, 0.406]
+IMAGENET_STD = [0.229, 0.224, 0.225]
+
+
+@pipeline_def
+def video_pipe(filenames):  # TODO: review, fix means
+    initial_prefetch_size = 16
+    video = fn.readers.video(
+        device="gpu",  # TODO: check what needs to be device for tests to run on CPU
+        filenames=filenames,
+        sequence_length=1,
+        initial_fill=initial_prefetch_size,
+        normalized=False,
+        dtype=types.DALIDataType.FLOAT,
+    )
+    video = video / 255
+    transform = fn.crop_mirror_normalize(
+        video,
+        output_layout="FCHW",
+        mean=IMAGENET_MEAN,
+        std=IMAGENET_STD,
+    )
+    return transform
 
 
 class DLCHeatmapDataset(torch.utils.data.Dataset):
@@ -119,18 +151,16 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
         # self.half_output_shape = (int(self.output_shape[0] / 2), int(self.output_shape[1] / 2))
         # print(self.half_output_shape)
 
-        imgnet_mean = [0.485, 0.456, 0.406]
-        imgnet_std = [0.229, 0.224, 0.225]
         self.torch_transform = transforms.Compose(
             [  # imagenet normalization
                 transforms.ToTensor(),
-                transforms.Normalize(mean=imgnet_mean, std=imgnet_std),
+                transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
             ]
         )
         self.mode = mode
         # Compute heatmaps as preprocessing step
         # check that max of heatmaps look good
-        self.compute_heatmaps()
+        self.compute_heatmaps()  # TODO: here we're computing the LABEL heatmaps which are saved to self. maybe explicitly have the outputs here
         self.num_targets = torch.numel(self.labels[0])
         print(self.num_targets)
 
@@ -182,7 +212,9 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
             )  # make sure this works with the transformations
 
         if self.transform:
-            x = self.transform(images=np.expand_dims(x, axis=0))  # check this
+            x = self.transform(
+                images=np.expand_dims(x, axis=0)
+            )  # TODO: check this. can be torch.unsqueeze(0)
             x = x.squeeze(0)
         x = self.torch_transform(x)
         y_heatmap = self.label_heatmaps[idx]
@@ -190,7 +222,7 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
         return x, y_heatmap
         # return x, y_heatmap, y_keypoint
 
-    def get_fully_labeled_idxs(self):
+    def get_fully_labeled_idxs(self):  # TODO: make shorter
         nan_check = torch.isnan(self.labels)
         nan_check = nan_check[:, :, 0]
         nan_check = ~nan_check
@@ -226,15 +258,20 @@ def draw_keypoints(keypoints, height, width, output_shape, sigma=1, normalize=Tr
     return confidence
 
 
+# TODO: let the unlabeled data module inherit from TrackingDataModule, just add the relevant components
+
+
 class TrackingDataModule(pl.LightningDataModule):
-    def __init__(
+    def __init__(  # TODO: add documentation
         self,
         dataset,
         mode,
         train_batch_size,
         validation_batch_size,
         test_batch_size,
-        num_workers,
+        num_workers: Optional[int] = 8,
+        use_unlabeled_frames: Optional[bool] = False,
+        unlabeled_video_path: Optional[str] = None,
     ):
         super().__init__()
         self.fulldataset = dataset
@@ -244,8 +281,10 @@ class TrackingDataModule(pl.LightningDataModule):
         self.num_workers = num_workers
         self.num_views = 2  # changes with dataset, 2 for mouse, 3 for fish
         self.mode = mode
+        self.use_unlabeled_frames = use_unlabeled_frames
+        self.unlabeled_video_path = unlabeled_video_path
 
-    def setup(self, stage: Optional[str] = None):
+    def setup(self, stage: Optional[str] = None):  # TODO: clean up
         datalen = self.fulldataset.__len__()
         print("datalen:")
         print(datalen)
@@ -262,7 +301,7 @@ class TrackingDataModule(pl.LightningDataModule):
                     round(datalen * 0.1),
                     round(datalen * 0.1),
                 ],  # hardcoded solution to rounding error
-                generator=torch.Generator().manual_seed(42),
+                generator=torch.Generator().manual_seed(TORCH_MANUAL_SEED),
             )
         elif (
             round(datalen * 0.8) + round(datalen * 0.1) + round(datalen * 0.1)
@@ -274,20 +313,57 @@ class TrackingDataModule(pl.LightningDataModule):
                     round(datalen * 0.1),
                     round(datalen * 0.1),
                 ],  # hardcoded solution to rounding error
-                generator=torch.Generator().manual_seed(42),
+                generator=torch.Generator().manual_seed(TORCH_MANUAL_SEED),
             )
         else:
             self.train_set, self.valid_set, self.test_set = random_split(
                 self.fulldataset,
                 [round(datalen * 0.8), round(datalen * 0.1), round(datalen * 0.1)],
-                generator=torch.Generator().manual_seed(42),
+                generator=torch.Generator().manual_seed(TORCH_MANUAL_SEED),
             )
         # self.train_set = self.train_set.dataset
         # self.valid_set = self.valid_set.dataset
         # self.test_set = self.test_set.dataset
         print(len(self.train_set), len(self.valid_set), len(self.test_set))
 
-    def computePPCA_params(self):
+    def setup_unlabeled(self, video_path):
+        class LightningWrapper(DALIGenericIterator):
+            def __init__(self, *kargs, **kvargs):
+                super().__init__(*kargs, **kvargs)
+
+            def __len__(self):
+                return 64  # num frames = len * batch_size; TODO: WHY 64? UNCLEAR
+
+            def __next__(self):
+                out = super().__next__()
+                # return [out[0]["x"][:,0,:,:,:].requires_grad_(True), out[0]["y"]] #not neccessary to carry dummy labels
+                return torch.tensor(
+                    out[0]["x"][:, 0, :, :, :], dtype=torch.float, device="cuda"
+                ).requires_grad_(
+                    True
+                )  # TODO: why requires_grad_?
+
+        startup_len = 2000
+        data_pipe = video_pipe(
+            video_path,
+            batch_size=self.train_batch_size,
+            num_threads=self.num_workers,
+            device_id=0,  # TODO: what's device_id? cuda 0?
+        )
+        data_pipe.build()
+        for i in range(startup_len):
+            data_pipe.run()
+        print(data_pipe._api_type)
+        data_pipe._api_type = types.PipelineAPIType.ITERATOR
+        print(data_pipe._api_type)
+        self.semi_supervised_loader = LightningWrapper(  # TODO: why write to self?
+            data_pipe,
+            output_map=["x"],
+            last_batch_policy=LastBatchPolicy.PARTIAL,
+            auto_reset=True,
+        )  # changed output_map to account for dummy labels
+
+    def computePPCA_params(self):  # TODO: could be separated from this class
         param_dict = {}
         if type(self.train_set) == torch.utils.data.dataset.Subset:
             indxs = torch.tensor(self.train_set.indices)
@@ -320,12 +396,39 @@ class TrackingDataModule(pl.LightningDataModule):
     def full_dataloader(self):
         return DataLoader(self.fulldataset, batch_size=1, num_workers=self.num_workers)
 
-    def train_dataloader(self):
-        return DataLoader(
-            self.train_set,
-            batch_size=self.train_batch_size,
-            num_workers=self.num_workers,
-        )
+    def unlabeled_dataloader(self):
+        return self.semi_supervised_loader
+
+    ## That's the clean train_dataloader that works. can revert to it if needed
+    # def train_dataloader(self):
+    #     return DataLoader(
+    #         self.train_set,
+    #         batch_size=self.train_batch_size,
+    #         num_workers=self.num_workers,
+    #     )
+
+    def train_dataloader(
+        self,
+    ):  # TODO: I don't like that the function returns a list or a dataloader.
+        # if self.trainer.current_epoch % 2 == 0:
+        #    return self.semi_supervised_loader
+        # else:
+        # return DataLoader(self.train_set, batch_size = self.train_batch_size, num_workers = self.num_workers)
+        if self.use_unlabeled_frames:
+            return [
+                DataLoader(
+                    self.train_set,
+                    batch_size=self.train_batch_size,
+                    num_workers=self.num_workers,
+                ),
+                self.unlabeled_dataloader,
+            ]  # for training on both labled and unlabeled frames in a single epoch
+        else:
+            return DataLoader(
+                self.train_set,
+                batch_size=self.train_batch_size,
+                num_workers=self.num_workers,
+            )
 
     def val_dataloader(self):
         return DataLoader(
