@@ -18,6 +18,7 @@ from pose_est_nets.utils.plotting_utils import saveNumericalPredictions, plotPre
 from pose_est_nets.utils.IO import set_or_open_folder, get_latest_version
 from pose_est_nets.utils.wrappers import predict_plot_test_epoch
 
+# TODO: change the "mode" convention
 parser = argparse.ArgumentParser()
 
 parser.add_argument(
@@ -50,8 +51,8 @@ parser.add_argument(
     "--num_gpus", type=int, default=1 if torch.cuda.is_available() else 0
 )
 parser.add_argument(
-    "--num_workers", type=int, default=8 if torch.cuda.is_available() else 0
-)  # on local machine multiple workers don't seem to work
+    "--num_workers", type=int, default=os.cpu_count()
+)  # From Nick: on local machine multiple workers don't seem to work
 # parser.add_argument("--num_keypoints", type = int, default = 108) #fish data default
 parser.add_argument(
     "--data_dir", type=str, default="../../deepposekit-tests/dlc_test/mouse_data/data"
