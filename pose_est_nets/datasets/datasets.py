@@ -22,27 +22,39 @@ import nvidia.dali.types as types
 # TODO: when moving to runs, we would like different random seeds, so consider eliminating.
 TORCH_MANUAL_SEED = 42
 # statistics of imagenet dataset on which the resnet was trained on
-IMAGENET_MEAN = [0.485, 0.456, 0.406]
-IMAGENET_STD = [0.229, 0.224, 0.225]
+_IMAGENET_MEAN = [0.485, 0.456, 0.406]
+_IMAGENET_STD = [0.229, 0.224, 0.225]
+# Dali parameters
+_DALI_DEVICE = "gpu" if torch.cuda.is_available() else "cpu"
+_SEQUENCE_LENGTH_UNSUPERVISED = 7
+_INITIAL_PREFETCH_SIZE = 16
+_BATCH_SIZE_UNSUPERVISED = 1  # sequence_length * batch_size = num_images passed
+_DALI_RANDOM_SEED = 123456
+video_directory = os.path.join(
+    "/home/jovyan/mouseRunningData/unlabeled_videos"
+)  # TODO: should go as input to the class.
+assert os.path.isdir(video_directory)
+video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
+num_processes = os.cpu_count()
 
 
 @pipeline_def
-def video_pipe(filenames):  # TODO: review, fix means
-    initial_prefetch_size = 16
+def video_pipe(filenames):
     video = fn.readers.video(
-        device="gpu",  # TODO: check what needs to be device for tests to run on CPU
+        device=_DALI_DEVICE,
         filenames=filenames,
-        sequence_length=1,
-        initial_fill=initial_prefetch_size,
+        sequence_length=_SEQUENCE_LENGTH_UNSUPERVISED,
+        random_shuffle=True,
+        initial_fill=_INITIAL_PREFETCH_SIZE,
         normalized=False,
         dtype=types.DALIDataType.FLOAT,
     )
-    video = video / 255
+    video = video / 255.0  # original videos range from 0-255. transform it to 0,1.
     transform = fn.crop_mirror_normalize(
         video,
         output_layout="FCHW",
-        mean=IMAGENET_MEAN,
-        std=IMAGENET_STD,
+        mean=_IMAGENET_MEAN,
+        std=_IMAGENET_STD,
     )
     return transform
 
@@ -56,7 +68,7 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
         header_rows: Optional[List[int]] = None,
         transform: Optional[Callable] = None,
         noNans: Optional[bool] = False,
-        downsample_factor: Optional[int] = 3,
+        downsample_factor: Optional[int] = 2,
     ) -> None:
         """
         Initializes the DLC Heatmap Dataset
@@ -154,7 +166,7 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
         self.torch_transform = transforms.Compose(
             [  # imagenet normalization
                 transforms.ToTensor(),
-                transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
+                transforms.Normalize(mean=_IMAGENET_MEAN, std=_IMAGENET_STD),
             ]
         )
         self.mode = mode
@@ -262,7 +274,7 @@ def draw_keypoints(keypoints, height, width, output_shape, sigma=1, normalize=Tr
 
 
 class TrackingDataModule(pl.LightningDataModule):
-    def __init__(  # TODO: add documentation
+    def __init__(  # TODO: add documentation and args
         self,
         dataset,
         mode,
@@ -327,35 +339,42 @@ class TrackingDataModule(pl.LightningDataModule):
         print(len(self.train_set), len(self.valid_set), len(self.test_set))
 
     def setup_unlabeled(self, video_path):
+        # device_id = self.local_rank
+        # shard_id = self.global_rank
+        # num_shards = self.trainer.world_size
+        data_pipe = video_pipe(
+            batch_size=_BATCH_SIZE_UNSUPERVISED,
+            num_threads=self.num_workers,
+            device_id=0,  # TODO: be careful when scaling to multinode
+            # shard_id=shard_id,
+            # num_shards=num_shards,
+            filenames=video_files,
+            seed=_DALI_RANDOM_SEED,
+        )
+
         class LightningWrapper(DALIGenericIterator):
             def __init__(self, *kargs, **kvargs):
                 super().__init__(*kargs, **kvargs)
 
-            def __len__(self):
-                return 64  # num frames = len * batch_size; TODO: WHY 64? UNCLEAR
+            def __len__(self):  # just to avoid ptl err check
+                return 1  # num frames = len * batch_size; TODO: WHY 64? UNCLEAR
 
             def __next__(self):
                 out = super().__next__()
-                # return [out[0]["x"][:,0,:,:,:].requires_grad_(True), out[0]["y"]] #not neccessary to carry dummy labels
                 return torch.tensor(
-                    out[0]["x"][:, 0, :, :, :], dtype=torch.float, device="cuda"
-                ).requires_grad_(
-                    True
-                )  # TODO: why requires_grad_?
+                    # out[0]["x"][:, 0, :, :, :], dtype=torch.float  # , device="cuda"
+                    out[0]["x"][
+                        0, :, :, :, :
+                    ],  # should be batch_size, W, H, 3. TODO: valid for one sequence.
+                    dtype=torch.float,  # , device="cuda"
+                )  # TODO: removed device. verify that it is not needed
 
-        startup_len = 2000
-        data_pipe = video_pipe(
-            video_path,
-            batch_size=self.train_batch_size,
-            num_threads=self.num_workers,
-            device_id=0,  # TODO: what's device_id? cuda 0?
-        )
-        data_pipe.build()
-        for i in range(startup_len):
-            data_pipe.run()
-        print(data_pipe._api_type)
-        data_pipe._api_type = types.PipelineAPIType.ITERATOR
-        print(data_pipe._api_type)
+        # data_pipe.build()
+        # for i in range(startup_len):
+        #     data_pipe.run()
+        # print(data_pipe._api_type)
+        # data_pipe._api_type = types.PipelineAPIType.ITERATOR
+        # print(data_pipe._api_type)
         self.semi_supervised_loader = LightningWrapper(  # TODO: why write to self?
             data_pipe,
             output_map=["x"],
@@ -407,7 +426,7 @@ class TrackingDataModule(pl.LightningDataModule):
     #         num_workers=self.num_workers,
     #     )
 
-    def train_dataloader(
+    def train_dataloader(  # TODO: verify that indeed the semi_supervised_loader does its job
         self,
     ):  # TODO: I don't like that the function returns a list or a dataloader.
         # if self.trainer.current_epoch % 2 == 0:
@@ -415,14 +434,16 @@ class TrackingDataModule(pl.LightningDataModule):
         # else:
         # return DataLoader(self.train_set, batch_size = self.train_batch_size, num_workers = self.num_workers)
         if self.use_unlabeled_frames:
-            return [
-                DataLoader(
+            loader = {
+                "labeled": DataLoader(
                     self.train_set,
                     batch_size=self.train_batch_size,
-                    num_workers=self.num_workers,
+                    num_workers=self.num_workers
+                    // 2,  # TODO: keep track of num_workers
                 ),
-                self.unlabeled_dataloader,
-            ]  # for training on both labled and unlabeled frames in a single epoch
+                "unlabeled": self.unlabeled_dataloader(),  # self.unlabeled_dataloader,
+            }
+            return loader
         else:
             return DataLoader(
                 self.train_set,

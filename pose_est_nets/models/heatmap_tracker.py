@@ -23,12 +23,14 @@ class DLC(LightningModule):
         self,
         num_targets: int,
         resnet_version: int = 18,
-        downsample_factor: Optional[int] = 3,
+        downsample_factor: Optional[
+            int
+        ] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model
         transfer: Optional[bool] = False,
     ) -> None:
         """
         Initializes DLC model with resnet backbone
-        :param num_targets: number of body parts
+        :param num_targets: number of body parts times 2 (x,y) coords
         :param resnet_version: The ResNet variant to be used (e.g. 18, 34, 50, 101, or 152). Essentially specifies how
             large the resnet will be.
         :param transfer:  Flag to indicate whether this is a transfer learning task or not; defaults to false,
@@ -53,6 +55,7 @@ class DLC(LightningModule):
         self.upsampling_layers = []
         # TODO: Add normalization
         # TODO: Should depend on input size
+        self.num_targets = num_targets
         self.num_keypoints = num_targets // 2
         self.downsample_factor = downsample_factor
         self.coordinate_scale = torch.tensor(2 ** downsample_factor, device=self.device)
@@ -106,9 +109,9 @@ class DLC(LightningModule):
 
     @typechecked
     def forward(
-        self, x: TensorType["batch", 3, "Height", "Width"]
+        self, x: TensorType["Batch_Size", 3, "Height", "Width"]
     ) -> TensorType[
-        "batch", 17, "Out_Height", "Out_Width"
+        "Batch_Size", "Num_Keypoints", "Out_Height", "Out_Width"
     ]:  # how do I use a variable to indicate number of keypoints
         """
         Forward pass through the network
@@ -118,14 +121,20 @@ class DLC(LightningModule):
         # self.feature_extractor.eval()
         # with torch.no_grad():
         representations = self.feature_extractor(x)
+        print(
+            "representations.shape in forward method of parent class: {}".format(
+                representations.shape
+            )
+        )
         out = self.upsampling_layers(representations)
+        print("out.shape in forward method of parent class: {}".format(out.shape))
         return out
 
     @staticmethod
     @typechecked
     def heatmap_loss(
-        y: TensorType["batch", 17, "Out_Height", "Out_Width"],
-        y_hat: TensorType["batch", 17, "Out_Height", "Out_Width"],
+        y: TensorType["Batch_Size", "Num_Keypoints", "Out_Height", "Out_Width"],
+        y_hat: TensorType["Batch_Size", "Num_Keypoints", "Out_Height", "Out_Width"],
     ) -> TensorType[()]:
         """
         Computes mse loss between ground truth (x,y) coordinates and predicted (x^,y^) coordinates
@@ -133,7 +142,7 @@ class DLC(LightningModule):
         :param y_hat: prediction. shape=(num_targets, 2)
         :return: mse loss
         """
-        # apply mask, only computes loss on heatmaps where the ground truth heatmap is not all zeros (aka not an occluded keypoint)
+        # apply mask, only computes loss on heatmaps where the ground truth heatmap is not all zeros (i.e., not an occluded keypoint)
         max_vals = torch.amax(y, dim=(2, 3))
         zeros = torch.zeros(size=(y.shape[0], y.shape[1]), device=y_hat.device)
         mask = torch.eq(max_vals, zeros)
@@ -149,7 +158,8 @@ class DLC(LightningModule):
     @typechecked
     # what are we doing about NANS?
     def pca_2view_loss(
-        self, y_hat: TensorType["batch", 17, "Out_Height", "Out_Width"]
+        self,
+        y_hat: TensorType["Batch_Size", "Num_Keypoints", "Out_Height", "Out_Width"],
     ) -> TensorType[()]:
         kernel_size = np.min(self.output_shape)  # change from numpy to torch
         kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
@@ -163,7 +173,9 @@ class DLC(LightningModule):
         )
         keypoints = keypoints[:, :, :2]
         data_arr = format_mouse_data(keypoints)
-        garbage_component = self.pca_param_dict["bot_1_eigenvector"]
+        garbage_component = self.pca_param_dict[
+            "bot_1_eigenvector"
+        ]  # TODO: generalize to more evecs
         garbage_variance = torch.matmul(data_arr.T, garbage_component.T)
         return torch.linalg.norm(garbage_variance)
 
@@ -194,6 +206,8 @@ class DLC(LightningModule):
 
     def validation_step(self, data, batch_idx):
         x, y = data
+        print("x.shape in validation_step of parent class: {}".format(x.shape))
+        print("y.shape in validation_step of parent class: {}".format(y.shape))
         y_hat = self.forward(x)
         # compute loss
         loss = self.heatmap_loss(y, y_hat)
@@ -256,4 +270,69 @@ class DLC(LightningModule):
         }
 
 
-# Might be good to write compute same padding function
+class Semi_Supervised_DLC(DLC):
+    def __init__(self, num_targets: int, resnet_version: Optional[int] = 18) -> None:
+        """
+        DLC model with support to labeled+unlabeled batches in training_step
+        """
+        super().__init__(num_targets=num_targets, resnet_version=resnet_version)
+        # super(Semi_Supervised_DLC, self).__init__()
+        self.__dict__.update(locals())
+
+    def training_step(self, batch: dict, batch_idx: int) -> dict:
+        # x, y_heatmap, y_keypoints = data
+        labeled_images, labeled_heatmaps = batch["labeled"]
+        print(type(labeled_images))
+        print(type(labeled_heatmaps))
+        print(len(labeled_images))
+        print(len(labeled_heatmaps))
+        unlabeled_images = batch["unlabeled"]
+        print(type(unlabeled_images))
+        print(len(unlabeled_images))
+        # push labeled images
+        pred_heatmaps_labeled = self.forward(labeled_images)
+        # push unlabeled images
+        pred_heatmaps_unlabeled = self.forward(unlabeled_images)
+        # compute loss
+        loss = self.heatmap_loss(labeled_heatmaps, pred_heatmaps_labeled)
+        pca_view_loss_labeled = self.pca_2view_loss(pred_heatmaps_labeled)
+        pca_view_loss_unlabeled = self.pca_2view_loss(pred_heatmaps_unlabeled)
+        loss += (
+            pca_view_loss_labeled + pca_view_loss_unlabeled
+        ) / 10000  # can improve scaling
+        # ppca_loss =
+        # log training loss
+        self.log(
+            "train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
+        )
+        self.log(
+            "pca_loss_labeled",
+            pca_view_loss_labeled,
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+        )
+        self.log(
+            "pca_loss_unlabeled",
+            pca_view_loss_unlabeled,
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+        )
+        return {"loss": loss}
+
+    def validation_step(
+        self, batch, batch_idx: int
+    ):  # ToDo: no need for validation step here. can be in parent class?
+        print(type(batch))
+        print(len(batch))
+        x, y = batch  # previous version
+        print("x.shape in validation_step of child class: {}".format(x.shape))
+        print("y.shape in validation_step of child class: {}".format(y.shape))
+        y_hat = self.forward(x)
+        # compute loss
+        loss = self.heatmap_loss(y, y_hat)
+        # log validation loss
+        self.log("val_loss", loss, prog_bar=True, logger=True)
