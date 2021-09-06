@@ -17,10 +17,15 @@ from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
 from nvidia.dali import pipeline_def
 import nvidia.dali.fn as fn
 import nvidia.dali.types as types
+from typeguard import typechecked
+import sklearn
 
 # set the random seed as input here.
 # TODO: when moving to runs, we would like different random seeds, so consider eliminating.
+# TODO: review the transforms -- resize is done by imgaug.augmenters coming from the main script. it is fed as input. internally, we always normalize to imagenet params.
 TORCH_MANUAL_SEED = 42
+_TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
 # statistics of imagenet dataset on which the resnet was trained on
 _IMAGENET_MEAN = [0.485, 0.456, 0.406]
 _IMAGENET_STD = [0.229, 0.224, 0.225]
@@ -38,8 +43,25 @@ video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
 num_processes = os.cpu_count()
 
 
+@typechecked
+def PCA_prints(pca: sklearn.decomposition._pca.PCA, components_to_keep: int) -> None:
+    print("Results of running PCA on labels:")
+    print(
+        "explained_variance_ratio_: {}".format(
+            np.round(pca.explained_variance_ratio_, 3)
+        )
+    )
+    print(
+        "total_explained_var: {}".format(
+            np.round(np.sum(pca.explained_variance_ratio_[:components_to_keep]), 3)
+        )
+    )
+
+
 @pipeline_def
-def video_pipe(filenames):
+def video_pipe(
+    filenames: list, resize_dims: Optional[list]
+):  # TODO: what does it return? more typechecking
     video = fn.readers.video(
         device=_DALI_DEVICE,
         filenames=filenames,
@@ -49,7 +71,10 @@ def video_pipe(filenames):
         normalized=False,
         dtype=types.DALIDataType.FLOAT,
     )
-    video = video / 255.0  # original videos range from 0-255. transform it to 0,1.
+    video = fn.resize(video, size=resize_dims)
+    video = (
+        video / 255.0
+    )  # original videos (at least Rick's) range from 0-255. transform it to 0,1. # TODO: not sure that we need that, make sure it's the same as the supervised ones
     transform = fn.crop_mirror_normalize(
         video,
         output_layout="FCHW",
@@ -113,7 +138,7 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
         self.labels = torch.reshape(self.labels, (self.labels.shape[0], -1, 2))
         print(test_img.size)
         test_label = self.labels[0]
-
+        # TODO: all the test images can be removed. add assertions.
         if self.transform:
             test_img_transformed, test_label_transformed = self.transform(
                 images=np.expand_dims(test_img, axis=0),
@@ -121,6 +146,7 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
             )
             test_img_transformed = test_img_transformed.squeeze(0)
             test_label_transformed = test_label_transformed.squeeze(0)
+        # TODO: not great, remove
         print(test_img_transformed.shape)
         self.height = test_img_transformed.shape[0]
         self.width = test_img_transformed.shape[1]
@@ -346,6 +372,7 @@ class TrackingDataModule(pl.LightningDataModule):
             batch_size=_BATCH_SIZE_UNSUPERVISED,
             num_threads=self.num_workers,
             device_id=0,  # TODO: be careful when scaling to multinode
+            resize_dims=[self.fulldataset.height, self.fulldataset.width],
             # shard_id=shard_id,
             # num_shards=num_shards,
             filenames=video_files,
@@ -382,8 +409,16 @@ class TrackingDataModule(pl.LightningDataModule):
             auto_reset=True,
         )  # changed output_map to account for dummy labels
 
-    def computePPCA_params(self):  # TODO: could be separated from this class
+    # TODO: could be separated from this class
+    # TODO: return something?
+    def computePPCA_params(
+        self,
+        components_to_keep: Optional[int] = 3,
+        empirical_epsilon_percentile: Optional[float] = 90.0,
+    ) -> None:
+        print("Computing PCA on the labels...")
         param_dict = {}
+        # TODO: I don't follow the ifs, clarify with Nick
         if type(self.train_set) == torch.utils.data.dataset.Subset:
             indxs = torch.tensor(self.train_set.indices)
             data_arr = torch.index_select(self.train_set.dataset.labels, 0, indxs)
@@ -394,21 +429,57 @@ class TrackingDataModule(pl.LightningDataModule):
         arr_for_pca = format_mouse_data(data_arr)
         pca = PCA(n_components=4, svd_solver="full")
         pca.fit(arr_for_pca.T)
-        mu = torch.mean(arr_for_pca, axis=1)
-        print(pca.explained_variance_ratio_)
-        explained_var = pca.explained_variance_ratio_
-        print(np.sum(explained_var[:3]))
-        param_dict["obs_offset"] = mu
-        param_dict["top_3_eigenvectors"] = torch.tensor(
-            pca.components_[:3],
+        print("Done!")
+
+        print(
+            "arr_for_pca shape: {}".format(arr_for_pca.shape)
+        )  # TODO: have prints as tests
+        print("type of pca: {} ".format(type(pca)))
+
+        PCA_prints(pca, components_to_keep)  # print important params
+        # mu = torch.mean(arr_for_pca, axis=1) # TODO: needed only for probabilistic version
+        # param_dict["obs_offset"] = mu  # TODO: needed only for probabilistic version
+        param_dict["kept_eigenvectors"] = torch.tensor(
+            pca.components_[:components_to_keep],
             dtype=torch.float32,
-            device="cuda" if torch.cuda.is_available() else "cpu",
+            device=_TORCH_DEVICE,  # TODO: be careful for multinode
         )
-        param_dict["bot_1_eigenvector"] = torch.tensor(
-            pca.components_[3:],
+        param_dict["discarded_eigenvectors"] = torch.tensor(
+            pca.components_[components_to_keep:],
             dtype=torch.float32,
-            device="cuda" if torch.cuda.is_available() else "cpu",
+            device=_TORCH_DEVICE,  # TODO: be careful for multinode
         )
+
+        # absolute value is important -- projections can be negative.
+        proj_discarded = torch.abs(
+            torch.matmul(
+                arr_for_pca.T,
+                param_dict["discarded_eigenvectors"].clone().detach().cpu().T,
+            )
+        )
+        print("proj_discarded.shape: {}".format(proj_discarded.shape))
+        print("min of proj: {}".format(torch.min(proj_discarded)))
+        print("max of proj: {}".format(torch.max(proj_discarded)))
+        # TODO: generalize to more dims, we may have multiple discarded components.
+        epsilon = np.percentile(
+            proj_discarded.numpy(), empirical_epsilon_percentile, axis=0
+        )
+        param_dict["epsilon"] = torch.tensor(
+            torch.tensor(epsilon),
+            dtype=torch.float32,
+            device=_TORCH_DEVICE,  # TODO: be careful for multinode
+        )
+        print("pre epsilon loss: {}".format(torch.linalg.norm(proj_discarded)))
+        proj_discarded = proj_discarded.masked_fill(
+            mask=proj_discarded > torch.tensor(epsilon), value=0.0
+        )
+        print("norm of proj: {}".format(torch.linalg.norm(proj_discarded)))
+
+        print("post epsilon loss: {}".format(torch.linalg.norm(proj_discarded)))
+
+        print("percentile: {}".format(epsilon))
+
+        print("proj_discarded.shape: {}".format(proj_discarded.shape))
 
         self.pca_param_dict = param_dict
 
@@ -441,7 +512,7 @@ class TrackingDataModule(pl.LightningDataModule):
                     num_workers=self.num_workers
                     // 2,  # TODO: keep track of num_workers
                 ),
-                "unlabeled": self.unlabeled_dataloader(),  # self.unlabeled_dataloader,
+                "unlabeled": self.unlabeled_dataloader(),
             }
             return loader
         else:

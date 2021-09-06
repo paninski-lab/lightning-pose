@@ -161,6 +161,7 @@ class DLC(LightningModule):
         self,
         y_hat: TensorType["Batch_Size", "Num_Keypoints", "Out_Height", "Out_Width"],
     ) -> TensorType[()]:
+        # TODO: add conditions regarding epsilon?
         kernel_size = np.min(self.output_shape)  # change from numpy to torch
         kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
         keypoints = find_subpixel_maxima(
@@ -173,11 +174,17 @@ class DLC(LightningModule):
         )
         keypoints = keypoints[:, :, :2]
         data_arr = format_mouse_data(keypoints)
-        garbage_component = self.pca_param_dict[
-            "bot_1_eigenvector"
-        ]  # TODO: generalize to more evecs
-        garbage_variance = torch.matmul(data_arr.T, garbage_component.T)
-        return torch.linalg.norm(garbage_variance)
+        abs_proj_discarded = torch.abs(
+            torch.matmul(data_arr.T, self.pca_param_dict["discarded_eigenvectors"].T)
+        )
+        epsilon_masked_proj = abs_proj_discarded.masked_fill(
+            mask=abs_proj_discarded > self.pca_param_dict["epsilon"], value=0.0
+        )
+        assert (epsilon_masked_proj >= 0.0).all()  # every element should be positive
+        assert torch.mean(epsilon_masked_proj) <= torch.mean(
+            abs_proj_discarded
+        )  # the scalar loss should be smaller after zeroing out elements.
+        return torch.mean(epsilon_masked_proj)
 
     def training_step(self, data, batch_idx):
         # x, y_heatmap, y_keypoints = data
@@ -188,7 +195,7 @@ class DLC(LightningModule):
         loss = self.heatmap_loss(y, y_hat)
         # heatmap_loss = self.heatmap_loss(y_heatmap, y_hat)
         pca_view_loss = self.pca_2view_loss(y_hat)
-        loss += pca_view_loss / 10000  # can improve scaling
+        loss += pca_view_loss  # / 10000.0  # TODO: can improve scaling, want it to be around 0.1-1.
         # ppca_loss =
         # log training loss
         self.log(
@@ -273,7 +280,8 @@ class DLC(LightningModule):
 class Semi_Supervised_DLC(DLC):
     def __init__(self, num_targets: int, resnet_version: Optional[int] = 18) -> None:
         """
-        DLC model with support to labeled+unlabeled batches in training_step
+        DLC model with support to labeled+unlabeled batches in training_step.
+        The only difference should be self.training_step(), as we're using the same ops for the labeled val/test images.
         """
         super().__init__(num_targets=num_targets, resnet_version=resnet_version)
         # super(Semi_Supervised_DLC, self).__init__()
@@ -299,7 +307,7 @@ class Semi_Supervised_DLC(DLC):
         pca_view_loss_unlabeled = self.pca_2view_loss(pred_heatmaps_unlabeled)
         loss += (
             pca_view_loss_labeled + pca_view_loss_unlabeled
-        ) / 10000  # can improve scaling
+        )  # / 10000  # can improve scaling
         # ppca_loss =
         # log training loss
         self.log(
