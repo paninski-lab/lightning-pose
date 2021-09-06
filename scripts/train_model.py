@@ -4,7 +4,9 @@ import pytorch_lightning as pl
 from pytorch_lightning.tuner.tuning import Tuner
 from pose_est_nets.models.regression_tracker import RegressionTracker
 from pose_est_nets.datasets.datasets import TrackingDataset, TrackingDataModule
-from pose_est_nets.callbacks.freeze_unfreeze_callback import FeatureExtractorFreezeUnfreeze
+from pose_est_nets.callbacks.freeze_unfreeze_callback import (
+    FeatureExtractorFreezeUnfreeze,
+)
 import matplotlib.pyplot as plt
 import json
 import argparse
@@ -14,8 +16,14 @@ from pose_est_nets.utils.wrappers import predict_plot_test_epoch
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--data_dir", type=str, default=None, help="set true to load model from checkpoint")
-parser.add_argument("--predict", action='store_true', help="whether or not to generate predictions on test data")
+parser.add_argument(
+    "--data_dir", type=str, default=None, help="set true to load model from checkpoint"
+)
+parser.add_argument(
+    "--predict",
+    action="store_true",
+    help="whether or not to generate predictions on test data",
+)
 # parser.add_argument("--ckpt", type=str, default="lightning_logs2/version_1/checkpoints/epoch=271-step=12511.ckpt",
 #                     help="path to model checkpoint if you want to load model from checkpoint")
 parser.add_argument("--train_batch_size", type=int, default=32)
@@ -31,25 +39,37 @@ parser.add_argument("--dropout_rate", type=float, default=0.2)
 
 args = parser.parse_args()
 
-model = RegressionTracker(num_targets=34,
-                          resnet_version=50,
-                          transfer=True,
-                          representation_dropout_rate=args.dropout_rate)
+model = RegressionTracker(
+    num_targets=34,
+    resnet_version=50,
+    transfer=True,
+    representation_dropout_rate=args.dropout_rate,
+)
 
 # specific to the mouseRunningData
-data_transform = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.1636, 0.1636, 0.1636], std=[0.1240, 0.1240, 0.1240])
-])
+data_transform = transforms.Compose(
+    [
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=[0.1636, 0.1636, 0.1636], std=[0.1240, 0.1240, 0.1240]
+        ),
+    ]
+)
 
-dataset = TrackingDataset(root_directory=args.data_dir, csv_path='CollectedData_.csv', header_rows=[1, 2],
-                          transform=data_transform)
+dataset = TrackingDataset(
+    root_directory=args.data_dir,
+    csv_path="CollectedData_.csv",
+    header_rows=[1, 2],
+    transform=data_transform,
+)
 
-data_module = TrackingDataModule(dataset,
-                                 train_batch_size=args.train_batch_size,
-                                 validation_batch_size=args.validation_batch_size,
-                                 test_batch_size=args.test_batch_size,
-                                 num_workers=args.num_workers)
+data_module = TrackingDataModule(
+    dataset,
+    train_batch_size=args.train_batch_size,
+    validation_batch_size=args.validation_batch_size,
+    test_batch_size=args.test_batch_size,
+    num_workers=args.num_workers,
+)
 
 early_stopping = pl.callbacks.EarlyStopping(
     monitor="val_loss", patience=args.early_stop_patience, mode="min"
@@ -58,26 +78,30 @@ early_stopping = pl.callbacks.EarlyStopping(
 transfer_unfreeze_callback = FeatureExtractorFreezeUnfreeze(args.unfreezing_epoch)
 
 callback_list = []
-if args.early_stop_patience<100: # patience values above 100 are impractical, train to convergence
+if (
+    args.early_stop_patience < 100
+):  # patience values above 100 are impractical, train to convergence
     callback_list.append(early_stopping)
-if args.unfreezing_epoch>0: # if unfreezing_epoch=0, don't use the callback
+if args.unfreezing_epoch > 0:  # if unfreezing_epoch=0, don't use the callback
     callback_list.append(transfer_unfreeze_callback)
 
-trainer = pl.Trainer(gpus=args.num_gpus,
-                     log_every_n_steps=15,
-                     callbacks=callback_list,
-                     auto_scale_batch_size=False,
-                     check_val_every_n_epoch=10,
-                     max_epochs=args.max_epochs)  # auto_scale_batch_size not working
+trainer = pl.Trainer(
+    gpus=args.num_gpus,
+    log_every_n_steps=15,
+    callbacks=callback_list,
+    auto_scale_batch_size=False,
+    check_val_every_n_epoch=10,
+    max_epochs=args.max_epochs,
+)  # auto_scale_batch_size not working
 
 trainer.fit(model=model, datamodule=data_module)
 
-if (args.predict):
+if args.predict:
     print("Finished Training! Starting to predict test images...")
-    preds_folder = set_or_open_folder('preds')
-    preds_dict = predict_plot_test_epoch(model,
-                                         data_module.test_dataloader(),
-                                         preds_folder)
+    preds_folder = set_or_open_folder("preds")
+    preds_dict = predict_plot_test_epoch(
+        model, data_module.test_dataloader(), preds_folder
+    )
     # model.eval()
     # trainer.test(model = model, datamodule = data_module)
     # model.eval()
