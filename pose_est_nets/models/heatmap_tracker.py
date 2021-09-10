@@ -121,13 +121,17 @@ class DLC(LightningModule):
         # self.feature_extractor.eval()
         # with torch.no_grad():
         representations = self.feature_extractor(x)
-        print(
-            "representations.shape in forward method of parent class: {}".format(
-                representations.shape
-            )
-        )
+        # TODO: move to tests
+        # TODO: [12,12] is independent of resnet architecture, but not sure if independent of image size. potentially different for non square images?
+        assert (
+            torch.tensor(representations.shape[-2:]) == torch.tensor([12, 12])
+        ).all()
+
         out = self.upsampling_layers(representations)
-        print("out.shape in forward method of parent class: {}".format(out.shape))
+        assert (
+            torch.tensor(out.shape[-2:])
+            == torch.tensor(x.shape[-2:]) // (2 ** self.downsample_factor)
+        ).all()
         return out
 
     @staticmethod
@@ -145,10 +149,8 @@ class DLC(LightningModule):
         # apply mask, only computes loss on heatmaps where the ground truth heatmap is not all zeros (i.e., not an occluded keypoint)
         max_vals = torch.amax(y, dim=(2, 3))
         zeros = torch.zeros(size=(y.shape[0], y.shape[1]), device=y_hat.device)
-        mask = torch.eq(max_vals, zeros)
-        mask = ~mask
-        mask = torch.unsqueeze(mask, 2)
-        mask = torch.unsqueeze(mask, 3)
+        non_zeros = ~torch.eq(max_vals, zeros)
+        mask = torch.reshape(non_zeros, [non_zeros.shape[0], non_zeros.shape[1], 1, 1])
         # compute loss
         loss = F.mse_loss(
             torch.masked_select(y_hat, mask), torch.masked_select(y, mask)
@@ -192,10 +194,11 @@ class DLC(LightningModule):
         # forward pass
         y_hat = self.forward(x)
         # compute loss
-        loss = self.heatmap_loss(y, y_hat)
+        heatmap_loss = self.heatmap_loss(y, y_hat)
         # heatmap_loss = self.heatmap_loss(y_heatmap, y_hat)
         pca_view_loss = self.pca_2view_loss(y_hat)
-        loss += pca_view_loss  # / 10000.0  # TODO: can improve scaling, want it to be around 0.1-1.
+        loss = heatmap_loss + pca_view_loss
+
         # ppca_loss =
         # log training loss
         self.log(
@@ -209,12 +212,19 @@ class DLC(LightningModule):
             prog_bar=True,
             logger=True,
         )
+
+        self.log(
+            "heatmap_loss",
+            heatmap_loss,
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+        )
         return {"loss": loss}
 
-    def validation_step(self, data, batch_idx):
+    def validation_step(self, data: Tuple, batch_idx: int) -> None:
         x, y = data
-        print("x.shape in validation_step of parent class: {}".format(x.shape))
-        print("y.shape in validation_step of parent class: {}".format(y.shape))
         y_hat = self.forward(x)
         # compute loss
         loss = self.heatmap_loss(y, y_hat)
@@ -284,35 +294,38 @@ class Semi_Supervised_DLC(DLC):
         The only difference should be self.training_step(), as we're using the same ops for the labeled val/test images.
         """
         super().__init__(num_targets=num_targets, resnet_version=resnet_version)
-        # super(Semi_Supervised_DLC, self).__init__()
         self.__dict__.update(locals())
 
     def training_step(self, batch: dict, batch_idx: int) -> dict:
         # x, y_heatmap, y_keypoints = data
         labeled_images, labeled_heatmaps = batch["labeled"]
-        print(type(labeled_images))
-        print(type(labeled_heatmaps))
-        print(len(labeled_images))
-        print(len(labeled_heatmaps))
         unlabeled_images = batch["unlabeled"]
-        print(type(unlabeled_images))
-        print(len(unlabeled_images))
         # push labeled images
         pred_heatmaps_labeled = self.forward(labeled_images)
         # push unlabeled images
         pred_heatmaps_unlabeled = self.forward(unlabeled_images)
         # compute loss
-        loss = self.heatmap_loss(labeled_heatmaps, pred_heatmaps_labeled)
+        heatmap_loss_labeled = self.heatmap_loss(
+            labeled_heatmaps, pred_heatmaps_labeled
+        )
         pca_view_loss_labeled = self.pca_2view_loss(pred_heatmaps_labeled)
         pca_view_loss_unlabeled = self.pca_2view_loss(pred_heatmaps_unlabeled)
-        loss += (
-            pca_view_loss_labeled + pca_view_loss_unlabeled
-        )  # / 10000  # can improve scaling
-        # ppca_loss =
-        # log training loss
+        loss = heatmap_loss_labeled + pca_view_loss_labeled + pca_view_loss_unlabeled
+
+        # log all relevant losses
         self.log(
-            "train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
+            "total_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
         )
+
+        self.log(
+            "heatmap_loss_labeled",
+            heatmap_loss_labeled,
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+        )
+
         self.log(
             "pca_loss_labeled",
             pca_view_loss_labeled,
@@ -329,18 +342,5 @@ class Semi_Supervised_DLC(DLC):
             prog_bar=True,
             logger=True,
         )
-        return {"loss": loss}
 
-    def validation_step(
-        self, batch, batch_idx: int
-    ):  # ToDo: no need for validation step here. can be in parent class?
-        print(type(batch))
-        print(len(batch))
-        x, y = batch  # previous version
-        print("x.shape in validation_step of child class: {}".format(x.shape))
-        print("y.shape in validation_step of child class: {}".format(y.shape))
-        y_hat = self.forward(x)
-        # compute loss
-        loss = self.heatmap_loss(y, y_hat)
-        # log validation loss
-        self.log("val_loss", loss, prog_bar=True, logger=True)
+        return {"loss": loss}
