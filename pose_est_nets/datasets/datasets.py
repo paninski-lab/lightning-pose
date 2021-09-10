@@ -26,7 +26,7 @@ import sklearn
 TORCH_MANUAL_SEED = 42
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# statistics of imagenet dataset on which the resnet was trained on
+# statistics of imagenet dataset on which the resnet was trained
 _IMAGENET_MEAN = [0.485, 0.456, 0.406]
 _IMAGENET_STD = [0.229, 0.224, 0.225]
 # Dali parameters
@@ -60,13 +60,15 @@ def PCA_prints(pca: sklearn.decomposition._pca.PCA, components_to_keep: int) -> 
 
 @pipeline_def
 def video_pipe(
-    filenames: list, resize_dims: Optional[list]
+    filenames: list,
+    resize_dims: Optional[list],
+    random_shuffle: Optional[bool] = False,
 ):  # TODO: what does it return? more typechecking
     video = fn.readers.video(
         device=_DALI_DEVICE,
         filenames=filenames,
         sequence_length=_SEQUENCE_LENGTH_UNSUPERVISED,
-        random_shuffle=True,
+        random_shuffle=random_shuffle,
         initial_fill=_INITIAL_PREFETCH_SIZE,
         normalized=False,
         dtype=types.DALIDataType.FLOAT,
@@ -84,6 +86,8 @@ def video_pipe(
     return transform
 
 
+# TODO: what's the base dataset? something like the regression dataset we have in our main branch?
+# the only addition here, should be the heatmap creation method.
 class DLCHeatmapDataset(torch.utils.data.Dataset):
     def __init__(
         self,
@@ -323,9 +327,14 @@ class TrackingDataModule(pl.LightningDataModule):
         self.unlabeled_video_path = unlabeled_video_path
 
     def setup(self, stage: Optional[str] = None):  # TODO: clean up
+        print("Setting up DataModule...")
         datalen = self.fulldataset.__len__()
-        print("datalen:")
-        print(datalen)
+        print(
+            "Number of labeled images in the full dataset (train+val+test): {}".format(
+                datalen
+            )
+        )
+
         if self.mode == "deterministic":
             return
 
@@ -359,10 +368,11 @@ class TrackingDataModule(pl.LightningDataModule):
                 [round(datalen * 0.8), round(datalen * 0.1), round(datalen * 0.1)],
                 generator=torch.Generator().manual_seed(TORCH_MANUAL_SEED),
             )
-        # self.train_set = self.train_set.dataset
-        # self.valid_set = self.valid_set.dataset
-        # self.test_set = self.test_set.dataset
-        print(len(self.train_set), len(self.valid_set), len(self.test_set))
+        print(
+            "Size of -- train set: {}, validation set: {}, test set: {}".format(
+                len(self.train_set), len(self.valid_set), len(self.test_set)
+            )
+        )
 
     def setup_unlabeled(self, video_path):
         # device_id = self.local_rank
@@ -370,9 +380,11 @@ class TrackingDataModule(pl.LightningDataModule):
         # num_shards = self.trainer.world_size
         data_pipe = video_pipe(
             batch_size=_BATCH_SIZE_UNSUPERVISED,
-            num_threads=self.num_workers,
+            num_threads=self.num_workers
+            // 2,  # because the other workers do the labeled dataloading
             device_id=0,  # TODO: be careful when scaling to multinode
             resize_dims=[self.fulldataset.height, self.fulldataset.width],
+            random_shuffle=True,
             # shard_id=shard_id,
             # num_shards=num_shards,
             filenames=video_files,
@@ -384,29 +396,22 @@ class TrackingDataModule(pl.LightningDataModule):
                 super().__init__(*kargs, **kvargs)
 
             def __len__(self):  # just to avoid ptl err check
-                return 1  # num frames = len * batch_size; TODO: WHY 64? UNCLEAR
+                return 1  # num frames = len * batch_size; TODO: determine actual length of vid
 
             def __next__(self):
                 out = super().__next__()
                 return torch.tensor(
-                    # out[0]["x"][:, 0, :, :, :], dtype=torch.float  # , device="cuda"
                     out[0]["x"][
                         0, :, :, :, :
                     ],  # should be batch_size, W, H, 3. TODO: valid for one sequence.
                     dtype=torch.float,  # , device="cuda"
-                )  # TODO: removed device. verify that it is not needed
+                )
 
-        # data_pipe.build()
-        # for i in range(startup_len):
-        #     data_pipe.run()
-        # print(data_pipe._api_type)
-        # data_pipe._api_type = types.PipelineAPIType.ITERATOR
-        # print(data_pipe._api_type)
-        self.semi_supervised_loader = LightningWrapper(  # TODO: why write to self?
+        self.semi_supervised_loader = LightningWrapper(
             data_pipe,
             output_map=["x"],
             last_batch_policy=LastBatchPolicy.PARTIAL,
-            auto_reset=True,
+            auto_reset=True,  # TODO: verify that
         )  # changed output_map to account for dummy labels
 
     # TODO: could be separated from this class
@@ -434,8 +439,6 @@ class TrackingDataModule(pl.LightningDataModule):
         print(
             "arr_for_pca shape: {}".format(arr_for_pca.shape)
         )  # TODO: have prints as tests
-        print("type of pca: {} ".format(type(pca)))
-
         PCA_prints(pca, components_to_keep)  # print important params
         # mu = torch.mean(arr_for_pca, axis=1) # TODO: needed only for probabilistic version
         # param_dict["obs_offset"] = mu  # TODO: needed only for probabilistic version
@@ -450,6 +453,7 @@ class TrackingDataModule(pl.LightningDataModule):
             device=_TORCH_DEVICE,  # TODO: be careful for multinode
         )
 
+        # compute the labels' projections on the discarded components, to estimate the e.g., 90th percentile and determine epsilon
         # absolute value is important -- projections can be negative.
         proj_discarded = torch.abs(
             torch.matmul(
@@ -457,29 +461,15 @@ class TrackingDataModule(pl.LightningDataModule):
                 param_dict["discarded_eigenvectors"].clone().detach().cpu().T,
             )
         )
-        print("proj_discarded.shape: {}".format(proj_discarded.shape))
-        print("min of proj: {}".format(torch.min(proj_discarded)))
-        print("max of proj: {}".format(torch.max(proj_discarded)))
-        # TODO: generalize to more dims, we may have multiple discarded components.
+        # setting axis = 0 generalizes to multiple discarded components
         epsilon = np.percentile(
             proj_discarded.numpy(), empirical_epsilon_percentile, axis=0
         )
         param_dict["epsilon"] = torch.tensor(
-            torch.tensor(epsilon),
+            epsilon,
             dtype=torch.float32,
             device=_TORCH_DEVICE,  # TODO: be careful for multinode
         )
-        print("pre epsilon loss: {}".format(torch.linalg.norm(proj_discarded)))
-        proj_discarded = proj_discarded.masked_fill(
-            mask=proj_discarded > torch.tensor(epsilon), value=0.0
-        )
-        print("norm of proj: {}".format(torch.linalg.norm(proj_discarded)))
-
-        print("post epsilon loss: {}".format(torch.linalg.norm(proj_discarded)))
-
-        print("percentile: {}".format(epsilon))
-
-        print("proj_discarded.shape: {}".format(proj_discarded.shape))
 
         self.pca_param_dict = param_dict
 
