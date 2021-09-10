@@ -88,6 +88,88 @@ def video_pipe(
 
 # TODO: what's the base dataset? something like the regression dataset we have in our main branch?
 # the only addition here, should be the heatmap creation method.
+
+
+class BaseTrackingDataset(torch.utils.data.Dataset):
+    def __init__(
+        self,
+        root_directory: str,
+        csv_path: str,
+        header_rows: Optional[List[int]] = None,
+        imgaug_transform: Optional[Callable] = None,
+        pytorch_transform_list: Optional[List] = None,
+    ) -> None:
+        """
+        Initializes the Regression Dataset
+        Parameters:
+            root_directory (str): path to data directory
+            csv_path (str): path to CSV file (within root_directory). CSV file should be
+                in the form (image_path, bodypart_1_x, bodypart_1_y, ..., bodypart_n_y)
+                Note: image_path is relative to the given root_directory
+            header_rows (List[int]): (optional) which rows in the csv are header rows
+            transform (torchvision.transforms): (optional) transform to apply to images
+        Returns:
+            None
+        """
+        csv_data = pd.read_csv(
+            os.path.join(root_directory, csv_path), header=header_rows
+        )
+        self.image_names = list(csv_data.iloc[:, 0])
+        self.labels = torch.tensor(csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32)
+        self.labels = self.labels.reshape(self.labels.shape[0], -1, 2)
+        self.imgaug_transform = imgaug_transform
+        if pytorch_transform_list is None:
+            pytorch_transform_list = []  # make the None an empty list
+        pytorch_transform_list += [
+            transforms.ToTensor(),
+            transforms.Normalize(mean=_IMAGENET_MEAN, std=_IMAGENET_STD),
+        ]
+
+        self.pytorch_transform = transforms.Compose(pytorch_transform_list)
+        # self.pytorch_transform = transforms.Compose(
+        #     [  # imagenet normalization
+        #         transforms.ToTensor(),
+        #         transforms.Normalize(mean=_IMAGENET_MEAN, std=_IMAGENET_STD),
+        #     ]
+        # )
+        self.root_directory = root_directory
+        self.num_targets = self.labels.shape[1]
+
+    def __len__(self) -> int:
+        return len(self.image_names)
+
+    def __getitem__(self, idx: int) -> Tuple[torch.tensor, torch.tensor]:
+        # get img_name from self.image_names
+        img_name = self.image_names[idx]
+        # read image from file and apply transformations (if any)
+        image = Image.open(os.path.join(self.root_directory, img_name)).convert(
+            "RGB"
+        )  # Rick's images have 1 color channel; change to 3.
+
+        keypoints_on_image = self.labels[
+            idx
+        ]  # get current image labels from self.labels
+        if self.imgaug_transform is not None:
+            print("image.shape: {}".format(np.expand_dims(image, axis=0).shape))
+            print(
+                "keypoints.shape: {}".format(
+                    np.expand_dims(keypoints_on_image, axis=0).shape
+                )
+            )
+
+            transformed_images, transformed_keypoints = self.imgaug_transform(
+                images=np.expand_dims(image, axis=0),  # add batch dim
+                keypoints=np.expand_dims(keypoints_on_image, axis=0),  # add batch dim
+            )
+            # get rid of the batch dim
+            transformed_images = transformed_images.squeeze(0)
+            transformed_keypoints = transformed_keypoints.squeeze(0)
+
+        transformed_images = self.pytorch_transform(transformed_images)
+
+        return transformed_images, transformed_keypoints
+
+
 class DLCHeatmapDataset(torch.utils.data.Dataset):
     def __init__(
         self,
@@ -473,7 +555,7 @@ class TrackingDataModule(pl.LightningDataModule):
 
         self.pca_param_dict = param_dict
 
-    def full_dataloader(self):
+    def full_dataloader(self):  # TODO: we're not really using it
         return DataLoader(self.fulldataset, batch_size=1, num_workers=self.num_workers)
 
     def unlabeled_dataloader(self):
