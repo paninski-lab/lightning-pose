@@ -12,6 +12,7 @@ from PIL import Image
 from tqdm import tqdm
 from sklearn.decomposition import PCA
 from pose_est_nets.utils.heatmap_tracker_utils import format_mouse_data
+from pose_est_nets.utils.dataset_utils import draw_keypoints
 import h5py
 from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
 from nvidia.dali import pipeline_def
@@ -35,11 +36,13 @@ _SEQUENCE_LENGTH_UNSUPERVISED = 7
 _INITIAL_PREFETCH_SIZE = 16
 _BATCH_SIZE_UNSUPERVISED = 1  # sequence_length * batch_size = num_images passed
 _DALI_RANDOM_SEED = 123456
-video_directory = os.path.join(
-    "/home/jovyan/mouseRunningData/unlabeled_videos"
-)  # TODO: should go as input to the class.
-assert os.path.isdir(video_directory)
-video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
+
+#video_directory = os.path.join(
+#    "/home/jovyan/mouseRunningData/unlabeled_videos"
+#)  # TODO: should go as input to the class.
+#assert os.path.isdir(video_directory)
+#video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
+
 num_processes = os.cpu_count()
 
 
@@ -84,11 +87,6 @@ def video_pipe(
         std=_IMAGENET_STD,
     )
     return transform
-
-
-# TODO: what's the base dataset? something like the regression dataset we have in our main branch?
-# the only addition here, should be the heatmap creation method.
-
 
 class BaseTrackingDataset(torch.utils.data.Dataset):
     def __init__(
@@ -144,12 +142,12 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             idx
         ]  # get current image labels from self.labels
         if self.imgaug_transform is not None:
-            print("image.shape: {}".format(np.expand_dims(image, axis=0).shape))
-            print(
-                "keypoints.shape: {}".format(
-                    np.expand_dims(keypoints_on_image, axis=0).shape
-                )
-            )
+            #print("image.shape: {}".format(np.expand_dims(image, axis=0).shape))
+            #print(
+            #    "keypoints.shape: {}".format(
+            #        np.expand_dims(keypoints_on_image, axis=0).shape
+            #    )
+            #)
 
             transformed_images, transformed_keypoints = self.imgaug_transform(
                 images=np.expand_dims(image, axis=0),  # add batch dim
@@ -161,9 +159,10 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
         transformed_images = self.pytorch_transform(transformed_images)
 
-        return transformed_images, transformed_keypoints
+        return transformed_images, torch.from_numpy(transformed_keypoints)
 
 
+# the only addition here, should be the heatmap creation method.
 class DLCHeatmapDataset(BaseTrackingDataset):
     def __init__(
         self,
@@ -172,7 +171,7 @@ class DLCHeatmapDataset(BaseTrackingDataset):
         header_rows: Optional[List[int]] = None,
         imgaug_transform: Optional[Callable] = None,
         pytorch_transform_list: Optional[List] = None,
-        mode: Optional[String] = 'csv',
+        mode: Optional[str] = 'csv',
         noNans: Optional[bool] = False,
         downsample_factor: Optional[int] = 2,
     ) -> None:
@@ -190,12 +189,9 @@ class DLCHeatmapDataset(BaseTrackingDataset):
         Returns:
             None
         """
-        super().init(root_directory, csv_path, header_rows, imgaug_transform, pytorch_transform_list)
-        print(imgaug_transform.get_parameters())
-        exit()
-       
-        #self.height = test_img_transformed.shape[0]
-        #self.width = test_img_transformed.shape[1]
+        super().__init__(root_directory, csv_path, header_rows, imgaug_transform, pytorch_transform_list)
+        self.height = imgaug_transform[0].get_parameters()[0][0].value #Assuming resizing transformation is the first imgaug one
+        self.width = imgaug_transform[0].get_parameters()[0][1].value 
 
         if self.height % 128 != 0 or self.height % 128 != 0:
             print(
@@ -233,7 +229,6 @@ class DLCHeatmapDataset(BaseTrackingDataset):
             self.width // 2 ** self.downsample_factor,
         )
         # self.half_output_shape = (int(self.output_shape[0] / 2), int(self.output_shape[1] / 2))
-        # print(self.half_output_shape)
 
    
         self.mode = mode
@@ -241,63 +236,24 @@ class DLCHeatmapDataset(BaseTrackingDataset):
         # check that max of heatmaps look good
         self.compute_heatmaps()  # TODO: here we're computing the LABEL heatmaps which are saved to self. maybe explicitly have the outputs here
         self.num_targets = torch.numel(self.labels[0])
-        print(self.num_targets)
 
     def compute_heatmaps(self):
         label_heatmaps = []
-        for idx, y in enumerate(tqdm(self.labels)):
-            if self.mode == "csv":
-                x = Image.open(
-                    os.path.join(self.root_directory, self.image_names[idx])
-                ).convert(
-                    "RGB"  # didn't do this for DLC
-                )  # Rick's images have 1 color channel; change to 3.
-            else:
-                x = Image.fromarray(self.images[idx]).convert("RGB")
-            if self.transform:
-                x, y = self.transform(
-                    images=np.expand_dims(x, axis=0),
-                    keypoints=np.expand_dims(y, axis=0),
-                )  # check transform and normalization
-                x = x.squeeze(0)
-                y = y.squeeze(0)
-            else:
-                y = y.numpy()
-            x = self.torch_transform(x)
+        
+        for idx in range(len(self.image_names)):
+            x, y = super().__getitem__(idx)
             y_heatmap = draw_keypoints(
-                y, x.shape[-2], x.shape[-1], self.output_shape, sigma=self.output_sigma
+                y.numpy(), x.shape[-2], x.shape[-1], self.output_shape, sigma=self.output_sigma
             )
             label_heatmaps.append(y_heatmap)
+
         self.label_heatmaps = torch.from_numpy(np.asarray(label_heatmaps)).float()
         self.label_heatmaps = self.label_heatmaps.permute(0, 3, 1, 2)
 
-    def __len__(self) -> int:
-        return self.labels.shape[0]
-
-    def __getitem__(self, idx: int) -> Tuple[torch.tensor, torch.tensor]:
-
-        # read image from file and apply transformations (if any)
-        if self.mode == "csv":
-            # get img_name from self.image_names
-            img_name = self.image_names[idx]
-            x = Image.open(
-                os.path.join(self.root_directory, img_name)
-            ).convert(  # didn't do this for dlc
-                "RGB"
-            )  # Rick's images have 1 color channel; change to 3.
-        else:
-            x = Image.fromarray(self.images[idx]).convert(
-                "RGB"
-            )  # make sure this works with the transformations
-
-        if self.transform:
-            x = self.transform(
-                images=np.expand_dims(x, axis=0)
-            )  # TODO: check this. can be torch.unsqueeze(0)
-            x = x.squeeze(0)
-        x = self.torch_transform(x)
+    def __getitem__(self, idx: int) -> Tuple[torch.tensor, torch.tensor]: 
+        x, y_keypoint = super().__getitem__(idx)
         y_heatmap = self.label_heatmaps[idx]
-        # y_keypoint = self.labels[idx]
+
         return x, y_heatmap
         # return x, y_heatmap, y_keypoint
 
@@ -309,36 +265,7 @@ class DLCHeatmapDataset(BaseTrackingDataset):
         annotated_index = torch.where(annotated)
         return annotated_index[0]
 
-
-# taken from https://github.com/jgraving/DeepPoseKit/blob/master/deepposekit/utils/keypoints.py
-def draw_keypoints(keypoints, height, width, output_shape, sigma=1, normalize=True):
-    keypoints = keypoints.copy()
-    n_keypoints = keypoints.shape[0]
-    out_height = output_shape[0]
-    out_width = output_shape[1]
-    keypoints[:, 1] *= out_height / height
-    keypoints[:, 0] *= out_width / width
-    confidence = np.zeros((out_height, out_width, n_keypoints))
-    xv = np.arange(out_width)
-    yv = np.arange(out_height)
-    xx, yy = np.meshgrid(xv, yv)
-    for idx in range(n_keypoints):
-        keypoint = keypoints[idx]
-        if np.any(keypoint != keypoint):  # keeps heatmaps with nans as all zeros
-            continue
-        gaussian = (yy - keypoint[1]) ** 2
-        gaussian += (xx - keypoint[0]) ** 2
-        gaussian *= -1
-        gaussian /= 2 * sigma ** 2
-        gaussian = np.exp(gaussian)
-        confidence[..., idx] = gaussian
-    if not normalize:
-        confidence /= sigma * np.sqrt(2 * np.pi)
-    return confidence
-
-
 # TODO: let the unlabeled data module inherit from TrackingDataModule, just add the relevant components
-
 
 class TrackingDataModule(pl.LightningDataModule):
     def __init__(  # TODO: add documentation and args
