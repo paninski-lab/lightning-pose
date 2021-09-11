@@ -126,12 +126,6 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         ]
 
         self.pytorch_transform = transforms.Compose(pytorch_transform_list)
-        # self.pytorch_transform = transforms.Compose(
-        #     [  # imagenet normalization
-        #         transforms.ToTensor(),
-        #         transforms.Normalize(mean=_IMAGENET_MEAN, std=_IMAGENET_STD),
-        #     ]
-        # )
         self.root_directory = root_directory
         self.num_targets = self.labels.shape[1]
 
@@ -170,14 +164,15 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         return transformed_images, transformed_keypoints
 
 
-class DLCHeatmapDataset(torch.utils.data.Dataset):
+class DLCHeatmapDataset(BaseTrackingDataset):
     def __init__(
         self,
         root_directory: str,
-        data_path: str,
-        mode: str,
+        csv_path: str,
         header_rows: Optional[List[int]] = None,
-        transform: Optional[Callable] = None,
+        imgaug_transform: Optional[Callable] = None,
+        pytorch_transform_list: Optional[List] = None,
+        mode: Optional[String] = 'csv',
         noNans: Optional[bool] = False,
         downsample_factor: Optional[int] = 2,
     ) -> None:
@@ -195,47 +190,12 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
         Returns:
             None
         """
-        self.root_directory = root_directory
-        self.transform = transform
-        if mode == "csv":
-            csv_data = pd.read_csv(
-                os.path.join(root_directory, data_path), header=header_rows
-            )
-            self.image_names = list(csv_data.iloc[:, 0])
-            self.labels = torch.tensor(
-                csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32
-            )
-            test_img = Image.open(
-                os.path.join(self.root_directory, self.image_names[0])
-            ).convert(
-                "RGB"  # didn't do this for DLC
-            )  # Rick's images have 1 color channel; change to 3.
-
-        elif mode == "h5":
-            hf = h5py.File(os.path.join(root_directory, data_path), "r")
-            self.images = np.array(hf["images"])
-            self.images = self.images[:, :, :, 0]
-            self.labels = torch.tensor(hf["annotations"])
-            test_img = Image.fromarray(self.images[0]).convert("RGB")
-
-        else:
-            raise ValueError("mode must be 'csv' or 'h5'")
-
-        self.labels = torch.reshape(self.labels, (self.labels.shape[0], -1, 2))
-        print(test_img.size)
-        test_label = self.labels[0]
-        # TODO: all the test images can be removed. add assertions.
-        if self.transform:
-            test_img_transformed, test_label_transformed = self.transform(
-                images=np.expand_dims(test_img, axis=0),
-                keypoints=np.expand_dims(test_label, axis=0),
-            )
-            test_img_transformed = test_img_transformed.squeeze(0)
-            test_label_transformed = test_label_transformed.squeeze(0)
-        # TODO: not great, remove
-        print(test_img_transformed.shape)
-        self.height = test_img_transformed.shape[0]
-        self.width = test_img_transformed.shape[1]
+        super().init(root_directory, csv_path, header_rows, imgaug_transform, pytorch_transform_list)
+        print(imgaug_transform.get_parameters())
+        exit()
+       
+        #self.height = test_img_transformed.shape[0]
+        #self.width = test_img_transformed.shape[1]
 
         if self.height % 128 != 0 or self.height % 128 != 0:
             print(
@@ -275,12 +235,7 @@ class DLCHeatmapDataset(torch.utils.data.Dataset):
         # self.half_output_shape = (int(self.output_shape[0] / 2), int(self.output_shape[1] / 2))
         # print(self.half_output_shape)
 
-        self.torch_transform = transforms.Compose(
-            [  # imagenet normalization
-                transforms.ToTensor(),
-                transforms.Normalize(mean=_IMAGENET_MEAN, std=_IMAGENET_STD),
-            ]
-        )
+   
         self.mode = mode
         # Compute heatmaps as preprocessing step
         # check that max of heatmaps look good
