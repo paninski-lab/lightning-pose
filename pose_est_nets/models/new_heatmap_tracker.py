@@ -1,3 +1,4 @@
+from pose_est_nets.models.base_resnet import BaseFeatureExtractor
 import torch
 import torchvision.models as models
 from torch.nn import functional as F
@@ -15,59 +16,54 @@ from pose_est_nets.utils.heatmap_tracker_utils import (
     format_mouse_data,
 )
 
-patch_typeguard()
-
-# base_class: with feature extractor
+patch_typeguard()  # use before @typechecked
 
 
-class DLC(LightningModule):
+class HeatmapTracker(BaseFeatureExtractor):
     def __init__(
         self,
         num_targets: int,
-        resnet_version: int = 18,
+        resnet_version: Optional[int] = 18,
         downsample_factor: Optional[
             int
         ] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model
-        transfer: Optional[bool] = False,
+        pretrained: Optional[bool] = False,
+        last_resnet_layer_to_get: Optional[int] = -3,
     ) -> None:
         """
-        Initializes DLC model with resnet backbone
+        TODO: edit this. note, last_resnet_layer_to_get is different from the regression net, on purpose.
+        Initializes a DLC-like model with resnet backbone inherited from BaseFeatureExtractor
         :param num_targets: number of body parts times 2 (x,y) coords
         :param resnet_version: The ResNet variant to be used (e.g. 18, 34, 50, 101, or 152). Essentially specifies how
             large the resnet will be.
         :param transfer:  Flag to indicate whether this is a transfer learning task or not; defaults to false,
             meaning the entire model will be trained unless this flag is provided
         """
-        super(DLC, self).__init__()
-        self.__dict__.update(locals())  # todo: what is this?
-        resnets = {
-            18: models.resnet18,
-            34: models.resnet34,
-            50: models.resnet50,
-            101: models.resnet101,
-            152: models.resnet152,
-        }
-        # Using a pretrained ResNet backbone
-        backbone = resnets[resnet_version](pretrained=True)
-        num_filters = backbone.fc.in_features
-        layers = list(backbone.children())[
-            :-2
-        ]  # also excluding the penultimate pooling layer
-        self.feature_extractor = nn.Sequential(*layers)
-        self.upsampling_layers = []
-        # TODO: Add normalization
-        # TODO: Should depend on input size?
-        # TODO: all of the following can be properties?
+        super().__init__(  # execute BaseFeatureExtractor.__init__()
+            resnet_version=resnet_version,
+            pretrained=pretrained,
+            last_resnet_layer_to_get=last_resnet_layer_to_get,
+        )
+        self.__dict__.update(locals())  # TODO: what is this?
+
+        self.num_filters_for_upsampling = self.backbone.fc.in_features
         self.num_targets = num_targets
         self.num_keypoints = num_targets // 2
         self.downsample_factor = downsample_factor
         self.coordinate_scale = torch.tensor(2 ** downsample_factor, device=self.device)
+        self.upsampling_layers = self.make_upsampling_layers()
+        self.initialize_upsampling_layers()
+        # I'm up to this line. the below is older
+        self.upsampling_layers = []
+        # TODO: Add normalization
+        # TODO: Should depend on input size?
+        # TODO: all of the following can be properties?
         if downsample_factor == 3:
-            self.upsampling_layers += [  # shape = [batch, 2048, 12, 12]
+            self.upsampling_layers += [  # shape = [batch, 2048, 12, 12] for resnet 50 and above, assuming it is chopped before the last pulling
                 # nn.Upsample(scale_factor = 2, mode = 'bilinear'),
                 nn.PixelShuffle(2),
                 nn.ConvTranspose2d(
-                    in_channels=int(num_filters / 4),
+                    in_channels=int(self.num_filters_for_upsampling / 4),
                     out_channels=self.num_keypoints,
                     kernel_size=(3, 3),
                     stride=(2, 2),
@@ -82,7 +78,7 @@ class DLC(LightningModule):
             self.upsampling_layers += [  # shape = [batch, 2048, 12, 12]
                 nn.PixelShuffle(2),
                 nn.ConvTranspose2d(
-                    in_channels=int(num_filters / 4),
+                    in_channels=int(self.num_filters_for_upsampling / 4),
                     out_channels=self.num_keypoints,
                     kernel_size=(3, 3),
                     stride=(2, 2),
@@ -109,6 +105,42 @@ class DLC(LightningModule):
 
         # self.batch_size = 16 #for autoscale batchsize
         # self.num_workers = 0
+
+    def initialize_upsampling_layers(self):
+        # TODO: test that running this method changes the weights and biases
+        """loop over the Conv2DTranspose layers and initialize them"""
+        for index, layer in enumerate(self.upsampling_layers):
+            if index > 0:  # we ignore the PixelShuffle
+                torch.nn.init.xavier_uniform_(layer.weight)
+                torch.nn.init.zeros_(layer.bias)
+
+    @typechecked
+    def make_upsampling_layers(self) -> list:
+        upsampling_layers = [nn.PixelShuffle(2)]
+        upsampling_layers.append(
+            nn.ConvTranspose2d(
+                in_channels=self.num_filters_for_upsampling // 4,
+                out_channels=self.num_keypoints,
+                kernel_size=(3, 3),
+                stride=(2, 2),
+                padding=(1, 1),
+                output_padding=(1, 1),
+            )
+        )
+
+        if self.downsample_factor == 2:  # make the heatmaps bigger
+            upsampling_layers.append(
+                nn.ConvTranspose2d(
+                    in_channels=self.num_keypoints,
+                    out_channels=self.num_keypoints,
+                    kernel_size=(3, 3),
+                    stride=(2, 2),
+                    padding=(1, 1),
+                    output_padding=(1, 1),
+                )
+            )
+
+        return upsampling_layers
 
     @typechecked
     def forward(
@@ -288,62 +320,3 @@ class DLC(LightningModule):
             "lr_scheduler": scheduler,
             "monitor": "val_loss",
         }
-
-
-class Semi_Supervised_DLC(DLC):
-    def __init__(self, num_targets: int, resnet_version: Optional[int] = 18) -> None:
-        """
-        DLC model with support to labeled+unlabeled batches in training_step.
-        The only difference should be self.training_step(), as we're using the same ops for the labeled val/test images.
-        """
-        super().__init__(num_targets=num_targets, resnet_version=resnet_version)
-        self.__dict__.update(locals())
-
-    def training_step(self, batch: dict, batch_idx: int) -> dict:
-        # x, y_heatmap, y_keypoints = data
-        labeled_images, labeled_heatmaps = batch["labeled"]
-        unlabeled_images = batch["unlabeled"]
-        # push labeled images
-        pred_heatmaps_labeled = self.forward(labeled_images)
-        # push unlabeled images
-        pred_heatmaps_unlabeled = self.forward(unlabeled_images)
-        # compute loss
-        heatmap_loss_labeled = self.heatmap_loss(
-            labeled_heatmaps, pred_heatmaps_labeled
-        )
-        pca_view_loss_labeled = self.pca_2view_loss(pred_heatmaps_labeled)
-        pca_view_loss_unlabeled = self.pca_2view_loss(pred_heatmaps_unlabeled)
-        loss = heatmap_loss_labeled + pca_view_loss_labeled + pca_view_loss_unlabeled
-
-        # log all relevant losses
-        self.log(
-            "total_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
-        )
-
-        self.log(
-            "heatmap_loss_labeled",
-            heatmap_loss_labeled,
-            on_step=True,
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-        )
-
-        self.log(
-            "pca_loss_labeled",
-            pca_view_loss_labeled,
-            on_step=True,
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-        )
-        self.log(
-            "pca_loss_unlabeled",
-            pca_view_loss_unlabeled,
-            on_step=True,
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-        )
-
-        return {"loss": loss}
