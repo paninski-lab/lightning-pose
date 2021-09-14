@@ -125,7 +125,6 @@ class DLC(LightningModule):
         # with torch.no_grad():
         representations = self.feature_extractor(x)
         # TODO: move to tests
-        # TODO: [12,12] is independent of resnet architecture, but not sure if independent of image size. potentially different for non square images?
         assert (
             torch.tensor(representations.shape[-2:]) == torch.tensor([12, 12])
         ).all()

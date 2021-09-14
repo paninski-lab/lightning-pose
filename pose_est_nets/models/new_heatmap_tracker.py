@@ -46,6 +46,7 @@ class HeatmapTracker(BaseFeatureExtractor):
             last_resnet_layer_to_get=last_resnet_layer_to_get,
         )
         self.__dict__.update(locals())  # TODO: what is this?
+        print("running this in init heatmap tracker")
 
         self.num_filters_for_upsampling = self.backbone.fc.in_features
         self.num_targets = num_targets
@@ -79,6 +80,7 @@ class HeatmapTracker(BaseFeatureExtractor):
                 torch.nn.init.xavier_uniform_(layer.weight)
                 torch.nn.init.zeros_(layer.bias)
 
+    # TODO: Should return nn.sequential!
     @typechecked
     def make_upsampling_layers(self) -> list:
         """input shape = [batch, resnet_version_filters, 12, 12]"""
@@ -90,7 +92,7 @@ class HeatmapTracker(BaseFeatureExtractor):
             stride=(2, 2),
             padding=(1, 1),
             output_padding=(1, 1),
-        )  # [batch, self.num_keypoints, 48, 48]
+        )  # [batch, self.num_keypoints, 48, 48]. stopping here if downsample_factor=3
 
         if self.downsample_factor == 2:  # make the heatmaps bigger
             upsampling_layers += nn.ConvTranspose2d(
@@ -104,20 +106,20 @@ class HeatmapTracker(BaseFeatureExtractor):
 
         return nn.Sequential(*upsampling_layers)
 
+    @staticmethod
     @typechecked
-    def get_representations(
-        self,
-        images: TensorType[
-            "Batch_Size", "Image_Channels":3, "Image_Height", "Image_Width", float
-        ],
-    ) -> TensorType[
-        "Batch_Size",
-        "Features":_num_features_in_representation,
-        "Representation_Height":12,
-        "Representation_Width":12,
-        float,
-    ]:
-        return self.feature_extractor(images)
+    def create_double_upsampling_layer(
+        in_channels: int, out_channels: int
+    ) -> torch.nn.ConvTranspose2d:
+        """taking in/out channels, and performs ConvTranspose2d to double the output shape"""
+        return nn.ConvTranspose2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=(3, 3),
+            stride=(2, 2),
+            padding=(1, 1),
+            output_padding=(1, 1),
+        )
 
     @typechecked
     def heatmaps_from_representation(
@@ -229,3 +231,12 @@ class HeatmapTracker(BaseFeatureExtractor):
         pred_keypoints = pred_keypoints[:, :2]  # getting rid of the actual max value
         y_keypoints = y_keypoints[:, :2]
         return pred_keypoints, y_keypoints
+
+    def configure_optimizers(self):
+        optimizer = Adam(filter(lambda p: p.requires_grad, self.parameters()), lr=1e-3)
+        scheduler = ReduceLROnPlateau(optimizer, factor=0.2, patience=20, verbose=True)
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": scheduler,
+            "monitor": "val_loss",
+        }
