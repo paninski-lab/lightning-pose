@@ -4,12 +4,13 @@ from torch.nn import functional as F
 from torch import nn
 from pytorch_lightning.core.lightning import LightningModule
 from torch.optim import Adam
-from typing import Any, Callable, Optional, Tuple, List
+from typing import Any, Callable, Optional, Tuple, List, Dict
 from torchtyping import TensorType, patch_typeguard
+from typing_extensions import Literal
 from typeguard import typechecked
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from pose_est_nets.models.base_resnet import BaseFeatureExtractor
-
+from pose_est_nets.losses.regression_loss import MaskedRegressionMSELoss
 
 patch_typeguard()  # use before @typechecked
 
@@ -18,7 +19,7 @@ class RegressionTracker(BaseFeatureExtractor):
     def __init__(
         self,
         num_targets: int,  # TODO: decide whether targets or keypoints is the quantity of interest
-        resnet_version: Optional[int] = 18,
+        resnet_version: Optional[Literal[18, 34, 50, 101, 152]] = 18,
         pretrained: Optional[bool] = False,
         representation_dropout_rate: Optional[float] = 0.2,
         last_resnet_layer_to_get: Optional[int] = -2,
@@ -46,53 +47,47 @@ class RegressionTracker(BaseFeatureExtractor):
     @staticmethod
     @typechecked
     def reshape_representation(
-        representation: TensorType["batch", "features", 1, 1]
-    ) -> TensorType["batch", "features"]:
-        # TODO: the [1,1] shape depends on when we truncate the ResNet
+        representation: TensorType[
+            "Batch_Size",
+            "Features",
+            "Representation_Height",
+            "Representation_Width",
+            float,
+        ]
+    ) -> TensorType["Batch_Size", "Features", float]:
         return representation.reshape(representation.shape[0], representation.shape[1])
 
     @typechecked
     def forward(
-        self, x: TensorType["batch", 3, "height", "width"]
-    ) -> TensorType["batch", "num_targets"]:
+        self,
+        images: TensorType[
+            "Batch_Size", "Image_Channels":3, "Image_Height", "Image_Width", float
+        ],
+    ) -> TensorType["Batch_Size", "Num_Targets"]:
         """
         Forward pass through the network
         :param x: input
         :return: output of network
         """
         with torch.no_grad():
-            representation = self.feature_extractor(x)
+            representation = self.get_representations(images)
             out = self.final_layer(self.reshape_representation(representation))
         return out
 
-    @staticmethod
     @typechecked
-    def regression_loss(
-        labels: TensorType["batch", "num_targets"],
-        preds: TensorType["batch", "num_targets"],
-    ) -> TensorType[()]:
-        """
-        Computes mse loss between ground truth (x,y) coordinates and predicted (x^,y^) coordinates
-        :param y: ground truth. shape=(batch, num_targets)
-        :param y_hat: prediction. shape=(batch, num_targets)
-        :return: mse loss
-        """
-        mask = labels == labels  # labels is not none, bool.
-        loss = F.mse_loss(
-            torch.masked_select(labels, mask), torch.masked_select(preds, mask)
-        )
-
-        return loss
-
-    def training_step(self, data, batch_idx):
-        x, y = data
+    def training_step(
+        self,
+        data: Tuple,
+        batch_idx: int,
+    ) -> Dict:
+        images, keypoints = data
         # forward pass
-        representation = self.feature_extractor(x)
-        y_hat = self.final_layer(
+        representation = self.get_representations(images)
+        predicted_keypoints = self.final_layer(
             self.representation_dropout(self.reshape_representation(representation))
         )  # TODO: consider removing representation dropout?
         # compute loss
-        loss = self.regression_loss(y, y_hat)
+        loss = MaskedRegressionMSELoss(keypoints, predicted_keypoints)
         # log training loss
         self.log(
             "train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
@@ -102,10 +97,10 @@ class RegressionTracker(BaseFeatureExtractor):
     def validation_step(self, data, batch_idx):
         x, y = data
         # forward pass
-        representation = self.feature_extractor(x)
+        representation = self.get_representations(x)
         y_hat = self.final_layer(self.reshape_representation(representation))
         # compute loss
-        loss = self.regression_loss(y, y_hat)
+        loss = MaskedRegressionMSELoss(y, y_hat)
         # log validation loss
         self.log("val_loss", loss, prog_bar=True, logger=True)
 
