@@ -7,6 +7,7 @@ from pytorch_lightning.core.lightning import LightningModule
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from typing import Any, Callable, Optional, Tuple, List
+from typing_extensions import Literal
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 import numpy as np
@@ -24,15 +25,14 @@ class HeatmapTracker(BaseFeatureExtractor):
     def __init__(
         self,
         num_targets: int,
-        resnet_version: Optional[int] = 18,
+        resnet_version: Optional[Literal[18, 34, 50, 101, 152]] = 18,
         downsample_factor: Optional[
-            int
-        ] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model
+            Literal[2, 3]
+        ] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
         pretrained: Optional[bool] = False,
         last_resnet_layer_to_get: Optional[int] = -3,
     ) -> None:
         """
-        TODO: edit this. note, last_resnet_layer_to_get is different from the regression net, on purpose.
         Initializes a DLC-like model with resnet backbone inherited from BaseFeatureExtractor
         :param num_targets: number of body parts times 2 (x,y) coords
         :param resnet_version: The ResNet variant to be used (e.g. 18, 34, 50, 101, or 152). Essentially specifies how
@@ -45,64 +45,47 @@ class HeatmapTracker(BaseFeatureExtractor):
             pretrained=pretrained,
             last_resnet_layer_to_get=last_resnet_layer_to_get,
         )
-        self.__dict__.update(locals())  # TODO: what is this?
-        print("running this in init heatmap tracker")
-
-        self.num_filters_for_upsampling = self.backbone.fc.in_features
         self.num_targets = num_targets
-        self.num_keypoints = num_targets // 2
         self.downsample_factor = downsample_factor
-        self.coordinate_scale = torch.tensor(2 ** downsample_factor, device=self.device)
         self.upsampling_layers = self.make_upsampling_layers()
         self.initialize_upsampling_layers()
 
-        # TODO: review with Nick. Do we agree on dims? how to do this?
-        global _num_features_in_representation
-        if resnet_version < 50:
-            _num_features_in_representation = 512
-        else:
-            _num_features_in_representation = 2048
-        global _num_keypoints
-        _num_keypoints = np.copy(self.num_keypoints)
-        # TODO: check that the 5 thing is general? not sure, it's only right for 384X384?
-        # TODO: this avoids the need for outputshape? we don't need to know image size in the current setup.
-        global _heatmap_dims
-        _heatmap_dims = 12 * (2 ** (5 - downsample_factor))
-        # I'm up to this line. the below is olde
-        # self.batch_size = 16 #for autoscale batchsize
-        # self.num_workers = 0
+    @property
+    def num_keypoints(self):
+        return self.num_targets // 2
 
-    def initialize_upsampling_layers(self):
+    @property
+    def num_filters_for_upsampling(self):
+        return self.backbone.fc.in_features
+
+    @property
+    def coordinate_scale(self):
+        return torch.tensor(2 ** self.downsample_factor, device=self.device)
+
+    def initialize_upsampling_layers(self) -> None:
         # TODO: test that running this method changes the weights and biases
-        """loop over the Conv2DTranspose layers and initialize them"""
+        """loop over the Conv2DTranspose upsampling layers and initialize them"""
         for index, layer in enumerate(self.upsampling_layers):
             if index > 0:  # we ignore the PixelShuffle
                 torch.nn.init.xavier_uniform_(layer.weight)
                 torch.nn.init.zeros_(layer.bias)
 
-    # TODO: Should return nn.sequential!
     @typechecked
-    def make_upsampling_layers(self) -> list:
-        """input shape = [batch, resnet_version_filters, 12, 12]"""
+    def make_upsampling_layers(self) -> torch.nn.Sequential:
         upsampling_layers = [nn.PixelShuffle(2)]
-        upsampling_layers += nn.ConvTranspose2d(
-            in_channels=self.num_filters_for_upsampling // 4,
-            out_channels=self.num_keypoints,
-            kernel_size=(3, 3),
-            stride=(2, 2),
-            padding=(1, 1),
-            output_padding=(1, 1),
-        )  # [batch, self.num_keypoints, 48, 48]. stopping here if downsample_factor=3
-
-        if self.downsample_factor == 2:  # make the heatmaps bigger
-            upsampling_layers += nn.ConvTranspose2d(
-                in_channels=self.num_keypoints,
+        upsampling_layers.append(
+            self.create_double_upsampling_layer(
+                in_channels=self.num_filters_for_upsampling // 4,
                 out_channels=self.num_keypoints,
-                kernel_size=(3, 3),
-                stride=(2, 2),
-                padding=(1, 1),
-                output_padding=(1, 1),
-            )  # [batch, self.num_keypoints, 96, 96]
+            )
+        )  # running up to here results in downsample_factor=3 for [384,384] images
+        if self.downsample_factor == 2:
+            upsampling_layers.append(
+                self.create_double_upsampling_layer(
+                    in_channels=self.num_keypoints,
+                    out_channels=self.num_keypoints,
+                )
+            )
 
         return nn.Sequential(*upsampling_layers)
 
@@ -122,31 +105,30 @@ class HeatmapTracker(BaseFeatureExtractor):
         )
 
     @typechecked
-    def heatmaps_from_representation(
+    def heatmaps_from_representations(
         self,
         representations: TensorType[
             "Batch_Size",
-            "Features":_num_features_in_representation,
-            "Representation_Height":12,
-            "Representation_Width":12,
+            "Features",
+            "Representation_Height",
+            "Representation_Width",
+            float,
         ],
     ) -> TensorType[
-        "Batch_Size",
-        "Num_Keypoints":_num_keypoints,
-        "Heatmap_Height":_heatmap_dims,
-        "Heatmap_Width":_heatmap_dims,
+        "Batch_Size", "Num_Keypoints", "Heatmap_Height", "Heatmap_Width", float
     ]:
+        """a wrapper around self.upsampling_layers for type and shape assertion.
+        Args:
+            representations (torch.tensor(float)): the output of the Resnet feature extractor.
+        Returns:
+            (torch.tensor(float)): the result of applying the upsampling layers to the representations.
+        """
         return self.upsampling_layers(representations)
 
     @typechecked
     def forward(
         self, images: TensorType["Batch_Size", 3, "Image_Height", "Image_Width"]
-    ) -> TensorType[
-        "Batch_Size",
-        "Num_Keypoints":_num_keypoints,
-        "Heatmap_Height":_heatmap_dims,
-        "Heatmap_Width":_heatmap_dims,
-    ]:
+    ) -> TensorType["Batch_Size", "Num_Keypoints", "Heatmap_Height", "Heatmap_Width",]:
         """
         Forward pass through the network
         :param x: images
@@ -155,15 +137,13 @@ class HeatmapTracker(BaseFeatureExtractor):
         """TODO: I have good assertions in the old heatmap_tracker.py
         currently the heatmaps and image shapes are decoupled, consider changing"""
         representations = self.get_representations(images)
-        out = self.heatmaps_from_representation(representations)
-        return out
+        heatmaps = self.heatmaps_from_representations(representations)
+        return heatmaps
 
-    def training_step(self, data, batch_idx):
-        # load batch
-        images, true_heatmaps = data
-        # forward pass: images -> heatmaps
-        predicted_heatmaps = self.forward(images)
-        # compute loss
+    @typechecked
+    def training_step(self, data_batch: Tuple, batch_idx: int) -> dict:
+        images, true_heatmaps = data_batch  # read batch
+        predicted_heatmaps = self.forward(images)  # images -> heatmaps
         heatmap_loss = MaskedMSEHeatmapLoss(true_heatmaps, predicted_heatmaps)
 
         self.log(
@@ -176,17 +156,22 @@ class HeatmapTracker(BaseFeatureExtractor):
         )
         return {"loss": heatmap_loss}
 
-    def validation_step(self, data: Tuple, batch_idx: int) -> None:
-        images, true_heatmaps = data
-        predicted_heatmaps = self.forward(images)
-        # compute loss
+    @typechecked
+    def evaluate(
+        self, data_batch: Tuple, stage: Optional[Literal["val", "test"]] = None
+    ):
+        images, true_heatmaps = data_batch  # read batch
+        predicted_heatmaps = self.forward(images)  # images -> heatmaps
         loss = MaskedMSEHeatmapLoss(true_heatmaps, predicted_heatmaps)
-        # log validation loss
-        self.log("val_loss", loss, prog_bar=True, logger=True)
+        # TODO: do we need other metrics?
+        if stage:
+            self.log(f"{stage}_loss", loss, prog_bar=True, logger=True)
 
-    def test_step(self, data, batch_idx):
-        # TODO: check that the logging names are fine
-        self.validation_step(data, batch_idx)
+    def validation_step(self, validation_batch: Tuple, batch_idx):
+        self.evaluate(validation_batch, "val")
+
+    def test_step(self, test_batch: Tuple, batch_idx):
+        self.evaluate(test_batch, "test")
 
     # TODO: can we define subpixmax class? that gets all the inputs at init and then operates given just heatmaps?
     def computeSubPixMax(self, heatmaps_pred, heatmaps_y, threshold):
