@@ -37,12 +37,12 @@ class RegressionTracker(BaseFeatureExtractor):
             pretrained=pretrained,
             last_resnet_layer_to_get=last_resnet_layer_to_get,
         )
-        self.__dict__.update(locals())
         self.num_targets = num_targets
+        self.resnet_version = resnet_version
         self.final_layer = nn.Linear(self.backbone.fc.in_features, self.num_targets)
         self.representation_dropout = nn.Dropout(
             p=representation_dropout_rate
-        )  # TODO: consider removing
+        )  # TODO: consider removing dropout
 
     @staticmethod
     @typechecked
@@ -69,18 +69,17 @@ class RegressionTracker(BaseFeatureExtractor):
         :param x: input
         :return: output of network
         """
-        with torch.no_grad():
-            representation = self.get_representations(images)
-            out = self.final_layer(self.reshape_representation(representation))
+        representation = self.get_representations(images)
+        out = self.final_layer(self.reshape_representation(representation))
         return out
 
     @typechecked
     def training_step(
         self,
-        data: Tuple,
+        data_batch: Tuple,
         batch_idx: int,
     ) -> Dict:
-        images, keypoints = data
+        images, keypoints = data_batch
         # forward pass
         representation = self.get_representations(images)
         predicted_keypoints = self.final_layer(
@@ -89,23 +88,28 @@ class RegressionTracker(BaseFeatureExtractor):
         # compute loss
         loss = MaskedRegressionMSELoss(keypoints, predicted_keypoints)
         # log training loss
-        self.log(
-            "train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
-        )
+        self.log("train_loss", loss)
         return {"loss": loss}
 
-    def validation_step(self, data, batch_idx):
-        x, y = data
-        # forward pass
-        representation = self.get_representations(x)
-        y_hat = self.final_layer(self.reshape_representation(representation))
-        # compute loss
-        loss = MaskedRegressionMSELoss(y, y_hat)
-        # log validation loss
-        self.log("val_loss", loss, prog_bar=True, logger=True)
+    @typechecked
+    def evaluate(
+        self, data_batch: Tuple, stage: Optional[Literal["val", "test"]] = None
+    ):
+        images, keypoints = data_batch
+        representation = self.get_representations(images)
+        predicted_keypoints = self.final_layer(
+            self.reshape_representation(representation)
+        )
+        loss = MaskedRegressionMSELoss(keypoints, predicted_keypoints)
+        # TODO: do we need other metrics?
+        if stage:
+            self.log(f"{stage}_loss", loss, prog_bar=True)
 
-    def test_step(self, data, batch_idx):
-        self.validation_step(data, batch_idx)
+    def validation_step(self, validation_batch: Tuple, batch_idx):
+        self.evaluate(validation_batch, "val")
+
+    def test_step(self, test_batch: Tuple, batch_idx):
+        self.evaluate(test_batch, "test")
 
     def configure_optimizers(self):
         optimizer = Adam(filter(lambda p: p.requires_grad, self.parameters()), lr=1e-3)

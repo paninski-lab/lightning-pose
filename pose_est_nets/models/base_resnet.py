@@ -62,8 +62,9 @@ class BaseFeatureExtractor(LightningModule):
             pretrained (Optional[bool], optional): [description]. Defaults to False.
             last_resnet_layer_to_get (Optional[int], optional): [description]. Defaults to -2.
         """
-        super(BaseFeatureExtractor, self).__init__()
-        self.__dict__.update(locals())  # TODO: what is this?
+        super().__init__()
+        print("\n Initializing a {} instance.".format(self._get_name()))
+
         self.resnet_version = resnet_version
         self.backbone = grab_resnet_backbone(
             resnet_version=self.resnet_version, pretrained=pretrained

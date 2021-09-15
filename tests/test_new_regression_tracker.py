@@ -26,16 +26,20 @@ repres_shape_list = [
     torch.Size([_BATCH_SIZE, 2048, 1, 1]),
 ]
 
+num_keypoints = 34
+
+fake_image_batch = torch.rand(
+    size=(_BATCH_SIZE, 3, _HEIGHT, _WIDTH), device=_TORCH_DEVICE
+)
+fake_keypoints = torch.rand(_BATCH_SIZE, num_keypoints, device=_TORCH_DEVICE) * _HEIGHT
+
 
 def test_forward():
     """loop over different resnet versions and make sure that the
     resulting representation shapes make sense."""
-    fake_image_batch = torch.rand(
-        size=(_BATCH_SIZE, 3, _HEIGHT, _WIDTH), device=_TORCH_DEVICE
-    )
-    for ind, resnet_v in enumerate(resnet_versions):
-        model = RegressionTracker(resnet_version=resnet_v, num_targets=34).to(
-            _TORCH_DEVICE
-        )
-        representations = model.feature_extractor(fake_image_batch)
-        assert representations.shape == repres_shape_list[ind]
+
+    model = RegressionTracker(resnet_version=50, num_targets=34).to(_TORCH_DEVICE)
+    representations = model.get_representations(fake_image_batch)
+    assert representations.shape == repres_shape_list[2]
+    preds = model(fake_image_batch)
+    assert preds.shape == fake_keypoints.shape
