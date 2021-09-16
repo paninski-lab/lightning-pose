@@ -31,11 +31,7 @@ _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 _IMAGENET_MEAN = [0.485, 0.456, 0.406]
 _IMAGENET_STD = [0.229, 0.224, 0.225]
 # Dali parameters
-_DALI_DEVICE = "gpu" if torch.cuda.is_available() else "cpu"
-_SEQUENCE_LENGTH_UNSUPERVISED = 7
-_INITIAL_PREFETCH_SIZE = 16
-_BATCH_SIZE_UNSUPERVISED = 1  # sequence_length * batch_size = num_images passed
-_DALI_RANDOM_SEED = 123456
+
 
 #video_directory = os.path.join(
 #    "/home/jovyan/mouseRunningData/unlabeled_videos"
@@ -46,47 +42,41 @@ _DALI_RANDOM_SEED = 123456
 num_processes = os.cpu_count()
 
 
-@typechecked
-def PCA_prints(pca: sklearn.decomposition._pca.PCA, components_to_keep: int) -> None:
-    print("Results of running PCA on labels:")
-    print(
-        "explained_variance_ratio_: {}".format(
-            np.round(pca.explained_variance_ratio_, 3)
-        )
-    )
-    print(
-        "total_explained_var: {}".format(
-            np.round(np.sum(pca.explained_variance_ratio_[:components_to_keep]), 3)
-        )
-    )
+# @pipeline_def
+# def video_pipe(
+#     filenames: list,
+#     resize_dims: Optional[list],
+#     random_shuffle: Optional[bool] = False,
+# ):  # TODO: what does it return? more typechecking
+#     video = fn.readers.video(
+#         device=_DALI_DEVICE,
+#         filenames=filenames,
+#         sequence_length=_SEQUENCE_LENGTH_UNSUPERVISED,
+#         random_shuffle=random_shuffle,
+#         initial_fill=_INITIAL_PREFETCH_SIZE,
+#         normalized=False,
+#         dtype=types.DALIDataType.FLOAT,
+#     )
+#     video = fn.resize(video, size=resize_dims)
+#     video = (
+#         video / 255.0
+#     )  # original videos (at least Rick's) range from 0-255. transform it to 0,1. # TODO: not sure that we need that, make sure it's the same as the supervised ones
+#     transform = fn.crop_mirror_normalize(
+#         video,
+#         output_layout="FCHW",
+#         mean=_IMAGENET_MEAN,
+#         std=_IMAGENET_STD,
+#     )
+#     return transform
 
 
-@pipeline_def
-def video_pipe(
-    filenames: list,
-    resize_dims: Optional[list],
-    random_shuffle: Optional[bool] = False,
-):  # TODO: what does it return? more typechecking
-    video = fn.readers.video(
-        device=_DALI_DEVICE,
-        filenames=filenames,
-        sequence_length=_SEQUENCE_LENGTH_UNSUPERVISED,
-        random_shuffle=random_shuffle,
-        initial_fill=_INITIAL_PREFETCH_SIZE,
-        normalized=False,
-        dtype=types.DALIDataType.FLOAT,
-    )
-    video = fn.resize(video, size=resize_dims)
-    video = (
-        video / 255.0
-    )  # original videos (at least Rick's) range from 0-255. transform it to 0,1. # TODO: not sure that we need that, make sure it's the same as the supervised ones
-    transform = fn.crop_mirror_normalize(
-        video,
-        output_layout="FCHW",
-        mean=_IMAGENET_MEAN,
-        std=_IMAGENET_STD,
-    )
-    return transform
+# def readDataset(
+#     root_directory: str,
+#     csv_path: str,
+#     header_rows: Optional[List[int]] = None
+# ):
+    
+
 
 class BaseTrackingDataset(torch.utils.data.Dataset):
     def __init__(
@@ -142,13 +132,6 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             idx
         ]  # get current image labels from self.labels
         if self.imgaug_transform is not None:
-            #print("image.shape: {}".format(np.expand_dims(image, axis=0).shape))
-            #print(
-            #    "keypoints.shape: {}".format(
-            #        np.expand_dims(keypoints_on_image, axis=0).shape
-            #    )
-            #)
-
             transformed_images, transformed_keypoints = self.imgaug_transform(
                 images=np.expand_dims(image, axis=0),  # add batch dim
                 keypoints=np.expand_dims(keypoints_on_image, axis=0),  # add batch dim
@@ -203,23 +186,12 @@ class DLCHeatmapDataset(BaseTrackingDataset):
 
         if noNans:
             # Checks for images with set of keypoints that include any nan, so that they can be excluded from the data entirely, like DeepPoseKit does
-            ##########################################################
             self.fully_labeled_idxs = self.get_fully_labeled_idxs()
-            if mode == "csv":
-                self.image_names = [
-                    self.image_names[idx] for idx in self.fully_labeled_idxs
-                ]
-            else:
-                self.images = [self.images[idx] for idx in self.fully_labeled_idxs]
-            # self.labels = [self.labels[idx] for idx in self.fully_labeled_idxs]
+            self.image_names = [
+                self.image_names[idx] for idx in self.fully_labeled_idxs
+            ]
             self.labels = torch.index_select(self.labels, 0, self.fully_labeled_idxs)
-            if mode == "csv":
-                print(len(self.image_names), len(self.labels))
-            else:
-                print(len(self.images), len(self.labels))
             self.labels = torch.tensor(self.labels)
-            print(self.labels.shape)
-            ##########################################################
 
         self.downsample_factor = downsample_factor
         self.sigma = 5
@@ -228,8 +200,6 @@ class DLCHeatmapDataset(BaseTrackingDataset):
             self.height // 2 ** self.downsample_factor,
             self.width // 2 ** self.downsample_factor,
         )
-        # self.half_output_shape = (int(self.output_shape[0] / 2), int(self.output_shape[1] / 2))
-
    
         self.mode = mode
         # Compute heatmaps as preprocessing step
@@ -238,8 +208,7 @@ class DLCHeatmapDataset(BaseTrackingDataset):
         self.num_targets = torch.numel(self.labels[0])
 
     def compute_heatmaps(self):
-        label_heatmaps = []
-        
+        label_heatmaps = []       
         for idx in range(len(self.image_names)):
             x, y = super().__getitem__(idx)
             y_heatmap = draw_keypoints(
@@ -251,11 +220,9 @@ class DLCHeatmapDataset(BaseTrackingDataset):
         self.label_heatmaps = self.label_heatmaps.permute(0, 3, 1, 2)
 
     def __getitem__(self, idx: int) -> Tuple[torch.tensor, torch.tensor]: 
-        x, y_keypoint = super().__getitem__(idx)
+        x  = super().__getitem__(idx)[0] #could modify this if speed bottleneck
         y_heatmap = self.label_heatmaps[idx]
-
         return x, y_heatmap
-        # return x, y_heatmap, y_keypoint
 
     def get_fully_labeled_idxs(self):  # TODO: make shorter
         nan_check = torch.isnan(self.labels)
@@ -265,230 +232,3 @@ class DLCHeatmapDataset(BaseTrackingDataset):
         annotated_index = torch.where(annotated)
         return annotated_index[0]
 
-# TODO: let the unlabeled data module inherit from TrackingDataModule, just add the relevant components
-
-class TrackingDataModule(pl.LightningDataModule):
-    def __init__(  # TODO: add documentation and args
-        self,
-        dataset,
-        mode,
-        train_batch_size,
-        validation_batch_size,
-        test_batch_size,
-        num_workers: Optional[int] = 8,
-        use_unlabeled_frames: Optional[bool] = False,
-        unlabeled_video_path: Optional[str] = None,
-    ):
-        super().__init__()
-        self.fulldataset = dataset
-        self.train_batch_size = train_batch_size
-        self.validation_batch_size = validation_batch_size
-        self.test_batch_size = test_batch_size
-        self.num_workers = num_workers
-        self.num_views = 2  # changes with dataset, 2 for mouse, 3 for fish
-        self.mode = mode
-        self.use_unlabeled_frames = use_unlabeled_frames
-        self.unlabeled_video_path = unlabeled_video_path
-
-    def setup(self, stage: Optional[str] = None):  # TODO: clean up
-        print("Setting up DataModule...")
-        datalen = self.fulldataset.__len__()
-        print(
-            "Number of labeled images in the full dataset (train+val+test): {}".format(
-                datalen
-            )
-        )
-
-        if self.mode == "deterministic":
-            return
-
-        if (
-            round(datalen * 0.8) + round(datalen * 0.1) + round(datalen * 0.1)
-        ) > datalen:
-            self.train_set, self.valid_set, self.test_set = random_split(
-                self.fulldataset,
-                [
-                    round(datalen * 0.8) - 1,
-                    round(datalen * 0.1),
-                    round(datalen * 0.1),
-                ],  # hardcoded solution to rounding error
-                generator=torch.Generator().manual_seed(TORCH_MANUAL_SEED),
-            )
-        elif (
-            round(datalen * 0.8) + round(datalen * 0.1) + round(datalen * 0.1)
-        ) < datalen:
-            self.train_set, self.valid_set, self.test_set = random_split(
-                self.fulldataset,
-                [
-                    round(datalen * 0.8) + 1,
-                    round(datalen * 0.1),
-                    round(datalen * 0.1),
-                ],  # hardcoded solution to rounding error
-                generator=torch.Generator().manual_seed(TORCH_MANUAL_SEED),
-            )
-        else:
-            self.train_set, self.valid_set, self.test_set = random_split(
-                self.fulldataset,
-                [round(datalen * 0.8), round(datalen * 0.1), round(datalen * 0.1)],
-                generator=torch.Generator().manual_seed(TORCH_MANUAL_SEED),
-            )
-        print(
-            "Size of -- train set: {}, validation set: {}, test set: {}".format(
-                len(self.train_set), len(self.valid_set), len(self.test_set)
-            )
-        )
-
-    def setup_unlabeled(self, video_path):
-        # device_id = self.local_rank
-        # shard_id = self.global_rank
-        # num_shards = self.trainer.world_size
-        data_pipe = video_pipe(
-            batch_size=_BATCH_SIZE_UNSUPERVISED,
-            num_threads=self.num_workers
-            // 2,  # because the other workers do the labeled dataloading
-            device_id=0,  # TODO: be careful when scaling to multinode
-            resize_dims=[self.fulldataset.height, self.fulldataset.width],
-            random_shuffle=True,
-            # shard_id=shard_id,
-            # num_shards=num_shards,
-            filenames=video_files,
-            seed=_DALI_RANDOM_SEED,
-        )
-
-        class LightningWrapper(DALIGenericIterator):
-            def __init__(self, *kargs, **kvargs):
-                super().__init__(*kargs, **kvargs)
-
-            def __len__(self):  # just to avoid ptl err check
-                return 1  # num frames = len * batch_size; TODO: determine actual length of vid
-
-            def __next__(self):
-                out = super().__next__()
-                return torch.tensor(
-                    out[0]["x"][
-                        0, :, :, :, :
-                    ],  # should be batch_size, W, H, 3. TODO: valid for one sequence.
-                    dtype=torch.float,  # , device="cuda"
-                )
-
-        self.semi_supervised_loader = LightningWrapper(
-            data_pipe,
-            output_map=["x"],
-            last_batch_policy=LastBatchPolicy.PARTIAL,
-            auto_reset=True,  # TODO: verify that
-        )  # changed output_map to account for dummy labels
-
-    # TODO: could be separated from this class
-    # TODO: return something?
-    def computePPCA_params(
-        self,
-        components_to_keep: Optional[int] = 3,
-        empirical_epsilon_percentile: Optional[float] = 90.0,
-    ) -> None:
-        print("Computing PCA on the labels...")
-        param_dict = {}
-        # TODO: I don't follow the ifs, clarify with Nick
-        if type(self.train_set) == torch.utils.data.dataset.Subset:
-            indxs = torch.tensor(self.train_set.indices)
-            data_arr = torch.index_select(self.train_set.dataset.labels, 0, indxs)
-            num_body_parts = self.train_set.dataset.num_targets
-        else:
-            data_arr = self.train_set.labels  # won't work for random splitting
-            num_body_parts = self.train_set.num_targets
-        arr_for_pca = format_mouse_data(data_arr)
-        pca = PCA(n_components=4, svd_solver="full")
-        pca.fit(arr_for_pca.T)
-        print("Done!")
-
-        print(
-            "arr_for_pca shape: {}".format(arr_for_pca.shape)
-        )  # TODO: have prints as tests
-        PCA_prints(pca, components_to_keep)  # print important params
-        # mu = torch.mean(arr_for_pca, axis=1) # TODO: needed only for probabilistic version
-        # param_dict["obs_offset"] = mu  # TODO: needed only for probabilistic version
-        param_dict["kept_eigenvectors"] = torch.tensor(
-            pca.components_[:components_to_keep],
-            dtype=torch.float32,
-            device=_TORCH_DEVICE,  # TODO: be careful for multinode
-        )
-        param_dict["discarded_eigenvectors"] = torch.tensor(
-            pca.components_[components_to_keep:],
-            dtype=torch.float32,
-            device=_TORCH_DEVICE,  # TODO: be careful for multinode
-        )
-
-        # compute the labels' projections on the discarded components, to estimate the e.g., 90th percentile and determine epsilon
-        # absolute value is important -- projections can be negative.
-        proj_discarded = torch.abs(
-            torch.matmul(
-                arr_for_pca.T,
-                param_dict["discarded_eigenvectors"].clone().detach().cpu().T,
-            )
-        )
-        # setting axis = 0 generalizes to multiple discarded components
-        epsilon = np.percentile(
-            proj_discarded.numpy(), empirical_epsilon_percentile, axis=0
-        )
-        param_dict["epsilon"] = torch.tensor(
-            epsilon,
-            dtype=torch.float32,
-            device=_TORCH_DEVICE,  # TODO: be careful for multinode
-        )
-
-        self.pca_param_dict = param_dict
-
-    def full_dataloader(self):  # TODO: we're not really using it
-        return DataLoader(self.fulldataset, batch_size=1, num_workers=self.num_workers)
-
-    def unlabeled_dataloader(self):
-        return self.semi_supervised_loader
-
-    ## That's the clean train_dataloader that works. can revert to it if needed
-    # def train_dataloader(self):
-    #     return DataLoader(
-    #         self.train_set,
-    #         batch_size=self.train_batch_size,
-    #         num_workers=self.num_workers,
-    #     )
-
-    def train_dataloader(  # TODO: verify that indeed the semi_supervised_loader does its job
-        self,
-    ):  # TODO: I don't like that the function returns a list or a dataloader.
-        # if self.trainer.current_epoch % 2 == 0:
-        #    return self.semi_supervised_loader
-        # else:
-        # return DataLoader(self.train_set, batch_size = self.train_batch_size, num_workers = self.num_workers)
-        if self.use_unlabeled_frames:
-            loader = {
-                "labeled": DataLoader(
-                    self.train_set,
-                    batch_size=self.train_batch_size,
-                    num_workers=self.num_workers
-                    // 2,  # TODO: keep track of num_workers
-                ),
-                "unlabeled": self.unlabeled_dataloader(),
-            }
-            return loader
-        else:
-            return DataLoader(
-                self.train_set,
-                batch_size=self.train_batch_size,
-                num_workers=self.num_workers,
-            )
-
-    def val_dataloader(self):
-        return DataLoader(
-            self.valid_set,
-            batch_size=self.validation_batch_size,
-            num_workers=self.num_workers,
-        )
-
-    def test_dataloader(self):
-        return DataLoader(
-            self.test_set, batch_size=self.test_batch_size, num_workers=self.num_workers
-        )
-
-    def predict_dataloader(self):
-        return DataLoader(
-            self.test_set, batch_size=self.test_batch_size, num_workers=self.num_workers
-        )
