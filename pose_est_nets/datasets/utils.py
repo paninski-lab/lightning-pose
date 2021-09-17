@@ -27,8 +27,8 @@ def split_sizes_from_probabilities(
     assert (
         test_probability + train_probability + val_probability == 1.0
     )  # probabilities should add to one
-    train_number = int(np.floor(0.8 * total_number))
-    val_number = int(np.floor(0.1 * total_number))
+    train_number = int(np.floor(train_probability * total_number))
+    val_number = int(np.floor(val_probability * total_number))
     test_number = (
         total_number - train_number - val_number
     )  # if we lose extra examples by flooring, send these to test_number

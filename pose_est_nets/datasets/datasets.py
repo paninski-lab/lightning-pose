@@ -28,16 +28,17 @@ TORCH_MANUAL_SEED = 42
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # statistics of imagenet dataset on which the resnet was trained
+# see https://pytorch.org/vision/stable/models.html
 _IMAGENET_MEAN = [0.485, 0.456, 0.406]
 _IMAGENET_STD = [0.229, 0.224, 0.225]
 # Dali parameters
 
 
-#video_directory = os.path.join(
+# video_directory = os.path.join(
 #    "/home/jovyan/mouseRunningData/unlabeled_videos"
-#)  # TODO: should go as input to the class.
-#assert os.path.isdir(video_directory)
-#video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
+# )  # TODO: should go as input to the class.
+# assert os.path.isdir(video_directory)
+# video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
 
 num_processes = os.cpu_count()
 
@@ -75,7 +76,6 @@ num_processes = os.cpu_count()
 #     csv_path: str,
 #     header_rows: Optional[List[int]] = None
 # ):
-    
 
 
 class BaseTrackingDataset(torch.utils.data.Dataset):
@@ -117,6 +117,16 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         self.root_directory = root_directory
         self.num_targets = self.labels.shape[1]
 
+    @property
+    def height(self):
+        return self.imgaug_transform[0].get_parameters()[0][0].value
+        # Assuming resizing transformation is the first imgaug one
+
+    @property
+    def width(self):
+        return self.imgaug_transform[0].get_parameters()[0][1].value
+        # Assuming resizing transformation is the first imgaug one
+
     def __len__(self) -> int:
         return len(self.image_names)
 
@@ -146,7 +156,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
 
 # the only addition here, should be the heatmap creation method.
-class DLCHeatmapDataset(BaseTrackingDataset):
+class HeatmapDataset(BaseTrackingDataset):
     def __init__(
         self,
         root_directory: str,
@@ -154,7 +164,6 @@ class DLCHeatmapDataset(BaseTrackingDataset):
         header_rows: Optional[List[int]] = None,
         imgaug_transform: Optional[Callable] = None,
         pytorch_transform_list: Optional[List] = None,
-        mode: Optional[str] = 'csv',
         noNans: Optional[bool] = False,
         downsample_factor: Optional[int] = 2,
     ) -> None:
@@ -172,16 +181,22 @@ class DLCHeatmapDataset(BaseTrackingDataset):
         Returns:
             None
         """
-        super().__init__(root_directory, csv_path, header_rows, imgaug_transform, pytorch_transform_list)
-        self.height = imgaug_transform[0].get_parameters()[0][0].value #Assuming resizing transformation is the first imgaug one
-        self.width = imgaug_transform[0].get_parameters()[0][1].value 
+        super().__init__(
+            root_directory,
+            csv_path,
+            header_rows,
+            imgaug_transform,
+            pytorch_transform_list,
+        )
+        # self.height = imgaug_transform[0].get_parameters()[0][0].value
+        # # Assuming resizing transformation is the first imgaug one
+        # self.width = imgaug_transform[0].get_parameters()[0][1].value
 
         if self.height % 128 != 0 or self.height % 128 != 0:
             print(
                 "image dimensions (after transformation) must be repeatably divisible by 2!"
             )
             print("current image dimensions after transformation are:")
-            print(test_img_transformed.shape[:2])
             exit()
 
         if noNans:
@@ -200,27 +215,30 @@ class DLCHeatmapDataset(BaseTrackingDataset):
             self.height // 2 ** self.downsample_factor,
             self.width // 2 ** self.downsample_factor,
         )
-   
-        self.mode = mode
+
         # Compute heatmaps as preprocessing step
         # check that max of heatmaps look good
         self.compute_heatmaps()  # TODO: here we're computing the LABEL heatmaps which are saved to self. maybe explicitly have the outputs here
         self.num_targets = torch.numel(self.labels[0])
 
     def compute_heatmaps(self):
-        label_heatmaps = []       
+        label_heatmaps = []
         for idx in range(len(self.image_names)):
             x, y = super().__getitem__(idx)
             y_heatmap = draw_keypoints(
-                y.numpy(), x.shape[-2], x.shape[-1], self.output_shape, sigma=self.output_sigma
+                y.numpy(),
+                x.shape[-2],
+                x.shape[-1],
+                self.output_shape,
+                sigma=self.output_sigma,
             )
             label_heatmaps.append(y_heatmap)
 
         self.label_heatmaps = torch.from_numpy(np.asarray(label_heatmaps)).float()
         self.label_heatmaps = self.label_heatmaps.permute(0, 3, 1, 2)
 
-    def __getitem__(self, idx: int) -> Tuple[torch.tensor, torch.tensor]: 
-        x  = super().__getitem__(idx)[0] #could modify this if speed bottleneck
+    def __getitem__(self, idx: int) -> Tuple[torch.tensor, torch.tensor]:
+        x = super().__getitem__(idx)[0]  # could modify this if speed bottleneck
         y_heatmap = self.label_heatmaps[idx]
         return x, y_heatmap
 
@@ -231,4 +249,3 @@ class DLCHeatmapDataset(BaseTrackingDataset):
         annotated = torch.all(nan_check, dim=1)
         annotated_index = torch.where(annotated)
         return annotated_index[0]
-
