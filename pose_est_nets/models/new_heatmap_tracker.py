@@ -21,6 +21,7 @@ from pose_est_nets.losses.heatmap_loss import MaskedMSEHeatmapLoss
 patch_typeguard()  # use before @typechecked
 
 
+@typechecked
 class HeatmapTracker(BaseFeatureExtractor):
     def __init__(
         self,
@@ -72,6 +73,8 @@ class HeatmapTracker(BaseFeatureExtractor):
 
     @typechecked
     def make_upsampling_layers(self) -> torch.nn.Sequential:
+        # Note: https://github.com/jgraving/DeepPoseKit/blob/cecdb0c8c364ea049a3b705275ae71a2f366d4da/deepposekit/models/DeepLabCut.py#L131
+        # in their model, the pixel shuffle happens only for the downsample_factor=2
         upsampling_layers = [nn.PixelShuffle(2)]
         upsampling_layers.append(
             self.create_double_upsampling_layer(
@@ -134,8 +137,6 @@ class HeatmapTracker(BaseFeatureExtractor):
         :param x: images
         :return: heatmap per keypoint
         """
-        """TODO: I have good assertions in the old heatmap_tracker.py
-        currently the heatmaps and image shapes are decoupled, consider changing"""
         representations = self.get_representations(images)
         heatmaps = self.heatmaps_from_representations(representations)
         return heatmaps
