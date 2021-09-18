@@ -16,8 +16,8 @@ patch_typeguard()  # use before @typechecked
 
 @typechecked
 def grab_resnet_backbone(
-    resnet_version: Optional[Literal[18, 34, 50, 101, 152]] = 18,
-    pretrained: Optional[bool] = True,
+    resnet_version: Literal[18, 34, 50, 101, 152] = 18,
+    pretrained: bool = True,
 ) -> models.resnet.ResNet:
     resnets = {
         18: models.resnet18,
@@ -49,9 +49,9 @@ def grab_layers_sequential(
 class BaseFeatureExtractor(LightningModule):
     def __init__(
         self,
-        resnet_version: Optional[Literal[18, 34, 50, 101, 152]] = 18,
-        pretrained: Optional[bool] = False,
-        last_resnet_layer_to_get: Optional[int] = -2,
+        resnet_version: Literal[18, 34, 50, 101, 152] = 18,
+        pretrained: Optional[bool] = True,
+        last_resnet_layer_to_get: int = -2,
     ) -> None:
         """A ResNet model that takes in images and generates features.
         ResNets will be loaded from torchvision and can be either pre-trained on ImageNet or randomly initialized.
