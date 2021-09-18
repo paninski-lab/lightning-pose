@@ -70,3 +70,7 @@ def test_heatmaps_from_representations():
         == torch.tensor(fake_image_batch.shape[-2:])
         // (2 ** heatmap_model.downsample_factor)
     ).all()
+
+def test_subpixmaxima(): #Finish writing test
+    from pose_est_nets.utils.heatmap_tracker_utils import SubPixelMaxima
+    #spm = SubPixelMaxima(output)

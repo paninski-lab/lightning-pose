@@ -217,9 +217,10 @@ def find_subpixel_maxima(
     return maxima
 
 
-class SubPixelMaxima():
+class SubPixelMaxima(): #Add tensor typing
     def __init__(self, 
-        output_shape, 
+        output_shape,
+        output_sigma, 
         upsample_factor, 
         coordinate_scale, 
         confidence_scale,
@@ -228,6 +229,7 @@ class SubPixelMaxima():
         ):
 
         self.output_shape = output_shape
+        self.output_sigma = output_sigma
         self.upsample_factor = upsample_factor
         self.coordinate_scale = coordinate_scale
         self.confidence_scale = confidence_scale
@@ -248,36 +250,39 @@ class SubPixelMaxima():
         keypoints_1 = find_subpixel_maxima(
             heatmaps_1.detach(),
             self.kernel_size,
-            torch.tensor(self.output_sigma, device=heatmaps_pred.device),
+            torch.tensor(self.output_sigma, device=heatmaps_1.device),
             self.upsample_factor,
             self.coordinate_scale,
             self.confidence_scale
         )
+
         if not heatmaps_2:
-            return self.threshold(keypoints_1)
+            return self.use_threshold(keypoints_1)
 
         keypoints_2 = find_subpixel_maxima(
             heatmaps_2.detach(),
             self.kernel_size,
-            torch.tensor(self.output_sigma, device=heatmaps_pred.device),
+            torch.tensor(self.output_sigma, device=heatmaps_2.device),
             self.upsample_factor,
             self.coordinate_scale,
             self.confidence_scale
         )
+        return self.use_threshold(keypoints_1), self.use_threshold(keypoints_2)
 
-        return self.threshold(keypoints_1), self.threshold(keypoints_2)
-
-    def threshold(
+    def use_threshold( #threshold function must be run even if 
         self,
         keypoints
         ):
         if not self.threshold:
-            return heatmaps
-        num_threshold = torch.tensor(0.001, device=keypoints.device)
-        mask = torch.gt(keypoints[:, 2], num_threshold)
-        mask = pred_mask.unsqueeze(-1)
-        keypoints = torch.masked_select(keypoints, mask).reshape(-1, 3)
-        keypoints = keypoints[:, :2]
+            num_threshold = torch.tensor(0, device=keypoints.device)
+        else:
+            num_threshold = torch.tensor(self.threshold, device=keypoints.device)
+        #print(keypoints.shape)
+        batch_dim, num_bodyparts, _ = keypoints.shape
+        mask = torch.gt(keypoints[:, :, 2], num_threshold)
+        mask = mask.unsqueeze(-1)
+        keypoints = torch.masked_select(keypoints, mask).reshape(batch_dim, num_bodyparts, 3)
+        keypoints = keypoints[:, :, :2]
         return keypoints
 
         

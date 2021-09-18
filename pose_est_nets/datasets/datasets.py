@@ -151,7 +151,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             transformed_keypoints = transformed_keypoints.squeeze(0)
 
         transformed_images = self.pytorch_transform(transformed_images)
-
+        #ret = (transformed_images, torch.from_numpy(transformed_keypoints))
         return transformed_images, torch.from_numpy(transformed_keypoints)
 
 
@@ -240,6 +240,9 @@ class HeatmapDataset(BaseTrackingDataset):
     def __getitem__(self, idx: int) -> Tuple[torch.tensor, torch.tensor]:
         x = super().__getitem__(idx)[0]  # could modify this if speed bottleneck
         y_heatmap = self.label_heatmaps[idx]
+        #print(x.shape)
+        #print(type((x, y_heatmap)))
+        #ret = (x, y_heatmap)
         return x, y_heatmap
 
     def get_fully_labeled_idxs(self):  # TODO: make shorter

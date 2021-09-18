@@ -8,6 +8,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.tuner.tuning import Tuner
 from pose_est_nets.models.new_heatmap_tracker import SemiSupervisedHeatmapTracker
 from pose_est_nets.datasets.datasets import HeatmapDataset
+from pose_est_nets.datasets.utils import split_data_deterministic
 from pose_est_nets.datasets.datamodules import UnlabeledDataModule
 
 from typing import Any, Callable, Optional, Tuple, List
@@ -93,9 +94,8 @@ DATAMODULE = UnlabeledDataModule
 #TODO Add deterministic data calculations to data utils folder which can also incorperate processing of dataset view info 
 if args.select_data_mode == "deterministic":
     print("deterministic")
-    train_data, val_data, test_data, datamod = split_data_deterministic(root_directory=args.data_dir, csv_path=args.data_path, header_rows=header_rows,
+    train_data, val_data, test_data = split_data_deterministic(root_directory=args.data_dir, csv_path=args.data_path, header_rows=header_rows,
         imgaug_transform=imgaug_transform,
-        noNans=True,
         downsample_factor=args.downsample_factor)
     
     datamod = DATAMODULE(
@@ -141,30 +141,29 @@ print(data.num_targets)
 model = SemiSupervisedHeatmapTracker(
     num_targets=data.num_targets,
     resnet_version=50,
-    transfer=False,
+    pretrained=True,
     downsample_factor=args.downsample_factor,
     pca_param_dict = datamod.pca_param_dict,
     output_shape = data.output_shape,
     output_sigma = data.output_sigma,
-    upsample_factor = torch.tensor(100, device=device),
-    confidence_scale = torch.tensor(255.0, device=device),
-    device = device
+    upsample_factor = 100,
+    confidence_scale = 255.0,
+    #device = device
 )
 if args.load:
     model = model.load_from_checkpoint(
         checkpoint_path=args.ckpt,
         num_targets=data.num_targets,
         resnet_version=50,
-        transfer=False,
+        pretrained=True,
         downsample_factor=args.downsample_factor,
+        pca_param_dict = datamod.pca_param_dict,
+        output_shape = data.output_shape,
+        output_sigma = data.output_sigma,
+        upsample_factor = 100,
+        confidence_scale = 255.0,
+        #device = device
     )
-
-# model.pca_param_dict = datamod.pca_param_dict
-# model.output_shape = data.output_shape
-# model.output_sigma = data.output_sigma
-# device = "cuda" if torch.cuda.is_available() else "cpu"
-# model.upsample_factor = torch.tensor(100, device=device)
-# model.confidence_scale = torch.tensor(255.0, device=device)
 
 early_stopping = pl.callbacks.EarlyStopping(
     monitor="val_loss", patience=100, mode="min"

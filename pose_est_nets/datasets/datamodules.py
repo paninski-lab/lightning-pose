@@ -54,11 +54,11 @@ class BaseDataModule(pl.LightningDataModule):
     def __init__(  # TODO: add documentation and args
         self,
         dataset,
-        use_deterministic: Optional[bool] = False,
-        train_batch_size: Optional[int] = 16,
-        validation_batch_size: Optional[int] = 16,
-        test_batch_size: Optional[int] = 1,
-        num_workers: Optional[int] = 8,
+        use_deterministic: bool = False,
+        train_batch_size: int = 16,
+        validation_batch_size: int = 16,
+        test_batch_size: int = 1,
+        num_workers: int = 8,
     ):
         super().__init__()
         self.fulldataset = dataset
@@ -158,7 +158,7 @@ class UnlabeledDataModule(BaseDataModule):
             last_batch_policy=LastBatchPolicy.PARTIAL,
             auto_reset=True,  # TODO: seems harmless, but verify at some point what "reseting" means
         )
-        #self.computePCA_params()
+        #self.computePCA_params() #Setup must be run before running this
 
     # TODO: could be separated from this class
     # TODO: return something?
