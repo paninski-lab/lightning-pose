@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import math
 from torch.nn import functional as F
+from typing import Optional
 
 
 def find_maxima(x):
@@ -216,6 +217,70 @@ def find_subpixel_maxima(
     return maxima
 
 
+class SubPixelMaxima():
+    def __init__(self, 
+        output_shape, 
+        upsample_factor, 
+        coordinate_scale, 
+        confidence_scale,
+        threshold,
+        device
+        ):
+
+        self.output_shape = output_shape
+        self.upsample_factor = upsample_factor
+        self.coordinate_scale = coordinate_scale
+        self.confidence_scale = confidence_scale
+        self.threshold = threshold
+        self.device = device
+
+    @property 
+    def kernel_size(self):
+        kernel_size = np.min(self.output_shape)
+        kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
+        return torch.tensor(kernel_size, device=self.device)
+
+    def run(
+        self,
+        heatmaps_1,
+        heatmaps_2 = None #Enables the function to be run with only one set of keypoints
+        ):
+        keypoints_1 = find_subpixel_maxima(
+            heatmaps_1.detach(),
+            self.kernel_size,
+            torch.tensor(self.output_sigma, device=heatmaps_pred.device),
+            self.upsample_factor,
+            self.coordinate_scale,
+            self.confidence_scale
+        )
+        if not heatmaps_2:
+            return self.threshold(keypoints_1)
+
+        keypoints_2 = find_subpixel_maxima(
+            heatmaps_2.detach(),
+            self.kernel_size,
+            torch.tensor(self.output_sigma, device=heatmaps_pred.device),
+            self.upsample_factor,
+            self.coordinate_scale,
+            self.confidence_scale
+        )
+
+        return self.threshold(keypoints_1), self.threshold(keypoints_2)
+
+    def threshold(
+        self,
+        keypoints
+        ):
+        if not self.threshold:
+            return heatmaps
+        num_threshold = torch.tensor(0.001, device=keypoints.device)
+        mask = torch.gt(keypoints[:, 2], num_threshold)
+        mask = pred_mask.unsqueeze(-1)
+        keypoints = torch.masked_select(keypoints, mask).reshape(-1, 3)
+        keypoints = keypoints[:, :2]
+        return keypoints
+
+        
 def format_mouse_data(data_arr):
     # TODO: assume that data is a csv file or pandas dataframe
     # with first line indicating view and second line indicating body part names

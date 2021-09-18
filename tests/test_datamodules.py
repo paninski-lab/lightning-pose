@@ -32,6 +32,9 @@ heatmapData = HeatmapDataset(
     imgaug_transform=imgaug_transform,
 )
 
+#video_directory = os.path.join("/home/jovyan/mouseRunningData/unlabeled_videos") #DAN's
+video_directory = os.path.join("unlabeled_videos") #NICK's
+video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
 
 def test_base_datamodule():
 
@@ -70,8 +73,6 @@ def test_base_datamodule():
 def test_UnlabeledDataModule():
     # TODO: make a short video in toydatasets
     # TODO: seperate into a heatmap test + regression test
-    #video_directory = os.path.join("/home/jovyan/mouseRunningData/unlabeled_videos")
-    video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
     unlabeled_module_regression = UnlabeledDataModule(
         regData, unlabeled_video_path=video_files[0]
     )  # and default args
@@ -104,6 +105,13 @@ def test_UnlabeledDataModule():
     )
 
 def test_PCA():
+    unlabeled_module_heatmap = UnlabeledDataModule(
+        heatmapData, unlabeled_video_path=video_files[0]
+    )
+    unlabeled_module_heatmap.setup()
+    unlabeled_module_heatmap.computePCA_params()
+    print(unlabeled_module_heatmap.pca_param_dict)
+
     
 
 
