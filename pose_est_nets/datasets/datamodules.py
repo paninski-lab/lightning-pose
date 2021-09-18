@@ -158,6 +158,7 @@ class UnlabeledDataModule(BaseDataModule):
             last_batch_policy=LastBatchPolicy.PARTIAL,
             auto_reset=True,  # TODO: seems harmless, but verify at some point what "reseting" means
         )
+        #self.computePCA_params()
 
     # TODO: could be separated from this class
     # TODO: return something?
@@ -171,17 +172,28 @@ class UnlabeledDataModule(BaseDataModule):
         # Nick: Subset inherits from dataset, it doesn't have access to dataset.labels
         if type(self.train_set) == torch.utils.data.dataset.Subset:
             indxs = torch.tensor(self.train_set.indices)
-            data_arr = torch.index_select(self.train_set.dataset.labels, 0, indxs)
-            num_body_parts = self.train_set.dataset.num_targets
+            data_arr = torch.index_select(self.fulldataset.labels.detach().clone(), 0, indxs)
+            if self.fulldataset.imgaug_transform:
+                i = 0
+                for idx in indxs:
+                    data_arr[i] = super(type(self.fulldataset), self.fulldataset).__getitem__(idx)[1]
+                    i += 1
         else:
-            data_arr = self.train_set.labels  # won't work for random splitting
-            num_body_parts = self.train_set.num_targets
+            data_arr = self.train_set.labels.detach().clone()  # won't work for random splitting
+            if self.train_set.imgaug_transform:
+                for i in range(len(data_arr)):
+                    data_arr[i] = super(type(self.train_set), self.train_set).__getitem__(i)[1]
+                       
+        #################### CHANGES NANS TO ZEROES FOR PURELY TESTING PURPOSES #############################
+        nan_indices = torch.nonzero(torch.isnan(data_arr))
+        for idx in nan_indices:
+            data_arr[idx] = torch.zeros(size = data_arr[0].shape)
+        nan_indices = torch.nonzero(torch.isnan(data_arr))
+        ######################################################################
+        
         # TODO: format_mouse_data is specific to Rick's dataset, change when we're scaling to more data sources
-        data_arr_resized = torch.tensor(shape = data_arr.reshaped)
-        
-        
-
         arr_for_pca = format_mouse_data(data_arr)
+
         pca = PCA(n_components=4, svd_solver="full")
         pca.fit(arr_for_pca.T)
         print("Done!")

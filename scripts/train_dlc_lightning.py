@@ -6,8 +6,10 @@ from torchvision import transforms
 from torch.utils.data import DataLoader, random_split
 import pytorch_lightning as pl
 from pytorch_lightning.tuner.tuning import Tuner
-from pose_est_nets.models.heatmap_tracker import DLC
-from pose_est_nets.datasets.datasets import DLCHeatmapDataset, TrackingDataModule
+from pose_est_nets.models.new_heatmap_tracker import SemiSupervisedHeatmapTracker
+from pose_est_nets.datasets.datasets import HeatmapDataset
+from pose_est_nets.datasets.datamodules import UnlabeledDataModule
+
 from typing import Any, Callable, Optional, Tuple, List
 import json
 import argparse
@@ -75,61 +77,35 @@ args = parser.parse_args()
 torch.manual_seed(11)
 
 # Hardcoded for fish data for now, in the future we can have feature which will automatically check if a data_transform needs to be applied and select the right transformation
-data_transform = []
-data_transform.append(
+imgaug_transform = []
+imgaug_transform.append(
     iaa.Resize({"height": 384, "width": 384})
 )  # dlc dimensions need to be repeatably divisable by 2
-data_transform = iaa.Sequential(data_transform)
+imgaug_transform = iaa.Sequential(imgaug_transform)
 
-mode = args.data_path.split(".")[-1]
 # header rows are hardcoded
 header_rows = [1, 2]
 
+unlabeled_data_path = '../unlabeled_videos/180726_005.mp4' #Nick specific
+
+DATAMODULE = UnlabeledDataModule
+
+#TODO Add deterministic data calculations to data utils folder which can also incorperate processing of dataset view info 
 if args.select_data_mode == "deterministic":
     print("deterministic")
-    train_data = DLCHeatmapDataset(
-        root_directory=args.data_dir,
-        data_path=args.data_path,
-        header_rows=header_rows,
-        mode=mode,
-        transform=data_transform,
+    train_data, val_data, test_data, datamod = split_data_deterministic(root_directory=args.data_dir, csv_path=args.data_path, header_rows=header_rows,
+        imgaug_transform=imgaug_transform,
         noNans=True,
-        downsample_factor=args.downsample_factor,
-    )
-    train_data.image_names = train_data.image_names[: args.num_train_examples]
-    train_data.labels = train_data.labels[: args.num_train_examples]
-    train_data.compute_heatmaps()
-    val_data = DLCHeatmapDataset(
-        root_directory=args.data_dir,
-        data_path=args.data_path,
-        header_rows=header_rows,
-        mode=mode,
-        transform=data_transform,
-        noNans=True,
-        downsample_factor=args.downsample_factor,
-    )
-    val_data.image_names = val_data.image_names[183 : 183 + 22]
-    val_data.labels = val_data.labels[183 : 183 + 22]
-    val_data.compute_heatmaps()
-    test_data = DLCHeatmapDataset(
-        root_directory=args.data_dir,
-        data_path=args.data_path,
-        header_rows=header_rows,
-        mode=mode,
-        transform=data_transform,
-        noNans=True,
-        downsample_factor=args.downsample_factor,
-    )
-    test_data.image_names = test_data.image_names[205:]
-    test_data.labels = test_data.labels[205:]
-    test_data.compute_heatmaps()
-    datamod = TrackingDataModule(
+        downsample_factor=args.downsample_factor)
+    
+    datamod = DATAMODULE(
         train_data,
-        mode=args.select_data_mode,
         train_batch_size=16,
         validation_batch_size=10,
         test_batch_size=1,
         num_workers=args.num_workers,
+        use_deterministic = True,
+        unlabeled_video_path = unlabeled_data_path,
     )  # dlc configs
     datamod.train_set = train_data
     datamod.valid_set = val_data
@@ -137,32 +113,42 @@ if args.select_data_mode == "deterministic":
     data = train_data
 else:
     print("not deterministic")
-    full_data = DLCHeatmapDataset(
+    full_data = HeatmapDataset(
         root_directory=args.data_dir,
-        data_path=args.data_path,
+        csv_path=args.data_path,
         header_rows=header_rows,
-        mode=mode,
         noNans=True,
-        transform=data_transform,
+        imgaug_transform=imgaug_transform,
+        downsample_factor=args.downsample_factor
     )
-    datamod = TrackingDataModule(
+    datamod = DATAMODULE(
         full_data,
-        mode=args.select_data_mode,
         train_batch_size=16,
         validation_batch_size=10,
         test_batch_size=1,
         num_workers=args.num_workers,
+        use_deterministic = False,
+        unlabeled_video_path = unlabeled_data_path,
     )  # dlc configs
     data = full_data
 
 datamod.setup()
-datamod.computePPCA_params()
+datamod.computePCA_params()
 
-model = DLC(
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+print(data.num_targets)
+model = SemiSupervisedHeatmapTracker(
     num_targets=data.num_targets,
     resnet_version=50,
     transfer=False,
     downsample_factor=args.downsample_factor,
+    pca_param_dict = datamod.pca_param_dict,
+    output_shape = data.output_shape,
+    output_sigma = data.output_sigma,
+    upsample_factor = torch.tensor(100, device=device),
+    confidence_scale = torch.tensor(255.0, device=device),
+    device = device
 )
 if args.load:
     model = model.load_from_checkpoint(
@@ -173,12 +159,12 @@ if args.load:
         downsample_factor=args.downsample_factor,
     )
 
-model.pca_param_dict = datamod.pca_param_dict
-model.output_shape = data.output_shape
-model.output_sigma = data.output_sigma
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model.upsample_factor = torch.tensor(100, device=device)
-model.confidence_scale = torch.tensor(255.0, device=device)
+# model.pca_param_dict = datamod.pca_param_dict
+# model.output_shape = data.output_shape
+# model.output_sigma = data.output_sigma
+# device = "cuda" if torch.cuda.is_available() else "cpu"
+# model.upsample_factor = torch.tensor(100, device=device)
+# model.confidence_scale = torch.tensor(255.0, device=device)
 
 early_stopping = pl.callbacks.EarlyStopping(
     monitor="val_loss", patience=100, mode="min"
