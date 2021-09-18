@@ -70,7 +70,7 @@ def test_base_datamodule():
 def test_UnlabeledDataModule():
     # TODO: make a short video in toydatasets
     # TODO: seperate into a heatmap test + regression test
-    video_directory = os.path.join("/home/jovyan/mouseRunningData/unlabeled_videos")
+    #video_directory = os.path.join("/home/jovyan/mouseRunningData/unlabeled_videos")
     video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
     unlabeled_module_regression = UnlabeledDataModule(
         regData, unlabeled_video_path=video_files[0]
@@ -102,3 +102,8 @@ def test_UnlabeledDataModule():
         384,
         384,
     )
+
+def test_PCA():
+    
+
+

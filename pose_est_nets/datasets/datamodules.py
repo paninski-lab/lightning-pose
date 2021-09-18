@@ -177,6 +177,10 @@ class UnlabeledDataModule(BaseDataModule):
             data_arr = self.train_set.labels  # won't work for random splitting
             num_body_parts = self.train_set.num_targets
         # TODO: format_mouse_data is specific to Rick's dataset, change when we're scaling to more data sources
+        data_arr_resized = torch.tensor(shape = data_arr.reshaped)
+        
+        
+
         arr_for_pca = format_mouse_data(data_arr)
         pca = PCA(n_components=4, svd_solver="full")
         pca.fit(arr_for_pca.T)
