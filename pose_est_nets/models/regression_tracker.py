@@ -10,7 +10,7 @@ from typing_extensions import Literal
 from typeguard import typechecked
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from pose_est_nets.models.base_resnet import BaseFeatureExtractor
-from pose_est_nets.losses.regression_loss import MaskedRegressionMSELoss
+from pose_est_nets.losses.losses import MaskedRegressionMSELoss
 
 patch_typeguard()  # use before @typechecked
 

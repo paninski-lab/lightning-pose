@@ -1,0 +1,7 @@
+pca: # loss = projection onto the discarded eigenvectors
+  weight: 0.6
+  discarded_eigenvectors: None
+  epsilon: None
+temporal: # loss = norm of distance between successive timepoints
+  weight: 0.7
+  epsilon: None
