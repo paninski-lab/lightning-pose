@@ -1,9 +1,11 @@
 import torch
+from typing import List, Callable, Dict, Any, Optional, Literal
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 from torch.nn import functional as F
 
 patch_typeguard()  # use before @typechecked
+
 
 @typechecked
 def MaskedRegressionMSELoss(
@@ -23,6 +25,7 @@ def MaskedRegressionMSELoss(
 
     return loss
 
+
 @typechecked
 def MaskedMSEHeatmapLoss(
     y: TensorType["Batch_Size", "Num_Keypoints", "Heatmap_Height", "Heatmap_Width"],
@@ -40,6 +43,7 @@ def MaskedMSEHeatmapLoss(
     # compute loss
     loss = F.mse_loss(torch.masked_select(y_hat, mask), torch.masked_select(y, mask))
     return loss
+
 
 # TODO: this won't work unless the inputs are right, not implemented yet.
 @typechecked
@@ -65,3 +69,56 @@ def MultiviewPCALoss(
     )  # the scalar loss should be smaller after zeroing out elements.
     return torch.mean(epsilon_masked_proj)
 
+
+@typechecked
+def filter_dict(mydict: Dict[str, Any], keys: List[str]) -> Dict[str, Any]:
+    """filter dictionary by desired keys.
+
+    Args:
+        mydict (Dict[str, Any]): disctionary with strings as keys.
+        keys (List[str]): a list of key names to keep.
+
+    Returns:
+        Dict[str, Any]: the same dictionary only at the desired keys.
+    """
+    return {k: v for k, v in mydict.items() if k in keys}
+
+
+@typechecked
+def get_losses_dict(
+    names_list: List[Literal["pca", "temporal"]]
+) -> Dict[str, Callable]:
+    """get a dictionary with all the loss functions for semi supervised training.
+    our models' training_step will iterate over these, instead of manually computing each.
+
+    Args:
+        names_list (Optional[List[str]], optional): list of desired loss names. Defaults to None.
+
+    Returns:
+        Dict[str, Callable]: [description]
+    """
+    loss_dict = {
+        "regression": MaskedRegressionMSELoss,
+        "heatmap": MaskedMSEHeatmapLoss,
+        "pca": MultiviewPCALoss,
+    }
+    return filter_dict(loss_dict, names_list)
+
+
+# @typechecked
+# def get_losses_dict(names_list: List[str]) -> dict:
+#     """get a dictionary with all the loss functions for semi supervised training.
+#     our models' training_step will iterate over these, instead of manually computing each.
+
+#     Args:
+#         names_list (Optional[List[str]], optional): list of desired loss names. Defaults to None.
+
+#     Returns:
+#         Dict[str, Callable]: [description]
+#     """
+#     import pdb
+
+#     filtered = filter_dict(loss_dict, names_list)
+
+#     pdb.set_trace()
+#     return filtered

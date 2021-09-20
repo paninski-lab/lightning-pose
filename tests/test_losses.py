@@ -1,6 +1,8 @@
 from pose_est_nets.losses.regression_loss import MaskedRegressionMSELoss
 import torch
 import numpy as np
+import pytest
+import yaml
 
 
 def test_masked_regression_loss():
@@ -18,7 +20,21 @@ def test_masked_regression_loss():
     assert loss.shape == torch.Size([])
     assert loss > 0.0
 
-    # add some nans and make sure that loss decreseas
-    true_keypoints[7, [1, 2]] = torch.tensor(np.nan)
-    loss_masked = MaskedRegressionMSELoss(true_keypoints, predicted_keypoints)
-    assert loss_masked <= loss
+
+def test_get_losses_dict():
+    from pose_est_nets.losses.losses import get_losses_dict
+
+    out_dict = get_losses_dict(["pca"])
+    assert "pca" in list(out_dict.keys())
+    assert "temporal" not in list(out_dict.keys())
+    assert type(out_dict) == dict
+
+    pytest.raises(TypeError, get_losses_dict, ["bla"])
+
+
+def test_yaml():
+    stream = open("pose_est_nets/losses/default_hypers.yaml", "r")
+
+    with open("pose_est_nets/losses/default_hypers.yaml") as f:
+        data = yaml.load(f, Loader=yaml.FullLoader)
+        print(data)

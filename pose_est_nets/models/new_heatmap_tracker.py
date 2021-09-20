@@ -16,7 +16,11 @@ from pose_est_nets.utils.heatmap_tracker_utils import (
     largest_factor,
     format_mouse_data,
 )
-from pose_est_nets.losses.losses import MaskedMSEHeatmapLoss, MultiviewPCALoss
+from pose_est_nets.losses.losses import (
+    MaskedMSEHeatmapLoss,
+    MultiviewPCALoss,  # TODO: remove if get_losses_dict does the job
+    get_losses_dict,
+)
 from pose_est_nets.utils.heatmap_tracker_utils import SubPixelMaxima
 
 patch_typeguard()  # use before @typechecked
@@ -28,16 +32,18 @@ class HeatmapTracker(BaseFeatureExtractor):
         self,
         num_targets: int,
         resnet_version: Literal[18, 34, 50, 101, 152] = 18,
-        #transfer: bool = True,
-        downsample_factor: Literal[2, 3] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
+        # transfer: bool = True,
+        downsample_factor: Literal[
+            2, 3
+        ] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
-        output_shape: Optional[tuple] = None, #change
-        output_sigma: float = 1.25, #check value
+        output_shape: Optional[tuple] = None,  # change
+        output_sigma: float = 1.25,  # check value
         upsample_factor: int = 100,
         confidence_scale: float = 255.0,
         threshold: Optional[float] = None,
-        #device: str = 'cpu',
+        # device: str = 'cpu',
     ) -> None:
         """
         Initializes a DLC-like model with resnet backbone inherited from BaseFeatureExtractor
@@ -61,7 +67,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         self.upsample_factor = torch.tensor(upsample_factor, device=self.device)
         self.confidence_scale = torch.tensor(confidence_scale, device=self.device)
         self.threshold = threshold
-        #self.device = device #might be done automatically by pytorch lightning
+        # self.device = device #might be done automatically by pytorch lightning
 
     @property
     def num_keypoints(self):
@@ -78,18 +84,17 @@ class HeatmapTracker(BaseFeatureExtractor):
     @property
     def SubPixMax(self):
         return SubPixelMaxima(
-            output_shape = self.output_shape, 
-            output_sigma = self.output_sigma,
-            upsample_factor = self.upsample_factor, 
-            coordinate_scale = self.coordinate_scale, 
-            confidence_scale = self.confidence_scale,
-            threshold = self.threshold,
-            device = self.device
-            )
+            output_shape=self.output_shape,
+            output_sigma=self.output_sigma,
+            upsample_factor=self.upsample_factor,
+            coordinate_scale=self.coordinate_scale,
+            confidence_scale=self.confidence_scale,
+            threshold=self.threshold,
+            device=self.device,
+        )
 
-    def run_subpixelmaxima(self, heatmaps1, heatmaps2 = None):
+    def run_subpixelmaxima(self, heatmaps1, heatmaps2=None):
         return self.SubPixMax.run(heatmaps1, heatmaps2)
-
 
     def initialize_upsampling_layers(self) -> None:
         # TODO: test that running this method changes the weights and biases
@@ -196,7 +201,9 @@ class HeatmapTracker(BaseFeatureExtractor):
         if stage:
             self.log(f"{stage}_loss", loss, prog_bar=True, logger=True)
 
-    def validation_step(self,validation_batch: List, batch_idx): #validation_batch: Tuple
+    def validation_step(
+        self, validation_batch: List, batch_idx
+    ):  # validation_batch: Tuple
         self.evaluate(validation_batch, "val")
 
     def test_step(self, test_batch: List, batch_idx):
@@ -212,53 +219,61 @@ class HeatmapTracker(BaseFeatureExtractor):
         }
 
 
-
 class SemiSupervisedHeatmapTracker(HeatmapTracker):
     def __init__(
         self,
         num_targets: int,
         resnet_version: Literal[18, 34, 50, 101, 152] = 18,
-        #transfer: bool = False,
-        downsample_factor: Literal[2, 3] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
+        # transfer: bool = False,
+        downsample_factor: Literal[
+            2, 3
+        ] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
         pretrained: bool = True,
-        last_resnet_layer_to_get: int = -3, 
-        output_shape: Optional[tuple] = None, #change
-        output_sigma: float = 1.25, #check value,
+        last_resnet_layer_to_get: int = -3,
+        output_shape: Optional[tuple] = None,  # change
+        output_sigma: float = 1.25,  # check value,
         upsample_factor: int = 100,
         confidence_scale: float = 255.0,
         threshold: Optional[float] = None,
-        #device: str = 'cpu',
         pca_param_dict: Optional[dict] = None,
-        #losses_to_use: Optional[list] = None
+        semi_super_losses_to_use: Optional[list] = None,
     ):
         super().__init__(
-            num_targets = num_targets,
-            resnet_version = resnet_version,
-            #transfer = transfer,
-            downsample_factor = downsample_factor,
-            pretrained = pretrained,
-            last_resnet_layer_to_get = last_resnet_layer_to_get,
-            output_shape = output_shape,
-            output_sigma = output_sigma,
-            upsample_factor = upsample_factor,
-            confidence_scale = confidence_scale,  
-            #device = device
+            num_targets=num_targets,
+            resnet_version=resnet_version,
+            # transfer = transfer,
+            downsample_factor=downsample_factor,
+            pretrained=pretrained,
+            last_resnet_layer_to_get=last_resnet_layer_to_get,
+            output_shape=output_shape,
+            output_sigma=output_sigma,
+            upsample_factor=upsample_factor,
+            confidence_scale=confidence_scale,
+            # device = device
         )
         self.pca_param_dict = pca_param_dict
+        self.loss_fuction_dict = get_losses_dict(semi_super_losses_to_use)
+        print(self.loss_fuction_dict)
 
     @typechecked
     def training_step(self, data_batch: dict, batch_idx: int) -> dict:
-        labeled_imgs, true_heatmaps = data_batch['labeled']
-        unlabeled_imgs = data_batch['unlabeled']
+        labeled_imgs, true_heatmaps = data_batch["labeled"]
+        unlabeled_imgs = data_batch["unlabeled"]
         predicted_heatmaps = self.forward(labeled_imgs)
         heatmap_loss = MaskedMSEHeatmapLoss(true_heatmaps, predicted_heatmaps)
         unlabeled_predicted_heatmaps = self.forward(unlabeled_imgs)
-        pred_keypoints_unsupervised = self.run_subpixelmaxima(unlabeled_predicted_heatmaps)
-        pca_loss = MultiviewPCALoss(pred_keypoints_unsupervised, self.pca_param_dict["discarded_eigenvectors"], self.pca_param_dict["epsilon"])
+        pred_keypoints_unsupervised = self.run_subpixelmaxima(
+            unlabeled_predicted_heatmaps
+        )
+        pca_loss = MultiviewPCALoss(
+            pred_keypoints_unsupervised,
+            self.pca_param_dict["discarded_eigenvectors"],
+            self.pca_param_dict["epsilon"],
+        )
         alpha, beta = 1, 1
 
-        #Make logging more concise?
-        
+        # Make logging more concise?
+
         tot_loss = alpha * heatmap_loss + beta * pca_loss
         self.log(
             "train_loss",
@@ -284,8 +299,8 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             prog_bar=True,
             logger=True,
         )
-        return {'loss': tot_loss, 'heatmap_loss': heatmap_loss, 'pca_loss': pca_loss} #remember to detach heatmap/pca loss
-
-
-        
-
+        return {
+            "loss": tot_loss,
+            "heatmap_loss": heatmap_loss,
+            "pca_loss": pca_loss,
+        }  # remember to detach heatmap/pca loss

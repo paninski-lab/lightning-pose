@@ -217,16 +217,17 @@ def find_subpixel_maxima(
     return maxima
 
 
-class SubPixelMaxima(): #Add tensor typing
-    def __init__(self, 
+class SubPixelMaxima:  # Add tensor typing
+    def __init__(
+        self,
         output_shape,
-        output_sigma, 
-        upsample_factor, 
-        coordinate_scale, 
+        output_sigma,
+        upsample_factor,
+        coordinate_scale,
         confidence_scale,
         threshold,
-        device
-        ):
+        device,
+    ):
 
         self.output_shape = output_shape
         self.output_sigma = output_sigma
@@ -236,7 +237,7 @@ class SubPixelMaxima(): #Add tensor typing
         self.threshold = threshold
         self.device = device
 
-    @property 
+    @property
     def kernel_size(self):
         kernel_size = np.min(self.output_shape)
         kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
@@ -245,15 +246,15 @@ class SubPixelMaxima(): #Add tensor typing
     def run(
         self,
         heatmaps_1,
-        heatmaps_2 = None #Enables the function to be run with only one set of keypoints
-        ):
+        heatmaps_2=None,  # Enables the function to be run with only one set of keypoints
+    ):
         keypoints_1 = find_subpixel_maxima(
             heatmaps_1.detach(),
             self.kernel_size,
             torch.tensor(self.output_sigma, device=heatmaps_1.device),
             self.upsample_factor,
             self.coordinate_scale,
-            self.confidence_scale
+            self.confidence_scale,
         )
 
         if not heatmaps_2:
@@ -265,27 +266,25 @@ class SubPixelMaxima(): #Add tensor typing
             torch.tensor(self.output_sigma, device=heatmaps_2.device),
             self.upsample_factor,
             self.coordinate_scale,
-            self.confidence_scale
+            self.confidence_scale,
         )
         return self.use_threshold(keypoints_1), self.use_threshold(keypoints_2)
 
-    def use_threshold( #threshold function must be run even if 
-        self,
-        keypoints
-        ):
+    def use_threshold(self, keypoints):  # threshold function must be run even if
         if not self.threshold:
             num_threshold = torch.tensor(0, device=keypoints.device)
         else:
             num_threshold = torch.tensor(self.threshold, device=keypoints.device)
-        #print(keypoints.shape)
         batch_dim, num_bodyparts, _ = keypoints.shape
         mask = torch.gt(keypoints[:, :, 2], num_threshold)
         mask = mask.unsqueeze(-1)
-        keypoints = torch.masked_select(keypoints, mask).reshape(batch_dim, num_bodyparts, 3)
+        keypoints = torch.masked_select(keypoints, mask).reshape(
+            batch_dim, num_bodyparts, 3
+        )
         keypoints = keypoints[:, :, :2]
         return keypoints
 
-        
+
 def format_mouse_data(data_arr):
     # TODO: assume that data is a csv file or pandas dataframe
     # with first line indicating view and second line indicating body part names
