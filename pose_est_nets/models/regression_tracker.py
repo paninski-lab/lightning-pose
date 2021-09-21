@@ -20,7 +20,7 @@ class RegressionTracker(BaseFeatureExtractor):
         self,
         num_targets: int,  # TODO: decide whether targets or keypoints is the quantity of interest
         resnet_version: Optional[Literal[18, 34, 50, 101, 152]] = 18,
-        pretrained: Optional[bool] = False,
+        pretrained: Optional[bool] = True,
         representation_dropout_rate: Optional[float] = 0.2,
         last_resnet_layer_to_get: Optional[int] = -2,
     ) -> None:
@@ -119,6 +119,55 @@ class RegressionTracker(BaseFeatureExtractor):
             "lr_scheduler": scheduler,
             "monitor": "val_loss",
         }
+
+class SemiSupervisedRegressionTracker(RegressionTracker):
+    def __init__(
+        self,
+        num_targets: int,  # TODO: decide whether targets or keypoints is the quantity of interest
+        loss_params: dict,
+        resnet_version: Optional[Literal[18, 34, 50, 101, 152]] = 18,
+        pretrained: Optional[bool] = True,
+        representation_dropout_rate: Optional[float] = 0.2,
+        last_resnet_layer_to_get: Optional[int] = -2, 
+        semi_super_losses_to_use: Optional[list] = None,      
+    ) -> None:
+        super().__init__(
+            num_targets, 
+            resnet_version, 
+            pretrained, 
+            representation_dropout_rate, 
+            last_resnet_layer_to_get
+        )
+        self.loss_params = loss_params
+        self.loss_fuction_dict = get_losses_dict(semi_super_losses_to_use)
+
+
+    @typechecked
+    def training_step(self, data_batch: dict, batch_idx: int) -> dict:
+        labeled_imgs, true_keypoints = data_batch["labeled"]
+        unlabeled_imgs = data_batch["unlabeled"]
+        representation = self.get_representations(labeled_imgs)
+        predicted_keypoints = self.final_layer(
+            self.representation_dropout(self.reshape_representation(representation))
+        )  # TODO: consider removing representation dropout?
+        # compute loss
+        tot_loss = MaskedRegressionMSELoss(true_keypoints, predicted_keypoints) 
+        us_representation = self.get_representations(unlabeled_imgs)
+        predicted_us_keypoints = self.final_layer(
+            self.representation_dropout(self.reshape_representation(us_representation)) #Do we need dropout
+        )
+        for loss_name, loss_fuct in self.loss_fuction_dict.items():
+            add_loss = self.loss_params[loss_name]["value"] * loss_fuct(predicted_us_keypoints, loss_params[loss_name])
+            tot_loss += add_loss
+            self.log(
+            loss_name + "_loss",
+            add_loss,
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+        )
+        return {"loss": tot_loss}
 
 
 # # that was the previous version that worked

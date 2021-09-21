@@ -7,7 +7,7 @@ import shutil
 from pose_est_nets.utils.wrappers import predict_plot_test_epoch
 from pose_est_nets.utils.IO import set_or_open_folder, load_object
 from typing import Optional
-from pose_est_nets.models.regression_tracker import RegressionTracker
+from pose_est_nets.models.regression_tracker import RegressionTracker, SemiSupervisedRegressionTracker
 
 # TODO: add more tests as we consolidate datasets
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -43,3 +43,9 @@ def test_forward():
     assert representations.shape == repres_shape_list[2]
     preds = model(fake_image_batch)
     assert preds.shape == fake_keypoints.shape
+
+
+def test_semisupervised():
+    #define unsupervised datamodule
+    model = SemiSupervisedRegressionTracker(resnet_version = 50, num_targets=34).to(_TORCH_DEVICE)
+    

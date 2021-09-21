@@ -162,7 +162,7 @@ class UnlabeledDataModule(BaseDataModule):
 
     # TODO: could be separated from this class
     # TODO: return something?
-    def computePCA_params(
+    def computePCA_params( #Should only call this now if pca in loss name dict
         self,
         components_to_keep: Optional[int] = 3,
         empirical_epsilon_percentile: Optional[float] = 90.0,
