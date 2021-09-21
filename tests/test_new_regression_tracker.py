@@ -6,10 +6,15 @@ import pytorch_lightning as pl
 import shutil
 from pose_est_nets.utils.wrappers import predict_plot_test_epoch
 from pose_est_nets.utils.IO import set_or_open_folder, load_object
-from pose_est_nets.data.datamodules import UnlabeledDataModule
-from pose_est_nets.data.datasets import BaseTrackingDataset
+from pose_est_nets.datasets.datamodules import UnlabeledDataModule
+from pose_est_nets.datasets.datasets import BaseTrackingDataset
 from typing import Optional
-from pose_est_nets.models.regression_tracker import RegressionTracker, SemiSupervisedRegressionTracker
+from pose_est_nets.models.regression_tracker import (
+    RegressionTracker,
+    SemiSupervisedRegressionTracker,
+)
+import yaml
+import imgaug.augmenters as iaa
 
 # TODO: add more tests as we consolidate datasets
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -48,7 +53,7 @@ def test_forward():
 
 
 def test_semisupervised():
-    #define unsupervised datamodule
+    # define unsupervised datamodule
     data_transform = []
     data_transform.append(
         iaa.Resize({"height": 384, "width": 384})
@@ -61,12 +66,28 @@ def test_semisupervised():
         header_rows=[1, 2],
         imgaug_transform=imgaug_transform,
     )
-    #video_directory = os.path.join("/home/jovyan/mouseRunningData/unlabeled_videos") #DAN's
-    video_directory = os.path.join("unlabeled_videos") #NICK's
+    video_directory = os.path.join(
+        "/home/jovyan/mouseRunningData/unlabeled_videos"
+    )  # DAN's
+    # video_directory = os.path.join("unlabeled_videos")  # NICK's
     video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
-    datamod = UnlabeledDataModule(dataset, video_files[0])
-    train_loader = datamod.train_dataloader()
-    pca_param_dict =
-    semi_super_losses_to_use = 
-    model = SemiSupervisedRegressionTracker(resnet_version = 50, num_targets=34, ).to(_TORCH_DEVICE)
-    
+    assert os.path.exists(video_files[0])
+    datamod = UnlabeledDataModule(dataset=dataset, video_paths_list=video_files[0])
+    # train_loader = datamod.train_dataloader()
+    stream = open("pose_est_nets/losses/default_hypers.yaml", "r")
+    with open("pose_est_nets/losses/default_hypers.yaml") as f:
+        loss_param_dict = yaml.load(f, Loader=yaml.FullLoader)
+    semi_super_losses_to_use = ["pca"]
+    model = SemiSupervisedRegressionTracker(
+        resnet_version=50,
+        num_targets=34,
+        loss_params=loss_param_dict,
+        semi_super_losses_to_use=semi_super_losses_to_use,
+    ).to(_TORCH_DEVICE)
+    trainer = pl.Trainer(
+        gpus=1 if _TORCH_DEVICE == "cuda" else 0,
+        max_epochs=1,
+        log_every_n_steps=1,
+        auto_scale_batch_size=False,
+    )  # auto_scale_batch_size not working
+    trainer.fit(model=model, datamodule=datamod)

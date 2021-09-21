@@ -11,6 +11,7 @@ from typeguard import typechecked
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from pose_est_nets.models.base_resnet import BaseFeatureExtractor
 from pose_est_nets.losses.losses import MaskedRegressionMSELoss
+from pose_est_nets.losses.losses import get_losses_dict
 
 patch_typeguard()  # use before @typechecked
 
@@ -76,7 +77,7 @@ class RegressionTracker(BaseFeatureExtractor):
     @typechecked
     def training_step(
         self,
-        data_batch: Tuple,
+        data_batch: list,
         batch_idx: int,
     ) -> Dict:
         images, keypoints = data_batch
@@ -93,22 +94,25 @@ class RegressionTracker(BaseFeatureExtractor):
 
     @typechecked
     def evaluate(
-        self, data_batch: Tuple, stage: Optional[Literal["val", "test"]] = None
+        self, data_batch: list, stage: Optional[Literal["val", "test"]] = None
     ):
         images, keypoints = data_batch
+        print("images {}".format(images.shape))
+        print("keypoints {}".format(keypoints.shape))
         representation = self.get_representations(images)
         predicted_keypoints = self.final_layer(
             self.reshape_representation(representation)
         )
+        print("predicted_keypoints {}".format(predicted_keypoints.shape))
         loss = MaskedRegressionMSELoss(keypoints, predicted_keypoints)
         # TODO: do we need other metrics?
         if stage:
             self.log(f"{stage}_loss", loss, prog_bar=True)
 
-    def validation_step(self, validation_batch: Tuple, batch_idx):
+    def validation_step(self, validation_batch: list, batch_idx):
         self.evaluate(validation_batch, "val")
 
-    def test_step(self, test_batch: Tuple, batch_idx):
+    def test_step(self, test_batch: list, batch_idx):
         self.evaluate(test_batch, "test")
 
     def configure_optimizers(self):
@@ -120,6 +124,7 @@ class RegressionTracker(BaseFeatureExtractor):
             "monitor": "val_loss",
         }
 
+
 class SemiSupervisedRegressionTracker(RegressionTracker):
     def __init__(
         self,
@@ -128,19 +133,18 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         resnet_version: Optional[Literal[18, 34, 50, 101, 152]] = 18,
         pretrained: Optional[bool] = True,
         representation_dropout_rate: Optional[float] = 0.2,
-        last_resnet_layer_to_get: Optional[int] = -2, 
-        semi_super_losses_to_use: Optional[list] = None,      
+        last_resnet_layer_to_get: Optional[int] = -2,
+        semi_super_losses_to_use: Optional[list] = None,
     ) -> None:
         super().__init__(
-            num_targets, 
-            resnet_version, 
-            pretrained, 
-            representation_dropout_rate, 
-            last_resnet_layer_to_get
+            num_targets,
+            resnet_version,
+            pretrained,
+            representation_dropout_rate,
+            last_resnet_layer_to_get,
         )
         self.loss_params = loss_params
         self.loss_fuction_dict = get_losses_dict(semi_super_losses_to_use)
-
 
     @typechecked
     def training_step(self, data_batch: dict, batch_idx: int) -> dict:
@@ -151,17 +155,31 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
             self.representation_dropout(self.reshape_representation(representation))
         )  # TODO: consider removing representation dropout?
         # compute loss
-        tot_loss = MaskedRegressionMSELoss(true_keypoints, predicted_keypoints) 
+        tot_loss = MaskedRegressionMSELoss(true_keypoints, predicted_keypoints)
         us_representation = self.get_representations(unlabeled_imgs)
         predicted_us_keypoints = self.final_layer(
-            self.representation_dropout(self.reshape_representation(us_representation)) #Do we need dropout
+            self.representation_dropout(
+                self.reshape_representation(us_representation)
+            )  # Do we need dropout
         )
-        for loss_name, loss_fuct in self.loss_fuction_dict.items():
-            add_loss = self.loss_params[loss_name]["value"] * loss_fuct(predicted_us_keypoints, loss_params[loss_name])
+        for loss_name, loss_func in self.loss_fuction_dict.items():
+            add_loss = self.loss_params[loss_name]["weight"] * loss_func(
+                predicted_us_keypoints, **self.loss_params[loss_name]
+            )
             tot_loss += add_loss
+            # log individual losses
             self.log(
-            loss_name + "_loss",
-            add_loss,
+                loss_name + "_loss",
+                add_loss,
+                on_step=True,
+                on_epoch=True,
+                prog_bar=True,
+                logger=True,
+            )
+        # log the total loss
+        self.log(
+            "total_loss",
+            tot_loss,
             on_step=True,
             on_epoch=True,
             prog_bar=True,

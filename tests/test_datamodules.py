@@ -18,6 +18,13 @@ data_transform.append(
 )  # dlc dimensions need to be repeatably divisable by 2
 imgaug_transform = iaa.Sequential(data_transform)
 
+video_directory = os.path.join(
+    "/home/jovyan/mouseRunningData/unlabeled_videos"
+)  # DAN's
+# video_directory = os.path.join("unlabeled_videos")  # NICK's
+video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
+assert os.path.exists(video_files[0])
+
 regData = BaseTrackingDataset(
     root_directory="toy_datasets/toymouseRunningData",
     csv_path="CollectedData_.csv",
@@ -71,10 +78,10 @@ def test_UnlabeledDataModule():
     # TODO: make a short video in toydatasets
     # TODO: seperate into a heatmap test + regression test
     unlabeled_module_regression = UnlabeledDataModule(
-        regData, unlabeled_video_path=video_files[0]
+        regData, video_paths_list=video_files[0]
     )  # and default args
     unlabeled_module_heatmap = UnlabeledDataModule(
-        heatmapData, unlabeled_video_path=video_files[0]
+        heatmapData, video_paths_list=video_files[0]
     )  # and default args
     unlabeled_module_regression.setup()
     unlabeled_module_heatmap.setup()
@@ -101,14 +108,11 @@ def test_UnlabeledDataModule():
         384,
     )
 
+
 def test_PCA():
     unlabeled_module_heatmap = UnlabeledDataModule(
-        heatmapData, unlabeled_video_path=video_files[0]
+        heatmapData, video_paths_list=video_files[0]
     )
     unlabeled_module_heatmap.setup()
     unlabeled_module_heatmap.computePCA_params()
     print(unlabeled_module_heatmap.pca_param_dict)
-
-    
-
-
