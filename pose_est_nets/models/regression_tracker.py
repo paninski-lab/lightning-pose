@@ -155,19 +155,21 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
             self.representation_dropout(self.reshape_representation(representation))
         )  # TODO: consider removing representation dropout?
         # compute loss
-        tot_loss = MaskedRegressionMSELoss(true_keypoints, predicted_keypoints)
+        supervised_loss = MaskedRegressionMSELoss(true_keypoints, predicted_keypoints)
         us_representation = self.get_representations(unlabeled_imgs)
         predicted_us_keypoints = self.final_layer(
             self.representation_dropout(
                 self.reshape_representation(us_representation)
             )  # Do we need dropout
         )
+        tot_loss = 0.0
+        tot_loss += supervised_loss
         for loss_name, loss_func in self.loss_fuction_dict.items():
             add_loss = self.loss_params[loss_name]["weight"] * loss_func(
                 predicted_us_keypoints, **self.loss_params[loss_name]
             )
             tot_loss += add_loss
-            # log individual losses
+            # log individual unsupervised losses
             self.log(
                 loss_name + "_loss",
                 add_loss,
@@ -180,6 +182,15 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         self.log(
             "total_loss",
             tot_loss,
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+        )
+        # log the supervised loss
+        self.log(
+            "supervised_loss",
+            supervised_loss,
             on_step=True,
             on_epoch=True,
             prog_bar=True,
