@@ -32,9 +32,6 @@ heatmapData = HeatmapDataset(
     imgaug_transform=imgaug_transform,
 )
 
-#video_directory = os.path.join("/home/jovyan/mouseRunningData/unlabeled_videos") #DAN's
-video_directory = os.path.join("unlabeled_videos") #NICK's
-video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
 
 def test_base_datamodule():
 

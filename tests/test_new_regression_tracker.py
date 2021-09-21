@@ -6,6 +6,8 @@ import pytorch_lightning as pl
 import shutil
 from pose_est_nets.utils.wrappers import predict_plot_test_epoch
 from pose_est_nets.utils.IO import set_or_open_folder, load_object
+from pose_est_nets.data.datamodules import UnlabeledDataModule
+from pose_est_nets.data.datasets import BaseTrackingDataset
 from typing import Optional
 from pose_est_nets.models.regression_tracker import RegressionTracker, SemiSupervisedRegressionTracker
 
@@ -47,5 +49,24 @@ def test_forward():
 
 def test_semisupervised():
     #define unsupervised datamodule
-    model = SemiSupervisedRegressionTracker(resnet_version = 50, num_targets=34).to(_TORCH_DEVICE)
+    data_transform = []
+    data_transform.append(
+        iaa.Resize({"height": 384, "width": 384})
+    )  # dlc dimensions need to be repeatably divisable by 2
+    imgaug_transform = iaa.Sequential(data_transform)
+
+    dataset = BaseTrackingDataset(
+        root_directory="toy_datasets/toymouseRunningData",
+        csv_path="CollectedData_.csv",
+        header_rows=[1, 2],
+        imgaug_transform=imgaug_transform,
+    )
+    #video_directory = os.path.join("/home/jovyan/mouseRunningData/unlabeled_videos") #DAN's
+    video_directory = os.path.join("unlabeled_videos") #NICK's
+    video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
+    datamod = UnlabeledDataModule(dataset, video_files[0])
+    train_loader = datamod.train_dataloader()
+    pca_param_dict =
+    semi_super_losses_to_use = 
+    model = SemiSupervisedRegressionTracker(resnet_version = 50, num_targets=34, ).to(_TORCH_DEVICE)
     
