@@ -72,12 +72,20 @@ def test_semisupervised():
     # video_directory = os.path.join("unlabeled_videos")  # NICK's
     video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
     assert os.path.exists(video_files[0])
-    datamod = UnlabeledDataModule(dataset=dataset, video_paths_list=video_files[0])
-    # train_loader = datamod.train_dataloader()
-    stream = open("pose_est_nets/losses/default_hypers.yaml", "r")
+    datamod = UnlabeledDataModule(
+        dataset=dataset, video_paths_list=video_files[0], specialized_dataprep="pca"
+    )
     with open("pose_est_nets/losses/default_hypers.yaml") as f:
         loss_param_dict = yaml.load(f, Loader=yaml.FullLoader)
     semi_super_losses_to_use = ["pca"]
+
+    print(loss_param_dict)
+    for param_name, param_value in datamod.pca_param_dict[
+        semi_super_losses_to_use[0]
+    ].items():
+        loss_param_dict[semi_super_losses_to_use[0]][param_value] = param_value
+    print(loss_param_dict)
+
     model = SemiSupervisedRegressionTracker(
         resnet_version=50,
         num_targets=34,

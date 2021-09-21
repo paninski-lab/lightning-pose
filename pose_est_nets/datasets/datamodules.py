@@ -122,11 +122,12 @@ class UnlabeledDataModule(BaseDataModule):
         self,
         dataset,
         video_paths_list: List[str],
-        use_deterministic: Optional[bool] = False,
-        train_batch_size: Optional[int] = 16,
-        validation_batch_size: Optional[int] = 16,
-        test_batch_size: Optional[int] = 1,
-        num_workers: Optional[int] = 8,
+        use_deterministic: bool = False,
+        train_batch_size: int = 16,
+        validation_batch_size: int = 16,
+        test_batch_size: int = 1,
+        num_workers: int = 8,
+        specialized_dataprep: Optional[Literal["pca"]] = None,
     ):
         super().__init__(
             dataset,
@@ -139,7 +140,14 @@ class UnlabeledDataModule(BaseDataModule):
         self.video_paths_list = video_paths_list
         self.num_workers_for_unlabeled = num_workers // 2
         self.num_workers_for_labeled = num_workers // 2
+        print("i'm pre super setup")
+        super().setup()
+        print("i'm post super setup")
         self.setup_unlabeled()
+        print("i'm post setup unlabeled")
+        if specialized_dataprep == "pca":
+            self.computePCA_params()
+        print("i'm post pca compute")
 
     def setup_unlabeled(self):
         data_pipe = video_pipe(
@@ -164,8 +172,8 @@ class UnlabeledDataModule(BaseDataModule):
     # TODO: return something?
     def computePCA_params(  # Should only call this now if pca in loss name dict
         self,
-        components_to_keep: Optional[int] = 3,
-        empirical_epsilon_percentile: Optional[float] = 90.0,
+        components_to_keep: int = 3,
+        empirical_epsilon_percentile: float = 90.0,
     ) -> None:
         print("Computing PCA on the labels...")
         param_dict = {}
@@ -178,9 +186,19 @@ class UnlabeledDataModule(BaseDataModule):
             if self.fulldataset.imgaug_transform:
                 i = 0
                 for idx in indxs:
-                    data_arr[i] = super(
-                        type(self.fulldataset), self.fulldataset
-                    ).__getitem__(idx)[1]
+                    test_out = (
+                        super(type(self.fulldataset), self.fulldataset)
+                        .__getitem__(idx)[1]
+                        .reshape(-1, 2)
+                    )
+                    print("=====")
+                    print("====test_out.shape: {}".format(test_out.shape))
+                    print("====data_arr.shape: {}".format(data_arr.shape))
+                    data_arr[i] = (
+                        super(type(self.fulldataset), self.fulldataset)
+                        .__getitem__(idx)[1]
+                        .reshape(-1, 2)
+                    )
                     i += 1
         else:
             data_arr = (

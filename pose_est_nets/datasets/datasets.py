@@ -99,13 +99,16 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         Returns:
             None
         """
+        self.root_directory = root_directory
+        self.imgaug_transform = imgaug_transform
         csv_data = pd.read_csv(
             os.path.join(root_directory, csv_path), header=header_rows
         )
         self.image_names = list(csv_data.iloc[:, 0])
         self.labels = torch.tensor(csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32)
-        self.labels = self.labels.reshape(self.labels.shape[0], -1, 2)
-        self.imgaug_transform = imgaug_transform
+        self.labels = self.labels.reshape(
+            self.labels.shape[0], -1, 2
+        )  # converted to x,y coordinates
         if pytorch_transform_list is None:
             pytorch_transform_list = []  # make the None an empty list
         pytorch_transform_list += [
@@ -114,8 +117,10 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         ]
 
         self.pytorch_transform = transforms.Compose(pytorch_transform_list)
-        self.root_directory = root_directory
-        self.num_targets = self.labels.shape[1]
+        self.num_targets = (
+            self.labels.shape[1] * 2
+        )  # labels has been already transformed above
+        self.num_keypoints = self.labels.shape[1]
 
     @property
     def height(self):
@@ -149,12 +154,12 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             # get rid of the batch dim
             transformed_images = transformed_images.squeeze(0)
             transformed_keypoints = transformed_keypoints.squeeze(0)
+            # TODO: the problem below is that it messes up datasets.compute_heatmaps()
             transformed_keypoints = transformed_keypoints.reshape(
                 transformed_keypoints.shape[0] * transformed_keypoints.shape[1]
             )
-        print("in get item: {}".format(transformed_keypoints.shape))
         transformed_images = self.pytorch_transform(transformed_images)
-        print("images in get item: {}".format(transformed_images.shape))
+        assert transformed_keypoints.shape == (self.num_targets,)
 
         # ret = (transformed_images, torch.from_numpy(transformed_keypoints))
         return transformed_images, torch.from_numpy(transformed_keypoints)
@@ -216,27 +221,38 @@ class HeatmapDataset(BaseTrackingDataset):
         self.downsample_factor = downsample_factor
         self.sigma = 5
         self.output_sigma = 1.25  # should be sigma/2 ^downsample factor
-        self.output_shape = (
-            self.height // 2 ** self.downsample_factor,
-            self.width // 2 ** self.downsample_factor,
-        )
+        # self.output_shape = (
+        #     self.height // 2 ** self.downsample_factor,
+        #     self.width // 2 ** self.downsample_factor,
+        # )
 
         # Compute heatmaps as preprocessing step
         # check that max of heatmaps look good
-        self.compute_heatmaps()  # TODO: here we're computing the LABEL heatmaps which are saved to self. maybe explicitly have the outputs here
         self.num_targets = torch.numel(self.labels[0])
+        self.num_keypoints = self.num_targets // 2
+        self.compute_heatmaps()
+
+    @property
+    def output_shape(self):
+        return (
+            self.height // 2 ** self.downsample_factor,
+            self.width // 2 ** self.downsample_factor,
+        )
 
     def compute_heatmaps(self):
         label_heatmaps = []
         for idx in range(len(self.image_names)):
             x, y = super().__getitem__(idx)
             y_heatmap = draw_keypoints(
-                y.numpy(),
+                y.numpy().reshape(
+                    self.num_keypoints, 2
+                ),  # Note: super().__getitem__ returns flat labels, we reshape to (num_keypoints,2)
                 x.shape[-2],
                 x.shape[-1],
                 self.output_shape,
                 sigma=self.output_sigma,
             )
+            assert y_heatmap.shape == (*self.output_shape, self.num_keypoints)
             label_heatmaps.append(y_heatmap)
 
         self.label_heatmaps = torch.from_numpy(np.asarray(label_heatmaps)).float()
@@ -245,9 +261,6 @@ class HeatmapDataset(BaseTrackingDataset):
     def __getitem__(self, idx: int) -> Tuple[torch.tensor, torch.tensor]:
         x = super().__getitem__(idx)[0]  # could modify this if speed bottleneck
         y_heatmap = self.label_heatmaps[idx]
-        # print(x.shape)
-        # print(type((x, y_heatmap)))
-        # ret = (x, y_heatmap)
         return x, y_heatmap
 
     def get_fully_labeled_idxs(self):  # TODO: make shorter

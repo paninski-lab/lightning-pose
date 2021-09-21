@@ -10,7 +10,7 @@ import imgaug.augmenters as iaa
 from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
 from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
 from pytorch_lightning.trainer.supporters import CombinedLoader
-
+import numpy as np
 
 data_transform = []
 data_transform.append(
@@ -50,8 +50,7 @@ def test_base_datamodule():
         == torch.tensor([regModule.train_batch_size, 3, 384, 384])
     ).all()
     assert (
-        torch.tensor(batch[1].shape)
-        == torch.tensor([regModule.train_batch_size, 17, 2])
+        torch.tensor(batch[1].shape) == torch.tensor([regModule.train_batch_size, 34])
     ).all()
 
     heatmapModule = BaseDataModule(heatmapData)  # and default args
@@ -116,3 +115,11 @@ def test_PCA():
     unlabeled_module_heatmap.setup()
     unlabeled_module_heatmap.computePCA_params()
     print(unlabeled_module_heatmap.pca_param_dict)
+
+
+def test_reshape():
+    ints = np.arange(34)
+    ints_reshaped = ints.reshape(-1, 2)
+    ints_reverted = ints_reshaped.reshape(34)
+    assert (ints_reshaped[:, 0] == np.arange(0, 34, 2)).all()
+    assert (ints_reverted == ints).all()
