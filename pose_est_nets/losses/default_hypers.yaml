@@ -1,7 +1,7 @@
 pca: # loss = projection onto the discarded eigenvectors
   weight: 0.6
-  discarded_eigenvectors: None
-  epsilon: None
+  discarded_eigenvectors: None # Computed per dataset
+  epsilon: None # Computed per dataset
 temporal: # loss = norm of distance between successive timepoints
   weight: 0.7
   epsilon: None
