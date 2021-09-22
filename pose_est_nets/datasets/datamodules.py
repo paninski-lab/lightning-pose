@@ -210,28 +210,19 @@ class UnlabeledDataModule(BaseDataModule):
                         type(self.train_set), self.train_set
                     ).__getitem__(i)[1]
 
-        #################### CHANGES NANS TO ZEROES FOR PURELY TESTING PURPOSES #############################
-        # nan_indices = torch.nonzero(torch.isnan(data_arr))
-        # for idx in nan_indices:
-        #     data_arr[idx] = torch.zeros(size=data_arr[0].shape)
-        # nan_indices = torch.nonzero(torch.isnan(data_arr))
-        ######################################################################
-
         # TODO: format_mouse_data is specific to Rick's dataset, change when we're scaling to more data sources
         arr_for_pca = format_mouse_data(data_arr)
-        print(arr_for_pca.shape)
-        nan_annotated = torch.isnan(arr_for_pca)
-        
-        good_indices = torch.nonzero(torch.logical_not(torch.isnan(arr_for_pca)))
-        print(nan_indices)
-        print(good_indices)
-        good_arr_for_pca = arr_for_pca.index_select()
+        bad_indices = torch.nonzero(torch.isnan(arr_for_pca))
+        all_indices = [i for i in range(arr_for_pca.shape[1])]
+        bad_indices = bad_indices[:, 1]
+        good_indices = [x for x in all_indices if x not in bad_indices] #can I do comprehensions like this with tensors?
+        good_arr_for_pca = arr_for_pca.index_select(dim = 1, index = torch.tensor(good_indices))
         pca = PCA(n_components=4, svd_solver="full")
-        pca.fit(arr_for_pca.T)
+        pca.fit(good_arr_for_pca.T)
         print("Done!")
 
         print(
-            "arr_for_pca shape: {}".format(arr_for_pca.shape)
+            "arr_for_pca shape: {}".format(good_arr_for_pca.shape)
         )  # TODO: have prints as tests
         PCA_prints(pca, components_to_keep)  # print important params
         # mu = torch.mean(arr_for_pca, axis=1) # TODO: needed only for probabilistic version
