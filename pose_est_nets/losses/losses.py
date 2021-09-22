@@ -3,6 +3,7 @@ from typing import List, Callable, Dict, Any, Optional, Literal
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 from torch.nn import functional as F
+from pose_est_nets.utils.heatmap_tracker_utils import format_mouse_data
 
 patch_typeguard()  # use before @typechecked
 
@@ -50,15 +51,18 @@ def MaskedMSEHeatmapLoss(
 # what are we doing about NANS?
 def MultiviewPCALoss(
     # TODO: y_hat should be already reshaped? if so, change below
-    reshaped_maxima_preds: TensorType["Batch_Size", "Num_Keypoints", 2, float],
-    discarded_evecs: TensorType["Views_Times_Two", "Num_Discarded_Evecs", float],
+    reshaped_maxima_preds: TensorType["Batch_Size", "Num_Targets", float], #Num_Targets = 2 * Num_Keypoints
+    discarded_eigenvectors: TensorType["Views_Times_Two", "Num_Discarded_Evecs", float],
     epsilon: TensorType[float],
+    **kwargs
 ) -> TensorType[float]:
     """assume that we have keypoints after find_subpixel_maxima
     and that we have discarded confidence here, and that keypoints were reshaped"""
     # TODO: consider avoiding the transposes
+    reshaped_maxima_preds = reshaped_maxima_preds.reshape(reshaped_maxima_preds.shape[0], -1, 2)
+    reshaped_maxima_preds = format_mouse_data(reshaped_maxima_preds) #TODO: get rid of dataset dependence
     abs_proj_discarded = torch.abs(
-        torch.matmul(reshaped_maxima_preds.T, discarded_evecs.T)
+        torch.matmul(reshaped_maxima_preds.T, discarded_eigenvectors.T)
     )
     epsilon_masked_proj = abs_proj_discarded.masked_fill(
         mask=abs_proj_discarded > epsilon, value=0.0

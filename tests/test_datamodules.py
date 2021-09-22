@@ -11,6 +11,7 @@ from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
 from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
 from pytorch_lightning.trainer.supporters import CombinedLoader
 import numpy as np
+import yaml
 
 data_transform = []
 data_transform.append(
@@ -18,10 +19,10 @@ data_transform.append(
 )  # dlc dimensions need to be repeatably divisable by 2
 imgaug_transform = iaa.Sequential(data_transform)
 
-video_directory = os.path.join(
-    "/home/jovyan/mouseRunningData/unlabeled_videos"
-)  # DAN's
-# video_directory = os.path.join("unlabeled_videos")  # NICK's
+# video_directory = os.path.join(
+#     "/home/jovyan/mouseRunningData/unlabeled_videos"
+# )  # DAN's
+video_directory = os.path.join("unlabeled_videos")  # NICK's
 video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
 assert os.path.exists(video_files[0])
 
@@ -39,6 +40,8 @@ heatmapData = HeatmapDataset(
     imgaug_transform=imgaug_transform,
 )
 
+with open("pose_est_nets/losses/default_hypers.yaml") as f:
+        loss_param_dict = yaml.load(f, Loader=yaml.FullLoader)
 
 def test_base_datamodule():
 
@@ -110,11 +113,11 @@ def test_UnlabeledDataModule():
 
 def test_PCA():
     unlabeled_module_heatmap = UnlabeledDataModule(
-        heatmapData, video_paths_list=video_files[0]
+        heatmapData, video_paths_list=video_files[0], loss_param_dict = loss_param_dict, specialized_dataprep = 'pca'
     )
-    unlabeled_module_heatmap.setup()
-    unlabeled_module_heatmap.computePCA_params()
-    print(unlabeled_module_heatmap.pca_param_dict)
+    #unlabeled_module_heatmap.setup()
+    #unlabeled_module_heatmap.computePCA_params()
+    #print(unlabeled_module_heatmap.pca_param_dict)
 
 
 def test_reshape():

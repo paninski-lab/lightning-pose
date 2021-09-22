@@ -14,6 +14,7 @@ from sklearn.decomposition import PCA
 from pose_est_nets.utils.heatmap_tracker_utils import format_mouse_data
 from pose_est_nets.utils.dataset_utils import draw_keypoints
 from pose_est_nets.datasets.DALI import video_pipe, LightningWrapper
+from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
 import h5py
 from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
 from nvidia.dali import pipeline_def
@@ -128,6 +129,7 @@ class UnlabeledDataModule(BaseDataModule):
         test_batch_size: int = 1,
         num_workers: int = 8,
         specialized_dataprep: Optional[Literal["pca"]] = None,
+        loss_param_dict: Optional[dict] = None
     ):
         super().__init__(
             dataset,
@@ -145,6 +147,7 @@ class UnlabeledDataModule(BaseDataModule):
         print("i'm post super setup")
         self.setup_unlabeled()
         print("i'm post setup unlabeled")
+        self.loss_param_dict = loss_param_dict
         if specialized_dataprep == "pca":
             self.computePCA_params()
         print("i'm post pca compute")
@@ -176,10 +179,11 @@ class UnlabeledDataModule(BaseDataModule):
         empirical_epsilon_percentile: float = 90.0,
     ) -> None:
         print("Computing PCA on the labels...")
-        param_dict = {}
+        param_dict = self.loss_param_dict['pca']
         # Nick: Subset inherits from dataset, it doesn't have access to dataset.labels
         if type(self.train_set) == torch.utils.data.dataset.Subset:
             indxs = torch.tensor(self.train_set.indices)
+            regressionData = super(type(self.fulldataset), self.fulldataset) if type(self.fulldataset) == HeatmapDataset else self.fulldataset
             data_arr = torch.index_select(
                 self.fulldataset.labels.detach().clone(), 0, indxs
             )
@@ -187,17 +191,13 @@ class UnlabeledDataModule(BaseDataModule):
                 i = 0
                 for idx in indxs:
                     test_out = (
-                        super(type(self.fulldataset), self.fulldataset)
-                        .__getitem__(idx)[1]
-                        .reshape(-1, 2)
+                        regressionData.__getitem__(idx)[1].reshape(-1, 2)
                     )
                     print("=====")
                     print("====test_out.shape: {}".format(test_out.shape))
                     print("====data_arr.shape: {}".format(data_arr.shape))
                     data_arr[i] = (
-                        super(type(self.fulldataset), self.fulldataset)
-                        .__getitem__(idx)[1]
-                        .reshape(-1, 2)
+                        regressionData.__getitem__(idx)[1].reshape(-1, 2)
                     )
                     i += 1
         else:
@@ -211,15 +211,21 @@ class UnlabeledDataModule(BaseDataModule):
                     ).__getitem__(i)[1]
 
         #################### CHANGES NANS TO ZEROES FOR PURELY TESTING PURPOSES #############################
-        nan_indices = torch.nonzero(torch.isnan(data_arr))
-        for idx in nan_indices:
-            data_arr[idx] = torch.zeros(size=data_arr[0].shape)
-        nan_indices = torch.nonzero(torch.isnan(data_arr))
+        # nan_indices = torch.nonzero(torch.isnan(data_arr))
+        # for idx in nan_indices:
+        #     data_arr[idx] = torch.zeros(size=data_arr[0].shape)
+        # nan_indices = torch.nonzero(torch.isnan(data_arr))
         ######################################################################
 
         # TODO: format_mouse_data is specific to Rick's dataset, change when we're scaling to more data sources
         arr_for_pca = format_mouse_data(data_arr)
-
+        print(arr_for_pca.shape)
+        nan_annotated = torch.isnan(arr_for_pca)
+        
+        good_indices = torch.nonzero(torch.logical_not(torch.isnan(arr_for_pca)))
+        print(nan_indices)
+        print(good_indices)
+        good_arr_for_pca = arr_for_pca.index_select()
         pca = PCA(n_components=4, svd_solver="full")
         pca.fit(arr_for_pca.T)
         print("Done!")
@@ -258,8 +264,7 @@ class UnlabeledDataModule(BaseDataModule):
             dtype=torch.float32,
             device=_TORCH_DEVICE,  # TODO: be careful for multinode
         )
-
-        self.pca_param_dict = param_dict
+        #self.pca_param_dict = param_dict
 
     def unlabeled_dataloader(self):
         return self.semi_supervised_loader
@@ -271,7 +276,7 @@ class UnlabeledDataModule(BaseDataModule):
             "labeled": DataLoader(
                 self.train_set,
                 batch_size=self.train_batch_size,
-                num_workers=self.num_workers_for_labeled,
+                num_workers=self.num_workers_for_labeled
             ),
             "unlabeled": self.unlabeled_dataloader(),
         }

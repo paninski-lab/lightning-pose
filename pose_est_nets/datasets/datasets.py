@@ -221,10 +221,6 @@ class HeatmapDataset(BaseTrackingDataset):
         self.downsample_factor = downsample_factor
         self.sigma = 5
         self.output_sigma = 1.25  # should be sigma/2 ^downsample factor
-        # self.output_shape = (
-        #     self.height // 2 ** self.downsample_factor,
-        #     self.width // 2 ** self.downsample_factor,
-        # )
 
         # Compute heatmaps as preprocessing step
         # check that max of heatmaps look good
