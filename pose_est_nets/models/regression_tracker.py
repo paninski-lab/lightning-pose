@@ -96,13 +96,10 @@ class RegressionTracker(BaseFeatureExtractor):
         self, data_batch: list, stage: Optional[Literal["val", "test"]] = None
     ):
         images, keypoints = data_batch
-        print("images {}".format(images.shape))
-        print("keypoints {}".format(keypoints.shape))
         representation = self.get_representations(images)
         predicted_keypoints = self.final_layer(
             self.reshape_representation(representation)
         )
-        print("predicted_keypoints {}".format(predicted_keypoints.shape))
         loss = MaskedRegressionMSELoss(keypoints, predicted_keypoints)
         # TODO: do we need other metrics?
         if stage:
@@ -165,8 +162,7 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         tot_loss += supervised_loss
         for loss_name, loss_func in self.loss_function_dict.items():
             add_loss = self.loss_params[loss_name]["weight"] * loss_func(
-                predicted_us_keypoints,
-                **self.loss_params[loss_name] 
+                predicted_us_keypoints, **self.loss_params[loss_name]
             )
             tot_loss += add_loss
             # log individual unsupervised losses

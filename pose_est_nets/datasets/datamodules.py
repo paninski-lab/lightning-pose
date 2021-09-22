@@ -13,6 +13,9 @@ from tqdm import tqdm
 from sklearn.decomposition import PCA
 from pose_est_nets.utils.heatmap_tracker_utils import format_mouse_data
 from pose_est_nets.utils.dataset_utils import draw_keypoints
+from pose_est_nets.datasets.utils import (
+    clean_any_nans,
+)  # TODO: merge the two utils above
 from pose_est_nets.datasets.DALI import video_pipe, LightningWrapper
 from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
 import h5py
@@ -129,7 +132,7 @@ class UnlabeledDataModule(BaseDataModule):
         test_batch_size: int = 1,
         num_workers: int = 8,
         specialized_dataprep: Optional[Literal["pca"]] = None,
-        loss_param_dict: Optional[dict] = None
+        loss_param_dict: Optional[dict] = None,
     ):
         super().__init__(
             dataset,
@@ -142,15 +145,11 @@ class UnlabeledDataModule(BaseDataModule):
         self.video_paths_list = video_paths_list
         self.num_workers_for_unlabeled = num_workers // 2
         self.num_workers_for_labeled = num_workers // 2
-        print("i'm pre super setup")
         super().setup()
-        print("i'm post super setup")
         self.setup_unlabeled()
-        print("i'm post setup unlabeled")
         self.loss_param_dict = loss_param_dict
         if specialized_dataprep == "pca":
             self.computePCA_params()
-        print("i'm post pca compute")
 
     def setup_unlabeled(self):
         data_pipe = video_pipe(
@@ -179,26 +178,23 @@ class UnlabeledDataModule(BaseDataModule):
         empirical_epsilon_percentile: float = 90.0,
     ) -> None:
         print("Computing PCA on the labels...")
-        param_dict = self.loss_param_dict['pca']
+        param_dict = self.loss_param_dict["pca"]
         # Nick: Subset inherits from dataset, it doesn't have access to dataset.labels
         if type(self.train_set) == torch.utils.data.dataset.Subset:
             indxs = torch.tensor(self.train_set.indices)
-            regressionData = super(type(self.fulldataset), self.fulldataset) if type(self.fulldataset) == HeatmapDataset else self.fulldataset
+            regressionData = (
+                super(type(self.fulldataset), self.fulldataset)
+                if type(self.fulldataset) == HeatmapDataset
+                else self.fulldataset
+            )
             data_arr = torch.index_select(
                 self.fulldataset.labels.detach().clone(), 0, indxs
             )
             if self.fulldataset.imgaug_transform:
                 i = 0
                 for idx in indxs:
-                    test_out = (
-                        regressionData.__getitem__(idx)[1].reshape(-1, 2)
-                    )
-                    print("=====")
-                    print("====test_out.shape: {}".format(test_out.shape))
-                    print("====data_arr.shape: {}".format(data_arr.shape))
-                    data_arr[i] = (
-                        regressionData.__getitem__(idx)[1].reshape(-1, 2)
-                    )
+                    test_out = regressionData.__getitem__(idx)[1].reshape(-1, 2)
+                    data_arr[i] = regressionData.__getitem__(idx)[1].reshape(-1, 2)
                     i += 1
         else:
             data_arr = (
@@ -212,21 +208,17 @@ class UnlabeledDataModule(BaseDataModule):
 
         # TODO: format_mouse_data is specific to Rick's dataset, change when we're scaling to more data sources
         arr_for_pca = format_mouse_data(data_arr)
-        bad_indices = torch.nonzero(torch.isnan(arr_for_pca))
-        all_indices = [i for i in range(arr_for_pca.shape[1])]
-        bad_indices = bad_indices[:, 1]
-        good_indices = [x for x in all_indices if x not in bad_indices] #can I do comprehensions like this with tensors?
-        good_arr_for_pca = arr_for_pca.index_select(dim = 1, index = torch.tensor(good_indices))
+        print("initial_arr_for_pca shape: {}".format(arr_for_pca.shape))
+        # Dan's cleanup:
+        good_arr_for_pca = clean_any_nans(arr_for_pca, dim=0)
         pca = PCA(n_components=4, svd_solver="full")
         pca.fit(good_arr_for_pca.T)
         print("Done!")
 
         print(
-            "arr_for_pca shape: {}".format(good_arr_for_pca.shape)
+            "good_arr_for_pca shape: {}".format(good_arr_for_pca.shape)
         )  # TODO: have prints as tests
         PCA_prints(pca, components_to_keep)  # print important params
-        # mu = torch.mean(arr_for_pca, axis=1) # TODO: needed only for probabilistic version
-        # param_dict["obs_offset"] = mu  # TODO: needed only for probabilistic version
         param_dict["kept_eigenvectors"] = torch.tensor(
             pca.components_[:components_to_keep],
             dtype=torch.float32,
@@ -255,7 +247,7 @@ class UnlabeledDataModule(BaseDataModule):
             dtype=torch.float32,
             device=_TORCH_DEVICE,  # TODO: be careful for multinode
         )
-        #self.pca_param_dict = param_dict
+        # self.pca_param_dict = param_dict
 
     def unlabeled_dataloader(self):
         return self.semi_supervised_loader
@@ -267,7 +259,7 @@ class UnlabeledDataModule(BaseDataModule):
             "labeled": DataLoader(
                 self.train_set,
                 batch_size=self.train_batch_size,
-                num_workers=self.num_workers_for_labeled
+                num_workers=self.num_workers_for_labeled,
             ),
             "unlabeled": self.unlabeled_dataloader(),
         }
