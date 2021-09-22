@@ -1,5 +1,6 @@
 import os
 import torch
+import numpy as np
 import torchvision.transforms as transforms
 import pytest
 import pytorch_lightning as pl
@@ -66,10 +67,12 @@ def test_semisupervised():
         header_rows=[1, 2],
         imgaug_transform=imgaug_transform,
     )
-    # video_directory = os.path.join(
-    #     "/home/jovyan/mouseRunningData/unlabeled_videos"
-    # )  # DAN's
-    video_directory = os.path.join("unlabeled_videos")  # NICK's
+    if os.path.exists("/home/jovyan"):
+        video_directory = os.path.join(
+            "/home/jovyan/mouseRunningData/unlabeled_videos"
+        )  # DAN's
+    else:
+        video_directory = os.path.join("unlabeled_videos")  # NICK's
     video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
     assert os.path.exists(video_files[0])
     with open("pose_est_nets/losses/default_hypers.yaml") as f:
@@ -77,7 +80,10 @@ def test_semisupervised():
     print(loss_param_dict)
     semi_super_losses_to_use = ["pca"]
     datamod = UnlabeledDataModule(
-        dataset=dataset, video_paths_list=video_files[0], specialized_dataprep="pca", loss_param_dict = loss_param_dict
+        dataset=dataset,
+        video_paths_list=video_files[0],
+        specialized_dataprep="pca",
+        loss_param_dict=loss_param_dict,
     )
     # for param_name, param_value in datamod.pca_param_dict[
     #     semi_super_losses_to_use[0]
@@ -98,3 +104,26 @@ def test_semisupervised():
         auto_scale_batch_size=False,
     )  # auto_scale_batch_size not working
     trainer.fit(model=model, datamodule=datamod)
+
+
+def test_nan_cleanup():
+    # TODO: move to datamodules tests? used in pca for reshaped arr
+    data = torch.rand(size=(4, 7))
+    # in two different columns (i.e., body parts) make one view invisble
+    data[[0, 1, 2, 3], [2, 2, 6, 6]] = torch.tensor(np.nan)
+    nan_bool = (
+        torch.sum(torch.isnan(data), dim=0) > 0
+    )  # those columns (keypoints) that have more than zero nans
+    assert nan_bool[2] == True
+    assert nan_bool[6] == True
+    clean_data = data[:, ~nan_bool]
+    assert clean_data.shape == (4, 5)
+
+    def clean_any_nans(data: torch.tensor, dim: int) -> torch.tensor:
+        nan_bool = (
+            torch.sum(torch.isnan(data), dim=dim) > 0
+        )  # e.g., when dim == 0, those columns (keypoints) that have more than zero nans
+        return data[:, ~nan_bool]
+
+    out = clean_any_nans(data, 0)
+    assert (out == clean_data).all()
