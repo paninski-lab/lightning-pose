@@ -111,13 +111,12 @@ def test_UnlabeledDataModule():
     )
 
 
-def test_PCA():
+def test_PCA(): #TODO FINISH WRITING TEST
     unlabeled_module_heatmap = UnlabeledDataModule(
         heatmapData, video_paths_list=video_files[0], loss_param_dict = loss_param_dict, specialized_dataprep = 'pca'
     )
     #unlabeled_module_heatmap.setup()
-    #unlabeled_module_heatmap.computePCA_params()
-    #print(unlabeled_module_heatmap.pca_param_dict)
+    #unlabeled_module_heatmap.computePCA_params() #These get automatically run now
 
 
 def test_reshape():
