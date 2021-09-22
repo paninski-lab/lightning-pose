@@ -9,7 +9,12 @@ from pose_est_nets.utils.wrappers import predict_plot_test_epoch
 from pose_est_nets.utils.IO import set_or_open_folder, load_object
 from typing import Optional
 import torchvision
-from pose_est_nets.models.new_heatmap_tracker import HeatmapTracker
+from pose_est_nets.datasets.datasets import HeatmapDataset
+from pose_est_nets.datasets.datamodules import UnlabeledDataModule
+from pose_est_nets.models.new_heatmap_tracker import HeatmapTracker, SemiSupervisedHeatmapTracker
+import imgaug.augmenters as iaa
+import yaml
+from pytorch_lightning.trainer.supporters import CombinedLoader
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -76,7 +81,82 @@ def test_heatmaps_from_representations():
     ).all()
 
 
-def test_subpixmaxima():  # Finish writing test
-    from pose_est_nets.utils.heatmap_tracker_utils import SubPixelMaxima
+def test_unsupervised():  # TODO Finish writing test
+    data_transform = []
+    data_transform.append(
+        iaa.Resize({"height": 384, "width": 384})
+    )  # dlc dimensions need to be repeatably divisable by 2
+    imgaug_transform = iaa.Sequential(data_transform)
+    dataset = HeatmapDataset(
+        root_directory="toy_datasets/toymouseRunningData",
+        csv_path="CollectedData_.csv",
+        header_rows=[1, 2],
+        imgaug_transform=imgaug_transform
+    )
+    # video_directory = os.path.join(
+    #     "/home/jovyan/mouseRunningData/unlabeled_videos"
+    # )  # DAN's
+    video_directory = os.path.join("unlabeled_videos")  # NICK's
+    video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
+    assert os.path.exists(video_files[0])
+    with open("pose_est_nets/losses/default_hypers.yaml") as f:
+        loss_param_dict = yaml.load(f, Loader=yaml.FullLoader)
 
-    # spm = SubPixelMaxima(output)
+    datamod = UnlabeledDataModule(
+        dataset = dataset,
+        video_paths_list=video_files[0], 
+        specialized_dataprep="pca", 
+        loss_param_dict = loss_param_dict
+    )
+    datamod.setup()
+    
+    semi_super_losses_to_use = ["pca"]
+    model = SemiSupervisedHeatmapTracker(
+        resnet_version = 18,
+        num_targets=34,
+        loss_params = loss_param_dict,
+        semi_super_losses_to_use = semi_super_losses_to_use,
+        output_shape = dataset.output_shape
+    ).to(_TORCH_DEVICE)
+    loader = CombinedLoader(datamod.train_dataloader())
+    out = next(iter(loader))
+    assert list(out.keys())[0] == "labeled"
+    assert list(out.keys())[1] == "unlabeled"
+    assert out["unlabeled"].shape == (
+        datamod.train_batch_size,
+        3,
+        384,
+        384,
+    )
+    print(out["labeled"][0].device)
+    print(out["unlabeled"].device)
+    print(model.device)
+    out_heatmaps_labeled = model.forward(out["labeled"][0].to(_TORCH_DEVICE))
+    out_heatmaps_unlabeled = model.forward(out["unlabeled"])
+
+    assert out_heatmaps_labeled.shape == (
+        datamod.train_batch_size,
+        model.num_keypoints,
+        384 // (2 ** model.downsample_factor),
+        384 // (2 ** model.downsample_factor),
+    )
+
+    assert out_heatmaps_unlabeled.shape == (
+        datamod.train_batch_size,
+        model.num_keypoints,
+        384 // (2 ** model.downsample_factor),
+        384 // (2 ** model.downsample_factor),
+    )
+
+    spm_l, spm_u = model.run_subpixelmaxima(out_heatmaps_labeled, out_heatmaps_unlabeled)
+
+    print(spm_l.shape, spm_u.shape)
+    assert(spm_l.shape == (datamod.train_batch_size, model.num_targets))
+    
+    trainer = pl.Trainer(
+        gpus=1 if _TORCH_DEVICE == "cuda" else 0,
+        max_epochs=1,
+        log_every_n_steps=1,
+        auto_scale_batch_size=False,
+    )  # auto_scale_batch_size not working
+    trainer.fit(model=model, datamodule=datamod)

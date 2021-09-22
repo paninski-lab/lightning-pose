@@ -257,7 +257,7 @@ class SubPixelMaxima:  # Add tensor typing
             self.confidence_scale,
         )
 
-        if not heatmaps_2:
+        if heatmaps_2 == None:
             return self.use_threshold(keypoints_1)
 
         keypoints_2 = find_subpixel_maxima(
@@ -282,7 +282,7 @@ class SubPixelMaxima:  # Add tensor typing
             batch_dim, num_bodyparts, 3
         )
         keypoints = keypoints[:, :, :2]
-        return keypoints
+        return keypoints.reshape(keypoints.shape[0], -1)
 
 
 def format_mouse_data(data_arr):

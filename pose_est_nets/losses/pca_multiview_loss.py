@@ -11,8 +11,10 @@ patch_typeguard()  # use before @typechecked
 def MultiviewPCALoss(
     # TODO: y_hat should be already reshaped? if so, change below
     reshaped_maxima_preds: TensorType["Batch_Size", "Num_Keypoints", 2, float],
-    discarded_evecs: TensorType["Views_Times_Two", "Num_Discarded_Evecs", float],
+    discarded_eigenvectors: TensorType["Views_Times_Two", "Num_Discarded_Evecs", float],
+    #kept_eigenvectors: TensorType["Views_Times_Two", "Num_Kept_Evecs", float],
     epsilon: TensorType[float],
+    **kwargs
 ) -> TensorType[float]:
     """assume that we have keypoints after find_subpixel_maxima
     and that we have discarded confidence here, and that keypoints were reshaped"""

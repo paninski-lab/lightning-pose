@@ -10,8 +10,7 @@ from typing_extensions import Literal
 from typeguard import typechecked
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from pose_est_nets.models.base_resnet import BaseFeatureExtractor
-from pose_est_nets.losses.losses import MaskedRegressionMSELoss
-from pose_est_nets.losses.losses import get_losses_dict
+from pose_est_nets.losses.losses import MaskedRegressionMSELoss, get_losses_dict
 
 patch_typeguard()  # use before @typechecked
 
@@ -144,7 +143,7 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
             last_resnet_layer_to_get,
         )
         self.loss_params = loss_params
-        self.loss_fuction_dict = get_losses_dict(semi_super_losses_to_use)
+        self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
 
     @typechecked
     def training_step(self, data_batch: dict, batch_idx: int) -> dict:
@@ -164,9 +163,10 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         )
         tot_loss = 0.0
         tot_loss += supervised_loss
-        for loss_name, loss_func in self.loss_fuction_dict.items():
+        for loss_name, loss_func in self.loss_function_dict.items():
             add_loss = self.loss_params[loss_name]["weight"] * loss_func(
-                predicted_us_keypoints, **self.loss_params[loss_name]
+                predicted_us_keypoints,
+                **self.loss_params[loss_name] 
             )
             tot_loss += add_loss
             # log individual unsupervised losses
