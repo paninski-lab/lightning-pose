@@ -1,0 +1,9 @@
+losses_to_use: ["pca"]
+pca: # loss = projection onto the discarded eigenvectors
+  weight: 0.6 # in front of PCA loss
+  discarded_eigenvectors: None # Computed per dataset
+  kept_eigenvectors: None # Computed per dataset
+  epsilon: None # Computed per dataset
+temporal: # loss = norm of distance between successive timepoints
+  weight: 0.7  # in front of temporal loss
+  epsilon: None # for epsilon insensitive rectification
