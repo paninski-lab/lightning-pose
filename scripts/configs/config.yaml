@@ -1,0 +1,3 @@
+defaults:
+  - training: train_params
+  - losses: loss_params
