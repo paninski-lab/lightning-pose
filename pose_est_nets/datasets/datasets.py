@@ -219,7 +219,7 @@ class HeatmapDataset(BaseTrackingDataset):
             self.labels = torch.tensor(self.labels)
 
         self.downsample_factor = downsample_factor
-        self.sigma = 5
+        #self.sigma = 5
         self.output_sigma = 1.25  # should be sigma/2 ^downsample factor
 
         # Compute heatmaps as preprocessing step

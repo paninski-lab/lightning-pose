@@ -131,7 +131,7 @@ class UnlabeledDataModule(BaseDataModule):
         validation_batch_size: int = 16,
         test_batch_size: int = 1,
         num_workers: int = 8,
-        specialized_dataprep: Optional[Literal["pca"]] = None,
+        specialized_dataprep: Optional[Literal["pca"]] = None, #Get rid of optional?
         loss_param_dict: Optional[dict] = None,
     ):
         super().__init__(
@@ -148,9 +148,9 @@ class UnlabeledDataModule(BaseDataModule):
         super().setup()
         self.setup_unlabeled()
         self.loss_param_dict = loss_param_dict
-        if specialized_dataprep == "pca":
+        if "pca" in specialized_dataprep:
             self.computePCA_params()
-
+        
     def setup_unlabeled(self):
         data_pipe = video_pipe(
             batch_size=_BATCH_SIZE_UNSUPERVISED,
@@ -247,7 +247,6 @@ class UnlabeledDataModule(BaseDataModule):
             dtype=torch.float32,
             device=_TORCH_DEVICE,  # TODO: be careful for multinode
         )
-        # self.pca_param_dict = param_dict
 
     def unlabeled_dataloader(self):
         return self.semi_supervised_loader

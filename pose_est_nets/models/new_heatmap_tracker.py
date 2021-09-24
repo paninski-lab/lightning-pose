@@ -173,7 +173,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         return heatmaps
 
     @typechecked
-    def training_step(self, data_batch: Tuple, batch_idx: int) -> dict:
+    def training_step(self, data_batch: List, batch_idx: int) -> dict:
         images, true_heatmaps = data_batch  # read batch
         predicted_heatmaps = self.forward(images)  # images -> heatmaps
         heatmap_loss = MaskedMSEHeatmapLoss(true_heatmaps, predicted_heatmaps)
@@ -201,7 +201,7 @@ class HeatmapTracker(BaseFeatureExtractor):
 
     def validation_step(
         self, validation_batch: List, batch_idx
-    ):  # validation_batch: Tuple
+    ): 
         self.evaluate(validation_batch, "val")
 
     def test_step(self, test_batch: List, batch_idx):
