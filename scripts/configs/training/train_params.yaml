@@ -7,8 +7,7 @@ num_workers: 4
 early_stop_patience: 6
 unfreezing_epoch: 50
 dropout_rate: 0.1
-image_resize_dims: 
-  height: 384 
-  width: 384 # TODO: move to image/transform yaml
-data_dir: 
-video_dir:
+
+
+
+
