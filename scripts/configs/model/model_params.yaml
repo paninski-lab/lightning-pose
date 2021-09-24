@@ -1,0 +1,3 @@
+losses_to_use: ["pca"]
+resnet_version: 50
+semi_supervised: True

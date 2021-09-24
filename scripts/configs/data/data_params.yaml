@@ -1,0 +1,12 @@
+image_resize_dims: 
+  height: 384 
+  width: 384 # TODO: move to image/transform yaml
+data_dir: "/home/ubuntu/pose-estimation-nets/toy_datasets/toymouseRunningData/"
+video_dir: "/home/ubuntu/pose-estimation-nets/unlabeled_videos/180726_005.mp4"
+csv_path: "CollectedData_.csv"
+data_type: "heatmap" #heatmap or regression
+header_rows: [1, 2]
+downsample_factor: 2
+num_targets: 34
+
+#we could parameters related to the ground truth heatmaps, sigma, confidence_scale, 
