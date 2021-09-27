@@ -7,6 +7,7 @@ from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
 from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
 from pose_est_nets.models.regression_tracker import RegressionTracker, SemiSupervisedRegressionTracker
 from pose_est_nets.models.new_heatmap_tracker import HeatmapTracker, SemiSupervisedHeatmapTracker
+from pose_est_nets.utils.fiftyone_plotting_utils import evaluate
 
 import os
 
@@ -14,7 +15,7 @@ _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # TODO: move the datapaths from cfg.training
 @hydra.main(config_path="configs", config_name="config")
-def train(cfg: DictConfig) -> None:
+def train(cfg: DictConfig):
     print(cfg)
     data_transform = []
     data_transform.append(
@@ -34,7 +35,6 @@ def train(cfg: DictConfig) -> None:
             imgaug_transform=imgaug_transform         
         )
     elif cfg.data.data_type == 'heatmap':
-        print(OmegaConf.to_object(cfg.data.header_rows), type(OmegaConf.to_object(cfg.data.header_rows)))
         dataset = HeatmapDataset(
             root_directory=cfg.data.data_dir,
             csv_path=cfg.data.csv_path,
@@ -103,32 +103,17 @@ def train(cfg: DictConfig) -> None:
             )
     trainer = pl.Trainer(
         gpus=1 if _TORCH_DEVICE == "cuda" else 0,
-        max_epochs=1,
-        log_every_n_steps=1,
+        max_epochs=cfg.training.max_epochs,
+        log_every_n_steps=15,
     ) 
     trainer.fit(model=model, datamodule=datamod)
+
+    #EVALUATION AND PLOTTING STARTS HERE
+    evaluate(cfg, datamod, model, trainer)
+
+    #return model
     
 if __name__ == "__main__":
-    train()
-
-
-#     print(OmegaConf.to_yaml(cfg))
-#     # Init dataset
-    
-#     print(dataset)
-
-#     video_files = [
-#         cfg.training.video_dir + "/" + f for f in os.listdir(cfg.training.video_dir)
-#     ]
-#     assert os.path.exists(
-#         video_files[0]
-#     )  # TODO: temporary. taking just the first video file
-
-#     # TODO: make sure that we're managing the discrepency between loss param dict and our new hydra approach
-#     # datamod = UnlabeledDataModule(
-#     #     dataset=dataset,
-#     #     video_paths_list=video_files[0],
-#     #     specialized_dataprep="pca",
-#     #     loss_param_dict=loss_param_dict,
-#     # )
+    train() #I think you get issues when you try to get return values from a hydra function=
+    #evaluate(cfg, datamod, model, trainer)
 

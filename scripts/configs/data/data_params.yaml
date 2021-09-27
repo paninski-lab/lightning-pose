@@ -1,6 +1,6 @@
 image_resize_dims: 
   height: 384 
-  width: 384 # TODO: move to image/transform yaml
+  width: 384
 data_dir: "/home/ubuntu/pose-estimation-nets/toy_datasets/toymouseRunningData/"
 video_dir: "/home/ubuntu/pose-estimation-nets/unlabeled_videos/180726_005.mp4"
 csv_path: "CollectedData_.csv"
