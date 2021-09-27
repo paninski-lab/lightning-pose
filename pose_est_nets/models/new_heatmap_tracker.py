@@ -65,6 +65,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         self.upsample_factor = torch.tensor(upsample_factor, device=self.device)
         self.confidence_scale = torch.tensor(confidence_scale, device=self.device)
         self.threshold = threshold
+        self.save_hyperparameters() #Necessary so we don't have to pass in model arguments when loading
         # self.device = device #might be done automatically by pytorch lightning
 
     @property
