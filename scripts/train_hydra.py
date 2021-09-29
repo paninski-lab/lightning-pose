@@ -5,9 +5,16 @@ from omegaconf import DictConfig, OmegaConf
 import imgaug.augmenters as iaa
 from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
 from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
-from pose_est_nets.models.regression_tracker import RegressionTracker, SemiSupervisedRegressionTracker
-from pose_est_nets.models.new_heatmap_tracker import HeatmapTracker, SemiSupervisedHeatmapTracker
+from pose_est_nets.models.regression_tracker import (
+    RegressionTracker,
+    SemiSupervisedRegressionTracker,
+)
+from pose_est_nets.models.new_heatmap_tracker import (
+    HeatmapTracker,
+    SemiSupervisedHeatmapTracker,
+)
 from pose_est_nets.utils.fiftyone_plotting_utils import evaluate
+from pytorch_lightning.loggers import TensorBoardLogger
 
 import os
 
@@ -27,93 +34,96 @@ def train(cfg: DictConfig):
         )
     )
     imgaug_transform = iaa.Sequential(data_transform)
-    if cfg.data.data_type == 'regression':
+    if cfg.data.data_type == "regression":
         dataset = BaseTrackingDataset(
             root_directory=cfg.data.data_dir,
             csv_path=cfg.data.csv_path,
             header_rows=OmegaConf.to_object(cfg.data.header_rows),
-            imgaug_transform=imgaug_transform         
+            imgaug_transform=imgaug_transform,
         )
-    elif cfg.data.data_type == 'heatmap':
+    elif cfg.data.data_type == "heatmap":
         dataset = HeatmapDataset(
             root_directory=cfg.data.data_dir,
             csv_path=cfg.data.csv_path,
             header_rows=OmegaConf.to_object(cfg.data.header_rows),
             imgaug_transform=imgaug_transform,
-            downsample_factor=cfg.data.downsample_factor
+            downsample_factor=cfg.data.downsample_factor,
         )
     else:
         print("INVALID DATASET SPECIFIED")
         exit()
 
-    if not (cfg.model['semi_supervised']):
+    if not (cfg.model["semi_supervised"]):
         datamod = BaseDataModule(
             dataset=dataset,
             train_batch_size=cfg.training.train_batch_size,
             validation_batch_size=cfg.training.val_batch_size,
             test_batch_size=cfg.training.test_batch_size,
-            num_workers=cfg.training.num_workers
+            num_workers=cfg.training.num_workers,
         )
-        if cfg.data.data_type == 'regression':
+        if cfg.data.data_type == "regression":
             model = RegressionTracker(
                 num_targets=cfg.data.num_targets,
-                resnet_version=50
+                resnet_version=cfg.model.resnet_version,
             )
 
-        elif cfg.data.data_type == 'heatmap':
+        elif cfg.data.data_type == "heatmap":
             model = HeatmapTracker(
                 num_targets=cfg.data.num_targets,
-                resnet_version=50,
+                resnet_version=cfg.model.resnet_version,
                 downsample_factor=cfg.data.downsample_factor,
-                output_shape=dataset.output_shape    
+                output_shape=dataset.output_shape,
             )
         else:
             print("INVALID DATASET SPECIFIED")
             exit()
-   
+
     else:
         loss_param_dict = OmegaConf.to_object(cfg.losses)
-        losses_to_use = OmegaConf.to_object(cfg.model.losses_to_use)    
+        losses_to_use = OmegaConf.to_object(cfg.model.losses_to_use)
         datamod = UnlabeledDataModule(
             dataset=dataset,
-            video_paths_list=cfg.data.video_dir, #just a single path for now
-            specialized_dataprep=losses_to_use, 
-            loss_param_dict=loss_param_dict, 
+            video_paths_list=cfg.data.video_dir,  # just a single path for now
+            specialized_dataprep=losses_to_use,
+            loss_param_dict=loss_param_dict,
             train_batch_size=cfg.training.train_batch_size,
             validation_batch_size=cfg.training.val_batch_size,
             test_batch_size=cfg.training.test_batch_size,
-            num_workers=cfg.training.num_workers
+            num_workers=cfg.training.num_workers,
         )
-        if cfg.data.data_type == 'regression':
+        if cfg.data.data_type == "regression":
             model = SemiSupervisedRegressionTracker(
                 num_targets=cfg.data.num_targets,
                 resnet_version=cfg.model.resnet_version,
-                loss_params=loss_param_dict,
-                semi_super_losses_to_use=losses_to_use
+                loss_params=datamod.loss_param_dict,
+                semi_super_losses_to_use=losses_to_use,
             )
 
-        elif cfg.data.data_type == 'heatmap':
+        elif cfg.data.data_type == "heatmap":
             model = SemiSupervisedHeatmapTracker(
                 num_targets=cfg.data.num_targets,
                 resnet_version=cfg.model.resnet_version,
                 downsample_factor=cfg.data.downsample_factor,
                 output_shape=dataset.output_shape,
-                loss_params=loss_param_dict,
-                semi_super_losses_to_use=losses_to_use
+                loss_params=datamod.loss_param_dict,
+                semi_super_losses_to_use=losses_to_use,
             )
-    trainer = pl.Trainer(
+    logger = TensorBoardLogger("tb_logs", name="my_test_model")
+    # TODO: add backbone refinement, add wandb?
+    trainer = pl.Trainer(  # TODO: be careful with the devices here if you want to scale to multiple gpus
         gpus=1 if _TORCH_DEVICE == "cuda" else 0,
         max_epochs=cfg.training.max_epochs,
-        log_every_n_steps=15,
-    ) 
+        log_every_n_steps=cfg.training.log_every_n_steps,
+        logger=logger,
+    )
     trainer.fit(model=model, datamodule=datamod)
 
-    #EVALUATION AND PLOTTING STARTS HERE
-    evaluate(cfg, datamod, model, trainer)
+    # EVALUATION AND PLOTTING STARTS HERE
+    # evaluate(cfg, datamod, model, trainer)
 
-    #return model
-    
+    # return model
+
+
 if __name__ == "__main__":
-    train() #I think you get issues when you try to get return values from a hydra function=
-    #evaluate(cfg, datamod, model, trainer)
-
+    train()  # I think you get issues when you try to get return values from a hydra function=
+    # evaluate(cfg, datamod, model, trainer)

@@ -13,7 +13,7 @@ from typeguard import typechecked
 import numpy as np
 from pose_est_nets.utils.heatmap_tracker_utils import (
     find_subpixel_maxima,
-    largest_factor
+    largest_factor,
 )
 from pose_est_nets.losses.losses import (
     MaskedMSEHeatmapLoss,
@@ -65,7 +65,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         self.upsample_factor = torch.tensor(upsample_factor, device=self.device)
         self.confidence_scale = torch.tensor(confidence_scale, device=self.device)
         self.threshold = threshold
-        self.save_hyperparameters() #Necessary so we don't have to pass in model arguments when loading
+        self.save_hyperparameters()  # Necessary so we don't have to pass in model arguments when loading
         # self.device = device #might be done automatically by pytorch lightning
 
     @property
@@ -200,9 +200,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         if stage:
             self.log(f"{stage}_loss", loss, prog_bar=True, logger=True)
 
-    def validation_step(
-        self, validation_batch: List, batch_idx
-    ): 
+    def validation_step(self, validation_batch: List, batch_idx):
         self.evaluate(validation_batch, "val")
 
     def test_step(self, test_batch: List, batch_idx):
@@ -222,9 +220,10 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
     def __init__(
         self,
         num_targets: int,
-        loss_params: dict,
+        loss_params: Optional[
+            dict
+        ] = None,  # having it optional so we can initialize a model without passing that in
         resnet_version: Literal[18, 34, 50, 101, 152] = 18,
-        # transfer: bool = False,
         downsample_factor: Literal[
             2, 3
         ] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
@@ -253,6 +252,16 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
         self.loss_params = loss_params
         print(self.loss_function_dict)
+        # self.save_hyperparameters()  # Should save loss_params with the model
+        # if self.loss_params is not None:
+        self.save_loss_param_dict()
+
+    def save_loss_param_dict(self) -> None:
+        for loss_name, param_dict in self.loss_params.items():
+            for key, val in param_dict.items():
+                if val is not None:  # we make it a tensor
+                    val = torch.tensor(val, dtype=torch.float32)
+                self.register_buffer(loss_name + "_" + key, val)
 
     @typechecked
     def training_step(self, data_batch: dict, batch_idx: int) -> dict:
@@ -261,15 +270,12 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         predicted_heatmaps = self.forward(labeled_imgs)
         supervised_loss = MaskedMSEHeatmapLoss(true_heatmaps, predicted_heatmaps)
         unlabeled_predicted_heatmaps = self.forward(unlabeled_imgs)
-        predicted_us_keypoints = self.run_subpixelmaxima(
-            unlabeled_predicted_heatmaps
-        )
+        predicted_us_keypoints = self.run_subpixelmaxima(unlabeled_predicted_heatmaps)
         tot_loss = 0.0
         tot_loss += supervised_loss
         for loss_name, loss_func in self.loss_function_dict.items():
             add_loss = self.loss_params[loss_name]["weight"] * loss_func(
-                predicted_us_keypoints,
-                **self.loss_params[loss_name] 
+                predicted_us_keypoints, **self.loss_params[loss_name]
             )
             tot_loss += add_loss
             # log individual unsupervised losses

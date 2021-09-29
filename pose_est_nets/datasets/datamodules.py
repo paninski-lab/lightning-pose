@@ -131,7 +131,7 @@ class UnlabeledDataModule(BaseDataModule):
         validation_batch_size: int = 16,
         test_batch_size: int = 1,
         num_workers: int = 8,
-        specialized_dataprep: Optional[Literal["pca"]] = None, #Get rid of optional?
+        specialized_dataprep: Optional[Literal["pca"]] = None,  # Get rid of optional?
         loss_param_dict: Optional[dict] = None,
     ):
         super().__init__(
@@ -150,7 +150,7 @@ class UnlabeledDataModule(BaseDataModule):
         self.loss_param_dict = loss_param_dict
         if "pca" in specialized_dataprep:
             self.computePCA_params()
-        
+
     def setup_unlabeled(self):
         data_pipe = video_pipe(
             batch_size=_BATCH_SIZE_UNSUPERVISED,
@@ -178,7 +178,6 @@ class UnlabeledDataModule(BaseDataModule):
         empirical_epsilon_percentile: float = 90.0,
     ) -> None:
         print("Computing PCA on the labels...")
-        param_dict = self.loss_param_dict["pca"]
         # Nick: Subset inherits from dataset, it doesn't have access to dataset.labels
         if type(self.train_set) == torch.utils.data.dataset.Subset:
             indxs = torch.tensor(self.train_set.indices)
@@ -219,12 +218,12 @@ class UnlabeledDataModule(BaseDataModule):
             "good_arr_for_pca shape: {}".format(good_arr_for_pca.shape)
         )  # TODO: have prints as tests
         PCA_prints(pca, components_to_keep)  # print important params
-        param_dict["kept_eigenvectors"] = torch.tensor(
+        self.loss_param_dict["pca"]["kept_eigenvectors"] = torch.tensor(
             pca.components_[:components_to_keep],
             dtype=torch.float32,
             device=_TORCH_DEVICE,  # TODO: be careful for multinode
         )
-        param_dict["discarded_eigenvectors"] = torch.tensor(
+        self.loss_param_dict["pca"]["discarded_eigenvectors"] = torch.tensor(
             pca.components_[components_to_keep:],
             dtype=torch.float32,
             device=_TORCH_DEVICE,  # TODO: be careful for multinode
@@ -235,14 +234,18 @@ class UnlabeledDataModule(BaseDataModule):
         proj_discarded = torch.abs(
             torch.matmul(
                 arr_for_pca.T,
-                param_dict["discarded_eigenvectors"].clone().detach().cpu().T,
+                self.loss_param_dict["pca"]["discarded_eigenvectors"]
+                .clone()
+                .detach()
+                .cpu()
+                .T,
             )
         )
         # setting axis = 0 generalizes to multiple discarded components
         epsilon = np.percentile(
             proj_discarded.numpy(), empirical_epsilon_percentile, axis=0
         )
-        param_dict["epsilon"] = torch.tensor(
+        self.loss_param_dict["pca"]["epsilon"] = torch.tensor(
             epsilon,
             dtype=torch.float32,
             device=_TORCH_DEVICE,  # TODO: be careful for multinode
