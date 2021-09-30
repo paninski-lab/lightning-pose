@@ -13,7 +13,7 @@ from pose_est_nets.models.new_heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
 )
-from pose_est_nets.utils.fiftyone_plotting_utils import evaluate
+from pose_est_nets.callbacks.freeze_unfreeze_callback import FeatureExtractorFreezeUnfreeze
 from pytorch_lightning.loggers import TensorBoardLogger
 
 import os
@@ -109,21 +109,24 @@ def train(cfg: DictConfig):
                 semi_super_losses_to_use=losses_to_use,
             )
     logger = TensorBoardLogger("tb_logs", name="my_test_model")
+    early_stopping = pl.callbacks.EarlyStopping(
+    monitor="val_loss", patience=100, mode="min"
+    )
+    lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval="epoch")
+
+    ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(monitor="val_loss")  
+    transfer_unfreeze_callback = FeatureExtractorFreezeUnfreeze(cfg.training.unfreezing_epoch) #Not used for now
     # TODO: add backbone refinement, add wandb?
     trainer = pl.Trainer(  # TODO: be careful with the devices here if you want to scale to multiple gpus
         gpus=1 if _TORCH_DEVICE == "cuda" else 0,
         max_epochs=cfg.training.max_epochs,
         log_every_n_steps=cfg.training.log_every_n_steps,
+        callbacks = [early_stopping, lr_monitor, ckpt_callback],
         logger=logger,
     )
     trainer.fit(model=model, datamodule=datamod)
 
-    # EVALUATION AND PLOTTING STARTS HERE
-    # evaluate(cfg, datamod, model, trainer)
-
-    # return model
-
 
 if __name__ == "__main__":
-    train()  # I think you get issues when you try to get return values from a hydra function=
-    # evaluate(cfg, datamod, model, trainer)
+    train()  # I think you get issues when you try to get return values from a hydra function
+
