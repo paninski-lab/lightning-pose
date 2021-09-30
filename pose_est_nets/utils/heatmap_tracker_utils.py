@@ -279,7 +279,7 @@ class SubPixelMaxima:  # Add tensor typing
         mask = torch.gt(keypoints[:, :, 2], num_threshold)
         mask = mask.unsqueeze(-1)
         keypoints = torch.masked_select(keypoints, mask).reshape(
-            batch_dim, num_bodyparts, 3
+            batch_dim, num_bodyparts, 3 #need to change this to take into account that some keypoints could be thresholded
         )
         keypoints = keypoints[:, :, :2]
         return keypoints.reshape(keypoints.shape[0], -1)
