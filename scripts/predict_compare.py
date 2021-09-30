@@ -16,7 +16,8 @@ import imgaug.augmenters as iaa
 from pose_est_nets.utils.fiftyone_plotting_utils import evaluate
 import time
 
-path = "/home/jovyan/pose-estimation-nets/outputs/2021-09-30/00-08-34/tb_logs/my_test_model/version_0/checkpoints/epoch=1-step=105.ckpt"
+#path = "/home/jovyan/pose-estimation-nets/outputs/2021-09-30/00-08-34/tb_logs/my_test_model/version_0/checkpoints/epoch=1-step=105.ckpt"
+path = "/home/ubuntu/pose-estimation-nets/outputs/2021-09-30/02-22-28/tb_logs/my_test_model/version_0/checkpoints/epoch=1-step=105.ckpt"
 assert os.path.isfile(path)
 
 
@@ -58,7 +59,7 @@ def predict(cfg: DictConfig):
     # Init model
     # for now this works without saving the pca params to dict
     model = SemiSupervisedHeatmapTracker.load_from_checkpoint(
-        path, semi_super_losses_to_use=losses_to_use
+        path, semi_super_losses_to_use=losses_to_use, loss_params=loss_param_dict
     )
 
     # model = model.load_from_checkpoint(path, strict=False)

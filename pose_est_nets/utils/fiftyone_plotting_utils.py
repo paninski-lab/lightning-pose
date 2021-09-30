@@ -47,8 +47,32 @@ def evaluate(
     path_to_ims = os.path.join(cfg.data.data_dir, "barObstacleScaling1")
     assert os.path.isdir(path_to_ims)
     gt_dataset = fo.Dataset.from_images_dir(path_to_ims)
+    new_samples = []
+    test_indices = datamod.test_set.indices
+    for idx, sample in enumerate(gt_dataset):
+        img_kpts = datamod.fulldataset.labels[idx]
+        img_kpts_list = []
+        for i in range(len(img_kpts)):
+            #img_kpts_list.append(tuple((float(img_kpts[i][0]),float(img_kpts[i][1]))))
+            img_kpts_list.append(tuple((float(img_kpts[i][0]/406),float(img_kpts[i][1]/396))))
+        #print(img_kpts_list)
+        sample["ground_truth"] = fo.Keypoints(keypoints=[fo.Keypoint(label="square", points=img_kpts_list[:5])])
+        sample.save()
+        #new_samples.append(sample)
+        #print(sample)
+    #new_dataset = fo.Dataset("labeled_data")
+    #new_dataset.add_samples(new_samples)
+        #print(sample)
+        
+
+
+    #print(gt_dataset)
+    #print(new_dataset)
     # gt_dataset = create_gt_dataset(cfg)
+    gt_dataset.persistent = True
     session = fo.launch_app(gt_dataset, remote=True)
+    random_view = gt_dataset.take(10)
+    session.view = random_view
     session.wait()
 
     # # best_model = model.load_from_checkpoint(
