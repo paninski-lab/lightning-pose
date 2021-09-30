@@ -1,10 +1,10 @@
 image_resize_dims: 
   height: 384 
   width: 384
-data_dir: "/home/jovyan/mouseRunningData"
-#data_dir: "/home/ubuntu/deepposekit-tests/dlc_test/mouse_data/data"
-video_dir: "/home/jovyan/mouseRunningData/unlabeled_videos/180726_005.mp4" # /180726_005.mp4
-#video_dir: "/home/ubuntu/pose-estimation-nets/unlabeled_videos/180726_005.mp4"
+#data_dir: "/home/jovyan/mouseRunningData"
+data_dir: "/home/ubuntu/deepposekit-tests/dlc_test/mouse_data/data"
+#video_dir: "/home/jovyan/mouseRunningData/unlabeled_videos/180726_005.mp4" # /180726_005.mp4
+video_dir: "/home/ubuntu/pose-estimation-nets/unlabeled_videos/180726_005.mp4"
 csv_path: "CollectedData_.csv"
 data_type: "heatmap" #heatmap or regression
 header_rows: [1, 2]
