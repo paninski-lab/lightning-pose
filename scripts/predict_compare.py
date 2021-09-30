@@ -16,8 +16,8 @@ import imgaug.augmenters as iaa
 from pose_est_nets.utils.fiftyone_plotting_utils import evaluate
 import time
 
-path = "/home/jovyan/pose-estimation-nets/outputs/2021-09-30/00-08-34/tb_logs/my_test_model/version_0/checkpoints/epoch=1-step=105.ckpt"
-# path = "/home/ubuntu/pose-estimation-nets/outputs/2021-09-30/02-22-28/tb_logs/my_test_model/version_0/checkpoints/epoch=1-step=105.ckpt"
+#path = "/home/jovyan/pose-estimation-nets/outputs/2021-09-30/00-08-34/tb_logs/my_test_model/version_0/checkpoints/epoch=1-step=105.ckpt"
+path = "/home/ubuntu/pose-estimation-nets/outputs/2021-09-30/05-41-05/tb_logs/my_test_model/version_0/checkpoints/epoch=299-step=15899.ckpt"
 assert os.path.isfile(path)
 
 

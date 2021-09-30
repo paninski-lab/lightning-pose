@@ -243,7 +243,7 @@ class SubPixelMaxima:  # Add tensor typing
         kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
         return torch.tensor(kernel_size, device=self.device)
 
-    def run(
+    def run( #TODO: maybe we should see if we can add batch functionality
         self,
         heatmaps_1,
         heatmaps_2=None,  # Enables the function to be run with only one set of keypoints
