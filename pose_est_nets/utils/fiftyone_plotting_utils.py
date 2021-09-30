@@ -5,6 +5,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 import os
 import imgaug.augmenters as iaa
+import torch
 
 
 def create_gt_dataset(cfg: DictConfig) -> None:
@@ -49,30 +50,41 @@ def evaluate(
     gt_dataset = fo.Dataset.from_images_dir(path_to_ims)
     new_samples = []
     test_indices = datamod.test_set.indices
-    for idx, sample in enumerate(gt_dataset):
-        img_kpts = datamod.fulldataset.labels[idx]
+    best_model.run_subpixelmaxima(pred)
+    # for idx, sample in enumerate(gt_dataset):
+    for idx, sample in enumerate(gt_dataset.iter_samples(progress=True)):
+        img_kpts = datamod.fulldataset.labels[idx]  # a list of tensors.
         img_kpts_list = []
-        for i in range(len(img_kpts)):
-            #img_kpts_list.append(tuple((float(img_kpts[i][0]),float(img_kpts[i][1]))))
-            img_kpts_list.append(tuple((float(img_kpts[i][0]/406),float(img_kpts[i][1]/396))))
-        #print(img_kpts_list)
-        sample["ground_truth"] = fo.Keypoints(keypoints=[fo.Keypoint(label="square", points=img_kpts_list[:5])])
+        for i in range(len(img_kpts)):  # iterating over the list
+            if ~torch.isnan(
+                img_kpts[i]
+            ).all():  # only if there are no nans in the length-2 tensor, we add keypoints for visualization
+                img_kpts_list.append(
+                    tuple((float(img_kpts[i][0] / 406), float(img_kpts[i][1] / 396)))
+                )
+        # print(img_kpts_list)
+        sample["ground_truth"] = fo.Keypoints(
+            keypoints=[fo.Keypoint(label="square", points=img_kpts_list)]
+        )
         sample.save()
-        #new_samples.append(sample)
-        #print(sample)
-    #new_dataset = fo.Dataset("labeled_data")
-    #new_dataset.add_samples(new_samples)
-        #print(sample)
-        
+    # new_samples.append(sample)
+    # print(sample)
+    # new_dataset = fo.Dataset("labeled_data")
+    # new_dataset.add_samples(new_samples)
+    # print(sample)
 
-
-    #print(gt_dataset)
-    #print(new_dataset)
+    # print(gt_dataset)
+    # print(new_dataset)
     # gt_dataset = create_gt_dataset(cfg)
-    gt_dataset.persistent = True
+    # print(gt_dataset.persistent = True)
+    print("counts: {} ".format(gt_dataset.count("ground_truth.keypoints.points")))
+    print("metadata: {} ".format(gt_dataset.compute_metadata()))
+    print("first: {} ".format(gt_dataset.first()))
+
     session = fo.launch_app(gt_dataset, remote=True)
-    random_view = gt_dataset.take(10)
-    session.view = random_view
+    # session.view = gt_dataset.exclude_fields("ground_truth").take(10) # suggested by forum
+    # random_view = gt_dataset.take(10)
+    # session.view = random_view
     session.wait()
 
     # # best_model = model.load_from_checkpoint(

@@ -16,8 +16,8 @@ import imgaug.augmenters as iaa
 from pose_est_nets.utils.fiftyone_plotting_utils import evaluate
 import time
 
-#path = "/home/jovyan/pose-estimation-nets/outputs/2021-09-30/00-08-34/tb_logs/my_test_model/version_0/checkpoints/epoch=1-step=105.ckpt"
-path = "/home/ubuntu/pose-estimation-nets/outputs/2021-09-30/02-22-28/tb_logs/my_test_model/version_0/checkpoints/epoch=1-step=105.ckpt"
+path = "/home/jovyan/pose-estimation-nets/outputs/2021-09-30/00-08-34/tb_logs/my_test_model/version_0/checkpoints/epoch=1-step=105.ckpt"
+# path = "/home/ubuntu/pose-estimation-nets/outputs/2021-09-30/02-22-28/tb_logs/my_test_model/version_0/checkpoints/epoch=1-step=105.ckpt"
 assert os.path.isfile(path)
 
 
@@ -66,7 +66,14 @@ def predict(cfg: DictConfig):
     print("loaded weights")
 
     evaluate(cfg, datamod, model)
-    # time.sleep(5 * 60)  # wait for five minutes
+    # # time.sleep(5 * 60)  # wait for five minutes
+
+    # import fiftyone as fo
+    # import fiftyone.zoo as foz
+
+    # dataset = foz.load_zoo_dataset("quickstart")
+    # session = fo.launch_app(dataset, remote=True)
+    # session.wait()
 
 
 if __name__ == "__main__":
