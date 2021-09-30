@@ -245,6 +245,7 @@ class UnlabeledDataModule(BaseDataModule):
         epsilon = np.percentile(
             proj_discarded.numpy(), empirical_epsilon_percentile, axis=0
         )
+        print(epsilon)
         self.loss_param_dict["pca"]["epsilon"] = torch.tensor(
             epsilon,
             dtype=torch.float32,

@@ -7,7 +7,7 @@ num_workers: 4
 early_stop_patience: 6
 unfreezing_epoch: 50
 dropout_rate: 0.1
-max_epochs: 2
+max_epochs: 300
 log_every_n_steps: 1
 
 
