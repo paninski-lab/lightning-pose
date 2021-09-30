@@ -249,19 +249,20 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             confidence_scale=confidence_scale,
             # device = device
         )
+        print(semi_super_losses_to_use)
         self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
         self.loss_params = loss_params
         print(self.loss_function_dict)
         # self.save_hyperparameters()  # Should save loss_params with the model
         # if self.loss_params is not None:
-        self.save_loss_param_dict()
+        # self.save_loss_param_dict()
 
-    def save_loss_param_dict(self) -> None:
-        for loss_name, param_dict in self.loss_params.items():
-            for key, val in param_dict.items():
-                if val is not None:  # we make it a tensor
-                    val = torch.tensor(val, dtype=torch.float32)
-                self.register_buffer(loss_name + "_" + key, val)
+    # def save_loss_param_dict(self) -> None:
+    #     for loss_name, param_dict in self.loss_params.items():
+    #         for key, val in param_dict.items():
+    #             if val is not None:  # we make it a tensor
+    #                 val = torch.tensor(val, dtype=torch.float32)
+    #             self.register_buffer(loss_name + "_" + key, val)
 
     @typechecked
     def training_step(self, data_batch: dict, batch_idx: int) -> dict:
