@@ -6,18 +6,24 @@
 5. launch fiftyone
 6. separately connect with ssh tunnel and inspect"""
 import os
+import time
 import pytorch_lightning as pl
-from pose_est_nets.models.new_heatmap_tracker import SemiSupervisedHeatmapTracker
 import hydra
 from omegaconf import DictConfig, OmegaConf
+import imgaug.augmenters as iaa
+from pose_est_nets.models.new_heatmap_tracker import HeatmapTracker, SemiSupervisedHeatmapTracker
+from pose_est_nets.models.regression_tracker import RegressionTracker, SemiSupervisedRegressionTracker
 from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
 from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
-import imgaug.augmenters as iaa
-from pose_est_nets.utils.fiftyone_plotting_utils import evaluate
-import time
+from pose_est_nets.utils.fiftyone_plotting_utils import evaluate, make_dataset_and_evaluate
 
 #path = "/home/jovyan/pose-estimation-nets/outputs/2021-09-30/00-08-34/tb_logs/my_test_model/version_0/checkpoints/epoch=1-step=105.ckpt"
+#Semi supervised heatmap tracker
 path = "/home/ubuntu/pose-estimation-nets/outputs/2021-09-30/05-41-05/tb_logs/my_test_model/version_0/checkpoints/epoch=299-step=15899.ckpt"
+#regular heatmap tracker
+path2 = "/home/ubuntu/pose-estimation-nets/outputs/2021-09-30/04-27-31/tb_logs/my_test_model/version_0/checkpoints/epoch=249-step=13249.ckpt"
+
+
 assert os.path.isfile(path)
 
 
@@ -62,18 +68,23 @@ def predict(cfg: DictConfig):
         path, semi_super_losses_to_use=losses_to_use, loss_params=loss_param_dict
     )
 
+    model2 = HeatmapTracker.load_from_checkpoint(
+        path2
+    )
+
+    # model3 = SemiSupervisedRegressionTracker(
+    #     path3, semi_super_losses_to_use=losses_to_use, loss_params=loss_param_dict
+    # )
+
     # model = model.load_from_checkpoint(path, strict=False)
     print("loaded weights")
 
-    evaluate(cfg, datamod, model)
-    # # time.sleep(5 * 60)  # wait for five minutes
+    bestmodels = {
+        "semi_supervised_heatmap_tracker": model, 
+        "base_heatmap_tracker": model2
+    }
 
-    # import fiftyone as fo
-    # import fiftyone.zoo as foz
-
-    # dataset = foz.load_zoo_dataset("quickstart")
-    # session = fo.launch_app(dataset, remote=True)
-    # session.wait()
+    make_dataset_and_evaluate(cfg, datamod, bestmodels)
 
 
 if __name__ == "__main__":

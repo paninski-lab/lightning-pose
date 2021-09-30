@@ -43,6 +43,7 @@ class RegressionTracker(BaseFeatureExtractor):
         self.representation_dropout = nn.Dropout(
             p=representation_dropout_rate
         )  # TODO: consider removing dropout
+        self.save_hyperparameters()
 
     @staticmethod
     @typechecked
@@ -141,7 +142,7 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         )
         self.loss_params = loss_params
         self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
-
+        
     @typechecked
     def training_step(self, data_batch: dict, batch_idx: int) -> dict:
         labeled_imgs, true_keypoints = data_batch["labeled"]
