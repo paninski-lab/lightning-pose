@@ -49,7 +49,7 @@ def make_dataset_and_evaluate(
     train_indices = datamod.train_set.indices
     valid_indices = datamod.valid_set.indices
     test_indices = datamod.test_set.indices
-    for model in best_model.values():
+    for model in best_models.values():
         model.eval()
     for idx, img_name in enumerate(image_names):
         print(idx)
