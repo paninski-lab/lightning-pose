@@ -1,23 +1,34 @@
 # pose-estimation-nets
-A Pytorch and Pytorch Lightning implementation of convnets for pose estimation.
+Scalable pose estimation based on Pytorch-Lightning, with support for massive unlabeled datasets using `DALI`.
+## Hardware
+We assume that you are running on a machine that has at least one GPU and CUDA 11 installed.
 ## Installation
-create conda environment (call it however you want)
+First create a `conda` environment in which `pose-estimation-nets` and its dependencies will be installed. 
+create:
+
 `conda create --name pose-estimation-nets`
-then activate the environment
+
+activate it:
+
 `conda activate pose-estimation-nets`
-now, move into the folder where you want the repository installed, and clone the repo as follows:
-`cd <SOME FOLDER>` and when there, run
+
+now, move into the folder where you want the repository installed:
+
+`cd <SOME FOLDER>`
+
+and within that folder, clone the repository:
+
 `git clone https://github.com/danbider/pose-estimation-nets.git`
-then `cd` into the new directory called `pose-estimation-nets` like so
+
+then move into the package directory:
+
 `cd pose-estimation-nets`
+
 and install our package and its dependencies like so
-`pip install -e .`
-If you use CUDA 11.0, please install `nvidia-dali` as follows (for other CUDA versions, check out https://docs.nvidia.com/deeplearning/dali/user-guide/docs/installation.html):
 
-```pip install --extra-index-url https://developer.download.nvidia.com/compute/redist --upgrade nvidia-dali-cuda110
-```
+`pip install -r requirements.txt`
 
-then you can verify that all the tests are passing on your machine by running
+You should be ready to go! you can verify that all the tests are passing on your machine by running
 `pytest`
 
 
