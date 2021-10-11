@@ -1,18 +1,26 @@
-torchvision
-pytorch-lightning
-pandas
-pillow
-pytest
-matplotlib
-typeguard
-torchtyping
-imgaug
-sklearn
-hydra-core
-black
-fiftyone
-wandb
+# torchvision
+# pytorch-lightning
+# pandas
+# pillow
+# pytest
+# matplotlib
+# typeguard
+# torchtyping
+# imgaug
+# sklearn
+# hydra-core
+# black
+# fiftyone
+# wandb # currently not used, add it in the future
 # from https://github.com/NVIDIA/DALI
+# https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html
+# You must first install the nvidia-pyindex package, which is required in order to set up your pip installation to 
+# fetch additional Python modules from the NVIDIA NGC PyPI repo.
+# but not required for nvidia-dali-cuda110
+nvidia-pyindex
+# https://github.com/NVIDIA/DALI
 # pip install --extra-index-url https://developer.download.nvidia.com/compute/redist --upgrade nvidia-dali-cuda110
 --extra-index-url https://developer.download.nvidia.com/compute/redist
 nvidia-dali-cuda110
+
+-e .
