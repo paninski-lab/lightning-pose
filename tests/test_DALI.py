@@ -14,7 +14,7 @@ for (
     f
 ) in (
     video_files
-):  # we may have other random files that are not vids, DALI will try to read them
+):  # video_directory may contain other random files that are not vids, DALI will try to read them
     if f.endswith(".mp4"):  # hardcoded for the toydataset folder
         vids.append(f)
 

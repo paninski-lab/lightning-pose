@@ -22,9 +22,18 @@ imgaug_transform = iaa.Sequential(data_transform)
 # video_directory = os.path.join(
 #     "/home/jovyan/mouseRunningData/unlabeled_videos"
 # )  # DAN's
-video_directory = os.path.join("unlabeled_videos")  # NICK's
+video_directory = "toy_datasets/toymouseRunningData/unlabeled_videos"
+assert os.path.exists(video_directory)
+
 video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
-assert os.path.exists(video_files[0])
+vids = []
+for (
+    f
+) in (
+    video_files
+):  # video_directory may contain other random files that are not vids, DALI will try to read them
+    if f.endswith(".mp4"):  # hardcoded for the toydataset folder
+        vids.append(f)
 
 regData = BaseTrackingDataset(
     root_directory="toy_datasets/toymouseRunningData",
@@ -41,7 +50,8 @@ heatmapData = HeatmapDataset(
 )
 
 with open("pose_est_nets/losses/default_hypers.yaml") as f:
-        loss_param_dict = yaml.load(f, Loader=yaml.FullLoader)
+    loss_param_dict = yaml.load(f, Loader=yaml.FullLoader)
+
 
 def test_base_datamodule():
 
@@ -80,10 +90,10 @@ def test_UnlabeledDataModule():
     # TODO: make a short video in toydatasets
     # TODO: seperate into a heatmap test + regression test
     unlabeled_module_regression = UnlabeledDataModule(
-        regData, video_paths_list=video_files[0]
+        regData, video_paths_list=vids  # video_files[0]
     )  # and default args
     unlabeled_module_heatmap = UnlabeledDataModule(
-        heatmapData, video_paths_list=video_files[0]
+        heatmapData, video_paths_list=vids  # video_files[0]
     )  # and default args
     unlabeled_module_regression.setup()
     unlabeled_module_heatmap.setup()
@@ -111,12 +121,15 @@ def test_UnlabeledDataModule():
     )
 
 
-def test_PCA(): #TODO FINISH WRITING TEST
+def test_PCA():  # TODO FINISH WRITING TEST
     unlabeled_module_heatmap = UnlabeledDataModule(
-        heatmapData, video_paths_list=video_files[0], loss_param_dict = loss_param_dict, specialized_dataprep = 'pca'
+        heatmapData,
+        video_paths_list=vids,
+        loss_param_dict=loss_param_dict,
+        specialized_dataprep="pca",
     )
-    #unlabeled_module_heatmap.setup()
-    #unlabeled_module_heatmap.computePCA_params() #These get automatically run now
+    # unlabeled_module_heatmap.setup()
+    # unlabeled_module_heatmap.computePCA_params() #These get automatically run now
 
 
 def test_reshape():
