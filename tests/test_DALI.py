@@ -5,9 +5,18 @@ from nvidia.dali import pipeline_def
 import nvidia.dali.fn as fn
 import nvidia.dali.types as types
 
-video_directory = os.path.join("/home/jovyan/mouseRunningData/unlabeled_videos")
+video_directory = "toy_datasets/toymouseRunningData/unlabeled_videos"
+
 assert os.path.exists(video_directory)
 video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
+vids = []
+for (
+    f
+) in (
+    video_files
+):  # we may have other random files that are not vids, DALI will try to read them
+    if f.endswith(".mp4"):  # hardcoded for the toydataset folder
+        vids.append(f)
 
 
 def test_video_pipe():
@@ -16,8 +25,8 @@ def test_video_pipe():
         batch_size=2,
         device_id=0,
         num_threads=2,
-        filenames=video_files,
-        resize_dims=[384, 384],
+        filenames=vids,
+        resize_dims=[384, 384],  # [384, 384]
     )
     pipe.build()
     n_iter = 3
