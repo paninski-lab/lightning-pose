@@ -17,6 +17,7 @@ from pose_est_nets.utils.heatmap_tracker_utils import (
 )
 from pose_est_nets.losses.losses import (
     MaskedMSEHeatmapLoss,
+    MaskedRMSELoss,
     get_losses_dict,
 )
 from pose_est_nets.utils.heatmap_tracker_utils import SubPixelMaxima
@@ -30,7 +31,6 @@ class HeatmapTracker(BaseFeatureExtractor):
         self,
         num_targets: int,
         resnet_version: Literal[18, 34, 50, 101, 152] = 18,
-        # transfer: bool = True,
         downsample_factor: Literal[
             2, 3
         ] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
@@ -41,7 +41,6 @@ class HeatmapTracker(BaseFeatureExtractor):
         upsample_factor: int = 100,
         confidence_scale: float = 255.0,
         threshold: Optional[float] = None,
-        # device: str = 'cpu',
     ) -> None:
         """
         Initializes a DLC-like model with resnet backbone inherited from BaseFeatureExtractor
@@ -175,17 +174,24 @@ class HeatmapTracker(BaseFeatureExtractor):
 
     @typechecked
     def training_step(self, data_batch: List, batch_idx: int) -> dict:
-        images, true_heatmaps = data_batch  # read batch
+        images, true_heatmaps, true_keypoints = data_batch  # read batch
         predicted_heatmaps = self.forward(images)  # images -> heatmaps
+        predicted_keypoints = self.run_subpixelmaxima(
+            predicted_heatmaps
+        )  # heatmaps -> keypoints
         heatmap_loss = MaskedMSEHeatmapLoss(true_heatmaps, predicted_heatmaps)
+        supervised_rmse = MaskedRMSELoss(true_keypoints, predicted_keypoints)
 
         self.log(
             "train_loss",
             heatmap_loss,
-            on_step=True,
-            on_epoch=True,
             prog_bar=True,
-            logger=True,
+        )
+
+        self.log(
+            "supervised_rmse",
+            supervised_rmse,
+            prog_bar=True,
         )
         return {"loss": heatmap_loss}
 
@@ -193,12 +199,20 @@ class HeatmapTracker(BaseFeatureExtractor):
     def evaluate(
         self, data_batch: List, stage: Optional[Literal["val", "test"]] = None
     ):
-        images, true_heatmaps = data_batch  # read batch
+        images, true_heatmaps, true_keypoints = data_batch  # read batch
         predicted_heatmaps = self.forward(images)  # images -> heatmaps
+        predicted_keypoints = self.run_subpixelmaxima(
+            predicted_heatmaps
+        )  # heatmaps -> keypoints
         loss = MaskedMSEHeatmapLoss(true_heatmaps, predicted_heatmaps)
+        supervised_rmse = MaskedRMSELoss(true_keypoints, predicted_keypoints)
+
         # TODO: do we need other metrics?
         if stage:
             self.log(f"{stage}_loss", loss, prog_bar=True, logger=True)
+            self.log(
+                f"{stage}_supervised_rmse", supervised_rmse, prog_bar=True, logger=True
+            )
 
     def validation_step(self, validation_batch: List, batch_idx):
         self.evaluate(validation_batch, "val")
@@ -239,7 +253,6 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         super().__init__(
             num_targets=num_targets,
             resnet_version=resnet_version,
-            # transfer = transfer,
             downsample_factor=downsample_factor,
             pretrained=pretrained,
             last_resnet_layer_to_get=last_resnet_layer_to_get,
@@ -247,29 +260,22 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             output_sigma=output_sigma,
             upsample_factor=upsample_factor,
             confidence_scale=confidence_scale,
-            # device = device
         )
         print(semi_super_losses_to_use)
         self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
         self.loss_params = loss_params
         print(self.loss_function_dict)
-        # self.save_hyperparameters()  # Should save loss_params with the model
-        # if self.loss_params is not None:
-        # self.save_loss_param_dict()
-
-    # def save_loss_param_dict(self) -> None:
-    #     for loss_name, param_dict in self.loss_params.items():
-    #         for key, val in param_dict.items():
-    #             if val is not None:  # we make it a tensor
-    #                 val = torch.tensor(val, dtype=torch.float32)
-    #             self.register_buffer(loss_name + "_" + key, val)
 
     @typechecked
     def training_step(self, data_batch: dict, batch_idx: int) -> dict:
-        labeled_imgs, true_heatmaps = data_batch["labeled"]
+        labeled_imgs, true_heatmaps, true_keypoints = data_batch["labeled"]
         unlabeled_imgs = data_batch["unlabeled"]
         predicted_heatmaps = self.forward(labeled_imgs)
         supervised_loss = MaskedMSEHeatmapLoss(true_heatmaps, predicted_heatmaps)
+        predicted_keypoints = self.run_subpixelmaxima(
+            predicted_heatmaps
+        )  # heatmaps -> keypoints
+        supervised_rmse = MaskedRMSELoss(true_keypoints, predicted_keypoints)
         unlabeled_predicted_heatmaps = self.forward(unlabeled_imgs)
         predicted_us_keypoints = self.run_subpixelmaxima(unlabeled_predicted_heatmaps)
         tot_loss = 0.0
@@ -283,27 +289,24 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             self.log(
                 loss_name + "_loss",
                 add_loss,
-                on_step=True,
-                on_epoch=True,
                 prog_bar=True,
-                logger=True,
             )
         # log the total loss
         self.log(
             "total_loss",
             tot_loss,
-            on_step=True,
-            on_epoch=True,
             prog_bar=True,
-            logger=True,
         )
         # log the supervised loss
         self.log(
             "supervised_loss",
             supervised_loss,
-            on_step=True,
-            on_epoch=True,
             prog_bar=True,
-            logger=True,
+        )
+
+        self.log(
+            "supervised_rmse",
+            supervised_rmse,
+            prog_bar=True,
         )
         return {"loss": tot_loss}

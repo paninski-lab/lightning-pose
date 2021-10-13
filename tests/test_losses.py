@@ -1,4 +1,4 @@
-from pose_est_nets.losses import MaskedRegressionMSELoss
+from pose_est_nets.losses.losses import MaskedRegressionMSELoss, MaskedRMSELoss
 import torch
 import numpy as np
 import pytest
@@ -6,6 +6,30 @@ import yaml
 
 
 def test_masked_regression_loss():
+
+    true_keypoints = torch.rand(
+        size=(12, 32),
+        device="cpu",
+    )
+
+    predicted_keypoints = torch.rand(
+        size=(12, 32),
+        device="cpu",
+    )
+    loss = MaskedRMSELoss(true_keypoints, predicted_keypoints)
+    assert loss.shape == torch.Size([])
+    assert loss > 0.0
+
+    n = 4
+    batch_size = 3
+    labels = 2 * torch.ones((batch_size, n), device="cpu")
+    preds = torch.zeros((batch_size, n), device="cpu")
+    true_rmse = 2.0  # sqrt(n * (1/n))
+    assert MaskedRMSELoss(labels, preds) == true_rmse
+    assert MaskedRegressionMSELoss(labels, preds) == true_rmse ** 2.0
+
+
+def test_masked_RMSE_loss():
 
     true_keypoints = torch.rand(
         size=(12, 32),

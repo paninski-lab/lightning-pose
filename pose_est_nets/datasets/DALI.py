@@ -85,21 +85,6 @@ class LightningWrapper(DALIGenericIterator):
         return torch.tensor(
             out[0]["x"][
                 0, :, :, :, :
-            ],  # should be batch_size, W, H, 3. TODO: valid for one sequence.
+            ],  # should be batch_size, W, H, 3. TODO: careful: valid for one sequence, i.e., batch size of 1.
             dtype=torch.float,  # , device="cuda"
         )
-
-
-# @typechecked
-# def PCA_prints(pca: sklearn.decomposition._pca.PCA, components_to_keep: int) -> None:
-#     print("Results of running PCA on labels:")
-#     print(
-#         "explained_variance_ratio_: {}".format(
-#             np.round(pca.explained_variance_ratio_, 3)
-#         )
-#     )
-#     print(
-#         "total_explained_var: {}".format(
-#             np.round(np.sum(pca.explained_variance_ratio_[:components_to_keep]), 3)
-#         )
-#     )
