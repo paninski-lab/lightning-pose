@@ -1,3 +1,4 @@
 losses_to_use: ["pca"]
 resnet_version: 50
-semi_supervised: True
+semi_supervised: False # whether to include a sequence of unlabeled frames
+model_type: "heatmap" # "heatmap" | "regression"

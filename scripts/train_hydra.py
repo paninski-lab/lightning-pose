@@ -36,14 +36,14 @@ def train(cfg: DictConfig):
         )
     )
     imgaug_transform = iaa.Sequential(data_transform)
-    if cfg.data.data_type == "regression":
+    if cfg.model.model_type == "regression":
         dataset = BaseTrackingDataset(
             root_directory=cfg.data.data_dir,
             csv_path=cfg.data.csv_path,
             header_rows=OmegaConf.to_object(cfg.data.header_rows),
             imgaug_transform=imgaug_transform,
         )
-    elif cfg.data.data_type == "heatmap":
+    elif cfg.model.model_type == "heatmap":
         dataset = HeatmapDataset(
             root_directory=cfg.data.data_dir,
             csv_path=cfg.data.csv_path,
@@ -63,13 +63,13 @@ def train(cfg: DictConfig):
             test_batch_size=cfg.training.test_batch_size,
             num_workers=cfg.training.num_workers,
         )
-        if cfg.data.data_type == "regression":
+        if cfg.model.model_type == "regression":
             model = RegressionTracker(
                 num_targets=cfg.data.num_targets,
                 resnet_version=cfg.model.resnet_version,
             )
 
-        elif cfg.data.data_type == "heatmap":
+        elif cfg.model.model_type == "heatmap":
             model = HeatmapTracker(
                 num_targets=cfg.data.num_targets,
                 resnet_version=cfg.model.resnet_version,
@@ -93,7 +93,7 @@ def train(cfg: DictConfig):
             test_batch_size=cfg.training.test_batch_size,
             num_workers=cfg.training.num_workers,
         )
-        if cfg.data.data_type == "regression":
+        if cfg.model.model_type == "regression":
             model = SemiSupervisedRegressionTracker(
                 num_targets=cfg.data.num_targets,
                 resnet_version=cfg.model.resnet_version,
@@ -101,7 +101,7 @@ def train(cfg: DictConfig):
                 semi_super_losses_to_use=losses_to_use,
             )
 
-        elif cfg.data.data_type == "heatmap":
+        elif cfg.model.model_type == "heatmap":
             model = SemiSupervisedHeatmapTracker(
                 num_targets=cfg.data.num_targets,
                 resnet_version=cfg.model.resnet_version,
@@ -125,7 +125,12 @@ def train(cfg: DictConfig):
         gpus=1 if _TORCH_DEVICE == "cuda" else 0,
         max_epochs=cfg.training.max_epochs,
         log_every_n_steps=cfg.training.log_every_n_steps,
-        callbacks=[early_stopping, lr_monitor, ckpt_callback],
+        callbacks=[
+            early_stopping,
+            lr_monitor,
+            ckpt_callback,
+            transfer_unfreeze_callback,
+        ],
         logger=logger,
     )
     trainer.fit(model=model, datamodule=datamod)

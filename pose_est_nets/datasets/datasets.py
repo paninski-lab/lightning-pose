@@ -31,51 +31,7 @@ _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # see https://pytorch.org/vision/stable/models.html
 _IMAGENET_MEAN = [0.485, 0.456, 0.406]
 _IMAGENET_STD = [0.229, 0.224, 0.225]
-# Dali parameters
-
-
-# video_directory = os.path.join(
-#    "/home/jovyan/mouseRunningData/unlabeled_videos"
-# )  # TODO: should go as input to the class.
-# assert os.path.isdir(video_directory)
-# video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
-
 num_processes = os.cpu_count()
-
-
-# @pipeline_def
-# def video_pipe(
-#     filenames: list,
-#     resize_dims: Optional[list],
-#     random_shuffle: Optional[bool] = False,
-# ):  # TODO: what does it return? more typechecking
-#     video = fn.readers.video(
-#         device=_DALI_DEVICE,
-#         filenames=filenames,
-#         sequence_length=_SEQUENCE_LENGTH_UNSUPERVISED,
-#         random_shuffle=random_shuffle,
-#         initial_fill=_INITIAL_PREFETCH_SIZE,
-#         normalized=False,
-#         dtype=types.DALIDataType.FLOAT,
-#     )
-#     video = fn.resize(video, size=resize_dims)
-#     video = (
-#         video / 255.0
-#     )  # original videos (at least Rick's) range from 0-255. transform it to 0,1. # TODO: not sure that we need that, make sure it's the same as the supervised ones
-#     transform = fn.crop_mirror_normalize(
-#         video,
-#         output_layout="FCHW",
-#         mean=_IMAGENET_MEAN,
-#         std=_IMAGENET_STD,
-#     )
-#     return transform
-
-
-# def readDataset(
-#     root_directory: str,
-#     csv_path: str,
-#     header_rows: Optional[List[int]] = None
-# ):
 
 
 class BaseTrackingDataset(torch.utils.data.Dataset):
@@ -197,9 +153,6 @@ class HeatmapDataset(BaseTrackingDataset):
             imgaug_transform,
             pytorch_transform_list,
         )
-        # self.height = imgaug_transform[0].get_parameters()[0][0].value
-        # # Assuming resizing transformation is the first imgaug one
-        # self.width = imgaug_transform[0].get_parameters()[0][1].value
 
         if self.height % 128 != 0 or self.height % 128 != 0:
             print(
@@ -235,6 +188,7 @@ class HeatmapDataset(BaseTrackingDataset):
         )
 
     def compute_heatmaps(self):
+        """note: original image dims -> resized image dims -> potentially downsampled heatmaps"""
         label_heatmaps = []
         for idx in range(len(self.image_names)):
             x, y = super().__getitem__(idx)
@@ -254,9 +208,13 @@ class HeatmapDataset(BaseTrackingDataset):
         self.label_heatmaps = self.label_heatmaps.permute(0, 3, 1, 2)
 
     def __getitem__(self, idx: int) -> Tuple[torch.tensor, torch.tensor]:
-        x = super().__getitem__(idx)[0]  # could modify this if speed bottleneck
-        y_heatmap = self.label_heatmaps[idx]
-        return x, y_heatmap
+        """we call the base dataset to get an image and a label.
+        we additionaly return the corresponding heatmap."""
+        image, labels = super().__getitem__(
+            idx
+        )  # could modify this if speed bottleneck
+        heatmaps = self.label_heatmaps[idx]
+        return image, heatmaps, labels
 
     def get_fully_labeled_idxs(self):  # TODO: make shorter
         nan_check = torch.isnan(self.labels)

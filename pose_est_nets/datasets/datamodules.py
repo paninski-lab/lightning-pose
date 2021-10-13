@@ -32,9 +32,6 @@ from pose_est_nets.datasets.utils import split_sizes_from_probabilities
 TORCH_MANUAL_SEED = 42
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-_DALI_DEVICE = "gpu" if torch.cuda.is_available() else "cpu"
-_SEQUENCE_LENGTH_UNSUPERVISED = 7
-_INITIAL_PREFETCH_SIZE = 16
 _BATCH_SIZE_UNSUPERVISED = 1  # sequence_length * batch_size = num_images passed
 _DALI_RANDOM_SEED = 123456
 
@@ -193,7 +190,6 @@ class UnlabeledDataModule(BaseDataModule):
             if self.fulldataset.imgaug_transform:
                 i = 0
                 for idx in indxs:
-                    test_out = regressionData.__getitem__(idx)[1].reshape(-1, 2)
                     data_arr[i] = regressionData.__getitem__(idx)[1].reshape(-1, 2)
                     i += 1
         else:
@@ -243,7 +239,7 @@ class UnlabeledDataModule(BaseDataModule):
             )
         )
         # setting axis = 0 generalizes to multiple discarded components
-        epsilon = np.percentile(
+        epsilon = np.nanpercentile(
             proj_discarded.numpy(), empirical_epsilon_percentile, axis=0
         )
         print(epsilon)
