@@ -188,7 +188,7 @@ class HeatmapDataset(BaseTrackingDataset):
         )
 
     def compute_heatmaps(self):
-        """note: original image dims -> resized image dims -> potentially downsampled heatmaps"""
+        """note: original image dims e.g., (406, 396) -> resized image dims e.g., (384, 384) -> potentially downsampled heatmaps e.g., (96, 96)"""
         label_heatmaps = []
         for idx in range(len(self.image_names)):
             x, y = super().__getitem__(idx)

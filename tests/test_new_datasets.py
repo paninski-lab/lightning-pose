@@ -37,7 +37,7 @@ def test_heatmap_dataset():
         heatmapData.width,
     )
     image, heatmaps, labels = heatmapData[0]
-    assert image.shape == (3, 384, 384)
+    assert image.shape == (3, 384, 384)  # resized image shape
     assert labels.shape == (34,)
     assert heatmaps.shape[1:] == heatmapData.output_shape
     assert type(regData[0][1]) == torch.Tensor

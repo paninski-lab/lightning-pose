@@ -128,8 +128,6 @@ def test_PCA():  # TODO FINISH WRITING TEST
         loss_param_dict=loss_param_dict,
         specialized_dataprep="pca",
     )
-    # unlabeled_module_heatmap.setup()
-    # unlabeled_module_heatmap.computePCA_params() #These get automatically run now
 
 
 def test_reshape():
