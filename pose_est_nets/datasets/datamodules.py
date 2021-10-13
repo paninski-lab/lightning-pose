@@ -148,8 +148,9 @@ class UnlabeledDataModule(BaseDataModule):
         super().setup()
         self.setup_unlabeled()
         self.loss_param_dict = loss_param_dict
-        if "pca" in specialized_dataprep:
-            self.computePCA_params()
+        if specialized_dataprep:  # it's not None
+            if "pca" in specialized_dataprep:
+                self.computePCA_params()
 
     def setup_unlabeled(self):
         data_pipe = video_pipe(

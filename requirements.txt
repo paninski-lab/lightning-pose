@@ -1,17 +1,3 @@
-# torchvision
-# pytorch-lightning
-# pandas
-# pillow
-# pytest
-# matplotlib
-# typeguard
-# torchtyping
-# imgaug
-# sklearn
-# hydra-core
-# black
-# fiftyone
-# wandb # currently not used, add it in the future
 # from https://github.com/NVIDIA/DALI
 # https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html
 # You must first install the nvidia-pyindex package, which is required in order to set up your pip installation to 

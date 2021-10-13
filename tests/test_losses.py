@@ -1,4 +1,4 @@
-from pose_est_nets.losses.regression_loss import MaskedRegressionMSELoss
+from pose_est_nets.losses import MaskedRegressionMSELoss
 import torch
 import numpy as np
 import pytest

@@ -184,7 +184,6 @@ class HeatmapDataset(BaseTrackingDataset):
             data_path (str): path to CSV or h5 file  (within root_directory). CSV file should be
                 in the form (image_path, bodypart_1_x, bodypart_1_y, ..., bodypart_n_y)
                 Note: image_path is relative to the given root_directory
-            mode (str): 'csv' or 'h5'
             header_rows (List[int]): (optional) which rows in the csv are header rows
             transform (torchvision.transforms): (optional) transform to resize the images, image dimensions must be repeatably divisible by 2
             noNans (bool): whether or not to throw out all frames that have occluded keypoints
@@ -219,7 +218,7 @@ class HeatmapDataset(BaseTrackingDataset):
             self.labels = torch.tensor(self.labels)
 
         self.downsample_factor = downsample_factor
-        #self.sigma = 5
+        # self.sigma = 5
         self.output_sigma = 1.25  # should be sigma/2 ^downsample factor
 
         # Compute heatmaps as preprocessing step
