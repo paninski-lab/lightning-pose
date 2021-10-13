@@ -56,6 +56,12 @@ The script relies on the **Hydra** to manage arguments in hierarchical config fi
 
 The outputs of the training script, namely the model checkpoints and `Tensorboard` logs, will be saved at the `outputs/YYYY-MM-DD/tb_logs` directory.
 
+To view the logged losses with tensorboard, in the command line, run:
+
+```tensorboard --logdir outputs/YYYY-MM-DD/```
+
+where you use the date in which you ran the model.
+
 ## Prediction and visualization
 
 Visualizing the models' predictions on the `train/test/val` datasets is done using the `FiftyOne` app. To generate these predictions, run

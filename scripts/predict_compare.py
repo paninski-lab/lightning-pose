@@ -11,20 +11,26 @@ import pytorch_lightning as pl
 import hydra
 from omegaconf import DictConfig, OmegaConf
 import imgaug.augmenters as iaa
-from pose_est_nets.models.new_heatmap_tracker import HeatmapTracker, SemiSupervisedHeatmapTracker
-from pose_est_nets.models.regression_tracker import RegressionTracker, SemiSupervisedRegressionTracker
+from pose_est_nets.models.heatmap_tracker import (
+    HeatmapTracker,
+    SemiSupervisedHeatmapTracker,
+)
+from pose_est_nets.models.regression_tracker import (
+    RegressionTracker,
+    SemiSupervisedRegressionTracker,
+)
 from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
 from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
 from pose_est_nets.utils.fiftyone_plotting_utils import make_dataset_and_evaluate
 
-#path = "/home/jovyan/pose-estimation-nets/outputs/2021-09-30/00-08-34/tb_logs/my_test_model/version_0/checkpoints/epoch=1-step=105.ckpt"
-#Semi supervised heatmap tracker
+# path = "/home/jovyan/pose-estimation-nets/outputs/2021-09-30/00-08-34/tb_logs/my_test_model/version_0/checkpoints/epoch=1-step=105.ckpt"
+# Semi supervised heatmap tracker
 path = "/home/ubuntu/pose-estimation-nets/outputs/2021-09-30/05-41-05/tb_logs/my_test_model/version_0/checkpoints/epoch=299-step=15899.ckpt"
-#regular heatmap tracker
+# regular heatmap tracker
 path2 = "/home/ubuntu/pose-estimation-nets/outputs/2021-09-30/04-27-31/tb_logs/my_test_model/version_0/checkpoints/epoch=249-step=13249.ckpt"
-#Semi supervised regression tracker
+# Semi supervised regression tracker
 path3 = "/home/ubuntu/pose-estimation-nets/outputs/2021-09-30/22-19-37/tb_logs/my_test_model/version_0/checkpoints/epoch=169-step=9009.ckpt"
-#regular regression tracker
+# regular regression tracker
 path4 = "/home/ubuntu/pose-estimation-nets/outputs/2021-09-30/23-50-18/tb_logs/my_test_model/version_0/checkpoints/epoch=146-step=7790.ckpt"
 
 
@@ -71,24 +77,20 @@ def predict(cfg: DictConfig):
     model = SemiSupervisedHeatmapTracker.load_from_checkpoint(
         path, semi_super_losses_to_use=losses_to_use, loss_params=loss_param_dict
     )
-    model2 = HeatmapTracker.load_from_checkpoint(
-        path2
-    )
+    model2 = HeatmapTracker.load_from_checkpoint(path2)
     model3 = SemiSupervisedRegressionTracker.load_from_checkpoint(
         path3, semi_super_losses_to_use=losses_to_use, loss_params=loss_param_dict
     )
-    model4 = RegressionTracker.load_from_checkpoint(
-        path4
-    )
+    model4 = RegressionTracker.load_from_checkpoint(path4)
 
     # model = model.load_from_checkpoint(path, strict=False)
     print("loaded weights")
 
     bestmodels = {
-        "semi_supervised_heatmap_tracker": model, 
+        "semi_supervised_heatmap_tracker": model,
         "base_heatmap_tracker": model2,
         "semi_supervised_regression_tracker": model3,
-        "base_regression_tracker": model4
+        "base_regression_tracker": model4,
     }
 
     make_dataset_and_evaluate(cfg, datamod, bestmodels)

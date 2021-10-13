@@ -51,7 +51,9 @@ def MaskedMSEHeatmapLoss(
 # what are we doing about NANS?
 def MultiviewPCALoss(
     # TODO: y_hat should be already reshaped? if so, change below
-    reshaped_maxima_preds: TensorType["Batch_Size", "Num_Targets", float], #Num_Targets = 2 * Num_Keypoints
+    reshaped_maxima_preds: TensorType[
+        "Batch_Size", "Num_Targets", float
+    ],  # Num_Targets = 2 * Num_Keypoints
     discarded_eigenvectors: TensorType["Views_Times_Two", "Num_Discarded_Evecs", float],
     epsilon: TensorType[float],
     **kwargs
@@ -59,8 +61,12 @@ def MultiviewPCALoss(
     """assume that we have keypoints after find_subpixel_maxima
     and that we have discarded confidence here, and that keypoints were reshaped"""
     # TODO: consider avoiding the transposes
-    reshaped_maxima_preds = reshaped_maxima_preds.reshape(reshaped_maxima_preds.shape[0], -1, 2)
-    reshaped_maxima_preds = format_mouse_data(reshaped_maxima_preds) #TODO: get rid of dataset dependence
+    reshaped_maxima_preds = reshaped_maxima_preds.reshape(
+        reshaped_maxima_preds.shape[0], -1, 2
+    )
+    reshaped_maxima_preds = format_mouse_data(
+        reshaped_maxima_preds
+    )  # TODO: get rid of dataset dependence
     abs_proj_discarded = torch.abs(
         torch.matmul(reshaped_maxima_preds.T, discarded_eigenvectors.T)
     )
@@ -107,22 +113,3 @@ def get_losses_dict(
         "pca": MultiviewPCALoss,
     }
     return filter_dict(loss_dict, names_list)
-
-
-# @typechecked
-# def get_losses_dict(names_list: List[str]) -> dict:
-#     """get a dictionary with all the loss functions for semi supervised training.
-#     our models' training_step will iterate over these, instead of manually computing each.
-
-#     Args:
-#         names_list (Optional[List[str]], optional): list of desired loss names. Defaults to None.
-
-#     Returns:
-#         Dict[str, Callable]: [description]
-#     """
-#     import pdb
-
-#     filtered = filter_dict(loss_dict, names_list)
-
-#     pdb.set_trace()
-#     return filtered

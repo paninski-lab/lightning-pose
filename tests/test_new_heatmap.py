@@ -1,5 +1,5 @@
 import os
-from pose_est_nets.models.new_heatmap_tracker import HeatmapTracker
+from pose_est_nets.models.heatmap_tracker import HeatmapTracker
 import torch
 import torchvision.transforms as transforms
 import pytest
@@ -11,7 +11,10 @@ from typing import Optional
 import torchvision
 from pose_est_nets.datasets.datasets import HeatmapDataset
 from pose_est_nets.datasets.datamodules import UnlabeledDataModule
-from pose_est_nets.models.new_heatmap_tracker import HeatmapTracker, SemiSupervisedHeatmapTracker
+from pose_est_nets.models.heatmap_tracker import (
+    HeatmapTracker,
+    SemiSupervisedHeatmapTracker,
+)
 import imgaug.augmenters as iaa
 import yaml
 from pytorch_lightning.trainer.supporters import CombinedLoader
@@ -91,32 +94,41 @@ def test_unsupervised():  # TODO Finish writing test
         root_directory="toy_datasets/toymouseRunningData",
         csv_path="CollectedData_.csv",
         header_rows=[1, 2],
-        imgaug_transform=imgaug_transform
+        imgaug_transform=imgaug_transform,
     )
+    video_directory = "toy_datasets/toymouseRunningData/unlabeled_videos"
+    assert os.path.exists(video_directory)
+    video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
+    vids = []
+    for (
+        f
+    ) in (
+        video_files
+    ):  # video_directory may contain other random files that are not vids, DALI will try to read them
+        if f.endswith(".mp4"):  # hardcoded for the toydataset folder
+            vids.append(f)
     # video_directory = os.path.join(
     #     "/home/jovyan/mouseRunningData/unlabeled_videos"
     # )  # DAN's
-    video_directory = os.path.join("unlabeled_videos")  # NICK's
-    video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
-    assert os.path.exists(video_files[0])
+
     with open("pose_est_nets/losses/default_hypers.yaml") as f:
         loss_param_dict = yaml.load(f, Loader=yaml.FullLoader)
 
     datamod = UnlabeledDataModule(
-        dataset = dataset,
-        video_paths_list=video_files[0], 
-        specialized_dataprep="pca", 
-        loss_param_dict = loss_param_dict
+        dataset=dataset,
+        video_paths_list=vids[0],
+        specialized_dataprep="pca",
+        loss_param_dict=loss_param_dict,
     )
     datamod.setup()
-    
+
     semi_super_losses_to_use = ["pca"]
     model = SemiSupervisedHeatmapTracker(
-        resnet_version = 18,
+        resnet_version=18,
         num_targets=34,
-        loss_params = loss_param_dict,
-        semi_super_losses_to_use = semi_super_losses_to_use,
-        output_shape = dataset.output_shape
+        loss_params=loss_param_dict,
+        semi_super_losses_to_use=semi_super_losses_to_use,
+        output_shape=dataset.output_shape,
     ).to(_TORCH_DEVICE)
     loader = CombinedLoader(datamod.train_dataloader())
     out = next(iter(loader))
@@ -148,11 +160,12 @@ def test_unsupervised():  # TODO Finish writing test
         384 // (2 ** model.downsample_factor),
     )
 
-    spm_l, spm_u = model.run_subpixelmaxima(out_heatmaps_labeled, out_heatmaps_unlabeled)
+    spm_l, spm_u = model.run_subpixelmaxima(
+        out_heatmaps_labeled, out_heatmaps_unlabeled
+    )
 
-    print(spm_l.shape, spm_u.shape)
-    assert(spm_l.shape == (datamod.train_batch_size, model.num_targets))
-    
+    assert spm_l.shape == (datamod.train_batch_size, model.num_targets)
+
     trainer = pl.Trainer(
         gpus=1 if _TORCH_DEVICE == "cuda" else 0,
         max_epochs=1,

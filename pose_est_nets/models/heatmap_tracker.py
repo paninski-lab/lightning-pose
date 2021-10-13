@@ -1,3 +1,4 @@
+from pose_est_nets.models.base_resnet import BaseFeatureExtractor
 import torch
 import torchvision.models as models
 from torch.nn import functional as F
@@ -6,281 +7,207 @@ from pytorch_lightning.core.lightning import LightningModule
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from typing import Any, Callable, Optional, Tuple, List
+from typing_extensions import Literal
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 import numpy as np
 from pose_est_nets.utils.heatmap_tracker_utils import (
     find_subpixel_maxima,
     largest_factor,
-    format_mouse_data,
 )
+from pose_est_nets.losses.losses import (
+    MaskedMSEHeatmapLoss,
+    get_losses_dict,
+)
+from pose_est_nets.utils.heatmap_tracker_utils import SubPixelMaxima
 
-patch_typeguard()
-
-# base_class: with feature extractor
+patch_typeguard()  # use before @typechecked
 
 
-class DLC(LightningModule):
+@typechecked
+class HeatmapTracker(BaseFeatureExtractor):
     def __init__(
         self,
         num_targets: int,
-        resnet_version: int = 18,
-        downsample_factor: Optional[
-            int
-        ] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model
-        transfer: Optional[bool] = False,
+        resnet_version: Literal[18, 34, 50, 101, 152] = 18,
+        # transfer: bool = True,
+        downsample_factor: Literal[
+            2, 3
+        ] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
+        pretrained: bool = True,
+        last_resnet_layer_to_get: int = -3,
+        output_shape: Optional[tuple] = None,  # change
+        output_sigma: float = 1.25,  # check value
+        upsample_factor: int = 100,
+        confidence_scale: float = 255.0,
+        threshold: Optional[float] = None,
+        # device: str = 'cpu',
     ) -> None:
         """
-        Initializes DLC model with resnet backbone
+        Initializes a DLC-like model with resnet backbone inherited from BaseFeatureExtractor
         :param num_targets: number of body parts times 2 (x,y) coords
         :param resnet_version: The ResNet variant to be used (e.g. 18, 34, 50, 101, or 152). Essentially specifies how
             large the resnet will be.
         :param transfer:  Flag to indicate whether this is a transfer learning task or not; defaults to false,
             meaning the entire model will be trained unless this flag is provided
         """
-        super(DLC, self).__init__()
-        self.__dict__.update(locals())  # todo: what is this?
-        resnets = {
-            18: models.resnet18,
-            34: models.resnet34,
-            50: models.resnet50,
-            101: models.resnet101,
-            152: models.resnet152,
-        }
-        # Using a pretrained ResNet backbone
-        backbone = resnets[resnet_version](pretrained=True)
-        num_filters = backbone.fc.in_features
-        layers = list(backbone.children())[
-            :-2
-        ]  # also excluding the penultimate pooling layer
-        self.feature_extractor = nn.Sequential(*layers)
-        self.upsampling_layers = []
-        # TODO: Add normalization
-        # TODO: Should depend on input size?
-        # TODO: all of the following can be properties?
+        super().__init__(  # execute BaseFeatureExtractor.__init__()
+            resnet_version=resnet_version,
+            pretrained=pretrained,
+            last_resnet_layer_to_get=last_resnet_layer_to_get,
+        )
         self.num_targets = num_targets
-        self.num_keypoints = num_targets // 2
         self.downsample_factor = downsample_factor
-        self.coordinate_scale = torch.tensor(2 ** downsample_factor, device=self.device)
-        if downsample_factor == 3:
-            self.upsampling_layers += [  # shape = [batch, 2048, 12, 12]
-                # nn.Upsample(scale_factor = 2, mode = 'bilinear'),
-                nn.PixelShuffle(2),
-                nn.ConvTranspose2d(
-                    in_channels=int(num_filters / 4),
-                    out_channels=self.num_keypoints,
-                    kernel_size=(3, 3),
-                    stride=(2, 2),
-                    padding=(1, 1),
-                    output_padding=(1, 1),
-                ),  # [batch, 17, 48, 48]
-            ]
-            self.upsampling_layers = nn.Sequential(*self.upsampling_layers)
-            torch.nn.init.xavier_uniform_(self.upsampling_layers[-1].weight)
-            torch.nn.init.zeros_(self.upsampling_layers[-1].bias)
-        elif downsample_factor == 2:
-            self.upsampling_layers += [  # shape = [batch, 2048, 12, 12]
-                nn.PixelShuffle(2),
-                nn.ConvTranspose2d(
-                    in_channels=int(num_filters / 4),
-                    out_channels=self.num_keypoints,
-                    kernel_size=(3, 3),
-                    stride=(2, 2),
-                    padding=(1, 1),
-                    output_padding=(1, 1),
-                ),  # [batch, 17, 48, 48]
-                nn.ConvTranspose2d(
-                    in_channels=self.num_keypoints,
-                    out_channels=self.num_keypoints,
-                    kernel_size=(3, 3),
-                    stride=(2, 2),
-                    padding=(1, 1),
-                    output_padding=(1, 1),
-                ),  # [batch, 17, 96, 96]
-            ]
-            self.upsampling_layers = nn.Sequential(*self.upsampling_layers)
-            torch.nn.init.xavier_uniform_(self.upsampling_layers[-1].weight)
-            torch.nn.init.zeros_(self.upsampling_layers[-1].bias)
-            torch.nn.init.xavier_uniform_(self.upsampling_layers[-2].weight)
-            torch.nn.init.zeros_(self.upsampling_layers[-2].bias)
-        else:
-            print("downsample factor not supported!")
-            exit()
+        self.upsampling_layers = self.make_upsampling_layers()
+        self.initialize_upsampling_layers()
+        self.output_shape = output_shape
+        self.output_sigma = output_sigma
+        self.upsample_factor = torch.tensor(upsample_factor, device=self.device)
+        self.confidence_scale = torch.tensor(confidence_scale, device=self.device)
+        self.threshold = threshold
+        self.save_hyperparameters()  # Necessary so we don't have to pass in model arguments when loading
+        # self.device = device #might be done automatically by pytorch lightning
 
-        # self.batch_size = 16 #for autoscale batchsize
-        # self.num_workers = 0
+    @property
+    def num_keypoints(self):
+        return self.num_targets // 2
+
+    @property
+    def num_filters_for_upsampling(self):
+        return self.backbone.fc.in_features
+
+    @property
+    def coordinate_scale(self):
+        return torch.tensor(2 ** self.downsample_factor, device=self.device)
+
+    @property
+    def SubPixMax(self):
+        return SubPixelMaxima(
+            output_shape=self.output_shape,
+            output_sigma=self.output_sigma,
+            upsample_factor=self.upsample_factor,
+            coordinate_scale=self.coordinate_scale,
+            confidence_scale=self.confidence_scale,
+            threshold=self.threshold,
+            device=self.device,
+        )
+
+    def run_subpixelmaxima(self, heatmaps1, heatmaps2=None):
+        return self.SubPixMax.run(heatmaps1, heatmaps2)
+
+    def initialize_upsampling_layers(self) -> None:
+        # TODO: test that running this method changes the weights and biases
+        """loop over the Conv2DTranspose upsampling layers and initialize them"""
+        for index, layer in enumerate(self.upsampling_layers):
+            if index > 0:  # we ignore the PixelShuffle
+                torch.nn.init.xavier_uniform_(layer.weight)
+                torch.nn.init.zeros_(layer.bias)
 
     @typechecked
-    def forward(
-        self, x: TensorType["Batch_Size", 3, "Height", "Width"]
-    ) -> TensorType[
-        "Batch_Size", "Num_Keypoints", "Out_Height", "Out_Width"
-    ]:  # how do I use a variable to indicate number of keypoints
-        """
-        Forward pass through the network
-        :param x: input
-        :return: output of network
-        """
-        # self.feature_extractor.eval()
-        # with torch.no_grad():
-        representations = self.feature_extractor(x)
-        # TODO: move to tests
-        assert (
-            torch.tensor(representations.shape[-2:]) == torch.tensor([12, 12])
-        ).all()
+    def make_upsampling_layers(self) -> torch.nn.Sequential:
+        # Note: https://github.com/jgraving/DeepPoseKit/blob/cecdb0c8c364ea049a3b705275ae71a2f366d4da/deepposekit/models/DeepLabCut.py#L131
+        # in their model, the pixel shuffle happens only for the downsample_factor=2
+        upsampling_layers = [nn.PixelShuffle(2)]
+        upsampling_layers.append(
+            self.create_double_upsampling_layer(
+                in_channels=self.num_filters_for_upsampling // 4,
+                out_channels=self.num_keypoints,
+            )
+        )  # running up to here results in downsample_factor=3 for [384,384] images
+        if self.downsample_factor == 2:
+            upsampling_layers.append(
+                self.create_double_upsampling_layer(
+                    in_channels=self.num_keypoints,
+                    out_channels=self.num_keypoints,
+                )
+            )
 
-        out = self.upsampling_layers(representations)
-        assert (
-            torch.tensor(out.shape[-2:])
-            == torch.tensor(x.shape[-2:]) // (2 ** self.downsample_factor)
-        ).all()
-        return out
+        return nn.Sequential(*upsampling_layers)
 
     @staticmethod
     @typechecked
-    def heatmap_loss(
-        y: TensorType["Batch_Size", "Num_Keypoints", "Out_Height", "Out_Width"],
-        y_hat: TensorType["Batch_Size", "Num_Keypoints", "Out_Height", "Out_Width"],
-    ) -> TensorType[()]:
-        """
-        Computes mse loss between ground truth (x,y) coordinates and predicted (x^,y^) coordinates
-        :param y: ground truth. shape=(num_targets, 2)
-        :param y_hat: prediction. shape=(num_targets, 2)
-        :return: mse loss
-        """
-        # apply mask, only computes loss on heatmaps where the ground truth heatmap is not all zeros (i.e., not an occluded keypoint)
-        max_vals = torch.amax(y, dim=(2, 3))
-        zeros = torch.zeros(size=(y.shape[0], y.shape[1]), device=y_hat.device)
-        non_zeros = ~torch.eq(max_vals, zeros)
-        mask = torch.reshape(non_zeros, [non_zeros.shape[0], non_zeros.shape[1], 1, 1])
-        # compute loss
-        loss = F.mse_loss(
-            torch.masked_select(y_hat, mask), torch.masked_select(y, mask)
+    def create_double_upsampling_layer(
+        in_channels: int, out_channels: int
+    ) -> torch.nn.ConvTranspose2d:
+        """taking in/out channels, and performs ConvTranspose2d to double the output shape"""
+        return nn.ConvTranspose2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=(3, 3),
+            stride=(2, 2),
+            padding=(1, 1),
+            output_padding=(1, 1),
         )
-        return loss
 
     @typechecked
-    # what are we doing about NANS?
-    def pca_2view_loss(
+    def heatmaps_from_representations(
         self,
-        y_hat: TensorType["Batch_Size", "Num_Keypoints", "Out_Height", "Out_Width"],
-    ) -> TensorType[()]:
-        # TODO: add conditions regarding epsilon?
-        kernel_size = np.min(self.output_shape)  # change from numpy to torch
-        kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
-        keypoints = find_subpixel_maxima(
-            y_hat.detach(),  # TODO: why detach? could keep everything on GPU?
-            torch.tensor(kernel_size, device=self.device),
-            torch.tensor(self.output_sigma, device=self.device),
-            self.upsample_factor,  # TODO: these are coming from self, shouldn't be inputs?
-            self.coordinate_scale,
-            self.confidence_scale,
-        )
-        keypoints = keypoints[:, :, :2]
-        data_arr = format_mouse_data(keypoints)
-        abs_proj_discarded = torch.abs(
-            torch.matmul(data_arr.T, self.pca_param_dict["discarded_eigenvectors"].T)
-        )
-        epsilon_masked_proj = abs_proj_discarded.masked_fill(
-            mask=abs_proj_discarded > self.pca_param_dict["epsilon"], value=0.0
-        )
-        assert (epsilon_masked_proj >= 0.0).all()  # every element should be positive
-        assert torch.mean(epsilon_masked_proj) <= torch.mean(
-            abs_proj_discarded
-        )  # the scalar loss should be smaller after zeroing out elements.
-        return torch.mean(epsilon_masked_proj)
+        representations: TensorType[
+            "Batch_Size",
+            "Features",
+            "Representation_Height",
+            "Representation_Width",
+            float,
+        ],
+    ) -> TensorType[
+        "Batch_Size", "Num_Keypoints", "Heatmap_Height", "Heatmap_Width", float
+    ]:
+        """a wrapper around self.upsampling_layers for type and shape assertion.
+        Args:
+            representations (torch.tensor(float)): the output of the Resnet feature extractor.
+        Returns:
+            (torch.tensor(float)): the result of applying the upsampling layers to the representations.
+        """
+        return self.upsampling_layers(representations)
 
-    def training_step(self, data, batch_idx):
-        # x, y_heatmap, y_keypoints = data
-        x, y = data
-        # forward pass
-        y_hat = self.forward(x)
-        # compute loss
-        heatmap_loss = self.heatmap_loss(y, y_hat)
-        # heatmap_loss = self.heatmap_loss(y_heatmap, y_hat)
-        pca_view_loss = self.pca_2view_loss(y_hat)
-        loss = heatmap_loss + pca_view_loss
+    @typechecked
+    def forward(
+        self, images: TensorType["Batch_Size", 3, "Image_Height", "Image_Width"]
+    ) -> TensorType["Batch_Size", "Num_Keypoints", "Heatmap_Height", "Heatmap_Width",]:
+        """
+        Forward pass through the network
+        :param x: images
+        :return: heatmap per keypoint
+        """
+        representations = self.get_representations(images)
+        heatmaps = self.heatmaps_from_representations(representations)
+        return heatmaps
 
-        # ppca_loss =
-        # log training loss
-        self.log(
-            "train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
-        )
-        self.log(
-            "pca_loss",
-            pca_view_loss,
-            on_step=True,
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-        )
+    @typechecked
+    def training_step(self, data_batch: List, batch_idx: int) -> dict:
+        images, true_heatmaps = data_batch  # read batch
+        predicted_heatmaps = self.forward(images)  # images -> heatmaps
+        heatmap_loss = MaskedMSEHeatmapLoss(true_heatmaps, predicted_heatmaps)
 
         self.log(
-            "heatmap_loss",
+            "train_loss",
             heatmap_loss,
             on_step=True,
             on_epoch=True,
             prog_bar=True,
             logger=True,
         )
-        return {"loss": loss}
+        return {"loss": heatmap_loss}
 
-    def validation_step(self, data: Tuple, batch_idx: int) -> None:
-        x, y = data
-        y_hat = self.forward(x)
-        # compute loss
-        loss = self.heatmap_loss(y, y_hat)
-        # log validation loss
-        self.log("val_loss", loss, prog_bar=True, logger=True)
+    @typechecked
+    def evaluate(
+        self, data_batch: List, stage: Optional[Literal["val", "test"]] = None
+    ):
+        images, true_heatmaps = data_batch  # read batch
+        predicted_heatmaps = self.forward(images)  # images -> heatmaps
+        loss = MaskedMSEHeatmapLoss(true_heatmaps, predicted_heatmaps)
+        # TODO: do we need other metrics?
+        if stage:
+            self.log(f"{stage}_loss", loss, prog_bar=True, logger=True)
 
-    def test_step(self, data, batch_idx):
-        self.validation_step(data, batch_idx)
+    def validation_step(self, validation_batch: List, batch_idx):
+        self.evaluate(validation_batch, "val")
 
-    def computeSubPixMax(self, heatmaps_pred, heatmaps_y, threshold):
-        assert hasattr(self, "output_shape")
-        kernel_size = np.min(self.output_shape)
-        kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
-        pred_keypoints = find_subpixel_maxima(
-            heatmaps_pred.detach(),
-            torch.tensor(kernel_size, device=heatmaps_pred.device),
-            torch.tensor(self.output_sigma, device=heatmaps_pred.device),
-            self.upsample_factor,
-            self.coordinate_scale,
-            self.confidence_scale,
-        )
-        y_keypoints = find_subpixel_maxima(
-            heatmaps_y.detach(),
-            torch.tensor(kernel_size, device=heatmaps_pred.device),
-            torch.tensor(self.output_sigma, device=heatmaps_pred.device),
-            self.upsample_factor,
-            self.coordinate_scale,
-            self.confidence_scale,
-        )
-        pred_keypoints = pred_keypoints[0]
-        y_keypoints = y_keypoints[0]
-        if threshold:
-            # for i in range(pred_keypoints.shape[0]): # pred_keypoints is shape(num_keypoints, 3) the last entry being (x,y, confidence)
-            #     if pred_keypoints[i, 2] > 0.008: #threshold for low confidence predictions
-            #         pred_kpts_list.append(pred_keypoints[i, :2].cpu().numpy())
-            #     if y_keypoints[i, 2] > 0.008:
-            #         y_kpts_list.append(y_keypoints[i, :2].cpu().numpy())
-            # print(pred_kpts_list, y_kpts_list)
-            num_threshold = torch.tensor(0.001, device=heatmaps_pred.device)
-            pred_mask = torch.gt(pred_keypoints[:, 2], num_threshold)
-            pred_mask = pred_mask.unsqueeze(-1)
-            y_mask = torch.gt(y_keypoints[:, 2], num_threshold)
-            y_mask = y_mask.unsqueeze(-1)
-            pred_keypoints = torch.masked_select(pred_keypoints, pred_mask).reshape(
-                -1, 3
-            )
-            y_keypoints = torch.masked_select(y_keypoints, y_mask).reshape(-1, 3)
-
-        pred_keypoints = pred_keypoints[:, :2]  # getting rid of the actual max value
-        y_keypoints = y_keypoints[:, :2]
-        return pred_keypoints, y_keypoints
+    def test_step(self, test_batch: List, batch_idx):
+        self.evaluate(test_batch, "test")
 
     def configure_optimizers(self):
-        optimizer = Adam(self.parameters(), lr=1e-3)
+        optimizer = Adam(filter(lambda p: p.requires_grad, self.parameters()), lr=1e-3)
         scheduler = ReduceLROnPlateau(optimizer, factor=0.2, patience=20, verbose=True)
         return {
             "optimizer": optimizer,
@@ -289,60 +216,94 @@ class DLC(LightningModule):
         }
 
 
-class Semi_Supervised_DLC(DLC):
-    def __init__(self, num_targets: int, resnet_version: Optional[int] = 18) -> None:
-        """
-        DLC model with support to labeled+unlabeled batches in training_step.
-        The only difference should be self.training_step(), as we're using the same ops for the labeled val/test images.
-        """
-        super().__init__(num_targets=num_targets, resnet_version=resnet_version)
-        self.__dict__.update(locals())
-
-    def training_step(self, batch: dict, batch_idx: int) -> dict:
-        # x, y_heatmap, y_keypoints = data
-        labeled_images, labeled_heatmaps = batch["labeled"]
-        unlabeled_images = batch["unlabeled"]
-        # push labeled images
-        pred_heatmaps_labeled = self.forward(labeled_images)
-        # push unlabeled images
-        pred_heatmaps_unlabeled = self.forward(unlabeled_images)
-        # compute loss
-        heatmap_loss_labeled = self.heatmap_loss(
-            labeled_heatmaps, pred_heatmaps_labeled
+class SemiSupervisedHeatmapTracker(HeatmapTracker):
+    def __init__(
+        self,
+        num_targets: int,
+        loss_params: Optional[
+            dict
+        ] = None,  # having it optional so we can initialize a model without passing that in
+        resnet_version: Literal[18, 34, 50, 101, 152] = 18,
+        downsample_factor: Literal[
+            2, 3
+        ] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
+        pretrained: bool = True,
+        last_resnet_layer_to_get: int = -3,
+        output_shape: Optional[tuple] = None,  # change
+        output_sigma: float = 1.25,  # check value,
+        upsample_factor: int = 100,
+        confidence_scale: float = 255.0,
+        threshold: Optional[float] = None,
+        semi_super_losses_to_use: Optional[list] = None,
+    ):
+        super().__init__(
+            num_targets=num_targets,
+            resnet_version=resnet_version,
+            # transfer = transfer,
+            downsample_factor=downsample_factor,
+            pretrained=pretrained,
+            last_resnet_layer_to_get=last_resnet_layer_to_get,
+            output_shape=output_shape,
+            output_sigma=output_sigma,
+            upsample_factor=upsample_factor,
+            confidence_scale=confidence_scale,
+            # device = device
         )
-        pca_view_loss_labeled = self.pca_2view_loss(pred_heatmaps_labeled)
-        pca_view_loss_unlabeled = self.pca_2view_loss(pred_heatmaps_unlabeled)
-        loss = heatmap_loss_labeled + pca_view_loss_labeled + pca_view_loss_unlabeled
+        print(semi_super_losses_to_use)
+        self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
+        self.loss_params = loss_params
+        print(self.loss_function_dict)
+        # self.save_hyperparameters()  # Should save loss_params with the model
+        # if self.loss_params is not None:
+        # self.save_loss_param_dict()
 
-        # log all relevant losses
-        self.log(
-            "total_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
-        )
+    # def save_loss_param_dict(self) -> None:
+    #     for loss_name, param_dict in self.loss_params.items():
+    #         for key, val in param_dict.items():
+    #             if val is not None:  # we make it a tensor
+    #                 val = torch.tensor(val, dtype=torch.float32)
+    #             self.register_buffer(loss_name + "_" + key, val)
 
+    @typechecked
+    def training_step(self, data_batch: dict, batch_idx: int) -> dict:
+        labeled_imgs, true_heatmaps = data_batch["labeled"]
+        unlabeled_imgs = data_batch["unlabeled"]
+        predicted_heatmaps = self.forward(labeled_imgs)
+        supervised_loss = MaskedMSEHeatmapLoss(true_heatmaps, predicted_heatmaps)
+        unlabeled_predicted_heatmaps = self.forward(unlabeled_imgs)
+        predicted_us_keypoints = self.run_subpixelmaxima(unlabeled_predicted_heatmaps)
+        tot_loss = 0.0
+        tot_loss += supervised_loss
+        for loss_name, loss_func in self.loss_function_dict.items():
+            add_loss = self.loss_params[loss_name]["weight"] * loss_func(
+                predicted_us_keypoints, **self.loss_params[loss_name]
+            )
+            tot_loss += add_loss
+            # log individual unsupervised losses
+            self.log(
+                loss_name + "_loss",
+                add_loss,
+                on_step=True,
+                on_epoch=True,
+                prog_bar=True,
+                logger=True,
+            )
+        # log the total loss
         self.log(
-            "heatmap_loss_labeled",
-            heatmap_loss_labeled,
+            "total_loss",
+            tot_loss,
             on_step=True,
             on_epoch=True,
             prog_bar=True,
             logger=True,
         )
-
+        # log the supervised loss
         self.log(
-            "pca_loss_labeled",
-            pca_view_loss_labeled,
+            "supervised_loss",
+            supervised_loss,
             on_step=True,
             on_epoch=True,
             prog_bar=True,
             logger=True,
         )
-        self.log(
-            "pca_loss_unlabeled",
-            pca_view_loss_unlabeled,
-            on_step=True,
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-        )
-
-        return {"loss": loss}
+        return {"loss": tot_loss}

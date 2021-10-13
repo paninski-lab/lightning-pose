@@ -6,33 +6,34 @@ from omegaconf import DictConfig, OmegaConf
 import os
 import imgaug.augmenters as iaa
 from imgaug.augmentables.kps import Keypoint, KeypointsOnImage
-from pose_est_nets.models.new_heatmap_tracker import HeatmapTracker
+from pose_est_nets.models.heatmap_tracker import HeatmapTracker
 import torch
 
 
-#PLAN: reads in hydra cfg, datamodule, and best_model (could be changed to list of best models)
-#Goes through the whole dataset using datamodule.fulldataset
+# PLAN: reads in hydra cfg, datamodule, and best_model (could be changed to list of best models)
+# Goes through the whole dataset using datamodule.fulldataset
 #   For each image in the dataset, create a sample with the image path, annotate images corresponding to train/valid/test,
 #   Add ground truth predictions from fulldataset.labels (filter out the nans)
-#   For each model (one for now), make predictions on the data, check if subpixelmaxima has to be taken (if dataset is heatmap), 
+#   For each model (one for now), make predictions on the data, check if subpixelmaxima has to be taken (if dataset is heatmap),
 #   and resize predictions back to original image dimension,
 #   and get rid of predictions of keypoints corresponding to nans in the ground truth
-#   add sample to sample list 
+#   add sample to sample list
 
-def tensor_to_keypoint_list( #TODO: move to utils file
-    keypoint_tensor
-):
+
+def tensor_to_keypoint_list(keypoint_tensor):  # TODO: move to utils file
     img_kpts_list = []
     for i in range(len(keypoint_tensor)):
-        img_kpts_list.append(tuple((float(keypoint_tensor[i][0]/406),float(keypoint_tensor[i][1]/396))))
-        #keypoints are normalized to the original image dims, either add these to data config, or automatically detect by
-        #loading a sample image in dataset.py or something
+        img_kpts_list.append(
+            tuple(
+                (float(keypoint_tensor[i][0] / 406), float(keypoint_tensor[i][1] / 396))
+            )
+        )
+        # keypoints are normalized to the original image dims, either add these to data config, or automatically detect by
+        # loading a sample image in dataset.py or something
     return img_kpts_list
 
 
-def make_dataset_and_evaluate(
-    cfg, datamod, best_models
-):
+def make_dataset_and_evaluate(cfg, datamod, best_models):
     reverse_transform = []
     reverse_transform.append(
         iaa.Resize(
@@ -54,7 +55,7 @@ def make_dataset_and_evaluate(
     for idx, img_name in enumerate(image_names):
         print(idx)
         img_path = os.path.join(cfg.data.data_dir, img_name)
-        #assert os.path.isfile(img_path)
+        # assert os.path.isfile(img_path)
         gt_img_kpts = gt_keypoints[idx]
         nan_bool = (
             torch.sum(torch.isnan(gt_img_kpts), dim=1) > 0
@@ -70,22 +71,28 @@ def make_dataset_and_evaluate(
         else:
             tag = "error"
         sample = fo.Sample(filepath=img_path, tags=[tag])
-        sample["ground_truth"] = fo.Keypoints(keypoints=[fo.Keypoint(points=gt_kpts_list)])
+        sample["ground_truth"] = fo.Keypoints(
+            keypoints=[fo.Keypoint(points=gt_kpts_list)]
+        )
         img = datamod.fulldataset.__getitem__(idx)[0].unsqueeze(0)
-        img_BHWC = img.permute(0, 2, 3, 1) #Needs to be BHWC format       
+        img_BHWC = img.permute(0, 2, 3, 1)  # Needs to be BHWC format
         for name, model in best_models.items():
             pred = model.forward(img)
-            if isinstance(model, HeatmapTracker) or issubclass(type(model), HeatmapTracker): #check if model is in the heatmap family
+            if isinstance(model, HeatmapTracker) or issubclass(
+                type(model), HeatmapTracker
+            ):  # check if model is in the heatmap family
                 pred = model.run_subpixelmaxima(pred)
             resized_pred = reverse_transform(
                 images=img_BHWC.numpy(),
-                keypoints=(pred.detach().numpy().reshape((1, -1, 2)))
+                keypoints=(pred.detach().numpy().reshape((1, -1, 2))),
             )[1][0]
             pred_kpts_list = tensor_to_keypoint_list(resized_pred[~nan_bool])
-            sample[name+"_prediction"] = fo.Keypoints(keypoints=[fo.Keypoint(points=pred_kpts_list)])
+            sample[name + "_prediction"] = fo.Keypoints(
+                keypoints=[fo.Keypoint(points=pred_kpts_list)]
+            )
         samples.append(sample)
-        #print(sample)
-        
+        # print(sample)
+
     full_dataset = fo.Dataset("mouse_data")
     full_dataset.add_samples(samples)
     print(full_dataset)
@@ -97,7 +104,6 @@ def make_dataset_and_evaluate(
     return
 
 
-
 # def evaluate(
 #     cfg, datamod, best_model
 # ):  # removed trainer arg, and assuming best_model is given
@@ -107,7 +113,7 @@ def make_dataset_and_evaluate(
 #     assert os.path.isdir(path_to_ims)
 #     gt_dataset = fo.Dataset.from_images_dir(path_to_ims)
 #     test_indices = datamod.test_set.indices
-#     best_model.run_subpixelmaxima(pred) 
+#     best_model.run_subpixelmaxima(pred)
 #     # for idx, sample in enumerate(gt_dataset):
 #     for idx, sample in enumerate(gt_dataset.iter_samples(progress=True)):
 #         img_kpts = datamod.fulldataset.labels[idx]  # a list of tensors.

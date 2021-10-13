@@ -27,7 +27,6 @@ def test_heatmap_dataset():
         csv_path="CollectedData_.csv",
         header_rows=[1, 2],
         imgaug_transform=imgaug_transform,
-        mode="csv",
     )
     # first test: both datasets provide the same image at index 0
     assert torch.equal(regData.__getitem__(0)[0], heatmapData.__getitem__(0)[0])
@@ -42,9 +41,15 @@ def test_heatmap_dataset():
     numLabels = regData.labels.shape[1]
     for idx in range(numLabels):
         if torch.any(torch.isnan(regData.__getitem__(0)[1][idx])):
+            print("there is any nan here")
             print(torch.max(heatmapData.__getitem__(0)[1][idx]))
             assert torch.max(heatmapData.__getitem__(0)[1][idx]) == torch.tensor(0)
-        else:
+        else:  # TODO: the below isn't passing on idx 5, we have an all zeros heatmap for a label vec without nans
+            print(f"idx {idx}")
+            print("no nan's here")
+            print("labels: {}")
+            print(torch.unique(heatmapData.__getitem__(0)[1][idx]))
+            print("item {}".format(torch.max(heatmapData.__getitem__(0)[1][idx])))
             assert torch.max(heatmapData.__getitem__(0)[1][idx]) != torch.tensor(0)
 
     print(heatmapData.__getitem__(11)[1])
