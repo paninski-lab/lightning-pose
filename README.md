@@ -1,7 +1,7 @@
 # pose-estimation-nets
 Scalable pose estimation based on **Pytorch-Lightning**, supporting training on massive unlabeled videos using **NVIDIA DALI**.
 ## Hardware
-We assume that you are running on a machine that has at least one GPU and **CUDA 11** installed. This is a requirement for **NVIDIA DALI**.
+Your (potentially remote) machine has at least one GPU and **CUDA 11** installed. This is a requirement for **NVIDIA DALI**.
 ## Installation
 First create a Conda environment in which this package and its dependencies will be installed. 
 As you would do for any other repository, first --
@@ -48,7 +48,7 @@ You should be ready to go! You may verify that all the unit tests are passing on
 ## Training
 
 The generic script for training models in our package is `scripts/train_hydra.py`.
-The script relies on the **Hydra** to manage arguments in hierarchical config files. You can run over an argument from the config file by calling
+The script relies on **Hydra** to manage arguments in hierarchical config files. You can run over an argument from the config file by calling
 
 ```python scripts/train_hydra.py training.max_epochs=11```.
 
