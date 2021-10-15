@@ -1,20 +1,7 @@
-# model_paths: [
-#   "/home/ubuntu/pose-estimation-nets/outputs/2021-09-30/05-41-05/tb_logs/my_test_model/version_0/checkpoints/epoch=299-step=15899.ckpt", 
-#   "/home/ubuntu/pose-estimation-nets/outputs/2021-09-30/04-27-31/tb_logs/my_test_model/version_0/checkpoints/epoch=249-step=13249.ckpt", 
-#   "/home/ubuntu/pose-estimation-nets/outputs/2021-09-30/22-19-37/tb_logs/my_test_model/version_0/checkpoints/epoch=169-step=9009.ckpt",
-#   "/home/ubuntu/pose-estimation-nets/outputs/2021-09-30/23-50-18/tb_logs/my_test_model/version_0/checkpoints/epoch=146-step=7790.ckpt"
-#   ]
 #path to the hydra config file in the output folder, we can use it reconstruct information about loss directory
 hydra_paths: [
   "2021-10-15/04-24-52/",
   "2021-10-15/04-28-08/",
   "2021-10-15/04-30-19/"
-  # "2021-09-30/05-41-05",
-  # "2021-09-30/04-27-31",
-  # "2021-09-30/22-19-37",
-  # "2021-09-30/23-50-18"
 ]
-
-
-#model_types: ["SemiSupervisedHeatmapTracker", "HeatmapTracker", "SemiSupervisedRegressionTracker", "RegressionTracker"]   #should we use shorthand?
 model_names: ["baseheatmap1", "semisupervisedheatmap2", "semisupervisedregression3"] #Names could be more descriptive
