@@ -9,6 +9,17 @@ from imgaug.augmentables.kps import Keypoint, KeypointsOnImage
 from pose_est_nets.models.heatmap_tracker import HeatmapTracker
 import torch
 
+def tensor_to_keypoint_list(keypoint_tensor, height, width):  # TODO: move to utils file
+    img_kpts_list = []
+    for i in range(len(keypoint_tensor)):
+        img_kpts_list.append(
+            tuple(
+                (float(keypoint_tensor[i][0] / height), float(keypoint_tensor[i][1] / width))
+            )
+        )
+        # keypoints are normalized to the original image dims, either add these to data config, or automatically detect by
+        # loading a sample image in dataset.py or something
+    return img_kpts_list
 
 # PLAN: reads in hydra cfg, datamodule, and best_model (could be changed to list of best models)
 # Goes through the whole dataset using datamodule.fulldataset
@@ -20,26 +31,13 @@ import torch
 #   add sample to sample list
 
 
-def tensor_to_keypoint_list(keypoint_tensor):  # TODO: move to utils file
-    img_kpts_list = []
-    for i in range(len(keypoint_tensor)):
-        img_kpts_list.append(
-            tuple(
-                (float(keypoint_tensor[i][0] / 406), float(keypoint_tensor[i][1] / 396))
-            )
-        )
-        # keypoints are normalized to the original image dims, either add these to data config, or automatically detect by
-        # loading a sample image in dataset.py or something
-    return img_kpts_list
-
-
 def make_dataset_and_evaluate(cfg, datamod, best_models):
     reverse_transform = []
     reverse_transform.append(
         iaa.Resize(
             {
-                "height": 406,  # HARDCODED FOR NOW,
-                "width": 396,
+                "height": cfg.data.image_orig_dims.height,
+                "width": cfg.data.image_orig_dims.width,
             }
         )
     )
@@ -61,7 +59,7 @@ def make_dataset_and_evaluate(cfg, datamod, best_models):
             torch.sum(torch.isnan(gt_img_kpts), dim=1) > 0
         )  # e.g., when dim == 0, those columns (keypoints) that have more than zero nans
         gt_img_kpts = gt_img_kpts[~nan_bool]
-        gt_kpts_list = tensor_to_keypoint_list(gt_img_kpts)
+        gt_kpts_list = tensor_to_keypoint_list(gt_img_kpts, cfg.data.image_orig_dims.height, cfg.data.image_orig_dims.width)
         if idx in train_indices:
             tag = "train"
         elif idx in valid_indices:
@@ -86,12 +84,11 @@ def make_dataset_and_evaluate(cfg, datamod, best_models):
                 images=img_BHWC.numpy(),
                 keypoints=(pred.detach().numpy().reshape((1, -1, 2))),
             )[1][0]
-            pred_kpts_list = tensor_to_keypoint_list(resized_pred[~nan_bool])
+            pred_kpts_list = tensor_to_keypoint_list(resized_pred[~nan_bool], cfg.data.image_orig_dims.height, cfg.data.image_orig_dims.width)
             sample[name + "_prediction"] = fo.Keypoints(
                 keypoints=[fo.Keypoint(points=pred_kpts_list)]
             )
         samples.append(sample)
-        # print(sample)
 
     full_dataset = fo.Dataset("mouse_data")
     full_dataset.add_samples(samples)

@@ -3,3 +3,4 @@ defaults:
 - losses: loss_params
 - data: data_params
 - model: model_params
+- eval: eval_params
