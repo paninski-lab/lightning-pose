@@ -24,7 +24,7 @@ def count_frames(video_full_path: str) -> int:
     return int(video.get(cv2.CAP_PROP_FRAME_COUNT))
 
 
-## DALI Defaults
+# DALI Defaults
 # statistics of imagenet dataset on which the resnet was trained
 # see https://pytorch.org/vision/stable/models.html
 _IMAGENET_MEAN = [0.485, 0.456, 0.406]
@@ -43,6 +43,8 @@ def video_pipe(
     normalization_std: Optional[List[float]] = _IMAGENET_STD,
     device: Optional[str] = _DALI_DEVICE,
     sequence_length: int = _SEQUENCE_LENGTH_UNSUPERVISED,
+    name: Optional[List[str]] = 'reader',
+    pad_sequences: Optional[List[bool]] = True,
 ):  # TODO: what does it return? more typechecking
     video = fn.readers.video(
         device=device,
@@ -52,6 +54,8 @@ def video_pipe(
         initial_fill=_INITIAL_PREFETCH_SIZE,
         normalized=False,
         dtype=types.DALIDataType.FLOAT,
+        name=name,
+        pad_sequences=pad_sequences,
     )
     if resize_dims:
         video = fn.resize(video, size=resize_dims)
