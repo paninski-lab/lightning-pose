@@ -2,11 +2,30 @@ import imgaug.augmenters as iaa
 import numpy as np
 import torch
 from pose_est_nets.utils.IO import set_or_open_folder, get_latest_version
+from pose_est_nets.models.heatmap_tracker import (
+    HeatmapTracker,
+    SemiSupervisedHeatmapTracker,
+)
+from pose_est_nets.models.regression_tracker import (
+    RegressionTracker,
+    SemiSupervisedRegressionTracker,
+)
 import matplotlib.pyplot as plt
 import os
 from typing import Callable, Optional, Tuple, List
 from typeguard import typechecked
 
+def get_model_class(map_type: str, semi_supervised: bool):
+    if not(semi_supervised):
+        if map_type == "regression":
+            return RegressionTracker
+        elif map_type == "heatmap":
+            return HeatmapTracker
+    else:
+        if map_type == "regression":
+            return SemiSupervisedRegressionTracker
+        elif map_type == "heatmap":
+            return SemiSupervisedHeatmapTracker
 
 def saveNumericalPredictions(model, datamod, threshold):
     i = 0
