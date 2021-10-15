@@ -34,6 +34,7 @@ def initialize_data_module(create_dataset):
                                      num_workers=8)
     return data_module
 
+@pytest.mark.skip(reason="test outdated")
 def test_forward(initialize_model, create_dataset):
     #TODO: separate from specific dataset, push random tensors
     model = initialize_model
@@ -50,6 +51,7 @@ def test_forward(initialize_model, create_dataset):
     assert (loss.detach().numpy() == float(0))
     assert (loss.shape == torch.Size([]))
 
+@pytest.mark.skip(reason="test outdated")
 def test_dataset(create_dataset, initialize_data_module):
     dataset = create_dataset
     data_module = initialize_data_module
@@ -63,6 +65,7 @@ def test_dataset(create_dataset, initialize_data_module):
         images, y_heatmaps = batch
         assert(~torch.any(torch.isnan(y_heatmaps)))
 
+@pytest.mark.skip(reason="test outdated")
 def test_loss(initialize_model, initialize_data_module):
     model = initialize_model
     data_module = initialize_data_module
