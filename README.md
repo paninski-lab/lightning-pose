@@ -1,8 +1,21 @@
 # Lightning Pose
 Convolutional Networks for pose tracking implemented in **Pytorch-Lightning**, supporting massively accelerated training on *unlabeled* videos using **NVIDIA DALI**.
-## Hardware
-Your (potentially remote) machine has at least one GPU and **CUDA 11** installed. This is a requirement for **NVIDIA DALI**.
+
+### Built with the coolest Deep Learning packages
+* `nvidia-DALI` for accelerated GPU dataloading
+* `torchtyping` for type and shape assertions of `torch` tensors
+* `pytorch-lightning` for multiple-GPU training and to minimize boilerplate code
+* `FiftyOne` for visualizing model predictions
+* `Hydra` to orchestrate the config files and log experiments
+* `Tensorboard` to visually diagnoze training performance
+
+## Required Hardware
+Your (potentially remote) machine has at least one GPU and **CUDA 11** installed. This is a requirement for **NVIDIA DALI**. 
+
+Provide more GPUs and we will use them.
+
 ## Installation
+
 First create a Conda environment in which this package and its dependencies will be installed. 
 As you would do for any other repository, first --
 
