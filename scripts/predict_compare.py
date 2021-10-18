@@ -68,7 +68,7 @@ def predict(cfg: DictConfig):
         specialized_dataprep=losses_to_use,
         loss_param_dict=loss_param_dict,
         train_batch_size=cfg.training.train_batch_size,
-        validation_batch_size=cfg.training.val_batch_size,
+        val_batch_size=cfg.training.val_batch_size,
         test_batch_size=cfg.training.test_batch_size,
         num_workers=cfg.training.num_workers,
     )
