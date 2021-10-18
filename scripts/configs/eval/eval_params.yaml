@@ -1,8 +1,10 @@
 #path to the hydra config file in the output folder, we can use it reconstruct information about loss directory
 hydra_paths: [
-  "2021-10-15/04-24-52/",
-  "2021-10-15/04-28-08/",
-  "2021-10-15/04-30-19/"
+  "2021-10-18/19-19-24/", 
+  "2021-10-18/19-22-08"
+  # "2021-10-15/04-24-52/",
+  # "2021-10-15/04-28-08/",
+  # "2021-10-15/04-30-19/"
 ]
-model_names: ["baseheatmap1", "semisupervisedheatmap2", "semisupervisedregression3"] #Names could be more descriptive
-fifty_one_dataset_name: "mouse_data"
+model_names: ["simple_heatmap", "simple_unsupervised_heatmap"] #["baseheatmap1", "semisupervisedheatmap2", "semisupervisedregression3"] #Names could be more descriptive
+fifty_one_dataset_name: "mouse_data2"

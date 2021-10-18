@@ -91,6 +91,8 @@ def predict(cfg: DictConfig):
     # for now this works without saving the pca params to dict
     bestmodels = {}
     for model_name, hydra_path in zip(cfg.eval.model_names, cfg.eval.hydra_paths):
+        if hydra_path[-1] != "/":
+            hydra_path += "/"
         model_config = OmegaConf.load("../../" + hydra_path + '.hydra/config.yaml')
         ModelClass = get_model_class(model_config.model.model_type, model_config.model.semi_supervised)
         ckpt_path = "../../" + hydra_path + "tb_logs/" + model_config.model.model_name + "/version_0/checkpoints/"
