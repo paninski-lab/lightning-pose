@@ -1,30 +1,43 @@
-# pose-estimation-nets
-Scalable pose estimation based on **Pytorch-Lightning**, supporting training on massive unlabeled videos using **NVIDIA DALI**.
-## Hardware
-Your (potentially remote) machine has at least one GPU and **CUDA 11** installed. This is a requirement for **NVIDIA DALI**.
+# Lightning Pose
+Convolutional Networks for pose tracking implemented in **Pytorch-Lightning**, supporting massively accelerated training on *unlabeled* videos using **NVIDIA DALI**.
+
+### Built with the coolest Deep Learning packages
+* `nvidia-DALI` for accelerated GPU dataloading
+* `torchtyping` for type and shape assertions of `torch` tensors
+* `pytorch-lightning` for multiple-GPU training and to minimize boilerplate code
+* `FiftyOne` for visualizing model predictions
+* `Hydra` to orchestrate the config files and log experiments
+* `Tensorboard` to visually diagnoze training performance
+
+## Required Hardware
+Your (potentially remote) machine has at least one GPU and **CUDA 11** installed. This is a requirement for **NVIDIA DALI**. 
+
+Provide more GPUs and we will use them.
+
 ## Installation
+
 First create a Conda environment in which this package and its dependencies will be installed. 
 As you would do for any other repository, first --
 
 Create the environment:
 
-```conda create --name pose-estimation-nets```
+```conda create --name <YOUR_ENVIRONMENT_NAME>```
 
 Activate the environment:
 
-```conda activate pose-estimation-nets```
+```conda activate <YOUR_ENVIRONMENT_NAME>```
 
 Move into the folder where you want to place the repository folder:
 
-```cd <SOMEFOLDER>```
+```cd <SOME_FOLDER>```
 
 From within that folder, download a local version of the GitHub folder:
 
-```git clone https://github.com/danbider/pose-estimation-nets.git```
+```git clone https://github.com/danbider/lightning-pose.git```
 
 Then move into the new package folder:
 
-```cd pose-estimation-nets```
+```cd lightning-pose```
 
 Install our package and its dependencies:
 
@@ -48,7 +61,7 @@ You should be ready to go! You may verify that all the unit tests are passing on
 ## Training
 
 The generic script for training models in our package is `scripts/train_hydra.py`.
-The script relies on **Hydra** to manage arguments in hierarchical config files. You can run over an argument from the config file by calling
+The script relies on **Hydra** to manage arguments in hierarchical config files. You can run over an argument from the config file, for example, `training.max_epochs`, by calling
 
 ```python scripts/train_hydra.py training.max_epochs=11```.
 
@@ -64,11 +77,10 @@ where you use the date in which you ran the model.
 
 ## Prediction and visualization
 
-Visualizing the models' predictions on the `train/test/val` datasets is done using the `FiftyOne` app. To generate these predictions, run
+Visualize the models' predictions on the `train/test/val` datasets using the `FiftyOne` app: 
 
 ```python scripts/predict_compare.py```
 
-**TODO: current version of this script relies on manual paths and models, we should extend this to flexible checkpoints and model types.**
 
 
 
