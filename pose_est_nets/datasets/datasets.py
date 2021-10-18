@@ -43,8 +43,19 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         imgaug_transform: Optional[Callable] = None,
         pytorch_transform_list: Optional[List] = None,
     ) -> None:
-        """
-        Initializes the Regression Dataset
+        """Initializes the Regression Dataset.
+
+        The csv file must contain image paths *relative to root_directory*.
+
+        The csv file will be searched for in the following order:
+        1. assume csv is located at `root_directory/csv_path` (i.e. `csv_path` argument is a path
+           relative to `root_directory`
+        2. if not found, assume `csv_path` is absolute. Note the image paths within the csv must
+           still be relative to `root_directory`
+        3. if not found, assume dlc directory structure:
+           `root_directory/training-datasets/iteration-0/csv_path` (`csv_path` argument will look
+           like "CollectedData_<scorer>.csv"
+
         Parameters:
             root_directory (str): path to data directory
             csv_path (str): path to CSV file (within root_directory). CSV file should be
@@ -52,14 +63,27 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 Note: image_path is relative to the given root_directory
             header_rows (List[int]): (optional) which rows in the csv are header rows
             transform (torchvision.transforms): (optional) transform to apply to images
-        Returns:
-            None
+
         """
         self.root_directory = root_directory
         self.imgaug_transform = imgaug_transform
-        csv_data = pd.read_csv(
-            os.path.join(root_directory, csv_path), header=header_rows
-        )
+
+        # load csv data
+        # step 1
+        csv_file = os.path.join(root_directory, csv_path)
+        if not os.path.exists(csv_file):
+            # step 2: assume csv_path is absolute
+            csv_file = csv_path
+            if not os.path.exists(csv_file):
+                # step 3: assume dlc directory structure
+                import glob
+                csv_file = glob.glob(os.path.join(
+                    root_directory, "training-datasets", "iteration-0", "*", csv_path
+                ))[0]  # wildcard handles dlc naming conventions specific to each project
+                if not os.path.exists(csv_file):
+                    raise FileNotFoundError("Could not find csv file!")
+
+        csv_data = pd.read_csv(csv_file, header=header_rows)
         self.image_names = list(csv_data.iloc[:, 0])
         self.labels = torch.tensor(csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32)
         self.labels = self.labels.reshape(
