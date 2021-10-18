@@ -93,7 +93,7 @@ def predict(cfg: DictConfig):
     for model_name, hydra_path in zip(cfg.eval.model_names, cfg.eval.hydra_paths):
         model_config = OmegaConf.load("../../" + hydra_path + '.hydra/config.yaml')
         ModelClass = get_model_class(model_config.model.model_type, model_config.model.semi_supervised)
-        ckpt_path = "../../" + hydra_path + "tb_logs/my_test_model/version_0/checkpoints/"
+        ckpt_path = "../../" + hydra_path + "tb_logs/" + model_config.model.model_name + "/version_0/checkpoints/"
         model_path = ckpt_path + os.listdir(ckpt_path)[0]
         if model_config.model.semi_supervised:
             model = ModelClass.load_from_checkpoint(

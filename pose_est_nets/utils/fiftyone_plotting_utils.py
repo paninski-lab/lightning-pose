@@ -80,7 +80,7 @@ def make_dataset_and_evaluate(cfg, datamod, best_models):
             )
         samples.append(sample)
 
-    full_dataset = fo.Dataset("mouse_data")
+    full_dataset = fo.Dataset(cfg.eval.fifty_one_dataset_name)
     full_dataset.add_samples(samples)
     print(full_dataset)
     print("counts: {} ".format(full_dataset.count("ground_truth.keypoints.points")))
