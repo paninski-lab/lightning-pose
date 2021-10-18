@@ -52,23 +52,54 @@ def PCA_prints(pca: sklearn.decomposition._pca.PCA, components_to_keep: int) -> 
 
 
 class BaseDataModule(pl.LightningDataModule):
-    def __init__(  # TODO: add documentation and args
+    def __init__(
         self,
         dataset,
         use_deterministic: bool = False,
         train_batch_size: int = 16,
-        validation_batch_size: int = 16,
+        val_batch_size: int = 16,
         test_batch_size: int = 1,
         num_workers: int = 8,
+        train_probability: float = 0.8,
+        val_probability: float = None,
+        test_probability: float = None,
+        train_frames: float = None,
     ):
+        """Data module splits a dataset into train, val, and test data loaders.
+
+        Args:
+            dataset (torch.utils.data.Dataset): base dataset to be split into train/val/test
+            use_deterministic (bool):
+            train_batch_size (int): number of samples of training batches
+            val_batch_size (int): number of samples in validation batches
+            test_batch_size (int): number of samples in test batches
+            num_workers (int): number of threads used for prefetching data
+            train_probability (float): fraction of full dataset used for training
+            val_probability (float): fraction of full dataset used for validation
+            test_probability (float): fraction of full dataset used for testing
+            train_frames (float or int): if integer, select this number of training frames from the
+                initially selected train frames (defined by `train_probability`); if float, must be
+                between 0 and 1 (exclusive) and defines the fraction of the initially selected
+                train frames
+
+        """
         super().__init__()
         self.fulldataset = dataset
         self.train_batch_size = train_batch_size
-        self.validation_batch_size = validation_batch_size
+        self.val_batch_size = val_batch_size
         self.test_batch_size = test_batch_size
         self.num_workers = num_workers
-        # maybe can make the view information more general when deciding on a specific format for csv files
+        # maybe can make the view information more general when deciding on a specific format for
+        # csv files
         self.use_deterministic = use_deterministic
+        # info about dataset splits
+        self.train_probability = train_probability
+        self.val_probability = val_probability
+        self.test_probability = test_probability
+        self.train_frames = train_frames
+        self.train_set = None  # populated by self.setup()
+        self.val_set = None  # populated by self.setup()
+        self.test_set = None  # populated by self.setup()
 
     def setup(self, stage: Optional[str] = None):  # TODO: clean up
         print("Setting up DataModule...")
@@ -82,17 +113,49 @@ class BaseDataModule(pl.LightningDataModule):
         if self.use_deterministic:
             return
 
-        data_splits_list = split_sizes_from_probabilities(datalen, 0.8, 0.1)
+        # split data based on provided probabilities
+        data_splits_list = split_sizes_from_probabilities(
+            datalen,
+            train_probability=self.train_probability,
+            val_probability=self.val_probability,
+            test_probability=self.test_probability)
 
-        self.train_set, self.valid_set, self.test_set = random_split(
+        self.train_set, self.val_set, self.test_set = random_split(
             self.fulldataset,
             data_splits_list,
             generator=torch.Generator().manual_seed(TORCH_MANUAL_SEED),
         )
 
+        # further subsample training data if desired
+        if self.train_frames is not None:
+            split = True
+            if self.train_frames >= len(self.train_set):
+                # take max number of train frames
+                print("Warning! Requested training frames exceeds training set size; using all")
+                n_frames = len(self.train_set)
+                split = False
+            elif self.train_frames == 1:
+                # assume this is a fraction; use full dataset
+                n_frames = len(self.train_set)
+                split = False
+            elif self.train_frames > 1:
+                # take this number of train frames
+                n_frames = int(self.train_frames)
+            elif self.train_frames > 0:
+                # take this fraction of train frames
+                n_frames = int(self.train_frames * len(self.train_set))
+            else:
+                raise ValueError("train_frames must be >0")
+            if split:
+                self.train_set, _ = random_split(
+                    self.train_set,
+                    [n_frames, len(self.train_set) - n_frames],
+                    generator=torch.Generator().manual_seed(TORCH_MANUAL_SEED),
+                )
+
         print(
             "Size of -- train set: {}, validation set: {}, test set: {}".format(
-                len(self.train_set), len(self.valid_set), len(self.test_set)
+                len(self.train_set), len(self.val_set), len(self.test_set)
             )
         )
 
@@ -105,8 +168,8 @@ class BaseDataModule(pl.LightningDataModule):
 
     def val_dataloader(self):
         return DataLoader(
-            self.valid_set,
-            batch_size=self.validation_batch_size,
+            self.val_set,
+            batch_size=self.val_batch_size,
             num_workers=self.num_workers,
         )
 
@@ -125,7 +188,7 @@ class UnlabeledDataModule(BaseDataModule):
         video_paths_list: List[str],
         use_deterministic: bool = False,
         train_batch_size: int = 16,
-        validation_batch_size: int = 16,
+        val_batch_size: int = 16,
         test_batch_size: int = 1,
         num_workers: int = 8,
         specialized_dataprep: Optional[Literal["pca"]] = None,  # Get rid of optional?
@@ -135,7 +198,7 @@ class UnlabeledDataModule(BaseDataModule):
             dataset,
             use_deterministic,
             train_batch_size,
-            validation_batch_size,
+            val_batch_size,
             test_batch_size,
             num_workers,
         )

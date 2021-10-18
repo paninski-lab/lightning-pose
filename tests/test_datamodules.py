@@ -13,15 +13,13 @@ from pytorch_lightning.trainer.supporters import CombinedLoader
 import numpy as np
 import yaml
 
+
 data_transform = []
 data_transform.append(
     iaa.Resize({"height": 384, "width": 384})
 )  # dlc dimensions need to be repeatably divisable by 2
 imgaug_transform = iaa.Sequential(data_transform)
 
-# video_directory = os.path.join(
-#     "/home/jovyan/mouseRunningData/unlabeled_videos"
-# )  # DAN's
 video_directory = "toy_datasets/toymouseRunningData/unlabeled_videos"
 assert os.path.exists(video_directory)
 
@@ -84,6 +82,60 @@ def test_base_datamodule():
             ]
         )
     ).all()
+
+    # test subsampling of training frames
+    train_frames = 10  # integer
+    heatmap_module = BaseDataModule(heatmapData, train_frames=train_frames)
+    heatmap_module.setup()
+    train_dataloader = heatmap_module.train_dataloader()
+    assert len(train_dataloader.dataset) == train_frames
+
+    train_frames = 1  # integer
+    train_probability = 0.8
+    heatmap_module = BaseDataModule(
+        heatmapData,
+        train_frames=train_frames,
+        train_probability=train_probability)
+    heatmap_module.setup()
+    train_dataloader = heatmap_module.train_dataloader()
+    assert (
+        len(train_dataloader.dataset)
+        == int(train_probability * len(heatmap_module.fulldataset))
+    )
+
+    train_frames = 0.1  # fraction < 1
+    train_probability = 0.8
+    heatmap_module = BaseDataModule(
+        heatmapData,
+        train_frames=train_frames,
+        train_probability=train_probability)
+    heatmap_module.setup()
+    train_dataloader = heatmap_module.train_dataloader()
+    assert (
+        len(train_dataloader.dataset)
+        == int(train_frames * train_probability * len(heatmap_module.fulldataset))
+    )
+
+    train_frames = 1000000  # integer larger than number of labeled frames
+    train_probability = 0.8
+    heatmap_module = BaseDataModule(
+        heatmapData,
+        train_frames=train_frames,
+        train_probability=train_probability)
+    heatmap_module.setup()
+    train_dataloader = heatmap_module.train_dataloader()
+    assert (
+        len(train_dataloader.dataset)
+        == int(train_probability * len(heatmap_module.fulldataset))
+    )
+
+    # raise exception when not a path
+    with pytest.raises(ValueError):
+        train_frames = -1
+        heatmap_module = BaseDataModule(
+            heatmapData,
+            train_frames=train_frames)
+        heatmap_module.setup()
 
 
 def test_UnlabeledDataModule():
