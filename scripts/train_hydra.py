@@ -110,7 +110,7 @@ def train(cfg: DictConfig):
                 loss_params=datamod.loss_param_dict,
                 semi_super_losses_to_use=losses_to_use,
             )
-    logger = TensorBoardLogger("tb_logs", name="my_test_model")
+    logger = TensorBoardLogger("tb_logs", name= cfg.model.model_name)
     early_stopping = pl.callbacks.EarlyStopping(
         monitor="val_loss", patience=100, mode="min"
     )

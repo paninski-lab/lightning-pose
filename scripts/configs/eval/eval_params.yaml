@@ -5,3 +5,4 @@ hydra_paths: [
   "2021-10-15/04-30-19/"
 ]
 model_names: ["baseheatmap1", "semisupervisedheatmap2", "semisupervisedregression3"] #Names could be more descriptive
+fifty_one_dataset_name: "mouse_data"
