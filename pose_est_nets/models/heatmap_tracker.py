@@ -39,7 +39,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         output_shape: Optional[tuple] = None,  # change
         output_sigma: float = 1.25,  # check value
         upsample_factor: int = 100,
-        confidence_scale: float = 255.0,
+        confidence_scale: float = 1.0,
         threshold: Optional[float] = None,
     ) -> None:
         """
@@ -60,7 +60,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         self.upsampling_layers = self.make_upsampling_layers()
         self.initialize_upsampling_layers()
         self.output_shape = output_shape
-        self.output_sigma = output_sigma
+        self.output_sigma = torch.tensor(output_sigma, device=self.device)
         self.upsample_factor = torch.tensor(upsample_factor, device=self.device)
         self.confidence_scale = torch.tensor(confidence_scale, device=self.device)
         self.threshold = threshold
@@ -176,7 +176,7 @@ class HeatmapTracker(BaseFeatureExtractor):
     def training_step(self, data_batch: List, batch_idx: int) -> dict:
         images, true_heatmaps, true_keypoints = data_batch  # read batch
         predicted_heatmaps = self.forward(images)  # images -> heatmaps
-        predicted_keypoints = self.run_subpixelmaxima(
+        predicted_keypoints, confidence = self.run_subpixelmaxima(
             predicted_heatmaps
         )  # heatmaps -> keypoints
         heatmap_loss = MaskedMSEHeatmapLoss(true_heatmaps, predicted_heatmaps)
@@ -201,7 +201,7 @@ class HeatmapTracker(BaseFeatureExtractor):
     ):
         images, true_heatmaps, true_keypoints = data_batch  # read batch
         predicted_heatmaps = self.forward(images)  # images -> heatmaps
-        predicted_keypoints = self.run_subpixelmaxima(
+        predicted_keypoints, confidence = self.run_subpixelmaxima(
             predicted_heatmaps
         )  # heatmaps -> keypoints
         loss = MaskedMSEHeatmapLoss(true_heatmaps, predicted_heatmaps)
@@ -272,12 +272,12 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         unlabeled_imgs = data_batch["unlabeled"]
         predicted_heatmaps = self.forward(labeled_imgs)
         supervised_loss = MaskedMSEHeatmapLoss(true_heatmaps, predicted_heatmaps)
-        predicted_keypoints = self.run_subpixelmaxima(
+        predicted_keypoints, confidence = self.run_subpixelmaxima(
             predicted_heatmaps
         )  # heatmaps -> keypoints
         supervised_rmse = MaskedRMSELoss(true_keypoints, predicted_keypoints)
         unlabeled_predicted_heatmaps = self.forward(unlabeled_imgs)
-        predicted_us_keypoints = self.run_subpixelmaxima(unlabeled_predicted_heatmaps)
+        predicted_us_keypoints, confidence = self.run_subpixelmaxima(unlabeled_predicted_heatmaps)
         tot_loss = 0.0
         tot_loss += supervised_loss
         for loss_name, loss_func in self.loss_function_dict.items():
