@@ -102,6 +102,33 @@ def MultiviewPCALoss(
 
 
 @typechecked
+def TemporalLoss(
+    preds: TensorType["batch", "num_targets"],
+    epsilon: TensorType[float] = 5,
+) -> TensorType[(), float]:
+    """Penalize temporal differences for each target.
+
+    Motion model: x_t = x_(t-1) + e_t, e_t ~ N(0, s)
+
+    Args:
+        preds:
+        epsilon:
+
+    Returns:
+
+    """
+    diffs = torch.diff(preds, dim=0)  # (batch - 1, num_targets)
+    reshape = torch.reshape(diffs, (diffs.shape[0], -1, 2))  # (batch - 1, num_keypoints, 2)
+    loss = torch.linalg.norm(
+        reshape,
+        ord=2,
+        dim=2
+    )  # (batch - 1, num_keypoints)
+    loss[loss < epsilon] = 0
+    return torch.mean(loss)  # pixels
+
+
+@typechecked
 def filter_dict(mydict: Dict[str, Any], keys: List[str]) -> Dict[str, Any]:
     """filter dictionary by desired keys.
 
