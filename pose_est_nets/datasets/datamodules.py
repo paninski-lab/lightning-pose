@@ -189,6 +189,10 @@ class UnlabeledDataModule(BaseDataModule):
         val_batch_size: int = 16,
         test_batch_size: int = 1,
         num_workers: int = 8,
+        train_probability: float = 0.8,
+        val_probability: float = None,
+        test_probability: float = None,
+        train_frames: float = None,
         unlabeled_batch_size: int = 1,
         unlabeled_sequence_length: int = 16,
         dali_seed: int = 123456,
@@ -203,6 +207,10 @@ class UnlabeledDataModule(BaseDataModule):
             val_batch_size=val_batch_size,
             test_batch_size=test_batch_size,
             num_workers=num_workers,
+            train_probability=train_probability,
+            val_probability=val_probability,
+            test_probability=test_probability,
+            train_frames=train_frames,
             torch_seed=torch_seed
         )
         self.video_paths_list = video_paths_list
