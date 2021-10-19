@@ -36,7 +36,7 @@ def make_dataset_and_evaluate(cfg, datamod, best_models):
     gt_keypoints = datamod.fulldataset.labels
     samples = []
     train_indices = datamod.train_set.indices
-    valid_indices = datamod.valid_set.indices
+    valid_indices = datamod.val_set.indices
     test_indices = datamod.test_set.indices
     for model in best_models.values():
         model.eval()
@@ -69,7 +69,7 @@ def make_dataset_and_evaluate(cfg, datamod, best_models):
             if isinstance(model, HeatmapTracker) or issubclass(
                 type(model), HeatmapTracker
             ):  # check if model is in the heatmap family
-                pred = model.run_subpixelmaxima(pred)
+                pred, confidence = model.run_subpixelmaxima(pred)
             resized_pred = reverse_transform(
                 images=img_BHWC.numpy(),
                 keypoints=(pred.detach().numpy().reshape((1, -1, 2))),

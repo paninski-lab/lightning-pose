@@ -160,7 +160,7 @@ def test_unsupervised():  # TODO Finish writing test
         384 // (2 ** model.downsample_factor),
     )
 
-    spm_l, spm_u = model.run_subpixelmaxima(
+    (spm_l, c_l), (spm_u, c_u) = model.run_subpixelmaxima(
         out_heatmaps_labeled, out_heatmaps_unlabeled
     )
 
