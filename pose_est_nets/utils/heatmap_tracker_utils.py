@@ -249,7 +249,7 @@ class SubPixelMaxima:  # Add tensor typing
         heatmaps_2: torch.Tensor=None,  # Enables the function to be run with only one set of keypoints
     ):
         keypoints_1 = find_subpixel_maxima(
-            heatmaps_1.detach(),
+            heatmaps_1,  # .detach(),  TODO: is there a reason to detach?
             self.kernel_size,
             self.output_sigma,
             self.upsample_factor,
@@ -261,7 +261,7 @@ class SubPixelMaxima:  # Add tensor typing
             return self.use_threshold(keypoints_1)
 
         keypoints_2 = find_subpixel_maxima(
-            heatmaps_2.detach(),
+            heatmaps_2,  #.detach(),
             self.kernel_size,
             self.output_sigma,
             self.upsample_factor,
