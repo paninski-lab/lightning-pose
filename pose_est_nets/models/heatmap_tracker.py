@@ -263,7 +263,7 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         )
         print(semi_super_losses_to_use)
         self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
-        self.loss_params = loss_params
+        self.loss_params = convert_dict_entries_to_tensors(loss_params, self.device)
         print(self.loss_function_dict)
 
     @typechecked

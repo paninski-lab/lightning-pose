@@ -149,8 +149,8 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
             representation_dropout_rate,
             last_resnet_layer_to_get,
         )
-        self.loss_params = loss_params
         self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
+        self.loss_params = convert_dict_entries_to_tensors(loss_params, self.device)
 
     @typechecked
     def training_step(self, data_batch: dict, batch_idx: int) -> dict:
