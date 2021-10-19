@@ -252,7 +252,7 @@ def predict_videos(
             for n, batch in enumerate(predict_loader):
                 outputs = model.forward(batch)
                 if cfg.model.data_type == "heatmap":
-                    pred_keypoints = model.run_subpixelmaxima(outputs).detach().cpu().numpy()
+                    pred_keypoints, confidence = model.run_subpixelmaxima(outputs).detach().cpu().numpy()
                 else:
                     pred_keypoints = outputs.detach().cpu().numpy()
                 n_frames_curr = pred_keypoints.shape[0]

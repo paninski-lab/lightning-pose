@@ -220,13 +220,13 @@ def find_subpixel_maxima(
 class SubPixelMaxima:  # Add tensor typing
     def __init__(
         self,
-        output_shape,
-        output_sigma,
-        upsample_factor,
-        coordinate_scale,
-        confidence_scale,
-        threshold,
-        device,
+        output_shape: tuple,
+        output_sigma: torch.Tensor,
+        upsample_factor: torch.Tensor,
+        coordinate_scale: torch.Tensor,
+        confidence_scale: torch.Tensor,
+        threshold: float = None,
+        device: str = "cpu",
     ):
 
         self.output_shape = output_shape
@@ -245,13 +245,13 @@ class SubPixelMaxima:  # Add tensor typing
 
     def run( #TODO: maybe we should see if we can add batch functionality
         self,
-        heatmaps_1,
-        heatmaps_2=None,  # Enables the function to be run with only one set of keypoints
+        heatmaps_1: torch.Tensor,
+        heatmaps_2: torch.Tensor=None,  # Enables the function to be run with only one set of keypoints
     ):
         keypoints_1 = find_subpixel_maxima(
             heatmaps_1.detach(),
             self.kernel_size,
-            torch.tensor(self.output_sigma, device=heatmaps_1.device),
+            self.output_sigma,
             self.upsample_factor,
             self.coordinate_scale,
             self.confidence_scale,
@@ -263,26 +263,30 @@ class SubPixelMaxima:  # Add tensor typing
         keypoints_2 = find_subpixel_maxima(
             heatmaps_2.detach(),
             self.kernel_size,
-            torch.tensor(self.output_sigma, device=heatmaps_2.device),
+            self.output_sigma,
             self.upsample_factor,
             self.coordinate_scale,
             self.confidence_scale,
         )
         return self.use_threshold(keypoints_1), self.use_threshold(keypoints_2)
 
-    def use_threshold(self, keypoints):  # threshold function must be run even if
+    def use_threshold(self, keypoints: torch.tensor):  # TODO: figure out what to do with batched masking, different elements of the batch could be masked into different sizes, which would cause a shape mismatch, could just turn masked elements into nans
         if not self.threshold:
-            num_threshold = torch.tensor(0, device=keypoints.device)
+            num_threshold = torch.tensor(-1, device=self.device)
         else:
             num_threshold = torch.tensor(self.threshold, device=keypoints.device)
+        #print(keypoints.shape)
         batch_dim, num_bodyparts, _ = keypoints.shape
         mask = torch.gt(keypoints[:, :, 2], num_threshold)
+        #print(mask.shape)
         mask = mask.unsqueeze(-1)
         keypoints = torch.masked_select(keypoints, mask).reshape(
-            batch_dim, num_bodyparts, 3 #need to change this to take into account that some keypoints could be thresholded
+            batch_dim, -1, 3
         )
+        #print(keypoints.shape)
+        confidence = keypoints[:, :, 2]
         keypoints = keypoints[:, :, :2]
-        return keypoints.reshape(keypoints.shape[0], -1)
+        return keypoints.reshape(keypoints.shape[0], -1), confidence
 
 
 def format_mouse_data(data_arr):
