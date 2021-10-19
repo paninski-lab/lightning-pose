@@ -233,7 +233,7 @@ def predict_videos(
 
         # build video loader/pipeline
         pipe = video_pipe(
-            resize_dims=(cfg.data.image_resize_dims.height, cfg.data.image_resize_dims.height),
+            resize_dims=(cfg.data.image_resize_dims.height, cfg.data.image_resize_dims.width),
             batch_size=batch_size, sequence_length=sequence_length, filenames=[video_file],
             random_shuffle=False, device=device_dali, name="reader", pad_sequences=True,
             **video_pipe_kwargs)
