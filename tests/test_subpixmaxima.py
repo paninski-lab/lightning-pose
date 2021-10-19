@@ -27,7 +27,7 @@ def test_subpixmaxima():
         threshold = None,
         device = _TORCH_DEVICE
     )
-    test_img, gt_heatmap, gt_keypts = dataset.__getitem__(idx = 2)
+    test_img, gt_heatmap, gt_keypts = dataset.__getitem__(idx = 0)
     maxima, confidence = SubPixMax.run(gt_heatmap.unsqueeze(0).to(_TORCH_DEVICE))
     maxima = maxima.squeeze(0)
     assert(maxima.shape == gt_keypts.shape)
