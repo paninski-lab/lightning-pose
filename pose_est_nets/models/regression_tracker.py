@@ -175,6 +175,7 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         )
         tot_loss = 0.0
         tot_loss += supervised_loss
+        # loop over unsupervised losses
         for loss_name, loss_func in self.loss_function_dict.items():
             add_loss = self.loss_params[loss_name]["weight"] * loss_func(
                 predicted_us_keypoints, **self.loss_params[loss_name]

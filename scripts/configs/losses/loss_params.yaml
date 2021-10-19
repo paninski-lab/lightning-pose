@@ -5,4 +5,4 @@ pca: # loss = projection onto the discarded eigenvectors
   epsilon: null # Computed per dataset
 temporal: # loss = norm of distance between successive timepoints
   weight: 0.7  # in front of temporal loss
-  epsilon: null # for epsilon insensitive rectification
+  epsilon: null # for epsilon insensitive rectification (in pixels; diffs below this are not penalized)
