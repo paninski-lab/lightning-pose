@@ -275,15 +275,15 @@ class SubPixelMaxima:  # Add tensor typing
             num_threshold = torch.tensor(-1, device=self.device)
         else:
             num_threshold = torch.tensor(self.threshold, device=keypoints.device)
-        print(keypoints.shape)
+        #print(keypoints.shape)
         batch_dim, num_bodyparts, _ = keypoints.shape
         mask = torch.gt(keypoints[:, :, 2], num_threshold)
-        print(mask.shape)
+        #print(mask.shape)
         mask = mask.unsqueeze(-1)
         keypoints = torch.masked_select(keypoints, mask).reshape(
             batch_dim, -1, 3
         )
-        print(keypoints.shape)
+        #print(keypoints.shape)
         confidence = keypoints[:, :, 2]
         keypoints = keypoints[:, :, :2]
         return keypoints.reshape(keypoints.shape[0], -1), confidence
