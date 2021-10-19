@@ -14,6 +14,7 @@ from pose_est_nets.losses.losses import (
     MaskedRMSELoss,
     MaskedRegressionMSELoss,
     get_losses_dict,
+    convert_dict_entries_to_tensors
 )
 
 patch_typeguard()  # use before @typechecked

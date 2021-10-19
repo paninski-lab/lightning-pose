@@ -77,7 +77,7 @@ def MultiviewPCALoss(
     ],  # Num_Targets = 2 * Num_Keypoints
     discarded_eigenvectors: TensorType["Views_Times_Two", "Num_Discarded_Evecs", float],
     epsilon: TensorType[float],
-    **kwargs
+    **kwargs  # make loss robust to unneeded inputs
 ) -> TensorType[float]:
     """assume that we have keypoints after find_subpixel_maxima
     and that we have discarded confidence here, and that keypoints were reshaped"""
@@ -105,6 +105,7 @@ def MultiviewPCALoss(
 def TemporalLoss(
     preds: TensorType["batch", "num_targets"],
     epsilon: TensorType[float] = 5,
+    **kwargs  # make loss robust to unneeded inputs
 ) -> TensorType[(), float]:
     """Penalize temporal differences for each target.
 
@@ -124,7 +125,7 @@ def TemporalLoss(
         ord=2,
         dim=2
     )  # (batch - 1, num_keypoints)
-    loss[loss < epsilon] = 0
+    loss = loss.masked_fill(mask=loss < epsilon, value=0.)  # epsilon-insensitive loss
     return torch.mean(loss)  # pixels
 
 
@@ -169,7 +170,7 @@ def convert_dict_entries_to_tensors(loss_params: dict, device: str) -> dict:
     for loss, params in loss_params.items():
         for key, val in params.items():
             if type(val) == float:
-                loss_params[loss][key] = torch.tensor([val], dtype=torch.float, device=device)
+                loss_params[loss][key] = torch.tensor(val, dtype=torch.float, device=device)
             if type(val) == int:
-                loss_params[loss][key] = torch.tensor([val], dtype=torch.int, device=device)
+                loss_params[loss][key] = torch.tensor(val, dtype=torch.int, device=device)
     return loss_params
