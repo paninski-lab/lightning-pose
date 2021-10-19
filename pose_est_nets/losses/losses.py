@@ -159,5 +159,17 @@ def get_losses_dict(
         "regression": MaskedRegressionMSELoss,
         "heatmap": MaskedMSEHeatmapLoss,
         "pca": MultiviewPCALoss,
+        "temporal": TemporalLoss
     }
     return filter_dict(loss_dict, names_list)
+
+
+def convert_dict_entries_to_tensors(loss_params: dict, device: str) -> dict:
+    """set scalars in loss params to torch Tensors; for use with unsupervised losses"""
+    for loss, params in loss_params.items():
+        for key, val in params.items():
+            if type(val) == float:
+                loss_params[loss][key] = torch.tensor([val], dtype=torch.float, device=device)
+            if type(val) == int:
+                loss_params[loss][key] = torch.tensor([val], dtype=torch.int, device=device)
+    return loss_params
