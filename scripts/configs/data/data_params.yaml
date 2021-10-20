@@ -8,11 +8,11 @@ image_resize_dims:
   height: 384 
   width: 384
 
-# location of data; for example script, this should be relative to `toy_datasets`
-data_dir: "toymouseRunningData/"
+# absolute path to data directory
+data_dir: "/home/jovyan/lightning-pose/toy_datasets/toymouseRunningData/"
 
-# location of video; for example script, this should be relative to `data_dir`
-video_dir: "unlabeled_videos/test_vid.mp4"
+# absolute path to unlabeled videos' directory (TODO: Matt, can have multiple vids)
+video_dir: "/home/jovyan/lightning-pose/toy_datasets/toymouseRunningData/unlabeled_videos/test_vid.mp4"
 
 # location of labels; for example script, this should be relative to `data_dir`
 csv_file: "CollectedData_.csv"

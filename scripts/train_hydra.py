@@ -13,9 +13,6 @@ from pose_est_nets.models.heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
 )
-from pose_est_nets.callbacks.freeze_unfreeze_callback import (
-    FeatureExtractorFreezeUnfreeze,
-)
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import BackboneFinetuning
 
@@ -29,11 +26,6 @@ def train(cfg: DictConfig):
 
     print(cfg)
 
-    # create absolute paths from relative paths
-    base_path = os.path.dirname(os.path.dirname(os.path.join(__file__)))
-    root_directory = os.path.join(base_path, 'toy_datasets', cfg.data.data_dir)
-    video_directory = os.path.join(root_directory, cfg.data.video_dir)
-
     data_transform = []
     data_transform.append(
         iaa.Resize(
@@ -46,14 +38,14 @@ def train(cfg: DictConfig):
     imgaug_transform = iaa.Sequential(data_transform)
     if cfg.model.model_type == "regression":
         dataset = BaseTrackingDataset(
-            root_directory=root_directory,
+            root_directory=cfg.data.data_dir,
             csv_path=cfg.data.csv_path,
             header_rows=OmegaConf.to_object(cfg.data.header_rows),
             imgaug_transform=imgaug_transform,
         )
     elif cfg.model.model_type == "heatmap":
         dataset = HeatmapDataset(
-            root_directory=root_directory,
+            root_directory=cfg.data.data_dir,
             csv_path=cfg.data.csv_file,
             header_rows=OmegaConf.to_object(cfg.data.header_rows),
             imgaug_transform=imgaug_transform,
@@ -97,7 +89,7 @@ def train(cfg: DictConfig):
         losses_to_use = OmegaConf.to_object(cfg.model.losses_to_use)
         datamod = UnlabeledDataModule(
             dataset=dataset,
-            video_paths_list=video_directory,
+            video_paths_list=cfg.data.video_dir,
             specialized_dataprep=losses_to_use,
             loss_param_dict=loss_param_dict,
             train_batch_size=cfg.training.train_batch_size,
@@ -139,7 +131,7 @@ def train(cfg: DictConfig):
     transfer_unfreeze_callback = BackboneFinetuning(
         unfreeze_backbone_at_epoch=cfg.training.unfreezing_epoch,
         lambda_func=lambda epoch: 1.5,
-        backbone_initial_ratio_lr=10,
+        backbone_initial_ratio_lr=0.1,
         should_align=True,
         train_bn=True,
     )
