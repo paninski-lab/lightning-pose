@@ -28,12 +28,7 @@ import sklearn
 from typing_extensions import Literal
 from pose_est_nets.datasets.utils import split_sizes_from_probabilities
 
-# Maybe make torch manual seed a global variable?
-TORCH_MANUAL_SEED = 42
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
-_BATCH_SIZE_UNSUPERVISED = 1  # sequence_length * batch_size = num_images passed
-_DALI_RANDOM_SEED = 123456
 
 
 @typechecked
@@ -64,6 +59,7 @@ class BaseDataModule(pl.LightningDataModule):
         val_probability: float = None,
         test_probability: float = None,
         train_frames: float = None,
+        torch_seed: int = 42,
     ):
         """Data module splits a dataset into train, val, and test data loaders.
 
@@ -81,6 +77,7 @@ class BaseDataModule(pl.LightningDataModule):
                 initially selected train frames (defined by `train_probability`); if float, must be
                 between 0 and 1 (exclusive) and defines the fraction of the initially selected
                 train frames
+            torch_seed (int, optional):
 
         """
         super().__init__()
@@ -100,6 +97,7 @@ class BaseDataModule(pl.LightningDataModule):
         self.train_set = None  # populated by self.setup()
         self.val_set = None  # populated by self.setup()
         self.test_set = None  # populated by self.setup()
+        self.torch_seed = torch_seed
 
     def setup(self, stage: Optional[str] = None):  # TODO: clean up
         print("Setting up DataModule...")
@@ -123,7 +121,7 @@ class BaseDataModule(pl.LightningDataModule):
         self.train_set, self.val_set, self.test_set = random_split(
             self.fulldataset,
             data_splits_list,
-            generator=torch.Generator().manual_seed(TORCH_MANUAL_SEED),
+            generator=torch.Generator().manual_seed(self.torch_seed),
         )
 
         # further subsample training data if desired
@@ -150,7 +148,7 @@ class BaseDataModule(pl.LightningDataModule):
                 self.train_set, _ = random_split(
                     self.train_set,
                     [n_frames, len(self.train_set) - n_frames],
-                    generator=torch.Generator().manual_seed(TORCH_MANUAL_SEED),
+                    generator=torch.Generator().manual_seed(self.torch_seed),
                 )
 
         print(
@@ -191,20 +189,38 @@ class UnlabeledDataModule(BaseDataModule):
         val_batch_size: int = 16,
         test_batch_size: int = 1,
         num_workers: int = 8,
+        train_probability: float = 0.8,
+        val_probability: float = None,
+        test_probability: float = None,
+        train_frames: float = None,
+        unlabeled_batch_size: int = 1,
+        unlabeled_sequence_length: int = 16,
+        dali_seed: int = 123456,
+        torch_seed: int = 42,
         specialized_dataprep: Optional[Literal["pca"]] = None,  # Get rid of optional?
         loss_param_dict: Optional[dict] = None,
     ):
         super().__init__(
-            dataset,
-            use_deterministic,
-            train_batch_size,
-            val_batch_size,
-            test_batch_size,
-            num_workers,
+            dataset=dataset,
+            use_deterministic=use_deterministic,
+            train_batch_size=train_batch_size,
+            val_batch_size=val_batch_size,
+            test_batch_size=test_batch_size,
+            num_workers=num_workers,
+            train_probability=train_probability,
+            val_probability=val_probability,
+            test_probability=test_probability,
+            train_frames=train_frames,
+            torch_seed=torch_seed
         )
         self.video_paths_list = video_paths_list
         self.num_workers_for_unlabeled = num_workers // 2
         self.num_workers_for_labeled = num_workers // 2
+        self.unlabeled_batch_size = unlabeled_batch_size
+        self.unlabeled_sequence_length = unlabeled_sequence_length
+        self.dali_seed = dali_seed
+        self.torch_seed = torch_seed
+        self.semi_supervised_loader = None  # initialized in setup_unlabeled
         super().setup()
         self.setup_unlabeled()
         self.loss_param_dict = loss_param_dict
@@ -214,13 +230,14 @@ class UnlabeledDataModule(BaseDataModule):
 
     def setup_unlabeled(self):
         data_pipe = video_pipe(
-            batch_size=_BATCH_SIZE_UNSUPERVISED,
+            batch_size=self.unlabeled_batch_size,
+            sequence_length=self.unlabeled_sequence_length,
             num_threads=self.num_workers_for_unlabeled,  # because the other workers do the labeled dataloading
             device_id=0,  # TODO: be careful when scaling to multinode
             resize_dims=[self.fulldataset.height, self.fulldataset.width],
             random_shuffle=True,
             filenames=self.video_paths_list,
-            seed=_DALI_RANDOM_SEED,
+            seed=self.dali_seed,
         )
 
         self.semi_supervised_loader = LightningWrapper(

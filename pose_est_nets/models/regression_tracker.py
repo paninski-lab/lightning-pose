@@ -14,6 +14,7 @@ from pose_est_nets.losses.losses import (
     MaskedRMSELoss,
     MaskedRegressionMSELoss,
     get_losses_dict,
+    convert_dict_entries_to_tensors
 )
 
 patch_typeguard()  # use before @typechecked
@@ -149,8 +150,8 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
             representation_dropout_rate,
             last_resnet_layer_to_get,
         )
-        self.loss_params = loss_params
         self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
+        self.loss_params = convert_dict_entries_to_tensors(loss_params, self.device)
 
     @typechecked
     def training_step(self, data_batch: dict, batch_idx: int) -> dict:
@@ -175,6 +176,7 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         )
         tot_loss = 0.0
         tot_loss += supervised_loss
+        # loop over unsupervised losses
         for loss_name, loss_func in self.loss_function_dict.items():
             add_loss = self.loss_params[loss_name]["weight"] * loss_func(
                 predicted_us_keypoints, **self.loss_params[loss_name]

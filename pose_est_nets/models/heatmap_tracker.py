@@ -19,6 +19,7 @@ from pose_est_nets.losses.losses import (
     MaskedMSEHeatmapLoss,
     MaskedRMSELoss,
     get_losses_dict,
+    convert_dict_entries_to_tensors
 )
 from pose_est_nets.utils.heatmap_tracker_utils import SubPixelMaxima
 
@@ -263,8 +264,7 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         )
         print(semi_super_losses_to_use)
         self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
-        self.loss_params = loss_params
-        print(self.loss_function_dict)
+        self.loss_params = loss_params  # convert_dict_entries_to_tensors(loss_params, self.device)
 
     @typechecked
     def training_step(self, data_batch: dict, batch_idx: int) -> dict:
@@ -280,6 +280,8 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         predicted_us_keypoints, confidence = self.run_subpixelmaxima(unlabeled_predicted_heatmaps)
         tot_loss = 0.0
         tot_loss += supervised_loss
+        # loop over unsupervised losses
+        self.loss_params = convert_dict_entries_to_tensors(self.loss_params, self.device)
         for loss_name, loss_func in self.loss_function_dict.items():
             add_loss = self.loss_params[loss_name]["weight"] * loss_func(
                 predicted_us_keypoints, **self.loss_params[loss_name]

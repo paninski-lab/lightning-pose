@@ -77,7 +77,7 @@ def MultiviewPCALoss(
     ],  # Num_Targets = 2 * Num_Keypoints
     discarded_eigenvectors: TensorType["Views_Times_Two", "Num_Discarded_Evecs", float],
     epsilon: TensorType[float],
-    **kwargs
+    **kwargs  # make loss robust to unneeded inputs
 ) -> TensorType[float]:
     """assume that we have keypoints after find_subpixel_maxima
     and that we have discarded confidence here, and that keypoints were reshaped"""
@@ -99,6 +99,34 @@ def MultiviewPCALoss(
         abs_proj_discarded
     )  # the scalar loss should be smaller after zeroing out elements.
     return torch.mean(epsilon_masked_proj)
+
+
+@typechecked
+def TemporalLoss(
+    preds: TensorType["batch", "num_targets"],
+    epsilon: TensorType[float] = 5,
+    **kwargs  # make loss robust to unneeded inputs
+) -> TensorType[(), float]:
+    """Penalize temporal differences for each target.
+
+    Motion model: x_t = x_(t-1) + e_t, e_t ~ N(0, s)
+
+    Args:
+        preds:
+        epsilon:
+
+    Returns:
+
+    """
+    diffs = torch.diff(preds, dim=0)  # (batch - 1, num_targets)
+    reshape = torch.reshape(diffs, (diffs.shape[0], -1, 2))  # (batch - 1, num_keypoints, 2)
+    loss = torch.linalg.norm(
+        reshape,
+        ord=2,
+        dim=2
+    )  # (batch - 1, num_keypoints)
+    loss = loss.masked_fill(mask=loss < epsilon, value=0.)  # epsilon-insensitive loss
+    return torch.mean(loss)  # pixels
 
 
 @typechecked
@@ -132,5 +160,17 @@ def get_losses_dict(
         "regression": MaskedRegressionMSELoss,
         "heatmap": MaskedMSEHeatmapLoss,
         "pca": MultiviewPCALoss,
+        "temporal": TemporalLoss
     }
     return filter_dict(loss_dict, names_list)
+
+
+def convert_dict_entries_to_tensors(loss_params: dict, device: str) -> dict:
+    """set scalars in loss params to torch Tensors; for use with unsupervised losses"""
+    for loss, params in loss_params.items():
+        for key, val in params.items():
+            if type(val) == float:
+                loss_params[loss][key] = torch.tensor(val, dtype=torch.float, device=device)
+            if type(val) == int:
+                loss_params[loss][key] = torch.tensor(val, dtype=torch.int, device=device)
+    return loss_params
