@@ -32,9 +32,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         self,
         num_targets: int,
         resnet_version: Literal[18, 34, 50, 101, 152] = 18,
-        downsample_factor: Literal[
-            2, 3
-        ] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
+        downsample_factor: Literal[2, 3] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
         output_shape: Optional[tuple] = None,  # change
@@ -42,6 +40,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         upsample_factor: int = 100,
         confidence_scale: float = 1.0,
         threshold: Optional[float] = None,
+        torch_seed: Optional[int] = 123,
     ) -> None:
         """
         Initializes a DLC-like model with resnet backbone inherited from BaseFeatureExtractor
@@ -51,6 +50,10 @@ class HeatmapTracker(BaseFeatureExtractor):
         :param transfer:  Flag to indicate whether this is a transfer learning task or not; defaults to false,
             meaning the entire model will be trained unless this flag is provided
         """
+
+        # for reproducible weight initialization
+        torch.manual_seed(torch_seed)
+
         super().__init__(  # execute BaseFeatureExtractor.__init__()
             resnet_version=resnet_version,
             pretrained=pretrained,
@@ -65,6 +68,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         self.upsample_factor = torch.tensor(upsample_factor, device=self.device)
         self.confidence_scale = torch.tensor(confidence_scale, device=self.device)
         self.threshold = threshold
+        self.torch_seed = torch_seed
         self.save_hyperparameters()  # Necessary so we don't have to pass in model arguments when loading
         # self.device = device #might be done automatically by pytorch lightning
 
@@ -149,9 +153,7 @@ class HeatmapTracker(BaseFeatureExtractor):
             "Representation_Width",
             float,
         ],
-    ) -> TensorType[
-        "Batch_Size", "Num_Keypoints", "Heatmap_Height", "Heatmap_Width", float
-    ]:
+    ) -> TensorType["Batch_Size", "Num_Keypoints", "Heatmap_Height", "Heatmap_Width", float]:
         """a wrapper around self.upsampling_layers for type and shape assertion.
         Args:
             representations (torch.tensor(float)): the output of the Resnet feature extractor.
@@ -226,13 +228,9 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
     def __init__(
         self,
         num_targets: int,
-        loss_params: Optional[
-            dict
-        ] = None,  # having it optional so we can initialize a model without passing that in
+        loss_params: Optional[dict] = None,  # having it optional so we can initialize a model without passing that in
         resnet_version: Literal[18, 34, 50, 101, 152] = 18,
-        downsample_factor: Literal[
-            2, 3
-        ] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
+        downsample_factor: Literal[2, 3] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
         output_shape: Optional[tuple] = None,  # change
@@ -240,6 +238,7 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         upsample_factor: int = 100,
         confidence_scale: float = 1.,
         threshold: Optional[float] = None,
+        torch_seed: Optional[int] = 123,
         semi_super_losses_to_use: Optional[list] = None,
     ):
         super().__init__(
@@ -252,10 +251,12 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             output_sigma=output_sigma,
             upsample_factor=upsample_factor,
             confidence_scale=confidence_scale,
+            threshold=threshold,
+            torch_seed=torch_seed,
         )
         print(semi_super_losses_to_use)
         self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
-        self.loss_params = loss_params  # convert_dict_entries_to_tensors(loss_params, self.device)
+        self.loss_params = loss_params
 
     @typechecked
     def training_step(self, data_batch: dict, batch_idx: int) -> dict:
@@ -284,19 +285,16 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
                 add_loss,
                 prog_bar=True,
             )
-        # log the total loss
         self.log(
             "total_loss",
             tot_loss,
             prog_bar=True,
         )
-        # log the supervised loss
         self.log(
             "supervised_loss",
             supervised_loss,
             prog_bar=True,
         )
-
         self.log(
             "supervised_rmse",
             supervised_rmse,
