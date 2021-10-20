@@ -183,7 +183,7 @@ class UnlabeledDataModule(BaseDataModule):
     def __init__(  # TODO: add documentation and args
         self,
         dataset,
-        video_paths_list: List[str],
+        video_paths_list: [List[str], str],
         use_deterministic: bool = False,
         train_batch_size: int = 16,
         val_batch_size: int = 16,
@@ -229,15 +229,35 @@ class UnlabeledDataModule(BaseDataModule):
                 self.computePCA_params()
 
     def setup_unlabeled(self):
+
+        # get input data
+        if isinstance(self.video_paths_list, list):
+            # presumably a list of files
+            filenames = self.video_paths_list
+        elif isinstance(self.video_paths_list, str) and os.path.isfile(self.video_paths_list):
+            # single video file
+            filenames = self.video_paths_list
+        elif isinstance(self.video_paths_list, str) and os.path.isdir(self.video_paths_list):
+            # directory of videos
+            import glob
+            extensions = ["*.mp4", "*.avi"]  # allowed file extensions
+            filenames = []
+            for extension in extensions:
+                filenames.extend(
+                    glob.glob(os.path.join(self.video_paths_list, '*.%s' % extension)))
+        else:
+            raise ValueError(
+                "`video_paths_list` must be a list of files, a single file, or a directory name")
+
         data_pipe = video_pipe(
-            batch_size=self.unlabeled_batch_size,
-            sequence_length=self.unlabeled_sequence_length,
-            num_threads=self.num_workers_for_unlabeled,  # because the other workers do the labeled dataloading
-            device_id=0,  # TODO: be careful when scaling to multinode
+            filenames=filenames,
             resize_dims=[self.fulldataset.height, self.fulldataset.width],
             random_shuffle=True,
-            filenames=self.video_paths_list,
+            device_id=0,  # TODO: be careful when scaling to multinode
             seed=self.dali_seed,
+            batch_size=self.unlabeled_batch_size,
+            sequence_length=self.unlabeled_sequence_length,
+            num_threads=self.num_workers_for_unlabeled,  # other workers do the labeled dataloading
         )
 
         self.semi_supervised_loader = LightningWrapper(
@@ -332,9 +352,7 @@ class UnlabeledDataModule(BaseDataModule):
     def unlabeled_dataloader(self):
         return self.semi_supervised_loader
 
-    def train_dataloader(
-        self,
-    ):
+    def train_dataloader(self):
         loader = {
             "labeled": DataLoader(
                 self.train_set,
