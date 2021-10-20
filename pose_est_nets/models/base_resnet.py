@@ -110,9 +110,9 @@ class BaseFeatureExtractor(LightningModule):
 
     def configure_optimizers(self):
         optimizer = Adam(filter(lambda p: p.requires_grad, self.parameters()), lr=1e-3)
-        scheduler = ReduceLROnPlateau(optimizer, factor=0.2, patience=20, verbose=True)
+        # scheduler = ReduceLROnPlateau(optimizer, factor=0.2, patience=20, verbose=True)
         # scheduler = StepLR(optimizer, step_size=50, gamma=0.5)
-        # scheduler = MultiStepLR(optimizer, milestones=[50, 100, 150], gamma=0.5)
+        scheduler = MultiStepLR(optimizer, milestones=[50, 100, 150], gamma=0.5)
         return {
             "optimizer": optimizer,
             "lr_scheduler": scheduler,
