@@ -1,5 +1,14 @@
+# list of unsupervised losses: "pca" | "temporal"
 losses_to_use: ["pca"]
+
+# resnet version for backbone: 18 | 34 | 50 | 101 | 152
 resnet_version: 50
-semi_supervised: False # whether to include a sequence of unlabeled frames
-model_type: "heatmap" # "heatmap" | "regression"
+
+# whether to include a sequence of unlabeled frames; must be accompanied by non-empty losses_to_use
+semi_supervised: False
+
+# prediction mode: "heatmap" | "regression"
+model_type: "heatmap"
+
+# directory name for model saving
 model_name: "my_test_model"
