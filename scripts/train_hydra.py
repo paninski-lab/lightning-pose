@@ -71,6 +71,7 @@ def train(cfg: DictConfig):
             model = RegressionTracker(
                 num_targets=cfg.data.num_targets,
                 resnet_version=cfg.model.resnet_version,
+                torch_seed=cfg.training.rng_seed_model_pt,
             )
 
         elif cfg.model.model_type == "heatmap":
@@ -79,6 +80,7 @@ def train(cfg: DictConfig):
                 resnet_version=cfg.model.resnet_version,
                 downsample_factor=cfg.data.downsample_factor,
                 output_shape=dataset.output_shape,
+                torch_seed=cfg.training.rng_seed_model_pt,
             )
         else:
             print("INVALID DATASET SPECIFIED")
@@ -110,6 +112,7 @@ def train(cfg: DictConfig):
                 resnet_version=cfg.model.resnet_version,
                 loss_params=datamod.loss_param_dict,
                 semi_super_losses_to_use=losses_to_use,
+                torch_seed=cfg.training.rng_seed_model_pt,
             )
 
         elif cfg.model.model_type == "heatmap":
@@ -120,6 +123,7 @@ def train(cfg: DictConfig):
                 output_shape=dataset.output_shape,
                 loss_params=datamod.loss_param_dict,
                 semi_super_losses_to_use=losses_to_use,
+                torch_seed=cfg.training.rng_seed_model_pt,
             )
 
     logger = TensorBoardLogger("tb_logs", name=cfg.model.model_name)
