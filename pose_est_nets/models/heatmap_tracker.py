@@ -74,7 +74,7 @@ class HeatmapTracker(BaseFeatureExtractor):
 
     @property
     def num_filters_for_upsampling(self):
-        return self.backbone.fc.in_features
+        return self.base.fc.in_features
 
     @property
     def coordinate_scale(self):
@@ -221,15 +221,6 @@ class HeatmapTracker(BaseFeatureExtractor):
     def test_step(self, test_batch: List, batch_idx):
         self.evaluate(test_batch, "test")
 
-    def configure_optimizers(self):
-        optimizer = Adam(filter(lambda p: p.requires_grad, self.parameters()), lr=1e-3)
-        scheduler = ReduceLROnPlateau(optimizer, factor=0.2, patience=20, verbose=True)
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": scheduler,
-            "monitor": "val_loss",
-        }
-
 
 class SemiSupervisedHeatmapTracker(HeatmapTracker):
     def __init__(
@@ -247,7 +238,7 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         output_shape: Optional[tuple] = None,  # change
         output_sigma: float = 1.25,  # check value,
         upsample_factor: int = 100,
-        confidence_scale: float = 255.0,
+        confidence_scale: float = 1.,
         threshold: Optional[float] = None,
         semi_super_losses_to_use: Optional[list] = None,
     ):
