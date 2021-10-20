@@ -9,14 +9,14 @@ class FeatureExtractorFreezeUnfreeze(BaseFinetuning):
 
     def freeze_before_training(self, pl_module):
         # freeze any module you want
-        # Here, we are freezing ``feature_extractor``
-        self.freeze(pl_module.feature_extractor)
+        # Here, we are freezing ``backbone``
+        self.freeze(pl_module.backbone)
 
     def finetune_function(self, pl_module, current_epoch, optimizer, optimizer_idx):
         # When `current_epoch` is 10, feature_extractor will start training.
         if current_epoch == self._unfreeze_at_epoch:
             self.unfreeze_and_add_param_group(
-                modules=pl_module.feature_extractor,
+                modules=pl_module.backbone,
                 optimizer=optimizer,
                 train_bn=True,
             )

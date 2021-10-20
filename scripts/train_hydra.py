@@ -17,6 +17,7 @@ from pose_est_nets.callbacks.freeze_unfreeze_callback import (
     FeatureExtractorFreezeUnfreeze,
 )
 from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.callbacks import BackboneFinetuning
 
 import os
 
@@ -117,10 +118,14 @@ def train(cfg: DictConfig):
     lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval="epoch")
 
     ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(monitor="val_loss")
-    transfer_unfreeze_callback = FeatureExtractorFreezeUnfreeze(
-        cfg.training.unfreezing_epoch
-    )  # Not used for now
-    # TODO: add backbone refinement, add wandb?
+    transfer_unfreeze_callback = BackboneFinetuning(
+        unfreeze_backbone_at_epoch=cfg.training.unfreezing_epoch,
+        lambda_func=lambda epoch: 1.5,
+        backbone_initial_ratio_lr=10,
+        should_align=True,
+        train_bn=True,
+    )
+    # TODO: add wandb?
     trainer = pl.Trainer(  # TODO: be careful with the devices here if you want to scale to multiple gpus
         gpus=1 if _TORCH_DEVICE == "cuda" else 0,
         max_epochs=cfg.training.max_epochs,
