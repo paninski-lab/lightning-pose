@@ -23,10 +23,17 @@ import os
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# TODO: move the datapaths from cfg.training
+
 @hydra.main(config_path="configs", config_name="config")
 def train(cfg: DictConfig):
+
     print(cfg)
+
+    # create absolute paths from relative paths
+    base_path = os.path.dirname(os.path.dirname(os.path.join(__file__)))
+    root_directory = os.path.join(base_path, 'toy_datasets', cfg.data.data_dir)
+    video_directory = os.path.join(root_directory, cfg.data.video_dir)
+
     data_transform = []
     data_transform.append(
         iaa.Resize(
@@ -39,15 +46,15 @@ def train(cfg: DictConfig):
     imgaug_transform = iaa.Sequential(data_transform)
     if cfg.model.model_type == "regression":
         dataset = BaseTrackingDataset(
-            root_directory=cfg.data.data_dir,
+            root_directory=root_directory,
             csv_path=cfg.data.csv_path,
             header_rows=OmegaConf.to_object(cfg.data.header_rows),
             imgaug_transform=imgaug_transform,
         )
     elif cfg.model.model_type == "heatmap":
         dataset = HeatmapDataset(
-            root_directory=cfg.data.data_dir,
-            csv_path=cfg.data.csv_path,
+            root_directory=root_directory,
+            csv_path=cfg.data.csv_file,
             header_rows=OmegaConf.to_object(cfg.data.header_rows),
             imgaug_transform=imgaug_transform,
             downsample_factor=cfg.data.downsample_factor,
@@ -63,6 +70,10 @@ def train(cfg: DictConfig):
             val_batch_size=cfg.training.val_batch_size,
             test_batch_size=cfg.training.test_batch_size,
             num_workers=cfg.training.num_workers,
+            train_probability=cfg.training.train_prob,
+            val_probability=cfg.training.val_prob,
+            train_frames=cfg.training.train_frames,
+            torch_seed=cfg.training.rng_seed_data_pt,
         )
         if cfg.model.model_type == "regression":
             model = RegressionTracker(
@@ -86,13 +97,20 @@ def train(cfg: DictConfig):
         losses_to_use = OmegaConf.to_object(cfg.model.losses_to_use)
         datamod = UnlabeledDataModule(
             dataset=dataset,
-            video_paths_list=cfg.data.video_dir,  # just a single path for now
+            video_paths_list=video_directory,
             specialized_dataprep=losses_to_use,
             loss_param_dict=loss_param_dict,
             train_batch_size=cfg.training.train_batch_size,
             val_batch_size=cfg.training.val_batch_size,
             test_batch_size=cfg.training.test_batch_size,
             num_workers=cfg.training.num_workers,
+            train_probability=cfg.training.train_prob,
+            val_probability=cfg.training.val_prob,
+            train_frames=cfg.training.train_frames,
+            unlabeled_batch_size=1,
+            unlabeled_sequence_length=cfg.training.unlabeled_sequence_length,
+            torch_seed=cfg.training.rng_seed_data_pt,
+            dali_seed=cfg.training.rng_seed_data_dali,
         )
         if cfg.model.model_type == "regression":
             model = SemiSupervisedRegressionTracker(
@@ -111,12 +129,12 @@ def train(cfg: DictConfig):
                 loss_params=datamod.loss_param_dict,
                 semi_super_losses_to_use=losses_to_use,
             )
-    logger = TensorBoardLogger("tb_logs", name= cfg.model.model_name)
+
+    logger = TensorBoardLogger("tb_logs", name=cfg.model.model_name)
     early_stopping = pl.callbacks.EarlyStopping(
-        monitor="val_loss", patience=100, mode="min"
+        monitor="val_loss", patience=cfg.training.early_stop_patience, mode="min"
     )
     lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval="epoch")
-
     ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(monitor="val_loss")
     transfer_unfreeze_callback = BackboneFinetuning(
         unfreeze_backbone_at_epoch=cfg.training.unfreezing_epoch,
@@ -126,9 +144,10 @@ def train(cfg: DictConfig):
         train_bn=True,
     )
     # TODO: add wandb?
-    trainer = pl.Trainer(  # TODO: be careful with the devices here if you want to scale to multiple gpus
+    trainer = pl.Trainer(  # TODO: be careful with devices if you want to scale to multiple gpus
         gpus=1 if _TORCH_DEVICE == "cuda" else 0,
         max_epochs=cfg.training.max_epochs,
+        check_val_every_n_epoch=cfg.training.check_val_every_n_epoch,
         log_every_n_steps=cfg.training.log_every_n_steps,
         callbacks=[
             early_stopping,
