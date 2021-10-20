@@ -44,7 +44,7 @@ class RegressionTracker(BaseFeatureExtractor):
         )
         self.num_targets = num_targets
         self.resnet_version = resnet_version
-        self.final_layer = nn.Linear(self.backbone.fc.in_features, self.num_targets)
+        self.final_layer = nn.Linear(self.base.fc.in_features, self.num_targets)
         self.representation_dropout = nn.Dropout(
             p=representation_dropout_rate
         )  # TODO: consider removing dropout
@@ -121,15 +121,6 @@ class RegressionTracker(BaseFeatureExtractor):
 
     def test_step(self, test_batch: list, batch_idx):
         self.evaluate(test_batch, "test")
-
-    def configure_optimizers(self):
-        optimizer = Adam(filter(lambda p: p.requires_grad, self.parameters()), lr=1e-3)
-        scheduler = ReduceLROnPlateau(optimizer, factor=0.2, patience=20, verbose=True)
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": scheduler,
-            "monitor": "val_loss",
-        }
 
 
 class SemiSupervisedRegressionTracker(RegressionTracker):

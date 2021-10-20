@@ -8,7 +8,7 @@ from typing import Any, Callable, Optional, Tuple, List
 from typing_extensions import Literal
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, MultiStepLR
 
 
 patch_typeguard()  # use before @typechecked
@@ -66,11 +66,11 @@ class BaseFeatureExtractor(LightningModule):
         print("\n Initializing a {} instance.".format(self._get_name()))
 
         self.resnet_version = resnet_version
-        self.backbone = grab_resnet_backbone(
+        self.base = grab_resnet_backbone(
             resnet_version=self.resnet_version, pretrained=pretrained
         )
-        self.feature_extractor = grab_layers_sequential(
-            model=self.backbone,
+        self.backbone = grab_layers_sequential(
+            model=self.base,
             last_layer_ind=last_resnet_layer_to_get,
         )
 
@@ -94,7 +94,7 @@ class BaseFeatureExtractor(LightningModule):
         Returns:
             torch.tensor(float): a representation of the images. Features differ as a function of resnet version. Representation height and width differ as a function of image dimensions, and are not necessarily equal.
         """
-        return self.feature_extractor(images)
+        return self.backbone(images)
 
     def forward(self, images):
         """Forward pass from images to representations. Just a wrapper over get_representations.
@@ -107,3 +107,14 @@ class BaseFeatureExtractor(LightningModule):
             torch.tensor(float): a representation of the images.
         """
         return self.get_representations(images)
+
+    def configure_optimizers(self):
+        optimizer = Adam(filter(lambda p: p.requires_grad, self.parameters()), lr=1e-3)
+        # scheduler = ReduceLROnPlateau(optimizer, factor=0.2, patience=20, verbose=True)
+        # scheduler = StepLR(optimizer, step_size=50, gamma=0.5)
+        scheduler = MultiStepLR(optimizer, milestones=[50, 100, 150], gamma=0.5)
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": scheduler,
+            "monitor": "val_loss",
+        }
