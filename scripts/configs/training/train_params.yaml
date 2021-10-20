@@ -52,3 +52,6 @@ rng_seed_data_pt: 42
 
 # rng seed for unlabeled videos
 rng_seed_data_dali: 43
+
+# rng seed for weight initialization
+rng_seed_model_pt: 44
