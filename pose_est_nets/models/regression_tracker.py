@@ -25,9 +25,10 @@ class RegressionTracker(BaseFeatureExtractor):
         self,
         num_targets: int,  # TODO: decide whether targets or keypoints is the quantity of interest
         resnet_version: Optional[Literal[18, 34, 50, 101, 152]] = 18,
-        pretrained: Optional[bool] = True,
-        representation_dropout_rate: Optional[float] = 0.2,
-        last_resnet_layer_to_get: Optional[int] = -2,
+        pretrained: bool = True,
+        representation_dropout_rate: float = 0.2,
+        last_resnet_layer_to_get: int = -2,
+        torch_seed: int = 123,
     ) -> None:
         """
         Initializes regression tracker model with resnet backbone
@@ -37,6 +38,10 @@ class RegressionTracker(BaseFeatureExtractor):
         :param transfer:  Flag to indicate whether this is a transfer learning task or not; defaults to false,
             meaning the entire model will be trained unless this flag is provided
         """
+
+        # for reproducible weight initialization
+        torch.manual_seed(torch_seed)
+
         super().__init__(
             resnet_version=resnet_version,
             pretrained=pretrained,
@@ -48,6 +53,7 @@ class RegressionTracker(BaseFeatureExtractor):
         self.representation_dropout = nn.Dropout(
             p=representation_dropout_rate
         )  # TODO: consider removing dropout
+        self.torch_seed = torch_seed
         self.save_hyperparameters()
 
     @staticmethod
@@ -66,9 +72,7 @@ class RegressionTracker(BaseFeatureExtractor):
     @typechecked
     def forward(
         self,
-        images: TensorType[
-            "Batch_Size", "Image_Channels":3, "Image_Height", "Image_Width", float
-        ],
+        images: TensorType["Batch_Size", "Image_Channels":3, "Image_Height", "Image_Width", float],
     ) -> TensorType["Batch_Size", "Num_Targets"]:
         """
         Forward pass through the network
@@ -129,20 +133,23 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         num_targets: int,  # TODO: decide whether targets or keypoints is the quantity of interest
         loss_params: dict,
         resnet_version: Optional[Literal[18, 34, 50, 101, 152]] = 18,
-        pretrained: Optional[bool] = True,
-        representation_dropout_rate: Optional[float] = 0.2,
-        last_resnet_layer_to_get: Optional[int] = -2,
+        pretrained: bool = True,
+        representation_dropout_rate: float = 0.2,
+        last_resnet_layer_to_get: int = -2,
+        torch_seed: int = 123,
         semi_super_losses_to_use: Optional[list] = None,
     ) -> None:
         super().__init__(
-            num_targets,
-            resnet_version,
-            pretrained,
-            representation_dropout_rate,
-            last_resnet_layer_to_get,
+            num_targets=num_targets,
+            resnet_version=resnet_version,
+            pretrained=pretrained,
+            representation_dropout_rate=representation_dropout_rate,
+            last_resnet_layer_to_get=last_resnet_layer_to_get,
+            torch_seed=torch_seed,
         )
+        print(semi_super_losses_to_use)
         self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
-        self.loss_params = convert_dict_entries_to_tensors(loss_params, self.device)
+        self.loss_params = loss_params
 
     @typechecked
     def training_step(self, data_batch: dict, batch_idx: int) -> dict:
@@ -168,6 +175,7 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         tot_loss = 0.0
         tot_loss += supervised_loss
         # loop over unsupervised losses
+        self.loss_params = convert_dict_entries_to_tensors(self.loss_params, self.device)
         for loss_name, loss_func in self.loss_function_dict.items():
             add_loss = self.loss_params[loss_name]["weight"] * loss_func(
                 predicted_us_keypoints, **self.loss_params[loss_name]
@@ -177,37 +185,22 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
             self.log(
                 loss_name + "_loss",
                 add_loss,
-                on_step=True,
-                on_epoch=True,
                 prog_bar=True,
-                logger=True,
             )
-        # log the total loss
         self.log(
             "total_loss",
             tot_loss,
-            on_step=True,
-            on_epoch=True,
             prog_bar=True,
-            logger=True,
         )
-        # log the supervised loss
         self.log(
             "supervised_loss",
             supervised_loss,
-            on_step=True,
-            on_epoch=True,
             prog_bar=True,
-            logger=True,
         )
-
         self.log(
             "supervised_rmse",
             supervised_rmse,
-            on_step=True,
-            on_epoch=True,
             prog_bar=True,
-            logger=True,
         )
 
         return {"loss": tot_loss}
