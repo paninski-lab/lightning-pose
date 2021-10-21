@@ -10,7 +10,7 @@ patch_typeguard()  # use before @typechecked
 
 @typechecked
 def MaskedRegressionMSELoss(
-    labels: TensorType["batch", "num_targets"],
+    keypoints: TensorType["batch", "num_targets"],
     preds: TensorType["batch", "num_targets"],
 ) -> TensorType[(), float]:
     """
@@ -19,17 +19,14 @@ def MaskedRegressionMSELoss(
     :param y_hat: prediction. shape=(batch, num_targets)
     :return: mse loss
     """
-    mask = labels == labels  # labels is not none, bool.
-    loss = F.mse_loss(
-        torch.masked_select(labels, mask), torch.masked_select(preds, mask)
-    )
-
+    mask = keypoints == keypoints  # keypoints is not none, bool.
+    loss = F.mse_loss(torch.masked_select(keypoints, mask), torch.masked_select(preds, mask))
     return loss
 
 
 @typechecked
 def MaskedRMSELoss(
-    labels: TensorType["batch", "num_targets"],
+    keypoints: TensorType["batch", "num_targets"],
     preds: TensorType["batch", "num_targets"],
 ) -> TensorType[(), float]:
     """
@@ -38,9 +35,9 @@ def MaskedRMSELoss(
     :param y_hat: prediction. shape=(batch, num_targets)
     :return: mse loss
     """
-    mask = labels == labels  # labels is not none, bool.
+    mask = keypoints == keypoints  # keypoints is not none, bool.
     loss = F.mse_loss(
-        torch.masked_select(labels, mask),
+        torch.masked_select(keypoints, mask),
         torch.masked_select(preds, mask),
         reduction="none",
     )

@@ -6,7 +6,7 @@ import pytest
 import pytorch_lightning as pl
 import shutil
 from pose_est_nets.utils.wrappers import predict_plot_test_epoch
-from pose_est_nets.utils.IO import set_or_open_folder, load_object
+from pose_est_nets.utils.io import set_or_open_folder, load_object
 from typing import Optional
 import torchvision
 from pose_est_nets.datasets.datasets import HeatmapDataset
@@ -107,11 +107,11 @@ def test_unsupervised():  # TODO Finish writing test
     ):  # video_directory may contain other random files that are not vids, DALI will try to read them
         if f.endswith(".mp4"):  # hardcoded for the toydataset folder
             vids.append(f)
-    # video_directory = os.path.join(
-    #     "/home/jovyan/mouseRunningData/unlabeled_videos"
-    # )  # DAN's
 
-    with open("pose_est_nets/losses/default_hypers.yaml") as f:
+    # grab example loss config file from repo
+    base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
+    loss_cfg = os.path.join(base_dir, "scripts", "configs", "losses", "loss_params.yaml")
+    with open(loss_cfg) as f:
         loss_param_dict = yaml.load(f, Loader=yaml.FullLoader)
 
     datamod = UnlabeledDataModule(

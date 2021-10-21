@@ -16,7 +16,7 @@ from pose_est_nets.utils.dataset_utils import draw_keypoints
 from pose_est_nets.datasets.utils import (
     clean_any_nans,
 )  # TODO: merge the two utils above
-from pose_est_nets.datasets.DALI import video_pipe, LightningWrapper
+from pose_est_nets.datasets.dali import video_pipe, LightningWrapper
 from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
 import h5py
 from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
@@ -33,7 +33,7 @@ _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 @typechecked
 def PCA_prints(pca: sklearn.decomposition._pca.PCA, components_to_keep: int) -> None:
-    print("Results of running PCA on labels:")
+    print("Results of running PCA on keypoints:")
     print(
         "explained_variance_ratio_: {}".format(
             np.round(pca.explained_variance_ratio_, 3)
@@ -275,8 +275,8 @@ class UnlabeledDataModule(BaseDataModule):
         components_to_keep: int = 3,
         empirical_epsilon_percentile: float = 90.0,
     ) -> None:
-        print("Computing PCA on the labels...")
-        # Nick: Subset inherits from dataset, it doesn't have access to dataset.labels
+        print("Computing PCA on the keypoints...")
+        # Nick: Subset inherits from dataset, it doesn't have access to dataset.keypoints
         if type(self.train_set) == torch.utils.data.dataset.Subset:
             indxs = torch.tensor(self.train_set.indices)
             regressionData = (
@@ -285,7 +285,7 @@ class UnlabeledDataModule(BaseDataModule):
                 else self.fulldataset
             )
             data_arr = torch.index_select(
-                self.fulldataset.labels.detach().clone(), 0, indxs
+                self.fulldataset.keypoints.detach().clone(), 0, indxs
             )
             if self.fulldataset.imgaug_transform:
                 i = 0
@@ -294,7 +294,7 @@ class UnlabeledDataModule(BaseDataModule):
                     i += 1
         else:
             data_arr = (
-                self.train_set.labels.detach().clone()
+                self.train_set.keypoints.detach().clone()
             )  # won't work for random splitting
             if self.train_set.imgaug_transform:
                 for i in range(len(data_arr)):
@@ -326,16 +326,13 @@ class UnlabeledDataModule(BaseDataModule):
             device=_TORCH_DEVICE,  # TODO: be careful for multinode
         )
 
-        # compute the labels' projections on the discarded components, to estimate the e.g., 90th percentile and determine epsilon
+        # compute the keypoints' projections on the discarded components, to estimate the e.g.,
+        # 90th percentile and determine epsilon
         # absolute value is important -- projections can be negative.
         proj_discarded = torch.abs(
             torch.matmul(
                 arr_for_pca.T,
-                self.loss_param_dict["pca"]["discarded_eigenvectors"]
-                .clone()
-                .detach()
-                .cpu()
-                .T,
+                self.loss_param_dict["pca"]["discarded_eigenvectors"].clone().detach().cpu().T,
             )
         )
         # setting axis = 0 generalizes to multiple discarded components
