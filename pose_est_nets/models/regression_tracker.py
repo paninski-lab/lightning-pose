@@ -25,10 +25,10 @@ class RegressionTracker(BaseFeatureExtractor):
         self,
         num_targets: int,  # TODO: decide whether targets or keypoints is the quantity of interest
         resnet_version: Optional[Literal[18, 34, 50, 101, 152]] = 18,
-        pretrained: Optional[bool] = True,
-        representation_dropout_rate: Optional[float] = 0.2,
-        last_resnet_layer_to_get: Optional[int] = -2,
-        torch_seed: Optional[int] = 123,
+        pretrained: bool = True,
+        representation_dropout_rate: float = 0.2,
+        last_resnet_layer_to_get: int = -2,
+        torch_seed: int = 123,
     ) -> None:
         """
         Initializes regression tracker model with resnet backbone
@@ -133,10 +133,10 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         num_targets: int,  # TODO: decide whether targets or keypoints is the quantity of interest
         loss_params: dict,
         resnet_version: Optional[Literal[18, 34, 50, 101, 152]] = 18,
-        pretrained: Optional[bool] = True,
-        representation_dropout_rate: Optional[float] = 0.2,
-        last_resnet_layer_to_get: Optional[int] = -2,
-        torch_seed: Optional[int] = 123,
+        pretrained: bool = True,
+        representation_dropout_rate: float = 0.2,
+        last_resnet_layer_to_get: int = -2,
+        torch_seed: int = 123,
         semi_super_losses_to_use: Optional[list] = None,
     ) -> None:
         super().__init__(

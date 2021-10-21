@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader, random_split
 import torch.nn.functional as F
 from torchvision import transforms
 import pytorch_lightning as pl
-from typing import Callable, Optional, Tuple, List
+from typing import Callable, Optional, Tuple, List, Union
 import os
 import numpy as np
 from PIL import Image
@@ -183,7 +183,7 @@ class UnlabeledDataModule(BaseDataModule):
     def __init__(  # TODO: add documentation and args
         self,
         dataset,
-        video_paths_list: [List[str], str],
+        video_paths_list: Union[List[str], str],
         use_deterministic: bool = False,
         train_batch_size: int = 16,
         val_batch_size: int = 16,
@@ -240,7 +240,7 @@ class UnlabeledDataModule(BaseDataModule):
         elif isinstance(self.video_paths_list, str) and os.path.isdir(self.video_paths_list):
             # directory of videos
             import glob
-            extensions = ["*.mp4", "*.avi"]  # allowed file extensions
+            extensions = ["mp4"]  # allowed file extensions
             filenames = []
             for extension in extensions:
                 filenames.extend(

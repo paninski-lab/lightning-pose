@@ -40,7 +40,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         upsample_factor: int = 100,
         confidence_scale: float = 1.0,
         threshold: Optional[float] = None,
-        torch_seed: Optional[int] = 123,
+        torch_seed: int = 123,
     ) -> None:
         """
         Initializes a DLC-like model with resnet backbone inherited from BaseFeatureExtractor
@@ -238,7 +238,7 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         upsample_factor: int = 100,
         confidence_scale: float = 1.,
         threshold: Optional[float] = None,
-        torch_seed: Optional[int] = 123,
+        torch_seed: int = 123,
         semi_super_losses_to_use: Optional[list] = None,
     ):
         super().__init__(
