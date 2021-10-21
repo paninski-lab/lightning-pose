@@ -1,83 +1,57 @@
-import torch
-import pandas as pd
-from torch import cuda
-from torch.utils.data import DataLoader, random_split
-import torch.nn.functional as F
-from torchvision import transforms
-import pytorch_lightning as pl
-from typing import Callable, Optional, Tuple, List, Union
-import os
+"""Data modules split a dataset into train, val, and test modules."""
+
 import numpy as np
-from PIL import Image
-from tqdm import tqdm
+from nvidia.dali.plugin.pytorch import LastBatchPolicy
+import os
+import pytorch_lightning as pl
 from sklearn.decomposition import PCA
-from pose_est_nets.utils.heatmap_tracker_utils import format_mouse_data
-from pose_est_nets.utils.dataset_utils import draw_keypoints
-from pose_est_nets.datasets.utils import (
-    clean_any_nans,
-)  # TODO: merge the two utils above
+import torch
+from torch.utils.data import DataLoader, random_split
+from typeguard import typechecked
+from typing import Literal, List, Optional, Tuple, Union
+
 from pose_est_nets.datasets.dali import video_pipe, LightningWrapper
 from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
-import h5py
-from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
-from nvidia.dali import pipeline_def
-import nvidia.dali.fn as fn
-import nvidia.dali.types as types
-from typeguard import typechecked
-import sklearn
-from typing_extensions import Literal
-from pose_est_nets.datasets.utils import split_sizes_from_probabilities
+from pose_est_nets.datasets.utils import clean_any_nans, split_sizes_from_probabilities
+from pose_est_nets.utils.heatmap_tracker_utils import format_mouse_data
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-@typechecked
-def PCA_prints(pca: sklearn.decomposition._pca.PCA, components_to_keep: int) -> None:
-    print("Results of running PCA on keypoints:")
-    print(
-        "explained_variance_ratio_: {}".format(
-            np.round(pca.explained_variance_ratio_, 3)
-        )
-    )
-    print(
-        "total_explained_var: {}".format(
-            np.round(np.sum(pca.explained_variance_ratio_[:components_to_keep]), 3)
-        )
-    )
-
-
 class BaseDataModule(pl.LightningDataModule):
+    """Base data module that splits a labeled dataset into train, val, and test data loaders."""
+
     def __init__(
-        self,
-        dataset,
-        use_deterministic: bool = False,
-        train_batch_size: int = 16,
-        val_batch_size: int = 16,
-        test_batch_size: int = 1,
-        num_workers: int = 8,
-        train_probability: float = 0.8,
-        val_probability: float = None,
-        test_probability: float = None,
-        train_frames: float = None,
-        torch_seed: int = 42,
-    ):
+            self,
+            dataset: torch.utils.data.Dataset,
+            use_deterministic: bool=False,
+            train_batch_size: int=16,
+            val_batch_size: int=16,
+            test_batch_size: int=1,
+            num_workers: int=8,
+            train_probability: float=0.8,
+            val_probability: Optional[float]=None,
+            test_probability: Optional[float]=None,
+            train_frames: Optional[Union[float, int]]=None,
+            torch_seed: int=42,
+    ) -> None:
         """Data module splits a dataset into train, val, and test data loaders.
 
         Args:
-            dataset (torch.utils.data.Dataset): base dataset to be split into train/val/test
-            use_deterministic (bool):
-            train_batch_size (int): number of samples of training batches
-            val_batch_size (int): number of samples in validation batches
-            test_batch_size (int): number of samples in test batches
-            num_workers (int): number of threads used for prefetching data
-            train_probability (float): fraction of full dataset used for training
-            val_probability (float): fraction of full dataset used for validation
-            test_probability (float): fraction of full dataset used for testing
-            train_frames (float or int): if integer, select this number of training frames from the
+            dataset: base dataset to be split into train/val/test
+            use_deterministic: TODO: use deterministic split of data...?
+            train_batch_size: number of samples of training batches
+            val_batch_size: number of samples in validation batches
+            test_batch_size: number of samples in test batches
+            num_workers: number of threads used for prefetching data
+            train_probability: fraction of full dataset used for training
+            val_probability: fraction of full dataset used for validation
+            test_probability: fraction of full dataset used for testing
+            train_frames: if integer, select this number of training frames from the
                 initially selected train frames (defined by `train_probability`); if float, must be
                 between 0 and 1 (exclusive) and defines the fraction of the initially selected
                 train frames
-            torch_seed (int, optional):
+            torch_seed: control data splits
 
         """
         super().__init__()
@@ -99,14 +73,10 @@ class BaseDataModule(pl.LightningDataModule):
         self.test_set = None  # populated by self.setup()
         self.torch_seed = torch_seed
 
-    def setup(self, stage: Optional[str] = None):  # TODO: clean up
+    def setup(self, stage: Optional[str]=None):  # stage arg needed for ptl
         print("Setting up DataModule...")
         datalen = self.fulldataset.__len__()
-        print(
-            "Number of labeled images in the full dataset (train+val+test): {}".format(
-                datalen
-            )
-        )
+        print("Number of labeled images in the full dataset (train+val+test): {}".format(datalen))
 
         if self.use_deterministic:
             return
@@ -116,7 +86,8 @@ class BaseDataModule(pl.LightningDataModule):
             datalen,
             train_probability=self.train_probability,
             val_probability=self.val_probability,
-            test_probability=self.test_probability)
+            test_probability=self.test_probability
+        )
 
         self.train_set, self.val_set, self.test_set = random_split(
             self.fulldataset,
@@ -180,26 +151,53 @@ class BaseDataModule(pl.LightningDataModule):
 
 
 class UnlabeledDataModule(BaseDataModule):
-    def __init__(  # TODO: add documentation and args
-        self,
-        dataset,
-        video_paths_list: Union[List[str], str],
-        use_deterministic: bool = False,
-        train_batch_size: int = 16,
-        val_batch_size: int = 16,
-        test_batch_size: int = 1,
-        num_workers: int = 8,
-        train_probability: float = 0.8,
-        val_probability: float = None,
-        test_probability: float = None,
-        train_frames: float = None,
-        unlabeled_batch_size: int = 1,
-        unlabeled_sequence_length: int = 16,
-        dali_seed: int = 123456,
-        torch_seed: int = 42,
-        specialized_dataprep: Optional[Literal["pca"]] = None,  # Get rid of optional?
-        loss_param_dict: Optional[dict] = None,
-    ):
+    """Data module that contains labeled and unlabled data loaders."""
+
+    def __init__(
+            self,
+            dataset: torch.utils.data.Dataset,
+            video_paths_list: Union[List[str], str],
+            use_deterministic: bool=False,
+            train_batch_size: int=16,
+            val_batch_size: int=16,
+            test_batch_size: int=1,
+            num_workers: int=8,
+            train_probability: float=0.8,
+            val_probability: Optional[float]=None,
+            test_probability: Optional[float]=None,
+            train_frames: Optional[float]=None,
+            unlabeled_batch_size: int=1,
+            unlabeled_sequence_length: int=16,
+            dali_seed: int=123456,
+            torch_seed: int=42,
+            specialized_dataprep: Optional[Literal["pca"]]=None,
+            loss_param_dict: Optional[dict]=None,
+    ) -> None:
+        """Data module that contains labeled and unlabeled data loaders.
+
+        Args:
+            dataset: pytorch Dataset for labeled data
+            video_paths_list: absolute paths of videos ("unlabeled" data)
+            use_deterministic: TODO: use deterministic split of data...?
+            train_batch_size: number of samples of training batches
+            val_batch_size: number of samples in validation batches
+            test_batch_size: number of samples in test batches
+            num_workers: number of threads used for prefetching data
+            train_probability: fraction of full dataset used for training
+            val_probability: fraction of full dataset used for validation
+            test_probability: fraction of full dataset used for testing
+            train_frames: if integer, select this number of training frames from the
+                initially selected train frames (defined by `train_probability`); if float, must be
+                between 0 and 1 (exclusive) and defines the fraction of the initially selected
+                train frames
+            torch_seed: control data splits
+            unlabeled_batch_size: number of sequences to load per unlabeled batch
+            unlabeled_sequence_length: number of frames per sequence of unlabeled data
+            dali_seed: control randomness of unlabeled data loading
+            torch_seed: control randomness of labeled data loading
+            specialized_dataprep:
+            loss_param_dict: details of loss types for unlabeled data (influences processing)
+        """
         super().__init__(
             dataset=dataset,
             use_deterministic=use_deterministic,
@@ -253,27 +251,26 @@ class UnlabeledDataModule(BaseDataModule):
             filenames=filenames,
             resize_dims=[self.fulldataset.height, self.fulldataset.width],
             random_shuffle=True,
-            device_id=0,  # TODO: be careful when scaling to multinode
             seed=self.dali_seed,
-            batch_size=self.unlabeled_batch_size,
             sequence_length=self.unlabeled_sequence_length,
+            batch_size=self.unlabeled_batch_size,
             num_threads=self.num_workers_for_unlabeled,  # other workers do the labeled dataloading
+            device_id=0,
         )
 
         self.semi_supervised_loader = LightningWrapper(
             data_pipe,
             output_map=["x"],
             last_batch_policy=LastBatchPolicy.PARTIAL,
-            auto_reset=True,  # TODO: seems harmless, but verify at some point what "reseting" means
+            auto_reset=True,  # TODO: verify at some point what "reseting" means
         )
-        # self.computePCA_params() #Setup must be run before running this
 
     # TODO: could be separated from this class
     # TODO: return something?
     def computePCA_params(  # Should only call this now if pca in loss name dict
-        self,
-        components_to_keep: int = 3,
-        empirical_epsilon_percentile: float = 90.0,
+            self,
+            components_to_keep: int=3,
+            empirical_epsilon_percentile: float=90.0,
     ) -> None:
         print("Computing PCA on the keypoints...")
         # Nick: Subset inherits from dataset, it doesn't have access to dataset.keypoints
@@ -314,7 +311,7 @@ class UnlabeledDataModule(BaseDataModule):
         print(
             "good_arr_for_pca shape: {}".format(good_arr_for_pca.shape)
         )  # TODO: have prints as tests
-        PCA_prints(pca, components_to_keep)  # print important params
+        pca_prints(pca, components_to_keep)  # print important params
         self.loss_param_dict["pca"]["kept_eigenvectors"] = torch.tensor(
             pca.components_[:components_to_keep],
             dtype=torch.float32,
@@ -367,3 +364,18 @@ class UnlabeledDataModule(BaseDataModule):
             batch_size=self.test_batch_size,
             num_workers=self.num_workers_for_labeled,
         )
+
+
+@typechecked
+def pca_prints(pca: PCA, components_to_keep: int) -> None:
+    print("Results of running PCA on keypoints:")
+    print(
+        "explained_variance_ratio_: {}".format(
+            np.round(pca.explained_variance_ratio_, 3)
+        )
+    )
+    print(
+        "total_explained_var: {}".format(
+            np.round(np.sum(pca.explained_variance_ratio_[:components_to_keep]), 3)
+        )
+    )

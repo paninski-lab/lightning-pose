@@ -1,9 +1,18 @@
+"""Training callbacks for pytorch lightning training."""
 
 from pytorch_lightning.callbacks.finetuning import BaseFinetuning
 
-class FeatureExtractorFreezeUnfreeze(BaseFinetuning):
 
-    def __init__(self, unfreeze_at_epoch=10):
+class FeatureExtractorFreezeUnfreeze(BaseFinetuning):
+    """Basic callback to unfreeze backbone feature extractor at a particular epoch."""
+
+    def __init__(self, unfreeze_at_epoch: int=10) -> None:
+        """FeatureExtractorFreezeUnfreeze constructor.
+
+        Args:
+            unfreeze_at_epoch: epoch at which to unfreeze feature extractor weights
+
+        """
         super().__init__()
         self._unfreeze_at_epoch = unfreeze_at_epoch
 
