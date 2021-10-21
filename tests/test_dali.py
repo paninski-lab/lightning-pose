@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from pose_est_nets.datasets.DALI import video_pipe
+from pose_est_nets.datasets.dali import video_pipe
 from nvidia.dali import pipeline_def
 import nvidia.dali.fn as fn
 import nvidia.dali.types as types

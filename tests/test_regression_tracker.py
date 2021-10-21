@@ -1,13 +1,45 @@
 import os
 import torch
+import numpy as np
 import torchvision.transforms as transforms
 import pytest
 import pytorch_lightning as pl
 import shutil
 from pose_est_nets.utils.wrappers import predict_plot_test_epoch
-from pose_est_nets.utils.IO import set_or_open_folder, load_object
+from pose_est_nets.utils.io import set_or_open_folder, load_object
+from pose_est_nets.datasets.datamodules import UnlabeledDataModule
+from pose_est_nets.datasets.datasets import BaseTrackingDataset
+from typing import Optional
+from pose_est_nets.models.regression_tracker import (
+    RegressionTracker,
+    SemiSupervisedRegressionTracker,
+)
+import yaml
+import imgaug.augmenters as iaa
 
-# assert (os.path.isdir('toy_datasets'))
+# TODO: add more tests as we consolidate datasets
+_TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+_BATCH_SIZE = 12
+_HEIGHT = 256  # TODO: should be different numbers?
+_WIDTH = 256
+
+resnet_versions = [18, 34, 50, 101, 152]
+
+repres_shape_list = [
+    torch.Size([_BATCH_SIZE, 512, 1, 1]),
+    torch.Size([_BATCH_SIZE, 512, 1, 1]),
+    torch.Size([_BATCH_SIZE, 2048, 1, 1]),
+    torch.Size([_BATCH_SIZE, 2048, 1, 1]),
+    torch.Size([_BATCH_SIZE, 2048, 1, 1]),
+]
+
+num_keypoints = 34
+
+fake_image_batch = torch.rand(
+    size=(_BATCH_SIZE, 3, _HEIGHT, _WIDTH), device=_TORCH_DEVICE
+)
+fake_keypoints = torch.rand(_BATCH_SIZE, num_keypoints, device=_TORCH_DEVICE) * _HEIGHT
 
 
 @pytest.fixture
@@ -43,173 +75,94 @@ def initialize_data_module(create_dataset):
     )
     return data_module
 
-@pytest.mark.skip(reason="test outdated")
-def test_forward(initialize_model, create_dataset):
-    # TODO: separate from specific dataset, push random tensors
-    model = initialize_model
-    dataset = create_dataset
-    dataloader = torch.utils.data.DataLoader(dataset)
-    images, labels = next(iter(dataloader))
-    preds = model(images)  # using the forward method without taking grads
-    assert preds.dtype == torch.float
-    assert images.shape == (1, 3, 406, 396)
-    loss = model.regression_loss(labels, preds)
-    assert loss.detach().numpy() > -0.00000001
-    assert loss.shape == torch.Size([])  # scalar has size zero in torch
-    assert preds.shape == (1, 34)
-    data = torch.ones(size=(1, 3, 2000, 2000))  # huge image
-    assert model.feature_extractor(data).shape == torch.Size([1, 512, 1, 1])
 
-@pytest.mark.skip(reason="test outdated")
-def test_preds(initialize_model, create_dataset):
-    model = initialize_model
-    dataset = create_dataset
-    dataloader = torch.utils.data.DataLoader(dataset)
-    preds_folder = set_or_open_folder("preds_test")
-    preds_dict = predict_plot_test_epoch(model, dataloader, preds_folder)
-    assert preds_dict.keys() is not None
-    assert len(dataset) + 1 == len(os.listdir(preds_folder))  # added 1 for the pkl file
-    preds_dict_loaded = load_object(os.path.join(preds_folder, "preds"))
-    assert preds_dict_loaded.keys() == preds_dict.keys()
+def test_forward():
+    """loop over different resnet versions and make sure that the
+    resulting representation shapes make sense."""
 
-@pytest.mark.skip(reason="test outdated")
-def test_reprs_dropout(initialize_model, create_dataset):
-    model = initialize_model
-    x = torch.randn(size=(2, 3, 406, 396))
-    representation = model.feature_extractor(x)
-    assert representation.shape == (2, 512, 1, 1)
-    reshaped_representation = model.reshape_representation(representation)
-    assert reshaped_representation.shape == (2, 512)
-    drop = model.representation_dropout(reshaped_representation)
-    assert torch.sum(drop == 0.0) > 1
+    model = RegressionTracker(resnet_version=50, num_targets=34).to(_TORCH_DEVICE)
+    representations = model.get_representations(fake_image_batch)
+    assert representations.shape == repres_shape_list[2]
+    preds = model(fake_image_batch)
+    assert preds.shape == fake_keypoints.shape
 
-@pytest.mark.skip(reason="test outdated")
-def test_archi(initialize_model):
-    model = initialize_model
-    assert model.feature_extractor[-1].output_size == (1, 1)
-    assert (
-        list(model.backbone.children())[-2]
-        == list(model.feature_extractor.children())[-1]
+
+def test_semisupervised():
+    # define unsupervised datamodule
+    data_transform = []
+    data_transform.append(
+        iaa.Resize({"height": 384, "width": 384})
+    )  # dlc dimensions need to be repeatably divisable by 2
+    imgaug_transform = iaa.Sequential(data_transform)
+
+    dataset = BaseTrackingDataset(
+        root_directory="toy_datasets/toymouseRunningData",
+        csv_path="CollectedData_.csv",
+        header_rows=[1, 2],
+        imgaug_transform=imgaug_transform,
     )
-    assert model.final_layer.in_features == 512
-    assert model.final_layer.out_features == 34
-    assert (
-        list(model.feature_extractor[-2][-1].children())[-2].weight.requires_grad
-        == True
+    # if os.path.exists("/home/jovyan"):
+    #     video_directory = os.path.join(
+    #         "/home/jovyan/mouseRunningData/unlabeled_videos"
+    #     )  # DAN's
+    # else:
+    #     video_directory = os.path.join("unlabeled_videos")  # NICK's
+    video_directory = "toy_datasets/toymouseRunningData/unlabeled_videos"
+    video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
+    assert os.path.exists(video_files[0])
+
+    # grab example loss config file from repo
+    base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
+    loss_cfg = os.path.join(base_dir, "scripts", "configs", "losses", "loss_params.yaml")
+    with open(loss_cfg) as f:
+        loss_param_dict = yaml.load(f, Loader=yaml.FullLoader)
+
+    semi_super_losses_to_use = ["pca"]
+    datamod = UnlabeledDataModule(
+        dataset=dataset,
+        video_paths_list=video_files[0],
+        specialized_dataprep="pca",
+        loss_param_dict=loss_param_dict,
     )
+    # for param_name, param_value in datamod.pca_param_dict[
+    #     semi_super_losses_to_use[0]
+    # ].items():
+    #     loss_param_dict[semi_super_losses_to_use[0]][param_value] = param_value
+    print(loss_param_dict)
 
-
-# todo: add a test for the training loop
-
-@pytest.mark.skip(reason="test outdated")
-def test_dataset(create_dataset, initialize_data_module):
-    from pose_est_nets.datasets.datasets import TrackingDataModule
-
-    data_module = TrackingDataModule(
-        create_dataset,
-        train_batch_size=4,
-        validation_batch_size=2,
-        test_batch_size=2,
-        num_workers=8,
-    )
-    data_module.setup()  # setup() needs to be called here if we're not fitting a module
-
-    train_dataloader = data_module.train_dataloader()
-    # dataloader = torch.utils.data.DataLoader(create_dataset)
-    assert next(iter(train_dataloader)) is not None
-    images, labels = next(iter(train_dataloader))
-    assert labels.shape == (4, 34)
-    assert labels.dtype == torch.float
-    assert images.shape[0] == 4 and images.shape[1] == 3
-
-    val_dataloader = data_module.val_dataloader()
-    assert next(iter(val_dataloader)) is not None
-    images, labels = next(iter(val_dataloader))
-    assert labels.shape == (2, 34)
-    assert labels.dtype == torch.float
-    assert images.shape[0] == 2 and images.shape[1] == 3
-
-@pytest.mark.skip(reason="test outdated")
-def test_training(initialize_model, initialize_data_module, create_dataset):
-    from pose_est_nets.datasets.datasets import TrackingDataModule
-    from pose_est_nets.callbacks.freeze_unfreeze_callback import (
-        FeatureExtractorFreezeUnfreeze,
-    )
-    from pytorch_lightning.callbacks import Callback
-
-    # TODO: keep checking the freeze unfreeze callback by checking that the gradients are frozen and unfrozen during training as expected
-
-    class FreezingUnfreezingTester(Callback):
-        def on_init_end(self, trainer):
-            print("trainer is init now")
-
-        def on_epoch_end(self, trainer, pl_module) -> None:
-            if trainer.current_epoch == 0:
-                assert pl_module.final_layer.weight.requires_grad == True
-                assert (
-                    list(pl_module.feature_extractor.children())[0].weight.requires_grad
-                    == False
-                )
-            if trainer.current_epoch == 1:
-                assert pl_module.final_layer.weight.requires_grad == True
-                assert (
-                    list(pl_module.feature_extractor.children())[0].weight.requires_grad
-                    == False
-                )
-            if trainer.current_epoch == 2:  # here's one we ask to unfreeze
-                assert pl_module.final_layer.weight.requires_grad == True
-                assert (
-                    list(pl_module.feature_extractor.children())[0].weight.requires_grad
-                    == True
-                )
-
-        def on_train_end(self, trainer, pl_module):
-            print("training ended")
-
-    early_stopping = pl.callbacks.EarlyStopping(
-        monitor="val_loss", patience=3, mode="min"
-    )
-    transfer_unfreeze_callback = FeatureExtractorFreezeUnfreeze(2)
-    transfer_unfreeze_tester = FreezingUnfreezingTester()
-    gpus_to_use = 0
-    if torch.cuda.is_available():
-        gpus_to_use = 1
-    model = initialize_model
-    data_module = TrackingDataModule(
-        create_dataset,
-        train_batch_size=4,
-        validation_batch_size=2,
-        test_batch_size=1,
-        num_workers=8,
-    )
+    model = SemiSupervisedRegressionTracker(
+        resnet_version=50,
+        num_targets=34,
+        loss_params=loss_param_dict,
+        semi_super_losses_to_use=semi_super_losses_to_use,
+    ).to(_TORCH_DEVICE)
     trainer = pl.Trainer(
-        gpus=gpus_to_use,
-        max_epochs=3,
+        gpus=1 if _TORCH_DEVICE == "cuda" else 0,
+        max_epochs=1,
         log_every_n_steps=1,
         auto_scale_batch_size=False,
-        callbacks=[
-            early_stopping,
-            transfer_unfreeze_callback,
-            transfer_unfreeze_tester,
-        ],
     )  # auto_scale_batch_size not working
-    trainer.fit(model=model, datamodule=data_module)
-    assert os.path.exists("lightning_logs/version_0/hparams.yaml")
-    assert os.path.exists("lightning_logs/version_0/checkpoints")
-    shutil.rmtree(
-        "lightning_logs"
-    )  # should be at teardown, we may not reach to this line if assert fails.
+    trainer.fit(model=model, datamodule=datamod)
 
-@pytest.mark.skip(reason="test outdated")
-def test_loss():
-    from torch.nn import functional as F
-    import numpy as np
 
-    labels = torch.tensor([1.0, np.nan, 3.0], dtype=torch.float)
-    preds = torch.tensor([2.0, 2.0, 3.0], dtype=torch.float)
-    mask = labels == labels  # labels is not none
-    assert ((labels == labels) == (torch.isnan(labels) == False)).all()
-    loss = F.mse_loss(
-        torch.masked_select(labels, mask), torch.masked_select(preds, mask)
-    )
-    assert loss.detach().numpy() == 1.0 ** 2 / 2.0
+def test_nan_cleanup():
+    # TODO: move to datamodules tests? used in pca for reshaped arr
+    data = torch.rand(size=(4, 7))
+    # in two different columns (i.e., body parts) make one view invisble
+    data[[0, 1, 2, 3], [2, 2, 6, 6]] = torch.tensor(np.nan)
+    nan_bool = (
+        torch.sum(torch.isnan(data), dim=0) > 0
+    )  # those columns (keypoints) that have more than zero nans
+    assert nan_bool[2] == True
+    assert nan_bool[6] == True
+    clean_data = data[:, ~nan_bool]
+    assert clean_data.shape == (4, 5)
+
+    def clean_any_nans(data: torch.tensor, dim: int) -> torch.tensor:
+        nan_bool = (
+            torch.sum(torch.isnan(data), dim=dim) > 0
+        )  # e.g., when dim == 0, those columns (keypoints) that have more than zero nans
+        return data[:, ~nan_bool]
+
+    out = clean_any_nans(data, 0)
+    assert (out == clean_data).all()

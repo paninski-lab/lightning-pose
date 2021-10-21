@@ -85,9 +85,9 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
         csv_data = pd.read_csv(csv_file, header=header_rows)
         self.image_names = list(csv_data.iloc[:, 0])
-        self.labels = torch.tensor(csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32)
-        self.labels = self.labels.reshape(
-            self.labels.shape[0], -1, 2
+        self.keypoints = torch.tensor(csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32)
+        self.keypoints = self.keypoints.reshape(
+            self.keypoints.shape[0], -1, 2
         )  # converted to x,y coordinates
         if pytorch_transform_list is None:
             pytorch_transform_list = []  # make the None an empty list
@@ -98,9 +98,9 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
         self.pytorch_transform = transforms.Compose(pytorch_transform_list)
         self.num_targets = (
-            self.labels.shape[1] * 2
-        )  # labels has been already transformed above
-        self.num_keypoints = self.labels.shape[1]
+            self.keypoints.shape[1] * 2
+        )  # keypoints has been already transformed above
+        self.num_keypoints = self.keypoints.shape[1]
 
     @property
     def height(self):
@@ -123,9 +123,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             "RGB"
         )  # Rick's images have 1 color channel; change to 3.
 
-        keypoints_on_image = self.labels[
-            idx
-        ]  # get current image labels from self.labels
+        keypoints_on_image = self.keypoints[idx]  # get current image keypoints from self.keypoints
         if self.imgaug_transform is not None:
             transformed_images, transformed_keypoints = self.imgaug_transform(
                 images=np.expand_dims(image, axis=0),  # add batch dim
@@ -191,8 +189,8 @@ class HeatmapDataset(BaseTrackingDataset):
             self.image_names = [
                 self.image_names[idx] for idx in self.fully_labeled_idxs
             ]
-            self.labels = torch.index_select(self.labels, 0, self.fully_labeled_idxs)
-            self.labels = torch.tensor(self.labels)
+            self.keypoints = torch.index_select(self.keypoints, 0, self.fully_labeled_idxs)
+            self.keypoints = torch.tensor(self.keypoints)
 
         self.downsample_factor = downsample_factor
         # self.sigma = 5
@@ -200,7 +198,7 @@ class HeatmapDataset(BaseTrackingDataset):
 
         # Compute heatmaps as preprocessing step
         # check that max of heatmaps look good
-        self.num_targets = torch.numel(self.labels[0])
+        self.num_targets = torch.numel(self.keypoints[0])
         self.num_keypoints = self.num_targets // 2
         self.compute_heatmaps()
 
@@ -219,7 +217,7 @@ class HeatmapDataset(BaseTrackingDataset):
             y_heatmap = draw_keypoints(
                 y.numpy().reshape(
                     self.num_keypoints, 2
-                ),  # Note: super().__getitem__ returns flat labels, we reshape to (num_keypoints,2)
+                ),  # Note: super().__getitem__ returns flat keypoints, reshape to (num_keypoints,2)
                 x.shape[-2],
                 x.shape[-1],
                 self.output_shape,
@@ -234,14 +232,12 @@ class HeatmapDataset(BaseTrackingDataset):
     def __getitem__(self, idx: int) -> Tuple[torch.tensor, torch.tensor]:
         """we call the base dataset to get an image and a label.
         we additionaly return the corresponding heatmap."""
-        image, labels = super().__getitem__(
-            idx
-        )  # could modify this if speed bottleneck
+        image, keypoints = super().__getitem__(idx)  # could modify this if speed bottleneck
         heatmaps = self.label_heatmaps[idx]
-        return image, heatmaps, labels
+        return image, heatmaps, keypoints
 
     def get_fully_labeled_idxs(self):  # TODO: make shorter
-        nan_check = torch.isnan(self.labels)
+        nan_check = torch.isnan(self.keypoints)
         nan_check = nan_check[:, :, 0]
         nan_check = ~nan_check
         annotated = torch.all(nan_check, dim=1)
