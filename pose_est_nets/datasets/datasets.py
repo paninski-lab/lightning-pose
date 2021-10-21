@@ -1,53 +1,39 @@
-import torch
-import pandas as pd
-from torch import cuda
-from torch.utils.data import DataLoader, random_split
-import torch.nn.functional as F
-from torchvision import transforms
-import pytorch_lightning as pl
-from typing import Callable, Optional, Tuple, List
-import os
-import numpy as np
-from PIL import Image
-from tqdm import tqdm
-from sklearn.decomposition import PCA
-from pose_est_nets.utils.heatmap_tracker_utils import format_mouse_data
-from pose_est_nets.utils.dataset_utils import draw_keypoints
-import h5py
-from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
-from nvidia.dali import pipeline_def
-import nvidia.dali.fn as fn
-import nvidia.dali.types as types
-from typeguard import typechecked
-import sklearn
+"""Dataset objects store images and labels, as well as functions for manipulating these."""
 
-# set the random seed as input here.
-# TODO: when moving to runs, we would like different random seeds, so consider eliminating.
-# TODO: review the transforms -- resize is done by imgaug.augmenters coming from the main script. it is fed as input. internally, we always normalize to imagenet params.
-TORCH_MANUAL_SEED = 42
+import numpy as np
+import os
+import pandas as pd
+from PIL import Image
+import torch
+from torchvision import transforms
+from typing import Callable, Literal, List, Optional, Tuple, Union
+
+from pose_est_nets.utils.dataset_utils import draw_keypoints
+
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # statistics of imagenet dataset on which the resnet was trained
 # see https://pytorch.org/vision/stable/models.html
 _IMAGENET_MEAN = [0.485, 0.456, 0.406]
 _IMAGENET_STD = [0.229, 0.224, 0.225]
-num_processes = os.cpu_count()
+
+# TODO: review transforms -- resize is done by imgaug.augmenters coming from the main script. it is fed as input. internally, we always normalize to imagenet params.
 
 
 class BaseTrackingDataset(torch.utils.data.Dataset):
+    """Base dataset that contains images and keypoints as (x, y) pairs."""
+
     def __init__(
-        self,
-        root_directory: str,
-        csv_path: str,
-        header_rows: Optional[List[int]] = None,
-        imgaug_transform: Optional[Callable] = None,
-        pytorch_transform_list: Optional[List] = None,
+            self,
+            root_directory: str,
+            csv_path: str,
+            header_rows: Optional[List[int]]=None,
+            imgaug_transform: Optional[Callable]=None,
+            pytorch_transform_list: Optional[List]=None,
     ) -> None:
-        """Initializes the Regression Dataset.
+        """Initialize the Regression Dataset.
 
-        The csv file must contain image paths *relative to root_directory*.
-
-        The csv file will be searched for in the following order:
+        The csv file of labels will be searched for in the following order:
         1. assume csv is located at `root_directory/csv_path` (i.e. `csv_path` argument is a path
            relative to `root_directory`
         2. if not found, assume `csv_path` is absolute. Note the image paths within the csv must
@@ -56,13 +42,13 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
            `root_directory/training-datasets/iteration-0/csv_path` (`csv_path` argument will look
            like "CollectedData_<scorer>.csv"
 
-        Parameters:
-            root_directory (str): path to data directory
-            csv_path (str): path to CSV file (within root_directory). CSV file should be
+        Args:
+            root_directory: path to data directory
+            csv_path: path to CSV file (within root_directory). CSV file should be
                 in the form (image_path, bodypart_1_x, bodypart_1_y, ..., bodypart_n_y)
                 Note: image_path is relative to the given root_directory
-            header_rows (List[int]): (optional) which rows in the csv are header rows
-            transform (torchvision.transforms): (optional) transform to apply to images
+            header_rows: which rows in the csv are header rows
+            transform: torchvision transform to apply to images
 
         """
         self.root_directory = root_directory
@@ -145,28 +131,30 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
 # the only addition here, should be the heatmap creation method.
 class HeatmapDataset(BaseTrackingDataset):
+    """Heatmap dataset that contains the images and keypoints stored in 2D arrays."""
+
     def __init__(
-        self,
-        root_directory: str,
-        csv_path: str,
-        header_rows: Optional[List[int]] = None,
-        imgaug_transform: Optional[Callable] = None,
-        pytorch_transform_list: Optional[List] = None,
-        noNans: Optional[bool] = False,
-        downsample_factor: Optional[int] = 2,
+            self,
+            root_directory: str,
+            csv_path: str,
+            header_rows: Optional[List[int]]=None,
+            imgaug_transform: Optional[Callable]=None,
+            pytorch_transform_list: Optional[List]=None,
+            no_nans: bool=False,
+            downsample_factor: int=2,
     ) -> None:
-        """
-        Initializes the DLC Heatmap Dataset
-        Parameters:
-            root_directory (str): path to data directory
-            data_path (str): path to CSV or h5 file  (within root_directory). CSV file should be
+        """Initialize the Heatmap Dataset.
+
+        Args:
+            root_directory: path to data directory
+            cav_path: path to CSV or h5 file  (within root_directory). CSV file should be
                 in the form (image_path, bodypart_1_x, bodypart_1_y, ..., bodypart_n_y)
                 Note: image_path is relative to the given root_directory
-            header_rows (List[int]): (optional) which rows in the csv are header rows
-            transform (torchvision.transforms): (optional) transform to resize the images, image dimensions must be repeatably divisible by 2
-            noNans (bool): whether or not to throw out all frames that have occluded keypoints
-        Returns:
-            None
+            header_rows: which rows in the csv are header rows
+            transform: torchvision transform to resize the images, image dimensions must be
+                repeatably divisible by 2
+            no_nans: whether or not to throw out all frames that have occluded keypoints
+
         """
         super().__init__(
             root_directory,
@@ -177,18 +165,15 @@ class HeatmapDataset(BaseTrackingDataset):
         )
 
         if self.height % 128 != 0 or self.height % 128 != 0:
-            print(
-                "image dimensions (after transformation) must be repeatably divisible by 2!"
-            )
+            print("image dimensions (after transformation) must be repeatably divisible by 2!")
             print("current image dimensions after transformation are:")
             exit()
 
-        if noNans:
-            # Checks for images with set of keypoints that include any nan, so that they can be excluded from the data entirely, like DeepPoseKit does
+        if no_nans:
+            # Checks for images with set of keypoints that include any nan, so that they can be
+            # excluded from the data entirely, like DeepPoseKit does
             self.fully_labeled_idxs = self.get_fully_labeled_idxs()
-            self.image_names = [
-                self.image_names[idx] for idx in self.fully_labeled_idxs
-            ]
+            self.image_names = [self.image_names[idx] for idx in self.fully_labeled_idxs]
             self.keypoints = torch.index_select(self.keypoints, 0, self.fully_labeled_idxs)
             self.keypoints = torch.tensor(self.keypoints)
 
@@ -200,6 +185,7 @@ class HeatmapDataset(BaseTrackingDataset):
         # check that max of heatmaps look good
         self.num_targets = torch.numel(self.keypoints[0])
         self.num_keypoints = self.num_targets // 2
+        self.label_heatmaps = None  # populated by `compute_heatmaps()`
         self.compute_heatmaps()
 
     @property
@@ -210,14 +196,17 @@ class HeatmapDataset(BaseTrackingDataset):
         )
 
     def compute_heatmaps(self):
-        """note: original image dims e.g., (406, 396) -> resized image dims e.g., (384, 384) -> potentially downsampled heatmaps e.g., (96, 96)"""
+        """note:
+        original image dims e.g., (406, 396) ->
+        resized image dims e.g., (384, 384) ->
+        potentially downsampled heatmaps e.g., (96, 96)"""
         label_heatmaps = []
         for idx in range(len(self.image_names)):
             x, y = super().__getitem__(idx)
             y_heatmap = draw_keypoints(
                 y.numpy().reshape(
                     self.num_keypoints, 2
-                ),  # Note: super().__getitem__ returns flat keypoints, reshape to (num_keypoints,2)
+                ),  # super().__getitem__ returns flat keypoints, reshape to (num_keypoints, 2)
                 x.shape[-2],
                 x.shape[-1],
                 self.output_shape,
@@ -229,7 +218,7 @@ class HeatmapDataset(BaseTrackingDataset):
         self.label_heatmaps = torch.from_numpy(np.asarray(label_heatmaps)).float()
         self.label_heatmaps = self.label_heatmaps.permute(0, 3, 1, 2)
 
-    def __getitem__(self, idx: int) -> Tuple[torch.tensor, torch.tensor]:
+    def __getitem__(self, idx: int) -> Tuple[torch.tensor, torch.tensor, torch.Tensor]:
         """we call the base dataset to get an image and a label.
         we additionaly return the corresponding heatmap."""
         image, keypoints = super().__getitem__(idx)  # could modify this if speed bottleneck

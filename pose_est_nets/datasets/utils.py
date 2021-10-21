@@ -1,28 +1,31 @@
-from typing import Optional, List
+"""Dataset/data module utilities."""
+
 import numpy as np
-from typeguard import typechecked
-from pose_est_nets.datasets.datasets import HeatmapDataset
 import torch
+from typeguard import typechecked
+from typing import Optional, List
+
+from pose_est_nets.datasets.datasets import HeatmapDataset
 
 
 @typechecked
 def split_sizes_from_probabilities(
-    total_number: int,
-    train_probability: float,
-    val_probability: Optional[float] = None,
-    test_probability: Optional[float] = None,
+        total_number: int,
+        train_probability: float,
+        val_probability: Optional[float]=None,
+        test_probability: Optional[float]=None,
 ) -> List[int]:
     """Returns the number of examples for training, validation, testing given split probabilities.
 
     Args:
-        total_number (int): total number of examples in dataset
-        train_probability (float): fraction of examples used for training
-        val_probability (float, optional): fraction of examples used for validation
-        test_probability (float, optional): fraction of examples used for test. Defaults to None.
+        total_number: total number of examples in dataset
+        train_probability: fraction of examples used for training
+        val_probability: fraction of examples used for validation
+        test_probability: fraction of examples used for test. Defaults to None.
             Can be computed as the remaining examples.
 
     Returns:
-        List[int]: num training examples, num validation examples, num test examples
+        [num training examples, num validation examples, num test examples]
 
     """
 

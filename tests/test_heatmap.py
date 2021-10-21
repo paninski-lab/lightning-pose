@@ -100,11 +100,9 @@ def test_unsupervised():  # TODO Finish writing test
     assert os.path.exists(video_directory)
     video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
     vids = []
-    for (
-        f
-    ) in (
-        video_files
-    ):  # video_directory may contain other random files that are not vids, DALI will try to read them
+
+    # video_directory may contain other random files that are not vids, DALI will try to read them
+    for f in video_files:
         if f.endswith(".mp4"):  # hardcoded for the toydataset folder
             vids.append(f)
 
@@ -134,12 +132,7 @@ def test_unsupervised():  # TODO Finish writing test
     out = next(iter(loader))
     assert list(out.keys())[0] == "labeled"
     assert list(out.keys())[1] == "unlabeled"
-    assert out["unlabeled"].shape == (
-        datamod.train_batch_size,
-        3,
-        384,
-        384,
-    )
+    assert out["unlabeled"].shape == (datamod.train_batch_size, 3, 384, 384,)
     print(out["labeled"][0].device)
     print(out["unlabeled"].device)
     print(model.device)

@@ -88,7 +88,7 @@ class RegressionTracker(BaseFeatureExtractor):
         self,
         data_batch: list,
         batch_idx: int,
-    ) -> Dict:
+    ) -> dict:
         images, keypoints = data_batch
         # forward pass
         representation = self.get_representations(images)
@@ -105,8 +105,10 @@ class RegressionTracker(BaseFeatureExtractor):
 
     @typechecked
     def evaluate(
-        self, data_batch: list, stage: Optional[Literal["val", "test"]] = None
-    ):
+            self,
+            data_batch: list,
+            stage: Optional[Literal["val", "test"]]=None
+    ) -> None:
         images, keypoints = data_batch
         representation = self.get_representations(images)
         predicted_keypoints = self.final_layer(

@@ -101,12 +101,6 @@ def test_semisupervised():
         header_rows=[1, 2],
         imgaug_transform=imgaug_transform,
     )
-    # if os.path.exists("/home/jovyan"):
-    #     video_directory = os.path.join(
-    #         "/home/jovyan/mouseRunningData/unlabeled_videos"
-    #     )  # DAN's
-    # else:
-    #     video_directory = os.path.join("unlabeled_videos")  # NICK's
     video_directory = "toy_datasets/toymouseRunningData/unlabeled_videos"
     video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
     assert os.path.exists(video_files[0])
