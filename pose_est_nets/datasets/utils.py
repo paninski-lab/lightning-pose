@@ -15,7 +15,7 @@ def split_sizes_from_probabilities(
         val_probability: Optional[float]=None,
         test_probability: Optional[float]=None,
 ) -> List[int]:
-    """Returns the number of examples for training, validation, testing given split probabilities.
+    """Returns the number of examples for train, val and test given split probs.
 
     Args:
         total_number: total number of examples in dataset
@@ -31,8 +31,9 @@ def split_sizes_from_probabilities(
 
     if test_probability is None and val_probability is None:
         remaining_probability = 1.0 - train_probability
-        val_probability = round(remaining_probability / 2, 5)  # round to 5 decimal places
-        test_probability = round(remaining_probability / 2, 5)  # round to 5 decimal places
+        # round each to 5 decimal places (issue with floating point precision)
+        val_probability = round(remaining_probability / 2, 5)
+        test_probability = round(remaining_probability / 2, 5)
     elif test_probability is None:
         test_probability = 1.0 - train_probability - val_probability
 
@@ -54,5 +55,5 @@ def split_sizes_from_probabilities(
 def clean_any_nans(data: torch.tensor, dim: int) -> torch.tensor:
     nan_bool = (
         torch.sum(torch.isnan(data), dim=dim) > 0
-    )  # e.g., when dim == 0, those columns (keypoints) that have more than zero nans
+    )  # e.g., when dim == 0, those columns (keypoints) that have >0 nans
     return data[:, ~nan_bool]

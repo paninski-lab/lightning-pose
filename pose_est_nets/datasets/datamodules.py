@@ -12,14 +12,16 @@ from typing import Literal, List, Optional, Tuple, Union
 
 from pose_est_nets.datasets.dali import video_pipe, LightningWrapper
 from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
-from pose_est_nets.datasets.utils import clean_any_nans, split_sizes_from_probabilities
+from pose_est_nets.datasets.utils import (
+    clean_any_nans,
+    split_sizes_from_probabilities)
 from pose_est_nets.utils.heatmap_tracker_utils import format_mouse_data
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 class BaseDataModule(pl.LightningDataModule):
-    """Base data module that splits a labeled dataset into train, val, and test data loaders."""
+    """Splits a labeled dataset into train, val, and test data loaders."""
 
     def __init__(
             self,
@@ -100,7 +102,9 @@ class BaseDataModule(pl.LightningDataModule):
             split = True
             if self.train_frames >= len(self.train_set):
                 # take max number of train frames
-                print("Warning! Requested training frames exceeds training set size; using all")
+                print(
+                    "Warning! Requested training frames exceeds training " +
+                    "set size; using all")
                 n_frames = len(self.train_set)
                 split = False
             elif self.train_frames == 1:
@@ -123,7 +127,7 @@ class BaseDataModule(pl.LightningDataModule):
                 )
 
         print(
-            "Size of -- train set: {}, validation set: {}, test set: {}".format(
+            "Size of -- train set: {}, val set: {}, test set: {}".format(
                 len(self.train_set), len(self.val_set), len(self.test_set)
             )
         )
@@ -186,17 +190,22 @@ class UnlabeledDataModule(BaseDataModule):
             train_probability: fraction of full dataset used for training
             val_probability: fraction of full dataset used for validation
             test_probability: fraction of full dataset used for testing
-            train_frames: if integer, select this number of training frames from the
-                initially selected train frames (defined by `train_probability`); if float, must be
-                between 0 and 1 (exclusive) and defines the fraction of the initially selected
+            train_frames: if integer, select this number of training frames
+                from the initially selected train frames (defined by
+                `train_probability`); if float, must be between 0 and 1
+                (exclusive) and defines the fraction of the initially selected
                 train frames
             torch_seed: control data splits
-            unlabeled_batch_size: number of sequences to load per unlabeled batch
-            unlabeled_sequence_length: number of frames per sequence of unlabeled data
+            unlabeled_batch_size: number of sequences to load per unlabeled
+                batch
+            unlabeled_sequence_length: number of frames per sequence of
+                unlabeled data
             dali_seed: control randomness of unlabeled data loading
             torch_seed: control randomness of labeled data loading
             specialized_dataprep:
-            loss_param_dict: details of loss types for unlabeled data (influences processing)
+            loss_param_dict: details of loss types for unlabeled data
+                (influences processing)
+
         """
         super().__init__(
             dataset=dataset,
@@ -232,20 +241,23 @@ class UnlabeledDataModule(BaseDataModule):
         if isinstance(self.video_paths_list, list):
             # presumably a list of files
             filenames = self.video_paths_list
-        elif isinstance(self.video_paths_list, str) and os.path.isfile(self.video_paths_list):
+        elif isinstance(self.video_paths_list, str) \
+                and os.path.isfile(self.video_paths_list):
             # single video file
             filenames = self.video_paths_list
-        elif isinstance(self.video_paths_list, str) and os.path.isdir(self.video_paths_list):
+        elif isinstance(self.video_paths_list, str) \
+                and os.path.isdir(self.video_paths_list):
             # directory of videos
             import glob
             extensions = ["mp4"]  # allowed file extensions
             filenames = []
             for extension in extensions:
-                filenames.extend(
-                    glob.glob(os.path.join(self.video_paths_list, '*.%s' % extension)))
+                filenames.extend(glob.glob(
+                    os.path.join(self.video_paths_list, '*.%s' % extension)))
         else:
             raise ValueError(
-                "`video_paths_list` must be a list of files, a single file, or a directory name")
+                "`video_paths_list` must be a list of files, a single file, " +
+                "or a directory name")
 
         data_pipe = video_pipe(
             filenames=filenames,
@@ -262,18 +274,19 @@ class UnlabeledDataModule(BaseDataModule):
             data_pipe,
             output_map=["x"],
             last_batch_policy=LastBatchPolicy.PARTIAL,
-            auto_reset=True,  # TODO: verify at some point what "reseting" means
+            auto_reset=True,  # TODO: verify what "reseting" means
         )
 
     # TODO: could be separated from this class
     # TODO: return something?
-    def computePCA_params(  # Should only call this now if pca in loss name dict
+    def computePCA_params(  # Should only call this if pca in loss name dict
             self,
             components_to_keep: int=3,
             empirical_epsilon_percentile: float=90.0,
     ) -> None:
         print("Computing PCA on the keypoints...")
-        # Nick: Subset inherits from dataset, it doesn't have access to dataset.keypoints
+        # Nick: Subset inherits from dataset, it doesn't have access to
+        # dataset.keypoints
         if type(self.train_set) == torch.utils.data.dataset.Subset:
             indxs = torch.tensor(self.train_set.indices)
             regressionData = (
@@ -287,7 +300,8 @@ class UnlabeledDataModule(BaseDataModule):
             if self.fulldataset.imgaug_transform:
                 i = 0
                 for idx in indxs:
-                    data_arr[i] = regressionData.__getitem__(idx)[1].reshape(-1, 2)
+                    vals = regressionData.__getitem__(idx)
+                    data_arr[i] = vals[1].reshape(-1, 2)
                     i += 1
         else:
             data_arr = (
@@ -299,7 +313,8 @@ class UnlabeledDataModule(BaseDataModule):
                         type(self.train_set), self.train_set
                     ).__getitem__(i)[1]
 
-        # TODO: format_mouse_data is specific to Rick's dataset, change when we're scaling to more data sources
+        # TODO: format_mouse_data is specific to Rick's dataset, change when
+        # TODO: we're scaling to more data sources
         arr_for_pca = format_mouse_data(data_arr)
         print("initial_arr_for_pca shape: {}".format(arr_for_pca.shape))
         # Dan's cleanup:
@@ -323,13 +338,14 @@ class UnlabeledDataModule(BaseDataModule):
             device=_TORCH_DEVICE,  # TODO: be careful for multinode
         )
 
-        # compute the keypoints' projections on the discarded components, to estimate the e.g.,
-        # 90th percentile and determine epsilon
+        # compute the keypoints' projections on the discarded components, to
+        # estimate the e.g., 90th percentile and determine epsilon
         # absolute value is important -- projections can be negative.
+        discarded_eigs = self.loss_param_dict["pca"]["discarded_eigenvectors"]
         proj_discarded = torch.abs(
             torch.matmul(
                 arr_for_pca.T,
-                self.loss_param_dict["pca"]["discarded_eigenvectors"].clone().detach().cpu().T,
+                discarded_eigs.clone().detach().cpu().T,  # TODO: why cpu?
             )
         )
         # setting axis = 0 generalizes to multiple discarded components
@@ -376,6 +392,7 @@ def pca_prints(pca: PCA, components_to_keep: int) -> None:
     )
     print(
         "total_explained_var: {}".format(
-            np.round(np.sum(pca.explained_variance_ratio_[:components_to_keep]), 3)
+            np.round(
+                np.sum(pca.explained_variance_ratio_[:components_to_keep]), 3)
         )
     )
