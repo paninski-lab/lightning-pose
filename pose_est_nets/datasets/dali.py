@@ -39,7 +39,7 @@ def count_frames(video_full_path: str) -> int:
     return int(video.get(cv2.CAP_PROP_FRAME_COUNT))
 
 
-# cannot typecheck due to the way pipeline_def decorator consumes additional arguments
+# cannot typecheck due to way pipeline_def decorator consumes additional args
 @pipeline_def
 def video_pipe(
         filenames: Union[list[str], str],
@@ -58,19 +58,22 @@ def video_pipe(
         # num_threads,
         # device_id
 ) -> Pipeline:
-    """Set up generic video reader pipeline that loads videos, resizes, and normalizes.
+    """Generic video reader pipeline that loads videos, resizes, and normalizes.
 
     Args:
-        filenames: list of absolute paths of video files to feed through pipeline
+        filenames: list of absolute paths of video files to feed through
+            pipeline
         resize_dims: [height, width] to resize raw frames
-        random_shuffle: True to grab random batches of frames from videos; False to sequential read
+        random_shuffle: True to grab random batches of frames from videos;
+            False to sequential read
         seed: random seed when `random_shuffle` is True
         sequence_length: number of frames to load per sequence
-        pad_sequences: allows creation of incomplete sequences if there is an insufficient number
-            of frames at the very end of the video
+        pad_sequences: allows creation of incomplete sequences if there is an
+            insufficient number of frames at the very end of the video
         initial_fill:
         normalization_mean: mean values in (0, 1) to subtract from each channel
-        normalization_std: standard deviation values to subtract from each channel
+        normalization_std: standard deviation values to subtract from each
+            channel
         device: "cpu" | "gpu"
         name: pipeline name, used to string together DataNode elements
 
@@ -112,7 +115,8 @@ class LightningWrapper(DALIGenericIterator):
         super().__init__(*kargs, **kvargs)
 
     def __len__(self):  # just to avoid ptl err check
-        return 1  # num frames = len * batch_size; TODO: determine actual length of vid
+        # TODO: determine actual length of vid
+        return 1  # num frames = len * batch_size
 
     def __next__(self):
         out = super().__next__()
