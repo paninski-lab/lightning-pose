@@ -16,7 +16,7 @@ def MaskedRegressionMSELoss(
         keypoints: TensorType["batch", "num_targets"],
         preds: TensorType["batch", "num_targets"],
 ) -> TensorType[(), float]:
-    """Compute MSE loss between ground truth (x,y) coordinates and predicted (x^,y^) coordinates.
+    """Compute MSE loss between ground truth and predicted coordinates.
 
     Args:
         keypoints: ground truth; shape=(batch, num_targets)
@@ -27,7 +27,10 @@ def MaskedRegressionMSELoss(
 
     """
     mask = keypoints == keypoints  # keypoints is not none, bool.
-    loss = F.mse_loss(torch.masked_select(keypoints, mask), torch.masked_select(preds, mask))
+    loss = F.mse_loss(
+        torch.masked_select(keypoints, mask),
+        torch.masked_select(preds, mask)
+    )
     return loss
 
 
@@ -36,7 +39,7 @@ def MaskedRMSELoss(
         keypoints: TensorType["batch", "num_targets"],
         preds: TensorType["batch", "num_targets"],
 ) -> TensorType[(), float]:
-    """Compute RMSE loss between ground truth (x,y) coordinates and predicted (x^,y^) coordinates.
+    """Compute RMSE loss between ground truth and predicted coordinates.
 
     Args:
         keypoints: ground truth; shape=(batch, num_targets)
@@ -72,14 +75,20 @@ def MaskedMSEHeatmapLoss(
         MSE loss
 
     """
-    # apply mask, only computes loss on heatmaps where the ground truth heatmap is not all zeros
-    # (i.e., not an occluded keypoint)
+    # apply mask, only computes loss on heatmaps where the ground truth heatmap
+    # is not all zeros (i.e., not an occluded keypoint)
     max_vals = torch.amax(y, dim=(2, 3))
     zeros = torch.zeros(size=(y.shape[0], y.shape[1]), device=y_hat.device)
     non_zeros = ~torch.eq(max_vals, zeros)
-    mask = torch.reshape(non_zeros, [non_zeros.shape[0], non_zeros.shape[1], 1, 1])
+    mask = torch.reshape(
+        non_zeros,
+        [non_zeros.shape[0], non_zeros.shape[1], 1, 1]
+    )
     # compute loss
-    loss = F.mse_loss(torch.masked_select(y_hat, mask), torch.masked_select(y, mask))
+    loss = F.mse_loss(
+        torch.masked_select(y_hat, mask),
+        torch.masked_select(y, mask)
+    )
     return loss
 
 
@@ -95,8 +104,9 @@ def MultiviewPCALoss(
 ) -> TensorType[float]:
     """
 
-    Assume that we have keypoints after find_subpixel_maxima and that we have discarded confidence
-    here, and that keypoints were reshaped  # TODO: check for this?
+    Assume that we have keypoints after find_subpixel_maxima and that we have
+    discarded confidence here, and that keypoints were reshaped
+    # TODO: check for this?
 
     Args:
         reshaped_maxima_preds:
@@ -121,10 +131,10 @@ def MultiviewPCALoss(
     epsilon_masked_proj = abs_proj_discarded.masked_fill(
         mask=abs_proj_discarded > epsilon, value=0.0
     )
-    assert (epsilon_masked_proj >= 0.0).all()  # every element should be positive
-    assert torch.mean(epsilon_masked_proj) <= torch.mean(
-        abs_proj_discarded
-    )  # the scalar loss should be smaller after zeroing out elements.
+    # each element positive
+    assert (epsilon_masked_proj >= 0.0).all()
+    # the scalar loss should be smaller after zeroing out elements.
+    assert torch.mean(epsilon_masked_proj) <= torch.mean(abs_proj_discarded)
     return torch.mean(epsilon_masked_proj)
 
 
@@ -146,14 +156,14 @@ def TemporalLoss(
         Temporal loss averaged over batch
 
     """
-    diffs = torch.diff(preds, dim=0)  # (batch - 1, num_targets)
-    reshape = torch.reshape(diffs, (diffs.shape[0], -1, 2))  # (batch - 1, num_keypoints, 2)
-    loss = torch.linalg.norm(
-        reshape,
-        ord=2,
-        dim=2
-    )  # (batch - 1, num_keypoints)
-    loss = loss.masked_fill(mask=loss < epsilon, value=0.)  # epsilon-insensitive loss
+    # returns tensor of shape (batch - 1, num_targets)
+    diffs = torch.diff(preds, dim=0)
+    # returns tensor of shape (batch - 1, num_keypoints, 2)
+    reshape = torch.reshape(diffs, (diffs.shape[0], -1, 2))
+    # returns tensor of shape (batch - 1, num_keypoints)
+    loss = torch.linalg.norm(reshape, ord=2, dim=2)
+    # epsilon-insensitive loss
+    loss = loss.masked_fill(mask=loss < epsilon, value=0.)
     return torch.mean(loss)  # pixels
 
 
@@ -181,7 +191,8 @@ def get_losses_dict(
 ) -> Dict[str, Callable]:
     """Get a dict with all the loss functions for semi supervised training.
 
-    The training step of a given model will iterate over these, instead of manually computing each.
+    The training step of a given model will iterate over these, instead of
+    manually computing each.
 
     Args:
         names_list: list of desired loss names; defaults to empty.
@@ -204,7 +215,7 @@ def convert_dict_entries_to_tensors(
         loss_params: dict,
         device: Union[str, torch.device]
 ) -> dict:
-    """Set scalars in loss params to torch Tensors; for use with unsupervised losses
+    """Set scalars in loss to torch tensors for use with unsupervised losses.
 
     Args:
         loss_params: loss dictionary to loop over
