@@ -1,54 +1,65 @@
-from pose_est_nets.models.base_resnet import BaseFeatureExtractor
+"""Models that produce heatmaps of keypoints from images."""
+
 import torch
-import torchvision.models as models
-from torch.nn import functional as F
 from torch import nn
-from pytorch_lightning.core.lightning import LightningModule
-from torch.optim import Adam
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-from typing import Any, Callable, Optional, Tuple, List
-from typing_extensions import Literal
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
-import numpy as np
+from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing_extensions import Literal
+
+from pose_est_nets.losses.losses import (
+    convert_dict_entries_to_tensors,
+    get_losses_dict,
+    MaskedMSEHeatmapLoss,
+    MaskedRMSELoss,
+)
+from pose_est_nets.models.base_resnet import BaseFeatureExtractor
 from pose_est_nets.utils.heatmap_tracker_utils import (
     find_subpixel_maxima,
     largest_factor,
+    SubPixelMaxima,
 )
-from pose_est_nets.losses.losses import (
-    MaskedMSEHeatmapLoss,
-    MaskedRMSELoss,
-    get_losses_dict,
-    convert_dict_entries_to_tensors
-)
-from pose_est_nets.utils.heatmap_tracker_utils import SubPixelMaxima
 
 patch_typeguard()  # use before @typechecked
 
 
 @typechecked
 class HeatmapTracker(BaseFeatureExtractor):
+    """Base model that produces heatmaps of keypoints from images."""
+
     def __init__(
-        self,
-        num_targets: int,
-        resnet_version: Literal[18, 34, 50, 101, 152] = 18,
-        downsample_factor: Literal[2, 3] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
-        pretrained: bool = True,
-        last_resnet_layer_to_get: int = -3,
-        output_shape: Optional[tuple] = None,  # change
-        output_sigma: float = 1.25,  # check value
-        upsample_factor: int = 100,
-        confidence_scale: float = 1.0,
-        threshold: Optional[float] = None,
-        torch_seed: int = 123,
+            self,
+            num_targets: int,
+            resnet_version: Literal[18, 34, 50, 101, 152]=18,
+            downsample_factor: Literal[2, 3]=2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
+            pretrained: bool=True,
+            last_resnet_layer_to_get: int=-3,
+            output_shape: Optional[tuple]=None,  # change
+            output_sigma: float=1.25,  # check value
+            upsample_factor: int=100,
+            confidence_scale: float=1.0,
+            threshold: Optional[float]=None,
+            torch_seed: int=123,
     ) -> None:
-        """
-        Initializes a DLC-like model with resnet backbone inherited from BaseFeatureExtractor
-        :param num_targets: number of body parts times 2 (x,y) coords
-        :param resnet_version: The ResNet variant to be used (e.g. 18, 34, 50, 101, or 152). Essentially specifies how
-            large the resnet will be.
-        :param transfer:  Flag to indicate whether this is a transfer learning task or not; defaults to false,
-            meaning the entire model will be trained unless this flag is provided
+        """Initialize a DLC-like model with resnet backbone.
+
+        Args:
+            num_targets: number of body parts times 2 (x,y) coords
+            resnet_version: ResNet variant to be used (e.g. 18, 34, 50, 101,
+                or 152); essentially specifies how large the resnet will be
+            downsample_factor: make heatmap smaller than original frames to
+                save memory; subpixel operations are performed for increased
+                precision
+            pretrained: True to load pretrained imagenet weights
+            last_resnet_layer_to_get: skip final layers of backbone model
+            output_shape: hard-coded image size to avoid dynamic shape
+                computations
+            output_sigma: TODO
+            upsample_factor: TODO
+            confidence_scale: TODO
+            threshold: TODO
+            torch_seed: make weight initialization reproducible
+
         """
 
         # for reproducible weight initialization
@@ -64,13 +75,23 @@ class HeatmapTracker(BaseFeatureExtractor):
         self.upsampling_layers = self.make_upsampling_layers()
         self.initialize_upsampling_layers()
         self.output_shape = output_shape
-        self.output_sigma = torch.tensor(output_sigma, device=self.device)
-        self.upsample_factor = torch.tensor(upsample_factor, device=self.device)
-        self.confidence_scale = torch.tensor(confidence_scale, device=self.device)
+        self.output_sigma = torch.tensor(
+            output_sigma,
+            device=self.device
+        )
+        self.upsample_factor = torch.tensor(
+            upsample_factor,
+            device=self.device
+        )
+        self.confidence_scale = torch.tensor(
+            confidence_scale,
+            device=self.device
+        )
         self.threshold = threshold
         self.torch_seed = torch_seed
-        self.save_hyperparameters()  # Necessary so we don't have to pass in model arguments when loading
-        # self.device = device #might be done automatically by pytorch lightning
+        # Necessary so we don't have to pass in model arguments when loading
+        self.save_hyperparameters()
+        # self.device = device  # done automatically by pytorch lightning?
 
     @property
     def num_keypoints(self):
@@ -100,8 +121,8 @@ class HeatmapTracker(BaseFeatureExtractor):
         return self.SubPixMax.run(heatmaps1, heatmaps2)
 
     def initialize_upsampling_layers(self) -> None:
+        """Intialize the Conv2DTranspose upsampling layers."""
         # TODO: test that running this method changes the weights and biases
-        """loop over the Conv2DTranspose upsampling layers and initialize them"""
         for index, layer in enumerate(self.upsampling_layers):
             if index > 0:  # we ignore the PixelShuffle
                 torch.nn.init.xavier_uniform_(layer.weight)
@@ -109,15 +130,17 @@ class HeatmapTracker(BaseFeatureExtractor):
 
     @typechecked
     def make_upsampling_layers(self) -> torch.nn.Sequential:
-        # Note: https://github.com/jgraving/DeepPoseKit/blob/cecdb0c8c364ea049a3b705275ae71a2f366d4da/deepposekit/models/DeepLabCut.py#L131
-        # in their model, the pixel shuffle happens only for the downsample_factor=2
+        # Note:
+        # https://github.com/jgraving/DeepPoseKit/blob/cecdb0c8c364ea049a3b705275ae71a2f366d4da/deepposekit/models/DeepLabCut.py#L131
+        # in their model, the pixel shuffle happens only for the
+        # downsample_factor=2
         upsampling_layers = [nn.PixelShuffle(2)]
         upsampling_layers.append(
             self.create_double_upsampling_layer(
                 in_channels=self.num_filters_for_upsampling // 4,
                 out_channels=self.num_keypoints,
             )
-        )  # running up to here results in downsample_factor=3 for [384,384] images
+        )  #  up to here results in downsample_factor=3 for [384,384] images
         if self.downsample_factor == 2:
             upsampling_layers.append(
                 self.create_double_upsampling_layer(
@@ -125,15 +148,24 @@ class HeatmapTracker(BaseFeatureExtractor):
                     out_channels=self.num_keypoints,
                 )
             )
-
         return nn.Sequential(*upsampling_layers)
 
     @staticmethod
     @typechecked
     def create_double_upsampling_layer(
-        in_channels: int, out_channels: int
+            in_channels: int,
+            out_channels: int
     ) -> torch.nn.ConvTranspose2d:
-        """taking in/out channels, and performs ConvTranspose2d to double the output shape"""
+        """Perform ConvTranspose2d to double the output shape.
+
+        Args:
+            in_channels: TODO
+            out_channels: TODO
+
+        Returns:
+            upsampling layer
+
+        """
         return nn.ConvTranspose2d(
             in_channels=in_channels,
             out_channels=out_channels,
@@ -145,31 +177,54 @@ class HeatmapTracker(BaseFeatureExtractor):
 
     @typechecked
     def heatmaps_from_representations(
-        self,
-        representations: TensorType[
+            self,
+            representations: TensorType[
+                "Batch_Size",
+                "Features",
+                "Representation_Height",
+                "Representation_Width",
+                float,
+            ],
+    ) -> TensorType[
             "Batch_Size",
-            "Features",
-            "Representation_Height",
-            "Representation_Width",
-            float,
-        ],
-    ) -> TensorType["Batch_Size", "Num_Keypoints", "Heatmap_Height", "Heatmap_Width", float]:
-        """a wrapper around self.upsampling_layers for type and shape assertion.
+            "Num_Keypoints",
+            "Heatmap_Height",
+            "Heatmap_Width",
+            float
+    ]:
+        """Wrapper around self.upsampling_layers for type and shape assertion.
+
         Args:
-            representations (torch.tensor(float)): the output of the Resnet feature extractor.
+            representations: the output of the Resnet feature extractor.
+
         Returns:
-            (torch.tensor(float)): the result of applying the upsampling layers to the representations.
+            the result of applying the upsampling layers to the representations
         """
         return self.upsampling_layers(representations)
 
     @typechecked
     def forward(
-        self, images: TensorType["Batch_Size", 3, "Image_Height", "Image_Width"]
-    ) -> TensorType["Batch_Size", "Num_Keypoints", "Heatmap_Height", "Heatmap_Width",]:
-        """
-        Forward pass through the network
-        :param x: images
-        :return: heatmap per keypoint
+            self,
+            images: TensorType[
+                "Batch_Size",
+                3,
+                "Image_Height",
+                "Image_Width"
+            ]
+    ) -> TensorType[
+            "Batch_Size",
+            "Num_Keypoints",
+            "Heatmap_Height",
+            "Heatmap_Width",
+    ]:
+        """Forward pass through the network.
+
+        Args:
+            images: images
+
+        Returns:
+            heatmap per keypoint
+
         """
         representations = self.get_representations(images)
         heatmaps = self.heatmaps_from_representations(representations)
@@ -184,13 +239,11 @@ class HeatmapTracker(BaseFeatureExtractor):
         )  # heatmaps -> keypoints
         heatmap_loss = MaskedMSEHeatmapLoss(true_heatmaps, predicted_heatmaps)
         supervised_rmse = MaskedRMSELoss(true_keypoints, predicted_keypoints)
-
         self.log(
             "train_loss",
             heatmap_loss,
             prog_bar=True,
         )
-
         self.log(
             "supervised_rmse",
             supervised_rmse,
@@ -200,7 +253,9 @@ class HeatmapTracker(BaseFeatureExtractor):
 
     @typechecked
     def evaluate(
-        self, data_batch: List, stage: Optional[Literal["val", "test"]] = None
+            self,
+            data_batch: List,
+            stage: Optional[Literal["val", "test"]]=None
     ):
         images, true_heatmaps, true_keypoints = data_batch  # read batch
         predicted_heatmaps = self.forward(images)  # images -> heatmaps
@@ -225,22 +280,46 @@ class HeatmapTracker(BaseFeatureExtractor):
 
 
 class SemiSupervisedHeatmapTracker(HeatmapTracker):
+    """Model produces heatmaps of keypoints from labeled/unlabeled images."""
+
     def __init__(
-        self,
-        num_targets: int,
-        loss_params: Optional[dict] = None,  # having it optional so we can initialize a model without passing that in
-        resnet_version: Literal[18, 34, 50, 101, 152] = 18,
-        downsample_factor: Literal[2, 3] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
-        pretrained: bool = True,
-        last_resnet_layer_to_get: int = -3,
-        output_shape: Optional[tuple] = None,  # change
-        output_sigma: float = 1.25,  # check value,
-        upsample_factor: int = 100,
-        confidence_scale: float = 1.,
-        threshold: Optional[float] = None,
-        torch_seed: int = 123,
-        semi_super_losses_to_use: Optional[list] = None,
+            self,
+            num_targets: int,
+            resnet_version: Literal[18, 34, 50, 101, 152]=18,
+            downsample_factor: Literal[2, 3]=2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
+            pretrained: bool=True,
+            last_resnet_layer_to_get: int=-3,
+            output_shape: Optional[tuple]=None,  # change
+            output_sigma: float=1.25,  # check value,
+            upsample_factor: int=100,
+            confidence_scale: float=1.,
+            threshold: Optional[float]=None,
+            torch_seed: int=123,
+            loss_params: Optional[dict]=None, # optional so we can initialize a model without passing that in
+            semi_super_losses_to_use: Optional[list]=None,
     ):
+        """
+
+        Args:
+            num_targets: number of body parts times 2 (x,y) coords
+            resnet_version: ResNet variant to be used (e.g. 18, 34, 50, 101,
+                or 152); essentially specifies how large the resnet will be
+            downsample_factor: make heatmap smaller than original frames to
+                save memory; subpixel operations are performed for increased
+                precision
+            pretrained: True to load pretrained imagenet weights
+            last_resnet_layer_to_get: skip final layers of original model
+            output_shape: hard-coded image size to avoid dynamic shape
+                computations
+            output_sigma: TODO
+            upsample_factor: TODO
+            confidence_scale: TODO
+            threshold: TODO
+            torch_seed: make weight initialization reproducible
+            loss_params: TODO
+            semi_super_losses_to_use: TODO
+
+        """
         super().__init__(
             num_targets=num_targets,
             resnet_version=resnet_version,
@@ -263,20 +342,29 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         labeled_imgs, true_heatmaps, true_keypoints = data_batch["labeled"]
         unlabeled_imgs = data_batch["unlabeled"]
         predicted_heatmaps = self.forward(labeled_imgs)
-        supervised_loss = MaskedMSEHeatmapLoss(true_heatmaps, predicted_heatmaps)
+        supervised_loss = MaskedMSEHeatmapLoss(
+            true_heatmaps,
+            predicted_heatmaps
+        )
         predicted_keypoints, confidence = self.run_subpixelmaxima(
             predicted_heatmaps
         )  # heatmaps -> keypoints
         supervised_rmse = MaskedRMSELoss(true_keypoints, predicted_keypoints)
         unlabeled_predicted_heatmaps = self.forward(unlabeled_imgs)
-        predicted_us_keypoints, confidence = self.run_subpixelmaxima(unlabeled_predicted_heatmaps)
+        predicted_us_keypoints, confidence = self.run_subpixelmaxima(
+            unlabeled_predicted_heatmaps
+        )
         tot_loss = 0.0
         tot_loss += supervised_loss
         # loop over unsupervised losses
-        self.loss_params = convert_dict_entries_to_tensors(self.loss_params, self.device)
+        self.loss_params = convert_dict_entries_to_tensors(
+            self.loss_params,
+            self.device
+        )
         for loss_name, loss_func in self.loss_function_dict.items():
             add_loss = self.loss_params[loss_name]["weight"] * loss_func(
-                predicted_us_keypoints, **self.loss_params[loss_name]
+                predicted_us_keypoints,
+                **self.loss_params[loss_name]
             )
             tot_loss += add_loss
             # log individual unsupervised losses

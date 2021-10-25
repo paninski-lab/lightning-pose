@@ -49,9 +49,10 @@ class BaseDataModule(pl.LightningDataModule):
             train_probability: fraction of full dataset used for training
             val_probability: fraction of full dataset used for validation
             test_probability: fraction of full dataset used for testing
-            train_frames: if integer, select this number of training frames from the
-                initially selected train frames (defined by `train_probability`); if float, must be
-                between 0 and 1 (exclusive) and defines the fraction of the initially selected
+            train_frames: if integer, select this number of training frames
+                from the initially selected train frames (defined by
+                `train_probability`); if float, must be between 0 and 1
+                (exclusive) and defines the fraction of the initially selected
                 train frames
             torch_seed: control data splits
 
@@ -62,8 +63,8 @@ class BaseDataModule(pl.LightningDataModule):
         self.val_batch_size = val_batch_size
         self.test_batch_size = test_batch_size
         self.num_workers = num_workers
-        # maybe can make the view information more general when deciding on a specific format for
-        # csv files
+        # maybe can make the view information more general when deciding on a
+        # specific format for csv files
         self.use_deterministic = use_deterministic
         # info about dataset splits
         self.train_probability = train_probability
