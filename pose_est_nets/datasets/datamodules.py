@@ -12,9 +12,7 @@ from typing import Literal, List, Optional, Tuple, Union
 
 from pose_est_nets.datasets.dali import video_pipe, LightningWrapper
 from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
-from pose_est_nets.datasets.utils import (
-    clean_any_nans,
-    split_sizes_from_probabilities)
+from pose_est_nets.datasets.utils import clean_any_nans, split_sizes_from_probabilities
 from pose_est_nets.utils.heatmap_tracker_utils import format_mouse_data
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -24,18 +22,18 @@ class BaseDataModule(pl.LightningDataModule):
     """Splits a labeled dataset into train, val, and test data loaders."""
 
     def __init__(
-            self,
-            dataset: torch.utils.data.Dataset,
-            use_deterministic: bool=False,
-            train_batch_size: int=16,
-            val_batch_size: int=16,
-            test_batch_size: int=1,
-            num_workers: int=8,
-            train_probability: float=0.8,
-            val_probability: Optional[float]=None,
-            test_probability: Optional[float]=None,
-            train_frames: Optional[Union[float, int]]=None,
-            torch_seed: int=42,
+        self,
+        dataset: torch.utils.data.Dataset,
+        use_deterministic: bool = False,
+        train_batch_size: int = 16,
+        val_batch_size: int = 16,
+        test_batch_size: int = 1,
+        num_workers: int = 8,
+        train_probability: float = 0.8,
+        val_probability: Optional[float] = None,
+        test_probability: Optional[float] = None,
+        train_frames: Optional[Union[float, int]] = None,
+        torch_seed: int = 42,
     ) -> None:
         """Data module splits a dataset into train, val, and test data loaders.
 
@@ -76,10 +74,14 @@ class BaseDataModule(pl.LightningDataModule):
         self.test_set = None  # populated by self.setup()
         self.torch_seed = torch_seed
 
-    def setup(self, stage: Optional[str]=None):  # stage arg needed for ptl
+    def setup(self, stage: Optional[str] = None):  # stage arg needed for ptl
         print("Setting up DataModule...")
         datalen = self.fulldataset.__len__()
-        print("Number of labeled images in the full dataset (train+val+test): {}".format(datalen))
+        print(
+            "Number of labeled images in the full dataset (train+val+test): {}".format(
+                datalen
+            )
+        )
 
         if self.use_deterministic:
             return
@@ -89,7 +91,7 @@ class BaseDataModule(pl.LightningDataModule):
             datalen,
             train_probability=self.train_probability,
             val_probability=self.val_probability,
-            test_probability=self.test_probability
+            test_probability=self.test_probability,
         )
 
         self.train_set, self.val_set, self.test_set = random_split(
@@ -104,8 +106,9 @@ class BaseDataModule(pl.LightningDataModule):
             if self.train_frames >= len(self.train_set):
                 # take max number of train frames
                 print(
-                    "Warning! Requested training frames exceeds training " +
-                    "set size; using all")
+                    "Warning! Requested training frames exceeds training "
+                    + "set size; using all"
+                )
                 n_frames = len(self.train_set)
                 split = False
             elif self.train_frames == 1:
@@ -159,24 +162,24 @@ class UnlabeledDataModule(BaseDataModule):
     """Data module that contains labeled and unlabled data loaders."""
 
     def __init__(
-            self,
-            dataset: torch.utils.data.Dataset,
-            video_paths_list: Union[List[str], str],
-            use_deterministic: bool=False,
-            train_batch_size: int=16,
-            val_batch_size: int=16,
-            test_batch_size: int=1,
-            num_workers: int=8,
-            train_probability: float=0.8,
-            val_probability: Optional[float]=None,
-            test_probability: Optional[float]=None,
-            train_frames: Optional[float]=None,
-            unlabeled_batch_size: int=1,
-            unlabeled_sequence_length: int=16,
-            dali_seed: int=123456,
-            torch_seed: int=42,
-            specialized_dataprep: Optional[Literal["pca"]]=None,
-            loss_param_dict: Optional[dict]=None,
+        self,
+        dataset: torch.utils.data.Dataset,
+        video_paths_list: Union[List[str], str],
+        use_deterministic: bool = False,
+        train_batch_size: int = 16,
+        val_batch_size: int = 16,
+        test_batch_size: int = 1,
+        num_workers: int = 8,
+        train_probability: float = 0.8,
+        val_probability: Optional[float] = None,
+        test_probability: Optional[float] = None,
+        train_frames: Optional[float] = None,
+        unlabeled_batch_size: int = 1,
+        unlabeled_sequence_length: int = 16,
+        dali_seed: int = 123456,
+        torch_seed: int = 42,
+        specialized_dataprep: Optional[Literal["pca"]] = None,
+        loss_param_dict: Optional[dict] = None,
     ) -> None:
         """Data module that contains labeled and unlabeled data loaders.
 
@@ -219,7 +222,7 @@ class UnlabeledDataModule(BaseDataModule):
             val_probability=val_probability,
             test_probability=test_probability,
             train_frames=train_frames,
-            torch_seed=torch_seed
+            torch_seed=torch_seed,
         )
         self.video_paths_list = video_paths_list
         self.num_workers_for_unlabeled = num_workers // 2
@@ -242,23 +245,28 @@ class UnlabeledDataModule(BaseDataModule):
         if isinstance(self.video_paths_list, list):
             # presumably a list of files
             filenames = self.video_paths_list
-        elif isinstance(self.video_paths_list, str) \
-                and os.path.isfile(self.video_paths_list):
+        elif isinstance(self.video_paths_list, str) and os.path.isfile(
+            self.video_paths_list
+        ):
             # single video file
             filenames = self.video_paths_list
-        elif isinstance(self.video_paths_list, str) \
-                and os.path.isdir(self.video_paths_list):
+        elif isinstance(self.video_paths_list, str) and os.path.isdir(
+            self.video_paths_list
+        ):
             # directory of videos
             import glob
+
             extensions = ["mp4"]  # allowed file extensions
             filenames = []
             for extension in extensions:
-                filenames.extend(glob.glob(
-                    os.path.join(self.video_paths_list, '*.%s' % extension)))
+                filenames.extend(
+                    glob.glob(os.path.join(self.video_paths_list, "*.%s" % extension))
+                )
         else:
             raise ValueError(
-                "`video_paths_list` must be a list of files, a single file, " +
-                "or a directory name")
+                "`video_paths_list` must be a list of files, a single file, "
+                + "or a directory name"
+            )
 
         data_pipe = video_pipe(
             filenames=filenames,
@@ -281,9 +289,9 @@ class UnlabeledDataModule(BaseDataModule):
     # TODO: could be separated from this class
     # TODO: return something?
     def computePCA_params(  # Should only call this if pca in loss name dict
-            self,
-            components_to_keep: int=3,
-            empirical_epsilon_percentile: float=90.0,
+        self,
+        components_to_keep: int = 3,
+        empirical_epsilon_percentile: float = 90.0,
     ) -> None:
         print("Computing PCA on the keypoints...")
         # Nick: Subset inherits from dataset, it doesn't have access to
@@ -393,7 +401,6 @@ def pca_prints(pca: PCA, components_to_keep: int) -> None:
     )
     print(
         "total_explained_var: {}".format(
-            np.round(
-                np.sum(pca.explained_variance_ratio_[:components_to_keep]), 3)
+            np.round(np.sum(pca.explained_variance_ratio_[:components_to_keep]), 3)
         )
     )

@@ -26,12 +26,12 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
     """Base dataset that contains images and keypoints as (x, y) pairs."""
 
     def __init__(
-            self,
-            root_directory: str,
-            csv_path: str,
-            header_rows: Optional[List[int]]=None,
-            imgaug_transform: Optional[Callable]=None,
-            pytorch_transform_list: Optional[List]=None,
+        self,
+        root_directory: str,
+        csv_path: str,
+        header_rows: Optional[List[int]] = None,
+        imgaug_transform: Optional[Callable] = None,
+        pytorch_transform_list: Optional[List] = None,
     ) -> None:
         """Initialize the Regression Dataset.
 
@@ -66,21 +66,25 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             if not os.path.exists(csv_file):
                 # step 3: assume dlc directory structure
                 import glob
-                csv_file = glob.glob(os.path.join(
-                    root_directory,
-                    "training-datasets",
-                    "iteration-0",
-                    "*",
-                    csv_path
-                ))[0]  # wildcard handles proj-specific dlc naming conventions
+
+                csv_file = glob.glob(
+                    os.path.join(
+                        root_directory,
+                        "training-datasets",
+                        "iteration-0",
+                        "*",
+                        csv_path,
+                    )
+                )[
+                    0
+                ]  # wildcard handles proj-specific dlc naming conventions
                 if not os.path.exists(csv_file):
                     raise FileNotFoundError("Could not find csv file!")
 
         csv_data = pd.read_csv(csv_file, header=header_rows)
         self.image_names = list(csv_data.iloc[:, 0])
         self.keypoints = torch.tensor(
-            csv_data.iloc[:, 1:].to_numpy(),
-            dtype=torch.float32
+            csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32
         )
         # convert to x,y coordinates
         self.keypoints = self.keypoints.reshape(self.keypoints.shape[0], -1, 2)
@@ -93,7 +97,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
         self.pytorch_transform = transforms.Compose(pytorch_transform_list)
         # keypoints has been already transformed above
-        self.num_targets = (self.keypoints.shape[1] * 2)
+        self.num_targets = self.keypoints.shape[1] * 2
         self.num_keypoints = self.keypoints.shape[1]
 
     @property
@@ -144,14 +148,14 @@ class HeatmapDataset(BaseTrackingDataset):
     """Heatmap dataset that contains the images and keypoints in 2D arrays."""
 
     def __init__(
-            self,
-            root_directory: str,
-            csv_path: str,
-            header_rows: Optional[List[int]]=None,
-            imgaug_transform: Optional[Callable]=None,
-            pytorch_transform_list: Optional[List]=None,
-            no_nans: bool=False,
-            downsample_factor: int=2,
+        self,
+        root_directory: str,
+        csv_path: str,
+        header_rows: Optional[List[int]] = None,
+        imgaug_transform: Optional[Callable] = None,
+        pytorch_transform_list: Optional[List] = None,
+        no_nans: bool = False,
+        downsample_factor: int = 2,
     ) -> None:
         """Initialize the Heatmap Dataset.
 
@@ -178,8 +182,9 @@ class HeatmapDataset(BaseTrackingDataset):
 
         if self.height % 128 != 0 or self.height % 128 != 0:
             print(
-                "image dimensions (after transformation) must be repeatably " +
-                "divisible by 2!")
+                "image dimensions (after transformation) must be repeatably "
+                + "divisible by 2!"
+            )
             print("current image dimensions after transformation are:")
             exit()
 
@@ -188,11 +193,10 @@ class HeatmapDataset(BaseTrackingDataset):
             # that they can be excluded from the data entirely, like DPK does
             self.fully_labeled_idxs = self.get_fully_labeled_idxs()
             self.image_names = [
-                self.image_names[idx] for idx in self.fully_labeled_idxs]
+                self.image_names[idx] for idx in self.fully_labeled_idxs
+            ]
             self.keypoints = torch.index_select(
-                self.keypoints,
-                0,
-                self.fully_labeled_idxs
+                self.keypoints, 0, self.fully_labeled_idxs
             )
             self.keypoints = torch.tensor(self.keypoints)
 
@@ -237,14 +241,10 @@ class HeatmapDataset(BaseTrackingDataset):
             assert y_heatmap.shape == (*self.output_shape, self.num_keypoints)
             label_heatmaps.append(y_heatmap)
 
-        self.label_heatmaps = torch.from_numpy(
-            np.asarray(label_heatmaps)).float()
+        self.label_heatmaps = torch.from_numpy(np.asarray(label_heatmaps)).float()
         self.label_heatmaps = self.label_heatmaps.permute(0, 3, 1, 2)
 
-    def __getitem__(
-            self,
-            idx: int
-    ) -> Tuple[torch.tensor, torch.tensor, torch.Tensor]:
+    def __getitem__(self, idx: int) -> Tuple[torch.tensor, torch.tensor, torch.Tensor]:
         """Get batch of data.
 
         Calls the base dataset to get an image and a label, then additionaly

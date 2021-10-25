@@ -17,8 +17,8 @@ patch_typeguard()  # use before @typechecked
 
 @typechecked
 def grab_resnet_backbone(
-        resnet_version: Literal[18, 34, 50, 101, 152]=18,
-        pretrained: bool=True,
+    resnet_version: Literal[18, 34, 50, 101, 152] = 18,
+    pretrained: bool = True,
 ) -> models.resnet.ResNet:
     """Load resnet architecture from torchvision.
 
@@ -60,8 +60,7 @@ def get_resnet_features(resnet_version: Literal[18, 34, 50, 101, 152]) -> int:
 
 @typechecked
 def grab_layers_sequential(
-        model: models.resnet.ResNet,
-        last_layer_ind: Optional[int]=None
+    model: models.resnet.ResNet, last_layer_ind: Optional[int] = None
 ) -> torch.nn.modules.container.Sequential:
     """Package selected number of layers into a nn.Sequential object.
 
@@ -81,10 +80,10 @@ class BaseFeatureExtractor(LightningModule):
     """Object that contains the base resnet feature extractor."""
 
     def __init__(
-            self,
-            resnet_version: Literal[18, 34, 50, 101, 152]=18,
-            pretrained: Optional[bool]=True,
-            last_resnet_layer_to_get: int=-2,
+        self,
+        resnet_version: Literal[18, 34, 50, 101, 152] = 18,
+        pretrained: Optional[bool] = True,
+        last_resnet_layer_to_get: int = -2,
     ) -> None:
         """A ResNet model that takes in images and generates features.
 
@@ -103,8 +102,7 @@ class BaseFeatureExtractor(LightningModule):
 
         self.resnet_version = resnet_version
         self.base = grab_resnet_backbone(
-            resnet_version=self.resnet_version,
-            pretrained=pretrained
+            resnet_version=self.resnet_version, pretrained=pretrained
         )
         self.backbone = grab_layers_sequential(
             model=self.base,
@@ -112,9 +110,17 @@ class BaseFeatureExtractor(LightningModule):
         )
 
     def get_representations(
-            self,
-            images: TensorType["Batch_Size", "Image_Channels":3, "Image_Height", "Image_Width", float],
-    ) -> TensorType["Batch_Size", "Features", "Representation_Height", "Representation_Width", float,]:
+        self,
+        images: TensorType[
+            "Batch_Size", "Image_Channels":3, "Image_Height", "Image_Width", float
+        ],
+    ) -> TensorType[
+        "Batch_Size",
+        "Features",
+        "Representation_Height",
+        "Representation_Width",
+        float,
+    ]:
         """Forward pass from images to representations.
 
         Wrapper around the backbone's feature_extractor() method for
@@ -150,9 +156,7 @@ class BaseFeatureExtractor(LightningModule):
         """Select optimizer, lr scheduler, and metric for monitoring."""
 
         # standard adam optimizer
-        optimizer = Adam(
-            filter(lambda p: p.requires_grad, self.parameters()),
-            lr=1e-3)
+        optimizer = Adam(filter(lambda p: p.requires_grad, self.parameters()), lr=1e-3)
 
         # define a scheduler that reduces the base learning rate
         # scheduler = ReduceLROnPlateau(
@@ -166,11 +170,7 @@ class BaseFeatureExtractor(LightningModule):
         #     step_size=50,
         #     gamma=0.5
         # )
-        scheduler = MultiStepLR(
-            optimizer,
-            milestones=[50, 100, 150],
-            gamma=0.5
-        )
+        scheduler = MultiStepLR(optimizer, milestones=[50, 100, 150], gamma=0.5)
 
         return {
             "optimizer": optimizer,
