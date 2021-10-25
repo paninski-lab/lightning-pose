@@ -22,13 +22,13 @@ class RegressionTracker(BaseFeatureExtractor):
     """Base model that produces (x, y) predictions of keypoints from images."""
 
     def __init__(
-            self,
-            num_targets: int,  # TODO: decide whether targets or keypoints is the quantity of interest
-            resnet_version: Optional[Literal[18, 34, 50, 101, 152]]=18,
-            pretrained: bool=True,
-            representation_dropout_rate: float=0.2,
-            last_resnet_layer_to_get: int=-2,
-            torch_seed: int=123,
+        self,
+        num_targets: int,  # TODO: decide whether targets or keypoints is the quantity of interest
+        resnet_version: Optional[Literal[18, 34, 50, 101, 152]] = 18,
+        pretrained: bool = True,
+        representation_dropout_rate: float = 0.2,
+        last_resnet_layer_to_get: int = -2,
+        torch_seed: int = 123,
     ) -> None:
         """Base model that produces (x, y) coordinates of keypoints from images.
 
@@ -54,10 +54,7 @@ class RegressionTracker(BaseFeatureExtractor):
         )
         self.num_targets = num_targets
         self.resnet_version = resnet_version
-        self.final_layer = nn.Linear(
-            self.base.fc.in_features,
-            self.num_targets
-        )
+        self.final_layer = nn.Linear(self.base.fc.in_features, self.num_targets)
         # TODO: consider removing dropout
         self.representation_dropout = nn.Dropout(p=representation_dropout_rate)
         self.torch_seed = torch_seed
@@ -74,21 +71,14 @@ class RegressionTracker(BaseFeatureExtractor):
             float,
         ]
     ) -> TensorType["Batch_Size", "Features", float]:
-        return representation.reshape(
-            representation.shape[0],
-            representation.shape[1]
-        )
+        return representation.reshape(representation.shape[0], representation.shape[1])
 
     @typechecked
     def forward(
-            self,
-            images: TensorType[
-                "Batch_Size",
-                "Image_Channels":3,
-                "Image_Height",
-                "Image_Width",
-                float
-            ],
+        self,
+        images: TensorType[
+            "Batch_Size", "Image_Channels":3, "Image_Height", "Image_Width", float
+        ],
     ) -> TensorType["Batch_Size", "Num_Targets"]:
         """Forward pass through the network.
 
@@ -105,17 +95,15 @@ class RegressionTracker(BaseFeatureExtractor):
 
     @typechecked
     def training_step(
-            self,
-            data_batch: list,
-            batch_idx: int,
+        self,
+        data_batch: list,
+        batch_idx: int,
     ) -> dict:
         images, keypoints = data_batch
         # forward pass
         representation = self.get_representations(images)
         predicted_keypoints = self.final_layer(
-            self.representation_dropout(
-                self.reshape_representation(representation)
-            )
+            self.representation_dropout(self.reshape_representation(representation))
         )
         # compute loss
         loss = MaskedRegressionMSELoss(keypoints, predicted_keypoints)
@@ -127,9 +115,7 @@ class RegressionTracker(BaseFeatureExtractor):
 
     @typechecked
     def evaluate(
-            self,
-            data_batch: list,
-            stage: Optional[Literal["val", "test"]]=None
+        self, data_batch: list, stage: Optional[Literal["val", "test"]] = None
     ) -> None:
         images, keypoints = data_batch
         representation = self.get_representations(images)
@@ -155,15 +141,15 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
     """Model produces vectors of keypoints from labeled/unlabeled images."""
 
     def __init__(
-            self,
-            num_targets: int,  # TODO: decide whether targets or keypoints is the quantity of interest
-            loss_params: dict,
-            resnet_version: Optional[Literal[18, 34, 50, 101, 152]]=18,
-            pretrained: bool=True,
-            representation_dropout_rate: float=0.2,
-            last_resnet_layer_to_get: int=-2,
-            torch_seed: int=123,
-            semi_super_losses_to_use: Optional[list]=None,
+        self,
+        num_targets: int,  # TODO: decide whether targets or keypoints is the quantity of interest
+        loss_params: dict,
+        resnet_version: Optional[Literal[18, 34, 50, 101, 152]] = 18,
+        pretrained: bool = True,
+        representation_dropout_rate: float = 0.2,
+        last_resnet_layer_to_get: int = -2,
+        torch_seed: int = 123,
+        semi_super_losses_to_use: Optional[list] = None,
     ) -> None:
         """
 
@@ -198,9 +184,7 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         unlabeled_imgs = data_batch["unlabeled"]
         representation = self.get_representations(labeled_imgs)
         predicted_keypoints = self.final_layer(
-            self.representation_dropout(
-                self.reshape_representation(representation)
-            )
+            self.representation_dropout(self.reshape_representation(representation))
         )  # TODO: consider removing representation dropout?
         # compute loss
         supervised_loss = MaskedRegressionMSELoss(
@@ -219,13 +203,11 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         tot_loss += supervised_loss
         # loop over unsupervised losses
         self.loss_params = convert_dict_entries_to_tensors(
-            self.loss_params,
-            self.device
+            self.loss_params, self.device
         )
         for loss_name, loss_func in self.loss_function_dict.items():
             add_loss = self.loss_params[loss_name]["weight"] * loss_func(
-                predicted_us_keypoints,
-                **self.loss_params[loss_name]
+                predicted_us_keypoints, **self.loss_params[loss_name]
             )
             tot_loss += add_loss
             # log individual unsupervised losses

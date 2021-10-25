@@ -10,10 +10,10 @@ from pose_est_nets.datasets.datasets import HeatmapDataset
 
 @typechecked
 def split_sizes_from_probabilities(
-        total_number: int,
-        train_probability: float,
-        val_probability: Optional[float]=None,
-        test_probability: Optional[float]=None,
+    total_number: int,
+    train_probability: float,
+    val_probability: Optional[float] = None,
+    test_probability: Optional[float] = None,
 ) -> List[int]:
     """Returns the number of examples for train, val and test given split probs.
 

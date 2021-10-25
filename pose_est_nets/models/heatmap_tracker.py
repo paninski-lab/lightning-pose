@@ -28,18 +28,20 @@ class HeatmapTracker(BaseFeatureExtractor):
     """Base model that produces heatmaps of keypoints from images."""
 
     def __init__(
-            self,
-            num_targets: int,
-            resnet_version: Literal[18, 34, 50, 101, 152]=18,
-            downsample_factor: Literal[2, 3]=2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
-            pretrained: bool=True,
-            last_resnet_layer_to_get: int=-3,
-            output_shape: Optional[tuple]=None,  # change
-            output_sigma: float=1.25,  # check value
-            upsample_factor: int=100,
-            confidence_scale: float=1.0,
-            threshold: Optional[float]=None,
-            torch_seed: int=123,
+        self,
+        num_targets: int,
+        resnet_version: Literal[18, 34, 50, 101, 152] = 18,
+        downsample_factor: Literal[
+            2, 3
+        ] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
+        pretrained: bool = True,
+        last_resnet_layer_to_get: int = -3,
+        output_shape: Optional[tuple] = None,  # change
+        output_sigma: float = 1.25,  # check value
+        upsample_factor: int = 100,
+        confidence_scale: float = 1.0,
+        threshold: Optional[float] = None,
+        torch_seed: int = 123,
     ) -> None:
         """Initialize a DLC-like model with resnet backbone.
 
@@ -75,18 +77,9 @@ class HeatmapTracker(BaseFeatureExtractor):
         self.upsampling_layers = self.make_upsampling_layers()
         self.initialize_upsampling_layers()
         self.output_shape = output_shape
-        self.output_sigma = torch.tensor(
-            output_sigma,
-            device=self.device
-        )
-        self.upsample_factor = torch.tensor(
-            upsample_factor,
-            device=self.device
-        )
-        self.confidence_scale = torch.tensor(
-            confidence_scale,
-            device=self.device
-        )
+        self.output_sigma = torch.tensor(output_sigma, device=self.device)
+        self.upsample_factor = torch.tensor(upsample_factor, device=self.device)
+        self.confidence_scale = torch.tensor(confidence_scale, device=self.device)
         self.threshold = threshold
         self.torch_seed = torch_seed
         # Necessary so we don't have to pass in model arguments when loading
@@ -153,8 +146,7 @@ class HeatmapTracker(BaseFeatureExtractor):
     @staticmethod
     @typechecked
     def create_double_upsampling_layer(
-            in_channels: int,
-            out_channels: int
+        in_channels: int, out_channels: int
     ) -> torch.nn.ConvTranspose2d:
         """Perform ConvTranspose2d to double the output shape.
 
@@ -177,20 +169,16 @@ class HeatmapTracker(BaseFeatureExtractor):
 
     @typechecked
     def heatmaps_from_representations(
-            self,
-            representations: TensorType[
-                "Batch_Size",
-                "Features",
-                "Representation_Height",
-                "Representation_Width",
-                float,
-            ],
-    ) -> TensorType[
+        self,
+        representations: TensorType[
             "Batch_Size",
-            "Num_Keypoints",
-            "Heatmap_Height",
-            "Heatmap_Width",
-            float
+            "Features",
+            "Representation_Height",
+            "Representation_Width",
+            float,
+        ],
+    ) -> TensorType[
+        "Batch_Size", "Num_Keypoints", "Heatmap_Height", "Heatmap_Width", float
     ]:
         """Wrapper around self.upsampling_layers for type and shape assertion.
 
@@ -204,19 +192,8 @@ class HeatmapTracker(BaseFeatureExtractor):
 
     @typechecked
     def forward(
-            self,
-            images: TensorType[
-                "Batch_Size",
-                3,
-                "Image_Height",
-                "Image_Width"
-            ]
-    ) -> TensorType[
-            "Batch_Size",
-            "Num_Keypoints",
-            "Heatmap_Height",
-            "Heatmap_Width",
-    ]:
+        self, images: TensorType["Batch_Size", 3, "Image_Height", "Image_Width"]
+    ) -> TensorType["Batch_Size", "Num_Keypoints", "Heatmap_Height", "Heatmap_Width",]:
         """Forward pass through the network.
 
         Args:
@@ -253,9 +230,7 @@ class HeatmapTracker(BaseFeatureExtractor):
 
     @typechecked
     def evaluate(
-            self,
-            data_batch: List,
-            stage: Optional[Literal["val", "test"]]=None
+        self, data_batch: List, stage: Optional[Literal["val", "test"]] = None
     ):
         images, true_heatmaps, true_keypoints = data_batch  # read batch
         predicted_heatmaps = self.forward(images)  # images -> heatmaps
@@ -283,20 +258,24 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
     """Model produces heatmaps of keypoints from labeled/unlabeled images."""
 
     def __init__(
-            self,
-            num_targets: int,
-            resnet_version: Literal[18, 34, 50, 101, 152]=18,
-            downsample_factor: Literal[2, 3]=2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
-            pretrained: bool=True,
-            last_resnet_layer_to_get: int=-3,
-            output_shape: Optional[tuple]=None,  # change
-            output_sigma: float=1.25,  # check value,
-            upsample_factor: int=100,
-            confidence_scale: float=1.,
-            threshold: Optional[float]=None,
-            torch_seed: int=123,
-            loss_params: Optional[dict]=None, # optional so we can initialize a model without passing that in
-            semi_super_losses_to_use: Optional[list]=None,
+        self,
+        num_targets: int,
+        resnet_version: Literal[18, 34, 50, 101, 152] = 18,
+        downsample_factor: Literal[
+            2, 3
+        ] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
+        pretrained: bool = True,
+        last_resnet_layer_to_get: int = -3,
+        output_shape: Optional[tuple] = None,  # change
+        output_sigma: float = 1.25,  # check value,
+        upsample_factor: int = 100,
+        confidence_scale: float = 1.0,
+        threshold: Optional[float] = None,
+        torch_seed: int = 123,
+        loss_params: Optional[
+            dict
+        ] = None,  # optional so we can initialize a model without passing that in
+        semi_super_losses_to_use: Optional[list] = None,
     ):
         """
 
@@ -342,10 +321,7 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         labeled_imgs, true_heatmaps, true_keypoints = data_batch["labeled"]
         unlabeled_imgs = data_batch["unlabeled"]
         predicted_heatmaps = self.forward(labeled_imgs)
-        supervised_loss = MaskedMSEHeatmapLoss(
-            true_heatmaps,
-            predicted_heatmaps
-        )
+        supervised_loss = MaskedMSEHeatmapLoss(true_heatmaps, predicted_heatmaps)
         predicted_keypoints, confidence = self.run_subpixelmaxima(
             predicted_heatmaps
         )  # heatmaps -> keypoints
@@ -358,13 +334,11 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         tot_loss += supervised_loss
         # loop over unsupervised losses
         self.loss_params = convert_dict_entries_to_tensors(
-            self.loss_params,
-            self.device
+            self.loss_params, self.device
         )
         for loss_name, loss_func in self.loss_function_dict.items():
             add_loss = self.loss_params[loss_name]["weight"] * loss_func(
-                predicted_us_keypoints,
-                **self.loss_params[loss_name]
+                predicted_us_keypoints, **self.loss_params[loss_name]
             )
             tot_loss += add_loss
             # log individual unsupervised losses

@@ -13,8 +13,8 @@ patch_typeguard()  # use before @typechecked
 
 @typechecked
 def MaskedRegressionMSELoss(
-        keypoints: TensorType["batch", "num_targets"],
-        preds: TensorType["batch", "num_targets"],
+    keypoints: TensorType["batch", "num_targets"],
+    preds: TensorType["batch", "num_targets"],
 ) -> TensorType[(), float]:
     """Compute MSE loss between ground truth and predicted coordinates.
 
@@ -28,16 +28,15 @@ def MaskedRegressionMSELoss(
     """
     mask = keypoints == keypoints  # keypoints is not none, bool.
     loss = F.mse_loss(
-        torch.masked_select(keypoints, mask),
-        torch.masked_select(preds, mask)
+        torch.masked_select(keypoints, mask), torch.masked_select(preds, mask)
     )
     return loss
 
 
 @typechecked
 def MaskedRMSELoss(
-        keypoints: TensorType["batch", "num_targets"],
-        preds: TensorType["batch", "num_targets"],
+    keypoints: TensorType["batch", "num_targets"],
+    preds: TensorType["batch", "num_targets"],
 ) -> TensorType[(), float]:
     """Compute RMSE loss between ground truth and predicted coordinates.
 
@@ -62,8 +61,8 @@ def MaskedRMSELoss(
 
 @typechecked
 def MaskedMSEHeatmapLoss(
-        y: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
-        y_hat: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+    y: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+    y_hat: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
 ) -> TensorType[()]:
     """Computes MSE loss between ground truth heatmap and predicted heatmap.
 
@@ -80,15 +79,9 @@ def MaskedMSEHeatmapLoss(
     max_vals = torch.amax(y, dim=(2, 3))
     zeros = torch.zeros(size=(y.shape[0], y.shape[1]), device=y_hat.device)
     non_zeros = ~torch.eq(max_vals, zeros)
-    mask = torch.reshape(
-        non_zeros,
-        [non_zeros.shape[0], non_zeros.shape[1], 1, 1]
-    )
+    mask = torch.reshape(non_zeros, [non_zeros.shape[0], non_zeros.shape[1], 1, 1])
     # compute loss
-    loss = F.mse_loss(
-        torch.masked_select(y_hat, mask),
-        torch.masked_select(y, mask)
-    )
+    loss = F.mse_loss(torch.masked_select(y_hat, mask), torch.masked_select(y, mask))
     return loss
 
 
@@ -97,10 +90,10 @@ def MaskedMSEHeatmapLoss(
 @typechecked
 # what are we doing about NANS?
 def MultiviewPCALoss(
-        reshaped_maxima_preds: TensorType["batch", "num_targets", float],
-        discarded_eigenvectors: TensorType["views_times_two", "num_discarded_evecs", float],
-        epsilon: TensorType[float],
-        **kwargs  # make loss robust to unneeded inputs
+    reshaped_maxima_preds: TensorType["batch", "num_targets", float],
+    discarded_eigenvectors: TensorType["views_times_two", "num_discarded_evecs", float],
+    epsilon: TensorType[float],
+    **kwargs  # make loss robust to unneeded inputs
 ) -> TensorType[float]:
     """
 
@@ -140,9 +133,9 @@ def MultiviewPCALoss(
 
 @typechecked
 def TemporalLoss(
-        preds: TensorType["batch", "num_targets"],
-        epsilon: TensorType[float] = 5,
-        **kwargs  # make loss robust to unneeded inputs
+    preds: TensorType["batch", "num_targets"],
+    epsilon: TensorType[float] = 5,
+    **kwargs  # make loss robust to unneeded inputs
 ) -> TensorType[(), float]:
     """Penalize temporal differences for each target.
 
@@ -163,15 +156,12 @@ def TemporalLoss(
     # returns tensor of shape (batch - 1, num_keypoints)
     loss = torch.linalg.norm(reshape, ord=2, dim=2)
     # epsilon-insensitive loss
-    loss = loss.masked_fill(mask=loss < epsilon, value=0.)
+    loss = loss.masked_fill(mask=loss < epsilon, value=0.0)
     return torch.mean(loss)  # pixels
 
 
 @typechecked
-def filter_dict(
-        mydict: Dict[str, Any],
-        keys: List[str]
-) -> Dict[str, Any]:
+def filter_dict(mydict: Dict[str, Any], keys: List[str]) -> Dict[str, Any]:
     """Filter dictionary by desired keys.
 
     Args:
@@ -187,7 +177,7 @@ def filter_dict(
 
 @typechecked
 def get_losses_dict(
-        names_list: List[Literal["pca", "temporal"]]=[]
+    names_list: List[Literal["pca", "temporal"]] = []
 ) -> Dict[str, Callable]:
     """Get a dict with all the loss functions for semi supervised training.
 
@@ -205,15 +195,14 @@ def get_losses_dict(
         "regression": MaskedRegressionMSELoss,
         "heatmap": MaskedMSEHeatmapLoss,
         "pca": MultiviewPCALoss,
-        "temporal": TemporalLoss
+        "temporal": TemporalLoss,
     }
     return filter_dict(loss_dict, names_list)
 
 
 @typechecked
 def convert_dict_entries_to_tensors(
-        loss_params: dict,
-        device: Union[str, torch.device]
+    loss_params: dict, device: Union[str, torch.device]
 ) -> dict:
     """Set scalars in loss to torch tensors for use with unsupervised losses.
 
@@ -228,7 +217,11 @@ def convert_dict_entries_to_tensors(
     for loss, params in loss_params.items():
         for key, val in params.items():
             if type(val) == float:
-                loss_params[loss][key] = torch.tensor(val, dtype=torch.float, device=device)
+                loss_params[loss][key] = torch.tensor(
+                    val, dtype=torch.float, device=device
+                )
             if type(val) == int:
-                loss_params[loss][key] = torch.tensor(val, dtype=torch.int, device=device)
+                loss_params[loss][key] = torch.tensor(
+                    val, dtype=torch.int, device=device
+                )
     return loss_params

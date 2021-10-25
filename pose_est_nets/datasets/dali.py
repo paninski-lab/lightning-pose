@@ -42,21 +42,21 @@ def count_frames(video_full_path: str) -> int:
 # cannot typecheck due to way pipeline_def decorator consumes additional args
 @pipeline_def
 def video_pipe(
-        filenames: Union[list[str], str],
-        resize_dims: Optional[List[int]]=None,
-        random_shuffle: bool=False,
-        seed: int = 123456,
-        sequence_length: int=16,
-        pad_sequences: bool=True,
-        initial_fill: int = 16,
-        normalization_mean: List[float]=_IMAGENET_MEAN,
-        normalization_std: List[float]=_IMAGENET_STD,
-        device: str=_DALI_DEVICE,
-        name: str='reader',
-        # arguments consumed by decorator:
-        # batch_size,
-        # num_threads,
-        # device_id
+    filenames: Union[list[str], str],
+    resize_dims: Optional[List[int]] = None,
+    random_shuffle: bool = False,
+    seed: int = 123456,
+    sequence_length: int = 16,
+    pad_sequences: bool = True,
+    initial_fill: int = 16,
+    normalization_mean: List[float] = _IMAGENET_MEAN,
+    normalization_std: List[float] = _IMAGENET_STD,
+    device: str = _DALI_DEVICE,
+    name: str = "reader",
+    # arguments consumed by decorator:
+    # batch_size,
+    # num_threads,
+    # device_id
 ) -> Pipeline:
     """Generic video reader pipeline that loads videos, resizes, and normalizes.
 
@@ -97,7 +97,7 @@ def video_pipe(
         video = fn.resize(video, size=resize_dims)
     # videos range from 0-255. transform it to 0,1.
     # happens naturally in the torchvision transform to tensor.
-    video = (video / 255.0)
+    video = video / 255.0
     # permute dimensions and normalize to imagenet statistics
     transform = fn.crop_mirror_normalize(
         video,
