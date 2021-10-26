@@ -67,7 +67,7 @@ The script relies on **Hydra** to manage arguments in hierarchical config files.
 
 ## Logs and saved models
 
-The outputs of the training script, namely the model checkpoints and `Tensorboard` logs, will be saved at the `outputs/YYYY-MM-DD/tb_logs` directory.
+The outputs of the training script, namely the model checkpoints and `Tensorboard` logs, will be saved at the `lightning-pose/outputs/YYYY-MM-DD/tb_logs` directory.
 
 To view the logged losses with tensorboard, in the command line, run:
 
@@ -75,13 +75,47 @@ To view the logged losses with tensorboard, in the command line, run:
 
 where you use the date in which you ran the model.
 
-## Prediction and visualization
+## Visualize train/test/val predictions:
 
-Visualize the models' predictions on the `train/test/val` datasets using the `FiftyOne` app: 
+You can visualize the predictions of one or multiple trained models on the `train/test/val` images using the `FiftyOne` app.
 
-```python scripts/predict_compare.py```
+You will need to specify:
+1. `eval.hydra_paths`: path to trained models to use for prediction. 
 
+Generally, using `Hydra` we can either edit the config `.yaml` files or override them from command line. 
 
+### Option 1: Edit the config
 
+Edit `scripts/configs/eval/eval_params.yaml` like so:
+```
+hydra_paths: [
+"YYYY-MM-DD/HH-MM-SS/", "YYYY-MM-DD/HH-MM-SS/",
+]
+```
+where you specify the relative paths for `hydra` folders within the `lightning-pose/outputs` folder. Then from command line, run:
+```
+python scripts/predict_compare.py
+```
 
+### Option 2: Override from command line
+Specify `hydra_paths` in the command line, overriding the `.yaml`:
+```
+python scripts/predict_compare.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"]
+``` 
+where again, `hydra_paths` should be a list of strings with folder names within `lightning-pose/outputs`.
 
+## Predict keypoints on new videos
+With a trained model and a path to a new videos, you can generate predictions for each frame and save it as a `.csv` or `.h5` file. You need to specify two paths:
+1. `eval.hydra_paths`: path to models to use for prediction: 
+2. `eval.path_to_test_videos`: path to a *folder* with new videos
+3. `path_to_save_predictions`: optional path specifying where to save predictions. If `null`, the predictions will be saved in `eval.path_to_test_videos`.
+
+as in above, you could directly edit `scripts/configs/eval/eval_params.yaml` and run
+```
+python scripts/predict_new_vids.py 
+```
+or override these arguments in the command line.
+
+```
+python scripts/predict_new_vids.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"] eval.path_to_save_predictions="/path/to/your/file.csv" eval.path_to_test_videos="path/to/test/vids"
+```

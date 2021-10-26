@@ -34,12 +34,11 @@ def make_predictions(cfg: DictConfig):
     model_ckpt_path = glob.glob(model_search_path)[
         -1
     ]  # the output of glob.glob is a list with all files that match the search.
-
     predict_videos(
-        cfg.eval.path_to_test_videos,
-        model_ckpt_path,
-        model_config_path,
-        None,
+        video_path=cfg.eval.path_to_test_videos,
+        model_file=model_ckpt_path,
+        config_file=model_config_path,
+        save_file=cfg.eval.path_to_save_predictions,
         sequence_length=cfg.eval.dali_parameters.sequence_length,
     )
 
