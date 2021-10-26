@@ -40,7 +40,7 @@ def count_frames(video_full_path: str) -> int:
 # cannot typecheck due to way pipeline_def decorator consumes additional args
 @pipeline_def
 def video_pipe(
-    filenames: Union[list[str], str],
+    filenames: Union[List[str], str],
     resize_dims: Optional[List[int]] = None,
     random_shuffle: bool = False,
     seed: int = 123456,

@@ -1,14 +1,14 @@
-#path to the hydra config file in the output folder, we can use it reconstruct information about loss directory
+# path to the hydra config file in the output folder, we can use it reconstruct information about loss directory
 hydra_paths: [
   "2021-10-20/20-28-45/"
 ]
 
-model_names: ["simple_unsupervised_heatmap"] #["baseheatmap1", "semisupervisedheatmap2", "semisupervisedregression3"] #Names could be more descriptive
+model_names: [] # if you want to manually provide a different model name to be displayed in FiftyOne
 
 fifty_one_dataset_name: "rick_data_test"
 
-# path to new unlabeled videos for prediction
-path_to_test_videos:  "/datastores/mouseRunningData/1/unlabeled_videos"
+# path to new unlabeled videos for prediction 
+path_to_test_videos: "/home/jovyan/lightning-pose/toy_datasets/toymouseRunningData/unlabeled_videos" #"/datastores/mouseRunningData/1/unlabeled_videos"
 
 # params for loading images from the video using nvidia-dali
 dali_parameters:
