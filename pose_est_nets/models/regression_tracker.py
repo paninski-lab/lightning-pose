@@ -1,26 +1,26 @@
+"""Models that produce (x, y) coordinates of keypoints from images."""
+
 import torch
-import torchvision.models as models
-from torch.nn import functional as F
 from torch import nn
-from pytorch_lightning.core.lightning import LightningModule
-from torch.optim import Adam
-from typing import Any, Callable, Optional, Tuple, List, Dict
 from torchtyping import TensorType, patch_typeguard
-from typing_extensions import Literal
 from typeguard import typechecked
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-from pose_est_nets.models.base_resnet import BaseFeatureExtractor
+from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing_extensions import Literal
+
 from pose_est_nets.losses.losses import (
-    MaskedRMSELoss,
-    MaskedRegressionMSELoss,
+    convert_dict_entries_to_tensors,
     get_losses_dict,
-    convert_dict_entries_to_tensors
+    MaskedMSEHeatmapLoss,
+    MaskedRMSELoss,
 )
+from pose_est_nets.models.base_resnet import BaseFeatureExtractor
 
 patch_typeguard()  # use before @typechecked
 
 
 class RegressionTracker(BaseFeatureExtractor):
+    """Base model that produces (x, y) predictions of keypoints from images."""
+
     def __init__(
         self,
         num_targets: int,  # TODO: decide whether targets or keypoints is the quantity of interest
@@ -30,19 +30,24 @@ class RegressionTracker(BaseFeatureExtractor):
         last_resnet_layer_to_get: int = -2,
         torch_seed: int = 123,
     ) -> None:
-        """
-        Initializes regression tracker model with resnet backbone
-        :param num_targets: number of body parts
-        :param resnet_version: The ResNet variant to be used (e.g. 18, 34, 50, 101, or 152). Essentially specifies how
-            large the resnet will be.
-        :param transfer:  Flag to indicate whether this is a transfer learning task or not; defaults to false,
-            meaning the entire model will be trained unless this flag is provided
+        """Base model that produces (x, y) coordinates of keypoints from images.
+
+        Args:
+            num_targets: number of body parts times 2 (x,y) coords
+            resnet_version: ResNet variant to be used (e.g. 18, 34, 50, 101,
+                or 152); essentially specifies how large the resnet will be
+            pretrained: True to load pretrained imagenet weights
+            representation_dropout_rate: dropout in the final fully connected
+                layers
+            last_resnet_layer_to_get: skip final layers of backbone model
+            torch_seed: make weight initialization reproducible
+
         """
 
         # for reproducible weight initialization
         torch.manual_seed(torch_seed)
 
-        super().__init__(
+        super().__init__(  # execute BaseFeatureExtractor.__init__()
             resnet_version=resnet_version,
             pretrained=pretrained,
             last_resnet_layer_to_get=last_resnet_layer_to_get,
@@ -50,9 +55,8 @@ class RegressionTracker(BaseFeatureExtractor):
         self.num_targets = num_targets
         self.resnet_version = resnet_version
         self.final_layer = nn.Linear(self.base.fc.in_features, self.num_targets)
-        self.representation_dropout = nn.Dropout(
-            p=representation_dropout_rate
-        )  # TODO: consider removing dropout
+        # TODO: consider removing dropout
+        self.representation_dropout = nn.Dropout(p=representation_dropout_rate)
         self.torch_seed = torch_seed
         self.save_hyperparameters()
 
@@ -60,24 +64,28 @@ class RegressionTracker(BaseFeatureExtractor):
     @typechecked
     def reshape_representation(
         representation: TensorType[
-            "Batch_Size",
-            "Features",
-            "Representation_Height",
-            "Representation_Width",
+            "batch",
+            "features",
+            "rep_height",
+            "rep_width",
             float,
         ]
-    ) -> TensorType["Batch_Size", "Features", float]:
+    ) -> TensorType["batch", "features", float]:
         return representation.reshape(representation.shape[0], representation.shape[1])
 
     @typechecked
     def forward(
         self,
-        images: TensorType["Batch_Size", "Image_Channels":3, "Image_Height", "Image_Width", float],
-    ) -> TensorType["Batch_Size", "Num_Targets"]:
-        """
-        Forward pass through the network
-        :param x: input
-        :return: output of network
+        images: TensorType["batch", "channels":3, "image_height", "image_width", float],
+    ) -> TensorType["batch", "2 x num_keypoints"]:
+        """Forward pass through the network.
+
+        Args:
+            images: images
+
+        Returns:
+            heatmap per keypoint
+
         """
         representation = self.get_representations(images)
         out = self.final_layer(self.reshape_representation(representation))
@@ -88,7 +96,7 @@ class RegressionTracker(BaseFeatureExtractor):
         self,
         data_batch: list,
         batch_idx: int,
-    ) -> Dict:
+    ) -> dict:
         images, keypoints = data_batch
         # forward pass
         representation = self.get_representations(images)
@@ -106,7 +114,7 @@ class RegressionTracker(BaseFeatureExtractor):
     @typechecked
     def evaluate(
         self, data_batch: list, stage: Optional[Literal["val", "test"]] = None
-    ):
+    ) -> None:
         images, keypoints = data_batch
         representation = self.get_representations(images)
         predicted_keypoints = self.final_layer(
@@ -128,6 +136,8 @@ class RegressionTracker(BaseFeatureExtractor):
 
 
 class SemiSupervisedRegressionTracker(RegressionTracker):
+    """Model produces vectors of keypoints from labeled/unlabeled images."""
+
     def __init__(
         self,
         num_targets: int,  # TODO: decide whether targets or keypoints is the quantity of interest
@@ -139,6 +149,21 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         torch_seed: int = 123,
         semi_super_losses_to_use: Optional[list] = None,
     ) -> None:
+        """
+
+        Args:
+            num_targets: number of body parts times 2 (x,y) coords
+            loss_params:
+            resnet_version: ResNet variant to be used (e.g. 18, 34, 50, 101,
+                or 152); essentially specifies how large the resnet will be
+            pretrained: True to load pretrained imagenet weights
+            representation_dropout_rate: dropout in the final fully connected
+                layers
+            last_resnet_layer_to_get: skip final layers of original model
+            torch_seed: make weight initialization reproducible
+            semi_super_losses_to_use: TODO
+
+        """
         super().__init__(
             num_targets=num_targets,
             resnet_version=resnet_version,
@@ -175,7 +200,9 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         tot_loss = 0.0
         tot_loss += supervised_loss
         # loop over unsupervised losses
-        self.loss_params = convert_dict_entries_to_tensors(self.loss_params, self.device)
+        self.loss_params = convert_dict_entries_to_tensors(
+            self.loss_params, self.device
+        )
         for loss_name, loss_func in self.loss_function_dict.items():
             add_loss = self.loss_params[loss_name]["weight"] * loss_func(
                 predicted_us_keypoints, **self.loss_params[loss_name]

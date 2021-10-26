@@ -101,11 +101,3 @@ def test_get_losses_dict():
     assert type(out_dict) == dict
 
     pytest.raises(TypeError, get_losses_dict, ["bla"])
-
-
-def test_yaml():
-    stream = open("pose_est_nets/losses/default_hypers.yaml", "r")
-
-    with open("pose_est_nets/losses/default_hypers.yaml") as f:
-        data = yaml.load(f, Loader=yaml.FullLoader)
-        print(data)

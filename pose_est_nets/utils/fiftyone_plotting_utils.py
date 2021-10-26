@@ -9,6 +9,7 @@ from imgaug.augmentables.kps import Keypoint, KeypointsOnImage
 from pose_est_nets.models.heatmap_tracker import HeatmapTracker
 import torch
 
+
 def tensor_to_keypoint_list(keypoint_tensor, height, width):  # TODO: move to utils file
     img_kpts_list = []
     for i in range(len(keypoint_tensor)):
@@ -20,6 +21,7 @@ def tensor_to_keypoint_list(keypoint_tensor, height, width):  # TODO: move to ut
         # keypoints are normalized to the original image dims, either add these to data config, or automatically detect by
         # loading a sample image in dataset.py or something
     return img_kpts_list
+
 
 def make_dataset_and_evaluate(cfg, datamod, best_models):
     reverse_transform = []
@@ -33,7 +35,7 @@ def make_dataset_and_evaluate(cfg, datamod, best_models):
     )
     reverse_transform = iaa.Sequential(reverse_transform)
     image_names = datamod.fulldataset.image_names
-    gt_keypoints = datamod.fulldataset.labels
+    gt_keypoints = datamod.fulldataset.keypoints
     samples = []
     train_indices = datamod.train_set.indices
     valid_indices = datamod.val_set.indices
@@ -49,7 +51,11 @@ def make_dataset_and_evaluate(cfg, datamod, best_models):
             torch.sum(torch.isnan(gt_img_kpts), dim=1) > 0
         )  # e.g., when dim == 0, those columns (keypoints) that have more than zero nans
         gt_img_kpts = gt_img_kpts[~nan_bool]
-        gt_kpts_list = tensor_to_keypoint_list(gt_img_kpts, cfg.data.image_orig_dims.height, cfg.data.image_orig_dims.width)
+        gt_kpts_list = tensor_to_keypoint_list(
+            gt_img_kpts,
+            cfg.data.image_orig_dims.height,
+            cfg.data.image_orig_dims.width
+        )
         if idx in train_indices:
             tag = "train"
         elif idx in valid_indices:
