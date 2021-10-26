@@ -56,19 +56,16 @@ def predict(cfg: DictConfig):
 
     # for now this works without saving the pca params to dict
     bestmodels = {}
-    for model_name, hydra_path in zip(cfg.eval.model_names, cfg.eval.hydra_paths):
+    for hydra_path in cfg.eval.hydra_paths:
         if hydra_path[-1] != "/":
             hydra_path += "/"
         model_config = OmegaConf.load("../../" + hydra_path + ".hydra/config.yaml")
+        model_name = model_config.model.model_name
         ModelClass = get_model_class(
             model_config.model.model_type, model_config.model.semi_supervised
         )
         ckpt_path = (
-            "../../"
-            + hydra_path
-            + "tb_logs/"
-            + model_config.model.model_name
-            + "/version_0/checkpoints/"
+            "../../" + hydra_path + "tb_logs/" + model_name + "/version_0/checkpoints/"
         )
         model_path = ckpt_path + os.listdir(ckpt_path)[0]
         if model_config.model.semi_supervised:
@@ -82,7 +79,6 @@ def predict(cfg: DictConfig):
         else:
             model = ModelClass.load_from_checkpoint(model_path)
         bestmodels[model_name] = model
-    print("loaded weights")
     make_dataset_and_evaluate(cfg, datamod, bestmodels)
 
 

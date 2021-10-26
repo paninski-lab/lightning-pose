@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import os
 from typing import Callable, Optional, Tuple, List
 from typeguard import typechecked
+from tqdm import tqdm
 
 
 def get_model_class(map_type: str, semi_supervised: bool):
@@ -290,12 +291,13 @@ def predict_videos(
         t_beg = time.time()
         n = -1
         with torch.no_grad():
-            for n, batch in enumerate(predict_loader):
+            for n, batch in enumerate(tqdm(predict_loader)):
                 outputs = model.forward(batch)
                 if cfg.model.model_type == "heatmap":
-                    pred_keypoints, confidence = (
-                        model.run_subpixelmaxima(outputs).detach().cpu().numpy()
-                    )
+                    pred_keypoints, confidence = model.run_subpixelmaxima(outputs)
+                    # send to cpu
+                    pred_keypoints = pred_keypoints.detach().cpu().numpy()
+                    confidence = confidence.detach().cpu().numpy()
                 else:
                     pred_keypoints = outputs.detach().cpu().numpy()
                 n_frames_curr = pred_keypoints.shape[0]
@@ -323,17 +325,22 @@ def predict_videos(
         if save_file is None:
             # create filename based on video name and model type
             video_file_name = os.path.basename(video_file).replace(".mp4", "")
-            loss_str = (
-                "_".join([""] + cfg.model.losses_to_use)
-                if len(cfg.model.losses_to_use) > 0
-                else ""
-            )
+            if (
+                cfg.model.semi_supervised
+            ):  # only if any of the unsupervised `cfg.model.losses_to_use` is actually used
+                loss_str = (
+                    "_".join([""] + list(cfg.model.losses_to_use))
+                    if len(cfg.model.losses_to_use) > 0
+                    else ""
+                )
+            else:
+                loss_str = ""
             save_file = os.path.join(
                 video_path,
                 "%s_%s%s.csv" % (video_file_name, cfg.model.model_type, loss_str),
             )
 
-        num_joints = int(model.num_targets // 2)
+        num_joints = model.num_keypoints
         predictions = np.zeros((keypoints_np.shape[0], num_joints * 3))
         predictions[:, 0] = np.arange(keypoints_np.shape[0])
         # put x vals back in original pixel space
@@ -346,7 +353,7 @@ def predict_videos(
         predictions[:, 1::3] = keypoints_np[:, 1::2] / y_resize * y_og
 
         xyl_labels = ["x", "y", "likelihood"]
-        joint_labels = ["bp_%i" % n for n in range(model.num_targets // 2)]
+        joint_labels = ["bp_%i" % n for n in range(model.num_keypoints)]
         pdindex = pd.MultiIndex.from_product(
             [["%s_tracker" % cfg.model.model_type], joint_labels, xyl_labels],
             names=["scorer", "bodyparts", "coords"],

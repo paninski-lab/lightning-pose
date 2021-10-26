@@ -140,6 +140,5 @@ dmypy.json
 # DS_Store
 **/.DS_Store
 
-# specific stuff
-pose_est_nets/datasets/MNIST/
-pose_est_nets/datasets/lightning_logs/
+# specific stuff like csv predictions on test_vid.mp4
+toy_datasets/toymouseRunningData/unlabeled_videos/*.csv
