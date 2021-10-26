@@ -41,24 +41,6 @@ def grab_resnet_backbone(
 
 
 @typechecked
-def get_resnet_features(resnet_version: Literal[18, 34, 50, 101, 152]) -> int:
-    """Get number of feature maps at end of resnet.
-
-    Args:
-        resnet_version: network depth
-
-    Returns:
-        number of feature maps for selected resnet version
-
-    """
-    if resnet_version < 50:
-        _num_features_in_representation = 512
-    else:
-        _num_features_in_representation = 2048
-    return _num_features_in_representation
-
-
-@typechecked
 def grab_layers_sequential(
     model: models.resnet.ResNet, last_layer_ind: Optional[int] = None
 ) -> torch.nn.modules.container.Sequential:
@@ -82,7 +64,7 @@ class BaseFeatureExtractor(LightningModule):
     def __init__(
         self,
         resnet_version: Literal[18, 34, 50, 101, 152] = 18,
-        pretrained: Optional[bool] = True,
+        pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
     ) -> None:
         """A ResNet model that takes in images and generates features.
@@ -111,17 +93,9 @@ class BaseFeatureExtractor(LightningModule):
 
     def get_representations(
         self,
-        images: TensorType[
-            "Batch_Size", "Image_Channels":3, "Image_Height", "Image_Width", float
-        ],
-    ) -> TensorType[
-        "Batch_Size",
-        "Features",
-        "Representation_Height",
-        "Representation_Width",
-        float,
-    ]:
-        """Forward pass from images to representations.
+        images: TensorType["batch", "channels":3, "image_height", "image_width", float],
+    ) -> TensorType["batch", "features", "rep_height", "rep_width", float]:
+        """Forward pass from images to feature maps.
 
         Wrapper around the backbone's feature_extractor() method for
         typechecking purposes.

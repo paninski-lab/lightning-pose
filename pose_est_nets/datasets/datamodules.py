@@ -56,7 +56,7 @@ class BaseDataModule(pl.LightningDataModule):
 
         """
         super().__init__()
-        self.fulldataset = dataset
+        self.dataset = dataset
         self.train_batch_size = train_batch_size
         self.val_batch_size = val_batch_size
         self.test_batch_size = test_batch_size
@@ -69,14 +69,14 @@ class BaseDataModule(pl.LightningDataModule):
         self.val_probability = val_probability
         self.test_probability = test_probability
         self.train_frames = train_frames
-        self.train_set = None  # populated by self.setup()
-        self.val_set = None  # populated by self.setup()
-        self.test_set = None  # populated by self.setup()
+        self.train_dataset = None  # populated by self.setup()
+        self.val_dataset = None  # populated by self.setup()
+        self.test_dataset = None  # populated by self.setup()
         self.torch_seed = torch_seed
 
     def setup(self, stage: Optional[str] = None):  # stage arg needed for ptl
-        print("Setting up DataModule...")
-        datalen = self.fulldataset.__len__()
+
+        datalen = self.dataset.__len__()
         print(
             "Number of labeled images in the full dataset (train+val+test): {}".format(
                 datalen
@@ -94,8 +94,8 @@ class BaseDataModule(pl.LightningDataModule):
             test_probability=self.test_probability,
         )
 
-        self.train_set, self.val_set, self.test_set = random_split(
-            self.fulldataset,
+        self.train_dataset, self.val_dataset, self.test_dataset = random_split(
+            self.dataset,
             data_splits_list,
             generator=torch.Generator().manual_seed(self.torch_seed),
         )
@@ -103,56 +103,56 @@ class BaseDataModule(pl.LightningDataModule):
         # further subsample training data if desired
         if self.train_frames is not None:
             split = True
-            if self.train_frames >= len(self.train_set):
+            if self.train_frames >= len(self.train_dataset):
                 # take max number of train frames
                 print(
                     "Warning! Requested training frames exceeds training "
                     + "set size; using all"
                 )
-                n_frames = len(self.train_set)
+                n_frames = len(self.train_dataset)
                 split = False
             elif self.train_frames == 1:
                 # assume this is a fraction; use full dataset
-                n_frames = len(self.train_set)
+                n_frames = len(self.train_dataset)
                 split = False
             elif self.train_frames > 1:
                 # take this number of train frames
                 n_frames = int(self.train_frames)
             elif self.train_frames > 0:
                 # take this fraction of train frames
-                n_frames = int(self.train_frames * len(self.train_set))
+                n_frames = int(self.train_frames * len(self.train_dataset))
             else:
                 raise ValueError("train_frames must be >0")
             if split:
-                self.train_set, _ = random_split(
-                    self.train_set,
-                    [n_frames, len(self.train_set) - n_frames],
+                self.train_dataset, _ = random_split(
+                    self.train_dataset,
+                    [n_frames, len(self.train_dataset) - n_frames],
                     generator=torch.Generator().manual_seed(self.torch_seed),
                 )
 
         print(
             "Size of -- train set: {}, val set: {}, test set: {}".format(
-                len(self.train_set), len(self.val_set), len(self.test_set)
+                len(self.train_dataset), len(self.val_dataset), len(self.test_dataset)
             )
         )
 
     def train_dataloader(self):
         return DataLoader(
-            self.train_set,
+            self.train_dataset,
             batch_size=self.train_batch_size,
             num_workers=self.num_workers,
         )
 
     def val_dataloader(self):
         return DataLoader(
-            self.val_set,
+            self.val_dataset,
             batch_size=self.val_batch_size,
             num_workers=self.num_workers,
         )
 
     def test_dataloader(self):
         return DataLoader(
-            self.test_set,
+            self.test_dataset,
             batch_size=self.test_batch_size,
             num_workers=self.num_workers,
         )
@@ -270,7 +270,7 @@ class UnlabeledDataModule(BaseDataModule):
 
         data_pipe = video_pipe(
             filenames=filenames,
-            resize_dims=[self.fulldataset.height, self.fulldataset.width],
+            resize_dims=[self.dataset.height, self.dataset.width],
             random_shuffle=True,
             seed=self.dali_seed,
             sequence_length=self.unlabeled_sequence_length,
@@ -296,17 +296,17 @@ class UnlabeledDataModule(BaseDataModule):
         print("Computing PCA on the keypoints...")
         # Nick: Subset inherits from dataset, it doesn't have access to
         # dataset.keypoints
-        if type(self.train_set) == torch.utils.data.dataset.Subset:
-            indxs = torch.tensor(self.train_set.indices)
+        if type(self.train_dataset) == torch.utils.data.dataset.Subset:
+            indxs = torch.tensor(self.train_dataset.indices)
             regressionData = (
-                super(type(self.fulldataset), self.fulldataset)
-                if type(self.fulldataset) == HeatmapDataset
-                else self.fulldataset
+                super(type(self.dataset), self.dataset)
+                if type(self.dataset) == HeatmapDataset
+                else self.dataset
             )
             data_arr = torch.index_select(
-                self.fulldataset.keypoints.detach().clone(), 0, indxs
+                self.dataset.keypoints.detach().clone(), 0, indxs
             )
-            if self.fulldataset.imgaug_transform:
+            if self.dataset.imgaug_transform:
                 i = 0
                 for idx in indxs:
                     vals = regressionData.__getitem__(idx)
@@ -314,12 +314,12 @@ class UnlabeledDataModule(BaseDataModule):
                     i += 1
         else:
             data_arr = (
-                self.train_set.keypoints.detach().clone()
+                self.train_dataset.keypoints.detach().clone()
             )  # won't work for random splitting
-            if self.train_set.imgaug_transform:
+            if self.train_dataset.imgaug_transform:
                 for i in range(len(data_arr)):
                     data_arr[i] = super(
-                        type(self.train_set), self.train_set
+                        type(self.train_dataset), self.train_dataset
                     ).__getitem__(i)[1]
 
         # TODO: format_mouse_data is specific to Rick's dataset, change when
@@ -374,7 +374,7 @@ class UnlabeledDataModule(BaseDataModule):
     def train_dataloader(self):
         loader = {
             "labeled": DataLoader(
-                self.train_set,
+                self.train_dataset,
                 batch_size=self.train_batch_size,
                 num_workers=self.num_workers_for_labeled,
             ),
@@ -385,7 +385,7 @@ class UnlabeledDataModule(BaseDataModule):
     # TODO: check if necessary
     def predict_dataloader(self):
         return DataLoader(
-            self.test_set,
+            self.test_dataset,
             batch_size=self.test_batch_size,
             num_workers=self.num_workers_for_labeled,
         )

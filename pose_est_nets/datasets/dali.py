@@ -19,8 +19,6 @@ from typing import List, Optional, Union
 _IMAGENET_MEAN = [0.485, 0.456, 0.406]
 _IMAGENET_STD = [0.229, 0.224, 0.225]
 _DALI_DEVICE = "gpu" if torch.cuda.is_available() else "cpu"
-_SEQUENCE_LENGTH_UNSUPERVISED = 16
-_INITIAL_PREFETCH_SIZE = 16
 
 
 # TODO: use the below in the lightning wrapper

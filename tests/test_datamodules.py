@@ -103,7 +103,7 @@ def test_base_datamodule():
     train_dataloader = heatmap_module.train_dataloader()
     assert (
         len(train_dataloader.dataset)
-        == int(train_probability * len(heatmap_module.fulldataset))
+        == int(train_probability * len(heatmap_module.dataset))
     )
 
     train_frames = 0.1  # fraction < 1
@@ -116,7 +116,7 @@ def test_base_datamodule():
     train_dataloader = heatmap_module.train_dataloader()
     assert (
         len(train_dataloader.dataset)
-        == int(train_frames * train_probability * len(heatmap_module.fulldataset))
+        == int(train_frames * train_probability * len(heatmap_module.dataset))
     )
 
     train_frames = 1000000  # integer larger than number of labeled frames
@@ -129,7 +129,7 @@ def test_base_datamodule():
     train_dataloader = heatmap_module.train_dataloader()
     assert (
         len(train_dataloader.dataset)
-        == int(train_probability * len(heatmap_module.fulldataset))
+        == int(train_probability * len(heatmap_module.dataset))
     )
 
     # raise exception when not a path

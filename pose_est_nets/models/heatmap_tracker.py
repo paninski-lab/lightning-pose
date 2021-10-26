@@ -171,15 +171,13 @@ class HeatmapTracker(BaseFeatureExtractor):
     def heatmaps_from_representations(
         self,
         representations: TensorType[
-            "Batch_Size",
-            "Features",
-            "Representation_Height",
-            "Representation_Width",
+            "batch",
+            "features",
+            "rep_height",
+            "rep_width",
             float,
         ],
-    ) -> TensorType[
-        "Batch_Size", "Num_Keypoints", "Heatmap_Height", "Heatmap_Width", float
-    ]:
+    ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width", float]:
         """Wrapper around self.upsampling_layers for type and shape assertion.
 
         Args:
@@ -192,8 +190,8 @@ class HeatmapTracker(BaseFeatureExtractor):
 
     @typechecked
     def forward(
-        self, images: TensorType["Batch_Size", 3, "Image_Height", "Image_Width"]
-    ) -> TensorType["Batch_Size", "Num_Keypoints", "Heatmap_Height", "Heatmap_Width",]:
+        self, images: TensorType["batch", "channels":3, "image_height", "image_width"]
+    ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Forward pass through the network.
 
         Args:
