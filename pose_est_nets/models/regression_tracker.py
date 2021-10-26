@@ -64,22 +64,20 @@ class RegressionTracker(BaseFeatureExtractor):
     @typechecked
     def reshape_representation(
         representation: TensorType[
-            "Batch_Size",
-            "Features",
-            "Representation_Height",
-            "Representation_Width",
+            "batch",
+            "features",
+            "rep_height",
+            "rep_width",
             float,
         ]
-    ) -> TensorType["Batch_Size", "Features", float]:
+    ) -> TensorType["batch", "features", float]:
         return representation.reshape(representation.shape[0], representation.shape[1])
 
     @typechecked
     def forward(
         self,
-        images: TensorType[
-            "Batch_Size", "Image_Channels":3, "Image_Height", "Image_Width", float
-        ],
-    ) -> TensorType["Batch_Size", "Num_Targets"]:
+        images: TensorType["batch", "channels":3, "image_height", "image_width", float],
+    ) -> TensorType["batch", "2 x num_keypoints"]:
         """Forward pass through the network.
 
         Args:
