@@ -107,7 +107,7 @@ where again, `hydra_paths` should be a list of strings with folder names within 
 ## Predict keypoints on new videos
 With a trained model and a path to a new videos, you can generate predictions for each frame and save it as a `.csv` or `.h5` file. You need to specify two paths:
 1. `eval.hydra_paths`: path to models to use for prediction: 
-2. `eval.path_to_test_videos`: path to a *folder* with new videos
+2. `eval.path_to_test_videos`: path to a *folder* with new videos (not a single video)
 3. `path_to_save_predictions`: optional path specifying where to save predictions. If `null`, the predictions will be saved in `eval.path_to_test_videos`.
 
 as in above, you could directly edit `scripts/configs/eval/eval_params.yaml` and run
