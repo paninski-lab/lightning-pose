@@ -1,7 +1,7 @@
 import imgaug.augmenters as iaa
 import numpy as np
 import torch
-from pose_est_nets.utils.IO import set_or_open_folder, get_latest_version
+from pose_est_nets.utils.io import set_or_open_folder, get_latest_version
 from pose_est_nets.models.heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
@@ -160,12 +160,12 @@ def predict_videos(
     import pandas as pd
     import time
 
-    from pose_est_nets.datasets.DALI import video_pipe, LightningWrapper, count_frames
+    from pose_est_nets.datasets.dali import video_pipe, LightningWrapper, count_frames
     from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
     from pose_est_nets.models.regression_tracker import RegressionTracker, \
         SemiSupervisedRegressionTracker
     from pose_est_nets.models.heatmap_tracker import HeatmapTracker, SemiSupervisedHeatmapTracker
-    from pose_est_nets.utils.IO import set_or_open_folder, get_latest_version
+    from pose_est_nets.utils.io import set_or_open_folder, get_latest_version
 
     # check input
     if save_file is not None:

@@ -36,12 +36,12 @@ def test_heatmap_dataset():
         heatmapData.height,
         heatmapData.width,
     )
-    image, heatmaps, labels = heatmapData[0]
+    image, heatmaps, keypoints = heatmapData[0]
     assert image.shape == (3, 384, 384)  # resized image shape
-    assert labels.shape == (34,)
+    assert keypoints.shape == (34,)
     assert heatmaps.shape[1:] == heatmapData.output_shape
     assert type(regData[0][1]) == torch.Tensor
-    numLabels = regData.labels.shape[1]
+    numKeypoints = regData.keypoints.shape[1]
 
     # for idx in range(numLabels):
     #     if torch.any(torch.isnan(regData.__getitem__(0)[1][idx])):

@@ -1,5 +1,6 @@
 import numpy as np
 
+
 # taken from https://github.com/jgraving/DeepPoseKit/blob/master/deepposekit/utils/keypoints.py
 def draw_keypoints(keypoints, height, width, output_shape, sigma=1, normalize=True):
     keypoints = keypoints.copy()

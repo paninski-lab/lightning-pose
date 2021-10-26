@@ -4,20 +4,20 @@ from setuptools import find_packages, setup
 version = None
 
 install_requires = [
-    "torchvision",
-    "pytorch-lightning",
+    "black",
+    "fiftyone",
+    "h5py",
+    "hydra-core",
+    "imgaug",
+    "matplotlib",
     "pandas",
     "pillow",
     "pytest",
-    "h5py",
-    "matplotlib",
-    "typeguard",
-    "torchtyping",
-    "imgaug",
+    "pytorch-lightning",
     "sklearn",
-    "hydra-core",
-    "black",
-    "fiftyone",
+    "torchtyping",
+    "torchvision",
+    "typeguard",
 ]
 
 

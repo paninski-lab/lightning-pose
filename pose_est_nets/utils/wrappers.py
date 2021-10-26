@@ -1,7 +1,8 @@
 import torch
 import matplotlib.pyplot as plt
 import os
-from pose_est_nets.utils.IO import save_object, get_latest_version
+from pose_est_nets.utils.io import save_object, get_latest_version
+
 
 def predict_plot_test_epoch(model,
                   dataloader,
@@ -32,6 +33,7 @@ def predict_plot_test_epoch(model,
     save_object(preds_dict, os.path.join(preds_folder, "preds"))
 
     return preds_dict
+
 
 def scatter_predictions(image: torch.Tensor, labels: torch.Tensor, preds: torch.Tensor) -> None:
     '''we assume that labels/preds come in format [x_1, y_1, x_2, y_2 ...]'''

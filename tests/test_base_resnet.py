@@ -5,7 +5,7 @@ import pytest
 import pytorch_lightning as pl
 import shutil
 from pose_est_nets.utils.wrappers import predict_plot_test_epoch
-from pose_est_nets.utils.IO import set_or_open_folder, load_object
+from pose_est_nets.utils.io import set_or_open_folder, load_object
 from typing import Optional
 from pose_est_nets.models.base_resnet import BaseFeatureExtractor
 import torchvision

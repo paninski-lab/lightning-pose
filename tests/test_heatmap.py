@@ -6,7 +6,7 @@ import pytest
 import pytorch_lightning as pl
 import shutil
 from pose_est_nets.utils.wrappers import predict_plot_test_epoch
-from pose_est_nets.utils.IO import set_or_open_folder, load_object
+from pose_est_nets.utils.io import set_or_open_folder, load_object
 from typing import Optional
 import torchvision
 from pose_est_nets.datasets.datasets import HeatmapDataset
@@ -100,18 +100,16 @@ def test_unsupervised():  # TODO Finish writing test
     assert os.path.exists(video_directory)
     video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
     vids = []
-    for (
-        f
-    ) in (
-        video_files
-    ):  # video_directory may contain other random files that are not vids, DALI will try to read them
+
+    # video_directory may contain other random files that are not vids, DALI will try to read them
+    for f in video_files:
         if f.endswith(".mp4"):  # hardcoded for the toydataset folder
             vids.append(f)
-    # video_directory = os.path.join(
-    #     "/home/jovyan/mouseRunningData/unlabeled_videos"
-    # )  # DAN's
 
-    with open("pose_est_nets/losses/default_hypers.yaml") as f:
+    # grab example loss config file from repo
+    base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
+    loss_cfg = os.path.join(base_dir, "scripts", "configs", "losses", "loss_params.yaml")
+    with open(loss_cfg) as f:
         loss_param_dict = yaml.load(f, Loader=yaml.FullLoader)
 
     datamod = UnlabeledDataModule(
@@ -134,12 +132,7 @@ def test_unsupervised():  # TODO Finish writing test
     out = next(iter(loader))
     assert list(out.keys())[0] == "labeled"
     assert list(out.keys())[1] == "unlabeled"
-    assert out["unlabeled"].shape == (
-        datamod.train_batch_size,
-        3,
-        384,
-        384,
-    )
+    assert out["unlabeled"].shape == (datamod.train_batch_size, 3, 384, 384,)
     print(out["labeled"][0].device)
     print(out["unlabeled"].device)
     print(model.device)
