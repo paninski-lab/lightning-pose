@@ -11,7 +11,7 @@ fifty_one_dataset_name: "rick_data_test"
 path_to_test_videos: "/home/jovyan/lightning-pose/toy_datasets/toymouseRunningData/unlabeled_videos" #"/datastores/mouseRunningData/1/unlabeled_videos"
 
 # path to save the .csv file with preds:
-path_to_save_predictions: "/home/jovyan/lightning-pose/toy_datasets/toymouseRunningData/unlabeled_videos/bla.csv" # either csv or h5
+path_to_save_predictions: null # "/home/jovyan/lightning-pose/toy_datasets/toymouseRunningData/unlabeled_videos/bla.csv" # either csv or h5
 
 # params for loading images from the video using nvidia-dali
 dali_parameters:
