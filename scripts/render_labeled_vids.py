@@ -49,12 +49,25 @@ for frame_idx in range(csv_with_preds.shape[0]):  # loop over frames
 dataset.add_sample(video_sample)
 dataset.compute_metadata()
 # print(dataset)
+
+config = foua.DrawConfig(
+    {"keypoints_size": 9}
+)  # note that 9 is approximately 40+ times smaller than the image
+
+# launch an interactive session
 session = fo.launch_app(dataset, remote=True)
 session.wait()
+
+# Render the labels
+config = foua.DrawConfig({"keypoints_size": 9})
+outpath = "/home/jovyan/vid.mp4"
+print("Writing labeled images to '%s'" % outpath)
+foua.draw_labeled_video(video_sample, outpath, config=config)
+print("Writing complete")
+
+# save to disc
+
 # inspect frames
 # for frame_number, frame in video_sample.frames.items():
 #     print(frame)
 #     break
-
-# now loop over the rows of the csv with prediction. add frame information as frame["predictions"]
-annotation_config = foua.AnnotationConfig()
