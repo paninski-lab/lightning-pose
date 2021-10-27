@@ -1,15 +1,16 @@
 import fiftyone as fo
 import pandas as pd
 import os
-import fiftyone.utils.video as fouv
+import fiftyone.utils.annotations as foua
 
-# TODO: make a dataset?
+
 dataset = fo.Dataset()
 
 video_path = "/home/jovyan/lightning-pose/toy_datasets/toymouseRunningData/unlabeled_videos/test_vid.mp4"
 
-"""if video_path is not codec h.264:
+"""video_path, if mp4, should be codec h.264. if not:
 video_path_transformed = "/home/jovyan/lightning-pose/toy_datasets/toymouseRunningData/unlabeled_videos/transformed_test_vid.mp4"
+import fiftyone.utils.video as fouv
 fouv.reencode_video(video_path, video_path_transformed, verbose=False)
 """
 
@@ -20,7 +21,7 @@ print(video_sample)
 
 
 csv_with_preds = pd.read_csv(
-    "/home/jovyan/lightning-pose/toy_datasets/toymouseRunningData/unlabeled_videos/bla.csv",
+    "/home/jovyan/lightning-pose/toy_datasets/toymouseRunningData/unlabeled_videos/test_vid_heatmap.csv",
     header=[1, 2],
 )
 
@@ -56,3 +57,4 @@ session.wait()
 #     break
 
 # now loop over the rows of the csv with prediction. add frame information as frame["predictions"]
+annotation_config = foua.AnnotationConfig()
