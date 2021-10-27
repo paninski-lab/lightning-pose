@@ -3,9 +3,10 @@ import pandas as pd
 import os
 import fiftyone.utils.annotations as foua
 
-
+# TODO: name as param
 dataset = fo.Dataset()
 
+# TODO: as param
 video_path = "/home/jovyan/lightning-pose/toy_datasets/toymouseRunningData/unlabeled_videos/test_vid.mp4"
 
 """video_path, if mp4, should be codec h.264. if not:
@@ -19,7 +20,7 @@ assert os.path.isfile(video_path)
 video_sample = fo.Sample(filepath=video_path)
 print(video_sample)
 
-
+# TODO: as param
 csv_with_preds = pd.read_csv(
     "/home/jovyan/lightning-pose/toy_datasets/toymouseRunningData/unlabeled_videos/test_vid_heatmap.csv",
     header=[1, 2],
@@ -50,6 +51,7 @@ dataset.add_sample(video_sample)
 dataset.compute_metadata()
 # print(dataset)
 
+# TODO: control more params from outside. also for app
 config = foua.DrawConfig(
     {"keypoints_size": 9}
 )  # note that 9 is approximately 40+ times smaller than the image
@@ -58,7 +60,7 @@ config = foua.DrawConfig(
 session = fo.launch_app(dataset, remote=True)
 session.wait()
 
-# Render the labels
+# TODO: by definition always save to disk.
 config = foua.DrawConfig({"keypoints_size": 9})
 outpath = "/home/jovyan/vid.mp4"
 print("Writing labeled images to '%s'" % outpath)
