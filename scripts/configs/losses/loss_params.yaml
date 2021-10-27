@@ -18,4 +18,8 @@ temporal:
   weight: 0.7
 
   # for epsilon insensitive rectification (in pixels; diffs below this are not penalized)
+<<<<<<< develop
   epsilon: 10.
+=======
+  epsilon: 5.
+>>>>>>> select gpu_id in training config
