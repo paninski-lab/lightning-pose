@@ -17,8 +17,8 @@ def tensor_to_keypoint_list(keypoint_tensor, height, width):  # TODO: move to ut
         img_kpts_list.append(
             tuple(
                 (
-                    float(keypoint_tensor[i][0] / height),
-                    float(keypoint_tensor[i][1] / width),
+                    float(keypoint_tensor[i][0] / width),  # height
+                    float(keypoint_tensor[i][1] / height),  # width
                 )
             )
         )
