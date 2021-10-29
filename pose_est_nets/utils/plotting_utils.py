@@ -48,7 +48,7 @@ def get_model_class(map_type: str, semi_supervised: bool):
             )
 
 
-def load_model_from_checkpoint(cfg: DictConfig, ckpt_file: str):
+def load_model_from_checkpoint(cfg: DictConfig, ckpt_file: str, eval: bool = False):
     """this will have: path to a specific .ckpt file which we extract using other funcs
     will also take the standard hydra config file"""
     # pick the right model class
@@ -65,6 +65,8 @@ def load_model_from_checkpoint(cfg: DictConfig, ckpt_file: str):
         )
     else:
         model = ModelClass.load_from_checkpoint(ckpt_file)
+    if eval:
+        model.eval()
     return model
 
 
@@ -260,7 +262,7 @@ def predict_videos(
     else:
         raise ValueError("cfg_file must be str or DictConfig, not %s!" % type(cfg_file))
 
-    model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file)
+    model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
 
     model.to(device_pt)
     model.eval()
@@ -308,8 +310,11 @@ def predict_videos(
         n_frames_ = count_frames(video_file)  # total frames in video
         n_frames = 0  # total frames processed
         keypoints_np = np.zeros((n_frames_, model.num_targets))
+        confidence_np = np.zeros((n_frames_, model.num_targets // 2))
+
         t_beg = time.time()
         n = -1
+        # TODO: seperate it out from the function
         with torch.no_grad():
             for n, batch in enumerate(tqdm(predict_loader)):
                 outputs = model.forward(batch)
@@ -320,14 +325,18 @@ def predict_videos(
                     confidence = confidence.detach().cpu().numpy()
                 else:
                     pred_keypoints = outputs.detach().cpu().numpy()
+                    confidence = np.zeros((outputs.shape[0], outputs.shape[1] // 2))
                 n_frames_curr = pred_keypoints.shape[0]
                 if n_frames + n_frames_curr > n_frames_:
                     # final sequence
                     final_batch_size = n_frames_ - n_frames
                     keypoints_np[n_frames:] = pred_keypoints[:final_batch_size]
+                    confidence_np[n_frames:] = confidence[:final_batch_size]
                     n_frames_curr = final_batch_size
-                else:
+                else:  # at every sequence except the final
                     keypoints_np[n_frames : n_frames + n_frames_curr] = pred_keypoints
+                    confidence_np[n_frames : n_frames + n_frames_curr] = confidence
+
                 n_frames += n_frames_curr
             t_end = time.time()
             if n == -1:
@@ -371,6 +380,7 @@ def predict_videos(
         y_resize = cfg.data.image_resize_dims.height
         y_og = cfg.data.image_orig_dims.height
         predictions[:, 1::3] = keypoints_np[:, 1::2] / y_resize * y_og
+        predictions[:, 2::3] = confidence_np
 
         xyl_labels = ["x", "y", "likelihood"]
         joint_labels = ["bp_%i" % n for n in range(model.num_keypoints)]

@@ -1,6 +1,5 @@
 # loss = projection onto the discarded eigenvectors
 pca:
-
   # weight in front of PCA loss
   weight: 0.6
 
@@ -15,9 +14,8 @@ pca:
 
 # loss = norm of distance between successive timepoints
 temporal:
-
   # weight in front of temporal loss
   weight: 0.7
 
   # for epsilon insensitive rectification (in pixels; diffs below this are not penalized)
-  epsilon: null
+  epsilon: 10.

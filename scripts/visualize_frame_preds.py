@@ -15,11 +15,22 @@ import imgaug.augmenters as iaa
 from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
 from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
 from pose_est_nets.utils.fiftyone_plotting_utils import make_dataset_and_evaluate
-from pose_est_nets.utils.plotting_utils import get_model_class
+from pose_est_nets.utils.plotting_utils import (
+    get_model_class,
+    load_model_from_checkpoint,
+)
+from pose_est_nets.utils.io import (
+    get_absolute_hydra_path_from_hydra_str,
+    ckpt_path_from_base_path,
+)
+from pose_est_nets.utils.io import get_absolute_data_paths
 
 
 @hydra.main(config_path="configs", config_name="config")
 def predict(cfg: DictConfig):
+
+    data_dir, video_dir = get_absolute_data_paths(cfg.data)
+
     # How to transform the images
     data_transform = []
     data_transform.append(
@@ -33,10 +44,13 @@ def predict(cfg: DictConfig):
     imgaug_transform = iaa.Sequential(data_transform)
     # Losses used for models
     loss_param_dict = OmegaConf.to_object(cfg.losses)
-    losses_to_use = OmegaConf.to_object(cfg.model.losses_to_use)
+    if cfg.model.losses_to_use is not None:
+        losses_to_use = OmegaConf.to_object(cfg.model.losses_to_use)
+    else:
+        losses_to_use = []
     # Assume we are using heatmap dataset for evaluation even if no models are heatmap models
     dataset = HeatmapDataset(
-        root_directory=cfg.data.data_dir,
+        root_directory=data_dir,
         csv_path=cfg.data.csv_file,
         header_rows=OmegaConf.to_object(cfg.data.header_rows),
         imgaug_transform=imgaug_transform,
@@ -45,7 +59,7 @@ def predict(cfg: DictConfig):
     # We don't need the unsupervised functionality for testing purposes on labeled frames, but keep for now because it sets up loss_param_dict
     datamod = UnlabeledDataModule(
         dataset=dataset,
-        video_paths_list=cfg.data.video_dir,  # just a single path for now
+        video_paths_list=video_dir,  # just a single path for now
         specialized_dataprep=losses_to_use,
         loss_param_dict=loss_param_dict,
         train_batch_size=cfg.training.train_batch_size,
@@ -54,31 +68,20 @@ def predict(cfg: DictConfig):
         num_workers=cfg.training.num_workers,
     )
 
-    # for now this works without saving the pca params to dict
     bestmodels = {}
-    for hydra_path in cfg.eval.hydra_paths:
-        if hydra_path[-1] != "/":
-            hydra_path += "/"
-        model_config = OmegaConf.load("../../" + hydra_path + ".hydra/config.yaml")
-        model_name = model_config.model.model_name
-        ModelClass = get_model_class(
-            model_config.model.model_type, model_config.model.semi_supervised
+    for hydra_relative_path in cfg.eval.hydra_paths:
+        absolute_cfg_path = get_absolute_hydra_path_from_hydra_str(hydra_relative_path)
+        model_cfg = OmegaConf.load(
+            os.path.join(absolute_cfg_path, ".hydra/config.yaml")
+        )  # path for the cfg file saved from the current trained model
+        ckpt_file = ckpt_path_from_base_path(
+            base_path=absolute_cfg_path, model_name=model_cfg.model.model_name
         )
-        ckpt_path = (
-            "../../" + hydra_path + "tb_logs/" + model_name + "/version_0/checkpoints/"
-        )
-        model_path = ckpt_path + os.listdir(ckpt_path)[0]
-        if model_config.model.semi_supervised:
-            model = ModelClass.load_from_checkpoint(
-                model_path,
-                semi_super_losses_to_use=OmegaConf.to_object(
-                    model_config.model.losses_to_use
-                ),
-                loss_params=loss_param_dict,  # loss param dict is generic
-            )
-        else:
-            model = ModelClass.load_from_checkpoint(model_path)
-        bestmodels[model_name] = model
+
+        model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file)
+
+        bestmodels[model_cfg.model.model_name] = model
+
     make_dataset_and_evaluate(cfg, datamod, bestmodels)
 
 
