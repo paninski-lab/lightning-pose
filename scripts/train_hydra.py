@@ -14,6 +14,7 @@ from pose_est_nets.models.heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
 )
+from pose_est_nets.utils.io import get_absolute_data_paths
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import BackboneFinetuning
 from typing import Tuple
@@ -23,39 +24,12 @@ import os
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def get_absolute_toy_data_paths(data_cfg: DictConfig) -> Tuple[str, str]:
-    """function to generate absolute path for our example toy data, wherever lightning-pose may be saved.
-    @hydra.main decorator switches the cwd when executing the decorated function, e.g., our train().
-    so we're in some /outputs/YYYY-MM-DD/HH-MM-SS folder.
-
-    Args:
-        data_cfg (DictConfig): data configuration file with paths to data folder and video folder.
-
-    Returns:
-        Tuple[str, str]: absolute paths to data and video folders.
-    """
-    if os.path.isabs(data_cfg.data_dir):  # both data and video paths are absolute
-        data_dir = data_cfg.data_dir
-        video_dir = data_cfg.video_dir
-    else:  # data_dir path is relative to lightning-pose, and video_dir is relative to data_dir (our toy_datasets)
-        cwd_split = os.getcwd().split(os.path.sep)
-        desired_path_list = cwd_split[:-3]
-        data_dir = os.path.join(os.path.sep, *desired_path_list, data_cfg.data_dir)
-        video_dir = os.path.join(
-            data_dir, data_cfg.video_dir
-        )  # video is inside data_dir
-    # assert that those paths exist and in the proper format
-    assert os.path.isdir(data_dir)
-    assert os.path.isdir(video_dir) or os.path.isfile(video_dir)
-    return data_dir, video_dir
-
-
 @hydra.main(config_path="configs", config_name="config")
 def train(cfg: DictConfig):
     print("Our Hydra config file:")
     print(cfg)
 
-    data_dir, video_dir = get_absolute_toy_data_paths(cfg.data)
+    data_dir, video_dir = get_absolute_data_paths(cfg.data)
 
     data_transform = []
     data_transform.append(

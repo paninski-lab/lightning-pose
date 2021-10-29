@@ -2,7 +2,8 @@ from operator import sub
 import os
 import pickle
 from typeguard import typechecked
-from typing import Any
+from typing import Any, Tuple
+from omegaconf import DictConfig, OmegaConf
 
 
 @typechecked
@@ -90,3 +91,33 @@ def ckpt_path_from_base_path(
     # TODO: we're taking the last ckpt. make sure that with multiple checkpoints, this is what we want
     model_ckpt_path = glob.glob(model_search_path)[-1]
     return model_ckpt_path
+
+
+@typechecked
+def get_absolute_data_paths(data_cfg: DictConfig) -> Tuple[str, str]:
+    """function to generate absolute path for our example toy data, wherever lightning-pose may be saved.
+    @hydra.main decorator switches the cwd when executing the decorated function, e.g., our train().
+    so we're in some /outputs/YYYY-MM-DD/HH-MM-SS folder.
+
+    Args:
+        data_cfg (DictConfig): data configuration file with paths to data folder and video folder.
+
+    Returns:
+        Tuple[str, str]: absolute paths to data and video folders.
+    """
+    if os.path.isabs(
+        data_cfg.data_dir
+    ):  # both data and video paths are already absolute
+        data_dir = data_cfg.data_dir
+        video_dir = data_cfg.video_dir
+    else:  # our toy_datasets:
+        cwd_split = os.getcwd().split(os.path.sep)
+        desired_path_list = cwd_split[:-3]
+        data_dir = os.path.join(os.path.sep, *desired_path_list, data_cfg.data_dir)
+        video_dir = os.path.join(
+            data_dir, data_cfg.video_dir
+        )  # video is inside data_dir
+    # assert that those paths exist and in the proper format
+    assert os.path.isdir(data_dir)
+    assert os.path.isdir(video_dir) or os.path.isfile(video_dir)
+    return data_dir, video_dir

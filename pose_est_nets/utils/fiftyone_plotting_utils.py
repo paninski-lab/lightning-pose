@@ -9,26 +9,25 @@ from imgaug.augmentables.kps import Keypoint, KeypointsOnImage
 from pose_est_nets.models.heatmap_tracker import HeatmapTracker
 import torch
 from tqdm import tqdm
-from typing import Union
+from typing import Union, Callable
 import pandas as pd
 
 
-def make_keypoint_list(
-    keypoint_arr: Union[torch.tensor, pd.core.frame.dataframe],
-    img_width: int,
-    img_height: int,
-) -> list:  # why not making anything into pandas arr?
-    """this function will have two modes. one is a pandas dframe, the other is a tensor.
-    or alternatively, convert everything to a tensor/numpy arr and index with ints"""
-    if type(keypoint_arr) is torch.tensor:
-        print("tensor")
-    elif type(keypoint_arr) is pd.core.frame.dataframe:
-        print("dataframe")
-    return []
+# def make_keypoint_list(
+#     keypoint_arr: Union[torch.tensor, pd.core.frame.dataframe],
+#     img_width: int,
+#     img_height: int,
+# ) -> list:  # why not making anything into pandas arr?
+#     """this function will have two modes. one is a pandas dframe, the other is a tensor.
+#     or alternatively, convert everything to a tensor/numpy arr and index with ints"""
+#     if type(keypoint_arr) is torch.tensor:
+#         print("tensor")
+#     elif type(keypoint_arr) is pd.core.frame.dataframe:
+#         print("dataframe")
+#     return []
 
 
 def tensor_to_keypoint_list(keypoint_tensor, height, width):
-    print(keypoint_tensor.shape)
     # TODO: standardize across video and image plotting. Dan's video util is more updated.
     img_kpts_list = []
     for i in range(len(keypoint_tensor)):
@@ -45,7 +44,7 @@ def tensor_to_keypoint_list(keypoint_tensor, height, width):
     return img_kpts_list
 
 
-def make_dataset_and_evaluate(cfg, datamod, best_models):
+def make_dataset_and_evaluate(cfg: DictConfig, datamod: Callable, best_models: dict):
     reverse_transform = []
     reverse_transform.append(
         iaa.Resize(
@@ -100,6 +99,8 @@ def make_dataset_and_evaluate(cfg, datamod, best_models):
                     type(model), HeatmapTracker
                 ):  # check if model is in the heatmap family
                     pred, confidence = model.run_subpixelmaxima(pred)
+                    print(pred)
+                    print(confidence)
                 resized_pred = reverse_transform(
                     images=img_BHWC.numpy(),
                     keypoints=(pred.detach().numpy().reshape((1, -1, 2))),
@@ -116,7 +117,12 @@ def make_dataset_and_evaluate(cfg, datamod, best_models):
 
     full_dataset = fo.Dataset(cfg.eval.fifty_one_dataset_name)
     full_dataset.add_samples(samples)
+    print("fiftyone_dataset:")
+    print(full_dataset)
+    print("fiftyone_dataset.first():")
+    print(full_dataset.first())
     full_dataset.compute_metadata()
-    session = fo.launch_app(full_dataset, remote=True)
-    session.wait()
+    print(full_dataset.exists("metadata", False))
+    # session = fo.launch_app(full_dataset, remote=True)
+    # session.wait()
     return
