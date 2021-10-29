@@ -115,8 +115,10 @@ def train(cfg: DictConfig):
                 torch_seed=cfg.training.rng_seed_model_pt,
             )
         else:
-            print("INVALID DATASET SPECIFIED")
-            exit()
+            raise NotImplementedError(
+                "%s is an invalid cfg.model.model_type for a fully supervised model"
+                % cfg.model.model_type
+            )
 
     else:
         loss_param_dict = OmegaConf.to_object(cfg.losses)
@@ -156,6 +158,11 @@ def train(cfg: DictConfig):
                 loss_params=datamod.loss_param_dict,
                 semi_super_losses_to_use=losses_to_use,
                 torch_seed=cfg.training.rng_seed_model_pt,
+            )
+        else:
+            raise NotImplementedError(
+                "%s is an invalid cfg.model.model_type for a semi-supervised model"
+                % cfg.model.model_type
             )
 
     logger = TensorBoardLogger("tb_logs", name=cfg.model.model_name)
