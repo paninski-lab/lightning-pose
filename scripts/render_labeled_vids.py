@@ -4,8 +4,6 @@ import os
 import fiftyone.utils.annotations as foua
 from tqdm import tqdm
 
-# TODO: name as param
-dataset = fo.Dataset()
 
 # TODO: as param
 video_path = "/home/jovyan/lightning-pose/toy_datasets/toymouseRunningData/unlabeled_videos/test_vid.mp4"
@@ -19,7 +17,6 @@ fouv.reencode_video(video_path, video_path_transformed, verbose=False)
 assert os.path.isfile(video_path)
 
 video_sample = fo.Sample(filepath=video_path)
-print(video_sample)
 
 # TODO: as param
 csv_with_preds = pd.read_csv(
@@ -50,13 +47,14 @@ for frame_idx in tqdm(range(csv_with_preds.shape[0])):  # loop over frames
                     ]
                 ],
                 confidence=csv_with_preds[kp_name]["likelihood"][frame_idx],
-                name=kp_name,
+                label=kp_name,
             )
         )
     video_sample.frames[frame_idx + 1]["preds"] = fo.Keypoints(keypoints=keypoints_list)
 print("Done.")
 
-
+# TODO: name as param
+dataset = fo.Dataset()
 dataset.add_sample(video_sample)
 dataset.compute_metadata()
 # print(dataset)

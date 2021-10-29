@@ -13,8 +13,8 @@ patch_typeguard()  # use before @typechecked
 
 @typechecked
 def MaskedRegressionMSELoss(
-    keypoints: TensorType["batch", "2 x num_keypoints"],
-    preds: TensorType["batch", "2 x num_keypoints"],
+    keypoints: TensorType["batch", "two_x_num_keypoints"],
+    preds: TensorType["batch", "two_x_num_keypoints"],
 ) -> TensorType[(), float]:
     """Compute MSE loss between ground truth and predicted coordinates.
 
@@ -35,8 +35,8 @@ def MaskedRegressionMSELoss(
 
 @typechecked
 def MaskedRMSELoss(
-    keypoints: TensorType["batch", "2 x num_keypoints"],
-    preds: TensorType["batch", "2 x num_keypoints"],
+    keypoints: TensorType["batch", "two_x_num_keypoints"],
+    preds: TensorType["batch", "two_x_num_keypoints"],
 ) -> TensorType[(), float]:
     """Compute RMSE loss between ground truth and predicted coordinates.
 
@@ -90,7 +90,7 @@ def MaskedMSEHeatmapLoss(
 @typechecked
 # what are we doing about NANS?
 def MultiviewPCALoss(
-    reshaped_maxima_preds: TensorType["batch", "2 x num_keypoints", float],
+    reshaped_maxima_preds: TensorType["batch", "two_x_num_keypoints", float],
     discarded_eigenvectors: TensorType["views_times_two", "num_discarded_evecs", float],
     epsilon: TensorType[float],
     **kwargs  # make loss robust to unneeded inputs
@@ -133,7 +133,7 @@ def MultiviewPCALoss(
 
 @typechecked
 def TemporalLoss(
-    preds: TensorType["batch", "2 x num_keypoints"],
+    preds: TensorType["batch", "two_x_num_keypoints"],
     epsilon: TensorType[float] = 5,
     **kwargs  # make loss robust to unneeded inputs
 ) -> TensorType[(), float]:

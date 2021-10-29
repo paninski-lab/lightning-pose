@@ -9,9 +9,27 @@ from imgaug.augmentables.kps import Keypoint, KeypointsOnImage
 from pose_est_nets.models.heatmap_tracker import HeatmapTracker
 import torch
 from tqdm import tqdm
+from typing import Union
+import pandas as pd
 
 
-def tensor_to_keypoint_list(keypoint_tensor, height, width):  # TODO: move to utils file
+def make_keypoint_list(
+    keypoint_arr: Union[torch.tensor, pd.core.frame.dataframe],
+    img_width: int,
+    img_height: int,
+) -> list:  # why not making anything into pandas arr?
+    """this function will have two modes. one is a pandas dframe, the other is a tensor.
+    or alternatively, convert everything to a tensor/numpy arr and index with ints"""
+    if type(keypoint_arr) is torch.tensor:
+        print("tensor")
+    elif type(keypoint_arr) is pd.core.frame.dataframe:
+        print("dataframe")
+    return []
+
+
+def tensor_to_keypoint_list(keypoint_tensor, height, width):
+    print(keypoint_tensor.shape)
+    # TODO: standardize across video and image plotting. Dan's video util is more updated.
     img_kpts_list = []
     for i in range(len(keypoint_tensor)):
         img_kpts_list.append(
@@ -39,7 +57,7 @@ def make_dataset_and_evaluate(cfg, datamod, best_models):
     )
     reverse_transform = iaa.Sequential(reverse_transform)
     image_names = datamod.dataset.image_names
-    gt_keypoints = datamod.dataset.keypoints
+    ground_truth_keypoints = datamod.dataset.keypoints
     train_indices = datamod.train_dataset.indices
     valid_indices = datamod.val_dataset.indices
     test_indices = datamod.test_dataset.indices
@@ -51,13 +69,15 @@ def make_dataset_and_evaluate(cfg, datamod, best_models):
     for idx, img_name in enumerate(tqdm(image_names)):
         img_path = os.path.join(cfg.data.data_dir, img_name)
         # assert os.path.isfile(img_path)
-        gt_img_kpts = gt_keypoints[idx]
+        ground_truth_img_kpts = ground_truth_keypoints[idx]
         nan_bool = (
-            torch.sum(torch.isnan(gt_img_kpts), dim=1) > 0
+            torch.sum(torch.isnan(ground_truth_img_kpts), dim=1) > 0
         )  # e.g., when dim == 0, those columns (keypoints) that have more than zero nans
-        gt_img_kpts = gt_img_kpts[~nan_bool]
-        gt_kpts_list = tensor_to_keypoint_list(
-            gt_img_kpts, cfg.data.image_orig_dims.height, cfg.data.image_orig_dims.width
+        ground_truth_img_kpts = ground_truth_img_kpts[~nan_bool]
+        ground_truth_kpts_list = tensor_to_keypoint_list(
+            ground_truth_img_kpts,
+            cfg.data.image_orig_dims.height,
+            cfg.data.image_orig_dims.width,
         )
         if idx in train_indices:
             tag = "train"
@@ -69,7 +89,7 @@ def make_dataset_and_evaluate(cfg, datamod, best_models):
             tag = "error"
         sample = fo.Sample(filepath=img_path, tags=[tag])
         sample["ground_truth"] = fo.Keypoints(
-            keypoints=[fo.Keypoint(points=gt_kpts_list)]
+            keypoints=[fo.Keypoint(points=ground_truth_kpts_list)]
         )
         img = datamod.dataset.__getitem__(idx)[0].unsqueeze(0)
         img_BHWC = img.permute(0, 2, 3, 1)  # Needs to be BHWC format
@@ -97,10 +117,6 @@ def make_dataset_and_evaluate(cfg, datamod, best_models):
     full_dataset = fo.Dataset(cfg.eval.fifty_one_dataset_name)
     full_dataset.add_samples(samples)
     full_dataset.compute_metadata()
-    # print(full_dataset)
-    # print("counts: {} ".format(full_dataset.count("ground_truth.keypoints.points")))
-    # print("metadata: {} ".format(full_dataset.compute_metadata()))
-    # print("first: {} ".format(full_dataset.first()))
     session = fo.launch_app(full_dataset, remote=True)
     session.wait()
     return
