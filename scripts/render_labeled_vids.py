@@ -2,6 +2,7 @@ import fiftyone as fo
 import pandas as pd
 import os
 import fiftyone.utils.annotations as foua
+from tqdm import tqdm
 
 # TODO: name as param
 dataset = fo.Dataset()
@@ -30,22 +31,31 @@ csv_with_preds = pd.read_csv(
 height = 406
 width = 396
 
-bodypart_names = csv_with_preds.columns.levels[0][1:]
+# Example from fiftyone team
+# fo.Keypoints(keypoints=[fo.Keypoint(points=[[0.5, 0.5]], confidence=0.5), ...])
 # TODO: check how to populate and use the confidence field
-for frame_idx in range(csv_with_preds.shape[0]):  # loop over frames
-    pred_list = []
-    for bp in bodypart_names:  # loop over bp names
-        # that's quick but looses body part name labels
-        pred_list.append(
-            (
-                csv_with_preds[bp]["x"][frame_idx] / width,
-                csv_with_preds[bp]["y"][frame_idx] / height,
+
+keypoint_names = csv_with_preds.columns.levels[0][1:]
+print("Populating the per-frame keypoints...")
+for frame_idx in tqdm(range(csv_with_preds.shape[0])):  # loop over frames
+    keypoints_list = []
+    for kp_name in keypoint_names:  # loop over bp names
+        # write a single keypoint's position, confidence, and name
+        keypoints_list.append(
+            fo.Keypoint(
+                points=[
+                    [
+                        csv_with_preds[kp_name]["x"][frame_idx] / width,
+                        csv_with_preds[kp_name]["y"][frame_idx] / height,
+                    ]
+                ],
+                confidence=csv_with_preds[kp_name]["likelihood"][frame_idx],
+                name=kp_name,
             )
         )
-    # note that their indexing starts from 1
-    video_sample.frames[frame_idx + 1]["preds"] = fo.Keypoints(
-        keypoints=[fo.Keypoint(points=pred_list)]
-    )
+    video_sample.frames[frame_idx + 1]["preds"] = fo.Keypoints(keypoints=keypoints_list)
+print("Done.")
+
 
 dataset.add_sample(video_sample)
 dataset.compute_metadata()
@@ -73,3 +83,21 @@ print("Writing complete")
 # for frame_number, frame in video_sample.frames.items():
 #     print(frame)
 #     break
+
+# bodypart_names = csv_with_preds.columns.levels[0][1:]
+# print("Populating the per-frame keypoints...")
+# for frame_idx in tqdm(range(csv_with_preds.shape[0])):  # loop over frames
+#     keypoints_list = []
+#     for bp in bodypart_names:  # loop over bp names
+#         # that's quick but looses body part name labels. works
+#         keypoints_list.append(
+#             (
+#                 csv_with_preds[bp]["x"][frame_idx] / width,
+#                 csv_with_preds[bp]["y"][frame_idx] / height,
+#             )
+#         )
+#     # # the below used to work note that their indexing starts from 1,
+#     video_sample.frames[frame_idx + 1]["preds"] = fo.Keypoints(
+#         keypoints=[fo.Keypoint(points=keypoints_list)]
+#     )
+# print("Done.")
