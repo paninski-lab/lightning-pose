@@ -12,22 +12,60 @@ from pose_est_nets.models.regression_tracker import (
 )
 import matplotlib.pyplot as plt
 import os
-from typing import Callable, Optional, Tuple, List
+from typing import Callable, Optional, Tuple, List, Union, Literal
 from typeguard import typechecked
 from tqdm import tqdm
+from omegaconf import DictConfig, OmegaConf
 
 
 def get_model_class(map_type: str, semi_supervised: bool):
+    """[summary]
+
+    Args:
+        map_type (str): "regression" | "heatmap"
+        semi_supervised (bool): True if you want to use unlabeled videos
+
+    Returns:
+        a ptl model class to be initialized outside of this function.
+    """
     if not (semi_supervised):
         if map_type == "regression":
             return RegressionTracker
         elif map_type == "heatmap":
             return HeatmapTracker
+        else:
+            raise NotImplementedError(
+                "%s is an invalid map_type for a fully supervised model" % map_type
+            )
     else:
         if map_type == "regression":
             return SemiSupervisedRegressionTracker
         elif map_type == "heatmap":
             return SemiSupervisedHeatmapTracker
+        else:
+            raise NotImplementedError(
+                "%s is an invalid map_type for a semi-supervised model" % map_type
+            )
+
+
+def load_model_from_checkpoint(cfg: DictConfig, ckpt_file: str):
+    """this will have: path to a specific .ckpt file which we extract using other funcs
+    will also take the standard hydra config file"""
+    # pick the right model class
+    ModelClass = get_model_class(
+        map_type=cfg.model.model_type,
+        semi_supervised=cfg.model.semi_supervised,
+    )
+    # initialize a model instance, with weights loaded from .ckpt file
+    if cfg.model.semi_supervised:
+        model = ModelClass.load_from_checkpoint(
+            ckpt_file,
+            semi_super_losses_to_use=OmegaConf.to_object(cfg.model.losses_to_use),
+            loss_params=OmegaConf.to_object(cfg.losses),
+        )
+    else:
+        model = ModelClass.load_from_checkpoint(ckpt_file)
+    return model
 
 
 def saveNumericalPredictions(model, datamod, threshold):
@@ -131,26 +169,26 @@ def plotPredictions(model, datamod, save_heatmaps, threshold, mode):
 
 
 def predict_videos(
-    video_path,
-    model_file,
-    config_file,
-    save_file=None,
-    sequence_length=16,
-    device="gpu",
+    video_path: str,
+    ckpt_file: str,
+    cfg_file: Union[str, DictConfig],
+    save_file: str,
+    sequence_length: int = 16,
+    device: Literal["gpu", "cuda", "cpu"] = "gpu",
     video_pipe_kwargs={},
 ):
     """Loop over a list of videos and process with tracker using DALI for fast inference.
 
     Args:
         video_path (str): process all videos located in this directory
-        model_file (str): .ckpt file for model
-        config_file (str): yaml file saved by hydra; must contain
-            - config_file.losses
-            - config_file.data.image_orig_dims
-            - config_file.data.image_resize_dims
-            - config_file.model.losses_to_use
-            - config_file.model.model_type
-            - config_file.model.semi_supervised
+        ckpt_file (str): .ckpt file for model
+        cfg_file (str): yaml file saved by hydra; must contain
+            - cfg_file.losses
+            - cfg_file.data.image_orig_dims
+            - cfg_file.data.image_resize_dims
+            - cfg_file.model.losses_to_use
+            - cfg_file.model.model_type
+            - cfg_file.model.semi_supervised
         save_file (str): full filename of tracked points; currently supports hdf5 and csv; if
             NoneType, the output will be saved in the video path
         sequence_length (int)
@@ -213,35 +251,17 @@ def predict_videos(
     if len(video_files) == 0:
         raise IOError("Did not find any video files (.mp4) in %s" % video_path)
 
-    # load configuration file
-    with open(config_file, "r") as f:
-        cfg = OmegaConf.load(f)
-
-    # load model weights
-    if not cfg.model.semi_supervised:
-        if cfg.model.model_type == "regression":
-            model = RegressionTracker.load_from_checkpoint(model_file)
-        elif cfg.model.model_type == "heatmap":
-            model = HeatmapTracker.load_from_checkpoint(model_file)
-        else:
-            raise NotImplementedError
+    if isinstance(cfg_file, str):
+        # load configuration file
+        with open(cfg_file, "r") as f:
+            cfg = OmegaConf.load(f)
+    elif isinstance(cfg_file, DictConfig):
+        cfg = cfg_file
     else:
-        loss_param_dict = OmegaConf.to_object(cfg.losses)
-        losses_to_use = OmegaConf.to_object(cfg.model.losses_to_use)
-        if cfg.model.model_type == "regression":
-            model = SemiSupervisedRegressionTracker.load_from_checkpoint(
-                model_file,
-                semi_super_losses_to_use=losses_to_use,
-                loss_params=loss_param_dict,
-            )
-        elif cfg.model.model_type == "heatmap":
-            model = SemiSupervisedHeatmapTracker.load_from_checkpoint(
-                model_file,
-                semi_super_losses_to_use=losses_to_use,
-                loss_params=loss_param_dict,
-            )
-        else:
-            raise NotImplementedError
+        raise ValueError("cfg_file must be str or DictConfig, not %s!" % type(cfg_file))
+
+    model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file)
+
     model.to(device_pt)
     model.eval()
 
