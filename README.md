@@ -21,11 +21,15 @@ As you would do for any other repository, first --
 
 Create the environment:
 
-```conda create --name <YOUR_ENVIRONMENT_NAME>```
+```console 
+foo@bar:~$ conda create --name <YOUR_ENVIRONMENT_NAME>
+```
 
 Activate the environment:
 
-```conda activate <YOUR_ENVIRONMENT_NAME>```
+```console
+foo@bar:~$ conda activate <YOUR_ENVIRONMENT_NAME>
+```
 
 Move into the folder where you want to place the repository folder:
 
