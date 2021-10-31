@@ -26,6 +26,43 @@ from pose_est_nets.utils.io import (
 from pose_est_nets.utils.io import get_absolute_data_paths
 
 
+def check_eval_model_names(names, hydra_paths) -> bool:
+    hydra_paths_list = OmegaConf.to_object(hydra_paths)
+    flag = False
+    if names is None:
+        print(
+            "cfg.eval.model_names is None, taking name from the model's cfg.model.model_name"
+        )
+        flag = True
+    else:
+        eval_model_names = OmegaConf.to_object(names)
+        if isinstance(eval_model_names, list):
+            if len(eval_model_names) != len(hydra_paths_list):
+                print(
+                    "Warning: cfg.eval.model_names and cfg.eval.hydra_paths are lists of different lengths, while they should match. taking name from the model's cfg.model.model_name"
+                )
+                flag = True
+    return flag
+
+
+def check_old_model_names(
+    model_name: str, model_ind: int, bestmodels: dict, hydra_relative_path
+) -> str:
+    if model_name in bestmodels.keys():
+        print(
+            "Warning: Got more than one model with the same name. \n",
+            "Check cfg.model.model_name for each model. \n",
+            "In this situation we recommended to provide concise names in cfg.eval.model_names corresponding to the cfg.eval.hydra_paths",
+        )
+        model_name = model_name + "_" + str(model_ind)
+        print(
+            "Renamed the model corresponding to {} as: {}".format(
+                hydra_relative_path, model_name
+            )
+        )
+    return model_name
+
+
 @hydra.main(config_path="configs", config_name="config")
 def predict(cfg: DictConfig):
 
@@ -69,18 +106,35 @@ def predict(cfg: DictConfig):
     )
 
     bestmodels = {}
-    for hydra_relative_path in cfg.eval.hydra_paths:
+
+    use_original_model_names = check_eval_model_names(
+        cfg.eval.model_names, cfg.eval.hydra_paths
+    )
+
+    for model_ind, hydra_relative_path in enumerate(cfg.eval.hydra_paths):
         absolute_cfg_path = get_absolute_hydra_path_from_hydra_str(hydra_relative_path)
         model_cfg = OmegaConf.load(
             os.path.join(absolute_cfg_path, ".hydra/config.yaml")
         )  # path for the cfg file saved from the current trained model
+
+        model_name = model_cfg.model.model_name
+
+        if use_original_model_names:  # the name you gave the model when you trained it
+            display_name = model_cfg.model.model_name
+        else:  # the new display name from the eval config
+            display_name = cfg.eval.model_names[model_ind]
+
         ckpt_file = ckpt_path_from_base_path(
-            base_path=absolute_cfg_path, model_name=model_cfg.model.model_name
+            base_path=absolute_cfg_path, model_name=model_name
         )
 
         model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file)
 
-        bestmodels[model_cfg.model.model_name] = model
+        display_name = check_old_model_names(
+            display_name, model_ind, bestmodels, hydra_relative_path
+        )
+
+        bestmodels[display_name] = model
 
     make_dataset_and_evaluate(cfg, datamod, bestmodels)
 

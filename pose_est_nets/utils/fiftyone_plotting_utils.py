@@ -11,20 +11,7 @@ import torch
 from tqdm import tqdm
 from typing import Union, Callable
 import pandas as pd
-
-
-# def make_keypoint_list(
-#     keypoint_arr: Union[torch.tensor, pd.core.frame.dataframe],
-#     img_width: int,
-#     img_height: int,
-# ) -> list:  # why not making anything into pandas arr?
-#     """this function will have two modes. one is a pandas dframe, the other is a tensor.
-#     or alternatively, convert everything to a tensor/numpy arr and index with ints"""
-#     if type(keypoint_arr) is torch.tensor:
-#         print("tensor")
-#     elif type(keypoint_arr) is pd.core.frame.dataframe:
-#         print("dataframe")
-#     return []
+import fiftyone.core.metadata as fom
 
 
 def tensor_to_keypoint_list(keypoint_tensor, height, width):
@@ -66,8 +53,8 @@ def make_dataset_and_evaluate(cfg: DictConfig, datamod: Callable, best_models: d
 
     samples = []  # this is the list of predictions we append to
     for idx, img_name in enumerate(tqdm(image_names)):
-        img_path = os.path.join(cfg.data.data_dir, img_name)
-        # assert os.path.isfile(img_path)
+        img_path = os.path.join(datamod.dataset.root_directory, img_name)
+        assert os.path.isfile(img_path)
         ground_truth_img_kpts = ground_truth_keypoints[idx]
         nan_bool = (
             torch.sum(torch.isnan(ground_truth_img_kpts), dim=1) > 0
@@ -99,8 +86,6 @@ def make_dataset_and_evaluate(cfg: DictConfig, datamod: Callable, best_models: d
                     type(model), HeatmapTracker
                 ):  # check if model is in the heatmap family
                     pred, confidence = model.run_subpixelmaxima(pred)
-                    print(pred)
-                    print(confidence)
                 resized_pred = reverse_transform(
                     images=img_BHWC.numpy(),
                     keypoints=(pred.detach().numpy().reshape((1, -1, 2))),
@@ -117,12 +102,15 @@ def make_dataset_and_evaluate(cfg: DictConfig, datamod: Callable, best_models: d
 
     full_dataset = fo.Dataset(cfg.eval.fifty_one_dataset_name)
     full_dataset.add_samples(samples)
-    print("fiftyone_dataset:")
-    print(full_dataset)
-    print("fiftyone_dataset.first():")
-    print(full_dataset.first())
-    full_dataset.compute_metadata()
-    print(full_dataset.exists("metadata", False))
-    # session = fo.launch_app(full_dataset, remote=True)
-    # session.wait()
+
+    try:
+        full_dataset.compute_metadata(skip_failures=False)
+    except ValueError:
+        print(full_dataset.exists("metadata", False))
+        print(
+            "the above print should indicate bad image samples, e.g., with bad paths."
+        )
+
+    session = fo.launch_app(full_dataset, remote=True)
+    session.wait()
     return
