@@ -45,7 +45,7 @@ def check_eval_model_names(names, hydra_paths) -> bool:
     return flag
 
 
-def check_old_model_names(
+def check_repeating_model_names(
     model_name: str, model_ind: int, bestmodels: dict, hydra_relative_path
 ) -> str:
     if model_name in bestmodels.keys():
@@ -130,7 +130,7 @@ def predict(cfg: DictConfig):
 
         model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file)
 
-        display_name = check_old_model_names(
+        display_name = check_repeating_model_names(
             display_name, model_ind, bestmodels, hydra_relative_path
         )
 
