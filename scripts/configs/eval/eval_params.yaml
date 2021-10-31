@@ -1,7 +1,8 @@
 # path to the hydra config file in the output folder, we can use it reconstruct information about loss directory
-hydra_paths: ["2021-10-29/13-53-17/", "2021-10-29/18-01-11/"]
+hydra_paths:
+  ["2021-10-29/13-53-17/", "2021-10-29/18-01-11/", "2021-10-31/00-11-36"]
 
-model_names: [] # if you want to manually provide a different model name to be displayed in FiftyOne
+model_names: ["toy_model_2", "toy_model_3"] # if you want to manually provide a different model name to be displayed in FiftyOne
 
 fifty_one_dataset_name: "rick_data_test"
 

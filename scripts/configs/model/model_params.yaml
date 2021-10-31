@@ -11,4 +11,4 @@ semi_supervised: True
 model_type: "heatmap"
 
 # directory name for model saving
-model_name: "my_small_mouse_visualize_model"
+model_name: "my_second_toy_model"
