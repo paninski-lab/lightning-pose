@@ -23,7 +23,7 @@ from pose_est_nets.utils.io import (
     get_absolute_hydra_path_from_hydra_str,
     ckpt_path_from_base_path,
 )
-from pose_est_nets.utils.io import get_absolute_data_paths
+from pose_est_nets.utils.io import verify_real_data_paths
 
 
 def check_eval_model_names(names, hydra_paths) -> bool:
@@ -66,7 +66,9 @@ def check_repeating_model_names(
 @hydra.main(config_path="configs", config_name="config")
 def predict(cfg: DictConfig):
 
-    data_dir, video_dir = get_absolute_data_paths(cfg.data)
+    data_dir, video_dir = verify_real_data_paths(
+        cfg.data
+    )  # if toy dataset with relative paths, make these absolute. otherwise don't change.
 
     # How to transform the images
     data_transform = []

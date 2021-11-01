@@ -18,6 +18,20 @@ from tqdm import tqdm
 from omegaconf import DictConfig, OmegaConf
 
 
+def get_videos_in_dir(video_dir: str) -> List[str]:
+    # gather videos to process
+    # TODO: check if you're give a path to a single video?
+    assert os.path.isdir(video_dir)
+    all_files = [video_dir + "/" + f for f in os.listdir(video_dir)]
+    video_files = []
+    for f in all_files:
+        if f.endswith(".mp4"):
+            video_files.append(f)
+    if len(video_files) == 0:
+        raise IOError("Did not find any video files (.mp4) in %s" % video_dir)
+    return video_files
+
+
 def get_model_class(map_type: str, semi_supervised: bool):
     """[summary]
 
@@ -221,7 +235,10 @@ def predict_videos(
         HeatmapTracker,
         SemiSupervisedHeatmapTracker,
     )
-    from pose_est_nets.utils.io import set_or_open_folder, get_latest_version
+    from pose_est_nets.utils.io import (
+        set_or_open_folder,
+        get_latest_version,
+    )
 
     # check input
     if save_file is not None:
