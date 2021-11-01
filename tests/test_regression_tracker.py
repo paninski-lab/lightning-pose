@@ -89,6 +89,8 @@ def test_forward():
 
 def test_semisupervised():
     # define unsupervised datamodule
+    from pose_est_nets.utils.plotting_utils import get_videos_in_dir
+
     data_transform = []
     data_transform.append(
         iaa.Resize({"height": 384, "width": 384})
@@ -102,12 +104,13 @@ def test_semisupervised():
         imgaug_transform=imgaug_transform,
     )
     video_directory = "toy_datasets/toymouseRunningData/unlabeled_videos"
-    video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
-    assert os.path.exists(video_files[0])
+    video_files = get_videos_in_dir(video_directory)
 
     # grab example loss config file from repo
     base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
-    loss_cfg = os.path.join(base_dir, "scripts", "configs", "losses", "loss_params.yaml")
+    loss_cfg = os.path.join(
+        base_dir, "scripts", "configs", "losses", "loss_params.yaml"
+    )
     with open(loss_cfg) as f:
         loss_param_dict = yaml.load(f, Loader=yaml.FullLoader)
 
@@ -160,3 +163,6 @@ def test_nan_cleanup():
 
     out = clean_any_nans(data, 0)
     assert (out == clean_data).all()
+
+
+torch.cuda.empty_cache()
