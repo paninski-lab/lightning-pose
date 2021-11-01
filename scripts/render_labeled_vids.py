@@ -7,6 +7,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from pose_est_nets.utils.io import verify_absolute_path
 from pose_est_nets.utils.plotting_utils import get_videos_in_dir
+import warnings
 
 
 """For FifyOne visualization, videos, if mp4, should be codec h.264. If they're not, see below on how to convert them:
@@ -52,9 +53,13 @@ def render_labeled_videos(cfg: DictConfig):
         cfg.eval.path_to_test_videos[0]
     )  # TODO: just for now assuming there's one dir, but can have multiple dirs.
     video = get_videos_in_dir(video_dir)
-    assert (
-        len(video) == 1
-    )  # currently supporting a single video in a directory, TODO: extend and loop
+    if len(video) > 1:  # just until further support
+        warnings.warn(
+            "{} has more than one video. \nAnalyzing just {}".format(
+                video_dir, video[0]
+            )
+        )
+    # currently supporting a single video in a directory, TODO: extend and loop
     dataset = fo.Dataset(
         cfg.eval.fifty_one_dataset_name + "_videos"
     )  # TODO: in the future, dataset should include multiple video samples

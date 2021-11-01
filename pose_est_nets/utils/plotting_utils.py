@@ -282,7 +282,6 @@ def predict_videos(
     model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
 
     model.to(device_pt)
-    model.eval()
 
     # set some defaults
     batch_size = (
@@ -326,8 +325,8 @@ def predict_videos(
         # iterate through video
         n_frames_ = count_frames(video_file)  # total frames in video
         n_frames = 0  # total frames processed
-        keypoints_np = np.zeros((n_frames_, model.num_targets))
-        confidence_np = np.zeros((n_frames_, model.num_targets // 2))
+        keypoints_np = np.zeros((n_frames_, model.num_keypoints * 2))
+        confidence_np = np.zeros((n_frames_, model.num_keypoints))
 
         t_beg = time.time()
         n = -1
