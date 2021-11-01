@@ -13,8 +13,10 @@ from pose_est_nets.models.heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
 )
+from pose_est_nets.utils.io import verify_real_data_paths
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import BackboneFinetuning
+from typing import Tuple
 
 import os
 
@@ -23,8 +25,10 @@ _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 @hydra.main(config_path="configs", config_name="config")
 def train(cfg: DictConfig):
-
+    print("Our Hydra config file:")
     print(cfg)
+
+    data_dir, video_dir = verify_real_data_paths(cfg.data)
 
     data_transform = []
     data_transform.append(
@@ -38,22 +42,23 @@ def train(cfg: DictConfig):
     imgaug_transform = iaa.Sequential(data_transform)
     if cfg.model.model_type == "regression":
         dataset = BaseTrackingDataset(
-            root_directory=cfg.data.data_dir,
+            root_directory=data_dir,
             csv_path=cfg.data.csv_path,
             header_rows=OmegaConf.to_object(cfg.data.header_rows),
             imgaug_transform=imgaug_transform,
         )
     elif cfg.model.model_type == "heatmap":
         dataset = HeatmapDataset(
-            root_directory=cfg.data.data_dir,
+            root_directory=data_dir,
             csv_path=cfg.data.csv_file,
             header_rows=OmegaConf.to_object(cfg.data.header_rows),
             imgaug_transform=imgaug_transform,
             downsample_factor=cfg.data.downsample_factor,
         )
     else:
-        print("INVALID DATASET SPECIFIED")
-        exit()
+        raise NotImplementedError(
+            "%s is an invalid cfg.model.model_type" % cfg.model.model_type
+        )
 
     if not (cfg.model["semi_supervised"]):
         datamod = BaseDataModule(
@@ -83,15 +88,17 @@ def train(cfg: DictConfig):
                 torch_seed=cfg.training.rng_seed_model_pt,
             )
         else:
-            print("INVALID DATASET SPECIFIED")
-            exit()
+            raise NotImplementedError(
+                "%s is an invalid cfg.model.model_type for a fully supervised model"
+                % cfg.model.model_type
+            )
 
     else:
         loss_param_dict = OmegaConf.to_object(cfg.losses)
         losses_to_use = OmegaConf.to_object(cfg.model.losses_to_use)
         datamod = UnlabeledDataModule(
             dataset=dataset,
-            video_paths_list=cfg.data.video_dir,
+            video_paths_list=video_dir,
             specialized_dataprep=losses_to_use,
             loss_param_dict=loss_param_dict,
             train_batch_size=cfg.training.train_batch_size,
@@ -124,6 +131,11 @@ def train(cfg: DictConfig):
                 loss_params=datamod.loss_param_dict,
                 semi_super_losses_to_use=losses_to_use,
                 torch_seed=cfg.training.rng_seed_model_pt,
+            )
+        else:
+            raise NotImplementedError(
+                "%s is an invalid cfg.model.model_type for a semi-supervised model"
+                % cfg.model.model_type
             )
 
     logger = TensorBoardLogger("tb_logs", name=cfg.model.model_name)

@@ -10,7 +10,7 @@ from typing_extensions import Literal
 from pose_est_nets.losses.losses import (
     convert_dict_entries_to_tensors,
     get_losses_dict,
-    MaskedMSEHeatmapLoss,
+    MaskedRegressionMSELoss,
     MaskedRMSELoss,
 )
 from pose_est_nets.models.base_resnet import BaseFeatureExtractor
@@ -77,7 +77,7 @@ class RegressionTracker(BaseFeatureExtractor):
     def forward(
         self,
         images: TensorType["batch", "channels":3, "image_height", "image_width", float],
-    ) -> TensorType["batch", "2 x num_keypoints"]:
+    ) -> TensorType["batch", "two_x_num_keypoints"]:
         """Forward pass through the network.
 
         Args:

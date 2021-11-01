@@ -40,6 +40,7 @@ def test_backbone():
                 type(list(model.backbone.children())[-3][-1])
                 == torchvision.models.resnet.Bottleneck
             )
+        torch.cuda.empty_cache()  # remove tensors from gpu
 
 
 def test_representation_shapes_truncated_resnet():
@@ -87,6 +88,7 @@ def test_representation_shapes_truncated_resnet():
             ).to(_TORCH_DEVICE)
             representations = model(fake_image_batch)
             assert representations.shape == shape_list_pre_pool[ind_image][ind]
+    torch.cuda.empty_cache()  # remove tensors from gpu
 
 
 def test_resnet_versions():
@@ -118,3 +120,4 @@ def test_representation_shapes_full_resnet():
             ).to(_TORCH_DEVICE)
             representations = model(fake_image_batch)
             assert representations.shape == repres_shape_list_all_but_fc[ind]
+    torch.cuda.empty_cache()  # remove tensors from gpu
