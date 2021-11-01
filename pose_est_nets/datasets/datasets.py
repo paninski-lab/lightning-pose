@@ -66,19 +66,21 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             if not os.path.exists(csv_file):
                 # step 3: assume dlc directory structure
                 import glob
+
                 glob_path = os.path.join(
-                        root_directory,
-                        "training-datasets",
-                        "iteration-0",
-                        "*",  # wildcard handles proj-specific dlc naming conventions
-                        csv_path,
-                    )
+                    root_directory,
+                    "training-datasets",
+                    "iteration-0",
+                    "*",  # wildcard handles proj-specific dlc naming conventions
+                    csv_path,
+                )
                 options = glob.glob(glob_path)
                 if not options or not os.path.exists(options[0]):
                     raise FileNotFoundError("Could not find csv file!")
                 csv_file = options[0]
 
         csv_data = pd.read_csv(csv_file, header=header_rows)
+        self.keypoint_names = csv_data.columns.levels[0][1:]
         self.image_names = list(csv_data.iloc[:, 0])
         self.keypoints = torch.tensor(
             csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32
