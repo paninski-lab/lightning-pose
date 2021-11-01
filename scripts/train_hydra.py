@@ -1,4 +1,3 @@
-from genericpath import isdir
 import pytorch_lightning as pl
 import torch
 import hydra
