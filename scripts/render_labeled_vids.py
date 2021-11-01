@@ -42,43 +42,54 @@ def render_labeled_videos(cfg: DictConfig):
     # there may be multiple video paths in the cfg eval
     # certainly there may be multiple models.
     # loop over both
-    video_dir = verify_absolute_path(cfg.eval.path_to_test_videos)
+    video_dir = verify_absolute_path(
+        cfg.eval.path_to_test_videos[0]
+    )  # TODO: just for now assuming there's one dir, but can have multiple dirs.
     video = get_videos_in_dir(video_dir)
     assert (
         len(video) == 1
     )  # currently supporting a single file in a directory, TODO: extend and loop
-    path_to_csv_with_preds = verify_absolute_path(cfg.eval.path_to_csv_predictions)
-    csv_with_preds = pd.read_csv(path_to_csv_with_preds, header=[1, 2])
-    keypoint_names = csv_with_preds.columns.levels[0][1:]
-    print("Populating the per-frame keypoints...")
     video_sample = fo.Sample(filepath=video[0])  # TODO: again extend to multiple vids
-    for frame_idx in tqdm(range(csv_with_preds.shape[0])):  # loop over frames
-        keypoints_list = make_keypoint_list(
-            csv_with_preds=csv_with_preds,
-            keypoint_names=keypoint_names,
-            frame_idx=frame_idx,
-            width=cfg.data.image_orig_dims.width,
-            height=cfg.data.image_orig_dims.height,
+    for display_name, path_to_preds_file in zip(
+        cfg.eval.model_display_names, cfg.eval.path_to_csv_predictions
+    ):  # loop over different models' preds for a given vid
+        print(
+            "========= \nModel display name: {} \nPredictions file: {}  \nVideo analyzed: {}".format(
+                display_name, path_to_preds_file, video[0]
+            )
         )
-        # keypoints_list = []
-        # for kp_name in keypoint_names:  # loop over bp names
-        #     # write a single keypoint's position, confidence, and name
-        #     keypoints_list.append(
-        #         fo.Keypoint(
-        #             points=[
-        #                 [
-        #                     csv_with_preds[kp_name]["x"][frame_idx] / width,
-        #                     csv_with_preds[kp_name]["y"][frame_idx] / height,
-        #                 ]
-        #             ],
-        #             confidence=csv_with_preds[kp_name]["likelihood"][frame_idx],
-        #             label=kp_name,
-        #         )
-        #     )
-        video_sample.frames[frame_idx + 1]["preds"] = fo.Keypoints(
-            keypoints=keypoints_list
-        )
-    print("Done.")
+        absolute_path_to_preds_file = verify_absolute_path(
+            path_to_preds_file
+        )  # if toy_dataset, append absolute path. else do nothing.
+        df_with_preds = pd.read_csv(absolute_path_to_preds_file, header=[1, 2])
+        keypoint_names = df_with_preds.columns.levels[0][1:]
+        print("Populating the per-frame keypoints...")
+        for frame_idx in tqdm(range(df_with_preds.shape[0])):  # loop over frames
+            keypoints_list = make_keypoint_list(
+                csv_with_preds=df_with_preds,
+                keypoint_names=keypoint_names,
+                frame_idx=frame_idx,
+                width=cfg.data.image_orig_dims.width,
+                height=cfg.data.image_orig_dims.height,
+            )
+            # keypoints_list = []
+            # for kp_name in keypoint_names:  # loop over bp names
+            #     # write a single keypoint's position, confidence, and name
+            #     keypoints_list.append(
+            #         fo.Keypoint(
+            #             points=[
+            #                 [
+            #                     csv_with_preds[kp_name]["x"][frame_idx] / width,
+            #                     csv_with_preds[kp_name]["y"][frame_idx] / height,
+            #                 ]
+            #             ],
+            #             confidence=csv_with_preds[kp_name]["likelihood"][frame_idx],
+            #             label=kp_name,
+            #         )
+            #     )
+            video_sample.frames[frame_idx + 1][display_name] = fo.Keypoints(
+                keypoints=keypoints_list
+            )
 
     # TODO: name as param
     dataset = fo.Dataset()
@@ -97,8 +108,8 @@ def render_labeled_videos(cfg: DictConfig):
 
     # TODO: by definition always save to disk.
     config = foua.DrawConfig({"keypoints_size": 9})
-    outpath = "/home/jovyan/vid_new.mp4"
-    print("Writing labeled images to '%s'" % outpath)
+    outpath = "/home/jovyan/vid_new.mp4"  # TODO: input to script
+    print("Writing a labeled video to '%s'" % outpath)
     foua.draw_labeled_video(video_sample, outpath, config=config)
     print("Writing complete")
 
