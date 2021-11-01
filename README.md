@@ -17,39 +17,39 @@ Provide more GPUs and we will use them.
 ## Installation
 
 First create a Conda environment in which this package and its dependencies will be installed. 
-As you would do for any other repository, first --
+As you would do for any other repository --
 
-Create the environment:
+Create a conda environment:
 
 ```console 
 foo@bar:~$ conda create --name <YOUR_ENVIRONMENT_NAME>
 ```
 
-Activate the environment:
+and activate it:
 
 ```console
 foo@bar:~$ conda activate <YOUR_ENVIRONMENT_NAME>
 ```
 
-Move into the folder where you want to place the repository folder:
+Move into the folder where you want to place the repository folder, and then download it from GitHub:
 
-```cd <SOME_FOLDER>```
+```console
+foo@bar:~$ cd <SOME_FOLDER>
+foo@bar:~$ git clone https://github.com/danbider/lightning-pose.git
+```
 
-From within that folder, download a local version of the GitHub folder:
+Then move into the newly-created repository folder, and install dependencies:
 
-```git clone https://github.com/danbider/lightning-pose.git```
-
-Then move into the new package folder:
-
-```cd lightning-pose```
-
-Install our package and its dependencies:
-
-`pip install -r requirements.txt`
+```console
+foo@bar:~$ cd lightning-pose
+foo@bar:~$ pip install -r requirements.txt
+```
 
 You should be ready to go! You may verify that all the unit tests are passing on your machine by running
 
-```pytest```
+```console
+foo@bar:~$ pytest
+```
 
 ## Datasets
 * `BaseDataset`: images + keypoint coordinates.
