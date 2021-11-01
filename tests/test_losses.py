@@ -1,4 +1,3 @@
-from pose_est_nets.losses.losses import MaskedRegressionMSELoss, MaskedRMSELoss
 import torch
 import numpy as np
 import pytest
@@ -6,6 +5,8 @@ import yaml
 
 
 def test_masked_regression_loss():
+
+    from pose_est_nets.losses.losses import MaskedRegressionMSELoss, MaskedRMSELoss
 
     true_keypoints = torch.rand(
         size=(12, 32),
@@ -31,6 +32,8 @@ def test_masked_regression_loss():
 
 def test_masked_RMSE_loss():
 
+    from pose_est_nets.losses.losses import MaskedRegressionMSELoss
+
     true_keypoints = torch.rand(
         size=(12, 32),
         device="cpu",
@@ -45,6 +48,50 @@ def test_masked_RMSE_loss():
     assert loss > 0.0
 
 
+def test_TemporalLoss():
+
+    from pose_est_nets.losses.losses import TemporalLoss
+
+    # make sure non-negative scalar is returned
+    predicted_keypoints = torch.rand(
+        size=(12, 32),
+        device="cpu",
+    )
+    loss = TemporalLoss(
+        predicted_keypoints, epsilon=torch.Tensor([0.], device="cpu"))
+    assert loss.shape == torch.Size([])
+    assert loss > 0.0
+
+    # make sure 0 is returned when no differences
+    num_batch = 10
+    num_keypoints = 4
+    predicted_keypoints = torch.ones(
+        size=(num_batch, num_keypoints),
+        device="cpu",
+    )
+    loss = TemporalLoss(predicted_keypoints, epsilon=torch.Tensor([0.], device="cpu"))
+    assert loss == 0
+
+    # compute actual norm
+    predicted_keypoints = torch.Tensor(
+        [[0., 0.], [np.sqrt(2.), np.sqrt(2.)]], device="cpu")
+    loss = TemporalLoss(predicted_keypoints, epsilon=torch.Tensor([0.], device="cpu"))
+    assert loss.item() - 2 < 1e-6
+
+    # test epsilon
+    s2 = np.sqrt(2.)
+    s3 = np.sqrt(3.)
+    predicted_keypoints = torch.Tensor(
+        [[0., 0.], [s2, s2], [s3 + s2, s3 + s2]], device="cpu")
+    # [s2, s2] -> 2
+    # [s3, s3] -> sqrt(6)
+    loss = TemporalLoss(predicted_keypoints, epsilon=torch.Tensor([0.], device="cpu"))
+    assert (loss.item() - (2 + np.sqrt(6))) < 1e-6
+
+    loss = TemporalLoss(predicted_keypoints, epsilon=torch.Tensor([2.1], device="cpu"))
+    assert (loss.item() - np.sqrt(6)) < 1e-6  # due to epsilon the "2" entry will be zeroed out
+
+
 def test_get_losses_dict():
     from pose_est_nets.losses.losses import get_losses_dict
 
@@ -54,11 +101,3 @@ def test_get_losses_dict():
     assert type(out_dict) == dict
 
     pytest.raises(TypeError, get_losses_dict, ["bla"])
-
-
-def test_yaml():
-    stream = open("pose_est_nets/losses/default_hypers.yaml", "r")
-
-    with open("pose_est_nets/losses/default_hypers.yaml") as f:
-        data = yaml.load(f, Loader=yaml.FullLoader)
-        print(data)

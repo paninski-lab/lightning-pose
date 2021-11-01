@@ -1,7 +1,7 @@
 import imgaug.augmenters as iaa
 import numpy as np
 import torch
-from pose_est_nets.utils.IO import set_or_open_folder, get_latest_version
+from pose_est_nets.utils.io import set_or_open_folder, get_latest_version
 from pose_est_nets.models.heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
@@ -12,20 +12,77 @@ from pose_est_nets.models.regression_tracker import (
 )
 import matplotlib.pyplot as plt
 import os
-from typing import Callable, Optional, Tuple, List
+from typing import Callable, Optional, Tuple, List, Union, Literal
 from typeguard import typechecked
+from tqdm import tqdm
+from omegaconf import DictConfig, OmegaConf
+
+
+def get_videos_in_dir(video_dir: str) -> List[str]:
+    # gather videos to process
+    # TODO: check if you're give a path to a single video?
+    assert os.path.isdir(video_dir)
+    all_files = [video_dir + "/" + f for f in os.listdir(video_dir)]
+    video_files = []
+    for f in all_files:
+        if f.endswith(".mp4"):
+            video_files.append(f)
+    if len(video_files) == 0:
+        raise IOError("Did not find any video files (.mp4) in %s" % video_dir)
+    return video_files
+
 
 def get_model_class(map_type: str, semi_supervised: bool):
-    if not(semi_supervised):
+    """[summary]
+
+    Args:
+        map_type (str): "regression" | "heatmap"
+        semi_supervised (bool): True if you want to use unlabeled videos
+
+    Returns:
+        a ptl model class to be initialized outside of this function.
+    """
+    if not (semi_supervised):
         if map_type == "regression":
             return RegressionTracker
         elif map_type == "heatmap":
             return HeatmapTracker
+        else:
+            raise NotImplementedError(
+                "%s is an invalid map_type for a fully supervised model" % map_type
+            )
     else:
         if map_type == "regression":
             return SemiSupervisedRegressionTracker
         elif map_type == "heatmap":
             return SemiSupervisedHeatmapTracker
+        else:
+            raise NotImplementedError(
+                "%s is an invalid map_type for a semi-supervised model" % map_type
+            )
+
+
+def load_model_from_checkpoint(cfg: DictConfig, ckpt_file: str, eval: bool = False):
+    """this will have: path to a specific .ckpt file which we extract using other funcs
+    will also take the standard hydra config file"""
+    # pick the right model class
+    ModelClass = get_model_class(
+        map_type=cfg.model.model_type,
+        semi_supervised=cfg.model.semi_supervised,
+    )
+    # initialize a model instance, with weights loaded from .ckpt file
+    if cfg.model.semi_supervised:
+        model = ModelClass.load_from_checkpoint(
+            ckpt_file,
+            semi_super_losses_to_use=OmegaConf.to_object(cfg.model.losses_to_use),
+            loss_params=OmegaConf.to_object(cfg.losses),
+        )
+    else:
+        model = ModelClass.load_from_checkpoint(ckpt_file)
+    if eval:
+        model.eval()
+    return model
+
 
 def saveNumericalPredictions(model, datamod, threshold):
     i = 0
@@ -39,7 +96,9 @@ def saveNumericalPredictions(model, datamod, threshold):
     full_dl = datamod.full_dataloader()
     test_dl = datamod.test_dataloader()
     final_gt_keypoints = np.empty(shape=(len(test_dl), model.num_keypoints, 2))
-    final_imgs = np.empty(shape=(len(test_dl), 406, 396, 1))
+    final_imgs = np.empty(
+        shape=(len(test_dl), 406, 396, 1)
+    )  # TODO: specific to Rick data
     final_preds = np.empty(shape=(len(test_dl), model.num_keypoints, 2))
 
     # dpk_final_preds = np.empty(shape = (len(test_dl), model.num_keypoints, 2))
@@ -126,20 +185,26 @@ def plotPredictions(model, datamod, save_heatmaps, threshold, mode):
 
 
 def predict_videos(
-        video_path, model_file, config_file, save_file=None, sequence_length=16, device="gpu",
-        video_pipe_kwargs={}):
+    video_path: str,
+    ckpt_file: str,
+    cfg_file: Union[str, DictConfig],
+    save_file: str,
+    sequence_length: int = 16,
+    device: Literal["gpu", "cuda", "cpu"] = "gpu",
+    video_pipe_kwargs={},
+):
     """Loop over a list of videos and process with tracker using DALI for fast inference.
 
     Args:
         video_path (str): process all videos located in this directory
-        model_file (str): .ckpt file for model
-        config_file (str): yaml file saved by hydra; must contain
-            - config_file.losses
-            - config_file.data.image_orig_dims
-            - config_file.data.image_resize_dims
-            - config_file.model.losses_to_use
-            - config_file.model.data_type
-            - config_file.model.semi_supervised
+        ckpt_file (str): .ckpt file for model
+        cfg_file (str): yaml file saved by hydra; must contain
+            - cfg_file.losses
+            - cfg_file.data.image_orig_dims
+            - cfg_file.data.image_resize_dims
+            - cfg_file.model.losses_to_use
+            - cfg_file.model.model_type
+            - cfg_file.model.semi_supervised
         save_file (str): full filename of tracked points; currently supports hdf5 and csv; if
             NoneType, the output will be saved in the video path
         sequence_length (int)
@@ -160,18 +225,30 @@ def predict_videos(
     import pandas as pd
     import time
 
-    from pose_est_nets.datasets.DALI import video_pipe, LightningWrapper, count_frames
+    from pose_est_nets.datasets.dali import video_pipe, LightningWrapper, count_frames
     from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
-    from pose_est_nets.models.regression_tracker import RegressionTracker, \
-        SemiSupervisedRegressionTracker
-    from pose_est_nets.models.heatmap_tracker import HeatmapTracker, SemiSupervisedHeatmapTracker
-    from pose_est_nets.utils.IO import set_or_open_folder, get_latest_version
+    from pose_est_nets.models.regression_tracker import (
+        RegressionTracker,
+        SemiSupervisedRegressionTracker,
+    )
+    from pose_est_nets.models.heatmap_tracker import (
+        HeatmapTracker,
+        SemiSupervisedHeatmapTracker,
+    )
+    from pose_est_nets.utils.io import (
+        set_or_open_folder,
+        get_latest_version,
+    )
 
     # check input
     if save_file is not None:
-        if not (save_file.endswith(".csv") or save_file.endswith(".hdf5")
-                or save_file.endswith(".hdf") or save_file.endswith(".h5")
-                or save_file.endswith(".h")):
+        if not (
+            save_file.endswith(".csv")
+            or save_file.endswith(".hdf5")
+            or save_file.endswith(".hdf")
+            or save_file.endswith(".h5")
+            or save_file.endswith(".h")
+        ):
             raise NotImplementedError("Currently only .csv and .h5 files are supported")
 
     if device == "gpu" or device == "cuda":
@@ -193,34 +270,23 @@ def predict_videos(
     if len(video_files) == 0:
         raise IOError("Did not find any video files (.mp4) in %s" % video_path)
 
-    # load configuration file
-    with open(config_file, 'r') as f:
-        cfg = OmegaConf.load(f)
-
-    # load model weights
-    if not cfg.model.semi_supervised:
-        if cfg.model.data_type == "regression":
-            model = RegressionTracker.load_from_checkpoint(model_file)
-        elif cfg.model.data_type == "heatmap":
-            model = HeatmapTracker.load_from_checkpoint(model_file)
-        else:
-            raise NotImplementedError
+    if isinstance(cfg_file, str):
+        # load configuration file
+        with open(cfg_file, "r") as f:
+            cfg = OmegaConf.load(f)
+    elif isinstance(cfg_file, DictConfig):
+        cfg = cfg_file
     else:
-        loss_param_dict = OmegaConf.to_object(cfg.losses)
-        losses_to_use = OmegaConf.to_object(cfg.model.losses_to_use)
-        if cfg.model.data_type == "regression":
-            model = SemiSupervisedRegressionTracker.load_from_checkpoint(
-                model_file, semi_super_losses_to_use=losses_to_use, loss_params=loss_param_dict)
-        elif cfg.model.data_type == "heatmap":
-            model = SemiSupervisedHeatmapTracker.load_from_checkpoint(
-                model_file, semi_super_losses_to_use=losses_to_use, loss_params=loss_param_dict)
-        else:
-            raise NotImplementedError
+        raise ValueError("cfg_file must be str or DictConfig, not %s!" % type(cfg_file))
+
+    model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
+
     model.to(device_pt)
-    model.eval()
 
     # set some defaults
-    batch_size = 1  # don't change this, change sequence length (exposed to user) instead
+    batch_size = (
+        1  # don't change this, change sequence length (exposed to user) instead
+    )
     video_pipe_kwargs_defaults = {"num_threads": 2, "device_id": 0}
     for key, val in video_pipe_kwargs_defaults.items():
         if key not in video_pipe_kwargs.keys():
@@ -233,54 +299,93 @@ def predict_videos(
 
         # build video loader/pipeline
         pipe = video_pipe(
-            resize_dims=(cfg.data.image_resize_dims.height, cfg.data.image_resize_dims.height),
-            batch_size=batch_size, sequence_length=sequence_length, filenames=[video_file],
-            random_shuffle=False, device=device_dali, name="reader", pad_sequences=True,
-            **video_pipe_kwargs)
+            resize_dims=(
+                cfg.data.image_resize_dims.height,
+                cfg.data.image_resize_dims.width,
+            ),
+            batch_size=batch_size,
+            sequence_length=sequence_length,
+            filenames=[video_file],
+            random_shuffle=False,
+            device=device_dali,
+            name="reader",
+            pad_sequences=True,
+            **video_pipe_kwargs
+        )
 
         predict_loader = LightningWrapper(
-            pipe, output_map=["x"], last_batch_policy=LastBatchPolicy.FILL,
-            last_batch_padded=False, auto_reset=False, reader_name="reader")
+            pipe,
+            output_map=["x"],
+            last_batch_policy=LastBatchPolicy.FILL,
+            last_batch_padded=False,
+            auto_reset=False,
+            reader_name="reader",
+        )
 
         # iterate through video
         n_frames_ = count_frames(video_file)  # total frames in video
         n_frames = 0  # total frames processed
-        keypoints_np = np.zeros((n_frames_, model.num_targets))
+        keypoints_np = np.zeros((n_frames_, model.num_keypoints * 2))
+        confidence_np = np.zeros((n_frames_, model.num_keypoints))
+
         t_beg = time.time()
         n = -1
+        # TODO: seperate it out from the function
         with torch.no_grad():
-            for n, batch in enumerate(predict_loader):
+            for n, batch in enumerate(tqdm(predict_loader)):
                 outputs = model.forward(batch)
-                if cfg.model.data_type == "heatmap":
-                    pred_keypoints, confidence = model.run_subpixelmaxima(outputs).detach().cpu().numpy()
+                if cfg.model.model_type == "heatmap":
+                    pred_keypoints, confidence = model.run_subpixelmaxima(outputs)
+                    # send to cpu
+                    pred_keypoints = pred_keypoints.detach().cpu().numpy()
+                    confidence = confidence.detach().cpu().numpy()
                 else:
                     pred_keypoints = outputs.detach().cpu().numpy()
+                    confidence = np.zeros((outputs.shape[0], outputs.shape[1] // 2))
                 n_frames_curr = pred_keypoints.shape[0]
                 if n_frames + n_frames_curr > n_frames_:
                     # final sequence
                     final_batch_size = n_frames_ - n_frames
                     keypoints_np[n_frames:] = pred_keypoints[:final_batch_size]
+                    confidence_np[n_frames:] = confidence[:final_batch_size]
                     n_frames_curr = final_batch_size
-                else:
-                    keypoints_np[n_frames:n_frames + n_frames_curr] = pred_keypoints
+                else:  # at every sequence except the final
+                    keypoints_np[n_frames : n_frames + n_frames_curr] = pred_keypoints
+                    confidence_np[n_frames : n_frames + n_frames_curr] = confidence
+
                 n_frames += n_frames_curr
             t_end = time.time()
             if n == -1:
-                print("WARNING: issue processing %s" % video_file)  # TODO: what can go wrong here?
+                print(
+                    "WARNING: issue processing %s" % video_file
+                )  # TODO: what can go wrong here?
                 continue
             else:
-                print("inference speed: %1.2f fr/sec" % ((n * sequence_length) / (t_end - t_beg)))
+                print(
+                    "inference speed: %1.2f fr/sec"
+                    % ((n * sequence_length) / (t_end - t_beg))
+                )
 
         # save csv file of predictions in DeepLabCut format
         if save_file is None:
             # create filename based on video name and model type
             video_file_name = os.path.basename(video_file).replace(".mp4", "")
-            loss_str = "_".join([""] + cfg.model.losses_to_use) \
-                if len(cfg.model.losses_to_use) > 0 else ""
+            if (
+                cfg.model.semi_supervised
+            ):  # only if any of the unsupervised `cfg.model.losses_to_use` is actually used
+                loss_str = (
+                    "_".join([""] + list(cfg.model.losses_to_use))
+                    if len(cfg.model.losses_to_use) > 0
+                    else ""
+                )
+            else:
+                loss_str = ""
             save_file = os.path.join(
-                video_path, "%s_%s%s.csv" % (video_file_name, cfg.model.data_type, loss_str))
+                video_path,
+                "%s_%s%s.csv" % (video_file_name, cfg.model.model_type, loss_str),
+            )
 
-        num_joints = int(model.num_targets // 2)
+        num_joints = model.num_keypoints
         predictions = np.zeros((keypoints_np.shape[0], num_joints * 3))
         predictions[:, 0] = np.arange(keypoints_np.shape[0])
         # put x vals back in original pixel space
@@ -291,11 +396,12 @@ def predict_videos(
         y_resize = cfg.data.image_resize_dims.height
         y_og = cfg.data.image_orig_dims.height
         predictions[:, 1::3] = keypoints_np[:, 1::2] / y_resize * y_og
+        predictions[:, 2::3] = confidence_np
 
         xyl_labels = ["x", "y", "likelihood"]
-        joint_labels = ['bp_%i' % n for n in range(model.num_targets // 2)]
+        joint_labels = ["bp_%i" % n for n in range(model.num_keypoints)]
         pdindex = pd.MultiIndex.from_product(
-            [["%s_tracker" % cfg.model.data_type], joint_labels, xyl_labels],
+            [["%s_tracker" % cfg.model.model_type], joint_labels, xyl_labels],
             names=["scorer", "bodyparts", "coords"],
         )
         df = pd.DataFrame(predictions, columns=pdindex)

@@ -1,7 +1,7 @@
 import pytorch_lightning as pl
 import torch
 import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 import imgaug.augmenters as iaa
 from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
 from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
@@ -13,19 +13,23 @@ from pose_est_nets.models.heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
 )
-from pose_est_nets.callbacks.freeze_unfreeze_callback import (
-    FeatureExtractorFreezeUnfreeze,
-)
+from pose_est_nets.utils.io import verify_real_data_paths
 from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.callbacks import BackboneFinetuning
+from typing import Tuple
 
 import os
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# TODO: move the datapaths from cfg.training
+
 @hydra.main(config_path="configs", config_name="config")
 def train(cfg: DictConfig):
+    print("Our Hydra config file:")
     print(cfg)
+
+    data_dir, video_dir = verify_real_data_paths(cfg.data)
+
     data_transform = []
     data_transform.append(
         iaa.Resize(
@@ -38,35 +42,45 @@ def train(cfg: DictConfig):
     imgaug_transform = iaa.Sequential(data_transform)
     if cfg.model.model_type == "regression":
         dataset = BaseTrackingDataset(
-            root_directory=cfg.data.data_dir,
+            root_directory=data_dir,
             csv_path=cfg.data.csv_path,
             header_rows=OmegaConf.to_object(cfg.data.header_rows),
             imgaug_transform=imgaug_transform,
         )
     elif cfg.model.model_type == "heatmap":
         dataset = HeatmapDataset(
-            root_directory=cfg.data.data_dir,
-            csv_path=cfg.data.csv_path,
+            root_directory=data_dir,
+            csv_path=cfg.data.csv_file,
             header_rows=OmegaConf.to_object(cfg.data.header_rows),
             imgaug_transform=imgaug_transform,
             downsample_factor=cfg.data.downsample_factor,
         )
     else:
-        print("INVALID DATASET SPECIFIED")
-        exit()
+        raise NotImplementedError(
+            "%s is an invalid cfg.model.model_type" % cfg.model.model_type
+        )
 
     if not (cfg.model["semi_supervised"]):
+        if not(cfg.training.gpu_id, int):
+            raise NotImplementedError(
+                "Cannot currently fit fully supervised model on multiple gpus"
+            )
         datamod = BaseDataModule(
             dataset=dataset,
             train_batch_size=cfg.training.train_batch_size,
             val_batch_size=cfg.training.val_batch_size,
             test_batch_size=cfg.training.test_batch_size,
             num_workers=cfg.training.num_workers,
+            train_probability=cfg.training.train_prob,
+            val_probability=cfg.training.val_prob,
+            train_frames=cfg.training.train_frames,
+            torch_seed=cfg.training.rng_seed_data_pt,
         )
         if cfg.model.model_type == "regression":
             model = RegressionTracker(
                 num_targets=cfg.data.num_targets,
                 resnet_version=cfg.model.resnet_version,
+                torch_seed=cfg.training.rng_seed_model_pt,
             )
 
         elif cfg.model.model_type == "heatmap":
@@ -75,23 +89,38 @@ def train(cfg: DictConfig):
                 resnet_version=cfg.model.resnet_version,
                 downsample_factor=cfg.data.downsample_factor,
                 output_shape=dataset.output_shape,
+                torch_seed=cfg.training.rng_seed_model_pt,
             )
         else:
-            print("INVALID DATASET SPECIFIED")
-            exit()
+            raise NotImplementedError(
+                "%s is an invalid cfg.model.model_type for a fully supervised model"
+                % cfg.model.model_type
+            )
 
     else:
+        if not(cfg.training.gpu_id, int):
+            raise NotImplementedError(
+                "Cannot currently fit semi-supervised model on multiple gpus"
+            )
         loss_param_dict = OmegaConf.to_object(cfg.losses)
         losses_to_use = OmegaConf.to_object(cfg.model.losses_to_use)
         datamod = UnlabeledDataModule(
             dataset=dataset,
-            video_paths_list=cfg.data.video_dir,  # just a single path for now
+            video_paths_list=video_dir,
             specialized_dataprep=losses_to_use,
             loss_param_dict=loss_param_dict,
             train_batch_size=cfg.training.train_batch_size,
             val_batch_size=cfg.training.val_batch_size,
             test_batch_size=cfg.training.test_batch_size,
             num_workers=cfg.training.num_workers,
+            train_probability=cfg.training.train_prob,
+            val_probability=cfg.training.val_prob,
+            train_frames=cfg.training.train_frames,
+            unlabeled_batch_size=1,
+            unlabeled_sequence_length=cfg.training.unlabeled_sequence_length,
+            torch_seed=cfg.training.rng_seed_data_pt,
+            dali_seed=cfg.training.rng_seed_data_dali,
+            device_id=cfg.training.gpu_id,
         )
         if cfg.model.model_type == "regression":
             model = SemiSupervisedRegressionTracker(
@@ -99,6 +128,7 @@ def train(cfg: DictConfig):
                 resnet_version=cfg.model.resnet_version,
                 loss_params=datamod.loss_param_dict,
                 semi_super_losses_to_use=losses_to_use,
+                torch_seed=cfg.training.rng_seed_model_pt,
             )
 
         elif cfg.model.model_type == "heatmap":
@@ -109,21 +139,47 @@ def train(cfg: DictConfig):
                 output_shape=dataset.output_shape,
                 loss_params=datamod.loss_param_dict,
                 semi_super_losses_to_use=losses_to_use,
+                torch_seed=cfg.training.rng_seed_model_pt,
             )
-    logger = TensorBoardLogger("tb_logs", name= cfg.model.model_name)
+        else:
+            raise NotImplementedError(
+                "%s is an invalid cfg.model.model_type for a semi-supervised model"
+                % cfg.model.model_type
+            )
+
+    logger = TensorBoardLogger("tb_logs", name=cfg.model.model_name)
     early_stopping = pl.callbacks.EarlyStopping(
-        monitor="val_loss", patience=100, mode="min"
+        monitor="val_loss", patience=cfg.training.early_stop_patience, mode="min"
     )
     lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval="epoch")
-
     ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(monitor="val_loss")
-    transfer_unfreeze_callback = FeatureExtractorFreezeUnfreeze(
-        cfg.training.unfreezing_epoch
-    )  # Not used for now
-    # TODO: add backbone refinement, add wandb?
-    trainer = pl.Trainer(  # TODO: be careful with the devices here if you want to scale to multiple gpus
-        gpus=1 if _TORCH_DEVICE == "cuda" else 0,
+    transfer_unfreeze_callback = BackboneFinetuning(
+        unfreeze_backbone_at_epoch=cfg.training.unfreezing_epoch,
+        lambda_func=lambda epoch: 1.5,
+        backbone_initial_ratio_lr=0.1,
+        should_align=True,
+        train_bn=True,
+    )
+    # TODO: add wandb?
+    # determine gpu setup
+    if _TORCH_DEVICE == "cpu":
+        gpus = 0
+    elif isinstance(cfg.training.gpu_id, list):
+        gpus = cfg.training.gpu_id
+    elif isinstance(cfg.training.gpu_id, ListConfig):
+        gpus = list(cfg.training.gpu_id)
+    elif isinstance(cfg.training.gpu_id, int):
+        gpus = [cfg.training.gpu_id]
+    else:
+        raise NotImplementedError(
+            "training.gpu_id must be list or int, not {}".format(
+                type(cfg.training.gpu_id)
+            )
+        )
+    trainer = pl.Trainer(  # TODO: be careful with devices if you want to scale to multiple gpus
+        gpus=gpus,
         max_epochs=cfg.training.max_epochs,
+        check_val_every_n_epoch=cfg.training.check_val_every_n_epoch,
         log_every_n_steps=cfg.training.log_every_n_steps,
         callbacks=[
             early_stopping,

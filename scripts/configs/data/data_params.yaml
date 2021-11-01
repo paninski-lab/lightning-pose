@@ -1,18 +1,28 @@
+# dimensions of training images
 image_orig_dims:
   height: 406
   width: 396
-image_resize_dims: 
-  height: 384 
-  width: 384
-#data_dir: "/home/jovyan/mouseRunningData"
-#data_dir: "/home/ubuntu/deepposekit-tests/dlc_test/mouse_data/data"
-data_dir: "/home/ubuntu/pose-estimation-nets/toy_datasets/toymouseRunningData/"
-#video_dir: "/home/jovyan/mouseRunningData/unlabeled_videos/180726_005.mp4" # /180726_005.mp4
-#video_dir: "/home/ubuntu/pose-estimation-nets/unlabeled_videos/180726_005.mp4"
-video_dir: "/home/ubuntu/pose-estimation-nets/toy_datasets/toymouseRunningData/unlabeled_videos/test_vid.mp4"
-csv_path: "CollectedData_.csv"
-header_rows: [1, 2]
-downsample_factor: 2
-num_targets: 34
 
-#we could parameters related to the ground truth heatmaps, sigma, confidence_scale, 
+# resize dimensions to streamline model creation
+image_resize_dims:
+  height: 256
+  width: 256
+
+# ABSOLUTE path to data directory. the below is just a toy example for running Getting Started scripts
+data_dir: "toy_datasets/toymouseRunningData"
+
+# ABSOLUTE path to unlabeled videos' directory. the below is just a toy example for running Getting Started scripts (TODO: Matt, can have multiple vids)
+video_dir: "unlabeled_videos"
+
+# location of labels; for example script, this should be relative to `data_dir`
+csv_file: "CollectedData_.csv"
+
+# header rows to strip in label csv file
+header_rows: [1, 2]
+
+# downsample heatmaps: 2 | 3
+downsample_factor: 2
+
+# total number of predictions; 2 * num_keypoints
+num_targets: 34
+# add parameters related to the ground truth heatmaps, sigma, confidence_scale, etc
