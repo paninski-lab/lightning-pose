@@ -178,6 +178,7 @@ class UnlabeledDataModule(BaseDataModule):
         unlabeled_sequence_length: int = 16,
         dali_seed: int = 123456,
         torch_seed: int = 42,
+        device_id: int = 0,
         specialized_dataprep: Optional[Literal["pca"]] = None,
         loss_param_dict: Optional[dict] = None,
     ) -> None:
@@ -206,6 +207,7 @@ class UnlabeledDataModule(BaseDataModule):
                 unlabeled data
             dali_seed: control randomness of unlabeled data loading
             torch_seed: control randomness of labeled data loading
+            device_id: gpu for unlabeled data loading
             specialized_dataprep:
             loss_param_dict: details of loss types for unlabeled data
                 (influences processing)
@@ -231,6 +233,7 @@ class UnlabeledDataModule(BaseDataModule):
         self.unlabeled_sequence_length = unlabeled_sequence_length
         self.dali_seed = dali_seed
         self.torch_seed = torch_seed
+        self.device_id = device_id
         self.semi_supervised_loader = None  # initialized in setup_unlabeled
         super().setup()
         self.setup_unlabeled()
@@ -276,7 +279,7 @@ class UnlabeledDataModule(BaseDataModule):
             sequence_length=self.unlabeled_sequence_length,
             batch_size=self.unlabeled_batch_size,
             num_threads=self.num_workers_for_unlabeled,  # other workers do the labeled dataloading
-            device_id=0,
+            device_id=self.device_id,
         )
 
         self.semi_supervised_loader = LightningWrapper(
