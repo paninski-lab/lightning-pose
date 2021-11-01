@@ -1,8 +1,25 @@
-pca: # loss = projection onto the discarded eigenvectors
-  weight: 0.6 # in front of PCA loss
-  discarded_eigenvectors: null # Computed per dataset
-  kept_eigenvectors: null # Computed per dataset
-  epsilon: null # Computed per dataset
-temporal: # loss = norm of distance between successive timepoints
-  weight: 0.7  # in front of temporal loss
-  epsilon: null # for epsilon insensitive rectification
+# loss = projection onto the discarded eigenvectors
+pca:
+  # weight in front of PCA loss
+  weight: 0.6
+
+  # Computed per dataset
+  discarded_eigenvectors: null
+
+  # Computed per dataset
+  kept_eigenvectors: null
+
+  # Computed per dataset
+  epsilon: null
+
+# loss = norm of distance between successive timepoints
+temporal:
+  # weight in front of temporal loss
+  weight: 0.7
+
+  # for epsilon insensitive rectification (in pixels; diffs below this are not penalized)
+<<<<<<< develop
+  epsilon: 10.
+=======
+  epsilon: 5.
+>>>>>>> select gpu_id in training config

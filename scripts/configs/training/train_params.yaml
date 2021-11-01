@@ -1,14 +1,57 @@
+# batch size of labeled data during training
 train_batch_size: 16
-seed: 42
+
+# batch size of labeled data during validation
 val_batch_size: 16
+
+# batch size of labeled data during test
 test_batch_size: 1
+
+# fraction of labeled data used for training
+train_prob: 0.8
+
+# fraction of labeled data used for validation (remaining used for test)
+val_prob: 0.1
+
+# <=1: fraction of total train frames (determined by `train_prob`) used for training
+# >1: number of total train frames used for training
+train_frames: 1
+
+# number of gpus to train a single model
 num_gpus: 0
+
+# number of cpu workers for data loaders
 num_workers: 4
+
+# epochs over which to assess validation metrics for early stopping
 early_stop_patience: 6
+
+# epoch at which backbone network weights begin updating
 unfreezing_epoch: 50
+
+# dropout in final layers
 dropout_rate: 0.1
+
+# max training epochs; training may exit before due to early stopping
 max_epochs: 300
+
+# frequency to log training metrics (one step is one batch)
 log_every_n_steps: 1
 
+# frequency to log validation metrics
+check_val_every_n_epoch: 1
 
+# select gpu for training
+gpu_id: 0
 
+# batch size of unlabeled video data during training (contiguous frames)
+unlabeled_sequence_length: 8
+
+# rng seed for labeled batches
+rng_seed_data_pt: 42
+
+# rng seed for unlabeled videos
+rng_seed_data_dali: 43
+
+# rng seed for weight initialization
+rng_seed_model_pt: 44

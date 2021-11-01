@@ -1,14 +1,15 @@
-import torch
-import torchvision.models as models
-from torch.nn import functional as F
-from torch import nn
+"""Base class for resnet backbone that acts as a feature extractor."""
+
 from pytorch_lightning.core.lightning import LightningModule
+import torch
+from torch import nn
 from torch.optim import Adam
-from typing import Any, Callable, Optional, Tuple, List
-from typing_extensions import Literal
+from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, MultiStepLR
 from torchtyping import TensorType, patch_typeguard
+import torchvision.models as models
 from typeguard import typechecked
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from typing import Any, Callable, List, Optional, Tuple
+from typing_extensions import Literal
 
 
 patch_typeguard()  # use before @typechecked
@@ -19,6 +20,16 @@ def grab_resnet_backbone(
     resnet_version: Literal[18, 34, 50, 101, 152] = 18,
     pretrained: bool = True,
 ) -> models.resnet.ResNet:
+    """Load resnet architecture from torchvision.
+
+    Args:
+        resnet_version: choose network depth
+        pretrained: True to load weights pretrained on imagenet
+
+    Returns:
+        selected resnet architecture as a model object
+
+    """
     resnets = {
         18: models.resnet18,
         34: models.resnet34,
@@ -30,75 +41,82 @@ def grab_resnet_backbone(
 
 
 @typechecked
-def get_resnet_features(resnet_version: Literal[18, 34, 50, 101, 152]) -> int:
-    if resnet_version < 50:
-        _num_features_in_representation = 512
-    else:
-        _num_features_in_representation = 2048
-    return _num_features_in_representation
-
-
-@typechecked
 def grab_layers_sequential(
     model: models.resnet.ResNet, last_layer_ind: Optional[int] = None
 ) -> torch.nn.modules.container.Sequential:
+    """Package selected number of layers into a nn.Sequential object.
+
+    Args:
+        model: original resnet model
+        last_layer_ind: final layer to pass data through
+
+    Returns:
+        potentially reduced backbone model
+
+    """
     layers = list(model.children())[: last_layer_ind + 1]
     return nn.Sequential(*layers)
 
 
 class BaseFeatureExtractor(LightningModule):
+    """Object that contains the base resnet feature extractor."""
+
     def __init__(
         self,
         resnet_version: Literal[18, 34, 50, 101, 152] = 18,
-        pretrained: Optional[bool] = True,
+        pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
     ) -> None:
         """A ResNet model that takes in images and generates features.
-        ResNets will be loaded from torchvision and can be either pre-trained on ImageNet or randomly initialized.
-        These were originally used for classification tasks, so we truncate their final fully connected layer.
+
+        ResNets will be loaded from torchvision and can be either pre-trained
+        on ImageNet or randomly initialized. These were originally used for
+        classification tasks, so we truncate their final fully connected layer.
 
         Args:
-            resnet_version (Optional[int], optional): Which ResNet version to use. Defaults to 18.
-            pretrained (Optional[bool], optional): [description]. Defaults to False.
-            last_resnet_layer_to_get (Optional[int], optional): [description]. Defaults to -2.
+            resnet_version: which ResNet version to use; defaults to 18
+            pretrained: True to load weights pretrained on imagenet
+            last_resnet_layer_to_get: Defaults to -2.
+
         """
         super().__init__()
         print("\n Initializing a {} instance.".format(self._get_name()))
 
         self.resnet_version = resnet_version
-        self.backbone = grab_resnet_backbone(
+        self.base = grab_resnet_backbone(
             resnet_version=self.resnet_version, pretrained=pretrained
         )
-        self.feature_extractor = grab_layers_sequential(
-            model=self.backbone,
+        self.backbone = grab_layers_sequential(
+            model=self.base,
             last_layer_ind=last_resnet_layer_to_get,
         )
 
     def get_representations(
         self,
-        images: TensorType[
-            "Batch_Size", "Image_Channels":3, "Image_Height", "Image_Width", float
-        ],
-    ) -> TensorType[
-        "Batch_Size",
-        "Features",
-        "Representation_Height",
-        "Representation_Width",
-        float,
-    ]:
-        """a wrapper around self.feature_extractor for typechecking purposes. see tests/test_base_resnet.py for example shapes.
+        images: TensorType["batch", "channels":3, "image_height", "image_width", float],
+    ) -> TensorType["batch", "features", "rep_height", "rep_width", float]:
+        """Forward pass from images to feature maps.
+
+        Wrapper around the backbone's feature_extractor() method for
+        typechecking purposes.
+        See tests/test_base_resnet.py for example shapes.
 
         Args:
-            images (torch.tensor(float)): a batch of images
+            images: a batch of images
 
         Returns:
-            torch.tensor(float): a representation of the images. Features differ as a function of resnet version. Representation height and width differ as a function of image dimensions, and are not necessarily equal.
+            a representation of the images; features differ as a function of
+            resnet version. Representation height and width differ as a
+            function of image dimensions, and are not necessarily equal.
         """
-        return self.feature_extractor(images)
+        return self.backbone(images)
 
     def forward(self, images):
-        """Forward pass from images to representations. Just a wrapper over get_representations.
-        Fancier childern models will use get_representations in their forward methods.
+        """Forward pass from images to representations.
+
+        Wrapper around self.get_representations().
+        Fancier childern models will use get_representations() in their forward
+        methods.
 
         Args:
             images (torch.tensor(float)): a batch of images.
@@ -107,3 +125,29 @@ class BaseFeatureExtractor(LightningModule):
             torch.tensor(float): a representation of the images.
         """
         return self.get_representations(images)
+
+    def configure_optimizers(self):
+        """Select optimizer, lr scheduler, and metric for monitoring."""
+
+        # standard adam optimizer
+        optimizer = Adam(filter(lambda p: p.requires_grad, self.parameters()), lr=1e-3)
+
+        # define a scheduler that reduces the base learning rate
+        # scheduler = ReduceLROnPlateau(
+        #     optimizer,
+        #     factor=0.2,
+        #     patience=20,
+        #     verbose=True
+        # )
+        # scheduler = StepLR(
+        #     optimizer,
+        #     step_size=50,
+        #     gamma=0.5
+        # )
+        scheduler = MultiStepLR(optimizer, milestones=[50, 100, 150], gamma=0.5)
+
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": scheduler,
+            "monitor": "val_loss",
+        }
