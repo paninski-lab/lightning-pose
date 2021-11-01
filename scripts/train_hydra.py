@@ -1,7 +1,7 @@
 import pytorch_lightning as pl
 import torch
 import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 import imgaug.augmenters as iaa
 from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
 from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
@@ -61,6 +61,10 @@ def train(cfg: DictConfig):
         )
 
     if not (cfg.model["semi_supervised"]):
+        if not(cfg.training.gpu_id, int):
+            raise NotImplementedError(
+                "Cannot currently fit fully supervised model on multiple gpus"
+            )
         datamod = BaseDataModule(
             dataset=dataset,
             train_batch_size=cfg.training.train_batch_size,
@@ -94,6 +98,10 @@ def train(cfg: DictConfig):
             )
 
     else:
+        if not(cfg.training.gpu_id, int):
+            raise NotImplementedError(
+                "Cannot currently fit semi-supervised model on multiple gpus"
+            )
         loss_param_dict = OmegaConf.to_object(cfg.losses)
         losses_to_use = OmegaConf.to_object(cfg.model.losses_to_use)
         datamod = UnlabeledDataModule(
@@ -112,6 +120,7 @@ def train(cfg: DictConfig):
             unlabeled_sequence_length=cfg.training.unlabeled_sequence_length,
             torch_seed=cfg.training.rng_seed_data_pt,
             dali_seed=cfg.training.rng_seed_data_dali,
+            device_id=cfg.training.gpu_id,
         )
         if cfg.model.model_type == "regression":
             model = SemiSupervisedRegressionTracker(
@@ -152,8 +161,23 @@ def train(cfg: DictConfig):
         train_bn=True,
     )
     # TODO: add wandb?
+    # determine gpu setup
+    if _TORCH_DEVICE == "cpu":
+        gpus = 0
+    elif isinstance(cfg.training.gpu_id, list):
+        gpus = cfg.training.gpu_id
+    elif isinstance(cfg.training.gpu_id, ListConfig):
+        gpus = list(cfg.training.gpu_id)
+    elif isinstance(cfg.training.gpu_id, int):
+        gpus = [cfg.training.gpu_id]
+    else:
+        raise NotImplementedError(
+            "training.gpu_id must be list or int, not {}".format(
+                type(cfg.training.gpu_id)
+            )
+        )
     trainer = pl.Trainer(  # TODO: be careful with devices if you want to scale to multiple gpus
-        gpus=1 if _TORCH_DEVICE == "cuda" else 0,
+        gpus=gpus,
         max_epochs=cfg.training.max_epochs,
         check_val_every_n_epoch=cfg.training.check_val_every_n_epoch,
         log_every_n_steps=cfg.training.log_every_n_steps,
