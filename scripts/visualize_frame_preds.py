@@ -124,7 +124,7 @@ def predict(cfg: DictConfig):
         if use_original_model_names:  # the name you gave the model when you trained it
             display_name = model_cfg.model.model_name
         else:  # the new display name from the eval config
-            display_name = cfg.eval.model_names[model_ind]
+            display_name = cfg.eval.model_display_names[model_ind]
 
         ckpt_file = ckpt_path_from_base_path(
             base_path=absolute_cfg_path, model_name=model_name
