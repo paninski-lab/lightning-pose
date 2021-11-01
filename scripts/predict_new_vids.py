@@ -11,6 +11,7 @@ from pose_est_nets.utils.plotting_utils import (
 from pose_est_nets.utils.io import (
     get_absolute_hydra_path_from_hydra_str,
     ckpt_path_from_base_path,
+    verify_absolute_path,
 )
 
 
@@ -30,8 +31,12 @@ def make_predictions(cfg: DictConfig):
             base_path=absolute_cfg_path, model_name=model_cfg.model.model_name
         )
 
+        absolute_path_to_test_videos = verify_absolute_path(
+            cfg.eval.path_to_test_videos
+        )
+
         predict_videos(
-            video_path=cfg.eval.path_to_test_videos,
+            video_path=absolute_path_to_test_videos,
             ckpt_file=ckpt_file,
             cfg_file=model_cfg,
             save_file=cfg.eval.path_to_save_predictions,

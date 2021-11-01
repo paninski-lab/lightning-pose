@@ -5,10 +5,10 @@ losses_to_use: ["temporal"]
 resnet_version: 18
 
 # whether to include a sequence of unlabeled frames; must be accompanied by non-empty losses_to_use
-semi_supervised: True
+semi_supervised: False
 
 # prediction mode: "heatmap" | "regression"
 model_type: "heatmap"
 
 # directory name for model saving
-model_name: "my_second_toy_model"
+model_name: "my_base_toy_model"

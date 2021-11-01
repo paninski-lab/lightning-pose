@@ -94,7 +94,7 @@ def ckpt_path_from_base_path(
 
 
 @typechecked
-def get_absolute_data_paths(data_cfg: DictConfig) -> Tuple[str, str]:
+def verify_real_data_paths(data_cfg: DictConfig) -> Tuple[str, str]:
     """function to generate absolute path for our example toy data, wherever lightning-pose may be saved.
     @hydra.main decorator switches the cwd when executing the decorated function, e.g., our train().
     so we're in some /outputs/YYYY-MM-DD/HH-MM-SS folder.
@@ -105,19 +105,43 @@ def get_absolute_data_paths(data_cfg: DictConfig) -> Tuple[str, str]:
     Returns:
         Tuple[str, str]: absolute paths to data and video folders.
     """
-    if os.path.isabs(
-        data_cfg.data_dir
-    ):  # both data and video paths are already absolute
-        data_dir = data_cfg.data_dir
+    data_dir = verify_absolute_path(data_cfg.data_dir)
+    if os.path.isabs(data_cfg.video_dir):
         video_dir = data_cfg.video_dir
-    else:  # our toy_datasets:
-        cwd_split = os.getcwd().split(os.path.sep)
-        desired_path_list = cwd_split[:-3]
-        data_dir = os.path.join(os.path.sep, *desired_path_list, data_cfg.data_dir)
-        video_dir = os.path.join(
-            data_dir, data_cfg.video_dir
-        )  # video is inside data_dir
+    else:
+        video_dir = os.path.join(data_dir, data_cfg.video_dir)
     # assert that those paths exist and in the proper format
     assert os.path.isdir(data_dir)
     assert os.path.isdir(video_dir) or os.path.isfile(video_dir)
     return data_dir, video_dir
+    ## the below worked
+    # if os.path.isabs(
+    #     data_cfg.data_dir
+    # ):  # both data and video paths are already absolute
+    #     data_dir = data_cfg.data_dir
+    #     video_dir = data_cfg.video_dir
+    # else:  # our toy_datasets:
+    #     cwd_split = os.getcwd().split(os.path.sep)
+    #     desired_path_list = cwd_split[:-3]
+    #     data_dir = os.path.join(os.path.sep, *desired_path_list, data_cfg.data_dir)
+    #     video_dir = os.path.join(
+    #         data_dir, data_cfg.video_dir
+    #     )  # video is inside data_dir
+    # # assert that those paths exist and in the proper format
+    # assert os.path.isdir(data_dir)
+    # assert os.path.isdir(video_dir) or os.path.isfile(video_dir)
+    # return data_dir, video_dir
+
+
+@typechecked
+def verify_absolute_path(possibly_relative_path: str) -> str:
+    import os
+
+    if os.path.isabs(possibly_relative_path):  # absolute path already; do nothing
+        abs_path = possibly_relative_path
+    else:  # our toy_dataset in relative path
+        cwd_split = os.getcwd().split(os.path.sep)
+        desired_path_list = cwd_split[:-3]
+        abs_path = os.path.join(os.path.sep, *desired_path_list, possibly_relative_path)
+    assert os.path.exists(abs_path)
+    return abs_path

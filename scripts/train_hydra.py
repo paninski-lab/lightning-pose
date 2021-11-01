@@ -14,7 +14,7 @@ from pose_est_nets.models.heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
 )
-from pose_est_nets.utils.io import get_absolute_data_paths
+from pose_est_nets.utils.io import verify_real_data_paths
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import BackboneFinetuning
 from typing import Tuple
@@ -29,7 +29,7 @@ def train(cfg: DictConfig):
     print("Our Hydra config file:")
     print(cfg)
 
-    data_dir, video_dir = get_absolute_data_paths(cfg.data)
+    data_dir, video_dir = verify_real_data_paths(cfg.data)
 
     data_transform = []
     data_transform.append(
