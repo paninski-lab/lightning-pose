@@ -8,14 +8,22 @@ import imgaug.augmenters as iaa
 from imgaug.augmentables.kps import Keypoint, KeypointsOnImage
 from pose_est_nets.models.heatmap_tracker import HeatmapTracker
 import torch
+from tqdm import tqdm
+from typing import Union, Callable
+import pandas as pd
+import fiftyone.core.metadata as fom
 
 
-def tensor_to_keypoint_list(keypoint_tensor, height, width):  # TODO: move to utils file
+def tensor_to_keypoint_list(keypoint_tensor, height, width):
+    # TODO: standardize across video and image plotting. Dan's video util is more updated.
     img_kpts_list = []
     for i in range(len(keypoint_tensor)):
         img_kpts_list.append(
             tuple(
-                (float(keypoint_tensor[i][0] / height), float(keypoint_tensor[i][1] / width))
+                (
+                    float(keypoint_tensor[i][0] / width),  # height
+                    float(keypoint_tensor[i][1] / height),  # width
+                )
             )
         )
         # keypoints are normalized to the original image dims, either add these to data config, or automatically detect by
@@ -23,7 +31,7 @@ def tensor_to_keypoint_list(keypoint_tensor, height, width):  # TODO: move to ut
     return img_kpts_list
 
 
-def make_dataset_and_evaluate(cfg, datamod, best_models):
+def make_dataset_and_evaluate(cfg: DictConfig, datamod: Callable, best_models: dict):
     reverse_transform = []
     reverse_transform.append(
         iaa.Resize(
@@ -34,27 +42,28 @@ def make_dataset_and_evaluate(cfg, datamod, best_models):
         )
     )
     reverse_transform = iaa.Sequential(reverse_transform)
-    image_names = datamod.fulldataset.image_names
-    gt_keypoints = datamod.fulldataset.keypoints
-    samples = []
-    train_indices = datamod.train_set.indices
-    valid_indices = datamod.val_set.indices
-    test_indices = datamod.test_set.indices
+    image_names = datamod.dataset.image_names
+    ground_truth_keypoints = datamod.dataset.keypoints
+    train_indices = datamod.train_dataset.indices
+    valid_indices = datamod.val_dataset.indices
+    test_indices = datamod.test_dataset.indices
+    # send all the models to .eval() mode
     for model in best_models.values():
         model.eval()
-    for idx, img_name in enumerate(image_names):
-        print(idx)
-        img_path = os.path.join(cfg.data.data_dir, img_name)
-        # assert os.path.isfile(img_path)
-        gt_img_kpts = gt_keypoints[idx]
+
+    samples = []  # this is the list of predictions we append to
+    for idx, img_name in enumerate(tqdm(image_names)):
+        img_path = os.path.join(datamod.dataset.root_directory, img_name)
+        assert os.path.isfile(img_path)
+        ground_truth_img_kpts = ground_truth_keypoints[idx]
         nan_bool = (
-            torch.sum(torch.isnan(gt_img_kpts), dim=1) > 0
+            torch.sum(torch.isnan(ground_truth_img_kpts), dim=1) > 0
         )  # e.g., when dim == 0, those columns (keypoints) that have more than zero nans
-        gt_img_kpts = gt_img_kpts[~nan_bool]
-        gt_kpts_list = tensor_to_keypoint_list(
-            gt_img_kpts,
+        ground_truth_img_kpts = ground_truth_img_kpts[~nan_bool]
+        ground_truth_kpts_list = tensor_to_keypoint_list(
+            ground_truth_img_kpts,
             cfg.data.image_orig_dims.height,
-            cfg.data.image_orig_dims.width
+            cfg.data.image_orig_dims.width,
         )
         if idx in train_indices:
             tag = "train"
@@ -66,32 +75,42 @@ def make_dataset_and_evaluate(cfg, datamod, best_models):
             tag = "error"
         sample = fo.Sample(filepath=img_path, tags=[tag])
         sample["ground_truth"] = fo.Keypoints(
-            keypoints=[fo.Keypoint(points=gt_kpts_list)]
+            keypoints=[fo.Keypoint(points=ground_truth_kpts_list)]
         )
-        img = datamod.fulldataset.__getitem__(idx)[0].unsqueeze(0)
+        img = datamod.dataset.__getitem__(idx)[0].unsqueeze(0)
         img_BHWC = img.permute(0, 2, 3, 1)  # Needs to be BHWC format
-        for name, model in best_models.items():
-            pred = model.forward(img)
-            if isinstance(model, HeatmapTracker) or issubclass(
-                type(model), HeatmapTracker
-            ):  # check if model is in the heatmap family
-                pred, confidence = model.run_subpixelmaxima(pred)
-            resized_pred = reverse_transform(
-                images=img_BHWC.numpy(),
-                keypoints=(pred.detach().numpy().reshape((1, -1, 2))),
-            )[1][0]
-            pred_kpts_list = tensor_to_keypoint_list(resized_pred[~nan_bool], cfg.data.image_orig_dims.height, cfg.data.image_orig_dims.width)
-            sample[name + "_prediction"] = fo.Keypoints(
-                keypoints=[fo.Keypoint(points=pred_kpts_list)]
-            )
+        with torch.no_grad():
+            for name, model in best_models.items():
+                pred = model.forward(img)
+                if isinstance(model, HeatmapTracker) or issubclass(
+                    type(model), HeatmapTracker
+                ):  # check if model is in the heatmap family
+                    pred, confidence = model.run_subpixelmaxima(pred)
+                resized_pred = reverse_transform(
+                    images=img_BHWC.numpy(),
+                    keypoints=(pred.detach().numpy().reshape((1, -1, 2))),
+                )[1][0]
+                pred_kpts_list = tensor_to_keypoint_list(
+                    resized_pred[~nan_bool],
+                    cfg.data.image_orig_dims.height,
+                    cfg.data.image_orig_dims.width,
+                )
+                sample[name + "_prediction"] = fo.Keypoints(
+                    keypoints=[fo.Keypoint(points=pred_kpts_list)]
+                )
         samples.append(sample)
 
     full_dataset = fo.Dataset(cfg.eval.fifty_one_dataset_name)
     full_dataset.add_samples(samples)
-    print(full_dataset)
-    print("counts: {} ".format(full_dataset.count("ground_truth.keypoints.points")))
-    print("metadata: {} ".format(full_dataset.compute_metadata()))
-    print("first: {} ".format(full_dataset.first()))
+
+    try:
+        full_dataset.compute_metadata(skip_failures=False)
+    except ValueError:
+        print(full_dataset.exists("metadata", False))
+        print(
+            "the above print should indicate bad image samples, e.g., with bad paths."
+        )
+
     session = fo.launch_app(full_dataset, remote=True)
     session.wait()
     return
