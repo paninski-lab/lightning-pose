@@ -111,16 +111,20 @@ def test_unsupervised():  # TODO Finish writing test
     loss_cfg = os.path.join(base_dir, "scripts", "configs", "losses", "loss_params.yaml")
     with open(loss_cfg) as f:
         loss_param_dict = yaml.load(f, Loader=yaml.FullLoader)
+    # hard code multivew pca info for now
+    loss_param_dict["pca_multiview"]["mirrored_column_matches"] = [
+        [0, 1, 2, 3, 4, 5, 6], [8, 9, 10, 11, 12, 13, 14]
+    ]
 
     datamod = UnlabeledDataModule(
         dataset=dataset,
         video_paths_list=vids[0],
-        specialized_dataprep="pca",
+        losses_to_use="pca_multiview",
         loss_param_dict=loss_param_dict,
     )
     datamod.setup()
 
-    semi_super_losses_to_use = ["pca"]
+    semi_super_losses_to_use = ["pca_multiview"]
     model = SemiSupervisedHeatmapTracker(
         resnet_version=18,
         num_targets=34,

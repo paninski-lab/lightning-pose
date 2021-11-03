@@ -6,7 +6,7 @@ from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
-from pose_est_nets.utils.heatmap_tracker_utils import format_mouse_data
+from pose_est_nets.datasets.preprocessing import format_multiview_data_for_pca
 
 patch_typeguard()  # use before @typechecked
 
@@ -115,7 +115,7 @@ def MultiviewPCALoss(
     reshaped_maxima_preds = reshaped_maxima_preds.reshape(
         reshaped_maxima_preds.shape[0], -1, 2
     )
-    reshaped_maxima_preds = format_mouse_data(
+    reshaped_maxima_preds = format_multiview_data_for_pca(
         reshaped_maxima_preds
     )  # TODO: get rid of dataset dependence
     abs_proj_discarded = torch.abs(

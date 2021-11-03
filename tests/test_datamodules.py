@@ -52,6 +52,10 @@ base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
 loss_cfg = os.path.join(base_dir, "scripts", "configs", "losses", "loss_params.yaml")
 with open(loss_cfg) as f:
     loss_param_dict = yaml.load(f, Loader=yaml.FullLoader)
+# hard code multivew pca info for now
+loss_param_dict["pca_multiview"]["mirrored_column_matches"] = [
+    [0, 1, 2, 3, 4, 5, 6], [8, 9, 10, 11, 12, 13, 14]
+]
 
 
 def test_base_datamodule():
@@ -181,7 +185,7 @@ def test_PCA():  # TODO FINISH WRITING TEST
         heatmapData,
         video_paths_list=vids,
         loss_param_dict=loss_param_dict,
-        specialized_dataprep="pca",
+        losses_to_use="pca_multiview",
     )
 
 
