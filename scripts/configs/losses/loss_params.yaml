@@ -1,5 +1,5 @@
 # loss = projection onto the discarded eigenvectors
-pca:
+pca_multiview:
   # weight in front of PCA loss
   weight: 0.6
 
@@ -18,8 +18,4 @@ temporal:
   weight: 0.7
 
   # for epsilon insensitive rectification (in pixels; diffs below this are not penalized)
-<<<<<<< develop
-  epsilon: 10.
-=======
   epsilon: 5.
->>>>>>> select gpu_id in training config

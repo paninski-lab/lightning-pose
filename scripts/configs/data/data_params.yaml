@@ -25,4 +25,17 @@ downsample_factor: 2
 
 # total number of predictions; 2 * num_keypoints
 num_targets: 34
-# add parameters related to the ground truth heatmaps, sigma, confidence_scale, etc
+
+# for mirrored setups with all keypoints defined in same csv file, define matching
+# columns for different keypoints (assumes x-y-x-y interleaving)
+# each list corresponds to a single view, so in the example below there are 2 views
+# keypoint 0 is from view 0 and matches up with keypoint 8 from view 2
+# columns that correspond to keypoints only labeled in a single view are omitted
+# TODO: what if a keypoint is labeled in more than 1 but not all views?
+# this info is only used for the multiview pca loss
+mirrored_column_matches:
+  - [0, 1, 2, 3, 4, 5, 6]
+  - [8, 9, 10, 11, 12, 13, 14]
+
+
+# TODO: add parameters related to the ground truth heatmaps, sigma, confidence_scale, etc
