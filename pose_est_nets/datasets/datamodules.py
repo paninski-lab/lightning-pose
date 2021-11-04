@@ -232,7 +232,7 @@ class UnlabeledDataModule(BaseDataModule):
         self.dali_seed = dali_seed
         self.torch_seed = torch_seed
         self.device_id = device_id
-        self.semi_supervised_loader = None  # initialized in setup_unlabeled
+        self.unlabeled_dataloader = None  # initialized in setup_unlabeled
         super().setup()
         self.setup_unlabeled()
         self.loss_param_dict = loss_param_dict
@@ -292,15 +292,12 @@ class UnlabeledDataModule(BaseDataModule):
             device_id=self.device_id,
         )
 
-        self.semi_supervised_loader = LightningWrapper(
+        self.unlabeled_dataloader = LightningWrapper(
             data_pipe,
             output_map=["x"],
             last_batch_policy=LastBatchPolicy.PARTIAL,
             auto_reset=True,  # TODO: verify what "reseting" means
         )
-
-    def unlabeled_dataloader(self):
-        return self.semi_supervised_loader
 
     def train_dataloader(self):
         loader = {
@@ -309,7 +306,7 @@ class UnlabeledDataModule(BaseDataModule):
                 batch_size=self.train_batch_size,
                 num_workers=self.num_workers_for_labeled,
             ),
-            "unlabeled": self.unlabeled_dataloader(),
+            "unlabeled": self.unlabeled_dataloader,
         }
         return loader
 
