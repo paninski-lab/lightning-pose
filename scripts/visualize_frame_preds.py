@@ -99,7 +99,7 @@ def predict(cfg: DictConfig):
     datamod = UnlabeledDataModule(
         dataset=dataset,
         video_paths_list=video_dir,  # just a single path for now
-        specialized_dataprep=losses_to_use,
+        losses_to_use=losses_to_use,
         loss_param_dict=loss_param_dict,
         train_batch_size=cfg.training.train_batch_size,
         val_batch_size=cfg.training.val_batch_size,
