@@ -52,7 +52,7 @@ def compute_multiview_pca_params(
             data_module.dataset.keypoints.detach().clone(), 0, indxs
         )  # data_arr is shape (train_batches, keypoints, 2)
 
-        # TODO: do we want this? applies augmentations
+        # apply augmentation which *downsamples* the frames
         if data_module.dataset.imgaug_transform:
             i = 0
             for idx in indxs:
@@ -63,7 +63,8 @@ def compute_multiview_pca_params(
         data_arr = (
             data_module.train_dataset.keypoints.detach().clone()
         )  # won't work for random splitting
-        # TODO: do we want this? applies augmentations
+
+        # apply augmentation which *downsamples* the frames
         if data_module.train_dataset.imgaug_transform:
             for i in range(len(data_arr)):
                 data_arr[i] = super(
@@ -84,12 +85,12 @@ def compute_multiview_pca_params(
         "good_arr_for_pca shape: {}".format(good_arr_for_pca.shape)
     )  # TODO: have prints as tests
     pca_prints(pca, components_to_keep)  # print important params
-    data_module.loss_param_dict["pca"]["kept_eigenvectors"] = torch.tensor(
+    data_module.loss_param_dict["pca_multiview"]["kept_eigenvectors"] = torch.tensor(
         pca.components_[:components_to_keep],
         dtype=torch.float32,
         device=_TORCH_DEVICE,  # TODO: be careful for multinode
     )
-    data_module.loss_param_dict["pca"]["discarded_eigenvectors"] = torch.tensor(
+    data_module.loss_param_dict["pca_multiview"]["discarded_eigenvectors"] = torch.tensor(
         pca.components_[components_to_keep:],
         dtype=torch.float32,
         device=_TORCH_DEVICE,  # TODO: be careful for multinode
@@ -98,7 +99,7 @@ def compute_multiview_pca_params(
     # compute the keypoints' projections on the discarded components, to
     # estimate the e.g., 90th percentile and determine epsilon.
     # absolute value is important -- projections can be negative.
-    discarded_eigs = data_module.loss_param_dict["pca"]["discarded_eigenvectors"]
+    discarded_eigs = data_module.loss_param_dict["pca_multiview"]["discarded_eigenvectors"]
     proj_discarded = torch.abs(
         torch.matmul(
             arr_for_pca.T,
@@ -110,7 +111,7 @@ def compute_multiview_pca_params(
         proj_discarded.numpy(), empirical_epsilon_percentile, axis=0
     )
     print(epsilon)
-    data_module.loss_param_dict["pca"]["epsilon"] = torch.tensor(
+    data_module.loss_param_dict["pca_multiview"]["epsilon"] = torch.tensor(
         epsilon,
         dtype=torch.float32,
         device=_TORCH_DEVICE,  # TODO: be careful for multinode
@@ -148,7 +149,7 @@ def format_multiview_data_for_pca(
     data_arr_views = []
     # separate views and reformat
     for view in range(n_views):
-        assert len(mirrored_column_matches[view]) == n_views
+        assert len(mirrored_column_matches[view]) == n_keypoints
         data_arr_tmp = data_arr[:, np.array(mirrored_column_matches[view]), :]
         data_arr_tmp = data_arr_tmp.permute(2, 0, 1).reshape(2, -1)
         data_arr_views.append(data_arr_tmp)
