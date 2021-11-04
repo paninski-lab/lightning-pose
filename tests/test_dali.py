@@ -32,6 +32,8 @@ def test_video_pipe():
         sequences_out = pipe_out[0].as_cpu().as_array()
         assert sequences_out.shape == (2, 7, 3, 384, 384)
     pass
+    # remove model/data from gpu; then cache can be cleared
+    del pipe
 
 
 def test_dali_wrapper():
