@@ -192,6 +192,8 @@ def train(cfg: DictConfig):
             transfer_unfreeze_callback,
         ],
         logger=logger,
+        limit_train_batches=10,
+        multiple_trainloader_mode='max_size_cycle',
     )
     trainer.fit(model=model, datamodule=datamod)
 
