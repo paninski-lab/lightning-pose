@@ -3,7 +3,7 @@
 import numpy as np
 import torch
 from typeguard import typechecked
-from typing import Optional, List
+from typing import Optional, List, Union
 
 from pose_est_nets.datasets.datasets import HeatmapDataset
 
@@ -57,3 +57,19 @@ def clean_any_nans(data: torch.tensor, dim: int) -> torch.tensor:
         torch.sum(torch.isnan(data), dim=dim) > 0
     )  # e.g., when dim == 0, those columns (keypoints) that have >0 nans
     return data[:, ~nan_bool]
+
+
+@typechecked
+def count_frames(video_list: Union[List[str], str]) -> int:
+    import cv2
+
+    if isinstance(video_list, str):
+        video_list = [video_list]
+
+    num_frames = 0
+    for video_file in video_list:
+        cap = cv2.VideoCapture(video_file)
+        num_frames += int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap.release()
+
+    return num_frames
