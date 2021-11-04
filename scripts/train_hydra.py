@@ -104,8 +104,9 @@ def train(cfg: DictConfig):
             )
         loss_param_dict = OmegaConf.to_object(cfg.losses)
         # copy data-specific details into loss dict TODO: this is ugly
-        loss_param_dict["pca_multiview"]["mirrored_column_matches"] = \
-            cfg.data.mirrored_column_matches
+        if "pca_multiview" in loss_param_dict.keys():
+            loss_param_dict["pca_multiview"]["mirrored_column_matches"] = \
+                cfg.data.mirrored_column_matches
         losses_to_use = OmegaConf.to_object(cfg.model.losses_to_use)
         datamod = UnlabeledDataModule(
             dataset=dataset,
