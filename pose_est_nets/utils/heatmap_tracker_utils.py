@@ -2,7 +2,6 @@ import torch
 import numpy as np
 import math
 from torch.nn import functional as F
-from typing import Optional
 
 
 def find_maxima(x):
@@ -287,15 +286,3 @@ class SubPixelMaxima:  # Add tensor typing
         confidence = keypoints[:, :, 2]
         keypoints = keypoints[:, :, :2]
         return keypoints.reshape(keypoints.shape[0], -1), confidence
-
-
-def format_mouse_data(data_arr):
-    # TODO: assume that data is a csv file or pandas dataframe
-    # with first line indicating view and second line indicating body part names
-    # access the the unique elements of the view column instead of :7 and 8:15
-    data_arr_top = data_arr[:, :7, :]  # mouse data info hardcoded here
-    data_arr_bot = data_arr[:, 8:15, :]
-    data_arr_top = data_arr_top.permute(2, 0, 1).reshape(2, -1)
-    data_arr_bot = data_arr_bot.permute(2, 0, 1).reshape(2, -1)
-    data_arr = torch.cat([data_arr_top, data_arr_bot], dim=0)
-    return data_arr

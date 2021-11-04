@@ -58,5 +58,13 @@ def test_heatmap_dataset():
 
     # print(heatmapData.__getitem__(11)[1])
 
+    # remove model/data from gpu; then cache can be cleared
+    del regData
+    del heatmapData
+    del image
+    del heatmaps
+    del keypoints
+    torch.cuda.empty_cache()  # remove tensors from gpu
+
 
 test_heatmap_dataset()

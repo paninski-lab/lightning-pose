@@ -4,7 +4,6 @@ import numpy as np
 from nvidia.dali.plugin.pytorch import LastBatchPolicy
 import os
 import pytorch_lightning as pl
-from sklearn.decomposition import PCA
 import torch
 from torch.utils.data import DataLoader, random_split
 from typeguard import typechecked
@@ -12,8 +11,7 @@ from typing import Literal, List, Optional, Tuple, Union
 
 from pose_est_nets.datasets.dali import video_pipe, LightningWrapper
 from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
-from pose_est_nets.datasets.utils import clean_any_nans, split_sizes_from_probabilities
-from pose_est_nets.utils.heatmap_tracker_utils import format_mouse_data
+from pose_est_nets.datasets.utils import split_sizes_from_probabilities
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -179,8 +177,8 @@ class UnlabeledDataModule(BaseDataModule):
         dali_seed: int = 123456,
         torch_seed: int = 42,
         device_id: int = 0,
-        specialized_dataprep: Optional[Literal["pca"]] = None,
         loss_param_dict: Optional[dict] = None,
+        losses_to_use: Optional[Literal["pca_multiview", "temporal"]] = None,
     ) -> None:
         """Data module that contains labeled and unlabeled data loaders.
 
@@ -208,9 +206,9 @@ class UnlabeledDataModule(BaseDataModule):
             dali_seed: control randomness of unlabeled data loading
             torch_seed: control randomness of labeled data loading
             device_id: gpu for unlabeled data loading
-            specialized_dataprep:
-            loss_param_dict: details of loss types for unlabeled data
-                (influences processing)
+            loss_param_dict: details of all possible loss types for unlabeled data
+            losses_to_use: list of losses to actually enforce (influences how data is
+                processed)
 
         """
         super().__init__(
@@ -234,13 +232,25 @@ class UnlabeledDataModule(BaseDataModule):
         self.dali_seed = dali_seed
         self.torch_seed = torch_seed
         self.device_id = device_id
-        self.semi_supervised_loader = None  # initialized in setup_unlabeled
+        self.unlabeled_dataloader = None  # initialized in setup_unlabeled
         super().setup()
         self.setup_unlabeled()
         self.loss_param_dict = loss_param_dict
-        if specialized_dataprep:  # it's not None
-            if "pca" in specialized_dataprep:
-                self.computePCA_params()
+
+        # perform any necessary preprocessing steps
+        if losses_to_use:  # check it's not None
+            if "pca_multiview" in losses_to_use:
+                from pose_est_nets.datasets.preprocessing import (
+                    compute_multiview_pca_params
+                )
+                compute_multiview_pca_params(self)
+            elif "pca" in losses_to_use:
+                # single-view pca
+                # from pose_est_nets.datasets.preprocessing import (
+                #     compute_singleview_pca_params
+                # )
+                # compute_singleview_pca_params(self)
+                raise NotImplementedError
 
     def setup_unlabeled(self):
 
@@ -282,97 +292,12 @@ class UnlabeledDataModule(BaseDataModule):
             device_id=self.device_id,
         )
 
-        self.semi_supervised_loader = LightningWrapper(
+        self.unlabeled_dataloader = LightningWrapper(
             data_pipe,
             output_map=["x"],
             last_batch_policy=LastBatchPolicy.PARTIAL,
             auto_reset=True,  # TODO: verify what "reseting" means
         )
-
-    # TODO: could be separated from this class
-    # TODO: return something?
-    def computePCA_params(  # Should only call this if pca in loss name dict
-        self,
-        components_to_keep: int = 3,
-        empirical_epsilon_percentile: float = 90.0,
-    ) -> None:
-        print("Computing PCA on the keypoints...")
-        # Nick: Subset inherits from dataset, it doesn't have access to
-        # dataset.keypoints
-        if type(self.train_dataset) == torch.utils.data.dataset.Subset:
-            indxs = torch.tensor(self.train_dataset.indices)
-            regressionData = (
-                super(type(self.dataset), self.dataset)
-                if type(self.dataset) == HeatmapDataset
-                else self.dataset
-            )
-            data_arr = torch.index_select(
-                self.dataset.keypoints.detach().clone(), 0, indxs
-            )
-            if self.dataset.imgaug_transform:
-                i = 0
-                for idx in indxs:
-                    vals = regressionData.__getitem__(idx)
-                    data_arr[i] = vals[1].reshape(-1, 2)
-                    i += 1
-        else:
-            data_arr = (
-                self.train_dataset.keypoints.detach().clone()
-            )  # won't work for random splitting
-            if self.train_dataset.imgaug_transform:
-                for i in range(len(data_arr)):
-                    data_arr[i] = super(
-                        type(self.train_dataset), self.train_dataset
-                    ).__getitem__(i)[1]
-
-        # TODO: format_mouse_data is specific to Rick's dataset, change when
-        # TODO: we're scaling to more data sources
-        arr_for_pca = format_mouse_data(data_arr)
-        print("initial_arr_for_pca shape: {}".format(arr_for_pca.shape))
-        # Dan's cleanup:
-        good_arr_for_pca = clean_any_nans(arr_for_pca, dim=0)
-        pca = PCA(n_components=4, svd_solver="full")
-        pca.fit(good_arr_for_pca.T)
-        print("Done!")
-
-        print(
-            "good_arr_for_pca shape: {}".format(good_arr_for_pca.shape)
-        )  # TODO: have prints as tests
-        pca_prints(pca, components_to_keep)  # print important params
-        self.loss_param_dict["pca"]["kept_eigenvectors"] = torch.tensor(
-            pca.components_[:components_to_keep],
-            dtype=torch.float32,
-            device=_TORCH_DEVICE,  # TODO: be careful for multinode
-        )
-        self.loss_param_dict["pca"]["discarded_eigenvectors"] = torch.tensor(
-            pca.components_[components_to_keep:],
-            dtype=torch.float32,
-            device=_TORCH_DEVICE,  # TODO: be careful for multinode
-        )
-
-        # compute the keypoints' projections on the discarded components, to
-        # estimate the e.g., 90th percentile and determine epsilon
-        # absolute value is important -- projections can be negative.
-        discarded_eigs = self.loss_param_dict["pca"]["discarded_eigenvectors"]
-        proj_discarded = torch.abs(
-            torch.matmul(
-                arr_for_pca.T,
-                discarded_eigs.clone().detach().cpu().T,  # TODO: why cpu?
-            )
-        )
-        # setting axis = 0 generalizes to multiple discarded components
-        epsilon = np.nanpercentile(
-            proj_discarded.numpy(), empirical_epsilon_percentile, axis=0
-        )
-        print(epsilon)
-        self.loss_param_dict["pca"]["epsilon"] = torch.tensor(
-            epsilon,
-            dtype=torch.float32,
-            device=_TORCH_DEVICE,  # TODO: be careful for multinode
-        )
-
-    def unlabeled_dataloader(self):
-        return self.semi_supervised_loader
 
     def train_dataloader(self):
         loader = {
@@ -381,7 +306,7 @@ class UnlabeledDataModule(BaseDataModule):
                 batch_size=self.train_batch_size,
                 num_workers=self.num_workers_for_labeled,
             ),
-            "unlabeled": self.unlabeled_dataloader(),
+            "unlabeled": self.unlabeled_dataloader,
         }
         return loader
 
@@ -392,18 +317,3 @@ class UnlabeledDataModule(BaseDataModule):
             batch_size=self.test_batch_size,
             num_workers=self.num_workers_for_labeled,
         )
-
-
-@typechecked
-def pca_prints(pca: PCA, components_to_keep: int) -> None:
-    print("Results of running PCA on keypoints:")
-    print(
-        "explained_variance_ratio_: {}".format(
-            np.round(pca.explained_variance_ratio_, 3)
-        )
-    )
-    print(
-        "total_explained_var: {}".format(
-            np.round(np.sum(pca.explained_variance_ratio_[:components_to_keep]), 3)
-        )
-    )

@@ -31,6 +31,9 @@ def test_init():
     assert model.num_keypoints == 17
     assert model.num_filters_for_upsampling == 512
     assert model.coordinate_scale == 4
+    # remove model/data from gpu; then cache can be cleared
+    del model
+    torch.cuda.empty_cache()  # remove tensors from gpu
 
 
 def test_create_double_upsampling_layer():
@@ -58,6 +61,16 @@ def test_create_double_upsampling_layer():
         == torch.tensor(upsampled.shape[-2:]) * 2
     ).all()
 
+    # remove model/data from gpu; then cache can be cleared
+    del fake_image_batch
+    del heatmap_model
+    del upsampling_layer
+    del representations
+    del upsampled
+    del upsampling_layer_two
+    del twice_upsampled
+    torch.cuda.empty_cache()  # remove tensors from gpu
+
     # TODO: revisit this test
     # # test the output
     # pix_shuff = torch.nn.PixelShuffle(2)
@@ -82,6 +95,13 @@ def test_heatmaps_from_representations():
         == torch.tensor(fake_image_batch.shape[-2:])
         // (2 ** heatmap_model.downsample_factor)
     ).all()
+
+    # remove model/data from gpu; then cache can be cleared
+    del fake_image_batch
+    del heatmap_model
+    del representations
+    del heatmaps
+    torch.cuda.empty_cache()  # remove tensors from gpu
 
 
 def test_unsupervised():  # TODO Finish writing test
@@ -111,20 +131,24 @@ def test_unsupervised():  # TODO Finish writing test
     loss_cfg = os.path.join(base_dir, "scripts", "configs", "losses", "loss_params.yaml")
     with open(loss_cfg) as f:
         loss_param_dict = yaml.load(f, Loader=yaml.FullLoader)
+    # hard code multivew pca info for now
+    loss_param_dict["pca_multiview"]["mirrored_column_matches"] = [
+        [0, 1, 2, 3, 4, 5, 6], [8, 9, 10, 11, 12, 13, 14]
+    ]
 
     datamod = UnlabeledDataModule(
         dataset=dataset,
         video_paths_list=vids[0],
-        specialized_dataprep="pca",
+        losses_to_use="pca_multiview",
         loss_param_dict=loss_param_dict,
     )
     datamod.setup()
 
-    semi_super_losses_to_use = ["pca"]
+    semi_super_losses_to_use = ["pca_multiview"]
     model = SemiSupervisedHeatmapTracker(
         resnet_version=18,
         num_targets=34,
-        loss_params=loss_param_dict,
+        loss_params=datamod.loss_param_dict,
         semi_super_losses_to_use=semi_super_losses_to_use,
         output_shape=dataset.output_shape,
     ).to(_TORCH_DEVICE)
@@ -166,3 +190,14 @@ def test_unsupervised():  # TODO Finish writing test
         auto_scale_batch_size=False,
     )  # auto_scale_batch_size not working
     trainer.fit(model=model, datamodule=datamod)
+
+    # remove model/data from gpu; then cache can be cleared
+    del datamod
+    del model
+    del loader
+    del out_heatmaps_labeled
+    del out_heatmaps_unlabeled
+    del spm_l, c_l
+    del spm_u, c_u
+    del trainer
+    torch.cuda.empty_cache()  # remove tensors from gpu
