@@ -245,12 +245,12 @@ class UnlabeledDataModule(BaseDataModule):
                     compute_multiview_pca_params
                 )
                 compute_multiview_pca_params(self)
-            elif "pca" in losses_to_use:
+            elif "pca_singleview" in losses_to_use:
                 # single-view pca
-                # from pose_est_nets.datasets.preprocessing import (
-                #     compute_singleview_pca_params
-                # )
-                # compute_singleview_pca_params(self)
+                from pose_est_nets.datasets.preprocessing import (
+                    compute_singleview_pca_params
+                )
+                compute_singleview_pca_params(self)
                 raise NotImplementedError
 
     def setup_unlabeled(self):
