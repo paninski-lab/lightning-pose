@@ -109,12 +109,16 @@ def video_pipe(
 class LightningWrapper(DALIGenericIterator):
     """wrapper around a DALI pipeline to get batches for ptl."""
 
-    def __init__(self, *kargs, **kvargs):
-        super().__init__(*kargs, **kvargs)
+    def __init__(self, *kargs, **kwargs):
 
-    def __len__(self):  # just to avoid ptl err check
-        # TODO: determine actual length of vid
-        return 1  # num frames = len * batch_size
+        # collect number of batches computed outside of class
+        self.num_batches = kwargs.pop("num_batches", 1)
+
+        # call parent
+        super().__init__(*kargs, **kwargs)
+
+    def __len__(self):
+        return self.num_batches
 
     def __next__(self):
         out = super().__next__()

@@ -227,6 +227,7 @@ class UnlabeledDataModule(BaseDataModule):
         self.video_paths_list = video_paths_list
         self.num_workers_for_unlabeled = num_workers // 2
         self.num_workers_for_labeled = num_workers // 2
+        assert unlabeled_batch_size == 1, "LightningWrapper expects batch size of 1"
         self.unlabeled_batch_size = unlabeled_batch_size
         self.unlabeled_sequence_length = unlabeled_sequence_length
         self.dali_seed = dali_seed
@@ -253,6 +254,8 @@ class UnlabeledDataModule(BaseDataModule):
                 raise NotImplementedError
 
     def setup_unlabeled(self):
+
+        from pose_est_nets.datasets.utils import count_frames
 
         # get input data
         if isinstance(self.video_paths_list, list):
@@ -292,11 +295,16 @@ class UnlabeledDataModule(BaseDataModule):
             device_id=self.device_id,
         )
 
+        # compute number of batches
+        total_frames = count_frames(filenames)
+        num_batches = int(total_frames // self.unlabeled_sequence_length)
+
         self.unlabeled_dataloader = LightningWrapper(
             data_pipe,
             output_map=["x"],
             last_batch_policy=LastBatchPolicy.PARTIAL,
-            auto_reset=True,  # TODO: verify what "reseting" means
+            auto_reset=True,  # TODO: auto reset on each epoch - is this random?
+            num_batches=num_batches
         )
 
     def train_dataloader(self):
