@@ -2,6 +2,7 @@ lightning_logs/
 .vscode/
 data/
 outputs/
+multirun/
 preds/
 
 # Byte-compiled / optimized / DLL files

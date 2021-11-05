@@ -1,4 +1,5 @@
 import pytorch_lightning as pl
+from pytorch_lightning import profiler
 import torch
 import hydra
 from omegaconf import DictConfig, ListConfig, OmegaConf
@@ -61,7 +62,7 @@ def train(cfg: DictConfig):
         )
 
     if not (cfg.model["semi_supervised"]):
-        if not(cfg.training.gpu_id, int):
+        if not (cfg.training.gpu_id, int):
             raise NotImplementedError(
                 "Cannot currently fit fully supervised model on multiple gpus"
             )
@@ -98,15 +99,16 @@ def train(cfg: DictConfig):
             )
 
     else:
-        if not(cfg.training.gpu_id, int):
+        if not (cfg.training.gpu_id, int):
             raise NotImplementedError(
                 "Cannot currently fit semi-supervised model on multiple gpus"
             )
         loss_param_dict = OmegaConf.to_object(cfg.losses)
         # copy data-specific details into loss dict TODO: this is ugly
         if "pca_multiview" in loss_param_dict.keys():
-            loss_param_dict["pca_multiview"]["mirrored_column_matches"] = \
-                cfg.data.mirrored_column_matches
+            loss_param_dict["pca_multiview"][
+                "mirrored_column_matches"
+            ] = cfg.data.mirrored_column_matches
         losses_to_use = OmegaConf.to_object(cfg.model.losses_to_use)
         datamod = UnlabeledDataModule(
             dataset=dataset,
@@ -192,8 +194,9 @@ def train(cfg: DictConfig):
             transfer_unfreeze_callback,
         ],
         logger=logger,
-        limit_train_batches=10,
-        multiple_trainloader_mode='max_size_cycle',
+        limit_train_batches=cfg.training.limit_train_batches,
+        multiple_trainloader_mode=cfg.training.multiple_trainloader_mode,
+        profiler=cfg.training.profiler,
     )
     trainer.fit(model=model, datamodule=datamod)
 
