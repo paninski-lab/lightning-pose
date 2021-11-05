@@ -2,8 +2,8 @@ from operator import sub
 import os
 import pickle
 from typeguard import typechecked
-from typing import Any, Tuple
-from omegaconf import DictConfig, OmegaConf
+from typing import Any, Tuple, Union
+from omegaconf import DictConfig, OmegaConf, ListConfig
 
 
 @typechecked
@@ -145,3 +145,28 @@ def verify_absolute_path(possibly_relative_path: str) -> str:
         abs_path = os.path.join(os.path.sep, *desired_path_list, possibly_relative_path)
     assert os.path.exists(abs_path)
     return abs_path
+
+
+@typechecked
+def check_if_semi_supervised(
+    losses_to_use: Union[ListConfig, list, None] = None
+) -> bool:
+    """take the entry of the hydra cfg that specifies losses_to_use. if it contains meaningful entries, infer that we want a semi_supervised model.
+
+    Args:
+        losses_to_use (Union[ListConfig, list, None], optional): the cfg entry specifying semisupervised losses to use. Defaults to None.
+
+    Returns:
+        bool: True if the model is semi_supervised. False otherwise.
+    """
+    if losses_to_use is None:  # null
+        semi_supervised = False
+    elif len(losses_to_use) == 0:  # empty list
+        semi_supervised = False
+    elif (
+        len(losses_to_use) == 1 and losses_to_use[0] == ""
+    ):  # list with an empty string
+        semi_supervised = False
+    else:
+        semi_supervised = True
+    return semi_supervised
