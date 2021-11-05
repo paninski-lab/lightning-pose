@@ -1,12 +1,13 @@
 """Supervised and unsupervised losses implemented in pytorch."""
 
+from omegaconf import ListConfig
 import torch
 from torch.nn import functional as F
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
-from pose_est_nets.utils.heatmap_tracker_utils import format_mouse_data
+from pose_est_nets.datasets.preprocessing import format_multiview_data_for_pca
 
 patch_typeguard()  # use before @typechecked
 
@@ -93,6 +94,7 @@ def MultiviewPCALoss(
     reshaped_maxima_preds: TensorType["batch", "two_x_num_keypoints", float],
     discarded_eigenvectors: TensorType["views_times_two", "num_discarded_evecs", float],
     epsilon: TensorType[float],
+    mirrored_column_matches: Union[ListConfig, List],
     **kwargs  # make loss robust to unneeded inputs
 ) -> TensorType[float]:
     """
@@ -105,6 +107,7 @@ def MultiviewPCALoss(
         reshaped_maxima_preds:
         discarded_eigenvectors:
         epsilon:
+        mirrored_column_matches:
         **kwargs:
 
     Returns:
@@ -115,9 +118,10 @@ def MultiviewPCALoss(
     reshaped_maxima_preds = reshaped_maxima_preds.reshape(
         reshaped_maxima_preds.shape[0], -1, 2
     )
-    reshaped_maxima_preds = format_mouse_data(
-        reshaped_maxima_preds
-    )  # TODO: get rid of dataset dependence
+    reshaped_maxima_preds = format_multiview_data_for_pca(
+        data_arr=reshaped_maxima_preds,
+        mirrored_column_matches=mirrored_column_matches
+    )
     abs_proj_discarded = torch.abs(
         torch.matmul(reshaped_maxima_preds.T, discarded_eigenvectors.T)
     )
@@ -177,7 +181,7 @@ def filter_dict(mydict: Dict[str, Any], keys: List[str]) -> Dict[str, Any]:
 
 @typechecked
 def get_losses_dict(
-    names_list: List[Literal["pca", "temporal"]] = []
+    names_list: List[Literal["pca_multiview", "temporal"]] = []
 ) -> Dict[str, Callable]:
     """Get a dict with all the loss functions for semi supervised training.
 
@@ -194,7 +198,7 @@ def get_losses_dict(
     loss_dict = {
         "regression": MaskedRegressionMSELoss,
         "heatmap": MaskedMSEHeatmapLoss,
-        "pca": MultiviewPCALoss,
+        "pca_multiview": MultiviewPCALoss,
         "temporal": TemporalLoss,
     }
     return filter_dict(loss_dict, names_list)

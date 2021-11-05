@@ -95,8 +95,8 @@ def test_TemporalLoss():
 def test_get_losses_dict():
     from pose_est_nets.losses.losses import get_losses_dict
 
-    out_dict = get_losses_dict(["pca"])
-    assert "pca" in list(out_dict.keys())
+    out_dict = get_losses_dict(["pca_multiview"])
+    assert "pca_multiview" in list(out_dict.keys())
     assert "temporal" not in list(out_dict.keys())
     assert type(out_dict) == dict
 

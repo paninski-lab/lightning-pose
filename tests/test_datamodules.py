@@ -33,14 +33,14 @@ for (
     if f.endswith(".mp4"):  # hardcoded for the toydataset folder
         vids.append(f)
 
-regData = BaseTrackingDataset(
+reg_data = BaseTrackingDataset(
     root_directory="toy_datasets/toymouseRunningData",
     csv_path="CollectedData_.csv",
     header_rows=[1, 2],
     imgaug_transform=imgaug_transform,
 )
 
-heatmapData = HeatmapDataset(
+heatmap_data = HeatmapDataset(
     root_directory="toy_datasets/toymouseRunningData",
     csv_path="CollectedData_.csv",
     header_rows=[1, 2],
@@ -52,43 +52,47 @@ base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
 loss_cfg = os.path.join(base_dir, "scripts", "configs", "losses", "loss_params.yaml")
 with open(loss_cfg) as f:
     loss_param_dict = yaml.load(f, Loader=yaml.FullLoader)
+# hard code multivew pca info for now
+loss_param_dict["pca_multiview"]["mirrored_column_matches"] = [
+    [0, 1, 2, 3, 4, 5, 6], [8, 9, 10, 11, 12, 13, 14]
+]
 
 
 def test_base_datamodule():
 
-    regModule = BaseDataModule(regData)  # and default args
-    regModule.setup()
-    batch = next(iter(regModule.train_dataloader()))
+    reg_module = BaseDataModule(reg_data)  # and default args
+    reg_module.setup()
+    batch = next(iter(reg_module.train_dataloader()))
     assert (
         torch.tensor(batch[0].shape)
-        == torch.tensor([regModule.train_batch_size, 3, 384, 384])
+        == torch.tensor([reg_module.train_batch_size, 3, 384, 384])
     ).all()
     assert (
-        torch.tensor(batch[1].shape) == torch.tensor([regModule.train_batch_size, 34])
+        torch.tensor(batch[1].shape) == torch.tensor([reg_module.train_batch_size, 34])
     ).all()
 
-    heatmapModule = BaseDataModule(heatmapData)  # and default args
-    heatmapModule.setup()
-    batch = next(iter(heatmapModule.train_dataloader()))
+    heatmap_module = BaseDataModule(heatmap_data)  # and default args
+    heatmap_module.setup()
+    batch = next(iter(heatmap_module.train_dataloader()))
     assert (
         torch.tensor(batch[0].shape)
-        == torch.tensor([heatmapModule.train_batch_size, 3, 384, 384])
+        == torch.tensor([heatmap_module.train_batch_size, 3, 384, 384])
     ).all()
     assert (
         torch.tensor(batch[1].shape)
         == torch.tensor(
             [
-                heatmapModule.train_batch_size,
+                heatmap_module.train_batch_size,
                 17,
-                384 / (2 ** heatmapData.downsample_factor),
-                384 / (2 ** heatmapData.downsample_factor),
+                384 / (2 ** heatmap_data.downsample_factor),
+                384 / (2 ** heatmap_data.downsample_factor),
             ]
         )
     ).all()
 
     # test subsampling of training frames
     train_frames = 10  # integer
-    heatmap_module = BaseDataModule(heatmapData, train_frames=train_frames)
+    heatmap_module = BaseDataModule(heatmap_data, train_frames=train_frames)
     heatmap_module.setup()
     train_dataloader = heatmap_module.train_dataloader()
     assert len(train_dataloader.dataset) == train_frames
@@ -96,7 +100,7 @@ def test_base_datamodule():
     train_frames = 1  # integer
     train_probability = 0.8
     heatmap_module = BaseDataModule(
-        heatmapData,
+        heatmap_data,
         train_frames=train_frames,
         train_probability=train_probability)
     heatmap_module.setup()
@@ -109,7 +113,7 @@ def test_base_datamodule():
     train_frames = 0.1  # fraction < 1
     train_probability = 0.8
     heatmap_module = BaseDataModule(
-        heatmapData,
+        heatmap_data,
         train_frames=train_frames,
         train_probability=train_probability)
     heatmap_module.setup()
@@ -122,7 +126,7 @@ def test_base_datamodule():
     train_frames = 1000000  # integer larger than number of labeled frames
     train_probability = 0.8
     heatmap_module = BaseDataModule(
-        heatmapData,
+        heatmap_data,
         train_frames=train_frames,
         train_probability=train_probability)
     heatmap_module.setup()
@@ -136,19 +140,26 @@ def test_base_datamodule():
     with pytest.raises(ValueError):
         train_frames = -1
         heatmap_module = BaseDataModule(
-            heatmapData,
+            heatmap_data,
             train_frames=train_frames)
         heatmap_module.setup()
+
+    # remove model/data from gpu; then cache can be cleared
+    del batch
+    del reg_module
+    del heatmap_module
+    del train_dataloader
+    torch.cuda.empty_cache()  # remove tensors from gpu
 
 
 def test_UnlabeledDataModule():
     # TODO: make a short video in toydatasets
     # TODO: seperate into a heatmap test + regression test
     unlabeled_module_regression = UnlabeledDataModule(
-        regData, video_paths_list=vids  # video_files[0]
+        reg_data, video_paths_list=vids  # video_files[0]
     )  # and default args
     unlabeled_module_heatmap = UnlabeledDataModule(
-        heatmapData, video_paths_list=vids  # video_files[0]
+        heatmap_data, video_paths_list=vids  # video_files[0]
     )  # and default args
     unlabeled_module_regression.setup()
     unlabeled_module_heatmap.setup()
@@ -175,14 +186,24 @@ def test_UnlabeledDataModule():
         384,
     )
 
+    # remove model/data from gpu; then cache can be cleared
+    del unlabeled_module_regression
+    del unlabeled_module_heatmap
+    del loader
+    del out
+    torch.cuda.empty_cache()  # remove tensors from gpu
+
 
 def test_PCA():  # TODO FINISH WRITING TEST
     unlabeled_module_heatmap = UnlabeledDataModule(
-        heatmapData,
+        heatmap_data,
         video_paths_list=vids,
         loss_param_dict=loss_param_dict,
-        specialized_dataprep="pca",
+        losses_to_use="pca_multiview",
     )
+    # remove model/data from gpu; then cache can be cleared
+    del unlabeled_module_heatmap
+    torch.cuda.empty_cache()  # remove tensors from gpu
 
 
 def test_reshape():
@@ -191,3 +212,11 @@ def test_reshape():
     ints_reverted = ints_reshaped.reshape(34)
     assert (ints_reshaped[:, 0] == np.arange(0, 34, 2)).all()
     assert (ints_reverted == ints).all()
+
+
+# def teardown_module():
+#     # remove module level data from gpu
+#     print('teardown')
+#     del reg_data
+#     del heatmap_data
+#     torch.cuda.empty_cache()  # remove tensors from gpu

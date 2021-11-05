@@ -103,11 +103,15 @@ def train(cfg: DictConfig):
                 "Cannot currently fit semi-supervised model on multiple gpus"
             )
         loss_param_dict = OmegaConf.to_object(cfg.losses)
+        # copy data-specific details into loss dict TODO: this is ugly
+        if "pca_multiview" in loss_param_dict.keys():
+            loss_param_dict["pca_multiview"]["mirrored_column_matches"] = \
+                cfg.data.mirrored_column_matches
         losses_to_use = OmegaConf.to_object(cfg.model.losses_to_use)
         datamod = UnlabeledDataModule(
             dataset=dataset,
             video_paths_list=video_dir,
-            specialized_dataprep=losses_to_use,
+            losses_to_use=losses_to_use,
             loss_param_dict=loss_param_dict,
             train_batch_size=cfg.training.train_batch_size,
             val_batch_size=cfg.training.val_batch_size,
@@ -188,6 +192,8 @@ def train(cfg: DictConfig):
             transfer_unfreeze_callback,
         ],
         logger=logger,
+        limit_train_batches=10,
+        multiple_trainloader_mode='max_size_cycle',
     )
     trainer.fit(model=model, datamodule=datamod)
 
