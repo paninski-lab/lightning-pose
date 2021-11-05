@@ -1,8 +1,8 @@
 # batch size of labeled data during training
-train_batch_size: 16
+train_batch_size: 32
 
 # batch size of labeled data during validation
-val_batch_size: 16
+val_batch_size: 64 # was 16
 
 # batch size of labeled data during test
 test_batch_size: 1
@@ -21,7 +21,7 @@ train_frames: 1
 num_gpus: 0
 
 # number of cpu workers for data loaders
-num_workers: 4
+num_workers: 8 # was 4
 
 # epochs over which to assess validation metrics for early stopping
 early_stop_patience: 6
@@ -45,7 +45,7 @@ check_val_every_n_epoch: 1
 gpu_id: 0
 
 # batch size of unlabeled video data during training (contiguous frames)
-unlabeled_sequence_length: 8
+unlabeled_sequence_length: 32
 
 # rng seed for labeled batches
 rng_seed_data_pt: 42
@@ -55,3 +55,11 @@ rng_seed_data_dali: 43
 
 # rng seed for weight initialization
 rng_seed_model_pt: 44
+
+# how many batches to take before terminating an epoch (any dataloader that has less than limit_train_batches will be cycled over)
+limit_train_batches: 10
+
+# if you have two dataloaders, you keep cycling over the smaller dataset berfore completing the larger one
+multiple_trainloader_mode: "max_size_cycle"
+
+profiler: "simple"
