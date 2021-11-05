@@ -29,6 +29,17 @@ def train(cfg: DictConfig):
     print("Our Hydra config file:")
     print(cfg)
 
+    # Todo: make func
+    if cfg.model.losses_to_use is None:
+        semi_supervised = False
+    elif len(cfg.model.losses_to_use) == 0:
+        semi_supervised = False
+    elif len(cfg.model.losses_to_use) == 1:
+        if cfg.model.losses_to_use[0] == "":
+            semi_supervised = False
+    else:
+        semi_supervised = True
+
     data_dir, video_dir = verify_real_data_paths(cfg.data)
 
     data_transform = []
@@ -61,7 +72,7 @@ def train(cfg: DictConfig):
             "%s is an invalid cfg.model.model_type" % cfg.model.model_type
         )
 
-    if not (cfg.model["semi_supervised"]):
+    if not semi_supervised:
         if not (cfg.training.gpu_id, int):
             raise NotImplementedError(
                 "Cannot currently fit fully supervised model on multiple gpus"
@@ -98,7 +109,7 @@ def train(cfg: DictConfig):
                 % cfg.model.model_type
             )
 
-    else:
+    else:  # semi_supervised == True
         if not (cfg.training.gpu_id, int):
             raise NotImplementedError(
                 "Cannot currently fit semi-supervised model on multiple gpus"
