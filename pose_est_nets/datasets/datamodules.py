@@ -299,8 +299,10 @@ class UnlabeledDataModule(BaseDataModule):
         )
 
         # compute number of batches
-        total_frames = count_frames(filenames)
-        num_batches = int(total_frames // self.unlabeled_sequence_length)
+        total_frames = count_frames(filenames)  # sum across vids
+        num_batches = int(
+            total_frames // self.unlabeled_sequence_length
+        )  # assuming batch_size==1
 
         self.unlabeled_dataloader = LightningWrapper(
             data_pipe,

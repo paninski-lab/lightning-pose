@@ -14,10 +14,9 @@ from pose_est_nets.models.heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
 )
-from pose_est_nets.utils.io import verify_real_data_paths
+from pose_est_nets.utils.io import verify_real_data_paths, check_if_semi_supervised
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import BackboneFinetuning
-from typing import Tuple
 
 import os
 
@@ -28,17 +27,7 @@ _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 def train(cfg: DictConfig):
     print("Our Hydra config file:")
     print(cfg)
-
-    # Todo: make func
-    if cfg.model.losses_to_use is None:
-        semi_supervised = False
-    elif len(cfg.model.losses_to_use) == 0:
-        semi_supervised = False
-    elif len(cfg.model.losses_to_use) == 1:
-        if cfg.model.losses_to_use[0] == "":
-            semi_supervised = False
-    else:
-        semi_supervised = True
+    semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
 
     data_dir, video_dir = verify_real_data_paths(cfg.data)
 

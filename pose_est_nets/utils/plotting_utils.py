@@ -1,7 +1,11 @@
 import imgaug.augmenters as iaa
 import numpy as np
 import torch
-from pose_est_nets.utils.io import set_or_open_folder, get_latest_version
+from pose_est_nets.utils.io import (
+    check_if_semi_supervised,
+    set_or_open_folder,
+    get_latest_version,
+)
 from pose_est_nets.models.heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
@@ -65,13 +69,16 @@ def get_model_class(map_type: str, semi_supervised: bool):
 def load_model_from_checkpoint(cfg: DictConfig, ckpt_file: str, eval: bool = False):
     """this will have: path to a specific .ckpt file which we extract using other funcs
     will also take the standard hydra config file"""
+    from pose_est_nets.utils.io import check_if_semi_supervised
+
+    semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
     # pick the right model class
     ModelClass = get_model_class(
         map_type=cfg.model.model_type,
-        semi_supervised=cfg.model.semi_supervised,
+        semi_supervised=semi_supervised,
     )
     # initialize a model instance, with weights loaded from .ckpt file
-    if cfg.model.semi_supervised:
+    if semi_supervised:
         model = ModelClass.load_from_checkpoint(
             ckpt_file,
             semi_super_losses_to_use=OmegaConf.to_object(cfg.model.losses_to_use),
@@ -204,7 +211,6 @@ def predict_videos(
             - cfg_file.data.image_resize_dims
             - cfg_file.model.losses_to_use
             - cfg_file.model.model_type
-            - cfg_file.model.semi_supervised
         save_file (str): full filename of tracked points; currently supports hdf5 and csv; if
             NoneType, the output will be saved in the video path
         sequence_length (int)
@@ -370,8 +376,9 @@ def predict_videos(
         if save_file is None:
             # create filename based on video name and model type
             video_file_name = os.path.basename(video_file).replace(".mp4", "")
+            semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
             if (
-                cfg.model.semi_supervised
+                semi_supervised
             ):  # only if any of the unsupervised `cfg.model.losses_to_use` is actually used
                 loss_str = (
                     "_".join([""] + list(cfg.model.losses_to_use))
