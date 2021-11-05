@@ -139,6 +139,7 @@ class BaseDataModule(pl.LightningDataModule):
             self.train_dataset,
             batch_size=self.train_batch_size,
             num_workers=self.num_workers,
+            persistent_workers=True,
         )
 
     def val_dataloader(self):
@@ -242,8 +243,9 @@ class UnlabeledDataModule(BaseDataModule):
         if losses_to_use:  # check it's not None
             if "pca_multiview" in losses_to_use:
                 from pose_est_nets.datasets.preprocessing import (
-                    compute_multiview_pca_params
+                    compute_multiview_pca_params,
                 )
+
                 compute_multiview_pca_params(self)
             elif "pca" in losses_to_use:
                 # single-view pca
@@ -304,7 +306,7 @@ class UnlabeledDataModule(BaseDataModule):
             output_map=["x"],
             last_batch_policy=LastBatchPolicy.PARTIAL,
             auto_reset=True,  # TODO: auto reset on each epoch - is this random?
-            num_batches=num_batches
+            num_batches=num_batches,
         )
 
     def train_dataloader(self):
@@ -313,6 +315,7 @@ class UnlabeledDataModule(BaseDataModule):
                 self.train_dataset,
                 batch_size=self.train_batch_size,
                 num_workers=self.num_workers_for_labeled,
+                persistent_workers=True,
             ),
             "unlabeled": self.unlabeled_dataloader,
         }
