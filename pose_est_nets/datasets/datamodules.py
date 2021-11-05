@@ -147,6 +147,7 @@ class BaseDataModule(pl.LightningDataModule):
             self.val_dataset,
             batch_size=self.val_batch_size,
             num_workers=self.num_workers,
+            persistent_workers=True,
         )
 
     def test_dataloader(self):
