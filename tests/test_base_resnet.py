@@ -40,6 +40,8 @@ def test_backbone():
                 type(list(model.backbone.children())[-3][-1])
                 == torchvision.models.resnet.Bottleneck
             )
+        # remove model/data from gpu; then cache can be cleared
+        del model
         torch.cuda.empty_cache()  # remove tensors from gpu
 
 
@@ -88,6 +90,10 @@ def test_representation_shapes_truncated_resnet():
             ).to(_TORCH_DEVICE)
             representations = model(fake_image_batch)
             assert representations.shape == shape_list_pre_pool[ind_image][ind]
+            # remove model/data from gpu; then cache can be cleared
+            del model
+            del fake_image_batch
+            del representations
     torch.cuda.empty_cache()  # remove tensors from gpu
 
 
@@ -96,6 +102,9 @@ def test_resnet_versions():
     pytest.raises(TypeError, BaseFeatureExtractor, resnet_version=11)
     # below should run fine
     model = BaseFeatureExtractor(resnet_version=18, last_resnet_layer_to_get=-3)
+    # remove model/data from gpu; then cache can be cleared
+    del model
+    torch.cuda.empty_cache()
 
 
 def test_representation_shapes_full_resnet():
@@ -120,4 +129,8 @@ def test_representation_shapes_full_resnet():
             ).to(_TORCH_DEVICE)
             representations = model(fake_image_batch)
             assert representations.shape == repres_shape_list_all_but_fc[ind]
+            # remove model/data from gpu; then cache can be cleared
+            del model
+            del fake_image_batch
+            del representations
     torch.cuda.empty_cache()  # remove tensors from gpu
