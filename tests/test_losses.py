@@ -100,11 +100,11 @@ def test_get_losses_dict():
     assert "temporal" not in list(out_dict.keys())
     assert type(out_dict) == dict
 
-    pytest.raises(TypeError, get_losses_dict, ["bla"])
+    #test outdated because we changed type checking on this
+    #pytest.raises(TypeError, get_losses_dict, ["bla"])
 
 
-  
-  #Biggest thing is to make sure shapes match: Matt
+    #Biggest thing is to make sure shapes match: Matt
 def test_SingleView_PCA_loss():
     from pose_est_nets.losses.losses import SingleviewPCALoss
 
