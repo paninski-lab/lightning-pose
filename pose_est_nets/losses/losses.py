@@ -126,7 +126,7 @@ def MultiviewPCALoss(
         torch.matmul(reshaped_maxima_preds.T, discarded_eigenvectors.T)
     )
     epsilon_masked_proj = abs_proj_discarded.masked_fill(
-        mask=abs_proj_discarded > epsilon, value=0.0
+        mask=abs_proj_discarded < epsilon, value=0.0
     )
     # each element positive
     assert (epsilon_masked_proj >= 0.0).all()
@@ -162,7 +162,7 @@ def SingleviewPCALoss(
         torch.matmul(reshaped_maxima_preds, discarded_eigenvectors.T)
     )
     epsilon_masked_proj = abs_proj_discarded.masked_fill(
-        mask=abs_proj_discarded > epsilon, value=0.0
+        mask=abs_proj_discarded < epsilon, value=0.0
     )
     # each element positive
     assert (epsilon_masked_proj >= 0.0).all()
