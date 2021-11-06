@@ -1,5 +1,5 @@
 # batch size of labeled data during training
-train_batch_size: 32
+train_batch_size: 16
 
 # batch size of labeled data during validation
 val_batch_size: 64 # was 16
@@ -24,13 +24,16 @@ num_gpus: 0
 num_workers: 8 # was 4
 
 # epochs over which to assess validation metrics for early stopping
-early_stop_patience: 6
+early_stop_patience: 3
 
 # epoch at which backbone network weights begin updating
-unfreezing_epoch: 50
+unfreezing_epoch: 25
 
 # dropout in final layers
 dropout_rate: 0.1
+
+# min training epochs; training cannot terminate before. compare to unfreezing_epoch, check_val_every_n_epoch, early_stop_patience
+min_epochs: 40
 
 # max training epochs; training may exit before due to early stopping
 max_epochs: 300
@@ -39,13 +42,13 @@ max_epochs: 300
 log_every_n_steps: 1
 
 # frequency to log validation metrics
-check_val_every_n_epoch: 1
+check_val_every_n_epoch: 10
 
 # select gpu for training
 gpu_id: 0
 
 # batch size of unlabeled video data during training (contiguous frames)
-unlabeled_sequence_length: 32
+unlabeled_sequence_length: 64
 
 # rng seed for labeled batches
 rng_seed_data_pt: 42
@@ -63,3 +66,6 @@ limit_train_batches: 10
 multiple_trainloader_mode: "max_size_cycle"
 
 profiler: "simple"
+
+# runs K small batches of size N before doing a backwards pass.
+accumulate_grad_batches: 2
