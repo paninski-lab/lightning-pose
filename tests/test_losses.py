@@ -100,4 +100,33 @@ def test_get_losses_dict():
     assert "temporal" not in list(out_dict.keys())
     assert type(out_dict) == dict
 
-    pytest.raises(TypeError, get_losses_dict, ["bla"])
+    #test outdated because we changed type checking on this
+    #pytest.raises(TypeError, get_losses_dict, ["bla"])
+
+
+    #Biggest thing is to make sure shapes match: Matt
+def test_SingleView_PCA_loss():
+    from pose_est_nets.losses.losses import SingleviewPCALoss
+
+    predicted_keypoints = torch.rand(
+        size=(12, 32),
+        device="cpu",
+    )
+
+    discarded_evecs = torch.zeros(
+        size=(6, 32),
+        device="cpu"
+    )
+    epsilon = torch.zeros(
+        size=(6,),
+        device="cpu"
+    )
+    single_view_pca_loss = SingleviewPCALoss(
+        reshaped_maxima_preds=predicted_keypoints, 
+        discarded_eigenvectors=discarded_evecs,
+        epsilon=epsilon
+    )
+    assert(single_view_pca_loss == 0.0)
+
+
+
