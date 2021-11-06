@@ -246,16 +246,17 @@ class UnlabeledDataModule(BaseDataModule):
                 from pose_est_nets.datasets.preprocessing import (
                     compute_multiview_pca_params,
                 )
-
                 compute_multiview_pca_params(self)
             elif "pca_singleview" in losses_to_use:
                 # single-view pca
                 from pose_est_nets.datasets.preprocessing import (
                     compute_singleview_pca_params
                 )
-                compute_singleview_pca_params(self)
+                compute_singleview_pca_params(
+                    self,
+                    empirical_epsilon_percentile=5,
+                )
                 
-
     def setup_unlabeled(self):
 
         from pose_est_nets.datasets.utils import count_frames
