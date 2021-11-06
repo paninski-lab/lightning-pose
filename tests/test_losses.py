@@ -126,7 +126,7 @@ def test_SingleView_PCA_loss():
         discarded_eigenvectors=discarded_evecs,
         epsilon=epsilon
     )
-    print(single_view_pca_loss)
+    assert(single_view_pca_loss == 0.0
 
 
 
