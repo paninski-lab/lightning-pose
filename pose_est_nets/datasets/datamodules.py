@@ -178,7 +178,7 @@ class UnlabeledDataModule(BaseDataModule):
         torch_seed: int = 42,
         device_id: int = 0,
         loss_param_dict: Optional[dict] = None,
-        losses_to_use: Optional[Literal["pca_multiview", "temporal"]] = None,
+        losses_to_use: list = None,
     ) -> None:
         """Data module that contains labeled and unlabeled data loaders.
 
@@ -251,7 +251,7 @@ class UnlabeledDataModule(BaseDataModule):
                     compute_singleview_pca_params
                 )
                 compute_singleview_pca_params(self)
-                raise NotImplementedError
+                
 
     def setup_unlabeled(self):
 

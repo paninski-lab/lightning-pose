@@ -123,7 +123,7 @@ def compute_singleview_pca_params(
         data_module: UnlabeledDataModule,
         empirical_epsilon_percentile: float = 90.0
 ) -> None:
-    """Compute eigenvalues and eigenvectors of labeled data for multiview pca loss.
+    """Compute eigenvalues and eigenvectors of labeled data for singleview pca loss.
 
     Note: this function updates attributes of `data_module`
 
@@ -133,7 +133,7 @@ def compute_singleview_pca_params(
         empirical_epsilon_percentile: ?
 
     """
-    print("Computing PCA on multiview keypoints...")
+    print("Computing PCA on singleview keypoints...")
 
     # collect data on which to run pca from data module
     # Subset inherits from dataset, it doesn't have access to dataset.keypoints
@@ -174,17 +174,17 @@ def compute_singleview_pca_params(
     arr_for_pca = data_arr.reshape(data_arr.shape[0], -1)
     print("Initial array for pca shape: {}".format(arr_for_pca.shape))
 
-    good_arr_for_pca = clean_any_nans(arr_for_pca, dim=0)
-    #want to make sure we have more rows than columns after doing nan filtering
-    assert(good_parr_for_pca.shape[0] >= good_arr_for_pca.shape[1]), "filtered out too many nan frames"
-    pca = PCA(n_components=good_arr_for_pca.shape[1], svd_solver="full")
-    pca.fit(good_arr_for_pca)
-    print("Done!")
+    good_arr_for_pca = clean_any_nans(arr_for_pca, dim=1)
     print(
         "good_arr_for_pca shape: {}".format(good_arr_for_pca.shape)
     )  # TODO: have prints as tests
+    #want to make sure we have more rows than columns after doing nan filtering
+    assert(good_arr_for_pca.shape[0] >= good_arr_for_pca.shape[1]), "filtered out too many nan frames"
+    pca = PCA(n_components=good_arr_for_pca.shape[1], svd_solver="full")
+    pca.fit(good_arr_for_pca)
+    print("Done!")
     tot_explained_variance = np.cumsum(pca.explained_variance_ratio_)
-    components_to_keep = np.where(tot_explained_variance >= data_module.loss_param_dict["pca_singleview"]["min_variance_explained"])[0][0]
+    components_to_keep = int(np.where(tot_explained_variance >= data_module.loss_param_dict["pca_singleview"]["min_variance_explained"])[0][0])
     components_to_keep += 1 #cumsum is a d - 1 dimensional vector where the 0th element is the sum of the 0th and 1st element of the d dimensional vector it is summing over
     pca_prints(pca, components_to_keep)  # print important params
     data_module.loss_param_dict["pca_singleview"]["kept_eigenvectors"] = torch.tensor(
