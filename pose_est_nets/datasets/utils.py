@@ -56,7 +56,10 @@ def clean_any_nans(data: torch.tensor, dim: int) -> torch.tensor:
     nan_bool = (
         torch.sum(torch.isnan(data), dim=dim) > 0
     )  # e.g., when dim == 0, those columns (keypoints) that have >0 nans
-    return data[:, ~nan_bool]
+    if dim == 0:
+        return data[:, ~nan_bool]
+    elif dim == 1:
+        return data[~nan_bool]
 
 
 @typechecked
