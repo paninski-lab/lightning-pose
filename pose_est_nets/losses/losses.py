@@ -89,10 +89,9 @@ def MaskedMSEHeatmapLoss(
 # TODO: this won't work unless the inputs are right, not implemented yet.
 # TODO: y_hat should be already reshaped? if so, change below
 @typechecked
-# what are we doing about NANS?
 def MultiviewPCALoss(
     reshaped_maxima_preds: TensorType["batch", "two_x_num_keypoints", float],
-    discarded_eigenvectors: TensorType["views_times_two", "num_discarded_evecs", float],
+    discarded_eigenvectors: TensorType["num_discarded_evecs", "views_times_two", float],
     epsilon: TensorType[float],
     mirrored_column_matches: Union[ListConfig, List],
     **kwargs  # make loss robust to unneeded inputs
@@ -117,13 +116,50 @@ def MultiviewPCALoss(
     # TODO: consider avoiding the transposes
     reshaped_maxima_preds = reshaped_maxima_preds.reshape(
         reshaped_maxima_preds.shape[0], -1, 2
-    )
+    ) #shape = (batch_size, num_keypoints, 2)
+    
     reshaped_maxima_preds = format_multiview_data_for_pca(
         data_arr=reshaped_maxima_preds,
         mirrored_column_matches=mirrored_column_matches
-    )
+    ) #shape = (views * 2, num_batches * num_keypoints)
     abs_proj_discarded = torch.abs(
         torch.matmul(reshaped_maxima_preds.T, discarded_eigenvectors.T)
+    )
+    epsilon_masked_proj = abs_proj_discarded.masked_fill(
+        mask=abs_proj_discarded > epsilon, value=0.0
+    )
+    # each element positive
+    assert (epsilon_masked_proj >= 0.0).all()
+    # the scalar loss should be smaller after zeroing out elements.
+    assert torch.mean(epsilon_masked_proj) <= torch.mean(abs_proj_discarded)
+    return torch.mean(epsilon_masked_proj)
+
+@typechecked
+def SingleviewPCALoss(
+    reshaped_maxima_preds: TensorType["batch", "two_x_num_keypoints", float],
+    discarded_eigenvectors: TensorType["num_discarded_evecs", "two_x_num_keypoints", float],
+    epsilon: TensorType[float],
+    **kwargs  # make loss robust to unneeded inputs
+) -> TensorType[float]:
+    """
+
+    Assume that we have keypoints after find_subpixel_maxima and that we have
+    discarded confidence here, and that keypoints were reshaped
+    # TODO: check for this?
+
+    Args:
+        reshaped_maxima_preds:
+        discarded_eigenvectors:
+        epsilon:
+        **kwargs:
+
+    Returns:
+        Projection of data onto discarded eigenvectors
+
+    """
+    
+    abs_proj_discarded = torch.abs(
+        torch.matmul(reshaped_maxima_preds, discarded_eigenvectors.T)
     )
     epsilon_masked_proj = abs_proj_discarded.masked_fill(
         mask=abs_proj_discarded > epsilon, value=0.0
@@ -181,7 +217,7 @@ def filter_dict(mydict: Dict[str, Any], keys: List[str]) -> Dict[str, Any]:
 
 @typechecked
 def get_losses_dict(
-    names_list: List[Literal["pca_multiview", "temporal"]] = []
+    names_list: list = [],
 ) -> Dict[str, Callable]:
     """Get a dict with all the loss functions for semi supervised training.
 
@@ -199,6 +235,7 @@ def get_losses_dict(
         "regression": MaskedRegressionMSELoss,
         "heatmap": MaskedMSEHeatmapLoss,
         "pca_multiview": MultiviewPCALoss,
+        "pca_singleview": SingleviewPCALoss,
         "temporal": TemporalLoss,
     }
     return filter_dict(loss_dict, names_list)
