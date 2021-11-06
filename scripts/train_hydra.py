@@ -185,6 +185,7 @@ def train(cfg: DictConfig):
     trainer = pl.Trainer(  # TODO: be careful with devices if you want to scale to multiple gpus
         gpus=gpus,
         max_epochs=cfg.training.max_epochs,
+        min_epochs=cfg.training.min_epochs,
         check_val_every_n_epoch=cfg.training.check_val_every_n_epoch,
         log_every_n_steps=cfg.training.log_every_n_steps,
         callbacks=[
@@ -195,6 +196,7 @@ def train(cfg: DictConfig):
         ],
         logger=logger,
         limit_train_batches=cfg.training.limit_train_batches,
+        accumulate_grad_batches=cfg.training.accumulate_grad_batches,
         multiple_trainloader_mode=cfg.training.multiple_trainloader_mode,
         profiler=cfg.training.profiler,
     )
