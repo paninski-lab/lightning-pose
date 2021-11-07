@@ -35,3 +35,7 @@ temporal:
 
   # for epsilon insensitive rectification (in pixels; diffs below this are not penalized)
   epsilon: 5.
+
+unimodal:
+  weight: 0.6
+  

@@ -8,6 +8,7 @@ from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
 from pose_est_nets.datasets.preprocessing import format_multiview_data_for_pca
+from pose_est_nets.utils.dataset_utils import draw_keypoints
 
 patch_typeguard()  # use before @typechecked
 
@@ -198,6 +199,21 @@ def TemporalLoss(
     # epsilon-insensitive loss
     loss = loss.masked_fill(mask=loss < epsilon, value=0.0)
     return torch.mean(loss)  # pixels
+
+@typechecked
+def UnimodalLoss(
+    preds: TensorType["batch", "two_x_num_keypoints"],
+    pred_heatmaps: 
+    output_shape: tuple,
+    **kwargs  # make loss robust to unneeded inputs
+)-> TensorType[(), float]:
+    preds = preds.reshape(preds.shape[0], -1, 2)
+    draw_keypoints
+
+
+
+    
+
 
 
 @typechecked
