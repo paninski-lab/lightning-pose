@@ -109,6 +109,12 @@ def train(cfg: DictConfig):
         if "pca_multiview" in losses_to_use:
             loss_param_dict["pca_multiview"]["mirrored_column_matches"] = \
                 cfg.data.mirrored_column_matches
+        if "unimodal" in losses_to_use:
+            if cfg.model.model_type == "regression":
+                raise NotImplementedError(
+                    "unimodal loss can only be used with heatmap tracker"
+                )
+            loss_param_dict["unimodal"]["output_shape"] = dataset.output_shape
         datamod = UnlabeledDataModule(
             dataset=dataset,
             video_paths_list=video_dir,

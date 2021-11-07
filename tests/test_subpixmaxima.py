@@ -7,6 +7,10 @@ from torch.utils.data import DataLoader
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
+def test_draw_keypoints():
+    
+
+
 def test_subpixmaxima():
 
     data_transform = []

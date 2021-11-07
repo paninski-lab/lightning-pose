@@ -238,17 +238,16 @@ class SubPixelMaxima:  # Add tensor typing
 
     @property
     def kernel_size(self):
-        kernel_size = np.min(self.output_shape)
+        kernel_size = np.min(self.output_shape) #could change to torch.min
         kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
         return torch.tensor(kernel_size, device=self.device)
 
     def run(  # TODO: maybe we should see if we can add batch functionality
         self,
-        heatmaps_1: torch.Tensor,
-        heatmaps_2: torch.Tensor = None,  # Enables the function to be run with only one set of keypoints
+        heatmaps: torch.Tensor,
     ):
-        keypoints_1 = find_subpixel_maxima(
-            heatmaps_1,  # .detach(),  TODO: is there a reason to detach?
+        keypoints = find_subpixel_maxima(
+            heatmaps,  # .detach(),  TODO: is there a reason to detach?
             self.kernel_size,
             self.output_sigma,
             self.upsample_factor,
@@ -256,18 +255,7 @@ class SubPixelMaxima:  # Add tensor typing
             self.confidence_scale,
         )
 
-        if heatmaps_2 == None:
-            return self.use_threshold(keypoints_1)
-
-        keypoints_2 = find_subpixel_maxima(
-            heatmaps_2,  # .detach(),
-            self.kernel_size,
-            self.output_sigma,
-            self.upsample_factor,
-            self.coordinate_scale,
-            self.confidence_scale,
-        )
-        return self.use_threshold(keypoints_1), self.use_threshold(keypoints_2)
+        return self.use_threshold(keypoints)
 
     def use_threshold(
         self, keypoints: torch.tensor

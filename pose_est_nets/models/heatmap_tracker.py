@@ -110,8 +110,8 @@ class HeatmapTracker(BaseFeatureExtractor):
             device=self.device,
         )
 
-    def run_subpixelmaxima(self, heatmaps1, heatmaps2=None):
-        return self.SubPixMax.run(heatmaps1, heatmaps2)
+    def run_subpixelmaxima(self, heatmaps1):
+        return self.SubPixMax.run(heatmaps1)
 
     def initialize_upsampling_layers(self) -> None:
         """Intialize the Conv2DTranspose upsampling layers."""
@@ -335,6 +335,10 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             self.loss_params, self.device
         )
         for loss_name, loss_func in self.loss_function_dict.items():
+            if loss_name == "unimodal":
+                add_loss = self.loss_params[loss_name]["weight"] * loss_func(
+                predicted_us_keypoints, unlabeled_predicted_heatmaps, **self.loss_params[loss_name]
+                )
             add_loss = self.loss_params[loss_name]["weight"] * loss_func(
                 predicted_us_keypoints, **self.loss_params[loss_name]
             )
