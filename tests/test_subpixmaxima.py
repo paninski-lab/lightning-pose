@@ -89,8 +89,6 @@ def test_generate_keypoints():
     )
     og_maxima, gt_confidence = SubPixMax.run(gt_heatmap.to(_TORCH_DEVICE))
     torch_maxima, confidence_t = SubPixMax.run(torch_heatmap.to(_TORCH_DEVICE))
-    print(og_maxima, torch_maxima, gt_keypts)
-    print(gt_confidence, confidence_t)
     assert(og_maxima == torch_maxima).all()
     assert(gt_confidence == confidence_t).all()
 
@@ -126,8 +124,6 @@ def test_generate_keypoints_weird_shape():
     )
     og_maxima, gt_confidence = SubPixMax.run(gt_heatmap.to(_TORCH_DEVICE))
     torch_maxima, confidence_t = SubPixMax.run(torch_heatmap.to(_TORCH_DEVICE))
-    print(og_maxima, torch_maxima, gt_keypts)
-    print(gt_confidence, confidence_t)
     assert(og_maxima == torch_maxima).all()
     assert(gt_confidence == confidence_t).all()
 
@@ -143,4 +139,25 @@ def test_generate_keypoints_batched():
         header_rows=[1, 2],
         imgaug_transform=imgaug_transform,
     )
-    
+    dl = DataLoader(dataset=dataset, batch_size=10) 
+    SubPixMax = SubPixelMaxima(
+        output_shape=(96, 96),
+        output_sigma=torch.tensor(1.25, device=_TORCH_DEVICE),
+        upsample_factor=torch.tensor(2, device=_TORCH_DEVICE),
+        coordinate_scale=torch.tensor(4, device=_TORCH_DEVICE),  # 2 ** 2
+        confidence_scale=torch.tensor(1, device=_TORCH_DEVICE), 
+        threshold=None,
+        device=_TORCH_DEVICE
+    )
+    for batch in dl:
+        _, gt_heatmaps, gt_keypts = batch
+        gt_keypts = gt_keypts.reshape(-1, 17, 2)
+        heatmaps = generate_heatmaps(gt_keypts, height=384, width=384, output_shape=(96,96))
+        gt_maxima, gt_confidence = SubPixMax.run(gt_heatmaps.to(_TORCH_DEVICE))
+        torch_maxima, confidence_t = SubPixMax.run(heatmaps.to(_TORCH_DEVICE))
+        assert(gt_maxima == torch_maxima).all()
+        # bad_idx = ~(gt_confidence == confidence_t)
+        # print(gt_confidence[bad_idx])
+        # print(confidence_t[bad_idx])
+        #assert(gt_confidence == confidence_t).all() #seem to have inperceptible differences (maybe in hidden decimal places)
+

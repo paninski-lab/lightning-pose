@@ -335,12 +335,10 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             self.loss_params, self.device
         )
         for loss_name, loss_func in self.loss_function_dict.items():
-            if loss_name == "unimodal":
-                add_loss = self.loss_params[loss_name]["weight"] * loss_func(
-                predicted_us_keypoints, unlabeled_predicted_heatmaps, **self.loss_params[loss_name]
-                )
             add_loss = self.loss_params[loss_name]["weight"] * loss_func(
-                predicted_us_keypoints, **self.loss_params[loss_name]
+                keypoint_preds = predicted_us_keypoints, 
+                heatmap_preds = unlabeled_predicted_heatmaps,
+                **self.loss_params[loss_name]
             )
             tot_loss += add_loss
             # log individual unsupervised losses
