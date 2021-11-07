@@ -1,6 +1,7 @@
 from pose_est_nets.utils.heatmap_tracker_utils import SubPixelMaxima
 from pose_est_nets.datasets.datasets import HeatmapDataset
 from pose_est_nets.utils.dataset_utils import draw_keypoints, generate_heatmaps
+from pose_est_nets.losses.losses import MaskedMSEHeatmapLoss
 import imgaug.augmenters as iaa
 import torch
 from torch.utils.data import DataLoader
@@ -156,6 +157,8 @@ def test_generate_keypoints_batched():
         gt_maxima, gt_confidence = SubPixMax.run(gt_heatmaps.to(_TORCH_DEVICE))
         torch_maxima, confidence_t = SubPixMax.run(heatmaps.to(_TORCH_DEVICE))
         assert(gt_maxima == torch_maxima).all()
+        loss = MaskedMSEHeatmapLoss(gt_heatmaps, heatmaps)
+        assert(loss < 1e-6)
         # bad_idx = ~(gt_confidence == confidence_t)
         # print(gt_confidence[bad_idx])
         # print(confidence_t[bad_idx])
