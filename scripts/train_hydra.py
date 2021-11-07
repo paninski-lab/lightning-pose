@@ -105,7 +105,7 @@ def train(cfg: DictConfig):
             )
         loss_param_dict = OmegaConf.to_object(cfg.losses)
         losses_to_use = OmegaConf.to_object(cfg.model.losses_to_use)
-        # copy data-specific details into loss dict TODO: this is ugly
+        # copy data-specific details into loss dict TODO: this is ugly, maybe make it a function
         if "pca_multiview" in losses_to_use:
             loss_param_dict["pca_multiview"]["mirrored_column_matches"] = \
                 cfg.data.mirrored_column_matches
@@ -115,6 +115,8 @@ def train(cfg: DictConfig):
                     "unimodal loss can only be used with heatmap tracker"
                 )
             loss_param_dict["unimodal"]["output_shape"] = dataset.output_shape
+            loss_param_dict["unimodal"]["original_image_height"] = dataset.height
+            loss_param_dict["unimodal"]["original_image_width"] = dataset.width
         datamod = UnlabeledDataModule(
             dataset=dataset,
             video_paths_list=video_dir,

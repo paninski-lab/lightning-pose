@@ -122,7 +122,7 @@ def test_SingleView_PCA_loss():
         device="cpu"
     )
     single_view_pca_loss = SingleviewPCALoss(
-        reshaped_maxima_preds=predicted_keypoints, 
+        keypoint_preds=predicted_keypoints, 
         discarded_eigenvectors=discarded_evecs,
         epsilon=epsilon
     )
