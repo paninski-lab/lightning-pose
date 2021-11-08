@@ -238,16 +238,16 @@ class SubPixelMaxima:  # Add tensor typing
 
     @property
     def kernel_size(self):
-        kernel_size = np.min(self.output_shape) #could change to torch.min
+        kernel_size = np.min(self.output_shape) #could change to torch.min if we change output_shape to a tensor, but seems ok for now
         kernel_size = (kernel_size // largest_factor(kernel_size)) + 1
         return torch.tensor(kernel_size, device=self.device)
 
-    def run(  # TODO: maybe we should see if we can add batch functionality
+    def run(
         self,
         heatmaps: torch.Tensor,
     ):
         keypoints = find_subpixel_maxima(
-            heatmaps,  # .detach(),  TODO: is there a reason to detach?
+            heatmaps,
             self.kernel_size,
             self.output_sigma,
             self.upsample_factor,

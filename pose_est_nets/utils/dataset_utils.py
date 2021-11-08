@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from torchtyping import TensorType, patch_typeguard
+from typing import Union, Tuple
 from typeguard import typechecked
 import math
 #import inspect
@@ -40,8 +41,8 @@ def generate_heatmaps(
     keypoints: TensorType["batch", "num_keypoints", 2], 
     height: int, #height of full sized image
     width: int,  #width of full sized image
-    output_shape: tuple, #dimensions of full sized image
-    sigma: int = 1.25, #sigma used for generating heatmaps
+    output_shape: Tuple[int], #dimensions of full sized image
+    sigma: Union[float, int] = 1.25, #sigma used for generating heatmaps
     normalize: bool = True
 ):
     keypoints = keypoints.detach().clone()
@@ -53,12 +54,15 @@ def generate_heatmaps(
     #confidence = torch.zeros((batch_dim, n_keypoints, out_height, out_width), device=keypoints.device)
     xv = torch.arange(out_width, device=keypoints.device)
     yv = torch.arange(out_height, device=keypoints.device)
-    xx, yy = torch.meshgrid(yv, xv) #double check flipped order because of pytorch's ij and numpy's xy indexing for meshgrid 
+    xx, yy = torch.meshgrid(yv, xv) #note flipped order because of pytorch's ij and numpy's xy indexing for meshgrid 
+    #adds batch and num_keypoints dimensions to grids
     xx = xx.unsqueeze(0).unsqueeze(0)
     yy = yy.unsqueeze(0).unsqueeze(0)
+    #adds dimension corresponding to the first dimension of the 2d grid
     keypoints = keypoints.unsqueeze(2)
-    confidence = (yy - keypoints[:, :, :, :1]) ** 2
-    confidence += (xx - keypoints[:, :, :, 1:]) ** 2
+    #evaluates 2d gaussian with mean equal to the keypoint and variance equal to sigma squared
+    confidence = (yy - keypoints[:, :, :, :1]) ** 2 #also flipped order here
+    confidence += (xx - keypoints[:, :, :, 1:]) ** 2 #also flipped order here
     confidence *= -1
     confidence /= 2 * sigma ** 2
     confidence = torch.exp(confidence)

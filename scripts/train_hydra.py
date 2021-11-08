@@ -112,7 +112,8 @@ def train(cfg: DictConfig):
         if "unimodal" in losses_to_use:
             if cfg.model.model_type == "regression":
                 raise NotImplementedError(
-                    "unimodal loss can only be used with heatmap tracker"
+                    "unimodal loss can only be used with classes inheriting from HeatmapTracker." \ 
+                    "You specified an invalid RegressionTracker model."
                 )
             loss_param_dict["unimodal"]["output_shape"] = dataset.output_shape
             loss_param_dict["unimodal"]["original_image_height"] = dataset.height

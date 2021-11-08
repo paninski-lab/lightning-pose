@@ -335,6 +335,8 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             self.loss_params, self.device
         )
         for loss_name, loss_func in self.loss_function_dict.items():
+            #Some losses use keypoint_preds, some use heatmap_preds, and some use both. 
+            #all have **kwargs so are robust to unneeded inputs."
             add_loss = self.loss_params[loss_name]["weight"] * loss_func(
                 keypoint_preds = predicted_us_keypoints, 
                 heatmap_preds = unlabeled_predicted_heatmaps,
