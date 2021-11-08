@@ -177,8 +177,8 @@ def test_unsupervised():  # TODO Finish writing test
         384 // (2 ** model.downsample_factor),
     )
 
-    (spm_l, c_l), (spm_u, c_u) = model.run_subpixelmaxima(
-        out_heatmaps_labeled, out_heatmaps_unlabeled
+    spm_l, c_l = model.run_subpixelmaxima(
+        out_heatmaps_labeled
     )
 
     assert spm_l.shape == (datamod.train_batch_size, model.num_targets)
@@ -198,6 +198,5 @@ def test_unsupervised():  # TODO Finish writing test
     del out_heatmaps_labeled
     del out_heatmaps_unlabeled
     del spm_l, c_l
-    del spm_u, c_u
     del trainer
     torch.cuda.empty_cache()  # remove tensors from gpu
