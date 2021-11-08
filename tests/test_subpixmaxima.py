@@ -128,6 +128,9 @@ def test_generate_keypoints_weird_shape():
     assert(og_maxima == torch_maxima).all()
     assert(gt_confidence == confidence_t).all()
 
+#tests the batched functionality of generate_heatmaps by comparing it to the ground truth heatmaps
+#in the heatmap dataset computed by the previous numpy function draw_keypoints. 
+#TODO: Change ground truth computation of heatmaps for heatmap dataset to use generate_heatmaps.
 def test_generate_keypoints_batched():
     data_transform = []
     data_transform.append(
