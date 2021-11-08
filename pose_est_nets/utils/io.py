@@ -49,12 +49,23 @@ def get_latest_version(lightning_logs_path: str) -> str:
 
 
 def get_absolute_hydra_path_from_hydra_str(hydra_path: str) -> str:
+    """This function gets a full hydra path from a string with YYYY-MM-DD/HH-MM-SS
+
+    Args:
+        hydra_path (str): either a full path to a hydra saving folder, or a string with just YYYY-MM-DD/HH-MM-SS, assumed to be in the outputs/ dir
+
+    Returns:
+        str: full path to that hydra folder
+    """
     import os
 
-    cwd_split = os.getcwd().split(os.path.sep)
-    desired_path_list = cwd_split[:-2]
-    absolute_path = os.path.join(os.path.sep, *desired_path_list, hydra_path)
-    assert os.path.isdir(absolute_path)
+    if os.path.isdir(hydra_path):  # you are given a full path
+        absolute_path = hydra_path
+    else:  # assuming that you run in some outputs/YYYY-MM-DD/HH-MM-SS and that the desired path is in some other outputs/YYYY-MM-DD/HH-MM-SS
+        cwd_split = os.getcwd().split(os.path.sep)
+        desired_path_list = cwd_split[:-2]
+        absolute_path = os.path.join(os.path.sep, *desired_path_list, hydra_path)
+        assert os.path.isdir(absolute_path)
     return absolute_path
 
 
