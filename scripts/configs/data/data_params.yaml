@@ -18,7 +18,7 @@ video_dir: "unlabeled_videos"
 csv_file: "CollectedData_.csv"
 
 # header rows to strip in label csv file
-header_rows: [1, 2]
+header_rows: [0, 1]
 
 # downsample heatmaps: 2 | 3
 downsample_factor: 2
