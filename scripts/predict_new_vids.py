@@ -20,6 +20,7 @@ def make_predictions(cfg: DictConfig):
     """this script will work with a path to a trained model's hydra folder
     from that folder it'll read the info about the model, get the checkpoint, and predict on a new vid"""
     """note, by decorating with hydra, the current working directory will be become the new folder os.path.join(os.getcwd(), "/outputs/YYYY-MM-DD/hour-info")"""
+    # TODO: supporting only the zeroth index of cfg.eval.path_to_test_videos[0]
     # go to folders up to the "outputs" folder, and search for hydra_path from cfg
     for hydra_relative_path in cfg.eval.hydra_paths:
         # cfg.eval.hydra_paths defines a list of relative paths to hydra folders "YYYY-MM-DD/HH-MM-SS", and we extract an absolute path below
@@ -32,7 +33,7 @@ def make_predictions(cfg: DictConfig):
         )
 
         absolute_path_to_test_videos = verify_absolute_path(
-            cfg.eval.path_to_test_videos
+            cfg.eval.path_to_test_videos[0]
         )
 
         predict_videos(
