@@ -139,7 +139,7 @@ def test_unsupervised():  # TODO Finish writing test
     datamod = UnlabeledDataModule(
         dataset=dataset,
         video_paths_list=vids[0],
-        losses_to_use="pca_multiview",
+        losses_to_use=["pca_multiview"],
         loss_param_dict=loss_param_dict,
     )
     datamod.setup()
@@ -157,10 +157,10 @@ def test_unsupervised():  # TODO Finish writing test
     assert list(out.keys())[0] == "labeled"
     assert list(out.keys())[1] == "unlabeled"
     assert out["unlabeled"].shape == (datamod.train_batch_size, 3, 384, 384,)
-    print(out["labeled"][0].device)
+    print(out["labeled"]["images"].device)
     print(out["unlabeled"].device)
     print(model.device)
-    out_heatmaps_labeled = model.forward(out["labeled"][0].to(_TORCH_DEVICE))
+    out_heatmaps_labeled = model.forward(out["labeled"]["images"].to(_TORCH_DEVICE))
     out_heatmaps_unlabeled = model.forward(out["unlabeled"])
 
     assert out_heatmaps_labeled.shape == (

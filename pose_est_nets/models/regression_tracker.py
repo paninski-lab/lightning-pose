@@ -92,46 +92,44 @@ class RegressionTracker(BaseFeatureExtractor):
         return out
 
     @typechecked
-    def training_step(
-        self,
-        data_batch: list,
-        batch_idx: int,
-    ) -> dict:
-        images, keypoints = data_batch
+    def training_step(self, data_batch: Dict, batch_idx: int) -> Dict:
+
         # forward pass
-        representation = self.get_representations(images)
+        representation = self.get_representations(data_batch["images"])
         predicted_keypoints = self.final_layer(
             self.representation_dropout(self.reshape_representation(representation))
         )
+
         # compute loss
-        loss = MaskedRegressionMSELoss(keypoints, predicted_keypoints)
-        supervised_rmse = MaskedRMSELoss(keypoints, predicted_keypoints)
+        loss = MaskedRegressionMSELoss(data_batch["keypoints"], predicted_keypoints)
+        supervised_rmse = MaskedRMSELoss(data_batch["keypoints"], predicted_keypoints)
+
         # log training loss + rmse
         self.log("train_loss", loss, prog_bar=True)
         self.log("supervised_rmse", supervised_rmse, prog_bar=True)
+
         return {"loss": loss}
 
     @typechecked
     def evaluate(
-        self, data_batch: list, stage: Optional[Literal["val", "test"]] = None
+        self,
+        data_batch: Dict,
+        stage: Optional[Literal["val", "test"]] = None,
     ) -> None:
-        images, keypoints = data_batch
-        representation = self.get_representations(images)
+        representation = self.get_representations(data_batch["images"])
         predicted_keypoints = self.final_layer(
             self.reshape_representation(representation)
         )
-        loss = MaskedRegressionMSELoss(keypoints, predicted_keypoints)
-        supervised_rmse = MaskedRMSELoss(keypoints, predicted_keypoints)
-
-        # TODO: do we need other metrics?
+        loss = MaskedRegressionMSELoss(data_batch["keypoints"], predicted_keypoints)
+        supervised_rmse = MaskedRMSELoss(data_batch["keypoints"], predicted_keypoints)
         if stage:
             self.log(f"{stage}_loss", loss, prog_bar=True)
             self.log(f"{stage}_supervised_rmse", supervised_rmse, prog_bar=True)
 
-    def validation_step(self, validation_batch: list, batch_idx):
+    def validation_step(self, validation_batch: Dict, batch_idx):
         self.evaluate(validation_batch, "val")
 
-    def test_step(self, test_batch: list, batch_idx):
+    def test_step(self, test_batch: Dict, batch_idx):
         self.evaluate(test_batch, "test")
 
 
@@ -178,28 +176,34 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
 
     @typechecked
     def training_step(self, data_batch: dict, batch_idx: int) -> dict:
-        labeled_imgs, true_keypoints = data_batch["labeled"]
-        unlabeled_imgs = data_batch["unlabeled"]
-        representation = self.get_representations(labeled_imgs)
+
+        # forward pass labeled
+        representation = self.get_representations(data_batch["labeled"]['images'])
         predicted_keypoints = self.final_layer(
             self.representation_dropout(self.reshape_representation(representation))
         )  # TODO: consider removing representation dropout?
-        # compute loss
+
+        # compute loss labeled
         supervised_loss = MaskedRegressionMSELoss(
-            true_keypoints, predicted_keypoints
+            data_batch["labeled"]["keypoints"],
+            predicted_keypoints
         )  # for training
         supervised_rmse = MaskedRMSELoss(
-            true_keypoints, predicted_keypoints
+            data_batch["labeled"]["keypoints"],
+            predicted_keypoints
         )  # for logging
-        us_representation = self.get_representations(unlabeled_imgs)
+
+        # forward pass unlabeled
+        us_representation = self.get_representations(data_batch["unlabeled"])
         predicted_us_keypoints = self.final_layer(
             self.representation_dropout(
                 self.reshape_representation(us_representation)
             )  # Do we need dropout
         )
+
+        # loop over unsupervised losses
         tot_loss = 0.0
         tot_loss += supervised_loss
-        # loop over unsupervised losses
         self.loss_params = convert_dict_entries_to_tensors(
             self.loss_params, self.device
         )
@@ -209,25 +213,11 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
             )
             tot_loss += add_loss
             # log individual unsupervised losses
-            self.log(
-                loss_name + "_loss",
-                add_loss,
-                prog_bar=True,
-            )
-        self.log(
-            "total_loss",
-            tot_loss,
-            prog_bar=True,
-        )
-        self.log(
-            "supervised_loss",
-            supervised_loss,
-            prog_bar=True,
-        )
-        self.log(
-            "supervised_rmse",
-            supervised_rmse,
-            prog_bar=True,
-        )
+            self.log(loss_name + "_loss", add_loss, prog_bar=True)
+
+        # log other losses
+        self.log("total_loss", tot_loss, prog_bar=True)
+        self.log("supervised_loss", supervised_loss, prog_bar=True)
+        self.log("supervised_rmse", supervised_rmse, prog_bar=True)
 
         return {"loss": tot_loss}

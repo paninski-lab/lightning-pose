@@ -77,7 +77,7 @@ def make_dataset_and_evaluate(cfg: DictConfig, datamod: Callable, best_models: d
         sample["ground_truth"] = fo.Keypoints(
             keypoints=[fo.Keypoint(points=ground_truth_kpts_list)]
         )
-        img = datamod.dataset.__getitem__(idx)[0].unsqueeze(0)
+        img = datamod.dataset.__getitem__(idx)["images"].unsqueeze(0)
         img_BHWC = img.permute(0, 2, 3, 1)  # Needs to be BHWC format
         with torch.no_grad():
             for name, model in best_models.items():
