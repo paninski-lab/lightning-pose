@@ -12,6 +12,22 @@ pca_multiview:
   # Computed per dataset
   epsilon: null
 
+pca_singleview:
+  # weight in front of PCA loss
+  weight: 0.6
+
+  #amount of variance to keep explained by retained eigenvectors 
+  min_variance_explained: .95
+
+  # Computed per dataset
+  discarded_eigenvectors: null
+
+  # Computed per dataset
+  kept_eigenvectors: null
+
+  # Computed per dataset
+  epsilon: null
+
 # loss = norm of distance between successive timepoints
 temporal:
   # weight in front of temporal loss
@@ -19,3 +35,9 @@ temporal:
 
   # for epsilon insensitive rectification (in pixels; diffs below this are not penalized)
   epsilon: 5.
+
+# loss = MSE between generated heatmap and ideal gaussian heatmap with same center as generated heatmap
+unimodal:
+  # weight in front of unimodal loss
+  weight: 0.6
+  

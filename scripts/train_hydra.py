@@ -104,12 +104,20 @@ def train(cfg: DictConfig):
                 "Cannot currently fit semi-supervised model on multiple gpus"
             )
         loss_param_dict = OmegaConf.to_object(cfg.losses)
-        # copy data-specific details into loss dict TODO: this is ugly
-        if "pca_multiview" in loss_param_dict.keys():
+        losses_to_use = OmegaConf.to_object(cfg.model.losses_to_use)
+        # copy data-specific details into loss dict TODO: this is ugly, maybe make it a function
+        if "pca_multiview" in losses_to_use:
             loss_param_dict["pca_multiview"][
                 "mirrored_column_matches"
             ] = cfg.data.mirrored_column_matches
-        losses_to_use = OmegaConf.to_object(cfg.model.losses_to_use)
+        if "unimodal" in losses_to_use:
+            if cfg.model.model_type == "regression":
+                raise NotImplementedError(
+                    "unimodal loss can only be used with classes inheriting from HeatmapTracker. \nYou specified an invalid RegressionTracker model."
+                )
+            loss_param_dict["unimodal"]["output_shape"] = dataset.output_shape
+            loss_param_dict["unimodal"]["original_image_height"] = dataset.height
+            loss_param_dict["unimodal"]["original_image_width"] = dataset.width
         datamod = UnlabeledDataModule(
             dataset=dataset,
             video_paths_list=video_dir,
