@@ -8,6 +8,7 @@ from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
 from pose_est_nets.datasets.preprocessing import format_multiview_data_for_pca
+from pose_est_nets.utils.dataset_utils import generate_heatmaps
 
 patch_typeguard()  # use before @typechecked
 
@@ -89,10 +90,9 @@ def MaskedMSEHeatmapLoss(
 # TODO: this won't work unless the inputs are right, not implemented yet.
 # TODO: y_hat should be already reshaped? if so, change below
 @typechecked
-# what are we doing about NANS?
 def MultiviewPCALoss(
-    reshaped_maxima_preds: TensorType["batch", "two_x_num_keypoints", float],
-    discarded_eigenvectors: TensorType["views_times_two", "num_discarded_evecs", float],
+    keypoint_preds: TensorType["batch", "two_x_num_keypoints", float],
+    discarded_eigenvectors: TensorType["num_discarded_evecs", "views_times_two", float],
     epsilon: TensorType[float],
     mirrored_column_matches: Union[ListConfig, List],
     **kwargs  # make loss robust to unneeded inputs
@@ -104,7 +104,7 @@ def MultiviewPCALoss(
     # TODO: check for this?
 
     Args:
-        reshaped_maxima_preds:
+        keypoint_preds:
         discarded_eigenvectors:
         epsilon:
         mirrored_column_matches:
@@ -115,18 +115,55 @@ def MultiviewPCALoss(
 
     """
     # TODO: consider avoiding the transposes
-    reshaped_maxima_preds = reshaped_maxima_preds.reshape(
-        reshaped_maxima_preds.shape[0], -1, 2
-    )
-    reshaped_maxima_preds = format_multiview_data_for_pca(
-        data_arr=reshaped_maxima_preds,
+    keypoint_preds = keypoint_preds.reshape(
+        keypoint_preds.shape[0], -1, 2
+    ) #shape = (batch_size, num_keypoints, 2)
+    
+    keypoint_preds = format_multiview_data_for_pca(
+        data_arr=keypoint_preds,
         mirrored_column_matches=mirrored_column_matches
-    )
+    ) #shape = (views * 2, num_batches * num_keypoints)
     abs_proj_discarded = torch.abs(
-        torch.matmul(reshaped_maxima_preds.T, discarded_eigenvectors.T)
+        torch.matmul(keypoint_preds.T, discarded_eigenvectors.T)
     )
     epsilon_masked_proj = abs_proj_discarded.masked_fill(
-        mask=abs_proj_discarded > epsilon, value=0.0
+        mask=abs_proj_discarded < epsilon, value=0.0
+    )
+    # each element positive
+    assert (epsilon_masked_proj >= 0.0).all()
+    # the scalar loss should be smaller after zeroing out elements.
+    assert torch.mean(epsilon_masked_proj) <= torch.mean(abs_proj_discarded)
+    return torch.mean(epsilon_masked_proj)
+
+@typechecked
+def SingleviewPCALoss(
+    keypoint_preds: TensorType["batch", "two_x_num_keypoints", float],
+    discarded_eigenvectors: TensorType["num_discarded_evecs", "two_x_num_keypoints", float],
+    epsilon: TensorType[float],
+    **kwargs  # make loss robust to unneeded inputs
+) -> TensorType[float]:
+    """
+
+    Assume that we have keypoints after find_subpixel_maxima and that we have
+    discarded confidence here, and that keypoints were reshaped
+    # TODO: check for this?
+
+    Args:
+        keypoint_preds:
+        discarded_eigenvectors:
+        epsilon:
+        **kwargs:
+
+    Returns:
+        Projection of data onto discarded eigenvectors
+
+    """
+    
+    abs_proj_discarded = torch.abs(
+        torch.matmul(keypoint_preds, discarded_eigenvectors.T)
+    )
+    epsilon_masked_proj = abs_proj_discarded.masked_fill(
+        mask=abs_proj_discarded < epsilon, value=0.0
     )
     # each element positive
     assert (epsilon_masked_proj >= 0.0).all()
@@ -137,7 +174,7 @@ def MultiviewPCALoss(
 
 @typechecked
 def TemporalLoss(
-    preds: TensorType["batch", "two_x_num_keypoints"],
+    keypoint_preds: TensorType["batch", "two_x_num_keypoints"],
     epsilon: TensorType[float] = 5,
     **kwargs  # make loss robust to unneeded inputs
 ) -> TensorType[(), float]:
@@ -154,7 +191,7 @@ def TemporalLoss(
 
     """
     # returns tensor of shape (batch - 1, num_targets)
-    diffs = torch.diff(preds, dim=0)
+    diffs = torch.diff(keypoint_preds, dim=0)
     # returns tensor of shape (batch - 1, num_keypoints, 2)
     reshape = torch.reshape(diffs, (diffs.shape[0], -1, 2))
     # returns tensor of shape (batch - 1, num_keypoints)
@@ -163,6 +200,23 @@ def TemporalLoss(
     loss = loss.masked_fill(mask=loss < epsilon, value=0.0)
     return torch.mean(loss)  # pixels
 
+@typechecked
+def UnimodalLoss(
+    keypoint_preds: TensorType["batch", "two_x_num_keypoints"],
+    heatmap_preds: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+    original_image_height: torch.Tensor,
+    original_image_width: torch.Tensor,
+    output_shape: tuple,
+    **kwargs  # make loss robust to unneeded inputs
+)-> TensorType[(), float]:
+    keypoint_preds = keypoint_preds.reshape(keypoint_preds.shape[0], -1, 2)
+    ideal_heatmaps = generate_heatmaps( #this process doesn't compute gradients
+        keypoints=keypoint_preds,
+        height=int(original_image_height),
+        width=int(original_image_width),
+        output_shape=output_shape
+    )
+    return MaskedMSEHeatmapLoss(ideal_heatmaps, heatmap_preds)
 
 @typechecked
 def filter_dict(mydict: Dict[str, Any], keys: List[str]) -> Dict[str, Any]:
@@ -181,7 +235,7 @@ def filter_dict(mydict: Dict[str, Any], keys: List[str]) -> Dict[str, Any]:
 
 @typechecked
 def get_losses_dict(
-    names_list: List[Literal["pca_multiview", "temporal"]] = []
+    names_list: list = [],
 ) -> Dict[str, Callable]:
     """Get a dict with all the loss functions for semi supervised training.
 
@@ -199,7 +253,9 @@ def get_losses_dict(
         "regression": MaskedRegressionMSELoss,
         "heatmap": MaskedMSEHeatmapLoss,
         "pca_multiview": MultiviewPCALoss,
+        "pca_singleview": SingleviewPCALoss,
         "temporal": TemporalLoss,
+        "unimodal": UnimodalLoss
     }
     return filter_dict(loss_dict, names_list)
 
