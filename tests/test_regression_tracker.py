@@ -126,7 +126,7 @@ def test_semisupervised():
     datamod = UnlabeledDataModule(
         dataset=dataset,
         video_paths_list=video_files[0],
-        losses_to_use="pca_multiview",
+        losses_to_use=["pca_multiview"],
         loss_param_dict=loss_param_dict,
         train_batch_size=4,
     )

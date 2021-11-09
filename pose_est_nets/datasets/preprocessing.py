@@ -56,20 +56,20 @@ def compute_multiview_pca_params(
         if data_module.dataset.imgaug_transform:
             i = 0
             for idx in indxs:
-                vals = pca_data.__getitem__(idx)
-                data_arr[i] = vals[1].reshape(-1, 2)
+                batch = pca_data.__getitem__(idx)
+                data_arr[i] = batch["keypoints"].reshape(-1, 2)
                 i += 1
     else:
         data_arr = (
             data_module.train_dataset.keypoints.detach().clone()
         )  # won't work for random splitting
 
-        # apply augmentation which *downsamples* the frames
+        # apply augmentation which *downsamples* the frames/keypoints
         if data_module.train_dataset.imgaug_transform:
             for i in range(len(data_arr)):
                 data_arr[i] = super(
                     type(data_module.train_dataset), data_module.train_dataset
-                ).__getitem__(i)[1]
+                ).__getitem__(i)["keypoints"]
 
     # format data and run pca
     #shape will be (2 * num_views, num_batches * num_keypoints)
@@ -150,12 +150,12 @@ def compute_singleview_pca_params(
             data_module.dataset.keypoints.detach().clone(), 0, indxs
         )  # data_arr is shape (train_batches, keypoints, 2)
 
-        # apply augmentation which *downsamples* the frames
+        # apply augmentation which *downsamples* the frames/keypoints
         if data_module.dataset.imgaug_transform:
             i = 0
             for idx in indxs:
-                vals = pca_data.__getitem__(idx)
-                data_arr[i] = vals[1].reshape(-1, 2)
+                batch = pca_data.__getitem__(idx)
+                data_arr[i] = batch["keypoints"].reshape(-1, 2)
                 i += 1
     else:
         data_arr = (
@@ -167,7 +167,7 @@ def compute_singleview_pca_params(
             for i in range(len(data_arr)):
                 data_arr[i] = super(
                     type(data_module.train_dataset), data_module.train_dataset
-                ).__getitem__(i)[1]
+                ).__getitem__(i)["keypoints"]
 
     # format data and run pca
     #shape is (num_batches, num_keypoints * 2)
