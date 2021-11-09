@@ -195,7 +195,7 @@ def predict_videos(
     video_path: str,
     ckpt_file: str,
     cfg_file: Union[str, DictConfig],
-    save_file: str,
+    save_file: Optional[str] = None,
     sequence_length: int = 16,
     device: Literal["gpu", "cuda", "cpu"] = "gpu",
     video_pipe_kwargs={},
@@ -247,6 +247,7 @@ def predict_videos(
     )
 
     # check input
+    # TODO: this is problematic, we may have multiple files and not a single file name.
     if save_file is not None:
         if not (
             save_file.endswith(".csv")
@@ -302,6 +303,26 @@ def predict_videos(
     for video_file in video_files:
 
         print("Processing video at %s" % video_file)
+
+        if save_file is None:
+            # create filename based on video name and model type
+            video_file_name = os.path.basename(video_file).replace(".mp4", "")
+            semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
+            if (
+                semi_supervised
+            ):  # only if any of the unsupervised `cfg.model.losses_to_use` is actually used
+                loss_str = ""
+                if len(cfg.model.losses_to_use) > 0:
+                    for loss in list(cfg.model.losses_to_use):
+                        loss_str = loss_str.join(
+                            "_%s_%.6f" % (loss, cfg["losses"][loss]["weight"])
+                        )
+            else:
+                loss_str = ""
+            save_file = os.path.join(
+                video_path,
+                "%s_%s%s.csv" % (video_file_name, cfg.model.model_type, loss_str),
+            )
 
         # build video loader/pipeline
         pipe = video_pipe(
@@ -373,25 +394,6 @@ def predict_videos(
                 )
 
         # save csv file of predictions in DeepLabCut format
-        if save_file is None:
-            # create filename based on video name and model type
-            video_file_name = os.path.basename(video_file).replace(".mp4", "")
-            semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
-            if (
-                semi_supervised
-            ):  # only if any of the unsupervised `cfg.model.losses_to_use` is actually used
-                loss_str = (
-                    "_".join([""] + list(cfg.model.losses_to_use))
-                    if len(cfg.model.losses_to_use) > 0
-                    else ""
-                )
-            else:
-                loss_str = ""
-            save_file = os.path.join(
-                video_path,
-                "%s_%s%s.csv" % (video_file_name, cfg.model.model_type, loss_str),
-            )
-
         num_joints = model.num_keypoints
         predictions = np.zeros((keypoints_np.shape[0], num_joints * 3))
         predictions[:, 0] = np.arange(keypoints_np.shape[0])
@@ -418,3 +420,7 @@ def predict_videos(
             df.to_hdf(save_file)
         else:
             raise NotImplementedError("Currently only .csv and .h5 files are supported")
+
+        # if iterating over multiple models, outside this function, the below will reduce memory
+        del model, pipe, predict_loader
+        torch.cuda.empty_cache()
