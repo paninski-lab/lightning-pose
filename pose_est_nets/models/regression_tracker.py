@@ -60,6 +60,10 @@ class RegressionTracker(BaseFeatureExtractor):
         self.torch_seed = torch_seed
         self.save_hyperparameters()
 
+    @property
+    def num_keypoints(self):
+        return self.num_targets // 2
+
     @staticmethod
     @typechecked
     def reshape_representation(
@@ -171,6 +175,10 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
             torch_seed=torch_seed,
         )
         print(semi_super_losses_to_use)
+        if semi_super_losses_to_use is None:
+            raise ValueError("must specify losses for unlabeled frames")
+        if "unimodal" in semi_super_losses_to_use:
+            raise ValueError("cannot use unimodal loss in regression tracker")
         self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
         self.loss_params = loss_params
 
