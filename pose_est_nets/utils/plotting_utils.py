@@ -438,6 +438,7 @@ def predict_videos(
         else:
             raise NotImplementedError("Currently only .csv and .h5 files are supported")
 
-        # if iterating over multiple models, outside this function, the below will reduce memory
-        del model, pipe, predict_loader
-        torch.cuda.empty_cache()
+    # if iterating over multiple models, outside this function, the below will reduce
+    # memory
+    del model, pipe, predict_loader
+    torch.cuda.empty_cache()
