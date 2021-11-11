@@ -67,7 +67,9 @@ foo@bar:~$ pytest
 The generic script for training models in our package is `scripts/train_hydra.py`.
 The script relies on **Hydra** to manage arguments in hierarchical config files. You can run over an argument from the config file, for example, `training.max_epochs`, by calling
 
-```python scripts/train_hydra.py training.max_epochs=11```.
+```console
+foo@bar: ~$python scripts/train_hydra.py training.max_epochs=11
+```
 
 ## Logs and saved models
 
@@ -75,7 +77,9 @@ The outputs of the training script, namely the model checkpoints and `Tensorboar
 
 To view the logged losses with tensorboard, in the command line, run:
 
-```tensorboard --logdir outputs/YYYY-MM-DD/```
+```console
+foo@bar:~$ tensorboard --logdir outputs/YYYY-MM-DD/
+```
 
 where you use the date in which you ran the model.
 
@@ -97,14 +101,14 @@ hydra_paths: [
 ]
 ```
 where you specify the relative paths for `hydra` folders within the `lightning-pose/outputs` folder. Then from command line, run:
-```
-python scripts/predict_compare.py
+```console
+foo@bar:~$ python scripts/predict_compare.py
 ```
 
 ### Option 2: Override from command line
 Specify `hydra_paths` in the command line, overriding the `.yaml`:
-```
-python scripts/predict_compare.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"]
+```console
+foo@bar:~$ python scripts/predict_compare.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"]
 ``` 
 where again, `hydra_paths` should be a list of strings with folder names within `lightning-pose/outputs`.
 
@@ -115,11 +119,11 @@ With a trained model and a path to a new videos, you can generate predictions fo
 3. `path_to_save_predictions`: optional path specifying where to save predictions. If `null`, the predictions will be saved in `eval.path_to_test_videos`.
 
 as in above, you could directly edit `scripts/configs/eval/eval_params.yaml` and run
-```
-python scripts/predict_new_vids.py 
+```console
+foo@bar:~$ python scripts/predict_new_vids.py 
 ```
 or override these arguments in the command line.
 
-```
-python scripts/predict_new_vids.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"] eval.path_to_save_predictions="/path/to/your/file.csv" eval.path_to_test_videos="path/to/test/vids"
+```console
+foo@bar:~$ python scripts/predict_new_vids.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"] eval.path_to_save_predictions="/path/to/your/file.csv" eval.path_to_test_videos="path/to/test/vids"
 ```
