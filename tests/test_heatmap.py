@@ -183,6 +183,13 @@ def test_unsupervised():  # TODO Finish writing test
 
     assert spm_l.shape == (datamod.train_batch_size, model.num_targets)
 
+    # remove model/data from gpu; then cache can be cleared
+    del loader
+    del out_heatmaps_labeled
+    del out_heatmaps_unlabeled
+    del spm_l, c_l
+    torch.cuda.empty_cache()  # remove tensors from gpu
+
     trainer = pl.Trainer(
         gpus=1 if _TORCH_DEVICE == "cuda" else 0,
         max_epochs=1,
@@ -194,9 +201,5 @@ def test_unsupervised():  # TODO Finish writing test
     # remove model/data from gpu; then cache can be cleared
     del datamod
     del model
-    del loader
-    del out_heatmaps_labeled
-    del out_heatmaps_unlabeled
-    del spm_l, c_l
     del trainer
     torch.cuda.empty_cache()  # remove tensors from gpu
