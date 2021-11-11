@@ -23,9 +23,7 @@ from pose_est_nets.utils.heatmap_tracker_utils import (
 from pose_est_nets.models.regression_tracker import BaseBatchDict
 
 
-patch_typeguard()  # use before @typechecked
-
-
+@typechecked
 class HeatmapBatchDict(BaseBatchDict):
     """Inherets key-value pairs from BaseExampleDict and adds "heatmaps"
 
@@ -33,10 +31,19 @@ class HeatmapBatchDict(BaseBatchDict):
         BaseExampleDict (TypedDict): a dict containing a single example.
     """
 
-    heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]
+    heatmaps: TensorType[
+        "batch", "num_keypoints", "heatmap_height", "heatmap_width", float
+    ]
 
 
-# TODO: add batch for semisupervised
+class SemiSupervisedHeatmapBatchDict(TypedDict):
+    labeled: HeatmapBatchDict
+    unlabeled: TensorType[
+        "sequence_length", "RGB":3, "image_height", "image_width", float
+    ]
+
+
+patch_typeguard()  # use before @typechecked
 
 
 @typechecked
@@ -328,7 +335,9 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         self.loss_params = loss_params
 
     @typechecked
-    def training_step(self, data_batch: Dict, batch_idx: int) -> Dict:
+    def training_step(
+        self, data_batch: SemiSupervisedHeatmapBatchDict, batch_idx: int
+    ) -> Dict:
 
         # forward pass labeled
         predicted_heatmaps = self.forward(data_batch["labeled"]["images"])

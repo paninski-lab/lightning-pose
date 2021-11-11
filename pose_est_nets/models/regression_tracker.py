@@ -19,9 +19,16 @@ patch_typeguard()  # use before @typechecked
 
 
 class BaseBatchDict(TypedDict):
-    images: TensorType["batch", "RGB":3, "image_height", "image_width"]
-    keypoints: TensorType["batch", "num_targets"]
-    idxs: TensorType["batch"]
+    images: TensorType["batch", "RGB":3, "image_height", "image_width", float]
+    keypoints: TensorType["batch", "num_targets", float]
+    idxs: TensorType["batch", int]
+
+
+class SemiSupervisedBatchDict(TypedDict):
+    labeled: BaseBatchDict
+    unlabeled: TensorType[
+        "sequence_length", "RGB":3, "image_height", "image_width", float
+    ]
 
 
 # TODO: Add the semisuper case
@@ -105,7 +112,7 @@ class RegressionTracker(BaseFeatureExtractor):
         return out
 
     @typechecked
-    def training_step(self, data_batch: Dict, batch_idx: int) -> Dict:
+    def training_step(self, data_batch: BaseBatchDict, batch_idx: int) -> Dict:
 
         # forward pass
         representation = self.get_representations(data_batch["images"])
@@ -126,7 +133,7 @@ class RegressionTracker(BaseFeatureExtractor):
     @typechecked
     def evaluate(
         self,
-        data_batch: Dict,
+        data_batch: BaseBatchDict,
         stage: Optional[Literal["val", "test"]] = None,
     ) -> None:
         representation = self.get_representations(data_batch["images"])
@@ -139,10 +146,10 @@ class RegressionTracker(BaseFeatureExtractor):
             self.log(f"{stage}_loss", loss, prog_bar=True)
             self.log(f"{stage}_supervised_rmse", supervised_rmse, prog_bar=True)
 
-    def validation_step(self, validation_batch: Dict, batch_idx):
+    def validation_step(self, validation_batch: BaseBatchDict, batch_idx):
         self.evaluate(validation_batch, "val")
 
-    def test_step(self, test_batch: Dict, batch_idx):
+    def test_step(self, test_batch: BaseBatchDict, batch_idx):
         self.evaluate(test_batch, "test")
 
 
@@ -192,7 +199,9 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         self.loss_params = loss_params
 
     @typechecked
-    def training_step(self, data_batch: dict, batch_idx: int) -> dict:
+    def training_step(
+        self, data_batch: SemiSupervisedBatchDict, batch_idx: int
+    ) -> dict:
 
         # forward pass labeled
         representation = self.get_representations(data_batch["labeled"]["images"])
