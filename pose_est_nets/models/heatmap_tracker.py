@@ -16,11 +16,9 @@ from pose_est_nets.losses.losses import (
     MaskedRMSELoss,
 )
 from pose_est_nets.models.base_resnet import BaseFeatureExtractor
-
 from pose_est_nets.models.regression_tracker import BaseBatchDict
 
 
-@typechecked
 class HeatmapBatchDict(BaseBatchDict):
     """Inherets key-value pairs from BaseExampleDict and adds "heatmaps"
 
@@ -128,7 +126,10 @@ class HeatmapTracker(BaseFeatureExtractor):
             "heatmap_height",
             "heatmap_width",
             float]
-    ) -> Tuple[torch.tensor, torch.tensor]:
+    ) -> Tuple[
+        TensorType["batch", "num_targets", float],
+        TensorType["batch", "num_keypoints", float]
+    ]:
         """Use soft argmax on heatmaps.
 
         Args:
@@ -226,7 +227,8 @@ class HeatmapTracker(BaseFeatureExtractor):
 
     @typechecked
     def forward(
-        self, images: TensorType["batch", "channels":3, "image_height", "image_width"]
+        self,
+        images: TensorType["batch", "channels":3, "image_height", "image_width", float]
     ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width", float]:
         """Forward pass through the network.
 
