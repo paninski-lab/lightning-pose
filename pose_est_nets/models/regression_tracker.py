@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict
 from typing_extensions import Literal
 
 from pose_est_nets.losses.losses import (
@@ -16,6 +16,15 @@ from pose_est_nets.losses.losses import (
 from pose_est_nets.models.base_resnet import BaseFeatureExtractor
 
 patch_typeguard()  # use before @typechecked
+
+
+class BaseBatchDict(TypedDict):
+    images: TensorType["batch", "RGB":3, "image_height", "image_width"]
+    keypoints: TensorType["batch", "num_targets"]
+    idxs: TensorType["batch"]
+
+
+# TODO: Add the semisuper case
 
 
 class RegressionTracker(BaseFeatureExtractor):
@@ -186,19 +195,17 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
     def training_step(self, data_batch: dict, batch_idx: int) -> dict:
 
         # forward pass labeled
-        representation = self.get_representations(data_batch["labeled"]['images'])
+        representation = self.get_representations(data_batch["labeled"]["images"])
         predicted_keypoints = self.final_layer(
             self.representation_dropout(self.reshape_representation(representation))
         )  # TODO: consider removing representation dropout?
 
         # compute loss labeled
         supervised_loss = MaskedRegressionMSELoss(
-            data_batch["labeled"]["keypoints"],
-            predicted_keypoints
+            data_batch["labeled"]["keypoints"], predicted_keypoints
         )  # for training
         supervised_rmse = MaskedRMSELoss(
-            data_batch["labeled"]["keypoints"],
-            predicted_keypoints
+            data_batch["labeled"]["keypoints"], predicted_keypoints
         )  # for logging
 
         # forward pass unlabeled
