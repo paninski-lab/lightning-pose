@@ -25,7 +25,7 @@ _IMAGENET_STD = [0.229, 0.224, 0.225]
 
 
 class BaseExampleDict(TypedDict):
-    images: TensorType["RGB":3, "height", "width"]
+    images: TensorType["RGB":3, "image_height", "image_width"]
     keypoints: TensorType[
         "num_targets",
     ]
@@ -39,7 +39,7 @@ class HeatmapExampleDict(BaseExampleDict):
         BaseExampleDict (TypedDict): a dict containing a single example.
     """
 
-    heatmaps: TensorType["num_keypoints", "height", "width"]
+    heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width"]
 
 
 class BaseTrackingDataset(torch.utils.data.Dataset):
@@ -271,7 +271,7 @@ class HeatmapDataset(BaseTrackingDataset):
         self.label_heatmaps = self.label_heatmaps.permute(0, 3, 1, 2)
 
     def __getitem__(self, idx: int) -> HeatmapExampleDict:
-        """Get batch of data.
+        """Get an example from the dataset.
 
         Calls the base dataset to get an image and a label, then additionaly
         return the corresponding heatmap.

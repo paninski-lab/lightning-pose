@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict
 from typing_extensions import Literal
 
 from pose_est_nets.losses.losses import (
@@ -20,7 +20,23 @@ from pose_est_nets.utils.heatmap_tracker_utils import (
     SubPixelMaxima,
 )
 
+from pose_est_nets.models.regression_tracker import BaseBatchDict
+
+
 patch_typeguard()  # use before @typechecked
+
+
+class HeatmapBatchDict(BaseBatchDict):
+    """Inherets key-value pairs from BaseExampleDict and adds "heatmaps"
+
+    Args:
+        BaseExampleDict (TypedDict): a dict containing a single example.
+    """
+
+    heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]
+
+
+# TODO: add batch for semisupervised
 
 
 @typechecked
@@ -206,17 +222,17 @@ class HeatmapTracker(BaseFeatureExtractor):
         return heatmaps
 
     @typechecked
-    def training_step(self, data_batch: Dict, batch_idx: int) -> Dict:
+    def training_step(self, batch_dict: HeatmapBatchDict, batch_idx: int) -> Dict:
 
         # forward pass
-        predicted_heatmaps = self.forward(data_batch["images"])  # images -> heatmaps
+        predicted_heatmaps = self.forward(batch_dict["images"])  # images -> heatmaps
         predicted_keypoints, confidence = self.run_subpixelmaxima(
             predicted_heatmaps
         )  # heatmaps -> keypoints
 
         # compute loss
-        heatmap_loss = MaskedMSEHeatmapLoss(data_batch["heatmaps"], predicted_heatmaps)
-        supervised_rmse = MaskedRMSELoss(data_batch["keypoints"], predicted_keypoints)
+        heatmap_loss = MaskedMSEHeatmapLoss(batch_dict["heatmaps"], predicted_heatmaps)
+        supervised_rmse = MaskedRMSELoss(batch_dict["keypoints"], predicted_keypoints)
 
         # log training loss + rmse
         self.log("train_loss", heatmap_loss, prog_bar=True)
@@ -227,25 +243,25 @@ class HeatmapTracker(BaseFeatureExtractor):
     @typechecked
     def evaluate(
         self,
-        data_batch: Dict,
-        stage: Optional[Literal["val", "test"]] = None
+        batch_dict: HeatmapBatchDict,
+        stage: Optional[Literal["val", "test"]] = None,
     ) -> None:
-        predicted_heatmaps = self.forward(data_batch["images"])  # images -> heatmaps
+        predicted_heatmaps = self.forward(batch_dict["images"])  # images -> heatmaps
         predicted_keypoints, confidence = self.run_subpixelmaxima(
             predicted_heatmaps
         )  # heatmaps -> keypoints
-        loss = MaskedMSEHeatmapLoss(data_batch["heatmaps"], predicted_heatmaps)
-        supervised_rmse = MaskedRMSELoss(data_batch["keypoints"], predicted_keypoints)
+        loss = MaskedMSEHeatmapLoss(batch_dict["heatmaps"], predicted_heatmaps)
+        supervised_rmse = MaskedRMSELoss(batch_dict["keypoints"], predicted_keypoints)
         if stage:
             self.log(f"{stage}_loss", loss, prog_bar=True, logger=True)
             self.log(
                 f"{stage}_supervised_rmse", supervised_rmse, prog_bar=True, logger=True
             )
 
-    def validation_step(self, validation_batch: Dict, batch_idx):
+    def validation_step(self, validation_batch: HeatmapBatchDict, batch_idx):
         self.evaluate(validation_batch, "val")
 
-    def test_step(self, test_batch: Dict, batch_idx):
+    def test_step(self, test_batch: HeatmapBatchDict, batch_idx):
         self.evaluate(test_batch, "test")
 
 
@@ -315,19 +331,17 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
     def training_step(self, data_batch: Dict, batch_idx: int) -> Dict:
 
         # forward pass labeled
-        predicted_heatmaps = self.forward(data_batch["labeled"]['images'])
+        predicted_heatmaps = self.forward(data_batch["labeled"]["images"])
         predicted_keypoints, confidence = self.run_subpixelmaxima(
             predicted_heatmaps
         )  # heatmaps -> keypoints
 
         # compute loss labeled
         supervised_loss = MaskedMSEHeatmapLoss(
-            data_batch["labeled"]["heatmaps"],
-            predicted_heatmaps
+            data_batch["labeled"]["heatmaps"], predicted_heatmaps
         )
         supervised_rmse = MaskedRMSELoss(
-            data_batch["labeled"]["keypoints"],
-            predicted_keypoints
+            data_batch["labeled"]["keypoints"], predicted_keypoints
         )
 
         # forward pass unlabeled
@@ -346,9 +360,9 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             # Some losses use keypoint_preds, some use heatmap_preds, and some use both.
             # all have **kwargs so are robust to unneeded inputs."
             add_loss = self.loss_params[loss_name]["weight"] * loss_func(
-                keypoint_preds = predicted_us_keypoints, 
-                heatmap_preds = unlabeled_predicted_heatmaps,
-                **self.loss_params[loss_name]
+                keypoint_preds=predicted_us_keypoints,
+                heatmap_preds=unlabeled_predicted_heatmaps,
+                **self.loss_params[loss_name],
             )
             tot_loss += add_loss
             # log individual unsupervised losses
