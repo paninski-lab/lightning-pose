@@ -7,6 +7,8 @@ from PIL import Image
 import torch
 from torchvision import transforms
 from typing import Callable, Literal, List, Optional, Tuple, Union, TypedDict
+from torchtyping import TensorType, patch_typeguard
+
 
 from pose_est_nets.utils.dataset_utils import draw_keypoints
 
@@ -22,14 +24,22 @@ _IMAGENET_STD = [0.229, 0.224, 0.225]
 # TODO: imagenet params.
 
 
-class BaseBatchDict(TypedDict):
-    images: torch.tensor
-    keypoints: torch.tensor
+class BaseExampleDict(TypedDict):
+    images: TensorType["RGB":3, "height", "width"]
+    keypoints: TensorType[
+        "num_targets",
+    ]
     idxs: int
 
 
-class HeatmapBatchDict(BaseBatchDict):
-    heatmaps: torch.tensor
+class HeatmapExampleDict(BaseExampleDict):
+    """Inherets key-value pairs from BaseExampleDict and adds "heatmaps"
+
+    Args:
+        BaseExampleDict (TypedDict): a dict containing a single example.
+    """
+
+    heatmaps: TensorType["num_keypoints", "height", "width"]
 
 
 class BaseTrackingDataset(torch.utils.data.Dataset):
@@ -122,7 +132,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
     def __len__(self) -> int:
         return len(self.image_names)
 
-    def __getitem__(self, idx: int) -> BaseBatchDict:
+    def __getitem__(self, idx: int) -> BaseExampleDict:
         # get img_name from self.image_names
         img_name = self.image_names[idx]
         # read image from file and apply transformations (if any)
@@ -244,13 +254,13 @@ class HeatmapDataset(BaseTrackingDataset):
         """
         label_heatmaps = []
         for idx in range(len(self.image_names)):
-            batch_dict: BaseBatchDict = super().__getitem__(idx)
+            example_dict: BaseExampleDict = super().__getitem__(idx)
             # super().__getitem__ returns flat keypoints, reshape to
             # (num_keypoints, 2)
             y_heatmap = draw_keypoints(
-                batch_dict["keypoints"].numpy().reshape(self.num_keypoints, 2),
-                batch_dict["images"].shape[-2],
-                batch_dict["images"].shape[-1],
+                example_dict["keypoints"].numpy().reshape(self.num_keypoints, 2),
+                example_dict["images"].shape[-2],
+                example_dict["images"].shape[-1],
                 self.output_shape,
                 sigma=self.output_sigma,
             )
@@ -260,7 +270,7 @@ class HeatmapDataset(BaseTrackingDataset):
         self.label_heatmaps = torch.from_numpy(np.asarray(label_heatmaps)).float()
         self.label_heatmaps = self.label_heatmaps.permute(0, 3, 1, 2)
 
-    def __getitem__(self, idx: int) -> HeatmapBatchDict:
+    def __getitem__(self, idx: int) -> HeatmapExampleDict:
         """Get batch of data.
 
         Calls the base dataset to get an image and a label, then additionaly
@@ -268,9 +278,9 @@ class HeatmapDataset(BaseTrackingDataset):
 
         """
         # could modify this if speed bottleneck
-        batch_dict: BaseBatchDict = super().__getitem__(idx)
-        batch_dict["heatmaps"] = self.label_heatmaps[idx]
-        return batch_dict
+        example_dict: BaseExampleDict = super().__getitem__(idx)
+        example_dict["heatmaps"] = self.label_heatmaps[idx]
+        return example_dict
 
     def get_fully_labeled_idxs(self):  # TODO: make shorter
         nan_check = torch.isnan(self.keypoints)
