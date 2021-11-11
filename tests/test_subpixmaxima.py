@@ -9,6 +9,7 @@ import pytest
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
+
 def test_subpixmaxima():
     data_transform = []
     data_transform.append(
@@ -26,37 +27,34 @@ def test_subpixmaxima():
         output_sigma=torch.tensor(1.25, device=_TORCH_DEVICE),
         upsample_factor=torch.tensor(2, device=_TORCH_DEVICE),
         coordinate_scale=torch.tensor(4, device=_TORCH_DEVICE),  # 2 ** 2
-        confidence_scale=torch.tensor(1, device=_TORCH_DEVICE), 
+        confidence_scale=torch.tensor(1, device=_TORCH_DEVICE),
         threshold=None,
-        device=_TORCH_DEVICE
+        device=_TORCH_DEVICE,
     )
-    test_img, gt_heatmap, gt_keypts = dataset.__getitem__(idx=0)
-    maxima, confidence = SubPixMax.run(gt_heatmap.unsqueeze(0).to(_TORCH_DEVICE))
+    example = dataset.__getitem__(idx=0)
+    maxima, confidence = SubPixMax.run(
+        example["heatmaps"].unsqueeze(0).to(_TORCH_DEVICE)
+    )
     maxima = maxima.squeeze(0)
-    assert(maxima.shape == gt_keypts.shape)
-    assert(maxima.shape[0]//2 == confidence.shape[1])
+    assert maxima.shape == example["keypoints"].shape
+    assert maxima.shape[0] // 2 == confidence.shape[1]
 
     # remove model/data from gpu; then cache can be cleared
-    del gt_heatmap
-    del test_img, gt_keypts
+    del example
     del maxima, confidence
     torch.cuda.empty_cache()  # remove tensors from gpu
 
     dl = DataLoader(dataset, batch_size=2)
-    img_batch, gt_heatmap_batch, gt_keypts_batch = next(iter(dl))
-
+    batch = next(iter(dl))
     del dataset
     del dl
-    del img_batch, gt_keypts_batch
     torch.cuda.empty_cache()  # remove tensors from gpu
-    
-    maxima1, confidence1 = SubPixMax.run(
-        gt_heatmap_batch.to(_TORCH_DEVICE)   
-    )
+
+    maxima1, confidence1 = SubPixMax.run(batch["heatmaps"].to(_TORCH_DEVICE))
     print(maxima1.shape, confidence1.shape)
 
     # remove model/data from gpu; then cache can be cleared
-    del gt_heatmap_batch
+    del batch
     del maxima1, confidence1
     torch.cuda.empty_cache()  # remove tensors from gpu
 
@@ -73,31 +71,42 @@ def test_generate_keypoints():
         header_rows=[1, 2],
         imgaug_transform=imgaug_transform,
     )
-    test_img, gt_heatmap, gt_keypts = dataset.__getitem__(idx=0)
-    assert(gt_keypts.shape == (torch.Size([34])))
-    gt_heatmap = gt_heatmap.unsqueeze(0)
-    gt_keypts = gt_keypts.unsqueeze(0).reshape(1, 17, 2)
-    assert(gt_heatmap.shape == (1, 17, 96, 96))
-    torch_heatmap = generate_heatmaps(gt_keypts, height=384, width=384, output_shape=(96,96))
+    example = dataset.__getitem__(idx=0)
+    assert example["keypoints"].shape == (torch.Size([34]))
+    gt_heatmap = example["heatmaps"].unsqueeze(0)
+    gt_keypts = example["keypoints"].unsqueeze(0).reshape(1, 17, 2)
+    assert gt_heatmap.shape == (1, 17, 96, 96)
+    torch_heatmap = generate_heatmaps(
+        gt_keypts, height=384, width=384, output_shape=(96, 96)
+    )
     SubPixMax = SubPixelMaxima(
         output_shape=(96, 96),
         output_sigma=torch.tensor(1.25, device=_TORCH_DEVICE),
         upsample_factor=torch.tensor(2, device=_TORCH_DEVICE),
         coordinate_scale=torch.tensor(4, device=_TORCH_DEVICE),  # 2 ** 2
-        confidence_scale=torch.tensor(1, device=_TORCH_DEVICE), 
+        confidence_scale=torch.tensor(1, device=_TORCH_DEVICE),
         threshold=None,
-        device=_TORCH_DEVICE
+        device=_TORCH_DEVICE,
     )
     og_maxima, gt_confidence = SubPixMax.run(gt_heatmap.to(_TORCH_DEVICE))
     torch_maxima, confidence_t = SubPixMax.run(torch_heatmap.to(_TORCH_DEVICE))
-    assert(og_maxima == torch_maxima).all()
-    assert(gt_confidence == confidence_t).all()
+    assert (og_maxima == torch_maxima).all()
+    assert (gt_confidence == confidence_t).all()
+
+    # remove model/data from gpu; then cache can be cleared
+    del example
+    del gt_heatmap, gt_keypts
+    torch.cuda.empty_cache()  # remove tensors from gpu
+
 
 def test_generate_keypoints_weird_shape():
     data_transform = []
     OG_SHAPE = (384, 256)
     DOWNSAMPLE_FACTOR = 2
-    output_shape = (OG_SHAPE[0]//(2** DOWNSAMPLE_FACTOR), OG_SHAPE[1]//(2** DOWNSAMPLE_FACTOR))
+    output_shape = (
+        OG_SHAPE[0] // (2 ** DOWNSAMPLE_FACTOR),
+        OG_SHAPE[1] // (2 ** DOWNSAMPLE_FACTOR),
+    )
     data_transform.append(
         iaa.Resize({"height": OG_SHAPE[0], "width": OG_SHAPE[1]})
     )  # dlc dimensions need to be repeatably divisable by 2
@@ -108,29 +117,33 @@ def test_generate_keypoints_weird_shape():
         header_rows=[1, 2],
         imgaug_transform=imgaug_transform,
     )
-    test_img, gt_heatmap, gt_keypts = dataset.__getitem__(idx=0)
-    assert(gt_keypts.shape == (torch.Size([34])))
-    gt_heatmap = gt_heatmap.unsqueeze(0)
-    gt_keypts = gt_keypts.unsqueeze(0).reshape(1, 17, 2)
-    assert(gt_heatmap.shape == (1, 17, output_shape[0], output_shape[1]))
-    torch_heatmap = generate_heatmaps(gt_keypts, height=OG_SHAPE[0], width=OG_SHAPE[1], output_shape=output_shape)
+    batch = dataset.__getitem__(idx=0)
+    assert batch["keypoints"].shape == (torch.Size([34]))
+    gt_heatmap = batch["heatmaps"].unsqueeze(0)
+    gt_keypts = batch["keypoints"].unsqueeze(0).reshape(1, 17, 2)
+    assert gt_heatmap.shape == (1, 17, output_shape[0], output_shape[1])
+    torch_heatmap = generate_heatmaps(
+        gt_keypts, height=OG_SHAPE[0], width=OG_SHAPE[1], output_shape=output_shape
+    )
     SubPixMax = SubPixelMaxima(
         output_shape=output_shape,
         output_sigma=torch.tensor(1.25, device=_TORCH_DEVICE),
         upsample_factor=torch.tensor(2, device=_TORCH_DEVICE),
         coordinate_scale=torch.tensor(4, device=_TORCH_DEVICE),  # 2 ** 2
-        confidence_scale=torch.tensor(1, device=_TORCH_DEVICE), 
+        confidence_scale=torch.tensor(1, device=_TORCH_DEVICE),
         threshold=None,
-        device=_TORCH_DEVICE
+        device=_TORCH_DEVICE,
     )
     og_maxima, gt_confidence = SubPixMax.run(gt_heatmap.to(_TORCH_DEVICE))
     torch_maxima, confidence_t = SubPixMax.run(torch_heatmap.to(_TORCH_DEVICE))
-    assert(og_maxima == torch_maxima).all()
-    assert(gt_confidence == confidence_t).all()
+    assert (og_maxima == torch_maxima).all()
+    assert (gt_confidence == confidence_t).all()
 
-#tests the batched functionality of generate_heatmaps by comparing it to the ground truth heatmaps
-#in the heatmap dataset computed by the previous numpy function draw_keypoints. 
-#TODO: Change ground truth computation of heatmaps for heatmap dataset to use generate_heatmaps.
+
+# tests the batched functionality of generate_heatmaps by comparing it to the ground
+# truth heatmaps in the heatmap dataset computed by the previous numpy function draw_
+# keypoints.
+# TODO: Change gt computation of heatmaps for heatmap dataset to use generate_heatmaps.
 def test_generate_keypoints_batched():
     data_transform = []
     data_transform.append(
@@ -143,27 +156,23 @@ def test_generate_keypoints_batched():
         header_rows=[1, 2],
         imgaug_transform=imgaug_transform,
     )
-    dl = DataLoader(dataset=dataset, batch_size=10) 
+    dl = DataLoader(dataset=dataset, batch_size=10)
     SubPixMax = SubPixelMaxima(
         output_shape=(96, 96),
         output_sigma=torch.tensor(1.25, device=_TORCH_DEVICE),
         upsample_factor=torch.tensor(2, device=_TORCH_DEVICE),
         coordinate_scale=torch.tensor(4, device=_TORCH_DEVICE),  # 2 ** 2
-        confidence_scale=torch.tensor(1, device=_TORCH_DEVICE), 
+        confidence_scale=torch.tensor(1, device=_TORCH_DEVICE),
         threshold=None,
-        device=_TORCH_DEVICE
+        device=_TORCH_DEVICE,
     )
     for batch in dl:
-        _, gt_heatmaps, gt_keypts = batch
-        gt_keypts = gt_keypts.reshape(-1, 17, 2)
-        heatmaps = generate_heatmaps(gt_keypts, height=384, width=384, output_shape=(96,96))
-        gt_maxima, gt_confidence = SubPixMax.run(gt_heatmaps.to(_TORCH_DEVICE))
+        gt_keypts = batch["keypoints"].reshape(-1, 17, 2)
+        heatmaps = generate_heatmaps(
+            gt_keypts, height=384, width=384, output_shape=(96, 96)
+        )
+        gt_maxima, gt_confidence = SubPixMax.run(batch["heatmaps"].to(_TORCH_DEVICE))
         torch_maxima, confidence_t = SubPixMax.run(heatmaps.to(_TORCH_DEVICE))
-        assert(gt_maxima == torch_maxima).all()
-        loss = MaskedMSEHeatmapLoss(gt_heatmaps, heatmaps)
-        assert(loss < 1e-6)
-        # bad_idx = ~(gt_confidence == confidence_t)
-        # print(gt_confidence[bad_idx])
-        # print(confidence_t[bad_idx])
-        #assert(gt_confidence == confidence_t).all() #seem to have inperceptible differences (maybe in hidden decimal places)
-
+        assert (gt_maxima == torch_maxima).all()
+        loss = MaskedMSEHeatmapLoss(batch["heatmaps"], heatmaps)
+        assert loss < 1e-6

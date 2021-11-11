@@ -19,16 +19,15 @@ def predict_plot_test_epoch(model,
     model.eval()
     counter = 0
     for batch in dataloader:
-        images, labels = batch
-        predictions = model(images)
+        predictions = model(batch["images"])
 
         for i in range(images.shape[0]):
-            scatter_predictions(images[i], labels[i], predictions[i])
+            scatter_predictions(images[i], batch["labels"][i], predictions[i])
             plt.savefig(os.path.join(preds_folder, "test_im_" + str(counter) + ".png"))
             plt.close()
             preds_dict["preds"].append(predictions[i])
             preds_dict["labels"].append(labels[i])
-            counter+=1
+            counter += 1
 
     save_object(preds_dict, os.path.join(preds_folder, "preds"))
 
@@ -41,4 +40,3 @@ def scatter_predictions(image: torch.Tensor, labels: torch.Tensor, preds: torch.
     plt.imshow(image[0])
     plt.scatter(labels[0::2], labels[1::2], label='labels')
     plt.scatter(preds[0::2], preds[1::2], label='preds')
-

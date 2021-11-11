@@ -6,7 +6,9 @@ import pandas as pd
 from PIL import Image
 import torch
 from torchvision import transforms
-from typing import Callable, Literal, List, Optional, Tuple, Union
+from typing import Callable, Literal, List, Optional, Tuple, Union, TypedDict
+from torchtyping import TensorType, patch_typeguard
+from typeguard import typechecked
 
 from pose_est_nets.utils.dataset_utils import draw_keypoints
 
@@ -20,6 +22,26 @@ _IMAGENET_STD = [0.229, 0.224, 0.225]
 # TODO: review transforms -- resize is done by imgaug.augmenters coming from
 # TODO: the main script. it is fed as input. internally, we always normalize to
 # TODO: imagenet params.
+
+patch_typeguard()  # use before @typechecked
+
+
+class BaseExampleDict(TypedDict):
+    images: TensorType["RGB":3, "image_height", "image_width"]
+    keypoints: TensorType[
+        "num_targets",
+    ]
+    idxs: int
+
+
+class HeatmapExampleDict(BaseExampleDict):
+    """Inherets key-value pairs from BaseExampleDict and adds "heatmaps"
+
+    Args:
+        BaseExampleDict (TypedDict): a dict containing a single example.
+    """
+
+    heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width"]
 
 
 class BaseTrackingDataset(torch.utils.data.Dataset):
@@ -112,7 +134,8 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
     def __len__(self) -> int:
         return len(self.image_names)
 
-    def __getitem__(self, idx: int) -> Tuple[torch.tensor, torch.tensor]:
+    # @typechecked
+    def __getitem__(self, idx: int) -> BaseExampleDict:
         # get img_name from self.image_names
         img_name = self.image_names[idx]
         # read image from file and apply transformations (if any)
@@ -135,11 +158,18 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             transformed_keypoints = transformed_keypoints.reshape(
                 transformed_keypoints.shape[0] * transformed_keypoints.shape[1]
             )
+        else:
+            transformed_images = np.expand_dims(image, axis=0)
+            transformed_keypoints = np.expand_dims(keypoints_on_image, axis=0)
+
         transformed_images = self.pytorch_transform(transformed_images)
         assert transformed_keypoints.shape == (self.num_targets,)
 
-        # ret = (transformed_images, torch.from_numpy(transformed_keypoints))
-        return transformed_images, torch.from_numpy(transformed_keypoints)
+        return {
+            "images": transformed_images,
+            "keypoints": torch.from_numpy(transformed_keypoints),
+            "idxs": idx,
+        }
 
 
 # the only addition here, should be the heatmap creation method.
@@ -227,13 +257,13 @@ class HeatmapDataset(BaseTrackingDataset):
         """
         label_heatmaps = []
         for idx in range(len(self.image_names)):
-            x, y = super().__getitem__(idx)
+            example_dict: BaseExampleDict = super().__getitem__(idx)
             # super().__getitem__ returns flat keypoints, reshape to
             # (num_keypoints, 2)
             y_heatmap = draw_keypoints(
-                y.numpy().reshape(self.num_keypoints, 2),
-                x.shape[-2],
-                x.shape[-1],
+                example_dict["keypoints"].numpy().reshape(self.num_keypoints, 2),
+                example_dict["images"].shape[-2],
+                example_dict["images"].shape[-1],
                 self.output_shape,
                 sigma=self.output_sigma,
             )
@@ -243,17 +273,18 @@ class HeatmapDataset(BaseTrackingDataset):
         self.label_heatmaps = torch.from_numpy(np.asarray(label_heatmaps)).float()
         self.label_heatmaps = self.label_heatmaps.permute(0, 3, 1, 2)
 
-    def __getitem__(self, idx: int) -> Tuple[torch.tensor, torch.tensor, torch.Tensor]:
-        """Get batch of data.
+    @typechecked
+    def __getitem__(self, idx: int) -> HeatmapExampleDict:
+        """Get an example from the dataset.
 
         Calls the base dataset to get an image and a label, then additionaly
         return the corresponding heatmap.
 
         """
         # could modify this if speed bottleneck
-        image, keypoints = super().__getitem__(idx)
-        heatmaps = self.label_heatmaps[idx]
-        return image, heatmaps, keypoints
+        example_dict: BaseExampleDict = super().__getitem__(idx)
+        example_dict["heatmaps"] = self.label_heatmaps[idx]
+        return example_dict
 
     def get_fully_labeled_idxs(self):  # TODO: make shorter
         nan_check = torch.isnan(self.keypoints)
