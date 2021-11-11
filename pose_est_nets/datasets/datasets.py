@@ -8,7 +8,7 @@ import torch
 from torchvision import transforms
 from typing import Callable, Literal, List, Optional, Tuple, Union, TypedDict
 from torchtyping import TensorType, patch_typeguard
-
+from typeguard import typechecked
 
 from pose_est_nets.utils.dataset_utils import draw_keypoints
 
@@ -22,6 +22,8 @@ _IMAGENET_STD = [0.229, 0.224, 0.225]
 # TODO: review transforms -- resize is done by imgaug.augmenters coming from
 # TODO: the main script. it is fed as input. internally, we always normalize to
 # TODO: imagenet params.
+
+patch_typeguard()  # use before @typechecked
 
 
 class BaseExampleDict(TypedDict):
@@ -132,6 +134,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
     def __len__(self) -> int:
         return len(self.image_names)
 
+    # @typechecked
     def __getitem__(self, idx: int) -> BaseExampleDict:
         # get img_name from self.image_names
         img_name = self.image_names[idx]
@@ -270,6 +273,7 @@ class HeatmapDataset(BaseTrackingDataset):
         self.label_heatmaps = torch.from_numpy(np.asarray(label_heatmaps)).float()
         self.label_heatmaps = self.label_heatmaps.permute(0, 3, 1, 2)
 
+    @typechecked
     def __getitem__(self, idx: int) -> HeatmapExampleDict:
         """Get an example from the dataset.
 
