@@ -25,11 +25,11 @@ def test_generate_keypoints():
     )
     example = dataset.__getitem__(idx=0)
     assert example["keypoints"].shape == (torch.Size([34]))
-    gt_heatmap = example["heatmaps"].unsqueeze(0)
-    gt_keypts = example["keypoints"].unsqueeze(0).reshape(1, 17, 2)
-    assert gt_heatmap.shape == (1, 17, 96, 96)
-    torch_heatmap = generate_heatmaps(
-        gt_keypts, height=384, width=384, output_shape=(96, 96)
+    heatmap_gt = example["heatmaps"].unsqueeze(0)
+    keypts_gt = example["keypoints"].unsqueeze(0).reshape(1, 17, 2)
+    assert heatmap_gt.shape == (1, 17, 96, 96)
+    heatmap_torch = generate_heatmaps(
+        keypts_gt, height=384, width=384, output_shape=(96, 96)
     )
 
     # find soft argmax and confidence of ground truth heatmap
@@ -46,13 +46,11 @@ def test_generate_keypoints():
     preds_torch = spatial_expectation2d(softmaxes_torch, normalized_coordinates=False)
     confidences_torch = torch.amax(softmaxes_torch, dim=(2, 3))
 
-    # og_maxima, gt_confidence = SubPixMax.run(heatmap_gt.to(_TORCH_DEVICE))
-    # torch_maxima, confidence_t = SubPixMax.run(heatmap_torch.to(_TORCH_DEVICE))
     assert(preds_gt == preds_torch).all()
     assert(confidences_gt == confidences_torch).all()
 
     # remove model/data from gpu; then cache can be cleared
-    del batch_dict
+    del example
     del heatmap_gt, keypts_gt
     del softmaxes_gt, preds_gt, confidences_gt
     del softmaxes_torch, preds_torch, confidences_torch
@@ -102,8 +100,6 @@ def test_generate_keypoints_weird_shape():
     preds_torch = spatial_expectation2d(softmaxes_torch, normalized_coordinates=False)
     confidences_torch = torch.amax(softmaxes_torch, dim=(2, 3))
 
-    # og_maxima, gt_confidence = SubPixMax.run(heatmap_gt.to(_TORCH_DEVICE))
-    # torch_maxima, confidence_t = SubPixMax.run(heatmap_torch.to(_TORCH_DEVICE))
     assert(preds_gt == preds_torch).all()
     assert(confidences_gt == confidences_torch).all()
 
