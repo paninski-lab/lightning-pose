@@ -1,5 +1,7 @@
 """Models that produce heatmaps of keypoints from images."""
 
+from kornia.geometry.subpix import spatial_softmax2d, spatial_expectation2d
+from kornia.geometry.transform import pyrup
 import torch
 from torch import nn
 from torchtyping import TensorType, patch_typeguard
@@ -14,11 +16,6 @@ from pose_est_nets.losses.losses import (
     MaskedRMSELoss,
 )
 from pose_est_nets.models.base_resnet import BaseFeatureExtractor
-from pose_est_nets.utils.heatmap_tracker_utils import (
-    find_subpixel_maxima,
-    largest_factor,
-    SubPixelMaxima,
-)
 
 from pose_est_nets.models.regression_tracker import BaseBatchDict
 
@@ -104,6 +101,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         self.upsample_factor = torch.tensor(upsample_factor, device=self.device)
         self.confidence_scale = torch.tensor(confidence_scale, device=self.device)
         self.threshold = threshold
+        self.temperature = torch.tensor(100, device=self.device)  # soft argmax temp
         self.torch_seed = torch_seed
         # Necessary so we don't have to pass in model arguments when loading
         self.save_hyperparameters()
@@ -121,20 +119,35 @@ class HeatmapTracker(BaseFeatureExtractor):
     def coordinate_scale(self):
         return torch.tensor(2 ** self.downsample_factor, device=self.device)
 
-    @property
-    def SubPixMax(self):
-        return SubPixelMaxima(
-            output_shape=self.output_shape,
-            output_sigma=self.output_sigma,
-            upsample_factor=self.upsample_factor,
-            coordinate_scale=self.coordinate_scale,
-            confidence_scale=self.confidence_scale,
-            threshold=self.threshold,
-            device=self.device,
-        )
+    @typechecked
+    def run_subpixelmaxima(
+        self,
+        heatmaps: TensorType[
+            "batch",
+            "num_keypoints",
+            "heatmap_height",
+            "heatmap_width",
+            float]
+    ) -> Tuple[torch.tensor, torch.tensor]:
+        """Use soft argmax on heatmaps.
 
-    def run_subpixelmaxima(self, heatmaps1):
-        return self.SubPixMax.run(heatmaps1)
+        Args:
+            heatmaps: output of upsampling layers
+
+        Returns:
+            - soft argmax of shape (batch, num_targets)
+            - confidences of shape (batch, num_keypoints)
+
+        """
+        # upsample heatmaps
+        for _ in range(self.downsample_factor):
+            heatmaps = pyrup(heatmaps)
+        # find soft argmax
+        softmaxes = spatial_softmax2d(heatmaps, temperature=self.temperature)
+        preds = spatial_expectation2d(softmaxes, normalized_coordinates=False)
+        # compute predictions as softmax value at argmax
+        confidences = torch.amax(softmaxes, dim=(2, 3))
+        return preds.reshape(-1, self.num_targets), confidences
 
     def initialize_upsampling_layers(self) -> None:
         """Intialize the Conv2DTranspose upsampling layers."""
@@ -214,7 +227,7 @@ class HeatmapTracker(BaseFeatureExtractor):
     @typechecked
     def forward(
         self, images: TensorType["batch", "channels":3, "image_height", "image_width"]
-    ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
+    ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width", float]:
         """Forward pass through the network.
 
         Args:
