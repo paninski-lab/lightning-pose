@@ -23,13 +23,11 @@ imgaug_transform = iaa.Sequential(data_transform)
 video_directory = "toy_datasets/toymouseRunningData/unlabeled_videos"
 assert os.path.exists(video_directory)
 
+# video_directory may contain other random files that are not vids, DALI will try to
+# read them
 video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
 vids = []
-for (
-    f
-) in (
-    video_files
-):  # video_directory may contain other random files that are not vids, DALI will try to read them
+for f in video_files:
     if f.endswith(".mp4"):  # hardcoded for the toydataset folder
         vids.append(f)
 
@@ -64,22 +62,23 @@ def test_base_datamodule():
     reg_module.setup()
     batch = next(iter(reg_module.train_dataloader()))
     assert (
-        torch.tensor(batch[0].shape)
+        torch.tensor(batch["images"].shape)
         == torch.tensor([reg_module.train_batch_size, 3, 384, 384])
     ).all()
     assert (
-        torch.tensor(batch[1].shape) == torch.tensor([reg_module.train_batch_size, 34])
+        torch.tensor(batch["keypoints"].shape) ==
+        torch.tensor([reg_module.train_batch_size, 34])
     ).all()
 
     heatmap_module = BaseDataModule(heatmap_data)  # and default args
     heatmap_module.setup()
     batch = next(iter(heatmap_module.train_dataloader()))
     assert (
-        torch.tensor(batch[0].shape)
+        torch.tensor(batch["images"].shape)
         == torch.tensor([heatmap_module.train_batch_size, 3, 384, 384])
     ).all()
     assert (
-        torch.tensor(batch[1].shape)
+        torch.tensor(batch["heatmaps"].shape)
         == torch.tensor(
             [
                 heatmap_module.train_batch_size,
@@ -199,7 +198,7 @@ def test_PCA():  # TODO FINISH WRITING TEST
         heatmap_data,
         video_paths_list=vids,
         loss_param_dict=loss_param_dict,
-        losses_to_use="pca_multiview",
+        losses_to_use=["pca_multiview"],
     )
     # remove model/data from gpu; then cache can be cleared
     del unlabeled_module_heatmap

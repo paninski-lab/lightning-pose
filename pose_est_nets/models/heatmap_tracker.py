@@ -1,10 +1,12 @@
 """Models that produce heatmaps of keypoints from images."""
 
+from kornia.geometry.subpix import spatial_softmax2d, spatial_expectation2d
+from kornia.geometry.transform import pyrup
 import torch
 from torch import nn
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict
 from typing_extensions import Literal
 
 from pose_est_nets.losses.losses import (
@@ -14,11 +16,27 @@ from pose_est_nets.losses.losses import (
     MaskedRMSELoss,
 )
 from pose_est_nets.models.base_resnet import BaseFeatureExtractor
-from pose_est_nets.utils.heatmap_tracker_utils import (
-    find_subpixel_maxima,
-    largest_factor,
-    SubPixelMaxima,
-)
+from pose_est_nets.models.regression_tracker import BaseBatchDict
+
+
+class HeatmapBatchDict(BaseBatchDict):
+    """Inherets key-value pairs from BaseExampleDict and adds "heatmaps"
+
+    Args:
+        BaseExampleDict (TypedDict): a dict containing a single example.
+    """
+
+    heatmaps: TensorType[
+        "batch", "num_keypoints", "heatmap_height", "heatmap_width", float
+    ]
+
+
+class SemiSupervisedHeatmapBatchDict(TypedDict):
+    labeled: HeatmapBatchDict
+    unlabeled: TensorType[
+        "sequence_length", "RGB":3, "image_height", "image_width", float
+    ]
+
 
 patch_typeguard()  # use before @typechecked
 
@@ -81,6 +99,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         self.upsample_factor = torch.tensor(upsample_factor, device=self.device)
         self.confidence_scale = torch.tensor(confidence_scale, device=self.device)
         self.threshold = threshold
+        self.temperature = torch.tensor(100, device=self.device)  # soft argmax temp
         self.torch_seed = torch_seed
         # Necessary so we don't have to pass in model arguments when loading
         self.save_hyperparameters()
@@ -98,20 +117,38 @@ class HeatmapTracker(BaseFeatureExtractor):
     def coordinate_scale(self):
         return torch.tensor(2 ** self.downsample_factor, device=self.device)
 
-    @property
-    def SubPixMax(self):
-        return SubPixelMaxima(
-            output_shape=self.output_shape,
-            output_sigma=self.output_sigma,
-            upsample_factor=self.upsample_factor,
-            coordinate_scale=self.coordinate_scale,
-            confidence_scale=self.confidence_scale,
-            threshold=self.threshold,
-            device=self.device,
-        )
+    @typechecked
+    def run_subpixelmaxima(
+        self,
+        heatmaps: TensorType[
+            "batch",
+            "num_keypoints",
+            "heatmap_height",
+            "heatmap_width",
+            float]
+    ) -> Tuple[
+        TensorType["batch", "num_targets", float],
+        TensorType["batch", "num_keypoints", float]
+    ]:
+        """Use soft argmax on heatmaps.
 
-    def run_subpixelmaxima(self, heatmaps1, heatmaps2=None):
-        return self.SubPixMax.run(heatmaps1, heatmaps2)
+        Args:
+            heatmaps: output of upsampling layers
+
+        Returns:
+            - soft argmax of shape (batch, num_targets)
+            - confidences of shape (batch, num_keypoints)
+
+        """
+        # upsample heatmaps
+        for _ in range(self.downsample_factor):
+            heatmaps = pyrup(heatmaps)
+        # find soft argmax
+        softmaxes = spatial_softmax2d(heatmaps, temperature=self.temperature)
+        preds = spatial_expectation2d(softmaxes, normalized_coordinates=False)
+        # compute predictions as softmax value at argmax
+        confidences = torch.amax(softmaxes, dim=(2, 3))
+        return preds.reshape(-1, self.num_targets), confidences
 
     def initialize_upsampling_layers(self) -> None:
         """Intialize the Conv2DTranspose upsampling layers."""
@@ -190,8 +227,9 @@ class HeatmapTracker(BaseFeatureExtractor):
 
     @typechecked
     def forward(
-        self, images: TensorType["batch", "channels":3, "image_height", "image_width"]
-    ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
+        self,
+        images: TensorType["batch", "channels":3, "image_height", "image_width", float]
+    ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width", float]:
         """Forward pass through the network.
 
         Args:
@@ -206,49 +244,46 @@ class HeatmapTracker(BaseFeatureExtractor):
         return heatmaps
 
     @typechecked
-    def training_step(self, data_batch: List, batch_idx: int) -> dict:
-        images, true_heatmaps, true_keypoints = data_batch  # read batch
-        predicted_heatmaps = self.forward(images)  # images -> heatmaps
+    def training_step(self, batch_dict: HeatmapBatchDict, batch_idx: int) -> Dict:
+
+        # forward pass
+        predicted_heatmaps = self.forward(batch_dict["images"])  # images -> heatmaps
         predicted_keypoints, confidence = self.run_subpixelmaxima(
             predicted_heatmaps
         )  # heatmaps -> keypoints
-        heatmap_loss = MaskedMSEHeatmapLoss(true_heatmaps, predicted_heatmaps)
-        supervised_rmse = MaskedRMSELoss(true_keypoints, predicted_keypoints)
-        self.log(
-            "train_loss",
-            heatmap_loss,
-            prog_bar=True,
-        )
-        self.log(
-            "supervised_rmse",
-            supervised_rmse,
-            prog_bar=True,
-        )
+
+        # compute loss
+        heatmap_loss = MaskedMSEHeatmapLoss(batch_dict["heatmaps"], predicted_heatmaps)
+        supervised_rmse = MaskedRMSELoss(batch_dict["keypoints"], predicted_keypoints)
+
+        # log training loss + rmse
+        self.log("train_loss", heatmap_loss, prog_bar=True)
+        self.log("supervised_rmse", supervised_rmse, prog_bar=True)
+
         return {"loss": heatmap_loss}
 
     @typechecked
     def evaluate(
-        self, data_batch: List, stage: Optional[Literal["val", "test"]] = None
-    ):
-        images, true_heatmaps, true_keypoints = data_batch  # read batch
-        predicted_heatmaps = self.forward(images)  # images -> heatmaps
+        self,
+        batch_dict: HeatmapBatchDict,
+        stage: Optional[Literal["val", "test"]] = None,
+    ) -> None:
+        predicted_heatmaps = self.forward(batch_dict["images"])  # images -> heatmaps
         predicted_keypoints, confidence = self.run_subpixelmaxima(
             predicted_heatmaps
         )  # heatmaps -> keypoints
-        loss = MaskedMSEHeatmapLoss(true_heatmaps, predicted_heatmaps)
-        supervised_rmse = MaskedRMSELoss(true_keypoints, predicted_keypoints)
-
-        # TODO: do we need other metrics?
+        loss = MaskedMSEHeatmapLoss(batch_dict["heatmaps"], predicted_heatmaps)
+        supervised_rmse = MaskedRMSELoss(batch_dict["keypoints"], predicted_keypoints)
         if stage:
             self.log(f"{stage}_loss", loss, prog_bar=True, logger=True)
             self.log(
                 f"{stage}_supervised_rmse", supervised_rmse, prog_bar=True, logger=True
             )
 
-    def validation_step(self, validation_batch: List, batch_idx):
+    def validation_step(self, validation_batch: HeatmapBatchDict, batch_idx):
         self.evaluate(validation_batch, "val")
 
-    def test_step(self, test_batch: List, batch_idx):
+    def test_step(self, test_batch: HeatmapBatchDict, batch_idx):
         self.evaluate(test_batch, "test")
 
 
@@ -315,49 +350,51 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         self.loss_params = loss_params
 
     @typechecked
-    def training_step(self, data_batch: dict, batch_idx: int) -> dict:
-        labeled_imgs, true_heatmaps, true_keypoints = data_batch["labeled"]
-        unlabeled_imgs = data_batch["unlabeled"]
-        predicted_heatmaps = self.forward(labeled_imgs)
-        supervised_loss = MaskedMSEHeatmapLoss(true_heatmaps, predicted_heatmaps)
+    def training_step(
+        self, data_batch: SemiSupervisedHeatmapBatchDict, batch_idx: int
+    ) -> Dict:
+
+        # forward pass labeled
+        predicted_heatmaps = self.forward(data_batch["labeled"]["images"])
         predicted_keypoints, confidence = self.run_subpixelmaxima(
             predicted_heatmaps
         )  # heatmaps -> keypoints
-        supervised_rmse = MaskedRMSELoss(true_keypoints, predicted_keypoints)
-        unlabeled_predicted_heatmaps = self.forward(unlabeled_imgs)
+
+        # compute loss labeled
+        supervised_loss = MaskedMSEHeatmapLoss(
+            data_batch["labeled"]["heatmaps"], predicted_heatmaps
+        )
+        supervised_rmse = MaskedRMSELoss(
+            data_batch["labeled"]["keypoints"], predicted_keypoints
+        )
+
+        # forward pass unlabeled
+        unlabeled_predicted_heatmaps = self.forward(data_batch["unlabeled"])
         predicted_us_keypoints, confidence = self.run_subpixelmaxima(
             unlabeled_predicted_heatmaps
         )
+
+        # loop over unsupervised losses
         tot_loss = 0.0
         tot_loss += supervised_loss
-        # loop over unsupervised losses
         self.loss_params = convert_dict_entries_to_tensors(
             self.loss_params, self.device
         )
         for loss_name, loss_func in self.loss_function_dict.items():
+            # Some losses use keypoint_preds, some use heatmap_preds, and some use both.
+            # all have **kwargs so are robust to unneeded inputs."
             add_loss = self.loss_params[loss_name]["weight"] * loss_func(
-                predicted_us_keypoints, **self.loss_params[loss_name]
+                keypoint_preds=predicted_us_keypoints,
+                heatmap_preds=unlabeled_predicted_heatmaps,
+                **self.loss_params[loss_name],
             )
             tot_loss += add_loss
             # log individual unsupervised losses
-            self.log(
-                loss_name + "_loss",
-                add_loss,
-                prog_bar=True,
-            )
-        self.log(
-            "total_loss",
-            tot_loss,
-            prog_bar=True,
-        )
-        self.log(
-            "supervised_loss",
-            supervised_loss,
-            prog_bar=True,
-        )
-        self.log(
-            "supervised_rmse",
-            supervised_rmse,
-            prog_bar=True,
-        )
+            self.log(loss_name + "_loss", add_loss, prog_bar=True)
+
+        # log other losses
+        self.log("total_loss", tot_loss, prog_bar=True)
+        self.log("supervised_loss", supervised_loss, prog_bar=True)
+        self.log("supervised_rmse", supervised_rmse, prog_bar=True)
+
         return {"loss": tot_loss}

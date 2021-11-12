@@ -139,7 +139,7 @@ def test_unsupervised():  # TODO Finish writing test
     datamod = UnlabeledDataModule(
         dataset=dataset,
         video_paths_list=vids[0],
-        losses_to_use="pca_multiview",
+        losses_to_use=["pca_multiview"],
         loss_param_dict=loss_param_dict,
     )
     datamod.setup()
@@ -157,10 +157,10 @@ def test_unsupervised():  # TODO Finish writing test
     assert list(out.keys())[0] == "labeled"
     assert list(out.keys())[1] == "unlabeled"
     assert out["unlabeled"].shape == (datamod.train_batch_size, 3, 384, 384,)
-    print(out["labeled"][0].device)
+    print(out["labeled"]["images"].device)
     print(out["unlabeled"].device)
     print(model.device)
-    out_heatmaps_labeled = model.forward(out["labeled"][0].to(_TORCH_DEVICE))
+    out_heatmaps_labeled = model.forward(out["labeled"]["images"].to(_TORCH_DEVICE))
     out_heatmaps_unlabeled = model.forward(out["unlabeled"])
 
     assert out_heatmaps_labeled.shape == (
@@ -177,11 +177,18 @@ def test_unsupervised():  # TODO Finish writing test
         384 // (2 ** model.downsample_factor),
     )
 
-    (spm_l, c_l), (spm_u, c_u) = model.run_subpixelmaxima(
-        out_heatmaps_labeled, out_heatmaps_unlabeled
+    spm_l, c_l = model.run_subpixelmaxima(
+        out_heatmaps_labeled
     )
 
     assert spm_l.shape == (datamod.train_batch_size, model.num_targets)
+
+    # remove model/data from gpu; then cache can be cleared
+    del loader
+    del out_heatmaps_labeled
+    del out_heatmaps_unlabeled
+    del spm_l, c_l
+    torch.cuda.empty_cache()  # remove tensors from gpu
 
     trainer = pl.Trainer(
         gpus=1 if _TORCH_DEVICE == "cuda" else 0,
@@ -194,10 +201,5 @@ def test_unsupervised():  # TODO Finish writing test
     # remove model/data from gpu; then cache can be cleared
     del datamod
     del model
-    del loader
-    del out_heatmaps_labeled
-    del out_heatmaps_unlabeled
-    del spm_l, c_l
-    del spm_u, c_u
     del trainer
     torch.cuda.empty_cache()  # remove tensors from gpu
