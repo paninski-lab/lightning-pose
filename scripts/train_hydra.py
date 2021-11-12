@@ -14,7 +14,8 @@ from pose_est_nets.models.heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
 )
-from pose_est_nets.utils.io import verify_real_data_paths, check_if_semi_supervised
+from pose_est_nets.utils.io import verify_real_data_paths, check_if_semi_supervised, ckpt_path_from_base_path
+from pose_est_nets.utils.plotting_utils import predict_dataset
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import BackboneFinetuning
 
@@ -209,6 +210,12 @@ def train(cfg: DictConfig):
         profiler=cfg.training.profiler,
     )
     trainer.fit(model=model, datamodule=datamod)
+
+    hydra_output_directory = os.getcwd()
+    print("Hydra output directory:".format(hydra_output_directory))
+    ckpt_file = ckpt_path_from_base_path(base_path = hydra_output_directory, model_name = cfg.model.model_name)
+    predict_dataset(cfg = cfg, datamod = datamod, hydra_output_directory = hydra_output_directory, ckpt_file = ckpt_file)
+
 
 
 if __name__ == "__main__":
