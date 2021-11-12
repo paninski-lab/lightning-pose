@@ -16,55 +16,47 @@ def test_heatmap_dataset():
     )  # dlc dimensions need to be repeatably divisable by 2
     imgaug_transform = iaa.Sequential(data_transform)
 
-    regData = BaseTrackingDataset(
+    regression_data = BaseTrackingDataset(
         root_directory="toy_datasets/toymouseRunningData",
         csv_path="CollectedData_.csv",
         header_rows=[1, 2],
         imgaug_transform=imgaug_transform,
     )
-    heatmapData = HeatmapDataset(
+    heatmap_data = HeatmapDataset(
         root_directory="toy_datasets/toymouseRunningData",
         csv_path="CollectedData_.csv",
         header_rows=[1, 2],
         imgaug_transform=imgaug_transform,
     )
     # first test: both datasets provide the same image at index 0
-    assert torch.equal(regData[0][0], heatmapData[0][0])
+    assert torch.equal(regression_data[0]["images"], heatmap_data[0]["images"])
 
     # we get the desired image height and width
-    assert heatmapData[0][0].shape[1:] == (
-        heatmapData.height,
-        heatmapData.width,
+    assert (
+            heatmap_data[0]["images"].shape[1:] ==
+            (heatmap_data.height, heatmap_data.width)
     )
-    image, heatmaps, keypoints = heatmapData[0]
-    assert image.shape == (3, 384, 384)  # resized image shape
-    assert keypoints.shape == (34,)
-    assert heatmaps.shape[1:] == heatmapData.output_shape
-    assert type(regData[0][1]) == torch.Tensor
-    numKeypoints = regData.keypoints.shape[1]
+    assert heatmap_data[0]["images"].shape == (3, 384, 384)  # resized image shape
+    assert heatmap_data[0]["keypoints"].shape == (34,)
+    assert heatmap_data[0]["heatmaps"].shape[1:] == heatmap_data.output_shape
+    assert type(regression_data[0]["keypoints"]) == torch.Tensor
 
     # for idx in range(numLabels):
-    #     if torch.any(torch.isnan(regData.__getitem__(0)[1][idx])):
+    #     if torch.any(torch.isnan(regression_data.__getitem__(0)[1][idx])):
     #         print("there is any nan here")
-    #         print(torch.max(heatmapData.__getitem__(0)[1][idx]))
-    #         assert torch.max(heatmapData.__getitem__(0)[1][idx]) == torch.tensor(0)
+    #         print(torch.max(heatmap_data.__getitem__(0)[1][idx]))
+    #         assert torch.max(heatmap_data.__getitem__(0)[1][idx]) == torch.tensor(0)
     #     else:  # TODO: the below isn't passing on idx 5, we have an all zeros heatmap for a label vec without nans
     #         print(f"idx {idx}")
     #         print("no nan's here")
     #         print("labels: {}")
-    #         print(torch.unique(heatmapData.__getitem__(0)[1][idx]))
-    #         print("item {}".format(torch.max(heatmapData.__getitem__(0)[1][idx])))
-    #         assert torch.max(heatmapData.__getitem__(0)[1][idx]) != torch.tensor(0)
+    #         print(torch.unique(heatmap_data.__getitem__(0)[1][idx]))
+    #         print("item {}".format(torch.max(heatmap_data.__getitem__(0)[1][idx])))
+    #         assert torch.max(heatmap_data.__getitem__(0)[1][idx]) != torch.tensor(0)
 
-    # print(heatmapData.__getitem__(11)[1])
+    # print(heatmap_data.__getitem__(11)[1])
 
     # remove model/data from gpu; then cache can be cleared
-    del regData
-    del heatmapData
-    del image
-    del heatmaps
-    del keypoints
+    del regression_data
+    del heatmap_data
     torch.cuda.empty_cache()  # remove tensors from gpu
-
-
-test_heatmap_dataset()

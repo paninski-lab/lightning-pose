@@ -9,6 +9,7 @@ install_requires = [
     "h5py",
     "hydra-core",
     "imgaug",
+    "kornia",
     "matplotlib",
     "pandas",
     "pillow",
