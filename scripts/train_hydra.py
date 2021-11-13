@@ -212,9 +212,10 @@ def train(cfg: DictConfig):
     trainer.fit(model=model, datamodule=datamod)
 
     hydra_output_directory = os.getcwd()
-    print("Hydra output directory:".format(hydra_output_directory))
-    ckpt_file = ckpt_path_from_base_path(base_path = hydra_output_directory, model_name = cfg.model.model_name)
-    predict_dataset(cfg = cfg, datamod = datamod, hydra_output_directory = hydra_output_directory, ckpt_file = ckpt_file)
+    print("Hydra output directory: {}".format(hydra_output_directory))
+    model_ckpt = trainer.checkpoint_callback.best_model_path
+    print("Best model path: {}".format(model_ckpt))
+    predict_dataset(cfg = cfg, datamod = datamod, hydra_output_directory = hydra_output_directory, ckpt_file = model_ckpt)
 
 
 
