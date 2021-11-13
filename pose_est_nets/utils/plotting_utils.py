@@ -23,7 +23,8 @@ from typing import Callable, Optional, Tuple, List, Union, Literal
 from typeguard import typechecked
 from tqdm import tqdm
 from omegaconf import DictConfig, OmegaConf
-from pytorch_lightning.core.lightning import LightningModule, LightningDataModule
+from pytorch_lightning.core.lightning import LightningModule
+from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -103,7 +104,7 @@ def predict_videos(
     cfg_file: Union[str, DictConfig],
     save_file: Optional[str] = None,
     sequence_length: int = 16,
-    device: Literal["gpu", "cuda", "cpu"] = "gpu",
+    device: Literal["gpu", "cuda", "cpu"] = "gpu", #TODO: can we just use _TORCH_DEVICE here?
     video_pipe_kwargs={},
 ):
     """Loop over a list of videos and process with tracker using DALI for fast inference.
@@ -262,8 +263,7 @@ def predict_videos(
             n_frames_ = n_frames_,
             batch_size = sequence_length, #note this is different from the batch_size defined above
             save_file = save_file,
-            mode = "video",
-            video_name =  video_file
+            data_name =  video_file
         )
 
 
@@ -275,7 +275,7 @@ def predict_videos(
 def make_predictions_and_create_csv(
     cfg: DictConfig,
     model: LightningModule,
-    dataloader: torch.data.DataLoader,
+    dataloader: torch.utils.data.DataLoader,
     n_frames_: int, #total number of frames,
     batch_size: int, #batch size or sequence length
     save_file: str,  
@@ -289,7 +289,11 @@ def make_predictions_and_create_csv(
     n = -1
     with torch.no_grad():
         for n, batch in enumerate(tqdm(dataloader)):
-            outputs = model.forward(batch)
+            if type(batch) == dict: 
+                image = batch["images"].to(_TORCH_DEVICE) #predicting from dataset
+            else:
+                image = batch #predicting from video
+            outputs = model.forward(image)
             if cfg.model.model_type == "heatmap":
                 pred_keypoints, confidence = model.run_subpixelmaxima(outputs)
                 # send to cpu
@@ -315,7 +319,7 @@ def make_predictions_and_create_csv(
             print(
                 "WARNING: issue processing %s" % data_name
             )  # TODO: what can go wrong here?
-            continue
+            return
         else:
             print(
                 "inference speed: %1.2f fr/sec"
@@ -373,18 +377,18 @@ def predict_dataset(
     datamod: LightningDataModule, 
     hydra_output_directory: str,
     ckpt_file: str,
-    heatmap_idxs: List[int] = test_dataset.indices[::5]
+    heatmap_idxs: List[int] = None
 ):
-     """
+    """
     Call this function with a path to ckpt file for a trained model
     heatmap_idxs: indexes of datapoints to save heatmaps for
 
     """
     model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
     model.to(_TORCH_DEVICE)
-    full_dataset = dataset.datamod.dataset
+    full_dataset = datamod.dataset
     num_datapoints = len(full_dataset)
-    full_dataloader = Dataloader(dataset = full_dataset, batch_size = datamod.test_batch_size)
+    full_dataloader = DataLoader(dataset = full_dataset, batch_size = datamod.test_batch_size)
     save_file = hydra_output_directory + "/predictions.csv" #default for now, should be saved to the model directory
     make_predictions_and_create_csv(
         cfg = cfg, 
