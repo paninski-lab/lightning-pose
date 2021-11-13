@@ -1,7 +1,7 @@
 # loss = projection onto the discarded eigenvectors
 pca_multiview:
   # weight in front of PCA loss
-  weight: 1e-5
+  weight: 0.00001
 
   # Computed per dataset
   discarded_eigenvectors: null
@@ -14,7 +14,7 @@ pca_multiview:
 
 pca_singleview:
   # weight in front of PCA loss
-  weight: 1e-5 
+  weight: 0.00001
 
   #amount of variance to keep explained by retained eigenvectors 
   min_variance_explained: .95
@@ -31,7 +31,7 @@ pca_singleview:
 # loss = norm of distance between successive timepoints
 temporal:
   # weight in front of temporal loss
-  weight: 1e-5
+  weight: 0.00001
 
   # for epsilon insensitive rectification (in pixels; diffs below this are not penalized)
   epsilon: 5.
@@ -39,5 +39,5 @@ temporal:
 # loss = MSE between generated heatmap and ideal gaussian heatmap with same center as generated heatmap
 unimodal:
   # weight in front of unimodal loss
-  weight: 1e-5
+  weight: 0.00001
   
