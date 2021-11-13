@@ -18,6 +18,7 @@ from pose_est_nets.models.regression_tracker import (
 import matplotlib.pyplot as plt
 import os
 import csv
+import json
 import time
 from typing import Callable, Optional, Tuple, List, Union, Literal
 from typeguard import typechecked
@@ -388,6 +389,14 @@ def predict_dataset(
     model.to(_TORCH_DEVICE)
     full_dataset = datamod.dataset
     num_datapoints = len(full_dataset)
+    dataset_split_indices = {
+        "train": datamod.train_dataset.indices,
+        "validation": datamod.val_dataset.indices,
+        "test": datamod.test_dataset.indices,
+    }
+    with open(hydra_output_directory + "/dataset_split_indices.json", "w") as f:
+        json.dump(dataset_split_indices, f)
+
     full_dataloader = DataLoader(dataset = full_dataset, batch_size = datamod.test_batch_size)
     save_file = hydra_output_directory + "/predictions.csv" #default for now, should be saved to the model directory
     make_predictions_and_create_csv(
