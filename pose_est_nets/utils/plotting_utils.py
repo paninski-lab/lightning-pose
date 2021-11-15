@@ -105,7 +105,7 @@ def predict_videos(
     cfg_file: Union[str, DictConfig],
     save_file: Optional[str] = None,
     sequence_length: int = 16,
-    device: Literal["gpu", "cuda", "cpu"] = "gpu", #TODO: can we just use _TORCH_DEVICE here?
+    device: Literal["gpu", "cuda", "cpu"] = "gpu",
     video_pipe_kwargs={},
 ):
     """Loop over a list of videos and process with tracker using DALI for fast inference.
@@ -378,11 +378,12 @@ def predict_dataset(
     datamod: LightningDataModule, 
     hydra_output_directory: str,
     ckpt_file: str,
+    save_file: str = None,
     heatmap_idxs: List[int] = None
 ):
     """
     Call this function with a path to ckpt file for a trained model
-    heatmap_idxs: indexes of datapoints to save heatmaps for
+    heatmap_idxs: indexes of datapoints to save heatmaps for (NOT IMPLEMENTED YET)
 
     """
     model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
@@ -398,7 +399,8 @@ def predict_dataset(
         json.dump(dataset_split_indices, f)
 
     full_dataloader = DataLoader(dataset = full_dataset, batch_size = datamod.test_batch_size)
-    save_file = hydra_output_directory + "/predictions.csv" #default for now, should be saved to the model directory
+    if save_file is None: 
+       save_file = hydra_output_directory + "/predictions.csv" #default for now, should be saved to the model directory
     make_predictions_and_create_csv(
         cfg = cfg, 
         model = model, 

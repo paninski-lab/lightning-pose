@@ -98,7 +98,6 @@ def ckpt_path_from_base_path(
         "checkpoints",
         "*.ckpt",
     )
-    print(model_search_path)
 
     # TODO: we're taking the last ckpt. make sure that with multiple checkpoints, this is what we want
     model_ckpt_path = glob.glob(model_search_path)[-1]
