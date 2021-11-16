@@ -378,26 +378,14 @@ def make_predictions_and_create_csv(
     )
 
     predictions = make_predictions_arr(cfg, keypoints_np, confidence_np)
-    # # save csv file of predictions in DeepLabCut format
-    # num_joints = model.num_keypoints
-    # predictions = np.zeros((keypoints_np.shape[0], num_joints * 3))
-    # predictions[:, 0] = np.arange(keypoints_np.shape[0])
-    # # put x vals back in original pixel space
-    # x_resize = cfg.data.image_resize_dims.width
-    # x_og = cfg.data.image_orig_dims.width
-    # predictions[:, 0::3] = keypoints_np[:, 0::2] / x_resize * x_og
-    # # put y vals back in original pixel space
-    # y_resize = cfg.data.image_resize_dims.height
-    # y_og = cfg.data.image_orig_dims.height
-    # predictions[:, 1::3] = keypoints_np[:, 1::2] / y_resize * y_og
-    # predictions[:, 2::3] = confidence_np
-
     # get bodypart names from labeled data csv if possible
-    # TODO: I suspect this doesn't work with the toydataset example (saving BP1, BP2...). make sure were verifying absolute paths using our utils.
-    # TODO: e.g., data_dir, video_dir = verify_real_data_paths(cfg.data)
+    from pose_est_nets.utils.io import verify_real_data_paths
 
     if ("data_dir" in cfg.data) and ("csv_file" in cfg.data):
-        csv_file = os.path.join(cfg.data.data_dir, cfg.data.csv_file)
+        data_dir, _ = verify_real_data_paths(
+            cfg.data
+        )  # needed for getting bodypart names for toy_dataset
+        csv_file = os.path.join(data_dir, cfg.data.csv_file)
     else:
         csv_file = ""
     if os.path.exists(csv_file):
