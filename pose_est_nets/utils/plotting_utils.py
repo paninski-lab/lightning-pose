@@ -1,3 +1,4 @@
+from posixpath import join
 import imgaug.augmenters as iaa
 import numpy as np
 import pandas as pd
@@ -331,7 +332,8 @@ def predict_frames(
             return keypoints_np, confidence_np
 
 
-def make_predictions_arr(
+@typechecked
+def make_pred_arr_undo_resize(
     cfg: DictConfig,
     keypoints_np: np.array,
     confidence_np: np.array,
@@ -357,7 +359,57 @@ def make_predictions_arr(
     return predictions
 
 
-def make_predictions_and_create_csv(
+@typechecked
+def get_csv_file(cfg: DictConfig) -> str:
+    from pose_est_nets.utils.io import verify_real_data_paths
+
+    if ("data_dir" in cfg.data) and ("csv_file" in cfg.data):
+        data_dir, _ = verify_real_data_paths(
+            cfg.data
+        )  # needed for getting bodypart names for toy_dataset
+        csv_file = os.path.join(data_dir, cfg.data.csv_file)
+    else:
+        csv_file = ""
+    return csv_file
+
+
+@typechecked
+def get_keypoint_names(cfg: DictConfig, csv_file: Optional[str] = None) -> List[str]:
+    if os.path.exists(csv_file):
+        if "header_rows" in cfg.data:
+            header_rows = list(cfg.data.header_rows)
+        else:
+            # assume dlc format
+            header_rows = [0, 1, 2]
+        df = pd.read_csv(csv_file, header=header_rows)
+        # collect marker names from multiindex header
+        keypoint_names = [c[0] for c in df.columns[1::2]]
+    else:
+        keypoint_names = ["bp_%i" % n for n in range(cfg.data.num_targets // 2)]
+    return keypoint_names
+
+
+@typechecked
+def make_dlc_pandas_index(cfg: DictConfig, keypoint_names: List[str]) -> pd.MultiIndex:
+    xyl_labels = ["x", "y", "likelihood"]
+    pdindex = pd.MultiIndex.from_product(
+        [["%s_tracker" % cfg.model.model_type], keypoint_names, xyl_labels],
+        names=["scorer", "bodyparts", "coords"],
+    )
+    return pdindex
+
+
+@typechecked
+def save_dframe(df: pd.core.DataFrame, save_file: str) -> None:
+    if save_file.endswith(".csv"):
+        df.to_csv(save_file)
+    elif save_file.find(".h") > -1:
+        df.to_hdf(save_file)
+    else:
+        raise NotImplementedError("Currently only .csv and .h5 files are supported")
+
+
+def make_predictions_and_create_csv(  # TODO: consider naming differently
     cfg: DictConfig,
     model: LightningModule,
     dataloader: torch.utils.data.DataLoader,
@@ -376,43 +428,21 @@ def make_predictions_and_create_csv(
         data_name,
         save_heatmaps,
     )
+    # unify keypoints and confidences into one numpy array, scale (x,y) coords by resizing factor
+    predictions = make_pred_arr_undo_resize(cfg, keypoints_np, confidence_np)
 
-    predictions = make_predictions_arr(cfg, keypoints_np, confidence_np)
     # get bodypart names from labeled data csv if possible
-    from pose_est_nets.utils.io import verify_real_data_paths
+    csv_file = get_csv_file(cfg)
+    keypoint_names = get_keypoint_names(cfg, csv_file)
 
-    if ("data_dir" in cfg.data) and ("csv_file" in cfg.data):
-        data_dir, _ = verify_real_data_paths(
-            cfg.data
-        )  # needed for getting bodypart names for toy_dataset
-        csv_file = os.path.join(data_dir, cfg.data.csv_file)
-    else:
-        csv_file = ""
-    if os.path.exists(csv_file):
-        if "header_rows" in cfg.data:
-            header_rows = list(cfg.data.header_rows)
-        else:
-            # assume dlc format
-            header_rows = [0, 1, 2]
-        df = pd.read_csv(csv_file, header=header_rows)
-        # collect marker names from multiindex header
-        joint_labels = [c[0] for c in df.columns[1::2]]
-    else:
-        joint_labels = ["bp_%i" % n for n in range(model.num_keypoints)]
+    # make a hierarchical pandas index, dlc style, using keypoint_names
+    pd_index = make_dlc_pandas_index(cfg, keypoint_names)
 
-    # build data frame
-    xyl_labels = ["x", "y", "likelihood"]
-    pdindex = pd.MultiIndex.from_product(
-        [["%s_tracker" % cfg.model.model_type], joint_labels, xyl_labels],
-        names=["scorer", "bodyparts", "coords"],
-    )
-    df = pd.DataFrame(predictions, columns=pdindex)
-    if save_file.endswith(".csv"):
-        df.to_csv(save_file)
-    elif save_file.find(".h") > -1:
-        df.to_hdf(save_file)
-    else:
-        raise NotImplementedError("Currently only .csv and .h5 files are supported")
+    # build dataframe from the hierarchal index and predictions array
+    df = pd.DataFrame(predictions, columns=pd_index)
+
+    # save it
+    save_dframe(df, save_file)
 
 
 def predict_dataset(
