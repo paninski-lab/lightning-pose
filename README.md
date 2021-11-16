@@ -1,12 +1,13 @@
-# Lightning Pose
-Convolutional Networks for pose tracking implemented in **Pytorch-Lightning**, supporting massively accelerated training on *unlabeled* videos using **NVIDIA DALI**.
+![Wide Lightning Pose Logo](assets/images/LightningPose_horizontal_dark.png)
+Convolutional Networks for pose tracking implemented in **Pytorch Lightning**, supporting massively accelerated training on *unlabeled* videos using **NVIDIA DALI**.
 
 ### Built with the coolest Deep Learning packages
-* `nvidia-DALI` for accelerated GPU dataloading
-* `torchtyping` for type and shape assertions of `torch` tensors
 * `pytorch-lightning` for multiple-GPU training and to minimize boilerplate code
-* `FiftyOne` for visualizing model predictions
+* `nvidia-DALI` for accelerated GPU dataloading
 * `Hydra` to orchestrate the config files and log experiments
+* `kornia` for differntiable computer vision ops
+* `torchtyping` for type and shape assertions of `torch` tensors
+* `FiftyOne` for visualizing model predictions
 * `Tensorboard` to visually diagnoze training performance
 
 ## Required Hardware
