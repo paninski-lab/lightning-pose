@@ -121,12 +121,15 @@ class BaseDataModule(pl.LightningDataModule):
                 n_frames = int(self.train_frames * len(self.train_dataset))
             else:
                 raise ValueError("train_frames must be >0")
-            if split:
-                self.train_dataset, _ = random_split(
-                    self.train_dataset,
-                    [n_frames, len(self.train_dataset) - n_frames],
-                    generator=torch.Generator().manual_seed(self.torch_seed),
-                )
+            if split:  # a second split
+                self.train_dataset.indices = self.train_dataset.indices[
+                    :n_frames
+                ]  # this works well
+                # self.train_dataset, _ = random_split(
+                #     self.train_dataset,
+                #     [n_frames, len(self.train_dataset) - n_frames],
+                #     generator=torch.Generator().manual_seed(self.torch_seed),
+                # ) # increasing train_frames will just add indices to the same list. not drawing different indices. the above is more simple
 
         print(
             "Size of -- train set: {}, val set: {}, test set: {}".format(
@@ -246,17 +249,19 @@ class UnlabeledDataModule(BaseDataModule):
                 from pose_est_nets.datasets.preprocessing import (
                     compute_multiview_pca_params,
                 )
+
                 compute_multiview_pca_params(self)
             elif "pca_singleview" in losses_to_use:
                 # single-view pca
                 from pose_est_nets.datasets.preprocessing import (
-                    compute_singleview_pca_params
+                    compute_singleview_pca_params,
                 )
+
                 compute_singleview_pca_params(
                     self,
                     empirical_epsilon_percentile=5,
                 )
-                
+
     def setup_unlabeled(self):
 
         from pose_est_nets.datasets.utils import count_frames
