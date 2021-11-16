@@ -14,7 +14,12 @@ from pose_est_nets.models.heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
 )
-from pose_est_nets.utils.io import verify_real_data_paths, check_if_semi_supervised
+from pose_est_nets.utils.io import (
+    verify_real_data_paths,
+    check_if_semi_supervised,
+    ckpt_path_from_base_path,
+)
+from pose_est_nets.utils.plotting_utils import predict_dataset
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import BackboneFinetuning
 
@@ -44,7 +49,7 @@ def train(cfg: DictConfig):
     if cfg.model.model_type == "regression":
         dataset = BaseTrackingDataset(
             root_directory=data_dir,
-            csv_path=cfg.data.csv_path,
+            csv_path=cfg.data.csv_file,
             header_rows=OmegaConf.to_object(cfg.data.header_rows),
             imgaug_transform=imgaug_transform,
         )
@@ -209,6 +214,21 @@ def train(cfg: DictConfig):
         profiler=cfg.training.profiler,
     )
     trainer.fit(model=model, datamodule=datamod)
+
+    hydra_output_directory = os.getcwd()
+    print("Hydra output directory: {}".format(hydra_output_directory))
+    model_ckpt = trainer.checkpoint_callback.best_model_path
+    print("Best model path: {}".format(model_ckpt))
+    if not os.path.isfile(os.path.abspath(model_ckpt)):
+        raise FileNotFoundError(
+            "Cannot find a checkpoint to the model. Check if you have trained for too few epochs."
+        )
+    predict_dataset(
+        cfg=cfg,
+        datamod=datamod,
+        hydra_output_directory=hydra_output_directory,
+        ckpt_file=model_ckpt,
+    )
 
 
 if __name__ == "__main__":

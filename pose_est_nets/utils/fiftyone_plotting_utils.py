@@ -30,7 +30,10 @@ def tensor_to_keypoint_list(keypoint_tensor, height, width):
         # loading a sample image in dataset.py or something
     return img_kpts_list
 
-
+#TODO: write version of this function that just takes in csv files of predictions 
+#and h5 files of heatmaps and plots on fiftyone
+#note that the csv file needs to contain the image paths so that they can be added
+#to the fiftyone dataset
 def make_dataset_and_evaluate(cfg: DictConfig, datamod: Callable, best_models: dict):
     reverse_transform = []
     reverse_transform.append(
