@@ -21,7 +21,7 @@ import os
 import csv
 import json
 import time
-from typing import Callable, Optional, Tuple, List, Union, Literal
+from typing import Callable, Optional, Tuple, List, Union, Literal, Type
 from typeguard import typechecked
 from tqdm import tqdm
 from omegaconf import DictConfig, OmegaConf
@@ -274,6 +274,7 @@ def predict_videos(
     torch.cuda.empty_cache()
 
 
+@typechecked
 def predict_frames(
     cfg: DictConfig,
     model: LightningModule,
@@ -410,6 +411,7 @@ def save_dframe(df: pd.DataFrame, save_file: str) -> None:
         raise NotImplementedError("Currently only .csv and .h5 files are supported")
 
 
+@typechecked
 def make_predictions(
     cfg: DictConfig,
     model: LightningModule,
