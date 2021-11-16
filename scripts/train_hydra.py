@@ -219,6 +219,10 @@ def train(cfg: DictConfig):
     print("Hydra output directory: {}".format(hydra_output_directory))
     model_ckpt = trainer.checkpoint_callback.best_model_path
     print("Best model path: {}".format(model_ckpt))
+    if not os.path.isfile(os.path.abspath(model_ckpt)):
+        raise FileNotFoundError(
+            "Cannot find a checkpoint to the model. Check if you have trained for too few epochs."
+        )
     predict_dataset(
         cfg=cfg,
         datamod=datamod,
