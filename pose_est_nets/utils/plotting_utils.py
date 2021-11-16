@@ -257,7 +257,7 @@ def predict_videos(
 
         # iterate through video
         n_frames_ = count_frames(video_file)  # total frames in video
-        make_predictions_and_create_csv(
+        df = make_predictions(
             cfg=cfg,
             model=model,
             dataloader=predict_loader,
@@ -266,6 +266,7 @@ def predict_videos(
             save_file=save_file,
             data_name=video_file,
         )
+        save_dframe(df, save_file)
 
     # if iterating over multiple models, outside this function, the below will reduce
     # memory
@@ -400,7 +401,7 @@ def make_dlc_pandas_index(cfg: DictConfig, keypoint_names: List[str]) -> pd.Mult
 
 
 @typechecked
-def save_dframe(df: pd.core.DataFrame, save_file: str) -> None:
+def save_dframe(df: pd.DataFrame, save_file: str) -> None:
     if save_file.endswith(".csv"):
         df.to_csv(save_file)
     elif save_file.find(".h") > -1:
@@ -409,16 +410,15 @@ def save_dframe(df: pd.core.DataFrame, save_file: str) -> None:
         raise NotImplementedError("Currently only .csv and .h5 files are supported")
 
 
-def make_predictions_and_create_csv(  # TODO: consider naming differently
+def make_predictions(
     cfg: DictConfig,
     model: LightningModule,
     dataloader: torch.utils.data.DataLoader,
     n_frames_: int,  # total number of frames in the dataset or video
     batch_size: int,  # regular batch_size for images or sequence_length for videos
-    save_file: str,
     data_name: str = "dataset",
     save_heatmaps: bool = False,
-):
+) -> pd.DataFrame:
     keypoints_np, confidence_np = predict_frames(
         cfg,
         model,
@@ -441,8 +441,7 @@ def make_predictions_and_create_csv(  # TODO: consider naming differently
     # build dataframe from the hierarchal index and predictions array
     df = pd.DataFrame(predictions, columns=pd_index)
 
-    # save it
-    save_dframe(df, save_file)
+    return df
 
 
 def predict_dataset(
@@ -462,13 +461,12 @@ def predict_dataset(
     model.to(_TORCH_DEVICE)
     full_dataset = datamod.dataset
     num_datapoints = len(full_dataset)
+    # recover the indices assuming we re-use the same random seed as in training
     dataset_split_indices = {
         "train": datamod.train_dataset.indices,
         "validation": datamod.val_dataset.indices,
         "test": datamod.test_dataset.indices,
     }
-    with open(hydra_output_directory + "/dataset_split_indices.json", "w") as f:
-        json.dump(dataset_split_indices, f)
 
     full_dataloader = DataLoader(
         dataset=full_dataset, batch_size=datamod.test_batch_size
@@ -477,11 +475,18 @@ def predict_dataset(
         save_file = (
             hydra_output_directory + "/predictions.csv"
         )  # default for now, should be saved to the model directory
-    make_predictions_and_create_csv(
+    df = make_predictions(
         cfg=cfg,
         model=model,
         dataloader=full_dataloader,
         n_frames_=num_datapoints,
         batch_size=datamod.test_batch_size,
-        save_file=save_file,
     )
+
+    # add train/test/val column
+    df["set"] = np.zeros(df.shape[0])
+    # iterate over conditions and their indices, and add strs to dataframe
+    for key, val in dataset_split_indices.items():
+        df.loc[val, "set"] = np.repeat(key, len(val))
+
+    save_dframe(df, save_file)
