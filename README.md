@@ -1,4 +1,4 @@
-![Wide Lightning Pose Logo](assets/images/LightningPose_horizontal_dark.png)
+![Wide Lightning Pose Logo](assets/images/LightningPose_horizontal_light.png)
 Convolutional Networks for pose tracking implemented in **Pytorch Lightning**, supporting massively accelerated training on *unlabeled* videos using **NVIDIA DALI**.
 
 ### Built with the coolest Deep Learning packages
