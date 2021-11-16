@@ -99,6 +99,7 @@ def load_model_from_checkpoint(cfg: DictConfig, ckpt_file: str, eval: bool = Fal
         model.eval()
     return model
 
+
 def predict_videos(
     video_path: str,
     ckpt_file: str,
@@ -130,12 +131,10 @@ def predict_videos(
 
     """
 
-    
     from nvidia.dali import pipeline_def
     import nvidia.dali.fn as fn
     from nvidia.dali.plugin.pytorch import LastBatchPolicy
     import nvidia.dali.types as types
-
 
     from pose_est_nets.datasets.dali import video_pipe, LightningWrapper, count_frames
     from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
@@ -258,28 +257,28 @@ def predict_videos(
         # iterate through video
         n_frames_ = count_frames(video_file)  # total frames in video
         make_predictions_and_create_csv(
-            cfg = cfg, 
-            model = model, 
-            dataloader = predict_loader,
-            n_frames_ = n_frames_,
-            batch_size = sequence_length, #note this is different from the batch_size defined above
-            save_file = save_file,
-            data_name =  video_file
+            cfg=cfg,
+            model=model,
+            dataloader=predict_loader,
+            n_frames_=n_frames_,
+            batch_size=sequence_length,  # note this is different from the batch_size defined above
+            save_file=save_file,
+            data_name=video_file,
         )
-
 
     # if iterating over multiple models, outside this function, the below will reduce
     # memory
     del model, pipe, predict_loader
     torch.cuda.empty_cache()
 
+
 def make_predictions_and_create_csv(
     cfg: DictConfig,
     model: LightningModule,
     dataloader: torch.utils.data.DataLoader,
-    n_frames_: int, #total number of frames,
-    batch_size: int, #batch size or sequence length
-    save_file: str,  
+    n_frames_: int,  # total number of frames,
+    batch_size: int,  # batch size or sequence length
+    save_file: str,
     data_name: str = "dataset",
     save_heatmaps: bool = False,
 ):
@@ -290,10 +289,10 @@ def make_predictions_and_create_csv(
     n = -1
     with torch.no_grad():
         for n, batch in enumerate(tqdm(dataloader)):
-            if type(batch) == dict: 
-                image = batch["images"].to(_TORCH_DEVICE) #predicting from dataset
+            if type(batch) == dict:
+                image = batch["images"].to(_TORCH_DEVICE)  # predicting from dataset
             else:
-                image = batch #predicting from video
+                image = batch  # predicting from video
             outputs = model.forward(image)
             if cfg.model.model_type == "heatmap":
                 pred_keypoints, confidence = model.run_subpixelmaxima(outputs)
@@ -323,8 +322,7 @@ def make_predictions_and_create_csv(
             return
         else:
             print(
-                "inference speed: %1.2f fr/sec"
-                % ((n * batch_size) / (t_end - t_beg))
+                "inference speed: %1.2f fr/sec" % ((n * batch_size) / (t_end - t_beg))
             )
 
     # save csv file of predictions in DeepLabCut format
@@ -374,12 +372,12 @@ def make_predictions_and_create_csv(
 
 
 def predict_dataset(
-    cfg: DictConfig, 
-    datamod: LightningDataModule, 
+    cfg: DictConfig,
+    datamod: LightningDataModule,
     hydra_output_directory: str,
     ckpt_file: str,
     save_file: str = None,
-    heatmap_idxs: List[int] = None
+    heatmap_idxs: List[int] = None,
 ):
     """
     Call this function with a path to ckpt file for a trained model
@@ -398,14 +396,18 @@ def predict_dataset(
     with open(hydra_output_directory + "/dataset_split_indices.json", "w") as f:
         json.dump(dataset_split_indices, f)
 
-    full_dataloader = DataLoader(dataset = full_dataset, batch_size = datamod.test_batch_size)
-    if save_file is None: 
-       save_file = hydra_output_directory + "/predictions.csv" #default for now, should be saved to the model directory
+    full_dataloader = DataLoader(
+        dataset=full_dataset, batch_size=datamod.test_batch_size
+    )
+    if save_file is None:
+        save_file = (
+            hydra_output_directory + "/predictions.csv"
+        )  # default for now, should be saved to the model directory
     make_predictions_and_create_csv(
-        cfg = cfg, 
-        model = model, 
-        dataloader = full_dataloader, 
-        n_frames_ = num_datapoints, 
-        batch_size = datamod.test_batch_size, 
-        save_file  = save_file
+        cfg=cfg,
+        model=model,
+        dataloader=full_dataloader,
+        n_frames_=num_datapoints,
+        batch_size=datamod.test_batch_size,
+        save_file=save_file,
     )
