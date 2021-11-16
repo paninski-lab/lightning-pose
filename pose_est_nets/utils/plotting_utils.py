@@ -331,6 +331,32 @@ def predict_frames(
             return keypoints_np, confidence_np
 
 
+def make_predictions_arr(
+    cfg: DictConfig,
+    keypoints_np: np.array,
+    confidence_np: np.array,
+) -> np.array:
+    assert keypoints_np.shape[0] == confidence_np.shape[0]  # num frames in the dataset
+    assert keypoints_np.shape[1] == (
+        confidence_np.shape[1] * 2
+    )  # we have two (x,y) coordinates and a single likelihood value
+
+    num_joints = confidence_np.shape[-1]  # model.num_keypoints
+    predictions = np.zeros((keypoints_np.shape[0], num_joints * 3))
+    predictions[:, 0] = np.arange(keypoints_np.shape[0])
+    # put x vals back in original pixel space
+    x_resize = cfg.data.image_resize_dims.width
+    x_og = cfg.data.image_orig_dims.width
+    predictions[:, 0::3] = keypoints_np[:, 0::2] / x_resize * x_og
+    # put y vals back in original pixel space
+    y_resize = cfg.data.image_resize_dims.height
+    y_og = cfg.data.image_orig_dims.height
+    predictions[:, 1::3] = keypoints_np[:, 1::2] / y_resize * y_og
+    predictions[:, 2::3] = confidence_np
+
+    return predictions
+
+
 def make_predictions_and_create_csv(
     cfg: DictConfig,
     model: LightningModule,
@@ -350,64 +376,26 @@ def make_predictions_and_create_csv(
         data_name,
         save_heatmaps,
     )
-    # keypoints_np = np.zeros((n_frames_, model.num_keypoints * 2))
-    # confidence_np = np.zeros((n_frames_, model.num_keypoints))
-    # t_beg = time.time()
-    # n_frames = 0  # total frames processed
-    # n = -1
-    # with torch.no_grad():
-    #     for n, batch in enumerate(tqdm(dataloader)):
-    #         if type(batch) == dict:
-    #             image = batch["images"].to(_TORCH_DEVICE)  # predicting from dataset
-    #         else:
-    #             image = batch  # predicting from video
-    #         outputs = model.forward(image)
-    #         if cfg.model.model_type == "heatmap":
-    #             pred_keypoints, confidence = model.run_subpixelmaxima(outputs)
-    #             # send to cpu
-    #             pred_keypoints = pred_keypoints.detach().cpu().numpy()
-    #             confidence = confidence.detach().cpu().numpy()
-    #         else:
-    #             pred_keypoints = outputs.detach().cpu().numpy()
-    #             confidence = np.zeros((outputs.shape[0], outputs.shape[1] // 2))
-    #         n_frames_curr = pred_keypoints.shape[0]
-    #         if n_frames + n_frames_curr > n_frames_:
-    #             # final sequence
-    #             final_batch_size = n_frames_ - n_frames
-    #             keypoints_np[n_frames:] = pred_keypoints[:final_batch_size]
-    #             confidence_np[n_frames:] = confidence[:final_batch_size]
-    #             n_frames_curr = final_batch_size
-    #         else:  # at every sequence except the final
-    #             keypoints_np[n_frames : n_frames + n_frames_curr] = pred_keypoints
-    #             confidence_np[n_frames : n_frames + n_frames_curr] = confidence
 
-    #         n_frames += n_frames_curr
-    #     t_end = time.time()
-    #     if n == -1:
-    #         print(
-    #             "WARNING: issue processing %s" % data_name
-    #         )  # TODO: what can go wrong here?
-    #         return
-    #     else:
-    #         print(
-    #             "inference speed: %1.2f fr/sec" % ((n * batch_size) / (t_end - t_beg))
-    #         )
-
-    # save csv file of predictions in DeepLabCut format
-    num_joints = model.num_keypoints
-    predictions = np.zeros((keypoints_np.shape[0], num_joints * 3))
-    predictions[:, 0] = np.arange(keypoints_np.shape[0])
-    # put x vals back in original pixel space
-    x_resize = cfg.data.image_resize_dims.width
-    x_og = cfg.data.image_orig_dims.width
-    predictions[:, 0::3] = keypoints_np[:, 0::2] / x_resize * x_og
-    # put y vals back in original pixel space
-    y_resize = cfg.data.image_resize_dims.height
-    y_og = cfg.data.image_orig_dims.height
-    predictions[:, 1::3] = keypoints_np[:, 1::2] / y_resize * y_og
-    predictions[:, 2::3] = confidence_np
+    predictions = make_predictions_arr(cfg, keypoints_np, confidence_np)
+    # # save csv file of predictions in DeepLabCut format
+    # num_joints = model.num_keypoints
+    # predictions = np.zeros((keypoints_np.shape[0], num_joints * 3))
+    # predictions[:, 0] = np.arange(keypoints_np.shape[0])
+    # # put x vals back in original pixel space
+    # x_resize = cfg.data.image_resize_dims.width
+    # x_og = cfg.data.image_orig_dims.width
+    # predictions[:, 0::3] = keypoints_np[:, 0::2] / x_resize * x_og
+    # # put y vals back in original pixel space
+    # y_resize = cfg.data.image_resize_dims.height
+    # y_og = cfg.data.image_orig_dims.height
+    # predictions[:, 1::3] = keypoints_np[:, 1::2] / y_resize * y_og
+    # predictions[:, 2::3] = confidence_np
 
     # get bodypart names from labeled data csv if possible
+    # TODO: I suspect this doesn't work with the toydataset example (saving BP1, BP2...). make sure were verifying absolute paths using our utils.
+    # TODO: e.g., data_dir, video_dir = verify_real_data_paths(cfg.data)
+
     if ("data_dir" in cfg.data) and ("csv_file" in cfg.data):
         csv_file = os.path.join(cfg.data.data_dir, cfg.data.csv_file)
     else:
