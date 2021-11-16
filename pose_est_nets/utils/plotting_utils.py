@@ -272,20 +272,19 @@ def predict_videos(
     torch.cuda.empty_cache()
 
 
-def make_predictions_and_create_csv(
+def predict_frames(
     cfg: DictConfig,
     model: LightningModule,
     dataloader: torch.utils.data.DataLoader,
-    n_frames_: int,  # total number of frames,
-    batch_size: int,  # batch size or sequence length
-    save_file: str,
+    n_frames_: int,  # total number of frames in the dataset or video
+    batch_size: int,  # regular batch_size for images or sequence_length for videos
     data_name: str = "dataset",
-    save_heatmaps: bool = False,
+    save_heatmaps: bool = False,  # TODO: save heatmaps to hdf5 file.
 ):
     keypoints_np = np.zeros((n_frames_, model.num_keypoints * 2))
     confidence_np = np.zeros((n_frames_, model.num_keypoints))
     t_beg = time.time()
-    n_frames = 0  # total frames processed
+    n_frames_counter = 0  # total frames processed
     n = -1
     with torch.no_grad():
         for n, batch in enumerate(tqdm(dataloader)):
@@ -303,17 +302,21 @@ def make_predictions_and_create_csv(
                 pred_keypoints = outputs.detach().cpu().numpy()
                 confidence = np.zeros((outputs.shape[0], outputs.shape[1] // 2))
             n_frames_curr = pred_keypoints.shape[0]
-            if n_frames + n_frames_curr > n_frames_:
+            if n_frames_counter + n_frames_curr > n_frames_:
                 # final sequence
-                final_batch_size = n_frames_ - n_frames
-                keypoints_np[n_frames:] = pred_keypoints[:final_batch_size]
-                confidence_np[n_frames:] = confidence[:final_batch_size]
+                final_batch_size = n_frames_ - n_frames_counter
+                keypoints_np[n_frames_counter:] = pred_keypoints[:final_batch_size]
+                confidence_np[n_frames_counter:] = confidence[:final_batch_size]
                 n_frames_curr = final_batch_size
             else:  # at every sequence except the final
-                keypoints_np[n_frames : n_frames + n_frames_curr] = pred_keypoints
-                confidence_np[n_frames : n_frames + n_frames_curr] = confidence
+                keypoints_np[
+                    n_frames_counter : n_frames_counter + n_frames_curr
+                ] = pred_keypoints
+                confidence_np[
+                    n_frames_counter : n_frames_counter + n_frames_curr
+                ] = confidence
 
-            n_frames += n_frames_curr
+            n_frames_counter += n_frames_curr
         t_end = time.time()
         if n == -1:
             print(
@@ -324,6 +327,71 @@ def make_predictions_and_create_csv(
             print(
                 "inference speed: %1.2f fr/sec" % ((n * batch_size) / (t_end - t_beg))
             )
+            # for a regression network, confidence_np will be all zeros
+            return keypoints_np, confidence_np
+
+
+def make_predictions_and_create_csv(
+    cfg: DictConfig,
+    model: LightningModule,
+    dataloader: torch.utils.data.DataLoader,
+    n_frames_: int,  # total number of frames in the dataset or video
+    batch_size: int,  # regular batch_size for images or sequence_length for videos
+    save_file: str,
+    data_name: str = "dataset",
+    save_heatmaps: bool = False,
+):
+    keypoints_np, confidence_np = predict_frames(
+        cfg,
+        model,
+        dataloader,
+        n_frames_,
+        batch_size,
+        data_name,
+        save_heatmaps,
+    )
+    # keypoints_np = np.zeros((n_frames_, model.num_keypoints * 2))
+    # confidence_np = np.zeros((n_frames_, model.num_keypoints))
+    # t_beg = time.time()
+    # n_frames = 0  # total frames processed
+    # n = -1
+    # with torch.no_grad():
+    #     for n, batch in enumerate(tqdm(dataloader)):
+    #         if type(batch) == dict:
+    #             image = batch["images"].to(_TORCH_DEVICE)  # predicting from dataset
+    #         else:
+    #             image = batch  # predicting from video
+    #         outputs = model.forward(image)
+    #         if cfg.model.model_type == "heatmap":
+    #             pred_keypoints, confidence = model.run_subpixelmaxima(outputs)
+    #             # send to cpu
+    #             pred_keypoints = pred_keypoints.detach().cpu().numpy()
+    #             confidence = confidence.detach().cpu().numpy()
+    #         else:
+    #             pred_keypoints = outputs.detach().cpu().numpy()
+    #             confidence = np.zeros((outputs.shape[0], outputs.shape[1] // 2))
+    #         n_frames_curr = pred_keypoints.shape[0]
+    #         if n_frames + n_frames_curr > n_frames_:
+    #             # final sequence
+    #             final_batch_size = n_frames_ - n_frames
+    #             keypoints_np[n_frames:] = pred_keypoints[:final_batch_size]
+    #             confidence_np[n_frames:] = confidence[:final_batch_size]
+    #             n_frames_curr = final_batch_size
+    #         else:  # at every sequence except the final
+    #             keypoints_np[n_frames : n_frames + n_frames_curr] = pred_keypoints
+    #             confidence_np[n_frames : n_frames + n_frames_curr] = confidence
+
+    #         n_frames += n_frames_curr
+    #     t_end = time.time()
+    #     if n == -1:
+    #         print(
+    #             "WARNING: issue processing %s" % data_name
+    #         )  # TODO: what can go wrong here?
+    #         return
+    #     else:
+    #         print(
+    #             "inference speed: %1.2f fr/sec" % ((n * batch_size) / (t_end - t_beg))
+    #         )
 
     # save csv file of predictions in DeepLabCut format
     num_joints = model.num_keypoints
