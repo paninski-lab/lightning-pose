@@ -22,7 +22,8 @@ def make_predictions(cfg: DictConfig):
     """note, by decorating with hydra, the current working directory will be become the new folder os.path.join(os.getcwd(), "/outputs/YYYY-MM-DD/hour-info")"""
     # TODO: supporting only the zeroth index of cfg.eval.path_to_test_videos[0]
     # go to folders up to the "outputs" folder, and search for hydra_path from cfg
-    for hydra_relative_path in cfg.eval.hydra_paths:
+    for i, hydra_relative_path in enumerate(cfg.eval.hydra_paths):
+        print(cfg.eval.path_to_save_predictions[i], hydra_relative_path)
         # cfg.eval.hydra_paths defines a list of relative paths to hydra folders "YYYY-MM-DD/HH-MM-SS", and we extract an absolute path below
         absolute_cfg_path = get_absolute_hydra_path_from_hydra_str(hydra_relative_path)
         model_cfg = OmegaConf.load(
@@ -40,7 +41,7 @@ def make_predictions(cfg: DictConfig):
             video_path=absolute_path_to_test_videos,
             ckpt_file=ckpt_file,
             cfg_file=model_cfg,
-            save_file=cfg.eval.path_to_save_predictions,
+            save_file=cfg.eval.path_to_save_predictions[i],
             sequence_length=cfg.eval.dali_parameters.sequence_length,
         )
 

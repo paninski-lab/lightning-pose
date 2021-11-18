@@ -8,6 +8,7 @@ from pose_est_nets.utils.io import (
     set_or_open_folder,
     get_latest_version,
 )
+from pose_est_nets.datasets.dali import LightningWrapper
 from pose_est_nets.models.heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
@@ -28,6 +29,7 @@ from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.core.lightning import LightningModule
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader
+from kornia.geometry.transform import pyrup
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -137,7 +139,7 @@ def predict_videos(
     from nvidia.dali.plugin.pytorch import LastBatchPolicy
     import nvidia.dali.types as types
 
-    from pose_est_nets.datasets.dali import video_pipe, LightningWrapper, count_frames
+    from pose_est_nets.datasets.dali import video_pipe, count_frames
     from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
     from pose_est_nets.models.regression_tracker import (
         RegressionTracker,
@@ -263,7 +265,6 @@ def predict_videos(
             dataloader=predict_loader,
             n_frames_=n_frames_,
             batch_size=sequence_length,  # note this is different from the batch_size defined above
-            save_file=save_file,
             data_name=video_file,
         )
         save_dframe(df, save_file)
@@ -278,7 +279,7 @@ def predict_videos(
 def predict_frames(
     cfg: DictConfig,
     model: LightningModule,
-    dataloader: torch.utils.data.DataLoader,
+    dataloader: Union[torch.utils.data.DataLoader, LightningWrapper],
     n_frames_: int,  # total number of frames in the dataset or video
     batch_size: int,  # regular batch_size for images or sequence_length for videos
     data_name: str = "dataset",
@@ -297,6 +298,7 @@ def predict_frames(
                 image = batch  # predicting from video
             outputs = model.forward(image)
             if cfg.model.model_type == "heatmap":
+
                 pred_keypoints, confidence = model.run_subpixelmaxima(outputs)
                 # send to cpu
                 pred_keypoints = pred_keypoints.detach().cpu().numpy()
@@ -415,7 +417,7 @@ def save_dframe(df: pd.DataFrame, save_file: str) -> None:
 def make_predictions(
     cfg: DictConfig,
     model: LightningModule,
-    dataloader: torch.utils.data.DataLoader,
+    dataloader: Union[torch.utils.data.DataLoader, LightningWrapper],
     n_frames_: int,  # total number of frames in the dataset or video
     batch_size: int,  # regular batch_size for images or sequence_length for videos
     data_name: str = "dataset",

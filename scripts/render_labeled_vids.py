@@ -22,6 +22,9 @@ def make_keypoint_list(
 ) -> list:
     keypoints_list = []
     for kp_name in keypoint_names:  # loop over names
+        print(kp_name)
+        if kp_name == "bodyparts":
+            continue
         # write a single keypoint's position, confidence, and name
         keypoints_list.append(
             fo.Keypoint(
@@ -32,7 +35,7 @@ def make_keypoint_list(
                     ]
                 ],
                 confidence=csv_with_preds[kp_name]["likelihood"][frame_idx],
-                label=kp_name,
+                #label=kp_name,
             )
         )
     return keypoints_list
@@ -95,12 +98,24 @@ def render_labeled_videos(cfg: DictConfig):
 
     # TODO: control more params from outside?
     # After you finish interactively looking at the video it, save to disc
+    
     config = foua.DrawConfig(
-        {"keypoints_size": 9}
+        {"keypoints_size": 9, 
+        "show_keypoints_names":False, 
+        "show_keypoints_labels":True, 
+        "per_keypoints_label_colors":True,
+        #"show_object_names":False,
+        #"show_object_labels":False,
+        #"show_frame_attr_names":False,
+        #"show_object_attr_names":False,
+        #"hide_all_names":True,
+        #"hide_all_confidences":True
+        }
     )  # this size is good for a 400X400 image.
+    print(config)
     outpath = (
         video[0].replace(".mp4", "") + "_labeled.mp4"
-    )  # TODO: careful with [0], yoy should loop over videos.
+    )  # TODO: careful with [0], you should loop over videos.
     print("Writing a labeled video to '%s'" % outpath)
     foua.draw_labeled_video(video_sample, outpath, config=config)
     print("Video writing now complete.")
