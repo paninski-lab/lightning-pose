@@ -110,7 +110,7 @@ def predict(cfg: DictConfig):
     bestmodels = {}
 
     use_original_model_names = check_eval_model_names(
-        cfg.eval.model_names, cfg.eval.hydra_paths
+        cfg.eval.model_display_names, cfg.eval.hydra_paths
     )
 
     for model_ind, hydra_relative_path in enumerate(cfg.eval.hydra_paths):

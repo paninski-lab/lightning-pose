@@ -256,7 +256,6 @@ def predict_videos(
             auto_reset=False,
             reader_name="reader",
         )
-
         # iterate through video
         n_frames_ = count_frames(video_file)  # total frames in video
         df = make_predictions(
@@ -283,13 +282,19 @@ def predict_frames(
     n_frames_: int,  # total number of frames in the dataset or video
     batch_size: int,  # regular batch_size for images or sequence_length for videos
     data_name: str = "dataset",
-    save_heatmaps: bool = False,  # TODO: save heatmaps to hdf5 file.
+    #save_heatmaps: bool = False,  # TODO: save heatmaps to hdf5 file.
+    save_folder = None
 ):
+    if not save_folder:
+        save_heatmaps = False
+    else:
+        save_heatmaps = True
     keypoints_np = np.zeros((n_frames_, model.num_keypoints * 2))
     confidence_np = np.zeros((n_frames_, model.num_keypoints))
     t_beg = time.time()
     n_frames_counter = 0  # total frames processed
     n = -1
+    kpt_plt_idx = 0 #hardcoded for now
     with torch.no_grad():
         for n, batch in enumerate(tqdm(dataloader)):
             if type(batch) == dict:
@@ -298,7 +303,27 @@ def predict_frames(
                 image = batch  # predicting from video
             outputs = model.forward(image)
             if cfg.model.model_type == "heatmap":
-
+                if type(batch) == dict and save_heatmaps and n % 10 == 0: #only predicting heatmaps for dataset for now
+                    #plt.imshow(batch["images"][0][kpt_plt_idx].numpy())
+                    #print(batch["images"].shape)
+                    plt.imsave(
+                        save_folder + "image_batch_" + str(n) + "_kpt_" + str(kpt_plt_idx) + ".png",
+                        batch["images"][0][0].numpy()
+                    )
+                    plt.clf()
+                    full_heatmap = outputs[0][kpt_plt_idx].unsqueeze(0).unsqueeze(0)
+                    # for i in range(model.downsample_factor):
+                    #     full_heatmap = pyrup(full_heatmap)
+                    #plt.imshow(full_heatmap.numpy())
+                    plt.imsave(
+                        save_folder + "heatmap_batch_" + str(n) + "_kpt_" + str(kpt_plt_idx) + ".png",
+                        full_heatmap[0][0].cpu().numpy()
+                    )
+                    plt.clf()
+                    kpt_plt_idx += 1
+                    if kpt_plt_idx == outputs.shape[1]: #starts plotting from the first keypoint if it reaches the last
+                        kpt_plt_idx = 0
+          
                 pred_keypoints, confidence = model.run_subpixelmaxima(outputs)
                 # send to cpu
                 pred_keypoints = pred_keypoints.detach().cpu().numpy()
@@ -421,7 +446,7 @@ def make_predictions(
     n_frames_: int,  # total number of frames in the dataset or video
     batch_size: int,  # regular batch_size for images or sequence_length for videos
     data_name: str = "dataset",
-    save_heatmaps: bool = False,
+    save_folder: str = None
 ) -> pd.DataFrame:
     keypoints_np, confidence_np = predict_frames(
         cfg,
@@ -430,7 +455,8 @@ def make_predictions(
         n_frames_,
         batch_size,
         data_name,
-        save_heatmaps,
+        #save_heatmaps,
+        save_folder
     )
     # unify keypoints and confidences into one numpy array, scale (x,y) coords by resizing factor
     predictions = make_pred_arr_undo_resize(cfg, keypoints_np, confidence_np)
@@ -479,12 +505,17 @@ def predict_dataset(
         save_file = (
             hydra_output_directory + "/predictions.csv"
         )  # default for now, should be saved to the model directory
+    save_folder = hydra_output_directory + "/heatmaps_and_images/"
+    if not (os.path.isdir(save_folder)):
+        os.mkdir(save_folder)
+
     df = make_predictions(
         cfg=cfg,
         model=model,
         dataloader=full_dataloader,
         n_frames_=num_datapoints,
         batch_size=datamod.test_batch_size,
+        save_folder=save_folder
     )
 
     # add train/test/val column

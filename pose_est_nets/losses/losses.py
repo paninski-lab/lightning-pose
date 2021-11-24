@@ -4,6 +4,7 @@ from omegaconf import ListConfig
 import torch
 from torch.nn import functional as F
 from torchtyping import TensorType, patch_typeguard
+from geomloss import SamplesLoss
 from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
@@ -85,6 +86,20 @@ def MaskedMSEHeatmapLoss(
     # compute loss
     loss = F.mse_loss(torch.masked_select(y_hat, mask), torch.masked_select(y, mask))
     return loss
+
+@typechecked
+def MaskedWassersteinLoss(
+    y: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+    y_hat: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+) -> TensorType[()]:
+    max_vals = torch.amax(y, dim=(2, 3))
+    zeros = torch.zeros(size=(y.shape[0], y.shape[1]), device=y_hat.device)
+    non_zeros = ~torch.eq(max_vals, zeros)
+    mask = torch.reshape(non_zeros, [non_zeros.shape[0], non_zeros.shape[1], 1, 1])
+    wass_loss = SamplesLoss(loss="sinkhorn")
+    loss = wass_loss(torch.masked_select(y_hat, mask).unsqueeze(0), torch.masked_select(y, mask).unsqueeze(0))
+    return loss
+
 
 
 # TODO: this won't work unless the inputs are right, not implemented yet.
