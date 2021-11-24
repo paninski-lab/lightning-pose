@@ -101,9 +101,9 @@ def render_labeled_videos(cfg: DictConfig):
     
     config = foua.DrawConfig(
         {"keypoints_size": 9, 
-        "show_keypoints_names":False, 
+        "show_keypoints_names":True, 
         "show_keypoints_labels":True, 
-        "per_keypoints_label_colors":True,
+        "per_keypoints_label_colors":False,
         #"show_object_names":False,
         #"show_object_labels":False,
         #"show_frame_attr_names":False,

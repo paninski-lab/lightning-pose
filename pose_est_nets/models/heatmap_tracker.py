@@ -13,6 +13,7 @@ from pose_est_nets.losses.losses import (
     convert_dict_entries_to_tensors,
     get_losses_dict,
     MaskedMSEHeatmapLoss,
+    MaskedWassersteinLoss,
     MaskedRMSELoss,
 )
 from pose_est_nets.models.base_resnet import BaseFeatureExtractor
@@ -57,6 +58,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         output_shape: Optional[tuple] = None,  # change
         output_sigma: float = 1.25,  # check value
         upsample_factor: int = 100,
+        supervised_loss: str = "mse",
         confidence_scale: float = 1.0,
         threshold: Optional[float] = None,
         torch_seed: int = 123,
@@ -97,6 +99,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         self.output_shape = output_shape
         self.output_sigma = torch.tensor(output_sigma, device=self.device)
         self.upsample_factor = torch.tensor(upsample_factor, device=self.device)
+        self.supervised_loss = supervised_loss
         self.confidence_scale = torch.tensor(confidence_scale, device=self.device)
         self.threshold = threshold
         self.temperature = torch.tensor(100, device=self.device)  # soft argmax temp
@@ -252,8 +255,11 @@ class HeatmapTracker(BaseFeatureExtractor):
             predicted_heatmaps
         )  # heatmaps -> keypoints
 
-        # compute loss
-        heatmap_loss = MaskedMSEHeatmapLoss(batch_dict["heatmaps"], predicted_heatmaps)
+        # compute loss   
+        if self.supervised_loss == "wasserstein":
+            heatmap_loss = MaskedWassersteinLoss(batch_dict["heatmaps"], predicted_heatmaps)
+        else:
+             heatmap_loss = MaskedMSEHeatmapLoss(batch_dict["heatmaps"], predicted_heatmaps)
         supervised_rmse = MaskedRMSELoss(batch_dict["keypoints"], predicted_keypoints)
 
         # log training loss + rmse
@@ -272,7 +278,10 @@ class HeatmapTracker(BaseFeatureExtractor):
         predicted_keypoints, confidence = self.run_subpixelmaxima(
             predicted_heatmaps
         )  # heatmaps -> keypoints
-        loss = MaskedMSEHeatmapLoss(batch_dict["heatmaps"], predicted_heatmaps)
+        if self.supervised_loss == "wasserstein":
+            loss = MaskedWassersteinLoss(batch_dict["heatmaps"], predicted_heatmaps)
+        else:
+            loss = MaskedMSEHeatmapLoss(batch_dict["heatmaps"], predicted_heatmaps)
         supervised_rmse = MaskedRMSELoss(batch_dict["keypoints"], predicted_keypoints)
         if stage:
             self.log(f"{stage}_loss", loss, prog_bar=True, logger=True)
@@ -361,9 +370,14 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         )  # heatmaps -> keypoints
 
         # compute loss labeled
-        supervised_loss = MaskedMSEHeatmapLoss(
-            data_batch["labeled"]["heatmaps"], predicted_heatmaps
-        )
+        if self.supervised_loss == "wasserstein":
+            supervised_loss = MaskedWassersteinLoss(
+                data_batch["labeled"]["heatmaps"], predicted_heatmaps
+            )
+        else:
+            supervised_loss = MaskedMSEHeatmapLoss(
+                 data_batch["labeled"]["heatmaps"], predicted_heatmaps
+            )
         supervised_rmse = MaskedRMSELoss(
             data_batch["labeled"]["keypoints"], predicted_keypoints
         )
