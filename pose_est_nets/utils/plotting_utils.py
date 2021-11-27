@@ -2,6 +2,7 @@ from posixpath import join
 import imgaug.augmenters as iaa
 import numpy as np
 import pandas as pd
+import h5py
 import torch
 from pose_est_nets.utils.io import (
     check_if_semi_supervised,
@@ -258,7 +259,7 @@ def predict_videos(
         )
         # iterate through video
         n_frames_ = count_frames(video_file)  # total frames in video
-        df = make_predictions(
+        df, heatmaps_np = make_predictions(
             cfg=cfg,
             model=model,
             dataloader=predict_loader,
@@ -285,16 +286,25 @@ def predict_frames(
     #save_heatmaps: bool = False,  # TODO: save heatmaps to hdf5 file.
     save_folder = None
 ):
-    if not save_folder:
+    if not save_folder or cfg.model.model_type != "heatmap" :
         save_heatmaps = False
     else:
         save_heatmaps = True
     keypoints_np = np.zeros((n_frames_, model.num_keypoints * 2))
     confidence_np = np.zeros((n_frames_, model.num_keypoints))
+    if save_heatmaps:
+        heatmaps_np = np.zeros((
+            n_frames_, 
+            model.num_keypoints, 
+            model.output_shape[0] // (2 ** model.downsample_factor),
+            model.output_shape[1] // (2 ** model.downsample_factor) 
+        ))
+    else:
+        heatmaps_np = None
     t_beg = time.time()
     n_frames_counter = 0  # total frames processed
     n = -1
-    kpt_plt_idx = 0 #hardcoded for now
+    #kpt_plt_idx = 0
     with torch.no_grad():
         for n, batch in enumerate(tqdm(dataloader)):
             if type(batch) == dict:
@@ -303,27 +313,25 @@ def predict_frames(
                 image = batch  # predicting from video
             outputs = model.forward(image)
             if cfg.model.model_type == "heatmap":
-                if type(batch) == dict and save_heatmaps and n % 10 == 0: #only predicting heatmaps for dataset for now
+                # if type(batch) == dict and save_heatmaps: #only predicting heatmaps for dataset for now
                     #plt.imshow(batch["images"][0][kpt_plt_idx].numpy())
                     #print(batch["images"].shape)
-                    plt.imsave(
-                        save_folder + "image_batch_" + str(n) + "_kpt_" + str(kpt_plt_idx) + ".png",
-                        batch["images"][0][0].numpy()
-                    )
-                    plt.clf()
-                    full_heatmap = outputs[0][kpt_plt_idx].unsqueeze(0).unsqueeze(0)
+                    # plt.imsave(
+                    #     save_folder + "image_batch_" + str(n) + "_kpt_" + str(kpt_plt_idx) + ".png",
+                    #     batch["images"][0][0].numpy()
+                    # )
+                    #full_heatmap = outputs[0][kpt_plt_idx].unsqueeze(0).unsqueeze(0)
                     # for i in range(model.downsample_factor):
                     #     full_heatmap = pyrup(full_heatmap)
                     #plt.imshow(full_heatmap.numpy())
-                    plt.imsave(
-                        save_folder + "heatmap_batch_" + str(n) + "_kpt_" + str(kpt_plt_idx) + ".png",
-                        full_heatmap[0][0].cpu().numpy()
-                    )
-                    plt.clf()
-                    kpt_plt_idx += 1
-                    if kpt_plt_idx == outputs.shape[1]: #starts plotting from the first keypoint if it reaches the last
-                        kpt_plt_idx = 0
-          
+                    # plt.imsave(
+                    #     save_folder + "heatmap_batch_" + str(n) + "_kpt_" + str(kpt_plt_idx) + ".png",
+                    #     full_heatmap[0][0].cpu().numpy()
+                    # )
+                    # plt.clf()
+                    # kpt_plt_idx += 1
+                    # if kpt_plt_idx == outputs.shape[1]: #starts plotting from the first keypoint if it reaches the last
+                    #     kpt_plt_idx = 0
                 pred_keypoints, confidence = model.run_subpixelmaxima(outputs)
                 # send to cpu
                 pred_keypoints = pred_keypoints.detach().cpu().numpy()
@@ -337,6 +345,8 @@ def predict_frames(
                 final_batch_size = n_frames_ - n_frames_counter
                 keypoints_np[n_frames_counter:] = pred_keypoints[:final_batch_size]
                 confidence_np[n_frames_counter:] = confidence[:final_batch_size]
+                if save_heatmaps:
+                    heatmaps_np[n_frames_counter:] = outputs[:final_batch_size]
                 n_frames_curr = final_batch_size
             else:  # at every sequence except the final
                 keypoints_np[
@@ -345,6 +355,11 @@ def predict_frames(
                 confidence_np[
                     n_frames_counter : n_frames_counter + n_frames_curr
                 ] = confidence
+                if save_heatmaps:
+                    heatmaps_np[
+                        n_frames_counter : n_frames_counter + n_frames_curr
+                    ] = outputs
+
 
             n_frames_counter += n_frames_curr
         t_end = time.time()
@@ -358,7 +373,7 @@ def predict_frames(
                 "inference speed: %1.2f fr/sec" % ((n * batch_size) / (t_end - t_beg))
             )
             # for a regression network, confidence_np will be all zeros
-            return keypoints_np, confidence_np
+            return keypoints_np, confidence_np, heatmaps_np
 
 
 @typechecked
@@ -437,6 +452,11 @@ def save_dframe(df: pd.DataFrame, save_file: str) -> None:
     else:
         raise NotImplementedError("Currently only .csv and .h5 files are supported")
 
+def save_heatmaps(heatmaps_np: np.ndarray, save_folder: str) -> None:
+    hf = h5py.File(save_folder + 'heatmaps.h5', 'w')
+    hf.create_dataset('heatmaps', data=heatmaps_np)
+    hf.close()
+
 
 @typechecked
 def make_predictions(
@@ -448,7 +468,7 @@ def make_predictions(
     data_name: str = "dataset",
     save_folder: str = None
 ) -> pd.DataFrame:
-    keypoints_np, confidence_np = predict_frames(
+    keypoints_np, confidence_np, heatmaps_np = predict_frames(
         cfg,
         model,
         dataloader,
@@ -471,7 +491,7 @@ def make_predictions(
     # build dataframe from the hierarchal index and predictions array
     df = pd.DataFrame(predictions, columns=pd_index)
 
-    return df
+    return df, heatmaps_np
 
 
 def predict_dataset(
@@ -509,7 +529,7 @@ def predict_dataset(
     if not (os.path.isdir(save_folder)):
         os.mkdir(save_folder)
 
-    df = make_predictions(
+    df, heatmaps_np = make_predictions(
         cfg=cfg,
         model=model,
         dataloader=full_dataloader,
@@ -525,3 +545,5 @@ def predict_dataset(
         df.loc[val, "set"] = np.repeat(key, len(val))
 
     save_dframe(df, save_file)
+    if heatmaps_np:
+        save_heatmaps(heatmaps_np, save_folder)
