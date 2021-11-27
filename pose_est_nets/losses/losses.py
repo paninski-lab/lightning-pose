@@ -231,7 +231,8 @@ def UnimodalLoss(
         width=int(original_image_width),
         output_shape=output_shape
     )
-    return MaskedMSEHeatmapLoss(ideal_heatmaps, heatmap_preds)
+    return MaskedMSEHeatmapLoss(ideal_heatmaps, heatmap_preds) 
+    #want to use wasserstein here if heatmap_model.supervised_loss == "wasserstein"
 
 @typechecked
 def filter_dict(mydict: Dict[str, Any], keys: List[str]) -> Dict[str, Any]:
