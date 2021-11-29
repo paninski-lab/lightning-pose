@@ -394,14 +394,13 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         for loss_name, loss_func in self.loss_function_dict.items():
             # Some losses use keypoint_preds, some use heatmap_preds, and some use both.
             # all have **kwargs so are robust to unneeded inputs."
-            # TODO: define the weight, it varies between learning and non-learning mode.
             if (
                 self.learn_weights == True
-            ):  # 1 / 2 * \sigma^{2} where our trainable parameter is \log(\sigma)
+            ):  # weight = 1 / 2 * \sigma^{2} where our trainable parameter is \log(\sigma)
                 loss_weight = 1.0 / (
                     2.0 * (torch.exp(self.loss_params[loss_name]["log_weight"]) ** 2.0)
                 )
-            else:  # \sigma where our parameter is \log(\sigma). i.e., we take the parameter as it is in the config and exponentiate it to enforce positivity
+            else:  # weight = \sigma where our trainable parameter is \log(\sigma). i.e., we take the parameter as it is in the config and exponentiate it to enforce positivity
                 loss_weight = torch.exp(self.loss_params[loss_name]["log_weight"])
 
             add_loss = loss_weight * loss_func(

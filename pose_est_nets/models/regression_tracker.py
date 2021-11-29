@@ -1,5 +1,5 @@
 """Models that produce (x, y) coordinates of keypoints from images."""
-
+# TODO: support weight tuning here too
 import torch
 from torch import nn
 from torchtyping import TensorType, patch_typeguard
@@ -9,6 +9,7 @@ from typing_extensions import Literal
 
 from pose_est_nets.losses.losses import (
     convert_dict_entries_to_tensors,
+    convert_loss_dicts_to_torch_nn_modules,
     get_losses_dict,
     MaskedRegressionMSELoss,
     MaskedRMSELoss,
@@ -29,9 +30,6 @@ class SemiSupervisedBatchDict(TypedDict):
     unlabeled: TensorType[
         "sequence_length", "RGB":3, "image_height", "image_width", float
     ]
-
-
-# TODO: Add the semisuper case
 
 
 class RegressionTracker(BaseFeatureExtractor):
@@ -166,6 +164,7 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         last_resnet_layer_to_get: int = -2,
         torch_seed: int = 123,
         semi_super_losses_to_use: Optional[list] = None,
+        learn_weights: bool = True,  # whether to use multitask weight learning
     ) -> None:
         """
 
@@ -197,6 +196,17 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
             raise ValueError("cannot use unimodal loss in regression tracker")
         self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
         self.loss_params = loss_params
+        self.learn_weights = learn_weights
+        self.loss_params = convert_dict_entries_to_tensors(
+            loss_params=self.loss_params,
+            device=self.device,
+            to_parameters=self.learn_weights,
+        )
+        if (
+            self.learn_weights == True
+        ):  # for each unsupervised loss we convert the "log_weight" in the config into a learnable parameter
+            self.loss_params = convert_loss_dicts_to_torch_nn_modules(loss_params)
+            print(self.loss_params)  # TODO: remove
 
     @typechecked
     def training_step(
@@ -228,14 +238,31 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         # loop over unsupervised losses
         tot_loss = 0.0
         tot_loss += supervised_loss
-        self.loss_params = convert_dict_entries_to_tensors(
-            self.loss_params, self.device
-        )
+        # ommited the below as I did for HeatmapTracker
+        # self.loss_params = convert_dict_entries_to_tensors(
+        #     self.loss_params, self.device
+        # )
         for loss_name, loss_func in self.loss_function_dict.items():
-            add_loss = self.loss_params[loss_name]["weight"] * loss_func(
+            if (
+                self.learn_weights == True
+            ):  # weight = 1 / 2 * \sigma^{2} where our trainable parameter is \log(\sigma)
+                loss_weight = 1.0 / (
+                    2.0 * (torch.exp(self.loss_params[loss_name]["log_weight"]) ** 2.0)
+                )
+            else:  # weight = \sigma where our trainable parameter is \log(\sigma). i.e., we take the parameter as it is in the config and exponentiate it to enforce positivity
+                loss_weight = torch.exp(self.loss_params[loss_name]["log_weight"])
+
+            add_loss = loss_weight * loss_func(
                 predicted_us_keypoints, **self.loss_params[loss_name]
             )
             tot_loss += add_loss
+            if (
+                self.learn_weights == True
+            ):  # penalize for the magnitude of the weights: \log(\sigma_i) for each weight i
+                tot_loss += self.loss_params[loss_name][
+                    "log_weight"
+                ]  # recall that \log(\sigma_1 * \sigma_2 * ...) = \log(\sigma_1) + \log(\sigma_2) + ...
+
             # log individual unsupervised losses
             self.log(loss_name + "_loss", add_loss, prog_bar=True)
 
@@ -243,5 +270,12 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         self.log("total_loss", tot_loss, prog_bar=True)
         self.log("supervised_loss", supervised_loss, prog_bar=True)
         self.log("supervised_rmse", supervised_rmse, prog_bar=True)
+
+        for loss_name in self.loss_function_dict.keys():
+            self.log(
+                "{}_{}".format(loss_name, "weight"),
+                torch.exp(self.loss_params[loss_name]["log_weight"]),
+                prog_bar=True,
+            )
 
         return {"loss": tot_loss}
