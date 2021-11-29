@@ -299,7 +299,7 @@ def convert_dict_entries_to_tensors(
                 )
 
             if to_parameters:
-                requires_grad = True if key == "weight" else False
+                requires_grad = True if key == "log_weight" else False
                 loss_params[loss][key] = torch.nn.Parameter(
                     data=loss_params[loss][key], requires_grad=requires_grad
                 )
@@ -313,7 +313,7 @@ def convert_loss_dicts_to_torch_nn_modules(loss_params: dict) -> torch.nn.Module
         loss_params[loss] = torch.nn.ParameterDict(params)
         for key, val in params.items():  # loop over the entries of each loss
             if (
-                key == "weight"
+                key == "log_weight"
             ):  # we take derivatives only w.r.t the weight infront of the loss
                 assert loss_params[loss][key].requires_grad == True
             else:  # treat it as a static tensor
