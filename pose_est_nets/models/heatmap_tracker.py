@@ -358,14 +358,6 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         ):  # for each unsupervised loss we convert the "weight" in the config into a learnable parameter
             # TODO: should be in log format, right now it's raw
             self.loss_params = convert_loss_dicts_to_torch_nn_modules(loss_params)
-            # previos attempt -- the parameter wasn't recognized
-            # for loss_name, _ in self.loss_function_dict.items():
-            #     init_val = torch.tensor(self.loss_params[loss_name]["weight"])
-            #     if init_val is None:
-            #         init_val = torch.tensor(0.0)
-            #     self.loss_params[loss_name]["weight"] = torch.nn.Parameter(
-            #         data=init_val, requires_grad=True
-            #     )
             print(self.loss_params)  # TODO: remove
 
     @typechecked
@@ -403,12 +395,29 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         for loss_name, loss_func in self.loss_function_dict.items():
             # Some losses use keypoint_preds, some use heatmap_preds, and some use both.
             # all have **kwargs so are robust to unneeded inputs."
-            add_loss = self.loss_params[loss_name]["weight"] * loss_func(
+            # TODO: define the weight, it varies between learning and non-learning mode.
+            if (
+                self.learn_weights == True
+            ):  # 1 / 2 * \sigma^{2} where our trainable parameter is \log(\sigma)
+                loss_weight = 1.0 / (
+                    2.0 * (torch.exp(self.loss_params[loss_name]["weight"]) ** 2.0)
+                )
+            else:  # \sigma where our parameter is \log(\sigma). i.e., we take the parameter as it is in the config and exponentiate it to enforce positivity
+                loss_weight = torch.exp(self.loss_params[loss_name]["weight"])
+
+            add_loss = loss_weight * loss_func(
                 keypoint_preds=predicted_us_keypoints,
                 heatmap_preds=unlabeled_predicted_heatmaps,
                 **self.loss_params[loss_name],
             )
             tot_loss += add_loss
+
+            if (
+                self.learn_weights == True
+            ):  # penalize for the magnitude of the weights: \log(\sigma_i) for each weight i
+                tot_loss += self.loss_params[loss_name][
+                    "weight"
+                ]  # recall that \log(\sigma_1 * \sigma_2 * ...) = \log(\sigma_1) + \log(\sigma_2) + ...
             # log individual unsupervised losses
             self.log(loss_name + "_loss", add_loss, prog_bar=True)
 
@@ -419,10 +428,11 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
 
         # log weights of losses (we do it always, but it is interesting only when self.learn_weights=True)
         # for each unsupervised loss we convert the "weight" in the config into a learnable parameter
+        # the quantity being logged is \sigma, where the weight is 1/ 2 *\sigma^2. Ideally, \sigma should decrease in training.
         for loss_name in self.loss_function_dict.keys():
             self.log(
                 "{}_{}".format(loss_name, "weight"),
-                self.loss_params[loss_name]["weight"],
+                torch.exp(self.loss_params[loss_name]["weight"]),
                 prog_bar=True,
             )
         return {"loss": tot_loss}
