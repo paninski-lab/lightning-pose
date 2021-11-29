@@ -117,12 +117,11 @@ def MultiviewPCALoss(
     # TODO: consider avoiding the transposes
     keypoint_preds = keypoint_preds.reshape(
         keypoint_preds.shape[0], -1, 2
-    ) #shape = (batch_size, num_keypoints, 2)
-    
+    )  # shape = (batch_size, num_keypoints, 2)
+
     keypoint_preds = format_multiview_data_for_pca(
-        data_arr=keypoint_preds,
-        mirrored_column_matches=mirrored_column_matches
-    ) #shape = (views * 2, num_batches * num_keypoints)
+        data_arr=keypoint_preds, mirrored_column_matches=mirrored_column_matches
+    )  # shape = (views * 2, num_batches * num_keypoints)
     abs_proj_discarded = torch.abs(
         torch.matmul(keypoint_preds.T, discarded_eigenvectors.T)
     )
@@ -135,10 +134,13 @@ def MultiviewPCALoss(
     assert torch.mean(epsilon_masked_proj) <= torch.mean(abs_proj_discarded)
     return torch.mean(epsilon_masked_proj)
 
+
 @typechecked
 def SingleviewPCALoss(
     keypoint_preds: TensorType["batch", "two_x_num_keypoints", float],
-    discarded_eigenvectors: TensorType["num_discarded_evecs", "two_x_num_keypoints", float],
+    discarded_eigenvectors: TensorType[
+        "num_discarded_evecs", "two_x_num_keypoints", float
+    ],
     epsilon: TensorType[float],
     **kwargs  # make loss robust to unneeded inputs
 ) -> TensorType[float]:
@@ -158,7 +160,7 @@ def SingleviewPCALoss(
         Projection of data onto discarded eigenvectors
 
     """
-    
+
     abs_proj_discarded = torch.abs(
         torch.matmul(keypoint_preds, discarded_eigenvectors.T)
     )
@@ -200,23 +202,27 @@ def TemporalLoss(
     loss = loss.masked_fill(mask=loss < epsilon, value=0.0)
     return torch.mean(loss)  # pixels
 
+
 @typechecked
 def UnimodalLoss(
     keypoint_preds: TensorType["batch", "two_x_num_keypoints"],
-    heatmap_preds: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+    heatmap_preds: TensorType[
+        "batch", "num_keypoints", "heatmap_height", "heatmap_width"
+    ],
     original_image_height: torch.Tensor,
     original_image_width: torch.Tensor,
     output_shape: tuple,
     **kwargs  # make loss robust to unneeded inputs
-)-> TensorType[(), float]:
+) -> TensorType[(), float]:
     keypoint_preds = keypoint_preds.reshape(keypoint_preds.shape[0], -1, 2)
-    ideal_heatmaps = generate_heatmaps( #this process doesn't compute gradients
+    ideal_heatmaps = generate_heatmaps(  # this process doesn't compute gradients
         keypoints=keypoint_preds,
         height=int(original_image_height),
         width=int(original_image_width),
-        output_shape=output_shape
+        output_shape=output_shape,
     )
     return MaskedMSEHeatmapLoss(ideal_heatmaps, heatmap_preds)
+
 
 @typechecked
 def filter_dict(mydict: Dict[str, Any], keys: List[str]) -> Dict[str, Any]:
@@ -255,14 +261,16 @@ def get_losses_dict(
         "pca_multiview": MultiviewPCALoss,
         "pca_singleview": SingleviewPCALoss,
         "temporal": TemporalLoss,
-        "unimodal": UnimodalLoss
+        "unimodal": UnimodalLoss,
     }
     return filter_dict(loss_dict, names_list)
 
 
 @typechecked
 def convert_dict_entries_to_tensors(
-    loss_params: dict, device: Union[str, torch.device]
+    loss_params: dict,
+    device: Union[str, torch.device],
+    to_parameters: bool = False,
 ) -> dict:
     """Set scalars in loss to torch tensors for use with unsupervised losses.
 
@@ -276,6 +284,7 @@ def convert_dict_entries_to_tensors(
     """
     for loss, params in loss_params.items():
         for key, val in params.items():
+            # TODO: can be made more concise? assign dtype beforehand
             if type(val) == float:
                 loss_params[loss][key] = torch.tensor(
                     val, dtype=torch.float, device=device
@@ -284,4 +293,29 @@ def convert_dict_entries_to_tensors(
                 loss_params[loss][key] = torch.tensor(
                     val, dtype=torch.int, device=device
                 )
+            if val is None:
+                loss_params[loss][key] = torch.tensor(
+                    0.0, dtype=torch.float, device=device
+                )
+
+            if to_parameters:
+                requires_grad = True if key == "weight" else False
+                loss_params[loss][key] = torch.nn.Parameter(
+                    data=loss_params[loss][key], requires_grad=requires_grad
+                )
     return loss_params
+
+
+@typechecked
+def convert_loss_dicts_to_torch_nn_modules(loss_params: dict) -> torch.nn.ModuleDict:
+    for loss, params in loss_params.items():  # loop over multiple different losses
+        # params is a dict which we convert to ParameterDict
+        loss_params[loss] = torch.nn.ParameterDict(params)
+        for key, val in params.items():  # loop over the entries of each loss
+            if (
+                key == "weight"
+            ):  # we take derivatives only w.r.t the weight infront of the loss
+                assert loss_params[loss][key].requires_grad == True
+            else:  # treat it as a static tensor
+                assert loss_params[loss][key].requires_grad == False
+    return torch.nn.ModuleDict(loss_params)
