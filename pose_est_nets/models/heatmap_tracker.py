@@ -11,6 +11,7 @@ from typing_extensions import Literal
 
 from pose_est_nets.losses.losses import (
     convert_dict_entries_to_tensors,
+    convert_loss_dicts_to_torch_nn_modules,
     get_losses_dict,
     MaskedMSEHeatmapLoss,
     MaskedRMSELoss,
@@ -121,14 +122,11 @@ class HeatmapTracker(BaseFeatureExtractor):
     def run_subpixelmaxima(
         self,
         heatmaps: TensorType[
-            "batch",
-            "num_keypoints",
-            "heatmap_height",
-            "heatmap_width",
-            float]
+            "batch", "num_keypoints", "heatmap_height", "heatmap_width", float
+        ],
     ) -> Tuple[
         TensorType["batch", "num_targets", float],
-        TensorType["batch", "num_keypoints", float]
+        TensorType["batch", "num_keypoints", float],
     ]:
         """Use soft argmax on heatmaps.
 
@@ -228,7 +226,7 @@ class HeatmapTracker(BaseFeatureExtractor):
     @typechecked
     def forward(
         self,
-        images: TensorType["batch", "channels":3, "image_height", "image_width", float]
+        images: TensorType["batch", "channels":3, "image_height", "image_width", float],
     ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width", float]:
         """Forward pass through the network.
 
@@ -309,6 +307,7 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             dict
         ] = None,  # optional so we can initialize a model without passing that in
         semi_super_losses_to_use: Optional[list] = None,
+        learn_weights: bool = True,  # whether to use multitask weight learning
     ):
         """
 
@@ -348,6 +347,26 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         print(semi_super_losses_to_use)
         self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
         self.loss_params = loss_params
+        self.learn_weights = learn_weights
+        self.loss_params = convert_dict_entries_to_tensors(
+            loss_params=self.loss_params,
+            device=self.device,
+            to_parameters=self.learn_weights,
+        )  # TODO: trying it out here rather than inside the training loop.
+        if (
+            self.learn_weights == True
+        ):  # for each unsupervised loss we convert the "weight" in the config into a learnable parameter
+            # TODO: should be in log format, right now it's raw
+            self.loss_params = convert_loss_dicts_to_torch_nn_modules(loss_params)
+            # previos attempt -- the parameter wasn't recognized
+            # for loss_name, _ in self.loss_function_dict.items():
+            #     init_val = torch.tensor(self.loss_params[loss_name]["weight"])
+            #     if init_val is None:
+            #         init_val = torch.tensor(0.0)
+            #     self.loss_params[loss_name]["weight"] = torch.nn.Parameter(
+            #         data=init_val, requires_grad=True
+            #     )
+            print(self.loss_params)  # TODO: remove
 
     @typechecked
     def training_step(
@@ -377,9 +396,10 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         # loop over unsupervised losses
         tot_loss = 0.0
         tot_loss += supervised_loss
-        self.loss_params = convert_dict_entries_to_tensors(
-            self.loss_params, self.device
-        )
+        # # TODO: checking what happens if I omit this
+        # self.loss_params = convert_dict_entries_to_tensors(
+        #     self.loss_params, self.device
+        # )
         for loss_name, loss_func in self.loss_function_dict.items():
             # Some losses use keypoint_preds, some use heatmap_preds, and some use both.
             # all have **kwargs so are robust to unneeded inputs."
@@ -397,4 +417,12 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         self.log("supervised_loss", supervised_loss, prog_bar=True)
         self.log("supervised_rmse", supervised_rmse, prog_bar=True)
 
+        # log weights of losses (we do it always, but it is interesting only when self.learn_weights=True)
+        # for each unsupervised loss we convert the "weight" in the config into a learnable parameter
+        for loss_name in self.loss_function_dict.keys():
+            self.log(
+                "{}_{}".format(loss_name, "weight"),
+                self.loss_params[loss_name]["weight"],
+                prog_bar=True,
+            )
         return {"loss": tot_loss}
