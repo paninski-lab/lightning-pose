@@ -33,7 +33,7 @@ unfreezing_epoch: 25
 dropout_rate: 0.1
 
 # min training epochs; training cannot terminate before. compare to unfreezing_epoch, check_val_every_n_epoch, early_stop_patience
-min_epochs: 40
+min_epochs: 80
 
 # max training epochs; training may exit before due to early stopping
 max_epochs: 300
