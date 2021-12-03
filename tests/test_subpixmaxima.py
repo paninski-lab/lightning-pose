@@ -12,7 +12,7 @@ import pytest
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def test_generate_keypoints():
+def test_generate_heatmaps():
     data_transform = [
         iaa.Resize({"height": 384, "width": 384})
     ]  # dlc dimensions need to be repeatably divisable by 2
@@ -57,7 +57,7 @@ def test_generate_keypoints():
     torch.cuda.empty_cache()  # remove tensors from gpu
 
 
-def test_generate_keypoints_weird_shape():
+def test_generate_heatmaps_weird_shape():
     OG_SHAPE = (384, 256)
     DOWNSAMPLE_FACTOR = 2
     output_shape = (
@@ -115,7 +115,7 @@ def test_generate_keypoints_weird_shape():
 # truth heatmaps in the heatmap dataset computed by the previous numpy function draw_
 # keypoints.
 # TODO: Change gt computation of heatmaps for heatmap dataset to use generate_heatmaps.
-def test_generate_keypoints_batched():
+def test_generate_heatmaps_batched():
     data_transform = [
         iaa.Resize({"height": 384, "width": 384})
     ]  # dlc dimensions need to be repeatably divisable by 2
@@ -135,6 +135,10 @@ def test_generate_keypoints_batched():
             width=384,
             output_shape=(96, 96)
         )
+        sums = torch.sum(heatmaps_torch, dim=(2,3))
+        print(sums)
+        ones = torch.ones(size=sums.shape, dtype=torch.int32)
+        assert(sums.eq(ones)).all() #testing if generated heatmaps are valid probability distributions
 
         # find soft argmax and confidence of ground truth heatmap
         softmaxes_gt = spatial_softmax2d(

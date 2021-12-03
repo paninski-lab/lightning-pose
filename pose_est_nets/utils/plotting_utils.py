@@ -293,11 +293,12 @@ def predict_frames(
     keypoints_np = np.zeros((n_frames_, model.num_keypoints * 2))
     confidence_np = np.zeros((n_frames_, model.num_keypoints))
     if save_heatmaps:
+        print(model.output_shape[0], model.output_shape[1])
         heatmaps_np = np.zeros((
             n_frames_, 
             model.num_keypoints, 
-            model.output_shape[0] // (2 ** model.downsample_factor),
-            model.output_shape[1] // (2 ** model.downsample_factor) 
+            model.output_shape[0], #// (2 ** model.downsample_factor),
+            model.output_shape[1] #// (2 ** model.downsample_factor) 
         ))
     else:
         heatmaps_np = None
@@ -336,6 +337,7 @@ def predict_frames(
                 # send to cpu
                 pred_keypoints = pred_keypoints.detach().cpu().numpy()
                 confidence = confidence.detach().cpu().numpy()
+                outputs = outputs.detach().cpu().numpy()
             else:
                 pred_keypoints = outputs.detach().cpu().numpy()
                 confidence = np.zeros((outputs.shape[0], outputs.shape[1] // 2))
@@ -467,7 +469,7 @@ def make_predictions(
     batch_size: int,  # regular batch_size for images or sequence_length for videos
     data_name: str = "dataset",
     save_folder: str = None
-) -> pd.DataFrame:
+) -> Tuple[pd.DataFrame, np.ndarray]:
     keypoints_np, confidence_np, heatmaps_np = predict_frames(
         cfg,
         model,
@@ -545,5 +547,5 @@ def predict_dataset(
         df.loc[val, "set"] = np.repeat(key, len(val))
 
     save_dframe(df, save_file)
-    if heatmaps_np:
+    if not(heatmaps_np is None):
         save_heatmaps(heatmaps_np, save_folder)
