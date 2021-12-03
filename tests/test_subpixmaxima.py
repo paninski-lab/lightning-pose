@@ -114,64 +114,64 @@ def test_generate_heatmaps_weird_shape():
 # tests the batched functionality of generate_heatmaps by comparing it to the ground
 # truth heatmaps in the heatmap dataset computed by the previous numpy function draw_
 # keypoints.
-# TODO: Change gt computation of heatmaps for heatmap dataset to use generate_heatmaps.
-def test_generate_heatmaps_batched():
-    data_transform = [
-        iaa.Resize({"height": 384, "width": 384})
-    ]  # dlc dimensions need to be repeatably divisable by 2
-    imgaug_transform = iaa.Sequential(data_transform)
-    dataset = HeatmapDataset(
-        root_directory="toy_datasets/toymouseRunningData",
-        csv_path="CollectedData_.csv",
-        header_rows=[1, 2],
-        imgaug_transform=imgaug_transform,
-    )
-    dl = DataLoader(dataset=dataset, batch_size=10)
-    for batch_dict in dl:
-        keypts_gt = batch_dict["keypoints"].reshape(-1, 17, 2)
-        heatmaps_torch = generate_heatmaps(
-            keypts_gt,
-            height=384,
-            width=384,
-            output_shape=(96, 96)
-        )
-        sums = torch.sum(heatmaps_torch, dim=(2,3))
-        print(sums)
-        ones = torch.ones(size=sums.shape, dtype=torch.int32)
-        assert(sums.eq(ones)).all() #testing if generated heatmaps are valid probability distributions
+# TODO: Test is outdated, we are now using generate_heatmaps to make the ground truth heatmaps
+# def test_generate_heatmaps_batched():
+#     data_transform = [
+#         iaa.Resize({"height": 384, "width": 384})
+#     ]  # dlc dimensions need to be repeatably divisable by 2
+#     imgaug_transform = iaa.Sequential(data_transform)
+#     dataset = HeatmapDataset(
+#         root_directory="toy_datasets/toymouseRunningData",
+#         csv_path="CollectedData_.csv",
+#         header_rows=[1, 2],
+#         imgaug_transform=imgaug_transform,
+#     )
+#     dl = DataLoader(dataset=dataset, batch_size=10)
+#     for batch_dict in dl:
+#         keypts_gt = batch_dict["keypoints"].reshape(-1, 17, 2)
+#         heatmaps_torch = generate_heatmaps(
+#             keypts_gt,
+#             height=384,
+#             width=384,
+#             output_shape=(96, 96)
+#         )
+#         sums = torch.sum(heatmaps_torch, dim=(2,3))
+#         print(sums)
+#         ones = torch.ones(size=sums.shape, dtype=torch.int32)
+#         assert(sums.eq(ones)).all() #testing if generated heatmaps are valid probability distributions
 
-        # find soft argmax and confidence of ground truth heatmap
-        softmaxes_gt = spatial_softmax2d(
-            batch_dict["heatmaps"].to(_TORCH_DEVICE),
-            temperature=torch.tensor(100).to(_TORCH_DEVICE))
-        preds_gt = spatial_expectation2d(
-            softmaxes_gt,
-            normalized_coordinates=False
-        )
-        confidences_gt = torch.amax(softmaxes_gt, dim=(2, 3))
+#         # find soft argmax and confidence of ground truth heatmap
+#         softmaxes_gt = spatial_softmax2d(
+#             batch_dict["heatmaps"].to(_TORCH_DEVICE),
+#             temperature=torch.tensor(100).to(_TORCH_DEVICE))
+#         preds_gt = spatial_expectation2d(
+#             softmaxes_gt,
+#             normalized_coordinates=False
+#         )
+#         confidences_gt = torch.amax(softmaxes_gt, dim=(2, 3))
 
-        # find soft argmax and confidence of generated heatmap
-        softmaxes_torch = spatial_softmax2d(
-            heatmaps_torch.to(_TORCH_DEVICE),
-            temperature=torch.tensor(100).to(_TORCH_DEVICE))
-        preds_torch = spatial_expectation2d(
-            softmaxes_torch,
-            normalized_coordinates=False
-        )
-        confidences_torch = torch.amax(softmaxes_torch, dim=(2, 3))
+#         # find soft argmax and confidence of generated heatmap
+#         softmaxes_torch = spatial_softmax2d(
+#             heatmaps_torch.to(_TORCH_DEVICE),
+#             temperature=torch.tensor(100).to(_TORCH_DEVICE))
+#         preds_torch = spatial_expectation2d(
+#             softmaxes_torch,
+#             normalized_coordinates=False
+#         )
+#         confidences_torch = torch.amax(softmaxes_torch, dim=(2, 3))
 
-        # og_maxima, gt_confidence = SubPixMax.run(heatmap_gt.to(_TORCH_DEVICE))
-        # torch_maxima, confidence_t = SubPixMax.run(heatmap_torch.to(_TORCH_DEVICE))
-        print(preds_gt[-1])
-        print(preds_torch[-1])
-        assert torch.allclose(preds_gt, preds_torch)
+#         # og_maxima, gt_confidence = SubPixMax.run(heatmap_gt.to(_TORCH_DEVICE))
+#         # torch_maxima, confidence_t = SubPixMax.run(heatmap_torch.to(_TORCH_DEVICE))
+#         print(preds_gt[-1])
+#         print(preds_torch[-1])
+#         assert torch.allclose(preds_gt, preds_torch)
 
-        loss = MaskedMSEHeatmapLoss(batch_dict["heatmaps"], heatmaps_torch)
-        assert loss < 1e-6
+#         loss = MaskedMSEHeatmapLoss(batch_dict["heatmaps"], heatmaps_torch)
+#         assert loss < 1e-6
 
-    # remove model/data from gpu; then cache can be cleared
-    del batch_dict
-    del keypts_gt
-    del softmaxes_gt, preds_gt, confidences_gt
-    del softmaxes_torch, preds_torch, confidences_torch
-    torch.cuda.empty_cache()  # remove tensors from gpu
+#     # remove model/data from gpu; then cache can be cleared
+#     del batch_dict
+#     del keypts_gt
+#     del softmaxes_gt, preds_gt, confidences_gt
+#     del softmaxes_torch, preds_torch, confidences_torch
+#     torch.cuda.empty_cache()  # remove tensors from gpu
