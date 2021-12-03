@@ -154,7 +154,7 @@ def verify_absolute_path(possibly_relative_path: str) -> str:
         cwd_split = os.getcwd().split(os.path.sep)
         desired_path_list = cwd_split[:-3]
         abs_path = os.path.join(os.path.sep, *desired_path_list, possibly_relative_path)
-    assert os.path.exists(abs_path)
+    assert os.path.exists(abs_path) #what about if it is a directory?
     return abs_path
 
 
