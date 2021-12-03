@@ -76,4 +76,6 @@ def generate_heatmaps(
         )
     zero_heatmap = torch.zeros((out_height, out_width), device=keypoints.device)
     confidence[nan_idxes] = zero_heatmap
+    # uniform_heatmap = torch.ones((out_height, out_width), device=keypoints.device) / (out_height * out_width)
+    # confidence[nan_idxes] = uniform_heatmap
     return confidence

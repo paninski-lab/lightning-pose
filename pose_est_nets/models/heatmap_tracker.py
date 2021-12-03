@@ -102,6 +102,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         self.supervised_loss = supervised_loss
         self.confidence_scale = torch.tensor(confidence_scale, device=self.device)
         self.threshold = threshold
+        self.softmax = nn.Softmax(dim=2)
         self.temperature = torch.tensor(100, device=self.device)  # soft argmax temp
         self.torch_seed = torch_seed
         # Necessary so we don't have to pass in model arguments when loading
@@ -244,6 +245,13 @@ class HeatmapTracker(BaseFeatureExtractor):
         """
         representations = self.get_representations(images)
         heatmaps = self.heatmaps_from_representations(representations)
+        # B = heatmaps.shape[0]
+        # valid_probability_heatmaps = self.softmax(
+        #     heatmaps.reshape(B, self.num_keypoints, -1)
+        # )
+        # valid_probability_heatmaps = valid_probability_heatmaps.reshape(
+        #     B, self.num_keypoints, self.output_shape[0], self.output_shape[1]
+        # )
         return heatmaps
 
     @typechecked
