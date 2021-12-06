@@ -3,7 +3,7 @@ from kornia.geometry.transform import pyrup
 
 from pose_est_nets.datasets.datasets import HeatmapDataset
 from pose_est_nets.utils.dataset_utils import draw_keypoints, generate_heatmaps
-from pose_est_nets.losses.losses import MaskedMSEHeatmapLoss
+from pose_est_nets.losses.losses import MaskedHeatmapLoss
 import imgaug.augmenters as iaa
 import torch
 from torch.utils.data import DataLoader
@@ -166,7 +166,7 @@ def test_generate_heatmaps_weird_shape():
 #         print(preds_torch[-1])
 #         assert torch.allclose(preds_gt, preds_torch)
 
-#         loss = MaskedMSEHeatmapLoss(batch_dict["heatmaps"], heatmaps_torch)
+#         loss = MaskedHeatmapLoss(batch_dict["heatmaps"], heatmaps_torch)
 #         assert loss < 1e-6
 
 #     # remove model/data from gpu; then cache can be cleared

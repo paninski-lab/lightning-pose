@@ -10,7 +10,7 @@ from typing import Callable, Literal, List, Optional, Tuple, Union, TypedDict
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 
-from pose_est_nets.utils.dataset_utils import draw_keypoints, generate_heatmaps
+from pose_est_nets.utils.dataset_utils import generate_heatmaps
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -255,23 +255,13 @@ class HeatmapDataset(BaseTrackingDataset):
         potentially downsampled heatmaps e.g., (96, 96)
 
         """
-        #label_heatmaps = []
+
         label_heatmaps = torch.empty(
             size=(len(self.image_names), self.num_keypoints, *self.output_shape)
         )
         for idx in range(len(self.image_names)):
             example_dict: BaseExampleDict = super().__getitem__(idx)
             # super().__getitem__ returns flat keypoints, reshape to
-            # (num_keypoints, 2)
-            # y_heatmap = draw_keypoints(
-            #     example_dict["keypoints"].numpy().reshape(self.num_keypoints, 2),
-            #     example_dict["images"].shape[-2],
-            #     example_dict["images"].shape[-1],
-            #     self.output_shape,
-            #     sigma=self.output_sigma,
-            # )
-            # assert y_heatmap.shape == (*self.output_shape, self.num_keypoints)
-            # label_heatmaps.append(y_heatmap)
             
             y_heatmap = generate_heatmaps(
                 example_dict["keypoints"].reshape(1, self.num_keypoints, 2), #add batch dim
@@ -286,9 +276,6 @@ class HeatmapDataset(BaseTrackingDataset):
         
         self.label_heatmaps = label_heatmaps
         
-        # self.label_heatmaps = torch.from_numpy(np.asarray(label_heatmaps)).float()
-        # self.label_heatmaps = self.label_heatmaps.permute(0, 3, 1, 2)
-
         print(self.label_heatmaps.shape)
 
     @typechecked
