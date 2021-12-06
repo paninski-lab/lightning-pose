@@ -234,4 +234,4 @@ def train(cfg: DictConfig):
 
 
 if __name__ == "__main__":
-    train()  # I think you get issues when you try to get return values from a hydra function
+    train()

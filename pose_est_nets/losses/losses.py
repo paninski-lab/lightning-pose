@@ -63,11 +63,12 @@ def MaskedRMSELoss(
 
 
 @typechecked
-def MaskedMSEHeatmapLoss(
+def MaskedHeatmapLoss(
     y: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
     y_hat: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+    loss_type: str = "mse"
 ) -> TensorType[()]:
-    """Computes MSE loss between ground truth heatmap and predicted heatmap.
+    """Computes heatmap (MSE or Wasserstein) loss between ground truth heatmap and predicted heatmap.
 
     Args:
         y: ground truth heatmaps
@@ -84,21 +85,28 @@ def MaskedMSEHeatmapLoss(
     non_zeros = ~torch.eq(max_vals, zeros)
     mask = torch.reshape(non_zeros, [non_zeros.shape[0], non_zeros.shape[1], 1, 1])
     # compute loss
-    loss = F.mse_loss(torch.masked_select(y_hat, mask), torch.masked_select(y, mask))
+    if loss_type == "mse":
+        loss = F.mse_loss(torch.masked_select(y_hat, mask), torch.masked_select(y, mask))
+    elif loss_type == "wasserstein":
+        wass_loss = SamplesLoss(loss="sinkhorn") #maybe could speed up by creating this outside of the function
+        loss = wass_loss(torch.masked_select(y_hat, mask).unsqueeze(0), torch.masked_select(y, mask).unsqueeze(0))
+    else:
+        NotImplementedError("Currently only mse and wasserstein are supported")
+
     return loss
 
-@typechecked
-def MaskedWassersteinLoss(
-    y: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
-    y_hat: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
-) -> TensorType[()]:
-    max_vals = torch.amax(y, dim=(2, 3))
-    zeros = torch.zeros(size=(y.shape[0], y.shape[1]), device=y_hat.device)
-    non_zeros = ~torch.eq(max_vals, zeros)
-    mask = torch.reshape(non_zeros, [non_zeros.shape[0], non_zeros.shape[1], 1, 1])
-    wass_loss = SamplesLoss(loss="sinkhorn")
-    loss = wass_loss(torch.masked_select(y_hat, mask).unsqueeze(0), torch.masked_select(y, mask).unsqueeze(0))
-    return loss
+# @typechecked
+# def MaskedWassersteinLoss(
+#     y: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+#     y_hat: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+# ) -> TensorType[()]:
+#     max_vals = torch.amax(y, dim=(2, 3))
+#     zeros = torch.zeros(size=(y.shape[0], y.shape[1]), device=y_hat.device)
+#     non_zeros = ~torch.eq(max_vals, zeros)
+#     mask = torch.reshape(non_zeros, [non_zeros.shape[0], non_zeros.shape[1], 1, 1])
+#     wass_loss = SamplesLoss(loss="sinkhorn")
+#     loss = wass_loss(torch.masked_select(y_hat, mask).unsqueeze(0), torch.masked_select(y, mask).unsqueeze(0))
+#     return loss
 
 
 
@@ -231,7 +239,7 @@ def UnimodalLoss(
         width=int(original_image_width),
         output_shape=output_shape
     )
-    return MaskedMSEHeatmapLoss(ideal_heatmaps, heatmap_preds) 
+    return MaskedHeatmapLoss(ideal_heatmaps, heatmap_preds) 
     #want to use wasserstein here if heatmap_model.supervised_loss == "wasserstein"
 
 @typechecked
@@ -267,7 +275,7 @@ def get_losses_dict(
     """
     loss_dict = {
         "regression": MaskedRegressionMSELoss,
-        "heatmap": MaskedMSEHeatmapLoss,
+        "heatmap": MaskedHeatmapLoss,
         "pca_multiview": MultiviewPCALoss,
         "pca_singleview": SingleviewPCALoss,
         "temporal": TemporalLoss,

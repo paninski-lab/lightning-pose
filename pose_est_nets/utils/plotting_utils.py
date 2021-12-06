@@ -314,25 +314,6 @@ def predict_frames(
                 image = batch  # predicting from video
             outputs = model.forward(image)
             if cfg.model.model_type == "heatmap":
-                # if type(batch) == dict and save_heatmaps: #only predicting heatmaps for dataset for now
-                    #plt.imshow(batch["images"][0][kpt_plt_idx].numpy())
-                    #print(batch["images"].shape)
-                    # plt.imsave(
-                    #     save_folder + "image_batch_" + str(n) + "_kpt_" + str(kpt_plt_idx) + ".png",
-                    #     batch["images"][0][0].numpy()
-                    # )
-                    #full_heatmap = outputs[0][kpt_plt_idx].unsqueeze(0).unsqueeze(0)
-                    # for i in range(model.downsample_factor):
-                    #     full_heatmap = pyrup(full_heatmap)
-                    #plt.imshow(full_heatmap.numpy())
-                    # plt.imsave(
-                    #     save_folder + "heatmap_batch_" + str(n) + "_kpt_" + str(kpt_plt_idx) + ".png",
-                    #     full_heatmap[0][0].cpu().numpy()
-                    # )
-                    # plt.clf()
-                    # kpt_plt_idx += 1
-                    # if kpt_plt_idx == outputs.shape[1]: #starts plotting from the first keypoint if it reaches the last
-                    #     kpt_plt_idx = 0
                 pred_keypoints, confidence = model.run_subpixelmaxima(outputs)
                 # send to cpu
                 pred_keypoints = pred_keypoints.detach().cpu().numpy()
