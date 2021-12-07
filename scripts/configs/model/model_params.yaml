@@ -1,7 +1,7 @@
 # list of unsupervised losses: "pca" | "temporal", default: null. if null, assume a model is supervised.
 losses_to_use: ["temporal"]
 
-supervised_loss: "mse"
+heatmap_loss_type: "mse" # which heatmap loss to use: "mse" | "wasserstein"
 
 # resnet version for backbone: 18 | 34 | 50 | 101 | 152
 resnet_version: 50
