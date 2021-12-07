@@ -283,7 +283,6 @@ def predict_frames(
     n_frames_: int,  # total number of frames in the dataset or video
     batch_size: int,  # regular batch_size for images or sequence_length for videos
     data_name: str = "dataset",
-    #save_heatmaps: bool = False,  # TODO: save heatmaps to hdf5 file.
     save_folder = None
 ):
     if not save_folder or cfg.model.model_type != "heatmap" :
@@ -293,7 +292,6 @@ def predict_frames(
     keypoints_np = np.zeros((n_frames_, model.num_keypoints * 2))
     confidence_np = np.zeros((n_frames_, model.num_keypoints))
     if save_heatmaps:
-        print(model.output_shape[0], model.output_shape[1])
         heatmaps_np = np.zeros((
             n_frames_, 
             model.num_keypoints, 
@@ -355,7 +353,7 @@ def predict_frames(
             print(
                 "inference speed: %1.2f fr/sec" % ((n * batch_size) / (t_end - t_beg))
             )
-            # for a regression network, confidence_np will be all zeros
+            # for a regression network, confidence_np will be all zeros, and heatmaps_np will be None
             return keypoints_np, confidence_np, heatmaps_np
 
 
@@ -458,7 +456,6 @@ def make_predictions(
         n_frames_,
         batch_size,
         data_name,
-        #save_heatmaps,
         save_folder
     )
     # unify keypoints and confidences into one numpy array, scale (x,y) coords by resizing factor
