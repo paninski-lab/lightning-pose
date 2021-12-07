@@ -448,7 +448,7 @@ def make_predictions(
     batch_size: int,  # regular batch_size for images or sequence_length for videos
     data_name: str = "dataset",
     save_folder: str = None
-) -> Tuple[pd.DataFrame, np.ndarray]:
+) -> Tuple[pd.DataFrame, Union[np.ndarray, None]]:
     keypoints_np, confidence_np, heatmaps_np = predict_frames(
         cfg,
         model,
