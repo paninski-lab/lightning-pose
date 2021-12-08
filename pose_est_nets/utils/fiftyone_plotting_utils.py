@@ -12,6 +12,7 @@ from tqdm import tqdm
 from typing import Union, Callable
 import pandas as pd
 import fiftyone.core.metadata as fom
+import h5py
 
 
 def tensor_to_keypoint_list(keypoint_tensor, height, width):
@@ -30,10 +31,89 @@ def tensor_to_keypoint_list(keypoint_tensor, height, width):
         # loading a sample image in dataset.py or something
     return img_kpts_list
 
-#TODO: write version of this function that just takes in csv files of predictions 
-#and h5 files of heatmaps and plots on fiftyone
-#note that the csv file needs to contain the image paths so that they can be added
-#to the fiftyone dataset
+def make_dataset_and_viz_from_csvs(cfg: DictConfig):
+    assert(len(cfg.eval.model_display_names) == len(cfg.eval.hydra_paths))
+    header_rows = OmegaConf.to_object(cfg.data.header_rows)
+    csv_data = pd.read_csv(
+        os.path.join(cfg.data.data_dir, cfg.data.csv_file), header=header_rows
+    )
+    image_names = list(csv_data.iloc[:, 0])
+    num_kpts = cfg.data.num_targets//2
+    gt_keypoints = csv_data.iloc[:, 1:].to_numpy()
+    gt_keypoints = gt_keypoints.reshape(-1, num_kpts, 2)
+    model_directory_paths = cfg.eval.hydra_paths
+    data_pt_tags = list(pd.read_csv(model_directory_paths[0] + "predictions.csv", header=header_rows).iloc[:, -1])
+    model_preds_np = np.empty(
+        shape=(len(model_directory_paths), len(image_names), num_kpts, 3)
+    )
+    heatmap_height = cfg.data.image_resize_dims.height // (2 ** cfg.data.downsample_factor)
+    heatmap_width = cfg.data.image_resize_dims.width // (2 ** cfg.data.downsample_factor)
+    model_heatmaps_np = np.empty(
+        shape=(len(model_directory_paths), len(image_names), num_kpts, heatmap_height, heatmap_width)
+    )
+
+    #assuming these are absolute paths for now, might change this later
+    for model_idx, model_dir in enumerate(model_directory_paths):
+        pred_csv_path = model_dir + "predictions.csv"
+        pred_heatmap_path = model_dir + "heatmaps_and_images/heatmaps.h5"
+        model_csv = pd.read_csv(
+            pred_csv_path, header=header_rows
+        )  # load ground-truth data csv
+        keypoints_np = model_csv.iloc[:, 1:-1].to_numpy()
+        keypoints_np = keypoints_np.reshape(-1, num_kpts, 3) #x, y, confidence
+        model_h5 = h5py.File(pred_heatmap_path, 'r')
+        heatmaps = model_h5.get("heatmaps")
+        heatmaps_np = np.array(heatmaps)
+        model_preds_np[model_idx] = keypoints_np
+        model_heatmaps_np[model_idx] = heatmaps_np
+
+    samples = []
+    keypoint_idx = 0 #index of keypoint to visualize heatmap for
+    for img_idx, img_name in enumerate(tqdm(image_names)):
+        gt_kpts_list = tensor_to_keypoint_list(
+            gt_keypoints[img_idx],
+            cfg.data.image_orig_dims.height,
+            cfg.data.image_orig_dims.width
+        )
+        img_path = os.path.join(cfg.data.data_dir, img_name)
+        assert os.path.isfile(img_path)
+        tag = data_pt_tags[img_idx]
+        if tag == 0.0:
+            tag = "train-not_used"
+        sample = fo.Sample(filepath=img_path, tags=[tag])
+        sample["ground_truth"] = fo.Keypoints(
+            keypoints=[fo.Keypoint(points=gt_kpts_list)]
+        )
+        for model_idx, model_name in enumerate(cfg.eval.model_display_names):
+            model_kpts_list = tensor_to_keypoint_list(
+                model_preds_np[model_idx][img_idx],
+                cfg.data.image_orig_dims.height,
+                cfg.data.image_orig_dims.width
+            )
+            sample[model_name + "_prediction"] = fo.Keypoints(
+                keypoints=[fo.Keypoint(points=model_kpts_list)]
+            )
+            model_heatmap = model_heatmaps_np[model_idx][img_idx][keypoint_idx]
+            sample[model_name + "_heatmap_"] = fo.Heatmap(map=model_heatmap)
+        samples.append(sample)
+        keypoint_idx += 1
+        if keypoint_idx == num_kpts:
+            keypoint_idx = 0
+    full_dataset = fo.Dataset(cfg.eval.fifty_one_dataset_name)
+    full_dataset.add_samples(samples)
+
+    try:
+        full_dataset.compute_metadata(skip_failures=False)
+    except ValueError:
+        print(full_dataset.exists("metadata", False))
+        print(
+            "the above print should indicate bad image samples, e.g., with bad paths."
+        )
+
+    session = fo.launch_app(full_dataset, remote=True)
+    session.wait()
+    return
+   
 def make_dataset_and_evaluate(cfg: DictConfig, datamod: Callable, best_models: dict):
     reverse_transform = []
     reverse_transform.append(

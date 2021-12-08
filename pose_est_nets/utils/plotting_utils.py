@@ -2,6 +2,7 @@ from posixpath import join
 import imgaug.augmenters as iaa
 import numpy as np
 import pandas as pd
+import h5py
 import torch
 from pose_est_nets.utils.io import (
     check_if_semi_supervised,
@@ -256,10 +257,9 @@ def predict_videos(
             auto_reset=False,
             reader_name="reader",
         )
-
         # iterate through video
         n_frames_ = count_frames(video_file)  # total frames in video
-        df = make_predictions(
+        df, heatmaps_np = make_predictions(
             cfg=cfg,
             model=model,
             dataloader=predict_loader,
@@ -283,13 +283,27 @@ def predict_frames(
     n_frames_: int,  # total number of frames in the dataset or video
     batch_size: int,  # regular batch_size for images or sequence_length for videos
     data_name: str = "dataset",
-    save_heatmaps: bool = False,  # TODO: save heatmaps to hdf5 file.
+    save_folder = None
 ):
+    if not save_folder or cfg.model.model_type != "heatmap" :
+        save_heatmaps = False
+    else:
+        save_heatmaps = True
     keypoints_np = np.zeros((n_frames_, model.num_keypoints * 2))
     confidence_np = np.zeros((n_frames_, model.num_keypoints))
+    if save_heatmaps:
+        heatmaps_np = np.zeros((
+            n_frames_, 
+            model.num_keypoints, 
+            model.output_shape[0], #// (2 ** model.downsample_factor),
+            model.output_shape[1] #// (2 ** model.downsample_factor) 
+        ))
+    else:
+        heatmaps_np = None
     t_beg = time.time()
     n_frames_counter = 0  # total frames processed
     n = -1
+    #kpt_plt_idx = 0
     with torch.no_grad():
         for n, batch in enumerate(tqdm(dataloader)):
             if type(batch) == dict:
@@ -298,11 +312,11 @@ def predict_frames(
                 image = batch  # predicting from video
             outputs = model.forward(image)
             if cfg.model.model_type == "heatmap":
-
                 pred_keypoints, confidence = model.run_subpixelmaxima(outputs)
                 # send to cpu
                 pred_keypoints = pred_keypoints.detach().cpu().numpy()
                 confidence = confidence.detach().cpu().numpy()
+                outputs = outputs.detach().cpu().numpy()
             else:
                 pred_keypoints = outputs.detach().cpu().numpy()
                 confidence = np.zeros((outputs.shape[0], outputs.shape[1] // 2))
@@ -312,6 +326,8 @@ def predict_frames(
                 final_batch_size = n_frames_ - n_frames_counter
                 keypoints_np[n_frames_counter:] = pred_keypoints[:final_batch_size]
                 confidence_np[n_frames_counter:] = confidence[:final_batch_size]
+                if save_heatmaps:
+                    heatmaps_np[n_frames_counter:] = outputs[:final_batch_size]
                 n_frames_curr = final_batch_size
             else:  # at every sequence except the final
                 keypoints_np[
@@ -320,6 +336,11 @@ def predict_frames(
                 confidence_np[
                     n_frames_counter : n_frames_counter + n_frames_curr
                 ] = confidence
+                if save_heatmaps:
+                    heatmaps_np[
+                        n_frames_counter : n_frames_counter + n_frames_curr
+                    ] = outputs
+
 
             n_frames_counter += n_frames_curr
         t_end = time.time()
@@ -332,8 +353,8 @@ def predict_frames(
             print(
                 "inference speed: %1.2f fr/sec" % ((n * batch_size) / (t_end - t_beg))
             )
-            # for a regression network, confidence_np will be all zeros
-            return keypoints_np, confidence_np
+            # for a regression network, confidence_np will be all zeros, and heatmaps_np will be None
+            return keypoints_np, confidence_np, heatmaps_np
 
 
 @typechecked
@@ -412,6 +433,11 @@ def save_dframe(df: pd.DataFrame, save_file: str) -> None:
     else:
         raise NotImplementedError("Currently only .csv and .h5 files are supported")
 
+def save_heatmaps(heatmaps_np: np.ndarray, save_folder: str) -> None:
+    hf = h5py.File(save_folder + 'heatmaps.h5', 'w')
+    hf.create_dataset('heatmaps', data=heatmaps_np)
+    hf.close()
+
 
 @typechecked
 def make_predictions(
@@ -421,16 +447,16 @@ def make_predictions(
     n_frames_: int,  # total number of frames in the dataset or video
     batch_size: int,  # regular batch_size for images or sequence_length for videos
     data_name: str = "dataset",
-    save_heatmaps: bool = False,
-) -> pd.DataFrame:
-    keypoints_np, confidence_np = predict_frames(
+    save_folder: str = None
+) -> Tuple[pd.DataFrame, Union[np.ndarray, None]]:
+    keypoints_np, confidence_np, heatmaps_np = predict_frames(
         cfg,
         model,
         dataloader,
         n_frames_,
         batch_size,
         data_name,
-        save_heatmaps,
+        save_folder
     )
     # unify keypoints and confidences into one numpy array, scale (x,y) coords by resizing factor
     predictions = make_pred_arr_undo_resize(cfg, keypoints_np, confidence_np)
@@ -445,7 +471,7 @@ def make_predictions(
     # build dataframe from the hierarchal index and predictions array
     df = pd.DataFrame(predictions, columns=pd_index)
 
-    return df
+    return df, heatmaps_np
 
 
 def predict_dataset(
@@ -479,12 +505,17 @@ def predict_dataset(
         save_file = (
             hydra_output_directory + "/predictions.csv"
         )  # default for now, should be saved to the model directory
-    df = make_predictions(
+    save_folder = hydra_output_directory + "/heatmaps_and_images/"
+    if not (os.path.isdir(save_folder)):
+        os.mkdir(save_folder)
+
+    df, heatmaps_np = make_predictions(
         cfg=cfg,
         model=model,
         dataloader=full_dataloader,
         n_frames_=num_datapoints,
         batch_size=datamod.test_batch_size,
+        save_folder=save_folder
     )
 
     # add train/test/val column
@@ -494,3 +525,5 @@ def predict_dataset(
         df.loc[val, "set"] = np.repeat(key, len(val))
 
     save_dframe(df, save_file)
+    if not(heatmaps_np is None):
+        save_heatmaps(heatmaps_np, save_folder)

@@ -12,7 +12,7 @@ from typing_extensions import Literal
 from pose_est_nets.losses.losses import (
     convert_dict_entries_to_tensors,
     get_losses_dict,
-    MaskedMSEHeatmapLoss,
+    MaskedHeatmapLoss,
     MaskedRMSELoss,
 )
 from pose_est_nets.models.base_resnet import BaseFeatureExtractor
@@ -57,6 +57,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         output_shape: Optional[tuple] = None,  # change
         output_sigma: float = 1.25,  # check value
         upsample_factor: int = 100,
+        supervised_loss: str = "mse",
         confidence_scale: float = 1.0,
         threshold: Optional[float] = None,
         torch_seed: int = 123,
@@ -97,8 +98,10 @@ class HeatmapTracker(BaseFeatureExtractor):
         self.output_shape = output_shape
         self.output_sigma = torch.tensor(output_sigma, device=self.device)
         self.upsample_factor = torch.tensor(upsample_factor, device=self.device)
+        self.supervised_loss = supervised_loss
         self.confidence_scale = torch.tensor(confidence_scale, device=self.device)
         self.threshold = threshold
+        self.softmax = nn.Softmax(dim=2)
         self.temperature = torch.tensor(100, device=self.device)  # soft argmax temp
         self.torch_seed = torch_seed
         # Necessary so we don't have to pass in model arguments when loading
@@ -241,6 +244,13 @@ class HeatmapTracker(BaseFeatureExtractor):
         """
         representations = self.get_representations(images)
         heatmaps = self.heatmaps_from_representations(representations)
+        # B = heatmaps.shape[0]
+        # valid_probability_heatmaps = self.softmax(
+        #     heatmaps.reshape(B, self.num_keypoints, -1)
+        # )
+        # valid_probability_heatmaps = valid_probability_heatmaps.reshape(
+        #     B, self.num_keypoints, self.output_shape[0], self.output_shape[1]
+        # )
         return heatmaps
 
     @typechecked
@@ -252,8 +262,13 @@ class HeatmapTracker(BaseFeatureExtractor):
             predicted_heatmaps
         )  # heatmaps -> keypoints
 
-        # compute loss
-        heatmap_loss = MaskedMSEHeatmapLoss(batch_dict["heatmaps"], predicted_heatmaps)
+        # compute loss   
+        heatmap_loss = MaskedHeatmapLoss(
+            batch_dict["heatmaps"], 
+            predicted_heatmaps, 
+            self.supervised_loss
+        )
+        
         supervised_rmse = MaskedRMSELoss(batch_dict["keypoints"], predicted_keypoints)
 
         # log training loss + rmse
@@ -272,7 +287,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         predicted_keypoints, confidence = self.run_subpixelmaxima(
             predicted_heatmaps
         )  # heatmaps -> keypoints
-        loss = MaskedMSEHeatmapLoss(batch_dict["heatmaps"], predicted_heatmaps)
+        loss = MaskedHeatmapLoss(batch_dict["heatmaps"], predicted_heatmaps, self.supervised_loss)
         supervised_rmse = MaskedRMSELoss(batch_dict["keypoints"], predicted_keypoints)
         if stage:
             self.log(f"{stage}_loss", loss, prog_bar=True, logger=True)
@@ -302,6 +317,7 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         output_shape: Optional[tuple] = None,  # change
         output_sigma: float = 1.25,  # check value,
         upsample_factor: int = 100,
+        supervised_loss: str = "mse",
         confidence_scale: float = 1.0,
         threshold: Optional[float] = None,
         torch_seed: int = 123,
@@ -341,6 +357,7 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             output_shape=output_shape,
             output_sigma=output_sigma,
             upsample_factor=upsample_factor,
+            supervised_loss=supervised_loss,
             confidence_scale=confidence_scale,
             threshold=threshold,
             torch_seed=torch_seed,
@@ -361,9 +378,10 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         )  # heatmaps -> keypoints
 
         # compute loss labeled
-        supervised_loss = MaskedMSEHeatmapLoss(
-            data_batch["labeled"]["heatmaps"], predicted_heatmaps
+        supervised_loss = MaskedHeatmapLoss(
+            data_batch["labeled"]["heatmaps"], predicted_heatmaps, self.supervised_loss
         )
+
         supervised_rmse = MaskedRMSELoss(
             data_batch["labeled"]["keypoints"], predicted_keypoints
         )

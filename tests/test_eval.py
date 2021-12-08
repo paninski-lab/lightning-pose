@@ -50,7 +50,7 @@ trainer = pl.Trainer(
         callbacks=[ckpt_callback]
 )  
 
-model = HeatmapTracker(num_targets=34)
+model = HeatmapTracker(num_targets=34, output_shape=heatmap_data.output_shape)
 trainer.fit(model=model, datamodule=heatmap_module)
 model_ckpt = hydra_output_directory + "/last.ckpt"
 
