@@ -8,6 +8,7 @@ from pose_est_nets.utils.io import (
     check_if_semi_supervised,
     set_or_open_folder,
     get_latest_version,
+    format_and_update_loss_info
 )
 from pose_est_nets.datasets.dali import LightningWrapper
 from pose_est_nets.models.heatmap_tracker import (
@@ -92,10 +93,11 @@ def load_model_from_checkpoint(cfg: DictConfig, ckpt_file: str, eval: bool = Fal
     )
     # initialize a model instance, with weights loaded from .ckpt file
     if semi_supervised:
+        loss_param_dict, losses_to_use = format_and_update_loss_info(cfg)
         model = ModelClass.load_from_checkpoint(
             ckpt_file,
-            semi_super_losses_to_use=OmegaConf.to_object(cfg.model.losses_to_use),
-            loss_params=OmegaConf.to_object(cfg.losses),
+            semi_super_losses_to_use=losses_to_use,
+            loss_params=loss_param_dict,
         )
     else:
         model = ModelClass.load_from_checkpoint(ckpt_file)

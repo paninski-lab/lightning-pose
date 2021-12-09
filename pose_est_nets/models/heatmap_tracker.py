@@ -11,7 +11,7 @@ from typing_extensions import Literal
 
 from pose_est_nets.losses.losses import (
     convert_dict_entries_to_tensors,
-    convert_loss_dicts_to_torch_nn_modules,
+    convert_loss_tensors_to_torch_nn_modules,
     get_losses_dict,
     MaskedHeatmapLoss,
     MaskedRMSELoss,
@@ -364,7 +364,7 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         print(semi_super_losses_to_use)
         self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
         self.learn_weights = learn_weights
-        self.loss_params = convert_dict_entries_to_tensors(
+        self.loss_params_tensor, self.loss_params_dict = convert_dict_entries_to_tensors(
             loss_params=loss_params,
             device=self.device,
             losses_to_use=semi_super_losses_to_use,
@@ -373,8 +373,8 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         if (
             self.learn_weights == True
         ):  # for each unsupervised loss we convert the "log_weight" in the config into a learnable parameter
-            self.loss_params = convert_loss_dicts_to_torch_nn_modules(self.loss_params)
-            print(self.loss_params)  # TODO: remove
+            self.loss_params_tensor = convert_loss_tensors_to_torch_nn_modules(self.loss_params_tensor)
+            print(self.loss_params_tensor)  # TODO: remove
 
     @typechecked
     def training_step(
@@ -415,16 +415,17 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             unsupervised_loss = loss_func(
                 keypoint_preds=predicted_us_keypoints,
                 heatmap_preds=unlabeled_predicted_heatmaps,
-                **self.loss_params[loss_name],
+                **self.loss_params_tensor[loss_name],
+                **self.loss_params_dict[loss_name]
             )
             if (
                 self.learn_weights == True
             ):  # weight = 1 / 2 * \sigma^{2} where our trainable parameter is \log(\sigma)
                 loss_weight = 1.0 / (
-                    2.0 * torch.exp(self.loss_params[loss_name]["log_weight"])
+                    2.0 * torch.exp(self.loss_params_tensor[loss_name]["log_weight"])
                 )
             else:  # weight = \sigma where our trainable parameter is \log(\sigma). i.e., we take the parameter as it is in the config and exponentiate it to enforce positivity
-                loss_weight = torch.exp(self.loss_params[loss_name]["log_weight"])
+                loss_weight = torch.exp(self.loss_params_tensor[loss_name]["log_weight"])
 
             current_weighted_loss = loss_weight * unsupervised_loss
             tot_loss += current_weighted_loss
@@ -434,7 +435,7 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             ):  # penalize for the magnitude of the weights: \log(\sigma_i) for each weight i
                 # tot_loss += -0.5 * torch.log((2.0 * loss_weight))
                 tot_loss += (
-                    0.5 * self.loss_params[loss_name]["log_weight"]
+                    0.5 * self.loss_params_tensor[loss_name]["log_weight"]
                 )  # recall that \log(\sigma_1 * \sigma_2 * ...) = \log(\sigma_1) + \log(\sigma_2) + ...
             # log individual unsupervised losses
             self.log(loss_name + "_loss", unsupervised_loss, prog_bar=True)

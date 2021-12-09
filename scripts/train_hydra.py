@@ -18,6 +18,7 @@ from pose_est_nets.utils.io import (
     verify_real_data_paths,
     check_if_semi_supervised,
     ckpt_path_from_base_path,
+    format_and_update_loss_info,
 )
 from pose_est_nets.utils.plotting_utils import predict_dataset
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -109,21 +110,9 @@ def train(cfg: DictConfig):
             raise NotImplementedError(
                 "Cannot currently fit semi-supervised model on multiple gpus"
             )
-        loss_param_dict = OmegaConf.to_object(cfg.losses)
-        losses_to_use = OmegaConf.to_object(cfg.model.losses_to_use)
-        # copy data-specific details into loss dict TODO: this is ugly, maybe make it a function
-        if "pca_multiview" in losses_to_use:
-            loss_param_dict["pca_multiview"][
-                "mirrored_column_matches"
-            ] = cfg.data.mirrored_column_matches
-        if "unimodal" in losses_to_use:
-            if cfg.model.model_type == "regression":
-                raise NotImplementedError(
-                    "unimodal loss can only be used with classes inheriting from HeatmapTracker. \nYou specified an invalid RegressionTracker model."
-                )
-            loss_param_dict["unimodal"]["output_shape"] = dataset.output_shape
-            loss_param_dict["unimodal"]["original_image_height"] = dataset.height
-            loss_param_dict["unimodal"]["original_image_width"] = dataset.width
+        # copy data-specific details into loss dict
+        loss_param_dict, losses_to_use = format_and_update_loss_info(cfg)
+        
         datamod = UnlabeledDataModule(
             dataset=dataset,
             video_paths_list=video_dir,
@@ -152,6 +141,7 @@ def train(cfg: DictConfig):
             )
 
         elif cfg.model.model_type == "heatmap":
+            print(datamod.loss_param_dict)
             model = SemiSupervisedHeatmapTracker(
                 num_targets=cfg.data.num_targets,
                 resnet_version=cfg.model.resnet_version,
