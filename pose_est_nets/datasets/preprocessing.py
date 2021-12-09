@@ -98,6 +98,11 @@ def compute_multiview_pca_params(
         dtype=torch.float32,
         device=_TORCH_DEVICE,  # TODO: be careful for multinode
     )
+    data_module.loss_param_dict["pca_multiview"]["mean"] = torch.tensor(
+        pca.mean_,
+        dtype=torch.float32,
+        device=_TORCH_DEVICE,  # TODO: be careful for multinode    
+    )
 
     # compute the keypoints' projections on the discarded components, to
     # estimate the e.g., 90th percentile and determine epsilon.

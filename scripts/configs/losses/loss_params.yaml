@@ -10,6 +10,9 @@ pca_multiview:
   kept_eigenvectors: null
 
   # Computed per dataset
+  mean: null
+
+  # Computed per dataset
   epsilon: null
 
 pca_singleview:
@@ -24,6 +27,9 @@ pca_singleview:
 
   # Computed per dataset
   kept_eigenvectors: null
+
+  # Computed per dataset
+  mean: null
 
   # Computed per dataset
   epsilon: null
