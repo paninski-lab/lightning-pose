@@ -116,7 +116,8 @@ def MaskedHeatmapLoss(
 def MultiviewPCALoss(
     keypoint_preds: TensorType["batch", "two_x_num_keypoints", float],
     discarded_eigenvectors: TensorType["num_discarded_evecs", "views_times_two", float],
-    mean: TensorType[float]
+    kept_eigenvectors: TensorType["num_kept_evecs", "views_times_two", float],
+    mean: TensorType[float],
     epsilon: TensorType[float],
     mirrored_column_matches: Union[ListConfig, List],
     **kwargs  # make loss robust to unneeded inputs
@@ -147,8 +148,16 @@ def MultiviewPCALoss(
         data_arr=keypoint_preds, mirrored_column_matches=mirrored_column_matches
     )  # shape = (views * 2, num_batches * num_keypoints)
 
-    keypoint_preds = keypoint_preds - mean.unsqueeze(-1)
-    
+    keypoint_preds = keypoint_preds.T - mean.unsqueeze(0)
+    keypoint_preds_reproject = keypoint_preds @ kept_eigenvectors.T * kept_eigenvectors
+    keypoint_preds_reproject = keypoint_preds_reproject.T
+    diff = keypoint_preds - keypoint_preds_reproject
+    reprojection_loss = torch.linalg.norm(diff) #vector norm of the flattened vector
+
+    #loss values below epsilon as masked to zero
+    reprojection_loss = reprojection_loss.masked_fill(mask=reprojection_loss < epsilon, value=0.0)
+
+
     abs_proj_discarded = torch.abs(
         torch.matmul(keypoint_preds.T, discarded_eigenvectors.T)
     )
