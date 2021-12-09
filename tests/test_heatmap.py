@@ -103,6 +103,22 @@ def test_heatmaps_from_representations():
     del heatmaps
     torch.cuda.empty_cache()  # remove tensors from gpu
 
+# def test_softmax():
+#     fake_image_batch = torch.rand(
+#         size=(_BATCH_SIZE, 3, _HEIGHT, _WIDTH), device=_TORCH_DEVICE
+#     )
+#     heatmap_model = HeatmapTracker(num_targets=34, output_shape=(_HEIGHT//4, _WIDTH//4)).to(_TORCH_DEVICE)
+#     representations = heatmap_model.get_representations(fake_image_batch)
+#     heatmaps = heatmap_model.heatmaps_from_representations(representations)
+#     print(torch.sum(heatmaps[0][0]))
+#     print(torch.sum(heatmaps[1][1])) #before heatmaps sums would vary widely
+#     valid_probability_heatmaps = heatmap_model.forward(fake_image_batch)
+#     sums = torch.sum(valid_probability_heatmaps, dim=(2,3))
+#     print(sums)
+#     ones = torch.ones(size=(_BATCH_SIZE, heatmap_model.num_keypoints), dtype=torch.int32).to(_TORCH_DEVICE)
+#     sums = torch.round(sums) #rounding error was causing assert to fail
+#     assert(sums.eq(ones)).all() 
+
 
 def test_unsupervised():  # TODO Finish writing test
     data_transform = []
