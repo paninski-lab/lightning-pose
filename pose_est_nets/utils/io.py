@@ -182,3 +182,27 @@ def check_if_semi_supervised(
     else:
         semi_supervised = True
     return semi_supervised
+
+def format_and_update_loss_info(cfg):
+    loss_param_dict = OmegaConf.to_object(cfg.losses)
+    losses_to_use = OmegaConf.to_object(cfg.model.losses_to_use)
+    if "pca_multiview" in losses_to_use:
+        loss_param_dict["pca_multiview"][
+            "mirrored_column_matches"
+        ] = cfg.data.mirrored_column_matches
+    if "unimodal" in losses_to_use:
+        if cfg.model.model_type == "regression":
+            raise NotImplementedError(
+                "unimodal loss can only be used with classes inheriting from HeatmapTracker. \nYou specified an invalid RegressionTracker model."
+            )
+        downsample_scale = 2 ** cfg.data.downsample_factor
+        output_shape = (
+            cfg.data.image_resize_dims.height // downsample_scale, 
+            cfg.data.image_resize_dims.width // downsample_scale
+        )
+        loss_param_dict["unimodal"]["output_shape"] = output_shape
+        loss_param_dict["unimodal"]["original_image_height"] = cfg.data.image_resize_dims.height
+        loss_param_dict["unimodal"]["original_image_width"] = cfg.data.image_resize_dims.width
+        loss_param_dict["unimodal"]["heatmap_loss_type"] = cfg.model.heatmap_loss_type
+
+    return loss_param_dict, losses_to_use

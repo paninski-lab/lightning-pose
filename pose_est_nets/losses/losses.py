@@ -6,7 +6,7 @@ from torch.nn import functional as F
 from torchtyping import TensorType, patch_typeguard
 from geomloss import SamplesLoss
 from typeguard import typechecked
-from typing import Any, Callable, Dict, List, Literal, Optional, Union
+from typing import Any, Callable, Dict, Tuple, List, Literal, Optional, Union
 
 from pose_est_nets.datasets.preprocessing import format_multiview_data_for_pca
 from pose_est_nets.utils.dataset_utils import generate_heatmaps
@@ -235,6 +235,7 @@ def UnimodalLoss(
     original_image_height: torch.Tensor,
     original_image_width: torch.Tensor,
     output_shape: tuple,
+    heatmap_loss_type: str,
     **kwargs  # make loss robust to unneeded inputs
 ) -> TensorType[(), float]:
     keypoint_preds = keypoint_preds.reshape(keypoint_preds.shape[0], -1, 2)
@@ -244,8 +245,7 @@ def UnimodalLoss(
         width=int(original_image_width),
         output_shape=output_shape,
     )
-    return MaskedHeatmapLoss(ideal_heatmaps, heatmap_preds) 
-    #want to use wasserstein here if heatmap_model.supervised_loss == "wasserstein"
+    return MaskedHeatmapLoss(ideal_heatmaps, heatmap_preds, heatmap_loss_type) 
 
 
 @typechecked
@@ -296,7 +296,7 @@ def convert_dict_entries_to_tensors(
     device: Union[str, torch.device],
     losses_to_use: List[str],
     to_parameters: bool = False,
-) -> dict:
+) -> Tuple[dict, dict]:
     """Set scalars in loss to torch tensors for use with unsupervised losses.
 
     Args:
@@ -309,11 +309,13 @@ def convert_dict_entries_to_tensors(
         dict with updated values
 
     """
-    loss_params_tensor = {}
+    loss_params_tensor = {} #for parameters that can be represented as a tensor
+    loss_params_dict = {} #for parameters like a tuple or a string which should not be
     for loss, params in loss_params.items():
         print(loss)
         if loss in losses_to_use:
             loss_params_tensor[loss] = {}
+            loss_params_dict[loss] = {}
             print("this loss is used")
             for key, val in params.items():
                 # TODO: can be made more concise? assign dtype beforehand
@@ -329,6 +331,9 @@ def convert_dict_entries_to_tensors(
                     loss_params_tensor[loss][key] = torch.tensor(
                         0.0, dtype=torch.float, device=device
                     )
+                elif type(val) != float and type(val) != int: #if it is a string, or a tuple, or some other type of parameter we don't want as a tensor
+                    loss_params_dict[loss][key] = val
+                    continue
                 print("right before making it a parameter")
                 if to_parameters:
                     requires_grad = True if key == "log_weight" else False
@@ -336,16 +341,15 @@ def convert_dict_entries_to_tensors(
                         data=loss_params_tensor[loss][key], requires_grad=requires_grad
                     )
     print("loss params at the end of convert_dict_entries_to_tensors")
-    print(loss_params_tensor)
-    return loss_params_tensor
+    print(loss_params_tensor, loss_params_dict)
+    return loss_params_tensor, loss_params_dict
 
 
 @typechecked
-def convert_loss_dicts_to_torch_nn_modules(loss_params: dict) -> torch.nn.ModuleDict:
+def convert_loss_tensors_to_torch_nn_modules(loss_params: dict) -> torch.nn.ModuleDict:
     for loss, params in loss_params.items():  # loop over multiple different losses
         # params is a dict which we convert to ParameterDict
         print(loss, params)
-        print(loss_params[loss])
         loss_params[loss] = torch.nn.ParameterDict(params)
         for key, val in params.items():  # loop over the entries of each loss
             if (
