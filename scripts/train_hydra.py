@@ -94,6 +94,7 @@ def train(cfg: DictConfig):
                 num_targets=cfg.data.num_targets,
                 resnet_version=cfg.model.resnet_version,
                 downsample_factor=cfg.data.downsample_factor,
+                supervised_loss=cfg.model.heatmap_loss_type,
                 output_shape=dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
             )
@@ -155,6 +156,7 @@ def train(cfg: DictConfig):
                 num_targets=cfg.data.num_targets,
                 resnet_version=cfg.model.resnet_version,
                 downsample_factor=cfg.data.downsample_factor,
+                supervised_loss=cfg.model.heatmap_loss_type,
                 output_shape=dataset.output_shape,
                 loss_params=datamod.loss_param_dict,
                 semi_super_losses_to_use=losses_to_use,
@@ -232,4 +234,4 @@ def train(cfg: DictConfig):
 
 
 if __name__ == "__main__":
-    train()  # I think you get issues when you try to get return values from a hydra function
+    train()
