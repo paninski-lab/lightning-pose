@@ -375,6 +375,7 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         ):  # for each unsupervised loss we convert the "log_weight" in the config into a learnable parameter
             self.loss_params_tensor = convert_loss_tensors_to_torch_nn_modules(self.loss_params_tensor)
             print(self.loss_params_tensor)  # TODO: remove
+        #self.save_hyperparameters()
 
     @typechecked
     def training_step(
@@ -408,25 +409,18 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         for loss_name, loss_func in self.loss_function_dict.items():
             # Some losses use keypoint_preds, some use heatmap_preds, and some use both.
             # all have **kwargs so are robust to unneeded inputs.
-            # loss_weight = torch.exp(
-            #     self.loss_params[loss_name]["log_weight"]
-            # )  # weight = \exp \log weight
-
+           
             unsupervised_loss = loss_func(
                 keypoint_preds=predicted_us_keypoints,
                 heatmap_preds=unlabeled_predicted_heatmaps,
                 **self.loss_params_tensor[loss_name],
                 **self.loss_params_dict[loss_name]
             )
-            if (
-                self.learn_weights == True
-            ):  # weight = 1 / 2 * \sigma^{2} where our trainable parameter is \log(\sigma)
-                loss_weight = 1.0 / (
-                    2.0 * torch.exp(self.loss_params_tensor[loss_name]["log_weight"])
-                )
-            else:  # weight = \sigma where our trainable parameter is \log(\sigma). i.e., we take the parameter as it is in the config and exponentiate it to enforce positivity
-                loss_weight = torch.exp(self.loss_params_tensor[loss_name]["log_weight"])
-
+            
+            loss_weight = 1.0 / ( # weight = \sigma where our trainable parameter is \log(\sigma). i.e., we take the parameter as it is in the config and exponentiate it to enforce positivity
+                2.0 * torch.exp(self.loss_params_tensor[loss_name]["log_weight"])
+            )
+            
             current_weighted_loss = loss_weight * unsupervised_loss
             tot_loss += current_weighted_loss
 

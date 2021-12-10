@@ -89,11 +89,9 @@ def compute_multiview_pca_params(
     data_module.loss_param_dict["pca_multiview"]["kept_eigenvectors"] = torch.tensor(
         pca.components_[:components_to_keep],
         dtype=torch.float32,
-        device=_TORCH_DEVICE,  # TODO: be careful for multinode
+        device=_TORCH_DEVICE,
     )
-    data_module.loss_param_dict["pca_multiview"][
-        "discarded_eigenvectors"
-    ] = torch.tensor(
+    data_module.loss_param_dict["pca_multiview"]["discarded_eigenvectors"] = torch.tensor(
         pca.components_[components_to_keep:],
         dtype=torch.float32,
         device=_TORCH_DEVICE,  # TODO: be careful for multinode
@@ -101,24 +99,18 @@ def compute_multiview_pca_params(
     data_module.loss_param_dict["pca_multiview"]["mean"] = torch.tensor(
         pca.mean_,
         dtype=torch.float32,
-        device=_TORCH_DEVICE,  # TODO: be careful for multinode    
+        device=_TORCH_DEVICE,  # TODO: be careful for multinode
     )
-
-    # compute the keypoints' projections on the discarded components, to
-    # estimate the e.g., 90th percentile and determine epsilon.
-    # absolute value is important -- projections can be negative.
-    discarded_eigs = data_module.loss_param_dict["pca_multiview"][
-        "discarded_eigenvectors"
-    ]
-    proj_discarded = torch.abs(
-        torch.matmul(
-            arr_for_pca.T,
-            discarded_eigs.clone().detach().cpu().T,
-        )
-    )
-    # setting axis = 0 generalizes to multiple discarded components
+    good_arr_for_pca = good_arr_for_pca.to(_TORCH_DEVICE)
+    kept_eigenvectors = data_module.loss_param_dict["pca_multiview"]["kept_eigenvectors"]
+    mean = data_module.loss_param_dict["pca_multiview"]["mean"]
+    num_views = good_arr_for_pca.shape[0] // 2
+    good_arr_for_pca = good_arr_for_pca.T - mean.unsqueeze(0)
+    reprojection_arr = good_arr_for_pca @ kept_eigenvectors.T @ kept_eigenvectors
+    diff = good_arr_for_pca - reprojection_arr
+    reprojection_loss = torch.linalg.norm(diff, dim=1) / num_views
     epsilon = np.nanpercentile(
-        proj_discarded.numpy(), empirical_epsilon_percentile, axis=0
+        reprojection_loss.clone().detach().cpu().numpy(), empirical_epsilon_percentile, axis=0
     )
     print(epsilon)
     data_module.loss_param_dict["pca_multiview"]["epsilon"] = torch.tensor(
@@ -126,6 +118,30 @@ def compute_multiview_pca_params(
         dtype=torch.float32,
         device=_TORCH_DEVICE,  # TODO: be careful for multinode
     )
+   
+    return
+    # compute the keypoints' projections on the discarded components, to
+    # estimate the e.g., 90th percentile and determine epsilon.
+    # absolute value is important -- projections can be negative.
+    # discarded_eigs = data_module.loss_param_dict["pca_multiview"][
+    #     "discarded_eigenvectors"
+    # ]
+    # proj_discarded = torch.abs(
+    #     torch.matmul(
+    #         arr_for_pca.T,
+    #         discarded_eigs.clone().detach().cpu().T,
+    #     )
+    # )
+    # # setting axis = 0 generalizes to multiple discarded components
+    # epsilon = np.nanpercentile(
+    #     proj_discarded.numpy(), empirical_epsilon_percentile, axis=0
+    # )
+    # print(epsilon)
+    # data_module.loss_param_dict["pca_multiview"]["epsilon"] = torch.tensor(
+    #     epsilon,
+    #     dtype=torch.float32,
+    #     device=_TORCH_DEVICE,  # TODO: be careful for multinode
+    # )
 
 
 @typechecked
