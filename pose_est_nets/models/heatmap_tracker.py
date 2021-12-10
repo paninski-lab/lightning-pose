@@ -463,6 +463,10 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             )
         return {"loss": tot_loss}
 
+    @staticmethod
+    def anneal_unsupervised_weight(epoch: int, increase_factor: float) -> float:
+        return max(epoch * increase_factor, 1.0)
+
     # single optimizer with different learning rates
     def configure_optimizers(self):
         optimizer = Adam(
