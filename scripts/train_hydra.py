@@ -150,6 +150,7 @@ def train(cfg: DictConfig):
                 output_shape=dataset.output_shape,
                 loss_params=datamod.loss_param_dict,
                 semi_super_losses_to_use=losses_to_use,
+                learn_weights=cfg.model.learn_weights,
                 torch_seed=cfg.training.rng_seed_model_pt,
             )
         else:

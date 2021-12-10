@@ -98,6 +98,7 @@ def load_model_from_checkpoint(cfg: DictConfig, ckpt_file: str, eval: bool = Fal
             ckpt_file,
             semi_super_losses_to_use=losses_to_use,
             loss_params=loss_param_dict,
+            strict=False,
         )
     else:
         model = ModelClass.load_from_checkpoint(ckpt_file)

@@ -147,28 +147,28 @@ def MultiviewPCALoss(
     keypoint_preds = format_multiview_data_for_pca(
         data_arr=keypoint_preds, mirrored_column_matches=mirrored_column_matches
     )  # shape = (views * 2, num_batches * num_keypoints)
-
+    num_views = keypoint_preds.shape[0] // 2
     keypoint_preds = keypoint_preds.T - mean.unsqueeze(0)
-    keypoint_preds_reproject = keypoint_preds @ kept_eigenvectors.T * kept_eigenvectors
-    keypoint_preds_reproject = keypoint_preds_reproject.T
+    keypoint_preds_reproject = keypoint_preds @ kept_eigenvectors.T @ kept_eigenvectors
     diff = keypoint_preds - keypoint_preds_reproject
-    reprojection_loss = torch.linalg.norm(diff) #vector norm of the flattened vector
+    reprojection_loss = torch.linalg.norm(diff, dim=1) / num_views #vector norm of distance between keypoint and reprojection for each keypoint within each batch (averaged over the number of views)
 
     #loss values below epsilon as masked to zero
     reprojection_loss = reprojection_loss.masked_fill(mask=reprojection_loss < epsilon, value=0.0)
 
-
-    abs_proj_discarded = torch.abs(
-        torch.matmul(keypoint_preds.T, discarded_eigenvectors.T)
-    )
-    epsilon_masked_proj = abs_proj_discarded.masked_fill(
-        mask=abs_proj_discarded < epsilon, value=0.0
-    )
-    # each element positive
-    assert (epsilon_masked_proj >= 0.0).all()
-    # the scalar loss should be smaller after zeroing out elements.
-    assert torch.mean(epsilon_masked_proj) <= torch.mean(abs_proj_discarded)
-    return torch.mean(epsilon_masked_proj)
+    return torch.mean(reprojection_loss)
+    
+    # abs_proj_discarded = torch.abs(
+    #     torch.matmul(keypoint_preds.T, discarded_eigenvectors.T)
+    # )
+    # epsilon_masked_proj = abs_proj_discarded.masked_fill(
+    #     mask=abs_proj_discarded < epsilon, value=0.0
+    # )
+    # # each element positive
+    # assert (epsilon_masked_proj >= 0.0).all()
+    # # the scalar loss should be smaller after zeroing out elements.
+    # assert torch.mean(epsilon_masked_proj) <= torch.mean(abs_proj_discarded)
+    # return torch.mean(epsilon_masked_proj)
 
 
 @typechecked
