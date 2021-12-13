@@ -389,6 +389,15 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         self, data_batch: SemiSupervisedHeatmapBatchDict, batch_idx: int
     ) -> Dict:
 
+        total_unsupervised_importance = self.anneal_unsupervised_weight(
+            epoch=self.current_epoch
+        )  # TODO: add args here and in configs
+        self.log(
+            "total_unsupervised_importance",
+            total_unsupervised_importance,
+            prog_bar=True,
+        )
+
         # forward pass labeled
         predicted_heatmaps = self.forward(data_batch["labeled"]["images"])
         predicted_keypoints, confidence = self.run_subpixelmaxima(
@@ -432,13 +441,13 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             )
 
             current_weighted_loss = loss_weight * unsupervised_loss
-            tot_loss += current_weighted_loss
+            tot_loss += total_unsupervised_importance * current_weighted_loss
 
             if (
                 self.learn_weights == True
             ):  # penalize for the magnitude of the weights: \log(\sigma_i) for each weight i
                 # tot_loss += -0.5 * torch.log((2.0 * loss_weight))
-                tot_loss += (
+                tot_loss += total_unsupervised_importance * (
                     0.5 * self.loss_params_tensor[loss_name]["log_weight"]
                 )  # recall that \log(\sigma_1 * \sigma_2 * ...) = \log(\sigma_1) + \log(\sigma_2) + ...
             # log individual unsupervised losses
@@ -464,8 +473,17 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         return {"loss": tot_loss}
 
     @staticmethod
-    def anneal_unsupervised_weight(epoch: int, increase_factor: float) -> float:
-        return max(epoch * increase_factor, 1.0)
+    def anneal_unsupervised_weight(
+        epoch: int,  # TODO: access from module
+        increase_factor: float = 0.02,
+        freeze_until_epoch: int = 100,
+    ) -> float:
+        if epoch <= freeze_until_epoch:
+            weight: float = 0.0
+        else:
+            eff_epoch: int = epoch - freeze_until_epoch
+            weight: float = min(eff_epoch * increase_factor, 1.0)
+        return weight
 
     # single optimizer with different learning rates
     def configure_optimizers(self):
@@ -473,7 +491,7 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             [
                 {"params": self.backbone.parameters()},
                 {"params": self.upsampling_layers.parameters()},
-                {"params": self.loss_params_tensor.parameters(), "lr": 1e-1},
+                {"params": self.loss_params_tensor.parameters(), "lr": 1e-2},
             ],
             lr=1e-3,
         )
