@@ -66,7 +66,8 @@ def MaskedRMSELoss(
 def MaskedHeatmapLoss(
     y: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
     y_hat: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
-    loss_type: str = "mse"
+    loss_type: str = "mse",
+    reach: Union[float, str] = None,
 ) -> TensorType[()]:
     """Computes heatmap (MSE or Wasserstein) loss between ground truth heatmap and predicted heatmap.
 
@@ -75,11 +76,13 @@ def MaskedHeatmapLoss(
         y_hat: predicted heatmaps
 
     Returns:
-        MSE loss
+        MSE or Wasserstein loss
 
     """
     # apply mask, only computes loss on heatmaps where the ground truth heatmap
     # is not all zeros (i.e., not an occluded keypoint)
+    bs = y.shape[0]
+    nk = y.shape[1]
     max_vals = torch.amax(y, dim=(2, 3))
     zeros = torch.zeros(size=(y.shape[0], y.shape[1]), device=y_hat.device)
     non_zeros = ~torch.eq(max_vals, zeros)
@@ -88,8 +91,11 @@ def MaskedHeatmapLoss(
     if loss_type == "mse":
         loss = F.mse_loss(torch.masked_select(y_hat, mask), torch.masked_select(y, mask))
     elif loss_type == "wasserstein":
-        wass_loss = SamplesLoss(loss="sinkhorn") #maybe could speed up by creating this outside of the function
+        if reach == "None":
+            reach = None
+        wass_loss = SamplesLoss(loss="sinkhorn", reach=reach) #maybe could speed up by creating this outside of the function
         loss = wass_loss(torch.masked_select(y_hat, mask).unsqueeze(0), torch.masked_select(y, mask).unsqueeze(0))
+        #loss = loss / (bs * nk) #we should divide this by batch size times number of keypoints to its on per heatmap scale
     else:
         NotImplementedError("Currently only mse and wasserstein are supported")
 
@@ -340,10 +346,10 @@ def convert_dict_entries_to_tensors(
                     loss_params_tensor[loss][key] = torch.tensor(
                         val, dtype=torch.int, device=device
                     )
-                if val is None:
-                    loss_params_tensor[loss][key] = torch.tensor(
-                        0.0, dtype=torch.float, device=device
-                    )
+                # if val is None:
+                #     loss_params_tensor[loss][key] = torch.tensor(
+                #         0.0, dtype=torch.float, device=device
+                #     )
                 elif type(val) != float and type(val) != int: #if it is a string, or a tuple, or some other type of parameter we don't want as a tensor
                     loss_params_dict[loss][key] = val
                     continue

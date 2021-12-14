@@ -36,7 +36,7 @@ dropout_rate: 0.1
 min_epochs: 80
 
 # max training epochs; training may exit before due to early stopping
-max_epochs: 300
+max_epochs: 500
 
 # frequency to log training metrics (one step is one batch)
 log_every_n_steps: 1

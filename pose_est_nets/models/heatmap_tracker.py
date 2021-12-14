@@ -6,7 +6,7 @@ import torch
 from torch import nn
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict
+from typing import Any, Callable, Dict, List, Union, Optional, Tuple, TypedDict
 from typing_extensions import Literal
 
 from pose_est_nets.losses.losses import (
@@ -59,6 +59,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         output_sigma: float = 1.25,  # check value
         upsample_factor: int = 100,
         supervised_loss: str = "mse",
+        reach: Union[float, str] = None,
         confidence_scale: float = 1.0,
         threshold: Optional[float] = None,
         torch_seed: int = 123,
@@ -100,6 +101,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         self.output_sigma = torch.tensor(output_sigma, device=self.device)
         self.upsample_factor = torch.tensor(upsample_factor, device=self.device)
         self.supervised_loss = supervised_loss
+        self.reach = reach
         self.confidence_scale = torch.tensor(confidence_scale, device=self.device)
         self.threshold = threshold
         self.softmax = nn.Softmax(dim=2)
@@ -264,7 +266,8 @@ class HeatmapTracker(BaseFeatureExtractor):
         heatmap_loss = MaskedHeatmapLoss(
             batch_dict["heatmaps"], 
             predicted_heatmaps, 
-            self.supervised_loss
+            loss_type=self.supervised_loss,
+            reach=self.reach,
         )
         
         supervised_rmse = MaskedRMSELoss(batch_dict["keypoints"], predicted_keypoints)
@@ -285,7 +288,12 @@ class HeatmapTracker(BaseFeatureExtractor):
         predicted_keypoints, confidence = self.run_subpixelmaxima(
             predicted_heatmaps
         )  # heatmaps -> keypoints
-        loss = MaskedHeatmapLoss(batch_dict["heatmaps"], predicted_heatmaps, self.supervised_loss)
+        loss = MaskedHeatmapLoss(
+            batch_dict["heatmaps"], 
+            predicted_heatmaps, 
+            loss_type=self.supervised_loss, 
+            reach=self.reach,
+        )
         supervised_rmse = MaskedRMSELoss(batch_dict["keypoints"], predicted_keypoints)
         if stage:
             self.log(f"{stage}_loss", loss, prog_bar=True, logger=True)
@@ -316,13 +324,14 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         output_sigma: float = 1.25,  # check value,
         upsample_factor: int = 100,
         supervised_loss: str = "mse",
+        reach: Union[float, str] = None,
         confidence_scale: float = 1.0,
         threshold: Optional[float] = None,
         torch_seed: int = 123,
         loss_params: Optional[
             dict
         ] = None,  # TODO: specify a dictionary of dictionaries. is it Optional?
-        semi_super_losses_to_use: Optional[list] = None,
+        semi_super_losses_to_use: Optional[list] = [],
         learn_weights: bool = True,  # whether to use multitask weight learning
     ):
         """
@@ -357,6 +366,7 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             output_sigma=output_sigma,
             upsample_factor=upsample_factor,
             supervised_loss=supervised_loss,
+            reach=reach,
             confidence_scale=confidence_scale,
             threshold=threshold,
             torch_seed=torch_seed,
