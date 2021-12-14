@@ -381,6 +381,9 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
                 self.loss_params_tensor
             )
             print(self.loss_params_tensor)  # TODO: remove
+        self.register_buffer(
+            "total_unsupervised_importance", torch.tensor(1.0)
+        )  # this attribute will be modified by AnnealWeight callback during training
         # self.save_hyperparameters()
 
     @typechecked
@@ -388,7 +391,7 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         self, data_batch: SemiSupervisedHeatmapBatchDict, batch_idx: int
     ) -> Dict:
 
-        # self.total_unsupervised_importance is defined externally by AnnealWeight callback
+        # on each epoch, self.total_unsupervised_importance is modified by the AnnealWeight callback
         self.log(
             "total_unsupervised_importance",
             self.total_unsupervised_importance,
@@ -443,10 +446,10 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             if (
                 self.learn_weights == True
             ):  # penalize for the magnitude of the weights: \log(\sigma_i) for each weight i
-                # tot_loss += -0.5 * torch.log((2.0 * loss_weight))
                 tot_loss += self.total_unsupervised_importance * (
                     0.5 * self.loss_params_tensor[loss_name]["log_weight"]
                 )  # recall that \log(\sigma_1 * \sigma_2 * ...) = \log(\sigma_1) + \log(\sigma_2) + ...
+
             # log individual unsupervised losses
             self.log(loss_name + "_loss", unsupervised_loss, prog_bar=True)
             self.log(
@@ -459,8 +462,7 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         self.log("supervised_rmse", supervised_rmse, prog_bar=True)
 
         # log weights of losses (we do it always, but it is interesting only when self.learn_weights=True)
-        # for each unsupervised loss we convert the "log_weight" in the config into a learnable parameter
-        # the quantity being logged is \sigma, where the weight is 1/ 2 *\sigma^2. Ideally, \sigma should decrease in training.
+        # the quantity being logged is 1/ 2 *\sigma^2. Ideally, \sigma should decrease in training.
         for loss_name in self.loss_function_dict.keys():
             self.log(
                 "{}_{}".format(loss_name, "weight"),
