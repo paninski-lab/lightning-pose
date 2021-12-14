@@ -1,3 +1,4 @@
+from pose_est_nets.callbacks.callbacks import AnnealWeight
 import pytorch_lightning as pl
 from pytorch_lightning import profiler
 import torch
@@ -112,7 +113,7 @@ def train(cfg: DictConfig):
             )
         # copy data-specific details into loss dict
         loss_param_dict, losses_to_use = format_and_update_loss_info(cfg)
-        
+
         datamod = UnlabeledDataModule(
             dataset=dataset,
             video_paths_list=video_dir,
@@ -172,6 +173,7 @@ def train(cfg: DictConfig):
         should_align=True,
         train_bn=True,
     )
+    anneal_weight_callback = AnnealWeight(**cfg.callbacks.anneal_weight)
     # TODO: add wandb?
     # determine gpu setup
     if _TORCH_DEVICE == "cpu":
@@ -199,6 +201,7 @@ def train(cfg: DictConfig):
             lr_monitor,
             ckpt_callback,
             transfer_unfreeze_callback,
+            anneal_weight_callback,
         ],
         logger=logger,
         limit_train_batches=cfg.training.limit_train_batches,

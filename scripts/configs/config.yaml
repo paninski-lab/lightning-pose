@@ -1,6 +1,7 @@
 defaults:
-- training: train_params
-- losses: loss_params
-- data: data_params
-- model: model_params
-- eval: eval_params
+  - training: train_params
+  - losses: loss_params
+  - data: data_params
+  - model: model_params
+  - eval: eval_params
+  - callbacks: callback_params

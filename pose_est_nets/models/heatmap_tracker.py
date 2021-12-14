@@ -104,7 +104,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         self.supervised_loss = supervised_loss
         self.confidence_scale = torch.tensor(confidence_scale, device=self.device)
         self.threshold = threshold
-        self.softmax = nn.Softmax(dim=2)
+        # self.softmax = nn.Softmax(dim=2)
         self.temperature = torch.tensor(100, device=self.device)  # soft argmax temp
         self.torch_seed = torch_seed
         # Necessary so we don't have to pass in model arguments when loading
@@ -363,7 +363,6 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             threshold=threshold,
             torch_seed=torch_seed,
         )
-        print(semi_super_losses_to_use)
         self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
         self.learn_weights = learn_weights
         (
@@ -389,12 +388,10 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         self, data_batch: SemiSupervisedHeatmapBatchDict, batch_idx: int
     ) -> Dict:
 
-        total_unsupervised_importance = self.anneal_unsupervised_weight(
-            epoch=self.current_epoch
-        )  # TODO: add args here and in configs
+        # self.total_unsupervised_importance is defined externally by AnnealWeight callback
         self.log(
             "total_unsupervised_importance",
-            total_unsupervised_importance,
+            self.total_unsupervised_importance,
             prog_bar=True,
         )
 
@@ -441,13 +438,13 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             )
 
             current_weighted_loss = loss_weight * unsupervised_loss
-            tot_loss += total_unsupervised_importance * current_weighted_loss
+            tot_loss += self.total_unsupervised_importance * current_weighted_loss
 
             if (
                 self.learn_weights == True
             ):  # penalize for the magnitude of the weights: \log(\sigma_i) for each weight i
                 # tot_loss += -0.5 * torch.log((2.0 * loss_weight))
-                tot_loss += total_unsupervised_importance * (
+                tot_loss += self.total_unsupervised_importance * (
                     0.5 * self.loss_params_tensor[loss_name]["log_weight"]
                 )  # recall that \log(\sigma_1 * \sigma_2 * ...) = \log(\sigma_1) + \log(\sigma_2) + ...
             # log individual unsupervised losses
@@ -471,19 +468,6 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
                 prog_bar=True,
             )
         return {"loss": tot_loss}
-
-    @staticmethod
-    def anneal_unsupervised_weight(
-        epoch: int,  # TODO: access from module
-        increase_factor: float = 0.02,
-        freeze_until_epoch: int = 100,
-    ) -> float:
-        if epoch <= freeze_until_epoch:
-            weight: float = 0.0
-        else:
-            eff_epoch: int = epoch - freeze_until_epoch
-            weight: float = min(eff_epoch * increase_factor, 1.0)
-        return weight
 
     # single optimizer with different learning rates
     def configure_optimizers(self):
