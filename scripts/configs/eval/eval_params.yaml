@@ -1,5 +1,5 @@
 # path to the hydra config file in the output folder, we can use it reconstruct information about loss directory
-hydra_paths: ["2021-11-01/00-21-04/", "2021-11-01/00-46-34"]
+hydra_paths: ['/home/ubuntu/pose-estimation-nets/multirun/2021-12-10/23-02-38/0/','/home/ubuntu/pose-estimation-nets/multirun/2021-12-13/22-07-47/0/'] #path must end in /
 
 model_display_names: ["toy_model_3", "quick_model"] # if you want to manually provide a different model name to be displayed in FiftyOne
 

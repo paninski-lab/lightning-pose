@@ -96,6 +96,7 @@ def train(cfg: DictConfig):
                 resnet_version=cfg.model.resnet_version,
                 downsample_factor=cfg.data.downsample_factor,
                 supervised_loss=cfg.model.heatmap_loss_type,
+                reach=cfg.model.reach,
                 output_shape=dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
             )
@@ -147,6 +148,7 @@ def train(cfg: DictConfig):
                 resnet_version=cfg.model.resnet_version,
                 downsample_factor=cfg.data.downsample_factor,
                 supervised_loss=cfg.model.heatmap_loss_type,
+                reach=cfg.model.reach,
                 output_shape=dataset.output_shape,
                 loss_params=datamod.loss_param_dict,
                 semi_super_losses_to_use=losses_to_use,
