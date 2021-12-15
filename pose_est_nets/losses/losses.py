@@ -66,7 +66,8 @@ def MaskedRMSELoss(
 def MaskedHeatmapLoss(
     y: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
     y_hat: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
-    loss_type: str = "mse"
+    loss_type: str = "mse",
+    reach: Union[float, str] = None,
 ) -> TensorType[()]:
     """Computes heatmap (MSE or Wasserstein) loss between ground truth heatmap and predicted heatmap.
 
@@ -75,11 +76,13 @@ def MaskedHeatmapLoss(
         y_hat: predicted heatmaps
 
     Returns:
-        MSE loss
+        MSE or Wasserstein loss
 
     """
     # apply mask, only computes loss on heatmaps where the ground truth heatmap
     # is not all zeros (i.e., not an occluded keypoint)
+    bs = y.shape[0]
+    nk = y.shape[1]
     max_vals = torch.amax(y, dim=(2, 3))
     zeros = torch.zeros(size=(y.shape[0], y.shape[1]), device=y_hat.device)
     non_zeros = ~torch.eq(max_vals, zeros)
@@ -88,8 +91,11 @@ def MaskedHeatmapLoss(
     if loss_type == "mse":
         loss = F.mse_loss(torch.masked_select(y_hat, mask), torch.masked_select(y, mask))
     elif loss_type == "wasserstein":
-        wass_loss = SamplesLoss(loss="sinkhorn") #maybe could speed up by creating this outside of the function
+        if reach == "None":
+            reach = None
+        wass_loss = SamplesLoss(loss="sinkhorn", reach=reach) #maybe could speed up by creating this outside of the function
         loss = wass_loss(torch.masked_select(y_hat, mask).unsqueeze(0), torch.masked_select(y, mask).unsqueeze(0))
+        loss = loss / (bs * nk) #we should divide this by batch size times number of keypoints to its on per heatmap scale
     else:
         NotImplementedError("Currently only mse and wasserstein are supported")
 
@@ -245,8 +251,8 @@ def UnimodalLoss(
     heatmap_preds: TensorType[
         "batch", "num_keypoints", "heatmap_height", "heatmap_width"
     ],
-    original_image_height: torch.Tensor,
-    original_image_width: torch.Tensor,
+    original_image_height: int,
+    original_image_width: int,
     output_shape: tuple,
     heatmap_loss_type: str,
     **kwargs  # make loss robust to unneeded inputs
@@ -254,8 +260,8 @@ def UnimodalLoss(
     keypoint_preds = keypoint_preds.reshape(keypoint_preds.shape[0], -1, 2)
     ideal_heatmaps = generate_heatmaps(  # this process doesn't compute gradients
         keypoints=keypoint_preds,
-        height=int(original_image_height),
-        width=int(original_image_width),
+        height=original_image_height,
+        width=original_image_width,
         output_shape=output_shape,
     )
     return MaskedHeatmapLoss(ideal_heatmaps, heatmap_preds, heatmap_loss_type) 
@@ -309,7 +315,7 @@ def convert_dict_entries_to_tensors(
     device: Union[str, torch.device],
     losses_to_use: List[str],
     to_parameters: bool = False,
-) -> Tuple[dict, dict]:
+) -> Tuple: 
     """Set scalars in loss to torch tensors for use with unsupervised losses.
 
     Args:
@@ -322,53 +328,43 @@ def convert_dict_entries_to_tensors(
         dict with updated values
 
     """
-    loss_params_tensor = {} #for parameters that can be represented as a tensor
+    loss_weights_dict = {} #for parameters that can be represented as a tensor
     loss_params_dict = {} #for parameters like a tuple or a string which should not be
     for loss, params in loss_params.items():
-        print(loss)
         if loss in losses_to_use:
-            loss_params_tensor[loss] = {}
             loss_params_dict[loss] = {}
-            print("this loss is used")
             for key, val in params.items():
-                # TODO: can be made more concise? assign dtype beforehand
-                if type(val) == float:
-                    loss_params_tensor[loss][key] = torch.tensor(
+                if key == "log_weight":
+                    loss_weights_dict[loss] = torch.tensor(
                         val, dtype=torch.float, device=device
                     )
-                if type(val) == int:
-                    loss_params_tensor[loss][key] = torch.tensor(
-                        val, dtype=torch.int, device=device
+                    if to_parameters:
+                        loss_weights_dict[loss] = torch.nn.Parameter(
+                            data=loss_weights_dict[loss], requires_grad=True
+                        )
+                elif key == "epsilon" and type(val) != torch.Tensor and val != None:
+                    loss_params_dict[loss][key] = torch.tensor(
+                        val, dtype=torch.float, device=device
                     )
-                if val is None:
-                    loss_params_tensor[loss][key] = torch.tensor(
-                        0.0, dtype=torch.float, device=device
-                    )
-                elif type(val) != float and type(val) != int: #if it is a string, or a tuple, or some other type of parameter we don't want as a tensor
+                else:
                     loss_params_dict[loss][key] = val
-                    continue
-                print("right before making it a parameter")
-                if to_parameters:
-                    requires_grad = True if key == "log_weight" else False
-                    loss_params_tensor[loss][key] = torch.nn.Parameter(
-                        data=loss_params_tensor[loss][key], requires_grad=requires_grad
-                    )
-    print("loss params at the end of convert_dict_entries_to_tensors")
-    print(loss_params_tensor, loss_params_dict)
-    return loss_params_tensor, loss_params_dict
+    if to_parameters:
+        loss_weights_dict = convert_loss_tensors_to_torch_nn_params(loss_weights_dict)            
+    print("loss weights at the end of convert_dict_entries_to_tensors:")
+    print(loss_weights_dict)
+    for key, val in loss_weights_dict.items():
+        print(key, val)
+    print("loss params dict:")
+    print(loss_params_dict)
+
+    return loss_weights_dict, loss_params_dict
 
 
 @typechecked
-def convert_loss_tensors_to_torch_nn_modules(loss_params: dict) -> torch.nn.ModuleDict:
-    for loss, params in loss_params.items():  # loop over multiple different losses
-        # params is a dict which we convert to ParameterDict
-        print(loss, params)
-        loss_params[loss] = torch.nn.ParameterDict(params)
-        for key, val in params.items():  # loop over the entries of each loss
-            if (
-                key == "log_weight"
-            ):  # we take derivatives only w.r.t the weight infront of the loss
-                assert loss_params[loss][key].requires_grad == True
-            else:  # treat it as a static tensor
-                assert loss_params[loss][key].requires_grad == False
-    return torch.nn.ModuleDict(loss_params)
+def convert_loss_tensors_to_torch_nn_params(loss_weights: dict) -> torch.nn.ParameterDict:
+    loss_weights_params = {}
+    for loss, weight in loss_weights.items():  # loop over multiple different losses
+        print(loss, weight)
+        loss_weights_params[loss] = torch.nn.Parameter(weight)
+    parameter_dict = torch.nn.ParameterDict(loss_weights_params)
+    return parameter_dict 

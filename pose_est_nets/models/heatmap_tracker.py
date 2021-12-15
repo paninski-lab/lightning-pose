@@ -6,14 +6,14 @@ import torch
 from torch import nn
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict
+from typing import Any, Callable, Dict, List, Union, Optional, Tuple, TypedDict
 from typing_extensions import Literal
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 
 from pose_est_nets.losses.losses import (
     convert_dict_entries_to_tensors,
-    convert_loss_tensors_to_torch_nn_modules,
+    # convert_loss_tensors_to_torch_nn_modules,
     get_losses_dict,
     MaskedHeatmapLoss,
     MaskedRMSELoss,
@@ -61,6 +61,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         output_sigma: float = 1.25,  # check value
         upsample_factor: int = 100,
         supervised_loss: str = "mse",
+        reach: Union[float, str] = None,
         confidence_scale: float = 1.0,
         threshold: Optional[float] = None,
         torch_seed: int = 123,
@@ -102,6 +103,7 @@ class HeatmapTracker(BaseFeatureExtractor):
         self.output_sigma = torch.tensor(output_sigma, device=self.device)
         self.upsample_factor = torch.tensor(upsample_factor, device=self.device)
         self.supervised_loss = supervised_loss
+        self.reach = reach
         self.confidence_scale = torch.tensor(confidence_scale, device=self.device)
         self.threshold = threshold
         # self.softmax = nn.Softmax(dim=2)
@@ -264,7 +266,10 @@ class HeatmapTracker(BaseFeatureExtractor):
 
         # compute loss
         heatmap_loss = MaskedHeatmapLoss(
-            batch_dict["heatmaps"], predicted_heatmaps, self.supervised_loss
+            batch_dict["heatmaps"],
+            predicted_heatmaps,
+            loss_type=self.supervised_loss,
+            reach=self.reach,
         )
 
         supervised_rmse = MaskedRMSELoss(batch_dict["keypoints"], predicted_keypoints)
@@ -286,7 +291,10 @@ class HeatmapTracker(BaseFeatureExtractor):
             predicted_heatmaps
         )  # heatmaps -> keypoints
         loss = MaskedHeatmapLoss(
-            batch_dict["heatmaps"], predicted_heatmaps, self.supervised_loss
+            batch_dict["heatmaps"],
+            predicted_heatmaps,
+            loss_type=self.supervised_loss,
+            reach=self.reach,
         )
         supervised_rmse = MaskedRMSELoss(batch_dict["keypoints"], predicted_keypoints)
         if stage:
@@ -318,13 +326,14 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         output_sigma: float = 1.25,  # check value,
         upsample_factor: int = 100,
         supervised_loss: str = "mse",
+        reach: Union[float, str] = None,
         confidence_scale: float = 1.0,
         threshold: Optional[float] = None,
         torch_seed: int = 123,
         loss_params: Optional[
             dict
         ] = None,  # TODO: specify a dictionary of dictionaries. is it Optional?
-        semi_super_losses_to_use: Optional[list] = None,
+        semi_super_losses_to_use: Optional[list] = [],
         learn_weights: bool = True,  # whether to use multitask weight learning
     ):
         """
@@ -359,28 +368,20 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             output_sigma=output_sigma,
             upsample_factor=upsample_factor,
             supervised_loss=supervised_loss,
+            reach=reach,
             confidence_scale=confidence_scale,
             threshold=threshold,
             torch_seed=torch_seed,
         )
         self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
         self.learn_weights = learn_weights
-        (
-            self.loss_params_tensor,
-            self.loss_params_dict,
-        ) = convert_dict_entries_to_tensors(
+        self.loss_weights_dict, self.loss_params_dict = convert_dict_entries_to_tensors(
             loss_params=loss_params,
             device=self.device,
             losses_to_use=semi_super_losses_to_use,
             to_parameters=self.learn_weights,
         )
-        if (
-            self.learn_weights == True
-        ):  # for each unsupervised loss we convert the "log_weight" in the config into a learnable parameter
-            self.loss_params_tensor = convert_loss_tensors_to_torch_nn_modules(
-                self.loss_params_tensor
-            )
-            print(self.loss_params_tensor)  # TODO: remove
+
         self.register_buffer(
             "total_unsupervised_importance", torch.tensor(1.0)
         )  # this attribute will be modified by AnnealWeight callback during training
@@ -429,14 +430,13 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             unsupervised_loss = loss_func(
                 keypoint_preds=predicted_us_keypoints,
                 heatmap_preds=unlabeled_predicted_heatmaps,
-                **self.loss_params_tensor[loss_name],
                 **self.loss_params_dict[loss_name],
             )
 
             loss_weight = (
                 1.0
                 / (  # weight = \sigma where our trainable parameter is \log(\sigma^2). i.e., we take the parameter as it is in the config and exponentiate it to enforce positivity
-                    2.0 * torch.exp(self.loss_params_tensor[loss_name]["log_weight"])
+                    2.0 * torch.exp(self.loss_weights_dict[loss_name])
                 )
             )
 
@@ -447,7 +447,7 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
                 self.learn_weights == True
             ):  # penalize for the magnitude of the weights: \log(\sigma_i) for each weight i
                 tot_loss += self.total_unsupervised_importance * (
-                    0.5 * self.loss_params_tensor[loss_name]["log_weight"]
+                    0.5 * self.loss_weights_dict[loss_name]
                 )  # recall that \log(\sigma_1 * \sigma_2 * ...) = \log(\sigma_1) + \log(\sigma_2) + ...
 
             # log individual unsupervised losses
@@ -455,36 +455,28 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             self.log(
                 "weighted_" + loss_name + "_loss", current_weighted_loss, prog_bar=True
             )
+            self.log(
+                "{}_{}".format(loss_name, "weight"),
+                loss_weight,
+                prog_bar=True,
+            )
 
         # log other losses
         self.log("total_loss", tot_loss, prog_bar=True)
         self.log("supervised_loss", supervised_loss, prog_bar=True)
         self.log("supervised_rmse", supervised_rmse, prog_bar=True)
 
-        # log weights of losses (we do it always, but it is interesting only when self.learn_weights=True)
-        # the quantity being logged is 1/ 2 *\sigma^2. Ideally, \sigma should decrease in training.
-        for loss_name in self.loss_function_dict.keys():
-            self.log(
-                "{}_{}".format(loss_name, "weight"),
-                loss_weight,
-                prog_bar=True,
-            )
         return {"loss": tot_loss}
 
     # single optimizer with different learning rates
     def configure_optimizers(self):
-        optimizer = Adam(
-            [
-                {"params": self.backbone.parameters()},
-                {"params": self.upsampling_layers.parameters()},
-                {
-                    "params": self.loss_params_tensor.parameters(),
-                    "lr": 1e-1,
-                },  # was 1e-2, found that 1e-1 works well in unimodal
-            ],
-            lr=1e-3,
-        )
-
+        params = [
+            {"params": self.backbone.parameters()},
+            {"params": self.upsampling_layers.parameters()},
+        ]
+        if self.learn_weights:
+            params.append({"params": self.loss_weights_dict.parameters(), "lr": 1e-2})
+        optimizer = Adam(params, lr=1e-3)
         scheduler = MultiStepLR(optimizer, milestones=[100, 200, 300], gamma=0.5)
 
         return {

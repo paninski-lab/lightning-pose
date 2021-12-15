@@ -4,7 +4,11 @@ losses_to_use: ["temporal"]
 #whether to learn the weights for the unsupervised losses
 learn_weights: True
 
-heatmap_loss_type: "mse" # which heatmap loss to use: "mse" | "wasserstein"
+# which heatmap loss to use: "mse" | "wasserstein"
+heatmap_loss_type: "mse" 
+
+#reach parameter for wasserstein loss
+reach: None
 
 # resnet version for backbone: 18 | 34 | 50 | 101 | 152
 resnet_version: 50
