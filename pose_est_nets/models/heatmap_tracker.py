@@ -477,7 +477,10 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             [
                 {"params": self.backbone.parameters()},
                 {"params": self.upsampling_layers.parameters()},
-                {"params": self.loss_params_tensor.parameters(), "lr": 1e-2},
+                {
+                    "params": self.loss_params_tensor.parameters(),
+                    "lr": 1e-1,
+                },  # was 1e-2, found that 1e-1 works well in unimodal
             ],
             lr=1e-3,
         )
