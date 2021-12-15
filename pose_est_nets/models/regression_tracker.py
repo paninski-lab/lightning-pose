@@ -9,7 +9,7 @@ from typing_extensions import Literal
 
 from pose_est_nets.losses.losses import (
     convert_dict_entries_to_tensors,
-    convert_loss_tensors_to_torch_nn_modules,
+    #convert_loss_tensors_to_torch_nn_params,
     get_losses_dict,
     MaskedRegressionMSELoss,
     MaskedRMSELoss,
@@ -202,11 +202,11 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
             device=self.device,
             to_parameters=self.learn_weights,
         )
-        if (
-            self.learn_weights == True
-        ):  # for each unsupervised loss we convert the "log_weight" in the config into a learnable parameter
-            self.loss_params_tensor = convert_loss_dicts_to_torch_nn_modules(self.loss_params_tensor)
-            print(self.loss_params_tensor)  # TODO: remove
+        # if (
+        #     self.learn_weights == True
+        # ):  # for each unsupervised loss we convert the "log_weight" in the config into a learnable parameter
+        #     self.loss_params_tensor = convert_loss_dicts_to_torch_nn_modules(self.loss_params_tensor)
+        #     print(self.loss_params_tensor)  # TODO: remove
 
     @typechecked
     def training_step(
