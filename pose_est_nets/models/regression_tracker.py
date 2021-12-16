@@ -9,7 +9,7 @@ from typing_extensions import Literal
 
 from pose_est_nets.losses.losses import (
     convert_dict_entries_to_tensors,
-    #convert_loss_tensors_to_torch_nn_params,
+    # convert_loss_tensors_to_torch_nn_params,
     get_losses_dict,
     MaskedRegressionMSELoss,
     MaskedRMSELoss,
@@ -68,7 +68,7 @@ class RegressionTracker(BaseFeatureExtractor):
         )
         self.num_targets = num_targets
         self.resnet_version = resnet_version
-        self.final_layer = nn.Linear(self.base.fc.in_features, self.num_targets)
+        self.final_layer = nn.Linear(self.num_fc_input_features, self.num_targets)
         # TODO: consider removing dropout
         self.representation_dropout = nn.Dropout(p=representation_dropout_rate)
         self.torch_seed = torch_seed
@@ -197,7 +197,10 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
         self.loss_params = loss_params
         self.learn_weights = learn_weights
-        self.loss_params_tensor, self.loss_params_dict = convert_dict_entries_to_tensors( #is there a point of doing this for regression tracker?
+        (
+            self.loss_params_tensor,
+            self.loss_params_dict,
+        ) = convert_dict_entries_to_tensors(  # is there a point of doing this for regression tracker?
             loss_params=self.loss_params,
             device=self.device,
             to_parameters=self.learn_weights,
@@ -247,13 +250,19 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
                 self.learn_weights == True
             ):  # weight = 1 / 2 * \sigma^{2} where our trainable parameter is \log(\sigma)
                 loss_weight = 1.0 / (
-                    2.0 * (torch.exp(self.loss_params_tensor[loss_name]["log_weight"]) ** 2.0)
+                    2.0
+                    * (
+                        torch.exp(self.loss_params_tensor[loss_name]["log_weight"])
+                        ** 2.0
+                    )
                 )
             else:  # weight = \sigma where our trainable parameter is \log(\sigma). i.e., we take the parameter as it is in the config and exponentiate it to enforce positivity
-                loss_weight = torch.exp(self.loss_params_tensor[loss_name]["log_weight"])
+                loss_weight = torch.exp(
+                    self.loss_params_tensor[loss_name]["log_weight"]
+                )
 
             add_loss = loss_weight * loss_func(
-                predicted_us_keypoints, 
+                predicted_us_keypoints,
                 **self.loss_params_tensor[loss_name],
                 **self.loss_params_dict[loss_name],
             )

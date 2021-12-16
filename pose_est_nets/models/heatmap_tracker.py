@@ -9,7 +9,7 @@ from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Union, Optional, Tuple, TypedDict
 from typing_extensions import Literal
 from torch.optim import Adam
-from torch.optim.lr_scheduler import MultiStepLR
+from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau
 
 from pose_est_nets.losses.losses import (
     convert_dict_entries_to_tensors,
@@ -119,7 +119,7 @@ class HeatmapTracker(BaseFeatureExtractor):
 
     @property
     def num_filters_for_upsampling(self):
-        return self.base.fc.in_features
+        return self.num_fc_input_features
 
     @property
     def coordinate_scale(self):
@@ -309,6 +309,23 @@ class HeatmapTracker(BaseFeatureExtractor):
     def test_step(self, test_batch: HeatmapBatchDict, batch_idx):
         self.evaluate(test_batch, "test")
 
+    # single optimizer with different learning rates
+    def configure_optimizers(self):
+        params = [
+            # {"params": self.backbone.parameters()}, # don't uncomment this line; the BackboneFinetuning callback should add backbone to the params.
+            {
+                "params": self.upsampling_layers.parameters()
+            },  # important that this is the 0th element, for BackboneFinetuning callback
+        ]
+        optimizer = Adam(params, lr=1e-3)
+        scheduler = MultiStepLR(optimizer, milestones=[100, 200, 300], gamma=0.5)
+
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": scheduler,
+            "monitor": "val_loss",
+        }
+
 
 class SemiSupervisedHeatmapTracker(HeatmapTracker):
     """Model produces heatmaps of keypoints from labeled/unlabeled images."""
@@ -471,11 +488,13 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
     # single optimizer with different learning rates
     def configure_optimizers(self):
         params = [
-            {"params": self.backbone.parameters()},
-            {"params": self.upsampling_layers.parameters()},
+            # {"params": self.backbone.parameters()}, # don't uncomment this line; the BackboneFinetuning callback should add backbone to the params.
+            {
+                "params": self.upsampling_layers.parameters()
+            },  # important that this is the 0th element, for BackboneFineTuning
         ]
         if self.learn_weights:
-            params.append({"params": self.loss_weights_dict.parameters(), "lr": 1e-2})
+            params.append({"params": self.loss_weights_dict.parameters(), "lr": 1e-1})
         optimizer = Adam(params, lr=1e-3)
         scheduler = MultiStepLR(optimizer, milestones=[100, 200, 300], gamma=0.5)
 
