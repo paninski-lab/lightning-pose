@@ -45,4 +45,4 @@ temporal:
 # loss = MSE between generated heatmap and ideal gaussian heatmap with same center as generated heatmap
 unimodal:
   # weight in front of unimodal loss
-  log_weight: 3.0
+  log_weight: 0.0

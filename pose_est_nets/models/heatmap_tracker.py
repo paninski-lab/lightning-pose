@@ -494,12 +494,37 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             },  # important that this is the 0th element, for BackboneFineTuning
         ]
         if self.learn_weights:
-            params.append({"params": self.loss_weights_dict.parameters(), "lr": 1e-1})
+            params.append({"params": self.loss_weights_dict.parameters(), "lr": 1e-2})
         optimizer = Adam(params, lr=1e-3)
-        scheduler = MultiStepLR(optimizer, milestones=[100, 200, 300], gamma=0.5)
+        scheduler = MultiStepLR(optimizer, milestones=[100, 150, 200, 300], gamma=0.5)
 
         return {
             "optimizer": optimizer,
             "lr_scheduler": scheduler,
             "monitor": "val_loss",
         }
+
+    # # single optimizer with different learning rates
+    # def configure_optimizers(self):
+    #     params_net = [
+    #         # {"params": self.backbone.parameters()}, # don't uncomment this line; the BackboneFinetuning callback should add backbone to the params.
+    #         {
+    #             "params": self.upsampling_layers.parameters()
+    #         },  # important that this is the 0th element, for BackboneFineTuning
+    #     ]
+    #     optimizer = Adam(params_net, lr=1e-3)
+    #     scheduler = MultiStepLR(optimizer, milestones=[100, 200, 300], gamma=0.5)
+
+    #     optimizers = [optimizer]
+    #     lr_schedulers = [scheduler]
+
+    #     if self.learn_weights:
+    #         params_weights = [{"params": self.loss_weights_dict.parameters()}]
+    #         optimizer_weights = Adam(params_weights, lr=1e-3)
+    #         optimizers.append(optimizer_weights)
+    #         scheduler_weights = MultiStepLR(
+    #             optimizer, milestones=[100, 200, 300], gamma=0.5
+    #         )
+    #         lr_schedulers.append(scheduler_weights)
+
+    #     return optimizers, lr_schedulers
