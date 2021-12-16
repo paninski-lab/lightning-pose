@@ -83,11 +83,12 @@ class BaseFeatureExtractor(LightningModule):
         print("\n Initializing a {} instance.".format(self._get_name()))
 
         self.resnet_version = resnet_version
-        self.base = grab_resnet_backbone(
+        base = grab_resnet_backbone(
             resnet_version=self.resnet_version, pretrained=pretrained
         )
+        self.num_fc_input_features = base.fc.in_features
         self.backbone = grab_layers_sequential(
-            model=self.base,
+            model=base,
             last_layer_ind=last_resnet_layer_to_get,
         )
 
