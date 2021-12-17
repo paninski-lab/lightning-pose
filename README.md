@@ -69,7 +69,7 @@ The generic script for training models in our package is `scripts/train_hydra.py
 The script relies on **Hydra** to manage arguments in hierarchical config files. You can run over an argument from the config file, for example, `training.max_epochs`, by calling
 
 ```console
-foo@bar: ~$python scripts/train_hydra.py training.max_epochs=11
+foo@bar:~$ python scripts/train_hydra.py training.max_epochs=11
 ```
 
 ## Logs and saved models
@@ -103,13 +103,13 @@ hydra_paths: [
 ```
 where you specify the relative paths for `hydra` folders within the `lightning-pose/outputs` folder. Then from command line, run:
 ```console
-foo@bar:~$ python scripts/predict_compare.py
+foo@bar:~$ python scripts/launch_diagnostics.py
 ```
 
 ### Option 2: Override from command line
 Specify `hydra_paths` in the command line, overriding the `.yaml`:
 ```console
-foo@bar:~$ python scripts/predict_compare.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"]
+foo@bar:~$ python scripts/launch_diagnostics.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"]
 ``` 
 where again, `hydra_paths` should be a list of strings with folder names within `lightning-pose/outputs`.
 
