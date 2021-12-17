@@ -23,6 +23,11 @@ def make_predictions(cfg: DictConfig):
     # TODO: supporting only the zeroth index of cfg.eval.path_to_test_videos[0]
     # go to folders up to the "outputs" folder, and search for hydra_path from cfg
     for i, hydra_relative_path in enumerate(cfg.eval.hydra_paths):
+
+        if cfg.eval.path_to_save_predictions is None:
+            saved_csv_path = os.path.join(hydra_relative_path, "preds.csv")
+        else:
+            saved_csv_path = cfg.eval.path_to_save_predictions[i]
         print(cfg.eval.path_to_save_predictions[i], hydra_relative_path)
         # cfg.eval.hydra_paths defines a list of relative paths to hydra folders "YYYY-MM-DD/HH-MM-SS", and we extract an absolute path below
         absolute_cfg_path = get_absolute_hydra_path_from_hydra_str(hydra_relative_path)
