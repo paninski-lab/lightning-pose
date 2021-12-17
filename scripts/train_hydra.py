@@ -216,8 +216,9 @@ def train(cfg: DictConfig):
     hydra_output_directory = os.getcwd()
     print("Hydra output directory: {}".format(hydra_output_directory))
     model_ckpt = trainer.checkpoint_callback.best_model_path
-    print("Best model path: {}".format(model_ckpt))
-    if not os.path.isfile(os.path.abspath(model_ckpt)):
+    model_ckpt_abs = os.path.abspath(model_ckpt)
+    print("Best model path: {}".format(model_ckpt_abs))
+    if not os.path.isfile(model_ckpt_abs):
         raise FileNotFoundError(
             "Cannot find a checkpoint to the model. Check if you have trained for too few epochs."
         )
@@ -227,6 +228,9 @@ def train(cfg: DictConfig):
         hydra_output_directory=hydra_output_directory,
         ckpt_file=model_ckpt,
     )
+
+    # generate a video
+    # evaluate the network on everything in the video_dir, and make videos.
 
 
 if __name__ == "__main__":
