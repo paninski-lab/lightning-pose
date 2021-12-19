@@ -6,8 +6,6 @@ import h5py
 import torch
 from pose_est_nets.utils.io import (
     check_if_semi_supervised,
-    set_or_open_folder,
-    get_latest_version,
     format_and_update_loss_info
 )
 from pose_est_nets.datasets.dali import LightningWrapper
@@ -36,6 +34,7 @@ from kornia.geometry.transform import pyrup
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
+@typechecked
 def get_videos_in_dir(video_dir: str) -> List[str]:
     # gather videos to process
     # TODO: check if you're give a path to a single video?
@@ -107,6 +106,7 @@ def load_model_from_checkpoint(cfg: DictConfig, ckpt_file: str, eval: bool = Fal
     return model
 
 
+@typechecked
 def predict_videos(
     video_path: str,
     ckpt_file: str,
@@ -114,7 +114,7 @@ def predict_videos(
     save_file: Optional[str] = None,
     sequence_length: int = 16,
     device: Literal["gpu", "cuda", "cpu"] = "gpu",
-    video_pipe_kwargs={},
+    video_pipe_kwargs: dict = {},
 ):
     """Loop over a list of videos and process with tracker using DALI for fast inference.
 
@@ -152,10 +152,6 @@ def predict_videos(
     from pose_est_nets.models.heatmap_tracker import (
         HeatmapTracker,
         SemiSupervisedHeatmapTracker,
-    )
-    from pose_est_nets.utils.io import (
-        set_or_open_folder,
-        get_latest_version,
     )
 
     # check input
@@ -436,6 +432,8 @@ def save_dframe(df: pd.DataFrame, save_file: str) -> None:
     else:
         raise NotImplementedError("Currently only .csv and .h5 files are supported")
 
+
+@typechecked
 def save_heatmaps(heatmaps_np: np.ndarray, save_folder: str) -> None:
     hf = h5py.File(save_folder + 'heatmaps.h5', 'w')
     hf.create_dataset('heatmaps', data=heatmaps_np)
@@ -477,6 +475,7 @@ def make_predictions(
     return df, heatmaps_np
 
 
+@typechecked
 def predict_dataset(
     cfg: DictConfig,
     datamod: LightningDataModule,

@@ -1,12 +1,9 @@
 import os
 from pose_est_nets.models.heatmap_tracker import HeatmapTracker
 import torch
-import torchvision.transforms as transforms
 import pytest
 import pytorch_lightning as pl
 import shutil
-from pose_est_nets.utils.wrappers import predict_plot_test_epoch
-from pose_est_nets.utils.io import set_or_open_folder, load_object
 from typing import Optional
 import torchvision
 from pose_est_nets.datasets.datasets import HeatmapDataset

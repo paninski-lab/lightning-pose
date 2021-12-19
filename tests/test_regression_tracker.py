@@ -1,12 +1,9 @@
 import os
 import torch
 import numpy as np
-import torchvision.transforms as transforms
 import pytest
 import pytorch_lightning as pl
 import shutil
-from pose_est_nets.utils.wrappers import predict_plot_test_epoch
-from pose_est_nets.utils.io import set_or_open_folder, load_object
 from pose_est_nets.datasets.datamodules import UnlabeledDataModule
 from pose_est_nets.datasets.datasets import BaseTrackingDataset
 from typing import Optional
