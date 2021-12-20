@@ -1,6 +1,6 @@
 from pose_est_nets.models.heatmap_tracker import HeatmapTracker
 from pose_est_nets.datasets.datasets import HeatmapDataset
-from pose_est_nets.utils.dataset_utils import generate_heatmaps
+from pose_est_nets.datasets.utils import generate_heatmaps
 from pose_est_nets.datasets.datamodules import BaseDataModule
 import torch
 import pytest

@@ -10,7 +10,7 @@ from typing import Callable, Literal, List, Optional, Tuple, Union, TypedDict
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 
-from pose_est_nets.utils.dataset_utils import generate_heatmaps
+from pose_est_nets.datasets.utils import generate_heatmaps
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
