@@ -103,23 +103,32 @@ hydra_paths: [
 ```
 where you specify the relative paths for `hydra` folders within the `lightning-pose/outputs` folder. Then from command line, run:
 ```console
-foo@bar:~$ python scripts/predict_compare.py
+foo@bar:~$ python scripts/launch_diagnostics.py
 ```
 
 ### Option 2: Override from command line
 Specify `hydra_paths` in the command line, overriding the `.yaml`:
 ```console
-foo@bar:~$ python scripts/predict_compare.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"]
+foo@bar:~$ python scripts/launch_diagnostics.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"]
 ``` 
 where again, `hydra_paths` should be a list of strings with folder names within `lightning-pose/outputs`.
 
 ## Predict keypoints on new videos
-With a trained model and a path to a new videos, you can generate predictions for each frame and save it as a `.csv` or `.h5` file. You need to specify two paths:
+With a trained model and a path to a new video, you can generate predictions for each frame and save it as a `.csv` or `.h5` file. 
+To do so for the example dataset, run:
+
+```console
+foo@bar:~$ python scripts/predict_new_vids.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"]
+```
+
+using the same hydra path as before.
+
+In order to use this script more generally, you need to specify several paths:
 1. `eval.hydra_paths`: path to models to use for prediction: 
 2. `eval.path_to_test_videos`: path to a *folder* with new videos (not a single video)
-3. `path_to_save_predictions`: optional path specifying where to save predictions. If `null`, the predictions will be saved in `eval.path_to_test_videos`.
+3. `path_to_save_predictions`: optional path specifying where to save prediction csv files. If `null`, the predictions will be saved in `eval.path_to_test_videos`.
 
-as in above, you could directly edit `scripts/configs/eval/eval_params.yaml` and run
+As above, you could directly edit `scripts/configs/eval/eval_params.yaml` and run
 ```console
 foo@bar:~$ python scripts/predict_new_vids.py 
 ```
@@ -128,3 +137,13 @@ or override these arguments in the command line.
 ```console
 foo@bar:~$ python scripts/predict_new_vids.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"] eval.path_to_save_predictions="/path/to/your/file.csv" eval.path_to_test_videos="path/to/test/vids"
 ```
+
+## Overlay predicted keypoints on new videos
+With the pose predictions output by the previous step, you can now overlay these predictions on the video. 
+To do so for the example dataset, run:
+
+```console
+foo@bar:~$ python scripts/render_labeled_vids.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"]
+```
+
+using the same hydra path as before.

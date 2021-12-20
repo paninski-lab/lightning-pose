@@ -1,25 +1,25 @@
-# path to the hydra config file in the output folder, we can use it reconstruct information about loss directory
-hydra_paths:
-  ["/home/ubuntu/pose-estimation-nets/multirun/2021-12-15/04-11-43/0/"]
+# paths to the hydra config files in the output folder
+hydra_paths: ["2021-12-15/04-11-43/"]
 
-model_display_names: ["test_model"] # if you want to manually provide a different model name to be displayed in FiftyOne
+# if you want to manually provide a different model name to be displayed in FiftyOne
+model_display_names: ["test_model"]
 
 fifty_one_dataset_name: "rick_data_test"
 
-# list with absolute paths to new unlabeled videos folders for prediction (it's not absolute just for the example)
+# list with absolute paths to new unlabeled videos folders for prediction
+# (it's not absolute just for the toy example)
 path_to_test_videos: ["toy_datasets/toymouseRunningData/unlabeled_videos"]
 
 # list with absolute paths to the .csv with predictions for each vid in path_to_test_videos
 path_to_csv_predictions:
-  [
-    "toy_datasets/toymouseRunningData/unlabeled_videos/test_vid_heatmap.csv",
-    "toy_datasets/toymouseRunningData/unlabeled_videos/test_vid_heatmap_temporal.csv",
-  ]
+  ["toy_datasets/toymouseRunningData/unlabeled_videos/test_vid_heatmap_temporal_0.000000.csv"]
 
-# path to save the .csv file with preds:
-path_to_save_predictions: null # either .csv or .h5
+# path to save the .csv file with preds
+path_to_save_predictions:
+  ["toy_datasets/toymouseRunningData/unlabeled_videos/"]
 
 # params for loading images from the video using nvidia-dali
 dali_parameters:
+
   # how many frames to grab at once from the video
-  sequence_length: 64
+  sequence_length: 16

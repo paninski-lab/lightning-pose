@@ -1,53 +1,54 @@
-from pose_est_nets.callbacks.callbacks import AnnealWeight
-import pytorch_lightning as pl
-from pytorch_lightning import profiler
-import torch
+"""Example model training script."""
+
 import hydra
-from omegaconf import DictConfig, ListConfig, OmegaConf
 import imgaug.augmenters as iaa
-from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
+from omegaconf import DictConfig, ListConfig, OmegaConf
+import os
+import pytorch_lightning as pl
+import torch
+
+from pose_est_nets.callbacks.callbacks import AnnealWeight
 from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
-from pose_est_nets.models.regression_tracker import (
-    RegressionTracker,
-    SemiSupervisedRegressionTracker,
-)
+from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
 from pose_est_nets.models.heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
 )
+from pose_est_nets.models.regression_tracker import (
+    RegressionTracker,
+    SemiSupervisedRegressionTracker,
+)
 from pose_est_nets.utils.io import (
-    verify_real_data_paths,
+    return_absolute_data_paths,
     check_if_semi_supervised,
-    ckpt_path_from_base_path,
     format_and_update_loss_info,
 )
 from pose_est_nets.utils.plotting_utils import predict_dataset
-from pytorch_lightning.loggers import TensorBoardLogger
-from pytorch_lightning.callbacks import BackboneFinetuning
 
-import os
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 @hydra.main(config_path="configs", config_name="config")
 def train(cfg: DictConfig):
+    """Main fitting function, accessed from command line."""
+
     print("Our Hydra config file:")
     print(cfg)
-    semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
 
-    data_dir, video_dir = verify_real_data_paths(cfg.data)
+    # ----------------------------------------------------------------------------------
+    # Initialize data loaders and model
+    # ----------------------------------------------------------------------------------
 
-    data_transform = []
-    data_transform.append(
-        iaa.Resize(
-            {
-                "height": cfg.data.image_resize_dims.height,
-                "width": cfg.data.image_resize_dims.width,
-            }
-        )
+    data_dir, video_dir = return_absolute_data_paths(cfg.data)
+
+    data_transform = iaa.Resize(
+        {
+            "height": cfg.data.image_resize_dims.height,
+            "width": cfg.data.image_resize_dims.width,
+        }
     )
-    imgaug_transform = iaa.Sequential(data_transform)
+    imgaug_transform = iaa.Sequential([data_transform])
     if cfg.model.model_type == "regression":
         dataset = BaseTrackingDataset(
             root_directory=data_dir,
@@ -68,6 +69,7 @@ def train(cfg: DictConfig):
             "%s is an invalid cfg.model.model_type" % cfg.model.model_type
         )
 
+    semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
     if not semi_supervised:
         if not (cfg.training.gpu_id, int):
             raise NotImplementedError(
@@ -162,13 +164,17 @@ def train(cfg: DictConfig):
                 % cfg.model.model_type
             )
 
-    logger = TensorBoardLogger("tb_logs", name=cfg.model.model_name)
+    # ----------------------------------------------------------------------------------
+    # Set up and run training
+    # ----------------------------------------------------------------------------------
+
+    logger = pl.loggers.TensorBoardLogger("tb_logs", name=cfg.model.model_name)
     early_stopping = pl.callbacks.EarlyStopping(
         monitor="val_loss", patience=cfg.training.early_stop_patience, mode="min"
     )
     lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval="epoch")
     ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(monitor="val_loss")
-    transfer_unfreeze_callback = BackboneFinetuning(
+    transfer_unfreeze_callback = pl.callbacks.BackboneFinetuning(
         unfreeze_backbone_at_epoch=cfg.training.unfreezing_epoch,
         lambda_func=lambda epoch: 1.5,
         backbone_initial_ratio_lr=0.1,
@@ -192,7 +198,7 @@ def train(cfg: DictConfig):
                 type(cfg.training.gpu_id)
             )
         )
-    trainer = pl.Trainer(  # TODO: be careful with devices if you want to scale to multiple gpus
+    trainer = pl.Trainer(  # TODO: be careful with devices when scaling to multiple gpus
         gpus=gpus,
         max_epochs=cfg.training.max_epochs,
         min_epochs=cfg.training.min_epochs,
@@ -213,6 +219,10 @@ def train(cfg: DictConfig):
     )
     trainer.fit(model=model, datamodule=datamod)
 
+    # ----------------------------------------------------------------------------------
+    # Post-training cleanup
+    # ----------------------------------------------------------------------------------
+
     hydra_output_directory = os.getcwd()
     print("Hydra output directory: {}".format(hydra_output_directory))
     model_ckpt = trainer.checkpoint_callback.best_model_path
@@ -220,7 +230,7 @@ def train(cfg: DictConfig):
     print("Best model path: {}".format(model_ckpt_abs))
     if not os.path.isfile(model_ckpt_abs):
         raise FileNotFoundError(
-            "Cannot find a checkpoint to the model. Check if you have trained for too few epochs."
+            "Cannot find model checkpoint. Have you trained for too few epochs?"
         )
     predict_dataset(
         cfg=cfg,
