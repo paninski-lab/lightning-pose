@@ -46,8 +46,8 @@ def generate_heatmaps(
     output_shape: Tuple[int, int],  # dimensions of downsampled heatmap
     sigma: Union[float, int] = 1.25,  # sigma used for generating heatmaps
     normalize: bool = True,
-    nan_heatmap_mode: str = "zero",
-) -> TensorType["batch", "num_keypoints", "heatmap_width", "heatmap_height"]:
+    nan_heatmap_mode: str = "zero"
+):
     keypoints = keypoints.detach().clone()
     out_height = output_shape[0]
     out_width = output_shape[1]
@@ -75,13 +75,11 @@ def generate_heatmaps(
         confidence /= sigma * torch.sqrt(
             2 * torch.tensor(math.pi), device=keypoints.device
         )
-
+    
     if nan_heatmap_mode == "uniform":
-        uniform_heatmap = torch.ones(
-            (out_height, out_width), device=keypoints.device
-        ) / (out_height * out_width)
+        uniform_heatmap = torch.ones((out_height, out_width), device=keypoints.device) / (out_height * out_width)
         confidence[nan_idxes] = uniform_heatmap
-    else:  # nan_heatmap_mode == "zero"
+    else: #nan_heatmap_mode == "zero"
         zero_heatmap = torch.zeros((out_height, out_width), device=keypoints.device)
         confidence[nan_idxes] = zero_heatmap
 
