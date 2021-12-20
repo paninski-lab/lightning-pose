@@ -1,20 +1,27 @@
+"""Overlay model predictions on videos with fiftyone.
+
+Videos, if mp4 format, should be codec h.264. If they're not, convert them as follows:
+
+```python
+import fiftyone.utils.video as fouv
+video_path = /path/to/video.mp4
+video_path_transformed = "/path/to/video_transformed.mp4"
+fouv.reencode_video(video_path, video_path_transformed, verbose=False)
+```
+
+"""
+
 import fiftyone as fo
-import pandas as pd
-import os
 import fiftyone.utils.annotations as foua
-from tqdm import tqdm
 import hydra
 from omegaconf import DictConfig, OmegaConf
-from pose_est_nets.utils.io import verify_absolute_path
-from pose_est_nets.utils.plotting_utils import get_videos_in_dir
+import os
+import pandas as pd
+from tqdm import tqdm
 import warnings
 
-
-"""For FifyOne visualization, videos, if mp4, should be codec h.264. If they're not, see below on how to convert them:
-video_path_transformed = "/home/jovyan/lightning-pose/toy_datasets/toymouseRunningData/unlabeled_videos/transformed_test_vid.mp4"
-import fiftyone.utils.video as fouv
-fouv.reencode_video(video_path, video_path_transformed, verbose=False)
-"""
+from pose_est_nets.utils.io import return_absolute_path
+from pose_est_nets.utils.plotting_utils import get_videos_in_dir
 
 
 def make_keypoint_list(
@@ -43,18 +50,23 @@ def make_keypoint_list(
 
 @hydra.main(config_path="configs", config_name="config")
 def render_labeled_videos(cfg: DictConfig):
-    """This function currently supports a single video. It takes the .csv including predictions from one or more models.
-    TODO: we have to decide together how to generalize to multiple videos, without inputting all the csv's for each model.
+    """Overlay keypoints from already saved prediction csv file on video.
+
+    This function currently supports a single video. It takes the prediction csv from
+    one or more models.
+
+    TODO: how to generalize to multiple videos, without inputting csv for each model.
 
     Args:
-        cfg (DictConfig): our hierarchical Hydra config. of special interest is cfg.eval.
+        cfg (DictConfig): hierarchical Hydra config. of special interest is cfg.eval
+
     """
     # there may be multiple video paths in the cfg eval
     # certainly there may be multiple models.
     # loop over both
-    video_dir = verify_absolute_path(
-        cfg.eval.path_to_test_videos[0]
-    )  # TODO: just for now assuming there's one dir, but can have multiple dirs.
+
+    # TODO: just for now assuming there's one dir, but can have multiple dirs.
+    video_dir = return_absolute_path(cfg.eval.path_to_test_videos[0])
     video = get_videos_in_dir(video_dir)
     if len(video) > 1:  # just until further support
         warnings.warn(
@@ -62,7 +74,7 @@ def render_labeled_videos(cfg: DictConfig):
                 video_dir, video[0]
             )
         )
-    # currently supporting a single video in a directory, TODO: extend and loop
+    # TODO: extend and loop over multiple vids
     dataset = fo.Dataset(
         cfg.eval.fifty_one_dataset_name + "_videos"
     )  # TODO: in the future, dataset should include multiple video samples
@@ -75,7 +87,7 @@ def render_labeled_videos(cfg: DictConfig):
                 display_name, path_to_preds_file, video[0]
             )
         )
-        absolute_path_to_preds_file = verify_absolute_path(
+        absolute_path_to_preds_file = return_absolute_path(
             path_to_preds_file
         )  # if toy_dataset, append absolute path. else do nothing.
         df_with_preds = pd.read_csv(absolute_path_to_preds_file, header=[1, 2])
@@ -99,20 +111,19 @@ def render_labeled_videos(cfg: DictConfig):
     # TODO: control more params from outside?
     # After you finish interactively looking at the video it, save to disc
     
-    config = foua.DrawConfig(
-        {"keypoints_size": 9, 
-        "show_keypoints_names":True, 
-        "show_keypoints_labels":True, 
-        "per_keypoints_label_colors":False,
-        #"show_object_names":False,
-        #"show_object_labels":False,
-        #"show_frame_attr_names":False,
-        #"show_object_attr_names":False,
-        #"hide_all_names":True,
-        #"hide_all_confidences":True
-        }
-    )  # this size is good for a 400X400 image.
-    print(config)
+    config = foua.DrawConfig({
+        "keypoints_size": 9,
+        "show_keypoints_names": True,
+        "show_keypoints_labels": True,
+        "per_keypoints_label_colors": False,
+        # "show_object_names": False,
+        # "show_object_labels": False,
+        # "show_frame_attr_names": False,
+        # "show_object_attr_names": False,
+        # "hide_all_names": True,
+        # "hide_all_confidences": True
+    })  # this size is good for a 400X400 image.
+
     outpath = (
         video[0].replace(".mp4", "") + "_labeled.mp4"
     )  # TODO: careful with [0], you should loop over videos.
