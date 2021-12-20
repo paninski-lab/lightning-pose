@@ -143,3 +143,5 @@ dmypy.json
 
 # specific stuff like csv predictions on test_vid.mp4
 toy_datasets/toymouseRunningData/unlabeled_videos/*.csv
+toy_datasets/toymouseRunningData/unlabeled_videos/test_vid_labeled.mp4
+toy_datasets/toymouseRunningData/unlabeled_videos/test_vid_*.mp4

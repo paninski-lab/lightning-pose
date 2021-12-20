@@ -1,5 +1,6 @@
 ![Wide Lightning Pose Logo](assets/images/LightningPose_horizontal_light.png)
-Convolutional Networks for pose tracking implemented in **Pytorch Lightning**, supporting massively accelerated training on *unlabeled* videos using **NVIDIA DALI**.
+Convolutional Networks for pose tracking implemented in **Pytorch Lightning**, 
+supporting massively accelerated training on *unlabeled* videos using **NVIDIA DALI**.
 
 ### Built with the coolest Deep Learning packages
 * `pytorch-lightning` for multiple-GPU training and to minimize boilerplate code
@@ -11,7 +12,8 @@ Convolutional Networks for pose tracking implemented in **Pytorch Lightning**, s
 * `Tensorboard` to visually diagnoze training performance
 
 ## Required Hardware
-Your (potentially remote) machine has at least one GPU and **CUDA 11** installed. This is a requirement for **NVIDIA DALI**. 
+Your (potentially remote) machine has at least one GPU and **CUDA 11** installed. This 
+is a requirement for **NVIDIA DALI**. 
 
 Provide more GPUs and we will use them.
 
@@ -46,7 +48,8 @@ foo@bar:~$ cd lightning-pose
 foo@bar:~$ pip install -r requirements.txt
 ```
 
-You should be ready to go! You may verify that all the unit tests are passing on your machine by running
+You should be ready to go! You may verify that all the unit tests are passing on your 
+machine by running
 
 ```console
 foo@bar:~$ pytest
@@ -66,32 +69,37 @@ foo@bar:~$ pytest
 ## Training
 
 The generic script for training models in our package is `scripts/train_hydra.py`.
-The script relies on **Hydra** to manage arguments in hierarchical config files. You can run over an argument from the config file, for example, `training.max_epochs`, by calling
+The script relies on **Hydra** to manage arguments in hierarchical config files. 
+You can run over an argument from the config file, for example, `training.max_epochs`, by calling
 
 ```console
-foo@bar: ~$python scripts/train_hydra.py training.max_epochs=11
+foo@bar:~$ python scripts/train_hydra.py training.max_epochs=11
 ```
 
 ## Logs and saved models
 
-The outputs of the training script, namely the model checkpoints and `Tensorboard` logs, will be saved at the `lightning-pose/outputs/YYYY-MM-DD/tb_logs` directory.
+The outputs of the training script, namely the model checkpoints and `Tensorboard` logs, 
+will be saved at the `lightning-pose/outputs/YYYY-MM-DD/HH-MM-SS/tb_logs` directory.
 
-To view the logged losses with tensorboard, in the command line, run:
+To view the logged losses with tensorboard in your browser, in the command line, run:
 
 ```console
 foo@bar:~$ tensorboard --logdir outputs/YYYY-MM-DD/
 ```
 
-where you use the date in which you ran the model.
+where you use the date in which you ran the model. Click on the provided link in the
+terminal, which will look something like `http://localhost:6006/`. 
 
-## Visualize train/test/val predictions:
+## Visualize train/test/val predictions
 
-You can visualize the predictions of one or multiple trained models on the `train/test/val` images using the `FiftyOne` app.
+You can visualize the predictions of one or multiple trained models on the `train/test/val` 
+images using the `FiftyOne` app.
 
 You will need to specify:
 1. `eval.hydra_paths`: path to trained models to use for prediction. 
 
-Generally, using `Hydra` we can either edit the config `.yaml` files or override them from command line. 
+Generally, using `Hydra` we can either edit the config `.yaml` files or override them 
+from the command line. 
 
 ### Option 1: Edit the config
 
@@ -101,20 +109,28 @@ hydra_paths: [
 "YYYY-MM-DD/HH-MM-SS/", "YYYY-MM-DD/HH-MM-SS/",
 ]
 ```
-where you specify the relative paths for `hydra` folders within the `lightning-pose/outputs` folder. Then from command line, run:
+where you specify the relative paths for `hydra` folders within the `lightning-pose/outputs` folder. 
+Then from command line, run:
 ```console
 foo@bar:~$ python scripts/launch_diagnostics.py
 ```
+
+As with `Tensorboard`, click on the link provided in the terminal to launch the diagnostics
+in your browser.
 
 ### Option 2: Override from command line
 Specify `hydra_paths` in the command line, overriding the `.yaml`:
 ```console
 foo@bar:~$ python scripts/launch_diagnostics.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"]
 ``` 
-where again, `hydra_paths` should be a list of strings with folder names within `lightning-pose/outputs`.
+where again, `hydra_paths` should be a list of strings with folder names within 
+`lightning-pose/outputs`. 
+As with `Tensorboard`, click on the link provided in the terminal to launch the diagnostics
+in your browser.
 
 ## Predict keypoints on new videos
-With a trained model and a path to a new video, you can generate predictions for each frame and save it as a `.csv` or `.h5` file. 
+With a trained model and a path to a new video, you can generate predictions for each 
+frame and save it as a `.csv` or `.h5` file. 
 To do so for the example dataset, run:
 
 ```console
@@ -124,7 +140,7 @@ foo@bar:~$ python scripts/predict_new_vids.py eval.hydra_paths=["YYYY-MM-DD/HH-M
 using the same hydra path as before.
 
 In order to use this script more generally, you need to specify several paths:
-1. `eval.hydra_paths`: path to models to use for prediction: 
+1. `eval.hydra_paths`: path to models to use for prediction
 2. `eval.path_to_test_videos`: path to a *folder* with new videos (not a single video)
 3. `path_to_save_predictions`: optional path specifying where to save prediction csv files. If `null`, the predictions will be saved in `eval.path_to_test_videos`.
 
@@ -139,11 +155,14 @@ foo@bar:~$ python scripts/predict_new_vids.py eval.hydra_paths=["YYYY-MM-DD/HH-M
 ```
 
 ## Overlay predicted keypoints on new videos
-With the pose predictions output by the previous step, you can now overlay these predictions on the video. 
+With the pose predictions output by the previous step, you can now overlay these 
+predictions on the video. 
 To do so for the example dataset, run:
 
 ```console
 foo@bar:~$ python scripts/render_labeled_vids.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"]
 ```
 
-using the same hydra path as before.
+using the same hydra path as before. This script will by default save a labeled video in 
+the toy dataset video directory, and will also launch the fiftyone app to further 
+explore the video(s) in the browser. 
