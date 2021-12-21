@@ -130,10 +130,10 @@ def compute_PCA_reprojection_error(
     mean: torch.Tensor,
 ) -> torch.Tensor:
     # first verify that the pca array has observations divisible by 2 (corresponding to (x,y) coords)
-    assert good_arr_for_pca.shape[1] % 2 == 0
     good_arr_for_pca = good_arr_for_pca.T - mean.unsqueeze(
         0
     )  # transpose and mean-center
+    assert good_arr_for_pca.shape[1] % 2 == 0
     reprojection_arr = (
         good_arr_for_pca @ kept_eigenvectors.T @ kept_eigenvectors
     )  # e.g., (214, 4) X (4, 3) X (3, 4) = (214, 4) as we started
@@ -265,7 +265,7 @@ def compute_singleview_pca_params(
 
     # now compute epsilon
     epsilon = compute_epsilon_for_PCA(
-        good_arr_for_pca=good_arr_for_pca.to(_TORCH_DEVICE),
+        good_arr_for_pca=good_arr_for_pca.to(_TORCH_DEVICE).T,
         kept_eigenvectors=data_module.loss_param_dict["pca_singleview"][
             "kept_eigenvectors"
         ],
