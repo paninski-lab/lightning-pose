@@ -246,14 +246,14 @@ class UnlabeledDataModule(BaseDataModule):
         # perform any necessary preprocessing steps
         if losses_to_use:  # check it's not None
             if "pca_multiview" in losses_to_use:
-                from pose_est_nets.datasets.preprocessing import (
+                from pose_est_nets.utils.pca import (
                     compute_multiview_pca_params,
                 )
 
                 compute_multiview_pca_params(self)
             elif "pca_singleview" in losses_to_use:
                 # single-view pca
-                from pose_est_nets.datasets.preprocessing import (
+                from pose_est_nets.utils.pca import (
                     compute_singleview_pca_params,
                 )
 
