@@ -8,7 +8,10 @@ from geomloss import SamplesLoss
 from typeguard import typechecked
 from typing import Any, Callable, Dict, Tuple, List, Literal, Optional, Union
 
-from pose_est_nets.datasets.preprocessing import format_multiview_data_for_pca
+from pose_est_nets.datasets.preprocessing import (
+    format_multiview_data_for_pca,
+    compute_PCA_reprojection_error,
+)
 from pose_est_nets.utils.dataset_utils import generate_heatmaps
 
 patch_typeguard()  # use before @typechecked
@@ -114,7 +117,6 @@ def MaskedHeatmapLoss(
 @typechecked
 def MultiviewPCALoss(
     keypoint_preds: TensorType["batch", "two_x_num_keypoints", float],
-    discarded_eigenvectors: TensorType["num_discarded_evecs", "views_times_two", float],
     kept_eigenvectors: TensorType["num_kept_evecs", "views_times_two", float],
     mean: TensorType[float],
     epsilon: TensorType[float],
@@ -146,40 +148,25 @@ def MultiviewPCALoss(
     keypoint_preds = format_multiview_data_for_pca(
         data_arr=keypoint_preds, mirrored_column_matches=mirrored_column_matches
     )  # shape = (views * 2, num_batches * num_keypoints)
-    num_views = keypoint_preds.shape[0] // 2
-    keypoint_preds = keypoint_preds.T - mean.unsqueeze(0)
-    keypoint_preds_reproject = keypoint_preds @ kept_eigenvectors.T @ kept_eigenvectors
-    diff = keypoint_preds - keypoint_preds_reproject
-    reprojection_loss = (
-        torch.linalg.norm(diff, dim=1) / num_views
-    )  # vector norm of distance between keypoint and reprojection for each keypoint within each batch (averaged over the number of views)
+
+    reprojection_error = compute_PCA_reprojection_error(
+        good_arr_for_pca=keypoint_preds, kept_eigenvectors=kept_eigenvectors, mean=mean
+    )  # shape = (num_batches * num_keypoints, num_views)
 
     # loss values below epsilon as masked to zero
-    reprojection_loss = reprojection_loss.masked_fill(
-        mask=reprojection_loss < epsilon, value=0.0
+    reprojection_loss = reprojection_error.masked_fill(
+        mask=reprojection_error < epsilon, value=0.0
     )
-
+    # average across both (num_batches * num_keypoints) and num_views
     return torch.mean(reprojection_loss)
 
-    # abs_proj_discarded = torch.abs(
-    #     torch.matmul(keypoint_preds.T, discarded_eigenvectors.T)
-    # )
-    # epsilon_masked_proj = abs_proj_discarded.masked_fill(
-    #     mask=abs_proj_discarded < epsilon, value=0.0
-    # )
-    # # each element positive
-    # assert (epsilon_masked_proj >= 0.0).all()
-    # # the scalar loss should be smaller after zeroing out elements.
-    # assert torch.mean(epsilon_masked_proj) <= torch.mean(abs_proj_discarded)
-    # return torch.mean(epsilon_masked_proj)
 
-
+# TODO: write a unit-test for this without the toy_dataset
 @typechecked
 def SingleviewPCALoss(
     keypoint_preds: TensorType["batch", "two_x_num_keypoints", float],
-    discarded_eigenvectors: TensorType[
-        "num_discarded_evecs", "two_x_num_keypoints", float
-    ],
+    kept_eigenvectors: TensorType["num_kept_evecs", "two_x_num_keypoints", float],
+    mean: TensorType[float],
     epsilon: TensorType[float],
     **kwargs  # make loss robust to unneeded inputs
 ) -> TensorType[float]:
@@ -196,27 +183,28 @@ def SingleviewPCALoss(
         **kwargs:
 
     Returns:
-        Projection of data onto discarded eigenvectors
+        Average reprojection error across batch and num_keypoints
 
     """
 
-    abs_proj_discarded = torch.abs(
-        torch.matmul(keypoint_preds, discarded_eigenvectors.T)
+    reprojection_error = compute_PCA_reprojection_error(
+        good_arr_for_pca=keypoint_preds.T,
+        kept_eigenvectors=kept_eigenvectors,
+        mean=mean,
+    )  # shape = (batch, num_keypoints)
+
+    # loss values below epsilon as masked to zero
+    reprojection_loss = reprojection_error.masked_fill(
+        mask=reprojection_error < epsilon, value=0.0
     )
-    epsilon_masked_proj = abs_proj_discarded.masked_fill(
-        mask=abs_proj_discarded < epsilon, value=0.0
-    )
-    # each element positive
-    assert (epsilon_masked_proj >= 0.0).all()
-    # the scalar loss should be smaller after zeroing out elements.
-    assert torch.mean(epsilon_masked_proj) <= torch.mean(abs_proj_discarded)
-    return torch.mean(epsilon_masked_proj)
+    # average across both batch and num_keypoints
+    return torch.mean(reprojection_loss)
 
 
 @typechecked
 def TemporalLoss(
     keypoint_preds: TensorType["batch", "two_x_num_keypoints"],
-    epsilon: TensorType[float] = 5,
+    epsilon: TensorType[float] = 5.0,
     **kwargs  # make loss robust to unneeded inputs
 ) -> TensorType[(), float]:
     """Penalize temporal differences for each target.
@@ -231,12 +219,11 @@ def TemporalLoss(
         Temporal loss averaged over batch
 
     """
-    # returns tensor of shape (batch - 1, num_targets)
-    diffs = torch.diff(keypoint_preds, dim=0)
-    # returns tensor of shape (batch - 1, num_keypoints, 2)
-    reshape = torch.reshape(diffs, (diffs.shape[0], -1, 2))
-    # returns tensor of shape (batch - 1, num_keypoints)
-    loss = torch.linalg.norm(reshape, ord=2, dim=2)
+    diffs = torch.diff(keypoint_preds, dim=0)  # shape (batch - 1, num_targets)
+    reshape = torch.reshape(
+        diffs, (diffs.shape[0], -1, 2)
+    )  # shape (batch - 1, num_keypoints, 2)
+    loss = torch.linalg.norm(reshape, ord=2, dim=2)  # shape (batch - 1, num_keypoints)
     # epsilon-insensitive loss
     loss = loss.masked_fill(mask=loss < epsilon, value=0.0)
     return torch.mean(loss)  # pixels
