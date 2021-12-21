@@ -1,5 +1,5 @@
 """Models that produce (x, y) coordinates of keypoints from images."""
-
+# TODO: support weight tuning here too
 import torch
 from torch import nn
 from torchtyping import TensorType, patch_typeguard
@@ -9,6 +9,7 @@ from typing_extensions import Literal
 
 from pose_est_nets.losses.losses import (
     convert_dict_entries_to_tensors,
+    # convert_loss_tensors_to_torch_nn_params,
     get_losses_dict,
     MaskedRegressionMSELoss,
     MaskedRMSELoss,
@@ -29,9 +30,6 @@ class SemiSupervisedBatchDict(TypedDict):
     unlabeled: TensorType[
         "sequence_length", "RGB":3, "image_height", "image_width", float
     ]
-
-
-# TODO: Add the semisuper case
 
 
 class RegressionTracker(BaseFeatureExtractor):
@@ -70,7 +68,7 @@ class RegressionTracker(BaseFeatureExtractor):
         )
         self.num_targets = num_targets
         self.resnet_version = resnet_version
-        self.final_layer = nn.Linear(self.base.fc.in_features, self.num_targets)
+        self.final_layer = nn.Linear(self.num_fc_input_features, self.num_targets)
         # TODO: consider removing dropout
         self.representation_dropout = nn.Dropout(p=representation_dropout_rate)
         self.torch_seed = torch_seed
@@ -166,6 +164,7 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         last_resnet_layer_to_get: int = -2,
         torch_seed: int = 123,
         semi_super_losses_to_use: Optional[list] = None,
+        learn_weights: bool = True,  # whether to use multitask weight learning
     ) -> None:
         """
 
@@ -197,11 +196,35 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
             raise ValueError("cannot use unimodal loss in regression tracker")
         self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
         self.loss_params = loss_params
+        self.learn_weights = learn_weights
+        # (
+        #     self.loss_params_tensor,
+        #     self.loss_params_dict,
+        # ) = convert_dict_entries_to_tensors(  # is there a point of doing this for regression tracker?
+        #     loss_params=self.loss_params,
+        #     device=self.device,
+        #     to_parameters=self.learn_weights,
+        # )
+        self.loss_weights_dict, self.loss_params_dict = convert_dict_entries_to_tensors(
+            loss_params=loss_params,
+            device=self.device,
+            losses_to_use=semi_super_losses_to_use,
+            to_parameters=self.learn_weights,
+        )
+
+        self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
 
     @typechecked
     def training_step(
         self, data_batch: SemiSupervisedBatchDict, batch_idx: int
     ) -> dict:
+
+        # on each epoch, self.total_unsupervised_importance is modified by the AnnealWeight callback
+        self.log(
+            "total_unsupervised_importance",
+            self.total_unsupervised_importance,
+            prog_bar=True,
+        )
 
         # forward pass labeled
         representation = self.get_representations(data_batch["labeled"]["images"])
@@ -228,16 +251,41 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         # loop over unsupervised losses
         tot_loss = 0.0
         tot_loss += supervised_loss
-        self.loss_params = convert_dict_entries_to_tensors(
-            self.loss_params, self.device
-        )
+
         for loss_name, loss_func in self.loss_function_dict.items():
-            add_loss = self.loss_params[loss_name]["weight"] * loss_func(
-                predicted_us_keypoints, **self.loss_params[loss_name]
+
+            unsupervised_loss = loss_func(
+                keypoint_preds=predicted_us_keypoints,
+                **self.loss_params_dict[loss_name],
             )
-            tot_loss += add_loss
+
+            loss_weight = (
+                1.0
+                / (  # weight = \sigma where our trainable parameter is \log(\sigma^2). i.e., we take the parameter as it is in the config and exponentiate it to enforce positivity
+                    2.0 * torch.exp(self.loss_weights_dict[loss_name])
+                )
+            )
+
+            current_weighted_loss = loss_weight * unsupervised_loss
+            tot_loss += self.total_unsupervised_importance * current_weighted_loss
+
+            if (
+                self.learn_weights == True
+            ):  # penalize for the magnitude of the weights: \log(\sigma_i) for each weight i
+                tot_loss += self.total_unsupervised_importance * (
+                    0.5 * self.loss_weights_dict[loss_name]
+                )  #
+
             # log individual unsupervised losses
-            self.log(loss_name + "_loss", add_loss, prog_bar=True)
+            self.log(loss_name + "_loss", unsupervised_loss, prog_bar=True)
+            self.log(
+                "weighted_" + loss_name + "_loss", current_weighted_loss, prog_bar=True
+            )
+            self.log(
+                "{}_{}".format(loss_name, "weight"),
+                loss_weight,
+                prog_bar=True,
+            )
 
         # log other losses
         self.log("total_loss", tot_loss, prog_bar=True)

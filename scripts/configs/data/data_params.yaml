@@ -18,7 +18,7 @@ video_dir: "unlabeled_videos"
 csv_file: "CollectedData_.csv"
 
 # header rows to strip in label csv file
-header_rows: [0, 1]
+header_rows: [1, 2]
 
 # downsample heatmaps: 2 | 3
 downsample_factor: 2
@@ -36,6 +36,4 @@ num_targets: 34
 mirrored_column_matches:
   - [0, 1, 2, 3, 4, 5, 6]
   - [8, 9, 10, 11, 12, 13, 14]
-
-
 # TODO: add parameters related to the ground truth heatmaps, sigma, confidence_scale, etc

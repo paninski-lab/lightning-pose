@@ -43,7 +43,7 @@ def generate_heatmaps(
     keypoints: TensorType["batch", "num_keypoints", 2],
     height: int,  # height of full sized image
     width: int,  # width of full sized image
-    output_shape: Tuple[int, int],  # dimensions of full sized image
+    output_shape: Tuple[int, int],  # dimensions of downsampled heatmap
     sigma: Union[float, int] = 1.25,  # sigma used for generating heatmaps
     normalize: bool = True,
     nan_heatmap_mode: str = "zero"
