@@ -12,7 +12,7 @@ from pose_est_nets.models.heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
 )
-from pose_est_nets.utils.dataset_utils import generate_heatmaps
+from pose_est_nets.utils.heatmaps import generate_heatmaps
 import imgaug.augmenters as iaa
 import yaml
 from pytorch_lightning.trainer.supporters import CombinedLoader
