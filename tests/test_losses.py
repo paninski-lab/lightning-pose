@@ -110,19 +110,25 @@ def test_get_losses_dict():
 
 
 def test_SingleView_PCA_loss():
-    # TODO: make that test smarter with hand-constructed e-vecs
     from pose_est_nets.losses.losses import SingleviewPCALoss
 
-    predicted_keypoints = torch.zeros(
-        size=(3, 12),
-        device="cpu",
-    )
-
-    kept_evecs = torch.zeros(size=(2, 12), device="cpu")
+    kept_evecs = torch.eye(n=4)[:, :2].T  # two eigenvecs, each 4D
+    projection_to_obs = torch.randn(
+        size=(10, 2)
+    )  # random projection matrix from kept_evecs to obs
+    obs = projection_to_obs @ kept_evecs  # make 10 observations
+    mean = obs.mean(dim=0)
+    good_arr_for_pca = obs - mean.unsqueeze(0)  # subtract mean
     epsilon = torch.tensor(0.0, device="cpu")
-    mean = torch.zeros(size=(12,), device="cpu")
+    reproj = (
+        good_arr_for_pca @ kept_evecs.T @ kept_evecs
+    )  # first matmul projects to 2D, second matmul projects back to 4D
+    assert torch.allclose(
+        (reproj - good_arr_for_pca), torch.zeros_like(input=reproj)
+    )  # assert that reproj=good_arr_for_pca
+    # now verify that the pca loss acknowledges this
     single_view_pca_loss = SingleviewPCALoss(
-        keypoint_preds=predicted_keypoints,
+        keypoint_preds=obs,
         kept_eigenvectors=kept_evecs,
         mean=mean,
         epsilon=epsilon,
