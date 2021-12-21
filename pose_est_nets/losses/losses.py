@@ -322,10 +322,6 @@ def convert_dict_entries_to_tensors(
                     loss_weights_dict[loss] = torch.tensor(
                         val, dtype=torch.float, device=device
                     )
-                    if to_parameters:
-                        loss_weights_dict[loss] = torch.nn.Parameter(
-                            data=loss_weights_dict[loss], requires_grad=True
-                        )
                 elif key == "epsilon" and type(val) != torch.Tensor and val != None:
                     loss_params_dict[loss][key] = torch.tensor(
                         val, dtype=torch.float, device=device
@@ -351,6 +347,6 @@ def convert_loss_tensors_to_torch_nn_params(
     loss_weights_params = {}
     for loss, weight in loss_weights.items():  # loop over multiple different losses
         print(loss, weight)
-        loss_weights_params[loss] = torch.nn.Parameter(weight)
+        loss_weights_params[loss] = torch.nn.Parameter(weight, requires_grad=True)
     parameter_dict = torch.nn.ParameterDict(loss_weights_params)
     return parameter_dict
