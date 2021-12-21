@@ -57,8 +57,7 @@ def test_TemporalLoss():
         size=(12, 32),
         device="cpu",
     )
-    loss = TemporalLoss(
-        predicted_keypoints, epsilon=torch.Tensor([0.], device="cpu"))
+    loss = TemporalLoss(predicted_keypoints, epsilon=torch.Tensor([0.0], device="cpu"))
     assert loss.shape == torch.Size([])
     assert loss > 0.0
 
@@ -69,27 +68,31 @@ def test_TemporalLoss():
         size=(num_batch, num_keypoints),
         device="cpu",
     )
-    loss = TemporalLoss(predicted_keypoints, epsilon=torch.Tensor([0.], device="cpu"))
+    loss = TemporalLoss(predicted_keypoints, epsilon=torch.Tensor([0.0], device="cpu"))
     assert loss == 0
 
     # compute actual norm
     predicted_keypoints = torch.Tensor(
-        [[0., 0.], [np.sqrt(2.), np.sqrt(2.)]], device="cpu")
-    loss = TemporalLoss(predicted_keypoints, epsilon=torch.Tensor([0.], device="cpu"))
+        [[0.0, 0.0], [np.sqrt(2.0), np.sqrt(2.0)]], device="cpu"
+    )
+    loss = TemporalLoss(predicted_keypoints, epsilon=torch.Tensor([0.0], device="cpu"))
     assert loss.item() - 2 < 1e-6
 
     # test epsilon
-    s2 = np.sqrt(2.)
-    s3 = np.sqrt(3.)
+    s2 = np.sqrt(2.0)
+    s3 = np.sqrt(3.0)
     predicted_keypoints = torch.Tensor(
-        [[0., 0.], [s2, s2], [s3 + s2, s3 + s2]], device="cpu")
+        [[0.0, 0.0], [s2, s2], [s3 + s2, s3 + s2]], device="cpu"
+    )
     # [s2, s2] -> 2
     # [s3, s3] -> sqrt(6)
-    loss = TemporalLoss(predicted_keypoints, epsilon=torch.Tensor([0.], device="cpu"))
+    loss = TemporalLoss(predicted_keypoints, epsilon=torch.Tensor([0.0], device="cpu"))
     assert (loss.item() - (2 + np.sqrt(6))) < 1e-6
 
     loss = TemporalLoss(predicted_keypoints, epsilon=torch.Tensor([2.1], device="cpu"))
-    assert (loss.item() - np.sqrt(6)) < 1e-6  # due to epsilon the "2" entry will be zeroed out
+    assert (
+        loss.item() - np.sqrt(6)
+    ) < 1e-6  # due to epsilon the "2" entry will be zeroed out
 
 
 def test_get_losses_dict():
@@ -100,33 +103,28 @@ def test_get_losses_dict():
     assert "temporal" not in list(out_dict.keys())
     assert type(out_dict) == dict
 
-    #test outdated because we changed type checking on this
-    #pytest.raises(TypeError, get_losses_dict, ["bla"])
+    # test outdated because we changed type checking on this
+    # pytest.raises(TypeError, get_losses_dict, ["bla"])
+
+    # Biggest thing is to make sure shapes match: Matt
 
 
-    #Biggest thing is to make sure shapes match: Matt
 def test_SingleView_PCA_loss():
+    # TODO: make that test smarter with hand-constructed e-vecs
     from pose_est_nets.losses.losses import SingleviewPCALoss
 
-    predicted_keypoints = torch.rand(
-        size=(12, 32),
+    predicted_keypoints = torch.zeros(
+        size=(3, 12),
         device="cpu",
     )
 
-    discarded_evecs = torch.zeros(
-        size=(6, 32),
-        device="cpu"
-    )
-    epsilon = torch.zeros(
-        size=(6,),
-        device="cpu"
-    )
+    kept_evecs = torch.zeros(size=(2, 12), device="cpu")
+    epsilon = torch.tensor(0.0, device="cpu")
+    mean = torch.zeros(size=(12,), device="cpu")
     single_view_pca_loss = SingleviewPCALoss(
-        keypoint_preds=predicted_keypoints, 
-        discarded_eigenvectors=discarded_evecs,
-        epsilon=epsilon
+        keypoint_preds=predicted_keypoints,
+        kept_eigenvectors=kept_evecs,
+        mean=mean,
+        epsilon=epsilon,
     )
-    assert(single_view_pca_loss == 0.0)
-
-
-
+    assert single_view_pca_loss == 0.0

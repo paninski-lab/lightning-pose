@@ -129,7 +129,7 @@ def compute_PCA_reprojection_error(
     kept_eigenvectors: torch.Tensor,
     mean: torch.Tensor,
 ) -> torch.Tensor:
-    good_arr_for_pca = good_arr_for_pca.to(_TORCH_DEVICE)
+    # good_arr_for_pca = good_arr_for_pca.to(_TORCH_DEVICE) # Uuncommenting this line, we'll get everyone on the same device
     good_arr_for_pca = good_arr_for_pca.T - mean.unsqueeze(
         0
     )  # transpose and mean-center

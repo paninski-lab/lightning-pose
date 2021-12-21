@@ -12,7 +12,7 @@ from pose_est_nets.datasets.preprocessing import (
     format_multiview_data_for_pca,
     compute_PCA_reprojection_error,
 )
-from pose_est_nets.utils.dataset_utils import generate_heatmaps
+from pose_est_nets.utils.heatmaps import generate_heatmaps
 
 patch_typeguard()  # use before @typechecked
 
@@ -140,7 +140,6 @@ def MultiviewPCALoss(
         Projection of data onto discarded eigenvectors
 
     """
-    # TODO: consider avoiding the transposes
     keypoint_preds = keypoint_preds.reshape(
         keypoint_preds.shape[0], -1, 2
     )  # shape = (batch_size, num_keypoints, 2)
