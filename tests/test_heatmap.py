@@ -15,6 +15,7 @@ from pose_est_nets.models.heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
 )
+from pose_est_nets.utils.dataset_utils import generate_heatmaps
 import imgaug.augmenters as iaa
 import yaml
 from pytorch_lightning.trainer.supporters import CombinedLoader
@@ -103,6 +104,7 @@ def test_heatmaps_from_representations():
     del heatmaps
     torch.cuda.empty_cache()  # remove tensors from gpu
 
+
 # def test_softmax():
 #     fake_image_batch = torch.rand(
 #         size=(_BATCH_SIZE, 3, _HEIGHT, _WIDTH), device=_TORCH_DEVICE
@@ -117,7 +119,49 @@ def test_heatmaps_from_representations():
 #     print(sums)
 #     ones = torch.ones(size=(_BATCH_SIZE, heatmap_model.num_keypoints), dtype=torch.int32).to(_TORCH_DEVICE)
 #     sums = torch.round(sums) #rounding error was causing assert to fail
-#     assert(sums.eq(ones)).all() 
+#     assert(sums.eq(ones)).all()
+
+
+def test_heatmap_generation():
+    """want to compare the output of our manual function to kornia's. if it works, move to kornia"""
+    # a batch size of 2, with 3 keypoints per batch.
+    from time import time
+    from kornia.geometry.subpix import render_gaussian2d
+
+    batch_dim_1 = torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]) * 10.0
+    batch_dim_2 = batch_dim_1 * 2.0
+    data = torch.stack((batch_dim_1, batch_dim_2), dim=0)
+    t_s = time()
+    fake_heatmaps = generate_heatmaps(
+        keypoints=data,
+        height=256,
+        width=256,
+        output_shape=(64, 64),
+        normalize=True,
+        nan_heatmap_mode="zero",
+    )
+    t_e = time()
+    t_ours = t_e - t_s
+    t_s = time()
+    data[:, :, 0] *= 64.0 / 256.0  # make it 4 times smaller
+    data[:, :, 1] *= 64.0 / 256.0  # make it 4 times smaller
+    kornia_heatmaps = render_gaussian2d(
+        mean=data.reshape(-1, 2), std=torch.tensor((1.0, 1.0)), size=(64, 64)
+    )
+    t_e = time()
+    t_kornia = t_e - t_s
+    print(kornia_heatmaps[0, :, :].flatten())
+    print(fake_heatmaps[0, :, :].flatten())
+    print((kornia_heatmaps[0, :, :].flatten()).sum())
+    print((fake_heatmaps[0, :, :].flatten().sum()))
+    kornia_heatmaps = kornia_heatmaps.reshape(2, 3, 64, 64)
+    kornia_min_max = (kornia_heatmaps.min(), kornia_heatmaps.max())
+    our_min_max = (fake_heatmaps.min(), fake_heatmaps.max())
+    data_1 = data.reshape(-1, 2)
+    data_2 = data_1.reshape(2, 3, 2)
+    (data == data_2).all()
+    kornia_heatmaps.shape
+    fake_keypoints = torch.tensor(3)
 
 
 def test_unsupervised():  # TODO Finish writing test
@@ -144,12 +188,15 @@ def test_unsupervised():  # TODO Finish writing test
 
     # grab example loss config file from repo
     base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
-    loss_cfg = os.path.join(base_dir, "scripts", "configs", "losses", "loss_params.yaml")
+    loss_cfg = os.path.join(
+        base_dir, "scripts", "configs", "losses", "loss_params.yaml"
+    )
     with open(loss_cfg) as f:
         loss_param_dict = yaml.load(f, Loader=yaml.FullLoader)
     # hard code multivew pca info for now
     loss_param_dict["pca_multiview"]["mirrored_column_matches"] = [
-        [0, 1, 2, 3, 4, 5, 6], [8, 9, 10, 11, 12, 13, 14]
+        [0, 1, 2, 3, 4, 5, 6],
+        [8, 9, 10, 11, 12, 13, 14],
     ]
 
     datamod = UnlabeledDataModule(
@@ -172,7 +219,12 @@ def test_unsupervised():  # TODO Finish writing test
     out = next(iter(loader))
     assert list(out.keys())[0] == "labeled"
     assert list(out.keys())[1] == "unlabeled"
-    assert out["unlabeled"].shape == (datamod.train_batch_size, 3, 384, 384,)
+    assert out["unlabeled"].shape == (
+        datamod.train_batch_size,
+        3,
+        384,
+        384,
+    )
     print(out["labeled"]["images"].device)
     print(out["unlabeled"].device)
     print(model.device)
@@ -193,9 +245,7 @@ def test_unsupervised():  # TODO Finish writing test
         384 // (2 ** model.downsample_factor),
     )
 
-    spm_l, c_l = model.run_subpixelmaxima(
-        out_heatmaps_labeled
-    )
+    spm_l, c_l = model.run_subpixelmaxima(out_heatmaps_labeled)
 
     assert spm_l.shape == (datamod.train_batch_size, model.num_targets)
 
