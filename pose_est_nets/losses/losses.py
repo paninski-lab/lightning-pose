@@ -8,7 +8,7 @@ from geomloss import SamplesLoss
 from typeguard import typechecked
 from typing import Any, Callable, Dict, Tuple, List, Literal, Optional, Union
 
-from pose_est_nets.datasets.preprocessing import (
+from pose_est_nets.utils.pca import (
     format_multiview_data_for_pca,
     compute_PCA_reprojection_error,
 )
