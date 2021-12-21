@@ -110,7 +110,7 @@ def test_get_losses_dict():
 
 
 def test_SingleView_PCA_loss():
-    from pose_est_nets.losses.losses import SingleviewPCALoss
+    from pose_est_nets.losses.losses import SingleviewPCALoss, MultiviewPCALoss
 
     kept_evecs = torch.eye(n=4)[:, :2].T  # two eigenvecs, each 4D
     projection_to_obs = torch.randn(
@@ -133,4 +133,5 @@ def test_SingleView_PCA_loss():
         mean=mean,
         epsilon=epsilon,
     )
+
     assert single_view_pca_loss == 0.0
