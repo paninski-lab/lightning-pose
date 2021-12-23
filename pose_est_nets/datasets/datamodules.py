@@ -259,7 +259,7 @@ class UnlabeledDataModule(BaseDataModule):
 
                 compute_singleview_pca_params(
                     self,
-                    empirical_epsilon_percentile=5,
+                    empirical_epsilon_percentile=5,  # TODO: check that! -- not sure it's good
                 )
 
     def setup_unlabeled(self):

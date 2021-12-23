@@ -18,6 +18,21 @@ patch_typeguard()  # use before @typechecked
 
 
 @typechecked
+def compute_pca_params(
+    loss_type: Literal["pca_singleview", "pca_multiview"],
+    data_module: UnlabeledDataModule,
+    components_to_keep: Optional[Union[int, float]],
+    empirical_epsilon_percentile: float = 90.0,
+):
+    # TODO:
+    # unify the two funcs to one. handle prints nicely.
+    # handle the components_to_keep nicely. make sure you pass the right arguments in datamodule.
+    # make sure you cover the case where the two are passed? or assume it won't happen?
+    # call the formatting function accordingly
+    return None
+
+
+@typechecked
 def compute_multiview_pca_params(
     data_module: UnlabeledDataModule,
     components_to_keep: int = 3,
@@ -37,41 +52,8 @@ def compute_multiview_pca_params(
     """
     print("Computing PCA on multiview keypoints...")
 
-    # collect data on which to run pca from data module
-    # Subset inherits from dataset, it doesn't have access to dataset.keypoints
-    if type(data_module.train_dataset) == torch.utils.data.dataset.Subset:
-
-        # copy data module to manipulate it without interfering with original
-        if type(data_module.dataset) == HeatmapDataset:
-            pca_data = super(type(data_module.dataset), data_module.dataset)
-        else:
-            pca_data = data_module.dataset
-
-        indxs = torch.tensor(data_module.train_dataset.indices)
-        data_arr = torch.index_select(
-            data_module.dataset.keypoints.detach().clone(), 0, indxs
-        )  # data_arr is shape (train_batches, keypoints, 2)
-
-        # apply augmentation which *downsamples* the frames
-        if data_module.dataset.imgaug_transform:
-            i = 0
-            for idx in indxs:
-                batch_dict = pca_data.__getitem__(idx)
-                data_arr[i] = batch_dict["keypoints"].reshape(-1, 2)
-                i += 1
-    else:
-        data_arr = (
-            data_module.train_dataset.keypoints.detach().clone()
-        )  # won't work for random splitting
-
-        # apply augmentation which *downsamples* the frames/keypoints
-        if data_module.train_dataset.imgaug_transform:
-            for i in range(len(data_arr)):
-                data_arr[i] = super(
-                    type(data_module.train_dataset), data_module.train_dataset
-                ).__getitem__(i)["keypoints"]
-
     # format data and run pca
+    data_arr = get_train_data_for_pca(data_module=data_module)
     # shape will be (2 * num_views, num_batches * num_keypoints)
     arr_for_pca = format_multiview_data_for_pca(
         data_arr,
@@ -172,45 +154,12 @@ def compute_singleview_pca_params(
     Args:
         data_module: initialized unlabeled data module, which contains all the relevant
             information
-        empirical_epsilon_percentile: ?
+        empirical_epsilon_percentile (float): a percentile of all errors, below which errors are zeroed out
 
     """
     print("Computing PCA on singleview keypoints...")
 
-    # collect data on which to run pca from data module
-    # Subset inherits from dataset, it doesn't have access to dataset.keypoints
-    if type(data_module.train_dataset) == torch.utils.data.dataset.Subset:
-
-        # copy data module to manipulate it without interfering with original
-        if type(data_module.dataset) == HeatmapDataset:
-            pca_data = super(type(data_module.dataset), data_module.dataset)
-        else:
-            pca_data = data_module.dataset
-
-        indxs = torch.tensor(data_module.train_dataset.indices)
-        data_arr = torch.index_select(
-            data_module.dataset.keypoints.detach().clone(), 0, indxs
-        )  # data_arr is shape (train_batches, keypoints, 2)
-
-        # apply augmentation which *downsamples* the frames/keypoints
-        if data_module.dataset.imgaug_transform:
-            i = 0
-            for idx in indxs:
-                batch_dict = pca_data.__getitem__(idx)
-                data_arr[i] = batch_dict["keypoints"].reshape(-1, 2)
-                i += 1
-    else:
-        data_arr = (
-            data_module.train_dataset.keypoints.detach().clone()
-        )  # won't work for random splitting
-
-        # apply augmentation which *downsamples* the frames
-        if data_module.train_dataset.imgaug_transform:
-            for i in range(len(data_arr)):
-                data_arr[i] = super(
-                    type(data_module.train_dataset), data_module.train_dataset
-                ).__getitem__(i)["keypoints"]
-
+    data_arr = get_train_data_for_pca(data_module=data_module)
     # format data and run pca
     # shape is (num_batches, num_keypoints * 2)
     arr_for_pca = data_arr.reshape(data_arr.shape[0], -1)
@@ -262,6 +211,53 @@ def compute_singleview_pca_params(
         loss_key="pca_singleview",
         epsilon=epsilon,
     )
+
+
+@typechecked
+def get_train_data_for_pca(data_module: UnlabeledDataModule) -> torch.Tensor:
+    """collect training data on which to run pca from data module. extract the training frames, transform them, and spit out a tensor of data.
+
+    Args:
+        data_module (UnlabeledDataModule): an instance of UnlabeledDataModule
+
+    Returns:
+        torch.Tensor:
+    """
+    # collect data on which to run pca from data module
+    # Subset inherits from dataset, it doesn't have access to dataset.keypoints
+    if type(data_module.train_dataset) == torch.utils.data.dataset.Subset:
+
+        # copy data module to manipulate it without interfering with original
+        if type(data_module.dataset) == HeatmapDataset:
+            pca_data = super(type(data_module.dataset), data_module.dataset)
+        else:
+            pca_data = data_module.dataset
+
+        indxs = torch.tensor(data_module.train_dataset.indices)
+        data_arr = torch.index_select(
+            data_module.dataset.keypoints.detach().clone(), 0, indxs
+        )  # data_arr is shape (train_batches, keypoints, 2)
+
+        # apply augmentation which *downsamples* the frames/keypoints
+        if data_module.dataset.imgaug_transform:
+            i = 0
+            for idx in indxs:
+                batch_dict = pca_data.__getitem__(idx)
+                data_arr[i] = batch_dict["keypoints"].reshape(-1, 2)
+                i += 1
+    else:
+        data_arr = (
+            data_module.train_dataset.keypoints.detach().clone()
+        )  # won't work for random splitting
+
+        # apply augmentation which *downsamples* the frames
+        if data_module.train_dataset.imgaug_transform:
+            for i in range(len(data_arr)):
+                data_arr[i] = super(
+                    type(data_module.train_dataset), data_module.train_dataset
+                ).__getitem__(i)["keypoints"]
+
+    return data_arr
 
 
 @typechecked
