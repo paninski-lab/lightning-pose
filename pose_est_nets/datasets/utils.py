@@ -54,7 +54,8 @@ def split_sizes_from_probabilities(
 
 
 @typechecked
-def clean_any_nans(data: torch.tensor, dim: int) -> torch.tensor:
+def clean_any_nans(data: torch.Tensor, dim: int) -> torch.Tensor:
+    # currently supports only 2D arrays
     nan_bool = (
         torch.sum(torch.isnan(data), dim=dim) > 0
     )  # e.g., when dim == 0, those columns (keypoints) that have >0 nans

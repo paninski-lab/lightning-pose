@@ -2,7 +2,9 @@
 
 from omegaconf import DictConfig, ListConfig
 import numpy as np
+from pytorch_lightning.core import datamodule
 from sklearn.decomposition import PCA
+import sklearn
 import torch
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
@@ -15,6 +17,148 @@ from pose_est_nets.datasets.utils import clean_any_nans
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 patch_typeguard()  # use before @typechecked
+
+# TODO: think about exporting out the data-getting procedure to its own class so that we can support general arrays, like arrays with predictions.
+
+
+@typechecked
+class KeypointPCA:
+    def __init__(
+        self,
+        loss_type: Literal["pca_singleview", "pca_multiview"],
+        data_module: UnlabeledDataModule,
+        components_to_keep: Optional[Union[int, float]],
+        empirical_epsilon_percentile: float = 90.0,
+    ):
+        self.loss_type = loss_type
+        self.data_module = data_module
+        self.components_to_keep = components_to_keep
+        self.empirical_epsilon_percentile = empirical_epsilon_percentile
+
+    def _get_training_data(self) -> None:
+        # TODO: try to simplify.
+        # iterate over train loader and organize data as a tensor
+        # collect data on which to run pca from data module
+        # Subset inherits from dataset, it doesn't have access to dataset.keypoints
+        if type(self.data_module.train_dataset) == torch.utils.data.dataset.Subset:
+
+            # copy data module to manipulate it without interfering with original
+            if type(self.data_module.dataset) == HeatmapDataset:
+                pca_data = super(
+                    type(self.data_module.dataset), self.data_module.dataset
+                )
+            else:
+                pca_data = self.data_module.dataset
+
+            indxs = torch.tensor(self.data_module.train_dataset.indices)
+            data_arr = torch.index_select(
+                self.data_module.dataset.keypoints.detach().clone(), 0, indxs
+            )  # data_arr is shape (train_batches, keypoints, 2)
+
+            # apply augmentation which *downsamples* the frames/keypoints
+            if self.data_module.dataset.imgaug_transform:
+                i = 0
+                for idx in indxs:
+                    batch_dict = pca_data.__getitem__(idx)
+                    data_arr[i] = batch_dict["keypoints"].reshape(-1, 2)
+                    i += 1
+        else:
+            data_arr = (
+                self.data_module.train_dataset.keypoints.detach().clone()
+            )  # won't work for random splitting
+
+            # apply augmentation which *downsamples* the frames
+            if self.data_module.train_dataset.imgaug_transform:
+                for i in range(len(data_arr)):
+                    data_arr[i] = super(
+                        type(self.data_module.train_dataset),
+                        self.data_module.train_dataset,
+                    ).__getitem__(i)["keypoints"]
+
+        self.data_arr = data_arr
+
+    def _format_data(self) -> None:
+        # TODO: check that the two format end up having same rows/columns division
+        if self.data_arr is not None:
+            if self.loss_type == "pca_multiview":
+                self.data_arr = format_multiview_data_for_pca(
+                    data_arr=self.data_arr,
+                    mirrored_column_matches=self.data_module.loss_param_dict[
+                        "pca_multiview"
+                    ]["mirrored_column_matches"],
+                )
+            else:  # no need to format single-view data
+                pass
+
+    def _clean_any_nans(self) -> None:
+        # we count nans along the first dimension, i.e., columns. We remove those rows whose column nan sum > 0, i.e., more than zero nan.
+        self.data_arr = clean_any_nans(self.data_arr, dim=1)
+
+    def _check_data(self) -> None:
+        # ensure we have more rows than columns after doing nan filtering
+        # TODO: raise a more informative error?
+        assert self.data_arr.shape[0] >= self.data_arr.shape[1]
+
+    def _fit_pca(self) -> None:
+        # fit PCA with the full number of comps
+        pass
+
+    def _choose_n_components(self) -> None:
+        # TODO: should we return an integer and not override?
+        # call the ComponentChooser class which we just tested.
+        pass
+
+    def __call__(self):
+        # TODO: think if we always like to override data_arr. should we need a copy of it to undo the nan stuff?
+        self._get_training_data()  # save training data in self.data_arr, TODO: consider putting in init
+        self._format_data()  # modify self.data_arr in the case of multiview pca, else keep the same
+        self._clean_any_nans()  # remove those observations with more than one Nan. TODO: consider infilling somehow
+        self._check_data()  # check that we have more observations than observation-dimensions
+
+
+class ComponentChooser:
+    """determines the number of components to keep."""
+
+    def __init__(
+        self,
+        pca_object: sklearn.decomposition.PCA,
+        components_to_keep: Optional[Union[int, float]],
+    ):
+        self.pca_object = pca_object
+        self.components_to_keep = components_to_keep  # can be either a float indicating proportion of explained variance, or an integer specifying the number of components.
+        self._check_components_to_keep()
+
+    # TODO: I dislike the confusing names (components to keep versus min_variance_explained)
+    @property
+    def cumsum_explained_variance(self):
+        return np.cumsum(self.pca_object.explained_variance_ratio_)
+
+    def _check_components_to_keep(self) -> None:
+        # if int, ensure it's not too big
+        if type(self.components_to_keep) is int:
+            assert self.components_to_keep <= len(
+                self.pca_object.explained_variance_ratio_
+            )  # TODO: check if there's a clearer attribute like n_components
+        # if float, ensure a proportion between 0.0-1.0
+        elif type(self.components_to_keep) is float:
+            assert self.components_to_keep >= 0.0 and self.components_to_keep <= 1.0
+
+    def _find_first_threshold_cross(self) -> int:
+        # find the index of the first element above a min_variance_explained threshold
+        assert type(self.components_to_keep is float)
+        components_to_keep = int(
+            np.where(self.cumsum_explained_variance >= self.components_to_keep)[0][0]
+        )
+        # cumsum is a d - 1 dimensional vector where the 0th element is the sum of the 0th and 1st element of the d dimensional vector it is summing over
+        return components_to_keep + 1
+
+    def __call__(self) -> int:
+        if type(self.components_to_keep) is int:
+            return self.components_to_keep  # return integer as is
+        elif type(self.components_to_keep) is float:
+            return (
+                self._find_first_threshold_cross()
+            )  # find that integer that crosses the minimum explained variance
 
 
 @typechecked
@@ -299,7 +443,7 @@ def pca_prints(pca: PCA, components_to_keep: int) -> None:
 def format_multiview_data_for_pca(
     data_arr: TensorType["batch", "num_keypoints", "2"],
     mirrored_column_matches: Union[ListConfig, List],
-) -> TensorType["two_times_num_views", "batch_times_num_keypoints"]:
+) -> TensorType["batch_times_num_keypoints", "two_times_num_views"]:
     """
 
     Args:
@@ -323,4 +467,4 @@ def format_multiview_data_for_pca(
         data_arr_views.append(data_arr_tmp)
     # concatenate views
     data_arr = torch.cat(data_arr_views, dim=0)
-    return data_arr
+    return data_arr.T  # note the transpose
