@@ -11,8 +11,8 @@ from typing_extensions import Literal
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau
 
+from pose_est_nets.losses.helpers import convert_dict_entries_to_tensors
 from pose_est_nets.losses.losses import (
-    convert_dict_entries_to_tensors,
     # convert_loss_tensors_to_torch_nn_modules,
     get_losses_dict,
     MaskedHeatmapLoss,
