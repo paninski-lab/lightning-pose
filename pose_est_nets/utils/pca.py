@@ -1,5 +1,6 @@
 """Preprocessing for specialized losses."""
 
+import warnings
 from omegaconf import DictConfig, ListConfig
 import numpy as np
 from pytorch_lightning.core import datamodule
@@ -8,11 +9,13 @@ import sklearn
 import torch
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
-from typing import List, Optional, Union, Literal
+from typing import List, Optional, Union, Literal, Dict
+import warnings
 
 from pose_est_nets.datasets.datamodules import UnlabeledDataModule
 from pose_est_nets.datasets.datasets import HeatmapDataset
 from pose_est_nets.datasets.utils import clean_any_nans
+from pose_est_nets.losses.helpers import EmpiricalEpsilon
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -22,18 +25,31 @@ patch_typeguard()  # use before @typechecked
 
 
 @typechecked
+def convert_dict_entries_to_tensors(
+    param_dict: Dict[str, Union[np.array, float]], device: Literal["cpu", "cuda"]
+) -> Dict[str, torch.Tensor]:
+    # TODO: currently supporting just floats
+    for key, val in param_dict.items():
+        param_dict[key] = torch.tensor(val, dtype=torch.float, device=device)
+    return param_dict
+
+
+@typechecked
 class KeypointPCA:
     def __init__(
         self,
         loss_type: Literal["pca_singleview", "pca_multiview"],
         data_module: UnlabeledDataModule,
-        components_to_keep: Optional[Union[int, float]],
+        components_to_keep: Optional[Union[int, float]] = 0.95,
         empirical_epsilon_percentile: float = 90.0,
+        device: Literal["cuda", "cpu"] = "cpu",
     ):
         self.loss_type = loss_type
         self.data_module = data_module
         self.components_to_keep = components_to_keep
         self.empirical_epsilon_percentile = empirical_epsilon_percentile
+        self.pca_object = None
+        self.device = device
 
     def _get_training_data(self) -> None:
         # TODO: try to simplify.
@@ -94,26 +110,115 @@ class KeypointPCA:
         # we count nans along the first dimension, i.e., columns. We remove those rows whose column nan sum > 0, i.e., more than zero nan.
         self.data_arr = clean_any_nans(self.data_arr, dim=1)
 
-    def _check_data(self) -> None:
+    def _ensure_no_nans(self) -> None:
+        nan_count = torch.sum(torch.isnan(self.data_arr))
+        if nan_count > 0:
+            raise ValueError(
+                "data array includes {} missing values (nans), cannot fit vanilla PCA.".format(
+                    nan_count
+                )
+            )
+
+    def _ensure_enough_data(self) -> None:
         # ensure we have more rows than columns after doing nan filtering
-        # TODO: raise a more informative error?
-        assert self.data_arr.shape[0] >= self.data_arr.shape[1]
+        if self.data_arr.shape[0] < self.data_arr.shape[1]:
+            raise ValueError(
+                "cannot fit PCA with {} observations < {} observation dimensions".format(
+                    self.data_arr.shape[0], self.data_arr.shape[1]
+                )
+            )
+
+    def _check_data(self) -> None:
+        self._ensure_no_nans()
+        self._ensure_enough_data()
 
     def _fit_pca(self) -> None:
-        # fit PCA with the full number of comps
-        pass
+        # fit PCA with the full number of comps on the cleaned-up data array.
+        # note self.data_arr is a tensor but sklearn's PCA function is fine with it
+        self.pca_object = PCA(svd_solver="full")
+        self.pca_object.fit(X=self.data_arr)
 
     def _choose_n_components(self) -> None:
         # TODO: should we return an integer and not override?
-        # call the ComponentChooser class which we just tested.
-        pass
+        if self.loss_type == "pca_multiview":
+            self._n_components_kept = 3  # all views can be explained by 3 (x,y,z) coords. ignore self.components_to_keep_argument
+            if self._n_components_kept != self.components_to_keep:
+                warnings.warn(
+                    "for {} loss, you specified {} components_to_keep, but we will instead keep {} components".format(
+                        self.loss_type, self.components_to_keep, self._n_components_kept
+                    )
+                )
+        elif self.loss_type == "pca_singleview":
+            if self.pca_object is not None:
+                self._n_components_kept = ComponentChooser(
+                    fitted_pca_object=self.pca_object,
+                    components_to_keep=self.components_to_keep,
+                ).__call__()
+        assert type(self._n_components_kept) is int
+
+    def pca_prints(self) -> None:
+        # called after we've fitted a pca object and selected how many components to keep.
+        pca_prints(self.pca_object, self.loss_type, self._n_components_kept)
+
+    def _set_parameter_dict(self) -> None:
+        self.parameters = {}  # dict with same keys as loss_param_dict
+        self.parameters["mean"] = self.pca_object.mean_
+        self.parameters["kept_eigenvectors"] = self.pca_object.components_[
+            : self._n_components_kept
+        ]
+        self.parameters["discarded_eigenvectors"] = self.pca_object.components_[
+            self._n_components_kept :
+        ]
+        self.parameters = convert_dict_entries_to_tensors(self.parameters, self.device)
+
+        self.parameters["epsilon"] = EmpiricalEpsilon(
+            percentile=self.empirical_epsilon_percentile
+        )(loss=self._compute_reproj_error())
+
+    def _compute_reproj_error(self) -> torch.Tensor:
+        return compute_PCA_reprojection_error(
+            self.data_arr.to(self.device),
+            self.parameters["kept_eigenvectors"],
+            self.parameters["mean"],
+        )
+
+    def _convert_dict_entries_to_tensors(self) -> None:
+        for key, val in self.parameters.items():
+            self.parameters[key] = torch.tensor(
+                val, dtype=torch.float, device=_TORCH_DEVICE
+            )
+
+    @typechecked
+    def compute_epsilon_for_PCA(
+        clean_pca_arr: torch.Tensor,
+        kept_eigenvectors: torch.Tensor,
+        mean: torch.Tensor,
+        empirical_epsilon_percentile: float,
+    ):
+        # TODO: outdated
+
+        reprojection_loss = compute_PCA_reprojection_error(
+            clean_pca_arr, kept_eigenvectors, mean
+        )
+
+        epsilon = np.nanpercentile(
+            reprojection_loss.flatten().clone().detach().cpu().numpy(),
+            empirical_epsilon_percentile,
+            axis=0,
+        )
+        return epsilon
 
     def __call__(self):
         # TODO: think if we always like to override data_arr. should we need a copy of it to undo the nan stuff?
         self._get_training_data()  # save training data in self.data_arr, TODO: consider putting in init
         self._format_data()  # modify self.data_arr in the case of multiview pca, else keep the same
         self._clean_any_nans()  # remove those observations with more than one Nan. TODO: consider infilling somehow
-        self._check_data()  # check that we have more observations than observation-dimensions
+        self._check_data()  # check no nans, and that we have more observations than observation-dimensions
+        self._fit_pca()
+        self._choose_n_components()
+        self.pca_prints()
+        self._set_parameter_dict()  # save all the meaningful quantities
+        # extract those relevant eigenvectors, make them into tensors, compute epsilon and return
 
 
 class ComponentChooser:
@@ -121,31 +226,42 @@ class ComponentChooser:
 
     def __init__(
         self,
-        pca_object: sklearn.decomposition.PCA,
+        fitted_pca_object: sklearn.decomposition.PCA,
         components_to_keep: Optional[Union[int, float]],
     ):
-        self.pca_object = pca_object
+        self.fitted_pca_object = fitted_pca_object
         self.components_to_keep = components_to_keep  # can be either a float indicating proportion of explained variance, or an integer specifying the number of components.
         self._check_components_to_keep()
 
-    # TODO: I dislike the confusing names (components to keep versus min_variance_explained)
+    # TODO: I dislike the confusing names (components_to_keep versus min_variance_explained)
+
     @property
     def cumsum_explained_variance(self):
-        return np.cumsum(self.pca_object.explained_variance_ratio_)
+        return np.cumsum(self.fitted_pca_object.explained_variance_ratio_)
 
     def _check_components_to_keep(self) -> None:
         # if int, ensure it's not too big
         if type(self.components_to_keep) is int:
-            assert self.components_to_keep <= len(
-                self.pca_object.explained_variance_ratio_
-            )  # TODO: check if there's a clearer attribute like n_components
+            if self.components_to_keep > self.fitted_pca_object.n_components_:
+                raise ValueError(
+                    "components_to_keep was set to {}, exceeding the maximum value of {} observation dims".format(
+                        self.components_to_keep, self.fitted_pca_object.n_components_
+                    )
+                )
         # if float, ensure a proportion between 0.0-1.0
         elif type(self.components_to_keep) is float:
-            assert self.components_to_keep >= 0.0 and self.components_to_keep <= 1.0
+            if self.components_to_keep < 0.0 or self.components_to_keep > 1.0:
+                raise ValueError(
+                    "components_to_keep was set to {} while it has to be between 0.0 and 1.0".format(
+                        self.components_to_keep
+                    )
+                )
 
     def _find_first_threshold_cross(self) -> int:
         # find the index of the first element above a min_variance_explained threshold
-        assert type(self.components_to_keep is float)
+        assert type(
+            self.components_to_keep is float
+        )  # i.e., threshold crossing doesn't make sense with an integer components_to_keep
         components_to_keep = int(
             np.where(self.cumsum_explained_variance >= self.components_to_keep)[0][0]
         )
@@ -159,21 +275,6 @@ class ComponentChooser:
             return (
                 self._find_first_threshold_cross()
             )  # find that integer that crosses the minimum explained variance
-
-
-@typechecked
-def compute_pca_params(
-    loss_type: Literal["pca_singleview", "pca_multiview"],
-    data_module: UnlabeledDataModule,
-    components_to_keep: Optional[Union[int, float]],
-    empirical_epsilon_percentile: float = 90.0,
-):
-    # TODO:
-    # unify the two funcs to one. handle prints nicely.
-    # handle the components_to_keep nicely. make sure you pass the right arguments in datamodule.
-    # make sure you cover the case where the two are passed? or assume it won't happen?
-    # call the formatting function accordingly
-    return None
 
 
 @typechecked
@@ -243,20 +344,18 @@ def compute_multiview_pca_params(
 # TODO: add TensorType
 @typechecked
 def compute_PCA_reprojection_error(
-    good_arr_for_pca: torch.Tensor,
+    clean_pca_arr: torch.Tensor,
     kept_eigenvectors: torch.Tensor,
     mean: torch.Tensor,
 ) -> torch.Tensor:
     # first verify that the pca array has observations divisible by 2 (corresponding to (x,y) coords)
-    good_arr_for_pca = good_arr_for_pca.T - mean.unsqueeze(
-        0
-    )  # transpose and mean-center
-    assert good_arr_for_pca.shape[1] % 2 == 0
+    clean_pca_arr = clean_pca_arr - mean.unsqueeze(0)  # mean-center
+    assert clean_pca_arr.shape[1] % 2 == 0
     reprojection_arr = (
-        good_arr_for_pca @ kept_eigenvectors.T @ kept_eigenvectors
+        clean_pca_arr @ kept_eigenvectors.T @ kept_eigenvectors
     )  # e.g., (214, 4) X (4, 3) X (3, 4) = (214, 4) as we started
     diff = (
-        good_arr_for_pca - reprojection_arr
+        clean_pca_arr - reprojection_arr
     )  # shape: (num_samples: for multiview (num_samples=num_samples X num_bodyparts), observation_dim: for multiview (2 X num_views), for singleview (2 X num_bodyparts))
     # reshape:
     diff_arr_per_keypoint = diff.reshape(diff.shape[0], diff.shape[1] // 2, 2)
@@ -269,14 +368,14 @@ def compute_PCA_reprojection_error(
 
 @typechecked
 def compute_epsilon_for_PCA(
-    good_arr_for_pca: torch.Tensor,
+    clean_pca_arr: torch.Tensor,
     kept_eigenvectors: torch.Tensor,
     mean: torch.Tensor,
     empirical_epsilon_percentile: float,
 ):
 
     reprojection_loss = compute_PCA_reprojection_error(
-        good_arr_for_pca, kept_eigenvectors, mean
+        clean_pca_arr, kept_eigenvectors, mean
     )
 
     epsilon = np.nanpercentile(
@@ -430,13 +529,13 @@ def add_params_to_loss_dict(
 
 
 @typechecked
-def pca_prints(pca: PCA, components_to_keep: int) -> None:
-    print("Results of running PCA on keypoints:")
+def pca_prints(pca: PCA, condition: str, components_to_keep: int) -> None:
+    print("Results of running PCA ({}) on keypoints:".format(condition))
+    print("Kept {} components, and found:".format(components_to_keep))
     evr = np.round(pca.explained_variance_ratio_, 3)
-    print("components kept: {}".format(components_to_keep))
-    print("explained_variance_ratio_: {}".format(evr))
+    print("Explained variance ratio: {}".format(evr))
     tev = np.round(np.sum(pca.explained_variance_ratio_[:components_to_keep]), 3)
-    print("total_explained_var: {}".format(tev))
+    print("Variance explained by {} components: {}".format(components_to_keep, tev))
 
 
 @typechecked

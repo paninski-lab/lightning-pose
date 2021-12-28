@@ -4,6 +4,144 @@ import numpy as np
 import pytest
 import yaml
 import sklearn
+import os
+import imgaug.augmenters as iaa
+from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
+from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
+from typing import List
+from pose_est_nets.utils.pca import KeypointPCA
+import unittest
+
+
+def checkEqual(L1, L2):
+    return len(L1) == len(L2) and sorted(L1) == sorted(L2)
+
+
+@pytest.fixture
+def heatmap_dataset() -> HeatmapDataset:
+    """creates a basic heatmap dataset from toy_datasets/toymouseRunningData
+
+    Returns:
+        HeatmapDataset: [description]
+    """
+    data_transform = []
+    data_transform.append(
+        iaa.Resize({"height": 256, "width": 256})
+    )  # dlc dimensions need to be repeatably divisable by 2
+    imgaug_transform = iaa.Sequential(data_transform)
+
+    heatmap_dataset = HeatmapDataset(
+        root_directory="toy_datasets/toymouseRunningData",
+        csv_path="CollectedData_.csv",
+        header_rows=[1, 2],
+        imgaug_transform=imgaug_transform,
+    )
+
+    return heatmap_dataset
+
+
+@pytest.fixture
+def video_list() -> List[str]:
+    video_directory = "toy_datasets/toymouseRunningData/unlabeled_videos"
+    assert os.path.exists(video_directory)
+
+    # video_directory may contain other random files that are not vids, DALI will try to
+    # read them
+    video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
+    vids = []
+    for f in video_files:
+        if f.endswith(".mp4"):  # hardcoded for the toydataset folder
+            vids.append(f)
+    return vids
+
+
+@pytest.fixture
+def loss_param_dict() -> dict:
+    # TODO: check if needed
+    # grab example loss config file from repo
+    base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
+    loss_cfg = os.path.join(
+        base_dir, "scripts", "configs", "losses", "loss_params.yaml"
+    )
+    with open(loss_cfg) as f:
+        loss_param_dict = yaml.load(f, Loader=yaml.FullLoader)
+    # hard code multivew pca info for now
+    loss_param_dict["pca_multiview"]["mirrored_column_matches"] = [
+        [0, 1, 2, 3, 4, 5, 6],
+        [8, 9, 10, 11, 12, 13, 14],
+    ]
+    return loss_param_dict
+
+
+@pytest.fixture
+def data_module(heatmap_dataset, video_list, loss_param_dict) -> UnlabeledDataModule:
+    unlabeled_module_heatmap = UnlabeledDataModule(
+        heatmap_dataset, video_paths_list=video_list, loss_param_dict=loss_param_dict
+    )
+    return unlabeled_module_heatmap
+
+
+def test_pca_keypoint_class(data_module):
+    # initialize an instance
+    kp_pca = KeypointPCA(
+        loss_type="pca_multiview",
+        data_module=data_module,
+        components_to_keep=0.9,
+        empirical_epsilon_percentile=0.3,
+    )
+    kp_pca._get_training_data()
+    assert kp_pca.data_arr.shape == (31, 17, 2)  # 31 is 0.8*39 images
+
+    # we know that there are nan keypoints in this toy dataset, assert that
+    nan_count_pre_cleanup = torch.sum(torch.isnan(kp_pca.data_arr))
+    assert nan_count_pre_cleanup > 0
+
+    kp_pca._format_data()
+    assert kp_pca.data_arr.shape == (
+        7 * 31,
+        4,
+    )  # 7 keypoints seen from both views (specified in loss param dict), 31 images, 4 coords per keypoint
+
+    # again, it should still contain nans
+    nan_count_pre_cleanup = torch.sum(torch.isnan(kp_pca.data_arr))
+    assert nan_count_pre_cleanup > 0
+
+    # now clean nans
+    kp_pca._clean_any_nans()
+    assert kp_pca.data_arr.shape[0] < (31 * 7)  # we've eliminated some rows
+
+    # no nans allowed at this stage
+    nan_count = torch.sum(torch.isnan(kp_pca.data_arr))
+    assert nan_count == 0
+
+    # check that we have enough ovservations
+    kp_pca._check_data()  # raises ValueErrors if fails
+
+    # fit the pca model
+    kp_pca._fit_pca()
+
+    # we specified 0.9 components to keep but we'll take 3
+    kp_pca._choose_n_components()
+
+    kp_pca.pca_prints()
+
+    kp_pca._set_parameter_dict()
+
+    checkEqual(
+        list(kp_pca.parameters.keys()),
+        ["mean", "kept_eigenvectors", "discarded_eigenvectors", "epsilon"],
+    )
+
+    # assert that the results of running the .__call__() method are the same as separately running each of the subparts
+    kp_pca_2 = KeypointPCA(
+        loss_type="pca_multiview",
+        data_module=data_module,
+        components_to_keep=0.9,
+        empirical_epsilon_percentile=0.3,
+    )
+    kp_pca_2.__call__()
+
+    assert (kp_pca_2.data_arr == kp_pca.data_arr).all()
 
 
 def test_format_multiview_data_for_pca():
@@ -62,18 +200,18 @@ def test_component_chooser():
     assert comp_chooser_int() == 4
 
     # can't keep more than 10 componets for diabetes data (obs dim = 10)
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         comp_chooser_int = ComponentChooser(pca, 11)
 
     # we return ints, so basically checking that 2 < 3
     assert ComponentChooser(pca, 2)() < ComponentChooser(pca, 3)()
 
     # can't explain more than 1.0 of the variance
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         comp_chooser_float = ComponentChooser(pca, 1.04)
 
     # no negative proportions
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         comp_chooser_float = ComponentChooser(pca, -0.2)
 
     # typical behavior

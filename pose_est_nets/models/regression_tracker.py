@@ -6,9 +6,8 @@ from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict
 from typing_extensions import Literal
-
+from pose_est_nets.losses.helpers import convert_dict_entries_to_tensors
 from pose_est_nets.losses.losses import (
-    convert_dict_entries_to_tensors,
     # convert_loss_tensors_to_torch_nn_params,
     get_losses_dict,
     MaskedRegressionMSELoss,
