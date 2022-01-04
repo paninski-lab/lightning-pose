@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from typeguard import typechecked
 from torchtyping import TensorType, patch_typeguard
-from typing import Tuple, Union, Dict, List
+from typing import Tuple, Union, Dict, List, Literal
 
 patch_typeguard()  # use before @typechecked
 
@@ -11,7 +11,7 @@ class EmpiricalEpsilon:
     def __init__(self, percentile) -> None:
         self.percentile = percentile
 
-    def __call__(self, loss: torch.Tensor) -> float:
+    def __call__(self, loss: Union[torch.Tensor, np.array]) -> float:
         """compute the percentile of some loss, to use as an epsilon for epsilon-insensitive loss.
 
         Args:
@@ -20,10 +20,13 @@ class EmpiricalEpsilon:
         Returns:
             float: the percentile of the loss which we use as epsilon
         """
-        flattened_loss = loss.flatten().clone().detach().cpu().numpy()
+        flattened_loss = loss.flatten()  # applies for both np arrays and torch tensors.
+        if type(loss) is torch.Tensor:
+            flattened_loss = flattened_loss.clone().detach().cpu().numpy()
         return np.nanpercentile(flattened_loss, self.percentile, axis=0)
 
 
+# TODO: revisit
 @typechecked
 def convert_dict_entries_to_tensors(
     loss_params: Dict[str, dict],
@@ -81,3 +84,13 @@ def convert_loss_tensors_to_torch_nn_params(
         loss_weights_params[loss] = torch.nn.Parameter(weight, requires_grad=True)
     parameter_dict = torch.nn.ParameterDict(loss_weights_params)
     return parameter_dict
+
+
+@typechecked
+def convert_dict_values_to_tensors(
+    param_dict: Dict[str, Union[np.array, float]], device: Literal["cpu", "cuda"]
+) -> Dict[str, torch.Tensor]:
+    # TODO: currently supporting just floats
+    for key, val in param_dict.items():
+        param_dict[key] = torch.tensor(val, dtype=torch.float, device=device)
+    return param_dict

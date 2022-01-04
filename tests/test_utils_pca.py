@@ -81,6 +81,45 @@ def data_module(heatmap_dataset, video_list, loss_param_dict) -> UnlabeledDataMo
     return unlabeled_module_heatmap
 
 
+def test_train_loader_iter(data_module):
+    # data_module.setup()
+    # access both loaders
+    # TODO this is just messing around with dataloaders. good educationally, not great as a test. keep somehow.
+    dataset_length = len(data_module.train_dataset)
+    from pytorch_lightning.trainer.supporters import CombinedLoader
+
+    loaders = data_module.train_dataloader()
+    combined_loader = CombinedLoader(loaders)
+    image_counter = 0
+    for i, batch in enumerate(combined_loader):
+        image_counter += len(batch["labeled"]["keypoints"])
+        assert type(batch) is dict
+        assert type(batch["labeled"]) is dict
+        assert type(batch["unlabeled"]) is torch.Tensor
+        assert checkEqual(
+            list(batch["labeled"].keys()), ["images", "keypoints", "idxs", "heatmaps"]
+        )
+        # print(type(batch["labeled"]))
+        # print(batch["labeled"])
+        # print(batch)
+    assert image_counter == dataset_length
+
+    # access only the labeled loader
+    labeled_loader = data_module.train_dataloader()["labeled"]
+    print(type(labeled_loader))
+    for i, b in enumerate(labeled_loader):
+        print(i, b.keys(), len(b["keypoints"]))
+
+
+def test_data_extractor(data_module):
+    # TODO: move to datasets once the fixtures are set there. more rigorous testing.
+    from pose_est_nets.datasets.utils import DataExtractor
+
+    data_tensor = DataExtractor(data_module=data_module, cond="train")()
+
+    assert data_tensor.shape == (31, 34)
+
+
 def test_pca_keypoint_class(data_module):
     # initialize an instance
     kp_pca = KeypointPCA(
@@ -89,7 +128,7 @@ def test_pca_keypoint_class(data_module):
         components_to_keep=0.9,
         empirical_epsilon_percentile=0.3,
     )
-    kp_pca._get_training_data()
+    kp_pca._get_data()
     assert kp_pca.data_arr.shape == (31, 17, 2)  # 31 is 0.8*39 images
 
     # we know that there are nan keypoints in this toy dataset, assert that
