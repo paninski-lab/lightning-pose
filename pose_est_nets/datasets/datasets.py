@@ -277,17 +277,14 @@ class HeatmapDataset(BaseTrackingDataset):
 
         self.label_heatmaps = label_heatmaps
 
-        print(self.label_heatmaps.shape)
-
     @typechecked
     def __getitem__(self, idx: int) -> HeatmapExampleDict:
         """Get an example from the dataset.
 
         Calls the base dataset to get an image and a label, then additionaly
-        return the corresponding heatmap.
+        returns the corresponding heatmap.
 
         """
-        # could modify this if speed bottleneck
         example_dict: BaseExampleDict = super().__getitem__(idx)
         example_dict["heatmaps"] = self.label_heatmaps[idx]
         return example_dict
