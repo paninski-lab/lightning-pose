@@ -8,7 +8,7 @@ patch_typeguard()  # use before @typechecked
 
 
 class EmpiricalEpsilon:
-    def __init__(self, percentile) -> None:
+    def __init__(self, percentile: float) -> None:
         self.percentile = percentile
 
     def __call__(self, loss: Union[torch.Tensor, np.array]) -> float:
