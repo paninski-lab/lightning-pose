@@ -131,6 +131,17 @@ def test_pca_keypoint_class(data_module):
     kp_pca._get_data()
     assert kp_pca.data_arr.shape == (31, 17, 2)  # 31 is 0.8*39 images
 
+    # from pose_est_nets.utils.pca import get_train_data_for_pca
+
+    # old_data = get_train_data_for_pca(data_module=data_module)
+    # print(kp_pca.data_arr)
+    # print(old_data)
+    # flat_old = old_data.flatten()
+    # flat_new = kp_pca.data_arr.flatten()
+
+    # assert torch.allclose(
+    #     flat_old[~torch.isnan(flat_old)], flat_new[~torch.isnan(flat_old)]
+    # )
     # we know that there are nan keypoints in this toy dataset, assert that
     nan_count_pre_cleanup = torch.sum(torch.isnan(kp_pca.data_arr))
     assert nan_count_pre_cleanup > 0
