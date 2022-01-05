@@ -49,6 +49,9 @@ class KeypointPCA:
 
         # TODO: if you want PCA data from a different source, this method will have to be modified
         self.data_arr = DataExtractor(data_module=self.data_module, cond="train")()
+        self.data_arr = self.data_arr.reshape(
+            self.data_arr.shape[0], self.data_arr.shape[1] // 2, 2
+        )
 
     def _format_data(self) -> None:
         # TODO: check that the two format end up having same rows/columns division
@@ -142,8 +145,7 @@ class KeypointPCA:
 
     def __call__(self):
         # TODO: think if we always like to override data_arr. should we need a copy of it to undo the nan stuff?
-        self._get_training_data()  # save training data in self.data_arr, TODO: consider putting in init
-        # TODO: we want kp_pca.data_arr.shape == (31, 17, 2), now it's torch.Size([31, 34]). do an extra reshape and test.
+        self._get_data()  # save training data in self.data_arr, TODO: consider putting in init
         self._format_data()  # modify self.data_arr in the case of multiview pca, else keep the same
         self._clean_any_nans()  # remove those observations with more than one Nan. TODO: consider infilling somehow
         self._check_data()  # check no nans, and that we have more observations than observation-dimensions
