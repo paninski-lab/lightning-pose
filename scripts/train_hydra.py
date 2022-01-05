@@ -5,7 +5,9 @@ import imgaug.augmenters as iaa
 from omegaconf import DictConfig, ListConfig, OmegaConf
 import os
 import pytorch_lightning as pl
+from sklearn import datasets
 import torch
+from typing import Callable, Union
 
 from pose_est_nets.callbacks.callbacks import AnnealWeight
 from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
@@ -29,26 +31,10 @@ from pose_est_nets.utils.plotting_utils import predict_dataset
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-@hydra.main(config_path="configs", config_name="config")
-def train(cfg: DictConfig):
-    """Main fitting function, accessed from command line."""
+def get_dataset(
+    cfg: DictConfig, data_dir: str, imgaug_transform: iaa.Sequential
+) -> Union[BaseTrackingDataset, HeatmapDataset]:
 
-    print("Our Hydra config file:")
-    print(cfg)
-
-    # ----------------------------------------------------------------------------------
-    # Initialize data loaders and model
-    # ----------------------------------------------------------------------------------
-
-    data_dir, video_dir = return_absolute_data_paths(cfg.data)
-
-    data_transform = iaa.Resize(
-        {
-            "height": cfg.data.image_resize_dims.height,
-            "width": cfg.data.image_resize_dims.width,
-        }
-    )
-    imgaug_transform = iaa.Sequential([data_transform])
     if cfg.model.model_type == "regression":
         dataset = BaseTrackingDataset(
             root_directory=data_dir,
@@ -68,6 +54,23 @@ def train(cfg: DictConfig):
         raise NotImplementedError(
             "%s is an invalid cfg.model.model_type" % cfg.model.model_type
         )
+    return dataset
+
+
+def get_imgaug_tranform(cfg: DictConfig) -> iaa.Sequential:
+    # transforms
+    data_transform = iaa.Resize(
+        {
+            "height": cfg.data.image_resize_dims.height,
+            "width": cfg.data.image_resize_dims.width,
+        }
+    )
+    return iaa.Sequential([data_transform])
+
+
+def get_datamodule(
+    cfg: DictConfig, dataset: Union[BaseTrackingDataset, HeatmapDataset], video_dir: str
+) -> Union[BaseDataModule, UnlabeledDataModule]:
 
     semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
     if not semi_supervised:
@@ -75,7 +78,7 @@ def train(cfg: DictConfig):
             raise NotImplementedError(
                 "Cannot currently fit fully supervised model on multiple gpus"
             )
-        datamod = BaseDataModule(
+        data_module = BaseDataModule(
             dataset=dataset,
             train_batch_size=cfg.training.train_batch_size,
             val_batch_size=cfg.training.val_batch_size,
@@ -86,38 +89,16 @@ def train(cfg: DictConfig):
             train_frames=cfg.training.train_frames,
             torch_seed=cfg.training.rng_seed_data_pt,
         )
-        if cfg.model.model_type == "regression":
-            model = RegressionTracker(
-                num_targets=cfg.data.num_targets,
-                resnet_version=cfg.model.resnet_version,
-                torch_seed=cfg.training.rng_seed_model_pt,
-            )
-
-        elif cfg.model.model_type == "heatmap":
-            model = HeatmapTracker(
-                num_targets=cfg.data.num_targets,
-                resnet_version=cfg.model.resnet_version,
-                downsample_factor=cfg.data.downsample_factor,
-                supervised_loss=cfg.model.heatmap_loss_type,
-                reach=cfg.model.reach,
-                output_shape=dataset.output_shape,
-                torch_seed=cfg.training.rng_seed_model_pt,
-            )
-        else:
-            raise NotImplementedError(
-                "%s is an invalid cfg.model.model_type for a fully supervised model"
-                % cfg.model.model_type
-            )
-
-    else:  # semi_supervised == True
+    else:
         if not (cfg.training.gpu_id, int):
             raise NotImplementedError(
                 "Cannot currently fit semi-supervised model on multiple gpus"
             )
         # copy data-specific details into loss dict
+        # TODO: careful here, we may want to eliminate that when we refactor losses from datasets
         loss_param_dict, losses_to_use = format_and_update_loss_info(cfg)
 
-        datamod = UnlabeledDataModule(
+        data_module = UnlabeledDataModule(
             dataset=dataset,
             video_paths_list=video_dir,
             losses_to_use=losses_to_use,
@@ -135,25 +116,66 @@ def train(cfg: DictConfig):
             dali_seed=cfg.training.rng_seed_data_dali,
             device_id=cfg.training.gpu_id,
         )
+    return data_module
+
+
+def get_model(
+    cfg: DictConfig,
+    data_module: Union[BaseDataModule, UnlabeledDataModule],
+    loss_factory: Callable,  # TODO: be more specific
+) -> Union[
+    RegressionTracker,
+    HeatmapTracker,
+    SemiSupervisedRegressionTracker,
+    SemiSupervisedHeatmapTracker,
+]:
+    semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
+    if not semi_supervised:
+        if cfg.model.model_type == "regression":
+            model = RegressionTracker(
+                num_targets=cfg.data.num_targets,
+                resnet_version=cfg.model.resnet_version,
+                torch_seed=cfg.training.rng_seed_model_pt,
+            )
+        elif cfg.model.model_type == "heatmap":
+            model = HeatmapTracker(
+                num_targets=cfg.data.num_targets,
+                resnet_version=cfg.model.resnet_version,
+                downsample_factor=cfg.data.downsample_factor,
+                supervised_loss=cfg.model.heatmap_loss_type,
+                reach=cfg.model.reach,
+                output_shape=data_module.dataset.output_shape,
+                torch_seed=cfg.training.rng_seed_model_pt,
+            )
+        else:
+            raise NotImplementedError(
+                "%s is an invalid cfg.model.model_type for a fully supervised model"
+                % cfg.model.model_type
+            )
+
+    else:  # semi_supervised == True
+        # copy data-specific details into loss dict
+        # TODO: in refactoring maybe change this
+        loss_param_dict, losses_to_use = format_and_update_loss_info(cfg)
+
         if cfg.model.model_type == "regression":
             model = SemiSupervisedRegressionTracker(
                 num_targets=cfg.data.num_targets,
                 resnet_version=cfg.model.resnet_version,
-                loss_params=datamod.loss_param_dict,
+                loss_params=data_module.loss_param_dict,
                 semi_super_losses_to_use=losses_to_use,
                 torch_seed=cfg.training.rng_seed_model_pt,
             )
 
         elif cfg.model.model_type == "heatmap":
-            print(datamod.loss_param_dict)
             model = SemiSupervisedHeatmapTracker(
                 num_targets=cfg.data.num_targets,
                 resnet_version=cfg.model.resnet_version,
                 downsample_factor=cfg.data.downsample_factor,
                 supervised_loss=cfg.model.heatmap_loss_type,
                 reach=cfg.model.reach,
-                output_shape=dataset.output_shape,
-                loss_params=datamod.loss_param_dict,
+                output_shape=data_module.dataset.output_shape,
+                loss_params=data_module.loss_param_dict,
                 semi_super_losses_to_use=losses_to_use,
                 learn_weights=cfg.model.learn_weights,
                 torch_seed=cfg.training.rng_seed_model_pt,
@@ -163,6 +185,34 @@ def train(cfg: DictConfig):
                 "%s is an invalid cfg.model.model_type for a semi-supervised model"
                 % cfg.model.model_type
             )
+        return model
+
+
+@hydra.main(config_path="configs", config_name="config")
+def train(cfg: DictConfig):
+    """Main fitting function, accessed from command line."""
+
+    print("Our Hydra config file:")
+    print(cfg)
+
+    # path handling for toy datasets
+    data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
+
+    # imgaug transform
+    imgaug_transform = get_imgaug_tranform(cfg=cfg)
+
+    # dataset
+    dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
+
+    # datamodule
+    data_module = get_datamodule(cfg=cfg, dataset=dataset, video_dir=video_dir)
+
+    # losses
+    # TODO
+
+    # model
+    # TODO: watch out for loss_factory argument when you introduce it
+    model = get_model(cfg=cfg, data_module=data_module, loss_factory=None)
 
     # ----------------------------------------------------------------------------------
     # Set up and run training
@@ -217,7 +267,7 @@ def train(cfg: DictConfig):
         multiple_trainloader_mode=cfg.training.multiple_trainloader_mode,
         profiler=cfg.training.profiler,
     )
-    trainer.fit(model=model, datamodule=datamod)
+    trainer.fit(model=model, datamodule=data_module)
 
     # ----------------------------------------------------------------------------------
     # Post-training cleanup
@@ -234,7 +284,7 @@ def train(cfg: DictConfig):
         )
     predict_dataset(
         cfg=cfg,
-        datamod=datamod,
+        data_module=data_module,
         hydra_output_directory=hydra_output_directory,
         ckpt_file=model_ckpt,
     )

@@ -338,6 +338,7 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             2, 3
         ] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
         pretrained: bool = True,
+        loss_factory=None,  # TODO: Add stronger typechecking
         last_resnet_layer_to_get: int = -3,
         output_shape: Optional[tuple] = None,  # change
         output_sigma: float = 1.25,  # check value,
@@ -349,9 +350,9 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         torch_seed: int = 123,
         loss_params: Optional[
             dict
-        ] = None,  # TODO: specify a dictionary of dictionaries. is it Optional?
-        semi_super_losses_to_use: Optional[list] = [],
-        learn_weights: bool = True,  # whether to use multitask weight learning
+        ] = None,  # TODO: remove; taken care of by loss_factory
+        semi_super_losses_to_use: Optional[list] = [],  # TODO: remove; same as above
+        learn_weights: bool = True,  # TODO: remove; same as above
     ):
         """
 
