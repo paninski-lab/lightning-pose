@@ -3,6 +3,8 @@ import numpy as np
 import pytest
 import yaml
 
+from pose_est_nets.losses.losses import HeatmapWassersteinLoss
+
 
 def test_masked_regression_loss():
 
@@ -135,3 +137,51 @@ def test_SingleView_PCA_loss():
     )
 
     assert single_view_pca_loss == 0.0
+
+
+def test_zero_removal():
+    zeroes = torch.zeros((1, 2, 48, 48))
+    ones = torch.ones((1, 3, 48, 48))
+    one_example = torch.cat([zeroes, ones, zeroes], dim=1)
+    second_example = torch.cat([ones, zeroes, zeroes], dim=1)
+    batch = torch.cat([one_example, second_example], dim=0)
+
+    # now zeroes check
+    squeezed_batch = batch.reshape(batch.shape[0], batch.shape[1], -1)
+    all_zeroes = torch.all(squeezed_batch == 0.0, dim=-1)
+    assert (
+        all_zeroes
+        == torch.tensor(
+            [
+                [True, True, False, False, False, True, True],
+                [False, False, False, True, True, True, True],
+            ]
+        )
+    ).all()
+    print(all_zeroes.shape)
+    # mask = all_zeroes.reshape(all_zeroes.shape[0], all_zeroes.shape[1], 1, 1)
+    assert batch[~all_zeroes].shape == (6, 48, 48)
+    assert (batch[~all_zeroes].flatten() == 1.0).all()
+    # print(torch.masked_select(batch, ~all_zeroes).shape)
+
+    # print(batch[~mask].shape)
+    # cat = torch.cat([ones, zeroes, ones, ones, zeroes])
+
+
+def test_heatmap_mse_loss():
+    # define the class
+    from pose_est_nets.losses.losses import HeatmapMSELoss, HeatmapWassersteinLoss
+
+    heatmap_mse_loss = HeatmapMSELoss()
+    targets = torch.ones((3, 7, 48, 48)) / (48 * 48)
+    predictions = (torch.ones_like(targets) / (48 * 48)) + 0.01 * torch.randn_like(
+        targets
+    )
+
+    loss = heatmap_mse_loss(targets=targets, predictions=predictions, logging=False)
+    print("mse_loss:", loss)
+    # assert loss == 0.0
+
+    heatmap_wasser_loss = HeatmapWassersteinLoss()
+    loss = heatmap_wasser_loss(targets=targets, predictions=predictions, logging=False)
+    print("wass_loss:", loss)
