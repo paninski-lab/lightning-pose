@@ -7,29 +7,198 @@ from torchtyping import TensorType, patch_typeguard
 from geomloss import SamplesLoss
 from typeguard import typechecked
 from typing import Any, Callable, Dict, Tuple, List, Literal, Optional, Union
-
+import pytorch_lightning as pl
 from pose_est_nets.utils.pca import (
+    KeypointPCA,
     format_multiview_data_for_pca,
     compute_PCA_reprojection_error,
 )
 from pose_est_nets.utils.heatmaps import generate_heatmaps
+from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
 
 patch_typeguard()  # use before @typechecked
 
+reduce_methods_dict = {"mean": torch.mean, "sum": torch.sum}
+
 # TODO: Do we want to inherit from torch or ptl?
-class Loss:
-    def __init__(self) -> None:
-        self.epsilon = 0.0
+class Loss(pl.LightningModule):
+    def __init__(self, epsilon: float = 0.0, log_weight: float = 0.0) -> None:
+        super().__init__()
+        self.epsilon = epsilon
+        self.log_weight = torch.tensor(log_weight, device=self.device)
+        self.loss_name = "base"
+
+    @property
+    def weight(self) -> TensorType[(), float]:
+        # weight = \sigma where our trainable parameter is \log(\sigma^2). i.e., we take the parameter as it is in the config and exponentiate it to enforce positivity
+        weight = 1.0 / (2.0 * torch.exp(self.log_weight))
+        return weight
 
     def rectify_epsilon(
-        self, loss: torch.Tensor, dim: int
+        self, loss: torch.Tensor
     ) -> torch.Tensor:  # TODO: check if we can assert same in/out shapes here
-        # take a tensor, pick a dimension, and rectify according to self.epsilon
+        # loss values below epsilon as masked to zero
+        loss = loss.masked_fill(mask=loss < self.epsilon, value=0.0)
+        return loss
+
+    def remove_nans(self, **kwargs):
+        # find nans in the targets, and do a masked_select operation
+        raise NotImplementedError
+
+    def compute_loss(self, **kwargs):
+        raise NotImplementedError
+
+    def reduce_loss(
+        self, loss: torch.Tensor, method: str = "mean"
+    ) -> TensorType[(), float]:
+        return reduce_methods_dict[method](loss)
+
+    def log_loss(self, loss: torch.Tensor) -> None:
+        self.log(self.loss_name + "_loss", loss, prog_bar=True)
+        self.log(self.loss_name + "_weight", self.weight)
+
+    def __call__(self, **kwargs):
+        raise NotImplementedError
+        # # give us the flow of operations, and we overwrite the methods, and determine their arguments which are in buffer
+        # self.remove_nans()
+        # self.compute_loss()
+        # self.rectify_epsilon()
+        # self.reduce_loss()
+        # self.log_loss()
+        # return self.weight * scalar_loss
+
+
+class HeatmapLoss(Loss):
+    # TODO: check if we can safely eliminate the __init__()
+    def __init__(
+        self,
+        epsilon: float = 0.0,
+        log_weight: float = 0.0,
+    ) -> None:
+        super().__init__(epsilon=epsilon, log_weight=log_weight)
+
+    def remove_nans(
+        self,
+        targets: TensorType[
+            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
+        ],
+        predictions: TensorType[
+            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
+        ],
+    ) -> Tuple[
+        TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
+        TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
+    ]:
+
+        squeezed_targets = targets.reshape(targets.shape[0], targets.shape[1], -1)
+        all_zeroes = torch.all(squeezed_targets == 0.0, dim=-1)
+
+        return targets[~all_zeroes], predictions[~all_zeroes]
+
+    def __call__(
+        self,
+        targets: torch.Tensor,
+        predictions: torch.Tensor,
+        logging: bool = True,
+        **kwargs
+    ):
+        # give us the flow of operations, and we overwrite the methods, and determine their arguments which are in buffer
+        clean_targets, clean_predictions = self.remove_nans(
+            targets=targets, predictions=predictions
+        )
+        elementwise_loss = self.compute_loss(
+            targets=clean_targets, predictions=clean_predictions
+        )
+        epsilon_insensitive_loss = self.rectify_epsilon(loss=elementwise_loss)
+        scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
+        if logging:
+            self.log_loss(loss=scalar_loss)
+        return self.weight * scalar_loss
+
+
+class HeatmapMSELoss(HeatmapLoss):
+    def __init__(
+        self, epsilon: float = 0.0, log_weight: float = 0.0, loss_name="heatmap_mse"
+    ) -> None:
+        super().__init__(epsilon=epsilon, log_weight=log_weight)
+        self.loss_name = loss_name
+
+    def compute_loss(self, targets: torch.Tensor, predictions: torch.Tensor):
+        loss = F.mse_loss(targets, predictions, reduction="none")
+        return loss
+
+
+@typechecked
+class HeatmapWassersteinLoss(HeatmapLoss):
+    def __init__(
+        self,
+        epsilon: float = 0.0,
+        log_weight: float = 0.0,
+        reach: Union[float, str] = "none",
+    ) -> None:
+        super().__init__(epsilon=epsilon, log_weight=log_weight)
+        self.wasserstein_loss = SamplesLoss(
+            loss="sinkhorn", reach=None if (reach == "none") else reach
+        )  # maybe could speed up by creating this outside of the function
+        self.loss_name = "wasserstein"
+
+    @typechecked
+    def compute_loss(
+        self,
+        targets: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
+        predictions: TensorType[
+            "num_valid_keypoints", "heatmap_height", "heatmap_width"
+        ],
+    ) -> TensorType["num_valid_keypoints"]:
+        # we should divide the loss by batch size times number of keypoints so its on per heatmap scale
+        return self.wasserstein_loss(targets, predictions)
+
+
+@typechecked
+class PCALoss(Loss):
+    def __init__(
+        self,
+        loss_name: Literal["pca_singleview", "pca_multiview"],
+        data_module: Union[BaseDataModule, UnlabeledDataModule],
+        components_to_keep: Union[int, float] = 0.95,
+        empirical_epsilon_percentile: float = 0.90,
+        epsilon: float = 0,
+        log_weight: float = 0,
+    ) -> None:
+        super().__init__(epsilon=epsilon, log_weight=log_weight)
+        self.loss_name = loss_name
+        # initialize keypoint pca module
+        self.pca = KeypointPCA(
+            loss_type=self.loss_name,
+            data_module=data_module,
+            components_to_keep=components_to_keep,
+            empirical_epsilon_percentile=empirical_epsilon_percentile,
+            device=self.device,
+        )
+        self.pca()  # computes all the parameters needed for the loss
+        self.epsilon = self.pca.parameters[
+            "epsilon"
+        ]  # computed empirically in KeypointPCA
+
+    def compute_loss(self, predictions: torch.Tensor):
+        # compute reprojection error
+        # TODO: preds have to be reshaped before
+        compute_PCA_reprojection_error(
+            clean_pca_arr=predictions,
+            kept_eigenvectors=self.pca.parameters["kept_eigenvectors"],
+            mean=self.pca.parameters["mean"],
+        )
         pass
 
-    def remove_nans(self, predictions: torch.Tensor, targets: torch.Tensor):
-        # find nans in the targets, and do a masked_select operation
-        pass
+    def __call__(self, predictions: torch.Tensor, logging: bool = True):
+        # different from heatmap's
+        # if multiview, reshape the predictions first
+        elementwise_loss = self.compute_loss(predictions=predictions)
+        epsilon_insensitive_loss = self.rectify_epsilon(loss=elementwise_loss)
+        scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
+        if logging:
+            self.log_loss(loss=scalar_loss)
+        return self.weight * scalar_loss
 
 
 @typechecked
@@ -78,53 +247,6 @@ def MaskedRMSELoss(
     )
 
     return torch.mean(torch.sqrt(loss))
-
-
-@typechecked
-def MaskedHeatmapLoss(
-    y: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
-    y_hat: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
-    loss_type: Literal["mse", "wasserstein"] = "mse",
-    reach: Union[float, str] = None,
-) -> TensorType[()]:
-    """Computes heatmap (MSE or Wasserstein) loss between ground truth heatmap and predicted heatmap.
-
-    Args:
-        y: ground truth heatmaps
-        y_hat: predicted heatmaps
-
-    Returns:
-        MSE or Wasserstein loss
-
-    """
-    # apply mask, only computes loss on heatmaps where the ground truth heatmap
-    # is not all zeros (i.e., not an occluded keypoint)
-    bs = y.shape[0]
-    nk = y.shape[1]
-    max_vals = torch.amax(y, dim=(2, 3))
-    zeros = torch.zeros(size=(y.shape[0], y.shape[1]), device=y_hat.device)
-    non_zeros = ~torch.eq(max_vals, zeros)
-    mask = torch.reshape(non_zeros, [non_zeros.shape[0], non_zeros.shape[1], 1, 1])
-    # compute loss
-    if loss_type == "mse":
-        loss = F.mse_loss(
-            torch.masked_select(y_hat, mask), torch.masked_select(y, mask)
-        )
-    elif loss_type == "wasserstein":
-        if reach == "None":
-            reach = None
-        wass_loss = SamplesLoss(
-            loss="sinkhorn", reach=reach
-        )  # maybe could speed up by creating this outside of the function
-        loss = wass_loss(
-            torch.masked_select(y_hat, mask).unsqueeze(0),
-            torch.masked_select(y, mask).unsqueeze(0),
-        )
-        loss = loss / (
-            bs * nk
-        )  # we should divide this by batch size times number of keypoints so its on per heatmap scale
-
-    return loss
 
 
 # TODO: this won't work unless the inputs are right, not implemented yet.
