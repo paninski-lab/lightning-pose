@@ -16,6 +16,21 @@ from pose_est_nets.utils.heatmaps import generate_heatmaps
 
 patch_typeguard()  # use before @typechecked
 
+# TODO: Do we want to inherit from torch or ptl?
+class Loss:
+    def __init__(self) -> None:
+        self.epsilon = 0.0
+
+    def rectify_epsilon(
+        self, loss: torch.Tensor, dim: int
+    ) -> torch.Tensor:  # TODO: check if we can assert same in/out shapes here
+        # take a tensor, pick a dimension, and rectify according to self.epsilon
+        pass
+
+    def remove_nans(self, predictions: torch.Tensor, targets: torch.Tensor):
+        # find nans in the targets, and do a masked_select operation
+        pass
+
 
 @typechecked
 def MaskedRegressionMSELoss(
