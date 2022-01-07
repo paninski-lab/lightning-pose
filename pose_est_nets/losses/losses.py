@@ -528,24 +528,20 @@ def get_losses_dict(
 
 @typechecked
 def get_loss_classes() -> Dict[str, Callable]:
-    """Get a dict with all the loss functions for semi supervised training.
-
-    The training step of a given model will iterate over these, instead of
-    manually computing each.
-
-    Args:
-        names_list: list of desired loss names; defaults to empty.
+    """Get a dict with all the loss classes.
 
     Returns:
         Dict[str, Callable]: [description]
 
     """
     loss_dict = {
-        "regression": MaskedRegressionMSELoss,
-        "heatmap": MaskedHeatmapLoss,
-        "pca_multiview": MultiviewPCALoss,
-        "pca_singleview": SingleviewPCALoss,
+        "regression": RegressionMSELoss,
+        "heatmap_mse": HeatmapMSELoss,
+        "heatmap_wasserstein": HeatmapWassersteinLoss,
+        "pca_multiview": PCALoss,
+        "pca_singleview": PCALoss,
         "temporal": TemporalLoss,
-        "unimodal": UnimodalLoss,
+        "unimodal_mse": UnimodalLoss,
+        "unimodal_wasserstein": UnimodalLoss,
     }
     return loss_dict
