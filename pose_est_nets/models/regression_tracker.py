@@ -1,33 +1,24 @@
 """Models that produce (x, y) coordinates of keypoints from images."""
-# TODO: support weight tuning here too
+
 import torch
 from torch import nn
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from typing_extensions import Literal
 
 from pose_est_nets.losses.factory import LossFactory
 from pose_est_nets.losses.losses import RegressionRMSELoss
-from pose_est_nets.models.base_resnet import BaseFeatureExtractor
+from pose_est_nets.models.base import (
+    BaseBatchDict,
+    BaseSupervisedTracker,
+    SemiSupervisedTrackerMixin,
+)
 
 patch_typeguard()  # use before @typechecked
 
 
-class BaseBatchDict(TypedDict):
-    images: TensorType["batch", "RGB":3, "image_height", "image_width", float]
-    keypoints: TensorType["batch", "num_targets", float]
-    idxs: TensorType["batch", int]
-
-
-class SemiSupervisedBatchDict(TypedDict):
-    labeled: BaseBatchDict
-    unlabeled: TensorType[
-        "sequence_length", "RGB":3, "image_height", "image_width", float
-    ]
-
-
-class RegressionTracker(BaseFeatureExtractor):
+class RegressionTracker(BaseSupervisedTracker):
     """Base model that produces (x, y) predictions of keypoints from images."""
 
     def __init__(
@@ -73,6 +64,9 @@ class RegressionTracker(BaseFeatureExtractor):
         self.torch_seed = torch_seed
         self.save_hyperparameters()
 
+        # use this to log auxiliary information: rmse on labeled data
+        self.rmse_loss = RegressionRMSELoss()
+
     @staticmethod
     @typechecked
     def reshape_representation(
@@ -99,72 +93,21 @@ class RegressionTracker(BaseFeatureExtractor):
         return out
 
     @typechecked
-    def training_step(self, data_batch: BaseBatchDict, batch_idx: int) -> dict:
+    def get_loss_inputs_labeled(self, batch_dict: BaseBatchDict) -> dict:
+        """Return predicted coordinates."""
 
-        # forward pass
-        representation = self.get_representations(data_batch["images"])
-        predicted_keypoints = self.final_layer(
-            self.representation_dropout(self.reshape_representation(representation))
-        )
-
-        # compute and log loss
-        loss = self.loss_factory(
-            keypoints_true=data_batch["keypoints"],
-            keypoints_pred=predicted_keypoints,
-            stage="train",  # for logging purposes
-        )
-        self.log("train_loss", loss, prog_bar=True)
-
-        # for additional info: compute and log supervised rmse
-        rmse_loss = RegressionRMSELoss()
-        supervised_rmse = rmse_loss(
-            keypoints_true=data_batch["keypoints"],
-            keypoints_pred=predicted_keypoints,
-            logging=False,
-        )
-        self.log("train_rmse_supervised", supervised_rmse, prog_bar=True)
-
-        return {"loss": loss}
-
-    @typechecked
-    def evaluate(
-        self,
-        data_batch: BaseBatchDict,
-        stage: Optional[Literal["val", "test"]] = None,
-    ) -> None:
-
-        # forward_pass
         representation = self.get_representations(data_batch["images"])
         predicted_keypoints = self.final_layer(
             self.reshape_representation(representation)
         )
 
-        # compute loss
-        loss = self.loss_factory(
-            keypoints_targ=data_batch["keypoints"],
-            keypoints_pred=predicted_keypoints,
-            stage=stage,  # for logging purposes
-        )
-
-        # log loss + rmse
-        if stage:
-            rmse_loss = RegressionRMSELoss()
-            supervised_rmse = rmse_loss(
-                keypoints_targ=data_batch["keypoints"],
-                keypoints_pred=predicted_keypoints,
-                logging=False,
-            )
-            self.log(f"{stage}_loss", loss, prog_bar=True)
-            self.log(f"{stage}_supervised_rmse", supervised_rmse, prog_bar=True)
-
-    def validation_step(self, validation_batch: BaseBatchDict, batch_idx: int):
-        self.evaluate(validation_batch, "val")
-
-    def test_step(self, test_batch: BaseBatchDict, batch_idx: int):
-        self.evaluate(test_batch, "test")
+        return {
+            "keypoints_targ": data_batch["keypoints"],
+            "keypoints_pred": predicted_keypoints,
+        }
 
 
-class SemiSupervisedRegressionTracker(RegressionTracker):
+class SemiSupervisedRegressionTracker(RegressionTracker, SemiSupervisedTrackerMixin):
     """Model produces vectors of keypoints from labeled/unlabeled images."""
 
     def __init__(
@@ -212,58 +155,12 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
 
     @typechecked
-    def training_step(
-        self, data_batch: SemiSupervisedBatchDict, batch_idx: int
-    ) -> dict:
+    def get_loss_inputs_unlabeled(self, batch: torch.Tensor) -> dict:
+        """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
 
-        # on each epoch, self.total_unsupervised_importance is modified by the
-        # AnnealWeight callback
-        self.log(
-            "total_unsupervised_importance",
-            self.total_unsupervised_importance,
-            prog_bar=True,
-        )
-
-        # forward pass labeled
-        # --------------------
-        representation = self.get_representations(data_batch["labeled"]["images"])
+        representation = self.get_representations(batch)
         predicted_keypoints = self.final_layer(
             self.representation_dropout(self.reshape_representation(representation))
         )  # TODO: consider removing representation dropout?
 
-        # compute and log supervised loss
-        loss_super = self.loss_factory(
-            keypoints_targ=data_batch["labeled"]["keypoints"],
-            keypoints_pred=predicted_keypoints,
-            stage="train",  # for logging purposes
-        )
-        self.log("train_loss_supervised", loss_super, prog_bar=True)
-
-        # for additional info: compute and log supervised rmse
-        rmse_loss = RegressionRMSELoss()
-        supervised_rmse = rmse_loss(
-            keypoints_targ=data_batch["labeled"]["keypoints"],
-            keypoints_pred=predicted_keypoints,
-            logging=False,
-        )
-        self.log("train_rmse_supervised", supervised_rmse, prog_bar=True)
-
-        # forward pass unlabeled
-        # ----------------------
-        representation_ul = self.get_representations(data_batch["unlabeled"])
-        predicted_keypoints_ul = self.final_layer(
-            self.representation_dropout(self.reshape_representation(representation_ul))
-        )  # TODO: consider removing representation dropout?
-
-        # compute and log unsupervised loss
-        loss_unsuper = self.loss_factory_unsup(
-            keypoints_pred=predicted_keypoints_ul,
-            anneal_weight=self.total_unsupervised_importance,
-            stage="train",  # for logging purposes
-        )
-
-        # log total loss
-        total_loss = loss_super + loss_unsuper
-        self.log("total_loss", total_loss, prog_bar=True)
-
-        return {"loss": total_loss}
+        return {"keypoints_pred": predicted_keypoints}

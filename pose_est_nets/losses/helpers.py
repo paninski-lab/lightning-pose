@@ -8,6 +8,7 @@ patch_typeguard()  # use before @typechecked
 
 
 class EmpiricalEpsilon:
+
     def __init__(self, percentile: float) -> None:
         self.percentile = percentile
 
@@ -28,69 +29,69 @@ class EmpiricalEpsilon:
         return np.nanpercentile(flattened_loss, self.percentile, axis=0)
 
 
-# TODO: revisit
-@typechecked
-def convert_dict_entries_to_tensors(
-    loss_params: Dict[str, dict],
-    device: Union[str, torch.device],
-    losses_to_use: List[str],
-    to_parameters: bool = False,
-) -> Tuple:
-    """Set scalars in loss to torch tensors for use with unsupervised losses.
-
-    Args:
-        loss_params: dictionary of loss dictionaries, each containing weight, and other
-            args.
-        losses_to_use: a list of string with names of losses we'll use for training.
-            these names will match the keys of loss_params
-        device: device to send floats and ints to
-        to_parameters: boolean saying whether we make the values into
-            torch.nn.Parameter, allowing them to be recognized as by torch.nn.module as
-            module.parameters() (and potentially be trained). if False, keep them as
-            tensors.
-
-    Returns:
-        dict with updated values
-
-    """
-    loss_weights_dict = {}  # for parameters that can be represented as a tensor
-    loss_params_dict = {}  # for parameters like a tuple or a string which should not be
-    for loss, params in loss_params.items():
-        if loss in losses_to_use:
-            loss_params_dict[loss] = {}
-            for key, val in params.items():
-                if key == "log_weight":
-                    loss_weights_dict[loss] = torch.tensor(
-                        val, dtype=torch.float, device=device
-                    )
-                elif key == "epsilon" and type(val) != torch.Tensor and val is not None:
-                    loss_params_dict[loss][key] = torch.tensor(
-                        val, dtype=torch.float, device=device
-                    )
-                else:
-                    loss_params_dict[loss][key] = val
-    if to_parameters:
-        loss_weights_dict = convert_loss_tensors_to_torch_nn_params(loss_weights_dict)
-    print("loss weights at the end of convert_dict_entries_to_tensors:")
-    print(loss_weights_dict)
-    for key, val in loss_weights_dict.items():
-        print(key, val)
-    print("loss params dict:")
-    print(loss_params_dict)
-
-    return loss_weights_dict, loss_params_dict
-
-
-@typechecked
-def convert_loss_tensors_to_torch_nn_params(
-    loss_weights: dict,
-) -> torch.nn.ParameterDict:
-    loss_weights_params = {}
-    for loss, weight in loss_weights.items():  # loop over multiple different losses
-        print(loss, weight)
-        loss_weights_params[loss] = torch.nn.Parameter(weight, requires_grad=True)
-    parameter_dict = torch.nn.ParameterDict(loss_weights_params)
-    return parameter_dict
+# TODO: can delete after Dan okays it
+# @typechecked
+# def convert_dict_entries_to_tensors(
+#     loss_params: Dict[str, dict],
+#     device: Union[str, torch.device],
+#     losses_to_use: List[str],
+#     to_parameters: bool = False,
+# ) -> Tuple:
+#     """Set scalars in loss to torch tensors for use with unsupervised losses.
+#
+#     Args:
+#         loss_params: dictionary of loss dictionaries, each containing weight, and other
+#             args.
+#         losses_to_use: a list of string with names of losses we'll use for training.
+#             these names will match the keys of loss_params
+#         device: device to send floats and ints to
+#         to_parameters: boolean saying whether we make the values into
+#             torch.nn.Parameter, allowing them to be recognized as by torch.nn.module as
+#             module.parameters() (and potentially be trained). if False, keep them as
+#             tensors.
+#
+#     Returns:
+#         dict with updated values
+#
+#     """
+#     loss_weights_dict = {}  # for parameters that can be represented as a tensor
+#     loss_params_dict = {}  # for parameters like a tuple or a string which should not be
+#     for loss, params in loss_params.items():
+#         if loss in losses_to_use:
+#             loss_params_dict[loss] = {}
+#             for key, val in params.items():
+#                 if key == "log_weight":
+#                     loss_weights_dict[loss] = torch.tensor(
+#                         val, dtype=torch.float, device=device
+#                     )
+#                 elif key == "epsilon" and type(val) != torch.Tensor and val is not None:
+#                     loss_params_dict[loss][key] = torch.tensor(
+#                         val, dtype=torch.float, device=device
+#                     )
+#                 else:
+#                     loss_params_dict[loss][key] = val
+#     if to_parameters:
+#         loss_weights_dict = convert_loss_tensors_to_torch_nn_params(loss_weights_dict)
+#     print("loss weights at the end of convert_dict_entries_to_tensors:")
+#     print(loss_weights_dict)
+#     for key, val in loss_weights_dict.items():
+#         print(key, val)
+#     print("loss params dict:")
+#     print(loss_params_dict)
+#
+#     return loss_weights_dict, loss_params_dict
+#
+#
+# @typechecked
+# def convert_loss_tensors_to_torch_nn_params(
+#     loss_weights: dict,
+# ) -> torch.nn.ParameterDict:
+#     loss_weights_params = {}
+#     for loss, weight in loss_weights.items():  # loop over multiple different losses
+#         print(loss, weight)
+#         loss_weights_params[loss] = torch.nn.Parameter(weight, requires_grad=True)
+#     parameter_dict = torch.nn.ParameterDict(loss_weights_params)
+#     return parameter_dict
 
 
 @typechecked

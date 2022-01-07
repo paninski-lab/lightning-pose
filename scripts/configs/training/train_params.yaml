@@ -2,7 +2,7 @@
 train_batch_size: 16
 
 # batch size of labeled data during validation
-val_batch_size: 16 # was 16
+val_batch_size: 16
 
 # batch size of labeled data during test
 test_batch_size: 16
