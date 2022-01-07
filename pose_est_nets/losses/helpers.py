@@ -15,10 +15,12 @@ class EmpiricalEpsilon:
         """compute the percentile of some loss, to use as an epsilon for epsilon-insensitive loss.
 
         Args:
-            loss (torch.Tensor): tensor with scalar loss per term (e.g., loss per image, or loss per keypoint, etc.)
+            loss (torch.Tensor): tensor with scalar loss per term (e.g., loss per image,
+                or loss per keypoint, etc.)
 
         Returns:
             float: the percentile of the loss which we use as epsilon
+
         """
         flattened_loss = loss.flatten()  # applies for both np arrays and torch tensors.
         if type(loss) is torch.Tensor:
@@ -37,10 +39,15 @@ def convert_dict_entries_to_tensors(
     """Set scalars in loss to torch tensors for use with unsupervised losses.
 
     Args:
-        loss_params: dictionary of loss dictionaries, each containing weight, and other args.
-        losses_to_use: a list of string with names of losses we'll use for training. these names will match the keys of loss_params
+        loss_params: dictionary of loss dictionaries, each containing weight, and other
+            args.
+        losses_to_use: a list of string with names of losses we'll use for training.
+            these names will match the keys of loss_params
         device: device to send floats and ints to
-        to_parameters: boolean saying whether we make the values into torch.nn.Parameter, allowing them to be recognized as by torch.nn.module as module.parameters() (and potentially be trained). if False, keep them as tensors.
+        to_parameters: boolean saying whether we make the values into
+            torch.nn.Parameter, allowing them to be recognized as by torch.nn.module as
+            module.parameters() (and potentially be trained). if False, keep them as
+            tensors.
 
     Returns:
         dict with updated values
@@ -56,7 +63,7 @@ def convert_dict_entries_to_tensors(
                     loss_weights_dict[loss] = torch.tensor(
                         val, dtype=torch.float, device=device
                     )
-                elif key == "epsilon" and type(val) != torch.Tensor and val != None:
+                elif key == "epsilon" and type(val) != torch.Tensor and val is not None:
                     loss_params_dict[loss][key] = torch.tensor(
                         val, dtype=torch.float, device=device
                     )

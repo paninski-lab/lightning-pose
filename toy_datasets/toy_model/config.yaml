@@ -23,23 +23,25 @@ training:
   multiple_trainloader_mode: max_size_cycle
   profiler: simple
   accumulate_grad_batches: 2
+
 losses:
   pca_multiview:
-    weight: 0.6
-    discarded_eigenvectors: null
-    kept_eigenvectors: null
-    epsilon: null
+    log_weight: 0.0
+    components_to_keep: 3
+    empirical_epsilon_percentile: 0.90
   pca_singleview:
-    weight: 0.6
-    min_variance_explained: 0.95
-    discarded_eigenvectors: null
-    kept_eigenvectors: null
-    epsilon: null
+    log_weight: 0.0
+    components_to_keep: 0.95
+    empirical_epsilon_percentile: 0.90
   temporal:
-    weight: 0.7
+    log_weight: 0.0
     epsilon: 5.0
-  unimodal:
-    weight: 0.6
+  unimodal_mse:
+    log_weight: 0.0
+  unimodal_wasserstein:
+    log_weight: 0.0
+    reach: none
+
 data:
   image_orig_dims:
     height: 406
@@ -54,7 +56,7 @@ data:
   - 0
   - 1
   downsample_factor: 2
-  num_targets: 34
+  num_keypoints: 17
   mirrored_column_matches:
   - - 0
     - 1
@@ -70,12 +72,15 @@ data:
     - 12
     - 13
     - 14
+
 model:
-  losses_to_use:
+  losses_to_use:  # temporal | unimodal_mse | unimodal_wasserstein | pca_singleview | pca_multiview
   - temporal
   resnet_version: 50
-  model_type: heatmap
+  model_type: heatmap  # heatmap | regression
+  heatmap_type: mse  # mse | wasserstein | todo: xent
   model_name: my_base_toy_model
+
 eval:
   hydra_paths:
   - 2021-11-01/00-21-04/

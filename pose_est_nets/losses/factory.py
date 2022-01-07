@@ -1,41 +1,54 @@
-# high-level class that orchestrates the individual losses
-# individual loss classes -> losses.py
-# a base loss parent class -> losses.py
-from typing import Any, Dict, List, Union, Callable
+"""High-level loss object that orchestrates the individual losses."""
 
 import pytorch_lightning as pl
-from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
-
-from pose_est_nets.losses.losses import get_loss_classes, get_losses_dict
 import torch
+from typing import Any, Dict, List, Union, Callable
+
+from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
+from pose_est_nets.losses.helpers import convert_dict_entries_to_tensors
+from pose_est_nets.losses.losses import get_loss_classes
 
 
 class LossFactory(pl.LightningModule):
+    """Factory object that contains an object for each specified loss."""
+
     def __init__(
         self,
         losses_params_dict: Dict[str, dict],
         data_module: Union[BaseDataModule, UnlabeledDataModule],
     ) -> None:
         super().__init__()
-        self.losses_params_dict = losses_params_dict  # that dictionary is filtered before the LossFactory. Only the relevant losses
+        self.losses_params_dict = losses_params_dict
         self.data_module = data_module
 
-    @property
-    def loss_instance_dict(self) -> Dict[str, Callable]:
-        loss_instance_dict = {}
-        loss_classes_dict = get_loss_classes()
-        for loss, params in self.losses_params_dict.items():  # assumes loss
-            loss_instance_dict[loss] = loss_classes_dict[loss](
-                data_module=self.data_module, **params
-            )  # some losses may need the data_module to compute parameters at initialization time
-        return loss_instance_dict
+        # where to call `convert_dict_entries_to_tensors`?
 
-    def __call__(self, **kwargs):
+        # initialize loss classes
+        self.loss_instance_dict = {}
+        loss_classes_dict = get_loss_classes()
+        for loss, params in self.losses_params_dict.items():
+            self.loss_instance_dict[loss] = loss_classes_dict[loss](
+                data_module=self.data_module, **params
+            )  # some losses need the data_module to compute parameters at init time
+
+    # NOTE: this will reinitialize the loss classes on every call to __call__; expensive
+    # for e.g. pca losses
+    # @property
+    # def loss_instance_dict(self) -> Dict[str, Callable]:
+    #     loss_instance_dict = {}
+    #     loss_classes_dict = get_loss_classes()
+    #     for loss, params in self.losses_params_dict.items():
+    #         loss_instance_dict[loss] = loss_classes_dict[loss](
+    #             data_module=self.data_module, **params
+    #         )  # some losses need the data_module to compute parameters at init time
+    #     return loss_instance_dict
+
+    def __call__(self, stage=None, anneal_weight=1.0, **kwargs):
         # loop over losses, compute, sum, log
         # loop over unsupervised losses
+        # don't log if stage is None
         # Question -- should we include the supervised loss?
         tot_loss = 0.0
-        tot_loss += supervised_loss
         for loss_name, loss_instance in self.loss_instance_dict.items():
             # Some losses use keypoint_preds, some use heatmap_preds, and some use both.
             # all have **kwargs so are robust to unneeded inputs.
@@ -73,12 +86,4 @@ class LossFactory(pl.LightningModule):
                 prog_bar=True,
             )
 
-        # log other losses
-        self.log("total_loss", tot_loss, prog_bar=True)
-        self.log("supervised_loss", supervised_loss, prog_bar=True)
-        self.log("supervised_rmse", supervised_rmse, prog_bar=True)
-
-
-def get_loss(loss: str, params: dict) -> Callable:
-    # initialize the right loss class
-    pass
+        return tot_loss
