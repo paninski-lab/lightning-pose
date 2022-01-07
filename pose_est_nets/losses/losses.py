@@ -18,28 +18,25 @@ from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModu
 
 patch_typeguard()  # use before @typechecked
 
-reduce_methods_dict = {"mean": torch.mean, "sum": torch.sum}
 
-# TODO: Do we want to inherit from torch or ptl?
 class Loss(pl.LightningModule):
+    """Parent class for all losses."""
+
     def __init__(self, epsilon: float = 0.0, log_weight: float = 0.0) -> None:
         super().__init__()
         self.epsilon = epsilon
         self.log_weight = torch.tensor(log_weight, device=self.device)
         self.loss_name = "base"
 
+        self.reduce_methods_dict = {"mean": torch.mean, "sum": torch.sum}
+
     @property
     def weight(self) -> TensorType[(), float]:
-        # weight = \sigma where our trainable parameter is \log(\sigma^2). i.e., we take the parameter as it is in the config and exponentiate it to enforce positivity
+        # weight = \sigma where our trainable parameter is \log(\sigma^2).
+        # i.e., we take the parameter as it is in the config and exponentiate it to
+        # enforce positivity
         weight = 1.0 / (2.0 * torch.exp(self.log_weight))
         return weight
-
-    def rectify_epsilon(
-        self, loss: torch.Tensor
-    ) -> torch.Tensor:  # TODO: check if we can assert same in/out shapes here
-        # loss values below epsilon as masked to zero
-        loss = loss.masked_fill(mask=loss < self.epsilon, value=0.0)
-        return loss
 
     def remove_nans(self, **kwargs):
         # find nans in the targets, and do a masked_select operation
@@ -48,10 +45,17 @@ class Loss(pl.LightningModule):
     def compute_loss(self, **kwargs):
         raise NotImplementedError
 
+    def rectify_epsilon(
+        self, loss: torch.Tensor
+    ) -> torch.Tensor:  # TODO: check if we can assert same in/out shapes here
+        # loss values below epsilon as masked to zero
+        loss = loss.masked_fill(mask=loss < self.epsilon, value=0.0)
+        return loss
+
     def reduce_loss(
         self, loss: torch.Tensor, method: str = "mean"
     ) -> TensorType[(), float]:
-        return reduce_methods_dict[method](loss)
+        return self.reduce_methods_dict[method](loss)
 
     def log_loss(self, loss: torch.Tensor) -> None:
         self.log(self.loss_name + "_loss", loss, prog_bar=True)
@@ -59,22 +63,22 @@ class Loss(pl.LightningModule):
 
     def __call__(self, **kwargs):
         raise NotImplementedError
-        # # give us the flow of operations, and we overwrite the methods, and determine their arguments which are in buffer
+        # give us the flow of operations, and we overwrite the methods, and determine
+        # their arguments which are in buffer
+
         # self.remove_nans()
         # self.compute_loss()
         # self.rectify_epsilon()
         # self.reduce_loss()
         # self.log_loss()
+
         # return self.weight * scalar_loss
 
 
 class HeatmapLoss(Loss):
-    # TODO: check if we can safely eliminate the __init__()
-    def __init__(
-        self,
-        epsilon: float = 0.0,
-        log_weight: float = 0.0,
-    ) -> None:
+    """Parent class for different heatmap losses (MSE, Wasserstein, etc)."""
+
+    def __init__(self, epsilon: float = 0.0, log_weight: float = 0.0) -> None:
         super().__init__(epsilon=epsilon, log_weight=log_weight)
 
     def remove_nans(
@@ -95,6 +99,9 @@ class HeatmapLoss(Loss):
 
         return targets[~all_zeroes], predictions[~all_zeroes]
 
+    def compute_loss(self, **kwargs):
+        raise NotImplementedError
+
     def __call__(
         self,
         targets: torch.Tensor,
@@ -102,7 +109,8 @@ class HeatmapLoss(Loss):
         logging: bool = True,
         **kwargs
     ):
-        # give us the flow of operations, and we overwrite the methods, and determine their arguments which are in buffer
+        # give us the flow of operations, and we overwrite the methods, and determine
+        # their arguments which are in buffer
         clean_targets, clean_predictions = self.remove_nans(
             targets=targets, predictions=predictions
         )
@@ -117,11 +125,11 @@ class HeatmapLoss(Loss):
 
 
 class HeatmapMSELoss(HeatmapLoss):
-    def __init__(
-        self, epsilon: float = 0.0, log_weight: float = 0.0, loss_name="heatmap_mse"
-    ) -> None:
+    """MSE loss between heatmaps."""
+
+    def __init__(self, epsilon: float = 0.0, log_weight: float = 0.0) -> None:
         super().__init__(epsilon=epsilon, log_weight=log_weight)
-        self.loss_name = loss_name
+        self.loss_name = "heatmap_mse"
 
     def compute_loss(self, targets: torch.Tensor, predictions: torch.Tensor):
         loss = F.mse_loss(targets, predictions, reduction="none")
@@ -130,6 +138,8 @@ class HeatmapMSELoss(HeatmapLoss):
 
 @typechecked
 class HeatmapWassersteinLoss(HeatmapLoss):
+    """Wasserstein loss between heatmaps."""
+
     def __init__(
         self,
         epsilon: float = 0.0,
@@ -137,9 +147,9 @@ class HeatmapWassersteinLoss(HeatmapLoss):
         reach: Union[float, str] = "none",
     ) -> None:
         super().__init__(epsilon=epsilon, log_weight=log_weight)
-        self.wasserstein_loss = SamplesLoss(
-            loss="sinkhorn", reach=None if (reach == "none") else reach
-        )  # maybe could speed up by creating this outside of the function
+
+        reach_ = None if (reach == "none") else reach
+        self.wasserstein_loss = SamplesLoss(loss="sinkhorn", reach=reach_)
         self.loss_name = "wasserstein"
 
     @typechecked
@@ -150,7 +160,6 @@ class HeatmapWassersteinLoss(HeatmapLoss):
             "num_valid_keypoints", "heatmap_height", "heatmap_width"
         ],
     ) -> TensorType["num_valid_keypoints"]:
-        # we should divide the loss by batch size times number of keypoints so its on per heatmap scale
         return self.wasserstein_loss(targets, predictions)
 
 
@@ -201,52 +210,190 @@ class PCALoss(Loss):
         return self.weight * scalar_loss
 
 
-@typechecked
-def MaskedRegressionMSELoss(
-    keypoints: TensorType["batch", "two_x_num_keypoints"],
-    preds: TensorType["batch", "two_x_num_keypoints"],
-) -> TensorType[(), float]:
-    """Compute MSE loss between ground truth and predicted coordinates.
+class TemporalLoss(Loss):
+    """Penalize temporal differences for each target.
 
-    Args:
-        keypoints: ground truth; shape=(batch, num_targets)
-        preds: predictions; shape=(batch, num_targets)
-
-    Returns:
-        MSE loss averaged over both dimensions
-
-    """
-    mask = keypoints == keypoints  # keypoints is not none, bool.
-    loss = F.mse_loss(
-        torch.masked_select(keypoints, mask), torch.masked_select(preds, mask)
-    )
-    return loss
-
-
-@typechecked
-def MaskedRMSELoss(
-    keypoints: TensorType["batch", "two_x_num_keypoints"],
-    preds: TensorType["batch", "two_x_num_keypoints"],
-) -> TensorType[(), float]:
-    """Compute RMSE loss between ground truth and predicted coordinates.
-
-    Args:
-        keypoints: ground truth; shape=(batch, num_targets)
-        preds: predictions; shape=(batch, num_targets)
-
-    Returns:
-        Root mean-square error per keypoint averaged
+    Motion model: x_t = x_(t-1) + e_t, e_t ~ N(0, s)
 
     """
 
-    mask = keypoints == keypoints  # keypoints is not none, bool.
-    loss = F.mse_loss(
-        torch.masked_select(keypoints, mask),
-        torch.masked_select(preds, mask),
-        reduction="none",
-    )
+    def __init__(self, epsilon: float = 0.0, log_weight: float = 0.0) -> None:
+        super().__init__(epsilon=epsilon, log_weight=log_weight)
+        self.loss_name = "temporal"
 
-    return torch.mean(torch.sqrt(loss))
+    def remove_nans(self, **kwargs):
+        # find nans in the targets, and do a masked_select operation
+        pass
+
+    def compute_loss(
+        self,
+        predictions: TensorType["batch", "two_x_num_keypoints", float],
+    ) -> TensorType["batch_minus_one", "two_x_num_keypoints", float]:
+
+        #  return shape: (batch - 1, num_targets)
+        diffs = torch.diff(predictions, dim=0)
+
+        # return shape: (batch - 1, num_keypoints, 2)
+        reshape = torch.reshape(diffs, (diffs.shape[0], -1, 2))
+
+        # return shape (batch - 1, num_keypoints)
+        loss = torch.linalg.norm(reshape, ord=2, dim=2)
+
+        return loss
+
+    def __call__(
+        self,
+        predictions: TensorType["batch", "two_x_num_keypoints", float],
+        logging: bool = True,
+        **kwargs
+    ) -> TensorType[(), float]:
+
+        elementwise_loss = self.compute_loss(predictions=predictions)
+        epsilon_insensitive_loss = self.rectify_epsilon(loss=elementwise_loss)
+        scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
+        if logging:
+            self.log_loss(loss=scalar_loss)
+        return self.weight * scalar_loss
+
+
+class UnimodalLoss(Loss):
+    """Encourage heatmaps to be unimodal using various measures."""
+
+    def __init__(
+            self,
+            original_image_height: int,
+            original_image_width: int,
+            output_shape: tuple,
+            loss_type: Literal["mse", "wasserstein"],
+            reach: Union[float, str] = "none",
+            epsilon: float = 0.0,
+            log_weight: float = 0.0,
+    ) -> None:
+
+        super().__init__(epsilon=epsilon, log_weight=log_weight)
+        self.loss_type = loss_type
+        self.loss_name = "unimodal_%s" % self.loss_type
+        self.original_image_height = original_image_height
+        self.original_image_width = original_image_width
+        self.output_shape = output_shape
+        if loss_type == "wasserstein":
+            reach_ = None if (reach == "none") else reach
+            self.wasserstein_loss = SamplesLoss(loss="sinkhorn", reach=reach_)
+        else:
+            self.wasserstein_loss = None
+
+    def remove_nans(self, **kwargs):
+        pass
+
+    def compute_loss(
+        self,
+        targets: TensorType[
+            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
+        ],
+        predictions: TensorType[
+            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
+        ],
+    ) -> torch.Tensor:
+
+        if self.loss_type == "mse":
+            return F.mse_loss(targets, predictions, reduction="none")
+        elif self.loss_type == "wasserstein":
+            # collapse over batch/keypoint dims
+            targets_rs = targets.reshape(-1, targets.shape[-2], targets.shape[-1])
+            predictions_rs = predictions.reshape(
+                -1, predictions.shape[-2], predictions.shape[-1]
+            )
+            return self.wasserstein_loss(targets_rs, predictions_rs)
+        else:
+            raise NotImplementedError
+
+    def __call__(
+        self,
+        keypoint_preds: TensorType["batch", "two_x_num_keypoints"],
+        heatmap_preds: TensorType[
+            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
+        ],
+        logging: bool = True,
+        **kwargs,
+    ) -> TensorType[(), float]:
+
+        # turn keypoint predictions into unimodal heatmaps
+        keypoint_preds = keypoint_preds.reshape(keypoint_preds.shape[0], -1, 2)
+        heatmaps_ideal = generate_heatmaps(  # this process doesn't compute gradients
+            keypoints=keypoint_preds,
+            height=self.original_image_height,
+            width=self.original_image_width,
+            output_shape=self.output_shape,
+        )
+
+        # compare unimodal heatmaps with predicted heatmaps
+        elementwise_loss = self.compute_loss(
+            targets=heatmaps_ideal,
+            predictions=heatmap_preds
+        )
+        scalar_loss = self.reduce_loss(elementwise_loss, method="mean")
+        if logging:
+            self.log_loss(loss=scalar_loss)
+
+        return self.weight * scalar_loss
+
+
+class RegressionMSELoss(Loss):
+    """MSE loss between ground truth and predicted coordinates."""
+
+    def __init__(self, epsilon: float = 0.0, log_weight: float = 0.0) -> None:
+        super().__init__(epsilon=epsilon, log_weight=log_weight)
+        self.loss_name = "regression_mse"
+
+    def remove_nans(
+        self,
+        targets: TensorType["batch", "two_x_num_keypoints"],
+        predictions: TensorType["batch", "two_x_num_keypoints"],
+    ) -> Tuple[
+        TensorType["num_valid_keypoints"], TensorType["num_valid_keypoints"],
+    ]:
+        mask = targets == targets  # keypoints is not none, bool
+        targets_masked = torch.masked_select(targets, mask)
+        predictions_masked = torch.masked_select(predictions, mask)
+        return targets_masked, predictions_masked
+
+    def compute_loss(self, targets: torch.Tensor, predictions: torch.Tensor):
+        loss = F.mse_loss(targets, predictions, reduction="none")
+        return loss
+
+    def __call__(
+        self,
+        targets: TensorType["batch", "two_x_num_keypoints"],
+        predictions: TensorType["batch", "two_x_num_keypoints"],
+        logging: bool = True,
+        **kwargs
+    ):
+
+        clean_targets, clean_predictions = self.remove_nans(
+            targets=targets, predictions=predictions
+        )
+        elementwise_loss = self.compute_loss(
+            targets=clean_targets, predictions=clean_predictions
+        )
+        scalar_loss = self.reduce_loss(elementwise_loss, method="mean")
+        if logging:
+            self.log_loss(loss=scalar_loss)
+
+        return self.weight * scalar_loss
+
+
+class RegressionRMSELoss(RegressionMSELoss):
+    """Root MSE loss between ground truth and predicted coordinates."""
+
+    def __init__(self, epsilon: float = 0.0, log_weight: float = 0.0) -> None:
+        super().__init__(epsilon=epsilon, log_weight=log_weight)
+        self.loss_name = "regression_rmse"
+
+    def compute_loss(self, targets: torch.Tensor, predictions: torch.Tensor):
+        targs = targets.reshape(-1, 2)
+        preds = predictions.reshape(-1, 2)
+        loss = torch.mean(F.mse_loss(targs, preds, reduction="none"), dim=1)
+        return torch.sqrt(loss)
 
 
 # TODO: this won't work unless the inputs are right, not implemented yet.
@@ -335,56 +482,6 @@ def SingleviewPCALoss(
     )
     # average across both batch and num_keypoints
     return torch.mean(reprojection_loss)
-
-
-@typechecked
-def TemporalLoss(
-    keypoint_preds: TensorType["batch", "two_x_num_keypoints"],
-    epsilon: TensorType[float] = 5.0,
-    **kwargs  # make loss robust to unneeded inputs
-) -> TensorType[(), float]:
-    """Penalize temporal differences for each target.
-
-    Motion model: x_t = x_(t-1) + e_t, e_t ~ N(0, s)
-
-    Args:
-        preds: keypoint predictions; shape=(batch, num_targets)
-        epsilon: loss values below this threshold are discarded (set to zero)
-
-    Returns:
-        Temporal loss averaged over batch
-
-    """
-    diffs = torch.diff(keypoint_preds, dim=0)  # shape (batch - 1, num_targets)
-    reshape = torch.reshape(
-        diffs, (diffs.shape[0], -1, 2)
-    )  # shape (batch - 1, num_keypoints, 2)
-    loss = torch.linalg.norm(reshape, ord=2, dim=2)  # shape (batch - 1, num_keypoints)
-    # epsilon-insensitive loss
-    loss = loss.masked_fill(mask=loss < epsilon, value=0.0)
-    return torch.mean(loss)  # pixels
-
-
-@typechecked
-def UnimodalLoss(
-    keypoint_preds: TensorType["batch", "two_x_num_keypoints"],
-    heatmap_preds: TensorType[
-        "batch", "num_keypoints", "heatmap_height", "heatmap_width"
-    ],
-    original_image_height: int,
-    original_image_width: int,
-    output_shape: tuple,
-    heatmap_loss_type: str,
-    **kwargs  # make loss robust to unneeded inputs
-) -> TensorType[(), float]:
-    keypoint_preds = keypoint_preds.reshape(keypoint_preds.shape[0], -1, 2)
-    ideal_heatmaps = generate_heatmaps(  # this process doesn't compute gradients
-        keypoints=keypoint_preds,
-        height=original_image_height,
-        width=original_image_width,
-        output_shape=output_shape,
-    )
-    return MaskedHeatmapLoss(ideal_heatmaps, heatmap_preds, heatmap_loss_type)
 
 
 @typechecked

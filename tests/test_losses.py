@@ -6,9 +6,9 @@ import yaml
 from pose_est_nets.losses.losses import HeatmapWassersteinLoss
 
 
-def test_masked_regression_loss():
+def test_regression_mse_loss():
 
-    from pose_est_nets.losses.losses import MaskedRegressionMSELoss, MaskedRMSELoss
+    from pose_est_nets.losses.losses import RegressionMSELoss
 
     true_keypoints = torch.rand(
         size=(12, 32),
@@ -19,17 +19,30 @@ def test_masked_regression_loss():
         size=(12, 32),
         device="cpu",
     )
-    loss = MaskedRMSELoss(true_keypoints, predicted_keypoints)
+    mse_loss = RegressionMSELoss()
+    loss = mse_loss(true_keypoints, predicted_keypoints, logging=False)
     assert loss.shape == torch.Size([])
     assert loss > 0.0
+
+
+def test_regression_rmse_loss():
+
+    from pose_est_nets.losses.losses import RegressionMSELoss, RegressionRMSELoss
 
     n = 4
     batch_size = 3
     labels = 2 * torch.ones((batch_size, n), device="cpu")
     preds = torch.zeros((batch_size, n), device="cpu")
-    true_rmse = 2.0  # sqrt(n * (1/n))
-    assert MaskedRMSELoss(labels, preds) == true_rmse
-    assert MaskedRegressionMSELoss(labels, preds) == true_rmse ** 2.0
+    true_rmse = 2.0
+
+    mse_loss = RegressionMSELoss(log_weight=np.log(0.5))  # set log_weight so weight=1
+    mse = mse_loss(labels, preds, logging=False)
+
+    rmse_loss = RegressionRMSELoss(log_weight=np.log(0.5)) # set log_weight so weight=1
+    rmse = rmse_loss(labels, preds, logging=False)
+
+    assert rmse == true_rmse
+    assert mse == true_rmse ** 2.0
 
 
 def test_masked_RMSE_loss():
@@ -48,53 +61,6 @@ def test_masked_RMSE_loss():
     loss = MaskedRegressionMSELoss(true_keypoints, predicted_keypoints)
     assert loss.shape == torch.Size([])
     assert loss > 0.0
-
-
-def test_TemporalLoss():
-
-    from pose_est_nets.losses.losses import TemporalLoss
-
-    # make sure non-negative scalar is returned
-    predicted_keypoints = torch.rand(
-        size=(12, 32),
-        device="cpu",
-    )
-    loss = TemporalLoss(predicted_keypoints, epsilon=torch.Tensor([0.0], device="cpu"))
-    assert loss.shape == torch.Size([])
-    assert loss > 0.0
-
-    # make sure 0 is returned when no differences
-    num_batch = 10
-    num_keypoints = 4
-    predicted_keypoints = torch.ones(
-        size=(num_batch, num_keypoints),
-        device="cpu",
-    )
-    loss = TemporalLoss(predicted_keypoints, epsilon=torch.Tensor([0.0], device="cpu"))
-    assert loss == 0
-
-    # compute actual norm
-    predicted_keypoints = torch.Tensor(
-        [[0.0, 0.0], [np.sqrt(2.0), np.sqrt(2.0)]], device="cpu"
-    )
-    loss = TemporalLoss(predicted_keypoints, epsilon=torch.Tensor([0.0], device="cpu"))
-    assert loss.item() - 2 < 1e-6
-
-    # test epsilon
-    s2 = np.sqrt(2.0)
-    s3 = np.sqrt(3.0)
-    predicted_keypoints = torch.Tensor(
-        [[0.0, 0.0], [s2, s2], [s3 + s2, s3 + s2]], device="cpu"
-    )
-    # [s2, s2] -> 2
-    # [s3, s3] -> sqrt(6)
-    loss = TemporalLoss(predicted_keypoints, epsilon=torch.Tensor([0.0], device="cpu"))
-    assert (loss.item() - (2 + np.sqrt(6))) < 1e-6
-
-    loss = TemporalLoss(predicted_keypoints, epsilon=torch.Tensor([2.1], device="cpu"))
-    assert (
-        loss.item() - np.sqrt(6)
-    ) < 1e-6  # due to epsilon the "2" entry will be zeroed out
 
 
 def test_get_losses_dict():
@@ -185,3 +151,118 @@ def test_heatmap_mse_loss():
     heatmap_wasser_loss = HeatmapWassersteinLoss()
     loss = heatmap_wasser_loss(targets=targets, predictions=predictions, logging=False)
     print("wass_loss:", loss)
+
+
+def test_temporal_loss():
+
+    from pose_est_nets.losses.losses import TemporalLoss
+
+    temporal_loss = TemporalLoss(epsilon=0.0)
+
+    # make sure non-negative scalar is returned
+    predicted_keypoints = torch.rand(
+        size=(12, 32),
+        device="cpu",
+    )
+    loss = temporal_loss(predicted_keypoints, logging=False)
+    assert loss.shape == torch.Size([])
+    assert loss > 0.0
+
+    # make sure 0 is returned when no differences
+    num_batch = 10
+    num_keypoints = 4
+    predicted_keypoints = torch.ones(
+        size=(num_batch, num_keypoints),
+        device="cpu",
+    )
+    loss = temporal_loss(predicted_keypoints, logging=False)
+    assert loss == 0
+
+    # compute actual norm
+    predicted_keypoints = torch.Tensor(
+        [[0.0, 0.0], [np.sqrt(2.0), np.sqrt(2.0)]], device="cpu"
+    )
+    loss = temporal_loss(predicted_keypoints, logging=False)
+    assert loss.item() - 2 < 1e-6
+
+    # test epsilon
+    s2 = np.sqrt(2.0)
+    s3 = np.sqrt(3.0)
+    predicted_keypoints = torch.Tensor(
+        [[0.0, 0.0], [s2, s2], [s3 + s2, s3 + s2]], device="cpu"
+    )
+    # [s2, s2] -> 2
+    # [s3, s3] -> sqrt(6)
+    loss = temporal_loss(predicted_keypoints, logging=False)
+    assert (loss.item() - (2 + np.sqrt(6))) < 1e-6
+
+    temporal_loss = TemporalLoss(epsilon=2.1)
+    loss = temporal_loss(predicted_keypoints, logging=False)
+    # due to epsilon the "2" entry will be zeroed out
+    assert (loss.item() - np.sqrt(6)) < 1e-6
+
+
+def test_unimodal_mse_loss():
+
+    from pose_est_nets.losses.losses import UnimodalLoss
+
+    img_size = 48
+    img_size_ds = 32
+    batch_size = 12
+    num_keypoints = 16
+
+    # make sure non-negative scalar is returned
+    predicted_keypoints = img_size * torch.rand(
+        size=(batch_size, 2 * num_keypoints),
+        device="cpu",
+    )
+    predicted_heatmaps = torch.ones(
+        size=(batch_size, num_keypoints, img_size_ds, img_size_ds),
+        device="cpu",
+    )
+    uni_loss = UnimodalLoss(
+        original_image_height=img_size,
+        original_image_width=img_size,
+        output_shape=(img_size_ds, img_size_ds),
+        loss_type="mse",
+    )
+    loss = uni_loss(
+        keypoint_preds=predicted_keypoints,
+        heatmap_preds=predicted_heatmaps,
+        logging=False,
+    )
+    assert loss.shape == torch.Size([])
+    assert loss > 0.0
+
+
+def test_unimodal_wasserstein_loss():
+
+    from pose_est_nets.losses.losses import UnimodalLoss
+
+    img_size = 48
+    img_size_ds = 32
+    batch_size = 12
+    num_keypoints = 16
+
+    # make sure non-negative scalar is returned
+    predicted_keypoints = img_size * torch.rand(
+        size=(batch_size, 2 * num_keypoints),
+        device="cpu",
+    )
+    predicted_heatmaps = torch.ones(
+        size=(batch_size, num_keypoints, img_size_ds, img_size_ds),
+        device="cpu",
+    )
+    uni_loss = UnimodalLoss(
+        original_image_height=img_size,
+        original_image_width=img_size,
+        output_shape=(img_size_ds, img_size_ds),
+        loss_type="wasserstein",
+    )
+    loss = uni_loss(
+        keypoint_preds=predicted_keypoints,
+        heatmap_preds=predicted_heatmaps,
+        logging=False,
+    )
+    assert loss.shape == torch.Size([])
+    assert loss > 0.0
