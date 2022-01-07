@@ -6,13 +6,9 @@ from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict
 from typing_extensions import Literal
-from pose_est_nets.losses.helpers import convert_dict_entries_to_tensors
-from pose_est_nets.losses.losses import (
-    # convert_loss_tensors_to_torch_nn_params,
-    get_losses_dict,
-    MaskedRegressionMSELoss,
-    MaskedRMSELoss,
-)
+
+from pose_est_nets.losses.factory import LossFactory
+from pose_est_nets.losses.losses import RegressionRMSELoss
 from pose_est_nets.models.base_resnet import BaseFeatureExtractor
 
 patch_typeguard()  # use before @typechecked
@@ -36,7 +32,8 @@ class RegressionTracker(BaseFeatureExtractor):
 
     def __init__(
         self,
-        num_targets: int,  # TODO: decide whether targets or keypoints is the quantity of interest
+        num_keypoints: int,
+        loss_factory: LossFactory,
         resnet_version: Optional[Literal[18, 34, 50, 101, 152]] = 18,
         pretrained: bool = True,
         representation_dropout_rate: float = 0.2,
@@ -46,7 +43,8 @@ class RegressionTracker(BaseFeatureExtractor):
         """Base model that produces (x, y) coordinates of keypoints from images.
 
         Args:
-            num_targets: number of body parts times 2 (x,y) coords
+            num_keypoints: number of body parts
+            loss_factory: object to orchestrate loss computation
             resnet_version: ResNet variant to be used (e.g. 18, 34, 50, 101,
                 or 152); essentially specifies how large the resnet will be
             pretrained: True to load pretrained imagenet weights
@@ -65,7 +63,9 @@ class RegressionTracker(BaseFeatureExtractor):
             pretrained=pretrained,
             last_resnet_layer_to_get=last_resnet_layer_to_get,
         )
-        self.num_targets = num_targets
+        self.num_keypoints = num_keypoints
+        self.num_targets = self.num_keypoints * 2
+        self.loss_factory = loss_factory
         self.resnet_version = resnet_version
         self.final_layer = nn.Linear(self.num_fc_input_features, self.num_targets)
         # TODO: consider removing dropout
@@ -73,27 +73,17 @@ class RegressionTracker(BaseFeatureExtractor):
         self.torch_seed = torch_seed
         self.save_hyperparameters()
 
-    @property
-    def num_keypoints(self):
-        return self.num_targets // 2
-
     @staticmethod
     @typechecked
     def reshape_representation(
-        representation: TensorType[
-            "batch",
-            "features",
-            "rep_height",
-            "rep_width",
-            float,
-        ]
-    ) -> TensorType["batch", "features", float]:
+        representation: TensorType["batch", "features", "rep_height", "rep_width"]
+    ) -> TensorType["batch", "features"]:
         return representation.reshape(representation.shape[0], representation.shape[1])
 
     @typechecked
     def forward(
         self,
-        images: TensorType["batch", "channels":3, "image_height", "image_width", float],
+        images: TensorType["batch", "channels":3, "image_height", "image_width"],
     ) -> TensorType["batch", "two_x_num_keypoints"]:
         """Forward pass through the network.
 
@@ -109,7 +99,7 @@ class RegressionTracker(BaseFeatureExtractor):
         return out
 
     @typechecked
-    def training_step(self, data_batch: BaseBatchDict, batch_idx: int) -> Dict:
+    def training_step(self, data_batch: BaseBatchDict, batch_idx: int) -> dict:
 
         # forward pass
         representation = self.get_representations(data_batch["images"])
@@ -117,13 +107,22 @@ class RegressionTracker(BaseFeatureExtractor):
             self.representation_dropout(self.reshape_representation(representation))
         )
 
-        # compute loss
-        loss = MaskedRegressionMSELoss(data_batch["keypoints"], predicted_keypoints)
-        supervised_rmse = MaskedRMSELoss(data_batch["keypoints"], predicted_keypoints)
-
-        # log training loss + rmse
+        # compute and log loss
+        loss = self.loss_factory(
+            keypoints_true=data_batch["keypoints"],
+            keypoints_pred=predicted_keypoints,
+            stage="train",  # for logging purposes
+        )
         self.log("train_loss", loss, prog_bar=True)
-        self.log("supervised_rmse", supervised_rmse, prog_bar=True)
+
+        # for additional info: compute and log supervised rmse
+        rmse_loss = RegressionRMSELoss()
+        supervised_rmse = rmse_loss(
+            keypoints_true=data_batch["keypoints"],
+            keypoints_pred=predicted_keypoints,
+            logging=False,
+        )
+        self.log("train_rmse_supervised", supervised_rmse, prog_bar=True)
 
         return {"loss": loss}
 
@@ -133,20 +132,35 @@ class RegressionTracker(BaseFeatureExtractor):
         data_batch: BaseBatchDict,
         stage: Optional[Literal["val", "test"]] = None,
     ) -> None:
+
+        # forward_pass
         representation = self.get_representations(data_batch["images"])
         predicted_keypoints = self.final_layer(
             self.reshape_representation(representation)
         )
-        loss = MaskedRegressionMSELoss(data_batch["keypoints"], predicted_keypoints)
-        supervised_rmse = MaskedRMSELoss(data_batch["keypoints"], predicted_keypoints)
+
+        # compute loss
+        loss = self.loss_factory(
+            keypoints_targ=data_batch["keypoints"],
+            keypoints_pred=predicted_keypoints,
+            stage=stage,  # for logging purposes
+        )
+
+        # log loss + rmse
         if stage:
+            rmse_loss = RegressionRMSELoss()
+            supervised_rmse = rmse_loss(
+                keypoints_targ=data_batch["keypoints"],
+                keypoints_pred=predicted_keypoints,
+                logging=False,
+            )
             self.log(f"{stage}_loss", loss, prog_bar=True)
             self.log(f"{stage}_supervised_rmse", supervised_rmse, prog_bar=True)
 
-    def validation_step(self, validation_batch: BaseBatchDict, batch_idx):
+    def validation_step(self, validation_batch: BaseBatchDict, batch_idx: int):
         self.evaluate(validation_batch, "val")
 
-    def test_step(self, test_batch: BaseBatchDict, batch_idx):
+    def test_step(self, test_batch: BaseBatchDict, batch_idx: int):
         self.evaluate(test_batch, "test")
 
 
@@ -155,21 +169,22 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
 
     def __init__(
         self,
-        num_targets: int,  # TODO: decide whether targets or keypoints is the quantity of interest
-        loss_params: dict,
+        num_keypoints: int,
+        loss_factory: LossFactory,
+        loss_factory_unsupervised: LossFactory,
         resnet_version: Optional[Literal[18, 34, 50, 101, 152]] = 18,
         pretrained: bool = True,
         representation_dropout_rate: float = 0.2,
         last_resnet_layer_to_get: int = -2,
         torch_seed: int = 123,
-        semi_super_losses_to_use: Optional[list] = None,
-        learn_weights: bool = True,  # whether to use multitask weight learning
     ) -> None:
         """
 
         Args:
-            num_targets: number of body parts times 2 (x,y) coords
-            loss_params:
+            num_keypoints: number of body parts
+            loss_factory: object to orchestrate supervised loss computation
+            loss_factory_unsupervised: object to orchestrate unsupervised loss
+                computation
             resnet_version: ResNet variant to be used (e.g. 18, 34, 50, 101,
                 or 152); essentially specifies how large the resnet will be
             pretrained: True to load pretrained imagenet weights
@@ -177,40 +192,23 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
                 layers
             last_resnet_layer_to_get: skip final layers of original model
             torch_seed: make weight initialization reproducible
-            semi_super_losses_to_use: TODO
 
         """
         super().__init__(
-            num_targets=num_targets,
+            num_keypoints=num_keypoints,
+            loss_factory=loss_factory,
             resnet_version=resnet_version,
             pretrained=pretrained,
             representation_dropout_rate=representation_dropout_rate,
             last_resnet_layer_to_get=last_resnet_layer_to_get,
             torch_seed=torch_seed,
         )
-        print(semi_super_losses_to_use)
-        if semi_super_losses_to_use is None:
-            raise ValueError("must specify losses for unlabeled frames")
-        if "unimodal" in semi_super_losses_to_use:
+        self.loss_factory_unsup = loss_factory_unsupervised
+        loss_names = loss_factory_unsupervised.loss_classes_dict.keys()
+        if "unimodal_mse" in loss_names or "unimodal_wasserstein" in loss_names:
             raise ValueError("cannot use unimodal loss in regression tracker")
-        self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
-        self.loss_params = loss_params
-        self.learn_weights = learn_weights
-        # (
-        #     self.loss_params_tensor,
-        #     self.loss_params_dict,
-        # ) = convert_dict_entries_to_tensors(  # is there a point of doing this for regression tracker?
-        #     loss_params=self.loss_params,
-        #     device=self.device,
-        #     to_parameters=self.learn_weights,
-        # )
-        self.loss_weights_dict, self.loss_params_dict = convert_dict_entries_to_tensors(
-            loss_params=loss_params,
-            device=self.device,
-            losses_to_use=semi_super_losses_to_use,
-            to_parameters=self.learn_weights,
-        )
 
+        # this attribute will be modified by AnnealWeight callback during training
         self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
 
     @typechecked
@@ -218,7 +216,8 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         self, data_batch: SemiSupervisedBatchDict, batch_idx: int
     ) -> dict:
 
-        # on each epoch, self.total_unsupervised_importance is modified by the AnnealWeight callback
+        # on each epoch, self.total_unsupervised_importance is modified by the
+        # AnnealWeight callback
         self.log(
             "total_unsupervised_importance",
             self.total_unsupervised_importance,
@@ -226,69 +225,45 @@ class SemiSupervisedRegressionTracker(RegressionTracker):
         )
 
         # forward pass labeled
+        # --------------------
         representation = self.get_representations(data_batch["labeled"]["images"])
         predicted_keypoints = self.final_layer(
             self.representation_dropout(self.reshape_representation(representation))
         )  # TODO: consider removing representation dropout?
 
-        # compute loss labeled
-        supervised_loss = MaskedRegressionMSELoss(
-            data_batch["labeled"]["keypoints"], predicted_keypoints
-        )  # for training
-        supervised_rmse = MaskedRMSELoss(
-            data_batch["labeled"]["keypoints"], predicted_keypoints
-        )  # for logging
+        # compute and log supervised loss
+        loss_super = self.loss_factory(
+            keypoints_targ=data_batch["labeled"]["keypoints"],
+            keypoints_pred=predicted_keypoints,
+            stage="train",  # for logging purposes
+        )
+        self.log("train_loss_supervised", loss_super, prog_bar=True)
+
+        # for additional info: compute and log supervised rmse
+        rmse_loss = RegressionRMSELoss()
+        supervised_rmse = rmse_loss(
+            keypoints_targ=data_batch["labeled"]["keypoints"],
+            keypoints_pred=predicted_keypoints,
+            logging=False,
+        )
+        self.log("train_rmse_supervised", supervised_rmse, prog_bar=True)
 
         # forward pass unlabeled
-        us_representation = self.get_representations(data_batch["unlabeled"])
-        predicted_us_keypoints = self.final_layer(
-            self.representation_dropout(
-                self.reshape_representation(us_representation)
-            )  # Do we need dropout
+        # ----------------------
+        representation_ul = self.get_representations(data_batch["unlabeled"])
+        predicted_keypoints_ul = self.final_layer(
+            self.representation_dropout(self.reshape_representation(representation_ul))
+        )  # TODO: consider removing representation dropout?
+
+        # compute and log unsupervised loss
+        loss_unsuper = self.loss_factory_unsup(
+            keypoints_pred=predicted_keypoints_ul,
+            anneal_weight=self.total_unsupervised_importance,
+            stage="train",  # for logging purposes
         )
 
-        # loop over unsupervised losses
-        tot_loss = 0.0
-        tot_loss += supervised_loss
+        # log total loss
+        total_loss = loss_super + loss_unsuper
+        self.log("total_loss", total_loss, prog_bar=True)
 
-        for loss_name, loss_func in self.loss_function_dict.items():
-
-            unsupervised_loss = loss_func(
-                keypoint_preds=predicted_us_keypoints,
-                **self.loss_params_dict[loss_name],
-            )
-
-            loss_weight = (
-                1.0
-                / (  # weight = \sigma where our trainable parameter is \log(\sigma^2). i.e., we take the parameter as it is in the config and exponentiate it to enforce positivity
-                    2.0 * torch.exp(self.loss_weights_dict[loss_name])
-                )
-            )
-
-            current_weighted_loss = loss_weight * unsupervised_loss
-            tot_loss += self.total_unsupervised_importance * current_weighted_loss
-
-            if (
-                self.learn_weights == True
-            ):  # penalize for the magnitude of the weights: \log(\sigma_i) for each weight i
-                tot_loss += self.total_unsupervised_importance * (
-                    0.5 * self.loss_weights_dict[loss_name]
-                )  #
-
-            # log individual unsupervised losses
-            self.log(loss_name + "_loss", unsupervised_loss, prog_bar=True)
-            self.log(
-                "weighted_" + loss_name + "_loss", current_weighted_loss, prog_bar=True
-            )
-            self.log(
-                "{}_{}".format(loss_name, "weight"),
-                loss_weight,
-                prog_bar=True,
-            )
-
-        # log other losses
-        self.log("total_loss", tot_loss, prog_bar=True)
-        self.log("supervised_loss", supervised_loss, prog_bar=True)
-        self.log("supervised_rmse", supervised_rmse, prog_bar=True)
-
-        return {"loss": tot_loss}
+        return {"loss": total_loss}

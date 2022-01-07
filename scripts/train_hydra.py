@@ -12,6 +12,7 @@ from typing import Callable, Union
 from pose_est_nets.callbacks.callbacks import AnnealWeight
 from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
 from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
+from pose_est_nets.losses.factory import LossFactory
 from pose_est_nets.models.heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
@@ -29,6 +30,17 @@ from pose_est_nets.utils.plotting_utils import predict_dataset
 
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+def get_imgaug_tranform(cfg: DictConfig) -> iaa.Sequential:
+    # transforms
+    data_transform = iaa.Resize(
+        {
+            "height": cfg.data.image_resize_dims.height,
+            "width": cfg.data.image_resize_dims.width,
+        }
+    )
+    return iaa.Sequential([data_transform])
 
 
 def get_dataset(
@@ -55,17 +67,6 @@ def get_dataset(
             "%s is an invalid cfg.model.model_type" % cfg.model.model_type
         )
     return dataset
-
-
-def get_imgaug_tranform(cfg: DictConfig) -> iaa.Sequential:
-    # transforms
-    data_transform = iaa.Resize(
-        {
-            "height": cfg.data.image_resize_dims.height,
-            "width": cfg.data.image_resize_dims.width,
-        }
-    )
-    return iaa.Sequential([data_transform])
 
 
 def get_datamodule(
@@ -119,10 +120,64 @@ def get_datamodule(
     return data_module
 
 
+def get_loss_factories(
+        cfg: DictConfig,
+        data_module: Union[BaseDataModule, UnlabeledDataModule]
+) -> dict:
+    """Note: much of this replaces the function `format_and_update_loss_info`."""
+
+    # collect all supervised losses in a dict; no extra params needed
+    loss_params_dict_sup = {}
+    if cfg.model_type == "heatmap":
+        loss_params_dict_sup["heatmap_" + cfg.model.heatmap_type] = {"log_weight": 0.0}
+    else:
+        loss_params_dict_sup[cfg.model.model_type] = {"log_weight": 0.0}
+
+    # collect all unsupervised losses and their params in a dict
+    loss_params_dict_unsup = {}
+    for loss_name in cfg.model.losses_to_use:
+        # general parameters
+        loss_params_dict_unsup[loss_name] = cfg.losses[loss_name]
+        loss_params_dict_unsup[loss_name]["loss_name"] = loss_name  # generally useful
+        # loss-specific parameters
+        if loss_name == "unimodal_mse" or loss_name == "unimodal_wasserstein":
+            if cfg.model.model_type == "regression":
+                raise NotImplementedError(
+                    f"unimodal loss can only be used with classes inheriting from "
+                    f"HeatmapTracker. \nYou specified a RegressionTracker model."
+                )
+            # record original image dims (after initial resizing)
+            height_og = cfg.data.image_resize_dims.height
+            width_og = cfg.data.image_resize_dims.width
+            loss_params_dict_unsup[loss_name]["original_image_height"] = height_og
+            loss_params_dict_unsup[loss_name]["original_image_width"] = width_og
+            # record downsampled image dims
+            height_ds = int(height_og // (2 ** cfg.data.downsample_factor))
+            width_ds = int(width_og // (2 ** cfg.data.downsample_factor))
+            loss_params_dict_unsup[loss_name]["original_image_height"] = height_ds
+            loss_params_dict_unsup[loss_name]["original_image_width"] = width_ds
+        elif loss_name == "pca_multiview":
+            loss_params_dict_unsup[loss_name]["mirrored_column_matches"] = \
+                cfg.data.mirrored_column_matches
+
+    # build supervised loss factory, which orchestrates all supervised losses
+    loss_factory_sup = LossFactory(
+        losses_params_dict=loss_params_dict_sup,
+        data_module=data_module
+    )
+    # build supervised loss factory, which orchestrates all supervised losses
+    loss_factory_unsup = LossFactory(
+        losses_params_dict=loss_params_dict_sup,
+        data_module=data_module
+    )
+
+    return {"supervised": loss_factory_sup, "unsupervised": loss_factory_unsup}
+
+
 def get_model(
     cfg: DictConfig,
     data_module: Union[BaseDataModule, UnlabeledDataModule],
-    loss_factory: Callable,  # TODO: be more specific
+    loss_factories: Dict[str, LossFactory],
 ) -> Union[
     RegressionTracker,
     HeatmapTracker,
@@ -133,17 +188,17 @@ def get_model(
     if not semi_supervised:
         if cfg.model.model_type == "regression":
             model = RegressionTracker(
-                num_targets=cfg.data.num_targets,
+                num_keypoints=cfg.data.num_keypoints,
+                loss_factory=loss_factories["supervised"],
                 resnet_version=cfg.model.resnet_version,
                 torch_seed=cfg.training.rng_seed_model_pt,
             )
         elif cfg.model.model_type == "heatmap":
             model = HeatmapTracker(
-                num_targets=cfg.data.num_targets,
+                num_keypoints=cfg.data.num_keypoints,
+                loss_factory=loss_factories["supervised"],
                 resnet_version=cfg.model.resnet_version,
                 downsample_factor=cfg.data.downsample_factor,
-                supervised_loss=cfg.model.heatmap_loss_type,
-                reach=cfg.model.reach,
                 output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
             )
@@ -153,31 +208,24 @@ def get_model(
                 % cfg.model.model_type
             )
 
-    else:  # semi_supervised == True
-        # copy data-specific details into loss dict
-        # TODO: in refactoring maybe change this
-        loss_param_dict, losses_to_use = format_and_update_loss_info(cfg)
-
+    else:
         if cfg.model.model_type == "regression":
             model = SemiSupervisedRegressionTracker(
-                num_targets=cfg.data.num_targets,
+                num_keypoints=cfg.data.num_keypoints,
+                loss_factory=loss_factories["supervised"],
+                loss_factory_unsupervised=loss_factories["unsupervised"],
                 resnet_version=cfg.model.resnet_version,
-                loss_params=data_module.loss_param_dict,
-                semi_super_losses_to_use=losses_to_use,
                 torch_seed=cfg.training.rng_seed_model_pt,
             )
 
         elif cfg.model.model_type == "heatmap":
             model = SemiSupervisedHeatmapTracker(
-                num_targets=cfg.data.num_targets,
+                num_keypoints=cfg.data.num_keypoints,
+                loss_factory=loss_factories["supervised"],
+                loss_factory_unsupervised=loss_factories["unsupervised"],
                 resnet_version=cfg.model.resnet_version,
                 downsample_factor=cfg.data.downsample_factor,
-                supervised_loss=cfg.model.heatmap_loss_type,
-                reach=cfg.model.reach,
                 output_shape=data_module.dataset.output_shape,
-                loss_params=data_module.loss_param_dict,
-                semi_super_losses_to_use=losses_to_use,
-                learn_weights=cfg.model.learn_weights,
                 torch_seed=cfg.training.rng_seed_model_pt,
             )
         else:
@@ -185,7 +233,7 @@ def get_model(
                 "%s is an invalid cfg.model.model_type for a semi-supervised model"
                 % cfg.model.model_type
             )
-        return model
+    return model
 
 
 @hydra.main(config_path="configs", config_name="config")
@@ -198,21 +246,24 @@ def train(cfg: DictConfig):
     # path handling for toy datasets
     data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
 
+    # ----------------------------------------------------------------------------------
+    # Set up data/model objects
+    # ----------------------------------------------------------------------------------
+
     # imgaug transform
     imgaug_transform = get_imgaug_tranform(cfg=cfg)
 
     # dataset
     dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
 
-    # datamodule
+    # datamodule; breaks up dataset into train/val/test
     data_module = get_datamodule(cfg=cfg, dataset=dataset, video_dir=video_dir)
 
     # losses
-    # TODO
+    loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
 
     # model
-    # TODO: watch out for loss_factory argument when you introduce it
-    model = get_model(cfg=cfg, data_module=data_module, loss_factory=None)
+    model = get_model(cfg=cfg, data_module=data_module, loss_factories=loss_factories)
 
     # ----------------------------------------------------------------------------------
     # Set up and run training

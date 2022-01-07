@@ -11,24 +11,14 @@ from typing_extensions import Literal
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau
 
-from pose_est_nets.losses.helpers import convert_dict_entries_to_tensors
-from pose_est_nets.losses.losses import (
-    # convert_loss_tensors_to_torch_nn_modules,
-    get_losses_dict,
-    MaskedHeatmapLoss,
-    MaskedRMSELoss,
-)
+from pose_est_nets.losses.factory import LossFactory
+from pose_est_nets.losses.losses import MaskedHeatmapLoss, MaskedRMSELoss
 from pose_est_nets.models.base_resnet import BaseFeatureExtractor
 from pose_est_nets.models.regression_tracker import BaseBatchDict
 
 
 class HeatmapBatchDict(BaseBatchDict):
-    """Inherets key-value pairs from BaseExampleDict and adds "heatmaps"
-
-    Args:
-        BaseExampleDict (TypedDict): a dict containing a single example.
-    """
-
+    """Inherets key-value pairs from BaseExampleDict and adds "heatmaps"."""
     heatmaps: TensorType[
         "batch", "num_keypoints", "heatmap_height", "heatmap_width", float
     ]
@@ -50,26 +40,20 @@ class HeatmapTracker(BaseFeatureExtractor):
 
     def __init__(
         self,
-        num_targets: int,
+        num_keypoints: int,
+        loss_factory: LossFactory,
         resnet_version: Literal[18, 34, 50, 101, 152] = 18,
-        downsample_factor: Literal[
-            2, 3
-        ] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
+        downsample_factor: Literal[2, 3] = 2,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
         output_shape: Optional[tuple] = None,  # change
-        output_sigma: float = 1.25,  # check value
-        upsample_factor: int = 100,
-        supervised_loss: str = "mse",
-        reach: Union[float, str] = None,
-        confidence_scale: float = 1.0,
-        threshold: Optional[float] = None,
         torch_seed: int = 123,
     ) -> None:
         """Initialize a DLC-like model with resnet backbone.
 
         Args:
-            num_targets: number of body parts times 2 (x,y) coords
+            num_keypoints: number of body parts
+            loss_factory: object to orchestrate loss computation
             resnet_version: ResNet variant to be used (e.g. 18, 34, 50, 101,
                 or 152); essentially specifies how large the resnet will be
             downsample_factor: make heatmap smaller than original frames to
@@ -79,10 +63,6 @@ class HeatmapTracker(BaseFeatureExtractor):
             last_resnet_layer_to_get: skip final layers of backbone model
             output_shape: hard-coded image size to avoid dynamic shape
                 computations
-            output_sigma: TODO
-            upsample_factor: TODO
-            confidence_scale: TODO
-            threshold: TODO
             torch_seed: make weight initialization reproducible
 
         """
@@ -95,27 +75,19 @@ class HeatmapTracker(BaseFeatureExtractor):
             pretrained=pretrained,
             last_resnet_layer_to_get=last_resnet_layer_to_get,
         )
-        self.num_targets = num_targets
+        self.num_keypoints = num_keypoints
+        self.num_targets = num_keypoints * 2
+        self.loss_factory = loss_factory
+        # TODO: downsample_factor may be in mismatch between datamodule and model.
+        # consider adding support for more types
         self.downsample_factor = downsample_factor
         self.upsampling_layers = self.make_upsampling_layers()
         self.initialize_upsampling_layers()
         self.output_shape = output_shape
-        self.output_sigma = torch.tensor(output_sigma, device=self.device)
-        self.upsample_factor = torch.tensor(upsample_factor, device=self.device)
-        self.supervised_loss = supervised_loss
-        self.reach = reach
-        self.confidence_scale = torch.tensor(confidence_scale, device=self.device)
-        self.threshold = threshold
-        # self.softmax = nn.Softmax(dim=2)
         self.temperature = torch.tensor(100, device=self.device)  # soft argmax temp
         self.torch_seed = torch_seed
         # Necessary so we don't have to pass in model arguments when loading
         self.save_hyperparameters()
-        # self.device = device  # done automatically by pytorch lightning?
-
-    @property
-    def num_keypoints(self):
-        return self.num_targets // 2
 
     @property
     def num_filters_for_upsampling(self):
@@ -141,8 +113,9 @@ class HeatmapTracker(BaseFeatureExtractor):
             heatmaps: output of upsampling layers
 
         Returns:
-            - soft argmax of shape (batch, num_targets)
-            - confidences of shape (batch, num_keypoints)
+            tuple
+                - soft argmax of shape (batch, num_targets)
+                - confidences of shape (batch, num_keypoints)
 
         """
         # upsample heatmaps
@@ -175,7 +148,7 @@ class HeatmapTracker(BaseFeatureExtractor):
                 in_channels=self.num_filters_for_upsampling // 4,
                 out_channels=self.num_keypoints,
             )
-        )  #  up to here results in downsample_factor=3 for [384,384] images
+        )  # up to here results in downsample_factor=3 for [384,384] images
         if self.downsample_factor == 2:
             upsampling_layers.append(
                 self.create_double_upsampling_layer(
@@ -258,27 +231,31 @@ class HeatmapTracker(BaseFeatureExtractor):
     @typechecked
     def training_step(self, batch_dict: HeatmapBatchDict, batch_idx: int) -> Dict:
 
+        # TODO: return loss from evaluate method and set "train" stage?
         # forward pass
-        predicted_heatmaps = self.forward(batch_dict["images"])  # images -> heatmaps
-        predicted_keypoints, confidence = self.run_subpixelmaxima(
-            predicted_heatmaps
-        )  # heatmaps -> keypoints
+        # images -> heatmaps
+        predicted_heatmaps = self.forward(batch_dict["images"])
+        # heatmaps -> keypoints
+        predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
 
-        # compute loss
-        heatmap_loss = MaskedHeatmapLoss(
-            batch_dict["heatmaps"],
-            predicted_heatmaps,
-            loss_type=self.supervised_loss,
-            reach=self.reach,
+        # compute and log loss
+        loss = self.loss_factory(
+            heatmaps_targ=data_batch["heatmaps"],
+            heatmaps_pred=predicted_heatmaps,
+            stage="train",  # for logging purposes
         )
+        self.log("train_loss", loss, prog_bar=True)
 
-        supervised_rmse = MaskedRMSELoss(batch_dict["keypoints"], predicted_keypoints)
+        # for additional info: compute and log supervised rmse
+        rmse_loss = RegressionRMSELoss()
+        supervised_rmse = rmse_loss(
+            keypoints_targ=data_batch["keypoints"],
+            keypoints_pred=predicted_keypoints,
+            logging=False,
+        )
+        self.log("train_rmse_supervised", supervised_rmse, prog_bar=True)
 
-        # log training loss + rmse
-        self.log("train_loss", heatmap_loss, prog_bar=True)
-        self.log("supervised_rmse", supervised_rmse, prog_bar=True)
-
-        return {"loss": heatmap_loss}
+        return {"loss": loss}
 
     @typechecked
     def evaluate(
@@ -286,22 +263,29 @@ class HeatmapTracker(BaseFeatureExtractor):
         batch_dict: HeatmapBatchDict,
         stage: Optional[Literal["val", "test"]] = None,
     ) -> None:
-        predicted_heatmaps = self.forward(batch_dict["images"])  # images -> heatmaps
-        predicted_keypoints, confidence = self.run_subpixelmaxima(
-            predicted_heatmaps
-        )  # heatmaps -> keypoints
-        loss = MaskedHeatmapLoss(
-            batch_dict["heatmaps"],
-            predicted_heatmaps,
-            loss_type=self.supervised_loss,
-            reach=self.reach,
+
+        # forward pass
+        # images -> heatmaps
+        predicted_heatmaps = self.forward(batch_dict["images"])
+        # heatmaps -> keypoints
+        predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
+
+        # compute loss
+        loss = self.loss_factory(
+            heatmaps_targ=data_batch["heatmaps"],
+            heatmaps_pred=predicted_heatmaps,
+            stage=stage,  # for logging purposes
         )
-        supervised_rmse = MaskedRMSELoss(batch_dict["keypoints"], predicted_keypoints)
+
         if stage:
-            self.log(f"{stage}_loss", loss, prog_bar=True, logger=True)
-            self.log(
-                f"{stage}_supervised_rmse", supervised_rmse, prog_bar=True, logger=True
+            rmse_loss = RegressionRMSELoss()
+            supervised_rmse = rmse_loss(
+                keypoints_targ=data_batch["keypoints"],
+                keypoints_pred=predicted_keypoints,
+                logging=False,
             )
+            self.log(f"{stage}_loss", loss, prog_bar=True)
+            self.log(f"{stage}_rmse_supervised", supervised_rmse, prog_bar=True)
 
     def validation_step(self, validation_batch: HeatmapBatchDict, batch_idx):
         self.evaluate(validation_batch, "val")
@@ -312,10 +296,12 @@ class HeatmapTracker(BaseFeatureExtractor):
     # single optimizer with different learning rates
     def configure_optimizers(self):
         params = [
-            # {"params": self.backbone.parameters()}, # don't uncomment this line; the BackboneFinetuning callback should add backbone to the params.
+            # {"params": self.backbone.parameters()},
+            #  don't uncomment above line; the BackboneFinetuning callback should add
+            # backbone to the params.
             {
                 "params": self.upsampling_layers.parameters()
-            },  # important that this is the 0th element, for BackboneFinetuning callback
+            },  # important this is the 0th element, for BackboneFinetuning callback
         ]
         optimizer = Adam(params, lr=1e-3)
         scheduler = MultiStepLR(optimizer, milestones=[100, 200, 300], gamma=0.5)
@@ -332,32 +318,23 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
 
     def __init__(
         self,
-        num_targets: int,
+        num_keypoints: int,
+        loss_factory: LossFactory,
+        loss_factory_unsupervised: LossFactory,
         resnet_version: Literal[18, 34, 50, 101, 152] = 18,
-        downsample_factor: Literal[
-            2, 3
-        ] = 2,  # TODO: downsample_factor may be in mismatch between datamodule and model. consider adding support for more types
+        downsample_factor: Literal[2, 3] = 2,
         pretrained: bool = True,
-        loss_factory=None,  # TODO: Add stronger typechecking
         last_resnet_layer_to_get: int = -3,
         output_shape: Optional[tuple] = None,  # change
-        output_sigma: float = 1.25,  # check value,
-        upsample_factor: int = 100,
-        supervised_loss: str = "mse",
-        reach: Union[float, str] = None,
-        confidence_scale: float = 1.0,
-        threshold: Optional[float] = None,
         torch_seed: int = 123,
-        loss_params: Optional[
-            dict
-        ] = None,  # TODO: remove; taken care of by loss_factory
-        semi_super_losses_to_use: Optional[list] = [],  # TODO: remove; same as above
-        learn_weights: bool = True,  # TODO: remove; same as above
     ):
         """
 
         Args:
-            num_targets: number of body parts times 2 (x,y) coords
+            num_keypoints: number of body parts
+            loss_factory: object to orchestrate supervised loss computation
+            loss_factory_unsupervised: object to orchestrate unsupervised loss
+                computation
             resnet_version: ResNet variant to be used (e.g. 18, 34, 50, 101,
                 or 152); essentially specifies how large the resnet will be
             downsample_factor: make heatmap smaller than original frames to
@@ -367,50 +344,31 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             last_resnet_layer_to_get: skip final layers of original model
             output_shape: hard-coded image size to avoid dynamic shape
                 computations
-            output_sigma: TODO
-            upsample_factor: TODO
-            confidence_scale: TODO
-            threshold: TODO
             torch_seed: make weight initialization reproducible
-            loss_params: TODO
-            semi_super_losses_to_use: TODO
 
         """
         super().__init__(
-            num_targets=num_targets,
+            num_keypoints=num_keypoints,
+            loss_factory=loss_factory,
             resnet_version=resnet_version,
             downsample_factor=downsample_factor,
             pretrained=pretrained,
             last_resnet_layer_to_get=last_resnet_layer_to_get,
             output_shape=output_shape,
-            output_sigma=output_sigma,
-            upsample_factor=upsample_factor,
-            supervised_loss=supervised_loss,
-            reach=reach,
-            confidence_scale=confidence_scale,
-            threshold=threshold,
             torch_seed=torch_seed,
         )
-        self.loss_function_dict = get_losses_dict(semi_super_losses_to_use)
-        self.learn_weights = learn_weights
-        self.loss_weights_dict, self.loss_params_dict = convert_dict_entries_to_tensors(
-            loss_params=loss_params,
-            device=self.device,
-            losses_to_use=semi_super_losses_to_use,
-            to_parameters=self.learn_weights,
-        )
+        self.loss_factory_unsup = loss_factory_unsupervised
 
-        self.register_buffer(
-            "total_unsupervised_importance", torch.tensor(1.0)
-        )  # this attribute will be modified by AnnealWeight callback during training
-        # self.save_hyperparameters()
+        # this attribute will be modified by AnnealWeight callback during training
+        self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
 
     @typechecked
     def training_step(
         self, data_batch: SemiSupervisedHeatmapBatchDict, batch_idx: int
     ) -> Dict:
 
-        # on each epoch, self.total_unsupervised_importance is modified by the AnnealWeight callback
+        # on each epoch, self.total_unsupervised_importance is modified by the
+        # AnnealWeight callback
         self.log(
             "total_unsupervised_importance",
             self.total_unsupervised_importance,
@@ -418,71 +376,45 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         )
 
         # forward pass labeled
+        # --------------------
         predicted_heatmaps = self.forward(data_batch["labeled"]["images"])
-        predicted_keypoints, confidence = self.run_subpixelmaxima(
-            predicted_heatmaps
-        )  # heatmaps -> keypoints
+        predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
 
-        # compute loss labeled
-        supervised_loss = MaskedHeatmapLoss(
-            data_batch["labeled"]["heatmaps"], predicted_heatmaps, self.supervised_loss
+        # compute and log loss
+        loss_super = self.loss_factory(
+            heatmaps_targ=data_batch["labeled"]["heatmaps"],
+            heatmaps_pred=predicted_heatmaps,
+            stage="train",  # for logging purposes
         )
+        self.log("train_loss_supervised", loss_super, prog_bar=True)
 
-        supervised_rmse = MaskedRMSELoss(
-            data_batch["labeled"]["keypoints"], predicted_keypoints
+        # for additional info: compute and log supervised rmse
+        rmse_loss = RegressionRMSELoss()
+        supervised_rmse = rmse_loss(
+            keypoints_targ=data_batch["labeled"]["keypoints"],
+            keypoints_pred=predicted_keypoints,
+            logging=False,
         )
+        self.log("train_rmse_supervised", supervised_rmse, prog_bar=True)
 
         # forward pass unlabeled
-        unlabeled_predicted_heatmaps = self.forward(data_batch["unlabeled"])
-        predicted_us_keypoints, confidence = self.run_subpixelmaxima(
-            unlabeled_predicted_heatmaps
+        # ----------------------
+        predicted_heatmaps_ul = self.forward(data_batch["unlabeled"])
+        predicted_keypoints_ul, confidence = self.run_subpixelmaxima(
+            predicted_heatmaps_ul
         )
 
-        # loop over unsupervised losses
-        tot_loss = 0.0
-        tot_loss += supervised_loss
-        for loss_name, loss_func in self.loss_function_dict.items():
-            # Some losses use keypoint_preds, some use heatmap_preds, and some use both.
-            # all have **kwargs so are robust to unneeded inputs.
+        # compute and log unsupervised loss
+        loss_unsuper = self.loss_factory_unsup(
+            keypoints_pred=predicted_keypoints_ul,
+            heatmaps_pred=predicted_heatmaps_ul,
+            anneal_weight=self.total_unsupervised_importance,
+            stage="train",  # for logging purposes
+        )
 
-            unsupervised_loss = loss_func(
-                keypoint_preds=predicted_us_keypoints,
-                heatmap_preds=unlabeled_predicted_heatmaps,
-                **self.loss_params_dict[loss_name],
-            )
-
-            loss_weight = (
-                1.0
-                / (  # weight = \sigma where our trainable parameter is \log(\sigma^2). i.e., we take the parameter as it is in the config and exponentiate it to enforce positivity
-                    2.0 * torch.exp(self.loss_weights_dict[loss_name])
-                )
-            )
-
-            current_weighted_loss = loss_weight * unsupervised_loss
-            tot_loss += self.total_unsupervised_importance * current_weighted_loss
-
-            if (
-                self.learn_weights == True
-            ):  # penalize for the magnitude of the weights: \log(\sigma_i) for each weight i
-                tot_loss += self.total_unsupervised_importance * (
-                    0.5 * self.loss_weights_dict[loss_name]
-                )  # recall that \log(\sigma_1 * \sigma_2 * ...) = \log(\sigma_1) + \log(\sigma_2) + ...
-
-            # log individual unsupervised losses
-            self.log(loss_name + "_loss", unsupervised_loss, prog_bar=True)
-            self.log(
-                "weighted_" + loss_name + "_loss", current_weighted_loss, prog_bar=True
-            )
-            self.log(
-                "{}_{}".format(loss_name, "weight"),
-                loss_weight,
-                prog_bar=True,
-            )
-
-        # log other losses
-        self.log("total_loss", tot_loss, prog_bar=True)
-        self.log("supervised_loss", supervised_loss, prog_bar=True)
-        self.log("supervised_rmse", supervised_rmse, prog_bar=True)
+        # log total loss
+        total_loss = loss_super + loss_unsuper
+        self.log("total_loss", total_loss, prog_bar=True)
 
         return {"loss": tot_loss}
 

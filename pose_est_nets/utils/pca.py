@@ -24,7 +24,8 @@ _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 patch_typeguard()  # use before @typechecked
 
-# TODO: think about exporting out the data-getting procedure to its own class so that we can support general arrays, like arrays with predictions.
+# TODO: think about exporting out the data-getting procedure to its own class so that we
+# can support general arrays, like arrays with predictions.
 
 
 @typechecked
@@ -67,7 +68,8 @@ class KeypointPCA:
                 pass
 
     def _clean_any_nans(self) -> None:
-        # we count nans along the first dimension, i.e., columns. We remove those rows whose column nan sum > 0, i.e., more than zero nan.
+        # we count nans along the first dimension, i.e., columns. We remove those rows
+        # whose column nan sum > 0, i.e., more than zero nan.
         self.data_arr = clean_any_nans(self.data_arr, dim=1)
 
     def _ensure_no_nans(self) -> None:
@@ -117,11 +119,11 @@ class KeypointPCA:
         assert type(self._n_components_kept) is int
 
     def pca_prints(self) -> None:
-        # called after we've fitted a pca object and selected how many components to keep.
+        # call after we've fitted a pca object and selected how many components to keep
         pca_prints(self.pca_object, self.loss_type, self._n_components_kept)
 
     def _set_parameter_dict(self) -> None:
-        # TODO: these are the parameters of pca, need to send these over to the loss param dict
+        # TODO: parameters of pca, need to send over to the loss param dict
         self.parameters = {}  # dict with same keys as loss_param_dict
         self.parameters["mean"] = self.pca_object.mean_
         self.parameters["kept_eigenvectors"] = self.pca_object.components_[

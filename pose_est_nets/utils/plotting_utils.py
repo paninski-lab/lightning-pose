@@ -507,6 +507,7 @@ def load_model_from_checkpoint(
     )
     # initialize a model instance, with weights loaded from .ckpt file
     if semi_supervised:
+        # TODO: TODO TODO TODO
         loss_param_dict, losses_to_use = format_and_update_loss_info(cfg)
         model = ModelClass.load_from_checkpoint(
             ckpt_file,
