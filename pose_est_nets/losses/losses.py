@@ -27,12 +27,17 @@ class Loss(pl.LightningModule):
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
         epsilon: float = 0.0,
         log_weight: float = 0.0,
+        **kwargs,
     ) -> None:
 
         super().__init__()
         self.data_module = data_module
-        self.epsilon = epsilon
-        self.log_weight = torch.tensor(log_weight, device=self.device)
+        self.epsilon = torch.tensor(
+            epsilon, dtype=torch.float, device=self.device
+        )
+        self.log_weight = torch.tensor(
+            log_weight, dtype=torch.float, device=self.device
+        )
         self.loss_name = "base"
 
         self.reduce_methods_dict = {"mean": torch.mean, "sum": torch.sum}
@@ -64,13 +69,12 @@ class Loss(pl.LightningModule):
     def log_loss(
             self,
             loss: torch.Tensor,
-            stage: Literal["train", "val", "test"]
+            stage: Literal["train", "val", "test"],
     ) -> None:
         self.log("%s_%s_loss" % stage, self.loss_name, loss, prog_bar=True)
         self.log(self.loss_name + "_weight", self.weight)
 
-    def __call__(self, **kwargs):
-        raise NotImplementedError
+    def __call__(self, *args, **kwargs):
         # give us the flow of operations, and we overwrite the methods, and determine
         # their arguments which are in buffer
 
@@ -81,6 +85,7 @@ class Loss(pl.LightningModule):
         # self.log_loss()
 
         # return self.weight * scalar_loss
+        raise NotImplementedError
 
 
 class HeatmapLoss(Loss):
@@ -118,7 +123,7 @@ class HeatmapLoss(Loss):
         self,
         heatmaps_targ: torch.Tensor,
         heatmaps_pred: torch.Tensor,
-        logging: bool = True,
+        stage: Optional[Literal["train", "val", "test"]] = None,
         **kwargs
     ):
         # give us the flow of operations, and we overwrite the methods, and determine
@@ -131,8 +136,8 @@ class HeatmapLoss(Loss):
         )
         epsilon_insensitive_loss = self.rectify_epsilon(loss=elementwise_loss)
         scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
-        if logging:
-            self.log_loss(loss=scalar_loss)
+        if stage:
+            self.log_loss(loss=scalar_loss, stage=stage)
         return self.weight * scalar_loss
 
 
@@ -185,11 +190,15 @@ class PCALoss(Loss):
         loss_name: Literal["pca_singleview", "pca_multiview"],
         components_to_keep: Union[int, float] = 0.95,
         empirical_epsilon_percentile: float = 0.90,
+        mirrored_column_matches: Optional[Union[ListConfig, List]] = None,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
         log_weight: float = 0.0,
     ) -> None:
         super().__init__(data_module=data_module, log_weight=log_weight)
         self.loss_name = loss_name
+
+        if loss_name == "pca_multiview":
+            assert mirrored_column_matches is not None
 
         # initialize keypoint pca module
         self.pca = KeypointPCA(
@@ -197,32 +206,49 @@ class PCALoss(Loss):
             data_module=data_module,
             components_to_keep=components_to_keep,
             empirical_epsilon_percentile=empirical_epsilon_percentile,
+            mirrored_column_matches=mirrored_column_matches,
             device=self.device,
         )
-        self.pca()  # computes all the parameters needed for the loss
-        self.epsilon = self.pca.parameters[
-            "epsilon"
-        ]  # computed empirically in KeypointPCA
+        # compute all the parameters needed for the loss
+        self.pca()
+        # empirically compute epsilon, already converted to tensor
+        self.epsilon = self.pca.parameters["epsilon"]
+
+    def remove_nans(self, **kwargs):
+        # find nans in the targets, and do a masked_select operation
+        pass
 
     def compute_loss(self, predictions: torch.Tensor):
         # compute reprojection error
-        # TODO: preds have to be reshaped before
-        compute_PCA_reprojection_error(
+        # TODO: need to check that shapes are correct for both loss types
+        reproj_error = compute_PCA_reprojection_error(
             clean_pca_arr=predictions,
             kept_eigenvectors=self.pca.parameters["kept_eigenvectors"],
             mean=self.pca.parameters["mean"],
         )
-        pass
+        return reproj_error
 
-    def __call__(self, keypoints_pred: torch.Tensor, logging: bool = True):
-        # different from heatmap's
-        # if multiview, reshape the predictions first
-        # Note: need to keep arg name as "keypoints_pred"
+    def __call__(
+            self,
+            keypoints_pred: torch.Tensor,
+            stage: Optional[Literal["train", "val", "test"]] = None
+    ) -> TensorType[(), float]:
+
+        # if multiview, reformat the predictions first
+        if self.loss_name == "pca_multiview":
+            keypoints_pred = keypoints_pred.reshape(
+                keypoints_pred.shape[0], -1, 2
+            )  # shape = (batch_size, num_keypoints, 2)
+            keypoints_pred = format_multiview_data_for_pca(
+                data_arr=keypoints_pred,
+                mirrored_column_matches=self.pca.mirrored_column_matches,
+            )  # shape = (views * 2, num_batches * num_keypoints)
+
         elementwise_loss = self.compute_loss(predictions=keypoints_pred)
         epsilon_insensitive_loss = self.rectify_epsilon(loss=elementwise_loss)
         scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
-        if logging:
-            self.log_loss(loss=scalar_loss)
+        if stage:
+            self.log_loss(loss=scalar_loss, stage=stage)
         return self.weight * scalar_loss
 
 
@@ -269,15 +295,15 @@ class TemporalLoss(Loss):
     def __call__(
         self,
         keypoints_pred: TensorType["batch", "two_x_num_keypoints", float],
-        logging: bool = True,
+        stage: Optional[Literal["train", "val", "test"]] = None,
         **kwargs
     ) -> TensorType[(), float]:
 
         elementwise_loss = self.compute_loss(predictions=keypoints_pred)
         epsilon_insensitive_loss = self.rectify_epsilon(loss=elementwise_loss)
         scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
-        if logging:
-            self.log_loss(loss=scalar_loss)
+        if stage:
+            self.log_loss(loss=scalar_loss, stage=stage)
         return self.weight * scalar_loss
 
 
@@ -346,7 +372,7 @@ class UnimodalLoss(Loss):
         heatmaps_pred: TensorType[
             "batch", "num_keypoints", "heatmap_height", "heatmap_width"
         ],
-        logging: bool = True,
+        stage: Optional[Literal["train", "val", "test"]] = None,
         **kwargs,
     ) -> TensorType[(), float]:
 
@@ -365,8 +391,8 @@ class UnimodalLoss(Loss):
             predictions=heatmaps_pred
         )
         scalar_loss = self.reduce_loss(elementwise_loss, method="mean")
-        if logging:
-            self.log_loss(loss=scalar_loss)
+        if stage:
+            self.log_loss(loss=scalar_loss, stage=stage)
 
         return self.weight * scalar_loss
 
@@ -407,7 +433,7 @@ class RegressionMSELoss(Loss):
         self,
         keypoints_targ: TensorType["batch", "two_x_num_keypoints"],
         keypoints_pred: TensorType["batch", "two_x_num_keypoints"],
-        logging: bool = True,
+        stage: Optional[Literal["train", "val", "test"]] = None,
         **kwargs,
     ):
 
@@ -418,8 +444,8 @@ class RegressionMSELoss(Loss):
             targets=clean_targets, predictions=clean_predictions
         )
         scalar_loss = self.reduce_loss(elementwise_loss, method="mean")
-        if logging:
-            self.log_loss(loss=scalar_loss)
+        if stage:
+            self.log_loss(loss=scalar_loss, stage=stage)
 
         return self.weight * scalar_loss
 
@@ -445,94 +471,6 @@ class RegressionRMSELoss(RegressionMSELoss):
         preds = predictions.reshape(-1, 2)
         loss = torch.mean(F.mse_loss(targs, preds, reduction="none"), dim=1)
         return torch.sqrt(loss)
-
-
-# TODO: this won't work unless the inputs are right, not implemented yet.
-# TODO: y_hat should be already reshaped? if so, change below
-@typechecked
-def MultiviewPCALoss(
-    keypoint_preds: TensorType["batch", "two_x_num_keypoints", float],
-    kept_eigenvectors: TensorType["num_kept_evecs", "views_times_two", float],
-    mean: TensorType[float],
-    epsilon: TensorType[float],
-    mirrored_column_matches: Union[ListConfig, List],
-    **kwargs  # make loss robust to unneeded inputs
-) -> TensorType[float]:
-    """
-
-    Assume that we have keypoints after find_subpixel_maxima and that we have
-    discarded confidence here, and that keypoints were reshaped
-    # TODO: check for this?
-
-    Args:
-        keypoint_preds:
-        discarded_eigenvectors:
-        epsilon:
-        mirrored_column_matches:
-        **kwargs:
-
-    Returns:
-        Projection of data onto discarded eigenvectors
-
-    """
-    keypoint_preds = keypoint_preds.reshape(
-        keypoint_preds.shape[0], -1, 2
-    )  # shape = (batch_size, num_keypoints, 2)
-
-    keypoint_preds = format_multiview_data_for_pca(
-        data_arr=keypoint_preds, mirrored_column_matches=mirrored_column_matches
-    )  # shape = (views * 2, num_batches * num_keypoints)
-
-    reprojection_error = compute_PCA_reprojection_error(
-        good_arr_for_pca=keypoint_preds, kept_eigenvectors=kept_eigenvectors, mean=mean
-    )  # shape = (num_batches * num_keypoints, num_views)
-
-    # loss values below epsilon as masked to zero
-    reprojection_loss = reprojection_error.masked_fill(
-        mask=reprojection_error < epsilon, value=0.0
-    )
-    # average across both (num_batches * num_keypoints) and num_views
-    return torch.mean(reprojection_loss)
-
-
-# TODO: write a unit-test for this without the toy_dataset
-@typechecked
-def SingleviewPCALoss(
-    keypoint_preds: TensorType["batch", "two_x_num_keypoints", float],
-    kept_eigenvectors: TensorType["num_kept_evecs", "two_x_num_keypoints", float],
-    mean: TensorType[float],
-    epsilon: TensorType[float],
-    **kwargs  # make loss robust to unneeded inputs
-) -> TensorType[float]:
-    """
-
-    Assume that we have keypoints after find_subpixel_maxima and that we have
-    discarded confidence here, and that keypoints were reshaped
-    # TODO: check for this?
-
-    Args:
-        keypoint_preds:
-        discarded_eigenvectors:
-        epsilon:
-        **kwargs:
-
-    Returns:
-        Average reprojection error across batch and num_keypoints
-
-    """
-
-    reprojection_error = compute_PCA_reprojection_error(
-        good_arr_for_pca=keypoint_preds.T,
-        kept_eigenvectors=kept_eigenvectors,
-        mean=mean,
-    )  # shape = (batch, num_keypoints)
-
-    # loss values below epsilon as masked to zero
-    reprojection_loss = reprojection_error.masked_fill(
-        mask=reprojection_error < epsilon, value=0.0
-    )
-    # average across both batch and num_keypoints
-    return torch.mean(reprojection_loss)
 
 
 @typechecked

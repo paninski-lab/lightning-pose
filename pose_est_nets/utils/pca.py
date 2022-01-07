@@ -29,26 +29,28 @@ patch_typeguard()  # use before @typechecked
 
 
 @typechecked
-class KeypointPCA:
+class KeypointPCA(object):
     def __init__(
         self,
         loss_type: Literal["pca_singleview", "pca_multiview"],
         data_module: Union[UnlabeledDataModule, BaseDataModule],
         components_to_keep: Optional[Union[int, float]] = 0.95,
         empirical_epsilon_percentile: float = 90.0,
+        mirrored_column_matches: Optional[Union[ListConfig, List]] = None,
         device: Literal["cuda", "cpu"] = "cpu",
     ):
         self.loss_type = loss_type
         self.data_module = data_module
         self.components_to_keep = components_to_keep
         self.empirical_epsilon_percentile = empirical_epsilon_percentile
+        self.mirrored_column_matches = mirrored_column_matches
         self.pca_object = None
         self.device = device
 
     def _get_data(self) -> None:
         from pose_est_nets.datasets.utils import DataExtractor
 
-        # TODO: if you want PCA data from a different source, this method will have to be modified
+        # this method will have to be modified to get PCA data from different source
         self.data_arr = DataExtractor(data_module=self.data_module, cond="train")()
         self.data_arr = self.data_arr.reshape(
             self.data_arr.shape[0], self.data_arr.shape[1] // 2, 2
@@ -60,9 +62,7 @@ class KeypointPCA:
             if self.loss_type == "pca_multiview":
                 self.data_arr = format_multiview_data_for_pca(
                     data_arr=self.data_arr,
-                    mirrored_column_matches=self.data_module.loss_param_dict[
-                        "pca_multiview"
-                    ]["mirrored_column_matches"],
+                    mirrored_column_matches=self.mirrored_column_matches,
                 )
             else:  # no need to format single-view data
                 pass
@@ -215,6 +215,97 @@ class ComponentChooser:
             )  # find that integer that crosses the minimum explained variance
 
 
+# TODO: add TensorType
+@typechecked
+def compute_PCA_reprojection_error(
+    clean_pca_arr: torch.Tensor,
+    kept_eigenvectors: torch.Tensor,
+    mean: torch.Tensor,
+) -> torch.Tensor:
+    # first verify that the pca array has observations divisible by 2 (corresponding to (x,y) coords)
+    clean_pca_arr = clean_pca_arr - mean.unsqueeze(0)  # mean-center
+    assert clean_pca_arr.shape[1] % 2 == 0
+    reprojection_arr = (
+        clean_pca_arr @ kept_eigenvectors.T @ kept_eigenvectors
+    )  # e.g., (214, 4) X (4, 3) X (3, 4) = (214, 4) as we started
+    diff = (
+        clean_pca_arr - reprojection_arr
+    )  # shape: (num_samples: for multiview (num_samples=num_samples X num_bodyparts), observation_dim: for multiview (2 X num_views), for singleview (2 X num_bodyparts))
+    # reshape:
+    diff_arr_per_keypoint = diff.reshape(diff.shape[0], diff.shape[1] // 2, 2)
+    reprojection_loss = torch.linalg.norm(diff_arr_per_keypoint, dim=2)
+    # print("reprojection_loss.shape: {}".format(reprojection_loss.shape))
+    # print("diff: {}".format(diff[:5, :]))
+    # print("diff_arr_per_keypoint: {}".format(diff_arr_per_keypoint[:5, :, :]))
+    return reprojection_loss
+
+
+@typechecked
+def add_params_to_loss_dict(
+    data_module: UnlabeledDataModule,
+    loss_key: Literal["pca_singleview", "pca_multiview"],
+    **kwargs
+):
+    # TODO: be careful of dtype (for half-precision training) and device (for multinode)
+    print("original data_module.loss_param_dict")
+    print(data_module.loss_param_dict[loss_key])
+    for param_name, param_val in kwargs.items():
+        # make it a tensor and send to device
+        tensor_param = torch.tensor(
+            param_val,
+            dtype=torch.float32,
+            device=_TORCH_DEVICE,
+        )
+        print(
+            "modifying data_module.loss_param_dict[%s][%s] with:"
+            % (loss_key, param_name)
+        )
+        print(tensor_param)
+        # save in dict
+        data_module.loss_param_dict[loss_key][param_name] = tensor_param
+
+
+@typechecked
+def pca_prints(pca: PCA, condition: str, components_to_keep: int) -> None:
+    print("Results of running PCA ({}) on keypoints:".format(condition))
+    print("Kept {} components, and found:".format(components_to_keep))
+    evr = np.round(pca.explained_variance_ratio_, 3)
+    print("Explained variance ratio: {}".format(evr))
+    tev = np.round(np.sum(pca.explained_variance_ratio_[:components_to_keep]), 3)
+    print("Variance explained by {} components: {}".format(components_to_keep, tev))
+
+
+@typechecked
+def format_multiview_data_for_pca(
+    data_arr: TensorType["batch", "num_keypoints", "2"],
+    mirrored_column_matches: Union[ListConfig, List],
+) -> TensorType["batch_times_num_keypoints", "two_times_num_views"]:
+    """
+
+    Args:
+        data_arr: keypoints from training data
+        mirrored_column_matches: one element for each camera view; each element is
+            itself a list that contains indices into the overall ordering of the
+            keypoints
+
+    Returns:
+        formatted data to run pca
+
+    """
+    n_views = len(mirrored_column_matches)
+    n_keypoints = len(mirrored_column_matches[0])
+    data_arr_views = []
+    # separate views and reformat
+    for view in range(n_views):
+        assert len(mirrored_column_matches[view]) == n_keypoints
+        data_arr_tmp = data_arr[:, np.array(mirrored_column_matches[view]), :]
+        data_arr_tmp = data_arr_tmp.permute(2, 0, 1).reshape(2, -1)
+        data_arr_views.append(data_arr_tmp)
+    # concatenate views
+    data_arr = torch.cat(data_arr_views, dim=0)
+    return data_arr.T  # note the transpose
+
+
 # @typechecked
 # def compute_multiview_pca_params(
 #     data_module: UnlabeledDataModule,
@@ -277,31 +368,6 @@ class ComponentChooser:
 #     )
 
 #     return
-
-
-# TODO: add TensorType
-@typechecked
-def compute_PCA_reprojection_error(
-    clean_pca_arr: torch.Tensor,
-    kept_eigenvectors: torch.Tensor,
-    mean: torch.Tensor,
-) -> torch.Tensor:
-    # first verify that the pca array has observations divisible by 2 (corresponding to (x,y) coords)
-    clean_pca_arr = clean_pca_arr - mean.unsqueeze(0)  # mean-center
-    assert clean_pca_arr.shape[1] % 2 == 0
-    reprojection_arr = (
-        clean_pca_arr @ kept_eigenvectors.T @ kept_eigenvectors
-    )  # e.g., (214, 4) X (4, 3) X (3, 4) = (214, 4) as we started
-    diff = (
-        clean_pca_arr - reprojection_arr
-    )  # shape: (num_samples: for multiview (num_samples=num_samples X num_bodyparts), observation_dim: for multiview (2 X num_views), for singleview (2 X num_bodyparts))
-    # reshape:
-    diff_arr_per_keypoint = diff.reshape(diff.shape[0], diff.shape[1] // 2, 2)
-    reprojection_loss = torch.linalg.norm(diff_arr_per_keypoint, dim=2)
-    # print("reprojection_loss.shape: {}".format(reprojection_loss.shape))
-    # print("diff: {}".format(diff[:5, :]))
-    # print("diff_arr_per_keypoint: {}".format(diff_arr_per_keypoint[:5, :, :]))
-    return reprojection_loss
 
 
 # @typechecked
@@ -420,68 +486,88 @@ def compute_PCA_reprojection_error(
 
 #     return data_arr
 
+# TODO: this won't work unless the inputs are right, not implemented yet.
+# TODO: y_hat should be already reshaped? if so, change below
+# @typechecked
+# def MultiviewPCALoss(
+#     keypoint_preds: TensorType["batch", "two_x_num_keypoints", float],
+#     kept_eigenvectors: TensorType["num_kept_evecs", "views_times_two", float],
+#     mean: TensorType[float],
+#     epsilon: TensorType[float],
+#     mirrored_column_matches: Union[ListConfig, List],
+#     **kwargs  # make loss robust to unneeded inputs
+# ) -> TensorType[float]:
+#     """
+#
+#     Assume that we have keypoints after find_subpixel_maxima and that we have
+#     discarded confidence here, and that keypoints were reshaped
+#     # TODO: check for this?
+#
+#     Args:
+#         keypoint_preds:
+#         discarded_eigenvectors:
+#         epsilon:
+#         mirrored_column_matches:
+#         **kwargs:
+#
+#     Returns:
+#         Projection of data onto discarded eigenvectors
+#
+#     """
+#     keypoint_preds = keypoint_preds.reshape(
+#         keypoint_preds.shape[0], -1, 2
+#     )  # shape = (batch_size, num_keypoints, 2)
+#
+#     keypoint_preds = format_multiview_data_for_pca(
+#         data_arr=keypoint_preds, mirrored_column_matches=mirrored_column_matches
+#     )  # shape = (views * 2, num_batches * num_keypoints)
+#
+#     reprojection_error = compute_PCA_reprojection_error(
+#         good_arr_for_pca=keypoint_preds, kept_eigenvectors=kept_eigenvectors, mean=mean
+#     )  # shape = (num_batches * num_keypoints, num_views)
+#
+#     # loss values below epsilon as masked to zero
+#     reprojection_loss = reprojection_error.masked_fill(
+#         mask=reprojection_error < epsilon, value=0.0
+#     )
+#     # average across both (num_batches * num_keypoints) and num_views
+#     return torch.mean(reprojection_loss)
 
-@typechecked
-def add_params_to_loss_dict(
-    data_module: UnlabeledDataModule,
-    loss_key: Literal["pca_singleview", "pca_multiview"],
-    **kwargs
-):
-    # TODO: be careful of dtype (for half-precision training) and device (for multinode)
-    print("original data_module.loss_param_dict")
-    print(data_module.loss_param_dict[loss_key])
-    for param_name, param_val in kwargs.items():
-        # make it a tensor and send to device
-        tensor_param = torch.tensor(
-            param_val,
-            dtype=torch.float32,
-            device=_TORCH_DEVICE,
-        )
-        print(
-            "modifying data_module.loss_param_dict[%s][%s] with:"
-            % (loss_key, param_name)
-        )
-        print(tensor_param)
-        # save in dict
-        data_module.loss_param_dict[loss_key][param_name] = tensor_param
-
-
-@typechecked
-def pca_prints(pca: PCA, condition: str, components_to_keep: int) -> None:
-    print("Results of running PCA ({}) on keypoints:".format(condition))
-    print("Kept {} components, and found:".format(components_to_keep))
-    evr = np.round(pca.explained_variance_ratio_, 3)
-    print("Explained variance ratio: {}".format(evr))
-    tev = np.round(np.sum(pca.explained_variance_ratio_[:components_to_keep]), 3)
-    print("Variance explained by {} components: {}".format(components_to_keep, tev))
-
-
-@typechecked
-def format_multiview_data_for_pca(
-    data_arr: TensorType["batch", "num_keypoints", "2"],
-    mirrored_column_matches: Union[ListConfig, List],
-) -> TensorType["batch_times_num_keypoints", "two_times_num_views"]:
-    """
-
-    Args:
-        data_arr: keypoints from training data
-        mirrored_column_matches: one element for each camera view; each element is
-            itself a list that contains indices into the overall ordering of the
-            keypoints
-
-    Returns:
-        formatted data to run pca
-
-    """
-    n_views = len(mirrored_column_matches)
-    n_keypoints = len(mirrored_column_matches[0])
-    data_arr_views = []
-    # separate views and reformat
-    for view in range(n_views):
-        assert len(mirrored_column_matches[view]) == n_keypoints
-        data_arr_tmp = data_arr[:, np.array(mirrored_column_matches[view]), :]
-        data_arr_tmp = data_arr_tmp.permute(2, 0, 1).reshape(2, -1)
-        data_arr_views.append(data_arr_tmp)
-    # concatenate views
-    data_arr = torch.cat(data_arr_views, dim=0)
-    return data_arr.T  # note the transpose
+# TODO: write a unit-test for this without the toy_dataset
+# @typechecked
+# def SingleviewPCALoss(
+#     keypoint_preds: TensorType["batch", "two_x_num_keypoints", float],
+#     kept_eigenvectors: TensorType["num_kept_evecs", "two_x_num_keypoints", float],
+#     mean: TensorType[float],
+#     epsilon: TensorType[float],
+#     **kwargs  # make loss robust to unneeded inputs
+# ) -> TensorType[float]:
+#     """
+#
+#     Assume that we have keypoints after find_subpixel_maxima and that we have
+#     discarded confidence here, and that keypoints were reshaped
+#     # TODO: check for this?
+#
+#     Args:
+#         keypoint_preds:
+#         discarded_eigenvectors:
+#         epsilon:
+#         **kwargs:
+#
+#     Returns:
+#         Average reprojection error across batch and num_keypoints
+#
+#     """
+#
+#     reprojection_error = compute_PCA_reprojection_error(
+#         good_arr_for_pca=keypoint_preds.T,
+#         kept_eigenvectors=kept_eigenvectors,
+#         mean=mean,
+#     )  # shape = (batch, num_keypoints)
+#
+#     # loss values below epsilon as masked to zero
+#     reprojection_loss = reprojection_error.masked_fill(
+#         mask=reprojection_error < epsilon, value=0.0
+#     )
+#     # average across both batch and num_keypoints
+#     return torch.mean(reprojection_loss)

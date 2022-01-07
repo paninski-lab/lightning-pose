@@ -13,10 +13,7 @@ from typeguard import typechecked
 from typing import Callable, List, Literal, Optional, Tuple, Type, Union
 
 from pose_est_nets.datasets.dali import LightningWrapper
-from pose_est_nets.utils.io import (
-    check_if_semi_supervised,
-    format_and_update_loss_info
-)
+from pose_est_nets.utils.io import check_if_semi_supervised
 
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -53,10 +50,9 @@ def predict_dataset(
         dataset=full_dataset, batch_size=datamod.test_batch_size
     )
     if save_file is None:
-        save_file = (
-            hydra_output_directory + "/predictions.csv"
-        )  # default for now, should be saved to the model directory
-    save_folder = hydra_output_directory + "/heatmaps_and_images/"
+        # default for now, should be saved to the model directory
+        save_file = os.path.join(hydra_output_directory, "predictions.csv")
+    save_folder = os.path.join(hydra_output_directory, "heatmaps_and_images")
     if not (os.path.isdir(save_folder)):
         os.mkdir(save_folder)
 
@@ -128,14 +124,7 @@ def predict_videos(
         raise NotImplementedError("must choose 'gpu' or 'cpu' for `device` argument")
 
     # gather videos to process
-    assert os.path.exists(video_path)
-    all_files = [video_path + "/" + f for f in os.listdir(video_path)]
-    video_files = []
-    for f in all_files:
-        if f.endswith(".mp4"):
-            video_files.append(f)
-    if len(video_files) == 0:
-        raise IOError("Did not find any video files (.mp4) in %s" % video_path)
+    video_files = get_videos_in_dir(video_path)
 
     if isinstance(cfg_file, str):
         # load configuration file
@@ -308,8 +297,8 @@ def _predict_frames(
         heatmaps_np = np.zeros((
             n_frames_,
             model.num_keypoints,
-            model.output_shape[0], #// (2 ** model.downsample_factor),
-            model.output_shape[1] #// (2 ** model.downsample_factor)
+            model.output_shape[0],  # // (2 ** model.downsample_factor),
+            model.output_shape[1],  # // (2 ** model.downsample_factor)
         ))
     else:
         heatmaps_np = None
@@ -401,7 +390,7 @@ def get_videos_in_dir(video_dir: str) -> List[str]:
     # gather videos to process
     # TODO: check if you're give a path to a single video?
     assert os.path.isdir(video_dir)
-    all_files = [video_dir + "/" + f for f in os.listdir(video_dir)]
+    all_files = [os.path.join(video_dir, f) for f in os.listdir(video_dir)]
     video_files = []
     for f in all_files:
         if f.endswith(".mp4"):
@@ -416,9 +405,8 @@ def get_csv_file(cfg: DictConfig) -> str:
     from pose_est_nets.utils.io import return_absolute_data_paths
 
     if ("data_dir" in cfg.data) and ("csv_file" in cfg.data):
-        data_dir, _ = return_absolute_data_paths(
-            cfg.data
-        )  # needed for getting bodypart names for toy_dataset
+        # needed for getting bodypart names for toy_dataset
+        data_dir, _ = return_absolute_data_paths(cfg.data)
         csv_file = os.path.join(data_dir, cfg.data.csv_file)
     else:
         csv_file = ""
@@ -507,12 +495,24 @@ def load_model_from_checkpoint(
     )
     # initialize a model instance, with weights loaded from .ckpt file
     if semi_supervised:
-        # TODO: TODO TODO TODO
-        loss_param_dict, losses_to_use = format_and_update_loss_info(cfg)
+        # TODO: ask Dan if necessary; do we need to update the loss factory info?
+        # maybe we don't need to do this after adding `save_hyperparameters` to init
+        from pose_est_nets.utils.scripts import (
+            get_datamodule,
+            get_dataset,
+            get_imgaug_tranform,
+            get_loss_factories,
+        )
+        imgaug_transform = get_imgaug_tranform(cfg=cfg)
+        dataset = get_dataset(
+            cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform
+        )
+        data_module = get_datamodule(cfg=cfg, dataset=dataset, video_dir=video_dir)
+        loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
         model = ModelClass.load_from_checkpoint(
             ckpt_file,
-            semi_super_losses_to_use=losses_to_use,
-            loss_params=loss_param_dict,
+            loss_factory=loss_factories["supervised"],
+            loss_factory_unsupervised=loss_factories["unsupervised"],
             strict=False,
         )
     else:

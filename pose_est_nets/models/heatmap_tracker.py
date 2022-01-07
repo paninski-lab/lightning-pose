@@ -13,29 +13,18 @@ from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau
 
 from pose_est_nets.losses.factory import LossFactory
 from pose_est_nets.losses.losses import MaskedHeatmapLoss, MaskedRMSELoss
-from pose_est_nets.models.base_resnet import BaseFeatureExtractor
-from pose_est_nets.models.regression_tracker import BaseBatchDict
-
-
-class HeatmapBatchDict(BaseBatchDict):
-    """Inherets key-value pairs from BaseExampleDict and adds "heatmaps"."""
-    heatmaps: TensorType[
-        "batch", "num_keypoints", "heatmap_height", "heatmap_width", float
-    ]
-
-
-class SemiSupervisedHeatmapBatchDict(TypedDict):
-    labeled: HeatmapBatchDict
-    unlabeled: TensorType[
-        "sequence_length", "RGB":3, "image_height", "image_width", float
-    ]
-
+from pose_est_nets.models.base import (
+    BaseBatchDict,
+    BaseSupervisedTracker,
+    HeatmapBatchDict,
+    SemiSupervisedTrackerMixin,
+)
 
 patch_typeguard()  # use before @typechecked
 
 
 @typechecked
-class HeatmapTracker(BaseFeatureExtractor):
+class HeatmapTracker(BaseSupervisedTracker):
     """Base model that produces heatmaps of keypoints from images."""
 
     def __init__(
@@ -86,8 +75,12 @@ class HeatmapTracker(BaseFeatureExtractor):
         self.output_shape = output_shape
         self.temperature = torch.tensor(100, device=self.device)  # soft argmax temp
         self.torch_seed = torch_seed
+
         # Necessary so we don't have to pass in model arguments when loading
         self.save_hyperparameters()
+
+        # use this to log auxiliary information: rmse on labeled data
+        self.rmse_loss = RegressionRMSELoss()
 
     @property
     def num_filters_for_upsampling(self):
@@ -229,87 +222,20 @@ class HeatmapTracker(BaseFeatureExtractor):
         return heatmaps
 
     @typechecked
-    def training_step(self, batch_dict: HeatmapBatchDict, batch_idx: int) -> Dict:
+    def get_loss_inputs_labeled(self, batch_dict: HeatmapBatchDict) -> dict:
+        """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
 
-        # TODO: return loss from evaluate method and set "train" stage?
-        # forward pass
         # images -> heatmaps
         predicted_heatmaps = self.forward(batch_dict["images"])
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
-
-        # compute and log loss
-        loss = self.loss_factory(
-            heatmaps_targ=data_batch["heatmaps"],
-            heatmaps_pred=predicted_heatmaps,
-            stage="train",  # for logging purposes
-        )
-        self.log("train_loss", loss, prog_bar=True)
-
-        # for additional info: compute and log supervised rmse
-        rmse_loss = RegressionRMSELoss()
-        supervised_rmse = rmse_loss(
-            keypoints_targ=data_batch["keypoints"],
-            keypoints_pred=predicted_keypoints,
-            logging=False,
-        )
-        self.log("train_rmse_supervised", supervised_rmse, prog_bar=True)
-
-        return {"loss": loss}
-
-    @typechecked
-    def evaluate(
-        self,
-        batch_dict: HeatmapBatchDict,
-        stage: Optional[Literal["val", "test"]] = None,
-    ) -> None:
-
-        # forward pass
-        # images -> heatmaps
-        predicted_heatmaps = self.forward(batch_dict["images"])
-        # heatmaps -> keypoints
-        predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
-
-        # compute loss
-        loss = self.loss_factory(
-            heatmaps_targ=data_batch["heatmaps"],
-            heatmaps_pred=predicted_heatmaps,
-            stage=stage,  # for logging purposes
-        )
-
-        if stage:
-            rmse_loss = RegressionRMSELoss()
-            supervised_rmse = rmse_loss(
-                keypoints_targ=data_batch["keypoints"],
-                keypoints_pred=predicted_keypoints,
-                logging=False,
-            )
-            self.log(f"{stage}_loss", loss, prog_bar=True)
-            self.log(f"{stage}_rmse_supervised", supervised_rmse, prog_bar=True)
-
-    def validation_step(self, validation_batch: HeatmapBatchDict, batch_idx):
-        self.evaluate(validation_batch, "val")
-
-    def test_step(self, test_batch: HeatmapBatchDict, batch_idx):
-        self.evaluate(test_batch, "test")
-
-    # single optimizer with different learning rates
-    def configure_optimizers(self):
-        params = [
-            # {"params": self.backbone.parameters()},
-            #  don't uncomment above line; the BackboneFinetuning callback should add
-            # backbone to the params.
-            {
-                "params": self.upsampling_layers.parameters()
-            },  # important this is the 0th element, for BackboneFinetuning callback
-        ]
-        optimizer = Adam(params, lr=1e-3)
-        scheduler = MultiStepLR(optimizer, milestones=[100, 200, 300], gamma=0.5)
 
         return {
-            "optimizer": optimizer,
-            "lr_scheduler": scheduler,
-            "monitor": "val_loss",
+            "heatmaps_targ": data_batch["heatmaps"],
+            "heatmaps_pred": predicted_heatmaps,
+            "keypoints_targ": data_batch["keypoints"],
+            "keypoints_pred": predicted_keypoints,
+            "confidences": confidence,
         }
 
 
@@ -362,102 +288,20 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         # this attribute will be modified by AnnealWeight callback during training
         self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
 
+        # Necessary so we don't have to pass in model arguments when loading
+        self.save_hyperparameters()
+
     @typechecked
-    def training_step(
-        self, data_batch: SemiSupervisedHeatmapBatchDict, batch_idx: int
-    ) -> Dict:
+    def get_loss_inputs_unlabeled(self, batch: torch.Tensor) -> dict:
+        """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
 
-        # on each epoch, self.total_unsupervised_importance is modified by the
-        # AnnealWeight callback
-        self.log(
-            "total_unsupervised_importance",
-            self.total_unsupervised_importance,
-            prog_bar=True,
-        )
-
-        # forward pass labeled
-        # --------------------
-        predicted_heatmaps = self.forward(data_batch["labeled"]["images"])
+        # images -> heatmaps
+        predicted_heatmaps = self.forward(batch)
+        # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
 
-        # compute and log loss
-        loss_super = self.loss_factory(
-            heatmaps_targ=data_batch["labeled"]["heatmaps"],
-            heatmaps_pred=predicted_heatmaps,
-            stage="train",  # for logging purposes
-        )
-        self.log("train_loss_supervised", loss_super, prog_bar=True)
-
-        # for additional info: compute and log supervised rmse
-        rmse_loss = RegressionRMSELoss()
-        supervised_rmse = rmse_loss(
-            keypoints_targ=data_batch["labeled"]["keypoints"],
-            keypoints_pred=predicted_keypoints,
-            logging=False,
-        )
-        self.log("train_rmse_supervised", supervised_rmse, prog_bar=True)
-
-        # forward pass unlabeled
-        # ----------------------
-        predicted_heatmaps_ul = self.forward(data_batch["unlabeled"])
-        predicted_keypoints_ul, confidence = self.run_subpixelmaxima(
-            predicted_heatmaps_ul
-        )
-
-        # compute and log unsupervised loss
-        loss_unsuper = self.loss_factory_unsup(
-            keypoints_pred=predicted_keypoints_ul,
-            heatmaps_pred=predicted_heatmaps_ul,
-            anneal_weight=self.total_unsupervised_importance,
-            stage="train",  # for logging purposes
-        )
-
-        # log total loss
-        total_loss = loss_super + loss_unsuper
-        self.log("total_loss", total_loss, prog_bar=True)
-
-        return {"loss": tot_loss}
-
-    # single optimizer with different learning rates
-    def configure_optimizers(self):
-        params = [
-            # {"params": self.backbone.parameters()}, # don't uncomment this line; the BackboneFinetuning callback should add backbone to the params.
-            {
-                "params": self.upsampling_layers.parameters()
-            },  # important that this is the 0th element, for BackboneFineTuning
-        ]
-        if self.learn_weights:
-            params.append({"params": self.loss_weights_dict.parameters(), "lr": 1e-2})
-        optimizer = Adam(params, lr=1e-3)
-        scheduler = MultiStepLR(optimizer, milestones=[100, 150, 200, 300], gamma=0.5)
-
         return {
-            "optimizer": optimizer,
-            "lr_scheduler": scheduler,
-            "monitor": "val_loss",
+            "heatmaps_pred": predicted_heatmaps,
+            "keypoints_pred": predicted_keypoints,
+            "confidences": confidence,
         }
-
-    # # single optimizer with different learning rates
-    # def configure_optimizers(self):
-    #     params_net = [
-    #         # {"params": self.backbone.parameters()}, # don't uncomment this line; the BackboneFinetuning callback should add backbone to the params.
-    #         {
-    #             "params": self.upsampling_layers.parameters()
-    #         },  # important that this is the 0th element, for BackboneFineTuning
-    #     ]
-    #     optimizer = Adam(params_net, lr=1e-3)
-    #     scheduler = MultiStepLR(optimizer, milestones=[100, 200, 300], gamma=0.5)
-
-    #     optimizers = [optimizer]
-    #     lr_schedulers = [scheduler]
-
-    #     if self.learn_weights:
-    #         params_weights = [{"params": self.loss_weights_dict.parameters()}]
-    #         optimizer_weights = Adam(params_weights, lr=1e-3)
-    #         optimizers.append(optimizer_weights)
-    #         scheduler_weights = MultiStepLR(
-    #             optimizer, milestones=[100, 200, 300], gamma=0.5
-    #         )
-    #         lr_schedulers.append(scheduler_weights)
-
-    #     return optimizers, lr_schedulers

@@ -182,8 +182,6 @@ class UnlabeledDataModule(BaseDataModule):
         dali_seed: int = 123456,
         torch_seed: int = 42,
         device_id: int = 0,
-        loss_param_dict: Optional[dict] = None,
-        losses_to_use: list = None,
     ) -> None:
         """Data module that contains labeled and unlabeled data loaders.
 
@@ -211,9 +209,6 @@ class UnlabeledDataModule(BaseDataModule):
             dali_seed: control randomness of unlabeled data loading
             torch_seed: control randomness of labeled data loading
             device_id: gpu for unlabeled data loading
-            loss_param_dict: details of all possible loss types for unlabeled data
-            losses_to_use: list of losses to actually enforce (influences how data is
-                processed)
 
         """
         super().__init__(
@@ -241,26 +236,6 @@ class UnlabeledDataModule(BaseDataModule):
         self.unlabeled_dataloader = None  # initialized in setup_unlabeled
         super().setup()
         self.setup_unlabeled()
-        self.loss_param_dict = loss_param_dict
-
-        # perform any necessary preprocessing steps
-        if losses_to_use:  # check it's not None
-            if "pca_multiview" in losses_to_use:
-                from pose_est_nets.utils.pca import (
-                    compute_multiview_pca_params,
-                )
-
-                compute_multiview_pca_params(self)
-            elif "pca_singleview" in losses_to_use:
-                # single-view pca
-                from pose_est_nets.utils.pca import (
-                    compute_singleview_pca_params,
-                )
-
-                compute_singleview_pca_params(
-                    self,
-                    empirical_epsilon_percentile=5,  # TODO: check that! -- not sure it's good
-                )
 
     def setup_unlabeled(self):
 
