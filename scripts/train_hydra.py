@@ -55,10 +55,16 @@ def train(cfg: DictConfig):
 
     logger = pl.loggers.TensorBoardLogger("tb_logs", name=cfg.model.model_name)
     early_stopping = pl.callbacks.EarlyStopping(
-        monitor="val_loss", patience=cfg.training.early_stop_patience, mode="min"
+        monitor="val_supervised_loss",
+        patience=cfg.training.early_stop_patience,
+        mode="min",
     )
-    lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval="epoch")
-    ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(monitor="val_loss")
+    lr_monitor = pl.callbacks.LearningRateMonitor(
+        logging_interval="epoch"
+    )
+    ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
+        monitor="val_supervised_loss"
+    )
     transfer_unfreeze_callback = pl.callbacks.BackboneFinetuning(
         unfreeze_backbone_at_epoch=cfg.training.unfreezing_epoch,
         lambda_func=lambda epoch: 1.5,

@@ -12,7 +12,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau
 
 from pose_est_nets.losses.factory import LossFactory
-from pose_est_nets.losses.losses import MaskedHeatmapLoss, MaskedRMSELoss
+from pose_est_nets.losses.losses import RegressionRMSELoss
 from pose_est_nets.models.base import (
     BaseBatchDict,
     BaseSupervisedTracker,
@@ -59,7 +59,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         # for reproducible weight initialization
         torch.manual_seed(torch_seed)
 
-        super().__init__(  # execute BaseFeatureExtractor.__init__()
+        super().__init__(
             resnet_version=resnet_version,
             pretrained=pretrained,
             last_resnet_layer_to_get=last_resnet_layer_to_get,
@@ -68,7 +68,6 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.num_targets = num_keypoints * 2
         self.loss_factory = loss_factory
         # TODO: downsample_factor may be in mismatch between datamodule and model.
-        # consider adding support for more types
         self.downsample_factor = downsample_factor
         self.upsampling_layers = self.make_upsampling_layers()
         self.initialize_upsampling_layers()
@@ -76,11 +75,11 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.temperature = torch.tensor(100, device=self.device)  # soft argmax temp
         self.torch_seed = torch_seed
 
-        # Necessary so we don't have to pass in model arguments when loading
-        self.save_hyperparameters()
-
         # use this to log auxiliary information: rmse on labeled data
         self.rmse_loss = RegressionRMSELoss()
+
+        # necessary so we don't have to pass in model arguments when loading
+        self.save_hyperparameters(ignore="loss_factory")  # cannot be pickled
 
     @property
     def num_filters_for_upsampling(self):
@@ -231,9 +230,9 @@ class HeatmapTracker(BaseSupervisedTracker):
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
 
         return {
-            "heatmaps_targ": data_batch["heatmaps"],
+            "heatmaps_targ": batch_dict["heatmaps"],
             "heatmaps_pred": predicted_heatmaps,
-            "keypoints_targ": data_batch["keypoints"],
+            "keypoints_targ": batch_dict["keypoints"],
             "keypoints_pred": predicted_keypoints,
             "confidences": confidence,
         }
@@ -288,8 +287,9 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         # this attribute will be modified by AnnealWeight callback during training
         self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
 
-        # Necessary so we don't have to pass in model arguments when loading
-        self.save_hyperparameters()
+        # necessary so we don't have to pass in model arguments when loading
+        # ignore loss factory, cannot be pickled
+        self.save_hyperparameters(ignore="loss_factory_unsupervised")
 
     @typechecked
     def get_loss_inputs_unlabeled(self, batch: torch.Tensor) -> dict:
