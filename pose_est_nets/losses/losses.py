@@ -17,6 +17,8 @@ from pose_est_nets.utils.pca import (
 from pose_est_nets.utils.heatmaps import generate_heatmaps
 from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
 
+_TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
 patch_typeguard()  # use before @typechecked
 
 
@@ -104,6 +106,7 @@ class HeatmapLoss(Loss):
         self,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
         log_weight: float = 0.0,
+        **kwargs,
     ) -> None:
         super().__init__(data_module=data_module, log_weight=log_weight)
 
@@ -157,6 +160,7 @@ class HeatmapMSELoss(HeatmapLoss):
         self,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
         log_weight: float = 0.0,
+        **kwargs,
     ) -> None:
         super().__init__(data_module=data_module, log_weight=log_weight)
         self.loss_name = "heatmap_mse"
@@ -174,6 +178,7 @@ class HeatmapWassersteinLoss(HeatmapLoss):
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
         log_weight: float = 0.0,
         reach: Union[float, str] = "none",
+        **kwargs,
     ) -> None:
         super().__init__(data_module=data_module, log_weight=log_weight)
         reach_ = None if (reach == "none") else reach
@@ -202,6 +207,7 @@ class PCALoss(Loss):
         mirrored_column_matches: Optional[Union[ListConfig, List]] = None,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
         log_weight: float = 0.0,
+        **kwargs,
     ) -> None:
         super().__init__(data_module=data_module, log_weight=log_weight)
         self.loss_name = loss_name
@@ -216,7 +222,7 @@ class PCALoss(Loss):
             components_to_keep=components_to_keep,
             empirical_epsilon_percentile=empirical_epsilon_percentile,
             mirrored_column_matches=mirrored_column_matches,
-            device=self.device,
+            device=_TORCH_DEVICE,
         )
         # compute all the parameters needed for the loss
         self.pca()
@@ -238,9 +244,10 @@ class PCALoss(Loss):
         return reproj_error
 
     def __call__(
-            self,
-            keypoints_pred: torch.Tensor,
-            stage: Optional[Literal["train", "val", "test"]] = None
+        self,
+        keypoints_pred: torch.Tensor,
+        stage: Optional[Literal["train", "val", "test"]] = None,
+        **kwargs,
     ) -> Tuple[TensorType[(), float], dict]:
 
         # if multiview, reformat the predictions first
@@ -272,6 +279,7 @@ class TemporalLoss(Loss):
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
         epsilon: float = 0.0,
         log_weight: float = 0.0,
+        **kwargs,
     ) -> None:
         super().__init__(
             data_module=data_module,
@@ -328,6 +336,7 @@ class UnimodalLoss(Loss):
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
         epsilon: float = 0.0,
         log_weight: float = 0.0,
+        **kwargs,
     ) -> None:
 
         super().__init__(
@@ -361,9 +370,9 @@ class UnimodalLoss(Loss):
         ],
     ) -> torch.Tensor:
 
-        if self.loss_type == "unimodal_mse":
+        if self.loss_name == "unimodal_mse":
             return F.mse_loss(targets, predictions, reduction="none")
-        elif self.loss_type == "unimodal_wasserstein":
+        elif self.loss_name == "unimodal_wasserstein":
             # collapse over batch/keypoint dims
             targets_rs = targets.reshape(-1, targets.shape[-2], targets.shape[-1])
             predictions_rs = predictions.reshape(
@@ -389,7 +398,7 @@ class UnimodalLoss(Loss):
             keypoints=keypoints_pred,
             height=self.original_image_height,
             width=self.original_image_width,
-            output_shape=(self.downsampled_image_height, downsampled_image_width),
+            output_shape=(self.downsampled_image_height, self.downsampled_image_width),
         )
 
         # compare unimodal heatmaps with predicted heatmaps
@@ -411,6 +420,7 @@ class RegressionMSELoss(Loss):
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
         epsilon: float = 0.0,
         log_weight: float = 0.0,
+        **kwargs,
     ) -> None:
         super().__init__(
             data_module=data_module,
@@ -463,6 +473,7 @@ class RegressionRMSELoss(RegressionMSELoss):
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
         epsilon: float = 0.0,
         log_weight: float = 0.0,
+        **kwargs,
     ) -> None:
         super().__init__(
             data_module=data_module,

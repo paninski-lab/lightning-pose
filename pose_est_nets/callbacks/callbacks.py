@@ -4,6 +4,8 @@ import torch
 
 
 class AnnealWeight(Callback):
+    """Callback to change weight value during training."""
+
     def __init__(
         self,
         attr_name: str,

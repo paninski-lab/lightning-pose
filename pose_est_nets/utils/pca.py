@@ -37,7 +37,7 @@ class KeypointPCA(object):
         components_to_keep: Optional[Union[int, float]] = 0.95,
         empirical_epsilon_percentile: float = 90.0,
         mirrored_column_matches: Optional[Union[ListConfig, List]] = None,
-        device: Literal["cuda", "cpu"] = "cpu",
+        device: Union[Literal["cuda", "cpu"], torch.device] = "cpu",
     ):
         self.loss_type = loss_type
         self.data_module = data_module
@@ -52,14 +52,14 @@ class KeypointPCA(object):
 
         # this method will have to be modified to get PCA data from different source
         self.data_arr = DataExtractor(data_module=self.data_module, cond="train")()
-        self.data_arr = self.data_arr.reshape(
-            self.data_arr.shape[0], self.data_arr.shape[1] // 2, 2
-        )
 
     def _format_data(self) -> None:
         # TODO: check that the two format end up having same rows/columns division
         if self.data_arr is not None:
             if self.loss_type == "pca_multiview":
+                self.data_arr = self.data_arr.reshape(
+                    self.data_arr.shape[0], self.data_arr.shape[1] // 2, 2
+                )
                 self.data_arr = format_multiview_data_for_pca(
                     data_arr=self.data_arr,
                     mirrored_column_matches=self.mirrored_column_matches,

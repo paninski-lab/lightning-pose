@@ -25,7 +25,7 @@ def train(cfg: DictConfig):
     """Main fitting function, accessed from command line."""
 
     print("Our Hydra config file:")
-    print(cfg)
+    pretty_print(cfg)
 
     # path handling for toy datasets
     data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
@@ -132,6 +132,20 @@ def train(cfg: DictConfig):
 
     # generate a video
     # evaluate the network on everything in the video_dir, and make videos.
+
+
+def pretty_print(cfg):
+
+    for key, val in cfg.items():
+        if key == "eval":
+            continue
+        print("--------------------")
+        print("%s parameters" % key)
+        print("--------------------")
+        for k, v in val.items():
+            print("{}: {}".format(k, v))
+        print()
+    print("------------------------------------------------------------------\n")
 
 
 if __name__ == "__main__":

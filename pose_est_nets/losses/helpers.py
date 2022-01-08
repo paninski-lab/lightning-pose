@@ -96,7 +96,8 @@ class EmpiricalEpsilon:
 
 @typechecked
 def convert_dict_values_to_tensors(
-    param_dict: Dict[str, Union[np.array, float]], device: Literal["cpu", "cuda"]
+    param_dict: Dict[str, Union[np.array, float]],
+    device: Union[Literal["cpu", "cuda"], torch.device],
 ) -> Dict[str, torch.Tensor]:
     # TODO: currently supporting just floats
     for key, val in param_dict.items():

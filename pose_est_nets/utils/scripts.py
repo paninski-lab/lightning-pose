@@ -110,8 +110,7 @@ def get_loss_factories(
 ) -> dict:
     """Note: much of this replaces the function `format_and_update_loss_info`."""
 
-    # loss_param_dict = OmegaConf.to_object(cfg.losses)
-    # losses_to_use = OmegaConf.to_object(cfg.model.losses_to_use)
+    cfg_loss_dict = OmegaConf.to_object(cfg.losses)
 
     loss_params_dict = {"supervised": {}, "unsupervised": {}}
 
@@ -129,7 +128,7 @@ def get_loss_factories(
     # collect all unsupervised losses and their params in a dict
     for loss_name in cfg.model.losses_to_use:
         # general parameters
-        loss_params_dict["unsupervised"][loss_name] = cfg.losses[loss_name]
+        loss_params_dict["unsupervised"][loss_name] = cfg_loss_dict[loss_name]
         loss_params_dict["unsupervised"][loss_name]["loss_name"] = loss_name
         # loss-specific parameters
         if loss_name == "unimodal_mse" or loss_name == "unimodal_wasserstein":

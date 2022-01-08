@@ -98,7 +98,7 @@ class RegressionTracker(BaseSupervisedTracker):
     def get_loss_inputs_labeled(self, batch_dict: BaseBatchDict) -> dict:
         """Return predicted coordinates."""
 
-        representation = self.get_representations(data_batch["images"])
+        representation = self.get_representations(batch_dict["images"])
         predicted_keypoints = self.final_layer(
             self.reshape_representation(representation)
         )
@@ -109,7 +109,7 @@ class RegressionTracker(BaseSupervisedTracker):
         }
 
 
-class SemiSupervisedRegressionTracker(RegressionTracker, SemiSupervisedTrackerMixin):
+class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTracker):
     """Model produces vectors of keypoints from labeled/unlabeled images."""
 
     def __init__(
@@ -149,16 +149,12 @@ class SemiSupervisedRegressionTracker(RegressionTracker, SemiSupervisedTrackerMi
             torch_seed=torch_seed,
         )
         self.loss_factory_unsup = loss_factory_unsupervised
-        loss_names = loss_factory_unsupervised.loss_classes_dict.keys()
+        loss_names = loss_factory_unsupervised.loss_instance_dict.keys()
         if "unimodal_mse" in loss_names or "unimodal_wasserstein" in loss_names:
             raise ValueError("cannot use unimodal loss in regression tracker")
 
         # this attribute will be modified by AnnealWeight callback during training
         self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
-
-        # necessary so we don't have to pass in model arguments when loading
-        # ignore loss factory, cannot be pickled
-        self.save_hyperparameters(ignore="loss_factory_unsupervised")
 
     @typechecked
     def get_loss_inputs_unlabeled(self, batch: torch.Tensor) -> dict:

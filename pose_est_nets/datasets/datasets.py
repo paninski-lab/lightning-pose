@@ -28,9 +28,7 @@ patch_typeguard()  # use before @typechecked
 
 class BaseExampleDict(TypedDict):
     images: TensorType["RGB":3, "image_height", "image_width"]
-    keypoints: TensorType[
-        "num_targets",
-    ]
+    keypoints: TensorType["num_targets"]
     idxs: int
 
 

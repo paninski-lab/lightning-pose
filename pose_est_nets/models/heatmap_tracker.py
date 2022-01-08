@@ -66,7 +66,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         )
         self.num_keypoints = num_keypoints
         self.num_targets = num_keypoints * 2
-        self.loss_factory = loss_factory
+        self.loss_factory = loss_factory.to(self.device)
         # TODO: downsample_factor may be in mismatch between datamodule and model.
         self.downsample_factor = downsample_factor
         self.upsampling_layers = self.make_upsampling_layers()
@@ -238,7 +238,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         }
 
 
-class SemiSupervisedHeatmapTracker(HeatmapTracker):
+class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
     """Model produces heatmaps of keypoints from labeled/unlabeled images."""
 
     def __init__(
@@ -250,7 +250,7 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
         downsample_factor: Literal[2, 3] = 2,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
-        output_shape: Optional[tuple] = None,  # change
+        output_shape: Optional[tuple] = None,
         torch_seed: int = 123,
     ):
         """
@@ -282,17 +282,16 @@ class SemiSupervisedHeatmapTracker(HeatmapTracker):
             output_shape=output_shape,
             torch_seed=torch_seed,
         )
-        self.loss_factory_unsup = loss_factory_unsupervised
+        self.loss_factory_unsup = loss_factory_unsupervised.to(self.device)
 
         # this attribute will be modified by AnnealWeight callback during training
         self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
 
-        # necessary so we don't have to pass in model arguments when loading
-        # ignore loss factory, cannot be pickled
-        self.save_hyperparameters(ignore="loss_factory_unsupervised")
-
     @typechecked
-    def get_loss_inputs_unlabeled(self, batch: torch.Tensor) -> dict:
+    def get_loss_inputs_unlabeled(
+        self,
+        batch: TensorType["batch", "channels":3, "image_height", "image_width", float],
+    ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
 
         # images -> heatmaps

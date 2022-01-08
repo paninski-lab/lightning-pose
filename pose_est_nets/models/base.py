@@ -237,15 +237,23 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
 
     @typechecked
     def configure_optimizers(self) -> dict:
-        # single optimizer with single learning rate
-        params = [
-            # {"params": self.backbone.parameters()},
-            #  don't uncomment above line; the BackboneFinetuning callback should add
-            # backbone to the params.
-            {
-                "params": self.upsampling_layers.parameters()
-            },  # important this is the 0th element, for BackboneFinetuning callback
-        ]
+
+        if getattr(self, "upsampling_layers", None) is not None:
+
+            # single optimizer with single learning rate
+            params = [
+                # {"params": self.backbone.parameters()},
+                #  don't uncomment above line; the BackboneFinetuning callback should
+                # add backbone to the params.
+                {
+                    "params": self.upsampling_layers.parameters()
+                },  # important this is the 0th element, for BackboneFinetuning callback
+            ]
+
+        else:
+            # standard adam optimizer
+            params = filter(lambda p: p.requires_grad, self.parameters())
+
         optimizer = Adam(params, lr=1e-3)
         scheduler = MultiStepLR(optimizer, milestones=[100, 200, 300], gamma=0.5)
 
@@ -267,13 +275,13 @@ class SemiSupervisedTrackerMixin(object):
     @typechecked
     def evaluate_unlabeled(
         self,
-        batch: torch.Tensor,
+        batch: TensorType["batch", "channels":3, "image_height", "image_width", float],
         stage: Optional[Literal["train", "val", "test"]] = None,
-        anneal_weight: float = 1.0,
+        anneal_weight: Union[float, torch.Tensor] = 1.0,
     ) -> TensorType[(), float]:
 
         # forward pass: collect predicted heatmaps and keypoints
-        data_dict = self.get_loss_inputs_unlabeled(bach=batch)
+        data_dict = self.get_loss_inputs_unlabeled(batch=batch)
 
         # compute loss on unlabeled data
         loss, log_list = self.loss_factory_unsup(
@@ -292,9 +300,9 @@ class SemiSupervisedTrackerMixin(object):
     @typechecked
     def training_step(
         self,
-        train_batch: dict,
+        train_batch: Union[SemiSupervisedBatchDict, SemiSupervisedHeatmapBatchDict],
         batch_idx: int
-    ) -> Dict:
+    ) -> Dict[str, TensorType[(), float]]:
 
         # on each epoch, self.total_unsupervised_importance is modified by the
         # AnnealWeight callback
@@ -327,19 +335,25 @@ class SemiSupervisedTrackerMixin(object):
         total_loss = loss_super + loss_unsuper
         self.log("total_loss", total_loss, prog_bar=True)
 
-        return {"loss": tot_loss}
+        return {"loss": total_loss}
 
     def configure_optimizers(self):
         """Single optimizer with different learning rates."""
 
-        params = [
-            # {"params": self.backbone.parameters()},
-            #  don't uncomment above line; the BackboneFinetuning callback should add
-            # backbone to the params.
-            {
-                "params": self.upsampling_layers.parameters()
-            },  # important that this is the 0th element, for BackboneFineTuning
-        ]
+        if getattr(self, "upsampling_layers", None) is not None:
+            # check if heatmap
+            params = [
+                # {"params": self.backbone.parameters()},
+                #  don't uncomment above line; the BackboneFinetuning callback should
+                # add backbone to the params.
+                {
+                    "params": self.upsampling_layers.parameters()
+                },  # important this is the 0th element, for BackboneFinetuning callback
+            ]
+
+        else:
+            # standard adam optimizer
+            params = filter(lambda p: p.requires_grad, self.parameters())
 
         # define different learning rate for weights in front of unsupervised losses
         if len(self.loss_factory_unsup.loss_weights_parameter_dict) > 0:
@@ -348,6 +362,7 @@ class SemiSupervisedTrackerMixin(object):
                     self.loss_factory_unsup.loss_weights_parameter_dict.parameters(),
                 "lr": 1e-2,
             })
+
         optimizer = Adam(params, lr=1e-3)
         scheduler = MultiStepLR(optimizer, milestones=[100, 150, 200, 300], gamma=0.5)
 
