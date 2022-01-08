@@ -5,7 +5,7 @@
 # - "unimodal_mse"
 # - "unimodal_wasserstein"
 # - null: if null, assume a model is supervised.
-losses_to_use: []
+losses_to_use: [temporal]
 
 # whether to learn the weights for the unsupervised losses
 learn_weights: False
