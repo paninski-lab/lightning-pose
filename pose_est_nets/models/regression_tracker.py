@@ -49,7 +49,7 @@ class RegressionTracker(BaseSupervisedTracker):
         # for reproducible weight initialization
         torch.manual_seed(torch_seed)
 
-        super().__init__(  # execute BaseFeatureExtractor.__init__()
+        super().__init__(
             resnet_version=resnet_version,
             pretrained=pretrained,
             last_resnet_layer_to_get=last_resnet_layer_to_get,
@@ -62,10 +62,12 @@ class RegressionTracker(BaseSupervisedTracker):
         # TODO: consider removing dropout
         self.representation_dropout = nn.Dropout(p=representation_dropout_rate)
         self.torch_seed = torch_seed
-        self.save_hyperparameters()
 
         # use this to log auxiliary information: rmse on labeled data
         self.rmse_loss = RegressionRMSELoss()
+
+        # necessary so we don't have to pass in model arguments when loading
+        self.save_hyperparameters(ignore="loss_factory")  # cannot be pickled
 
     @staticmethod
     @typechecked
@@ -102,7 +104,7 @@ class RegressionTracker(BaseSupervisedTracker):
         )
 
         return {
-            "keypoints_targ": data_batch["keypoints"],
+            "keypoints_targ": batch_dict["keypoints"],
             "keypoints_pred": predicted_keypoints,
         }
 
@@ -153,6 +155,10 @@ class SemiSupervisedRegressionTracker(RegressionTracker, SemiSupervisedTrackerMi
 
         # this attribute will be modified by AnnealWeight callback during training
         self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
+
+        # necessary so we don't have to pass in model arguments when loading
+        # ignore loss factory, cannot be pickled
+        self.save_hyperparameters(ignore="loss_factory_unsupervised")
 
     @typechecked
     def get_loss_inputs_unlabeled(self, batch: torch.Tensor) -> dict:

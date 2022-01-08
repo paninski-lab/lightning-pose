@@ -24,7 +24,7 @@ patch_typeguard()  # use before @typechecked
 @typechecked
 def predict_dataset(
     cfg: DictConfig,
-    datamod: LightningDataModule,
+    data_module: LightningDataModule,
     hydra_output_directory: str,
     ckpt_file: str,
     save_file: str = None,
@@ -37,17 +37,17 @@ def predict_dataset(
     """
     model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
     model.to(_TORCH_DEVICE)
-    full_dataset = datamod.dataset
+    full_dataset = data_module.dataset
     num_datapoints = len(full_dataset)
     # recover the indices assuming we re-use the same random seed as in training
     dataset_split_indices = {
-        "train": datamod.train_dataset.indices,
-        "validation": datamod.val_dataset.indices,
-        "test": datamod.test_dataset.indices,
+        "train": data_module.train_dataset.indices,
+        "validation": data_module.val_dataset.indices,
+        "test": data_module.test_dataset.indices,
     }
 
     full_dataloader = DataLoader(
-        dataset=full_dataset, batch_size=datamod.test_batch_size
+        dataset=full_dataset, batch_size=data_module.test_batch_size
     )
     if save_file is None:
         # default for now, should be saved to the model directory
@@ -61,7 +61,7 @@ def predict_dataset(
         model=model,
         dataloader=full_dataloader,
         n_frames_=num_datapoints,
-        batch_size=datamod.test_batch_size,
+        batch_size=data_module.test_batch_size,
         save_folder=save_folder
     )
 
@@ -485,30 +485,34 @@ def load_model_from_checkpoint(
 ) -> LightningModule:
     """this will have: path to a specific .ckpt file which we extract using other funcs
     will also take the standard hydra config file"""
-    from pose_est_nets.utils.io import check_if_semi_supervised
+    from pose_est_nets.utils.io import (
+        check_if_semi_supervised,
+        return_absolute_data_paths,
+    )
+    from pose_est_nets.utils.scripts import (
+        get_datamodule,
+        get_dataset,
+        get_imgaug_tranform,
+        get_loss_factories,
+    )
 
-    semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
+    # get loss factories
+    data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
+    imgaug_transform = get_imgaug_tranform(cfg=cfg)
+    dataset = get_dataset(
+        cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform
+    )
+    data_module = get_datamodule(cfg=cfg, dataset=dataset, video_dir=video_dir)
+    loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
+
     # pick the right model class
+    semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
     ModelClass = get_model_class(
         map_type=cfg.model.model_type,
         semi_supervised=semi_supervised,
     )
     # initialize a model instance, with weights loaded from .ckpt file
     if semi_supervised:
-        # TODO: ask Dan if necessary; do we need to update the loss factory info?
-        # maybe we don't need to do this after adding `save_hyperparameters` to init
-        from pose_est_nets.utils.scripts import (
-            get_datamodule,
-            get_dataset,
-            get_imgaug_tranform,
-            get_loss_factories,
-        )
-        imgaug_transform = get_imgaug_tranform(cfg=cfg)
-        dataset = get_dataset(
-            cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform
-        )
-        data_module = get_datamodule(cfg=cfg, dataset=dataset, video_dir=video_dir)
-        loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
         model = ModelClass.load_from_checkpoint(
             ckpt_file,
             loss_factory=loss_factories["supervised"],
@@ -516,9 +520,15 @@ def load_model_from_checkpoint(
             strict=False,
         )
     else:
-        model = ModelClass.load_from_checkpoint(ckpt_file)
+        model = ModelClass.load_from_checkpoint(
+            ckpt_file,
+            loss_factory=loss_factories["supervised"],
+            strict=False,
+        )
+
     if eval:
         model.eval()
+
     return model
 
 

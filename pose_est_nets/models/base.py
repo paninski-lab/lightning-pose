@@ -8,7 +8,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, MultiStepLR
 from torchtyping import TensorType, patch_typeguard
 import torchvision.models as models
 from typeguard import typechecked
-from typing import Any, Callable, List, Optional, Tuple, TypedDict
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, Union
 from typing_extensions import Literal
 
 
@@ -169,7 +169,7 @@ class BaseFeatureExtractor(LightningModule):
         return {
             "optimizer": optimizer,
             "lr_scheduler": scheduler,
-            "monitor": "val_loss",
+            "monitor": "val_supervised_loss",
         }
 
 
@@ -194,14 +194,19 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         data_dict = self.get_loss_inputs_labeled(batch_dict=batch_dict)
 
         # compute and log loss on labeled data
-        loss = self.loss_factory(stage=stage, **data_dict)
+        loss, log_list = self.loss_factory(stage=stage, **data_dict)
 
         # compute and log rmse loss on labeled data
-        self.rmse_loss(stage=stage, **data_dict)
+        loss_rmse, _ = self.rmse_loss(stage=stage, **data_dict)
 
         if stage:
             # log overall supervised loss
             self.log(f"{stage}_supervised_loss", loss, prog_bar=True)
+            # log supervised rmse
+            self.log(f"{stage}_supervised_rmse", loss_rmse)
+            # log individual supervised losses
+            for log_dict in log_list:
+                self.log(**log_dict)
 
         return loss
 
@@ -247,7 +252,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         return {
             "optimizer": optimizer,
             "lr_scheduler": scheduler,
-            "monitor": "val_loss",
+            "monitor": "val_supervised_loss",
         }
 
 
@@ -271,11 +276,16 @@ class SemiSupervisedTrackerMixin(object):
         data_dict = self.get_loss_inputs_unlabeled(bach=batch)
 
         # compute loss on unlabeled data
-        loss = self.loss_factory_unsup(
+        loss, log_list = self.loss_factory_unsup(
             stage=stage,
             anneal_weight=anneal_weight,
             **data_dict,
         )
+
+        if stage:
+            # log individual unsupervised losses
+            for log_dict in log_list:
+                self.log(**log_dict)
 
         return loss
 
@@ -344,13 +354,15 @@ class SemiSupervisedTrackerMixin(object):
         return {
             "optimizer": optimizer,
             "lr_scheduler": scheduler,
-            "monitor": "val_loss",
+            "monitor": "val_supervised_loss",
         }
 
     # # single optimizer with different learning rates
     # def configure_optimizers(self):
     #     params_net = [
-    #         # {"params": self.backbone.parameters()}, # don't uncomment this line; the BackboneFinetuning callback should add backbone to the params.
+    #         # {"params": self.backbone.parameters()},
+    #         #  don't uncomment above line; the BackboneFinetuning callback should add
+    #         # backbone to the params.
     #         {
     #             "params": self.upsampling_layers.parameters()
     #         },  # important that this is the 0th element, for BackboneFineTuning

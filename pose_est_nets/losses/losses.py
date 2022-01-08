@@ -6,7 +6,8 @@ from torch.nn import functional as F
 from torchtyping import TensorType, patch_typeguard
 from geomloss import SamplesLoss
 from typeguard import typechecked
-from typing import Any, Callable, Dict, Tuple, List, Literal, Optional, Union
+from typing import Any, Callable, Dict, Tuple, List, Optional, Union
+from typing_extensions import Literal
 import pytorch_lightning as pl
 from pose_est_nets.utils.pca import (
     KeypointPCA,
@@ -70,9 +71,17 @@ class Loss(pl.LightningModule):
             self,
             loss: torch.Tensor,
             stage: Literal["train", "val", "test"],
-    ) -> None:
-        self.log("%s_%s_loss" % stage, self.loss_name, loss, prog_bar=True)
-        self.log(self.loss_name + "_weight", self.weight)
+    ) -> List[dict]:
+        loss_dict = {
+            "name": "%s_%s_loss" % (stage, self.loss_name),
+            "value": loss,
+            "prog_bar": True,
+        }
+        weight_dict = {
+            "name": "%s_weight" % self.loss_name,
+            "value": self.weight,
+        }
+        return [loss_dict, weight_dict]
 
     def __call__(self, *args, **kwargs):
         # give us the flow of operations, and we overwrite the methods, and determine
@@ -84,7 +93,7 @@ class Loss(pl.LightningModule):
         # self.reduce_loss()
         # self.log_loss()
 
-        # return self.weight * scalar_loss
+        # return self.weight * scalar_loss, logs
         raise NotImplementedError
 
 
@@ -125,7 +134,7 @@ class HeatmapLoss(Loss):
         heatmaps_pred: torch.Tensor,
         stage: Optional[Literal["train", "val", "test"]] = None,
         **kwargs
-    ):
+    ) -> Tuple[TensorType[(), float], dict]:
         # give us the flow of operations, and we overwrite the methods, and determine
         # their arguments which are in buffer
         clean_targets, clean_predictions = self.remove_nans(
@@ -136,9 +145,9 @@ class HeatmapLoss(Loss):
         )
         epsilon_insensitive_loss = self.rectify_epsilon(loss=elementwise_loss)
         scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
-        if stage:
-            self.log_loss(loss=scalar_loss, stage=stage)
-        return self.weight * scalar_loss
+        logs = self.log_loss(loss=scalar_loss, stage=stage)
+
+        return self.weight * scalar_loss, logs
 
 
 class HeatmapMSELoss(HeatmapLoss):
@@ -232,7 +241,7 @@ class PCALoss(Loss):
             self,
             keypoints_pred: torch.Tensor,
             stage: Optional[Literal["train", "val", "test"]] = None
-    ) -> TensorType[(), float]:
+    ) -> Tuple[TensorType[(), float], dict]:
 
         # if multiview, reformat the predictions first
         if self.loss_name == "pca_multiview":
@@ -247,9 +256,8 @@ class PCALoss(Loss):
         elementwise_loss = self.compute_loss(predictions=keypoints_pred)
         epsilon_insensitive_loss = self.rectify_epsilon(loss=elementwise_loss)
         scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
-        if stage:
-            self.log_loss(loss=scalar_loss, stage=stage)
-        return self.weight * scalar_loss
+        logs = self.log_loss(loss=scalar_loss, stage=stage)
+        return self.weight * scalar_loss, logs
 
 
 class TemporalLoss(Loss):
@@ -297,14 +305,13 @@ class TemporalLoss(Loss):
         keypoints_pred: TensorType["batch", "two_x_num_keypoints", float],
         stage: Optional[Literal["train", "val", "test"]] = None,
         **kwargs
-    ) -> TensorType[(), float]:
+    ) -> Tuple[TensorType[(), float], dict]:
 
         elementwise_loss = self.compute_loss(predictions=keypoints_pred)
         epsilon_insensitive_loss = self.rectify_epsilon(loss=elementwise_loss)
         scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
-        if stage:
-            self.log_loss(loss=scalar_loss, stage=stage)
-        return self.weight * scalar_loss
+        logs = self.log_loss(loss=scalar_loss, stage=stage)
+        return self.weight * scalar_loss, logs
 
 
 class UnimodalLoss(Loss):
@@ -374,7 +381,7 @@ class UnimodalLoss(Loss):
         ],
         stage: Optional[Literal["train", "val", "test"]] = None,
         **kwargs,
-    ) -> TensorType[(), float]:
+    ) -> Tuple[TensorType[(), float], dict]:
 
         # turn keypoint predictions into unimodal heatmaps
         keypoints_pred = keypoints_pred.reshape(keypoints_pred.shape[0], -1, 2)
@@ -391,10 +398,9 @@ class UnimodalLoss(Loss):
             predictions=heatmaps_pred
         )
         scalar_loss = self.reduce_loss(elementwise_loss, method="mean")
-        if stage:
-            self.log_loss(loss=scalar_loss, stage=stage)
+        logs = self.log_loss(loss=scalar_loss, stage=stage)
 
-        return self.weight * scalar_loss
+        return self.weight * scalar_loss, logs
 
 
 class RegressionMSELoss(Loss):
@@ -435,7 +441,7 @@ class RegressionMSELoss(Loss):
         keypoints_pred: TensorType["batch", "two_x_num_keypoints"],
         stage: Optional[Literal["train", "val", "test"]] = None,
         **kwargs,
-    ):
+    ) -> Tuple[TensorType[(), float], List[dict]]:
 
         clean_targets, clean_predictions = self.remove_nans(
             targets=keypoints_targ, predictions=keypoints_pred
@@ -444,10 +450,9 @@ class RegressionMSELoss(Loss):
             targets=clean_targets, predictions=clean_predictions
         )
         scalar_loss = self.reduce_loss(elementwise_loss, method="mean")
-        if stage:
-            self.log_loss(loss=scalar_loss, stage=stage)
+        logs = self.log_loss(loss=scalar_loss, stage=stage)
 
-        return self.weight * scalar_loss
+        return self.weight * scalar_loss, logs
 
 
 class RegressionRMSELoss(RegressionMSELoss):
@@ -464,7 +469,7 @@ class RegressionRMSELoss(RegressionMSELoss):
             epsilon=epsilon,
             log_weight=log_weight
         )
-        self.loss_name = "regression_rmse"
+        self.loss_name = "rmse"
 
     def compute_loss(self, targets: torch.Tensor, predictions: torch.Tensor):
         targs = targets.reshape(-1, 2)

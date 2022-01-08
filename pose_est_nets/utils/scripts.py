@@ -1,7 +1,9 @@
 """Helper functions to build pipeline components from config dictionary."""
 
-from omegaconf import DictConfig, ListConfig
-from typing import Union
+import imgaug.augmenters as iaa
+from omegaconf import DictConfig, ListConfig, OmegaConf
+from typeguard import typechecked
+from typing import Dict, Union
 
 from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
 from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
@@ -17,6 +19,7 @@ from pose_est_nets.models.regression_tracker import (
 from pose_est_nets.utils.io import check_if_semi_supervised
 
 
+@typechecked
 def get_imgaug_tranform(cfg: DictConfig) -> iaa.Sequential:
     # define data transform pipeline
     data_transform = iaa.Resize(
@@ -28,6 +31,7 @@ def get_imgaug_tranform(cfg: DictConfig) -> iaa.Sequential:
     return iaa.Sequential([data_transform])
 
 
+@typechecked
 def get_dataset(
     cfg: DictConfig, data_dir: str, imgaug_transform: iaa.Sequential
 ) -> Union[BaseTrackingDataset, HeatmapDataset]:
@@ -54,6 +58,7 @@ def get_dataset(
     return dataset
 
 
+@typechecked
 def get_datamodule(
     cfg: DictConfig, dataset: Union[BaseTrackingDataset, HeatmapDataset], video_dir: str
 ) -> Union[BaseDataModule, UnlabeledDataModule]:
@@ -98,9 +103,10 @@ def get_datamodule(
     return data_module
 
 
+@typechecked
 def get_loss_factories(
-        cfg: DictConfig,
-        data_module: Union[BaseDataModule, UnlabeledDataModule]
+    cfg: DictConfig,
+    data_module: Union[BaseDataModule, UnlabeledDataModule]
 ) -> dict:
     """Note: much of this replaces the function `format_and_update_loss_info`."""
 
@@ -111,18 +117,20 @@ def get_loss_factories(
 
     # collect all supervised losses in a dict; no extra params needed
     # set "log_weight = 0.0" so that weight = 1 and effective weight is (1 / 2)
-    if cfg.model_type == "heatmap":
+    if cfg.model.model_type == "heatmap":
         loss_params_dict["supervised"]["heatmap_" + cfg.model.heatmap_loss_type] = {
             "log_weight": 0.0
         }
     else:
-        loss_params_dict["supervised"][cfg.model.model_type] = {"log_weight": 0.0}
+        loss_params_dict["supervised"][cfg.model.model_type] = {
+            "log_weight": 0.0
+        }
 
     # collect all unsupervised losses and their params in a dict
     for loss_name in cfg.model.losses_to_use:
         # general parameters
         loss_params_dict["unsupervised"][loss_name] = cfg.losses[loss_name]
-        loss_params_dict["unsupervised"][loss_name]["loss_name"] = loss_name  # generally useful
+        loss_params_dict["unsupervised"][loss_name]["loss_name"] = loss_name
         # loss-specific parameters
         if loss_name == "unimodal_mse" or loss_name == "unimodal_wasserstein":
             if cfg.model.model_type == "regression":
@@ -133,13 +141,17 @@ def get_loss_factories(
             # record original image dims (after initial resizing)
             height_og = cfg.data.image_resize_dims.height
             width_og = cfg.data.image_resize_dims.width
-            loss_params_dict["unsupervised"][loss_name]["original_image_height"] = height_og
-            loss_params_dict["unsupervised"][loss_name]["original_image_width"] = width_og
+            loss_params_dict["unsupervised"][loss_name]["original_image_height"] = \
+                height_og
+            loss_params_dict["unsupervised"][loss_name]["original_image_width"] = \
+                width_og
             # record downsampled image dims
             height_ds = int(height_og // (2 ** cfg.data.downsample_factor))
             width_ds = int(width_og // (2 ** cfg.data.downsample_factor))
-            loss_params_dict["unsupervised"][loss_name]["downsampled_image_height"] = height_ds
-            loss_params_dict["unsupervised"][loss_name]["downsampled_image_width"] = width_ds
+            loss_params_dict["unsupervised"][loss_name]["downsampled_image_height"] = \
+                height_ds
+            loss_params_dict["unsupervised"][loss_name]["downsampled_image_width"] = \
+                width_ds
         elif loss_name == "pca_multiview":
             loss_params_dict["unsupervised"][loss_name]["mirrored_column_matches"] = \
                 cfg.data.mirrored_column_matches
@@ -159,6 +171,7 @@ def get_loss_factories(
     return {"supervised": loss_factory_sup, "unsupervised": loss_factory_unsup}
 
 
+@typechecked
 def get_model(
     cfg: DictConfig,
     data_module: Union[BaseDataModule, UnlabeledDataModule],
@@ -192,6 +205,8 @@ def get_model(
                 "%s is an invalid cfg.model.model_type for a fully supervised model"
                 % cfg.model.model_type
             )
+        # add losses onto initialized model
+        # model.add_loss_factory(loss_factories["supervised"])
 
     else:
         if cfg.model.model_type == "regression":
