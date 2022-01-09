@@ -3,7 +3,7 @@
 import imgaug.augmenters as iaa
 from omegaconf import DictConfig, ListConfig, OmegaConf
 from typeguard import typechecked
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 
 from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
 from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
@@ -59,8 +59,10 @@ def get_dataset(
 
 
 @typechecked
-def get_datamodule(
-    cfg: DictConfig, dataset: Union[BaseTrackingDataset, HeatmapDataset], video_dir: str
+def get_data_module(
+    cfg: DictConfig,
+    dataset: Union[BaseTrackingDataset, HeatmapDataset],
+    video_dir: Optional[str] = None,
 ) -> Union[BaseDataModule, UnlabeledDataModule]:
 
     semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)

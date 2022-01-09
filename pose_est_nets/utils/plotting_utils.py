@@ -490,7 +490,7 @@ def load_model_from_checkpoint(
         return_absolute_data_paths,
     )
     from pose_est_nets.utils.scripts import (
-        get_datamodule,
+        get_data_module,
         get_dataset,
         get_imgaug_tranform,
         get_loss_factories,
@@ -502,7 +502,7 @@ def load_model_from_checkpoint(
     dataset = get_dataset(
         cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform
     )
-    data_module = get_datamodule(cfg=cfg, dataset=dataset, video_dir=video_dir)
+    data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
     loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
 
     # pick the right model class
