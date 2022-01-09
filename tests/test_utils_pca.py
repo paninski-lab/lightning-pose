@@ -61,7 +61,7 @@ def loss_param_dict() -> dict:
     # grab example loss config file from repo
     base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
     loss_cfg = os.path.join(
-        base_dir, "scripts", "configs", "losses", "loss_params.yaml"
+        base_dir, "scripts", "configs", "losses", "losses_params.yaml"
     )
     with open(loss_cfg) as f:
         loss_param_dict = yaml.load(f, Loader=yaml.FullLoader)

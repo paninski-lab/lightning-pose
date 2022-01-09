@@ -10,7 +10,7 @@ from pose_est_nets.callbacks.callbacks import AnnealWeight
 from pose_est_nets.utils.io import return_absolute_data_paths
 from pose_est_nets.utils.plotting_utils import predict_dataset
 from pose_est_nets.utils.scripts import (
-    get_datamodule,
+    get_data_module,
     get_dataset,
     get_imgaug_tranform,
     get_loss_factories,
@@ -41,9 +41,9 @@ def train(cfg: DictConfig):
     dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
 
     # datamodule; breaks up dataset into train/val/test
-    data_module = get_datamodule(cfg=cfg, dataset=dataset, video_dir=video_dir)
+    data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
 
-    # losses
+    # build loss factory which orchestrates different losses
     loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
 
     # model
@@ -123,6 +123,7 @@ def train(cfg: DictConfig):
         raise FileNotFoundError(
             "Cannot find model checkpoint. Have you trained for too few epochs?"
         )
+    # export predictions on train/val/test data to a csv saved in model directory
     predict_dataset(
         cfg=cfg,
         data_module=data_module,
