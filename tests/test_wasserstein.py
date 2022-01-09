@@ -1,7 +1,7 @@
-from pose_est_nets.models.heatmap_tracker import HeatmapTracker
-from pose_est_nets.datasets.datasets import HeatmapDataset
-from pose_est_nets.utils.heatmaps import generate_heatmaps
-from pose_est_nets.datasets.datamodules import BaseDataModule
+from lightning_pose.models.heatmap_tracker import HeatmapTracker
+from lightning_pose.data.datasets import HeatmapDataset
+from lightning_pose.data.utils import generate_heatmaps
+from lightning_pose.data.datamodules import BaseDataModule
 import torch
 import pytest
 import pytorch_lightning as pl

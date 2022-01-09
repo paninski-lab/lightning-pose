@@ -4,7 +4,7 @@ import pytest
 import pytorch_lightning as pl
 import shutil
 from typing import Optional
-from pose_est_nets.models.base import BaseFeatureExtractor
+from lightning_pose.models.base import BaseFeatureExtractor
 import torchvision
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"

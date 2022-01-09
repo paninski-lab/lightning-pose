@@ -1,6 +1,6 @@
 """Provide pytest fixtures for the entire test suite.
 
-These fixtures create datasets and data modules that can be reused by other tests. Their
+These fixtures create data and data modules that can be reused by other tests. Their
 construction relies heavily on the utility functions provided in `utils/scripts.py`.
 
 """
@@ -11,18 +11,19 @@ from omegaconf import ListConfig, OmegaConf
 import os
 import pytest
 import pytorch_lightning as pl
+import shutil
 import torch
-from typing import List, Optional
+from typing import Callable, List, Optional
 import yaml
 
-from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
-from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
-from pose_est_nets.utils.scripts import (
+from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
+from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
+from lightning_pose.utils.plotting_utils import get_videos_in_dir
+from lightning_pose.utils.scripts import (
     get_data_module,
     get_dataset,
-    get_imgaug_tranform,
+    get_imgaug_transform,
 )
-from pose_est_nets.utils.plotting_utils import get_videos_in_dir
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -51,7 +52,7 @@ def cfg() -> dict:
 @pytest.fixture
 def imgaug_transform(cfg) -> iaa.Sequential:
     """Create basic resizing transform."""
-    return get_imgaug_tranform(cfg)
+    return get_imgaug_transform(cfg)
 
 
 @pytest.fixture
@@ -100,6 +101,7 @@ def base_data_module(cfg, base_dataset) -> BaseDataModule:
     cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.losses_to_use = [""]
     data_module = get_data_module(cfg_tmp, dataset=base_dataset, video_dir=None)
+    data_module.setup()
 
     # return to tests
     yield data_module
@@ -117,6 +119,7 @@ def heatmap_data_module(cfg, heatmap_dataset) -> BaseDataModule:
     cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.losses_to_use = []
     data_module = get_data_module(cfg_tmp, dataset=heatmap_dataset, video_dir=None)
+    data_module.setup()
 
     # return to tests
     yield data_module
@@ -138,6 +141,7 @@ def base_data_module_combined(cfg, base_dataset) -> UnlabeledDataModule:
         dataset=base_dataset,
         video_dir=os.path.join(TOY_DATA_ROOT_DIR, "unlabeled_videos")
     )
+    # data_module.setup()  # already done in UnlabeledDataModule constructor
 
     # return to tests
     yield data_module
@@ -159,6 +163,7 @@ def heatmap_data_module_combined(cfg, heatmap_dataset) -> UnlabeledDataModule:
         dataset=heatmap_dataset,
         video_dir=os.path.join(TOY_DATA_ROOT_DIR, "unlabeled_videos")
     )
+    # data_module.setup()  # already done in UnlabeledDataModule constructor
 
     # return to tests
     yield data_module
@@ -210,9 +215,20 @@ def trainer(cfg) -> pl.Trainer:
     return trainer
 
 
-# @pytest.fixture
-# def unlabeled_data_module(
+@pytest.fixture
+def remove_logs() -> Callable:
+    def _remove_logs():
+        base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
+        logging_dir = os.path.join(base_dir, "lightning_logs")
+        shutil.rmtree(logging_dir)
+    return _remove_logs
 
-# @pytest.fixture
-# def video_list() -> List[str]:
-#     return get_videos_in_dir("toy_datasets/toymouseRunningData/unlabeled_videos")
+
+@pytest.fixture
+def video_list() -> List[str]:
+    return get_videos_in_dir(os.path.join(TOY_DATA_ROOT_DIR, "unlabeled_videos"))
+
+
+@pytest.fixture
+def toy_data_dir() -> str:
+    return TOY_DATA_ROOT_DIR

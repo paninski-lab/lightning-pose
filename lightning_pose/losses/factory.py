@@ -5,8 +5,8 @@ import torch
 from torchtyping import TensorType, patch_typeguard
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 
-from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
-from pose_est_nets.losses.losses import get_loss_classes
+from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
+from lightning_pose.losses.losses import get_loss_classes
 
 patch_typeguard()  # use before @typechecked
 

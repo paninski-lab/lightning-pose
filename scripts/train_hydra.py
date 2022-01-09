@@ -6,13 +6,13 @@ import os
 import pytorch_lightning as pl
 import torch
 
-from pose_est_nets.callbacks.callbacks import AnnealWeight
-from pose_est_nets.utils.io import return_absolute_data_paths
-from pose_est_nets.utils.plotting_utils import predict_dataset
-from pose_est_nets.utils.scripts import (
+from lightning_pose.callbacks.callbacks import AnnealWeight
+from lightning_pose.utils.io import return_absolute_data_paths
+from lightning_pose.utils.plotting_utils import predict_dataset
+from lightning_pose.utils.scripts import (
     get_data_module,
     get_dataset,
-    get_imgaug_tranform,
+    get_imgaug_transform,
     get_loss_factories,
     get_model,
 )
@@ -27,7 +27,7 @@ def train(cfg: DictConfig):
     print("Our Hydra config file:")
     pretty_print(cfg)
 
-    # path handling for toy datasets
+    # path handling for toy data
     data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
 
     # ----------------------------------------------------------------------------------
@@ -35,7 +35,7 @@ def train(cfg: DictConfig):
     # ----------------------------------------------------------------------------------
 
     # imgaug transform
-    imgaug_transform = get_imgaug_tranform(cfg=cfg)
+    imgaug_transform = get_imgaug_transform(cfg=cfg)
 
     # dataset
     dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
@@ -146,7 +146,7 @@ def pretty_print(cfg):
         for k, v in val.items():
             print("{}: {}".format(k, v))
         print()
-    print("------------------------------------------------------------------\n")
+    print("\n\n")
 
 
 if __name__ == "__main__":

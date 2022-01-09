@@ -11,9 +11,9 @@ from typing_extensions import Literal
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau
 
-from pose_est_nets.losses.factory import LossFactory
-from pose_est_nets.losses.losses import RegressionRMSELoss
-from pose_est_nets.models.base import (
+from lightning_pose.losses.factory import LossFactory
+from lightning_pose.losses.losses import RegressionRMSELoss
+from lightning_pose.models.base import (
     BaseBatchDict,
     BaseSupervisedTracker,
     HeatmapBatchDict,

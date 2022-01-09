@@ -2,7 +2,7 @@
 
 import hydra
 from omegaconf import DictConfig
-from pose_est_nets.utils.fiftyone_plotting_utils import make_dataset_and_viz_from_csvs
+from lightning_pose.utils.fiftyone_plotting_utils import make_dataset_and_viz_from_csvs
 
 
 @hydra.main(config_path="configs", config_name="config")

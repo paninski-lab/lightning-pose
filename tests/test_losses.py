@@ -3,12 +3,12 @@ import numpy as np
 import pytest
 import yaml
 
-from pose_est_nets.losses.losses import HeatmapWassersteinLoss
+from lightning_pose.losses.losses import HeatmapWassersteinLoss
 
 
 def test_regression_mse_loss():
 
-    from pose_est_nets.losses.losses import RegressionMSELoss
+    from lightning_pose.losses.losses import RegressionMSELoss
 
     true_keypoints = torch.rand(
         size=(12, 32),
@@ -27,7 +27,7 @@ def test_regression_mse_loss():
 
 def test_regression_rmse_loss():
 
-    from pose_est_nets.losses.losses import RegressionMSELoss, RegressionRMSELoss
+    from lightning_pose.losses.losses import RegressionMSELoss, RegressionRMSELoss
 
     n = 4
     batch_size = 3
@@ -49,7 +49,7 @@ def test_pca_singleview_loss():
 
     # TODO
     pass
-    # from pose_est_nets.losses.losses import PCALoss
+    # from lightning_pose.losses.losses import PCALoss
     #
     # kept_evecs = torch.eye(n=4)[:, :2].T  # two eigenvecs, each 4D
     # projection_to_obs = torch.randn(
@@ -112,7 +112,7 @@ def test_zero_removal():
 
 def test_heatmap_mse_loss():
     # define the class
-    from pose_est_nets.losses.losses import HeatmapMSELoss, HeatmapWassersteinLoss
+    from lightning_pose.losses.losses import HeatmapMSELoss, HeatmapWassersteinLoss
 
     heatmap_mse_loss = HeatmapMSELoss()
     targets = torch.ones((3, 7, 48, 48)) / (48 * 48)
@@ -135,7 +135,7 @@ def test_heatmap_mse_loss():
 
 def test_temporal_loss():
 
-    from pose_est_nets.losses.losses import TemporalLoss
+    from lightning_pose.losses.losses import TemporalLoss
 
     temporal_loss = TemporalLoss(epsilon=0.0)
 
@@ -184,7 +184,7 @@ def test_temporal_loss():
 
 def test_unimodal_mse_loss():
 
-    from pose_est_nets.losses.losses import UnimodalLoss
+    from lightning_pose.losses.losses import UnimodalLoss
 
     img_size = 48
     img_size_ds = 32
@@ -218,7 +218,7 @@ def test_unimodal_mse_loss():
 
 def test_unimodal_wasserstein_loss():
 
-    from pose_est_nets.losses.losses import UnimodalLoss
+    from lightning_pose.losses.losses import UnimodalLoss
 
     img_size = 48
     img_size_ds = 32
