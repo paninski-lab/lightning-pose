@@ -1,14 +1,12 @@
 """Test the initialization and training of heatmap models."""
 
 import copy
-import torch
 import pytest
-import pytorch_lightning as pl
 
-from pose_est_nets.utils.scripts import get_loss_factories, get_model
+from lightning_pose.utils.scripts import get_loss_factories, get_model
 
 
-def test_supervised_heatmap(cfg, heatmap_data_module, trainer):
+def test_supervised_heatmap(cfg, heatmap_data_module, trainer, remove_logs):
     """Test the initialization and training of a supervised heatmap model."""
 
     cfg_tmp = copy.deepcopy(cfg)
@@ -23,10 +21,16 @@ def test_supervised_heatmap(cfg, heatmap_data_module, trainer):
         cfg=cfg_tmp, data_module=heatmap_data_module, loss_factories=loss_factories
     )
 
+    # train model for a couple epochs
     trainer.fit(model=model, datamodule=heatmap_data_module)
 
+    # clean up logging
+    remove_logs()
 
-def test_unsupervised_heatmap_temporal(cfg, heatmap_data_module_combined, trainer):
+
+def test_unsupervised_heatmap_temporal(
+    cfg, heatmap_data_module_combined, trainer, remove_logs,
+):
     """Test the initialization and training of an unsupervised heatmap model."""
 
     cfg_tmp = copy.deepcopy(cfg)
@@ -38,14 +42,18 @@ def test_unsupervised_heatmap_temporal(cfg, heatmap_data_module_combined, traine
         cfg=cfg_tmp, data_module=heatmap_data_module_combined
     )
 
-    # model
+    # build model
     model = get_model(
         cfg=cfg_tmp,
         data_module=heatmap_data_module_combined,
         loss_factories=loss_factories,
     )
 
+    # train model for a couple epochs
     trainer.fit(model=model, datamodule=heatmap_data_module_combined)
+
+    # clean up logging
+    remove_logs()
 
 
 # def test_init():

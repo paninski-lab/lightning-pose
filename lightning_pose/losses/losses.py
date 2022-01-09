@@ -9,13 +9,13 @@ from typeguard import typechecked
 from typing import Any, Callable, Dict, Tuple, List, Optional, Union
 from typing_extensions import Literal
 import pytorch_lightning as pl
-from pose_est_nets.utils.pca import (
+from lightning_pose.utils.pca import (
     KeypointPCA,
     format_multiview_data_for_pca,
     compute_PCA_reprojection_error,
 )
-from pose_est_nets.utils.heatmaps import generate_heatmaps
-from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
+from lightning_pose.data.utils import generate_heatmaps
+from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 

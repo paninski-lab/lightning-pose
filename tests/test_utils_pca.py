@@ -6,10 +6,10 @@ import yaml
 import sklearn
 import os
 import imgaug.augmenters as iaa
-from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
-from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
+from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
+from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from typing import List
-from pose_est_nets.utils.pca import KeypointPCA
+from lightning_pose.utils.pca import KeypointPCA
 import unittest
 
 
@@ -38,21 +38,6 @@ def heatmap_dataset() -> HeatmapDataset:
     )
 
     return heatmap_dataset
-
-
-@pytest.fixture
-def video_list() -> List[str]:
-    video_directory = "toy_datasets/toymouseRunningData/unlabeled_videos"
-    assert os.path.exists(video_directory)
-
-    # video_directory may contain other random files that are not vids, DALI will try to
-    # read them
-    video_files = [video_directory + "/" + f for f in os.listdir(video_directory)]
-    vids = []
-    for f in video_files:
-        if f.endswith(".mp4"):  # hardcoded for the toydataset folder
-            vids.append(f)
-    return vids
 
 
 @pytest.fixture
@@ -112,8 +97,8 @@ def test_train_loader_iter(data_module):
 
 
 def test_data_extractor(data_module):
-    # TODO: move to datasets once the fixtures are set there. more rigorous testing.
-    from pose_est_nets.datasets.utils import DataExtractor
+    # TODO: move to data once the fixtures are set there. more rigorous testing.
+    from lightning_pose.data.utils import DataExtractor
 
     data_tensor = DataExtractor(data_module=data_module, cond="train")()
 
@@ -131,7 +116,7 @@ def test_pca_keypoint_class(data_module):
     kp_pca._get_data()
     assert kp_pca.data_arr.shape == (31, 17, 2)  # 31 is 0.8*39 images
 
-    # from pose_est_nets.utils.pca import get_train_data_for_pca
+    # from lightning_pose.utils.pca import get_train_data_for_pca
 
     # old_data = get_train_data_for_pca(data_module=data_module)
     # print(kp_pca.data_arr)
@@ -196,7 +181,7 @@ def test_pca_keypoint_class(data_module):
 
 def test_format_multiview_data_for_pca():
 
-    from pose_est_nets.utils.pca import format_multiview_data_for_pca
+    from lightning_pose.utils.pca import format_multiview_data_for_pca
 
     n_batches = 12
     n_keypoints = 20
@@ -243,7 +228,7 @@ def test_component_chooser():
     pca = PCA(svd_solver="full")
     pca.fit(data_for_pca)
 
-    from pose_est_nets.utils.pca import ComponentChooser
+    from lightning_pose.utils.pca import ComponentChooser
 
     # regular integer behavior
     comp_chooser_int = ComponentChooser(pca, 4)

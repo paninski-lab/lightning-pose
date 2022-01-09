@@ -4,17 +4,17 @@ import numpy as np
 import pytest
 import pytorch_lightning as pl
 import shutil
-from pose_est_nets.datasets.datamodules import UnlabeledDataModule
-from pose_est_nets.datasets.datasets import BaseTrackingDataset
+from lightning_pose.data.datamodules import UnlabeledDataModule
+from lightning_pose.data.datasets import BaseTrackingDataset
 from typing import Optional
-from pose_est_nets.models.regression_tracker import (
+from lightning_pose.models.regression_tracker import (
     RegressionTracker,
     SemiSupervisedRegressionTracker,
 )
 import yaml
 import imgaug.augmenters as iaa
 
-# TODO: add more tests as we consolidate datasets
+# TODO: add more tests as we consolidate data
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 _BATCH_SIZE = 12
@@ -35,7 +35,7 @@ num_keypoints = 34
 
 # @pytest.fixture
 # def create_dataset():
-#     from pose_est_nets.datasets.datasets import BaseTrackingDataset
+#     from lightning_pose.data.data import BaseTrackingDataset
 #
 #     dataset = BaseTrackingDataset(
 #         root_directory="toy_datasets/toymouseRunningData",
@@ -47,7 +47,7 @@ num_keypoints = 34
 
 # @pytest.fixture
 # def initialize_model():
-#     from pose_est_nets.models.regression_tracker import RegressionTracker
+#     from lightning_pose.models.regression_tracker import RegressionTracker
 #
 #     model = RegressionTracker(num_targets=34, resnet_version=18)
 #     return model
@@ -55,7 +55,7 @@ num_keypoints = 34
 
 # @pytest.fixture
 # def initialize_data_module(create_dataset):
-#     from pose_est_nets.datasets.datasets import TrackingDataModule
+#     from lightning_pose.data.data import TrackingDataModule
 #
 #     data_module = TrackingDataModule(
 #         create_dataset,
@@ -91,7 +91,7 @@ def test_forward():
 
 def test_semisupervised():
     # define unsupervised datamodule
-    from pose_est_nets.utils.plotting_utils import get_videos_in_dir
+    from lightning_pose.utils.plotting_utils import get_videos_in_dir
 
     data_transform = []
     data_transform.append(

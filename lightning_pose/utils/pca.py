@@ -12,10 +12,10 @@ from typeguard import typechecked
 from typing import List, Optional, Union, Literal, Dict
 import warnings
 
-from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
-from pose_est_nets.datasets.datasets import HeatmapDataset
-from pose_est_nets.datasets.utils import clean_any_nans
-from pose_est_nets.losses.helpers import (
+from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
+from lightning_pose.data.datasets import HeatmapDataset
+from lightning_pose.data.utils import clean_any_nans
+from lightning_pose.losses.helpers import (
     EmpiricalEpsilon,
     convert_dict_values_to_tensors,
 )
@@ -48,7 +48,7 @@ class KeypointPCA(object):
         self.device = device
 
     def _get_data(self) -> None:
-        from pose_est_nets.datasets.utils import DataExtractor
+        from lightning_pose.data.utils import DataExtractor
 
         # this method will have to be modified to get PCA data from different source
         self.data_arr = DataExtractor(data_module=self.data_module, cond="train")()

@@ -5,23 +5,23 @@ from omegaconf import DictConfig, ListConfig, OmegaConf
 from typeguard import typechecked
 from typing import Dict, Optional, Union
 
-from pose_est_nets.datasets.datamodules import BaseDataModule, UnlabeledDataModule
-from pose_est_nets.datasets.datasets import BaseTrackingDataset, HeatmapDataset
-from pose_est_nets.losses.factory import LossFactory
-from pose_est_nets.models.heatmap_tracker import (
+from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
+from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
+from lightning_pose.losses.factory import LossFactory
+from lightning_pose.models.heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
 )
-from pose_est_nets.models.regression_tracker import (
+from lightning_pose.models.regression_tracker import (
     RegressionTracker,
     SemiSupervisedRegressionTracker,
 )
-from pose_est_nets.utils.io import check_if_semi_supervised
+from lightning_pose.utils.io import check_if_semi_supervised
 
 
 @typechecked
-def get_imgaug_tranform(cfg: DictConfig) -> iaa.Sequential:
-    # define data transform pipeline
+def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
+    """Create simple data transform pipeline that resizes images."""
     data_transform = iaa.Resize(
         {
             "height": cfg.data.image_resize_dims.height,
@@ -35,6 +35,7 @@ def get_imgaug_tranform(cfg: DictConfig) -> iaa.Sequential:
 def get_dataset(
     cfg: DictConfig, data_dir: str, imgaug_transform: iaa.Sequential
 ) -> Union[BaseTrackingDataset, HeatmapDataset]:
+    """Create a dataset that contains labeled data."""
 
     if cfg.model.model_type == "regression":
         dataset = BaseTrackingDataset(
@@ -64,6 +65,7 @@ def get_data_module(
     dataset: Union[BaseTrackingDataset, HeatmapDataset],
     video_dir: Optional[str] = None,
 ) -> Union[BaseDataModule, UnlabeledDataModule]:
+    """Create a data module that splits a dataset into train/val/test iterators."""
 
     semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
     if not semi_supervised:
@@ -110,7 +112,7 @@ def get_loss_factories(
     cfg: DictConfig,
     data_module: Union[BaseDataModule, UnlabeledDataModule]
 ) -> dict:
-    """Note: much of this replaces the function `format_and_update_loss_info`."""
+    """Create loss factory that orchestrates different losses during training."""
 
     cfg_loss_dict = OmegaConf.to_object(cfg.losses)
 
@@ -183,6 +185,8 @@ def get_model(
     SemiSupervisedRegressionTracker,
     SemiSupervisedHeatmapTracker,
 ]:
+    """Create model: regression or heatmap based, supervised or semi-supervised."""
+
     semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
     if not semi_supervised:
         if cfg.model.model_type == "regression":

@@ -12,8 +12,8 @@ from tqdm import tqdm
 from typeguard import typechecked
 from typing import Callable, List, Literal, Optional, Tuple, Type, Union
 
-from pose_est_nets.datasets.dali import LightningWrapper
-from pose_est_nets.utils.io import check_if_semi_supervised
+from lightning_pose.data.dali import LightningWrapper
+from lightning_pose.utils.io import check_if_semi_supervised
 
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -102,7 +102,7 @@ def predict_videos(
         sequence_length (int)
         device (str): "gpu" | "cpu"
         video_pipe_kwargs (dict): extra keyword-value argument pairs for
-            `pose_est_nets.datasets.DALI.video_pipe` function
+            `lightning_pose.data.DALI.video_pipe` function
 
     TODO: support different video formats
 
@@ -112,7 +112,7 @@ def predict_videos(
     import nvidia.dali.fn as fn
     from nvidia.dali.plugin.pytorch import LastBatchPolicy
     import nvidia.dali.types as types
-    from pose_est_nets.datasets.dali import video_pipe, count_frames
+    from lightning_pose.data.dali import video_pipe, count_frames
 
     if device == "gpu" or device == "cuda":
         device_pt = "cuda"
@@ -402,7 +402,7 @@ def get_videos_in_dir(video_dir: str) -> List[str]:
 
 @typechecked
 def get_csv_file(cfg: DictConfig) -> str:
-    from pose_est_nets.utils.io import return_absolute_data_paths
+    from lightning_pose.utils.io import return_absolute_data_paths
 
     if ("data_dir" in cfg.data) and ("csv_file" in cfg.data):
         # needed for getting bodypart names for toy_dataset
@@ -453,10 +453,10 @@ def get_model_class(map_type: str, semi_supervised: bool) -> Type[LightningModul
     """
     if not semi_supervised:
         if map_type == "regression":
-            from pose_est_nets.models.regression_tracker import RegressionTracker
+            from lightning_pose.models.regression_tracker import RegressionTracker
             return RegressionTracker
         elif map_type == "heatmap":
-            from pose_est_nets.models.heatmap_tracker import HeatmapTracker
+            from lightning_pose.models.heatmap_tracker import HeatmapTracker
             return HeatmapTracker
         else:
             raise NotImplementedError(
@@ -464,11 +464,11 @@ def get_model_class(map_type: str, semi_supervised: bool) -> Type[LightningModul
             )
     else:
         if map_type == "regression":
-            from pose_est_nets.models.regression_tracker import \
+            from lightning_pose.models.regression_tracker import \
                 SemiSupervisedRegressionTracker
             return SemiSupervisedRegressionTracker
         elif map_type == "heatmap":
-            from pose_est_nets.models.heatmap_tracker import \
+            from lightning_pose.models.heatmap_tracker import \
                 SemiSupervisedHeatmapTracker
             return SemiSupervisedHeatmapTracker
         else:
@@ -485,20 +485,20 @@ def load_model_from_checkpoint(
 ) -> LightningModule:
     """this will have: path to a specific .ckpt file which we extract using other funcs
     will also take the standard hydra config file"""
-    from pose_est_nets.utils.io import (
+    from lightning_pose.utils.io import (
         check_if_semi_supervised,
         return_absolute_data_paths,
     )
-    from pose_est_nets.utils.scripts import (
+    from lightning_pose.utils.scripts import (
         get_data_module,
         get_dataset,
-        get_imgaug_tranform,
+        get_imgaug_transform,
         get_loss_factories,
     )
 
     # get loss factories
     data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
-    imgaug_transform = get_imgaug_tranform(cfg=cfg)
+    imgaug_transform = get_imgaug_transform(cfg=cfg)
     dataset = get_dataset(
         cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform
     )

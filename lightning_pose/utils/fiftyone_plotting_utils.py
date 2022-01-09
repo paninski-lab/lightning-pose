@@ -12,8 +12,8 @@ import torch
 from tqdm import tqdm
 from typing import Union, Callable
 
-from pose_est_nets.models.heatmap_tracker import HeatmapTracker
-from pose_est_nets.utils.io import return_absolute_path, return_absolute_data_paths
+from lightning_pose.models.heatmap_tracker import HeatmapTracker
+from lightning_pose.utils.io import return_absolute_path, return_absolute_data_paths
 
 
 def tensor_to_keypoint_list(keypoint_tensor, height, width):
