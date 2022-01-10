@@ -1,8 +1,9 @@
-"""High-level loss object that orchestrates the individual losses."""
+"""High-level loss class that orchestrates the individual losses."""
 
 import pytorch_lightning as pl
 import torch
 from torchtyping import TensorType, patch_typeguard
+from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
@@ -14,6 +15,7 @@ patch_typeguard()  # use before @typechecked
 class LossFactory(pl.LightningModule):
     """Factory object that contains an object for each specified loss."""
 
+    @typechecked
     def __init__(
         self,
         losses_params_dict: Dict[str, dict],
@@ -56,12 +58,13 @@ class LossFactory(pl.LightningModule):
             # no parameter module optimized
             self.loss_weights_parameter_dict = {}
 
+    @typechecked
     def __call__(
-            self,
-            stage: Optional[Literal["train", "val", "test"]] = None,
-            anneal_weight: float = 1.0,
-            **kwargs
-    ) -> Tuple[TensorType[(), float], List[dict]]:
+        self,
+        stage: Optional[Literal["train", "val", "test"]] = None,
+        anneal_weight: float = 1.0,
+        **kwargs
+    ) -> Tuple[TensorType[()], List[dict]]:
 
         # loop over losses, compute, sum, log
         # don't log if stage is None
@@ -94,10 +97,12 @@ class LossFactory(pl.LightningModule):
                 tot_loss += anneal_weight * 0.5 * self.loss_instance.log_weight
 
             # log weighted losses (unweighted losses auto-logged by loss instance)
-            log_list += [{
-                "name": "%s_%s_loss_weighted" % (stage, loss_name),
-                "value": current_weighted_loss,
-            }]
+            log_list += [
+                {
+                    "name": "%s_%s_loss_weighted" % (stage, loss_name),
+                    "value": current_weighted_loss,
+                }
+            ]
 
             # append all losses
             log_list_all += log_list

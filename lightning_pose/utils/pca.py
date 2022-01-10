@@ -139,7 +139,7 @@ class KeypointPCA(object):
         )(loss=self._compute_reproj_error())
 
     def _compute_reproj_error(self) -> torch.Tensor:
-        return compute_PCA_reprojection_error(
+        return compute_pca_reprojection_error(
             self.data_arr.to(self.device),
             self.parameters["kept_eigenvectors"],
             self.parameters["mean"],
@@ -217,12 +217,13 @@ class ComponentChooser:
 
 # TODO: add TensorType
 @typechecked
-def compute_PCA_reprojection_error(
+def compute_pca_reprojection_error(
     clean_pca_arr: torch.Tensor,
     kept_eigenvectors: torch.Tensor,
     mean: torch.Tensor,
 ) -> torch.Tensor:
-    # first verify that the pca array has observations divisible by 2 (corresponding to (x,y) coords)
+    # first verify that the pca array has observations divisible by 2
+    # (corresponding to (x,y) coords)
     clean_pca_arr = clean_pca_arr - mean.unsqueeze(0)  # mean-center
     assert clean_pca_arr.shape[1] % 2 == 0
     reprojection_arr = (
@@ -298,276 +299,12 @@ def format_multiview_data_for_pca(
     # separate views and reformat
     for view in range(n_views):
         assert len(mirrored_column_matches[view]) == n_keypoints
+        print(view)
+        print(data_arr.shape)
+        print(mirrored_column_matches[view])
         data_arr_tmp = data_arr[:, np.array(mirrored_column_matches[view]), :]
         data_arr_tmp = data_arr_tmp.permute(2, 0, 1).reshape(2, -1)
         data_arr_views.append(data_arr_tmp)
     # concatenate views
     data_arr = torch.cat(data_arr_views, dim=0)
     return data_arr.T  # note the transpose
-
-
-# @typechecked
-# def compute_multiview_pca_params(
-#     data_module: UnlabeledDataModule,
-#     components_to_keep: int = 3,
-#     empirical_epsilon_percentile: float = 90.0,
-# ) -> None:
-#     """Compute eigenvalues and eigenvectors of labeled data for multiview pca loss.
-
-#     Note: this function updates attributes of `data_module`
-
-#     Args:
-#         data_module: initialized unlabeled data module, which contains all the relevant
-#             information
-#         components_to_keep: projections of predicted keypoints onto remaining components
-#             will be penalized; enforces a low-dimensional prediction from the network
-#         empirical_epsilon_percentile: ?
-
-#     """
-#     print("Computing PCA on multiview keypoints...")
-
-#     # format data and run pca
-#     data_arr = get_train_data_for_pca(data_module=data_module)
-#     # shape will be (2 * num_views, num_batches * num_keypoints)
-#     arr_for_pca = format_multiview_data_for_pca(
-#         data_arr,
-#         data_module.loss_param_dict["pca_multiview"]["mirrored_column_matches"],
-#     )
-#     print("Initial array for pca shape: {}".format(arr_for_pca.shape))
-#     good_arr_for_pca = clean_any_nans(arr_for_pca, dim=0)
-#     pca = PCA(n_components=good_arr_for_pca.shape[0], svd_solver="full")
-#     pca.fit(good_arr_for_pca.T)
-#     print("Done!")
-#     print(
-#         "good_arr_for_pca shape: {}".format(good_arr_for_pca.shape)
-#     )  # TODO: have prints as tests
-#     pca_prints(pca, components_to_keep)  # print important params
-
-#     # send parameters to loss_param_dict["pca_singleview"]
-#     add_params_to_loss_dict(
-#         data_module=data_module,
-#         loss_key="pca_multiview",
-#         mean=pca.mean_,
-#         kept_eigenvectors=pca.components_[:components_to_keep],
-#         discarded_eigenvectors=pca.components_[components_to_keep:],
-#     )
-
-#     epsilon = compute_epsilon_for_PCA(
-#         good_arr_for_pca=good_arr_for_pca.to(_TORCH_DEVICE),
-#         kept_eigenvectors=data_module.loss_param_dict["pca_multiview"][
-#             "kept_eigenvectors"
-#         ],
-#         mean=data_module.loss_param_dict["pca_multiview"]["mean"],
-#         empirical_epsilon_percentile=empirical_epsilon_percentile,
-#     )
-
-#     add_params_to_loss_dict(
-#         data_module=data_module,
-#         loss_key="pca_multiview",
-#         epsilon=epsilon,
-#     )
-
-#     return
-
-
-# @typechecked
-# def compute_singleview_pca_params(
-#     data_module: UnlabeledDataModule, empirical_epsilon_percentile: float = 90.0
-# ) -> None:
-#     """Compute eigenvalues and eigenvectors of labeled data for singleview pca loss.
-
-#     Note: this function updates attributes of `data_module`
-
-#     Args:
-#         data_module: initialized unlabeled data module, which contains all the relevant
-#             information
-#         empirical_epsilon_percentile (float): a percentile of all errors, below which errors are zeroed out
-
-#     """
-#     print("Computing PCA on singleview keypoints...")
-
-#     data_arr = get_train_data_for_pca(data_module=data_module)
-#     # format data and run pca
-#     # shape is (num_batches, num_keypoints * 2)
-#     arr_for_pca = data_arr.reshape(data_arr.shape[0], -1)
-#     print("Initial array for pca shape: {}".format(arr_for_pca.shape))
-
-#     good_arr_for_pca = clean_any_nans(arr_for_pca, dim=1)
-#     print(
-#         "good_arr_for_pca shape: {}".format(good_arr_for_pca.shape)
-#     )  # TODO: have prints as tests
-#     # want to make sure we have more rows than columns after doing nan filtering
-#     assert (
-#         good_arr_for_pca.shape[0] >= good_arr_for_pca.shape[1]
-#     ), "filtered out too many nan frames"
-#     pca = PCA(n_components=good_arr_for_pca.shape[1], svd_solver="full")
-#     pca.fit(good_arr_for_pca)
-#     print("Done!")
-#     tot_explained_variance = np.cumsum(pca.explained_variance_ratio_)
-#     components_to_keep = int(
-#         np.where(
-#             tot_explained_variance
-#             >= data_module.loss_param_dict["pca_singleview"]["min_variance_explained"]
-#         )[0][0]
-#     )
-#     components_to_keep += 1  # cumsum is a d - 1 dimensional vector where the 0th element is the sum of the 0th and 1st element of the d dimensional vector it is summing over
-#     pca_prints(pca, components_to_keep)  # print important params
-
-#     # send parameters to loss_param_dict["pca_singleview"]
-#     add_params_to_loss_dict(
-#         data_module=data_module,
-#         loss_key="pca_singleview",
-#         mean=pca.mean_,
-#         kept_eigenvectors=pca.components_[:components_to_keep],
-#         discarded_eigenvectors=pca.components_[components_to_keep:],
-#     )
-
-#     # now compute epsilon
-#     epsilon = compute_epsilon_for_PCA(
-#         good_arr_for_pca=good_arr_for_pca.to(_TORCH_DEVICE).T,
-#         kept_eigenvectors=data_module.loss_param_dict["pca_singleview"][
-#             "kept_eigenvectors"
-#         ],
-#         mean=data_module.loss_param_dict["pca_singleview"]["mean"],
-#         empirical_epsilon_percentile=empirical_epsilon_percentile,
-#     )
-
-#     # send it to loss dict
-#     add_params_to_loss_dict(
-#         data_module=data_module,
-#         loss_key="pca_singleview",
-#         epsilon=epsilon,
-#     )
-
-
-# @typechecked
-# def get_train_data_for_pca(data_module: UnlabeledDataModule) -> torch.Tensor:
-#     """collect training data on which to run pca from data module. extract the training frames, transform them, and spit out a tensor of data.
-
-#     Args:
-#         data_module (UnlabeledDataModule): an instance of UnlabeledDataModule
-
-#     Returns:
-#         torch.Tensor:
-#     """
-#     # collect data on which to run pca from data module
-#     # Subset inherits from dataset, it doesn't have access to dataset.keypoints
-#     if type(data_module.train_dataset) == torch.utils.data.dataset.Subset:
-
-#         # copy data module to manipulate it without interfering with original
-#         if type(data_module.dataset) == HeatmapDataset:
-#             pca_data = super(type(data_module.dataset), data_module.dataset)
-#         else:
-#             pca_data = data_module.dataset
-
-#         indxs = torch.tensor(data_module.train_dataset.indices)
-#         data_arr = torch.index_select(
-#             data_module.dataset.keypoints.detach().clone(), 0, indxs
-#         )  # data_arr is shape (train_batches, keypoints, 2)
-
-#         # apply augmentation which *downsamples* the frames/keypoints
-#         if data_module.dataset.imgaug_transform:
-#             i = 0
-#             for idx in indxs:
-#                 batch_dict = pca_data.__getitem__(idx)
-#                 data_arr[i] = batch_dict["keypoints"].reshape(-1, 2)
-#                 i += 1
-#     else:
-#         data_arr = (
-#             data_module.train_dataset.keypoints.detach().clone()
-#         )  # won't work for random splitting
-
-#         # apply augmentation which *downsamples* the frames
-#         if data_module.train_dataset.imgaug_transform:
-#             for i in range(len(data_arr)):
-#                 data_arr[i] = super(
-#                     type(data_module.train_dataset), data_module.train_dataset
-#                 ).__getitem__(i)["keypoints"]
-
-#     return data_arr
-
-# TODO: this won't work unless the inputs are right, not implemented yet.
-# TODO: y_hat should be already reshaped? if so, change below
-# @typechecked
-# def MultiviewPCALoss(
-#     keypoint_preds: TensorType["batch", "two_x_num_keypoints", float],
-#     kept_eigenvectors: TensorType["num_kept_evecs", "views_times_two", float],
-#     mean: TensorType[float],
-#     epsilon: TensorType[float],
-#     mirrored_column_matches: Union[ListConfig, List],
-#     **kwargs  # make loss robust to unneeded inputs
-# ) -> TensorType[float]:
-#     """
-#
-#     Assume that we have keypoints after find_subpixel_maxima and that we have
-#     discarded confidence here, and that keypoints were reshaped
-#     # TODO: check for this?
-#
-#     Args:
-#         keypoint_preds:
-#         discarded_eigenvectors:
-#         epsilon:
-#         mirrored_column_matches:
-#         **kwargs:
-#
-#     Returns:
-#         Projection of data onto discarded eigenvectors
-#
-#     """
-#     keypoint_preds = keypoint_preds.reshape(
-#         keypoint_preds.shape[0], -1, 2
-#     )  # shape = (batch_size, num_keypoints, 2)
-#
-#     keypoint_preds = format_multiview_data_for_pca(
-#         data_arr=keypoint_preds, mirrored_column_matches=mirrored_column_matches
-#     )  # shape = (views * 2, num_batches * num_keypoints)
-#
-#     reprojection_error = compute_PCA_reprojection_error(
-#         good_arr_for_pca=keypoint_preds, kept_eigenvectors=kept_eigenvectors, mean=mean
-#     )  # shape = (num_batches * num_keypoints, num_views)
-#
-#     # loss values below epsilon as masked to zero
-#     reprojection_loss = reprojection_error.masked_fill(
-#         mask=reprojection_error < epsilon, value=0.0
-#     )
-#     # average across both (num_batches * num_keypoints) and num_views
-#     return torch.mean(reprojection_loss)
-
-# TODO: write a unit-test for this without the toy_dataset
-# @typechecked
-# def SingleviewPCALoss(
-#     keypoint_preds: TensorType["batch", "two_x_num_keypoints", float],
-#     kept_eigenvectors: TensorType["num_kept_evecs", "two_x_num_keypoints", float],
-#     mean: TensorType[float],
-#     epsilon: TensorType[float],
-#     **kwargs  # make loss robust to unneeded inputs
-# ) -> TensorType[float]:
-#     """
-#
-#     Assume that we have keypoints after find_subpixel_maxima and that we have
-#     discarded confidence here, and that keypoints were reshaped
-#     # TODO: check for this?
-#
-#     Args:
-#         keypoint_preds:
-#         discarded_eigenvectors:
-#         epsilon:
-#         **kwargs:
-#
-#     Returns:
-#         Average reprojection error across batch and num_keypoints
-#
-#     """
-#
-#     reprojection_error = compute_PCA_reprojection_error(
-#         good_arr_for_pca=keypoint_preds.T,
-#         kept_eigenvectors=kept_eigenvectors,
-#         mean=mean,
-#     )  # shape = (batch, num_keypoints)
-#
-#     # loss values below epsilon as masked to zero
-#     reprojection_loss = reprojection_error.masked_fill(
-#         mask=reprojection_error < epsilon, value=0.0
-#     )
-#     # average across both batch and num_keypoints
-#     return torch.mean(reprojection_loss)

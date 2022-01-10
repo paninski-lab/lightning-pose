@@ -258,3 +258,30 @@ def test_component_chooser():
 
     # less explained variance -> less components kept
     assert ComponentChooser(pca, 0.20)() < ComponentChooser(pca, 0.90)()
+
+
+def test_compute_pca_reprojection_error():
+
+    from lightning_pose.utils.pca import compute_pca_reprojection_error
+
+    # make two eigenvecs, each 4D
+    kept_evecs = torch.eye(n=4, device=device)[:, :2].T
+    # random projection matrix from kept_evecs to obs
+    projection_to_obs = torch.randn(size=(10, 2), device=device)
+    # make observations
+    obs = projection_to_obs @ kept_evecs
+    mean = obs.mean(dim=0)
+    good_arr_for_pca = obs - mean.unsqueeze(0)  # subtract mean
+    # first matmul projects to 2D, second matmul projects back to 4D
+    reproj = good_arr_for_pca @ kept_evecs.T @ kept_evecs
+    # assert that reproj=good_arr_for_pca
+    assert torch.allclose(reproj - good_arr_for_pca, torch.zeros_like(input=reproj))
+
+    # now verify the pca loss
+    pca_loss = compute_pca_reprojection_error(
+        keypoint_preds=obs,
+        kept_eigenvectors=kept_evecs,
+        mean=mean,
+    )
+
+    assert pca_loss == 0.0
