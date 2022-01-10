@@ -1,6 +1,5 @@
 lightning_logs/
 .vscode/
-data/
 outputs/
 multirun/
 preds/
