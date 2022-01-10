@@ -62,7 +62,7 @@ class LossFactory(pl.LightningModule):
     def __call__(
         self,
         stage: Optional[Literal["train", "val", "test"]] = None,
-        anneal_weight: float = 1.0,
+        anneal_weight: Union[float, torch.Tensor] = 1.0,
         **kwargs
     ) -> Tuple[TensorType[()], List[dict]]:
 

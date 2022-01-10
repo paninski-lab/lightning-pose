@@ -21,14 +21,15 @@ patch_typeguard()  # use before @typechecked
 class RegressionTracker(BaseSupervisedTracker):
     """Base model that produces (x, y) predictions of keypoints from images."""
 
+    @typechecked
     def __init__(
         self,
         num_keypoints: int,
         loss_factory: LossFactory,
-        resnet_version: Optional[Literal[18, 34, 50, 101, 152]] = 18,
+        resnet_version: Literal[18, 34, 50, 101, 152] = 18,
         pretrained: bool = True,
-        representation_dropout_rate: float = 0.2,
         last_resnet_layer_to_get: int = -2,
+        representation_dropout_rate: float = 0.2,
         torch_seed: int = 123,
     ) -> None:
         """Base model that produces (x, y) coordinates of keypoints from images.
@@ -39,9 +40,9 @@ class RegressionTracker(BaseSupervisedTracker):
             resnet_version: ResNet variant to be used (e.g. 18, 34, 50, 101,
                 or 152); essentially specifies how large the resnet will be
             pretrained: True to load pretrained imagenet weights
+            last_resnet_layer_to_get: skip final layers of backbone model
             representation_dropout_rate: dropout in the final fully connected
                 layers
-            last_resnet_layer_to_get: skip final layers of backbone model
             torch_seed: make weight initialization reproducible
 
         """
@@ -81,28 +82,18 @@ class RegressionTracker(BaseSupervisedTracker):
         self,
         images: TensorType["batch", "channels":3, "image_height", "image_width"],
     ) -> TensorType["batch", "two_x_num_keypoints"]:
-        """Forward pass through the network.
-
-        Args:
-            images: images
-
-        Returns:
-            heatmap per keypoint
-
-        """
+        """Forward pass through the network."""
         representation = self.get_representations(images)
         out = self.final_layer(self.reshape_representation(representation))
         return out
 
     @typechecked
     def get_loss_inputs_labeled(self, batch_dict: BaseBatchDict) -> dict:
-        """Return predicted coordinates."""
-
+        """Return predicted coordinates for a batch of data."""
         representation = self.get_representations(batch_dict["images"])
         predicted_keypoints = self.final_layer(
             self.reshape_representation(representation)
         )
-
         return {
             "keypoints_targ": batch_dict["keypoints"],
             "keypoints_pred": predicted_keypoints,
@@ -112,6 +103,7 @@ class RegressionTracker(BaseSupervisedTracker):
 class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTracker):
     """Model produces vectors of keypoints from labeled/unlabeled images."""
 
+    @typechecked
     def __init__(
         self,
         num_keypoints: int,
@@ -119,8 +111,8 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         loss_factory_unsupervised: LossFactory,
         resnet_version: Optional[Literal[18, 34, 50, 101, 152]] = 18,
         pretrained: bool = True,
-        representation_dropout_rate: float = 0.2,
         last_resnet_layer_to_get: int = -2,
+        representation_dropout_rate: float = 0.2,
         torch_seed: int = 123,
     ) -> None:
         """
@@ -133,9 +125,9 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
             resnet_version: ResNet variant to be used (e.g. 18, 34, 50, 101,
                 or 152); essentially specifies how large the resnet will be
             pretrained: True to load pretrained imagenet weights
+            last_resnet_layer_to_get: skip final layers of original model
             representation_dropout_rate: dropout in the final fully connected
                 layers
-            last_resnet_layer_to_get: skip final layers of original model
             torch_seed: make weight initialization reproducible
 
         """
@@ -159,10 +151,8 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
     @typechecked
     def get_loss_inputs_unlabeled(self, batch: torch.Tensor) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
-
         representation = self.get_representations(batch)
         predicted_keypoints = self.final_layer(
             self.representation_dropout(self.reshape_representation(representation))
         )  # TODO: consider removing representation dropout?
-
         return {"keypoints_pred": predicted_keypoints}

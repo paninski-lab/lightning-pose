@@ -23,10 +23,10 @@ from lightning_pose.models.base import (
 patch_typeguard()  # use before @typechecked
 
 
-@typechecked
 class HeatmapTracker(BaseSupervisedTracker):
     """Base model that produces heatmaps of keypoints from images."""
 
+    @typechecked
     def __init__(
         self,
         num_keypoints: int,
@@ -93,11 +93,11 @@ class HeatmapTracker(BaseSupervisedTracker):
     def run_subpixelmaxima(
         self,
         heatmaps: TensorType[
-            "batch", "num_keypoints", "heatmap_height", "heatmap_width", float
+            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
         ],
     ) -> Tuple[
-        TensorType["batch", "num_targets", float],
-        TensorType["batch", "num_keypoints", float],
+        TensorType["batch", "num_targets"],
+        TensorType["batch", "num_keypoints"],
     ]:
         """Use soft argmax on heatmaps.
 
@@ -120,6 +120,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         confidences = torch.amax(softmaxes, dim=(2, 3))
         return preds.reshape(-1, self.num_targets), confidences
 
+    @typechecked
     def initialize_upsampling_layers(self) -> None:
         """Intialize the Conv2DTranspose upsampling layers."""
         # TODO: test that running this method changes the weights and biases
@@ -132,8 +133,7 @@ class HeatmapTracker(BaseSupervisedTracker):
     def make_upsampling_layers(self) -> torch.nn.Sequential:
         # Note:
         # https://github.com/jgraving/DeepPoseKit/blob/cecdb0c8c364ea049a3b705275ae71a2f366d4da/deepposekit/models/DeepLabCut.py#L131
-        # in their model, the pixel shuffle happens only for the
-        # downsample_factor=2
+        # in their model, the pixel shuffle happens only for downsample_factor=2
         upsampling_layers = [nn.PixelShuffle(2)]
         upsampling_layers.append(
             self.create_double_upsampling_layer(
@@ -153,18 +153,10 @@ class HeatmapTracker(BaseSupervisedTracker):
     @staticmethod
     @typechecked
     def create_double_upsampling_layer(
-        in_channels: int, out_channels: int
+        in_channels: int,
+        out_channels: int,
     ) -> torch.nn.ConvTranspose2d:
-        """Perform ConvTranspose2d to double the output shape.
-
-        Args:
-            in_channels: TODO
-            out_channels: TODO
-
-        Returns:
-            upsampling layer
-
-        """
+        """Perform ConvTranspose2d to double the output shape."""
         return nn.ConvTranspose2d(
             in_channels=in_channels,
             out_channels=out_channels,
@@ -177,38 +169,17 @@ class HeatmapTracker(BaseSupervisedTracker):
     @typechecked
     def heatmaps_from_representations(
         self,
-        representations: TensorType[
-            "batch",
-            "features",
-            "rep_height",
-            "rep_width",
-            float,
-        ],
-    ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width", float]:
-        """Wrapper around self.upsampling_layers for type and shape assertion.
-
-        Args:
-            representations: the output of the Resnet feature extractor.
-
-        Returns:
-            the result of applying the upsampling layers to the representations
-        """
+        representations: TensorType["batch", "features", "rep_height", "rep_width"],
+    ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
+        """Wrapper around self.upsampling_layers for type and shape assertion."""
         return self.upsampling_layers(representations)
 
     @typechecked
     def forward(
         self,
-        images: TensorType["batch", "channels":3, "image_height", "image_width", float],
-    ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width", float]:
-        """Forward pass through the network.
-
-        Args:
-            images: images
-
-        Returns:
-            heatmap per keypoint
-
-        """
+        images: TensorType["batch", "channels":3, "image_height", "image_width"],
+    ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
+        """Forward pass through the network."""
         representations = self.get_representations(images)
         heatmaps = self.heatmaps_from_representations(representations)
         # B = heatmaps.shape[0]
@@ -223,12 +194,10 @@ class HeatmapTracker(BaseSupervisedTracker):
     @typechecked
     def get_loss_inputs_labeled(self, batch_dict: HeatmapBatchDict) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
-
         # images -> heatmaps
         predicted_heatmaps = self.forward(batch_dict["images"])
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
-
         return {
             "heatmaps_targ": batch_dict["heatmaps"],
             "heatmaps_pred": predicted_heatmaps,
@@ -241,6 +210,7 @@ class HeatmapTracker(BaseSupervisedTracker):
 class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
     """Model produces heatmaps of keypoints from labeled/unlabeled images."""
 
+    @typechecked
     def __init__(
         self,
         num_keypoints: int,
@@ -293,12 +263,10 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         batch: TensorType["batch", "channels":3, "image_height", "image_width", float],
     ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
-
         # images -> heatmaps
         predicted_heatmaps = self.forward(batch)
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
-
         return {
             "heatmaps_pred": predicted_heatmaps,
             "keypoints_pred": predicted_keypoints,
