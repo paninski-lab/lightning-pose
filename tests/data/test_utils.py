@@ -11,9 +11,11 @@ from lightning_pose.data.utils import generate_heatmaps
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def test_data_extractor():
-    # TODO
-    pass
+def test_data_extractor(base_data_module_combined):
+    # TODO: expand
+    from lightning_pose.data.utils import DataExtractor
+    data_tensor = DataExtractor(data_module=base_data_module_combined, cond="train")()
+    assert data_tensor.shape == (63, 34)
 
 
 def test_split_sizes_from_probabilities():
