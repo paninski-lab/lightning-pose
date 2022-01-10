@@ -1,6 +1,6 @@
 defaults:
-  - training: train_params
-  - losses: loss_params
+  - training: training_params
+  - losses: losses_params
   - data: data_params
   - model: model_params
   - eval: eval_params

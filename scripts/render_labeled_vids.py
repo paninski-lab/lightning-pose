@@ -20,8 +20,8 @@ import pandas as pd
 from tqdm import tqdm
 import warnings
 
-from pose_est_nets.utils.io import return_absolute_path
-from pose_est_nets.utils.plotting_utils import get_videos_in_dir
+from lightning_pose.utils.io import return_absolute_path
+from lightning_pose.utils.plotting_utils import get_videos_in_dir
 
 
 def make_keypoint_list(
