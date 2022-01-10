@@ -8,9 +8,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, MultiStepLR
 from torchtyping import TensorType, patch_typeguard
 import torchvision.models as models
 from typeguard import typechecked
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, Union
-from typing_extensions import Literal
-
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypedDict, Union
 
 patch_typeguard()  # use before @typechecked
 
@@ -60,6 +58,7 @@ def grab_layers_sequential(
 
 class BaseBatchDict(TypedDict):
     """Class for finer control over typechecking."""
+
     images: TensorType["batch", "RGB":3, "image_height", "image_width", float]
     keypoints: TensorType["batch", "num_targets", float]
     idxs: TensorType["batch", int]
@@ -67,6 +66,7 @@ class BaseBatchDict(TypedDict):
 
 class HeatmapBatchDict(BaseBatchDict):
     """Class for finer control over typechecking."""
+
     heatmaps: TensorType[
         "batch", "num_keypoints", "heatmap_height", "heatmap_width", float
     ]
@@ -74,6 +74,7 @@ class HeatmapBatchDict(BaseBatchDict):
 
 class SemiSupervisedBatchDict(TypedDict):
     """Class for finer control over typechecking."""
+
     labeled: BaseBatchDict
     unlabeled: TensorType[
         "sequence_length", "RGB":3, "image_height", "image_width", float
@@ -82,6 +83,7 @@ class SemiSupervisedBatchDict(TypedDict):
 
 class SemiSupervisedHeatmapBatchDict(TypedDict):
     """Class for finer control over typechecking."""
+
     labeled: HeatmapBatchDict
     unlabeled: TensorType[
         "sequence_length", "RGB":3, "image_height", "image_width", float
@@ -128,17 +130,18 @@ class BaseFeatureExtractor(LightningModule):
     ) -> TensorType["batch", "features", "rep_height", "rep_width", float]:
         """Forward pass from images to feature maps.
 
-        Wrapper around the backbone's feature_extractor() method for
-        typechecking purposes.
-        See tests/test_base_resnet.py for example shapes.
+        Wrapper around the backbone's feature_extractor() method for typechecking
+        purposes.
+        See tests/models/test_base.py for example shapes.
 
         Args:
             images: a batch of images
 
         Returns:
-            a representation of the images; features differ as a function of
-            resnet version. Representation height and width differ as a
-            function of image dimensions, and are not necessarily equal.
+            a representation of the images; features differ as a function of resnet
+            version. Representation height and width differ as a function of image
+            dimensions, and are not necessarily equal.
+
         """
         return self.backbone(images)
 
@@ -181,6 +184,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         self,
         batch_dict: Union[BaseBatchDict, HeatmapBatchDict],
     ) -> dict:
+        """Return predicted coordinates for a batch of data."""
         raise NotImplementedError
 
     @typechecked
@@ -189,6 +193,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         batch_dict: Union[BaseBatchDict, HeatmapBatchDict],
         stage: Optional[Literal["train", "val", "test"]] = None,
     ) -> TensorType[(), float]:
+        """Compute and log the losses on a batch of labeled data."""
 
         # forward pass; collected true and predicted heatmaps, keypoints
         data_dict = self.get_loss_inputs_labeled(batch_dict=batch_dict)
@@ -216,6 +221,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         train_batch: Union[BaseBatchDict, HeatmapBatchDict],
         batch_idx: int,
     ) -> Dict[str, TensorType[(), float]]:
+        """Base training step, a wrapper around the `evaluate_labeled` method."""
         loss = self.evaluate_labeled(train_batch, "train")
         return {"loss": loss}
 
@@ -225,6 +231,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         val_batch: Union[BaseBatchDict, HeatmapBatchDict],
         batch_idx: int,
     ) -> None:
+        """Base validation step, a wrapper around the `evaluate_labeled` method."""
         self.evaluate_labeled(val_batch, "val")
 
     @typechecked
@@ -233,10 +240,12 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         test_batch: Union[BaseBatchDict, HeatmapBatchDict],
         batch_idx: int,
     ) -> None:
+        """Base test step, a wrapper around the `evaluate_labeled` method."""
         self.evaluate_labeled(test_batch, "test")
 
     @typechecked
     def configure_optimizers(self) -> dict:
+        """Select optimizer, lr scheduler, and metric for monitoring."""
 
         if getattr(self, "upsampling_layers", None) is not None:
 
@@ -279,6 +288,7 @@ class SemiSupervisedTrackerMixin(object):
         stage: Optional[Literal["train", "val", "test"]] = None,
         anneal_weight: Union[float, torch.Tensor] = 1.0,
     ) -> TensorType[(), float]:
+        """Compute and log the losses on a batch of unlabeled data (frames only)."""
 
         # forward pass: collect predicted heatmaps and keypoints
         data_dict = self.get_loss_inputs_unlabeled(batch=batch)
@@ -301,8 +311,9 @@ class SemiSupervisedTrackerMixin(object):
     def training_step(
         self,
         train_batch: Union[SemiSupervisedBatchDict, SemiSupervisedHeatmapBatchDict],
-        batch_idx: int
+        batch_idx: int,
     ) -> Dict[str, TensorType[(), float]]:
+        """Training step computes and logs both supervised and unsupervised losses."""
 
         # on each epoch, self.total_unsupervised_importance is modified by the
         # AnnealWeight callback
@@ -357,11 +368,12 @@ class SemiSupervisedTrackerMixin(object):
 
         # define different learning rate for weights in front of unsupervised losses
         if len(self.loss_factory_unsup.loss_weights_parameter_dict) > 0:
-            params.append({
-                "params":
-                    self.loss_factory_unsup.loss_weights_parameter_dict.parameters(),
-                "lr": 1e-2,
-            })
+            params.append(
+                {
+                    "params": self.loss_factory_unsup.loss_weights_parameter_dict.parameters(),
+                    "lr": 1e-2,
+                }
+            )
 
         optimizer = Adam(params, lr=1e-3)
         scheduler = MultiStepLR(optimizer, milestones=[100, 150, 200, 300], gamma=0.5)
@@ -384,10 +396,10 @@ class SemiSupervisedTrackerMixin(object):
     #     ]
     #     optimizer = Adam(params_net, lr=1e-3)
     #     scheduler = MultiStepLR(optimizer, milestones=[100, 200, 300], gamma=0.5)
-
+    #
     #     optimizers = [optimizer]
     #     lr_schedulers = [scheduler]
-
+    #
     #     if self.learn_weights:
     #         params_weights = [{"params": self.loss_weights_dict.parameters()}]
     #         optimizer_weights = Adam(params_weights, lr=1e-3)
@@ -396,5 +408,5 @@ class SemiSupervisedTrackerMixin(object):
     #             optimizer, milestones=[100, 200, 300], gamma=0.5
     #         )
     #         lr_schedulers.append(scheduler_weights)
-
+    #
     #     return optimizers, lr_schedulers

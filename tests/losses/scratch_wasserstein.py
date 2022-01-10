@@ -1,3 +1,5 @@
+"""NOTE: won't run as a test until name is changed to `test_wasserstein.py`."""
+
 from lightning_pose.models.heatmap_tracker import HeatmapTracker
 from lightning_pose.data.datasets import HeatmapDataset
 from lightning_pose.data.utils import generate_heatmaps
@@ -14,29 +16,17 @@ _HEIGHT = 256
 _WIDTH = 256
 _REACH = 100
 
-data_transform = []
-data_transform.append(
-    iaa.Resize({"height": _HEIGHT, "width": _WIDTH})
-)  # dlc dimensions need to be repeatably divisable by 2
-imgaug_transform = iaa.Sequential(data_transform)
-dataset = HeatmapDataset(
-    root_directory="toy_datasets/toymouseRunningData",
-    csv_path="CollectedData_.csv",
-    header_rows=[1, 2],
-    imgaug_transform=imgaug_transform,
-)
-datamodule = BaseDataModule(dataset=dataset)
-datamodule.setup()
-dataloader = iter(datamodule.train_dataloader())
 
-model = HeatmapTracker(
-    num_targets=34,
-    supervised_loss="wasserstein",
-    reach=100.0,
-).to(_TORCH_DEVICE)
+def test_wass(base_data_module):
 
+    dataloader = iter(base_data_module.train_dataloader())
 
-def test_wass():
+    model = HeatmapTracker(
+        num_targets=34,
+        supervised_loss="wasserstein",
+        reach=100.0,
+    ).to(_TORCH_DEVICE)
+
     batch = next(dataloader)
     print(len(batch))
     gt_heatmaps = batch["heatmaps"]
