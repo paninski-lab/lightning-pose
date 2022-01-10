@@ -304,9 +304,10 @@ def _predict_frames(
         heatmaps_np = None
     t_beg = time.time()
     n_frames_counter = 0  # total frames processed
+    n_batches = int(np.ceil(n_frames_ / batch_size))
     n = -1
     with torch.no_grad():
-        for n, batch in enumerate(tqdm(dataloader)):
+        for n, batch in enumerate(tqdm(dataloader, total=n_batches)):
             if type(batch) == dict:
                 image = batch["images"].to(_TORCH_DEVICE)  # predicting from dataset
             else:
