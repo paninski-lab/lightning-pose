@@ -7,8 +7,8 @@ from omegaconf import DictConfig, OmegaConf
 import os
 import torch
 
-from pose_est_nets.utils.plotting_utils import predict_videos
-from pose_est_nets.utils.io import (
+from lightning_pose.utils.plotting_utils import predict_videos
+from lightning_pose.utils.io import (
     ckpt_path_from_base_path,
     return_absolute_path,
 )

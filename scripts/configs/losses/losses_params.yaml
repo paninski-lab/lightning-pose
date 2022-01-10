@@ -1,0 +1,47 @@
+# loss = projection onto the discarded eigenvectors
+pca_multiview:
+
+  # weight in front of PCA loss
+  log_weight: 0.0
+
+  # predictions whould lie within the low-d subspace spanned by these components
+  components_to_keep: 3
+
+  # only penalize outliers
+  empirical_epsilon_percentile: 0.90
+
+# loss = projection onto the discarded eigenvectors
+pca_singleview:
+
+  # weight in front of PCA loss
+  log_weight: 0.0
+
+  # predictions whould lie within the low-d subspace spanned by components that describe this fraction of variance
+  components_to_keep: 0.95
+
+  # only penalize outliers
+  empirical_epsilon_percentile: 0.90
+
+# loss = norm of distance between successive timepoints
+temporal:
+
+  # weight in front of temporal loss
+  log_weight: 0.0
+
+  # for epsilon insensitive rectification (in pixels; diffs below this are not penalized)
+  epsilon: 5.
+
+# loss = mse loss between generated heatmap and ideal gaussian heatmap with same center as generated heatmap
+unimodal_mse:
+
+  # weight in front of unimodal loss
+  log_weight: 0.0
+
+# loss = wasserstein earth-mover loss between generated heatmap and ideal gaussian heatmap with same center as generated heatmap
+unimodal_wasserstein:
+
+  # weight in front of unimodal loss
+  log_weight: 0.0
+
+  # todo
+  reach: none
