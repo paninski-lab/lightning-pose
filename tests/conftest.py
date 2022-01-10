@@ -99,7 +99,10 @@ def base_data_module(cfg, base_dataset) -> BaseDataModule:
 
     # setup
     cfg_tmp = copy.deepcopy(cfg)
-    cfg_tmp.model.losses_to_use = [""]
+    cfg_tmp.model.losses_to_use = []
+    # bump up training data so we can test pca_singleview loss
+    cfg_tmp.training.train_prob = 0.95
+    cfg_tmp.training.val_prob = 0.025
     data_module = get_data_module(cfg_tmp, dataset=base_dataset, video_dir=None)
     data_module.setup()
 
@@ -118,6 +121,9 @@ def heatmap_data_module(cfg, heatmap_dataset) -> BaseDataModule:
     # setup
     cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.losses_to_use = []
+    # bump up training data so we can test pca_singleview loss
+    cfg_tmp.training.train_prob = 0.95
+    cfg_tmp.training.val_prob = 0.025
     data_module = get_data_module(cfg_tmp, dataset=heatmap_dataset, video_dir=None)
     data_module.setup()
 

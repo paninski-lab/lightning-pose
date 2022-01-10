@@ -73,42 +73,50 @@ def test_heatmap_wasserstein_loss():
 
 
 def test_pca_singleview_loss(base_data_module):
-    # TODO
-    # from lightning_pose.losses.losses import PCALoss
-    #
-    # pca_loss = PCALoss(
-    #     loss_name="pca_singleview", components_to_keep=2, data_module=base_data_module,
-    # )
-    #
-    # # test pca loss on toy dataset
-    # keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets)
-    # loss, logs = pca_loss(keypoints_pred, stage=stage)
 
+    from lightning_pose.losses.losses import PCALoss
+
+    pca_loss = PCALoss(
+        loss_name="pca_singleview", components_to_keep=2, data_module=base_data_module,
+        device=device,
+    )
+
+    # ----------------------------
+    # test pca loss on toy dataset
+    # ----------------------------
+    keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets)
+    loss, logs = pca_loss(keypoints_pred, stage=stage)
+    assert loss.shape == torch.Size([])
+    assert loss > 0.0
+    assert logs[0]["name"] == "%s_pca_singleview_loss" % stage
+    assert logs[0]["value"] == loss / pca_loss.weight
+    assert logs[1]["name"] == "pca_singleview_weight"
+    assert logs[1]["value"] == pca_loss.weight
+
+    # -----------------------------
     # test pca loss on fake dataset
-    # # make two eigenvecs, each 4D
-    # kept_evecs = torch.eye(n=4, device=device)[:, :2].T
-    # # random projection matrix from kept_evecs to obs
-    # projection_to_obs = torch.randn(size=(10, 2), device=device)
-    # # make observations
-    # obs = projection_to_obs @ kept_evecs
-    # mean = obs.mean(dim=0)
-    # good_arr_for_pca = obs - mean.unsqueeze(0)  # subtract mean
-    # # first matmul projects to 2D, second matmul projects back to 4D
-    # reproj = good_arr_for_pca @ kept_evecs.T @ kept_evecs
-    # # assert that reproj=good_arr_for_pca
-    # assert torch.allclose(reproj - good_arr_for_pca, torch.zeros_like(input=reproj))
-    #
-    # # replace pca loss param
-    #
-    # # now verify the pca loss
-    # pca_loss = SingleviewPCALoss(
-    #     keypoint_preds=obs,
-    #     kept_eigenvectors=kept_evecs,
-    #     mean=mean,
-    # )
+    # -----------------------------
+    # make two eigenvecs, each 4D
+    kept_evecs = torch.eye(n=4, device=device)[:, :2].T
+    # random projection matrix from kept_evecs to obs
+    projection_to_obs = torch.randn(size=(10, 2), device=device)
+    # make observations
+    obs = projection_to_obs @ kept_evecs
+    mean = obs.mean(dim=0)
+    good_arr_for_pca = obs - mean.unsqueeze(0)  # subtract mean
+    # first matmul projects to 2D, second matmul projects back to 4D
+    reproj = good_arr_for_pca @ kept_evecs.T @ kept_evecs
 
-    # assert single_view_pca_loss == 0.0
-    pass
+    # assert that reproj=good_arr_for_pca
+    assert torch.allclose(reproj - good_arr_for_pca, torch.zeros_like(input=reproj))
+
+    # replace pca loss param
+    pca_loss.pca.parameters["kept_eigenvectors"] = kept_evecs
+    pca_loss.pca.parameters["mean"] = mean
+
+    # verify
+    loss, logs = pca_loss(obs, stage=stage)
+    assert loss == 0.0
 
 
 def test_pca_multiview_loss(cfg, base_data_module):

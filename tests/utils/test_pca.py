@@ -113,16 +113,17 @@ def test_pca_keypoint_class(cfg, base_data_module_combined):
 
     # assert that the results of running the .__call__() method are the same as
     # separately running each of the subparts
-    # MW: for some reason initializing this second object gave me a seg fault
-    # kp_pca_2 = KeypointPCA(
-    #     loss_type="pca_multiview",
-    #     data_module=base_data_module_combined,
-    #     components_to_keep=3,
-    #     empirical_epsilon_percentile=0.3,
-    #     mirrored_column_matches=cfg.data.mirrored_column_matches,
-    # )
-    # kp_pca_2()
-    # assert (kp_pca_2.data_arr == kp_pca.data_arr).all()
+    # MW: for some reason initializing this second object gave me a seg fault; I reduced
+    # the number of workers in the datamodule from 8 to 4 and it seems to be working now
+    kp_pca_2 = KeypointPCA(
+        loss_type="pca_multiview",
+        data_module=base_data_module_combined,
+        components_to_keep=3,
+        empirical_epsilon_percentile=0.3,
+        mirrored_column_matches=cfg.data.mirrored_column_matches,
+    )
+    kp_pca_2()
+    assert (kp_pca_2.data_arr == kp_pca.data_arr).all()
 
 
 def test_format_multiview_data_for_pca():
