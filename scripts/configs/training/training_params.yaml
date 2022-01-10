@@ -21,7 +21,7 @@ train_frames: 1
 num_gpus: 0
 
 # number of cpu workers for data loaders
-num_workers: 8 # was 4
+num_workers: 4
 
 # epochs over which to assess validation metrics for early stopping
 early_stop_patience: 3

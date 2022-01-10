@@ -109,7 +109,7 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         num_keypoints: int,
         loss_factory: LossFactory,
         loss_factory_unsupervised: LossFactory,
-        resnet_version: Optional[Literal[18, 34, 50, 101, 152]] = 18,
+        resnet_version: Literal[18, 34, 50, 101, 152] = 18,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         representation_dropout_rate: float = 0.2,
