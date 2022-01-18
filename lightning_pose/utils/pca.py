@@ -329,9 +329,6 @@ def format_multiview_data_for_pca(
     # separate views and reformat
     for view in range(n_views):
         assert len(mirrored_column_matches[view]) == n_keypoints
-        print(view)
-        print(data_arr.shape)
-        print(mirrored_column_matches[view])
         data_arr_tmp = data_arr[:, np.array(mirrored_column_matches[view]), :]
         data_arr_tmp = data_arr_tmp.permute(2, 0, 1).reshape(2, -1)
         data_arr_views.append(data_arr_tmp)
