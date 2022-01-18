@@ -10,10 +10,14 @@ import os
 import pandas as pd
 import torch
 from tqdm import tqdm
-from typing import Union, Callable
+from typing import List, Union, Callable
 
 from lightning_pose.models.heatmap_tracker import HeatmapTracker
 from lightning_pose.utils.io import return_absolute_path, return_absolute_data_paths
+
+
+def check_lists_equal(list_1, list_2):
+    return len(list_1) == len(list_2) and sorted(list_1) == sorted(list_2)
 
 
 def tensor_to_keypoint_list(keypoint_tensor, height, width):
@@ -34,6 +38,16 @@ def tensor_to_keypoint_list(keypoint_tensor, height, width):
     return img_kpts_list
 
 
+def check_unique_tags(data_pt_tags: List[str]) -> bool:
+    uniques = list(np.unique(data_pt_tags))
+    cond_list = ["test", "train", "validation"]
+    cond_list_with_unused_images = ["0.0", "test", "train", "validation"]
+    flag = check_lists_equal(uniques, cond_list) or check_lists_equal(
+        uniques, cond_list_with_unused_images
+    )
+    return flag
+
+
 def make_dataset_and_viz_from_csvs(cfg: DictConfig):
 
     # basic error checking
@@ -42,13 +56,13 @@ def make_dataset_and_viz_from_csvs(cfg: DictConfig):
     header_rows = OmegaConf.to_object(cfg.data.header_rows)
     data_dir, video_dir = return_absolute_data_paths(cfg.data)
 
-    # load info from ground truth csv file
-    csv_data = pd.read_csv(
+    # load ground truth csv file
+    gt_csv_data = pd.read_csv(
         os.path.join(data_dir, cfg.data.csv_file), header=header_rows
     )
-    image_names = list(csv_data.iloc[:, 0])
-    num_kpts = cfg.data.num_targets // 2
-    gt_keypoints = csv_data.iloc[:, 1:].to_numpy()
+    image_names = list(gt_csv_data.iloc[:, 0])
+    num_kpts = cfg.data.num_keypoints
+    gt_keypoints = gt_csv_data.iloc[:, 1:].to_numpy()
     gt_keypoints = gt_keypoints.reshape(-1, num_kpts, 2)
 
     # load info from predictions csv file
@@ -59,7 +73,8 @@ def make_dataset_and_viz_from_csvs(cfg: DictConfig):
     prediction_csv_file = os.path.join(model_abs_paths[0], "predictions.csv")
     data_pt_tags = list(
         pd.read_csv(prediction_csv_file, header=header_rows).iloc[:, -1]
-    )
+    )  # has potentially four unique entries: ['0.0' 'test' 'train' 'validation'] where 0.0 indicates an unused example, if train_frames < 0.8 * datalen
+    assert check_unique_tags(data_pt_tags=data_pt_tags)
 
     # store predictions from different models
     model_preds_np = np.empty(
@@ -86,8 +101,7 @@ def make_dataset_and_viz_from_csvs(cfg: DictConfig):
         pred_csv_path = os.path.join(model_dir, "predictions.csv")
         pred_heatmap_path = os.path.join(model_dir, "heatmaps_and_images/heatmaps.h5")
         model_csv = pd.read_csv(
-            pred_csv_path,
-            header=header_rows
+            pred_csv_path, header=header_rows
         )  # load ground-truth data csv
         keypoints_np = model_csv.iloc[:, 1:-1].to_numpy()
         keypoints_np = keypoints_np.reshape(-1, num_kpts, 3)  # x, y, confidence
