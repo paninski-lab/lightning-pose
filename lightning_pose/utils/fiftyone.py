@@ -92,12 +92,9 @@ class FiftyOneKeypointBase:
         self.model_preds_dict = {}
         for model_idx, model_dir in enumerate(model_abs_paths):
             # assuming that each path of saved logs has a predictions.csv file in it
-            print(model_idx)
-            print(model_dir)
             self.model_preds_dict[self.model_names[model_idx]] = pd.read_csv(
                 os.path.join(model_dir, "predictions.csv"), header=self.df_header_rows
             )
-            print(self.model_preds_dict[self.model_names[model_idx]].head())
 
     @typechecked
     def build_single_frame_keypoint_list(
