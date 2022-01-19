@@ -1,9 +1,9 @@
 import fiftyone as fo
 from tqdm import tqdm
-from typing import Dict, List, Union, Callable
+from typing import Dict, List, Optional, Union, Callable
 import pandas as pd
 import numpy as np
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, ListConfig
 from lightning_pose.utils.io import return_absolute_path, return_absolute_data_paths
 import os
 from typeguard import typechecked
@@ -34,62 +34,26 @@ def get_image_tags(pred_df: pd.DataFrame) -> pd.Series:
     return data_pt_tags
 
 
-@typechecked
-def make_keypoint_list(
-    df: pd.DataFrame,
-    keypoint_names: Union[List[str], pd.core.indexes.base.Index],
-    frame_idx: int,
-    width: int,
-    height: int,
-) -> List[fo.Keypoint]:
-    # the output of this, is a the positions of all keypoints in a single frame for a single model.
-    keypoints_list = []
-    for kp_name in keypoint_names:  # loop over names
-        if "likelihood" in df[kp_name]:
-            confidence = df[kp_name]["likelihood"][frame_idx]
-        else:  # gt data has no confidence, but we call it 1.0 for simplicity
-            confidence = 1.0  # also works if we make it None
-        # "bodyparts" it appears in the csv as we read it right now, but should be ignored
-        if kp_name == "bodyparts":
-            continue
-        # write a single keypoint's position, confidence, and name
-        keypoints_list.append(
-            fo.Keypoint(
-                points=[
-                    [
-                        df[kp_name]["x"][frame_idx] / width,
-                        df[kp_name]["y"][frame_idx] / height,
-                    ]
-                ],
-                confidence=confidence,
-                label=kp_name,  # sometimes plotted aggresively
-            )
-        )
-    return keypoints_list
-
-
-class FiftyOneKeypointPlotter:
-    def __init__(self, cfg: DictConfig) -> None:
+# @typechecked # force typechecking over the entire class. right now fails due to some list/listconfig issue
+class FiftyOneKeypointBase:
+    def __init__(
+        self, cfg: DictConfig, keypoints_to_plot: Optional[List[str]] = None
+    ) -> None:
         self.cfg = cfg
+        self.keypoints_to_plot = keypoints_to_plot
         self.data_dir, self.video_dir = return_absolute_data_paths(cfg.data)
         self.df_header_rows: List[int] = OmegaConf.to_object(cfg.data.header_rows)
         # TODO: [0, 1] in toy dataset, [1,2] in actual ones, standardize
+        # ground_truth_df is not necessary but useful for keypoint names
         self.ground_truth_df: pd.DataFrame = pd.read_csv(
             os.path.join(self.data_dir, self.cfg.data.csv_file),
             header=self.df_header_rows,
         )
-
-    @property
-    def image_paths(self) -> List[str]:
-        relative_list = list(self.ground_truth_df.iloc[:, 0])
-        absolute_list = [
-            os.path.join(self.data_dir, im_path) for im_path in relative_list
-        ]
-        # assert that the images are indeed files
-        for im in absolute_list:
-            assert os.path.isfile(im)
-
-        return absolute_list
+        if self.keypoints_to_plot is None:
+            # plot all keypoints that appear in the ground-truth dataframe
+            self.keypoints_to_plot: List[str] = list(
+                self.ground_truth_df.columns.levels[0][1:]
+            )
 
     @property
     def img_width(self) -> int:
@@ -122,34 +86,60 @@ class FiftyOneKeypointPlotter:
         return model_abs_paths
 
     def load_model_predictions(self) -> None:
+        # TODO: we have to specify the paths differently in the init method?
         # take the abs paths, and load the models into a dictionary
         model_abs_paths = self.get_model_abs_paths()
         self.model_preds_dict = {}
         for model_idx, model_dir in enumerate(model_abs_paths):
             # assuming that each path of saved logs has a predictions.csv file in it
+            print(model_idx)
+            print(model_dir)
             self.model_preds_dict[self.model_names[model_idx]] = pd.read_csv(
                 os.path.join(model_dir, "predictions.csv"), header=self.df_header_rows
             )
+            print(self.model_preds_dict[self.model_names[model_idx]].head())
 
     @typechecked
-    def get_keypoints_per_image(self, df: pd.DataFrame) -> List[fo.Keypoints]:
+    def build_single_frame_keypoint_list(
+        self,
+        df: pd.DataFrame,
+        frame_idx: int,
+    ) -> List[fo.Keypoint]:
+        # the output of this, is a the positions of all keypoints in a single frame for a single model.
         keypoints_list = []
-        for img_idx, img_path in enumerate(tqdm(self.image_paths)):
-            single_frame_keypoints_list = make_keypoint_list(
-                df=df,
-                keypoint_names=list(df.columns.levels[0][1:]),
-                frame_idx=img_idx,
-                width=self.img_width,
-                height=self.img_height,
+        for kp_name in self.keypoints_to_plot:  # loop over names
+            if "likelihood" in df[kp_name]:
+                confidence = df[kp_name]["likelihood"][frame_idx]
+            else:  # gt data has no confidence, but we call it 1.0 for simplicity
+                confidence = 1.0  # also works if we make it None
+            # "bodyparts" it appears in the csv as we read it right now, but should be ignored
+            if kp_name == "bodyparts":
+                continue
+            # write a single keypoint's position, confidence, and name
+            keypoints_list.append(
+                fo.Keypoint(
+                    points=[
+                        [
+                            df[kp_name]["x"][frame_idx] / self.img_width,
+                            df[kp_name]["y"][frame_idx] / self.img_height,
+                        ]
+                    ],
+                    confidence=confidence,
+                    label=kp_name,  # sometimes plotted aggresively
+                )
             )
-            keypoints_list.append(fo.Keypoints(keypoints=single_frame_keypoints_list))
         return keypoints_list
 
     @typechecked
-    def get_gt_keypoints_list(self) -> List[fo.Keypoints]:
-        # for each frame, extract ground-truth keypoint information
-        print("Collecting ground-truth keypoints...")
-        return self.get_keypoints_per_image(self.ground_truth_df)
+    def get_keypoints_per_image(self, df: pd.DataFrame) -> List[fo.Keypoints]:
+        """iterates over the rows of the dataframe and gathers keypoints in fiftyone format"""
+        keypoints_list = []
+        for img_idx in tqdm(range(df.shape[0])):
+            single_frame_keypoints_list = self.build_single_frame_keypoint_list(
+                df=df, frame_idx=img_idx
+            )
+            keypoints_list.append(fo.Keypoints(keypoints=single_frame_keypoints_list))
+        return keypoints_list
 
     @typechecked
     def get_pred_keypoints_dict(self) -> Dict[str, List[fo.Keypoints]]:
@@ -161,11 +151,47 @@ class FiftyOneKeypointPlotter:
 
         return pred_keypoints_dict
 
+    def create_dataset(self):
+        # subclasses build their own
+        raise NotImplementedError
+
+
+class FiftyOneImagePlotter(FiftyOneKeypointBase):
+    def __init__(
+        self, cfg: DictConfig, keypoints_to_plot: Optional[List[str]] = None
+    ) -> None:
+        super().__init__(cfg=cfg, keypoints_to_plot=keypoints_to_plot)
+
+    @property
+    def image_paths(self) -> List[str]:
+        """extract absolute paths for all the images in the ground truth csv file
+
+        Returns:
+            List[str]: absolute paths per image, checked before returning.
+        """
+        relative_list = list(self.ground_truth_df.iloc[:, 0])
+        absolute_list = [
+            os.path.join(self.data_dir, im_path) for im_path in relative_list
+        ]
+        # assert that the images are indeed files
+        for im in absolute_list:
+            assert os.path.isfile(im)
+
+        return absolute_list
+
+    @typechecked
+    def get_gt_keypoints_list(self) -> List[fo.Keypoints]:
+        # for each frame, extract ground-truth keypoint information
+        print("Collecting ground-truth keypoints...")
+        return self.get_keypoints_per_image(self.ground_truth_df)
+
     @typechecked
     def create_dataset(self) -> fo.Dataset:
         samples = []
         # read each model's csv into a pandas dataframe
+        print("here")
         self.load_model_predictions()
+        print("loaded")
         # assumes that train,test,val split is identical for all the different models. may be different with ensembling.
         self.data_tags = get_image_tags(self.model_preds_dict[self.model_names[0]])
         # build the ground-truth keypoints per image
@@ -183,9 +209,9 @@ class FiftyOneKeypointPlotter:
 
             samples.append(sample)
 
-        full_dataset = fo.Dataset(self.dataset_name)
-        full_dataset.add_samples(samples)
-        return full_dataset
+        fiftyone_dataset = fo.Dataset(self.dataset_name)
+        fiftyone_dataset.add_samples(samples)
+        return fiftyone_dataset
 
 
 """ 
@@ -199,6 +225,8 @@ should also use get_pred_keypoints_dict (assuming that the preds for a new vid l
 """
 
 
-class FiftyOneKeypointVideoPlotter:
-    def __init__(self) -> None:
-        pass
+class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
+    def __init__(
+        self, cfg: DictConfig, keypoints_to_plot: Optional[List[str]] = None
+    ) -> None:
+        super().__init__(cfg=cfg, keypoints_to_plot=keypoints_to_plot)
