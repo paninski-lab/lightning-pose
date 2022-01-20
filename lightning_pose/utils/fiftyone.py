@@ -8,6 +8,8 @@ from lightning_pose.utils.io import return_absolute_path, return_absolute_data_p
 import os
 from typeguard import typechecked
 
+from lightning_pose.utils.plotting_utils import get_videos_in_dir
+
 
 @typechecked
 def check_lists_equal(list_1: list, list_2: list) -> bool:
@@ -186,9 +188,7 @@ class FiftyOneImagePlotter(FiftyOneKeypointBase):
     def create_dataset(self) -> fo.Dataset:
         samples = []
         # read each model's csv into a pandas dataframe
-        print("here")
         self.load_model_predictions()
-        print("loaded")
         # assumes that train,test,val split is identical for all the different models. may be different with ensembling.
         self.data_tags = get_image_tags(self.model_preds_dict[self.model_names[0]])
         # build the ground-truth keypoints per image
@@ -227,3 +227,5 @@ class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
         self, cfg: DictConfig, keypoints_to_plot: Optional[List[str]] = None
     ) -> None:
         super().__init__(cfg=cfg, keypoints_to_plot=keypoints_to_plot)
+
+        self.new_videos = get_videos_in_dir(cfg.eval.path_to_test_videos[0])
