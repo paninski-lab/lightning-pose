@@ -14,6 +14,7 @@ from typing import Callable, Dict, List, Literal, Optional, Tuple, Type, Union
 
 from lightning_pose.data.dali import LightningWrapper
 from lightning_pose.utils.io import check_if_semi_supervised
+from lightning_pose.utils.scripts import pretty_print_str
 
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -116,7 +117,7 @@ def predict_single_video(
     video_file: str,
     ckpt_file: str,
     cfg_file: Union[str, DictConfig],
-    save_file: Optional[str] = None,
+    preds_file: Optional[str] = None,
     sequence_length: int = 16,
     device: Literal["gpu", "cuda", "cpu"] = "gpu",
     video_pipe_kwargs: dict = {},
@@ -127,10 +128,12 @@ def predict_single_video(
     import nvidia.dali.types as types
     from lightning_pose.data.dali import video_pipe
     from lightning_pose.data.utils import count_frames
+    from lightning_pose.utils.scripts import pretty_print_str
 
     device_dict = get_devices(device)
 
     cfg = get_cfg_file(cfg_file=cfg_file)
+    pretty_print_str(string="Loading trained model from %s... " % ckpt_file)
 
     model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
     model.to(device_dict["device_pt"])
@@ -142,8 +145,8 @@ def predict_single_video(
         if key not in video_pipe_kwargs.keys():
             video_pipe_kwargs[key] = val
 
-    print("Processing video at %s..." % video_file)
-    check_prediction_file_format(save_file=save_file)
+    check_prediction_file_format(save_file=preds_file)
+    pretty_print_str(string="Building DALI video eval pipeline...")
 
     # build video loader/pipeline
     pipe = video_pipe(
@@ -171,6 +174,7 @@ def predict_single_video(
     )
     # iterate through video
     n_frames_ = count_frames(video_file)  # total frames in video
+    pretty_print_str(string="Predicting video at %s..." % video_file)
     df, heatmaps_np = make_predictions(
         cfg=cfg,
         model=model,
@@ -181,9 +185,9 @@ def predict_single_video(
     )
 
     try:
-        save_dframe(df, save_file)
+        save_dframe(df, preds_file)
     except (PermissionError):
-        new_save_file = os.path.join(os.getcwd(), save_file.split("/")[-1])
+        new_save_file = os.path.join(os.getcwd(), preds_file.split("/")[-1])
         save_dframe(df, new_save_file)
         print(
             "Couldn't save file to the desired location due to a PermissionError. Instead saved it in %s"
@@ -194,7 +198,7 @@ def predict_single_video(
     del model, pipe, predict_loader
     torch.cuda.empty_cache()
 
-    return df
+    return df, heatmaps_np
 
 
 # @typechecked
@@ -425,7 +429,7 @@ def _predict_frames(
     n_frames_counter = 0  # total frames processed
     n_batches = int(np.ceil(n_frames_ / batch_size))
     n = -1
-    with torch.no_grad():
+    with torch.inference_mode():
         for n, batch in enumerate(tqdm(dataloader, total=n_batches)):
             if type(batch) == dict:
                 image = batch["images"].to(_TORCH_DEVICE)  # predicting from dataset
@@ -470,7 +474,7 @@ def _predict_frames(
             )  # TODO: what can go wrong here?
             return None, None, None
         else:
-            print(
+            pretty_print_str(
                 "inference speed: %1.2f fr/sec" % ((n * batch_size) / (t_end - t_beg))
             )
             # for regression networks, confidence_np will be all zeros,
@@ -509,7 +513,7 @@ def make_pred_arr_undo_resize(
 def get_videos_in_dir(video_dir: str) -> List[str]:
     # gather videos to process
     # TODO: check if you're give a path to a single video?
-    print("Looking inside %s..." % video_dir)
+    pretty_print_str(string="Looking inside %s..." % video_dir)
     assert os.path.isdir(video_dir)
     all_files = [os.path.join(video_dir, f) for f in os.listdir(video_dir)]
     video_files = []
@@ -659,10 +663,10 @@ def load_model_from_checkpoint(
 def save_dframe(df: pd.DataFrame, save_file: str) -> None:
     if save_file.endswith(".csv"):
         df.to_csv(save_file)
-        print("Saved predictions to: %s" % save_file)
+        pretty_print_str("Saved predictions to: %s" % save_file)
     elif save_file.find(".h") > -1:
         df.to_hdf(save_file)
-        print("Saved predictions to: %s" % save_file)
+        pretty_print_str("Saved predictions to: %s" % save_file)
     else:
         raise NotImplementedError("Currently only .csv and .h5 files are supported")
 

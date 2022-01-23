@@ -11,13 +11,7 @@ fifty_one_dataset_name: "rick_data_test"
 test_videos_directory: "toy_datasets/toymouseRunningData/unlabeled_videos"
 
 # list with absolute paths to the .csv with predictions for each vid in path_to_test_videos
-path_to_csv_predictions:
-  [
-    "toy_datasets/toymouseRunningData/unlabeled_videos/test_vid_heatmap_temporal_0.000000.csv",
-  ]
-
-# path to save the .csv file with preds for videos
-saved_video_predictions_directory: "toy_datasets/toymouseRunningData/unlabeled_videos/"
+saved_vid_preds_dir: "toy_datasets/toymouseRunningData"
 
 # params for loading images from the video using nvidia-dali
 dali_parameters:

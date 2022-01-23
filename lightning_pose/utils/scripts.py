@@ -109,8 +109,7 @@ def get_data_module(
 
 @typechecked
 def get_loss_factories(
-    cfg: DictConfig,
-    data_module: Union[BaseDataModule, UnlabeledDataModule]
+    cfg: DictConfig, data_module: Union[BaseDataModule, UnlabeledDataModule]
 ) -> dict:
     """Create loss factory that orchestrates different losses during training."""
 
@@ -125,9 +124,7 @@ def get_loss_factories(
             "log_weight": 0.0
         }
     else:
-        loss_params_dict["supervised"][cfg.model.model_type] = {
-            "log_weight": 0.0
-        }
+        loss_params_dict["supervised"][cfg.model.model_type] = {"log_weight": 0.0}
 
     # collect all unsupervised losses and their params in a dict
     for loss_name in cfg.model.losses_to_use:
@@ -144,20 +141,25 @@ def get_loss_factories(
             # record original image dims (after initial resizing)
             height_og = cfg.data.image_resize_dims.height
             width_og = cfg.data.image_resize_dims.width
-            loss_params_dict["unsupervised"][loss_name]["original_image_height"] = \
-                height_og
-            loss_params_dict["unsupervised"][loss_name]["original_image_width"] = \
-                width_og
+            loss_params_dict["unsupervised"][loss_name][
+                "original_image_height"
+            ] = height_og
+            loss_params_dict["unsupervised"][loss_name][
+                "original_image_width"
+            ] = width_og
             # record downsampled image dims
             height_ds = int(height_og // (2 ** cfg.data.downsample_factor))
             width_ds = int(width_og // (2 ** cfg.data.downsample_factor))
-            loss_params_dict["unsupervised"][loss_name]["downsampled_image_height"] = \
-                height_ds
-            loss_params_dict["unsupervised"][loss_name]["downsampled_image_width"] = \
-                width_ds
+            loss_params_dict["unsupervised"][loss_name][
+                "downsampled_image_height"
+            ] = height_ds
+            loss_params_dict["unsupervised"][loss_name][
+                "downsampled_image_width"
+            ] = width_ds
         elif loss_name == "pca_multiview":
-            loss_params_dict["unsupervised"][loss_name]["mirrored_column_matches"] = \
-                cfg.data.mirrored_column_matches
+            loss_params_dict["unsupervised"][loss_name][
+                "mirrored_column_matches"
+            ] = cfg.data.mirrored_column_matches
 
     # build supervised loss factory, which orchestrates all supervised losses
     loss_factory_sup = LossFactory(
@@ -239,3 +241,10 @@ def get_model(
                 % cfg.model.model_type
             )
     return model
+
+
+def pretty_print_str(string: str, symbol: str = "-") -> None:
+    str_length = len(string)
+    print(symbol * str_length)
+    print(string)
+    print(symbol * str_length)

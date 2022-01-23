@@ -1,14 +1,14 @@
 """Run inference on a list of models and videos."""
 
-import glob
 import hydra
-import numpy as np
 from omegaconf import DictConfig, OmegaConf
 import os
-import torch
 
-from lightning_pose.utils.plotting_utils import get_videos_in_dir, predict_videos
+from typeguard import typechecked
+
+from lightning_pose.utils.plotting_utils import get_videos_in_dir, predict_single_video
 from lightning_pose.utils.io import (
+    check_if_semi_supervised,
     ckpt_path_from_base_path,
     return_absolute_path,
 )
@@ -19,8 +19,53 @@ no need to loop over models or folders. we do need to loop over videos within a 
 however, keeping cfg.eval.hydra_paths is useful for the fiftyone image plotting. so keep"""
 
 
+@typechecked
+class VideoPredPathHandler:
+    def __init__(
+        self, save_preds_dir: str, video_file: str, model_cfg: DictConfig
+    ) -> None:
+        self.video_file = video_file
+        self.save_preds_dir = save_preds_dir
+        self.model_cfg = model_cfg
+        self.check_input_paths()
+
+    @property
+    def video_basename(self) -> str:
+        return os.path.basename(self.video_file).split(".")[0]
+
+    @property
+    def loss_str(self) -> str:
+        semi_supervised = check_if_semi_supervised(self.model_cfg.model.losses_to_use)
+        if semi_supervised:  # add the loss names and weights
+            loss_str = ""
+            if len(self.model_cfg.model.losses_to_use) > 0:
+                for loss in list(self.model_cfg.model.losses_to_use):
+                    # NOTE: keeping 3 decimals. if working with smaller numbers, modify to e.g,. .6f
+                    loss_str = loss_str.join(
+                        "_%s_%.3f" % (loss, self.model_cfg.losses[loss]["log_weight"])
+                    )
+        else:  # fully supervised, return empty string
+            loss_str = ""
+        return loss_str
+
+    def check_input_paths(self) -> None:
+        assert os.path.isfile(self.video_file)
+        assert os.path.isdir(self.save_preds_dir)
+
+    def build_pred_file_basename(self) -> str:
+        return "%s_%s%s.csv" % (
+            self.video_basename,
+            self.model_cfg.model.model_type,
+            self.loss_str,
+        )
+
+    def __call__(self) -> str:
+        pred_file_basename = self.build_pred_file_basename()
+        return os.path.join(self.save_preds_dir, pred_file_basename)
+
+
 @hydra.main(config_path="configs", config_name="config")
-def make_predictions(cfg: DictConfig):
+def predict_videos_in_dir(cfg: DictConfig):
     """
     This script will work with a path to a trained model's hydra folder
 
@@ -46,27 +91,36 @@ def make_predictions(cfg: DictConfig):
         )
 
         # determine a directory in which to save video prediction csv files
-        if cfg.eval.saved_video_predictions_directory is None:
+        if cfg.eval.saved_vid_preds_dir is None:
             # save to where the videos are. may get an exception
-            saved_video_predictions_directory = cfg.eval.path_to_test_videos
+            save_preds_dir = cfg.eval.test_videos_directory
         else:
-            saved_video_predictions_directory = return_absolute_path(
-                cfg.eval.saved_video_predictions_directory, n_dirs_back=3
+            save_preds_dir = return_absolute_path(
+                cfg.eval.saved_vid_preds_dir, n_dirs_back=3
             )
+        # save_preds_dir is checked below in VideoPredPathHandler
 
         # loop over videos in a provided directory
-        video_files = get_videos_in_dir(cfg.eval.path_to_test_videos)
+        video_files = get_videos_in_dir(
+            return_absolute_path(cfg.eval.test_videos_directory)
+        )
 
-        for test_videos_directory in cfg.eval.test_videos_directory:
-            absolute_path_to_test_videos = return_absolute_path(path_to_test_videos)
-            predict_videos(
-                video_path=absolute_path_to_test_videos,
+        for video_file in video_files:
+            video_pred_path_handler = VideoPredPathHandler(
+                save_preds_dir=save_preds_dir,
+                video_file=video_file,
+                model_cfg=model_cfg,
+            )
+            preds_file = video_pred_path_handler()
+
+            preds_df, heatmaps_np = predict_single_video(
+                video_file=video_file,
                 ckpt_file=ckpt_file,
                 cfg_file=model_cfg,
-                save_file=saved_csv_path,
-                sequence_length=cfg.eval.dali_parameters.sequence_length,
+                preds_file=preds_file,
             )
+            # this script is not doing anything with preds_df and heatmaps_np
 
 
 if __name__ == "__main__":
-    make_predictions()
+    predict_videos_in_dir()
