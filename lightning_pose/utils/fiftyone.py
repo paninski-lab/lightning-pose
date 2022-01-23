@@ -200,7 +200,7 @@ class FiftyOneImagePlotter(FiftyOneKeypointBase):
             sample = fo.Sample(filepath=img_path, tags=[self.data_tags[img_idx]])
             # add ground truth keypoints to the sample (won't happen for video)
             sample["ground_truth"] = gt_keypoints_list[img_idx]  # previously created
-            # add model-predicted keypoints the sample
+            # add model-predicted keypoints to the sample
             for model_field_name, model_preds in pred_keypoints_dict.items():
                 sample[model_field_name + "_preds"] = model_preds[img_idx]
 
@@ -219,6 +219,12 @@ creation of dataset.
 different: 
 in video each sample is a video. there is basically one sample if we analyze one video.
 should also use get_pred_keypoints_dict (assuming that the preds for a new vid look the same as the ones in train hydra)
+
+what do I need?
+a folder with csv predictions for a given video. I have multiple videos and potentially multiple models' predictions for each.
+maybe just point to path to preds, and automatically find the path that has the same basename as the video name? or is it too specific?
+or for each video in the folder, I should assume there exists a directory with the same name inside saved_preds folder? that seems easier to grasp.
+it will require changing the path handler a bit, but it'll be easy.
 """
 
 
@@ -228,4 +234,4 @@ class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
     ) -> None:
         super().__init__(cfg=cfg, keypoints_to_plot=keypoints_to_plot)
 
-        self.new_videos = get_videos_in_dir(cfg.eval.path_to_test_videos[0])
+        self.new_videos = get_videos_in_dir(cfg.eval.test_videos_directory)
