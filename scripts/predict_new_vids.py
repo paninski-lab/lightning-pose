@@ -72,6 +72,9 @@ def predict_videos_in_dir(cfg: DictConfig):
     From that folder it'll read the info about the model, get the checkpoint, and
     predict on a new vid
 
+    If you need to predict multiple folders (each with one or more videos), define a --multirun and pass these directories as
+    cfg.eval.test_videos_directory='dir/1','dir/2'...
+
     NOTE: by decorating with hydra, the current working directory will be become the new
     folder os.path.join(os.getcwd(), "/outputs/YYYY-MM-DD/hour-info")
 
