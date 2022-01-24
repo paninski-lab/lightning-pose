@@ -17,3 +17,8 @@ saved_vid_preds_dir: "toy_datasets/toymouseRunningData"
 dali_parameters:
   # how many frames to grab at once from the video
   sequence_length: 16
+
+video_file_to_plot: "/home/jovyan/lightning-pose/toy_datasets/toymouseRunningData/unlabeled_videos/test_vid.mp4"
+
+pred_csv_files_to_plot:
+  ["/home/jovyan/test_vid_heatmap_pca_multiview_7.500.csv"]

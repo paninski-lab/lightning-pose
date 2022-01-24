@@ -2,20 +2,8 @@
 
 import hydra
 from omegaconf import DictConfig
-from lightning_pose.utils.fiftyone import FiftyOneImagePlotter
-from lightning_pose.utils.fiftyone_plotting_utils import make_dataset_and_viz_from_csvs
+from lightning_pose.utils.fiftyone import FiftyOneImagePlotter, check_dataset
 import fiftyone as fo
-
-
-def check_dataset(dataset: fo.Dataset) -> None:
-    try:
-        dataset.compute_metadata(skip_failures=False)
-    except ValueError:
-        print("Encountered error in metadata computation. See print:")
-        print(dataset.exists("metadata", False))
-        print(
-            "The above print should indicate bad image samples, e.g., with bad paths."
-        )
 
 
 @hydra.main(config_path="configs", config_name="config")
