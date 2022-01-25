@@ -56,24 +56,36 @@ foo@bar:~$ pytest
 ```
 
 ## Datasets
+NEEDS UPDATE
 * `BaseDataset`: images + keypoint coordinates.
 * `HeatmapDataset`: images + heatmaps.
 * `SemiSupervisedDataset`: images + sequences of unlabeled videos + heatmaps.
 
 ## Models 
+NEEDS UPDATE
 * `RegressionTracker`: images -> labeled keypoint coordinates.
 * `HeatmapTracker`: images -> labeled heatmaps.
 * `SemiSupervisedHeatmapTracker`: images + sequences of unlabeled videos -> labeled heatmaps + unlabeled heatmaps. Supports multiple losses on the unlabeled videos.
 
+## Working with `hydra`
+
+For all of the scripts in our `scripts` folder, we rely on `hydra` to manage arguments in hierarchical config files. You have two options: edit the config file, or override it from the command line.
+
+* **Edit** a hydra config, that is, any of the files in `scripts/configs/config_folder/config_name.yaml`, and save it. Then run the script without arguments, e.g.,:
+```console
+foo@bar:~$ python scripts/train_hydra.py
+```
+
+* **Override** the argument from the command line:
+```console
+foo@bar:~$ python scripts/train_hydra.py training.max_epochs=11
+```
+If you happen to want to use a maximum of 11 epochs instead the default number (not recommended).
 
 ## Training
 
-The generic script for training models in our package is `scripts/train_hydra.py`.
-The script relies on **Hydra** to manage arguments in hierarchical config files. 
-You can run over an argument from the config file, for example, `training.max_epochs`, by calling
-
 ```console
-foo@bar:~$ python scripts/train_hydra.py training.max_epochs=11
+foo@bar:~$ python scripts/train_hydra.py
 ```
 
 ## Logs and saved models
@@ -88,7 +100,8 @@ foo@bar:~$ tensorboard --logdir outputs/YYYY-MM-DD/
 ```
 
 where you use the date in which you ran the model. Click on the provided link in the
-terminal, which will look something like `http://localhost:6006/`. 
+terminal, which will look something like `http://localhost:6006/`.
+Note that if you save the model at a different directory, just use that directory after `--logdir`.
 
 ## Visualize train/test/val predictions
 
@@ -99,7 +112,7 @@ You will need to specify:
 1. `eval.hydra_paths`: path to trained models to use for prediction. 
 
 Generally, using `Hydra` we can either edit the config `.yaml` files or override them 
-from the command line. 
+from the command line. The argument of ineterest is `
 
 ### Option 1: Edit the config
 
@@ -114,19 +127,17 @@ Then from command line, run:
 ```console
 foo@bar:~$ python scripts/launch_diagnostics.py
 ```
-
-As with `Tensorboard`, click on the link provided in the terminal to launch the diagnostics
-in your browser.
-
-### Option 2: Override from command line
-Specify `hydra_paths` in the command line, overriding the `.yaml`:
+Alternatively, override from the command line:
 ```console
-foo@bar:~$ python scripts/launch_diagnostics.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"]
+foo@bar:~$ python scripts/launch_diagnostics.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"] \
+data.data_dir='/absolute/path/to/data_dir' \
+data.video_dir='/absolute/path/to/video_dir' 
 ``` 
-where again, `hydra_paths` should be a list of strings with folder names within 
-`lightning-pose/outputs`. 
 As with `Tensorboard`, click on the link provided in the terminal to launch the diagnostics
 in your browser.
+
+### FiftyOne app
+The app will open and will show `FRAME LABELS` to the left. Click the `v` next to it. It will drop down a menu with keypoint names, and a filter with confidence. Play around with these. Once you're happy, you can click on the orange bookmark icon to save the filters you applied. Then from code, you can call `session.view.export(...)`. NOTE: not yet supported.
 
 ## Predict keypoints on new videos
 With a trained model and a path to a new video, you can generate predictions for each 
@@ -141,8 +152,8 @@ using the same hydra path as before.
 
 In order to use this script more generally, you need to specify several paths:
 1. `eval.hydra_paths`: path to models to use for prediction
-2. `eval.path_to_test_videos`: path to a *folder* with new videos (not a single video)
-3. `path_to_save_predictions`: optional path specifying where to save prediction csv files. If `null`, the predictions will be saved in `eval.path_to_test_videos`.
+2. `eval.test_videos_directory`: path to a *folder* with new videos (not a single video)
+3. `eval.saved_vid_preds_dir`: optional path specifying where to save prediction csv files. If `null`, the predictions will be saved in `eval.test_videos_directory`.
 
 As above, you could directly edit `scripts/configs/eval/eval_params.yaml` and run
 ```console
@@ -151,7 +162,9 @@ foo@bar:~$ python scripts/predict_new_vids.py
 or override these arguments in the command line.
 
 ```console
-foo@bar:~$ python scripts/predict_new_vids.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"] eval.path_to_save_predictions="/path/to/your/file.csv" eval.path_to_test_videos="path/to/test/vids"
+foo@bar:~$ python scripts/predict_new_vids.py eval.hydra_paths=["2022-01-18/01-03-45"] \
+eval.test_videos_directory="/absolute/path/to/unlabeled_videos" \
+eval.saved_vid_preds_dir="/absolute/path/to/dir"
 ```
 
 ## Overlay predicted keypoints on new videos
@@ -160,9 +173,12 @@ predictions on the video.
 To do so for the example dataset, run:
 
 ```console
-foo@bar:~$ python scripts/render_labeled_vids.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"]
+foo@bar:~$ python scripts/render_labeled_vids.py eval.model_display_names=["test_model"] \
+data.data_dir="/absolute/path/to/data_dir" \
+eval.video_file_to_plot="/absolute/path/to/vid.mp4" \
+eval.pred_csv_files_to_plot:["/absolute/path/1/to.csv", "/absolute/path/1/to.csv"]
+
 ```
 
-using the same hydra path as before. This script will by default save a labeled video in 
-the toy dataset video directory, and will also launch the fiftyone app to further 
-explore the video(s) in the browser. 
+using the same hydra path as before. This script will by default save a labeled video in the same directory as the video it analyzes, and will also launch the fiftyone app to further explore the video(s) in the browser. 
+
