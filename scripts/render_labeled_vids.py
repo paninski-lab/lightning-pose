@@ -15,19 +15,12 @@ import fiftyone as fo
 import fiftyone.utils.annotations as foua
 import hydra
 from omegaconf import DictConfig, OmegaConf
-import warnings
 
 from sympy import pretty_print
-
 from lightning_pose.utils.io import return_absolute_path
 from lightning_pose.utils.plotting_utils import get_videos_in_dir
 from lightning_pose.utils.fiftyone import FiftyOneKeypointVideoPlotter, check_dataset
 from lightning_pose.utils.scripts import pretty_print_str
-
-
-@hydra.main(config_path="configs", config_name="config")
-def render_labeled_videos(cfg: DictConfig):
-    pass
 
 
 @hydra.main(config_path="configs", config_name="config")
