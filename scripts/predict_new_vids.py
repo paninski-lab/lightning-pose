@@ -77,6 +77,7 @@ def predict_videos_in_dir(cfg: DictConfig):
                 ckpt_file=ckpt_file,
                 cfg_file=model_cfg,
                 preds_file=preds_file,
+                sequence_length=cfg.eval.dali_parameters.sequence_length,
             )
             # this script is not doing anything with preds_df and heatmaps_np
 

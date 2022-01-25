@@ -57,7 +57,7 @@ def predict_dataset(
     if not (os.path.isdir(save_folder)):
         os.mkdir(save_folder)
 
-    df, heatmaps_np = make_predictions(
+    df, heatmaps_np = _make_predictions(
         cfg=cfg,
         model=model,
         dataloader=full_dataloader,
@@ -117,15 +117,27 @@ def predict_single_video(
     video_file: str,
     ckpt_file: str,
     cfg_file: Union[str, DictConfig],
-    preds_file: Optional[str] = None,
+    preds_file: str,
     sequence_length: int = 16,
     device: Literal["gpu", "cuda", "cpu"] = "gpu",
     video_pipe_kwargs: dict = {},
-):
-    from nvidia.dali import pipeline_def
-    import nvidia.dali.fn as fn
+) -> Tuple[pd.DataFrame, Union[np.ndarray, None]]:
+    """make predictions for a single video, loading frame sequences using DALI.
+    The function will need to initialize a DALI pipeline, prepare a dataloader, and pass it on to _make_predictions().
+
+    Args:
+        video_file (str): absolute path to a single video you want to get predictions for. typically .mp4 file.
+        ckpt_file (str): absolute path to the checkpoint of your trained model. assumed .ckpt format.
+        cfg_file (Union[str, DictConfig]): either a hydra config or a path pointing to one, with all the model specs. needed for loading the model.
+        preds_file (str): absolute filename for the predictions .csv file.
+        sequence_length (int, optional): number of frames in a sequence of video frames drawn by DALI. Defaults to 16. can be controlled externally by cfg.eval.dali_parameters.sequence_length.
+        device (Literal[, optional): device for DALI to use. Defaults to "gpu".
+        video_pipe_kwargs (dict, optional): any additional kwargs for DALI. Defaults to {}.
+
+    Returns:
+        Tuple[pd.DataFrame, Union[np.ndarray, None]]: pandas dataframe with predictions, and a potential numpy array with predicted heatmaps.
+    """
     from nvidia.dali.plugin.pytorch import LastBatchPolicy
-    import nvidia.dali.types as types
     from lightning_pose.data.dali import video_pipe
     from lightning_pose.data.utils import count_frames
     from lightning_pose.utils.scripts import pretty_print_str
@@ -175,7 +187,7 @@ def predict_single_video(
     # iterate through video
     n_frames_ = count_frames(video_file)  # total frames in video
     pretty_print_str(string="Predicting video at %s..." % video_file)
-    df, heatmaps_np = make_predictions(
+    df, heatmaps_np = _make_predictions(
         cfg=cfg,
         model=model,
         dataloader=predict_loader,
@@ -200,31 +212,46 @@ def predict_single_video(
 
     return df, heatmaps_np
 
+    """make predictions for a single video, resize keypoints to original dims, and return a dataframe and numpy array with heatmaps.
+
+    Args:
+        cfg (DictConfig): hydra config.
+        model (LightningModule): a loaded model ready to be evaluated.
+        dataloader (Union[torch.utils.data.DataLoader, LightningWrapper]): dataloader ready to be iterated.
+        n_frames_ (int): total number of frames in the dataset or video
+        save_folder (str, optional): [description]. Defaults to None.
+         regular batch_size for images or sequence_length for videos
+
+    Returns:
+        Tuple[pd.DataFrame, Union[np.ndarray, None]]: [description]
+    """
+
 
 @typechecked
-def make_predictions(
+def _make_predictions(
     cfg: DictConfig,
     model: LightningModule,
     dataloader: Union[torch.utils.data.DataLoader, LightningWrapper],
-    n_frames_: int,  # total number of frames in the dataset or video
-    batch_size: int,  # regular batch_size for images or sequence_length for videos
+    n_frames_: int,
+    batch_size: int,
     data_name: str = "dataset",
     save_folder: str = None,
 ) -> Tuple[pd.DataFrame, Union[np.ndarray, None]]:
-    """
+    """[summary]
 
     Args:
-        cfg:
-        model:
-        dataloader:
-        n_frames_:
-        batch_size:
-        data_name:
-        save_folder:
+        cfg (DictConfig): hydra config.
+        model (LightningModule): a loaded model ready to be evaluated.
+        dataloader (Union[torch.utils.data.DataLoader, LightningWrapper]): dataloader ready to be iterated.
+        n_frames_ (int): total number of frames in the dataset or video
+        batch_size (int): regular batch_size for images or sequence_length for videos
+        data_name (str, optional): [description]. Defaults to "dataset".
+        save_folder (str, optional): [description]. Defaults to None.
 
     Returns:
-
+        Tuple[pd.DataFrame, Union[np.ndarray, None]]: [description]
     """
+
     keypoints_np, confidence_np, heatmaps_np = _predict_frames(
         cfg, model, dataloader, n_frames_, batch_size, data_name, save_folder
     )
@@ -245,16 +272,34 @@ def make_predictions(
     return df, heatmaps_np
 
 
+# total number of frames in the dataset or video
+# regular batch_size for images or sequence_length for videos
+
+
 @typechecked
 def _predict_frames(
     cfg: DictConfig,
     model: LightningModule,
     dataloader: Union[torch.utils.data.DataLoader, LightningWrapper],
-    n_frames_: int,  # total number of frames in the dataset or video
-    batch_size: int,  # regular batch_size for images or sequence_length for videos
+    n_frames_: int,
+    batch_size: int,
     data_name: str = "dataset",
     save_folder: Optional[str] = None,
 ) -> Tuple[np.ndarray, np.ndarray, Union[np.ndarray, None]]:
+    """predict all frames of a video without undoing the resize or reshaping.
+
+    Args:
+        cfg (DictConfig): hydra config.
+        model (LightningModule): a loaded model ready to be evaluated.
+        dataloader (Union[torch.utils.data.DataLoader, LightningWrapper]): dataloader ready to be iterated.
+        n_frames_ (int): total number of frames in the dataset or video
+        batch_size (int): regular batch_size for images or sequence_length for videos
+        data_name (str, optional): [description]. Defaults to "dataset".
+        save_folder (str, optional): [description]. Defaults to None.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray, Union[np.ndarray, None]]: keypoints, confidences, and potentially heatmaps.
+    """
 
     if not save_folder or cfg.model.model_type != "heatmap":
         save_heatmaps = False
