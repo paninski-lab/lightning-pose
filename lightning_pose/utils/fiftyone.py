@@ -250,24 +250,14 @@ class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
         keypoints_to_plot: Optional[List[str]] = None,
     ) -> None:
         super().__init__(cfg=cfg, keypoints_to_plot=keypoints_to_plot)
-        # video_file = cfg.eval.video_file_to_plot
-        # assert os.path.isfile(video_file)
-        # pred_csv_files = self.cfg.eval.pred_csv_files_to_plot
-        # for f in pred_csv_files:
-        #     assert os.path.isfile(f)
+        self.video: str = cfg.eval.video_file_to_plot
+        self.pred_csv_files: List[str] = self.cfg.eval.pred_csv_files_to_plot
+        self.check_inputs()
 
-    @property
-    def pred_csv_files(self):
-        pred_csv_files = self.cfg.eval.pred_csv_files_to_plot
-        for f in pred_csv_files:
+    def check_inputs(self) -> None:
+        for f in self.pred_csv_files:
             assert os.path.isfile(f)
-        return pred_csv_files
-
-    @property
-    def video(self):
-        video_file = self.cfg.eval.video_file_to_plot
-        assert os.path.isfile(video_file)
-        return video_file
+        assert os.path.isfile(self.video)
 
     @property
     def model_names(self) -> List[str]:
@@ -280,9 +270,6 @@ class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
         return model_display_names
 
     def load_model_predictions(self) -> None:
-        # TODO: we have to specify the paths differently in the init method?
-        # take the abs paths, and load the models into a dictionary
-        # need model names, and build dictionary
         self.model_preds_dict = {}
         for model_name, pred_csv_file in zip(self.model_names, self.pred_csv_files):
             self.model_preds_dict[model_name] = pd.read_csv(
@@ -298,7 +285,7 @@ class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
         dataset = fo.Dataset(self.dataset_name + "_videos")
         # adding _videos so as to not overwrite existing datasets with images.
         # NOTE: for now, one sample only in the dataset (one video)
-        # TODO: in the future, dataset should include multiple video samples
+        # TODO: in the future, dataset could include multiple video samples
         video_sample = fo.Sample(filepath=self.video)
         first_model_name = list(pred_keypoints_dict.keys())[0]
         for frame_idx in tqdm(range(len(pred_keypoints_dict[first_model_name]))):
