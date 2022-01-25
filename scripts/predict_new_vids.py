@@ -11,57 +11,13 @@ from lightning_pose.utils.io import (
     check_if_semi_supervised,
     ckpt_path_from_base_path,
     return_absolute_path,
+    VideoPredPathHandler,
 )
 
 """ this script will get two imporant args. model to use and video folder to process.
 hydra will orchestrate both. advanatages -- in the future we could parallelize to new machines.
 no need to loop over models or folders. we do need to loop over videos within a folder.
 however, keeping cfg.eval.hydra_paths is useful for the fiftyone image plotting. so keep"""
-
-
-@typechecked
-class VideoPredPathHandler:
-    def __init__(
-        self, save_preds_dir: str, video_file: str, model_cfg: DictConfig
-    ) -> None:
-        self.video_file = video_file
-        self.save_preds_dir = save_preds_dir
-        self.model_cfg = model_cfg
-        self.check_input_paths()
-
-    @property
-    def video_basename(self) -> str:
-        return os.path.basename(self.video_file).split(".")[0]
-
-    @property
-    def loss_str(self) -> str:
-        semi_supervised = check_if_semi_supervised(self.model_cfg.model.losses_to_use)
-        if semi_supervised:  # add the loss names and weights
-            loss_str = ""
-            if len(self.model_cfg.model.losses_to_use) > 0:
-                for loss in list(self.model_cfg.model.losses_to_use):
-                    # NOTE: keeping 3 decimals. if working with smaller numbers, modify to e.g,. .6f
-                    loss_str = loss_str.join(
-                        "_%s_%.3f" % (loss, self.model_cfg.losses[loss]["log_weight"])
-                    )
-        else:  # fully supervised, return empty string
-            loss_str = ""
-        return loss_str
-
-    def check_input_paths(self) -> None:
-        assert os.path.isfile(self.video_file)
-        assert os.path.isdir(self.save_preds_dir)
-
-    def build_pred_file_basename(self) -> str:
-        return "%s_%s%s.csv" % (
-            self.video_basename,
-            self.model_cfg.model.model_type,
-            self.loss_str,
-        )
-
-    def __call__(self) -> str:
-        pred_file_basename = self.build_pred_file_basename()
-        return os.path.join(self.save_preds_dir, pred_file_basename)
 
 
 @hydra.main(config_path="configs", config_name="config")
