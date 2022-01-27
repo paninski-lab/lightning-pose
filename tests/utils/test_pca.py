@@ -43,7 +43,10 @@ def test_train_loader_iter(base_data_module_combined):
 
 def test_pca_keypoint_class(cfg, base_data_module_combined):
 
-    num_train_ims = 63  # 63 is 0.8 * 82 images
+    num_train_ims = (
+        len(base_data_module_combined.dataset)
+        * base_data_module_combined.train_probability
+    )
     num_keypoints = base_data_module_combined.dataset.num_keypoints
     num_keypoints_both_views = 7
 

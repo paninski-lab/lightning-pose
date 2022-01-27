@@ -14,8 +14,13 @@ _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 def test_data_extractor(base_data_module_combined):
     # TODO: expand
     from lightning_pose.data.utils import DataExtractor
+
+    num_frames = (
+        len(base_data_module_combined.dataset)
+        * base_data_module_combined.train_probability
+    )
     data_tensor = DataExtractor(data_module=base_data_module_combined, cond="train")()
-    assert data_tensor.shape == (63, 34)
+    assert data_tensor.shape == (num_frames, 34)  # 72 = 0.8 * 90 images
 
 
 def test_split_sizes_from_probabilities():
@@ -32,16 +37,16 @@ def test_split_sizes_from_probabilities():
     assert out[0] == 80 and out[1] == 10 and out[2] == 10
 
     out = split_sizes_from_probabilities(
-        total_number,
-        train_probability=train_prob,
-        val_probability=val_prob)
+        total_number, train_probability=train_prob, val_probability=val_prob
+    )
     assert out[0] == 80 and out[1] == 10 and out[2] == 10
 
     out = split_sizes_from_probabilities(
         total_number,
         train_probability=train_prob,
         val_probability=val_prob,
-        test_probability=test_prob)
+        test_probability=test_prob,
+    )
     assert out[0] == 80 and out[1] == 10 and out[2] == 10
 
     out = split_sizes_from_probabilities(total_number, train_probability=0.7)
@@ -57,10 +62,10 @@ def test_clean_any_nans():
     from lightning_pose.data.utils import clean_any_nans
 
     a = torch.randn(10, 7)
-    a[0, 1] = float('nan')
-    a[0, 3] = float('nan')
-    a[3, 4] = float('nan')
-    a[5, 6] = float('nan')
+    a[0, 1] = float("nan")
+    a[0, 3] = float("nan")
+    a[3, 4] = float("nan")
+    a[5, 6] = float("nan")
 
     # remove samples (defined as columns) that have nan values
     b = clean_any_nans(a, dim=0)
@@ -74,6 +79,7 @@ def test_clean_any_nans():
 def test_count_frames(video_list):
     from lightning_pose.data.utils import count_frames
     import cv2
+
     num_frames = 0
     for video_file in video_list:
         cap = cv2.VideoCapture(video_file)
@@ -92,7 +98,9 @@ def test_generate_heatmaps(cfg, heatmap_dataset):
     heatmap_gt = batch["heatmaps"].unsqueeze(0)
     keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
     heatmap_torch = generate_heatmaps(
-        keypts_gt, height=im_height, width=im_width,
+        keypts_gt,
+        height=im_height,
+        width=im_width,
         output_shape=(heatmap_gt.shape[2], heatmap_gt.shape[3]),
     )
 
@@ -136,7 +144,9 @@ def test_generate_heatmaps_weird_shape(cfg, toy_data_dir):
     # build dataset with these new image dimensions
     imgaug_transform = get_imgaug_transform(cfg_tmp)
     dataset = get_dataset(
-        cfg_tmp, data_dir=toy_data_dir, imgaug_transform=imgaug_transform,
+        cfg_tmp,
+        data_dir=toy_data_dir,
+        imgaug_transform=imgaug_transform,
     )
 
     # now same test as `test_generate_heatmaps`
@@ -144,7 +154,9 @@ def test_generate_heatmaps_weird_shape(cfg, toy_data_dir):
     heatmap_gt = batch["heatmaps"].unsqueeze(0)
     keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
     heatmap_torch = generate_heatmaps(
-        keypts_gt, height=img_shape[0], width=img_shape[1],
+        keypts_gt,
+        height=img_shape[0],
+        width=img_shape[1],
         output_shape=(heatmap_gt.shape[2], heatmap_gt.shape[3]),
     )
 
