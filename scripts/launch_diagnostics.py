@@ -2,13 +2,20 @@
 
 import hydra
 from omegaconf import DictConfig
-from lightning_pose.utils.fiftyone_plotting_utils import make_dataset_and_viz_from_csvs
+from lightning_pose.utils.fiftyone import FiftyOneImagePlotter, check_dataset
+import fiftyone as fo
 
 
 @hydra.main(config_path="configs", config_name="config")
-def fiftyone_from_csvs(cfg: DictConfig) -> None:
-    make_dataset_and_viz_from_csvs(cfg)
+def visualize_training_dataset(cfg: DictConfig) -> None:
+    fo_keypoint_class = FiftyOneImagePlotter(cfg=cfg)  # initializes everything
+    dataset = fo_keypoint_class.create_dataset()  # loops over images and models
+    check_dataset(dataset)
+
+    # launch an interactive session
+    session = fo.launch_app(dataset, remote=True)
+    session.wait()
 
 
 if __name__ == "__main__":
-    fiftyone_from_csvs()
+    visualize_training_dataset()

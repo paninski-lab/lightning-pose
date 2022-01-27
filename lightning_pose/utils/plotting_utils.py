@@ -10,10 +10,11 @@ from torch.utils.data import DataLoader
 from torchtyping import patch_typeguard
 from tqdm import tqdm
 from typeguard import typechecked
-from typing import Callable, List, Literal, Optional, Tuple, Type, Union
+from typing import Callable, Dict, List, Literal, Optional, Tuple, Type, Union
 
 from lightning_pose.data.dali import LightningWrapper
 from lightning_pose.utils.io import check_if_semi_supervised
+from lightning_pose.utils.scripts import pretty_print_str
 
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -56,13 +57,13 @@ def predict_dataset(
     if not (os.path.isdir(save_folder)):
         os.mkdir(save_folder)
 
-    df, heatmaps_np = make_predictions(
+    df, heatmaps_np = _make_predictions(
         cfg=cfg,
         model=model,
         dataloader=full_dataloader,
         n_frames_=num_datapoints,
         batch_size=data_module.test_batch_size,
-        save_folder=save_folder
+        save_folder=save_folder,
     )
 
     # add train/test/val column
@@ -72,48 +73,11 @@ def predict_dataset(
         df.loc[val, "set"] = np.repeat(key, len(val))
 
     save_dframe(df, save_file)
-    if not(heatmaps_np is None):
+    if not (heatmaps_np is None):
         save_heatmaps(heatmaps_np, save_folder)
 
 
-@typechecked
-def predict_videos(
-    video_path: str,
-    ckpt_file: str,
-    cfg_file: Union[str, DictConfig],
-    save_file: Optional[str] = None,
-    sequence_length: int = 16,
-    device: Literal["gpu", "cuda", "cpu"] = "gpu",
-    video_pipe_kwargs: dict = {},
-) -> None:
-    """Loop over a list of videos and process with tracker using DALI for fast inference.
-
-    Args:
-        video_path (str): process all videos located in this directory
-        ckpt_file (str): .ckpt file for model
-        cfg_file (str): yaml file saved by hydra; must contain
-            - cfg_file.losses
-            - cfg_file.data.image_orig_dims
-            - cfg_file.data.image_resize_dims
-            - cfg_file.model.losses_to_use
-            - cfg_file.model.model_type
-        save_file (str): full filename of tracked points; currently supports hdf5 and csv; if
-            NoneType, the output will be saved in the video path
-        sequence_length (int)
-        device (str): "gpu" | "cpu"
-        video_pipe_kwargs (dict): extra keyword-value argument pairs for
-            `lightning_pose.data.DALI.video_pipe` function
-
-    TODO: support different video formats
-
-    """
-
-    from nvidia.dali import pipeline_def
-    import nvidia.dali.fn as fn
-    from nvidia.dali.plugin.pytorch import LastBatchPolicy
-    import nvidia.dali.types as types
-    from lightning_pose.data.dali import video_pipe, count_frames
-
+def get_devices(device: str) -> Dict[str, str]:
     if device == "gpu" or device == "cuda":
         device_pt = "cuda"
         device_dali = "gpu"
@@ -122,10 +86,10 @@ def predict_videos(
         device_dali = "cpu"
     else:
         raise NotImplementedError("must choose 'gpu' or 'cpu' for `device` argument")
+    return {"device_pt": device_pt, "device_dali": device_dali}
 
-    # gather videos to process
-    video_files = get_videos_in_dir(video_path)
 
+def get_cfg_file(cfg_file: Union[str, DictConfig]):
     if isinstance(cfg_file, str):
         # load configuration file
         with open(cfg_file, "r") as f:
@@ -134,9 +98,57 @@ def predict_videos(
         cfg = cfg_file
     else:
         raise ValueError("cfg_file must be str or DictConfig, not %s!" % type(cfg_file))
+    return cfg
+
+
+def check_prediction_file_format(save_file: str) -> None:
+    if not (
+        save_file.endswith(".csv")
+        or save_file.endswith(".hdf5")
+        or save_file.endswith(".hdf")
+        or save_file.endswith(".h5")
+        or save_file.endswith(".h")
+    ):
+        raise NotImplementedError("Currently only .csv and .h5 files are supported")
+
+
+@typechecked
+def predict_single_video(
+    video_file: str,
+    ckpt_file: str,
+    cfg_file: Union[str, DictConfig],
+    preds_file: str,
+    sequence_length: int = 16,
+    device: Literal["gpu", "cuda", "cpu"] = "gpu",
+    video_pipe_kwargs: dict = {},
+) -> Tuple[pd.DataFrame, Union[np.ndarray, None]]:
+    """make predictions for a single video, loading frame sequences using DALI.
+    The function will need to initialize a DALI pipeline, prepare a dataloader, and pass it on to _make_predictions().
+
+    Args:
+        video_file (str): absolute path to a single video you want to get predictions for. typically .mp4 file.
+        ckpt_file (str): absolute path to the checkpoint of your trained model. assumed .ckpt format.
+        cfg_file (Union[str, DictConfig]): either a hydra config or a path pointing to one, with all the model specs. needed for loading the model.
+        preds_file (str): absolute filename for the predictions .csv file.
+        sequence_length (int, optional): number of frames in a sequence of video frames drawn by DALI. Defaults to 16. can be controlled externally by cfg.eval.dali_parameters.sequence_length.
+        device (Literal[, optional): device for DALI to use. Defaults to "gpu".
+        video_pipe_kwargs (dict, optional): any additional kwargs for DALI. Defaults to {}.
+
+    Returns:
+        Tuple[pd.DataFrame, Union[np.ndarray, None]]: pandas dataframe with predictions, and a potential numpy array with predicted heatmaps.
+    """
+    from nvidia.dali.plugin.pytorch import LastBatchPolicy
+    from lightning_pose.data.dali import video_pipe
+    from lightning_pose.data.utils import count_frames
+    from lightning_pose.utils.scripts import pretty_print_str
+
+    device_dict = get_devices(device)
+
+    cfg = get_cfg_file(cfg_file=cfg_file)
+    pretty_print_str(string="Loading trained model from %s... " % ckpt_file)
 
     model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
-    model.to(device_pt)
+    model.to(device_dict["device_pt"])
 
     # set some defaults
     batch_size = 1  # don't modify, change sequence length (exposed to user) instead
@@ -145,119 +157,103 @@ def predict_videos(
         if key not in video_pipe_kwargs.keys():
             video_pipe_kwargs[key] = val
 
-    # loop over videos
-    for video_file in video_files:
+    check_prediction_file_format(save_file=preds_file)
+    pretty_print_str(string="Building DALI video eval pipeline...")
 
-        print("Processing video at %s" % video_file)
+    # build video loader/pipeline
+    pipe = video_pipe(
+        resize_dims=(
+            cfg.data.image_resize_dims.height,
+            cfg.data.image_resize_dims.width,
+        ),
+        batch_size=batch_size,
+        sequence_length=sequence_length,
+        filenames=[video_file],
+        random_shuffle=False,
+        device=device_dict["device_dali"],
+        name="reader",
+        pad_sequences=True,
+        **video_pipe_kwargs
+    )
 
-        if os.path.isfile(save_file):
-            if not (
-                save_file.endswith(".csv")
-                or save_file.endswith(".hdf5")
-                or save_file.endswith(".hdf")
-                or save_file.endswith(".h5")
-                or save_file.endswith(".h")
-            ):
-                raise NotImplementedError(
-                    "Currently only .csv and .h5 files are supported")
-        else:
+    predict_loader = LightningWrapper(
+        pipe,
+        output_map=["x"],
+        last_batch_policy=LastBatchPolicy.FILL,
+        last_batch_padded=False,
+        auto_reset=False,
+        reader_name="reader",
+    )
+    # iterate through video
+    n_frames_ = count_frames(video_file)  # total frames in video
+    pretty_print_str(string="Predicting video at %s..." % video_file)
+    df, heatmaps_np = _make_predictions(
+        cfg=cfg,
+        model=model,
+        dataloader=predict_loader,
+        n_frames_=n_frames_,
+        batch_size=sequence_length,  # note this is different from the batch_size defined above
+        data_name=video_file,
+    )
 
-            if os.path.isdir(save_file):
-                base_dir = save_file
-            else:
-                base_dir = video_path
-
-            # create filename based on video name and model type
-            video_file_name = os.path.basename(video_file).replace(".mp4", "")
-            semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
-            if semi_supervised:
-                loss_str = ""
-                if len(cfg.model.losses_to_use) > 0:
-                    for loss in list(cfg.model.losses_to_use):
-                        loss_str = loss_str.join(
-                            "_%s_%.6f" % (loss, cfg.losses[loss]["log_weight"])
-                        )
-            else:
-                loss_str = ""
-            save_file = os.path.join(
-                base_dir,
-                "%s_%s%s.csv" % (video_file_name, cfg.model.model_type, loss_str),
-            )
-
-        # build video loader/pipeline
-        pipe = video_pipe(
-            resize_dims=(
-                cfg.data.image_resize_dims.height,
-                cfg.data.image_resize_dims.width,
-            ),
-            batch_size=batch_size,
-            sequence_length=sequence_length,
-            filenames=[video_file],
-            random_shuffle=False,
-            device=device_dali,
-            name="reader",
-            pad_sequences=True,
-            **video_pipe_kwargs
+    try:
+        save_dframe(df, preds_file)
+    except (PermissionError):
+        new_save_file = os.path.join(os.getcwd(), preds_file.split("/")[-1])
+        save_dframe(df, new_save_file)
+        print(
+            "Couldn't save file to the desired location due to a PermissionError. Instead saved it in %s"
+            % new_save_file
         )
-
-        predict_loader = LightningWrapper(
-            pipe,
-            output_map=["x"],
-            last_batch_policy=LastBatchPolicy.FILL,
-            last_batch_padded=False,
-            auto_reset=False,
-            reader_name="reader",
-        )
-        # iterate through video
-        n_frames_ = count_frames(video_file)  # total frames in video
-        df, heatmaps_np = make_predictions(
-            cfg=cfg,
-            model=model,
-            dataloader=predict_loader,
-            n_frames_=n_frames_,
-            batch_size=sequence_length,  # note this is different from the batch_size defined above
-            data_name=video_file,
-        )
-        save_dframe(df, save_file)
-
     # if iterating over multiple models, outside this function, the below will reduce
     # memory
     del model, pipe, predict_loader
     torch.cuda.empty_cache()
 
+    return df, heatmaps_np
+
+    """make predictions for a single video, resize keypoints to original dims, and return a dataframe and numpy array with heatmaps.
+
+    Args:
+        cfg (DictConfig): hydra config.
+        model (LightningModule): a loaded model ready to be evaluated.
+        dataloader (Union[torch.utils.data.DataLoader, LightningWrapper]): dataloader ready to be iterated.
+        n_frames_ (int): total number of frames in the dataset or video
+        save_folder (str, optional): [description]. Defaults to None.
+         regular batch_size for images or sequence_length for videos
+
+    Returns:
+        Tuple[pd.DataFrame, Union[np.ndarray, None]]: [description]
+    """
+
 
 @typechecked
-def make_predictions(
+def _make_predictions(
     cfg: DictConfig,
     model: LightningModule,
     dataloader: Union[torch.utils.data.DataLoader, LightningWrapper],
-    n_frames_: int,  # total number of frames in the dataset or video
-    batch_size: int,  # regular batch_size for images or sequence_length for videos
+    n_frames_: int,
+    batch_size: int,
     data_name: str = "dataset",
-    save_folder: str = None
+    save_folder: str = None,
 ) -> Tuple[pd.DataFrame, Union[np.ndarray, None]]:
-    """
+    """[summary]
 
     Args:
-        cfg:
-        model:
-        dataloader:
-        n_frames_:
-        batch_size:
-        data_name:
-        save_folder:
+        cfg (DictConfig): hydra config.
+        model (LightningModule): a loaded model ready to be evaluated.
+        dataloader (Union[torch.utils.data.DataLoader, LightningWrapper]): dataloader ready to be iterated.
+        n_frames_ (int): total number of frames in the dataset or video
+        batch_size (int): regular batch_size for images or sequence_length for videos
+        data_name (str, optional): [description]. Defaults to "dataset".
+        save_folder (str, optional): [description]. Defaults to None.
 
     Returns:
-
+        Tuple[pd.DataFrame, Union[np.ndarray, None]]: [description]
     """
+
     keypoints_np, confidence_np, heatmaps_np = _predict_frames(
-        cfg,
-        model,
-        dataloader,
-        n_frames_,
-        batch_size,
-        data_name,
-        save_folder
+        cfg, model, dataloader, n_frames_, batch_size, data_name, save_folder
     )
     # unify keypoints and confidences into one numpy array, scale (x,y) coords by
     # resizing factor
@@ -276,16 +272,34 @@ def make_predictions(
     return df, heatmaps_np
 
 
+# total number of frames in the dataset or video
+# regular batch_size for images or sequence_length for videos
+
+
 @typechecked
 def _predict_frames(
     cfg: DictConfig,
     model: LightningModule,
     dataloader: Union[torch.utils.data.DataLoader, LightningWrapper],
-    n_frames_: int,  # total number of frames in the dataset or video
-    batch_size: int,  # regular batch_size for images or sequence_length for videos
+    n_frames_: int,
+    batch_size: int,
     data_name: str = "dataset",
     save_folder: Optional[str] = None,
 ) -> Tuple[np.ndarray, np.ndarray, Union[np.ndarray, None]]:
+    """predict all frames of a video without undoing the resize or reshaping.
+
+    Args:
+        cfg (DictConfig): hydra config.
+        model (LightningModule): a loaded model ready to be evaluated.
+        dataloader (Union[torch.utils.data.DataLoader, LightningWrapper]): dataloader ready to be iterated.
+        n_frames_ (int): total number of frames in the dataset or video
+        batch_size (int): regular batch_size for images or sequence_length for videos
+        data_name (str, optional): [description]. Defaults to "dataset".
+        save_folder (str, optional): [description]. Defaults to None.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray, Union[np.ndarray, None]]: keypoints, confidences, and potentially heatmaps.
+    """
 
     if not save_folder or cfg.model.model_type != "heatmap":
         save_heatmaps = False
@@ -294,19 +308,21 @@ def _predict_frames(
     keypoints_np = np.zeros((n_frames_, model.num_keypoints * 2))
     confidence_np = np.zeros((n_frames_, model.num_keypoints))
     if save_heatmaps:
-        heatmaps_np = np.zeros((
-            n_frames_,
-            model.num_keypoints,
-            model.output_shape[0],  # // (2 ** model.downsample_factor),
-            model.output_shape[1],  # // (2 ** model.downsample_factor)
-        ))
+        heatmaps_np = np.zeros(
+            (
+                n_frames_,
+                model.num_keypoints,
+                model.output_shape[0],  # // (2 ** model.downsample_factor),
+                model.output_shape[1],  # // (2 ** model.downsample_factor)
+            )
+        )
     else:
         heatmaps_np = None
     t_beg = time.time()
     n_frames_counter = 0  # total frames processed
     n_batches = int(np.ceil(n_frames_ / batch_size))
     n = -1
-    with torch.no_grad():
+    with torch.inference_mode():
         for n, batch in enumerate(tqdm(dataloader, total=n_batches)):
             if type(batch) == dict:
                 image = batch["images"].to(_TORCH_DEVICE)  # predicting from dataset
@@ -351,7 +367,7 @@ def _predict_frames(
             )  # TODO: what can go wrong here?
             return None, None, None
         else:
-            print(
+            pretty_print_str(
                 "inference speed: %1.2f fr/sec" % ((n * batch_size) / (t_end - t_beg))
             )
             # for regression networks, confidence_np will be all zeros,
@@ -390,6 +406,7 @@ def make_pred_arr_undo_resize(
 def get_videos_in_dir(video_dir: str) -> List[str]:
     # gather videos to process
     # TODO: check if you're give a path to a single video?
+    pretty_print_str(string="Looking inside %s..." % video_dir)
     assert os.path.isdir(video_dir)
     all_files = [os.path.join(video_dir, f) for f in os.listdir(video_dir)]
     video_files = []
@@ -455,9 +472,11 @@ def get_model_class(map_type: str, semi_supervised: bool) -> Type[LightningModul
     if not semi_supervised:
         if map_type == "regression":
             from lightning_pose.models.regression_tracker import RegressionTracker
+
             return RegressionTracker
         elif map_type == "heatmap":
             from lightning_pose.models.heatmap_tracker import HeatmapTracker
+
             return HeatmapTracker
         else:
             raise NotImplementedError(
@@ -465,12 +484,16 @@ def get_model_class(map_type: str, semi_supervised: bool) -> Type[LightningModul
             )
     else:
         if map_type == "regression":
-            from lightning_pose.models.regression_tracker import \
-                SemiSupervisedRegressionTracker
+            from lightning_pose.models.regression_tracker import (
+                SemiSupervisedRegressionTracker,
+            )
+
             return SemiSupervisedRegressionTracker
         elif map_type == "heatmap":
-            from lightning_pose.models.heatmap_tracker import \
-                SemiSupervisedHeatmapTracker
+            from lightning_pose.models.heatmap_tracker import (
+                SemiSupervisedHeatmapTracker,
+            )
+
             return SemiSupervisedHeatmapTracker
         else:
             raise NotImplementedError(
@@ -480,9 +503,7 @@ def get_model_class(map_type: str, semi_supervised: bool) -> Type[LightningModul
 
 @typechecked
 def load_model_from_checkpoint(
-    cfg: DictConfig,
-    ckpt_file: str,
-    eval: bool = False
+    cfg: DictConfig, ckpt_file: str, eval: bool = False
 ) -> LightningModule:
     """this will have: path to a specific .ckpt file which we extract using other funcs
     will also take the standard hydra config file"""
@@ -500,9 +521,7 @@ def load_model_from_checkpoint(
     # get loss factories
     data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
     imgaug_transform = get_imgaug_transform(cfg=cfg)
-    dataset = get_dataset(
-        cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform
-    )
+    dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
     data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
     loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
 
@@ -537,8 +556,10 @@ def load_model_from_checkpoint(
 def save_dframe(df: pd.DataFrame, save_file: str) -> None:
     if save_file.endswith(".csv"):
         df.to_csv(save_file)
+        pretty_print_str("Saved predictions to: %s" % save_file)
     elif save_file.find(".h") > -1:
         df.to_hdf(save_file)
+        pretty_print_str("Saved predictions to: %s" % save_file)
     else:
         raise NotImplementedError("Currently only .csv and .h5 files are supported")
 
@@ -546,6 +567,7 @@ def save_dframe(df: pd.DataFrame, save_file: str) -> None:
 @typechecked
 def save_heatmaps(heatmaps_np: np.ndarray, save_folder: str) -> None:
     import h5py
+
     save_file = os.path.join(save_folder, "heatmaps.h5")
     with h5py.File(save_file, "w") as hf:
-        hf.create_dataset('heatmaps', data=heatmaps_np)
+        hf.create_dataset("heatmaps", data=heatmaps_np)

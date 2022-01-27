@@ -30,6 +30,7 @@ def ckpt_path_from_base_path(
     """
     # TODO: consider finding the most recent hydra path containing logging_dir_name
     import glob
+
     model_search_path = os.path.join(
         base_path,
         logging_dir_name,  # TODO: may change when we switch from Tensorboard
@@ -46,7 +47,7 @@ def ckpt_path_from_base_path(
 
 @typechecked
 def check_if_semi_supervised(
-        losses_to_use: Union[ListConfig, list, None] = None
+    losses_to_use: Union[ListConfig, list, None] = None
 ) -> bool:
     """Use config file to determine if model is semi-supervised.
 
@@ -118,3 +119,55 @@ def return_absolute_data_paths(data_cfg: DictConfig) -> Tuple[str, str]:
     assert os.path.isdir(data_dir)
     assert os.path.isdir(video_dir) or os.path.isfile(video_dir)
     return data_dir, video_dir
+
+
+# --------------------------------------------------------------------------------------
+# Path handling for predictions on new videos
+# --------------------------------------------------------------------------------------
+
+
+@typechecked
+class VideoPredPathHandler:
+    """class that defines filename for a predictions .csv file, given video file and model specs."""
+
+    def __init__(
+        self, save_preds_dir: str, video_file: str, model_cfg: DictConfig
+    ) -> None:
+        self.video_file = video_file
+        self.save_preds_dir = save_preds_dir
+        self.model_cfg = model_cfg
+        self.check_input_paths()
+
+    @property
+    def video_basename(self) -> str:
+        return os.path.basename(self.video_file).split(".")[0]
+
+    @property
+    def loss_str(self) -> str:
+        semi_supervised = check_if_semi_supervised(self.model_cfg.model.losses_to_use)
+        if semi_supervised:  # add the loss names and weights
+            loss_str = ""
+            if len(self.model_cfg.model.losses_to_use) > 0:
+                for loss in list(self.model_cfg.model.losses_to_use):
+                    # NOTE: keeping 3 decimals. if working with smaller numbers, modify to e.g,. .6f
+                    loss_str = loss_str.join(
+                        "_%s_%.3f" % (loss, self.model_cfg.losses[loss]["log_weight"])
+                    )
+        else:  # fully supervised, return empty string
+            loss_str = ""
+        return loss_str
+
+    def check_input_paths(self) -> None:
+        assert os.path.isfile(self.video_file)
+        assert os.path.isdir(self.save_preds_dir)
+
+    def build_pred_file_basename(self) -> str:
+        return "%s_%s%s.csv" % (
+            self.video_basename,
+            self.model_cfg.model.model_type,
+            self.loss_str,
+        )
+
+    def __call__(self) -> str:
+        pred_file_basename = self.build_pred_file_basename()
+        return os.path.join(self.save_preds_dir, pred_file_basename)
