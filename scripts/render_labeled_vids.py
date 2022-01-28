@@ -16,7 +16,6 @@ import fiftyone.utils.annotations as foua
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
-from sympy import pretty_print
 from lightning_pose.utils.io import return_absolute_path
 from lightning_pose.utils.plotting_utils import get_videos_in_dir
 from lightning_pose.utils.fiftyone import FiftyOneKeypointVideoPlotter, check_dataset
