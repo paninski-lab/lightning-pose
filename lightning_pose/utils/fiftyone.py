@@ -73,6 +73,9 @@ class FiftyOneKeypointBase:
         self.gt_data_dict: Dict[str, Dict[str, np.array]] = dfConverter(
             df=self.ground_truth_df
         )()
+        self.model_abs_paths = self.get_model_abs_paths()
+        #
+        self.pred_csv_files = []  # override in subclasses
 
     @property
     def img_width(self) -> int:
@@ -88,7 +91,16 @@ class FiftyOneKeypointBase:
 
     @property
     def model_names(self) -> List[str]:
-        return self.cfg.eval.model_display_names
+        model_display_names = self.cfg.eval.model_display_names
+        if model_display_names is None:  # model_0, model_1, ...
+            model_display_names = [
+                "model_%i" % i for i in range(len(self.pred_csv_files))
+            ]
+        return model_display_names
+
+    # @property
+    # def model_names(self) -> List[str]:
+    #     return self.cfg.eval.model_display_names
 
     @property
     def dataset_name(self) -> str:
@@ -107,16 +119,13 @@ class FiftyOneKeypointBase:
     def load_model_predictions(self) -> None:
         # TODO: we have to specify the paths differently in the init method?
         # take the abs paths, and load the models into a dictionary
-        model_abs_paths = self.get_model_abs_paths()
         self.model_preds_dict = {}
         self.preds_pandas_df_dict = {}
-        for model_idx, model_dir in enumerate(model_abs_paths):
+        for model_name, pred_csv_file in zip(self.model_names, self.pred_csv_files):
             # assuming that each path of saved logs has a predictions.csv file in it
-            temp_df = pd.read_csv(
-                os.path.join(model_dir, "predictions.csv"), header=self.df_header_rows
-            )
-            self.model_preds_dict[self.model_names[model_idx]] = dfConverter(temp_df)()
-            self.preds_pandas_df_dict[self.model_names[model_idx]] = temp_df
+            temp_df = pd.read_csv(pred_csv_file, header=self.df_header_rows)
+            self.model_preds_dict[model_name] = dfConverter(temp_df)()
+            self.preds_pandas_df_dict[model_name] = temp_df
 
     # @typechecked
     # def build_single_frame_keypoint_list(
@@ -209,6 +218,11 @@ class FiftyOneImagePlotter(FiftyOneKeypointBase):
     ) -> None:
         super().__init__(cfg=cfg, keypoints_to_plot=keypoints_to_plot)
 
+        self.pred_csv_files = [
+            os.path.join(model_dir, "predictions.csv")
+            for model_dir in self.model_abs_paths
+        ]
+
     @property
     def image_paths(self) -> List[str]:
         """extract absolute paths for all the images in the ground truth csv file
@@ -291,6 +305,7 @@ class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
         super().__init__(cfg=cfg, keypoints_to_plot=keypoints_to_plot)
         self.video: str = cfg.eval.video_file_to_plot
         self.pred_csv_files: List[str] = self.cfg.eval.pred_csv_files_to_plot
+        # self.pred_csv_files overrides the attribute in FiftyOneKeypointBase
         self.check_inputs()
 
     def check_inputs(self) -> None:
@@ -298,22 +313,12 @@ class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
             assert os.path.isfile(f)
         assert os.path.isfile(self.video)
 
-    @property
-    def model_names(self) -> List[str]:
-        model_display_names = self.cfg.eval.model_display_names
-        if model_display_names is None:  # model_0, model_1, ...
-            model_display_names = [
-                "model_%i" % i for i in range(len(self.pred_csv_files))
-            ]
-        assert len(model_display_names) == len(self.pred_csv_files)
-        return model_display_names
-
-    def load_model_predictions(self) -> None:
-        self.model_preds_dict = {}
-        for model_name, pred_csv_file in zip(self.model_names, self.pred_csv_files):
-            self.model_preds_dict[model_name] = pd.read_csv(
-                pred_csv_file, header=self.df_header_rows
-            )
+    # def load_model_predictions(self) -> None:
+    #     self.model_preds_dict = {}
+    #     for model_name, pred_csv_file in zip(self.model_names, self.pred_csv_files):
+    #         self.model_preds_dict[model_name] = pd.read_csv(
+    #             pred_csv_file, header=self.df_header_rows
+    #         )
 
     def create_dataset(self) -> fo.Dataset:
         # read each model's csv into a pandas dataframe, save in self.model_preds_dict
@@ -327,12 +332,15 @@ class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
         # TODO: in the future, dataset could include multiple video samples
         video_sample = fo.Sample(filepath=self.video)
         first_model_name = list(pred_keypoints_dict.keys())[0]
+        pretty_print_str(
+            "Appending fiftyone.Keypoints to a fiftyone.Sample object for video, for each frame..."
+        )
         for frame_idx in tqdm(range(len(pred_keypoints_dict[first_model_name]))):
             for model_field_name, model_preds in pred_keypoints_dict.items():
                 video_sample.frames[frame_idx + 1][
                     model_field_name + "_preds"
                 ] = model_preds[frame_idx]
-
+        pretty_print_str("Adding a fiftyone.Sample to fiftyone.Dataset...")
         dataset.add_sample(video_sample)
         return dataset
 
@@ -360,7 +368,6 @@ class dfConverter:
         return {"coords": coords, "likelihood": likelihood}
 
     def __call__(self) -> Dict[str, Dict[str, np.array]]:
-        print(self.keypoint_names)
         full_dict = {}
         for kp_name in self.keypoint_names:
             full_dict[kp_name] = self.dict_per_bp(kp_name)
