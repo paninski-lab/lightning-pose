@@ -1,6 +1,6 @@
 import fiftyone as fo
 from tqdm import tqdm
-from typing import Dict, List, Optional, Union, Callable
+from typing import Dict, List, Optional, Union, Callable, Any
 import pandas as pd
 import numpy as np
 from omegaconf import DictConfig, OmegaConf, ListConfig
@@ -9,6 +9,7 @@ import os
 from typeguard import typechecked
 
 from lightning_pose.utils.plotting_utils import get_videos_in_dir
+from lightning_pose.utils.scripts import pretty_print_str
 
 
 @typechecked
@@ -68,6 +69,10 @@ class FiftyOneKeypointBase:
             self.keypoints_to_plot: List[str] = list(
                 self.ground_truth_df.columns.levels[0][1:]
             )
+        # for faster fiftyone access, convert gt data to dict of dicts
+        self.gt_data_dict: Dict[str, Dict[str, np.array]] = dfConverter(
+            df=self.ground_truth_df
+        )()
 
     @property
     def img_width(self) -> int:
@@ -104,50 +109,81 @@ class FiftyOneKeypointBase:
         # take the abs paths, and load the models into a dictionary
         model_abs_paths = self.get_model_abs_paths()
         self.model_preds_dict = {}
+        self.preds_pandas_df_dict = {}
         for model_idx, model_dir in enumerate(model_abs_paths):
             # assuming that each path of saved logs has a predictions.csv file in it
-            self.model_preds_dict[self.model_names[model_idx]] = pd.read_csv(
+            temp_df = pd.read_csv(
                 os.path.join(model_dir, "predictions.csv"), header=self.df_header_rows
             )
+            self.model_preds_dict[self.model_names[model_idx]] = dfConverter(temp_df)()
+            self.preds_pandas_df_dict[self.model_names[model_idx]] = temp_df
+
+    # @typechecked
+    # def build_single_frame_keypoint_list(
+    #     self,
+    #     df: pd.DataFrame,
+    #     frame_idx: int,
+    # ) -> List[fo.Keypoint]:
+    #     # the output of this, is a the positions of all keypoints in a single frame for a single model.
+    #     keypoints_list = []
+    #     for kp_name in self.keypoints_to_plot:  # loop over names
+    #         if "likelihood" in df[kp_name]:
+    #             confidence = df[kp_name]["likelihood"][frame_idx]
+    #         else:  # gt data has no confidence, but we call it 1.0 for simplicity
+    #             confidence = 1.0  # also works if we make it None
+    #         # "bodyparts" it appears in the csv as we read it right now, but should be ignored
+    #         if kp_name == "bodyparts":
+    #             continue
+    #         # write a single keypoint's position, confidence, and name
+    #         keypoints_list.append(
+    #             fo.Keypoint(
+    #                 points=[
+    #                     [
+    #                         df[kp_name]["x"][frame_idx] / self.img_width,
+    #                         df[kp_name]["y"][frame_idx] / self.img_height,
+    #                     ]
+    #                 ],
+    #                 confidence=confidence,
+    #                 label=kp_name,  # sometimes plotted aggresively
+    #             )
+    #         )
+    #     return keypoints_list
 
     @typechecked
     def build_single_frame_keypoint_list(
         self,
-        df: pd.DataFrame,
+        data_dict: Dict[str, Dict[str, np.array]],
         frame_idx: int,
     ) -> List[fo.Keypoint]:
         # the output of this, is a the positions of all keypoints in a single frame for a single model.
         keypoints_list = []
         for kp_name in self.keypoints_to_plot:  # loop over names
-            if "likelihood" in df[kp_name]:
-                confidence = df[kp_name]["likelihood"][frame_idx]
-            else:  # gt data has no confidence, but we call it 1.0 for simplicity
-                confidence = 1.0  # also works if we make it None
-            # "bodyparts" it appears in the csv as we read it right now, but should be ignored
-            if kp_name == "bodyparts":
-                continue
             # write a single keypoint's position, confidence, and name
             keypoints_list.append(
                 fo.Keypoint(
                     points=[
                         [
-                            df[kp_name]["x"][frame_idx] / self.img_width,
-                            df[kp_name]["y"][frame_idx] / self.img_height,
+                            data_dict[kp_name]["coords"][frame_idx, 0] / self.img_width,
+                            data_dict[kp_name]["coords"][frame_idx, 1]
+                            / self.img_height,
                         ]
                     ],
-                    confidence=confidence,
+                    confidence=data_dict[kp_name]["likelihood"][frame_idx],
                     label=kp_name,  # sometimes plotted aggresively
                 )
             )
         return keypoints_list
 
     @typechecked
-    def get_keypoints_per_image(self, df: pd.DataFrame) -> List[fo.Keypoints]:
+    def get_keypoints_per_image(
+        self, data_dict: Dict[str, Dict[str, np.array]]
+    ) -> List[fo.Keypoints]:
         """iterates over the rows of the dataframe and gathers keypoints in fiftyone format"""
+        dataset_length = data_dict[self.keypoints_to_plot[0]]["coords"].shape[0]
         keypoints_list = []
-        for img_idx in tqdm(range(df.shape[0])):
+        for img_idx in tqdm(range(dataset_length)):
             single_frame_keypoints_list = self.build_single_frame_keypoint_list(
-                df=df, frame_idx=img_idx
+                data_dict=data_dict, frame_idx=img_idx
             )
             keypoints_list.append(fo.Keypoints(keypoints=single_frame_keypoints_list))
         return keypoints_list
@@ -156,9 +192,9 @@ class FiftyOneKeypointBase:
     def get_pred_keypoints_dict(self) -> Dict[str, List[fo.Keypoints]]:
         pred_keypoints_dict = {}
         # loop over the dictionary with predictions per model
-        for model_name, model_df in self.model_preds_dict.items():
+        for model_name, model_dict in self.model_preds_dict.items():
             print("Collecting predicted keypoints for model: %s..." % model_name)
-            pred_keypoints_dict[model_name] = self.get_keypoints_per_image(model_df)
+            pred_keypoints_dict[model_name] = self.get_keypoints_per_image(model_dict)
 
         return pred_keypoints_dict
 
@@ -194,7 +230,7 @@ class FiftyOneImagePlotter(FiftyOneKeypointBase):
     def get_gt_keypoints_list(self) -> List[fo.Keypoints]:
         # for each frame, extract ground-truth keypoint information
         print("Collecting ground-truth keypoints...")
-        return self.get_keypoints_per_image(self.ground_truth_df)
+        return self.get_keypoints_per_image(self.gt_data_dict)
 
     @typechecked
     def create_dataset(self) -> fo.Dataset:
@@ -202,11 +238,14 @@ class FiftyOneImagePlotter(FiftyOneKeypointBase):
         # read each model's csv into a pandas dataframe
         self.load_model_predictions()
         # assumes that train,test,val split is identical for all the different models. may be different with ensembling.
-        self.data_tags = get_image_tags(self.model_preds_dict[self.model_names[0]])
+        self.data_tags = get_image_tags(self.preds_pandas_df_dict[self.model_names[0]])
         # build the ground-truth keypoints per image
         gt_keypoints_list = self.get_gt_keypoints_list()
         # do the same for each model's predictions (lists are stored in a dict)
         pred_keypoints_dict = self.get_pred_keypoints_dict()
+        pretty_print_str(
+            "Appending fiftyone.Keypoints to fiftyone.Sample objects, for each image..."
+        )
         for img_idx, img_path in enumerate(tqdm(self.image_paths)):
             # create a "sample" with an image and a tag (should be appended to self.samples)
             sample = fo.Sample(filepath=img_path, tags=[self.data_tags[img_idx]])
@@ -296,6 +335,37 @@ class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
 
         dataset.add_sample(video_sample)
         return dataset
+
+
+@typechecked
+class dfConverter:
+    def __init__(self, df: pd.DataFrame) -> None:
+        self.df = df
+
+    @property
+    def keypoint_names(self):
+        kp_names = list(self.df.columns.levels[0][1:])
+        if "bodyparts" in kp_names:
+            kp_names.remove("bodyparts")
+        return kp_names
+
+    def dict_per_bp(self, keypoint_name: str) -> Dict[str, np.array]:
+        bp_df = self.df[keypoint_name]
+        coords = bp_df[["x", "y"]].to_numpy()
+        if "likelihood" in bp_df:
+            likelihood = bp_df["likelihood"].to_numpy()
+        else:
+            likelihood = np.ones(shape=coords.shape[0])
+
+        return {"coords": coords, "likelihood": likelihood}
+
+    def __call__(self) -> Dict[str, Dict[str, np.array]]:
+        print(self.keypoint_names)
+        full_dict = {}
+        for kp_name in self.keypoint_names:
+            full_dict[kp_name] = self.dict_per_bp(kp_name)
+
+        return full_dict
 
 
 # import fiftyone as fo
