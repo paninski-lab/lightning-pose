@@ -20,6 +20,7 @@ patch_typeguard()  # use before @typechecked
 
 class BaseExampleDict(TypedDict):
     """Class for finer control over typechecking."""
+
     images: TensorType["RGB":3, "image_height", "image_width"]
     keypoints: TensorType["num_targets"]
     idxs: int
@@ -27,6 +28,7 @@ class BaseExampleDict(TypedDict):
 
 class HeatmapExampleDict(BaseExampleDict):
     """Class for finer control over typechecking."""
+
     heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width"]
 
 
@@ -89,7 +91,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 csv_file = options[0]
 
         csv_data = pd.read_csv(csv_file, header=header_rows)
-        self.keypoint_names = csv_data.columns.levels[0][1:]
+        self.keypoint_names = csv_data.columns.levels[0][1:]  # unused inside class
         self.image_names = list(csv_data.iloc[:, 0])
         self.keypoints = torch.tensor(
             csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32
