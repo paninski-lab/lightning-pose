@@ -11,11 +11,9 @@ supporting massively accelerated training on *unlabeled* videos using **NVIDIA D
 * `FiftyOne` for visualizing model predictions
 * `Tensorboard` to visually diagnoze training performance
 
-## Required Hardware
-Your (potentially remote) machine has at least one GPU and **CUDA 11** installed. This 
+## Requirements
+Your (potentially remote) machine has a Linux operating system, at least one GPU and **CUDA 11** installed. This 
 is a requirement for **NVIDIA DALI**. 
-
-Provide more GPUs and we will use them.
 
 ## Installation
 
