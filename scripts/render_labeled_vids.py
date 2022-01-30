@@ -50,6 +50,7 @@ def render_labeled_videos(cfg: DictConfig):
         }
     )  # this size is good for a 400X400 image.
 
+    # TODO: still some issues below. make sure you understand why it fails. video format?
     outpath = fo_video_class.video.replace(".mp4", "") + "_labeled.mp4"
     pretty_print_str("Writing a labeled video to '%s'..." % outpath)
     foua.draw_labeled_video(dataset[fo_video_class.video], outpath, config=config)

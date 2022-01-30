@@ -135,7 +135,7 @@ As with `Tensorboard`, click on the link provided in the terminal to launch the 
 in your browser.
 
 ### FiftyOne app
-The app will open and will show `FRAME LABELS` to the left. Click the `v` next to it. It will drop down a menu with keypoint names, and a filter with confidence. Play around with these. Once you're happy, you can click on the orange bookmark icon to save the filters you applied. Then from code, you can call `session.view.export(...)`. NOTE: not yet supported.
+The app will open and will show `LABELS` (for images) or `FRAME LABELS` (for videos) on the left. Click the downward arrow next to it. It will drop down a menu which (if `eval.fiftyone_build_speed == "slow"`) will allow you to filter by `Labels` (keypoint names), or `Confidence`. When `eval.fiftyone_build_speed == "fast"`) we do not store `Labels` and `Confidence` information. Play around with these; a typical good threshold is `0.05-1.0.` Once you're happy, you can click on the orange bookmark icon to save the filters you applied. Then from code, you can call `session.view.export(...)`. NOTE: not yet supported.
 
 ## Predict keypoints on new videos
 With a trained model and a path to a new video, you can generate predictions for each 

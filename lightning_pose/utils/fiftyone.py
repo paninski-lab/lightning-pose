@@ -52,7 +52,9 @@ def get_image_tags(pred_df: pd.DataFrame) -> pd.Series:
 # @typechecked # force typechecking over the entire class. right now fails due to some list/listconfig issue
 class FiftyOneKeypointBase:
     def __init__(
-        self, cfg: DictConfig, keypoints_to_plot: Optional[List[str]] = None
+        self,
+        cfg: DictConfig,
+        keypoints_to_plot: Optional[List[str]] = None,
     ) -> None:
         self.cfg = cfg
         self.keypoints_to_plot = keypoints_to_plot
@@ -76,6 +78,10 @@ class FiftyOneKeypointBase:
         self.model_abs_paths = self.get_model_abs_paths()
         #
         self.pred_csv_files = []  # override in subclasses
+
+    @property
+    def build_speed(self) -> str:
+        return self.cfg.eval.fiftyone_build_speed
 
     @property
     def img_width(self) -> int:
@@ -159,7 +165,7 @@ class FiftyOneKeypointBase:
     #     return keypoints_list
 
     @typechecked
-    def build_single_frame_keypoint_list(
+    def _slow_single_frame_build(
         self,
         data_dict: Dict[str, Dict[str, np.array]],
         frame_idx: int,
@@ -184,6 +190,40 @@ class FiftyOneKeypointBase:
         return keypoints_list
 
     @typechecked
+    def _fast_single_frame_build(
+        self,
+        data_dict: Dict[str, Dict[str, np.array]],
+        frame_idx: int,
+    ) -> List[fo.Keypoint]:
+        # the output of this, is a the positions of all keypoints in a single frame for a single model.
+        keypoint = [
+            fo.Keypoint(
+                points=[
+                    (
+                        data_dict[kp_name]["coords"][frame_idx, 0] / self.img_width,
+                        data_dict[kp_name]["coords"][frame_idx, 1] / self.img_height,
+                    )
+                    for kp_name in self.keypoints_to_plot
+                ]
+            )
+        ]
+        return keypoint
+
+    # have two options here, "fast" and "slow"
+    @typechecked
+    def build_single_frame_keypoints(
+        self, data_dict: Dict[str, Dict[str, np.array]], frame_idx: int
+    ) -> List[fo.Keypoint]:
+        if self.build_speed == "fast":
+            return self._fast_single_frame_build(
+                data_dict=data_dict, frame_idx=frame_idx
+            )
+        else:  # slow
+            return self._slow_single_frame_build(
+                data_dict=data_dict, frame_idx=frame_idx
+            )
+
+    @typechecked
     def get_keypoints_per_image(
         self, data_dict: Dict[str, Dict[str, np.array]]
     ) -> List[fo.Keypoints]:
@@ -191,7 +231,7 @@ class FiftyOneKeypointBase:
         dataset_length = data_dict[self.keypoints_to_plot[0]]["coords"].shape[0]
         keypoints_list = []
         for img_idx in tqdm(range(dataset_length)):
-            single_frame_keypoints_list = self.build_single_frame_keypoint_list(
+            single_frame_keypoints_list = self.build_single_frame_keypoints(
                 data_dict=data_dict, frame_idx=img_idx
             )
             keypoints_list.append(fo.Keypoints(keypoints=single_frame_keypoints_list))
@@ -214,7 +254,9 @@ class FiftyOneKeypointBase:
 
 class FiftyOneImagePlotter(FiftyOneKeypointBase):
     def __init__(
-        self, cfg: DictConfig, keypoints_to_plot: Optional[List[str]] = None
+        self,
+        cfg: DictConfig,
+        keypoints_to_plot: Optional[List[str]] = None,
     ) -> None:
         super().__init__(cfg=cfg, keypoints_to_plot=keypoints_to_plot)
 
@@ -340,6 +382,7 @@ class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
                 video_sample.frames[frame_idx + 1][
                     model_field_name + "_preds"
                 ] = model_preds[frame_idx]
+                # fo.Frame(keypoints=model_preds[frame_idx]) raised some issues
         pretty_print_str("Adding a fiftyone.Sample to fiftyone.Dataset...")
         dataset.add_sample(video_sample)
         return dataset
