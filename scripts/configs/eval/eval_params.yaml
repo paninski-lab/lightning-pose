@@ -7,6 +7,8 @@ model_display_names: ["test_model"]
 # will be the name of the dataset (Mongo DB) created by FiftyOne
 fifty_one_dataset_name: "rick_data_test"
 
+fiftyone_build_speed: "slow"
+
 # str with an absolute path to a directory containing videos for prediction.
 # (it's not absolute just for the toy example)
 test_videos_directory: "toy_datasets/toymouseRunningData/unlabeled_videos"
