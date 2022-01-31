@@ -81,7 +81,7 @@ class FiftyOneKeypointBase:
 
     @property
     def build_speed(self) -> str:
-        return self.cfg.eval.fiftyone_build_speed
+        return self.cfg.eval.fiftyone.build_speed
 
     @property
     def img_width(self) -> int:
@@ -97,20 +97,23 @@ class FiftyOneKeypointBase:
 
     @property
     def model_names(self) -> List[str]:
-        model_display_names = self.cfg.eval.model_display_names
+        model_display_names = self.cfg.eval.fiftyone.model_display_names
         if model_display_names is None:  # model_0, model_1, ...
             model_display_names = [
                 "model_%i" % i for i in range(len(self.pred_csv_files))
             ]
         return model_display_names
 
-    # @property
-    # def model_names(self) -> List[str]:
-    #     return self.cfg.eval.model_display_names
-
     @property
     def dataset_name(self) -> str:
-        return self.cfg.eval.fifty_one_dataset_name
+        return self.cfg.eval.fiftyone.dataset_name
+
+    def dataset_info_print(self) -> str:
+        # run after creating the dataset
+        pretty_print_str(
+            'Created FiftyOne dataset called: %s. To access it in python: fo.load_dataset("%s")'
+            % (self.dataset_name, self.dataset_name)
+        )
 
     def get_model_abs_paths(self) -> List[str]:
         model_maybe_relative_paths = self.cfg.eval.hydra_paths
@@ -313,29 +316,12 @@ class FiftyOneImagePlotter(FiftyOneKeypointBase):
 
             samples.append(sample)
 
-        fiftyone_dataset = fo.Dataset(self.dataset_name)
+        fiftyone_dataset = fo.Dataset(self.dataset_name, persistent=True)
+        self.dataset_info_print()  # printing dataset_name
+        pretty_print_str("Adding samples to the dataset...")
         fiftyone_dataset.add_samples(samples)
+        pretty_print_str("Done!")
         return fiftyone_dataset
-
-
-""" 
-what's shared between the two?
-certain properties of the image; keypoint names; obtaining of csvs
-creation of dataset.
-
-different: 
-in video each sample is a video. there is basically one sample if we analyze one video.
-should also use get_pred_keypoints_dict (assuming that the preds for a new vid look the same as the ones in train hydra)
-
-what do I need?
-a folder with csv predictions for a given video. I have multiple videos and potentially multiple models' predictions for each.
-maybe just point to path to preds, and automatically find the path that has the same basename as the video name? or is it too specific?
-or for each video in the folder, I should assume there exists a directory with the same name inside saved_preds folder? that seems easier to grasp.
-it will require changing the path handler a bit, but it'll be easy.
-
-for now -- assume the basic inputs exist, i.e., we have all the paths to individual predictions.
-assume one video for now. keep as simple as possible.
-"""
 
 
 class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
@@ -344,23 +330,19 @@ class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
         cfg: DictConfig,
         keypoints_to_plot: Optional[List[str]] = None,
     ) -> None:
+        # initialize FiftyOneKeypointBase
         super().__init__(cfg=cfg, keypoints_to_plot=keypoints_to_plot)
+
         self.video: str = cfg.eval.video_file_to_plot
         self.pred_csv_files: List[str] = self.cfg.eval.pred_csv_files_to_plot
         # self.pred_csv_files overrides the attribute in FiftyOneKeypointBase
         self.check_inputs()
+        self.dataset_name = self.dataset_name + "_video"  # modify property from base
 
     def check_inputs(self) -> None:
         for f in self.pred_csv_files:
             assert os.path.isfile(f)
         assert os.path.isfile(self.video)
-
-    # def load_model_predictions(self) -> None:
-    #     self.model_preds_dict = {}
-    #     for model_name, pred_csv_file in zip(self.model_names, self.pred_csv_files):
-    #         self.model_preds_dict[model_name] = pd.read_csv(
-    #             pred_csv_file, header=self.df_header_rows
-    #         )
 
     def create_dataset(self) -> fo.Dataset:
         # read each model's csv into a pandas dataframe, save in self.model_preds_dict
@@ -368,7 +350,9 @@ class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
         # modify the predictions into fiftyone format
         pred_keypoints_dict = self.get_pred_keypoints_dict()
         # inherited from FiftyOneKeypointBase
-        dataset = fo.Dataset(self.dataset_name + "_videos")
+        dataset = fo.Dataset(self.dataset_name, persistent=True)
+        self.dataset_info_print()  # printind dataset name
+
         # adding _videos so as to not overwrite existing datasets with images.
         # NOTE: for now, one sample only in the dataset (one video)
         # TODO: in the future, dataset could include multiple video samples
@@ -385,6 +369,7 @@ class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
                 # fo.Frame(keypoints=model_preds[frame_idx]) raised some issues
         pretty_print_str("Adding a fiftyone.Sample to fiftyone.Dataset...")
         dataset.add_sample(video_sample)
+        pretty_print_str("Done!")
         return dataset
 
 
@@ -512,7 +497,7 @@ class dfConverter:
 # def make_dataset_and_viz_from_csvs(cfg: DictConfig):
 
 #     # basic error checking
-#     assert len(cfg.eval.model_display_names) == len(cfg.eval.hydra_paths)
+#     assert len(cfg.eval.fiftyone.model_display_names) == len(cfg.eval.hydra_paths)
 
 #     df_header_rows = OmegaConf.to_object(cfg.data.header_rows)  # default is [1,2]
 #     data_dir, video_dir = return_absolute_data_paths(cfg.data)
@@ -595,7 +580,7 @@ class dfConverter:
 #         sample["ground_truth"] = fo.Keypoints(
 #             keypoints=[fo.Keypoint(points=gt_kpts_list)]
 #         )
-#         for model_idx, model_name in enumerate(cfg.eval.model_display_names):
+#         for model_idx, model_name in enumerate(cfg.eval.fiftyone.model_display_names):
 #             model_kpts_list = tensor_to_keypoint_list(
 #                 model_preds_np[model_idx][img_idx],
 #                 cfg.data.image_orig_dims.height,
@@ -614,7 +599,7 @@ class dfConverter:
 #             keypoint_idx = 0
 
 #     # create a dataset and add all samples to it
-#     full_dataset = fo.Dataset(cfg.eval.fifty_one_dataset_name)
+#     full_dataset = fo.Dataset(cfg.eval.fiftyone.dataset_name)
 #     full_dataset.add_samples(samples)
 
 #     try:

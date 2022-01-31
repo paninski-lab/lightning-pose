@@ -135,7 +135,33 @@ As with `Tensorboard`, click on the link provided in the terminal to launch the 
 in your browser.
 
 ### FiftyOne app
-The app will open and will show `LABELS` (for images) or `FRAME LABELS` (for videos) on the left. Click the downward arrow next to it. It will drop down a menu which (if `eval.fiftyone_build_speed == "slow"`) will allow you to filter by `Labels` (keypoint names), or `Confidence`. When `eval.fiftyone_build_speed == "fast"`) we do not store `Labels` and `Confidence` information. Play around with these; a typical good threshold is `0.05-1.0.` Once you're happy, you can click on the orange bookmark icon to save the filters you applied. Then from code, you can call `session.view.export(...)`. NOTE: not yet supported.
+The app will open and will show `LABELS` (for images) or `FRAME LABELS` (for videos) on the left. Click the downward arrow next to it. It will drop down a menu which (if `eval.fiftyone_build_speed == "slow"`) will allow you to filter by `Labels` (keypoint names), or `Confidence`. When `eval.fiftyone_build_speed == "fast"`) we do not store `Labels` and `Confidence` information. Play around with these; a typical good threshold is `0.05-1.0.` Once you're happy, you can click on the orange bookmark icon to save the filters you applied. Then from code, you can call `session.view.export(...)`.
+
+```
+In [1]: import fiftyone as fo
+In [2]: dataset = fo.load_dataset(...)
+In [3]: session = fo.launch_app(dataset)
+
+# Do stuff in the App..., and click the bookmark when you finish
+
+# Say you want to export images to disc after you've done some filtering in the app
+
+In [4]: view = session.view # point just to the current view
+
+# define a config file for style
+In [5]: config = foua.DrawConfig(
+        {
+            "keypoints_size": 9, # can adjust this number after inspecting images
+            "show_keypoints_names": False,
+            "show_keypoints_labels": False,
+            "show_keypoints_attr_names": False,
+            "per_keypoints_label_colors": False,
+        }
+    )
+In [6]: export_dir = "/absolute/path/to/dir"
+In [7]: label_fields = ["your_label_field_1", "your_label_field_2", ... ] # "LABELS" in the app, i.e., model preds and/or ground truth data
+In [6]: view.draw_labels(export_dir=export_dir, label_fields=label_fields)
+```
 
 ## Predict keypoints on new videos
 With a trained model and a path to a new video, you can generate predictions for each 
