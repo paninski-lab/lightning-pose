@@ -39,26 +39,29 @@ def render_labeled_videos(cfg: DictConfig):
     fo_video_class = FiftyOneKeypointVideoPlotter(cfg=cfg)
     dataset = fo_video_class.create_dataset()
     check_dataset(dataset)
+    fo_video_class.dataset_info_print()  # print the name of the dataset
 
-    config = foua.DrawConfig(
-        {
-            "keypoints_size": 9,
-            "show_keypoints_names": False,
-            "show_keypoints_labels": False,
-            "show_keypoints_attr_names": False,
-            "per_keypoints_label_colors": False,
-        }
-    )  # this size is good for a 400X400 image.
+    if cfg.eval.fiftyone.launch_app_from_script:
+        # launch an interactive session
+        session = fo.launch_app(dataset, remote=True)
+        session.wait()
+    # otherwise launch from an ipython session
 
-    # TODO: still some issues below. make sure you understand why it fails. video format?
-    outpath = fo_video_class.video.replace(".mp4", "") + "_labeled.mp4"
-    pretty_print_str("Writing a labeled video to '%s'..." % outpath)
-    foua.draw_labeled_video(dataset[fo_video_class.video], outpath, config=config)
-    pretty_print_str("Video writing now complete!")
+    # config = foua.DrawConfig(
+    #     {
+    #         "keypoints_size": 9,
+    #         "show_keypoints_names": False,
+    #         "show_keypoints_labels": False,
+    #         "show_keypoints_attr_names": False,
+    #         "per_keypoints_label_colors": False,
+    #     }
+    # )  # this size is good for a 400X400 image.
 
-    # launch an interactive session
-    session = fo.launch_app(dataset, remote=True)
-    session.wait()
+    # # TODO: still some issues below. make sure you understand why it fails. video format?
+    # outpath = fo_video_class.video.replace(".mp4", "") + "_labeled.mp4"
+    # pretty_print_str("Writing a labeled video to '%s'..." % outpath)
+    # foua.draw_labeled_video(dataset[fo_video_class.video], outpath, config=config)
+    # pretty_print_str("Video writing now complete!")
 
 
 if __name__ == "__main__":

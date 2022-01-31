@@ -13,11 +13,6 @@ fiftyone:
   # whether to launch the app from the script (True), or from ipython (and have finer control over the outputs)
   launch_app_from_script: False
 
-# will be the name of the dataset (Mongo DB) created by FiftyOne
-fifty_one_dataset_name: "rick_data_test"
-
-fiftyone_build_speed: "slow"
-
 # str with an absolute path to a directory containing videos for prediction.
 # (it's not absolute just for the toy example)
 test_videos_directory: "toy_datasets/toymouseRunningData/unlabeled_videos"

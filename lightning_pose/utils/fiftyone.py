@@ -314,7 +314,6 @@ class FiftyOneImagePlotter(FiftyOneKeypointBase):
             samples.append(sample)
 
         fiftyone_dataset = fo.Dataset(self.dataset_name, persistent=True)
-        self.dataset_info_print()  # printing dataset_name
         pretty_print_str("Adding samples to the dataset...")
         fiftyone_dataset.add_samples(samples)
         pretty_print_str("Done!")
@@ -348,8 +347,6 @@ class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
         pred_keypoints_dict = self.get_pred_keypoints_dict()
         # inherited from FiftyOneKeypointBase
         dataset = fo.Dataset(self.dataset_name, persistent=True)
-        self.dataset_info_print()  # printind dataset name
-
         # adding _videos so as to not overwrite existing datasets with images.
         # NOTE: for now, one sample only in the dataset (one video)
         # TODO: in the future, dataset could include multiple video samples
