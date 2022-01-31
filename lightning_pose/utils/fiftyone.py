@@ -58,6 +58,7 @@ class FiftyOneKeypointBase:
     ) -> None:
         self.cfg = cfg
         self.keypoints_to_plot = keypoints_to_plot
+        self.dataset_name = self.cfg.eval.fiftyone.dataset_name
         self.data_dir, self.video_dir = return_absolute_data_paths(cfg.data)
         self.df_header_rows: List[int] = OmegaConf.to_object(cfg.data.header_rows)
         # TODO: [0, 1] in toy dataset, [1,2] in actual ones, standardize
@@ -103,10 +104,6 @@ class FiftyOneKeypointBase:
                 "model_%i" % i for i in range(len(self.pred_csv_files))
             ]
         return model_display_names
-
-    @property
-    def dataset_name(self) -> str:
-        return self.cfg.eval.fiftyone.dataset_name
 
     def dataset_info_print(self) -> str:
         # run after creating the dataset
@@ -337,7 +334,7 @@ class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
         self.pred_csv_files: List[str] = self.cfg.eval.pred_csv_files_to_plot
         # self.pred_csv_files overrides the attribute in FiftyOneKeypointBase
         self.check_inputs()
-        self.dataset_name = self.dataset_name + "_video"  # modify property from base
+        self.dataset_name = self.dataset_name + "_video"
 
     def check_inputs(self) -> None:
         for f in self.pred_csv_files:
