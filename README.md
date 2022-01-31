@@ -139,17 +139,18 @@ The app will open and will show `LABELS` (for images) or `FRAME LABELS` (for vid
 
 ```
 In [1]: import fiftyone as fo
-In [2]: dataset = fo.load_dataset(...)
-In [3]: session = fo.launch_app(dataset)
+In [2]: import fiftyone.utils.annotations as foua
+In [3]: dataset = fo.load_dataset("your_dataset_name") # loads an existing dataset created by launch_diagnostics.py
+In [4]: session = fo.launch_app(dataset) # launches the app
 
 # Do stuff in the App..., and click the bookmark when you finish
 
 # Say you want to export images to disc after you've done some filtering in the app
 
-In [4]: view = session.view # point just to the current view
+In [5]: view = session.view # point just to the current view
 
 # define a config file for style
-In [5]: config = foua.DrawConfig(
+In [6]: config = foua.DrawConfig(
         {
             "keypoints_size": 9, # can adjust this number after inspecting images
             "show_keypoints_names": False,
@@ -158,9 +159,9 @@ In [5]: config = foua.DrawConfig(
             "per_keypoints_label_colors": False,
         }
     )
-In [6]: export_dir = "/absolute/path/to/dir"
-In [7]: label_fields = ["your_label_field_1", "your_label_field_2", ... ] # "LABELS" in the app, i.e., model preds and/or ground truth data
-In [6]: view.draw_labels(export_dir=export_dir, label_fields=label_fields)
+In [7]: export_dir = "/absolute/path/to/dir"
+In [8]: label_fields = ["your_label_field_1", "your_label_field_2", ... ] # "LABELS" in the app, i.e., model preds and/or ground truth data
+In [9]: view.draw_labels(export_dir, label_fields=label_fields, config=config)
 ```
 
 ## Predict keypoints on new videos

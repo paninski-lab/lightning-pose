@@ -10,7 +10,8 @@ import fiftyone as fo
 def visualize_training_dataset(cfg: DictConfig) -> None:
     fo_keypoint_class = FiftyOneImagePlotter(cfg=cfg)  # initializes everything
     dataset = fo_keypoint_class.create_dataset()  # loops over images and models
-    check_dataset(dataset)
+    check_dataset(dataset)  # create metadata and print if there are problems
+    fo_keypoint_class.dataset_info_print()  # print the name of the dataset
 
     if cfg.eval.fiftyone.launch_app_from_script:
         # launch an interactive session

@@ -1,6 +1,5 @@
 # loss = projection onto the discarded eigenvectors
 pca_multiview:
-
   # weight in front of PCA loss
   log_weight: 0.0
 
@@ -12,7 +11,6 @@ pca_multiview:
 
 # loss = projection onto the discarded eigenvectors
 pca_singleview:
-
   # weight in front of PCA loss
   log_weight: 0.0
 
@@ -24,22 +22,19 @@ pca_singleview:
 
 # loss = norm of distance between successive timepoints
 temporal:
-
   # weight in front of temporal loss
-  log_weight: 0.0
+  log_weight: 7.5
 
   # for epsilon insensitive rectification (in pixels; diffs below this are not penalized)
   epsilon: 5.
 
 # loss = mse loss between generated heatmap and ideal gaussian heatmap with same center as generated heatmap
 unimodal_mse:
-
   # weight in front of unimodal loss
   log_weight: 0.0
 
 # loss = wasserstein earth-mover loss between generated heatmap and ideal gaussian heatmap with same center as generated heatmap
 unimodal_wasserstein:
-
   # weight in front of unimodal loss
   log_weight: 0.0
 
