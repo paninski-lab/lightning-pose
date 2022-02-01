@@ -1,6 +1,6 @@
 import fiftyone as fo
 from tqdm import tqdm
-from typing import Dict, List, Optional, Union, Callable, Any
+from typing import Dict, List, Optional, Union, Callable, Any, Literal
 import pandas as pd
 import numpy as np
 from omegaconf import DictConfig, OmegaConf, ListConfig
@@ -30,6 +30,7 @@ def check_unique_tags(data_pt_tags: List[str]) -> bool:
 
 @typechecked
 def check_dataset(dataset: fo.Dataset) -> None:
+    pretty_print_str("Checking FiftyOne.Dataset by computing metadata... ")
     try:
         dataset.compute_metadata(skip_failures=False)
     except ValueError:
@@ -395,6 +396,19 @@ class dfConverter:
             full_dict[kp_name] = self.dict_per_bp(kp_name)
 
         return full_dict
+
+
+class FiftyOneFactory:
+    def __init__(self, dataset_to_create: Literal["images", "videos"]) -> None:
+        self.dataset_to_create = dataset_to_create
+
+    def __call__(
+        self,
+    ) -> Union[FiftyOneImagePlotter, FiftyOneKeypointVideoPlotter]:
+        if self.dataset_to_create == "images":
+            return FiftyOneImagePlotter
+        else:
+            return FiftyOneKeypointVideoPlotter
 
 
 # import fiftyone as fo
