@@ -13,6 +13,9 @@ fiftyone:
   # whether to launch the app from the script (True), or from ipython (and have finer control over the outputs)
   launch_app_from_script: False
 
+  # whether to create a "videos" or "images" dataset, since the processes are the same
+  dataset_to_create: "images"
+
 # str with an absolute path to a directory containing videos for prediction.
 # (it's not absolute just for the toy example)
 test_videos_directory: "toy_datasets/toymouseRunningData/unlabeled_videos"

@@ -85,6 +85,14 @@ If you happen to want to use a maximum of 11 epochs instead the default number (
 ```console
 foo@bar:~$ python scripts/train_hydra.py
 ```
+In case your config file isn't at `lightning-pose/scripts/configs`, which is common if you have multiple projects.
+
+```
+console
+foo@bar:~$ python scripts/lightning-pose/scripts/train_hydra.py \
+  --config-path="<PATH/TO/YOUR/CONFIGS/DIR>" \
+  --config-name="<CONFIG_NAME_.yaml>"
+```
 
 ## Logs and saved models
 
@@ -100,69 +108,6 @@ foo@bar:~$ tensorboard --logdir outputs/YYYY-MM-DD/
 where you use the date in which you ran the model. Click on the provided link in the
 terminal, which will look something like `http://localhost:6006/`.
 Note that if you save the model at a different directory, just use that directory after `--logdir`.
-
-## Visualize train/test/val predictions
-
-You can visualize the predictions of one or multiple trained models on the `train/test/val` 
-images using the `FiftyOne` app.
-
-You will need to specify:
-1. `eval.hydra_paths`: path to trained models to use for prediction. 
-
-Generally, using `Hydra` we can either edit the config `.yaml` files or override them 
-from the command line. The argument of ineterest is `
-
-### Option 1: Edit the config
-
-Edit `scripts/configs/eval/eval_params.yaml` like so:
-```
-hydra_paths: [
-"YYYY-MM-DD/HH-MM-SS/", "YYYY-MM-DD/HH-MM-SS/",
-]
-```
-where you specify the relative paths for `hydra` folders within the `lightning-pose/outputs` folder. 
-Then from command line, run:
-```console
-foo@bar:~$ python scripts/launch_diagnostics.py
-```
-Alternatively, override from the command line:
-```console
-foo@bar:~$ python scripts/launch_diagnostics.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"] \
-data.data_dir='/absolute/path/to/data_dir' \
-data.video_dir='/absolute/path/to/video_dir' 
-``` 
-As with `Tensorboard`, click on the link provided in the terminal to launch the diagnostics
-in your browser.
-
-### FiftyOne app
-The app will open and will show `LABELS` (for images) or `FRAME LABELS` (for videos) on the left. Click the downward arrow next to it. It will drop down a menu which (if `eval.fiftyone_build_speed == "slow"`) will allow you to filter by `Labels` (keypoint names), or `Confidence`. When `eval.fiftyone_build_speed == "fast"`) we do not store `Labels` and `Confidence` information. Play around with these; a typical good threshold is `0.05-1.0.` Once you're happy, you can click on the orange bookmark icon to save the filters you applied. Then from code, you can call `session.view.export(...)`.
-
-```
-In [1]: import fiftyone as fo
-In [2]: import fiftyone.utils.annotations as foua
-In [3]: dataset = fo.load_dataset("your_dataset_name") # loads an existing dataset created by launch_diagnostics.py
-In [4]: session = fo.launch_app(dataset) # launches the app
-
-# Do stuff in the App..., and click the bookmark when you finish
-
-# Say you want to export images to disc after you've done some filtering in the app
-
-In [5]: view = session.view # point just to the current view
-
-# define a config file for style
-In [6]: config = foua.DrawConfig(
-        {
-            "keypoints_size": 9, # can adjust this number after inspecting images
-            "show_keypoints_names": False,
-            "show_keypoints_labels": False,
-            "show_keypoints_attr_names": False,
-            "per_keypoints_label_colors": False,
-        }
-    )
-In [7]: export_dir = "/absolute/path/to/dir"
-In [8]: label_fields = ["your_label_field_1", "your_label_field_2", ... ] # "LABELS" in the app, i.e., model preds and/or ground truth data
-In [9]: view.draw_labels(export_dir, label_fields=label_fields, config=config)
-```
 
 ## Predict keypoints on new videos
 With a trained model and a path to a new video, you can generate predictions for each 
@@ -192,18 +137,95 @@ eval.test_videos_directory="/absolute/path/to/unlabeled_videos" \
 eval.saved_vid_preds_dir="/absolute/path/to/dir"
 ```
 
-## Overlay predicted keypoints on new videos
-With the pose predictions output by the previous step, you can now overlay these 
-predictions on the video. 
-To do so for the example dataset, run:
-
+## `FiftyOne`
+You can visualize the predictions of one or multiple trained models, either on the `train/test/val` 
+images or on test videos. 
+Add details about the app...
+The first step is to create a `FiftyOne.Dataset` (i.e., a Mongo database pointing to images, keypoint predictions, names, and confidences.)
+### Creating `FiftyOne.Dataset` for train/test/val predictions
 ```console
-foo@bar:~$ python scripts/render_labeled_vids.py eval.model_display_names=["test_model"] \
-data.data_dir="/absolute/path/to/data_dir" \
-eval.video_file_to_plot="/absolute/path/to/vid.mp4" \
-eval.pred_csv_files_to_plot:["/absolute/path/1/to.csv", "/absolute/path/1/to.csv"]
+foo@bar:~$ python scripts/create_fiftyone_dataset.py \
+eval.fiftyone.dataset_to_create="images" \
+eval.fiftyone.dataset_name=<YOUR_DATASET_NAME> \
+eval.fiftyone.build_speed="slow" \
+eval.hydra_paths=["</ABSOLUTE/PATH/TO/HYDRA/DIR/1>", "</ABSOLUTE/PATH/TO/HYDRA/DIR/1>"] \
+eval.fiftyone.model_display_names=["<NAME_FOR_MODEL_1>","<NAME_FOR_MODEL_2>"]
+```
+These arguments could also be edited and saved in the config files if needed.
+Note that `eval.hydra_paths` are absolute paths to directories with trained models you want to use for prediction. Each directory contains a `predictions.csv` file. 
+You can also use the relative form 
+```
+eval.hydra_paths: ["YYYY-MM-DD/HH-MM-SS/", "YYYY-MM-DD/HH-MM-SS/"]
+```
+which will look in the `lightning-pose/outputs` directory for these subdirectories.
+You can choose meaningful display names for the models above using `eval.fiftyone.model_display_names`, e.g., 
+```
+eval.fiftyone.model_display_names: ["supervised", "temporal"]
+```
+### Launching the FiftyOne app
+Open an `ipython` session from your terminal. 
+```console
+foo@bar:~$ ipython
+```
+Now in Python, we import fiftyone, load the dataset we created, and launch the app
+```
+In [1]: import fiftyone as fo
+In [2]: dataset = fo.load_dataset("YOUR_DATASET_NAME") # loads an existing dataset created by scripts/create_fiftyone_dataset.py which prints its name
+In [3]: session = fo.launch_app(dataset) # launches the app
 
+# Do stuff in the App..., and click the bookmark when you finish
+
+# Say you want to export images to disc after you've done some filtering in the app
+
+In [4]: view = session.view # point just to the current view
+
+# define a config file for style
+In [5]: import fiftyone.utils.annotations as foua
+In [6]: config = foua.DrawConfig(
+        {
+            "keypoints_size": 9, # can adjust this number after inspecting images
+            "show_keypoints_names": False,
+            "show_keypoints_labels": False,
+            "show_keypoints_attr_names": False,
+            "per_keypoints_label_colors": False,
+        }
+    )
+In [7]: export_dir = "/ABSOLUTE/PATH/TO/DIR" # a directory where you want the images saved
+In [8]: label_fields = ["YOUR_LABELED_FIELD_1", "YOUR_LABELED_FIELD_1", ... ] # "LABELS" in the app, i.e., model preds and/or ground truth data
+In [9]: view.draw_labels(export_dir, label_fields=label_fields, config=config)
 ```
 
-using the same hydra path as before. This script will by default save a labeled video in the same directory as the video it analyzes, and will also launch the fiftyone app to further explore the video(s) in the browser. 
+When you're in the app: the app will show `LABELS` (for images) or `FRAME LABELS` (for videos) on the left. Click the downward arrow next to it. It will drop down a menu which (if `eval.fiftyone.build_speed == "slow"`) will allow you to filter by `Labels` (keypoint names), or `Confidence`. When `eval.fiftyone_build_speed == "fast"`) we do not store `Labels` and `Confidence` information. Play around with these; a typical good threshold is `0.05-1.0.` Once you're happy, you can click on the orange bookmark icon to save the filters you applied. Then from code, you can call `view = session.view` and proceed from there.
+
+
+### Creating `FiftyOne.Dataset` for videos
+```console
+foo@bar:~$ python scripts/create_fiftyone_dataset.py \
+eval.fiftyone.dataset_to_create="videos" \
+eval.fiftyone.dataset_name=<YOUR_DATASET_NAME> \
+eval.fiftyone.build_speed="slow" \
+eval.hydra_paths=["</ABSOLUTE/PATH/TO/HYDRA/DIR/1>","</ABSOLUTE/PATH/TO/HYDRA/DIR/1>"] \
+eval.fiftyone.model_display_names=["<NAME_FOR_MODEL_1>","<NAME_FOR_MODEL_2>"]
+eval.test_videos_directory="</ABSOLUTE/PATH/TO/VIDEOS/DIR>" \
+eval.video_file_to_plot="</ABSOLUTE/PATH/TO/VIDEO.mp4>" \
+eval.pred_csv_files_to_plot=["</ABSOLUTE/PATH/TO/PREDS_1.csv>","</ABSOLUTE/PATH/TO/PREDS_2.csv>"]
+```
+Again, you may just edit the config and run
+```console
+foo@bar:~$ python scripts/create_fiftyone_dataset.py
+```
+**Note**: for videos longer than a few minutes, creating a detailed `FiftyOne.Dataset` may take a very long time. Until next releases, please implement your own visualization method for longer videos.
+
+Now, open `ipython` and launch the app similarly to the above.
+Note, that the app may complain about the video format, in which case, within ipython, reencode the video:
+```
+In [8]: fouv.reencode_video("</ABSOLUTE/PATH/TO/VIDEO.mp4>", output_path="</NEW/ABSOLUTE/PATH/TO/VIDEO.mp4>")
+```
+If you want to save a video to local directory,
+# TODO -- verify
+```
+foua.draw_labeled_video(dataset[fo_video_class.video], outpath, config=config)
+In [9]: view.draw_labels(export_dir, label_fields=label_fields, config=config)
+
+```
 
