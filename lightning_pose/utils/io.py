@@ -90,6 +90,9 @@ def return_absolute_path(possibly_relative_path: str, n_dirs_back=3) -> str:
         # our toy_dataset in relative path
         cwd_split = os.getcwd().split(os.path.sep)
         desired_path_list = cwd_split[:-n_dirs_back]
+        if desired_path_list[-1] == "multirun":
+            # hydra multirun, go one dir back
+            desired_path_list = desired_path_list[:-1]
         abs_path = os.path.join(os.path.sep, *desired_path_list, possibly_relative_path)
     if not os.path.exists(abs_path):
         raise IOError("%s is not a valid path" % abs_path)
