@@ -88,7 +88,7 @@ foo@bar:~$ python scripts/train_hydra.py
 In case your config file isn't at `lightning-pose/scripts/configs`, which is common if you have multiple projects.
 
 ```console
-foo@bar:~$ python scripts/lightning-pose/scripts/train_hydra.py \
+foo@bar:~$ python scripts/train_hydra.py \
   --config-path="<PATH/TO/YOUR/CONFIGS/DIR>" \
   --config-name="<CONFIG_NAME_.yaml>"
 ```
