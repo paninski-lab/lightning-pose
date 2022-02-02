@@ -69,3 +69,13 @@ profiler: "simple"
 
 # runs K small batches of size N before doing a backwards pass.
 accumulate_grad_batches: 2
+
+# learning rate scheduler
+# multisteplr | [todo: reducelronplateau]
+lr_scheduler: multisteplr
+
+# multisteplr scheduler params
+lr_scheduler_params:
+  multisteplr:
+    milestones: [100, 200, 300]
+    gamma: 0.5

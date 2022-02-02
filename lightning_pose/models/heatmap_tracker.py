@@ -2,11 +2,12 @@
 
 from kornia.geometry.subpix import spatial_softmax2d, spatial_expectation2d
 from kornia.geometry.transform import pyrup
+from omegaconf import DictConfig
 import torch
 from torch import nn
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
-from typing import Any, Callable, Dict, List, Union, Optional, Tuple, TypedDict
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, Union
 from typing_extensions import Literal
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau
@@ -37,6 +38,8 @@ class HeatmapTracker(BaseSupervisedTracker):
         last_resnet_layer_to_get: int = -3,
         output_shape: Optional[tuple] = None,  # change
         torch_seed: int = 123,
+        lr_scheduler: str = "multisteplr",
+        lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
     ) -> None:
         """Initialize a DLC-like model with resnet backbone.
 
@@ -53,6 +56,10 @@ class HeatmapTracker(BaseSupervisedTracker):
             output_shape: hard-coded image size to avoid dynamic shape
                 computations
             torch_seed: make weight initialization reproducible
+            lr_scheduler: how to schedule learning rate
+                multisteplr
+            lr_scheduler_params: params for specific learning rate schedulers
+                multisteplr: milestones, gamma
 
         """
 
@@ -63,6 +70,8 @@ class HeatmapTracker(BaseSupervisedTracker):
             resnet_version=resnet_version,
             pretrained=pretrained,
             last_resnet_layer_to_get=last_resnet_layer_to_get,
+            lr_scheduler=lr_scheduler,
+            lr_scheduler_params=lr_scheduler_params,
         )
         self.num_keypoints = num_keypoints
         self.num_targets = num_keypoints * 2
@@ -222,6 +231,8 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         last_resnet_layer_to_get: int = -3,
         output_shape: Optional[tuple] = None,
         torch_seed: int = 123,
+        lr_scheduler: str = "multisteplr",
+        lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
     ):
         """
 
@@ -240,6 +251,10 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             output_shape: hard-coded image size to avoid dynamic shape
                 computations
             torch_seed: make weight initialization reproducible
+            lr_scheduler: how to schedule learning rate
+                multisteplr
+            lr_scheduler_params: params for specific learning rate schedulers
+                multisteplr: milestones, gamma
 
         """
         super().__init__(
@@ -251,6 +266,8 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             last_resnet_layer_to_get=last_resnet_layer_to_get,
             output_shape=output_shape,
             torch_seed=torch_seed,
+            lr_scheduler=lr_scheduler,
+            lr_scheduler_params=lr_scheduler_params,
         )
         self.loss_factory_unsup = loss_factory_unsupervised.to(self.device)
 

@@ -1,10 +1,11 @@
 """Models that produce (x, y) coordinates of keypoints from images."""
 
+from omegaconf import DictConfig
 import torch
 from torch import nn
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from typing_extensions import Literal
 
 from lightning_pose.losses.factory import LossFactory
@@ -31,6 +32,8 @@ class RegressionTracker(BaseSupervisedTracker):
         last_resnet_layer_to_get: int = -2,
         representation_dropout_rate: float = 0.2,
         torch_seed: int = 123,
+        lr_scheduler: str = "multisteplr",
+        lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
     ) -> None:
         """Base model that produces (x, y) coordinates of keypoints from images.
 
@@ -44,6 +47,10 @@ class RegressionTracker(BaseSupervisedTracker):
             representation_dropout_rate: dropout in the final fully connected
                 layers
             torch_seed: make weight initialization reproducible
+            lr_scheduler: how to schedule learning rate
+                multisteplr
+            lr_scheduler_params: params for specific learning rate schedulers
+                multisteplr: milestones, gamma
 
         """
 
@@ -54,6 +61,8 @@ class RegressionTracker(BaseSupervisedTracker):
             resnet_version=resnet_version,
             pretrained=pretrained,
             last_resnet_layer_to_get=last_resnet_layer_to_get,
+            lr_scheduler=lr_scheduler,
+            lr_scheduler_params=lr_scheduler_params,
         )
         self.num_keypoints = num_keypoints
         self.num_targets = self.num_keypoints * 2
@@ -114,6 +123,8 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         last_resnet_layer_to_get: int = -2,
         representation_dropout_rate: float = 0.2,
         torch_seed: int = 123,
+        lr_scheduler: str = "multisteplr",
+        lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
     ) -> None:
         """
 
@@ -129,6 +140,10 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
             representation_dropout_rate: dropout in the final fully connected
                 layers
             torch_seed: make weight initialization reproducible
+            lr_scheduler: how to schedule learning rate
+                multisteplr
+            lr_scheduler_params: params for specific learning rate schedulers
+                multisteplr: milestones, gamma
 
         """
         super().__init__(
@@ -139,6 +154,8 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
             representation_dropout_rate=representation_dropout_rate,
             last_resnet_layer_to_get=last_resnet_layer_to_get,
             torch_seed=torch_seed,
+            lr_scheduler=lr_scheduler,
+            lr_scheduler_params=lr_scheduler_params,
         )
         self.loss_factory_unsup = loss_factory_unsupervised
         loss_names = loss_factory_unsupervised.loss_instance_dict.keys()
