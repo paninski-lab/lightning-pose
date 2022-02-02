@@ -12,6 +12,9 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypedDic
 
 patch_typeguard()  # use before @typechecked
 
+MULTISTEPLR_MILESTONES_DEFAULT = [100, 200, 300]
+MULTISTEPLR_GAMMA_DEFAULT = 0.5
+
 
 @typechecked
 def grab_resnet_backbone(
@@ -98,6 +101,8 @@ class BaseFeatureExtractor(LightningModule):
         resnet_version: Literal[18, 34, 50, 101, 152] = 18,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
+        lr_scheduler: str = "multisteplr",
+        lr_scheduler_params: Optional[dict] = None,
     ) -> None:
         """A ResNet model that takes in images and generates features.
 
@@ -109,6 +114,8 @@ class BaseFeatureExtractor(LightningModule):
             resnet_version: which ResNet version to use; defaults to 18
             pretrained: True to load weights pretrained on imagenet
             last_resnet_layer_to_get: Defaults to -2.
+            lr_scheduler: how to schedule learning rate
+            lr_scheduler_params: params for specific learning rate schedulers
 
         """
         super().__init__()
@@ -123,6 +130,9 @@ class BaseFeatureExtractor(LightningModule):
             model=base,
             last_layer_ind=last_resnet_layer_to_get,
         )
+
+        self.lr_scheduler = lr_scheduler
+        self.lr_scheduler_params = lr_scheduler_params
 
     def get_representations(
         self,
@@ -167,7 +177,23 @@ class BaseFeatureExtractor(LightningModule):
         optimizer = Adam(filter(lambda p: p.requires_grad, self.parameters()), lr=1e-3)
 
         # define a scheduler that reduces the base learning rate
-        scheduler = MultiStepLR(optimizer, milestones=[100, 200, 300], gamma=0.5)
+        if self.lr_scheduler == "multisteplr" or self.lr_scheduler == "multistep_lr":
+
+            if self.lr_scheduler_params is None:
+                milestones = MULTISTEPLR_MILESTONES_DEFAULT
+                gamma = MULTISTEPLR_GAMMA_DEFAULT
+            else:
+                milestones = self.lr_scheduler_params.get(
+                    "milestones", MULTISTEPLR_MILESTONES_DEFAULT)
+                gamma = self.lr_scheduler_params.get(
+                    "gamma", MULTISTEPLR_GAMMA_DEFAULT)
+
+            scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
+
+        else:
+            raise NotImplementedError(
+                "'%s' is an invalid LR scheduler" % self.lr_scheduler
+            )
 
         return {
             "optimizer": optimizer,
@@ -264,7 +290,25 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
             params = filter(lambda p: p.requires_grad, self.parameters())
 
         optimizer = Adam(params, lr=1e-3)
-        scheduler = MultiStepLR(optimizer, milestones=[100, 200, 300], gamma=0.5)
+
+        # define a scheduler that reduces the base learning rate
+        if self.lr_scheduler == "multisteplr" or self.lr_scheduler == "multistep_lr":
+
+            if self.lr_scheduler_params is None:
+                milestones = MULTISTEPLR_MILESTONES_DEFAULT
+                gamma = MULTISTEPLR_GAMMA_DEFAULT
+            else:
+                milestones = self.lr_scheduler_params.get(
+                    "milestones", MULTISTEPLR_MILESTONES_DEFAULT)
+                gamma = self.lr_scheduler_params.get(
+                    "gamma", MULTISTEPLR_GAMMA_DEFAULT)
+
+            scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
+
+        else:
+            raise NotImplementedError(
+                "'%s' is an invalid LR scheduler" % self.lr_scheduler
+            )
 
         return {
             "optimizer": optimizer,
@@ -376,7 +420,25 @@ class SemiSupervisedTrackerMixin(object):
             )
 
         optimizer = Adam(params, lr=1e-3)
-        scheduler = MultiStepLR(optimizer, milestones=[100, 150, 200, 300], gamma=0.5)
+
+        # define a scheduler that reduces the base learning rate
+        if self.lr_scheduler == "multisteplr" or self.lr_scheduler == "multistep_lr":
+
+            if self.lr_scheduler_params is None:
+                milestones = MULTISTEPLR_MILESTONES_DEFAULT
+                gamma = MULTISTEPLR_GAMMA_DEFAULT
+            else:
+                milestones = self.lr_scheduler_params.get(
+                    "milestones", MULTISTEPLR_MILESTONES_DEFAULT)
+                gamma = self.lr_scheduler_params.get(
+                    "gamma", MULTISTEPLR_GAMMA_DEFAULT)
+
+            scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
+
+        else:
+            raise NotImplementedError(
+                "'%s' is an invalid LR scheduler" % self.lr_scheduler
+            )
 
         return {
             "optimizer": optimizer,

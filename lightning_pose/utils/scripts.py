@@ -189,6 +189,8 @@ def get_model(
 ]:
     """Create model: regression or heatmap based, supervised or semi-supervised."""
 
+    lr_scheduler = cfg.training["lr_scheduler"]
+    lr_scheduler_params = cfg.training["lr_scheduler_params"][lr_scheduler]
     semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
     if not semi_supervised:
         if cfg.model.model_type == "regression":
@@ -197,6 +199,8 @@ def get_model(
                 loss_factory=loss_factories["supervised"],
                 resnet_version=cfg.model.resnet_version,
                 torch_seed=cfg.training.rng_seed_model_pt,
+                lr_scheduler=lr_scheduler,
+                lr_scheduler_params=lr_scheduler_params,
             )
         elif cfg.model.model_type == "heatmap":
             model = HeatmapTracker(
@@ -206,6 +210,8 @@ def get_model(
                 downsample_factor=cfg.data.downsample_factor,
                 output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
+                lr_scheduler=lr_scheduler,
+                lr_scheduler_params=lr_scheduler_params,
             )
         else:
             raise NotImplementedError(
@@ -223,6 +229,8 @@ def get_model(
                 loss_factory_unsupervised=loss_factories["unsupervised"],
                 resnet_version=cfg.model.resnet_version,
                 torch_seed=cfg.training.rng_seed_model_pt,
+                lr_scheduler=lr_scheduler,
+                lr_scheduler_params=lr_scheduler_params,
             )
 
         elif cfg.model.model_type == "heatmap":
@@ -234,6 +242,8 @@ def get_model(
                 downsample_factor=cfg.data.downsample_factor,
                 output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
+                lr_scheduler=lr_scheduler,
+                lr_scheduler_params=lr_scheduler_params,
             )
         else:
             raise NotImplementedError(
