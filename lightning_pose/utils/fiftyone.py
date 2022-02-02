@@ -279,7 +279,8 @@ class FiftyOneImagePlotter(FiftyOneKeypointBase):
         ]
         # assert that the images are indeed files
         for im in absolute_list:
-            assert os.path.isfile(im)
+            if not os.path.isfile(im):
+                raise FileNotFoundError(im)
 
         return absolute_list
 
