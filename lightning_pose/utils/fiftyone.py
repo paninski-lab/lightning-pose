@@ -338,8 +338,10 @@ class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
 
     def check_inputs(self) -> None:
         for f in self.pred_csv_files:
-            assert os.path.isfile(f)
-        assert os.path.isfile(self.video)
+            if not os.path.isfile(f):
+                raise FileNotFoundError(f)
+        if not os.path.isfile(self.video):
+            raise FileNotFoundError(self.video)
 
     def create_dataset(self) -> fo.Dataset:
         # read each model's csv into a pandas dataframe, save in self.model_preds_dict
