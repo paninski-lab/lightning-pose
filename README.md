@@ -227,4 +227,26 @@ foua.draw_labeled_video(dataset[fo_video_class.video], outpath, config=config)
 In [9]: view.draw_labels(export_dir, label_fields=label_fields, config=config)
 
 ```
+### Filtering according to confidence and bodypart
+```
+import fiftyone as fo
+from fiftyone import ViewField as F
+
+def simul_filter(sample_collection, fields, confidence=None, labels=None):
+    view = sample_collection.view()
+    for field in fields:
+        if labels is not None:
+            view = view.filter_labels(field, F("label").is_in(labels))
+
+        if confidence is not None:
+            view = view.filter_labels(field, F("confidence") > confidence)
+
+    return view
+
+dataset = fo.load_dataset(...)
+
+session = fo.launch_app(dataset)
+
+session.view = simul_filter(dataset, ["long", "list", "of", "fields"], confidence=0.5, labels=["nose"])
+```
 
