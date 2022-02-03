@@ -67,7 +67,7 @@ def predict_dataset(
     )
 
     # add train/test/val column
-    df["set"] = np.zeros(df.shape[0])
+    df["set"] = np.array(["unused"] * df.shape[0])
     # iterate over conditions and their indices, and add strs to dataframe
     for key, val in dataset_split_indices.items():
         df.loc[val, "set"] = np.repeat(key, len(val))
