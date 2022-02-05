@@ -385,6 +385,9 @@ class dfConverter:
         kp_names = remove_string_w_substring_from_list(
             strings=kp_names, substring="Unnamed"
         )
+        kp_names = remove_string_w_substring_from_list(
+            strings=kp_names, substring="bodyparts"
+        )
         return kp_names
 
     def dict_per_bp(self, keypoint_name: str) -> Dict[str, np.array]:
