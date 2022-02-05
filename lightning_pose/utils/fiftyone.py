@@ -79,11 +79,21 @@ class FiftyOneKeypointBase:
         if self.keypoints_to_plot is None:
             # plot all keypoints that appear in the ground-truth dataframe
             self.keypoints_to_plot: List[str] = list(
-                self.ground_truth_df.columns.levels[0][1:]
+                self.ground_truth_df.columns.levels[0]
             )
+            # remove "bodyparts"
+            if "bodyparts" in self.keypoints_to_plot:
+                self.keypoints_to_plot.remove("bodyparts")
+            # remove an "Unnamed" string if exists
+            self.keypoints_to_plot = remove_string_w_substring_from_list(
+                strings=self.keypoints_to_plot, substring="Unnamed"
+            )
+            print("Plotting: ", self.keypoints_to_plot)
+            # make sure that bodyparts and unnamed arguments aren't there:
+
         # for faster fiftyone access, convert gt data to dict of dicts
         self.gt_data_dict: Dict[str, Dict[str, np.array]] = dfConverter(
-            df=self.ground_truth_df
+            df=self.ground_truth_df, keypoint_names=self.keypoints_to_plot
         )()
         self.model_abs_paths = self.get_model_abs_paths()
         #
@@ -373,22 +383,9 @@ class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
 
 @typechecked
 class dfConverter:
-    def __init__(self, df: pd.DataFrame) -> None:
+    def __init__(self, df: pd.DataFrame, keypoint_names: List[str]) -> None:
         self.df = df
-
-    @property
-    def keypoint_names(self):
-        kp_names = list(self.df.columns.levels[0])
-        if "bodyparts" in kp_names:
-            kp_names.remove("bodyparts")
-        # remove an "Unnamed" substring from a list if exists
-        kp_names = remove_string_w_substring_from_list(
-            strings=kp_names, substring="Unnamed"
-        )
-        kp_names = remove_string_w_substring_from_list(
-            strings=kp_names, substring="bodyparts"
-        )
-        return kp_names
+        self.keypoint_names = keypoint_names
 
     def dict_per_bp(self, keypoint_name: str) -> Dict[str, np.array]:
         bp_df = self.df[keypoint_name]
