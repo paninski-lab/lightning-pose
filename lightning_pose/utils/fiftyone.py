@@ -149,7 +149,9 @@ class FiftyOneKeypointBase:
         for model_name, pred_csv_file in zip(self.model_names, self.pred_csv_files):
             # assuming that each path of saved logs has a predictions.csv file in it
             temp_df = pd.read_csv(pred_csv_file, header=self.df_header_rows)
-            self.model_preds_dict[model_name] = dfConverter(temp_df)()
+            self.model_preds_dict[model_name] = dfConverter(
+                temp_df, self.keypoints_to_plot
+            )()
             self.preds_pandas_df_dict[model_name] = temp_df
 
     # @typechecked
