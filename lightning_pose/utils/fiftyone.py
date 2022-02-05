@@ -18,6 +18,16 @@ def check_lists_equal(list_1: list, list_2: list) -> bool:
 
 
 @typechecked
+def remove_string_w_substring_from_list(
+    strings: List[str], substring: str
+) -> List[str]:
+    for s in strings:
+        if substring in s:
+            strings.remove(substring)
+    return strings
+
+
+@typechecked
 def check_unique_tags(data_pt_tags: List[str]) -> bool:
     uniques = list(np.unique(data_pt_tags))
     cond_list = ["test", "train", "validation"]
@@ -53,9 +63,7 @@ def get_image_tags(pred_df: pd.DataFrame) -> pd.Series:
 # @typechecked # force typechecking over the entire class. right now fails due to some list/listconfig issue
 class FiftyOneKeypointBase:
     def __init__(
-        self,
-        cfg: DictConfig,
-        keypoints_to_plot: Optional[List[str]] = None,
+        self, cfg: DictConfig, keypoints_to_plot: Optional[List[str]] = None,
     ) -> None:
         self.cfg = cfg
         self.keypoints_to_plot = keypoints_to_plot
@@ -167,9 +175,7 @@ class FiftyOneKeypointBase:
 
     @typechecked
     def _slow_single_frame_build(
-        self,
-        data_dict: Dict[str, Dict[str, np.array]],
-        frame_idx: int,
+        self, data_dict: Dict[str, Dict[str, np.array]], frame_idx: int,
     ) -> List[fo.Keypoint]:
         # the output of this, is a the positions of all keypoints in a single frame for a single model.
         keypoints_list = []
@@ -192,9 +198,7 @@ class FiftyOneKeypointBase:
 
     @typechecked
     def _fast_single_frame_build(
-        self,
-        data_dict: Dict[str, Dict[str, np.array]],
-        frame_idx: int,
+        self, data_dict: Dict[str, Dict[str, np.array]], frame_idx: int,
     ) -> List[fo.Keypoint]:
         # the output of this, is a the positions of all keypoints in a single frame for a single model.
         keypoint = [
@@ -255,9 +259,7 @@ class FiftyOneKeypointBase:
 
 class FiftyOneImagePlotter(FiftyOneKeypointBase):
     def __init__(
-        self,
-        cfg: DictConfig,
-        keypoints_to_plot: Optional[List[str]] = None,
+        self, cfg: DictConfig, keypoints_to_plot: Optional[List[str]] = None,
     ) -> None:
         super().__init__(cfg=cfg, keypoints_to_plot=keypoints_to_plot)
 
@@ -324,9 +326,7 @@ class FiftyOneImagePlotter(FiftyOneKeypointBase):
 
 class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
     def __init__(
-        self,
-        cfg: DictConfig,
-        keypoints_to_plot: Optional[List[str]] = None,
+        self, cfg: DictConfig, keypoints_to_plot: Optional[List[str]] = None,
     ) -> None:
         # initialize FiftyOneKeypointBase
         super().__init__(cfg=cfg, keypoints_to_plot=keypoints_to_plot)
@@ -378,9 +378,13 @@ class dfConverter:
 
     @property
     def keypoint_names(self):
-        kp_names = list(self.df.columns.levels[0][1:])
+        kp_names = list(self.df.columns.levels[0])
         if "bodyparts" in kp_names:
             kp_names.remove("bodyparts")
+        # remove an "Unnamed" substring from a list if exists
+        kp_names = remove_string_w_substring_from_list(
+            strings=kp_names, substring="Unnamed"
+        )
         return kp_names
 
     def dict_per_bp(self, keypoint_name: str) -> Dict[str, np.array]:
@@ -405,9 +409,7 @@ class FiftyOneFactory:
     def __init__(self, dataset_to_create: Literal["images", "videos"]) -> None:
         self.dataset_to_create = dataset_to_create
 
-    def __call__(
-        self,
-    ) -> Union[FiftyOneImagePlotter, FiftyOneKeypointVideoPlotter]:
+    def __call__(self,) -> Union[FiftyOneImagePlotter, FiftyOneKeypointVideoPlotter]:
         if self.dataset_to_create == "images":
             return FiftyOneImagePlotter
         else:
