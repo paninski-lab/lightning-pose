@@ -23,7 +23,7 @@ def remove_string_w_substring_from_list(
 ) -> List[str]:
     for s in strings:
         if substring in s:
-            strings.remove(substring)
+            strings.remove(s)
     return strings
 
 
