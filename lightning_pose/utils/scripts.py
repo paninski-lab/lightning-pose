@@ -36,6 +36,22 @@ def get_dataset(
     cfg: DictConfig, data_dir: str, imgaug_transform: iaa.Sequential
 ) -> Union[BaseTrackingDataset, HeatmapDataset]:
     """Create a dataset that contains labeled data."""
+    from PIL import Image
+    import os
+
+    image_name = os.path.join(data_dir)
+
+    def check_image_dims(self):
+        img_name = self.image_names[0]
+        # read image from file and apply transformations (if any)
+        file_name = os.path.join(self.root_directory, img_name)
+        # if 1 color channel, change to 3.
+        image = Image.open(file_name).convert("RGB")
+        assert image.shape == ()
+        # load one image (zeroth one)
+        # get the shape of that
+        # assert that it's equal to config file
+        pass
 
     if cfg.model.model_type == "regression":
         dataset = BaseTrackingDataset(
@@ -55,6 +71,22 @@ def get_dataset(
     else:
         raise NotImplementedError(
             "%s is an invalid cfg.model.model_type" % cfg.model.model_type
+        )
+    image = Image.open(
+        os.path.join(dataset.root_directory, dataset.image_names[0])
+    ).convert("RGB")
+    if image.size != (
+        cfg.data.image_orig_dims.width,
+        cfg.data.image_orig_dims.height,
+    ):
+        raise ValueError(
+            "image_orig_dims in data configuration file is (width=%i, height=%i) but your image size is (width=%i, height=%i). Please update the data configuration file"
+            % (
+                cfg.data.image_orig_dims.width,
+                cfg.data.image_orig_dims.height,
+                image.size[0],
+                image.size[1],
+            )
         )
     return dataset
 
@@ -148,8 +180,8 @@ def get_loss_factories(
                 "original_image_width"
             ] = width_og
             # record downsampled image dims
-            height_ds = int(height_og // (2 ** cfg.data.downsample_factor))
-            width_ds = int(width_og // (2 ** cfg.data.downsample_factor))
+            height_ds = int(height_og // (2**cfg.data.downsample_factor))
+            width_ds = int(width_og // (2**cfg.data.downsample_factor))
             loss_params_dict["unsupervised"][loss_name][
                 "downsampled_image_height"
             ] = height_ds
