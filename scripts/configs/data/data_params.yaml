@@ -1,12 +1,12 @@
-# dimensions of training images
+# dimensions of the raw training images. your computer will tell you WIDTH X HEIGHT
 image_orig_dims:
-  height: 406
   width: 396
+  height: 406
 
-# resize dimensions to streamline model creation
+# resize dimensions: we do this internally to accelerate training. make sure its a multiple of 128.
 image_resize_dims:
-  height: 256
   width: 256
+  height: 256
 
 # ABSOLUTE path to data directory. the below is just a toy example for running Getting Started scripts
 data_dir: "toy_datasets/toymouseRunningData"
