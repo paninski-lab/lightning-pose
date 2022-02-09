@@ -164,13 +164,14 @@ class VideoPredPathHandler:
         assert os.path.isfile(self.video_file)
         assert os.path.isdir(self.save_preds_dir)
 
-    def build_pred_file_basename(self) -> str:
-        return "%s_%s%s.csv" % (
+    def build_pred_file_basename(self, extra_str='') -> str:
+        return "%s_%s%s%s.csv" % (
             self.video_basename,
             self.model_cfg.model.model_type,
             self.loss_str,
+            extra_str,
         )
 
-    def __call__(self) -> str:
-        pred_file_basename = self.build_pred_file_basename()
+    def __call__(self, extra_str='') -> str:
+        pred_file_basename = self.build_pred_file_basename(extra_str=extra_str)
         return os.path.join(self.save_preds_dir, pred_file_basename)
