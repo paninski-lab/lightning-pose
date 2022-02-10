@@ -8,7 +8,7 @@ import torch
 
 from lightning_pose.callbacks.callbacks import AnnealWeight
 from lightning_pose.utils.io import return_absolute_data_paths
-from lightning_pose.utils.plotting_utils import predict_dataset
+from lightning_pose.utils.predictions import predict_dataset
 from lightning_pose.utils.scripts import (
     get_data_module,
     get_dataset,

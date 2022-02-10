@@ -6,7 +6,7 @@ import os
 
 from typeguard import typechecked
 
-from lightning_pose.utils.plotting_utils import get_videos_in_dir, predict_single_video
+from lightning_pose.utils.predictions import get_videos_in_dir, predict_single_video
 from lightning_pose.utils.io import (
     check_if_semi_supervised,
     ckpt_path_from_base_path,
