@@ -1,3 +1,5 @@
+"""Functions for predicting keypoints on labeled datasets and unlabeled videos."""
+
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
 import os
@@ -22,7 +24,8 @@ _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 patch_typeguard()  # use before @typechecked
 
 
-def get_devices(device: str) -> Dict[str, str]:
+def get_devices(device: Literal["gpu", "cuda", "cpu"]) -> Dict[str, str]:
+    """Get pytorch and dali device strings."""
     if device == "gpu" or device == "cuda":
         device_pt = "cuda"
         device_dali = "gpu"
@@ -35,6 +38,7 @@ def get_devices(device: str) -> Dict[str, str]:
 
 
 def get_cfg_file(cfg_file: Union[str, DictConfig]):
+    """Load yaml configuration files."""
     if isinstance(cfg_file, str):
         # load configuration file
         with open(cfg_file, "r") as f:
@@ -47,6 +51,7 @@ def get_cfg_file(cfg_file: Union[str, DictConfig]):
 
 
 def check_prediction_file_format(save_file: str) -> None:
+    """Make sure prediction file is a csv or hdf5 file."""
     if not (
         save_file.endswith(".csv")
         or save_file.endswith(".hdf5")
@@ -61,12 +66,22 @@ def check_prediction_file_format(save_file: str) -> None:
 def predict_dataset(
     cfg: DictConfig,
     data_module: LightningDataModule,
-    hydra_output_directory: str,
     ckpt_file: str,
-    save_file: str = None,
-    heatmap_save_file: Union[str, None] = "heatmaps.h5",
+    preds_file: str,
+    heatmap_file: Optional[str] = None,
 ) -> None:
-    """Save predicted keypoints and heatmaps for a labeled dataset."""
+    """Save predicted keypoints and heatmaps for a labeled dataset.
+
+    Args:
+        cfg: hydra config
+        data_module: data module that contains dataloaders for train, val, test splits
+        ckpt_file: absolute path to the checkpoint of your trained model; requires .ckpt
+            suffix
+        preds_file: absolute filename for the predictions .csv file
+        heatmap_file: absolute filename for the heatmaps .h5 file; if None, no heatmaps
+            are saved
+
+    """
 
     model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
     model.to(_TORCH_DEVICE)
@@ -82,9 +97,6 @@ def predict_dataset(
     full_dataloader = DataLoader(
         dataset=full_dataset, batch_size=data_module.test_batch_size
     )
-    if save_file is None:
-        # default for now, should be saved to the model directory
-        save_file = os.path.join(hydra_output_directory, "predictions.csv")
 
     df, heatmaps_np = _make_predictions(
         cfg=cfg,
@@ -92,7 +104,7 @@ def predict_dataset(
         dataloader=full_dataloader,
         n_frames_=num_datapoints,
         batch_size=data_module.test_batch_size,
-        return_heatmaps=bool(heatmap_save_file),
+        return_heatmaps=bool(heatmap_file),
     )
 
     # add train/test/val column
@@ -102,14 +114,14 @@ def predict_dataset(
         df.loc[val, "set"] = np.repeat(key, len(val))
 
     # save predictions
-    save_dframe(df, save_file)
+    save_dframe(df, preds_file)
 
     # save heatmaps
     if heatmaps_np is not None:
-        save_folder = os.path.join(hydra_output_directory, "heatmaps_and_images")
-        if not (os.path.isdir(save_folder)):
+        save_folder = os.path.dirname(heatmap_file)
+        if not (os.path.isdir(heatmap_file)):
             os.mkdir(save_folder)
-        save_heatmaps(heatmaps_np, os.path.join(save_folder, heatmap_save_file))
+        save_heatmaps(heatmaps_np, heatmap_file)
 
 
 @typechecked
@@ -243,7 +255,7 @@ def _make_predictions(
     data_name: str = "dataset",
     return_heatmaps: bool = False,
 ) -> Tuple[pd.DataFrame, Union[np.ndarray, None]]:
-    """[summary]
+    """Wrapper function that predicts, resizes, and puts results in a dataframe.
 
     Args:
         cfg (DictConfig): hydra config.
@@ -256,7 +268,8 @@ def _make_predictions(
         return_heatmaps (str, optional): [description]. Defaults to None.
 
     Returns:
-        Tuple[pd.DataFrame, Union[np.ndarray, None]]: [description]
+        Tuple[pd.DataFrame, Union[np.ndarray, None]]: keypoint dataframe and heatmaps
+
     """
 
     keypoints_np, confidence_np, heatmaps_np = _predict_frames(
@@ -279,10 +292,6 @@ def _make_predictions(
     return df, heatmaps_np
 
 
-# total number of frames in the dataset or video
-# regular batch_size for images or sequence_length for videos
-
-
 @typechecked
 def _predict_frames(
     cfg: DictConfig,
@@ -293,7 +302,7 @@ def _predict_frames(
     data_name: str = "dataset",
     return_heatmaps: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, Union[np.ndarray, None]]:
-    """predict all frames of a video without undoing the resize or reshaping.
+    """Predict all frames from a data loader without undoing the resize or reshaping.
 
     Args:
         cfg (DictConfig): hydra config.
@@ -390,6 +399,17 @@ def make_pred_arr_undo_resize(
     keypoints_np: np.array,
     confidence_np: np.array,
 ) -> np.array:
+    """Resize keypoints and add confidences into one numpy array.
+
+    Args:
+        cfg: hydara config; contains resizing info
+        keypoints_np: shape (n_frames, n_keypoints * 2)
+        confidence_np: shape (n_frames, n_keypoints)
+
+    Returns:
+        np.ndarray: cols are (bp0_x, bp0_y, bp0_likelihood, bp1_x, bp1_y, ...)
+
+    """
     assert keypoints_np.shape[0] == confidence_np.shape[0]  # num frames in the dataset
     assert keypoints_np.shape[1] == (
         confidence_np.shape[1] * 2
