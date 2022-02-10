@@ -8,7 +8,7 @@ from lightning_pose.utils.io import return_absolute_path, return_absolute_data_p
 import os
 from typeguard import typechecked
 
-from lightning_pose.utils.plotting_utils import get_videos_in_dir
+from lightning_pose.utils.predictions import get_videos_in_dir
 from lightning_pose.utils.scripts import pretty_print_str
 
 
