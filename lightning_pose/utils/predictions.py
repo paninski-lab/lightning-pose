@@ -120,7 +120,7 @@ def predict_dataset(
     if heatmaps_np is not None:
         save_folder = os.path.dirname(heatmap_file)
         if not (os.path.isdir(heatmap_file)):
-            os.mkdir(save_folder)
+            os.makedirs(save_folder)
         save_heatmaps(heatmaps_np, heatmap_file)
 
 
@@ -137,8 +137,8 @@ def predict_single_video(
 ) -> Tuple[pd.DataFrame, Union[np.ndarray, None]]:
     """Make predictions for a single video, loading frame sequences using DALI.
 
-    The function will need to initialize a DALI pipeline, prepare a dataloader, and pass
-    it on to _make_predictions().
+    This function initializes a DALI pipeline, prepares a dataloader, and passes it on
+    to _make_predictions().
 
     Args:
         video_file (str): absolute path to a single video you want to get predictions
@@ -228,8 +228,8 @@ def predict_single_video(
         new_save_file = os.path.join(os.getcwd(), preds_file.split("/")[-1])
         save_dframe(df, new_save_file)
         print(
-            "Couldn't save file to the desired location due to a PermissionError. Instead saved it in %s"
-            % new_save_file
+            f"Couldn't save file to the desired location due to a PermissionError. "
+            f"Instead saved it in %s" % new_save_file
         )
 
     if heatmaps_np is not None:
