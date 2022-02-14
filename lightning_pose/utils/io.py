@@ -131,7 +131,9 @@ def return_absolute_data_paths(data_cfg: DictConfig) -> Tuple[str, str]:
 
 @typechecked
 class VideoPredPathHandler:
-    """class that defines filename for a predictions .csv file, given video file and model specs."""
+    """class that defines filename for a predictions .csv file, given video file and
+    model specs.
+    """
 
     def __init__(
         self, save_preds_dir: str, video_file: str, model_cfg: DictConfig
@@ -152,7 +154,8 @@ class VideoPredPathHandler:
             loss_str = ""
             if len(self.model_cfg.model.losses_to_use) > 0:
                 for loss in list(self.model_cfg.model.losses_to_use):
-                    # NOTE: keeping 3 decimals. if working with smaller numbers, modify to e.g,. .6f
+                    # NOTE: keeping 3 decimals. if working with smaller numbers, modify
+                    # to e.g,. .6f
                     loss_str = loss_str.join(
                         "_%s_%.3f" % (loss, self.model_cfg.losses[loss]["log_weight"])
                     )
@@ -164,13 +167,14 @@ class VideoPredPathHandler:
         assert os.path.isfile(self.video_file)
         assert os.path.isdir(self.save_preds_dir)
 
-    def build_pred_file_basename(self) -> str:
-        return "%s_%s%s.csv" % (
+    def build_pred_file_basename(self, extra_str='') -> str:
+        return "%s_%s%s%s.csv" % (
             self.video_basename,
             self.model_cfg.model.model_type,
             self.loss_str,
+            extra_str,
         )
 
-    def __call__(self) -> str:
-        pred_file_basename = self.build_pred_file_basename()
+    def __call__(self, extra_str='') -> str:
+        pred_file_basename = self.build_pred_file_basename(extra_str=extra_str)
         return os.path.join(self.save_preds_dir, pred_file_basename)

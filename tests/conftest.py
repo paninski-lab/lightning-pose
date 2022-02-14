@@ -18,7 +18,7 @@ import yaml
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
-from lightning_pose.utils.plotting_utils import get_videos_in_dir
+from lightning_pose.utils.predictions import get_videos_in_dir
 from lightning_pose.utils.scripts import (
     get_data_module,
     get_dataset,

@@ -8,7 +8,7 @@ import torch
 
 from lightning_pose.callbacks.callbacks import AnnealWeight
 from lightning_pose.utils.io import return_absolute_data_paths
-from lightning_pose.utils.plotting_utils import predict_dataset
+from lightning_pose.utils.predictions import predict_dataset
 from lightning_pose.utils.scripts import (
     get_data_module,
     get_dataset,
@@ -127,8 +127,9 @@ def train(cfg: DictConfig):
     predict_dataset(
         cfg=cfg,
         data_module=data_module,
-        hydra_output_directory=hydra_output_directory,
         ckpt_file=model_ckpt,
+        preds_file=os.path.join(hydra_output_directory, "predictions.csv"),
+        heatmap_file=os.path.join(hydra_output_directory, "heatmaps.h5"),
     )
 
     # generate a video
