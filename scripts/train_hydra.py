@@ -129,8 +129,7 @@ def train(cfg: DictConfig):
         data_module=data_module,
         ckpt_file=model_ckpt,
         preds_file=os.path.join(hydra_output_directory, "predictions.csv"),
-        heatmap_file=os.path.join(
-            hydra_output_directory, "heatmaps_and_images", "heatmaps.h5"),
+        heatmap_file=os.path.join(hydra_output_directory, "heatmaps.h5"),
     )
 
     # generate a video
