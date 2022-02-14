@@ -27,6 +27,7 @@ from torch.nn import functional as F
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 from typing import Any, Callable, Dict, Tuple, List, Literal, Optional, Union
+import warnings
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import generate_heatmaps
@@ -249,6 +250,7 @@ class PCALoss(Loss):
         loss_name: Literal["pca_singleview", "pca_multiview"],
         components_to_keep: Union[int, float] = 0.95,
         empirical_epsilon_percentile: float = 0.90,
+        epsilon: Optional[float] = None,
         mirrored_column_matches: Optional[Union[ListConfig, List]] = None,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
         log_weight: float = 0.0,
@@ -273,8 +275,18 @@ class PCALoss(Loss):
         )
         # compute all the parameters needed for the loss
         self.pca()
-        # empirically compute epsilon, already converted to tensor
-        self.epsilon = self.pca.parameters["epsilon"]
+        # select epsilon based on constructor inputs
+        if epsilon is not None:
+            warnings.warn(
+                "Using absolute epsilon=%.2f for pca loss; empirical epsilon ignored" %
+                epsilon)
+            self.epsilon = torch.tensor(epsilon, dtype=torch.float, device=self.device)
+        else:
+            # empirically compute epsilon, already converted to tensor
+            warnings.warn(
+                "Using empirical epsilon={} for pca loss".format(
+                    self.pca.parameters["epsilon"]))
+            self.epsilon = self.pca.parameters["epsilon"]
 
     def remove_nans(self, **kwargs):
         # find nans in the targets, and do a masked_select operation
