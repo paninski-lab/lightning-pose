@@ -159,39 +159,40 @@ def get_loss_factories(
         loss_params_dict["supervised"][cfg.model.model_type] = {"log_weight": 0.0}
 
     # collect all unsupervised losses and their params in a dict
-    for loss_name in cfg.model.losses_to_use:
-        # general parameters
-        loss_params_dict["unsupervised"][loss_name] = cfg_loss_dict[loss_name]
-        loss_params_dict["unsupervised"][loss_name]["loss_name"] = loss_name
-        # loss-specific parameters
-        if loss_name == "unimodal_mse" or loss_name == "unimodal_wasserstein":
-            if cfg.model.model_type == "regression":
-                raise NotImplementedError(
-                    f"unimodal loss can only be used with classes inheriting from "
-                    f"HeatmapTracker. \nYou specified a RegressionTracker model."
-                )
-            # record original image dims (after initial resizing)
-            height_og = cfg.data.image_resize_dims.height
-            width_og = cfg.data.image_resize_dims.width
-            loss_params_dict["unsupervised"][loss_name][
-                "original_image_height"
-            ] = height_og
-            loss_params_dict["unsupervised"][loss_name][
-                "original_image_width"
-            ] = width_og
-            # record downsampled image dims
-            height_ds = int(height_og // (2**cfg.data.downsample_factor))
-            width_ds = int(width_og // (2**cfg.data.downsample_factor))
-            loss_params_dict["unsupervised"][loss_name][
-                "downsampled_image_height"
-            ] = height_ds
-            loss_params_dict["unsupervised"][loss_name][
-                "downsampled_image_width"
-            ] = width_ds
-        elif loss_name == "pca_multiview":
-            loss_params_dict["unsupervised"][loss_name][
-                "mirrored_column_matches"
-            ] = cfg.data.mirrored_column_matches
+    if cfg.model.losses_to_use is not None:
+        for loss_name in cfg.model.losses_to_use:
+            # general parameters
+            loss_params_dict["unsupervised"][loss_name] = cfg_loss_dict[loss_name]
+            loss_params_dict["unsupervised"][loss_name]["loss_name"] = loss_name
+            # loss-specific parameters
+            if loss_name == "unimodal_mse" or loss_name == "unimodal_wasserstein":
+                if cfg.model.model_type == "regression":
+                    raise NotImplementedError(
+                        f"unimodal loss can only be used with classes inheriting from "
+                        f"HeatmapTracker. \nYou specified a RegressionTracker model."
+                    )
+                # record original image dims (after initial resizing)
+                height_og = cfg.data.image_resize_dims.height
+                width_og = cfg.data.image_resize_dims.width
+                loss_params_dict["unsupervised"][loss_name][
+                    "original_image_height"
+                ] = height_og
+                loss_params_dict["unsupervised"][loss_name][
+                    "original_image_width"
+                ] = width_og
+                # record downsampled image dims
+                height_ds = int(height_og // (2**cfg.data.downsample_factor))
+                width_ds = int(width_og // (2**cfg.data.downsample_factor))
+                loss_params_dict["unsupervised"][loss_name][
+                    "downsampled_image_height"
+                ] = height_ds
+                loss_params_dict["unsupervised"][loss_name][
+                    "downsampled_image_width"
+                ] = width_ds
+            elif loss_name == "pca_multiview":
+                loss_params_dict["unsupervised"][loss_name][
+                    "mirrored_column_matches"
+                ] = cfg.data.mirrored_column_matches
 
     # build supervised loss factory, which orchestrates all supervised losses
     loss_factory_sup = LossFactory(
