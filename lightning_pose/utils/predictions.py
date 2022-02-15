@@ -119,7 +119,7 @@ def predict_dataset(
     # save heatmaps
     if heatmaps_np is not None:
         save_folder = os.path.dirname(heatmap_file)
-        if not (os.path.isdir(heatmap_file)):
+        if not os.path.isdir(save_folder):
             os.makedirs(save_folder)
         save_heatmaps(heatmaps_np, heatmap_file)
 
