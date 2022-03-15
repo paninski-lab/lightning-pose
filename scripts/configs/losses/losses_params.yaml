@@ -9,6 +9,9 @@ pca_multiview:
   # percentile of reprojection errors on train data below which pca loss is zeroed out
   empirical_epsilon_percentile: 1.00
 
+  # doing eff_epsilon = percentile(error, empirical_epsilon_percentile) * empirical_epsilon_multiplier
+  empirical_epsilon_multiplier: 1.0
+
   # absolute error (in pixels) below which pca loss is zeroed out; if not null, this
   # parameter takes precedence over `empirical_epsilon_percentile`
   epsilon: null
@@ -23,6 +26,9 @@ pca_singleview:
 
   # percentile of reprojection errors on train data below which pca loss is zeroed out
   empirical_epsilon_percentile: 1.00
+
+  # doing eff_epsilon = percentile(error, empirical_epsilon_percentile) * empirical_epsilon_multiplier
+  empirical_epsilon_multiplier: 1.0
 
   # absolute error (in pixels) below which pca loss is zeroed out; if not null, this
   # parameter takes precedence over `empirical_epsilon_percentile`
