@@ -239,3 +239,46 @@ def test_compute_pca_reprojection_error():
     )
 
     assert torch.mean(pca_loss) == 0.0
+
+
+# def test_undo_formatting():
+#     from lightning_pose.utils.pca import (
+#         format_multiview_data_for_pca,
+#         undo_format_multiview_data_for_pca,
+#     )
+
+#     coords = torch.cat(
+#         [
+#             1.0 * torch.arange(1, 5).unsqueeze(-1),
+#             2.0 * torch.arange(1, 5).unsqueeze(-1),
+#         ],
+#         dim=-1,
+#     ).unsqueeze(
+#         0
+#     )  # each coord is scaled differently
+#     batched_coords = torch.cat(
+#         [1.0 * coords, 10.0 * coords, 100.0 * coords], dim=0
+#     )  # each batch element is scaled differently
+#     print(batched_coords)
+#     print(batched_coords.shape)
+#     mirrored_inds = [[0, 1], [2, 3]]
+
+#     keypoints_pred = format_multiview_data_for_pca(
+#         data_arr=batched_coords,
+#         mirrored_column_matches=mirrored_inds,
+#     )
+#     assert keypoints_pred.shape == (
+#         batched_coords.shape[0] * batched_coords.shape[-1],
+#         batched_coords.shape[1],
+#     )
+#     print(batched_coords)
+#     print(keypoints_pred)
+
+#     # now undo formatting
+#     reverted_preds = undo_format_multiview_data_for_pca(
+#         multiview_arr=keypoints_pred, mirrored_column_matches=mirrored_inds
+#     )
+#     print(batched_coords)
+#     print(reverted_preds)
+# no format for pca
+# test_tensor = torch.tensor(data = 2)

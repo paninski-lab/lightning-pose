@@ -285,12 +285,17 @@ class PCALoss(Loss):
             self.epsilon = torch.tensor(epsilon, dtype=torch.float, device=self.device)
         else:
             # empirically compute epsilon, already converted to tensor
+            self.epsilon = self.pca.parameters["epsilon"] * empirical_epsilon_multiplier
+
             warnings.warn(
-                "Using empirical epsilon={} for pca loss".format(
-                    self.pca.parameters["epsilon"]
+                "Using empirical epsilon=%.3f * multiplier=%.3f -> total=%.3f for %s loss"
+                % (
+                    float(self.pca.parameters["epsilon"]),
+                    float(empirical_epsilon_multiplier),
+                    float(self.epsilon),
+                    self.loss_name,
                 )
             )
-            self.epsilon = self.pca.parameters["epsilon"] * empirical_epsilon_multiplier
 
     def remove_nans(self, **kwargs):
         # find nans in the targets, and do a masked_select operation
