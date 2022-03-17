@@ -310,7 +310,7 @@ def pca_prints(pca: PCA, condition: str, components_to_keep: int) -> None:
 def format_multiview_data_for_pca(
     data_arr: TensorType["batch", "num_keypoints", "2"],
     mirrored_column_matches: Union[ListConfig, list],
-) -> TensorType["batch_times_num_keypoints", "two_times_num_views"]:
+) -> TensorType["batch_times_num_selected_keypoints", "two_times_num_views"]:
     """Reformat multiview data so each observation is a single body part across views.
 
     Args:
@@ -324,14 +324,20 @@ def format_multiview_data_for_pca(
 
     """
     n_views = len(mirrored_column_matches)
-    n_keypoints = len(mirrored_column_matches[0])
+    n_keypoints = len(mirrored_column_matches[0])  # only the ones used for all views
     data_arr_views = []
     # separate views and reformat
     for view in range(n_views):
         assert len(mirrored_column_matches[view]) == n_keypoints
+        # all the (x,y) coordinates of all bodyparts from current view
         data_arr_tmp = data_arr[:, np.array(mirrored_column_matches[view]), :]
-        data_arr_tmp = data_arr_tmp.permute(2, 0, 1).reshape(2, -1)
+        # first permute to: 2, batch, num_keypoints, then reshape to: 2, batch * num_keypoints
+        data_arr_tmp = data_arr_tmp.permute(2, 0, 1).reshape(
+            2, -1
+        )  # -> 2 X num_frames*num_bodyparts
         data_arr_views.append(data_arr_tmp)
     # concatenate views
-    data_arr = torch.cat(data_arr_views, dim=0)
+    data_arr = torch.cat(
+        data_arr_views, dim=0
+    )  # -> 2 * n_views X num_frames*num_bodyparts
     return data_arr.T  # note the transpose
