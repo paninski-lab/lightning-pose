@@ -16,6 +16,8 @@ pca_multiview:
   # parameter takes precedence over `empirical_epsilon_percentile`
   epsilon: null
 
+  error_metric: "reprojection_error" # "reprojection_error" | "proj_on_discarded_evecs"
+
 # loss = projection onto the discarded eigenvectors
 pca_singleview:
   # weight in front of PCA loss
@@ -33,6 +35,8 @@ pca_singleview:
   # absolute error (in pixels) below which pca loss is zeroed out; if not null, this
   # parameter takes precedence over `empirical_epsilon_percentile`
   epsilon: null
+
+  error_metric: "reprojection_error" # "reprojection_error" | "proj_on_discarded_evecs"
 
 # loss = norm of distance between successive timepoints
 temporal:

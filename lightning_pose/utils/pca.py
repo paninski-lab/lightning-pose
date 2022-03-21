@@ -6,7 +6,7 @@ from sklearn.decomposition import PCA
 import torch
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
-from typing import List, Optional, Union, Literal, Dict
+from typing import List, Optional, Union, Literal, Dict, Any
 import warnings
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
@@ -31,6 +31,7 @@ class KeypointPCA(object):
     def __init__(
         self,
         loss_type: Literal["pca_singleview", "pca_multiview"],
+        error_metric: Literal["reprojection_error", "proj_on_discarded_evecs"],
         data_module: Union[UnlabeledDataModule, BaseDataModule],
         components_to_keep: Optional[Union[int, float]] = 0.95,
         empirical_epsilon_percentile: float = 90.0,
@@ -38,12 +39,27 @@ class KeypointPCA(object):
         device: Union[Literal["cuda", "cpu"], torch.device] = "cpu",
     ):
         self.loss_type = loss_type
+        self.error_metric = error_metric
         self.data_module = data_module
         self.components_to_keep = components_to_keep
         self.empirical_epsilon_percentile = empirical_epsilon_percentile
         self.mirrored_column_matches = mirrored_column_matches
         self.pca_object = None
         self.device = device
+
+    @property
+    def _error_metric_factory(self):
+        metrics = {
+            "reprojection_error": self.compute_reprojection_error,
+            "proj_on_discarded_evecs": self.compute_discarded_evec_error,
+        }
+        return metrics
+
+    # TODO: not using that still. allows you to switch between different pca penalties
+    def compute_error(
+        self, data_arr: Optional[TensorType["num_samples", "sample_dim"]] = None
+    ) -> TensorType["num_samples", -1]:
+        return self._error_metric_factory[self.error_metric](data_arr=data_arr)
 
     def _get_data(self) -> None:
         from lightning_pose.data.utils import DataExtractor
@@ -136,14 +152,84 @@ class KeypointPCA(object):
 
         self.parameters["epsilon"] = EmpiricalEpsilon(
             percentile=self.empirical_epsilon_percentile
-        )(loss=self._compute_reproj_error())
+        )(
+            loss=self.compute_error()
+        )  # self.compute_reprojection_error()
+        # was loss=self._compute_reprojection_error() relying on the external func
 
-    def _compute_reproj_error(self) -> torch.Tensor:
-        return compute_pca_reprojection_error(
-            self.data_arr.to(self.device),
-            self.parameters["kept_eigenvectors"],
-            self.parameters["mean"],
-        )
+    def reproject(
+        self, data_arr: Optional[TensorType["num_samples", "sample_dim"]] = None
+    ) -> TensorType["num_samples", "sample_dim"]:
+        """reproject a data array using the fixed pca parameters. everything happens in torch.
+        applying the transformation as it is in scikit learn.
+        https://github.com/scikit-learn/scikit-learn/blob/37ac6788c/sklearn/decomposition/_base.py#L125
+        """
+        # TODO: more type assertions
+        # assert that datashape is valid
+        if data_arr is None:
+            data_arr = self.data_arr.to(self.device)
+        evecs = self.parameters["kept_eigenvectors"]
+        mean = self.parameters["mean"].unsqueeze(0)
+
+        # assert that the observation dimension is equal for all objects
+        assert data_arr.shape[1] == evecs.shape[1] and evecs.shape[1] == mean.shape[1]
+        # verify that data array has observations divisible by 2 (corresponding to (x,y) coords)
+        assert data_arr.shape[1] % 2 == 0
+
+        # transform data into low-d space as in scikit learn's _BasePCA.transform()
+        # https://github.com/scikit-learn/scikit-learn/blob/37ac6788c9504ee409b75e5e24ff7d86c90c2ffb/sklearn/decomposition/_base.py#L97
+        centered_data = data_arr - mean
+        low_d_projection = centered_data @ evecs.T
+
+        # project back up to observation space, as in scikit learn's _BasePCA.inverse_transform()
+        # https://github.com/scikit-learn/scikit-learn/blob/37ac6788c9504ee409b75e5e24ff7d86c90c2ffb/sklearn/decomposition/_base.py#L125
+        reprojection = low_d_projection @ evecs + mean
+        return reprojection
+
+    def project_onto_discarded_evecs(
+        self, data_arr: Optional[TensorType["num_samples", "sample_dim"]] = None
+    ) -> Optional[TensorType["num_samples", "num_discarded_evecs"]]:
+        if data_arr is None:
+            data_arr = self.data_arr.to(self.device)
+        discarded_evecs = self.parameters["discarded_eigenvectors"]
+        mean = self.parameters["mean"].unsqueeze(0)
+        # mean subtract
+        centered_data = data_arr - mean
+        # project onto discarded components
+        return centered_data @ discarded_evecs.T
+
+    def compute_discarded_evec_error(
+        self, data_arr: Optional[TensorType["num_samples", "sample_dim"]] = None
+    ) -> TensorType["num_samples", 1]:
+        """returns a single error for all keypoints in a sample"""
+        if data_arr is None:
+            data_arr = self.data_arr.to(self.device)
+
+        proj = self.project_onto_discarded_evecs(data_arr=data_arr)
+        loss = torch.linalg.norm(proj, dim=1)
+        return loss.reshape(data_arr.shape[0], 1)
+
+    def compute_reprojection_error(
+        self, data_arr: Optional[TensorType["num_samples", "sample_dim"]] = None
+    ) -> TensorType["num_samples", "sample_dim_over_two"]:
+        """returns error per 2D keypoint"""
+        if data_arr is None:
+            data_arr = self.data_arr.to(self.device)
+        reprojection = self.reproject(data_arr=data_arr)
+        diff = data_arr - reprojection
+        # reshape to get a per-keypoint differences:
+        diff_arr_per_keypoint = diff.reshape(diff.shape[0], diff.shape[1] // 2, 2)
+        # compute the prediction error for each 2D bodypart
+        reprojection_loss = torch.linalg.norm(diff_arr_per_keypoint, dim=2)
+
+        return reprojection_loss
+
+    # def _compute_reproj_error(self) -> torch.Tensor:
+    #     return compute_pca_reprojection_error(
+    #         self.data_arr.to(self.device),
+    #         self.parameters["kept_eigenvectors"],
+    #         self.parameters["mean"],
+    #     )
 
     def __call__(self):
 
@@ -232,6 +318,7 @@ class ComponentChooser:
             )  # find that integer that crosses the minimum explained variance
 
 
+# TODO: the function below was in usage until Mar 21, 2022. Integrating it into the pca class
 @typechecked
 def compute_pca_reprojection_error(
     clean_pca_arr: TensorType["samples", "observation_dim"],
