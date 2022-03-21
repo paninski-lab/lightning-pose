@@ -5,6 +5,8 @@ import numpy as np
 import pytest
 import yaml
 
+from lightning_pose.utils.pca import format_multiview_data_for_pca
+
 
 stage = "train"
 device = "cpu"
@@ -20,7 +22,9 @@ def test_heatmap_mse_loss():
     targets = torch.ones((3, 7, 48, 48)) / (48 * 48)
     predictions = torch.ones_like(targets) / (48 * 48)
     loss, logs = heatmap_mse_loss(
-        heatmaps_targ=targets, heatmaps_pred=predictions, stage=stage,
+        heatmaps_targ=targets,
+        heatmaps_pred=predictions,
+        stage=stage,
     )
     assert loss.shape == torch.Size([])
     assert loss == 0.0
@@ -34,7 +38,9 @@ def test_heatmap_mse_loss():
         targets
     )
     loss, logs = heatmap_mse_loss(
-        heatmaps_targ=targets, heatmaps_pred=predictions, stage=stage,
+        heatmaps_targ=targets,
+        heatmaps_pred=predictions,
+        stage=stage,
     )
     assert loss > 0.0
 
@@ -53,7 +59,9 @@ def test_heatmap_wasserstein_loss():
     )
 
     loss, logs = heatmap_wasser_loss(
-        heatmaps_targ=targets, heatmaps_pred=predictions, stage=stage,
+        heatmaps_targ=targets,
+        heatmaps_pred=predictions,
+        stage=stage,
     )
     assert loss.shape == torch.Size([])
     assert np.isclose(loss.detach().cpu().numpy(), 0.0, rtol=1e-5)
@@ -67,7 +75,9 @@ def test_heatmap_wasserstein_loss():
         targets
     )
     loss2, logs = heatmap_wasser_loss(
-        heatmaps_targ=targets, heatmaps_pred=predictions, stage=stage,
+        heatmaps_targ=targets,
+        heatmaps_pred=predictions,
+        stage=stage,
     )
     assert loss2 > loss
 
@@ -77,7 +87,10 @@ def test_pca_singleview_loss(base_data_module):
     from lightning_pose.losses.losses import PCALoss
 
     pca_loss = PCALoss(
-        loss_name="pca_singleview", components_to_keep=2, data_module=base_data_module,
+        loss_name="pca_singleview",
+        error_metric="reprojection_error",
+        components_to_keep=2,
+        data_module=base_data_module,
         device=device,
     )
 
@@ -125,29 +138,77 @@ def test_pca_multiview_loss(cfg, base_data_module):
 
     # raise exception when mirrored_column_matches arg is not provided
     with pytest.raises(ValueError):
-        PCALoss(loss_name="pca_multiview", data_module=base_data_module)
+        PCALoss(
+            loss_name="pca_multiview",
+            error_metric="reprojection_error",
+            data_module=base_data_module,
+        )
 
-    pca_loss = PCALoss(
-        loss_name="pca_multiview", components_to_keep=3, data_module=base_data_module,
-        mirrored_column_matches=cfg.data.mirrored_column_matches, device=device,
-    )
+    for metric in ["reprojection_error", "proj_on_discarded_evecs"]:
+        pca_loss = PCALoss(
+            loss_name="pca_multiview",
+            error_metric=metric,
+            components_to_keep=3,
+            data_module=base_data_module,
+            mirrored_column_matches=cfg.data.mirrored_column_matches,
+            device=device,
+        )
 
-    # ----------------------------
-    # test pca loss on toy dataset
-    # ----------------------------
-    keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets)
-    loss, logs = pca_loss(keypoints_pred, stage=stage)
-    assert loss.shape == torch.Size([])
-    assert loss > 0.0
-    assert logs[0]["name"] == "%s_pca_multiview_loss" % stage
-    assert logs[0]["value"] == loss / pca_loss.weight
-    assert logs[1]["name"] == "pca_multiview_weight"
-    assert logs[1]["value"] == pca_loss.weight
+        # ----------------------------
+        # test pca loss on toy dataset
+        # ----------------------------
+        keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets)
+        # shape = (batch_size, num_keypoints * 2)
+        # this all happens in PCALoss.__call__() but keeping it since we want to look at pre reduction loss
+        keypoints_pred = keypoints_pred.reshape(
+            keypoints_pred.shape[0], -1, 2
+        )  # shape = (batch_size, num_keypoints, 2)
+        keypoints_pred = format_multiview_data_for_pca(
+            data_arr=keypoints_pred,
+            mirrored_column_matches=cfg.data.mirrored_column_matches,
+        )
+        pre_reduction_loss = pca_loss.compute_loss(keypoints_pred)
+        if metric == "proj_on_discarded_evecs":
+            # shape = (num_samples * num_keypoints, 1)
+            pre_reduction_loss.shape == (
+                keypoints_pred.shape[0] * len(cfg.data.mirrored_column_matches[0]),
+                1,
+            )
+
+        if metric == "reprojection_error":
+            # shape = (num_samples, num_keypoints, num_views)
+            pre_reduction_loss.shape == (
+                keypoints_pred.shape[0],
+                len(cfg.data.mirrored_column_matches[0]),
+                2,  # for 2 views in this toy dataset
+            )
+
+        # draw some numbers again, and reshape within the class
+        keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets)
+
+        loss, logs = pca_loss(keypoints_pred, stage=stage)
+
+        assert loss.shape == torch.Size([])
+        assert loss > 0.0
+        assert logs[0]["name"] == "%s_pca_multiview_loss" % stage
+        assert logs[0]["value"] == loss / pca_loss.weight
+        assert logs[1]["name"] == "pca_multiview_weight"
+        assert logs[1]["value"] == pca_loss.weight
 
     # -----------------------------
     # test pca loss on fake dataset
     # -----------------------------
     # make three eigenvecs, each 4D
+    # TODO: this is not how we currently compute reprojection. we now add mean in the final stage
+    pca_loss = PCALoss(
+        loss_name="pca_multiview",
+        error_metric="reprojection_error",
+        components_to_keep=3,
+        data_module=base_data_module,
+        mirrored_column_matches=cfg.data.mirrored_column_matches,
+        device=device,
+    )
+
     kept_evecs = torch.eye(n=4, device=device)[:, :3].T
     # random projection matrix from kept_evecs to obs
     projection_to_obs = torch.randn(size=(10, 3), device=device)
@@ -349,7 +410,7 @@ def test_regression_rmse_loss():
     mse, _ = mse_loss(labels, preds, stage=stage)
     rmse, _ = rmse_loss(labels, preds, stage=stage)
     assert rmse == true_rmse
-    assert mse == true_rmse ** 2.0
+    assert mse == true_rmse**2.0
 
 
 def test_get_loss_classes():

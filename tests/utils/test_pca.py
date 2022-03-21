@@ -53,6 +53,7 @@ def test_pca_keypoint_class(cfg, base_data_module_combined):
     # initialize an instance
     kp_pca = KeypointPCA(
         loss_type="pca_multiview",
+        error_metric="reprojection_error",
         data_module=base_data_module_combined,
         components_to_keep=3,
         empirical_epsilon_percentile=0.3,
@@ -120,6 +121,7 @@ def test_pca_keypoint_class(cfg, base_data_module_combined):
     # the number of workers in the datamodule from 8 to 4 and it seems to be working now
     kp_pca_2 = KeypointPCA(
         loss_type="pca_multiview",
+        error_metric="reprojection_error",
         data_module=base_data_module_combined,
         components_to_keep=3,
         empirical_epsilon_percentile=0.3,
@@ -212,6 +214,7 @@ def test_component_chooser():
 
 
 def test_compute_pca_reprojection_error():
+    """this test checks the mean-centered pca loss implemented in the old utils.pca.compute_pca_reprojection_error function"""
 
     from lightning_pose.utils.pca import compute_pca_reprojection_error
 
@@ -232,6 +235,7 @@ def test_compute_pca_reprojection_error():
     print(kept_evecs.shape)
     print(mean.shape)
     # now verify the pca loss
+    # TODO: compute_pca_reprojection_error became a part of KeypointPCA. consider removing.
     pca_loss = compute_pca_reprojection_error(
         clean_pca_arr=obs,
         kept_eigenvectors=kept_evecs,

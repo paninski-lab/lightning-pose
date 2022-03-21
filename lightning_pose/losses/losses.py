@@ -34,7 +34,6 @@ from lightning_pose.data.utils import generate_heatmaps
 from lightning_pose.utils.pca import (
     KeypointPCA,
     format_multiview_data_for_pca,
-    compute_pca_reprojection_error,
 )
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -248,6 +247,7 @@ class PCALoss(Loss):
     def __init__(
         self,
         loss_name: Literal["pca_singleview", "pca_multiview"],
+        error_metric: Literal["reprojection_error", "proj_on_discarded_evecs"],
         components_to_keep: Union[int, float] = 0.95,
         empirical_epsilon_percentile: float = 0.99,
         epsilon: Optional[float] = None,
@@ -260,14 +260,17 @@ class PCALoss(Loss):
     ) -> None:
         super().__init__(data_module=data_module, log_weight=log_weight)
         self.loss_name = loss_name
+        self.error_metric = error_metric
 
         if loss_name == "pca_multiview":
             if mirrored_column_matches is None:
                 raise ValueError("must provide mirrored_column_matches in data config")
 
         # initialize keypoint pca module
+        # this module will fit pca on training data, and will define the error metric and fuction to be used in model training.
         self.pca = KeypointPCA(
             loss_type=self.loss_name,
+            error_metric=self.error_metric,
             data_module=data_module,
             components_to_keep=components_to_keep,
             empirical_epsilon_percentile=empirical_epsilon_percentile,
@@ -304,15 +307,11 @@ class PCALoss(Loss):
     @typechecked
     def compute_loss(
         self,
-        predictions: TensorType["batch", "num_valid_dims"],
-    ) -> TensorType["batch", "num_valid_dims_div_by_two"]:
-        # compute reprojection error
-        reproj_error = compute_pca_reprojection_error(
-            clean_pca_arr=predictions,
-            kept_eigenvectors=self.pca.parameters["kept_eigenvectors"],
-            mean=self.pca.parameters["mean"],
-        )
-        return reproj_error
+        predictions: TensorType["num_samples", "sample_dim"],
+    ) -> TensorType["num_samples", -1]:
+        # compute either reprojection error or projection onto discarded evecs. they will vary in the last dim, hence -1.
+        return self.pca.compute_error(data_arr=predictions)
+        # was: return self.pca.compute_reprojection_error(data_arr=predictions)
 
     @typechecked
     def __call__(
