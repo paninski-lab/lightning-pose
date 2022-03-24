@@ -55,7 +55,6 @@ class KeypointPCA(object):
         }
         return metrics
 
-    # TODO: not using that still. allows you to switch between different pca penalties
     def compute_error(
         self, data_arr: Optional[TensorType["num_samples", "sample_dim"]] = None
     ) -> TensorType["num_samples", -1]:
@@ -258,10 +257,10 @@ class KeypointPCA(object):
         self._set_parameter_dict()
 
 
+@typechecked
 class ComponentChooser:
     """Determine the number of PCA components to keep."""
 
-    @typechecked
     def __init__(
         self,
         fitted_pca_object: PCA,
