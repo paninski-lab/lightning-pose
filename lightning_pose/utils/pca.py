@@ -36,6 +36,7 @@ class KeypointPCA(object):
         components_to_keep: Optional[Union[int, float]] = 0.95,
         empirical_epsilon_percentile: float = 90.0,
         mirrored_column_matches: Optional[Union[ListConfig, List]] = None,
+        columns_for_singleview_pca: Optional[Union[ListConfig, List]] = None,
         device: Union[Literal["cuda", "cpu"], torch.device] = "cpu",
     ):
         self.loss_type = loss_type
@@ -44,6 +45,7 @@ class KeypointPCA(object):
         self.components_to_keep = components_to_keep
         self.empirical_epsilon_percentile = empirical_epsilon_percentile
         self.mirrored_column_matches = mirrored_column_matches
+        self.columns_for_singleview_pca = columns_for_singleview_pca
         self.pca_object = None
         self.device = device
 
@@ -77,8 +79,9 @@ class KeypointPCA(object):
                     data_arr=self.data_arr,
                     mirrored_column_matches=self.mirrored_column_matches,
                 )
-            else:  # no need to format single-view data
-                pass
+            else:  # no need to format single-view data, just take the relevant columns
+                if self.columns_for_singleview_pca is not None:
+                    self.data_arr = self.data_arr[:, self.columns_for_singleview_pca]
 
     def _clean_any_nans(self) -> None:
         # we count nans along the first dimension, i.e., columns. We remove those rows
