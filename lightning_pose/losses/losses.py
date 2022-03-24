@@ -253,6 +253,7 @@ class PCALoss(Loss):
         epsilon: Optional[float] = None,
         empirical_epsilon_multiplier: float = 1.0,
         mirrored_column_matches: Optional[Union[ListConfig, List]] = None,
+        columns_for_singleview_pca: Optional[Union[ListConfig, List]] = None,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
         log_weight: float = 0.0,
         device: str = _TORCH_DEVICE,
@@ -275,6 +276,7 @@ class PCALoss(Loss):
             components_to_keep=components_to_keep,
             empirical_epsilon_percentile=empirical_epsilon_percentile,
             mirrored_column_matches=mirrored_column_matches,
+            columns_for_singleview_pca=columns_for_singleview_pca,
             device=device,
         )
         # compute all the parameters needed for the loss
