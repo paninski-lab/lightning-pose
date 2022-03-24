@@ -1,7 +1,7 @@
 # loss = projection onto the discarded eigenvectors
 pca_multiview:
   # weight in front of PCA loss
-  log_weight: 0.0
+  log_weight: 7.0
 
   # predictions whould lie within the low-d subspace spanned by these components
   components_to_keep: 3
@@ -21,7 +21,7 @@ pca_multiview:
 # loss = projection onto the discarded eigenvectors
 pca_singleview:
   # weight in front of PCA loss
-  log_weight: 0.0
+  log_weight: 7.0
 
   # predictions whould lie within the low-d subspace spanned by components that describe this fraction of variance
   components_to_keep: 0.99
