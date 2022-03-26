@@ -336,7 +336,9 @@ class PCALoss(Loss):
             )  # shape = (batch_size * num_keypoints, views * 2)
         elif self.loss_name == "pca_singleview":
             # shape = (batch, 2 * num_keypoints)
-            pass
+            # optionally choose a subset of the keypoints for the singleview pca
+            if self.pca.columns_for_singleview_pca is not None:
+                keypoints_pred = keypoints_pred[:, self.pca.columns_for_singleview_pca]
         else:
             raise NotImplementedError
 

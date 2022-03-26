@@ -79,7 +79,8 @@ class KeypointPCA(object):
                     data_arr=self.data_arr,
                     mirrored_column_matches=self.mirrored_column_matches,
                 )
-            else:  # no need to format single-view data, just take the relevant columns
+            else:
+                # no need to format single-view data unless you want to exclude columns
                 if self.columns_for_singleview_pca is not None:
                     self.data_arr = self.data_arr[:, self.columns_for_singleview_pca]
 
@@ -388,7 +389,11 @@ def add_params_to_loss_dict(
 @typechecked
 def pca_prints(pca: PCA, condition: str, components_to_keep: int) -> None:
     print("Results of running PCA ({}) on keypoints:".format(condition))
-    print("Kept {} components, and found:".format(components_to_keep))
+    print(
+        "Kept {}/{} components, and found:".format(
+            components_to_keep, pca.n_components_
+        )
+    )
     evr = np.round(pca.explained_variance_ratio_, 3)
     print("Explained variance ratio: {}".format(evr))
     tev = np.round(np.sum(pca.explained_variance_ratio_[:components_to_keep]), 3)
