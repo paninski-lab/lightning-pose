@@ -193,6 +193,10 @@ def get_loss_factories(
                 loss_params_dict["unsupervised"][loss_name][
                     "mirrored_column_matches"
                 ] = cfg.data.mirrored_column_matches
+            elif loss_name == "pca_singleview":
+                loss_params_dict["unsupervised"][loss_name][
+                    "columns_for_singleview_pca"
+                ] = cfg.data.columns_for_singleview_pca
 
     # build supervised loss factory, which orchestrates all supervised losses
     loss_factory_sup = LossFactory(
