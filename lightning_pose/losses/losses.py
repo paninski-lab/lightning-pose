@@ -323,25 +323,7 @@ class PCALoss(Loss):
         **kwargs,
     ) -> Tuple[TensorType[()], List[dict]]:
 
-        # if multiview, reformat the predictions first
-        if self.loss_name == "pca_multiview":
-            # shape = (batch, 2 * num_keypoints) where `num_keypoints` includes
-            # keypoints views from multiple views
-            keypoints_pred = keypoints_pred.reshape(
-                keypoints_pred.shape[0], -1, 2
-            )  # shape = (batch_size, num_keypoints, 2)
-            keypoints_pred = format_multiview_data_for_pca(
-                data_arr=keypoints_pred,
-                mirrored_column_matches=self.pca.mirrored_column_matches,
-            )  # shape = (batch_size * num_keypoints, views * 2)
-        elif self.loss_name == "pca_singleview":
-            # shape = (batch, 2 * num_keypoints)
-            # optionally choose a subset of the keypoints for the singleview pca
-            if self.pca.columns_for_singleview_pca is not None:
-                keypoints_pred = keypoints_pred[:, self.pca.columns_for_singleview_pca]
-        else:
-            raise NotImplementedError
-
+        keypoints_pred = self.pca._format_data(data_arr=keypoints_pred)
         elementwise_loss = self.compute_loss(predictions=keypoints_pred)
         epsilon_insensitive_loss = self.rectify_epsilon(loss=elementwise_loss)
         scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
