@@ -57,6 +57,14 @@ class KeypointPCA(object):
         }
         return metrics
 
+    @property
+    def _format_factory(self) -> Dict[str, Any]:
+        formats = {
+            "pca_multiview": self._multiview_format,
+            "pca_singleview": self._singleview_format,
+        }
+        return formats
+
     def compute_error(
         self, data_arr: Optional[TensorType["num_samples", "sample_dim"]] = None
     ) -> TensorType["num_samples", -1]:
@@ -68,21 +76,61 @@ class KeypointPCA(object):
         # this method will have to be modified to get PCA data from different source
         self.data_arr = DataExtractor(data_module=self.data_module, cond="train")()
 
-    def _format_data(self) -> None:
-        # TODO: check that the two format end up having same rows/columns division
-        if self.data_arr is not None:
-            if self.loss_type == "pca_multiview":
-                self.data_arr = self.data_arr.reshape(
-                    self.data_arr.shape[0], self.data_arr.shape[1] // 2, 2
-                )
-                self.data_arr = format_multiview_data_for_pca(
-                    data_arr=self.data_arr,
-                    mirrored_column_matches=self.mirrored_column_matches,
-                )
-            else:
-                # no need to format single-view data unless you want to exclude columns
-                if self.columns_for_singleview_pca is not None:
-                    self.data_arr = self.data_arr[:, self.columns_for_singleview_pca]
+    def _multiview_format(
+        self, data_arr: TensorType["num_original_samples", "num_original_dims"]
+    ) -> TensorType[
+        "num_original_samples_times_num_selected_keypoints", "two_times_num_views"
+    ]:
+        # original shape = (batch, 2 * num_keypoints) where `num_keypoints` includes
+        # keypoints views from multiple views.
+        data_arr = data_arr.reshape(data_arr.shape[0], data_arr.shape[1] // 2, 2)
+        # shape = (batch_size, num_keypoints, 2)
+        data_arr = format_multiview_data_for_pca(
+            data_arr=data_arr,
+            mirrored_column_matches=self.mirrored_column_matches,
+        )  # shape = (batch_size * num_keypoints, views * 2)
+        return data_arr
+
+    def _singleview_format(
+        self, data_arr: TensorType["num_original_samples", "num_original_dims"]
+    ) -> Union[
+        TensorType["num_original_samples", "num_selected_dims"],
+        TensorType["num_original_samples", "num_original_dims"],
+    ]:
+        # original shape = (batch, 2 * num_keypoints)
+        # optionally choose a subset of the keypoints for the singleview pca
+        if self.columns_for_singleview_pca is not None:
+            data_arr = data_arr[:, self.columns_for_singleview_pca]
+        return data_arr
+
+    def _format_data(
+        self, data_arr: TensorType["num_original_samples", "num_original_dims"]
+    ) -> TensorType:
+        # Union[
+        #     TensorType["num_original_samples", "num_selected_dims"],  # singleview filtered
+        #     TensorType[
+        #         "num_original_samples", "num_original_dims"
+        #     ],  # singleview unfiltered
+        #     TensorType[
+        #         "num_original_samples_times_num_selected_keypoints", "two_times_num_views"
+        #     ]],  # multiview
+        return self._format_factory[self.loss_type](data_arr=data_arr)
+
+    # def _format_data(self) -> None:
+    #     # TODO: check that the two format end up having same rows/columns division
+    #     if self.data_arr is not None:
+    #         if self.loss_type == "pca_multiview":
+    #             self.data_arr = self.data_arr.reshape(
+    #                 self.data_arr.shape[0], self.data_arr.shape[1] // 2, 2
+    #             )
+    #             self.data_arr = format_multiview_data_for_pca(
+    #                 data_arr=self.data_arr,
+    #                 mirrored_column_matches=self.mirrored_column_matches,
+    #             )
+    #         else:
+    #             # no need to format single-view data unless you want to exclude columns
+    #             if self.columns_for_singleview_pca is not None:
+    #                 self.data_arr = self.data_arr[:, self.columns_for_singleview_pca]
 
     def _clean_any_nans(self) -> None:
         # we count nans along the first dimension, i.e., columns. We remove those rows
@@ -244,7 +292,7 @@ class KeypointPCA(object):
         self._get_data()
 
         # modify self.data_arr in the case of multiview pca, else keep the same
-        self._format_data()
+        self.data_arr = self._format_data(data_arr=self.data_arr)
 
         # remove those observations with more than one Nan.
         # TODO: consider infilling somehow

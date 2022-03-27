@@ -78,7 +78,7 @@ def test_pca_keypoint_class(cfg, base_data_module_combined):
     nan_count_pre_cleanup = torch.sum(torch.isnan(kp_pca.data_arr))
     assert nan_count_pre_cleanup > 0
 
-    kp_pca._format_data()
+    kp_pca.data_arr = kp_pca._format_data(data_arr=kp_pca.data_arr)
     assert kp_pca.data_arr.shape == (
         num_keypoints_both_views * num_train_ims,
         4,  # 4 coords per keypoint (2 views)
