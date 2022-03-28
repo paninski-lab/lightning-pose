@@ -47,7 +47,7 @@ class Loss(pl.LightningModule):
     def __init__(
         self,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
-        epsilon: float = 0.0,
+        epsilon: Union[float, List[float]] = 0.0,
         log_weight: float = 0.0,
         **kwargs,
     ) -> None:
@@ -63,6 +63,7 @@ class Loss(pl.LightningModule):
         """
         super().__init__()
         self.data_module = data_module
+        # epsilon can either by a float or a list of floats
         self.epsilon = torch.tensor(epsilon, dtype=torch.float, device=self.device)
         self.log_weight = torch.tensor(
             log_weight, dtype=torch.float, device=self.device
@@ -331,6 +332,7 @@ class PCALoss(Loss):
         return self.weight * scalar_loss, logs
 
 
+@typechecked
 class TemporalLoss(Loss):
     """Penalize temporal differences for each target.
 
@@ -338,11 +340,10 @@ class TemporalLoss(Loss):
 
     """
 
-    @typechecked
     def __init__(
         self,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
-        epsilon: float = 0.0,
+        epsilon: Union[float, List[float]] = 0.0,
         log_weight: float = 0.0,
         **kwargs,
     ) -> None:
@@ -351,11 +352,20 @@ class TemporalLoss(Loss):
         )
         self.loss_name = "temporal"
 
+    def rectify_epsilon(
+        self, loss: TensorType["batch_minus_one", "num_keypoints"]
+    ) -> TensorType["batch_minus_one", "num_keypoints"]:
+        """Rectify supporting a list of epsilons, one per bodypart.
+        Not implemented in Loss class, because shapes of broadcasting may vary"""
+        # self.epsilon is a tensor initialized in parent class
+        # repeathing for broadcasting. note: this unsqueezing doesn't affect anything if epsilon is a scalar tensor, but it does if it's a tensor with multiple elements.
+        epsilon = self.epsilon.unsqueeze(0).repeat(loss.shape[0], 1).to(loss.device)
+        return loss.masked_fill(mask=loss < epsilon, value=0.0)
+
     def remove_nans(self, **kwargs):
         # find nans in the targets, and do a masked_select operation
         pass
 
-    @typechecked
     def compute_loss(
         self,
         predictions: TensorType["batch", "two_x_num_keypoints"],
@@ -372,7 +382,6 @@ class TemporalLoss(Loss):
 
         return loss
 
-    @typechecked
     def __call__(
         self,
         keypoints_pred: TensorType["batch", "two_x_num_keypoints"],
