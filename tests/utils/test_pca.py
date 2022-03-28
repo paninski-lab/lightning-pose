@@ -162,6 +162,34 @@ def test_format_multiview_data_for_pca():
     )
 
 
+def test_singleview_format_and_loss(cfg, base_data_module_combined):
+    # generate fake data
+    n_batches = 12
+    n_keypoints = 17
+    pred_keypoints = torch.rand(
+        size=(n_batches, n_keypoints * 2),
+        device="cpu",
+    )
+    # initialize an instance
+    singleview_pca = KeypointPCA(
+        loss_type="pca_singleview",
+        error_metric="reprojection_error",
+        data_module=base_data_module_combined,
+        components_to_keep=6,
+        empirical_epsilon_percentile=1.0,
+        columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
+    )
+    singleview_pca()  # fit it to have all the parameters
+
+    # push pred_keypoints through the reformatter
+    data_arr = singleview_pca._format_data(data_arr=pred_keypoints)
+    # num selected keypoints in the cfg is 14, so we should have 14 * 2 columns
+    assert data_arr.shape == (n_batches, 14 * 2)
+
+    err = singleview_pca.compute_error(data_arr=data_arr)
+    assert err.shape == (n_batches, 14)
+
+
 def test_component_chooser():
 
     # create fake data for PCA
