@@ -172,15 +172,20 @@ def predict_single_video(
     cfg = get_cfg_file(cfg_file=cfg_file)
     pretty_print_str(string="Loading trained model from %s... " % ckpt_file)
 
-    model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
-    model.to(device_dict["device_pt"])
-
     # set some defaults
     batch_size = 1  # don't modify, change sequence length (exposed to user) instead
     video_pipe_kwargs_defaults = {"num_threads": 2, "device_id": 0}
     for key, val in video_pipe_kwargs_defaults.items():
         if key not in video_pipe_kwargs.keys():
             video_pipe_kwargs[key] = val
+
+    # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    # os.environ["CUDA_VISIBLE_DEVICES"] = str(video_pipe_kwargs["device_id"])
+    model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
+    if device_dict["device_pt"] != "cpu":
+        model.to("%s:%i" % (device_dict["device_pt"], video_pipe_kwargs["device_id"]))
+    else:
+        model.to(device_dict["device_pt"])
 
     check_prediction_file_format(save_file=preds_file)
     pretty_print_str(string="Building DALI video eval pipeline...")
