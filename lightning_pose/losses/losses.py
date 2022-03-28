@@ -89,7 +89,7 @@ class Loss(pl.LightningModule):
     @typechecked
     def rectify_epsilon(self, loss: torch.Tensor) -> torch.Tensor:
         # loss values below epsilon as masked to zero
-        loss = loss.masked_fill(mask=loss < self.epsilon, value=0.0)
+        loss = loss.masked_fill_(mask=loss < self.epsilon, value=0.0)
         return loss
 
     @typechecked
