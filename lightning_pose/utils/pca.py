@@ -100,7 +100,12 @@ class KeypointPCA(object):
         # original shape = (batch, 2 * num_keypoints)
         # optionally choose a subset of the keypoints for the singleview pca
         if self.columns_for_singleview_pca is not None:
-            data_arr = data_arr[:, self.columns_for_singleview_pca]
+            # reshape to (batch, num_keypoints, 2) to easily select columns
+            data_arr = data_arr.reshape(data_arr.shape[0], data_arr.shape[1] // 2, 2)
+            # select columns
+            data_arr = data_arr[:, np.array(self.columns_for_singleview_pca), :]
+            # reshape back to (batch, num_selected_keypoints * 2)
+            data_arr = data_arr.reshape(data_arr.shape[0], data_arr.shape[1] * 2)
         return data_arr
 
     def _format_data(
