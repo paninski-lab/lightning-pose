@@ -284,6 +284,43 @@ def test_temporal_loss():
     assert (loss.item() - np.sqrt(6)) < 1e-6
 
 
+def test_temporal_loss_multi_epsilon_rectification():
+    from lightning_pose.losses.losses import TemporalLoss
+
+    batch_size = 6
+    temporal_loss = TemporalLoss(epsilon=[0.1, 0.0, 0.5])
+    # define a fake batch of loss values
+    # all keypoints have the same value in the batch dimension
+    loss_tensor = (
+        torch.tensor([0.0, 1.0, 0.4], dtype=torch.float32)
+        .unsqueeze(0)
+        .repeat(batch_size - 1, 1)
+    )
+
+    rectified = temporal_loss.rectify_epsilon(loss_tensor)
+    assert rectified.shape == torch.Size([batch_size - 1, 3])
+    assert torch.all(rectified[:, 0] == 0.0)
+    assert torch.all(rectified[:, 1] == 1.0)
+    assert torch.all(rectified[:, 2] == 0.0)
+
+    temporal_loss = TemporalLoss(epsilon=[0.1, 0.0, 0.3])
+    rectified = temporal_loss.rectify_epsilon(loss_tensor)
+    assert rectified.shape == torch.Size([batch_size - 1, 3])
+    assert torch.all(rectified[:, 0] == 0.0)
+    assert torch.all(rectified[:, 1] == 1.0)
+    assert torch.all(rectified[:, 2] == 0.4)
+
+    # each keypoint has different values in the batch dimension
+    loss_tensor_fancier = torch.tensor(
+        data=[[1.0, 2.0, 1.5], [0.05, 0.12, 0.2]], dtype=torch.float32
+    )
+    temporal_loss = TemporalLoss(epsilon=[0.1, 0.15, 0.3])
+    rectified = temporal_loss.rectify_epsilon(loss_tensor_fancier)
+    assert rectified.shape == (2, 3)
+    assert torch.allclose(rectified[0, :], torch.tensor([1.0, 2.0, 1.5]))
+    assert torch.allclose(rectified[1, :], torch.tensor([0.0, 0.0, 0.0]))
+
+
 def test_unimodal_mse_loss():
 
     from lightning_pose.losses.losses import UnimodalLoss
