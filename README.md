@@ -194,7 +194,7 @@ In [8]: label_fields = ["YOUR_LABELED_FIELD_1", "YOUR_LABELED_FIELD_1", ... ] # 
 In [9]: view.draw_labels(export_dir, label_fields=label_fields, config=config)
 ```
 
-When you're in the app: the app will show `LABELS` (for images) or `FRAME LABELS` (for videos) on the left. Click the downward arrow next to it. It will drop down a menu which (if `eval.fiftyone.build_speed == "slow"`) will allow you to filter by `Labels` (keypoint names), or `Confidence`. When `eval.fiftyone_build_speed == "fast"`) we do not store `Labels` and `Confidence` information. Play around with these; a typical good threshold is `0.05-1.0.` Once you're happy, you can click on the orange bookmark icon to save the filters you applied. Then from code, you can call `view = session.view` and proceed from there.
+When you're in the app: the app will show `LABELS` (for images) or `FRAME LABELS` (for videos) on the left. Click the downward arrow next to it. It will drop down a menu which (if `eval.fiftyone.build_speed == "slow"`) will allow you to filter by `Labels` (keypoint names), or `Confidence`. When `eval.fiftyone_build_speed == "fast"`) we do not store `Labels` and `Confidence` information. Play around with these; a typical good threshold is `0.05-0.1` Once you're happy, you can click on the orange bookmark icon to save the filters you applied. Then from code, you can call `view = session.view` and proceed from there.
 
 
 ### Creating `FiftyOne.Dataset` for videos
