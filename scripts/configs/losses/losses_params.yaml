@@ -44,6 +44,7 @@ temporal:
   log_weight: 7.5
 
   # for epsilon insensitive rectification (in pixels; diffs below this are not penalized)
+  # either a float or a list of floats, one for each keypoint according to the order in the csv columns
   epsilon:
     [
       20.0,
