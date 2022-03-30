@@ -150,17 +150,21 @@ class VideoPredPathHandler:
     @property
     def loss_str(self) -> str:
         semi_supervised = check_if_semi_supervised(self.model_cfg.model.losses_to_use)
+        loss_names = []
+        loss_weights = []
         if semi_supervised:  # add the loss names and weights
             loss_str = ""
             if len(self.model_cfg.model.losses_to_use) > 0:
-                for loss in list(self.model_cfg.model.losses_to_use):
-                    # NOTE: keeping 3 decimals. if working with smaller numbers, modify
-                    # to e.g,. .6f
-                    loss_str = loss_str.join(
-                        "_%s_%.3f" % (loss, self.model_cfg.losses[loss]["log_weight"])
-                    )
-        else:  # fully supervised, return empty string
-            loss_str = ""
+                loss_names = list(self.model_cfg.model.losses_to_use)
+                for loss in loss_names:
+                    loss_weights.append(self.model_cfg.losses[loss]["log_weight"])
+
+                loss_str = "" 
+                for loss, weight in zip(loss_names, loss_weights):
+                    loss_str += '_' + loss + "_" + str(weight)
+        
+            else:  # fully supervised, return empty string
+                loss_str = ""
         return loss_str
 
     def check_input_paths(self) -> None:
