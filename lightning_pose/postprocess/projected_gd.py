@@ -30,6 +30,7 @@ class ProjectedGD(object):
         diffs: TensorType["num_obs", "obs_dim"], scalar: float = 1.0
     ) -> TensorType["num_obs", "obs_dim"]:
         # TODO: test
+        # TODO check it's a proper L2 norm with a square root
         grad = diffs * scalar * (1.0 / torch.linalg.norm(diffs, dim=1, keepdim=True))
         return grad
 
@@ -45,8 +46,19 @@ class ProjectedGD(object):
     def project(
         self, x_after_step: TensorType["num_obs", "obs_dim"]
     ) -> TensorType["num_obs", "obs_dim"]:
+        # PCA rationale:
         # check for the constraints , if small, do nothing
         # if needed, project the result onto the constraints using the projection parameters
+        # pca_reproject(x_after_step, self.proj_params) to go back to plausible values (if epsilon = 0)
+        # if epsilon non-zero. project onto all evecs (discarded and kept). these are all orthogonal.
+        # you go one by one. if your in the kept eigenvecs, do nothing. if you're in discarded evecs, you're outside constraint space
+        # you have a sclar proj per dim. so in those held out dims, you manually set the projs to be epsilon instead of that high projection that you may encounter.
+        # you modify all the projections onto the discarded evecs. you have a vector which is num_obs x num_evecs. this is the representation of data in the PCA coordinate basis
+        # then, you modify that representation, and you send it back to the original space using the transpose of the evecs.
+        # Temporal rationale: want x_t - x_t-1 to be small. compute the difference per timepoint. choose one direction, say forward. you have two points in
+        # you have 2 points in 2d space. the difference vector is the direction. compute the norm. if norm > epsilon, rescale it so norm is equal to epsilon. diff/epsilon -- now you have a direction and a step size. you define x_t += x_t-1 + diff/epsilon.
+        # the next time point has to be inside a ball with radius epsilon. if it's outside, you project onto the exterior of that ball. if it's inside, keep it where it is.
+        # the result will be different if you start from the end or from the beggining.
         pass
 
     def step(
