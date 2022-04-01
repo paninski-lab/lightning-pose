@@ -20,6 +20,11 @@ from typeguard import typechecked
         # the next time point has to be inside a ball with radius epsilon. if it's outside, you project onto the exterior of that ball. if it's inside, keep it where it is.
         # the result will be different if you start from the end or from the beggining.
 """
+def MSE(preds: TensorType["num_samples", "num_keypoints",2],
+        gt: TensorType["num_samples", "num_keypoints",2]):
+    bp_error = torch.linalg.norm(preds - gt, dim=2) # error per keypoint-frame
+    average_error = torch.nanmean(bp_error, dim=1) # mean over keypoints
+    return average_error
 
 @typechecked
 class ProjectedGD(object):
@@ -36,15 +41,18 @@ class ProjectedGD(object):
         verbose: bool = False,
         confidences: Optional[TensorType["num_obs", "num_keypoints"]] = None,
     ):
+        """assume you get only the bodyparts of interest for this, irrelevant cols get filtered externally"""
 
         self.max_iter = max_iter
         self.tol = tol
         self.verbose = verbose
         self.data: TensorType["num_samples", "num_keypoints", 2] = data.reshape(data.shape[0], -1, 2)
+        self.ground_truth: TensorType["num_samples", "num_keypoints", 2] = ground_truth.reshape(ground_truth.shape[0], -1, 2)
         self.proj_params = proj_params
         self.optimized_preds = self.data.detach().clone() # + torch.randn_like(data)*1e-4 # torch.nn.parameter.Parameter(data=data.detach().clone())
         self.x_list = []
         self.lr_list = []
+        self.error_list = []
         self.confidences = 1.0
 
         if lr is not None:
@@ -108,7 +116,7 @@ class ProjectedGD(object):
         alpha = torch.max(torch.norm(diff, dim=2, keepdim=True) / self.confidences)
         return alpha
     
-    def fit(self) -> TensorType["num_obs", "obs_dim"]:
+    def fit(self) -> TensorType["num_samples", "num_keypoints", 2]:
         # TODO: measure RMSE per iteration, run for longer, understand whar it's doing 
         x_curr = self.optimized_preds.clone()
         # project and initialize step size.
@@ -123,6 +131,7 @@ class ProjectedGD(object):
                 # if no change, you're clamped at step=1.0, too big, decrease and move away from data
                 self.lr = self.lr*0.5
             x_curr = x_new.clone()
+            self.error_list.append(MSE(x_curr, self.ground_truth))
             self.x_list.append(x_new)  # record the new x
             self.lr_list.append(self.lr)  # record the new step size
         self.optimized_preds = x_new

@@ -28,7 +28,7 @@ def test_pca_inputs(cfg, base_data_module_combined):
     singleview_pca()  # fit it to have all the parameters
 
     # give that proj_gd instance the data and proj_params
-    proj_gd = ProjectedGD(data=singleview_pca.data_arr.clone(), proj_params={"pca_singleview": singleview_pca}, lr=1e-1, max_iter=100, tol=1e-3, verbose=True)
+    proj_gd = ProjectedGD(data=singleview_pca.data_arr.clone(), proj_params={"pca_singleview": singleview_pca}, lr=None, max_iter=100, tol=1e-3, verbose=True)
     reproj = proj_gd.project(proj_gd.optimized_preds)
     assert reproj.shape == proj_gd.optimized_preds.shape
     fitted_preds = proj_gd.fit()
