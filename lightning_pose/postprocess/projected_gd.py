@@ -30,12 +30,13 @@ class ProjectedGD(object):
         data: TensorType["num_obs", "obs_dim"] = None,
         ground_truth: Optional[TensorType["num_obs", "obs_dim"]] = None,
         proj_params: dict = None,
-        lr: float = 1e-3,
+        lr: Optional[float] = None,
         max_iter: int = 1000,
         tol: float = 1e-5,
         verbose: bool = False,
+        confidences: Optional[TensorType["num_obs", "num_keypoints"]] = None,
     ):
-        self.lr = lr
+
         self.max_iter = max_iter
         self.tol = tol
         self.verbose = verbose
@@ -43,6 +44,14 @@ class ProjectedGD(object):
         self.proj_params = proj_params
         self.optimized_preds = self.data.detach().clone() # + torch.randn_like(data)*1e-4 # torch.nn.parameter.Parameter(data=data.detach().clone())
         self.x_list = []
+        self.lr_list = []
+        self.confidences = 1.0
+
+        if lr is not None:
+            self.lr = lr
+        else:
+            self.lr = self.initialize_alpha()
+        
     
     # TODO: modify norm to bo over the last dimension. have num_keypoints norms per sample.
     # TODO: everything else can remain in this shape?
@@ -64,8 +73,13 @@ class ProjectedGD(object):
     def grad_step(
         self, x_curr: TensorType["num_samples", "num_keypoints", 2]
     ) -> TensorType["num_samples", "num_keypoints", 2]:
-        # TODO: check dims of x_curr and self.data
-        return x_curr - self.lr * self.l2_grad(x_curr - self.data)
+        norm = torch.linalg.norm(x_curr-self.data, dim=2, keepdim=True)
+        step = (self.lr * self.confidences) / (norm + 1e-8)
+        step = torch.clamp(step, min=0.0, max=1.0)
+        x_after_step = (1-step)*x_curr + step*self.data
+        return x_after_step
+        # standard way below
+        # return x_curr - self.lr * self.l2_grad(x_curr - self.data)
 
     def project(
         self, x_after_step: TensorType["num_samples", "num_keypoints", 2]
@@ -84,10 +98,20 @@ class ProjectedGD(object):
         x_after_step = self.grad_step(x_curr=x_curr) # gradient descent on the l2 norm objective
         x_after_projection = self.project(x_after_step=x_after_step)  # project the current x onto the constraints, get plausible x
         return x_after_projection
+        
+    def initialize_alpha(self) -> TensorType[(), float]:
+        # project
+        projected = self.project(x_after_step=self.data)
+        # compute the difference
+        diff = projected - self.data # X_0 - Y
+        # compute the norm and divide by confidences
+        alpha = torch.max(torch.norm(diff, dim=2, keepdim=True) / self.confidences)
+        return alpha
     
     def fit(self) -> TensorType["num_obs", "obs_dim"]:
-        # TODO: test that the recurrence is fine
+        # TODO: measure RMSE per iteration, run for longer, understand whar it's doing 
         x_curr = self.optimized_preds.clone()
+        # project and initialize step size.
         for i in tqdm(range(self.max_iter)):
             # projected gradient descent step
             x_new = self.step(x_curr)
@@ -96,10 +120,11 @@ class ProjectedGD(object):
                 print(f"x_curr: {x_curr}")
                 print(f"x_new: {x_new}")
             if torch.allclose(x_curr, x_new, atol=self.tol):
-                break
+                # if no change, you're clamped at step=1.0, too big, decrease and move away from data
+                self.lr = self.lr*0.5
             x_curr = x_new.clone()
             self.x_list.append(x_new)  # record the new x
-            # TODO: lr_decay
+            self.lr_list.append(self.lr)  # record the new step size
         self.optimized_preds = x_new
         return self.optimized_preds
 
