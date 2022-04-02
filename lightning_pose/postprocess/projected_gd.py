@@ -34,12 +34,13 @@ class ProjectedGD(object):
         self,
         data: TensorType["num_obs", "obs_dim"] = None,
         ground_truth: Optional[TensorType["num_obs", "obs_dim"]] = None,
+        confidences: Optional[TensorType["num_obs", "num_keypoints"]] = None,
         proj_params: dict = None,
         lr: Optional[float] = None,
         max_iter: int = 1000,
         tol: float = 1e-5,
         verbose: bool = False,
-        confidences: Optional[TensorType["num_obs", "num_keypoints"]] = None,
+        lr_decay_factor: float = 0.25,
     ):
         """assume you get only the bodyparts of interest for this, irrelevant cols get filtered externally"""
 
@@ -54,7 +55,12 @@ class ProjectedGD(object):
         self.lr_list = []
         self.error_list = []
         self.confidences = 1.0
+        self.lr_decay_factor = lr_decay_factor
 
+        if confidences is not None:
+            self.confidences: TensorType["num_obs", "num_keypoints",1] = confidences.unsqueeze(2)
+            self.confidences = torch.clamp(confidences, min=0.0, max=1.0)
+        
         if lr is not None:
             self.lr = lr
         else:
@@ -65,6 +71,7 @@ class ProjectedGD(object):
     # TODO: everything else can remain in this shape?
     # When conf comes in, reshape it similarly.
 
+    # currently this is not used.
     @staticmethod
     def l2_grad(
         diffs: TensorType["num_samples", "num_keypoints", 2], scalar: float = 1.0
@@ -81,8 +88,8 @@ class ProjectedGD(object):
     def grad_step(
         self, x_curr: TensorType["num_samples", "num_keypoints", 2]
     ) -> TensorType["num_samples", "num_keypoints", 2]:
-        norm = torch.linalg.norm(x_curr-self.data, dim=2, keepdim=True)
-        step = (self.lr * self.confidences) / (norm + 1e-8)
+        norm:  TensorType["num_samples", "num_keypoints", 1] = torch.linalg.norm(x_curr-self.data, dim=2, keepdim=True)
+        step: TensorType["num_samples", "num_keypoints", 1] = (self.lr * self.confidences) / (norm + 1e-8)
         step = torch.clamp(step, min=0.0, max=1.0)
         x_after_step = (1-step)*x_curr + step*self.data
         return x_after_step
@@ -129,7 +136,7 @@ class ProjectedGD(object):
                 print(f"x_new: {x_new}")
             if torch.allclose(x_curr, x_new, atol=self.tol):
                 # if no change, you're clamped at step=1.0, too big, decrease and move away from data
-                self.lr = self.lr*0.5
+                self.lr  = self.lr * self.lr_decay_factor
             x_curr = x_new.clone()
             self.error_list.append(MSE(x_curr, self.ground_truth))
             self.x_list.append(x_new)  # record the new x
