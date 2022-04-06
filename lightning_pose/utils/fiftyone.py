@@ -58,7 +58,6 @@ def get_image_tags(pred_df: pd.DataFrame) -> pd.Series:
     # zero -> unused, so explicitly replace
     # NOTE: can delete this at some point, pred_df now initialized w/ "unused"
     data_pt_tags = pred_df.iloc[:, -1].replace("0.0", "unused")
-    assert check_unique_tags(data_pt_tags=list(data_pt_tags))
     return data_pt_tags
 
 
@@ -99,7 +98,7 @@ class FiftyOneKeypointBase:
         self.gt_data_dict: Dict[str, Dict[str, np.array]] = dfConverter(
             df=self.ground_truth_df, keypoint_names=self.keypoints_to_plot
         )()
-        self.model_abs_paths = self.get_model_abs_paths()
+        # self.model_abs_paths = self.get_model_abs_paths()
         #
         self.pred_csv_files = []  # override in subclasses
 
@@ -277,13 +276,17 @@ class FiftyOneKeypointBase:
 
 class FiftyOneImagePlotter(FiftyOneKeypointBase):
     def __init__(
-        self, cfg: DictConfig, keypoints_to_plot: Optional[List[str]] = None,
+        self,
+        cfg: DictConfig,
+        keypoints_to_plot: Optional[List[str]] = None,
+        csv_filename: str = "predictions.csv"
     ) -> None:
         super().__init__(cfg=cfg, keypoints_to_plot=keypoints_to_plot)
 
+        model_abs_paths = self.get_model_abs_paths()
         self.pred_csv_files = [
-            os.path.join(model_dir, "predictions.csv")
-            for model_dir in self.model_abs_paths
+            os.path.join(model_dir, csv_filename)
+            for model_dir in model_abs_paths
         ]
 
     @property
@@ -344,7 +347,10 @@ class FiftyOneImagePlotter(FiftyOneKeypointBase):
 
 class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
     def __init__(
-        self, cfg: DictConfig, keypoints_to_plot: Optional[List[str]] = None,
+        self,
+        cfg: DictConfig,
+        keypoints_to_plot: Optional[List[str]] = None,
+        **kwargs  # make robust to other inputs
     ) -> None:
         # initialize FiftyOneKeypointBase
         super().__init__(cfg=cfg, keypoints_to_plot=keypoints_to_plot)
