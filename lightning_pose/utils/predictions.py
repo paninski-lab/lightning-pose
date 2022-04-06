@@ -69,6 +69,7 @@ def predict_dataset(
     ckpt_file: str,
     preds_file: str,
     heatmap_file: Optional[str] = None,
+    gpu_id: Optional[int] = None
 ) -> None:
     """Save predicted keypoints and heatmaps for a labeled dataset.
 
@@ -80,11 +81,15 @@ def predict_dataset(
         preds_file: absolute filename for the predictions .csv file
         heatmap_file: absolute filename for the heatmaps .h5 file; if None, no heatmaps
             are saved
+        gpu_id: specify which gpu to run prediction on
 
     """
 
     model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
-    model.to(_TORCH_DEVICE)
+    if gpu_id is None:
+        model.to(_TORCH_DEVICE)
+    else:
+        model.to("cuda:%i" % gpu_id)
     full_dataset = data_module.dataset
     num_datapoints = len(full_dataset)
     # recover the indices assuming we re-use the same random seed as in training
@@ -105,6 +110,7 @@ def predict_dataset(
         n_frames_=num_datapoints,
         batch_size=data_module.test_batch_size,
         return_heatmaps=bool(heatmap_file),
+        gpu_id=gpu_id,
     )
 
     # add train/test/val column
@@ -155,7 +161,7 @@ def predict_single_video(
             cfg.eval.dali_parameters.sequence_length.
         device (Literal[, optional): device for DALI to use. Defaults to "gpu".
         video_pipe_kwargs (dict, optional): any additional kwargs for DALI. Defaults to
-            {}.
+            {}. Includes "device_id" for running inference on a specfied gpu.
 
     Returns:
         Tuple[pd.DataFrame, Union[np.ndarray, None]]: pandas dataframe with predictions,
@@ -259,6 +265,7 @@ def _make_predictions(
     batch_size: int,
     data_name: str = "dataset",
     return_heatmaps: bool = False,
+    gpu_id: Optional[int] = None,
 ) -> Tuple[pd.DataFrame, Union[np.ndarray, None]]:
     """Wrapper function that predicts, resizes, and puts results in a dataframe.
 
@@ -271,6 +278,7 @@ def _make_predictions(
         batch_size (int): regular batch_size for images or sequence_length for videos
         data_name (str, optional): [description]. Defaults to "dataset".
         return_heatmaps (str, optional): [description]. Defaults to None.
+        gpu_id: specify which gpu to run prediction on
 
     Returns:
         Tuple[pd.DataFrame, Union[np.ndarray, None]]: keypoint dataframe and heatmaps
@@ -279,6 +287,7 @@ def _make_predictions(
 
     keypoints_np, confidence_np, heatmaps_np = _predict_frames(
         cfg, model, dataloader, n_frames_, batch_size, data_name, return_heatmaps,
+        gpu_id,
     )
     # unify keypoints and confidences into one numpy array, scale (x,y) coords by
     # resizing factor
@@ -306,6 +315,7 @@ def _predict_frames(
     batch_size: int,
     data_name: str = "dataset",
     return_heatmaps: bool = False,
+    gpu_id: Optional[int] = None,
 ) -> Tuple[np.ndarray, np.ndarray, Union[np.ndarray, None]]:
     """Predict all frames from a data loader without undoing the resize or reshaping.
 
@@ -318,6 +328,7 @@ def _predict_frames(
         batch_size (int): regular batch_size for images or sequence_length for videos
         data_name (str, optional): [description]. Defaults to "dataset".
         return_heatmaps (str, optional): [description]. Defaults to None.
+        gpu_id: specify which gpu to run prediction on
 
     Returns:
         Tuple[np.ndarray, np.ndarray, Union[np.ndarray, None]]: keypoints, confidences,
@@ -348,7 +359,11 @@ def _predict_frames(
     with torch.inference_mode():
         for n, batch in enumerate(tqdm(dataloader, total=n_batches)):
             if type(batch) == dict:
-                image = batch["images"].to(_TORCH_DEVICE)  # predicting from dataset
+                # predicting from dataset
+                if gpu_id is None:
+                    image = batch["images"].to(_TORCH_DEVICE)
+                else:
+                    image = batch["images"].to("cuda:%i" % gpu_id)
             else:
                 image = batch  # predicting from video
             outputs = model.forward(image)
@@ -372,14 +387,14 @@ def _predict_frames(
                 n_frames_curr = final_batch_size
             else:  # at every sequence except the final
                 keypoints_np[
-                    n_frames_counter : n_frames_counter + n_frames_curr
+                    n_frames_counter: n_frames_counter + n_frames_curr
                 ] = pred_keypoints
                 confidence_np[
-                    n_frames_counter : n_frames_counter + n_frames_curr
+                    n_frames_counter: n_frames_counter + n_frames_curr
                 ] = confidence
                 if return_heatmaps:
                     heatmaps_np[
-                        n_frames_counter : n_frames_counter + n_frames_curr
+                        n_frames_counter: n_frames_counter + n_frames_curr
                     ] = outputs
 
             n_frames_counter += n_frames_curr
