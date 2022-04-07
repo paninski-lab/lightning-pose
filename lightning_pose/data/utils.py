@@ -1,11 +1,13 @@
 """Dataset/data module utilities."""
 
+from kornia import image_to_tensor
 import numpy as np
 import torch
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 from typing import List, Literal, Optional, Tuple, Union, Dict, Any
 import pytorch_lightning as pl
+import math
 
 
 patch_typeguard()  # use before @typechecked
@@ -19,9 +21,11 @@ class DataExtractor(object):
         self,
         data_module: pl.LightningDataModule,
         cond: Literal["train", "test", "val"] = "train",
+        extract_images: bool = False
     ) -> None:
         self.data_module = data_module
         self.cond = cond
+        self.extract_images = extract_images
 
     @property
     def dataset_length(self) -> int:
@@ -52,24 +56,31 @@ class DataExtractor(object):
     @typechecked
     def iterate_over_dataloader(
         self, loader: torch.utils.data.DataLoader
-    ) -> TensorType["num_training_examples", Any]:
+    ) -> Tuple[TensorType["num_examples", Any], Union[TensorType["num_examples", 3, "image_width", "image_height"], None]]:
         keypoints_list = []
+        images_list = []
         for ind, batch in enumerate(loader):
             keypoints_list.append(batch["keypoints"])
+            if self.extract_images:
+                images_list.append(batch["images"])
         concat_keypoints = torch.cat(keypoints_list, dim=0)
+        if self.extract_images:
+            concat_images = torch.cat(images_list, dim=0)
+            assert concat_images.shape == (self.dataset_length, 3, batch["images"].shape[2], batch["images"].shape[3])
+        else:
+            concat_images = None
         # assert that indeed the number of columns does not change after concatenation,
         # and that the number of rows is the dataset length.
         assert concat_keypoints.shape == (
             self.dataset_length, keypoints_list[0].shape[1],
         )
-        return concat_keypoints
+        return concat_keypoints, concat_images
 
     @typechecked
-    def __call__(self) -> TensorType["num_training_examples", Any]:
-        loader = self.verify_labeled_loader(self.get_loader())
-        data_tensor = self.iterate_over_dataloader(loader)
-        return data_tensor
-
+    def __call__(self) -> Tuple[TensorType["num_examples", Any], Union[TensorType["num_examples", 3, "image_width", "image_height"], None]]:
+        loader = self.get_loader()
+        loader = self.verify_labeled_loader(loader)
+        return self.iterate_over_dataloader(loader)
 
 @typechecked
 def split_sizes_from_probabilities(
