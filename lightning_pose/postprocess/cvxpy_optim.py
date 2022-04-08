@@ -7,11 +7,13 @@ from typeguard import typechecked
 
 @typechecked
 class PostProcessorCVXPY:
-    def __init__(self, keypoints_preds: np.ndarray, pca_param_np: Dict[str, np.ndarray]) -> None:
+    def __init__(self, keypoints_preds: np.ndarray, confidences: np.ndarray, pca_param_np: Dict[str, np.ndarray]) -> None:
         self.keypoints_preds = keypoints_preds
         self.pca_param_np = pca_param_np
         self.keypoints_preds_2d = keypoints_preds.reshape(-1, 2) # shape (samples* n_keypoints, 2)
         self.x = cp.Variable(self.keypoints_preds_2d.shape)
+        #self.weights = confidences
+        #self.weights_flat = self.weights.reshape(-1)
         self.weights = np.ones(shape=(self.keypoints_preds_2d.shape[0],)) # TODO:  use actual vals
     
     @property
@@ -45,8 +47,8 @@ class PostProcessorCVXPY:
         return reprojection
     
     def build_pca_constraint(self) -> List[cp.constraints.Inequality]:
-        # reshape keypoints 
-        x = cp.reshape(self.x, shape=(self.orig_shape))
+        # reshape keypoints (hacking cvxpy's fortran indexing)
+        x = cp.reshape(self.x.T, shape=(self.orig_shape[1], self.orig_shape[0])).T
         # transform data into low-d space as in scikit learn's _BasePCA.transform()
         reconstruction = self.reproject_cvxpy()
         recon_err = cp.norm(reconstruction - x, p=2, axis=1)
