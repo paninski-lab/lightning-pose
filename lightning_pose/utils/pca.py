@@ -10,7 +10,7 @@ from typing import List, Optional, Union, Literal, Dict, Any
 import warnings
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
-from lightning_pose.data.utils import clean_any_nans
+from lightning_pose.data.utils import clean_any_nans, DataExtractor
 from lightning_pose.losses.helpers import (
     EmpiricalEpsilon,
     convert_dict_values_to_tensors,
@@ -71,10 +71,7 @@ class KeypointPCA(object):
         return self._error_metric_factory[self.error_metric](data_arr=data_arr)
 
     def _get_data(self) -> None:
-        from lightning_pose.data.utils import DataExtractor
-
-        # this method will have to be modified to get PCA data from different source
-        self.data_arr = DataExtractor(data_module=self.data_module, cond="train")()
+        self.data_arr, _ = DataExtractor(data_module=self.data_module, cond="train", extract_images=False)()
 
     def _multiview_format(
         self, data_arr: TensorType["num_original_samples", "num_original_dims"]

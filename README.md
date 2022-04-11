@@ -80,6 +80,9 @@ foo@bar:~$ python scripts/train_hydra.py training.max_epochs=11
 ```
 If you happen to want to use a maximum of 11 epochs instead the default number (not recommended).
 
+### Important configs
+* ``
+
 ## Training
 
 ```console
@@ -161,6 +164,8 @@ You can choose meaningful display names for the models above using `eval.fiftyon
 ```
 eval.fiftyone.model_display_names: ["supervised", "temporal"]
 ```
+The output of this command will include `Created FiftyOne dataset called: <NAME>.`. Use that name when you load the dataset from python.
+
 ### Launching the FiftyOne app
 Open an `ipython` session from your terminal. 
 ```console
