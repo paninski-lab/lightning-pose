@@ -19,10 +19,13 @@ def test_data_extractor(base_data_module_combined):
         len(base_data_module_combined.dataset)
         * base_data_module_combined.train_probability
     )
-    data_tensor = DataExtractor(data_module=base_data_module_combined, cond="train")()
-    assert data_tensor.shape == (num_frames, 34)  # 72 = 0.8 * 90 images
+    keypoint_tensor, _ = DataExtractor(data_module=base_data_module_combined, cond="train")()
+    assert keypoint_tensor.shape == (num_frames, 34)  # 72 = 0.8 * 90 images
 
+    keypoint_tensor, images_tensor = DataExtractor(data_module=base_data_module_combined, cond="train", extract_images=True)()
 
+    assert images_tensor.shape == (num_frames, 3, 256, 256)
+    
 def test_split_sizes_from_probabilities():
 
     from lightning_pose.data.utils import split_sizes_from_probabilities
