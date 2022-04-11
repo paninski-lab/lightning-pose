@@ -152,6 +152,7 @@ class VideoPredPathHandler:
         semi_supervised = check_if_semi_supervised(self.model_cfg.model.losses_to_use)
         loss_names = []
         loss_weights = []
+        loss_str = ""
         if semi_supervised:  # add the loss names and weights
             loss_str = ""
             if len(self.model_cfg.model.losses_to_use) > 0:
@@ -159,10 +160,10 @@ class VideoPredPathHandler:
                 for loss in loss_names:
                     loss_weights.append(self.model_cfg.losses[loss]["log_weight"])
 
-                loss_str = "" 
+                loss_str = ""
                 for loss, weight in zip(loss_names, loss_weights):
-                    loss_str += '_' + loss + "_" + str(weight)
-        
+                    loss_str += "_" + loss + "_" + str(weight)
+
             else:  # fully supervised, return empty string
                 loss_str = ""
         return loss_str
@@ -171,7 +172,7 @@ class VideoPredPathHandler:
         assert os.path.isfile(self.video_file)
         assert os.path.isdir(self.save_preds_dir)
 
-    def build_pred_file_basename(self, extra_str='') -> str:
+    def build_pred_file_basename(self, extra_str="") -> str:
         return "%s_%s%s%s.csv" % (
             self.video_basename,
             self.model_cfg.model.model_type,
@@ -179,6 +180,6 @@ class VideoPredPathHandler:
             extra_str,
         )
 
-    def __call__(self, extra_str='') -> str:
+    def __call__(self, extra_str="") -> str:
         pred_file_basename = self.build_pred_file_basename(extra_str=extra_str)
         return os.path.join(self.save_preds_dir, pred_file_basename)
