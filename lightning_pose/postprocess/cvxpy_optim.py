@@ -32,7 +32,7 @@ class PostProcessorCVXPY:
     def pca_epsilon(self) -> float:
         return self.pca_param_np["epsilon"]
     
-    def reproject_cvxpy(self, x: cp.Variable = None) -> np.ndarray:
+    def reproject_cvxpy(self, x):
         """ equivalent to our utils.pca.reproject() but suitable for cvxpy """
         mean = np.tile(self.pca_mean, (x.shape[0], 1)) # for each sample, repeat mean, to broadcast
         evecs = self.pca_kept_evecs
