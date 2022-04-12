@@ -1,20 +1,23 @@
 import numpy as np
 import cvxpy as cp
-from typing import Tuple, Dict, List, Union
+from typing import Tuple, Dict, List, Union, Optional
 from typeguard import typechecked
 
 # TODO: test that the variable names are good
 
 @typechecked
 class PostProcessorCVXPY:
-    def __init__(self, keypoints_preds: np.ndarray, confidences: np.ndarray, pca_param_np: Dict[str, Union[np.ndarray, np.float64]]) -> None:
+    def __init__(self, keypoints_preds: np.ndarray, pca_param_np: Dict[str, Union[np.ndarray, np.float64]], confidences: Optional[np.ndarray] = None) -> None:
         self.keypoints_preds = keypoints_preds
         self.pca_param_np = pca_param_np
         self.keypoints_preds_2d = keypoints_preds.reshape(-1, 2) # shape (samples* n_keypoints, 2)
         self.x = cp.Variable(self.keypoints_preds_2d.shape)
+        if confidences is None:
+            self.weights = np.ones(self.keypoints_preds_2d.shape[0])
+        else:
+            self.weights = confidences.reshape(-1)
         #self.weights = confidences
         #self.weights_flat = self.weights.reshape(-1)
-        self.weights = np.ones(shape=(self.keypoints_preds_2d.shape[0],)) # TODO:  use actual vals
     
     @property
     def orig_shape(self) -> Tuple[int, int]:
@@ -46,12 +49,25 @@ class PostProcessorCVXPY:
         reprojection = low_d_projection @ evecs + mean
         return reprojection
     
+    def compute_recon_error(self, x, reconstruction):
+        # do it like in training
+        diff = x - reconstruction
+        # flatten it back to a skinny vector using fortran indexing
+        diff_flat = cp.reshape(diff.T, shape=(2, self.keypoints_preds_2d.shape[0])).T
+        # compute the norm of the difference per keypoint
+        recon_err = cp.norm(diff_flat, p=2, axis=1)
+        # returns a long and skinny vector with reconstruction errors per keypoint
+        return recon_err
+
+    
     def build_pca_constraint(self) -> List[cp.constraints.Inequality]:
         # reshape keypoints (hacking cvxpy's fortran indexing)
         x = cp.reshape(self.x.T, shape=(self.orig_shape[1], self.orig_shape[0])).T
         # transform data into low-d space as in scikit learn's _BasePCA.transform()
         reconstruction = self.reproject_cvxpy(x=x)
-        recon_err = cp.norm(reconstruction - x, p=2, axis=1)
+        # compute the norm of the difference per keypoint
+        recon_err = self.compute_recon_error(x=x, reconstruction=reconstruction)
+        # constraint applied per keypoint
         return [recon_err <= self.pca_epsilon]
     
     def build_objective(self):
