@@ -62,7 +62,7 @@ def grab_layers_sequential(
 class BaseBatchDict(TypedDict):
     """Class for finer control over typechecking."""
 
-    images: TensorType["batch",  "frames", "RGB":3, "image_height", "image_width", float]
+    images: TensorType["batch", "RGB":3, "image_height", "image_width", float]
     keypoints: TensorType["batch", "num_targets", float]
     idxs: TensorType["batch", int]
 
@@ -136,7 +136,7 @@ class BaseFeatureExtractor(LightningModule):
 
     def get_representations(
         self,
-        images: TensorType["batch", "frames", "channels":3, "image_height", "image_width", float],
+        images: TensorType["batch", "channels":3, "image_height", "image_width", float],
     ) -> TensorType["batch", "features", "rep_height", "rep_width", float]:
         """Forward pass from images to feature maps.
 
@@ -153,13 +153,7 @@ class BaseFeatureExtractor(LightningModule):
             dimensions, and are not necessarily equal.
 
         """
-        
-        outputs = []
-        for image_batch in images:
-            output = self.backbone(image_batch)
-            outputs.append(output)
-        print(torch.cat(outputs), "OUTPUT SHAPE 2D context")
-        return torch.cat(outputs)
+        return self.backbone(images)
 
     def forward(self, images):
         """Forward pass from images to representations.

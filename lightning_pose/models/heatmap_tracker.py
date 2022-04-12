@@ -186,7 +186,7 @@ class HeatmapTracker(BaseSupervisedTracker):
     @typechecked
     def forward(
         self,
-        images: TensorType["batch", "channels":3, "image_height", "image_width"],
+        images: TensorType["batch",  "frames", "RGB":3, "image_height", "image_width", float],
     ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Forward pass through the network."""
         representations = self.get_representations(images)

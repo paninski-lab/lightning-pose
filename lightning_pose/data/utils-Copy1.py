@@ -77,7 +77,7 @@ class DataExtractor(object):
         return concat_keypoints, concat_images
 
     @typechecked
-    def __call__(self) -> Tuple[TensorType["num_examples", Any], Union[TensorType["num_examples", "frames", 3, "image_width", "image_height"], None]]:
+    def __call__(self) -> Tuple[TensorType["num_examples", Any], Union[TensorType["num_examples", 3, "image_width", "image_height"], None]]:
         loader = self.get_loader()
         loader = self.verify_labeled_loader(loader)
         return self.iterate_over_dataloader(loader)
