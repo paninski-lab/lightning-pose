@@ -108,31 +108,7 @@ class KeypointPCA(object):
     def _format_data(
         self, data_arr: TensorType["num_original_samples", "num_original_dims"]
     ) -> TensorType:
-        # Union[
-        #     TensorType["num_original_samples", "num_selected_dims"],  # singleview filtered
-        #     TensorType[
-        #         "num_original_samples", "num_original_dims"
-        #     ],  # singleview unfiltered
-        #     TensorType[
-        #         "num_original_samples_times_num_selected_keypoints", "two_times_num_views"
-        #     ]],  # multiview
         return self._format_factory[self.loss_type](data_arr=data_arr)
-
-    # def _format_data(self) -> None:
-    #     # TODO: check that the two format end up having same rows/columns division
-    #     if self.data_arr is not None:
-    #         if self.loss_type == "pca_multiview":
-    #             self.data_arr = self.data_arr.reshape(
-    #                 self.data_arr.shape[0], self.data_arr.shape[1] // 2, 2
-    #             )
-    #             self.data_arr = format_multiview_data_for_pca(
-    #                 data_arr=self.data_arr,
-    #                 mirrored_column_matches=self.mirrored_column_matches,
-    #             )
-    #         else:
-    #             # no need to format single-view data unless you want to exclude columns
-    #             if self.columns_for_singleview_pca is not None:
-    #                 self.data_arr = self.data_arr[:, self.columns_for_singleview_pca]
 
     def _clean_any_nans(self) -> None:
         # we count nans along the first dimension, i.e., columns. We remove those rows
@@ -309,6 +285,77 @@ class KeypointPCA(object):
 
         # save all the meaningful quantities
         self._set_parameter_dict()
+
+@typechecked
+class LinearGaussian(KeypointPCA):
+    """
+    A linear Gaussian model for keypoint detection.
+    Parametrized as in Bishop PRML Appendix B.32-B.51
+    p(z) = N(z; \mu, Lambda^{-1})
+    p(x|z) = N(x; Az + b, L^{-1})
+    """
+
+    def __init__(
+        self,
+        parametrization: Literal["Bishop","Paninski"] = "Bishop",
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        super().__call__() # clean data, fit pca, generate pca_object...
+
+        self.parametrization = parametrization
+        # derived quantities needed for both optional parametrizations
+        self.evals: TensorType["n_components_kept"]= torch.tensor(self.pca_object.explained_variance_, dtype=self.parameters["mean"].dtype)
+        # sigma_2: mean of the discarded eigenvalues
+        self.sigma_2: TensorType[(), float] =  torch.mean(self.evals[self._n_components_kept:])
+        # D: M \times M diagonal matrix with top M e-vals as entries
+        self.D: TensorType["n_components_kept", "n_components_kept"] = torch.diag(self.evals[:self._n_components_kept])
+
+        self.evecs: TensorType["n_components_kept", "observation_dim"] = self.parameters["kept_eigenvectors"]
+    
+    @property
+    def observation_mean(self) -> TensorType["observation_dim", 1]:
+        """ mean of the data as computed by the PCA class """
+        return self.parameters["mean"]
+    
+    @property
+    def prior_mean(self) -> TensorType["n_components_kept"]:
+        """ X \sim N(0, D) for Paninski, X \sim N(0, I) for Bishop """
+        return torch.zeros(self._n_components_kept, 1)
+    
+    @property
+    def prior_precision(self) -> TensorType["n_components_kept", "n_components_kept"]:
+        if self.parametrization == "Bishop":
+            return torch.eye(self._n_components_kept)
+        elif self.parametrization == "Paninski":
+            return torch.linalg.inv(self.D)
+    
+    @property
+    def observation_precision(self) -> TensorType["observation_dim", "observation_dim"]:
+        """ precision of the data """
+        if self.parametrization == "Bishop":
+            # identity matrix of size obs_dim X obs_dim 
+            I = torch.eye(self.parameters["mean"].shape[0])
+            return torch.linalg.inv(I * self.sigma_2)
+        elif self.parametrization == "Paninski":
+            # P: (M \times 2K), our A matrix
+            PDP_T = self.evecs.T @ self.D @ self.evecs
+            cov = torch.tensor(self.pca_object.get_covariance(), device=self.evecs.device)
+            R = cov - PDP_T # R is the covariance of the residuals, low-rank by construction
+            R += torch.eye(R.shape[0]) * 1e-5 # add a small diagonal jitter to avoid singularity
+            return torch.linalg.inv(R)
+    
+    @property
+    def observation_projection(self) -> TensorType["observation_dim", "n_components_kept"]:
+        """ projection matrix from latent space to data space """
+        if self.parametrization == "Bishop":
+            # Eq. 7 in Tipping & Bishop, assuming R=I and the sqrt of a diagonal matrix is the sqrt of the diag entries
+            # W_{ML} = U_q (\Lambda_q - \sigma^2 I)^{1/2}R
+            return self.evecs.T @ torch.sqrt(self.D - self.sigma_2*torch.eye(self.D.shape[0]))
+        elif self.parametrization == "Paninski":
+            return self.evecs.T
+            
+
 
 
 @typechecked

@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import torch
 
-from lightning_pose.utils.pca import KeypointPCA
+from lightning_pose.utils.pca import KeypointPCA, LinearGaussian
 
 
 def check_lists_equal(list_1, list_2):
@@ -272,6 +272,33 @@ def test_compute_pca_reprojection_error():
 
     assert torch.mean(pca_loss) == 0.0
 
+def test_linear_gaussian(cfg, base_data_module_combined):
+
+    # initialize an instance
+    lgssm = LinearGaussian(loss_type="pca_singleview",
+        error_metric="reprojection_error",
+        data_module=base_data_module_combined,
+        components_to_keep=6,
+        empirical_epsilon_percentile=1.0,
+        columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
+        parametrization="Bishop"
+    )
+    # lgssm()  # fit it to have all the parameters
+
+    # singleview_pca = KeypointPCA(
+    #     loss_type="pca_singleview",
+    #     error_metric="reprojection_error",
+    #     data_module=base_data_module_combined,
+    #     components_to_keep=6,
+    #     empirical_epsilon_percentile=1.0,
+    #     columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
+    # )
+    # singleview_pca()  # fit it to have all the parameters
+
+    # # push pred_keypoints through the reformatter
+    # data_arr = singleview_pca._format_data(data_arr=pred_keypoints)
+    # # num selected keypoints in the cfg is 14, so we should have 14 * 2 columns
+    # assert data_arr.shape == (n_batches, 14 * 2)
 
 # def test_undo_formatting():
 #     from lightning_pose.utils.pca import (
