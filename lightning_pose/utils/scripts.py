@@ -61,6 +61,7 @@ def get_dataset(
             imgaug_transform=imgaug_transform,
         )
     elif cfg.model.model_type == "heatmap":
+        print("create HeatmapDataset")
         dataset = HeatmapDataset(
             root_directory=data_dir,
             csv_path=cfg.data.csv_file,
@@ -68,10 +69,12 @@ def get_dataset(
             imgaug_transform=imgaug_transform,
             downsample_factor=cfg.data.downsample_factor,
         )
+        print("good HeatmapDataset")
     else:
         raise NotImplementedError(
             "%s is an invalid cfg.model.model_type" % cfg.model.model_type
         )
+    print("open image")
     image = Image.open(
         os.path.join(dataset.root_directory, dataset.image_names[0])
     ).convert("RGB")
@@ -88,6 +91,7 @@ def get_dataset(
                 image.size[1],
             )
         )
+    print("end")
     return dataset
 
 
@@ -249,6 +253,7 @@ def get_model(
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
+                do_context=cfg.model.do_context,
             )
         else:
             raise NotImplementedError(
@@ -271,6 +276,7 @@ def get_model(
             )
 
         elif cfg.model.model_type == "heatmap":
+            print("here", cfg.model.do_context)
             model = SemiSupervisedHeatmapTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -281,6 +287,7 @@ def get_model(
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
+                do_context=cfg.model.do_context,
             )
         else:
             raise NotImplementedError(

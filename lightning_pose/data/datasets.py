@@ -21,7 +21,7 @@ patch_typeguard()  # use before @typechecked
 class BaseExampleDict(TypedDict):
     """Class for finer control over typechecking."""
 
-    images: TensorType["RGB":3,"frames", "image_height", "image_width"]
+    images: TensorType["frames", "RGB":3, "image_height", "image_width"]
     keypoints: TensorType["num_targets"]
     idxs: int
 
