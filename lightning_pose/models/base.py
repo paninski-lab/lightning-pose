@@ -130,6 +130,7 @@ class BaseFeatureExtractor(LightningModule):
             model=base,
             last_layer_ind=last_resnet_layer_to_get,
         )
+        self.representation_fc = torch.nn.Linear(320, 64)
 
         self.lr_scheduler = lr_scheduler
         self.lr_scheduler_params = lr_scheduler_params
@@ -137,6 +138,7 @@ class BaseFeatureExtractor(LightningModule):
     def get_representations(
         self,
         images: TensorType["batch", "frames", "channels":3, "image_height", "image_width", float],
+        mode: str,
     ) -> TensorType["batch", "features", "rep_height", "rep_width", float]:
         """Forward pass from images to feature maps.
 
@@ -153,13 +155,22 @@ class BaseFeatureExtractor(LightningModule):
             dimensions, and are not necessarily equal.
 
         """
-        
-        outputs = []
-        for image_batch in images:
-            output = self.backbone(image_batch)
-            outputs.append(output)
-        print(torch.cat(outputs), "OUTPUT SHAPE 2D context")
-        return torch.cat(outputs)
+        if mode == "2d_context":
+            images_by_frame_group = torch.permute(images, (1, 0, 2, 3, 4))
+            outputs = []
+            for image_batch in images_by_frame_group:
+                output = self.backbone(image_batch)
+                outputs.append(output.reshape(output.shape[0], output.shape[1], -1))
+            outputs = torch.cat(outputs, dim=2)
+            representations_concat = self.representation_fc(outputs)
+            representations = output.reshape(representations_concat.shape[0], representations_concat.shape[1], representations_concat.shape[2]//8,
+                                             representations_concat.shape[2]//8)
+        else:
+            images_by_frame_group = torch.permute(images, (1, 0, 2, 3, 4))
+            image_batch = images_by_frame_group[0]
+            representations = self.backbone(image_batch)
+            
+        return representations
 
     def forward(self, images):
         """Forward pass from images to representations.
@@ -286,6 +297,9 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
                 # {"params": self.backbone.parameters()},
                 #  don't uncomment above line; the BackboneFinetuning callback should
                 # add backbone to the params.
+                {
+                    "params": self.representation_fc.parameters()
+                },  # important this is the 0th element, for BackboneFinetuning callback
                 {
                     "params": self.upsampling_layers.parameters()
                 },  # important this is the 0th element, for BackboneFinetuning callback

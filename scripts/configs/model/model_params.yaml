@@ -23,4 +23,7 @@ model_type: "heatmap"
 heatmap_loss_type: "mse"
 
 # directory name for model saving
-model_name: "my_base_toy_model"
+model_name: "context_optimize"
+
+# do context (5 frames)
+do_context: True

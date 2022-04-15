@@ -36,18 +36,23 @@ def train(cfg: DictConfig):
 
     # imgaug transform
     imgaug_transform = get_imgaug_transform(cfg=cfg)
+    print("transformed")
 
     # dataset
     dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
+    print("create dataset")
 
     # datamodule; breaks up dataset into train/val/test
     data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
+    print("datamodule")
 
     # build loss factory which orchestrates different losses
     loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
+    print("losses")
 
     # model
     model = get_model(cfg=cfg, data_module=data_module, loss_factories=loss_factories)
+    print("model")
 
     # ----------------------------------------------------------------------------------
     # Set up and run training

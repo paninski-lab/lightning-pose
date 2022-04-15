@@ -346,7 +346,7 @@ def _predict_frames(
                 image = batch["images"].to(_TORCH_DEVICE)  # predicting from dataset
             else:
                 image = batch  # predicting from video
-            outputs = model.forward(image)
+            outputs = model.forward(image, mode='2d_context')
             if cfg.model.model_type == "heatmap":
                 pred_keypoints, confidence = model.run_subpixelmaxima(outputs)
                 # send to cpu
