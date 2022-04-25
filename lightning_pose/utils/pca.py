@@ -6,7 +6,7 @@ from sklearn.decomposition import PCA
 import torch
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
-from typing import List, Optional, Union, Literal, Dict, Any
+from typing import List, Optional, Union, Literal, Dict, Any, Tuple
 import warnings
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
@@ -354,8 +354,24 @@ class LinearGaussian(KeypointPCA):
             return self.evecs.T @ torch.sqrt(self.D - self.sigma_2*torch.eye(self.D.shape[0]))
         elif self.parametrization == "Paninski":
             return self.evecs.T
-            
 
+@typechecked
+def tile_inds(inds: Union[List[int], TensorType["num_valid_inds", int]]) -> Tuple[TensorType["num_valid_inds_squared", int], TensorType["num_valid_inds_squared", int]]:
+    # if list, make it into a tensor
+    if isinstance(inds, list):
+        inds = torch.tensor(inds)
+    row_inds = inds.repeat_interleave(len(inds), dim=0)
+    col_inds = inds.tile(len(inds))
+    return (row_inds, col_inds)
+
+@typechecked
+def extract_blocks_from_inds(valid_inds: Union[List[int], TensorType["num_valid_inds", int]], cov_mat: TensorType["num_data_points", "num_data_points"]) -> TensorType[Any, Any]:
+    '''recieves a covariance matrix and extracts the relevant blocks'''
+    if isinstance(valid_inds, list):
+        valid_inds = torch.tensor(valid_inds)
+    assert (np.diff(valid_inds)>=0).all() # ensure valid_inds are sorted
+    inds_tuple = tile_inds(valid_inds)
+    return cov_mat[inds_tuple].reshape(len(valid_inds), len(valid_inds))
 
 
 @typechecked

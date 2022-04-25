@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import torch
 
-from lightning_pose.utils.pca import KeypointPCA, LinearGaussian
+from lightning_pose.utils.pca import KeypointPCA, LinearGaussian, extract_blocks_from_inds
 
 
 def check_lists_equal(list_1, list_2):
@@ -272,7 +272,7 @@ def test_compute_pca_reprojection_error():
 
     assert torch.mean(pca_loss) == 0.0
 
-def test_linear_gaussian(cfg, base_data_module_combined):
+def test_linear_gaussian_init(cfg, base_data_module_combined):
 
     # initialize an instance
     lgssm = LinearGaussian(loss_type="pca_singleview",
@@ -283,7 +283,24 @@ def test_linear_gaussian(cfg, base_data_module_combined):
         columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
         parametrization="Bishop"
     )
-    # lgssm()  # fit it to have all the parameters
+
+def test_extract_blocks_from_inds(cfg, base_data_module_combined):
+    # make up a toy matrix
+    sym_mat = torch.tensor([[1, 2, 3], [2, 5, 6], [3, 6, 9]])
+    # make up a list of indices
+    inds = torch.tensor([0, 2])
+    # extract the blocks
+    extracted_blocks = extract_blocks_from_inds(inds, sym_mat)
+
+    assert extracted_blocks.shape == (2,2)
+    assert torch.allclose(extracted_blocks, torch.tensor([[1, 3], [3, 9]]))
+
+
+
+     
+    
+
+
 
     # singleview_pca = KeypointPCA(
     #     loss_type="pca_singleview",
