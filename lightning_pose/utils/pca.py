@@ -316,12 +316,12 @@ class LinearGaussian(KeypointPCA):
     @property
     def observation_mean(self) -> TensorType["observation_dim", 1]:
         """ mean of the data as computed by the PCA class """
-        return self.parameters["mean"]
+        return self.parameters["mean"].unsqueeze(1)
     
     @property
-    def prior_mean(self) -> TensorType["n_components_kept"]:
+    def prior_mean(self) -> TensorType["n_components_kept", 1]:
         """ X \sim N(0, D) for Paninski, X \sim N(0, I) for Bishop """
-        return torch.zeros(self._n_components_kept, 1)
+        return torch.zeros((self._n_components_kept, 1))
     
     @property
     def prior_precision(self) -> TensorType["n_components_kept", "n_components_kept"]:
@@ -354,6 +354,41 @@ class LinearGaussian(KeypointPCA):
             return self.evecs.T @ torch.sqrt(self.D - self.sigma_2*torch.eye(self.D.shape[0]))
         elif self.parametrization == "Paninski":
             return self.evecs.T
+    
+    def compute_likelihood_mean(self, latent: TensorType["n_components_kept", -1, float]) -> TensorType["observation_dim", -1, float]:
+        """
+        Compute the mean Az + b of the likelihood function p(x|z): N(x; Az + b, L^{-1})
+        """
+        return self.observation_projection @ latent + self.observation_mean
+    
+    def compute_posterior(self, observation: TensorType["observation_dim", -1, float]) -> Tuple[TensorType["n_components_kept", 1, float], TensorType["n_components_kept", "n_components_kept", float]]:
+        """
+        Posterior mean and variance are:
+        $\mu = \Sigma{A^{\top}L(y-b) + \Lambda \mu}$
+        $\Sigma = (\Lambda + A^{\top} L A)^{-1}$
+        obs could have missing values, 
+        and therefore we'll take the corresponding blocks using the marginalization property of Gaussians
+        """
+        # assuming a single observation for now
+        valid_inds = torch.where(~torch.isnan(observation))[0]
+        valid_observation_precision = extract_blocks_from_inds(valid_inds, self.observation_precision)
+        valid_observation_projection = self.observation_projection[valid_inds, :]
+        posterior_precision = self.prior_precision + valid_observation_projection.T @ valid_observation_precision @ valid_observation_projection
+        posterior_covariance = torch.linalg.inv(posterior_precision) # Bishop's (2.112)
+        mean_subtracted_observation = observation[valid_inds] - self.observation_mean[valid_inds]
+        posterior_mean = posterior_covariance @ (valid_observation_projection.T @ valid_observation_precision @ mean_subtracted_observation + self.prior_precision @ self.prior_mean)
+        return posterior_mean, posterior_covariance
+    
+    def compute_posterior_prediction(self, posterior_mean: TensorType["n_components_kept", 1, float], posterior_covariance: TensorType["n_components_kept", "n_components_kept", float]) -> Tuple[TensorType["observation_dim", 1, float], TensorType["observation_dim", "observation_dim", float]]:
+        """compute the predictive distribution:
+        p(x) = \mathcal{N}(mu, Sigma)
+        where mu = A*posterior_mean + b
+        ans Sigma = A*posterior_cov*A^{\top} + R
+        compute preds for all data points, no missing vals.
+        you can later pick those dims of interest"""
+        mean_posterior_prediction = self.observation
+
+
 
 @typechecked
 def tile_inds(inds: Union[List[int], TensorType["num_valid_inds", int]]) -> Tuple[TensorType["num_valid_inds_squared", int], TensorType["num_valid_inds_squared", int]]:

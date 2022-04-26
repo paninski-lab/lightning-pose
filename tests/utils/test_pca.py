@@ -296,9 +296,67 @@ def test_extract_blocks_from_inds(cfg, base_data_module_combined):
     assert torch.allclose(extracted_blocks, torch.tensor([[1, 3], [3, 9]]))
 
 
-
+def test_compute_likelihood_mean(cfg, base_data_module_combined):
+    latent_dim = 6
+    n_batches = 2
+    # initialize an instance 
+    lgssm = LinearGaussian(loss_type="pca_singleview",
+        error_metric="reprojection_error",
+        data_module=base_data_module_combined,
+        components_to_keep=latent_dim,
+        empirical_epsilon_percentile=1.0,
+        columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
+        parametrization="Bishop"
+    )
+    # make up a latent state
+    latent_state = torch.randn(size=(latent_dim, n_batches))
+    # predict the mean
+    mean = lgssm.compute_likelihood_mean(latent_state)
+    assert mean.shape == (lgssm.observation_mean.shape[0], n_batches)
      
     
+def test_valid_inds_extraction():
+    obs = torch.randn((8,1))
+    bad_ind = 4
+    obs[bad_ind] = torch.nan
+    valid_inds = torch.where(~torch.isnan(obs))[0]
+    assert torch.allclose(valid_inds, torch.tensor([0,1,2,3,5,6,7]))
+
+def test_compute_posterior(cfg, base_data_module_combined):
+    latent_dim = 6
+
+    for method in ["Paninski", "Bishop"]:
+
+        # initialize an instance 
+        lgssm = LinearGaussian(loss_type="pca_singleview",
+            error_metric="reprojection_error",
+            data_module=base_data_module_combined,
+            components_to_keep=latent_dim,
+            empirical_epsilon_percentile=1.0,
+            columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
+            parametrization=method
+        )
+        # take a single observation
+        test_obs_ind = 17
+        obs = lgssm.data_arr[test_obs_ind, :]
+        obs = obs.unsqueeze(-1)
+        assert(obs.shape == (lgssm.observation_mean.shape[0], 1))
+
+        # infer posterior
+        posterior_mean, posterior_cov = lgssm.compute_posterior(obs)
+
+        # check that the covariance is symmetric
+        assert torch.allclose(posterior_cov, posterior_cov.T)
+
+        # assert that the covariance is full rank
+        assert torch.linalg.matrix_rank(posterior_cov, hermitian=True) == posterior_cov.shape[0]
+
+        # assert that we pass the cholesky tests
+        try:
+            torch.linalg.cholesky(posterior_cov)
+        except RuntimeError:
+            assert False
+
 
 
 
