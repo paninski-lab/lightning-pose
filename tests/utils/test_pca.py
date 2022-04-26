@@ -281,8 +281,24 @@ def test_linear_gaussian_init(cfg, base_data_module_combined):
         components_to_keep=6,
         empirical_epsilon_percentile=1.0,
         columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
-        parametrization="Bishop"
+        parametrization="Paninski"
     )
+    PDP_T = lgssm.evecs.T @ lgssm.D @ lgssm.evecs
+    assert torch.allclose(PDP_T, PDP_T.T)
+
+    assert torch.allclose(lgssm.pca_cov, lgssm.pca_cov.T)
+    PDP_T = PDP_T.double()
+    lgssm.pca_cov = lgssm.pca_cov.double()
+    R = lgssm.pca_cov - PDP_T
+    print(R.shape)
+    print(R[:10, :10])
+    print(R.T[:10, :10])
+    print('difference:')
+    print(R[:10, :10] - R.T[:10, :10])
+    assert torch.allclose(R[:10,:10], R.T[:10, :10], atol=1e-4)
+
+    assert torch.allclose(R, R.T, atol=1e-4)
+    #assert torch.allclose(lgssm.observation_precision, lgssm.observation_precision.T)
 
 def test_extract_blocks_from_inds(cfg, base_data_module_combined):
     # make up a toy matrix
@@ -337,7 +353,7 @@ def test_compute_posterior(cfg, base_data_module_combined):
             parametrization=method
         )
         # take a single observation
-        test_obs_ind = 17
+        test_obs_ind = 20
         obs = lgssm.data_arr[test_obs_ind, :]
         obs = obs.unsqueeze(-1)
         assert(obs.shape == (lgssm.observation_mean.shape[0], 1))
@@ -346,7 +362,11 @@ def test_compute_posterior(cfg, base_data_module_combined):
         posterior_mean, posterior_cov = lgssm.compute_posterior(obs)
 
         # check that the covariance is symmetric
+        print(posterior_cov)
+        print("diff")
+        print(posterior_cov-posterior_cov.T)
         assert torch.allclose(posterior_cov, posterior_cov.T)
+        print(posterior_cov-posterior_cov.T)
 
         # assert that the covariance is full rank
         assert torch.linalg.matrix_rank(posterior_cov, hermitian=True) == posterior_cov.shape[0]

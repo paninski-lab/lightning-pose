@@ -312,6 +312,9 @@ class LinearGaussian(KeypointPCA):
         self.D: TensorType["n_components_kept", "n_components_kept"] = torch.diag(self.evals[:self._n_components_kept])
 
         self.evecs: TensorType["n_components_kept", "observation_dim"] = self.parameters["kept_eigenvectors"]
+        
+        self.pca_cov: TensorType["observation_dim", "observation_dim"] = torch.tensor(self.pca_object.get_covariance(), device=self.evecs.device, dtype=self.evecs.dtype)
+
     
     @property
     def observation_mean(self) -> TensorType["observation_dim", 1]:
@@ -340,8 +343,7 @@ class LinearGaussian(KeypointPCA):
         elif self.parametrization == "Paninski":
             # P: (M \times 2K), our A matrix
             PDP_T = self.evecs.T @ self.D @ self.evecs
-            cov = torch.tensor(self.pca_object.get_covariance(), device=self.evecs.device)
-            R = cov - PDP_T # R is the covariance of the residuals, low-rank by construction
+            R = self.pca_cov - PDP_T # R is the covariance of the residuals, low-rank by construction
             R += torch.eye(R.shape[0]) * 1e-5 # add a small diagonal jitter to avoid singularity
             return torch.linalg.inv(R)
     
