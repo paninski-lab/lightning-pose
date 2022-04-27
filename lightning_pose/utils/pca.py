@@ -377,19 +377,33 @@ class LinearGaussian(KeypointPCA):
         valid_observation_projection = self.observation_projection[valid_inds, :]
         posterior_precision = self.prior_precision + valid_observation_projection.T @ valid_observation_precision @ valid_observation_projection
         posterior_covariance = torch.linalg.inv(posterior_precision) # Bishop's (2.112)
+        # add jitter to avoid psd issues
+        # posterior_covariance += torch.eye(posterior_covariance.shape[0]) * 1e-5
         mean_subtracted_observation = observation[valid_inds] - self.observation_mean[valid_inds]
         posterior_mean = posterior_covariance @ (valid_observation_projection.T @ valid_observation_precision @ mean_subtracted_observation + self.prior_precision @ self.prior_mean)
         return posterior_mean, posterior_covariance
     
-    def compute_posterior_prediction(self, posterior_mean: TensorType["n_components_kept", 1, float], posterior_covariance: TensorType["n_components_kept", "n_components_kept", float]) -> Tuple[TensorType["observation_dim", 1, float], TensorType["observation_dim", "observation_dim", float]]:
+    def predict(self, latent_mean: TensorType["n_components_kept", 1, float], latent_covariance: TensorType["n_components_kept", "n_components_kept", float]) -> Tuple[TensorType["observation_dim", 1, float], TensorType["observation_dim", "observation_dim", float]]:
         """compute the predictive distribution:
         p(x) = \mathcal{N}(mu, Sigma)
         where mu = A*posterior_mean + b
         ans Sigma = A*posterior_cov*A^{\top} + R
         compute preds for all data points, no missing vals.
         you can later pick those dims of interest"""
-        mean_posterior_prediction = self.observation
-
+        predictive_mean = self.observation_projection @ latent_mean + self.observation_mean
+        predictive_covariance = self.observation_projection @ latent_covariance @ self.observation_projection.T + torch.linalg.inv(self.observation_precision)
+        return predictive_mean, predictive_covariance
+    
+    def reconstruct(self, observation: TensorType["observation_dim", -1, float]) -> Dict[str, Tuple[TensorType, TensorType]]:
+        """
+        Compute the reconstruction of the data, given the posterior mean and covariance
+        """
+        # first compute the posterior mean and covariance
+        posterior_mean, posterior_covariance = self.compute_posterior(observation)
+        # then compute the predictive distribution
+        predictive_mean, predictive_covariance = self.predict(posterior_mean, posterior_covariance)
+        
+        return {"posterior": (posterior_mean, posterior_covariance), "reconstruction": (predictive_mean, predictive_covariance)}
 
 
 @typechecked

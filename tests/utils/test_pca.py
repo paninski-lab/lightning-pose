@@ -341,7 +341,7 @@ def test_valid_inds_extraction():
 def test_compute_posterior(cfg, base_data_module_combined):
     latent_dim = 6
 
-    for method in ["Paninski", "Bishop"]:
+    for method in ["Bishop"]: # TODO: add "Paninski"
 
         # initialize an instance 
         lgssm = LinearGaussian(loss_type="pca_singleview",
@@ -352,30 +352,33 @@ def test_compute_posterior(cfg, base_data_module_combined):
             columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
             parametrization=method
         )
-        # take a single observation
-        test_obs_ind = 20
-        obs = lgssm.data_arr[test_obs_ind, :]
-        obs = obs.unsqueeze(-1)
-        assert(obs.shape == (lgssm.observation_mean.shape[0], 1))
+        # take a single observation (try 4 of these)
+        for ind in [11,20,34,50]:
+            test_obs_ind = ind
+            obs = lgssm.data_arr[test_obs_ind, :]
+            obs = obs.unsqueeze(-1)
+            obs[13] = torch.nan # add nan to the observation
+            print("obs:", obs)
+            assert(obs.shape == (lgssm.observation_mean.shape[0], 1))
 
-        # infer posterior
-        posterior_mean, posterior_cov = lgssm.compute_posterior(obs)
+            # infer posterior
+            posterior_mean, posterior_cov = lgssm.compute_posterior(obs)
 
-        # check that the covariance is symmetric
-        print(posterior_cov)
-        print("diff")
-        print(posterior_cov-posterior_cov.T)
-        assert torch.allclose(posterior_cov, posterior_cov.T)
-        print(posterior_cov-posterior_cov.T)
+            # check that the covariance is symmetric
+            print(posterior_cov)
+            print("diff")
+            print(posterior_cov-posterior_cov.T)
+            assert torch.allclose(posterior_cov, posterior_cov.T, atol=1e-4)
+            print(posterior_cov-posterior_cov.T)
 
-        # assert that the covariance is full rank
-        assert torch.linalg.matrix_rank(posterior_cov, hermitian=True) == posterior_cov.shape[0]
+            # assert that the covariance is full rank
+            assert torch.linalg.matrix_rank(posterior_cov, hermitian=True) == posterior_cov.shape[0]
 
-        # assert that we pass the cholesky tests
-        try:
-            torch.linalg.cholesky(posterior_cov)
-        except RuntimeError:
-            assert False
+            # assert that we pass the cholesky tests
+            try:
+                torch.linalg.cholesky(posterior_cov)
+            except RuntimeError:
+                assert False
 
 
 
