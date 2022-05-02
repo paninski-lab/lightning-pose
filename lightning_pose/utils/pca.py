@@ -405,6 +405,106 @@ class LinearGaussian(KeypointPCA):
         
         return {"posterior": (posterior_mean, posterior_covariance), "reconstruction": (predictive_mean, predictive_covariance)}
 
+@typechecked
+class LGSSMOutlierDetector(LinearGaussian):
+    """
+    Outlier detector using LGSSM.
+    """
+    def __init__(
+        self,
+        parametrization: Literal["Bishop","Paninski"] = "Bishop",
+        **kwargs,
+    ):
+        # initialize the LinaearGaussian model. It will fit PCA and compute parameters
+        super().__init__(parametrization=parametrization, **kwargs)
+    
+    def loo_reconstruction(self, pred_vector: TensorType["num_keypoints"]) -> List[TensorType["num_keypoints"]]:
+        pred_reshaped = pred_vector.clone().reshape(-1,2)
+        recon_results = []
+        # loop over all the keypoints
+        for i in range(pred_reshaped.shape[0]):
+            temp_preds = pred_reshaped.clone()
+            if temp_preds[i,:].isnan().any():
+                # if it's already a nan from previous iteration, return a vector of nans
+                recon_result = torch.ones((pred_vector.shape[0]))*torch.nan
+                recon_results.append(recon_result)
+            else:
+                # remove keypoint from the prediction vector
+                temp_preds[i,:] = torch.nan
+                # LinearGaussian.reconstruct preds with missing data
+                recon_result = self.reconstruct(temp_preds.reshape(-1,1))
+                # add the mean reconstruction to the list
+                recon_results.append(recon_result["reconstruction"][0].reshape(-1))
+        return recon_results
+    
+    def compute_difference_norms(self, pred_vector: TensorType["num_keypoints_times_two"], recon_list: List[TensorType["num_keypoints_times_two"]]) -> TensorType["num_keypoints", "num_keypoints"]:
+        # check how much each point moved
+        norms_list = []
+        # loop over all the loo reconstructions
+        for i in range(len(recon_list)):
+            recons_temp = recon_list[i]
+            # reshape preds and recons to be of shape (num_keypoints, 2)
+            pred_reshaped = pred_vector.clone().reshape(-1,2)
+            recons_temp_reshaped = recons_temp.reshape(-1,2)
+            # for each reconstructed keypoint, compute the norm of the difference
+            norms = torch.linalg.norm(pred_reshaped - recons_temp_reshaped, dim=1)
+            norms_list.append(norms.unsqueeze(-1))
+        all_norms = torch.cat(norms_list, dim=-1)
+        return all_norms
+    
+    @staticmethod
+    def find_nanmax(tensor: TensorType["num_keypoints", float]) -> Tuple[float, int]:
+        """
+        Find the maximum value in a tensor, ignoring the masked values
+        """
+        # define a bool which is true for all non-nan values
+        non_nan_mask = ~torch.isnan(tensor)
+        # find the maximum value in the tensor
+        max_val = torch.max(tensor[non_nan_mask])
+        # find the indices of the maximum value
+        max_ind = torch.where(tensor == max_val)[0]
+        # return the indices of the maximum value
+        return float(max_val), int(max_ind)
+    
+    def find_max_norm(self, all_norms: TensorType["num_keypoints", "num_keypoints"], included_keypoint_names: List[str]) -> Tuple[TensorType[()], int, str]:
+        # get diags of all_norms
+        diag_norms = all_norms.diag()
+        # get the max norm ind
+        max_norm_val, max_norm_ind = self.find_nanmax(diag_norms) # = int(torch.argmax(diag_norms))
+        # get the max norm
+        max_norm = diag_norms[max_norm_ind]
+        # get the keypoint name
+        max_norm_name = included_keypoint_names[max_norm_ind]
+        return max_norm, max_norm_ind, max_norm_name
+    
+    def iterative_reconstruction(self, pred_vector: TensorType["num_keypoints_times_two"], norm_change_thresh: float, included_keypoint_names: List[str]) -> TensorType["num_keypoints_times_two"]:
+        # TODO: consider norm_change_thresh as a parameter of self, verify that the logic of the procedure is correct. 
+        # outer loop:
+        preds = pred_vector.clone()
+        while True:
+            print("========================================================")
+            # get the reconstruction results
+            recon_list = self.loo_reconstruction(preds)
+            # compute the norms
+            norms = self.compute_difference_norms(preds, recon_list)
+            # find the maximum norm change
+            max_norm, max_norm_ind, max_norm_name = self.find_max_norm(norms, included_keypoint_names)
+            print(f"max_norm: {max_norm}")
+            print(f"max_norm_ind: {max_norm_ind}")
+            print(f"max_norm_name: {max_norm_name}")
+            # if the max norm is less than the threshold, break
+            if max_norm < norm_change_thresh:
+                print("norm is < {}, breaking".format(norm_change_thresh))
+                break
+            else:
+                # remove the keypoint and continue
+                preds = preds.reshape(-1,2)
+                preds[max_norm_ind,:] = torch.nan
+                preds = preds.reshape(-1)
+            
+        return preds
+    
+
 
 @typechecked
 def tile_inds(inds: Union[List[int], TensorType["num_valid_inds", int]]) -> Tuple[TensorType["num_valid_inds_squared", int], TensorType["num_valid_inds_squared", int]]:
