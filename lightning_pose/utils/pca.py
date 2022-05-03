@@ -413,10 +413,14 @@ class LGSSMOutlierDetector(LinearGaussian):
     def __init__(
         self,
         parametrization: Literal["Bishop","Paninski"] = "Bishop",
+        included_keypoints: List[str] = None,
+        displacement_thresh: float = 40.0,
         **kwargs,
     ):
         # initialize the LinaearGaussian model. It will fit PCA and compute parameters
         super().__init__(parametrization=parametrization, **kwargs)
+        self.included_keypoints = included_keypoints
+        self.displacement_thresh = displacement_thresh
     
     def loo_reconstruction(self, pred_vector: TensorType["num_keypoints"]) -> List[TensorType["num_keypoints"]]:
         pred_reshaped = pred_vector.clone().reshape(-1,2)
@@ -504,6 +508,20 @@ class LGSSMOutlierDetector(LinearGaussian):
             
         return preds
     
+    def fix_outliers(self, pred_vector: TensorType["num_keypoints_times_two"], iterative_output: TensorType["num_keypoints_times_two"]) -> TensorType["num_keypoints_times_two"]:
+        post_reconstruction = self.reconstruct(iterative_output.float().reshape(-1,1))
+        recon_means = post_reconstruction["reconstruction"][0]
+        nan_outputs = torch.isnan(iterative_output.reshape(-1,2)).any(dim=1)
+        replaced_pred_vector = pred_vector.clone().float().reshape(-1,2)
+        replaced_pred_vector[nan_outputs, :] = recon_means.reshape(-1,2)[nan_outputs, :]
+        return replaced_pred_vector.reshape(-1)
+    
+    def flag_and_fix_single_obs(self, pred_vector: TensorType["num_keypoints_times_two"]) -> Dict[str, TensorType["num_keypoints_times_two"]]:
+        # iterative reconstruction
+        iterative_output = self.iterative_reconstruction(pred_vector, self.displacement_thresh, self.included_keypoints)
+        # fix outliers
+        fixed_output = self.fix_outliers(pred_vector, iterative_output)
+        return {"flagged": iterative_output, "fixed": fixed_output}
 
 
 @typechecked
