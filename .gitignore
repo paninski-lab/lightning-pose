@@ -3,6 +3,7 @@ lightning_logs/
 outputs/
 multirun/
 preds/
+scripts/figs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
