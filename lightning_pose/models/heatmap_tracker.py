@@ -78,10 +78,11 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.loss_factory = loss_factory.to(self.device)
         # TODO: downsample_factor may be in mismatch between datamodule and model.
         self.downsample_factor = downsample_factor
+        self.relu = nn.ReLU()  # for heatmaps
         self.upsampling_layers = self.make_upsampling_layers()
         self.initialize_upsampling_layers()
         self.output_shape = output_shape
-        self.temperature = torch.tensor(100, device=self.device)  # soft argmax temp
+        self.temperature = torch.tensor(1000., device=self.device)  # soft argmax temp
         self.torch_seed = torch_seed
 
         # use this to log auxiliary information: rmse on labeled data
@@ -124,6 +125,7 @@ class HeatmapTracker(BaseSupervisedTracker):
             heatmaps = pyrup(heatmaps)
         # find soft argmax
         softmaxes = spatial_softmax2d(heatmaps, temperature=self.temperature)
+        # softmaxes = heatmaps / torch.sum(heatmaps, dim=(2, 3), keepdim=True)
         preds = spatial_expectation2d(softmaxes, normalized_coordinates=False)
         # compute predictions as softmax value at argmax
         confidences = torch.amax(softmaxes, dim=(2, 3))
@@ -135,22 +137,33 @@ class HeatmapTracker(BaseSupervisedTracker):
         # TODO: test that running this method changes the weights and biases
         for index, layer in enumerate(self.upsampling_layers):
             if index > 0:  # we ignore the PixelShuffle
-                torch.nn.init.xavier_uniform_(layer.weight)
-                torch.nn.init.zeros_(layer.bias)
+                if isinstance(layer, nn.ConvTranspose2d):
+                    torch.nn.init.xavier_uniform_(layer.weight, gain=1.0)
+                    # torch.nn.init.normal_(layer.weight, mean=0.0, std=0.001)
+                    torch.nn.init.zeros_(layer.bias)
+                elif isinstance(layer, nn.BatchNorm2d):
+                    torch.nn.init.constant_(layer.weight, 1.0)
+                    torch.nn.init.constant_(layer.bias, 0.0)
 
     @typechecked
     def make_upsampling_layers(self) -> torch.nn.Sequential:
         # Note:
-        # https://github.com/jgraving/DeepPoseKit/blob/cecdb0c8c364ea049a3b705275ae71a2f366d4da/deepposekit/models/DeepLabCut.py#L131
+        # https://github.com/jgraving/DeepPoseKit/blob/
+        # cecdb0c8c364ea049a3b705275ae71a2f366d4da/deepposekit/models/DeepLabCut.py#L131
         # in their model, the pixel shuffle happens only for downsample_factor=2
-        upsampling_layers = [nn.PixelShuffle(2)]
+        upsampling_layers = []
+        upsampling_layers.append(nn.PixelShuffle(2))
+        # upsampling_layers.append(nn.BatchNorm2d(self.num_filters_for_upsampling // 4))
+        # upsampling_layers.append(nn.ReLU(inplace=True))
         upsampling_layers.append(
             self.create_double_upsampling_layer(
                 in_channels=self.num_filters_for_upsampling // 4,
                 out_channels=self.num_keypoints,
             )
-        )  # up to here results in downsample_factor=3 for [384,384] images
+        )  # up to here results in downsample_factor=3
         if self.downsample_factor == 2:
+            # upsampling_layers.append(nn.BatchNorm2d(self.num_keypoints))
+            # upsampling_layers.append(nn.ReLU(inplace=True))
             upsampling_layers.append(
                 self.create_double_upsampling_layer(
                     in_channels=self.num_keypoints,
@@ -191,14 +204,10 @@ class HeatmapTracker(BaseSupervisedTracker):
         """Forward pass through the network."""
         representations = self.get_representations(images)
         heatmaps = self.heatmaps_from_representations(representations)
-        # B = heatmaps.shape[0]
-        # valid_probability_heatmaps = self.softmax(
-        #     heatmaps.reshape(B, self.num_keypoints, -1)
-        # )
-        # valid_probability_heatmaps = valid_probability_heatmaps.reshape(
-        #     B, self.num_keypoints, self.output_shape[0], self.output_shape[1]
-        # )
-        return heatmaps
+        # heatmaps = self.relu(heatmaps)
+        # return heatmaps / torch.sum(heatmaps, dim=(2, 3), keepdim=True)
+        # return heatmaps
+        return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
 
     @typechecked
     def get_loss_inputs_labeled(self, batch_dict: HeatmapBatchDict) -> dict:

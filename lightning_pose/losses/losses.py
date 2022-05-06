@@ -210,7 +210,10 @@ class HeatmapMSELoss(HeatmapLoss):
             "batch_x_num_keypoints", "heatmap_height", "heatmap_width"
         ],
     ) -> TensorType["batch_x_num_keypoints", "heatmap_height", "heatmap_width"]:
-        loss = F.mse_loss(targets, predictions, reduction="none")
+        h = targets.shape[1]
+        w = targets.shape[2]
+        # multiply by number of pixels in heatmap to standardize loss range
+        loss = F.mse_loss(targets, predictions, reduction="none") * h * w
         return loss
 
 
@@ -238,7 +241,25 @@ class HeatmapWassersteinLoss(HeatmapLoss):
             "num_valid_keypoints", "heatmap_height", "heatmap_width"
         ],
     ) -> TensorType["num_valid_keypoints"]:
-        return self.wasserstein_loss(targets, predictions)
+        # return self.wasserstein_loss(targets, predictions)
+        xs = torch.linspace(0, 1, steps=targets.shape[2], device=targets.device)
+        ys = torch.linspace(0, 1, steps=targets.shape[1], device=targets.device)
+        grid_y, grid_x = torch.meshgrid(ys, xs)
+        grid_y = grid_y.reshape(-1, 1)
+        grid_x = grid_x.reshape(-1, 1)
+        position = torch.cat([grid_x, grid_y], dim=1)
+
+        # don't use batch mode in geomloss, consumes too much memory
+        loss = torch.zeros(targets.shape[0])
+        for k in range(targets.shape[0]):
+            loss[k] = self.wasserstein_loss(
+                targets[k].flatten(),
+                position,
+                predictions[k].flatten(),
+                position
+            )
+
+        return loss
 
 
 class PCALoss(Loss):
