@@ -78,7 +78,6 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.loss_factory = loss_factory.to(self.device)
         # TODO: downsample_factor may be in mismatch between datamodule and model.
         self.downsample_factor = downsample_factor
-        self.relu = nn.ReLU()  # for heatmaps
         self.upsampling_layers = self.make_upsampling_layers()
         self.initialize_upsampling_layers()
         self.output_shape = output_shape
@@ -125,7 +124,6 @@ class HeatmapTracker(BaseSupervisedTracker):
             heatmaps = pyrup(heatmaps)
         # find soft argmax
         softmaxes = spatial_softmax2d(heatmaps, temperature=self.temperature)
-        # softmaxes = heatmaps / torch.sum(heatmaps, dim=(2, 3), keepdim=True)
         preds = spatial_expectation2d(softmaxes, normalized_coordinates=False)
         # compute predictions as softmax value at argmax
         confidences = torch.amax(softmaxes, dim=(2, 3))
@@ -139,7 +137,6 @@ class HeatmapTracker(BaseSupervisedTracker):
             if index > 0:  # we ignore the PixelShuffle
                 if isinstance(layer, nn.ConvTranspose2d):
                     torch.nn.init.xavier_uniform_(layer.weight, gain=1.0)
-                    # torch.nn.init.normal_(layer.weight, mean=0.0, std=0.001)
                     torch.nn.init.zeros_(layer.bias)
                 elif isinstance(layer, nn.BatchNorm2d):
                     torch.nn.init.constant_(layer.weight, 1.0)
@@ -204,8 +201,6 @@ class HeatmapTracker(BaseSupervisedTracker):
         """Forward pass through the network."""
         representations = self.get_representations(images)
         heatmaps = self.heatmaps_from_representations(representations)
-        # heatmaps = self.relu(heatmaps)
-        # return heatmaps / torch.sum(heatmaps, dim=(2, 3), keepdim=True)
         # return heatmaps
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
 
