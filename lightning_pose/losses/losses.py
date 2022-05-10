@@ -20,6 +20,7 @@ The general flow of each loss class is as follows:
 """
 
 from geomloss import SamplesLoss
+from kornia.losses import js_div_loss_2d, kl_div_loss_2d
 from omegaconf import ListConfig
 import pytorch_lightning as pl
 import torch
@@ -39,6 +40,31 @@ from lightning_pose.utils.pca import (
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 patch_typeguard()  # use before @typechecked
+
+
+@typechecked
+def get_loss_classes() -> Dict[str, Callable]:
+    """Get a dict with all the loss classes.
+
+    Returns:
+        Dict[str, Callable]: [description]
+
+    """
+    loss_dict = {
+        "regression": RegressionMSELoss,
+        "heatmap_mse": HeatmapMSELoss,
+        "heatmap_wasserstein": HeatmapWassersteinLoss,
+        "heatmap_kl": HeatmapKLLoss,
+        "heatmap_js": HeatmapJSLoss,
+        "pca_multiview": PCALoss,
+        "pca_singleview": PCALoss,
+        "temporal": TemporalLoss,
+        "unimodal_mse": UnimodalLoss,
+        "unimodal_wasserstein": UnimodalLoss,
+        "unimodal_kl": UnimodalLoss,
+        "unimodal_js": UnimodalLoss,
+    }
+    return loss_dict
 
 
 class Loss(pl.LightningModule):
@@ -232,6 +258,7 @@ class HeatmapWassersteinLoss(HeatmapLoss):
         reach_ = None if (reach == "none") else reach
         self.wasserstein_loss = SamplesLoss(loss="sinkhorn", reach=reach_)
         self.loss_name = "heatmap_wasserstein"
+        raise NotImplementedError
 
     @typechecked
     def compute_loss(
@@ -241,7 +268,7 @@ class HeatmapWassersteinLoss(HeatmapLoss):
             "num_valid_keypoints", "heatmap_height", "heatmap_width"
         ],
     ) -> TensorType["num_valid_keypoints"]:
-        # return self.wasserstein_loss(targets, predictions)
+
         xs = torch.linspace(0, 1, steps=targets.shape[2], device=targets.device)
         ys = torch.linspace(0, 1, steps=targets.shape[1], device=targets.device)
         grid_y, grid_x = torch.meshgrid(ys, xs)
@@ -260,6 +287,66 @@ class HeatmapWassersteinLoss(HeatmapLoss):
             )
 
         return loss
+
+
+class HeatmapKLLoss(HeatmapLoss):
+    """Kullback-Leibler loss between heatmaps."""
+
+    @typechecked
+    def __init__(
+        self,
+        data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
+        log_weight: float = 0.0,
+        **kwargs,
+    ) -> None:
+        super().__init__(data_module=data_module, log_weight=log_weight)
+        self.loss = kl_div_loss_2d
+        self.loss_name = "heatmap_kl"
+
+    @typechecked
+    def compute_loss(
+        self,
+        targets: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
+        predictions: TensorType[
+            "num_valid_keypoints", "heatmap_height", "heatmap_width"
+        ],
+    ) -> TensorType["num_valid_keypoints"]:
+        loss = self.loss(
+            predictions.unsqueeze(0) + 1e-10,
+            targets.unsqueeze(0) + 1e-10,
+            reduction="none"
+        )
+        return loss[0]
+
+
+class HeatmapJSLoss(HeatmapLoss):
+    """Kullback-Leibler loss between heatmaps."""
+
+    @typechecked
+    def __init__(
+        self,
+        data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
+        log_weight: float = 0.0,
+        **kwargs,
+    ) -> None:
+        super().__init__(data_module=data_module, log_weight=log_weight)
+        self.loss = js_div_loss_2d
+        self.loss_name = "heatmap_js"
+
+    @typechecked
+    def compute_loss(
+        self,
+        targets: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
+        predictions: TensorType[
+            "num_valid_keypoints", "heatmap_height", "heatmap_width"
+        ],
+    ) -> TensorType["num_valid_keypoints"]:
+        loss = self.loss(
+            predictions.unsqueeze(0) + 1e-10,
+            targets.unsqueeze(0) + 1e-10,
+            reduction="none"
+        )
+        return loss[0]
 
 
 class PCALoss(Loss):
@@ -290,7 +377,8 @@ class PCALoss(Loss):
                 raise ValueError("must provide mirrored_column_matches in data config")
 
         # initialize keypoint pca module
-        # this module will fit pca on training data, and will define the error metric and fuction to be used in model training.
+        # this module will fit pca on training data, and will define the error metric
+        # and fuction to be used in model training.
         self.pca = KeypointPCA(
             loss_type=self.loss_name,
             error_metric=self.error_metric,
@@ -423,7 +511,7 @@ class UnimodalLoss(Loss):
     @typechecked
     def __init__(
         self,
-        loss_name: Literal["unimodal_mse", "unimodal_wasserstein"],
+        loss_name: Literal["unimodal_mse", "unimodal_wasserstein", "unimodal_kl"],
         original_image_height: int,
         original_image_width: int,
         downsampled_image_height: int,
@@ -447,9 +535,14 @@ class UnimodalLoss(Loss):
 
         if self.loss_name == "unimodal_wasserstein":
             reach_ = None if (reach == "none") else reach
-            self.wasserstein_loss = SamplesLoss(loss="sinkhorn", reach=reach_)
+            self.loss = SamplesLoss(loss="sinkhorn", reach=reach_)
+            raise NotImplementedError
+        elif self.loss_name == "unimodal_kl":
+            self.loss = kl_div_loss_2d
+        elif self.loss_name == "unimodal_js":
+            self.loss = js_div_loss_2d
         else:
-            self.wasserstein_loss = None
+            self.loss = None
 
     def remove_nans(self, **kwargs):
         pass
@@ -473,7 +566,11 @@ class UnimodalLoss(Loss):
             predictions_rs = predictions.reshape(
                 -1, predictions.shape[-2], predictions.shape[-1]
             )
-            return self.wasserstein_loss(targets_rs, predictions_rs)
+            return self.loss(targets_rs, predictions_rs)
+        elif self.loss_name == "unimodal_kl":
+            return self.loss(predictions + 1e-10, targets + 1e-10, reduction="none")
+        elif self.loss_name == "unimodal_js":
+            return self.loss(predictions + 1e-10, targets + 1e-10, reduction="none")
         else:
             raise NotImplementedError
 
@@ -528,7 +625,7 @@ class RegressionMSELoss(Loss):
         self,
         targets: TensorType["batch", "two_x_num_keypoints"],
         predictions: TensorType["batch", "two_x_num_keypoints"],
-    ) -> Tuple[TensorType["num_valid_keypoints"], TensorType["num_valid_keypoints"],]:
+    ) -> Tuple[TensorType["num_valid_keypoints"], TensorType["num_valid_keypoints"]]:
         mask = targets == targets  # keypoints is not none, bool
         targets_masked = torch.masked_select(targets, mask)
         predictions_masked = torch.masked_select(predictions, mask)
@@ -590,24 +687,3 @@ class RegressionRMSELoss(RegressionMSELoss):
         preds = predictions.reshape(-1, 2)
         loss = torch.mean(F.mse_loss(targs, preds, reduction="none"), dim=1)
         return torch.sqrt(loss)
-
-
-@typechecked
-def get_loss_classes() -> Dict[str, Callable]:
-    """Get a dict with all the loss classes.
-
-    Returns:
-        Dict[str, Callable]: [description]
-
-    """
-    loss_dict = {
-        "regression": RegressionMSELoss,
-        "heatmap_mse": HeatmapMSELoss,
-        "heatmap_wasserstein": HeatmapWassersteinLoss,
-        "pca_multiview": PCALoss,
-        "pca_singleview": PCALoss,
-        "temporal": TemporalLoss,
-        "unimodal_mse": UnimodalLoss,
-        "unimodal_wasserstein": UnimodalLoss,
-    }
-    return loss_dict

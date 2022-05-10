@@ -224,6 +224,5 @@ def generate_heatmaps(
     if normalize:
         # normalize all heatmaps to one
         confidence = confidence / torch.sum(confidence, dim=(2, 3), keepdim=True)
-        # assert torch.allclose(torch.sum(confidence, dim=(2, 3)), torch.Tensor([1.0]))
 
     return confidence
