@@ -19,7 +19,7 @@ resnet_version: 50
 # prediction mode: "heatmap" | "regression"
 model_type: "heatmap"
 
-# which heatmap loss to use: "mse" | "kl"
+# which heatmap loss to use: "mse" | "kl" | "js"
 heatmap_loss_type: "mse"
 
 # directory name for model saving
