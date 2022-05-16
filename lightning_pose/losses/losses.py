@@ -53,14 +53,12 @@ def get_loss_classes() -> Dict[str, Callable]:
     loss_dict = {
         "regression": RegressionMSELoss,
         "heatmap_mse": HeatmapMSELoss,
-        "heatmap_wasserstein": HeatmapWassersteinLoss,
         "heatmap_kl": HeatmapKLLoss,
         "heatmap_js": HeatmapJSLoss,
         "pca_multiview": PCALoss,
         "pca_singleview": PCALoss,
         "temporal": TemporalLoss,
         "unimodal_mse": UnimodalLoss,
-        "unimodal_wasserstein": UnimodalLoss,
         "unimodal_kl": UnimodalLoss,
         "unimodal_js": UnimodalLoss,
     }
@@ -240,52 +238,6 @@ class HeatmapMSELoss(HeatmapLoss):
         w = targets.shape[2]
         # multiply by number of pixels in heatmap to standardize loss range
         loss = F.mse_loss(targets, predictions, reduction="none") * h * w
-        return loss
-
-
-class HeatmapWassersteinLoss(HeatmapLoss):
-    """Wasserstein loss between heatmaps."""
-
-    @typechecked
-    def __init__(
-        self,
-        data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
-        log_weight: float = 0.0,
-        reach: Union[float, str] = "none",
-        **kwargs,
-    ) -> None:
-        super().__init__(data_module=data_module, log_weight=log_weight)
-        reach_ = None if (reach == "none") else reach
-        self.wasserstein_loss = SamplesLoss(loss="sinkhorn", reach=reach_)
-        self.loss_name = "heatmap_wasserstein"
-        raise NotImplementedError
-
-    @typechecked
-    def compute_loss(
-        self,
-        targets: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
-        predictions: TensorType[
-            "num_valid_keypoints", "heatmap_height", "heatmap_width"
-        ],
-    ) -> TensorType["num_valid_keypoints"]:
-
-        xs = torch.linspace(0, 1, steps=targets.shape[2], device=targets.device)
-        ys = torch.linspace(0, 1, steps=targets.shape[1], device=targets.device)
-        grid_y, grid_x = torch.meshgrid(ys, xs)
-        grid_y = grid_y.reshape(-1, 1)
-        grid_x = grid_x.reshape(-1, 1)
-        position = torch.cat([grid_x, grid_y], dim=1)
-
-        # don't use batch mode in geomloss, consumes too much memory
-        loss = torch.zeros(targets.shape[0])
-        for k in range(targets.shape[0]):
-            loss[k] = self.wasserstein_loss(
-                targets[k].flatten(),
-                position,
-                predictions[k].flatten(),
-                position
-            )
-
         return loss
 
 
@@ -511,12 +463,11 @@ class UnimodalLoss(Loss):
     @typechecked
     def __init__(
         self,
-        loss_name: Literal["unimodal_mse", "unimodal_wasserstein", "unimodal_kl"],
+        loss_name: Literal["unimodal_mse", "unimodal_kl", "unimodal_js"],
         original_image_height: int,
         original_image_width: int,
         downsampled_image_height: int,
         downsampled_image_width: int,
-        reach: Union[float, str] = "none",
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
         epsilon: float = 0.0,
         log_weight: float = 0.0,
@@ -533,16 +484,14 @@ class UnimodalLoss(Loss):
         self.downsampled_image_height = downsampled_image_height
         self.downsampled_image_width = downsampled_image_width
 
-        if self.loss_name == "unimodal_wasserstein":
-            reach_ = None if (reach == "none") else reach
-            self.loss = SamplesLoss(loss="sinkhorn", reach=reach_)
-            raise NotImplementedError
+        if self.loss_name == "unimodal_mse":
+            self.loss = None
         elif self.loss_name == "unimodal_kl":
             self.loss = kl_div_loss_2d
         elif self.loss_name == "unimodal_js":
             self.loss = js_div_loss_2d
         else:
-            self.loss = None
+            raise NotImplementedError
 
     def remove_nans(
         self,
@@ -575,9 +524,6 @@ class UnimodalLoss(Loss):
 
         if self.loss_name == "unimodal_mse":
             return F.mse_loss(targets, predictions, reduction="none")
-        elif self.loss_name == "unimodal_wasserstein":
-            raise NotImplementedError
-            # return self.loss(targets, predictions)
         elif self.loss_name == "unimodal_kl":
             return self.loss(
                 predictions.unsqueeze(0) + 1e-10,

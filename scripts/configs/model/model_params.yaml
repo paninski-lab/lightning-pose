@@ -3,15 +3,12 @@
 # - "pca_multiview"
 # - "temporal"
 # - "unimodal_mse"
-# - "unimodal_wasserstein"
+# - "unimodal_kl"
 # - null: if null, assume a model is supervised.
 losses_to_use: ["pca_singleview"]
 
 # whether to learn the weights for the unsupervised losses
 learn_weights: False
-
-# reach parameter for wasserstein loss
-reach: None
 
 # resnet version for backbone: 18 | 34 | 50 | 101 | 152
 resnet_version: 50
