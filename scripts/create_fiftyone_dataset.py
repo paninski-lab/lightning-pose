@@ -29,7 +29,7 @@ def build_fo_dataset(cfg: DictConfig) -> None:
 
     if cfg.eval.fiftyone.launch_app_from_script:
         # launch an interactive session
-        session = fo.launch_app(dataset, remote=True, port=cfg.eval.fiftyone.port)
+        session = fo.launch_app(dataset, remote=True, address=cfg.eval.fiftyone.address, port=cfg.eval.fiftyone.port)
         session.wait()
     # otherwise launch from an ipython session
 
