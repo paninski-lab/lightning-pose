@@ -59,6 +59,7 @@ def get_dataset(
             csv_path=cfg.data.csv_file,
             header_rows=OmegaConf.to_object(cfg.data.header_rows),
             imgaug_transform=imgaug_transform,
+            do_context=cfg.model.do_context,
         )
     elif cfg.model.model_type == "heatmap":
         print("create HeatmapDataset")
@@ -68,6 +69,7 @@ def get_dataset(
             header_rows=OmegaConf.to_object(cfg.data.header_rows),
             imgaug_transform=imgaug_transform,
             downsample_factor=cfg.data.downsample_factor,
+            do_context=cfg.model.do_context,
         )
         print("good HeatmapDataset")
     else:

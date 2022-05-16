@@ -85,7 +85,9 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.temperature = torch.tensor(100, device=self.device)  # soft argmax temp
         self.torch_seed = torch_seed
         self.do_context = do_context
-#         self.representation_fc = torch.nn.Linear(320, 64)
+        self.representation_fc = torch.nn.Linear(5, 1, bias=False)
+#         with torch.no_grad():
+#             self.representation_fc.weight = nn.Parameter(torch.Tensor([[0.0, 0.0, 1.0, 0.0, 0.0]]))
 
         # use this to log auxiliary information: rmse on labeled data
         self.rmse_loss = RegressionRMSELoss()
@@ -189,17 +191,16 @@ class HeatmapTracker(BaseSupervisedTracker):
     @typechecked
     def forward(
         self,
-        images: TensorType["batch",  "frames", "channels":3, "image_height", "image_width"],
-        mode: str,
+        images: Union[TensorType["batch", "channels":3, "image_height", "image_width"], TensorType["batch",  "frames", "channels":3, "image_height", "image_width"]],
+        do_context: bool,
     ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Forward pass through the network."""
-        representations = self.get_representations(images, mode)
-#         if mode == "2d_context":
-#             representations_concat = self.representation_fc(representations)
-#             representations = output.reshape(representations_concat.shape[0], representations_concat.shape[1], representations_concat.shape[2]//8,
-#                                              representations_concat.shape[2]//8)
-#             print(representations.shape)
+        representations = self.get_representations(images, do_context)
+        if do_context:
+            representations: TensorType["batch", "features", "rep_height", "rep_width", 1] = self.representation_fc(representations)
+            representations: TensorType["batch", "features", "rep_height", "rep_width"] = torch.squeeze(representations, 4)
         heatmaps = self.heatmaps_from_representations(representations)
+        
         # B = heatmaps.shape[0]
         # valid_probability_heatmaps = self.softmax(
         #     heatmaps.reshape(B, self.num_keypoints, -1)
@@ -213,11 +214,7 @@ class HeatmapTracker(BaseSupervisedTracker):
     def get_loss_inputs_labeled(self, batch_dict: HeatmapBatchDict) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
-        if self.do_context:
-            predicted_heatmaps = self.forward(batch_dict["images"], mode='2d_context')
-        else:
-            batch_image = torch.unsqueeze(batch_dict["images"][:,2], 1)
-            predicted_heatmaps = self.forward(batch_image, mode='2d')
+        predicted_heatmaps = self.forward(batch_dict["images"], do_context=self.do_context)
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
         return {
@@ -296,8 +293,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
     ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
-        batch = torch.unsqueeze(batch, 1)
-        predicted_heatmaps = self.forward(batch, mode='2d')
+        predicted_heatmaps = self.forward(batch, do_context=False)
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
         return {

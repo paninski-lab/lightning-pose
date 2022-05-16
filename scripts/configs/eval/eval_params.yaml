@@ -1,14 +1,14 @@
 # paths to the hydra config files in the output folder, OR absolute paths to such folders.
-hydra_paths: ["2021-12-15/04-11-43/"]
+hydra_paths: ["/home/jovyan/lightning-pose/artifacts/no-context-baseline-exp0/outputs/2022-05-10/22-00-25", "/home/jovyan/lightning-pose/artifacts/weighted-average-rand-weights-exp0/outputs/2022-05-10/21-59-47"]
 
 fiftyone:
   # will be the name of the dataset (Mongo DB) created by FiftyOne. for video dataset, we will append dataset_name + "_video"
-  dataset_name: "rick_data_test"
+  dataset_name: "5_frame_vs_1_frame_correct"
 
   build_speed: "slow" # "slow"/"fast". "fast" drops keypoint name and confidence information for faster processing.
 
   # if you want to manually provide a different model name to be displayed in FiftyOne
-  model_display_names: ["test_model"]
+  model_display_names: ["1_frame","5_frame"]
 
   # whether to launch the app from the script (True), or from ipython (and have finer control over the outputs)
   launch_app_from_script: False
