@@ -206,9 +206,7 @@ def generate_heatmaps(
     confidence /= 2 * sigma ** 2
     confidence = torch.exp(confidence)
     if not normalize:
-        confidence /= sigma * torch.sqrt(
-            2 * torch.tensor(np.pi), device=keypoints.device
-        )
+        confidence /= sigma * torch.sqrt(2 * torch.tensor(np.pi))
     else:
         nan_heatmap_mode = "uniform"  # so normalization doesn't fail
 
