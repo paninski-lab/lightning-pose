@@ -62,7 +62,8 @@ def grab_layers_sequential(
 class BaseBatchDict(TypedDict):
     """Class for finer control over typechecking."""
 
-    images: TensorType["batch",  "frames", "RGB":3, "image_height", "image_width", float]
+    images: Union[TensorType["batch", "RGB":3, "image_height", "image_width", float], 
+                  TensorType["batch",  "frames", "RGB":3, "image_height", "image_width", float]]
     keypoints: TensorType["batch", "num_targets", float]
     idxs: TensorType["batch", int]
 
@@ -130,15 +131,16 @@ class BaseFeatureExtractor(LightningModule):
             model=base,
             last_layer_ind=last_resnet_layer_to_get,
         )
-        self.representation_fc = torch.nn.Linear(320, 64)
+#         self.representation_fc = torch.nn.Linear(5, 1, bias=False)
 
         self.lr_scheduler = lr_scheduler
         self.lr_scheduler_params = lr_scheduler_params
 
     def get_representations(
         self,
-        images: TensorType["batch", "frames", "channels":3, "image_height", "image_width", float],
-        mode: str,
+        images: Union[TensorType["batch", "RGB":3, "image_height", "image_width", float], 
+                      TensorType["batch",  "frames", "RGB":3, "image_height", "image_width", float]],
+        do_context: bool,
     ) -> TensorType["batch", "features", "rep_height", "rep_width", float]:
         """Forward pass from images to feature maps.
 
@@ -148,6 +150,7 @@ class BaseFeatureExtractor(LightningModule):
 
         Args:
             images: a batch of images
+            do_context: whether or not to use extra frames of context
 
         Returns:
             a representation of the images; features differ as a function of resnet
@@ -155,19 +158,27 @@ class BaseFeatureExtractor(LightningModule):
             dimensions, and are not necessarily equal.
 
         """
-        if mode == "2d_context":
-            images_by_frame_group = torch.permute(images, (1, 0, 2, 3, 4))
-            outputs = []
-            for image_batch in images_by_frame_group:
-                output = self.backbone(image_batch)
-                outputs.append(output.reshape(output.shape[0], output.shape[1], -1))
-            outputs = torch.cat(outputs, dim=2)
-            representations_concat = self.representation_fc(outputs)
-            representations = output.reshape(representations_concat.shape[0], representations_concat.shape[1], representations_concat.shape[2]//8,
-                                             representations_concat.shape[2]//8)
+        if do_context:
+#             images_by_frame_group: TensorType["frames", "batch", "channels":3, "image_height", "image_width"] = torch.permute(images, (1, 0, 2, 3, 4))
+#             outputs = []
+            frames_batch_shape = images.shape[0] * images.shape[1]
+            channels = images.shape[2]
+            image_height = images.shape[3]
+            image_width = images.shape[4]
+            images_batch_frames: TensorType["batch*frames", "channels":3, "image_height", "image_width"] = images.reshape(frames_batch_shape, channels,
+                                                                                                                          image_height, image_width)
+            outputs: TensorType["batch*frames", "features", "rep_height", "rep_width"] = self.backbone(images_batch_frames)
+            outputs: TensorType["batch", "frames", "features", "rep_height", "rep_width"] = outputs.reshape(images.shape[0], images.shape[1], outputs.shape[1],
+                                                                                                            outputs.shape[2], outputs.shape[3])
+            representations: TensorType["batch", "features", "rep_height", "rep_width", "frames"] = torch.permute(outputs, (0, 2, 3, 4, 1))
+                
+                #             for image_batch in images_by_frame_group:
+#                 output = self.backbone(image_batch)
+#                 output = torch.unsqueeze(output, dim=1)
+#                 outputs.append(output)
+#             outputs: TensorType["batch", "frames", "features", "rep_height", "rep_width"] = torch.cat(outputs, dim=1)
         else:
-            images_by_frame_group = torch.permute(images, (1, 0, 2, 3, 4))
-            image_batch = images_by_frame_group[0]
+            image_batch = images
             representations = self.backbone(image_batch)
             
         return representations
@@ -265,6 +276,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         batch_idx: int,
     ) -> Dict[str, TensorType[(), float]]:
         """Base training step, a wrapper around the `evaluate_labeled` method."""
+        print(self.representation_fc.weight)
         loss = self.evaluate_labeled(train_batch, "train")
         return {"loss": loss}
 
@@ -298,11 +310,11 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
                 #  don't uncomment above line; the BackboneFinetuning callback should
                 # add backbone to the params.
                 {
-                    "params": self.representation_fc.parameters()
-                },  # important this is the 0th element, for BackboneFinetuning callback
-                {
                     "params": self.upsampling_layers.parameters()
                 },  # important this is the 0th element, for BackboneFinetuning callback
+                {
+                    "params": self.representation_fc.parameters()
+                }, 
             ]
 
         else:
@@ -381,6 +393,7 @@ class SemiSupervisedTrackerMixin(object):
 
         # on each epoch, self.total_unsupervised_importance is modified by the
         # AnnealWeight callback
+        print(self.representation_fc.weight)
         self.log(
             "total_unsupervised_importance",
             self.total_unsupervised_importance,
@@ -424,6 +437,9 @@ class SemiSupervisedTrackerMixin(object):
                 {
                     "params": self.upsampling_layers.parameters()
                 },  # important this is the 0th element, for BackboneFinetuning callback
+                {
+                    "params": self.representation_fc.parameters()
+                }, 
             ]
 
         else:

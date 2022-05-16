@@ -21,7 +21,7 @@ patch_typeguard()  # use before @typechecked
 class BaseExampleDict(TypedDict):
     """Class for finer control over typechecking."""
 
-    images: TensorType["frames", "RGB":3, "image_height", "image_width"]
+    images: Union[TensorType["RGB":3, "image_height", "image_width"], TensorType["frames", "RGB":3, "image_height", "image_width"]]
     keypoints: TensorType["num_targets"]
     idxs: int
 
@@ -43,6 +43,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         header_rows: Optional[List[int]] = None,
         imgaug_transform: Optional[Callable] = None,
         pytorch_transform_list: Optional[List] = None,
+        do_context: bool = True,
     ) -> None:
         """Initialize a dataset for regression (rather than heatmap) models.
 
@@ -63,10 +64,12 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 Note: image_path is relative to the given root_directory
             header_rows: which rows in the csv are header rows
             transform: torchvision transform to apply to images
+            do_context: include additional frames of context if possible.
 
         """
         self.root_directory = root_directory
         self.imgaug_transform = imgaug_transform
+        self.do_context = do_context
 
         # load csv data
         # step 1
@@ -130,30 +133,14 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx: int):
         
         img_name = self.image_names[idx]
-        # get index of the image 
-        idx_img = img_name.split('/')[-1].replace('img', '')
-        idx_img = int(idx_img.replace('.png', ''))
-
-        # get the frames -> t-2, t-1, t, t+1, t + 2
-        list_idx = [idx_img - 2, idx_img - 1, idx_img, idx_img + 1, idx_img + 2]
-        list_img_names = []
-
-        for items in list_idx:
-            img_name_new = img_name.replace(str(idx_img), str(items))
-            list_img_names.append(img_name_new)
         
-        # read the images from image list to create dataset
-        
-        keypoints_on_image = self.keypoints[idx]
-        list_images = []
-
-        for i,names in enumerate(list_img_names):
-
+        if not self.do_context:
             # read image from file and apply transformations (if any)
-            file_name = os.path.join(self.root_directory, names)
+            file_name = os.path.join(self.root_directory, img_name)
             # if 1 color channel, change to 3.
             image = Image.open(file_name).convert("RGB")
-            
+            # get current image keypoints from self.keypoints
+            keypoints_on_image = self.keypoints[idx]
             if self.imgaug_transform is not None:
                 transformed_images, transformed_keypoints = self.imgaug_transform(
                     images=np.expand_dims(image, axis=0),
@@ -173,21 +160,63 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
             transformed_images = self.pytorch_transform(transformed_images)
             assert transformed_keypoints.shape == (self.num_targets,)
-
-            if i == 0:
-                image_frames_tensor = torch.unsqueeze(transformed_images, dim = 0)
-            else:
-                image_expand = torch.unsqueeze(transformed_images, dim = 0)
-                image_frames_tensor = torch.cat((image_frames_tensor, image_expand), dim = 0)
-
-            # list_images.append(transformed_images)
             
-        assert transformed_keypoints.shape == (self.num_targets,)
-#         raise ValueError()
+        else: 
+            # get index of the image 
+            idx_img = img_name.split('/')[-1].replace('img', '')
+            idx_img = int(idx_img.replace('.png', ''))
+            
+            # get the frames -> t-2, t-1, t, t+1, t + 2
+            list_idx = [idx_img - 2, idx_img - 1, idx_img, idx_img + 1, idx_img + 2]
+            list_img_names = []
 
-#         image_frames_tensor = torch.permute(image_frames_tensor, (1, 0, 2, 3))
+            for items in list_idx:
+                img_name_new = img_name.replace(str(idx_img), str(items))
+                list_img_names.append(img_name_new)
+
+            # read the images from image list to create dataset
+
+            keypoints_on_image = self.keypoints[idx]
+            list_images = []
+
+            for i,names in enumerate(list_img_names):
+
+                # read image from file and apply transformations (if any)
+                file_name = os.path.join(self.root_directory, names)
+                # if 1 color channel, change to 3.
+                image = Image.open(file_name).convert("RGB")
+                if self.imgaug_transform is not None:
+                    transformed_images, transformed_keypoints = self.imgaug_transform(
+                        images=np.expand_dims(image, axis=0),
+                        keypoints=np.expand_dims(keypoints_on_image, axis=0),
+                    )  # expands add batch dim for imgaug
+                    # get rid of the batch dim
+                    transformed_images = transformed_images[0]
+                    transformed_keypoints = transformed_keypoints[0]
+                    # TODO: the problem below is that it messes up
+                    # TODO: data.compute_heatmaps()
+                    transformed_keypoints = transformed_keypoints.reshape(
+                        transformed_keypoints.shape[0] * transformed_keypoints.shape[1]
+                    )
+                else:
+                    transformed_images = np.expand_dims(image, axis=0)
+                    transformed_keypoints = np.expand_dims(keypoints_on_image, axis=0)
+
+                transformed_images = self.pytorch_transform(transformed_images)
+                assert transformed_keypoints.shape == (self.num_targets,)
+
+                if i == 0:
+                    image_frames_tensor = torch.unsqueeze(transformed_images, dim = 0)
+                else:
+                    image_expand = torch.unsqueeze(transformed_images, dim = 0)
+                    image_frames_tensor = torch.cat((image_frames_tensor, image_expand), dim = 0)
+
+                # list_images.append(transformed_images)
+            transformed_images = image_frames_tensor
+            assert transformed_keypoints.shape == (self.num_targets,)
+        
         return {
-            "images": image_frames_tensor,
+            "images": transformed_images,
             "keypoints": torch.from_numpy(transformed_keypoints),
             "idxs": idx,
         }
@@ -206,6 +235,7 @@ class HeatmapDataset(BaseTrackingDataset):
         pytorch_transform_list: Optional[List] = None,
         no_nans: bool = False,
         downsample_factor: int = 2,
+        do_context: bool = True,
     ) -> None:
         """Initialize the Heatmap Dataset.
 
@@ -228,6 +258,7 @@ class HeatmapDataset(BaseTrackingDataset):
             header_rows,
             imgaug_transform,
             pytorch_transform_list,
+            do_context,
         )
 
         if self.height % 128 != 0 or self.height % 128 != 0:
@@ -283,7 +314,13 @@ class HeatmapDataset(BaseTrackingDataset):
         for idx in range(len(self.image_names)):
             example_dict: BaseExampleDict = super().__getitem__(idx)
             # super().__getitem__ returns flat keypoints, reshape to
-
+            if self.do_context:
+                image_height = example_dict["images"][0].shape[-2]
+                image_width = example_dict["images"][0].shape[-1]
+            else:
+                image_height = example_dict["images"].shape[-2]
+                image_width = example_dict["images"].shape[-1]
+                
             y_heatmap = generate_heatmaps(
                 example_dict["keypoints"].reshape(
                     1, self.num_keypoints, 2

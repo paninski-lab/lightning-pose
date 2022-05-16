@@ -9,7 +9,8 @@ image_resize_dims:
   height: 256
 
 # ABSOLUTE path to data directory. the below is just a toy example for running Getting Started scripts
-data_dir: "/home/jovyan/datastores/mirror-mouse"
+# data_dir: "/home/jovyan/datastores/mirror-mouse"
+data_dir: "/datastores/mirror-mouse"
 
 # ABSOLUTE path to unlabeled videos' directory. the below is just a toy example for running Getting Started scripts (TODO: Matt, can have multiple vids)
 video_dir: "unlabeled_videos"

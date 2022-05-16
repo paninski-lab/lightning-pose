@@ -16,14 +16,16 @@ reach: None
 # resnet version for backbone: 18 | 34 | 50 | 101 | 152
 resnet_version: 50
 
-# prediction mode: "heatmap" | "regression"
+# prediction mode: "heatmap" | "regression" | "heatmap_context"
 model_type: "heatmap"
 
 # which heatmap loss to use: "mse" | "wasserstein"
 heatmap_loss_type: "mse"
 
 # directory name for model saving
-model_name: "context_optimize"
+model_name: "context_5X1_rand"
+# model_name: "baseline"
 
 # do context (5 frames)
 do_context: True
+# do_context: False
