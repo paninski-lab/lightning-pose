@@ -45,36 +45,67 @@ def test_heatmap_mse_loss():
     assert loss > 0.0
 
 
-def test_heatmap_wasserstein_loss():
+def test_heatmap_kl_loss():
 
-    from lightning_pose.losses.losses import HeatmapWassersteinLoss
+    from lightning_pose.data.utils import generate_heatmaps
+    from lightning_pose.losses.losses import HeatmapKLLoss
 
-    heatmap_wasser_loss = HeatmapWassersteinLoss()
+    heatmap_loss = HeatmapKLLoss()
 
-    targets = torch.ones((3, 7, 48, 48)) / (48 * 48)
-    # note: wasserstein loss fails when predictions exactly equal targets; need to look
-    # into kornia to see why this might be the case
-    predictions = (torch.ones_like(targets) / (48 * 48)) + 0.000001 * torch.randn_like(
-        targets
-    )
+    m = 100  # max pixel
+    keypoints = m * torch.rand((3, 7, 2))
+    targets = generate_heatmaps(keypoints, height=m, width=m, output_shape=(32, 32))
+    predictions = targets.clone()
 
-    loss, logs = heatmap_wasser_loss(
+    loss, logs = heatmap_loss(
         heatmaps_targ=targets,
         heatmaps_pred=predictions,
         stage=stage,
     )
     assert loss.shape == torch.Size([])
     assert np.isclose(loss.detach().cpu().numpy(), 0.0, rtol=1e-5)
-    assert logs[0]["name"] == "%s_heatmap_wasserstein_loss" % stage
-    assert logs[0]["value"] == loss / heatmap_wasser_loss.weight
-    assert logs[1]["name"] == "heatmap_wasserstein_weight"
-    assert logs[1]["value"] == heatmap_wasser_loss.weight
+    assert logs[0]["name"] == "%s_heatmap_kl_loss" % stage
+    assert logs[0]["value"] == loss / heatmap_loss.weight
+    assert logs[1]["name"] == "heatmap_kl_weight"
+    assert logs[1]["value"] == heatmap_loss.weight
 
     # when predictions have higher error, should return more positive value
-    predictions = (torch.ones_like(targets) / (48 * 48)) + 0.1 * torch.randn_like(
-        targets
+    predictions = torch.roll(predictions, shifts=1, dims=0)
+    loss2, logs = heatmap_loss(
+        heatmaps_targ=targets,
+        heatmaps_pred=predictions,
+        stage=stage,
     )
-    loss2, logs = heatmap_wasser_loss(
+    assert loss2 > loss
+
+
+def test_heatmap_js_loss():
+
+    from lightning_pose.data.utils import generate_heatmaps
+    from lightning_pose.losses.losses import HeatmapJSLoss
+
+    heatmap_loss = HeatmapJSLoss()
+
+    m = 100  # max pixel
+    keypoints = m * torch.rand((3, 7, 2))
+    targets = generate_heatmaps(keypoints, height=m, width=m, output_shape=(32, 32))
+    predictions = targets.clone()
+
+    loss, logs = heatmap_loss(
+        heatmaps_targ=targets,
+        heatmaps_pred=predictions,
+        stage=stage,
+    )
+    assert loss.shape == torch.Size([])
+    assert np.isclose(loss.detach().cpu().numpy(), 0.0, rtol=1e-5)
+    assert logs[0]["name"] == "%s_heatmap_js_loss" % stage
+    assert logs[0]["value"] == loss / heatmap_loss.weight
+    assert logs[1]["name"] == "heatmap_js_weight"
+    assert logs[1]["value"] == heatmap_loss.weight
+
+    # when predictions have higher error, should return more positive value
+    predictions = torch.roll(predictions, shifts=1, dims=0)
+    loss2, logs = heatmap_loss(
         heatmaps_targ=targets,
         heatmaps_pred=predictions,
         stage=stage,
@@ -359,8 +390,9 @@ def test_unimodal_mse_loss():
     assert logs[1]["value"] == uni_loss.weight
 
 
-def test_unimodal_wasserstein_loss():
+def test_unimodal_kl_loss():
 
+    from kornia.geometry.subpix import spatial_softmax2d
     from lightning_pose.losses.losses import UnimodalLoss
 
     img_size = 48
@@ -373,12 +405,12 @@ def test_unimodal_wasserstein_loss():
         size=(batch_size, 2 * num_keypoints),
         device=device,
     )
-    heatmaps_pred = torch.ones(
+    heatmaps_pred = spatial_softmax2d(torch.randn(
         size=(batch_size, num_keypoints, img_size_ds, img_size_ds),
         device=device,
-    )
+    ))
     uni_loss = UnimodalLoss(
-        loss_name="unimodal_wasserstein",
+        loss_name="unimodal_kl",
         original_image_height=img_size,
         original_image_width=img_size,
         downsampled_image_height=img_size_ds,
@@ -391,9 +423,48 @@ def test_unimodal_wasserstein_loss():
     )
     assert loss.shape == torch.Size([])
     assert loss > 0.0
-    assert logs[0]["name"] == "%s_unimodal_wasserstein_loss" % stage
+    assert logs[0]["name"] == "%s_unimodal_kl_loss" % stage
     assert logs[0]["value"] == loss / uni_loss.weight
-    assert logs[1]["name"] == "unimodal_wasserstein_weight"
+    assert logs[1]["name"] == "unimodal_kl_weight"
+    assert logs[1]["value"] == uni_loss.weight
+
+
+def test_unimodal_js_loss():
+
+    from kornia.geometry.subpix import spatial_softmax2d
+    from lightning_pose.losses.losses import UnimodalLoss
+
+    img_size = 48
+    img_size_ds = 32
+    batch_size = 12
+    num_keypoints = 16
+
+    # make sure non-negative scalar is returned
+    keypoints_pred = img_size * torch.rand(
+        size=(batch_size, 2 * num_keypoints),
+        device=device,
+    )
+    heatmaps_pred = spatial_softmax2d(torch.randn(
+        size=(batch_size, num_keypoints, img_size_ds, img_size_ds),
+        device=device,
+    ))
+    uni_loss = UnimodalLoss(
+        loss_name="unimodal_js",
+        original_image_height=img_size,
+        original_image_width=img_size,
+        downsampled_image_height=img_size_ds,
+        downsampled_image_width=img_size_ds,
+    )
+    loss, logs = uni_loss(
+        keypoints_pred=keypoints_pred,
+        heatmaps_pred=heatmaps_pred,
+        stage=stage,
+    )
+    assert loss.shape == torch.Size([])
+    assert loss > 0.0
+    assert logs[0]["name"] == "%s_unimodal_js_loss" % stage
+    assert logs[0]["value"] == loss / uni_loss.weight
+    assert logs[1]["name"] == "unimodal_js_weight"
     assert logs[1]["value"] == uni_loss.weight
 
 

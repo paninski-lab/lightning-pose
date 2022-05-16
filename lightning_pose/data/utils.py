@@ -82,6 +82,7 @@ class DataExtractor(object):
         loader = self.verify_labeled_loader(loader)
         return self.iterate_over_dataloader(loader)
 
+
 @typechecked
 def split_sizes_from_probabilities(
     total_number: int,
@@ -187,7 +188,7 @@ def generate_heatmaps(
     out_width = output_shape[1]
     keypoints[:, :, 1] *= out_height / height
     keypoints[:, :, 0] *= out_width / width
-    nan_idxes = torch.isnan(keypoints)[:, :, 0]
+    nan_idxs = torch.isnan(keypoints)[:, :, 0]
     xv = torch.arange(out_width, device=keypoints.device)
     yv = torch.arange(out_height, device=keypoints.device)
     xx, yy = torch.meshgrid(
@@ -205,17 +206,21 @@ def generate_heatmaps(
     confidence /= 2 * sigma ** 2
     confidence = torch.exp(confidence)
     if not normalize:
-        confidence /= sigma * torch.sqrt(
-            2 * torch.tensor(math.pi), device=keypoints.device
-        )
+        confidence /= sigma * torch.sqrt(2 * torch.tensor(np.pi))
+    else:
+        nan_heatmap_mode = "uniform"  # so normalization doesn't fail
 
     if nan_heatmap_mode == "uniform":
         uniform_heatmap = torch.ones(
             (out_height, out_width), device=keypoints.device
         ) / (out_height * out_width)
-        confidence[nan_idxes] = uniform_heatmap
+        confidence[nan_idxs] = uniform_heatmap
     else:  # nan_heatmap_mode == "zero"
         zero_heatmap = torch.zeros((out_height, out_width), device=keypoints.device)
-        confidence[nan_idxes] = zero_heatmap
+        confidence[nan_idxs] = zero_heatmap
+
+    if normalize:
+        # normalize all heatmaps to one
+        confidence = confidence / torch.sum(confidence, dim=(2, 3), keepdim=True)
 
     return confidence
