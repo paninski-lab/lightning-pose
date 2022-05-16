@@ -165,7 +165,7 @@ def get_loss_factories(
             loss_params_dict["unsupervised"][loss_name] = cfg_loss_dict[loss_name]
             loss_params_dict["unsupervised"][loss_name]["loss_name"] = loss_name
             # loss-specific parameters
-            if loss_name == "unimodal_mse" or loss_name == "unimodal_wasserstein":
+            if loss_name[:8] == "unimodal":
                 if cfg.model.model_type == "regression":
                     raise NotImplementedError(
                         f"unimodal loss can only be used with classes inheriting from "
