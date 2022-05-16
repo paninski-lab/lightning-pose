@@ -181,9 +181,9 @@ class HeatmapLoss(Loss):
     ]:
 
         squeezed_targets = targets.reshape(targets.shape[0], targets.shape[1], -1)
-        all_zeroes = torch.all(squeezed_targets == 0.0, dim=-1)
+        idxs_ignore = torch.all(squeezed_targets == 0.0, dim=-1)
 
-        return targets[~all_zeroes], predictions[~all_zeroes]
+        return targets[~idxs_ignore], predictions[~idxs_ignore]
 
     def compute_loss(self, **kwargs):
         raise NotImplementedError
@@ -544,11 +544,7 @@ class UnimodalLoss(Loss):
         else:
             self.loss = None
 
-    def remove_nans(self, **kwargs):
-        pass
-
-    @typechecked
-    def compute_loss(
+    def remove_nans(
         self,
         targets: TensorType[
             "batch", "num_keypoints", "heatmap_height", "heatmap_width"
@@ -556,21 +552,44 @@ class UnimodalLoss(Loss):
         predictions: TensorType[
             "batch", "num_keypoints", "heatmap_height", "heatmap_width"
         ],
+    ) -> Tuple[
+        TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
+        TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
+    ]:
+        # get rid of unsupervised targets with likely occlusions
+        squeezed_predictions = predictions.reshape(
+            predictions.shape[0], predictions.shape[1], -1)
+        idxs_ignore = torch.max(squeezed_predictions, dim=-1).values < self.epsilon
+        return targets[~idxs_ignore], predictions[~idxs_ignore]
+
+    @typechecked
+    def compute_loss(
+        self,
+        targets: TensorType[
+            "num_valid_keypoints", "heatmap_height", "heatmap_width"
+        ],
+        predictions: TensorType[
+            "num_valid_keypoints", "heatmap_height", "heatmap_width"
+        ],
     ) -> torch.Tensor:
 
         if self.loss_name == "unimodal_mse":
             return F.mse_loss(targets, predictions, reduction="none")
         elif self.loss_name == "unimodal_wasserstein":
-            # collapse over batch/keypoint dims
-            targets_rs = targets.reshape(-1, targets.shape[-2], targets.shape[-1])
-            predictions_rs = predictions.reshape(
-                -1, predictions.shape[-2], predictions.shape[-1]
-            )
-            return self.loss(targets_rs, predictions_rs)
+            raise NotImplementedError
+            # return self.loss(targets, predictions)
         elif self.loss_name == "unimodal_kl":
-            return self.loss(predictions + 1e-10, targets + 1e-10, reduction="none")
+            return self.loss(
+                predictions.unsqueeze(0) + 1e-10,
+                targets.unsqueeze(0) + 1e-10,
+                reduction="none"
+            )
         elif self.loss_name == "unimodal_js":
-            return self.loss(predictions + 1e-10, targets + 1e-10, reduction="none")
+            return self.loss(
+                predictions.unsqueeze(0) + 1e-10,
+                targets.unsqueeze(0) + 1e-10,
+                reduction="none"
+            )
         else:
             raise NotImplementedError
 
@@ -595,8 +614,11 @@ class UnimodalLoss(Loss):
         )
 
         # compare unimodal heatmaps with predicted heatmaps
-        elementwise_loss = self.compute_loss(
+        clean_targets, clean_predictions = self.remove_nans(
             targets=heatmaps_ideal, predictions=heatmaps_pred
+        )
+        elementwise_loss = self.compute_loss(
+            targets=clean_targets, predictions=clean_predictions
         )
         scalar_loss = self.reduce_loss(elementwise_loss, method="mean")
         logs = self.log_loss(loss=scalar_loss, stage=stage)
