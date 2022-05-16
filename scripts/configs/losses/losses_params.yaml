@@ -71,11 +71,11 @@ unimodal_mse:
   # weight in front of unimodal loss
   log_weight: 6.5
   # ignore heatmaps with a max prob less than epsilon (so loss is not applied to occlusions)
-  esilon: 0.0
+  prob_threshold: 0.0
 
 # loss = kl loss between generated heatmap and ideal gaussian heatmap with same center as generated heatmap
 unimodal_kl:
   # weight in front of unimodal loss
   log_weight: 6.5
   # ignore heatmaps with a max prob less than epsilon (so loss is not applied to occlusions)
-  esilon: 0.0
+  prob_threshold: 0.0
