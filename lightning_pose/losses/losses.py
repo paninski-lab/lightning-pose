@@ -27,7 +27,7 @@ import torch
 from torch.nn import functional as F
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
-from typing import Any, Callable, Dict, Tuple, List, Literal, Optional, Union
+from typing import Any, Callable, Dict, Tuple, List, Literal, Optional, Union, Type
 import warnings
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
@@ -43,28 +43,6 @@ patch_typeguard()  # use before @typechecked
 
 
 @typechecked
-def get_loss_classes() -> Dict[str, Callable]:
-    """Get a dict with all the loss classes.
-
-    Returns:
-        Dict[str, Callable]: [description]
-
-    """
-    loss_dict = {
-        "regression": RegressionMSELoss,
-        "heatmap_mse": HeatmapMSELoss,
-        "heatmap_kl": HeatmapKLLoss,
-        "heatmap_js": HeatmapJSLoss,
-        "pca_multiview": PCALoss,
-        "pca_singleview": PCALoss,
-        "temporal": TemporalLoss,
-        "unimodal_mse": UnimodalLoss,
-        "unimodal_kl": UnimodalLoss,
-        "unimodal_js": UnimodalLoss,
-    }
-    return loss_dict
-
-
 class Loss(pl.LightningModule):
     """Parent class for all losses."""
 
@@ -111,17 +89,14 @@ class Loss(pl.LightningModule):
     def compute_loss(self, **kwargs):
         raise NotImplementedError
 
-    @typechecked
     def rectify_epsilon(self, loss: torch.Tensor) -> torch.Tensor:
         # loss values below epsilon as masked to zero
         loss = loss.masked_fill_(mask=loss < self.epsilon, value=0.0)
         return loss
 
-    @typechecked
     def reduce_loss(self, loss: torch.Tensor, method: str = "mean") -> TensorType[()]:
         return self.reduce_methods_dict[method](loss)
 
-    @typechecked
     def log_loss(
         self,
         loss: torch.Tensor,
@@ -152,10 +127,10 @@ class Loss(pl.LightningModule):
         raise NotImplementedError
 
 
+@typechecked
 class HeatmapLoss(Loss):
     """Parent class for different heatmap losses (MSE, Wasserstein, etc)."""
 
-    @typechecked
     def __init__(
         self,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
@@ -164,7 +139,6 @@ class HeatmapLoss(Loss):
     ) -> None:
         super().__init__(data_module=data_module, log_weight=log_weight)
 
-    @typechecked
     def remove_nans(
         self,
         targets: TensorType[
@@ -186,7 +160,6 @@ class HeatmapLoss(Loss):
     def compute_loss(self, **kwargs):
         raise NotImplementedError
 
-    @typechecked
     def __call__(
         self,
         heatmaps_targ: TensorType[
@@ -213,10 +186,10 @@ class HeatmapLoss(Loss):
         return self.weight * scalar_loss, logs
 
 
+@typechecked
 class HeatmapMSELoss(HeatmapLoss):
     """MSE loss between heatmaps."""
 
-    @typechecked
     def __init__(
         self,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
@@ -226,7 +199,6 @@ class HeatmapMSELoss(HeatmapLoss):
         super().__init__(data_module=data_module, log_weight=log_weight)
         self.loss_name = "heatmap_mse"
 
-    @typechecked
     def compute_loss(
         self,
         targets: TensorType["batch_x_num_keypoints", "heatmap_height", "heatmap_width"],
@@ -241,10 +213,10 @@ class HeatmapMSELoss(HeatmapLoss):
         return loss
 
 
+@typechecked
 class HeatmapKLLoss(HeatmapLoss):
     """Kullback-Leibler loss between heatmaps."""
 
-    @typechecked
     def __init__(
         self,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
@@ -255,7 +227,6 @@ class HeatmapKLLoss(HeatmapLoss):
         self.loss = kl_div_loss_2d
         self.loss_name = "heatmap_kl"
 
-    @typechecked
     def compute_loss(
         self,
         targets: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
@@ -271,10 +242,10 @@ class HeatmapKLLoss(HeatmapLoss):
         return loss[0]
 
 
+@typechecked
 class HeatmapJSLoss(HeatmapLoss):
     """Kullback-Leibler loss between heatmaps."""
 
-    @typechecked
     def __init__(
         self,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
@@ -285,7 +256,6 @@ class HeatmapJSLoss(HeatmapLoss):
         self.loss = js_div_loss_2d
         self.loss_name = "heatmap_js"
 
-    @typechecked
     def compute_loss(
         self,
         targets: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
@@ -301,10 +271,10 @@ class HeatmapJSLoss(HeatmapLoss):
         return loss[0]
 
 
+@typechecked
 class PCALoss(Loss):
     """Penalize predictions that fall outside a low-dimensional subspace."""
 
-    @typechecked
     def __init__(
         self,
         loss_name: Literal["pca_singleview", "pca_multiview"],
@@ -368,7 +338,6 @@ class PCALoss(Loss):
         # find nans in the targets, and do a masked_select operation
         pass
 
-    @typechecked
     def compute_loss(
         self,
         predictions: TensorType["num_samples", "sample_dim"],
@@ -377,7 +346,6 @@ class PCALoss(Loss):
         return self.pca.compute_error(data_arr=predictions)
         # was: return self.pca.compute_reprojection_error(data_arr=predictions)
 
-    @typechecked
     def __call__(
         self,
         keypoints_pred: torch.Tensor,
@@ -457,10 +425,10 @@ class TemporalLoss(Loss):
         return self.weight * scalar_loss, logs
 
 
+@typechecked
 class UnimodalLoss(Loss):
     """Encourage heatmaps to be unimodal using various measures."""
 
-    @typechecked
     def __init__(
         self,
         loss_name: Literal["unimodal_mse", "unimodal_kl", "unimodal_js"],
@@ -469,20 +437,22 @@ class UnimodalLoss(Loss):
         downsampled_image_height: int,
         downsampled_image_width: int,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
-        epsilon: float = 0.0,
+        prob_threshold: float = 0.0,
         log_weight: float = 0.0,
         **kwargs,
     ) -> None:
 
-        super().__init__(
-            data_module=data_module, epsilon=epsilon, log_weight=log_weight
-        )
+        super().__init__(data_module=data_module, log_weight=log_weight)
 
         self.loss_name = loss_name
         self.original_image_height = original_image_height
         self.original_image_width = original_image_width
         self.downsampled_image_height = downsampled_image_height
         self.downsampled_image_width = downsampled_image_width
+
+        self.prob_threshold = torch.tensor(
+            prob_threshold, dtype=torch.float, device=self.device
+        )
 
         if self.loss_name == "unimodal_mse":
             self.loss = None
@@ -508,10 +478,10 @@ class UnimodalLoss(Loss):
         # get rid of unsupervised targets with likely occlusions
         squeezed_predictions = predictions.reshape(
             predictions.shape[0], predictions.shape[1], -1)
-        idxs_ignore = torch.max(squeezed_predictions, dim=-1).values < self.epsilon
+        idxs_ignore = torch.max(squeezed_predictions, dim=-1).values < \
+            self.prob_threshold
         return targets[~idxs_ignore], predictions[~idxs_ignore]
 
-    @typechecked
     def compute_loss(
         self,
         targets: TensorType[
@@ -539,7 +509,6 @@ class UnimodalLoss(Loss):
         else:
             raise NotImplementedError
 
-    @typechecked
     def __call__(
         self,
         keypoints_pred: TensorType["batch", "two_x_num_keypoints"],
@@ -572,10 +541,10 @@ class UnimodalLoss(Loss):
         return self.weight * scalar_loss, logs
 
 
+@typechecked
 class RegressionMSELoss(Loss):
     """MSE loss between ground truth and predicted coordinates."""
 
-    @typechecked
     def __init__(
         self,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
@@ -588,7 +557,6 @@ class RegressionMSELoss(Loss):
         )
         self.loss_name = "regression_mse"
 
-    @typechecked
     def remove_nans(
         self,
         targets: TensorType["batch", "two_x_num_keypoints"],
@@ -599,7 +567,6 @@ class RegressionMSELoss(Loss):
         predictions_masked = torch.masked_select(predictions, mask)
         return targets_masked, predictions_masked
 
-    @typechecked
     def compute_loss(
         self,
         targets: TensorType["batch_x_two_x_num_keypoints"],
@@ -608,7 +575,6 @@ class RegressionMSELoss(Loss):
         loss = F.mse_loss(targets, predictions, reduction="none")
         return loss
 
-    @typechecked
     def __call__(
         self,
         keypoints_targ: TensorType["batch", "two_x_num_keypoints"],
@@ -629,10 +595,10 @@ class RegressionMSELoss(Loss):
         return self.weight * scalar_loss, logs
 
 
+@typechecked
 class RegressionRMSELoss(RegressionMSELoss):
     """Root MSE loss between ground truth and predicted coordinates."""
 
-    @typechecked
     def __init__(
         self,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
@@ -645,7 +611,6 @@ class RegressionRMSELoss(RegressionMSELoss):
         )
         self.loss_name = "rmse"
 
-    @typechecked
     def compute_loss(
         self,
         targets: TensorType["batch_x_two_x_num_keypoints"],
@@ -655,3 +620,26 @@ class RegressionRMSELoss(RegressionMSELoss):
         preds = predictions.reshape(-1, 2)
         loss = torch.mean(F.mse_loss(targs, preds, reduction="none"), dim=1)
         return torch.sqrt(loss)
+
+
+@typechecked
+def get_loss_classes() -> Dict[str, Type[Loss]]:
+    """Get a dict with all the loss classes.
+
+    Returns:
+        Dict[str, Callable]: [description]
+
+    """
+    loss_dict = {
+        "regression": RegressionMSELoss,
+        "heatmap_mse": HeatmapMSELoss,
+        "heatmap_kl": HeatmapKLLoss,
+        "heatmap_js": HeatmapJSLoss,
+        "pca_multiview": PCALoss,
+        "pca_singleview": PCALoss,
+        "temporal": TemporalLoss,
+        "unimodal_mse": UnimodalLoss,
+        "unimodal_kl": UnimodalLoss,
+        "unimodal_js": UnimodalLoss,
+    }
+    return loss_dict

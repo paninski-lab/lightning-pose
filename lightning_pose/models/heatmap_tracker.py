@@ -81,6 +81,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.upsampling_layers = self.make_upsampling_layers()
         self.initialize_upsampling_layers()
         self.output_shape = output_shape
+        # TODO: temp=1000 works for 64x64 heatmaps, need to generalize to other shapes
         self.temperature = torch.tensor(1000., device=self.device)  # soft argmax temp
         self.torch_seed = torch_seed
 
@@ -201,7 +202,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         """Forward pass through the network."""
         representations = self.get_representations(images)
         heatmaps = self.heatmaps_from_representations(representations)
-        # return heatmaps
+        # softmax temp stays 1 here; to modify for model predictions, see constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
 
     @typechecked
