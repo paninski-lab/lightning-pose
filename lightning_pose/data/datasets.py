@@ -325,8 +325,8 @@ class HeatmapDataset(BaseTrackingDataset):
                 example_dict["keypoints"].reshape(
                     1, self.num_keypoints, 2
                 ),  # add batch dim
-                example_dict["images"][0].shape[-2],
-                example_dict["images"][0].shape[-1],
+                image_height,
+                image_width,
                 output_shape=self.output_shape,
                 sigma=self.output_sigma,
             )
