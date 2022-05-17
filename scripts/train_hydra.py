@@ -129,12 +129,16 @@ def train(cfg: DictConfig):
             "Cannot find model checkpoint. Have you trained for too few epochs?"
         )
     # export predictions on train/val/test data to a csv saved in model directory
+    if cfg.training.get("save_heatmaps", True):
+        heatmap_file = os.path.join(hydra_output_directory, "heatmaps.h5")
+    else:
+        heatmap_file = None
     predict_dataset(
         cfg=cfg,
         data_module=data_module,
         ckpt_file=model_ckpt,
         preds_file=os.path.join(hydra_output_directory, "predictions.csv"),
-        heatmap_file=os.path.join(hydra_output_directory, "heatmaps.h5"),
+        heatmap_file=heatmap_file,
     )
 
     # generate a video
