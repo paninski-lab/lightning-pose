@@ -14,9 +14,13 @@ from tqdm import tqdm
 from typeguard import typechecked
 from typing import Callable, Dict, List, Literal, Optional, Tuple, Type, Union
 
-from lightning_pose.data.dali import LightningWrapper
+from lightning_pose.data.dali import LightningWrapper, ContextLightningWrapper
 from lightning_pose.utils.io import check_if_semi_supervised
 from lightning_pose.utils.scripts import pretty_print_str
+from lightning_pose.data.dali import video_pipe
+from nvidia.dali.plugin.pytorch import LastBatchPolicy
+from lightning_pose.data.utils import count_frames
+
 
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -129,11 +133,11 @@ def predict_dataset(
             os.makedirs(save_folder)
         save_heatmaps(heatmaps_np, heatmap_file)
 
-
 @typechecked
 def predict_single_video(
     video_file: str,
     ckpt_file: str,
+    do_context: bool,
     cfg_file: Union[str, DictConfig],
     preds_file: str,
     heatmap_file: Optional[str] = None,
@@ -168,19 +172,21 @@ def predict_single_video(
             and a potential numpy array with predicted heatmaps.
 
     """
-    from nvidia.dali.plugin.pytorch import LastBatchPolicy
-    from lightning_pose.data.dali import video_pipe
-    from lightning_pose.data.utils import count_frames
-    from lightning_pose.utils.scripts import pretty_print_str
-
+    step = 1 # applies for both context and non-context
+    if do_context:
+        batch_size = 4 # TODO: make this configurable
+        sequence_length = 5 # hard coded -- this is the model
+    else: # usual static model 
+        batch_size = 1 # don't modify, change sequence length (exposed to user) instead
+        sequence_length = 16 # TODO: should be controlled from outside by cfg.eval.dali_parameters.sequence_length
+    
     device_dict = get_devices(device)
 
     cfg = get_cfg_file(cfg_file=cfg_file)
     pretty_print_str(string="Loading trained model from %s... " % ckpt_file)
 
     # set some defaults
-    batch_size = 1  # don't modify, change sequence length (exposed to user) instead
-    video_pipe_kwargs_defaults = {"num_threads": 2, "device_id": 0}
+    video_pipe_kwargs_defaults = {"num_threads": 2, "device_id": 0} # TODO: can have more threads. try 4? worked in a notebook.
     for key, val in video_pipe_kwargs_defaults.items():
         if key not in video_pipe_kwargs.keys():
             video_pipe_kwargs[key] = val
@@ -204,6 +210,7 @@ def predict_single_video(
         ),
         batch_size=batch_size,
         sequence_length=sequence_length,
+        step=step,
         filenames=[video_file],
         random_shuffle=False,
         device=device_dict["device_dali"],
@@ -212,14 +219,26 @@ def predict_single_video(
         **video_pipe_kwargs
     )
 
-    predict_loader = LightningWrapper(
-        pipe,
-        output_map=["x"],
-        last_batch_policy=LastBatchPolicy.FILL,
-        last_batch_padded=False,
-        auto_reset=False,
-        reader_name="reader",
-    )
+    # build dataloader
+    # each data loader returns 
+    if do_context:
+        predict_loader = ContextLightningWrapper(
+            pipe,
+            output_map=["x"],
+            last_batch_policy=LastBatchPolicy.PARTIAL,
+            auto_reset=False,  # TODO: I removed the auto_reset, but I don't know if it's needed. Think we'll loop over the dataset without resetting.
+            # num_batches=num_batches, # TODO: works also if num_batches = int
+        ) # TODO: there are other args in predict_loader that we don't have here. check if it's fine.
+    else:
+        predict_loader = LightningWrapper(
+            pipe,
+            output_map=["x"],
+            last_batch_policy=LastBatchPolicy.FILL,
+            last_batch_padded=False,
+            auto_reset=False,
+            reader_name="reader",
+        )
+    # TODO: got until here. seems like the LightningWrappe and pipe are like in my notebook
     # iterate through video
     n_frames_ = count_frames(video_file)  # total frames in video
     pretty_print_str(string="Predicting video at %s..." % video_file)
