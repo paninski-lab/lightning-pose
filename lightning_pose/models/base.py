@@ -106,6 +106,7 @@ class BaseFeatureExtractor(LightningModule):
         last_resnet_layer_to_get: int = -2,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[dict] = None,
+        do_context=False,
     ) -> None:
         """A ResNet model that takes in images and generates features.
 
@@ -135,6 +136,7 @@ class BaseFeatureExtractor(LightningModule):
         )
         self.lr_scheduler = lr_scheduler
         self.lr_scheduler_params = lr_scheduler_params
+        self.do_context = do_context
 
     def get_representations(
         self,
@@ -144,7 +146,7 @@ class BaseFeatureExtractor(LightningModule):
                 "batch", "frames", "RGB":3, "image_height", "image_width", float
             ],
         ],
-        do_context: bool,
+        do_context: bool=False,
     ) -> TensorType["batch", "features", "rep_height", "rep_width", float]:
         """Forward pass from images to feature maps.
 
@@ -202,7 +204,7 @@ class BaseFeatureExtractor(LightningModule):
         Returns:
             torch.tensor(float): a representation of the images.
         """
-        return self.get_representations(images)
+        return self.get_representations(images, self.do_context)
 
     def configure_optimizers(self):
         """Select optimizer, lr scheduler, and metric for monitoring."""
