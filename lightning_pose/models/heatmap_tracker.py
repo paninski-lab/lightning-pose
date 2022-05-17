@@ -82,7 +82,8 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.upsampling_layers = self.make_upsampling_layers()
         self.initialize_upsampling_layers()
         self.output_shape = output_shape
-        self.temperature = torch.tensor(100, device=self.device)  # soft argmax temp
+        # TODO: temp=1000 works for 64x64 heatmaps, need to generalize to other shapes
+        self.temperature = torch.tensor(1000., device=self.device)  # soft argmax temp
         self.torch_seed = torch_seed
         self.do_context = do_context
         self.representation_fc = torch.nn.Linear(5, 1, bias=False)
@@ -140,22 +141,32 @@ class HeatmapTracker(BaseSupervisedTracker):
         # TODO: test that running this method changes the weights and biases
         for index, layer in enumerate(self.upsampling_layers):
             if index > 0:  # we ignore the PixelShuffle
-                torch.nn.init.xavier_uniform_(layer.weight)
-                torch.nn.init.zeros_(layer.bias)
+                if isinstance(layer, nn.ConvTranspose2d):
+                    torch.nn.init.xavier_uniform_(layer.weight, gain=1.0)
+                    torch.nn.init.zeros_(layer.bias)
+                elif isinstance(layer, nn.BatchNorm2d):
+                    torch.nn.init.constant_(layer.weight, 1.0)
+                    torch.nn.init.constant_(layer.bias, 0.0)
 
     @typechecked
     def make_upsampling_layers(self) -> torch.nn.Sequential:
         # Note:
-        # https://github.com/jgraving/DeepPoseKit/blob/cecdb0c8c364ea049a3b705275ae71a2f366d4da/deepposekit/models/DeepLabCut.py#L131
+        # https://github.com/jgraving/DeepPoseKit/blob/
+        # cecdb0c8c364ea049a3b705275ae71a2f366d4da/deepposekit/models/DeepLabCut.py#L131
         # in their model, the pixel shuffle happens only for downsample_factor=2
-        upsampling_layers = [nn.PixelShuffle(2)]
+        upsampling_layers = []
+        upsampling_layers.append(nn.PixelShuffle(2))
+        # upsampling_layers.append(nn.BatchNorm2d(self.num_filters_for_upsampling // 4))
+        # upsampling_layers.append(nn.ReLU(inplace=True))
         upsampling_layers.append(
             self.create_double_upsampling_layer(
                 in_channels=self.num_filters_for_upsampling // 4,
                 out_channels=self.num_keypoints,
             )
-        )  # up to here results in downsample_factor=3 for [384,384] images
+        )  # up to here results in downsample_factor=3
         if self.downsample_factor == 2:
+            # upsampling_layers.append(nn.BatchNorm2d(self.num_keypoints))
+            # upsampling_layers.append(nn.ReLU(inplace=True))
             upsampling_layers.append(
                 self.create_double_upsampling_layer(
                     in_channels=self.num_keypoints,
@@ -200,15 +211,8 @@ class HeatmapTracker(BaseSupervisedTracker):
             representations: TensorType["batch", "features", "rep_height", "rep_width", 1] = self.representation_fc(representations)
             representations: TensorType["batch", "features", "rep_height", "rep_width"] = torch.squeeze(representations, 4)
         heatmaps = self.heatmaps_from_representations(representations)
-        
-        # B = heatmaps.shape[0]
-        # valid_probability_heatmaps = self.softmax(
-        #     heatmaps.reshape(B, self.num_keypoints, -1)
-        # )
-        # valid_probability_heatmaps = valid_probability_heatmaps.reshape(
-        #     B, self.num_keypoints, self.output_shape[0], self.output_shape[1]
-        # )
-        return heatmaps
+        # softmax temp stays 1 here; to modify for model predictions, see constructor
+        return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
 
     @typechecked
     def get_loss_inputs_labeled(self, batch_dict: HeatmapBatchDict) -> dict:

@@ -13,6 +13,9 @@ fiftyone:
   # whether to launch the app from the script (True), or from ipython (and have finer control over the outputs)
   launch_app_from_script: False
 
+  address: 127.0.0.1 # ip to launch the app on.
+  port: 5151 # port to launch the app on.
+
   # whether to create a "videos" or "images" dataset, since the processes are the same
   dataset_to_create: "images"
 

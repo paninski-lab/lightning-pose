@@ -20,13 +20,14 @@ The general flow of each loss class is as follows:
 """
 
 from geomloss import SamplesLoss
+from kornia.losses import js_div_loss_2d, kl_div_loss_2d
 from omegaconf import ListConfig
 import pytorch_lightning as pl
 import torch
 from torch.nn import functional as F
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
-from typing import Any, Callable, Dict, Tuple, List, Literal, Optional, Union
+from typing import Any, Callable, Dict, Tuple, List, Literal, Optional, Union, Type
 import warnings
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
@@ -41,6 +42,7 @@ _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 patch_typeguard()  # use before @typechecked
 
 
+@typechecked
 class Loss(pl.LightningModule):
     """Parent class for all losses."""
 
@@ -87,17 +89,14 @@ class Loss(pl.LightningModule):
     def compute_loss(self, **kwargs):
         raise NotImplementedError
 
-    @typechecked
     def rectify_epsilon(self, loss: torch.Tensor) -> torch.Tensor:
         # loss values below epsilon as masked to zero
         loss = loss.masked_fill_(mask=loss < self.epsilon, value=0.0)
         return loss
 
-    @typechecked
     def reduce_loss(self, loss: torch.Tensor, method: str = "mean") -> TensorType[()]:
         return self.reduce_methods_dict[method](loss)
 
-    @typechecked
     def log_loss(
         self,
         loss: torch.Tensor,
@@ -128,10 +127,10 @@ class Loss(pl.LightningModule):
         raise NotImplementedError
 
 
+@typechecked
 class HeatmapLoss(Loss):
     """Parent class for different heatmap losses (MSE, Wasserstein, etc)."""
 
-    @typechecked
     def __init__(
         self,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
@@ -140,7 +139,6 @@ class HeatmapLoss(Loss):
     ) -> None:
         super().__init__(data_module=data_module, log_weight=log_weight)
 
-    @typechecked
     def remove_nans(
         self,
         targets: TensorType[
@@ -155,14 +153,13 @@ class HeatmapLoss(Loss):
     ]:
 
         squeezed_targets = targets.reshape(targets.shape[0], targets.shape[1], -1)
-        all_zeroes = torch.all(squeezed_targets == 0.0, dim=-1)
+        idxs_ignore = torch.all(squeezed_targets == 0.0, dim=-1)
 
-        return targets[~all_zeroes], predictions[~all_zeroes]
+        return targets[~idxs_ignore], predictions[~idxs_ignore]
 
     def compute_loss(self, **kwargs):
         raise NotImplementedError
 
-    @typechecked
     def __call__(
         self,
         heatmaps_targ: TensorType[
@@ -189,10 +186,10 @@ class HeatmapLoss(Loss):
         return self.weight * scalar_loss, logs
 
 
+@typechecked
 class HeatmapMSELoss(HeatmapLoss):
     """MSE loss between heatmaps."""
 
-    @typechecked
     def __init__(
         self,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
@@ -202,7 +199,6 @@ class HeatmapMSELoss(HeatmapLoss):
         super().__init__(data_module=data_module, log_weight=log_weight)
         self.loss_name = "heatmap_mse"
 
-    @typechecked
     def compute_loss(
         self,
         targets: TensorType["batch_x_num_keypoints", "heatmap_height", "heatmap_width"],
@@ -210,27 +206,27 @@ class HeatmapMSELoss(HeatmapLoss):
             "batch_x_num_keypoints", "heatmap_height", "heatmap_width"
         ],
     ) -> TensorType["batch_x_num_keypoints", "heatmap_height", "heatmap_width"]:
-        loss = F.mse_loss(targets, predictions, reduction="none")
+        h = targets.shape[1]
+        w = targets.shape[2]
+        # multiply by number of pixels in heatmap to standardize loss range
+        loss = F.mse_loss(targets, predictions, reduction="none") * h * w
         return loss
 
 
-class HeatmapWassersteinLoss(HeatmapLoss):
-    """Wasserstein loss between heatmaps."""
+@typechecked
+class HeatmapKLLoss(HeatmapLoss):
+    """Kullback-Leibler loss between heatmaps."""
 
-    @typechecked
     def __init__(
         self,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
         log_weight: float = 0.0,
-        reach: Union[float, str] = "none",
         **kwargs,
     ) -> None:
         super().__init__(data_module=data_module, log_weight=log_weight)
-        reach_ = None if (reach == "none") else reach
-        self.wasserstein_loss = SamplesLoss(loss="sinkhorn", reach=reach_)
-        self.loss_name = "heatmap_wasserstein"
+        self.loss = kl_div_loss_2d
+        self.loss_name = "heatmap_kl"
 
-    @typechecked
     def compute_loss(
         self,
         targets: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
@@ -238,13 +234,47 @@ class HeatmapWassersteinLoss(HeatmapLoss):
             "num_valid_keypoints", "heatmap_height", "heatmap_width"
         ],
     ) -> TensorType["num_valid_keypoints"]:
-        return self.wasserstein_loss(targets, predictions)
+        loss = self.loss(
+            predictions.unsqueeze(0) + 1e-10,
+            targets.unsqueeze(0) + 1e-10,
+            reduction="none"
+        )
+        return loss[0]
 
 
+@typechecked
+class HeatmapJSLoss(HeatmapLoss):
+    """Kullback-Leibler loss between heatmaps."""
+
+    def __init__(
+        self,
+        data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
+        log_weight: float = 0.0,
+        **kwargs,
+    ) -> None:
+        super().__init__(data_module=data_module, log_weight=log_weight)
+        self.loss = js_div_loss_2d
+        self.loss_name = "heatmap_js"
+
+    def compute_loss(
+        self,
+        targets: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
+        predictions: TensorType[
+            "num_valid_keypoints", "heatmap_height", "heatmap_width"
+        ],
+    ) -> TensorType["num_valid_keypoints"]:
+        loss = self.loss(
+            predictions.unsqueeze(0) + 1e-10,
+            targets.unsqueeze(0) + 1e-10,
+            reduction="none"
+        )
+        return loss[0]
+
+
+@typechecked
 class PCALoss(Loss):
     """Penalize predictions that fall outside a low-dimensional subspace."""
 
-    @typechecked
     def __init__(
         self,
         loss_name: Literal["pca_singleview", "pca_multiview"],
@@ -269,7 +299,8 @@ class PCALoss(Loss):
                 raise ValueError("must provide mirrored_column_matches in data config")
 
         # initialize keypoint pca module
-        # this module will fit pca on training data, and will define the error metric and fuction to be used in model training.
+        # this module will fit pca on training data, and will define the error metric
+        # and fuction to be used in model training.
         self.pca = KeypointPCA(
             loss_type=self.loss_name,
             error_metric=self.error_metric,
@@ -307,7 +338,6 @@ class PCALoss(Loss):
         # find nans in the targets, and do a masked_select operation
         pass
 
-    @typechecked
     def compute_loss(
         self,
         predictions: TensorType["num_samples", "sample_dim"],
@@ -316,7 +346,6 @@ class PCALoss(Loss):
         return self.pca.compute_error(data_arr=predictions)
         # was: return self.pca.compute_reprojection_error(data_arr=predictions)
 
-    @typechecked
     def __call__(
         self,
         keypoints_pred: torch.Tensor,
@@ -396,27 +425,24 @@ class TemporalLoss(Loss):
         return self.weight * scalar_loss, logs
 
 
+@typechecked
 class UnimodalLoss(Loss):
     """Encourage heatmaps to be unimodal using various measures."""
 
-    @typechecked
     def __init__(
         self,
-        loss_name: Literal["unimodal_mse", "unimodal_wasserstein"],
+        loss_name: Literal["unimodal_mse", "unimodal_kl", "unimodal_js"],
         original_image_height: int,
         original_image_width: int,
         downsampled_image_height: int,
         downsampled_image_width: int,
-        reach: Union[float, str] = "none",
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
-        epsilon: float = 0.0,
+        prob_threshold: float = 0.0,
         log_weight: float = 0.0,
         **kwargs,
     ) -> None:
 
-        super().__init__(
-            data_module=data_module, epsilon=epsilon, log_weight=log_weight
-        )
+        super().__init__(data_module=data_module, log_weight=log_weight)
 
         self.loss_name = loss_name
         self.original_image_height = original_image_height
@@ -424,17 +450,20 @@ class UnimodalLoss(Loss):
         self.downsampled_image_height = downsampled_image_height
         self.downsampled_image_width = downsampled_image_width
 
-        if self.loss_name == "unimodal_wasserstein":
-            reach_ = None if (reach == "none") else reach
-            self.wasserstein_loss = SamplesLoss(loss="sinkhorn", reach=reach_)
+        self.prob_threshold = torch.tensor(
+            prob_threshold, dtype=torch.float, device=self.device
+        )
+
+        if self.loss_name == "unimodal_mse":
+            self.loss = None
+        elif self.loss_name == "unimodal_kl":
+            self.loss = kl_div_loss_2d
+        elif self.loss_name == "unimodal_js":
+            self.loss = js_div_loss_2d
         else:
-            self.wasserstein_loss = None
+            raise NotImplementedError
 
-    def remove_nans(self, **kwargs):
-        pass
-
-    @typechecked
-    def compute_loss(
+    def remove_nans(
         self,
         targets: TensorType[
             "batch", "num_keypoints", "heatmap_height", "heatmap_width"
@@ -442,21 +471,44 @@ class UnimodalLoss(Loss):
         predictions: TensorType[
             "batch", "num_keypoints", "heatmap_height", "heatmap_width"
         ],
+    ) -> Tuple[
+        TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
+        TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
+    ]:
+        # get rid of unsupervised targets with likely occlusions
+        squeezed_predictions = predictions.reshape(
+            predictions.shape[0], predictions.shape[1], -1)
+        idxs_ignore = torch.max(squeezed_predictions, dim=-1).values < \
+            self.prob_threshold
+        return targets[~idxs_ignore], predictions[~idxs_ignore]
+
+    def compute_loss(
+        self,
+        targets: TensorType[
+            "num_valid_keypoints", "heatmap_height", "heatmap_width"
+        ],
+        predictions: TensorType[
+            "num_valid_keypoints", "heatmap_height", "heatmap_width"
+        ],
     ) -> torch.Tensor:
 
         if self.loss_name == "unimodal_mse":
             return F.mse_loss(targets, predictions, reduction="none")
-        elif self.loss_name == "unimodal_wasserstein":
-            # collapse over batch/keypoint dims
-            targets_rs = targets.reshape(-1, targets.shape[-2], targets.shape[-1])
-            predictions_rs = predictions.reshape(
-                -1, predictions.shape[-2], predictions.shape[-1]
+        elif self.loss_name == "unimodal_kl":
+            return self.loss(
+                predictions.unsqueeze(0) + 1e-10,
+                targets.unsqueeze(0) + 1e-10,
+                reduction="none"
             )
-            return self.wasserstein_loss(targets_rs, predictions_rs)
+        elif self.loss_name == "unimodal_js":
+            return self.loss(
+                predictions.unsqueeze(0) + 1e-10,
+                targets.unsqueeze(0) + 1e-10,
+                reduction="none"
+            )
         else:
             raise NotImplementedError
 
-    @typechecked
     def __call__(
         self,
         keypoints_pred: TensorType["batch", "two_x_num_keypoints"],
@@ -477,8 +529,11 @@ class UnimodalLoss(Loss):
         )
 
         # compare unimodal heatmaps with predicted heatmaps
-        elementwise_loss = self.compute_loss(
+        clean_targets, clean_predictions = self.remove_nans(
             targets=heatmaps_ideal, predictions=heatmaps_pred
+        )
+        elementwise_loss = self.compute_loss(
+            targets=clean_targets, predictions=clean_predictions
         )
         scalar_loss = self.reduce_loss(elementwise_loss, method="mean")
         logs = self.log_loss(loss=scalar_loss, stage=stage)
@@ -486,10 +541,10 @@ class UnimodalLoss(Loss):
         return self.weight * scalar_loss, logs
 
 
+@typechecked
 class RegressionMSELoss(Loss):
     """MSE loss between ground truth and predicted coordinates."""
 
-    @typechecked
     def __init__(
         self,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
@@ -502,18 +557,16 @@ class RegressionMSELoss(Loss):
         )
         self.loss_name = "regression_mse"
 
-    @typechecked
     def remove_nans(
         self,
         targets: TensorType["batch", "two_x_num_keypoints"],
         predictions: TensorType["batch", "two_x_num_keypoints"],
-    ) -> Tuple[TensorType["num_valid_keypoints"], TensorType["num_valid_keypoints"],]:
+    ) -> Tuple[TensorType["num_valid_keypoints"], TensorType["num_valid_keypoints"]]:
         mask = targets == targets  # keypoints is not none, bool
         targets_masked = torch.masked_select(targets, mask)
         predictions_masked = torch.masked_select(predictions, mask)
         return targets_masked, predictions_masked
 
-    @typechecked
     def compute_loss(
         self,
         targets: TensorType["batch_x_two_x_num_keypoints"],
@@ -522,7 +575,6 @@ class RegressionMSELoss(Loss):
         loss = F.mse_loss(targets, predictions, reduction="none")
         return loss
 
-    @typechecked
     def __call__(
         self,
         keypoints_targ: TensorType["batch", "two_x_num_keypoints"],
@@ -543,10 +595,10 @@ class RegressionMSELoss(Loss):
         return self.weight * scalar_loss, logs
 
 
+@typechecked
 class RegressionRMSELoss(RegressionMSELoss):
     """Root MSE loss between ground truth and predicted coordinates."""
 
-    @typechecked
     def __init__(
         self,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
@@ -559,7 +611,6 @@ class RegressionRMSELoss(RegressionMSELoss):
         )
         self.loss_name = "rmse"
 
-    @typechecked
     def compute_loss(
         self,
         targets: TensorType["batch_x_two_x_num_keypoints"],
@@ -572,7 +623,7 @@ class RegressionRMSELoss(RegressionMSELoss):
 
 
 @typechecked
-def get_loss_classes() -> Dict[str, Callable]:
+def get_loss_classes() -> Dict[str, Type[Loss]]:
     """Get a dict with all the loss classes.
 
     Returns:
@@ -582,11 +633,13 @@ def get_loss_classes() -> Dict[str, Callable]:
     loss_dict = {
         "regression": RegressionMSELoss,
         "heatmap_mse": HeatmapMSELoss,
-        "heatmap_wasserstein": HeatmapWassersteinLoss,
+        "heatmap_kl": HeatmapKLLoss,
+        "heatmap_js": HeatmapJSLoss,
         "pca_multiview": PCALoss,
         "pca_singleview": PCALoss,
         "temporal": TemporalLoss,
         "unimodal_mse": UnimodalLoss,
-        "unimodal_wasserstein": UnimodalLoss,
+        "unimodal_kl": UnimodalLoss,
+        "unimodal_js": UnimodalLoss,
     }
     return loss_dict
