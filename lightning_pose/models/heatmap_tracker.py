@@ -40,7 +40,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
-        do_context: bool = True
+        do_context: bool = True,
     ) -> None:
         """Initialize a DLC-like model with resnet backbone.
 
@@ -83,12 +83,12 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.initialize_upsampling_layers()
         self.output_shape = output_shape
         # TODO: temp=1000 works for 64x64 heatmaps, need to generalize to other shapes
-        self.temperature = torch.tensor(1000., device=self.device)  # soft argmax temp
+        self.temperature = torch.tensor(1000.0, device=self.device)  # soft argmax temp
         self.torch_seed = torch_seed
         self.do_context = do_context
         self.representation_fc = torch.nn.Linear(5, 1, bias=False)
-#         with torch.no_grad():
-#             self.representation_fc.weight = nn.Parameter(torch.Tensor([[0.0, 0.0, 1.0, 0.0, 0.0]]))
+        #         with torch.no_grad():
+        #             self.representation_fc.weight = nn.Parameter(torch.Tensor([[0.0, 0.0, 1.0, 0.0, 0.0]]))
 
         # use this to log auxiliary information: rmse on labeled data
         self.rmse_loss = RegressionRMSELoss()
@@ -102,7 +102,7 @@ class HeatmapTracker(BaseSupervisedTracker):
 
     @property
     def coordinate_scale(self):
-        return torch.tensor(2 ** self.downsample_factor, device=self.device)
+        return torch.tensor(2**self.downsample_factor, device=self.device)
 
     @typechecked
     def run_subpixelmaxima(
@@ -202,14 +202,21 @@ class HeatmapTracker(BaseSupervisedTracker):
     @typechecked
     def forward(
         self,
-        images: Union[TensorType["batch", "channels":3, "image_height", "image_width"], TensorType["batch",  "frames", "channels":3, "image_height", "image_width"]],
+        images: Union[
+            TensorType["batch", "channels":3, "image_height", "image_width"],
+            TensorType["batch", "frames", "channels":3, "image_height", "image_width"],
+        ],
         do_context: bool,
     ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Forward pass through the network."""
         representations = self.get_representations(images, do_context)
         if do_context:
-            representations: TensorType["batch", "features", "rep_height", "rep_width", 1] = self.representation_fc(representations)
-            representations: TensorType["batch", "features", "rep_height", "rep_width"] = torch.squeeze(representations, 4)
+            representations: TensorType[
+                "batch", "features", "rep_height", "rep_width", 1
+            ] = self.representation_fc(representations)
+            representations: TensorType[
+                "batch", "features", "rep_height", "rep_width"
+            ] = torch.squeeze(representations, 4)
         heatmaps = self.heatmaps_from_representations(representations)
         # softmax temp stays 1 here; to modify for model predictions, see constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
@@ -218,7 +225,9 @@ class HeatmapTracker(BaseSupervisedTracker):
     def get_loss_inputs_labeled(self, batch_dict: HeatmapBatchDict) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
-        predicted_heatmaps = self.forward(batch_dict["images"], do_context=self.do_context)
+        predicted_heatmaps = self.forward(
+            batch_dict["images"], do_context=self.do_context
+        )
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
         return {
@@ -247,7 +256,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
-        do_context: bool = True
+        do_context: bool = True,
     ):
         """
 
@@ -283,7 +292,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             torch_seed=torch_seed,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
-            do_context=do_context
+            do_context=do_context,
         )
         self.loss_factory_unsup = loss_factory_unsupervised.to(self.device)
 
@@ -297,7 +306,9 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
     ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
-        predicted_heatmaps = self.forward(batch, do_context=False)
+        predicted_heatmaps = self.forward(
+            batch, do_context=False
+        )  # temporarily do_context=False
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
         return {

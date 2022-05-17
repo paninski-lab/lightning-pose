@@ -62,7 +62,6 @@ def get_dataset(
             do_context=cfg.model.do_context,
         )
     elif cfg.model.model_type == "heatmap":
-        print("create HeatmapDataset")
         dataset = HeatmapDataset(
             root_directory=data_dir,
             csv_path=cfg.data.csv_file,
@@ -71,12 +70,10 @@ def get_dataset(
             downsample_factor=cfg.data.downsample_factor,
             do_context=cfg.model.do_context,
         )
-        print("good HeatmapDataset")
     else:
         raise NotImplementedError(
             "%s is an invalid cfg.model.model_type" % cfg.model.model_type
         )
-    print("open image")
     image = Image.open(
         os.path.join(dataset.root_directory, dataset.image_names[0])
     ).convert("RGB")
@@ -93,7 +90,6 @@ def get_dataset(
                 image.size[1],
             )
         )
-    print("end")
     return dataset
 
 
@@ -278,7 +274,6 @@ def get_model(
             )
 
         elif cfg.model.model_type == "heatmap":
-            print("here", cfg.model.do_context)
             model = SemiSupervisedHeatmapTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],

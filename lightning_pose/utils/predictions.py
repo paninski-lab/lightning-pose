@@ -69,7 +69,7 @@ def predict_dataset(
     ckpt_file: str,
     preds_file: str,
     heatmap_file: Optional[str] = None,
-    gpu_id: Optional[int] = None
+    gpu_id: Optional[int] = None,
 ) -> None:
     """Save predicted keypoints and heatmaps for a labeled dataset.
 
@@ -209,7 +209,7 @@ def predict_single_video(
         device=device_dict["device_dali"],
         name="reader",
         pad_sequences=True,
-        **video_pipe_kwargs
+        **video_pipe_kwargs,
     )
 
     predict_loader = LightningWrapper(
@@ -286,7 +286,13 @@ def _make_predictions(
     """
 
     keypoints_np, confidence_np, heatmaps_np = _predict_frames(
-        cfg, model, dataloader, n_frames_, batch_size, data_name, return_heatmaps,
+        cfg,
+        model,
+        dataloader,
+        n_frames_,
+        batch_size,
+        data_name,
+        return_heatmaps,
         gpu_id,
     )
     # unify keypoints and confidences into one numpy array, scale (x,y) coords by
@@ -366,7 +372,7 @@ def _predict_frames(
                     image = batch["images"].to("cuda:%i" % gpu_id)
             else:
                 image = batch  # predicting from video
-            outputs = model.forward(image, mode='2d_context')
+            outputs = model.forward(image, do_context=model.do_context)
             if cfg.model.model_type == "heatmap":
                 pred_keypoints, confidence = model.run_subpixelmaxima(outputs)
                 # send to cpu
@@ -387,14 +393,14 @@ def _predict_frames(
                 n_frames_curr = final_batch_size
             else:  # at every sequence except the final
                 keypoints_np[
-                    n_frames_counter: n_frames_counter + n_frames_curr
+                    n_frames_counter : n_frames_counter + n_frames_curr
                 ] = pred_keypoints
                 confidence_np[
-                    n_frames_counter: n_frames_counter + n_frames_curr
+                    n_frames_counter : n_frames_counter + n_frames_curr
                 ] = confidence
                 if return_heatmaps:
                     heatmaps_np[
-                        n_frames_counter: n_frames_counter + n_frames_curr
+                        n_frames_counter : n_frames_counter + n_frames_curr
                     ] = outputs
 
             n_frames_counter += n_frames_curr
@@ -614,8 +620,9 @@ def save_dframe(df: pd.DataFrame, save_file: str) -> None:
 
 
 @typechecked
-def save_heatmaps(heatmaps_np: np.ndarray, save_file: str)-> None:
+def save_heatmaps(heatmaps_np: np.ndarray, save_file: str) -> None:
     import h5py
+
     assert save_file.endswith(".h5") or save_file.endswith(".hdf5")
     with h5py.File(save_file, "w") as hf:
         hf.create_dataset("heatmaps", data=heatmaps_np)

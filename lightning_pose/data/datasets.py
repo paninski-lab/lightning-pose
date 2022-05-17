@@ -21,7 +21,10 @@ patch_typeguard()  # use before @typechecked
 class BaseExampleDict(TypedDict):
     """Class for finer control over typechecking."""
 
-    images: Union[TensorType["RGB":3, "image_height", "image_width"], TensorType["frames", "RGB":3, "image_height", "image_width"]]
+    images: Union[
+        TensorType["RGB":3, "image_height", "image_width"],
+        TensorType["frames", "RGB":3, "image_height", "image_width"],
+    ]
     keypoints: TensorType["num_targets"]
     idxs: int
 
@@ -114,8 +117,6 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         self.num_targets = self.keypoints.shape[1] * 2
         self.num_keypoints = self.keypoints.shape[1]
 
-
-
     @property
     def height(self):
         # assume resizing transformation is the last imgaug one
@@ -131,9 +132,9 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
     @typechecked
     def __getitem__(self, idx: int):
-        
+
         img_name = self.image_names[idx]
-        
+
         if not self.do_context:
             # read image from file and apply transformations (if any)
             file_name = os.path.join(self.root_directory, img_name)
@@ -160,12 +161,12 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
             transformed_images = self.pytorch_transform(transformed_images)
             assert transformed_keypoints.shape == (self.num_targets,)
-            
-        else: 
-            # get index of the image 
-            idx_img = img_name.split('/')[-1].replace('img', '')
-            idx_img = int(idx_img.replace('.png', ''))
-            
+
+        else:
+            # get index of the image
+            idx_img = img_name.split("/")[-1].replace("img", "")
+            idx_img = int(idx_img.replace(".png", ""))
+
             # get the frames -> t-2, t-1, t, t+1, t + 2
             list_idx = [idx_img - 2, idx_img - 1, idx_img, idx_img + 1, idx_img + 2]
             list_img_names = []
@@ -179,7 +180,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             keypoints_on_image = self.keypoints[idx]
             list_images = []
 
-            for i,names in enumerate(list_img_names):
+            for i, names in enumerate(list_img_names):
 
                 # read image from file and apply transformations (if any)
                 file_name = os.path.join(self.root_directory, names)
@@ -206,15 +207,17 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 assert transformed_keypoints.shape == (self.num_targets,)
 
                 if i == 0:
-                    image_frames_tensor = torch.unsqueeze(transformed_images, dim = 0)
+                    image_frames_tensor = torch.unsqueeze(transformed_images, dim=0)
                 else:
-                    image_expand = torch.unsqueeze(transformed_images, dim = 0)
-                    image_frames_tensor = torch.cat((image_frames_tensor, image_expand), dim = 0)
+                    image_expand = torch.unsqueeze(transformed_images, dim=0)
+                    image_frames_tensor = torch.cat(
+                        (image_frames_tensor, image_expand), dim=0
+                    )
 
                 # list_images.append(transformed_images)
             transformed_images = image_frames_tensor
             assert transformed_keypoints.shape == (self.num_targets,)
-        
+
         return {
             "images": transformed_images,
             "keypoints": torch.from_numpy(transformed_keypoints),
@@ -295,8 +298,8 @@ class HeatmapDataset(BaseTrackingDataset):
     @property
     def output_shape(self):
         return (
-            self.height // 2 ** self.downsample_factor,
-            self.width // 2 ** self.downsample_factor,
+            self.height // 2**self.downsample_factor,
+            self.width // 2**self.downsample_factor,
         )
 
     def compute_heatmaps(self):
@@ -320,7 +323,7 @@ class HeatmapDataset(BaseTrackingDataset):
             else:
                 image_height = example_dict["images"].shape[-2]
                 image_width = example_dict["images"].shape[-1]
-                
+
             y_heatmap = generate_heatmaps(
                 example_dict["keypoints"].reshape(
                     1, self.num_keypoints, 2

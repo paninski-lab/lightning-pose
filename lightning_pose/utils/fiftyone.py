@@ -66,7 +66,9 @@ def get_image_tags(pred_df: pd.DataFrame) -> pd.Series:
 # list/listconfig issue
 class FiftyOneKeypointBase:
     def __init__(
-        self, cfg: DictConfig, keypoints_to_plot: Optional[List[str]] = None,
+        self,
+        cfg: DictConfig,
+        keypoints_to_plot: Optional[List[str]] = None,
     ) -> None:
         self.cfg = cfg
         self.keypoints_to_plot = keypoints_to_plot
@@ -192,7 +194,9 @@ class FiftyOneKeypointBase:
 
     @typechecked
     def _slow_single_frame_build(
-        self, data_dict: Dict[str, Dict[str, np.array]], frame_idx: int,
+        self,
+        data_dict: Dict[str, Dict[str, np.array]],
+        frame_idx: int,
     ) -> List[fo.Keypoint]:
         # the output of this, is a the positions of all keypoints in a single frame for a single model.
         keypoints_list = []
@@ -215,7 +219,9 @@ class FiftyOneKeypointBase:
 
     @typechecked
     def _fast_single_frame_build(
-        self, data_dict: Dict[str, Dict[str, np.array]], frame_idx: int,
+        self,
+        data_dict: Dict[str, Dict[str, np.array]],
+        frame_idx: int,
     ) -> List[fo.Keypoint]:
         # the output of this, is a the positions of all keypoints in a single frame for a single model.
         keypoint = [
@@ -279,14 +285,13 @@ class FiftyOneImagePlotter(FiftyOneKeypointBase):
         self,
         cfg: DictConfig,
         keypoints_to_plot: Optional[List[str]] = None,
-        csv_filename: str = "predictions.csv"
+        csv_filename: str = "predictions.csv",
     ) -> None:
         super().__init__(cfg=cfg, keypoints_to_plot=keypoints_to_plot)
 
         model_abs_paths = self.get_model_abs_paths()
         self.pred_csv_files = [
-            os.path.join(model_dir, csv_filename)
-            for model_dir in model_abs_paths
+            os.path.join(model_dir, csv_filename) for model_dir in model_abs_paths
         ]
 
     @property
@@ -423,7 +428,9 @@ class FiftyOneFactory:
     def __init__(self, dataset_to_create: Literal["images", "videos"]) -> None:
         self.dataset_to_create = dataset_to_create
 
-    def __call__(self,) -> Union[FiftyOneImagePlotter, FiftyOneKeypointVideoPlotter]:
+    def __call__(
+        self,
+    ) -> Union[FiftyOneImagePlotter, FiftyOneKeypointVideoPlotter]:
         if self.dataset_to_create == "images":
             return FiftyOneImagePlotter
         else:
