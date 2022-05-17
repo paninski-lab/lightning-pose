@@ -237,7 +237,7 @@ class HeatmapKLLoss(HeatmapLoss):
         loss = self.loss(
             predictions.unsqueeze(0) + 1e-10,
             targets.unsqueeze(0) + 1e-10,
-            reduction="none"
+            reduction="none",
         )
         return loss[0]
 
@@ -266,7 +266,7 @@ class HeatmapJSLoss(HeatmapLoss):
         loss = self.loss(
             predictions.unsqueeze(0) + 1e-10,
             targets.unsqueeze(0) + 1e-10,
-            reduction="none"
+            reduction="none",
         )
         return loss[0]
 
@@ -477,16 +477,16 @@ class UnimodalLoss(Loss):
     ]:
         # get rid of unsupervised targets with likely occlusions
         squeezed_predictions = predictions.reshape(
-            predictions.shape[0], predictions.shape[1], -1)
-        idxs_ignore = torch.max(squeezed_predictions, dim=-1).values < \
-            self.prob_threshold
+            predictions.shape[0], predictions.shape[1], -1
+        )
+        idxs_ignore = (
+            torch.max(squeezed_predictions, dim=-1).values < self.prob_threshold
+        )
         return targets[~idxs_ignore], predictions[~idxs_ignore]
 
     def compute_loss(
         self,
-        targets: TensorType[
-            "num_valid_keypoints", "heatmap_height", "heatmap_width"
-        ],
+        targets: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
         predictions: TensorType[
             "num_valid_keypoints", "heatmap_height", "heatmap_width"
         ],
@@ -498,13 +498,13 @@ class UnimodalLoss(Loss):
             return self.loss(
                 predictions.unsqueeze(0) + 1e-10,
                 targets.unsqueeze(0) + 1e-10,
-                reduction="none"
+                reduction="none",
             )
         elif self.loss_name == "unimodal_js":
             return self.loss(
                 predictions.unsqueeze(0) + 1e-10,
                 targets.unsqueeze(0) + 1e-10,
-                reduction="none"
+                reduction="none",
             )
         else:
             raise NotImplementedError
