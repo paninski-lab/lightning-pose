@@ -23,4 +23,4 @@ heatmap_loss_type: "mse"
 model_name: "my_base_toy_model"
 
 # do context (5 frames)
-do_context: True
+do_context: False
