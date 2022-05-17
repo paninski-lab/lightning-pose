@@ -104,3 +104,22 @@ class LightningWrapper(DALIGenericIterator):
             out[0]["x"][0, :, :, :, :],  # should be (sequence_length, 3, H, W)
             dtype=torch.float,
         )  # careful: only valid for one sequence, i.e., batch size of 1.
+
+class ContextLightningWrapper(DALIGenericIterator):
+    """wrapper around a DALI pipeline to get batches for ptl."""
+
+    def __init__(self, *kargs, **kwargs):
+
+        # collect number of batches computed outside of class
+        self.num_batches = kwargs.pop("num_batches", 1)
+
+        # call parent
+        super().__init__(*kargs, **kwargs)
+
+    def __len__(self):
+        # TODO: careful here, this needs to be something different now
+        return self.num_batches
+
+    def __next__(self):
+        out = super().__next__()
+        return out[0]["x"]
