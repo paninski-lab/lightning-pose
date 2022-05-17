@@ -159,7 +159,9 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 transformed_images = np.expand_dims(image, axis=0)
                 transformed_keypoints = np.expand_dims(keypoints_on_image, axis=0)
 
-            transformed_images = self.pytorch_transform(transformed_images)
+            transformed_images = self.pytorch_transform(
+                torch.tensor(transformed_images)
+            )
             assert transformed_keypoints.shape == (self.num_targets,)
 
         else:
@@ -176,48 +178,48 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 list_img_names.append(img_name_new)
 
             # read the images from image list to create dataset
-
             keypoints_on_image = self.keypoints[idx]
             list_images = []
-
-            for i, names in enumerate(list_img_names):
-
+            images = []
+            for names in list_img_names:
                 # read image from file and apply transformations (if any)
                 file_name = os.path.join(self.root_directory, names)
                 # if 1 color channel, change to 3.
                 image = Image.open(file_name).convert("RGB")
-                if self.imgaug_transform is not None:
-                    transformed_images, transformed_keypoints = self.imgaug_transform(
-                        images=np.expand_dims(image, axis=0),
-                        keypoints=np.expand_dims(keypoints_on_image, axis=0),
-                    )  # expands add batch dim for imgaug
-                    # get rid of the batch dim
-                    transformed_images = transformed_images[0]
-                    transformed_keypoints = transformed_keypoints[0]
-                    # TODO: the problem below is that it messes up
-                    # TODO: data.compute_heatmaps()
-                    transformed_keypoints = transformed_keypoints.reshape(
-                        transformed_keypoints.shape[0] * transformed_keypoints.shape[1]
-                    )
-                else:
-                    transformed_images = np.expand_dims(image, axis=0)
-                    transformed_keypoints = np.expand_dims(keypoints_on_image, axis=0)
+                images.append(np.asarray(image))
 
-                transformed_images = self.pytorch_transform(transformed_images)
-                assert transformed_keypoints.shape == (self.num_targets,)
+            keypoints_on_image = torch.unsqueeze(keypoints_on_image, 0)
+            keypoints_on_image = list(keypoints_on_image.tile((5, 1, 1)).numpy())
 
+            if self.imgaug_transform is not None:
+                transformed_images, transformed_keypoints = self.imgaug_transform(
+                    images=images,
+                    keypoints=keypoints_on_image,
+                )  # expands add batch dim for imgaug
+                # get rid of the batch dim
+                transformed_images = np.asarray(transformed_images)
+                transformed_keypoints = transformed_keypoints[0]
+                # TODO: the problem below is that it messes up
+                # TODO: data.compute_heatmaps()
+                transformed_keypoints = transformed_keypoints.reshape(
+                    transformed_keypoints.shape[0] * transformed_keypoints.shape[1]
+                )
+            else:
+                transformed_images = np.asarray(images)
+                transformed_keypoints = keypoints_on_image[0]
+
+            for i, transformed_image in enumerate(transformed_images):
+                transformed_image = self.pytorch_transform(transformed_image)
                 if i == 0:
-                    image_frames_tensor = torch.unsqueeze(transformed_images, dim=0)
+                    image_frames_tensor = torch.unsqueeze(transformed_image, dim=0)
                 else:
-                    image_expand = torch.unsqueeze(transformed_images, dim=0)
+                    image_expand = torch.unsqueeze(transformed_image, dim=0)
                     image_frames_tensor = torch.cat(
                         (image_frames_tensor, image_expand), dim=0
                     )
 
-                # list_images.append(transformed_images)
             transformed_images = image_frames_tensor
             assert transformed_keypoints.shape == (self.num_targets,)
-
         return {
             "images": transformed_images,
             "keypoints": torch.from_numpy(transformed_keypoints),
