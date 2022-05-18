@@ -21,7 +21,7 @@ class DataExtractor(object):
         self,
         data_module: pl.LightningDataModule,
         cond: Literal["train", "test", "val"] = "train",
-        extract_images: bool = False
+        extract_images: bool = False,
     ) -> None:
         self.data_module = data_module
         self.cond = cond
@@ -56,7 +56,14 @@ class DataExtractor(object):
     @typechecked
     def iterate_over_dataloader(
         self, loader: torch.utils.data.DataLoader
-    ) -> Tuple[TensorType["num_examples", Any], Union[TensorType["num_examples", 3, "image_width", "image_height"], None]]:
+    ) -> Tuple[
+        TensorType["num_examples", Any],
+        Union[
+            TensorType["num_examples", 3, "image_width", "image_height"],
+            TensorType["num_examples", "frames", 3, "image_width", "image_height"],
+            None,
+        ],
+    ]:
         keypoints_list = []
         images_list = []
         for ind, batch in enumerate(loader):
@@ -66,18 +73,27 @@ class DataExtractor(object):
         concat_keypoints = torch.cat(keypoints_list, dim=0)
         if self.extract_images:
             concat_images = torch.cat(images_list, dim=0)
-            assert concat_images.shape == (self.dataset_length, 3, batch["images"].shape[2], batch["images"].shape[3])
         else:
             concat_images = None
         # assert that indeed the number of columns does not change after concatenation,
         # and that the number of rows is the dataset length.
         assert concat_keypoints.shape == (
-            self.dataset_length, keypoints_list[0].shape[1],
+            self.dataset_length,
+            keypoints_list[0].shape[1],
         )
         return concat_keypoints, concat_images
 
     @typechecked
-    def __call__(self) -> Tuple[TensorType["num_examples", Any], Union[TensorType["num_examples", 3, "image_width", "image_height"], None]]:
+    def __call__(
+        self,
+    ) -> Tuple[
+        TensorType["num_examples", Any],
+        Union[
+            TensorType["num_examples", 3, "image_width", "image_height"],
+            TensorType["num_examples", "frames", 3, "image_width", "image_height"],
+            None,
+        ],
+    ]:
         loader = self.get_loader()
         loader = self.verify_labeled_loader(loader)
         return self.iterate_over_dataloader(loader)
@@ -203,7 +219,7 @@ def generate_heatmaps(
     confidence = (yy - keypoints[:, :, :, :1]) ** 2  # also flipped order here
     confidence += (xx - keypoints[:, :, :, 1:]) ** 2  # also flipped order here
     confidence *= -1
-    confidence /= 2 * sigma ** 2
+    confidence /= 2 * sigma**2
     confidence = torch.exp(confidence)
     if not normalize:
         confidence /= sigma * torch.sqrt(2 * torch.tensor(np.pi))

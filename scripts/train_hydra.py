@@ -48,7 +48,6 @@ def train(cfg: DictConfig):
 
     # model
     model = get_model(cfg=cfg, data_module=data_module, loss_factories=loss_factories)
-
     # ----------------------------------------------------------------------------------
     # Set up and run training
     # ----------------------------------------------------------------------------------
@@ -59,9 +58,7 @@ def train(cfg: DictConfig):
         patience=cfg.training.early_stop_patience,
         mode="min",
     )
-    lr_monitor = pl.callbacks.LearningRateMonitor(
-        logging_interval="epoch"
-    )
+    lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval="epoch")
     ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
         monitor="val_supervised_loss"
     )

@@ -62,7 +62,10 @@ def grab_layers_sequential(
 class BaseBatchDict(TypedDict):
     """Class for finer control over typechecking."""
 
-    images: TensorType["batch", "RGB":3, "image_height", "image_width", float]
+    images: Union[
+        TensorType["batch", "RGB":3, "image_height", "image_width", float],
+        TensorType["batch", "frames", "RGB":3, "image_height", "image_width", float],
+    ]
     keypoints: TensorType["batch", "num_targets", float]
     idxs: TensorType["batch", int]
 
@@ -103,6 +106,7 @@ class BaseFeatureExtractor(LightningModule):
         last_resnet_layer_to_get: int = -2,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[dict] = None,
+        do_context=False,
     ) -> None:
         """A ResNet model that takes in images and generates features.
 
@@ -130,13 +134,19 @@ class BaseFeatureExtractor(LightningModule):
             model=base,
             last_layer_ind=last_resnet_layer_to_get,
         )
-
         self.lr_scheduler = lr_scheduler
         self.lr_scheduler_params = lr_scheduler_params
+        self.do_context = do_context
 
     def get_representations(
         self,
-        images: TensorType["batch", "channels":3, "image_height", "image_width", float],
+        images: Union[
+            TensorType["batch", "RGB":3, "image_height", "image_width", float],
+            TensorType[
+                "batch", "frames", "RGB":3, "image_height", "image_width", float
+            ],
+        ],
+        do_context: bool=False,
     ) -> TensorType["batch", "features", "rep_height", "rep_width", float]:
         """Forward pass from images to feature maps.
 
@@ -146,6 +156,7 @@ class BaseFeatureExtractor(LightningModule):
 
         Args:
             images: a batch of images
+            do_context: whether or not to use extra frames of context
 
         Returns:
             a representation of the images; features differ as a function of resnet
@@ -153,7 +164,32 @@ class BaseFeatureExtractor(LightningModule):
             dimensions, and are not necessarily equal.
 
         """
-        return self.backbone(images)
+        if do_context:
+            batch, frames, channels, image_height, image_width = images.shape
+            frames_batch_shape = batch * frames
+            images_batch_frames: TensorType[
+                "batch*frames", "channels":3, "image_height", "image_width"
+            ] = images.reshape(frames_batch_shape, channels, image_height, image_width)
+            outputs: TensorType[
+                "batch*frames", "features", "rep_height", "rep_width"
+            ] = self.backbone(images_batch_frames)
+            outputs: TensorType[
+                "batch", "frames", "features", "rep_height", "rep_width"
+            ] = outputs.reshape(
+                images.shape[0],
+                images.shape[1],
+                outputs.shape[1],
+                outputs.shape[2],
+                outputs.shape[3],
+            )
+            representations: TensorType[
+                "batch", "features", "rep_height", "rep_width", "frames"
+            ] = torch.permute(outputs, (0, 2, 3, 4, 1))
+        else:
+            image_batch = images
+            representations = self.backbone(image_batch)
+
+        return representations
 
     def forward(self, images):
         """Forward pass from images to representations.
@@ -168,7 +204,7 @@ class BaseFeatureExtractor(LightningModule):
         Returns:
             torch.tensor(float): a representation of the images.
         """
-        return self.get_representations(images)
+        return self.get_representations(images, self.do_context)
 
     def configure_optimizers(self):
         """Select optimizer, lr scheduler, and metric for monitoring."""
@@ -184,9 +220,9 @@ class BaseFeatureExtractor(LightningModule):
                 gamma = MULTISTEPLR_GAMMA_DEFAULT
             else:
                 milestones = self.lr_scheduler_params.get(
-                    "milestones", MULTISTEPLR_MILESTONES_DEFAULT)
-                gamma = self.lr_scheduler_params.get(
-                    "gamma", MULTISTEPLR_GAMMA_DEFAULT)
+                    "milestones", MULTISTEPLR_MILESTONES_DEFAULT
+                )
+                gamma = self.lr_scheduler_params.get("gamma", MULTISTEPLR_GAMMA_DEFAULT)
 
             scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
 
@@ -283,6 +319,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
                 {
                     "params": self.upsampling_layers.parameters()
                 },  # important this is the 0th element, for BackboneFinetuning callback
+                {"params": self.representation_fc.parameters()},
             ]
 
         else:
@@ -299,9 +336,9 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
                 gamma = MULTISTEPLR_GAMMA_DEFAULT
             else:
                 milestones = self.lr_scheduler_params.get(
-                    "milestones", MULTISTEPLR_MILESTONES_DEFAULT)
-                gamma = self.lr_scheduler_params.get(
-                    "gamma", MULTISTEPLR_GAMMA_DEFAULT)
+                    "milestones", MULTISTEPLR_MILESTONES_DEFAULT
+                )
+                gamma = self.lr_scheduler_params.get("gamma", MULTISTEPLR_GAMMA_DEFAULT)
 
             scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
 
@@ -404,6 +441,7 @@ class SemiSupervisedTrackerMixin(object):
                 {
                     "params": self.upsampling_layers.parameters()
                 },  # important this is the 0th element, for BackboneFinetuning callback
+                {"params": self.representation_fc.parameters()},
             ]
 
         else:
@@ -429,9 +467,9 @@ class SemiSupervisedTrackerMixin(object):
                 gamma = MULTISTEPLR_GAMMA_DEFAULT
             else:
                 milestones = self.lr_scheduler_params.get(
-                    "milestones", MULTISTEPLR_MILESTONES_DEFAULT)
-                gamma = self.lr_scheduler_params.get(
-                    "gamma", MULTISTEPLR_GAMMA_DEFAULT)
+                    "milestones", MULTISTEPLR_MILESTONES_DEFAULT
+                )
+                gamma = self.lr_scheduler_params.get("gamma", MULTISTEPLR_GAMMA_DEFAULT)
 
             scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
 

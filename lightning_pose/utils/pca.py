@@ -71,7 +71,9 @@ class KeypointPCA(object):
         return self._error_metric_factory[self.error_metric](data_arr=data_arr)
 
     def _get_data(self) -> None:
-        self.data_arr, _ = DataExtractor(data_module=self.data_module, cond="train", extract_images=False)()
+        self.data_arr, _ = DataExtractor(
+            data_module=self.data_module, cond="train", extract_images=False
+        )()
 
     def _multiview_format(
         self, data_arr: TensorType["num_original_samples", "num_original_dims"]
