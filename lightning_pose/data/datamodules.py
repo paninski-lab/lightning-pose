@@ -285,6 +285,10 @@ class UnlabeledDataModule(BaseDataModule):
             auto_reset=True,  # TODO: auto reset on each epoch - is this random?
             num_batches=num_batches,
         )
+    
+    def setup_video_prediction(self):
+        # TODO: implement this
+        pass
 
     def train_dataloader(self):
         loader = {

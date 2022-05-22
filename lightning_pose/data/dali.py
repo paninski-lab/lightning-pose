@@ -29,6 +29,8 @@ def video_pipe(
     normalization_std: List[float] = _IMAGENET_STD,
     device: str = _DALI_DEVICE,
     name: str = "reader",
+    step: int = 1,
+    pad_last_batch: bool = False,
     # arguments consumed by decorator:
     # batch_size,
     # num_threads,
@@ -63,11 +65,14 @@ def video_pipe(
         random_shuffle=random_shuffle,
         seed=seed,
         sequence_length=sequence_length,
+        step=step,
         pad_sequences=pad_sequences,
         initial_fill=initial_fill,
         normalized=False,
         name=name,
         dtype=types.DALIDataType.FLOAT,
+        pad_last_batch=pad_last_batch, # Important for context loaders
+
     )
     if resize_dims:
         video = fn.resize(video, size=resize_dims)
