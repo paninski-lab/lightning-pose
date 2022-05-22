@@ -237,6 +237,18 @@ class HeatmapTracker(BaseSupervisedTracker):
             "keypoints_pred": predicted_keypoints,
             "confidences": confidence,
         }
+    
+    @typechecked
+    def predict_step(self, batch: Any, batch_idx: int) -> Any:
+        """Predict heatmaps and keypoints for a batch of video frames.
+        assuming a DALI video loader is passed in 
+        trainer = Trainer(devices=8, accelerator="gpu")
+        predictions = trainer.predict(model, data_loader) """
+        # images -> heatmaps
+        predicted_heatmaps = self.forward(batch, do_context=self.do_context)
+        # heatmaps -> keypoints
+        predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
+        return (predicted_keypoints, confidence)
 
 
 class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
