@@ -160,7 +160,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 transformed_keypoints = np.expand_dims(keypoints_on_image, axis=0)
 
             transformed_images = self.pytorch_transform(
-                torch.tensor(transformed_images)
+               transformed_images
             )
             assert transformed_keypoints.shape == (self.num_targets,)
 
