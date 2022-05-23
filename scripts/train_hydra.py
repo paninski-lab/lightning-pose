@@ -37,10 +37,22 @@ class PredictionHandler:
     def keypoint_names(self):
         return self.data_module.dataset.keypoint_names
     
+    @property
+    def do_context(self):
+        return self.data_module.dataset.do_context
+    
+    def discard_context_rows(self, df):
+        # TODO: replace first and last two rows by preds 2 and -2.
+        if self.do_context == False:
+            pass
+
+            
+
+    
     @staticmethod
     def unpack_preds(preds: List[Tuple[TensorType["batch", "two_times_num_keypoints"], TensorType["batch", "num_keypoints"]]], frame_count: int) -> Tuple[TensorType["num_frames", "two_times_num_keypoints"], TensorType["num_frames", "num_keypoints"]]:
         """ unpack list of preds coming out from pl.trainer.predict, confs tuples into tensors.
-        eliminate unnecessary rows
+        It still returns unnecessary final rows, which should be discarded at the dataframe stage.
         This works for the output of predict_loader, suitable for batch_size=1, sequence_length=16, step=16"""
         # stack the predictions into rows.
         # loop over the batches, and stack 
@@ -48,10 +60,12 @@ class PredictionHandler:
         stacked_confs = torch.vstack([pred[1] for pred in preds])
         # eliminate last rows
         # this is true just for the case of e.g., batch_size=1, sequence_length=16, step=sequence_length
+        # the context dataloader just doesn't include those extra frames.
         num_rows_to_discard = stacked_preds.shape[0] - frame_count
-        stacked_preds = stacked_preds[:-num_rows_to_discard]
-        stacked_confs = stacked_confs[:-num_rows_to_discard]
-        
+        if num_rows_to_discard > 0:
+            stacked_preds = stacked_preds[:-num_rows_to_discard]
+            stacked_confs = stacked_confs[:-num_rows_to_discard]
+            
         return stacked_preds, stacked_confs
     
     def make_pred_arr_undo_resize(
@@ -348,6 +362,11 @@ def train(cfg: DictConfig):
         num_threads = 4
         device_id = 0
 
+        from lightning_pose.data.utils import count_frames
+        frame_count = count_frames(filenames[0])
+        # assuming step=1
+        num_batches = int(np.ceil(frame_count / batch_size))
+
         pipe = video_pipe(
                 resize_dims=resize_dims,
                 batch_size=batch_size,
@@ -370,13 +389,18 @@ def train(cfg: DictConfig):
             last_batch_padded=False, # could work without it too.
             auto_reset=False,
             reader_name="reader",
-            num_batches = 1, # added for testing, so we can have it in predict loader.
+            num_batches = num_batches, # this is necessary to make the dataloader work with this policy and configs. this number should be right.
         )
 
         preds = trainer.predict(model=model, ckpt_path=model_ckpt_abs, dataloaders=predict_loader, return_predictions=True)
+        
+        # TODO: needs to be handled.
 
-        a = 6
-        b = 7
+        
+        num_frames = [pred[0].shape[0] for pred in preds]
+        print("num_frames: {}".format(np.array(num_frames).sum()))
+        total_num_frames = np.array(num_frames).sum()
+        assert(total_num_frames == frame_count)
 
 
 def pretty_print(cfg):
