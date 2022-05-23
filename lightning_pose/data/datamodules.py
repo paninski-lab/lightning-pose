@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader, random_split
 from typeguard import typechecked
 from typing import List, Literal, Optional, Tuple, Union
 
-from lightning_pose.data.dali import video_pipe, LightningWrapper
+from lightning_pose.data.dali import ContextLightningWrapper, video_pipe, LightningWrapper
 from lightning_pose.data.utils import split_sizes_from_probabilities
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -129,6 +129,14 @@ class BaseDataModule(pl.LightningDataModule):
                 len(self.train_dataset), len(self.val_dataset), len(self.test_dataset)
             )
         )
+    
+    def setup_video_prediction(self, video: str):
+        """ this will depend on context flag in dataset"""
+        pass
+
+    def predict_dataloader(self) -> Union[LightningWrapper, ContextLightningWrapper]:
+        """Returns a data loader for prediction. uses the pipes defined above."""
+        pass
 
     def train_dataloader(self):
         return DataLoader(

@@ -24,113 +24,10 @@ from lightning_pose.data.dali import video_pipe, LightningWrapper, ContextLightn
 from nvidia.dali.plugin.pytorch import LastBatchPolicy
 from typing import List, Tuple
 from torchtyping import TensorType, patch_typeguard
+from lightning_pose.utils.predictions_new import PredictionHandler
 
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
-class PredictionHandler:
-    def __init__(self, cfg: DictConfig, data_module: pl.LightningDataModule) -> None:
-        self.cfg = cfg
-        self.data_module = data_module
-    
-    @property
-    def keypoint_names(self):
-        return self.data_module.dataset.keypoint_names
-    
-    @property
-    def do_context(self):
-        return self.data_module.dataset.do_context
-    
-    def discard_context_rows(self, df):
-        # TODO: replace first and last two rows by preds 2 and -2.
-        if self.do_context == False:
-            pass
-
-            
-
-    
-    @staticmethod
-    def unpack_preds(preds: List[Tuple[TensorType["batch", "two_times_num_keypoints"], TensorType["batch", "num_keypoints"]]], frame_count: int) -> Tuple[TensorType["num_frames", "two_times_num_keypoints"], TensorType["num_frames", "num_keypoints"]]:
-        """ unpack list of preds coming out from pl.trainer.predict, confs tuples into tensors.
-        It still returns unnecessary final rows, which should be discarded at the dataframe stage.
-        This works for the output of predict_loader, suitable for batch_size=1, sequence_length=16, step=16"""
-        # stack the predictions into rows.
-        # loop over the batches, and stack 
-        stacked_preds = torch.vstack([pred[0] for pred in preds])
-        stacked_confs = torch.vstack([pred[1] for pred in preds])
-        # eliminate last rows
-        # this is true just for the case of e.g., batch_size=1, sequence_length=16, step=sequence_length
-        # the context dataloader just doesn't include those extra frames.
-        num_rows_to_discard = stacked_preds.shape[0] - frame_count
-        if num_rows_to_discard > 0:
-            stacked_preds = stacked_preds[:-num_rows_to_discard]
-            stacked_confs = stacked_confs[:-num_rows_to_discard]
-            
-        return stacked_preds, stacked_confs
-    
-    def make_pred_arr_undo_resize(
-        self,
-        keypoints_np: np.array,
-        confidence_np: np.array,
-    ) -> np.array:
-        """Resize keypoints and add confidences into one numpy array.
-
-        Args:
-            keypoints_np: shape (n_frames, n_keypoints * 2)
-            confidence_np: shape (n_frames, n_keypoints)
-
-        Returns:
-            np.ndarray: cols are (bp0_x, bp0_y, bp0_likelihood, bp1_x, bp1_y, ...)
-
-        """
-        assert keypoints_np.shape[0] == confidence_np.shape[0]  # num frames in the dataset
-        assert keypoints_np.shape[1] == (
-            confidence_np.shape[1] * 2
-        )  # we have two (x,y) coordinates and a single likelihood value
-
-        num_joints = confidence_np.shape[-1]  # model.num_keypoints
-        predictions = np.zeros((keypoints_np.shape[0], num_joints * 3))
-        predictions[:, 0] = np.arange(keypoints_np.shape[0])
-        # put x vals back in original pixel space
-        x_resize = self.cfg.data.image_resize_dims.width
-        x_og = self.cfg.data.image_orig_dims.width
-        predictions[:, 0::3] = keypoints_np[:, 0::2] / x_resize * x_og
-        # put y vals back in original pixel space
-        y_resize = self.cfg.data.image_resize_dims.height
-        y_og = self.cfg.data.image_orig_dims.height
-        predictions[:, 1::3] = keypoints_np[:, 1::2] / y_resize * y_og
-        predictions[:, 2::3] = confidence_np
-
-        return predictions
-    
-    def make_dlc_pandas_index(self) -> pd.MultiIndex:
-        xyl_labels = ["x", "y", "likelihood"]
-        pdindex = pd.MultiIndex.from_product(
-            [["%s_tracker" % self.cfg.model.model_type], self.keypoint_names, xyl_labels],
-            names=["scorer", "bodyparts", "coords"],
-        )
-        return pdindex
-    
-    def __call__(self, video_file: str, preds: List[Tuple[TensorType["batch", "two_times_num_keypoints"], TensorType["batch", "num_keypoints"]]])-> pd.DataFrame:
-        """
-        Call this function to get a pandas dataframe of the predictions for a single video.
-        Assuming you've already run trainer.predict(), and have a list of Tuple predictions.
-        Args:
-            preds: list of tuples of (predictions, confidences)
-            video_file: path to video file
-        Returns:
-            pd.DataFrame: index is (frame, bodypart, x, y, likelihood)
-        """
-        frame_count = count_frames(video_file)
-        stacked_preds, stacked_confs = self.unpack_preds(preds=preds, frame_count=frame_count)
-        pred_arr = self.make_pred_arr_undo_resize(stacked_preds.numpy(), stacked_confs.numpy())
-        pdindex = self.make_dlc_pandas_index()
-        df = pd.DataFrame(pred_arr, columns=pdindex)
-        return df
-
-    
-
-        
 
 
 @hydra.main(config_path="configs", config_name="config")
@@ -345,6 +242,7 @@ def train(cfg: DictConfig):
         pred_handler = PredictionHandler(cfg=cfg, data_module=data_module)
         
         # call this instance on a single vid's preds
+        # TODO: potentially loop over files in a directory here
         preds_df = pred_handler(video_file=filenames[0], preds=preds)
         
         # save the predictions to a csv
@@ -401,6 +299,18 @@ def train(cfg: DictConfig):
         print("num_frames: {}".format(np.array(num_frames).sum()))
         total_num_frames = np.array(num_frames).sum()
         assert(total_num_frames == frame_count)
+
+        # initialize prediction handler class, can process multiple vids with a shared cfg and data_module
+        pred_handler = PredictionHandler(cfg=cfg, data_module=data_module)
+        
+        # call this instance on a single vid's preds
+        preds_df = pred_handler(video_file=filenames[0], preds=preds)
+        
+        # save the predictions to a csv
+        # e.g.,: '/home/jovyan/dali-seq-testing/test_vid_with_fr.mp4' -> 'test_vid_with_fr'
+        base_vid_name_for_save = os.path.basename(filenames[0]).split('.')[0]
+        preds_df.to_csv(os.path.join(hydra_output_directory, "preds_{}.csv".format(base_vid_name_for_save)))
+        a= 6
 
 
 def pretty_print(cfg):
