@@ -43,14 +43,32 @@ class PredictionHandler:
                 stacked_confs = stacked_confs[:-num_rows_to_discard]
         
         if self.do_context == True:
-            # make first two rows and last two rows with confidence 0.0.
-            stacked_confs[:2, :] = 0.0
-            stacked_confs[-2:, :] = 0.0
-            # fill the predicted values with row 2 and row -2. 
-            stacked_preds[:2, :] = stacked_preds[2, :]
-            stacked_preds[-2:, :] = stacked_preds[-3, :]
+            # fix shifts in the context model
+            stacked_preds = self.fix_context_preds_confs(stacked_preds)
+            stacked_confs = self.fix_context_preds_confs(stacked_confs, is_confidence=True)
 
         return stacked_preds, stacked_confs
+    
+    def fix_context_preds_confs(self, stacked_preds: TensorType, is_confidence: bool = False):
+        """
+        In the context model, ind=0 is associated with image[2], and ind=1 is associated with image[3],
+        so we need to shift the predictions and confidences by two and eliminate the edges.
+        NOTE: confidences are not zero in the first and last two images, they are instead replicas of images[-2] and images[-3]
+        """
+        # first pad the first two rows for which we have no valid preds.
+        preds_1 = torch.tile(stacked_preds[0], (2,1)) # copying twice the prediction for image[2]
+        preds_2 = stacked_preds[0:-2] # throw out the last two rows.
+        preds_combined = torch.vstack([preds_1, preds_2])
+        # after concat this has the same length. everything is shifted by two rows. 
+        # but we don't have valid predictions for the last two elements, so we pad with element -3.
+        preds_combined[-2:, :] = preds_combined[-3, :]
+
+        if is_confidence == True:
+            # zeroing out those first and last two rows (after we've shifted everything above)
+            preds_combined[:2, :] = 0.0
+            preds_combined[-2:, :] = 0.0
+        
+        return preds_combined
     
     def make_pred_arr_undo_resize(
         self,
