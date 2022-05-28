@@ -8,11 +8,12 @@ from torch.utils.data import DataLoader, random_split
 from typeguard import typechecked
 from typing import List, Literal, Optional, Tuple, Union
 
-from lightning_pose.data.dali import ContextLightningWrapper, video_pipe, LightningWrapper
+from lightning_pose.data.dali import ContextLightningWrapper, LitDaliWrapper, video_pipe, LightningWrapper
 from lightning_pose.data.utils import split_sizes_from_probabilities
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
+# TODO: add typechecks here
 
 class BaseDataModule(pl.LightningDataModule):
     """Splits a labeled dataset into train, val, and test data loaders."""
@@ -317,3 +318,46 @@ class UnlabeledDataModule(BaseDataModule):
             batch_size=self.test_batch_size,
             num_workers=self.num_workers_for_labeled,
         )
+
+class VideoPredictionMixin(object):
+    
+    """
+    Mixin class for video prediction.
+    TODO: make sure the order of args when you mix is valid.
+    needs to know about context
+    TODO: consider changing LightningWrapper args from num_batches to num_iter
+    """
+
+    def setup_video_prediction(self, video: str):
+        """call it after you've initialized a datamodule and want to bring in new vids"""
+        self.pipe = None
+        self.num_iters = None
+        pass
+
+    def predict_dataloader(self):
+        return self.get_data_loader()
+
+    def get_data_loader(self) -> Union[LightningWrapper, ContextLightningWrapper]:
+        if self.do_context == False:
+            predict_loader = LitDaliWrapper(
+            self.pipe,
+            num_iters = self.num_iters, # added for testing, so we can have it in predict loader.
+            do_context = self.do_context,
+            output_map=["x"],
+            last_batch_policy=LastBatchPolicy.FILL,
+            last_batch_padded=False,
+            auto_reset=False,
+            reader_name="reader",
+        )
+        else:
+            predict_loader = LitDaliWrapper(
+            self.pipe,
+            num_iters = self.num_iters, # this is necessary to make the dataloader work with this policy and configs. this number should be right.
+            do_context = self.do_context,
+            output_map=["x"],
+            last_batch_policy=LastBatchPolicy.PARTIAL, # was fill
+            last_batch_padded=False, # could work without it too.
+            auto_reset=False,
+            reader_name="reader",
+        )
+        return predict_loader

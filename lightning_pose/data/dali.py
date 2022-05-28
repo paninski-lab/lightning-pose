@@ -9,11 +9,14 @@ import nvidia.dali.types as types
 import torch
 from typeguard import typechecked
 from typing import List, Optional, Union
+from torchtyping import TensorType, patch_typeguard
+
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
 
 _DALI_DEVICE = "gpu" if torch.cuda.is_available() else "cpu"
 
+patch_typeguard()  # use before @typechecked. TODO: new, make sure it doesn't mess things
 
 # cannot typecheck due to way pipeline_def decorator consumes additional args
 @pipeline_def
@@ -94,6 +97,7 @@ class LightningWrapper(DALIGenericIterator):
 
     def __init__(self, *kargs, **kwargs):
 
+        # TODO: change name to "num_iters"
         # collect number of batches computed outside of class
         self.num_batches = kwargs.pop("num_batches", 1)
 
@@ -110,6 +114,7 @@ class LightningWrapper(DALIGenericIterator):
             dtype=torch.float,
         )  # careful: only valid for one sequence, i.e., batch size of 1.
 
+# TODO: see if can be easily merged.
 class ContextLightningWrapper(DALIGenericIterator):
     """wrapper around a DALI pipeline to get batches for ptl."""
 
@@ -128,3 +133,39 @@ class ContextLightningWrapper(DALIGenericIterator):
     def __next__(self):
         out = super().__next__()
         return out[0]["x"]
+    
+
+@typechecked
+class LitDaliWrapper(DALIGenericIterator):
+    """wrapper around a DALI pipeline to get batches for ptl."""
+
+    def __init__(self, *kargs, num_iters: int = 1, do_context: bool = False, **kwargs):
+        """ wrapper around DALIGenericIterator to get batches for pl.
+        Args: 
+            num_iters: number of enumerations of dataloader (should be computed outside for now; should be fixed by lightning/dali teams)
+            do_context: whether model/loader use 5-frame context or not
+            """
+        # TODO: add a case where we 
+        self.num_iters = num_iters
+        self.do_context = do_context
+
+        # call parent
+        super().__init__(*kargs, **kwargs)
+
+    def __len__(self):
+        return self.num_iters
+    
+    def _modify_output(self, out) -> Union[TensorType["sequence_length", 3, "image_width", "image_height"], TensorType["batch", 5, 3, "image_width", "image_height"]]:
+        """ modify output to be torch tensor. 
+        looks different for context and non-context."""
+        if self.do_context == False:
+            return torch.tensor(
+            out[0]["x"][0, :, :, :, :],  # should be (sequence_length, 3, H, W)
+            dtype=torch.float,
+        )  # careful: only valid for one sequence, i.e., batch size of 1.
+        else:
+            return out[0]["x"]
+
+    def __next__(self):
+        out = super().__next__()
+        return self._modify_output(out)
