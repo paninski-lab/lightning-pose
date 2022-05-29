@@ -207,7 +207,7 @@ class FiftyOneKeypointBase:
                             / self.img_height,
                         ]
                     ],
-                    confidence=data_dict[kp_name]["likelihood"][frame_idx],
+                    confidence=[data_dict[kp_name]["likelihood"][frame_idx]],
                     label=kp_name,  # sometimes plotted aggresively
                 )
             )
