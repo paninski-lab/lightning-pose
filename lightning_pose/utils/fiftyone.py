@@ -226,7 +226,8 @@ class FiftyOneKeypointBase:
                         data_dict[kp_name]["coords"][frame_idx, 1] / self.img_height,
                     )
                     for kp_name in self.keypoints_to_plot
-                ]
+                ],
+                confidence=[data_dict[kp_name]["likelihood"][frame_idx] for kp_name in self.keypoints_to_plot]
             )
         ]
         return keypoint
