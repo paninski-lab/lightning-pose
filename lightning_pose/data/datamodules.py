@@ -6,7 +6,7 @@ import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader, random_split
 from typeguard import typechecked
-from typing import List, Literal, Optional, Tuple, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 from lightning_pose.data.dali import ContextLightningWrapper, LitDaliWrapper, video_pipe, LightningWrapper
 from lightning_pose.data.utils import split_sizes_from_probabilities
@@ -319,6 +319,7 @@ class UnlabeledDataModule(BaseDataModule):
             num_workers=self.num_workers_for_labeled,
         )
 
+# @typechecked
 class VideoPredictionMixin(object):
     
     """
@@ -326,38 +327,139 @@ class VideoPredictionMixin(object):
     TODO: make sure the order of args when you mix is valid.
     needs to know about context
     TODO: consider changing LightningWrapper args from num_batches to num_iter
+    Big picture: this will initialize the pipes and dataloaders which will be called only in Trainer.predict().
+    Another option -- make this valid for Trainer.train() as well, so the unlabeled stuff will be initialized here.
+    Thoughts: define a dict with args for pipe and data loader, per condition.
     """
+    def __init__(self, train_stage: Literal["predict", "train"], model_type: Literal["base", "context"], filenames: List[str], dali_params: Optional[dict] = None):
+        self.train_stage = train_stage
+        self.model_type = model_type
+        self.dali_params = dali_params
+        self._pipe_dict = self._setup_pipe_dict(filenames)
+    
+    def _setup_pipe_dict(self, filenames: List[str]) -> Dict[str, dict]:
+        """all of the pipe() args in one place"""
+        dict_args = {}
+        dict_args["predict"] = {"context": None, "base": None}
+        dict_args["train"] = {"context": None, "base": None}
+        
+        # base (vanilla model), predict pipe args 
+        dict_args["predict"]["base"] = {"filenames": filenames, "resize_dims": [256, 256], 
+        "sequence_length": 16, "step": 16, "batch_size": 1, 
+        "seed": 123456, "num_threads": 4, "device_id": 0, 
+        "random_shuffle": False, "device": "gpu", "name": "reader", 
+        "pad_sequences": True}
 
-    def setup_video_prediction(self, video: str):
-        """call it after you've initialized a datamodule and want to bring in new vids"""
-        self.pipe = None
-        self.num_iters = None
-        pass
+        # context (five-frame) model, predict pipe args
+        dict_args["predict"]["context"] = {"filenames": filenames, "resize_dims": [256, 256], 
+        "sequence_length": 5, "step": 1, "batch_size": 4, 
+        "num_threads": 4, 
+        "device_id": 0, "random_shuffle": False, 
+        "device": "gpu", "name": "reader", "seed": 123456,
+        "pad_sequences": True, "pad_last_batch": True}
 
-    def predict_dataloader(self):
-        return self.get_data_loader()
+        # TODO: "train" is missing.
+        
+        return dict_args
+    
+    def _get_dali_pipe(self):
+        """
+        Return a DALI pipe with predefined args.
+        """
+        if self.train_stage == "train":
+            raise NotImplementedError("train_stage is not implemented yet")
 
-    def get_data_loader(self) -> Union[LightningWrapper, ContextLightningWrapper]:
-        if self.do_context == False:
-            predict_loader = LitDaliWrapper(
-            self.pipe,
-            num_iters = self.num_iters, # added for testing, so we can have it in predict loader.
-            do_context = self.do_context,
-            output_map=["x"],
-            last_batch_policy=LastBatchPolicy.FILL,
-            last_batch_padded=False,
-            auto_reset=False,
-            reader_name="reader",
-        )
-        else:
-            predict_loader = LitDaliWrapper(
-            self.pipe,
-            num_iters = self.num_iters, # this is necessary to make the dataloader work with this policy and configs. this number should be right.
-            do_context = self.do_context,
-            output_map=["x"],
-            last_batch_policy=LastBatchPolicy.PARTIAL, # was fill
-            last_batch_padded=False, # could work without it too.
-            auto_reset=False,
-            reader_name="reader",
-        )
-        return predict_loader
+        pipe_args = self._pipe_dict[self.train_stage][self.model_type]
+        pipe = video_pipe(**pipe_args)
+        return pipe
+    
+    def _setup_dali_iterator_args(self) -> LitDaliWrapper:
+        """ builds args for Lightning iterator"""
+        dict_args = {}
+        dict_args["predict"] = {"context": None, "base": None}
+        dict_args["train"] = {"context": None, "base": None}
+        # TODO: fix num_iters arg
+        dict_args["predict"]["base"] = {"num_iters": 1, "do_context": False, "output_map": ["x"], "last_batch_policy": LastBatchPolicy.FILL, "last_batch_padded": False, "auto_reset": False, "reader_name": "reader"}
+        
+        dict_args["predict"]["context"] = {"num_iters": 1, "do_context": True, "output_map": ["x"], "last_batch_policy": LastBatchPolicy.PARTIAL, "last_batch_padded": False, "auto_reset": False, "reader_name": "reader"}
+
+        # TODO: add train
+
+        return dict_args
+    
+    def __call__(self) -> LitDaliWrapper:
+        """
+        Returns a LightningWrapper object.
+        """
+        pipe = self._get_dali_pipe()
+        args = self._setup_dali_iterator_args()
+        return LitDaliWrapper(pipe, **args[self.train_stage][self.model_type])
+    
+
+
+
+    
+    # def _setup_dali_args(self):
+    #     """ sets up basic args for DALI. necessary for pipe"""
+    #     # TODO: control from config
+    #     self.resize_dims = [256, 256]
+    #     if self.do_context == False:
+    #         self.sequence_length = 16
+    #         self.batch_size = 1
+    #         self.step = 16
+    #         self.num_threads = 4
+    #         self.device_id = 0            
+        
+    #     elif self.do_context == True:
+    #         self.sequence_length = 5
+    #         self.batch_size = 4
+    #         self.step = 1
+    #         self.num_threads = 4
+    #         self.device_id = 0
+    
+    # @staticmethod
+    # def calculate_num_iters(filename: str) -> int:
+    #     # TODO: fill with actual computation
+    #     return 8
+    
+    # def setup_video_prediction(self, video: str):
+    #     """call it after you've initialized a datamodule and want to bring in new vids"""
+    #     self.num_iters = self.calculate_num_iters(video)
+    #     self.pipe = None # have to build video_pipe based on args
+    #     self.num_iters = None
+    #     pass
+
+    # def predict_dataloader(self):
+    #     return self.get_data_loader()
+
+    # def get_data_loader(self) -> Union[LightningWrapper, ContextLightningWrapper]:
+    #     if self.do_context == False:
+    #         predict_loader = LitDaliWrapper(
+    #         self.pipe,
+    #         num_iters = self.num_iters, # added for testing, so we can have it in predict loader.
+    #         do_context = self.do_context,
+    #         output_map=["x"],
+    #         last_batch_policy=LastBatchPolicy.FILL,
+    #         last_batch_padded=False,
+    #         auto_reset=False,
+    #         reader_name="reader",
+    #     )
+    #     else:
+    #         predict_loader = LitDaliWrapper(
+    #         self.pipe,
+    #         num_iters = self.num_iters, # this is necessary to make the dataloader work with this policy and configs. this number should be right.
+    #         do_context = self.do_context,
+    #         output_map=["x"],
+    #         last_batch_policy=LastBatchPolicy.PARTIAL, # was fill
+    #         last_batch_padded=False, # could work without it too.
+    #         auto_reset=False,
+    #         reader_name="reader",
+    #     )
+    #     return predict_loader
+
+    # def __call__(self, filename: str):
+    #     """ returns a dataloader """
+    #     self._setup_dali_args() # depends on whether you're doing context or not.
+    #     self.setup_video_prediction(filename)
+    #     return self.get_data_loader()
+        
