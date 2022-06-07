@@ -6,7 +6,6 @@ version = None
 install_requires = [
     "black",
     "fiftyone",
-    "geomloss",
     "h5py",
     "hydra-core",
     "imgaug",
