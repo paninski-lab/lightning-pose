@@ -224,6 +224,7 @@ class UnlabeledDataModule(BaseDataModule):
             torch_seed=torch_seed,
         )
         self.video_paths_list = video_paths_list
+        self.filenames = check_video_paths(self.video_paths_list)
         self.num_workers_for_unlabeled = num_workers // 2
         self.num_workers_for_labeled = num_workers // 2
         assert unlabeled_batch_size == 1, "LightningWrapper expects batch size of 1"
@@ -238,11 +239,11 @@ class UnlabeledDataModule(BaseDataModule):
 
     def setup_unlabeled(self):
         """Sets up the unlabeled data loader."""
-        # get input data
-        filenames = check_video_paths(self.video_paths_list)
         # dali prep
         # TODO: circle back to DALI params if needed.
-        dali_prep = PrepareDALI(train_stage="train", model_type=self.dataset.do_context, filenames=self.video_paths_list, dali_params=None)
+        dali_prep = PrepareDALI(train_stage="train", 
+            model_type= "context" if self.dataset.do_context else "base", 
+            filenames=self.filenames, dali_params=None)
 
         self.unlabeled_dataloader = dali_prep()
         # # get input data

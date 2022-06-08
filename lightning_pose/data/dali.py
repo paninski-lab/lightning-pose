@@ -244,6 +244,13 @@ class PrepareDALI(object):
         dict_args["predict"] = {"context": None, "base": None}
         dict_args["train"] = {"context": None, "base": None}
         
+        # base (vanilla single-frame model), 
+        # train pipe args 
+        dict_args["train"]["base"] = {"filenames": filenames, "resize_dims": [256, 256], 
+        "sequence_length": 16, "step": 16, "batch_size": 1, 
+        "seed": 123456, "num_threads": 4, "device_id": 0, 
+        "random_shuffle": True, "device": "gpu"}
+
         # base (vanilla model), predict pipe args 
         dict_args["predict"]["base"] = {"filenames": filenames, "resize_dims": [256, 256], 
         "sequence_length": 16, "step": 16, "batch_size": 1, 
@@ -251,7 +258,8 @@ class PrepareDALI(object):
         "random_shuffle": False, "device": "gpu", "name": "reader", 
         "pad_sequences": True}
 
-        # context (five-frame) model, predict pipe args
+        # context (five-frame) model
+        # predict pipe args
         dict_args["predict"]["context"] = {"filenames": filenames, "resize_dims": [256, 256], 
         "sequence_length": 5, "step": 1, "batch_size": 4, 
         "num_threads": 4, 
@@ -259,7 +267,11 @@ class PrepareDALI(object):
         "device": "gpu", "name": "reader", "seed": 123456,
         "pad_sequences": True, "pad_last_batch": True}
 
-        # TODO: "train" is missing. add train args!!
+        # train pipe args 
+        dict_args["train"]["context"] = {"filenames": filenames, "resize_dims": [256, 256], 
+        "sequence_length": 8, "step": 8, "batch_size": 1, 
+        "seed": 123456, "num_threads": 4, "device_id": 0, 
+        "random_shuffle": True, "device": "gpu"}
         
         return dict_args
     
@@ -267,8 +279,6 @@ class PrepareDALI(object):
         """
         Return a DALI pipe with predefined args.
         """
-        if self.train_stage == "train":
-            raise NotImplementedError("train_stage is not implemented yet")
 
         pipe_args = self._pipe_dict[self.train_stage][self.model_type]
         pipe = video_pipe(**pipe_args)
@@ -280,11 +290,13 @@ class PrepareDALI(object):
         dict_args["predict"] = {"context": None, "base": None}
         dict_args["train"] = {"context": None, "base": None}
 
-        dict_args["predict"]["base"] = {"num_iters": self.num_iters, "do_context": False, "output_map": ["x"], "last_batch_policy": LastBatchPolicy.FILL, "last_batch_padded": False, "auto_reset": False, "reader_name": "reader"}
-        
-        dict_args["predict"]["context"] = {"num_iters": self.num_iters, "do_context": True, "output_map": ["x"], "last_batch_policy": LastBatchPolicy.PARTIAL, "last_batch_padded": False, "auto_reset": False, "reader_name": "reader"}
+        # base models (single-frame)
+        dict_args["train"]["base"] = {"num_iters": self.num_iters, "eval_mode": "train", "do_context": False, "output_map": ["x"], "last_batch_policy": LastBatchPolicy.PARTIAL, "auto_reset": True} # taken from datamodules.py. 
+        dict_args["predict"]["base"] = {"num_iters": self.num_iters, "eval_mode": "predict", "do_context": False, "output_map": ["x"], "last_batch_policy": LastBatchPolicy.FILL, "last_batch_padded": False, "auto_reset": False, "reader_name": "reader"}
 
-        # TODO: add train
+        # 5-frame context models
+        dict_args["train"]["context"] = {"num_iters": self.num_iters, "eval_mode": "train", "do_context": True, "output_map": ["x"], "last_batch_policy": LastBatchPolicy.PARTIAL, "auto_reset": True} # taken from datamodules.py. only difference is that we need to do context
+        dict_args["predict"]["context"] = {"num_iters": self.num_iters, "eval_mode": "predict", "do_context": True, "output_map": ["x"], "last_batch_policy": LastBatchPolicy.PARTIAL, "last_batch_padded": False, "auto_reset": False, "reader_name": "reader"}
 
         return dict_args
     

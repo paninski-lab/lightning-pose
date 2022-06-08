@@ -91,9 +91,12 @@ class SemiSupervisedHeatmapBatchDict(TypedDict):
     """Class for finer control over typechecking."""
 
     labeled: HeatmapBatchDict
-    unlabeled: TensorType[
+    unlabeled: Union[TensorType[
         "sequence_length", "RGB":3, "image_height", "image_width", float
-    ]
+    ], TensorType[
+        "sequence_length", "context":5, "RGB":3, "image_height", "image_width", float
+    ]]
+
 
 
 class BaseFeatureExtractor(LightningModule):
@@ -365,7 +368,11 @@ class SemiSupervisedTrackerMixin(object):
     @typechecked
     def evaluate_unlabeled(
         self,
-        batch: TensorType["batch", "channels":3, "image_height", "image_width", float],
+        batch: Union[TensorType[
+        "sequence_length", "RGB":3, "image_height", "image_width", float
+    ], TensorType[
+        "sequence_length", "context":5, "RGB":3, "image_height", "image_width", float
+    ]],
         stage: Optional[Literal["train", "val", "test"]] = None,
         anneal_weight: Union[float, torch.Tensor] = 1.0,
     ) -> TensorType[(), float]:

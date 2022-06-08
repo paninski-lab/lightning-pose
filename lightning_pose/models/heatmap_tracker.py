@@ -314,7 +314,11 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
     @typechecked
     def get_loss_inputs_unlabeled(
         self,
-        batch: TensorType["batch", "channels":3, "image_height", "image_width", float],
+        batch: Union[TensorType[
+        "sequence_length", "RGB":3, "image_height", "image_width", float
+    ], TensorType[
+        "sequence_length", "context":5, "RGB":3, "image_height", "image_width", float
+    ]],
     ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
