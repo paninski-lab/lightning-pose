@@ -4,15 +4,18 @@ import cv2
 from nvidia.dali import pipeline_def
 import nvidia.dali.fn as fn
 from nvidia.dali.pipeline import Pipeline
+from nvidia.dali.plugin.pytorch import LastBatchPolicy
 from nvidia.dali.plugin.pytorch import DALIGenericIterator
 import nvidia.dali.types as types
 import torch
+import numpy as np
 from typeguard import typechecked
-from typing import List, Optional, Union
+from typing import List, Dict, Optional, Union, Literal
 from torchtyping import TensorType, patch_typeguard
 
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
+from lightning_pose.data.utils import count_frames
 
 _DALI_DEVICE = "gpu" if torch.cuda.is_available() else "cpu"
 
@@ -139,7 +142,7 @@ class ContextLightningWrapper(DALIGenericIterator):
 class LitDaliWrapper(DALIGenericIterator):
     """wrapper around a DALI pipeline to get batches for ptl."""
 
-    def __init__(self, *kargs, num_iters: int = 1, do_context: bool = False, **kwargs):
+    def __init__(self, *kargs, eval_mode: Literal["train", "predict"], num_iters: int = 1, do_context: bool = False, **kwargs):
         """ wrapper around DALIGenericIterator to get batches for pl.
         Args: 
             num_iters: number of enumerations of dataloader (should be computed outside for now; should be fixed by lightning/dali teams)
@@ -148,6 +151,7 @@ class LitDaliWrapper(DALIGenericIterator):
         # TODO: add a case where we 
         self.num_iters = num_iters
         self.do_context = do_context
+        self.eval_mode = eval_mode
 
         # call parent
         super().__init__(*kargs, **kwargs)
@@ -155,7 +159,7 @@ class LitDaliWrapper(DALIGenericIterator):
     def __len__(self):
         return self.num_iters
     
-    def _modify_output(self, out) -> Union[TensorType["sequence_length", 3, "image_width", "image_height"], TensorType["batch", 5, 3, "image_width", "image_height"]]:
+    def _modify_output(self, out) -> Union[TensorType["sequence_length", 3, "image_height", "image_width"], TensorType["batch", 5, 3, "image_height", "image_width"]]:
         """ modify output to be torch tensor. 
         looks different for context and non-context."""
         if self.do_context == False:
@@ -164,8 +168,131 @@ class LitDaliWrapper(DALIGenericIterator):
             dtype=torch.float,
         )  # careful: only valid for one sequence, i.e., batch size of 1.
         else:
-            return out[0]["x"]
+            if self.eval_mode == "predict":
+                return out[0]["x"]
+            else: # train with context. pipeline is like for "base" model. but we reshape images. assume batch_size=1
+                raw_out = torch.tensor(
+                out[0]["x"][0, :, :, :, :],  # should be (sequence_length, 3, H, W)
+                dtype=torch.float)
+                # reshape to (5, 3, H, W)
+                return get_context_from_seq(img_seq=raw_out, context_length=5)
+
+        # TODO: support training with context, by reshaping a sequence.
 
     def __next__(self):
         out = super().__next__()
         return self._modify_output(out)
+
+def get_context_from_seq(
+    img_seq: TensorType["sequence_length", 3, "image_height", "image_width"],
+    context_length: int,
+) -> TensorType["sequence_length", "context_length", 3, "image_height", "image_width"]:
+    pass
+    # our goal is to extract 5-frame sequences from this sequence
+    img_shape = img_seq.shape[1:] # e.g., (3, H, W)
+    seq_len = img_seq.shape[0] # how many images in batch
+    train_seq = torch.zeros(
+        (seq_len, context_length, *img_shape), device=img_seq.device
+    )
+    # define pads: start pad repeats the zeroth image twice. end pad repeats the last image twice.
+    # this is to give padding for the first and last frames of the sequence
+    pad_start = torch.tile(img_seq[0].unsqueeze(0), (2, 1, 1, 1))
+    pad_end = torch.tile(img_seq[-1].unsqueeze(0), (2, 1, 1, 1))
+    # pad the sequence
+    padded_seq = torch.cat((pad_start, img_seq, pad_end), dim=0)
+    # padded_seq = torch.cat((two_pad, img_seq, two_pad), dim=0)
+    for i in range(seq_len):
+        # extract 5-frame sequences from the padded sequence
+        train_seq[i] = padded_seq[i : i + context_length]
+    return train_seq
+
+class PrepareDALI(object):
+    
+    """
+    All the DALI stuff in one place.
+    TODO: make sure the order of args when you mix is valid.
+    needs to know about context
+    TODO: consider changing LightningWrapper args from num_batches to num_iter
+    Big picture: this will initialize the pipes and dataloaders which will be called only in Trainer.predict().
+    Another option -- make this valid for Trainer.train() as well, so the unlabeled stuff will be initialized here.
+    Thoughts: define a dict with args for pipe and data loader, per condition.
+    """
+    def __init__(self, train_stage: Literal["predict", "train"], model_type: Literal["base", "context"], filenames: List[str], dali_params: Optional[dict] = None):
+        self.train_stage = train_stage
+        self.model_type = model_type
+        self.dali_params = dali_params
+        self.filenames = filenames
+        self.frame_count = count_frames(self.filenames)
+        self._pipe_dict: dict = self._setup_pipe_dict(self.filenames)
+
+    @property
+    def num_iters(self) -> int:
+        # count frames
+        # "how many times should we enumerate the data loader?""
+          # sum across vids
+        if self.model_type == "base":
+            return int(np.ceil(self.frame_count / (self._pipe_dict[self.train_stage][self.model_type]["sequence_length"])))
+        elif self.model_type == "context":
+            # assuming step=1
+            return int(np.ceil(self.frame_count / (self._pipe_dict[self.train_stage][self.model_type]["batch_size"])))
+        # calculate (two different ways, depending on context)
+        # return num_iters
+    
+    def _setup_pipe_dict(self, filenames: List[str]) -> Dict[str, dict]:
+        """all of the pipe() args in one place"""
+        dict_args = {}
+        dict_args["predict"] = {"context": None, "base": None}
+        dict_args["train"] = {"context": None, "base": None}
+        
+        # base (vanilla model), predict pipe args 
+        dict_args["predict"]["base"] = {"filenames": filenames, "resize_dims": [256, 256], 
+        "sequence_length": 16, "step": 16, "batch_size": 1, 
+        "seed": 123456, "num_threads": 4, "device_id": 0, 
+        "random_shuffle": False, "device": "gpu", "name": "reader", 
+        "pad_sequences": True}
+
+        # context (five-frame) model, predict pipe args
+        dict_args["predict"]["context"] = {"filenames": filenames, "resize_dims": [256, 256], 
+        "sequence_length": 5, "step": 1, "batch_size": 4, 
+        "num_threads": 4, 
+        "device_id": 0, "random_shuffle": False, 
+        "device": "gpu", "name": "reader", "seed": 123456,
+        "pad_sequences": True, "pad_last_batch": True}
+
+        # TODO: "train" is missing. add train args!!
+        
+        return dict_args
+    
+    def _get_dali_pipe(self):
+        """
+        Return a DALI pipe with predefined args.
+        """
+        if self.train_stage == "train":
+            raise NotImplementedError("train_stage is not implemented yet")
+
+        pipe_args = self._pipe_dict[self.train_stage][self.model_type]
+        pipe = video_pipe(**pipe_args)
+        return pipe
+    
+    def _setup_dali_iterator_args(self) -> LitDaliWrapper:
+        """ builds args for Lightning iterator"""
+        dict_args = {}
+        dict_args["predict"] = {"context": None, "base": None}
+        dict_args["train"] = {"context": None, "base": None}
+
+        dict_args["predict"]["base"] = {"num_iters": self.num_iters, "do_context": False, "output_map": ["x"], "last_batch_policy": LastBatchPolicy.FILL, "last_batch_padded": False, "auto_reset": False, "reader_name": "reader"}
+        
+        dict_args["predict"]["context"] = {"num_iters": self.num_iters, "do_context": True, "output_map": ["x"], "last_batch_policy": LastBatchPolicy.PARTIAL, "last_batch_padded": False, "auto_reset": False, "reader_name": "reader"}
+
+        # TODO: add train
+
+        return dict_args
+    
+    def __call__(self) -> LitDaliWrapper:
+        """
+        Returns a LightningWrapper object.
+        """
+        pipe = self._get_dali_pipe()
+        args = self._setup_dali_iterator_args()
+        return LitDaliWrapper(pipe, **args[self.train_stage][self.model_type])
+    

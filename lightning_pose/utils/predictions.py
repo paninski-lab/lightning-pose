@@ -172,14 +172,15 @@ def predict_single_video(
             and a potential numpy array with predicted heatmaps.
 
     """
-    step = 1 # applies for both context and non-context
+    
     if do_context:
+        step = 1 # applies for both context and non-context
         batch_size = 4 # TODO: make this configurable
         sequence_length = 5 # hard coded -- this is the model
     else: # usual static model 
         batch_size = 1 # don't modify, change sequence length (exposed to user) instead
         sequence_length = 16 # TODO: should be controlled from outside by cfg.eval.dali_parameters.sequence_length
-    
+        step = sequence_length
     device_dict = get_devices(device)
 
     cfg = get_cfg_file(cfg_file=cfg_file)
@@ -250,6 +251,7 @@ def predict_single_video(
         batch_size=sequence_length,  # note: different from the batch_size defined above
         data_name=video_file,
         return_heatmaps=bool(heatmap_file),
+        do_context=do_context,
     )
 
     try:
@@ -285,6 +287,7 @@ def _make_predictions(
     data_name: str = "dataset",
     return_heatmaps: bool = False,
     gpu_id: Optional[int] = None,
+    do_context: bool = False,
 ) -> Tuple[pd.DataFrame, Union[np.ndarray, None]]:
     """Wrapper function that predicts, resizes, and puts results in a dataframe.
 
@@ -313,6 +316,7 @@ def _make_predictions(
         data_name,
         return_heatmaps,
         gpu_id,
+        do_context,
     )
     # unify keypoints and confidences into one numpy array, scale (x,y) coords by
     # resizing factor
@@ -341,6 +345,7 @@ def _predict_frames(
     data_name: str = "dataset",
     return_heatmaps: bool = False,
     gpu_id: Optional[int] = None,
+    do_context: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, Union[np.ndarray, None]]:
     """Predict all frames from a data loader without undoing the resize or reshaping.
 
@@ -366,6 +371,11 @@ def _predict_frames(
 
     keypoints_np = np.zeros((n_frames_, model.num_keypoints * 2))
     confidence_np = np.zeros((n_frames_, model.num_keypoints))
+
+    if do_context:
+        kp_list = []
+        conf_list = []
+        heatmap_list = []
     if return_heatmaps:
         heatmaps_np = np.zeros(
             (
@@ -402,25 +412,39 @@ def _predict_frames(
                 pred_keypoints = outputs.detach().cpu().numpy()
                 confidence = np.zeros((outputs.shape[0], outputs.shape[1] // 2))
             n_frames_curr = pred_keypoints.shape[0]
-            if n_frames_counter + n_frames_curr > n_frames_:
-                # final sequence
-                final_batch_size = n_frames_ - n_frames_counter
-                keypoints_np[n_frames_counter:] = pred_keypoints[:final_batch_size]
-                confidence_np[n_frames_counter:] = confidence[:final_batch_size]
-                if return_heatmaps:
-                    heatmaps_np[n_frames_counter:] = outputs[:final_batch_size]
-                n_frames_curr = final_batch_size
-            else:  # at every sequence except the final
-                keypoints_np[
-                    n_frames_counter : n_frames_counter + n_frames_curr
-                ] = pred_keypoints
-                confidence_np[
-                    n_frames_counter : n_frames_counter + n_frames_curr
-                ] = confidence
-                if return_heatmaps:
-                    heatmaps_np[
+            if do_context == False:
+                if n_frames_counter + n_frames_curr > n_frames_:
+                    # final sequence
+                    final_batch_size = n_frames_ - n_frames_counter
+                    keypoints_np[n_frames_counter:] = pred_keypoints[:final_batch_size]
+                    confidence_np[n_frames_counter:] = confidence[:final_batch_size]
+                    if return_heatmaps:
+                        heatmaps_np[n_frames_counter:] = outputs[:final_batch_size]
+                    n_frames_curr = final_batch_size
+                else:  # at every sequence except the final
+                    keypoints_np[
                         n_frames_counter : n_frames_counter + n_frames_curr
-                    ] = outputs
+                    ] = pred_keypoints
+                    confidence_np[
+                        n_frames_counter : n_frames_counter + n_frames_curr
+                    ] = confidence
+                    if return_heatmaps:
+                        heatmaps_np[
+                            n_frames_counter : n_frames_counter + n_frames_curr
+                        ] = outputs
+                    
+            else: # we're doing context, so filling in inds differently (first two and last two frames are invalid.)
+                kp_list.append(pred_keypoints)
+                conf_list.append(confidence)
+        if do_context:
+            # stack and fill it in, not touching the first two and last two frames, for which we have no context.
+            kp_arr = np.vstack(kp_list)
+            conf_arr = np.vstack(conf_list)
+            assert(keypoints_np.shape[0] == kp_arr.shape[0] + 4)
+            keypoints_np[2:-2, :] = kp_arr
+            confidence_np[2:-2, :] = conf_arr
+            heatmaps_np = np.zeros((3,3)) # hack, can take care of that later
+
 
             n_frames_counter += n_frames_curr
         t_end = time.time()
@@ -474,23 +498,6 @@ def make_pred_arr_undo_resize(
     predictions[:, 2::3] = confidence_np
 
     return predictions
-
-
-@typechecked
-def get_videos_in_dir(video_dir: str) -> List[str]:
-    # gather videos to process
-    # TODO: check if you're give a path to a single video?
-    pretty_print_str(string="Looking inside %s..." % video_dir)
-    assert os.path.isdir(video_dir)
-    all_files = [os.path.join(video_dir, f) for f in os.listdir(video_dir)]
-    video_files = []
-    for f in all_files:
-        if f.endswith(".mp4"):
-            video_files.append(f)
-    if len(video_files) == 0:
-        raise IOError("Did not find any video files (.mp4) in %s" % video_dir)
-    return video_files
-
 
 @typechecked
 def get_csv_file(cfg: DictConfig) -> str:
