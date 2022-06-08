@@ -72,13 +72,13 @@ def test_dali_wrapper(cfg, video_list):
         # just check a single batch
         break
 
-def test_video_prediction_class(video_list):
-    from lightning_pose.data.datamodules import VideoPredictionMixin
+def test_PrepareDALI(video_list):
+    from lightning_pose.data.dali import PrepareDALI
     import os
     filenames = video_list
     assert os.path.isfile(filenames[0])
     # base model: check we can build and run pipe and get a decent looking batch
-    vid_pred_class = VideoPredictionMixin(train_stage="predict", model_type="base", filenames=filenames)
+    vid_pred_class = PrepareDALI(train_stage="predict", model_type="base", filenames=filenames)
     pipe = vid_pred_class._get_dali_pipe()
     # can we build pipe?
     pipe.build()
@@ -87,9 +87,20 @@ def test_video_prediction_class(video_list):
     sequences_out = pipe_out[0].as_cpu().as_array()
     # note: the 1 is there when we run pipe, but not when we obtain it through our lightning wrapper
     assert sequences_out.shape == (1, 16, 3, 256, 256)
+    
+    # starting it over since pipe_run grabs batches
+    vid_pred_class = PrepareDALI(train_stage="predict", model_type="base", filenames=filenames)
+    loader = vid_pred_class()
+    num_iters = vid_pred_class.num_iters
+    frame_count = vid_pred_class.frame_count
+
+    # always sequence length of 16. because sequence length never changes in DALI. batches can be chopped but not sequences. 
+    for i, batch in enumerate(loader):
+        assert batch.shape == (16, 3, 256, 256)
+    assert(i == num_iters-1) # we have the right number of batches drawn
 
     # context model, different looking batch and shapes 
-    vid_pred_class = VideoPredictionMixin(train_stage="predict", model_type="context", filenames=filenames)
+    vid_pred_class = PrepareDALI(train_stage="predict", model_type="context", filenames=filenames)
     pipe = vid_pred_class._get_dali_pipe()
     # can we build pipe?
     pipe.build()
@@ -98,21 +109,40 @@ def test_video_prediction_class(video_list):
     sequences_out = pipe_out[0].as_cpu().as_array()
     assert sequences_out.shape == (4,5, 3, 256, 256)
 
-    vid_pred_class = VideoPredictionMixin(train_stage="predict", model_type="context", filenames=filenames)
+    vid_pred_class = PrepareDALI(train_stage="predict", model_type="context", filenames=filenames)
     loader = vid_pred_class()
+
+    num_iters = vid_pred_class.num_iters
+    frame_count = vid_pred_class.frame_count
+
+    # this one assumes we're gonna have only two images in the last batch. this is a specific property of this video and the context.
+    for i, batch in enumerate(loader):
+        if i < num_iters-1:
+            assert batch.shape == (4, 5, 3, 256, 256)
+        elif i == num_iters-1:
+            assert batch.shape == (2, 5, 3, 256, 256)
+    assert(i == num_iters-1)
+
+    # now on the final batch, check that we're actually grabing 5-frame sequences
+    # assert that frame 1 in batch[0] is frame 0 in batch[1]
+    assert torch.allclose(batch[0][1], batch[1][0])
+
+    # last sequence of 5 frames, with a step=1, means that only the 0th image is an actual image. the rest is padding. so image 1 and -1 are identical.
+    assert torch.allclose(batch[1][1], batch[1][-1])
+    
     # how many batches?
 
-    from lightning_pose.data.utils import count_frames
-    import numpy as np
-    batch_size = 4 # TODO: cuurently hard-coded at the datamodules
-    frame_count = count_frames(filenames[0])
-    # assuming step=1
-    # "how many times should we enumerate the data loader?""
-    num_iters = int(np.ceil(frame_count / batch_size))
+    # from lightning_pose.data.utils import count_frames
+    # import numpy as np
+    # batch_size = 4 # TODO: cuurently hard-coded at the datamodules
+    # frame_count = count_frames(filenames[0])
+    # # assuming step=1
+    # # "how many times should we enumerate the data loader?""
+    # num_iters = int(np.ceil(frame_count / batch_size))
 
-    for i, batch in enumerate(loader):
-        if i < num_iters:
-            assert batch.shape == (4, 5, 3, 256, 256)
-        elif i == num_iters:
-            assert batch.shape == (2, 5, 3, 256, 256)
-    assert(i == num_iters)
+    # for i, batch in enumerate(loader):
+    #     if i < num_iters:
+    #         assert batch.shape == (4, 5, 3, 256, 256)
+    #     elif i == num_iters:
+    #         assert batch.shape == (2, 5, 3, 256, 256)
+    # assert(i == num_iters)

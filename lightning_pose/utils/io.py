@@ -3,7 +3,9 @@
 from omegaconf import DictConfig, OmegaConf, ListConfig
 import os
 from typeguard import typechecked
-from typing import Any, Tuple, Union
+from typing import Any, List, Tuple, Union
+
+#from lightning_pose.utils.scripts import pretty_print_str
 
 
 @typechecked
@@ -123,6 +125,70 @@ def return_absolute_data_paths(data_cfg: DictConfig) -> Tuple[str, str]:
     assert os.path.isdir(video_dir) or os.path.isfile(video_dir)
     return data_dir, video_dir
 
+
+@typechecked
+def get_videos_in_dir(video_dir: str) -> List[str]:
+    # gather videos to process
+    # TODO: check if you're give a path to a single video?
+    #pretty_print_str(string="Looking inside %s..." % video_dir)
+    assert os.path.isdir(video_dir)
+    all_files = [os.path.join(video_dir, f) for f in os.listdir(video_dir)]
+    video_files = []
+    for f in all_files:
+        if f.endswith(".mp4"):
+            video_files.append(f)
+    if len(video_files) == 0:
+        raise IOError("Did not find any video files (.mp4) in %s" % video_dir)
+    return video_files
+    # another version that worked -- glob.glob looks elegant. consider reintroducing.
+    #  # get input data
+    #     if isinstance(self.video_paths_list, list):
+    #         # presumably a list of files
+    #         filenames = self.video_paths_list
+    #     elif isinstance(self.video_paths_list, str) and os.path.isfile(
+    #         self.video_paths_list
+    #     ):
+    #         # single video file
+    #         filenames = self.video_paths_list
+    #     elif isinstance(self.video_paths_list, str) and os.path.isdir(
+    #         self.video_paths_list
+    #     ):
+    #         # directory of videos
+    #         import glob
+
+    #         extensions = ["mp4"]  # allowed file extensions
+    #         filenames = []
+    #         for extension in extensions:
+    #             filenames.extend(
+    #                 glob.glob(os.path.join(self.video_paths_list, "*.%s" % extension))
+    #             )
+    #     else:
+    #         raise ValueError(
+    #             "`video_paths_list` must be a list of files, a single file, "
+    #             + "or a directory name"
+    #         )
+
+def check_video_paths(video_paths: Union[List[str], str]) -> None:
+    # get input data
+    if isinstance(video_paths, list):
+        # presumably a list of files
+        filenames = video_paths
+    elif isinstance(video_paths, str) and os.path.isfile(
+        video_paths
+    ):
+        # single video file
+        filenames = video_paths
+    elif isinstance(video_paths, str) and os.path.isdir(
+        video_paths
+    ):
+        # directory of videos
+        filenames = get_videos_in_dir(video_paths)
+    else:
+        raise ValueError(
+            "`video_paths_list` must be a list of files, a single file, "
+            + "or a directory name"
+        )
+    return filenames
 
 # --------------------------------------------------------------------------------------
 # Path handling for predictions on new videos

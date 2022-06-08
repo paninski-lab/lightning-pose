@@ -8,8 +8,9 @@ from torch.utils.data import DataLoader, random_split
 from typeguard import typechecked
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
-from lightning_pose.data.dali import ContextLightningWrapper, LitDaliWrapper, video_pipe, LightningWrapper
+from lightning_pose.data.dali import PrepareDALI, LitDaliWrapper
 from lightning_pose.data.utils import split_sizes_from_probabilities
+from lightning_pose.utils.io import check_video_paths
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -135,10 +136,6 @@ class BaseDataModule(pl.LightningDataModule):
         """ this will depend on context flag in dataset"""
         pass
 
-    def predict_dataloader(self) -> Union[LightningWrapper, ContextLightningWrapper]:
-        """Returns a data loader for prediction. uses the pipes defined above."""
-        pass
-
     def train_dataloader(self):
         return DataLoader(
             self.train_dataset,
@@ -240,64 +237,65 @@ class UnlabeledDataModule(BaseDataModule):
         self.setup_unlabeled()
 
     def setup_unlabeled(self):
-
-        from lightning_pose.data.utils import count_frames
-
+        """Sets up the unlabeled data loader."""
         # get input data
-        if isinstance(self.video_paths_list, list):
-            # presumably a list of files
-            filenames = self.video_paths_list
-        elif isinstance(self.video_paths_list, str) and os.path.isfile(
-            self.video_paths_list
-        ):
-            # single video file
-            filenames = self.video_paths_list
-        elif isinstance(self.video_paths_list, str) and os.path.isdir(
-            self.video_paths_list
-        ):
-            # directory of videos
-            import glob
+        filenames = check_video_paths(self.video_paths_list)
+        # dali prep
+        # TODO: circle back to DALI params if needed.
+        dali_prep = PrepareDALI(train_stage="train", model_type=self.dataset.do_context, filenames=self.video_paths_list, dali_params=None)
 
-            extensions = ["mp4"]  # allowed file extensions
-            filenames = []
-            for extension in extensions:
-                filenames.extend(
-                    glob.glob(os.path.join(self.video_paths_list, "*.%s" % extension))
-                )
-        else:
-            raise ValueError(
-                "`video_paths_list` must be a list of files, a single file, "
-                + "or a directory name"
-            )
+        self.unlabeled_dataloader = dali_prep()
+        # # get input data
+        # if isinstance(self.video_paths_list, list):
+        #     # presumably a list of files
+        #     filenames = self.video_paths_list
+        # elif isinstance(self.video_paths_list, str) and os.path.isfile(
+        #     self.video_paths_list
+        # ):
+        #     # single video file
+        #     filenames = self.video_paths_list
+        # elif isinstance(self.video_paths_list, str) and os.path.isdir(
+        #     self.video_paths_list
+        # ):
+        #     # directory of videos
+        #     import glob
 
-        data_pipe = video_pipe(
-            filenames=filenames,
-            resize_dims=[self.dataset.height, self.dataset.width],
-            random_shuffle=True,
-            seed=self.dali_seed,
-            sequence_length=self.unlabeled_sequence_length,
-            batch_size=self.unlabeled_batch_size,
-            num_threads=self.num_workers_for_unlabeled,
-            device_id=self.device_id,
-        )
+        #     extensions = ["mp4"]  # allowed file extensions
+        #     filenames = []
+        #     for extension in extensions:
+        #         filenames.extend(
+        #             glob.glob(os.path.join(self.video_paths_list, "*.%s" % extension))
+        #         )
+        # else:
+        #     raise ValueError(
+        #         "`video_paths_list` must be a list of files, a single file, "
+        #         + "or a directory name"
+        #     )
 
-        # compute number of batches
-        total_frames = count_frames(filenames)  # sum across vids
-        num_batches = int(
-            total_frames // self.unlabeled_sequence_length
-        )  # assuming batch_size==1
+        # data_pipe = video_pipe(
+        #     filenames=filenames,
+        #     resize_dims=[self.dataset.height, self.dataset.width],
+        #     random_shuffle=True,
+        #     seed=self.dali_seed,
+        #     sequence_length=self.unlabeled_sequence_length,
+        #     batch_size=self.unlabeled_batch_size,
+        #     num_threads=self.num_workers_for_unlabeled,
+        #     device_id=self.device_id,
+        # )
 
-        self.unlabeled_dataloader = LightningWrapper(
-            data_pipe,
-            output_map=["x"],
-            last_batch_policy=LastBatchPolicy.PARTIAL,
-            auto_reset=True,  # TODO: auto reset on each epoch - is this random?
-            num_batches=num_batches,
-        )
-    
-    def setup_video_prediction(self):
-        # TODO: implement this
-        pass
+        # # compute number of batches
+        # total_frames = count_frames(filenames)  # sum across vids
+        # num_batches = int(
+        #     total_frames // self.unlabeled_sequence_length
+        # )  # assuming batch_size==1
+
+        # self.unlabeled_dataloader = LightningWrapper(
+        #     data_pipe,
+        #     output_map=["x"],
+        #     last_batch_policy=LastBatchPolicy.PARTIAL,
+        #     auto_reset=True,  # TODO: auto reset on each epoch - is this random?
+        #     num_batches=num_batches,
+        # )
 
     def train_dataloader(self):
         loader = {
@@ -318,148 +316,3 @@ class UnlabeledDataModule(BaseDataModule):
             batch_size=self.test_batch_size,
             num_workers=self.num_workers_for_labeled,
         )
-
-# @typechecked
-class VideoPredictionMixin(object):
-    
-    """
-    Mixin class for video prediction.
-    TODO: make sure the order of args when you mix is valid.
-    needs to know about context
-    TODO: consider changing LightningWrapper args from num_batches to num_iter
-    Big picture: this will initialize the pipes and dataloaders which will be called only in Trainer.predict().
-    Another option -- make this valid for Trainer.train() as well, so the unlabeled stuff will be initialized here.
-    Thoughts: define a dict with args for pipe and data loader, per condition.
-    """
-    def __init__(self, train_stage: Literal["predict", "train"], model_type: Literal["base", "context"], filenames: List[str], dali_params: Optional[dict] = None):
-        self.train_stage = train_stage
-        self.model_type = model_type
-        self.dali_params = dali_params
-        self._pipe_dict = self._setup_pipe_dict(filenames)
-    
-    def _setup_pipe_dict(self, filenames: List[str]) -> Dict[str, dict]:
-        """all of the pipe() args in one place"""
-        dict_args = {}
-        dict_args["predict"] = {"context": None, "base": None}
-        dict_args["train"] = {"context": None, "base": None}
-        
-        # base (vanilla model), predict pipe args 
-        dict_args["predict"]["base"] = {"filenames": filenames, "resize_dims": [256, 256], 
-        "sequence_length": 16, "step": 16, "batch_size": 1, 
-        "seed": 123456, "num_threads": 4, "device_id": 0, 
-        "random_shuffle": False, "device": "gpu", "name": "reader", 
-        "pad_sequences": True}
-
-        # context (five-frame) model, predict pipe args
-        dict_args["predict"]["context"] = {"filenames": filenames, "resize_dims": [256, 256], 
-        "sequence_length": 5, "step": 1, "batch_size": 4, 
-        "num_threads": 4, 
-        "device_id": 0, "random_shuffle": False, 
-        "device": "gpu", "name": "reader", "seed": 123456,
-        "pad_sequences": True, "pad_last_batch": True}
-
-        # TODO: "train" is missing.
-        
-        return dict_args
-    
-    def _get_dali_pipe(self):
-        """
-        Return a DALI pipe with predefined args.
-        """
-        if self.train_stage == "train":
-            raise NotImplementedError("train_stage is not implemented yet")
-
-        pipe_args = self._pipe_dict[self.train_stage][self.model_type]
-        pipe = video_pipe(**pipe_args)
-        return pipe
-    
-    def _setup_dali_iterator_args(self) -> LitDaliWrapper:
-        """ builds args for Lightning iterator"""
-        dict_args = {}
-        dict_args["predict"] = {"context": None, "base": None}
-        dict_args["train"] = {"context": None, "base": None}
-        # TODO: fix num_iters arg
-        dict_args["predict"]["base"] = {"num_iters": 1, "do_context": False, "output_map": ["x"], "last_batch_policy": LastBatchPolicy.FILL, "last_batch_padded": False, "auto_reset": False, "reader_name": "reader"}
-        
-        dict_args["predict"]["context"] = {"num_iters": 1, "do_context": True, "output_map": ["x"], "last_batch_policy": LastBatchPolicy.PARTIAL, "last_batch_padded": False, "auto_reset": False, "reader_name": "reader"}
-
-        # TODO: add train
-
-        return dict_args
-    
-    def __call__(self) -> LitDaliWrapper:
-        """
-        Returns a LightningWrapper object.
-        """
-        pipe = self._get_dali_pipe()
-        args = self._setup_dali_iterator_args()
-        return LitDaliWrapper(pipe, **args[self.train_stage][self.model_type])
-    
-
-
-
-    
-    # def _setup_dali_args(self):
-    #     """ sets up basic args for DALI. necessary for pipe"""
-    #     # TODO: control from config
-    #     self.resize_dims = [256, 256]
-    #     if self.do_context == False:
-    #         self.sequence_length = 16
-    #         self.batch_size = 1
-    #         self.step = 16
-    #         self.num_threads = 4
-    #         self.device_id = 0            
-        
-    #     elif self.do_context == True:
-    #         self.sequence_length = 5
-    #         self.batch_size = 4
-    #         self.step = 1
-    #         self.num_threads = 4
-    #         self.device_id = 0
-    
-    # @staticmethod
-    # def calculate_num_iters(filename: str) -> int:
-    #     # TODO: fill with actual computation
-    #     return 8
-    
-    # def setup_video_prediction(self, video: str):
-    #     """call it after you've initialized a datamodule and want to bring in new vids"""
-    #     self.num_iters = self.calculate_num_iters(video)
-    #     self.pipe = None # have to build video_pipe based on args
-    #     self.num_iters = None
-    #     pass
-
-    # def predict_dataloader(self):
-    #     return self.get_data_loader()
-
-    # def get_data_loader(self) -> Union[LightningWrapper, ContextLightningWrapper]:
-    #     if self.do_context == False:
-    #         predict_loader = LitDaliWrapper(
-    #         self.pipe,
-    #         num_iters = self.num_iters, # added for testing, so we can have it in predict loader.
-    #         do_context = self.do_context,
-    #         output_map=["x"],
-    #         last_batch_policy=LastBatchPolicy.FILL,
-    #         last_batch_padded=False,
-    #         auto_reset=False,
-    #         reader_name="reader",
-    #     )
-    #     else:
-    #         predict_loader = LitDaliWrapper(
-    #         self.pipe,
-    #         num_iters = self.num_iters, # this is necessary to make the dataloader work with this policy and configs. this number should be right.
-    #         do_context = self.do_context,
-    #         output_map=["x"],
-    #         last_batch_policy=LastBatchPolicy.PARTIAL, # was fill
-    #         last_batch_padded=False, # could work without it too.
-    #         auto_reset=False,
-    #         reader_name="reader",
-    #     )
-    #     return predict_loader
-
-    # def __call__(self, filename: str):
-    #     """ returns a dataloader """
-    #     self._setup_dali_args() # depends on whether you're doing context or not.
-    #     self.setup_video_prediction(filename)
-    #     return self.get_data_loader()
-        
