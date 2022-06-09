@@ -19,7 +19,6 @@ The general flow of each loss class is as follows:
 
 """
 
-from geomloss import SamplesLoss
 from kornia.losses import js_div_loss_2d, kl_div_loss_2d
 from omegaconf import ListConfig
 import pytorch_lightning as pl
