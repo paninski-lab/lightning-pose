@@ -23,7 +23,7 @@ As you would do for any other repository --
 Create a conda environment:
 
 ```console 
-foo@bar:~$ conda create --name <YOUR_ENVIRONMENT_NAME>
+foo@bar:~$ conda create --name <YOUR_ENVIRONMENT_NAME> python=3.8
 ```
 
 and activate it:
