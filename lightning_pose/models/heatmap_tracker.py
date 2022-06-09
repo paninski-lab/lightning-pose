@@ -23,11 +23,10 @@ from lightning_pose.models.base import (
 
 patch_typeguard()  # use before @typechecked
 
-
+@typechecked
 class HeatmapTracker(BaseSupervisedTracker):
     """Base model that produces heatmaps of keypoints from images."""
 
-    @typechecked
     def __init__(
         self,
         num_keypoints: int,
@@ -97,14 +96,13 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.save_hyperparameters(ignore="loss_factory")  # cannot be pickled
 
     @property
-    def num_filters_for_upsampling(self):
+    def num_filters_for_upsampling(self) -> int:
         return self.num_fc_input_features
 
     @property
-    def coordinate_scale(self):
+    def coordinate_scale(self) -> TensorType[(), int]:
         return torch.tensor(2**self.downsample_factor, device=self.device)
 
-    @typechecked
     def run_subpixelmaxima(
         self,
         heatmaps: TensorType[
@@ -135,7 +133,6 @@ class HeatmapTracker(BaseSupervisedTracker):
         confidences = torch.amax(softmaxes, dim=(2, 3))
         return preds.reshape(-1, self.num_targets), confidences
 
-    @typechecked
     def initialize_upsampling_layers(self) -> None:
         """Intialize the Conv2DTranspose upsampling layers."""
         # TODO: test that running this method changes the weights and biases
@@ -148,7 +145,6 @@ class HeatmapTracker(BaseSupervisedTracker):
                     torch.nn.init.constant_(layer.weight, 1.0)
                     torch.nn.init.constant_(layer.bias, 0.0)
 
-    @typechecked
     def make_upsampling_layers(self) -> torch.nn.Sequential:
         # Note:
         # https://github.com/jgraving/DeepPoseKit/blob/
@@ -176,7 +172,6 @@ class HeatmapTracker(BaseSupervisedTracker):
         return nn.Sequential(*upsampling_layers)
 
     @staticmethod
-    @typechecked
     def create_double_upsampling_layer(
         in_channels: int,
         out_channels: int,
@@ -191,7 +186,6 @@ class HeatmapTracker(BaseSupervisedTracker):
             output_padding=(1, 1),
         )
 
-    @typechecked
     def heatmaps_from_representations(
         self,
         representations: TensorType["batch", "features", "rep_height", "rep_width"],
@@ -199,18 +193,15 @@ class HeatmapTracker(BaseSupervisedTracker):
         """Wrapper around self.upsampling_layers for type and shape assertion."""
         return self.upsampling_layers(representations)
 
-    @typechecked
     def forward(
         self,
         images: Union[
             TensorType["batch", "channels":3, "image_height", "image_width"],
             TensorType["batch", "frames", "channels":3, "image_height", "image_width"],
-        ],
-        do_context: bool,
-    ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
+        ]) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Forward pass through the network."""
-        representations = self.get_representations(images, do_context)
-        if do_context:
+        representations = self.get_representations(images, self.do_context)
+        if self.do_context:
             representations: TensorType[
                 "batch", "features", "rep_height", "rep_width", 1
             ] = self.representation_fc(representations)
@@ -221,13 +212,11 @@ class HeatmapTracker(BaseSupervisedTracker):
         # softmax temp stays 1 here; to modify for model predictions, see constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
 
-    @typechecked
     def get_loss_inputs_labeled(self, batch_dict: HeatmapBatchDict) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
         predicted_heatmaps = self.forward(
-            batch_dict["images"], do_context=self.do_context
-        )
+            batch_dict["images"])
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
         return {
@@ -238,23 +227,21 @@ class HeatmapTracker(BaseSupervisedTracker):
             "confidences": confidence,
         }
     
-    @typechecked
     def predict_step(self, batch: Any, batch_idx: int) -> Any:
         """Predict heatmaps and keypoints for a batch of video frames.
         assuming a DALI video loader is passed in 
         trainer = Trainer(devices=8, accelerator="gpu")
         predictions = trainer.predict(model, data_loader) """
         # images -> heatmaps
-        predicted_heatmaps = self.forward(batch, do_context=self.do_context)
+        predicted_heatmaps = self.forward(batch)
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
         return (predicted_keypoints, confidence)
 
-
+@typechecked
 class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
     """Model produces heatmaps of keypoints from labeled/unlabeled images."""
 
-    @typechecked
     def __init__(
         self,
         num_keypoints: int,
@@ -311,7 +298,6 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         # this attribute will be modified by AnnealWeight callback during training
         self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
 
-    @typechecked
     def get_loss_inputs_unlabeled(
         self,
         batch: Union[TensorType[
@@ -322,9 +308,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
     ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
-        predicted_heatmaps = self.forward(
-            batch, do_context=False
-        )  # temporarily do_context=False
+        predicted_heatmaps = self.forward(batch)
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
         return {

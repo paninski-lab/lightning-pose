@@ -142,7 +142,7 @@ class ContextLightningWrapper(DALIGenericIterator):
 class LitDaliWrapper(DALIGenericIterator):
     """wrapper around a DALI pipeline to get batches for ptl."""
 
-    def __init__(self, *kargs, eval_mode: Literal["train", "predict"], num_iters: int = 1, do_context: bool = False, **kwargs):
+    def __init__(self, *kargs, eval_mode: Literal["train", "predict"], num_iters: int = 1, do_context: bool = False, context_sequences_successive: bool = False, **kwargs):
         """ wrapper around DALIGenericIterator to get batches for pl.
         Args: 
             num_iters: number of enumerations of dataloader (should be computed outside for now; should be fixed by lightning/dali teams)
@@ -152,6 +152,7 @@ class LitDaliWrapper(DALIGenericIterator):
         self.num_iters = num_iters
         self.do_context = do_context
         self.eval_mode = eval_mode
+        self.context_sequences_successive = context_sequences_successive
 
         # call parent
         super().__init__(*kargs, **kwargs)
@@ -171,13 +172,14 @@ class LitDaliWrapper(DALIGenericIterator):
             if self.eval_mode == "predict":
                 return out[0]["x"]
             else: # train with context. pipeline is like for "base" model. but we reshape images. assume batch_size=1
-                raw_out = torch.tensor(
-                out[0]["x"][0, :, :, :, :],  # should be (sequence_length, 3, H, W)
-                dtype=torch.float)
-                # reshape to (5, 3, H, W)
-                return get_context_from_seq(img_seq=raw_out, context_length=5)
-
-        # TODO: support training with context, by reshaping a sequence.
+                if self.context_sequences_successive:
+                    raw_out = torch.tensor(
+                    out[0]["x"][0, :, :, :, :],  # should be (sequence_length, 3, H, W)
+                    dtype=torch.float)
+                    # reshape to (5, 3, H, W)
+                    return get_context_from_seq(img_seq=raw_out, context_length=5)
+                else: # grabbing independent 5-frame sequences
+                    return out[0]["x"]
 
     def __next__(self):
         out = super().__next__()
@@ -186,7 +188,7 @@ class LitDaliWrapper(DALIGenericIterator):
 def get_context_from_seq(
     img_seq: TensorType["sequence_length", 3, "image_height", "image_width"],
     context_length: int,
-) -> TensorType["sequence_length", "context_length", 3, "image_height", "image_width"]:
+) -> TensorType["sequence_length", "context_length", "rgb": 3, "image_height", "image_width"]:
     pass
     # our goal is to extract 5-frame sequences from this sequence
     img_shape = img_seq.shape[1:] # e.g., (3, H, W)
@@ -217,12 +219,13 @@ class PrepareDALI(object):
     Another option -- make this valid for Trainer.train() as well, so the unlabeled stuff will be initialized here.
     Thoughts: define a dict with args for pipe and data loader, per condition.
     """
-    def __init__(self, train_stage: Literal["predict", "train"], model_type: Literal["base", "context"], filenames: List[str], dali_params: Optional[dict] = None):
+    def __init__(self, train_stage: Literal["predict", "train"], model_type: Literal["base", "context"], filenames: List[str], context_sequences_successive: bool = False, dali_params: Optional[dict] = None):
         self.train_stage = train_stage
         self.model_type = model_type
         self.dali_params = dali_params
         self.filenames = filenames
         self.frame_count = count_frames(self.filenames)
+        self.context_sequences_successive = context_sequences_successive
         self._pipe_dict: dict = self._setup_pipe_dict(self.filenames)
 
     @property
@@ -230,13 +233,17 @@ class PrepareDALI(object):
         # count frames
         # "how many times should we enumerate the data loader?""
           # sum across vids
+        pipe_dict = self._pipe_dict[self.train_stage][self.model_type]
         if self.model_type == "base":
-            return int(np.ceil(self.frame_count / (self._pipe_dict[self.train_stage][self.model_type]["sequence_length"])))
+            return int(np.ceil(self.frame_count / (pipe_dict["sequence_length"])))
         elif self.model_type == "context":
-            # assuming step=1
-            return int(np.ceil(self.frame_count / (self._pipe_dict[self.train_stage][self.model_type]["batch_size"])))
-        # calculate (two different ways, depending on context)
-        # return num_iters
+            if pipe_dict["step"] == 1: # context_sequences_successive
+                return int(np.ceil(self.frame_count / (pipe_dict["batch_size"])))
+            elif pipe_dict["step"] == pipe_dict["sequence_length"]: # context_sequences_successive = False
+                # taking the floor because during training we don't care about missing the last non-full batch. we prefer having fewer batches but valid.
+                return int(np.floor(self.frame_count / (pipe_dict["batch_size"] * pipe_dict["sequence_length"])))
+            else:
+                raise NotImplementedError
     
     def _setup_pipe_dict(self, filenames: List[str]) -> Dict[str, dict]:
         """all of the pipe() args in one place"""
@@ -267,11 +274,21 @@ class PrepareDALI(object):
         "device": "gpu", "name": "reader", "seed": 123456,
         "pad_sequences": True, "pad_last_batch": True}
 
-        # train pipe args 
-        dict_args["train"]["context"] = {"filenames": filenames, "resize_dims": [256, 256], 
-        "sequence_length": 8, "step": 8, "batch_size": 1, 
-        "seed": 123456, "num_threads": 4, "device_id": 0, 
-        "random_shuffle": True, "device": "gpu"}
+        # train pipe args
+        if self.context_sequences_successive:
+            # grab a sequence of 8 frames and reshape it internally (sequence length will effectively be multiplied by 5)
+            dict_args["train"]["context"] = {"filenames": filenames, "resize_dims": [256, 256], 
+            "sequence_length": 8, "step": 8, "batch_size": 1, 
+            "seed": 123456, "num_threads": 4, "device_id": 0, 
+            "random_shuffle": True, "device": "gpu"}
+        else:
+            dict_args["train"]["context"] = {"filenames": filenames, "resize_dims": [256, 256], 
+            "sequence_length": 5, "step": 5, "batch_size": 8, 
+            "num_threads": 4, 
+            "device_id": 0, "random_shuffle": True, 
+            "device": "gpu", "name": "reader", "seed": 123456,
+            "pad_sequences": True, "pad_last_batch": False}
+            # our floor above should prevent us from getting to the very final batch.
         
         return dict_args
     
