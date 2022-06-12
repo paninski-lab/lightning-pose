@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from lightning_pose.callbacks.callbacks import AnnealWeight
-from lightning_pose.utils.io import return_absolute_data_paths
+from lightning_pose.utils.io import check_video_paths, return_absolute_data_paths, return_absolute_path
 from lightning_pose.utils.predictions import predict_dataset, make_pred_arr_undo_resize, get_csv_file, get_keypoint_names
 from lightning_pose.utils.scripts import (
     get_data_module,
@@ -17,6 +17,7 @@ from lightning_pose.utils.scripts import (
     get_imgaug_transform,
     get_loss_factories,
     get_model,
+    pretty_print_str,
 )
 from lightning_pose.data.utils import count_frames
 # attempting to predict a video here
@@ -122,7 +123,7 @@ def train(cfg: DictConfig):
     trainer.fit(model=model, datamodule=data_module)
 
     # ----------------------------------------------------------------------------------
-    # Post-training cleanup
+    # Post-training analysis
     # ----------------------------------------------------------------------------------
     hydra_output_directory = os.getcwd()
     print("Hydra output directory: {}".format(hydra_output_directory))
@@ -133,7 +134,11 @@ def train(cfg: DictConfig):
         raise FileNotFoundError(
             "Cannot find model checkpoint. Have you trained for too few epochs?"
         )
+    
+    # ----------------------------------------------------------------------------------
     # predict full dataloader
+    # ----------------------------------------------------------------------------------
+    pretty_print_str("Predicting train/val/test images...")
     labeled_preds = trainer.predict(model=model, dataloaders=data_module.full_labeled_dataloader(), ckpt_path=best_ckpt, return_predictions=True)
     
     pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
@@ -141,44 +146,23 @@ def train(cfg: DictConfig):
     # call this instance on a single vid's preds
     labeled_preds_df = pred_handler(preds=labeled_preds)
 
-    # TODO: verify that the above works, then save and check how that looks
     labeled_preds_df.to_csv(os.path.join(hydra_output_directory, "predictions.csv"))
-
-
-    a = 6
-    b = 7
-    # hydra_output_directory = os.getcwd()
-    # print("Hydra output directory: {}".format(hydra_output_directory))
-    # model_ckpt = trainer.checkpoint_callback.best_model_path
-    # model_ckpt_abs = os.path.abspath(model_ckpt)
-    # print("Best model path: {}".format(model_ckpt_abs))
-    # if not os.path.isfile(model_ckpt_abs):
-    #     raise FileNotFoundError(
-    #         "Cannot find model checkpoint. Have you trained for too few epochs?"
-    #     )
-    # # export predictions on train/val/test data to a csv saved in model directory
-    # if cfg.training.get("save_heatmaps", True):
-    #     heatmap_file = os.path.join(hydra_output_directory, "heatmaps.h5")
-    # else:
-    #     heatmap_file = None
-    # predict_dataset(
-    #     cfg=cfg,
-    #     data_module=data_module,
-    #     ckpt_file=model_ckpt,
-    #     preds_file=os.path.join(hydra_output_directory, "predictions.csv"),
-    #     heatmap_file=heatmap_file,
-    # )
     
-    # TODO: loop over filenames. decide how to constrain that.
+    # ----------------------------------------------------------------------------------
+    # predict folder of videos
+    # ----------------------------------------------------------------------------------
     # get dali loader for video, eval network on it, save preds.
-    filenames = ["/home/jovyan/dali-seq-testing/test_vid.mp4", "/home/jovyan/dali-seq-testing/test_vid_with_fr.mp4"]
+    # cfg.eval.test_videos_directory holds videos to predict.
+    filenames = check_video_paths(return_absolute_path(cfg.eval.test_videos_directory))
+    pretty_print_str("Found {} videos to predict on (in cfg.eval.test_videos_directory)".format(len(filenames)))
 
     for video_file in filenames:
         assert os.path.isfile(video_file)
+        pretty_print_str("Predicting video: {}...".format(video_file))
         # base model: check we can build and run pipe and get a decent looking batch
         model_type = "context" if cfg.model.do_context else "base"
         # initialize
-        vid_pred_class = PrepareDALI(train_stage="predict", model_type=model_type, filenames=[video_file], resize_dims=[dataset.height, dataset.width])
+        vid_pred_class = PrepareDALI(train_stage="predict", model_type=model_type, dali_config=data_module.dali_config, filenames=[video_file], resize_dims=[dataset.height, dataset.width])
         # get loader
         predict_loader = vid_pred_class()
         # predict 
@@ -190,184 +174,18 @@ def train(cfg: DictConfig):
         # save the predictions to a csv
         # e.g.,: '/home/jovyan/dali-seq-testing/test_vid_with_fr.mp4' -> 'test_vid_with_fr.csv'
         base_vid_name_for_save = os.path.basename(video_file).split('.')[0]
-        video_dir = os.path.join(hydra_output_directory, 'video_preds')
+        video_pred_dir = os.path.join(hydra_output_directory, 'video_preds')
         # create directory if it doesn't exist
-        os.makedirs(video_dir, exist_ok=True)
-        preds_df.to_csv(os.path.join(video_dir, "{}.csv".format(base_vid_name_for_save)))
-
-    # # TODO: generate a video
-    # # TODO: evaluate the network on everything in the video_dir, and make videos.
+        os.makedirs(video_pred_dir, exist_ok=True)
+        preds_df.to_csv(os.path.join(video_pred_dir, "{}.csv".format(base_vid_name_for_save)))
+        
+        # TODO: generate a video if cfg.eval.save_video is True
+        # use create_labeled_videos() func.
+        if cfg.eval.save_vids_after_training:
+            pretty_print_str("Generating video...")
+            # do here the video generation
     
-    
-    # # build a video loader and predict dataset
-    # # build video loader/pipeline. this is identical for context/non-context, given the right batch sizes and sequence lengths.
-    # # batch_size = 1
-    # # sequence_length = cfg.eval.dali_parameters.sequence_length
-    # # step = 1
-    # # video_file = os.path.join(video_dir, "test.mp4") # just for now .
-
-    # # pipe = video_pipe(
-    # #     filenames=[video_file],
-    # #     resize_dims=(
-    # #         cfg.data.image_resize_dims.height,
-    # #         cfg.data.image_resize_dims.width,
-    # #     ),
-    # #     batch_size=batch_size,
-    # #     sequence_length=sequence_length,
-    # #     step=step,
-    # #     random_shuffle=False,
-    # #     device= "gpu", #device_dict["device_dali"],
-    # #     name="reader",
-    # #     pad_sequences=True, # TODO: be aware of that
-    # #     num_threads=2,
-    # #     device_id=0,
-    # #     #**video_pipe_kwargs
-    # # )
-
-    # # # build dataloader
-    # # # each data loader returns
-    # # do_context = False # TODO: make this a parameter from eval
-    # # if do_context:
-    # #     predict_loader = ContextLightningWrapper(
-    # #         pipe,
-    # #         output_map=["x"],
-    # #         last_batch_policy=LastBatchPolicy.PARTIAL,
-    # #         auto_reset=False,  # TODO: I removed the auto_reset, but I don't know if it's needed. Think we'll loop over the dataset without resetting.
-    # #         # num_batches=num_batches, # TODO: works also if num_batches = int
-    # #     ) # TODO: there are other args in predict_loader that we don't have here. check if it's fine.
-    # # else:
-    # #     predict_loader = LightningWrapper(
-    # #         pipe,
-    # #         output_map=["x"],
-    # #         last_batch_policy=LastBatchPolicy.FILL,
-    # #         last_batch_padded=False,
-    # #         auto_reset=False,
-    # #         reader_name="reader",
-    # #     )
-    
-    # if cfg.model.do_context == False:
-    
-    #     # TODO: all of this is just for testing. should ideally go to setup of predict_dataloader.
-    #     # should be called with video arguments, like video_dir. 
-    #     # this allows flexibility to load datamodule and add new vids to it. 
-    #     # need to make sure this all depends on context condition. 
-    #     filenames = ["/home/jovyan/dali-seq-testing/test_vid_with_fr.mp4"]
-    #     resize_dims = [256, 256]
-    #     sequence_length = 16
-    #     batch_size = 1
-    #     step = 16 # to proceed to frame 16 after reading frames 0-15
-    #     seed = 123456
-    #     num_threads = 4
-    #     device_id = 0
-
-    #     from lightning_pose.data.utils import count_frames
-    #     frame_count = count_frames(filenames[0])
-    #     num_batches_simple = int(np.ceil(frame_count / sequence_length)) # what matt had before. so we can add the num_batches and predict properly. 
-
-    #     pipe = video_pipe(
-    #             resize_dims=resize_dims,
-    #             batch_size=batch_size,
-    #             sequence_length=sequence_length,
-    #             step=step,
-    #             filenames=filenames,
-    #             random_shuffle=False,
-    #             device="gpu",
-    #             name="reader",
-    #             pad_sequences=True,
-    #             num_threads=num_threads,
-    #             device_id=device_id,
-    #         )
-
-    #     predict_loader = LightningWrapper(
-    #         pipe,
-    #         output_map=["x"],
-    #         last_batch_policy=LastBatchPolicy.FILL,
-    #         last_batch_padded=False,
-    #         auto_reset=False,
-    #         reader_name="reader",
-    #         num_batches = num_batches_simple, # added for testing, so we can have it in predict loader.
-    #     )
-
-    #     # TODO: call the VideoPrediction class, get the predict_loader.
-        
-    #     # TODO: consider adding more vids and covering that case. or loop over one vid at a time. 
-    #     # now do the prediction. this treats a single vid for now.
-    #     preds = trainer.predict(model=model, ckpt_path=model_ckpt_abs, dataloaders=predict_loader, return_predictions=True)
-        
-    #     # initialize prediction handler class, can process multiple vids with a shared cfg and data_module
-    #     pred_handler = PredictionHandler(cfg=cfg, data_module=data_module)
-        
-    #     # call this instance on a single vid's preds
-    #     # TODO: potentially loop over files in a directory here
-    #     preds_df = pred_handler(video_file=filenames[0], preds=preds)
-        
-    #     # save the predictions to a csv
-    #     # e.g.,: '/home/jovyan/dali-seq-testing/test_vid_with_fr.mp4' -> 'test_vid_with_fr'
-    #     base_vid_name_for_save = os.path.basename(filenames[0]).split('.')[0]
-    #     preds_df.to_csv(os.path.join(hydra_output_directory, "preds_{}.csv".format(base_vid_name_for_save)))
-    
-    # else: # we do context 
-    #     filenames = ["/home/jovyan/dali-seq-testing/test_vid_with_fr.mp4"]
-    #     resize_dims = [256, 256]
-    #     sequence_length = 5 # hard coded for context
-    #     batch_size = 4
-    #     step = 1 
-    #     seed = 123456
-    #     num_threads = 4
-    #     device_id = 0
-
-    #     from lightning_pose.data.utils import count_frames
-    #     frame_count = count_frames(filenames[0])
-    #     # assuming step=1
-    #     # "how many times should we enumerate the data loader?""
-    #     num_batches = int(np.ceil(frame_count / batch_size))
-
-    #     pipe = video_pipe(
-    #             resize_dims=resize_dims,
-    #             batch_size=batch_size,
-    #             sequence_length=sequence_length,
-    #             step=step,
-    #             filenames=filenames,
-    #             random_shuffle=False,
-    #             device="gpu",
-    #             name="reader",
-    #             pad_sequences=True,
-    #             num_threads=num_threads,
-    #             device_id=device_id,
-    #             pad_last_batch=True,
-    #         )
-
-    #     predict_loader = ContextLightningWrapper(
-    #         pipe,
-    #         output_map=["x"],
-    #         last_batch_policy=LastBatchPolicy.PARTIAL, # was fill
-    #         last_batch_padded=False, # could work without it too.
-    #         auto_reset=False,
-    #         reader_name="reader",
-    #         num_batches = num_batches, # this is necessary to make the dataloader work with this policy and configs. this number should be right.
-    #     )
-
-    #     preds = trainer.predict(model=model, ckpt_path=model_ckpt_abs, dataloaders=predict_loader, return_predictions=True)
-        
-    #     # TODO: needs to be handled.
-
-        
-    #     num_frames = [pred[0].shape[0] for pred in preds]
-    #     print("num_frames: {}".format(np.array(num_frames).sum()))
-    #     total_num_frames = np.array(num_frames).sum()
-    #     assert(total_num_frames == frame_count)
-
-    #     # initialize prediction handler class, can process multiple vids with a shared cfg and data_module
-    #     pred_handler = PredictionHandler(cfg=cfg, data_module=data_module)
-        
-    #     # call this instance on a single vid's preds
-    #     preds_df = pred_handler(video_file=filenames[0], preds=preds)
-        
-    #     # save the predictions to a csv
-    #     # e.g.,: '/home/jovyan/dali-seq-testing/test_vid_with_fr.mp4' -> 'test_vid_with_fr'
-    #     base_vid_name_for_save = os.path.basename(filenames[0]).split('.')[0]
-    #     preds_df.to_csv(os.path.join(hydra_output_directory, "preds_{}.csv".format(base_vid_name_for_save)))
-    #     a= 6
+    # ----------------------------------------------------------------------------------
 
 
 def pretty_print(cfg):
