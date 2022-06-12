@@ -4,16 +4,27 @@ from omegaconf import DictConfig
 import numpy as np
 import os
 import pandas as pd
-from typing import List, Tuple
+from typing import List, Tuple, Union
 from torchtyping import TensorType
 from lightning_pose.data.utils import count_frames
 import pytorch_lightning as pl
 
 
 class PredictionHandler:
-    def __init__(self, cfg: DictConfig, data_module: pl.LightningDataModule) -> None:
+    def __init__(self, cfg: DictConfig, data_module: pl.LightningDataModule, video_file: Union[str, None]) -> None:
         self.cfg = cfg
         self.data_module = data_module
+        self.video_file = video_file
+        if video_file is not None:
+            assert os.path.isfile(video_file)
+    
+    @property
+    def frame_count(self) -> int:
+        """Returns the number of frames in the video or the labeled dataset"""
+        if self.video_file is not None:
+            return count_frames(self.video_file)
+        else:
+            return len(self.data_module.dataset)
     
     @property
     def keypoint_names(self):
@@ -23,7 +34,7 @@ class PredictionHandler:
     def do_context(self):
         return self.data_module.dataset.do_context
 
-    def unpack_preds(self, preds: List[Tuple[TensorType["batch", "two_times_num_keypoints"], TensorType["batch", "num_keypoints"]]], frame_count: int) -> Tuple[TensorType["num_frames", "two_times_num_keypoints"], TensorType["num_frames", "num_keypoints"]]:
+    def unpack_preds(self, preds: List[Tuple[TensorType["batch", "two_times_num_keypoints"], TensorType["batch", "num_keypoints"]]]) -> Tuple[TensorType["num_frames", "two_times_num_keypoints"], TensorType["num_frames", "num_keypoints"]]:
         """ unpack list of preds coming out from pl.trainer.predict, confs tuples into tensors.
         It still returns unnecessary final rows, which should be discarded at the dataframe stage.
         This works for the output of predict_loader, suitable for batch_size=1, sequence_length=16, step=16"""
@@ -31,21 +42,19 @@ class PredictionHandler:
         # loop over the batches, and stack 
         stacked_preds = torch.vstack([pred[0] for pred in preds])
         stacked_confs = torch.vstack([pred[1] for pred in preds])
-        # eliminate last rows
-        # this is true just for the case of e.g., batch_size=1, sequence_length=16, step=sequence_length
-        # the context dataloader just doesn't include those extra frames.
-        # should be == 0 for the context model. it discards unnecessary batches.
-        if self.do_context == False:
-            # in this dataloader, the last sequence has a few extra frames.
-            num_rows_to_discard = stacked_preds.shape[0] - frame_count
-            if num_rows_to_discard > 0:
-                stacked_preds = stacked_preds[:-num_rows_to_discard]
-                stacked_confs = stacked_confs[:-num_rows_to_discard]
-        
-        if self.do_context == True:
-            # fix shifts in the context model
-            stacked_preds = self.fix_context_preds_confs(stacked_preds)
-            stacked_confs = self.fix_context_preds_confs(stacked_confs, is_confidence=True)
+
+        if self.video_file is not None: # dealing with dali loaders
+            if self.do_context == False:
+                # in this dataloader, the last sequence has a few extra frames.
+                num_rows_to_discard = stacked_preds.shape[0] - self.frame_count
+                if num_rows_to_discard > 0:
+                    stacked_preds = stacked_preds[:-num_rows_to_discard]
+                    stacked_confs = stacked_confs[:-num_rows_to_discard]
+            
+            if self.do_context == True:
+                # fix shifts in the context model
+                stacked_preds = self.fix_context_preds_confs(stacked_preds)
+                stacked_confs = self.fix_context_preds_confs(stacked_confs, is_confidence=True)
 
         return stacked_preds, stacked_confs
     
@@ -113,7 +122,22 @@ class PredictionHandler:
         )
         return pdindex
     
-    def __call__(self, video_file: str, preds: List[Tuple[TensorType["batch", "two_times_num_keypoints"], TensorType["batch", "num_keypoints"]]])-> pd.DataFrame:
+    def add_split_indices_to_df(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add split indices to the dataframe.
+        """
+        df["set"] = np.array(["unused"] * df.shape[0])
+        
+        dataset_split_indices = {
+        "train": self.data_module.train_dataset.indices,
+        "validation": self.data_module.val_dataset.indices,
+        "test": self.data_module.test_dataset.indices}
+        
+        for key, val in dataset_split_indices.items():
+            df.loc[val, "set"] = np.repeat(key, len(val))
+        return df
+
+    
+    def __call__(self, preds: List[Tuple[TensorType["batch", "two_times_num_keypoints"], TensorType["batch", "num_keypoints"]]])-> pd.DataFrame:
         """
         Call this function to get a pandas dataframe of the predictions for a single video.
         Assuming you've already run trainer.predict(), and have a list of Tuple predictions.
@@ -123,9 +147,11 @@ class PredictionHandler:
         Returns:
             pd.DataFrame: index is (frame, bodypart, x, y, likelihood)
         """
-        frame_count = count_frames(video_file)
-        stacked_preds, stacked_confs = self.unpack_preds(preds=preds, frame_count=frame_count)
+        stacked_preds, stacked_confs = self.unpack_preds(preds=preds)
         pred_arr = self.make_pred_arr_undo_resize(stacked_preds.numpy(), stacked_confs.numpy())
         pdindex = self.make_dlc_pandas_index()
         df = pd.DataFrame(pred_arr, columns=pdindex)
+        if self.video_file is None:
+            # specify which image is train/test/val/unused
+            df = self.add_split_indices_to_df(df)
         return df

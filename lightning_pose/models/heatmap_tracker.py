@@ -227,13 +227,17 @@ class HeatmapTracker(BaseSupervisedTracker):
             "confidences": confidence,
         }
     
-    def predict_step(self, batch: Any, batch_idx: int) -> Any:
+    def predict_step(self, batch: Union[HeatmapBatchDict,  TensorType["batch", "channels":3, "image_height", "image_width"],  TensorType["batch", "frames", "channels":3, "image_height", "image_width"]], batch_idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
         """Predict heatmaps and keypoints for a batch of video frames.
         assuming a DALI video loader is passed in 
         trainer = Trainer(devices=8, accelerator="gpu")
         predictions = trainer.predict(model, data_loader) """
+        if isinstance(batch, dict): # labeled image dataloaders
+            images = batch["images"]
+        else: # unlabeled dali video dataloaders
+            images = batch
         # images -> heatmaps
-        predicted_heatmaps = self.forward(batch)
+        predicted_heatmaps = self.forward(images)
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
         return (predicted_keypoints, confidence)

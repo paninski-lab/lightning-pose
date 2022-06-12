@@ -2,6 +2,7 @@
 
 from nvidia.dali.plugin.pytorch import LastBatchPolicy
 import os
+from omegaconf import DictConfig
 import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader, random_split
@@ -136,7 +137,7 @@ class BaseDataModule(pl.LightningDataModule):
         """ this will depend on context flag in dataset"""
         pass
 
-    def train_dataloader(self):
+    def train_dataloader(self) -> torch.utils.data.DataLoader:
         return DataLoader(
             self.train_dataset,
             batch_size=self.train_batch_size,
@@ -144,7 +145,7 @@ class BaseDataModule(pl.LightningDataModule):
             persistent_workers=True,
         )
 
-    def val_dataloader(self):
+    def val_dataloader(self) -> torch.utils.data.DataLoader:
         return DataLoader(
             self.val_dataset,
             batch_size=self.val_batch_size,
@@ -152,11 +153,19 @@ class BaseDataModule(pl.LightningDataModule):
             persistent_workers=True,
         )
 
-    def test_dataloader(self):
+    def test_dataloader(self) -> torch.utils.data.DataLoader:
         return DataLoader(
             self.test_dataset,
             batch_size=self.test_batch_size,
             num_workers=self.num_workers,
+        )
+    
+    def full_labeled_dataloader(self) -> torch.utils.data.DataLoader:
+        return DataLoader(
+            self.dataset,
+            batch_size=self.val_batch_size,
+            num_workers=self.num_workers,
+            shuffle=False,
         )
 
 
@@ -167,6 +176,7 @@ class UnlabeledDataModule(BaseDataModule):
         self,
         dataset: torch.utils.data.Dataset,
         video_paths_list: Union[List[str], str],
+        dali_config: Union[dict, DictConfig],
         use_deterministic: bool = False,
         train_batch_size: int = 16,
         val_batch_size: int = 16,
@@ -233,6 +243,7 @@ class UnlabeledDataModule(BaseDataModule):
         self.dali_seed = dali_seed
         self.torch_seed = torch_seed
         self.device_id = device_id
+        self.dali_config = dali_config
         self.unlabeled_dataloader = None  # initialized in setup_unlabeled
         super().setup()
         self.setup_unlabeled()
@@ -240,10 +251,10 @@ class UnlabeledDataModule(BaseDataModule):
     def setup_unlabeled(self):
         """Sets up the unlabeled data loader."""
         # dali prep
-        # TODO: circle back to DALI params if needed.
+        # TODO: currently not controlling context_frames_successive. internally it is set to False.
         dali_prep = PrepareDALI(train_stage="train", 
             model_type= "context" if self.dataset.do_context else "base", 
-            filenames=self.filenames, dali_params=None)
+            filenames=self.filenames, resize_dims=[self.dataset.height, self.dataset.width], dali_config=self.dali_config)
 
         self.unlabeled_dataloader = dali_prep()
         # # get input data
