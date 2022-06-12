@@ -7,6 +7,7 @@ from nvidia.dali.pipeline import Pipeline
 from nvidia.dali.plugin.pytorch import LastBatchPolicy
 from nvidia.dali.plugin.pytorch import DALIGenericIterator
 import nvidia.dali.types as types
+from omegaconf import DictConfig
 import torch
 import numpy as np
 from typeguard import typechecked
@@ -219,10 +220,11 @@ class PrepareDALI(object):
     Another option -- make this valid for Trainer.train() as well, so the unlabeled stuff will be initialized here.
     Thoughts: define a dict with args for pipe and data loader, per condition.
     """
-    def __init__(self, train_stage: Literal["predict", "train"], model_type: Literal["base", "context"], filenames: List[str], context_sequences_successive: bool = False, dali_params: Optional[dict] = None):
+    def __init__(self, train_stage: Literal["predict", "train"], model_type: Literal["base", "context"], filenames: List[str], resize_dims: List[int], context_sequences_successive: bool = False, dali_config: Union[dict, DictConfig] = None):
         self.train_stage = train_stage
         self.model_type = model_type
-        self.dali_params = dali_params
+        self.resize_dims = resize_dims
+        self.dali_config = dali_config
         self.filenames = filenames
         self.frame_count = count_frames(self.filenames)
         self.context_sequences_successive = context_sequences_successive
@@ -250,43 +252,50 @@ class PrepareDALI(object):
         dict_args = {}
         dict_args["predict"] = {"context": None, "base": None}
         dict_args["train"] = {"context": None, "base": None}
+        gen_cfg = self.dali_config["general"]
         
         # base (vanilla single-frame model), 
-        # train pipe args 
-        dict_args["train"]["base"] = {"filenames": filenames, "resize_dims": [256, 256], 
-        "sequence_length": 16, "step": 16, "batch_size": 1, 
-        "seed": 123456, "num_threads": 4, "device_id": 0, 
-        "random_shuffle": True, "device": "gpu"}
+        # train pipe args
+        base_train_cfg = self.dali_config["base"]["train"]
+        dict_args["train"]["base"] = {"filenames": filenames, "resize_dims": self.resize_dims, 
+        "sequence_length": base_train_cfg["sequence_length"], "step": base_train_cfg["sequence_length"], "batch_size": 1, 
+        "seed": gen_cfg["seed"], "num_threads": gen_cfg["num_threads"], "device_id": gen_cfg["device_id"], 
+        "random_shuffle": True, "device": gen_cfg["device"]}
 
         # base (vanilla model), predict pipe args 
-        dict_args["predict"]["base"] = {"filenames": filenames, "resize_dims": [256, 256], 
-        "sequence_length": 16, "step": 16, "batch_size": 1, 
-        "seed": 123456, "num_threads": 4, "device_id": 0, 
-        "random_shuffle": False, "device": "gpu", "name": "reader", 
+        base_pred_cfg = self.dali_config["base"]["predict"]
+        dict_args["predict"]["base"] = {"filenames": filenames, "resize_dims": self.resize_dims, 
+        "sequence_length": base_pred_cfg["sequence_length"], "step": base_pred_cfg["sequence_length"], "batch_size": 1, 
+        "seed": gen_cfg["seed"], "num_threads":  gen_cfg["num_threads"], "device_id": gen_cfg["device_id"], 
+        "random_shuffle": False, "device": gen_cfg["device"], "name": "reader", 
         "pad_sequences": True}
 
         # context (five-frame) model
         # predict pipe args
-        dict_args["predict"]["context"] = {"filenames": filenames, "resize_dims": [256, 256], 
-        "sequence_length": 5, "step": 1, "batch_size": 4, 
-        "num_threads": 4, 
-        "device_id": 0, "random_shuffle": False, 
-        "device": "gpu", "name": "reader", "seed": 123456,
+        context_pred_cfg = self.dali_config["context"]["predict"]
+        dict_args["predict"]["context"] = {"filenames": filenames, "resize_dims": self.resize_dims, 
+        "sequence_length": 5, "step": 1, "batch_size": context_pred_cfg["batch_size"], 
+        "num_threads": gen_cfg["num_threads"], 
+        "device_id": gen_cfg["device_id"], "random_shuffle": False, 
+        "device": gen_cfg["device"], "name": "reader", "seed": gen_cfg["seed"],
         "pad_sequences": True, "pad_last_batch": True}
 
         # train pipe args
+        context_train_cfg = self.dali_config["context"]["train"]
         if self.context_sequences_successive:
+            # TODO: not fully controllable from outside yet.
+            # need to implement reshaphing at the representation level to allow more flex.
             # grab a sequence of 8 frames and reshape it internally (sequence length will effectively be multiplied by 5)
-            dict_args["train"]["context"] = {"filenames": filenames, "resize_dims": [256, 256], 
+            dict_args["train"]["context"] = {"filenames": filenames, "resize_dims": self.resize_dims, 
             "sequence_length": 8, "step": 8, "batch_size": 1, 
-            "seed": 123456, "num_threads": 4, "device_id": 0, 
-            "random_shuffle": True, "device": "gpu"}
+            "seed": gen_cfg["seed"], "num_threads": gen_cfg["num_threads"], "device_id": gen_cfg["device_id"], 
+            "random_shuffle": True, "device": gen_cfg["device"]}
         else:
-            dict_args["train"]["context"] = {"filenames": filenames, "resize_dims": [256, 256], 
-            "sequence_length": 5, "step": 5, "batch_size": 8, 
-            "num_threads": 4, 
-            "device_id": 0, "random_shuffle": True, 
-            "device": "gpu", "name": "reader", "seed": 123456,
+            dict_args["train"]["context"] = {"filenames": filenames, "resize_dims": self.resize_dims, 
+            "sequence_length": 5, "step": 5, "batch_size": context_train_cfg["batch_size"], 
+            "num_threads": gen_cfg["num_threads"], 
+            "device_id": gen_cfg["device_id"], "random_shuffle": True, 
+            "device": gen_cfg["device"], "name": "reader", "seed": gen_cfg["seed"],
             "pad_sequences": True, "pad_last_batch": False}
             # our floor above should prevent us from getting to the very final batch.
         

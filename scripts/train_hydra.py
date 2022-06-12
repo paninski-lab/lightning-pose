@@ -124,28 +124,50 @@ def train(cfg: DictConfig):
     # ----------------------------------------------------------------------------------
     # Post-training cleanup
     # ----------------------------------------------------------------------------------
-
     hydra_output_directory = os.getcwd()
     print("Hydra output directory: {}".format(hydra_output_directory))
-    model_ckpt = trainer.checkpoint_callback.best_model_path
-    model_ckpt_abs = os.path.abspath(model_ckpt)
-    print("Best model path: {}".format(model_ckpt_abs))
-    if not os.path.isfile(model_ckpt_abs):
+    # get best ckpt
+    best_ckpt = os.path.abspath(trainer.checkpoint_callback.best_model_path)
+    # check if best_ckpt is a file 
+    if not os.path.isfile(best_ckpt):
         raise FileNotFoundError(
             "Cannot find model checkpoint. Have you trained for too few epochs?"
         )
-    # export predictions on train/val/test data to a csv saved in model directory
-    if cfg.training.get("save_heatmaps", True):
-        heatmap_file = os.path.join(hydra_output_directory, "heatmaps.h5")
-    else:
-        heatmap_file = None
-    predict_dataset(
-        cfg=cfg,
-        data_module=data_module,
-        ckpt_file=model_ckpt,
-        preds_file=os.path.join(hydra_output_directory, "predictions.csv"),
-        heatmap_file=heatmap_file,
-    )
+    # predict full dataloader
+    labeled_preds = trainer.predict(model=model, dataloaders=data_module.full_labeled_dataloader(), ckpt_path=best_ckpt, return_predictions=True)
+    
+    pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
+
+    # call this instance on a single vid's preds
+    labeled_preds_df = pred_handler(preds=labeled_preds)
+
+    # TODO: verify that the above works, then save and check how that looks
+    labeled_preds_df.to_csv(os.path.join(hydra_output_directory, "predictions.csv"))
+
+
+    a = 6
+    b = 7
+    # hydra_output_directory = os.getcwd()
+    # print("Hydra output directory: {}".format(hydra_output_directory))
+    # model_ckpt = trainer.checkpoint_callback.best_model_path
+    # model_ckpt_abs = os.path.abspath(model_ckpt)
+    # print("Best model path: {}".format(model_ckpt_abs))
+    # if not os.path.isfile(model_ckpt_abs):
+    #     raise FileNotFoundError(
+    #         "Cannot find model checkpoint. Have you trained for too few epochs?"
+    #     )
+    # # export predictions on train/val/test data to a csv saved in model directory
+    # if cfg.training.get("save_heatmaps", True):
+    #     heatmap_file = os.path.join(hydra_output_directory, "heatmaps.h5")
+    # else:
+    #     heatmap_file = None
+    # predict_dataset(
+    #     cfg=cfg,
+    #     data_module=data_module,
+    #     ckpt_file=model_ckpt,
+    #     preds_file=os.path.join(hydra_output_directory, "predictions.csv"),
+    #     heatmap_file=heatmap_file,
+    # )
     
     # TODO: loop over filenames. decide how to constrain that.
     # get dali loader for video, eval network on it, save preds.
@@ -156,15 +178,15 @@ def train(cfg: DictConfig):
         # base model: check we can build and run pipe and get a decent looking batch
         model_type = "context" if cfg.model.do_context else "base"
         # initialize
-        vid_pred_class = PrepareDALI(train_stage="predict", model_type=model_type, filenames=[video_file])
+        vid_pred_class = PrepareDALI(train_stage="predict", model_type=model_type, filenames=[video_file], resize_dims=[dataset.height, dataset.width])
         # get loader
         predict_loader = vid_pred_class()
         # predict 
-        preds = trainer.predict(model=model, ckpt_path=model_ckpt_abs, dataloaders=predict_loader, return_predictions=True)
+        preds = trainer.predict(model=model, ckpt_path=best_ckpt, dataloaders=predict_loader, return_predictions=True)
         # initialize prediction handler class, can process multiple vids with a shared cfg and data_module
-        pred_handler = PredictionHandler(cfg=cfg, data_module=data_module)
+        pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=video_file)
         # call this instance on a single vid's preds
-        preds_df = pred_handler(video_file=video_file, preds=preds)
+        preds_df = pred_handler(preds=preds)
         # save the predictions to a csv
         # e.g.,: '/home/jovyan/dali-seq-testing/test_vid_with_fr.mp4' -> 'test_vid_with_fr.csv'
         base_vid_name_for_save = os.path.basename(video_file).split('.')[0]
