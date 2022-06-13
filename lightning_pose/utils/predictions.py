@@ -7,7 +7,7 @@ import os
 import pandas as pd
 from pytorch_lightning.core.lightning import LightningModule
 from pytorch_lightning import LightningDataModule
-from skimage.draw import draw
+from skimage.draw import disk
 import time
 import torch
 from torch.utils.data import DataLoader
