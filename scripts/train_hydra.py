@@ -102,6 +102,23 @@ def train(cfg: DictConfig):
                 type(cfg.training.gpu_id)
             )
         )
+    # # calculate limit_train_batches
+    # if cfg.training.limit_train_batches is None:
+    #     if type(data_module.train_dataloader()) is torch.utils.data.DataLoader:
+    #         num_batches = len(data_module.train_dataloader())
+    #     elif type(data_module.train_dataloader()) is dict:
+    #         num_batches = len(data_module.train_dataloader["labeled"])
+    #     print(num_batches)
+    #     exit()
+    #     limit_train_batches = np.ceil(len(data_module.train_dataset) / cfg.training.train_batch_size)
+    #     limit_train_batches = np.max([limit_train_batches, 10]) # 10 is minimum
+    #     print("limit_train_batches: {}".format(limit_train_batches))
+    # else: 
+    #     limit_train_batches = cfg.training.limit_train_batches
+    limit_train_batches = cfg.training.limit_train_batches
+    print("limit_train_batches={}".format(limit_train_batches))
+    # cannot access the data_module because train_dataset hasn't been setup yet.
+    # set up trainer
     trainer = pl.Trainer(  # TODO: be careful with devices when scaling to multiple gpus
         gpus=gpus,
         max_epochs=cfg.training.max_epochs,
@@ -116,7 +133,7 @@ def train(cfg: DictConfig):
             anneal_weight_callback,
         ],
         logger=logger,
-        limit_train_batches=cfg.training.limit_train_batches,
+        limit_train_batches=limit_train_batches,
         accumulate_grad_batches=cfg.training.accumulate_grad_batches,
         multiple_trainloader_mode=cfg.training.multiple_trainloader_mode,
         profiler=cfg.training.profiler,
