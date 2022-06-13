@@ -5,8 +5,6 @@ import os
 from typeguard import typechecked
 from typing import Any, List, Tuple, Union
 
-#from lightning_pose.utils.scripts import pretty_print_str
-
 
 @typechecked
 def ckpt_path_from_base_path(
@@ -80,7 +78,6 @@ def check_if_semi_supervised(
 # --------------------------------------------------------------------------------------
 # Path handling functions for running toy dataset
 # --------------------------------------------------------------------------------------
-
 
 @typechecked
 def return_absolute_path(possibly_relative_path: str, n_dirs_back=3) -> str:
@@ -168,19 +165,17 @@ def get_videos_in_dir(video_dir: str) -> List[str]:
     #             + "or a directory name"
     #         )
 
-def check_video_paths(video_paths: Union[List[str], str]) -> None:
+
+@typechecked
+def check_video_paths(video_paths: Union[List[str], str]) -> list:
     # get input data
     if isinstance(video_paths, list):
         # presumably a list of files
         filenames = video_paths
-    elif isinstance(video_paths, str) and os.path.isfile(
-        video_paths
-    ):
+    elif isinstance(video_paths, str) and os.path.isfile(video_paths):
         # single video file
         filenames = video_paths
-    elif isinstance(video_paths, str) and os.path.isdir(
-        video_paths
-    ):
+    elif isinstance(video_paths, str) and os.path.isdir(video_paths):
         # directory of videos
         filenames = get_videos_in_dir(video_paths)
     else:
@@ -190,10 +185,10 @@ def check_video_paths(video_paths: Union[List[str], str]) -> None:
         )
     return filenames
 
+
 # --------------------------------------------------------------------------------------
 # Path handling for predictions on new videos
 # --------------------------------------------------------------------------------------
-
 
 @typechecked
 class VideoPredPathHandler:
