@@ -154,7 +154,7 @@ class LitDaliWrapper(DALIGenericIterator):
         self.do_context = do_context
         self.eval_mode = eval_mode
         self.context_sequences_successive = context_sequences_successive
-
+        self.batch_sampler = 1 # hack to get around DALI-ptl issue
         # call parent
         super().__init__(*kargs, **kwargs)
 
