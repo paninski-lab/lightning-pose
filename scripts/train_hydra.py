@@ -185,8 +185,9 @@ def train(cfg: DictConfig):
         if cfg.eval.save_vids_after_training:
             pretty_print_str("Generating video...")
             # TODO: wrap inside a func
-            os.makedirs(os.path.join(video_pred_dir, 'labeled_videos'), exist_ok=True)
-            video_file_labeled = base_vid_name_for_save + '_labeled.mp4'
+            labeled_vid_dir = os.path.join(video_pred_dir, 'labeled_videos')
+            os.makedirs(labeled_vid_dir, exist_ok=True)
+            video_file_labeled = os.path.join(labeled_vid_dir, base_vid_name_for_save + '_labeled.mp4')
             video_clip = VideoFileClip(video_file)
             
             # transform df to numpy array
