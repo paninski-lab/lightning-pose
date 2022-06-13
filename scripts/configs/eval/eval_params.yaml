@@ -15,6 +15,7 @@ fiftyone:
   # whether to launch the app from the script (True), or from ipython (and have finer control over the outputs)
   launch_app_from_script: False
 
+  remote: True # for LAI, must be False
   address: 127.0.0.1 # ip to launch the app on.
   port: 5151 # port to launch the app on.
 
@@ -27,6 +28,9 @@ test_videos_directory: "toy_datasets/toymouseRunningData/unlabeled_videos"
 
 # str with an absolute path to directory in which you want to save .csv with predictions
 saved_vid_preds_dir: "toy_datasets/toymouseRunningData"
+
+# create labeled video from each video in test_videos_directory
+create_labeled_video: true
 
 # params for loading images from the video using nvidia-dali
 # TODO: remove, we're stopping to use this argument.

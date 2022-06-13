@@ -1,11 +1,13 @@
 """Functions for predicting keypoints on labeled datasets and unlabeled videos."""
 
+import matplotlib.pyplot as plt
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
 import os
 import pandas as pd
 from pytorch_lightning.core.lightning import LightningModule
 from pytorch_lightning import LightningDataModule
+from skimage.draw import circle
 import time
 import torch
 from torch.utils.data import DataLoader
@@ -634,3 +636,84 @@ def save_heatmaps(heatmaps_np: np.ndarray, save_file: str) -> None:
     assert save_file.endswith(".h5") or save_file.endswith(".hdf5")
     with h5py.File(save_file, "w") as hf:
         hf.create_dataset("heatmaps", data=heatmaps_np)
+
+
+def make_cmap(number_colors, cmap="cool"):
+    color_class = plt.cm.ScalarMappable(cmap=cmap)
+    C = color_class.to_rgba(np.linspace(0, 1, number_colors))
+    colors = (C[:, :3] * 255).astype(np.uint8)
+    return colors
+
+
+def create_labeled_video(
+        clip, xs_arr, ys_arr, mask_array=None, dotsize=5, colormap="cool", fps=None,
+        add_frame_idx=True, filename="movie.mp4"):
+    """Helper function for creating annotated videos.
+
+    Parameters
+    ----------
+    clip : moviepy.editor.VideoFileClip
+    xs_arr : np.ndarray
+        shape T x n_joints
+    ys_arr : np.ndarray
+        shape T x n_joints
+    mask_array : np.ndarray, boolean, optional
+        shape T x n_joints, same as df_x and df_y; any timepoints/joints with a False
+        entry will not be plotted
+    dotsize : int
+        size of marker dot on labeled video
+    colormap : str
+        matplotlib color map for markers
+    fps : float, optional
+        None to default to fps of original video
+    add_frame_idx : bool, optional
+        put frame index in upper left corner
+    filename : str, optional
+        video file name
+
+    """
+
+    if mask_array is None:
+        mask_array = ~np.isnan(xs_arr)
+
+    n_frames, n_keypoints = xs_arr.shape
+
+    # Set colormap for each color
+    colors = make_cmap(n_keypoints, cmap=colormap)
+
+    nx, ny = clip.size
+    duration = int(clip.duration - clip.start)
+    fps_og = clip.fps
+
+    print(
+        "Duration of video [s]: {}, recorded with {} fps!".format(
+            np.round(duration, 2), np.round(fps_og, 2)))
+
+    # add marker to each frame t, where t is in sec
+    def add_marker(get_frame, t):
+        image = get_frame(t * 1.0)
+        # frame [ny x ny x 3]
+        frame = image.copy()
+        # convert from sec to indices
+        index = int(np.round(t * 1.0 * fps_og))
+        for bpindex in range(n_keypoints):
+            if index >= n_frames:
+                print('Skipped frame {}, marker {}'.format(index, bpindex))
+                continue
+            if mask_array[index, bpindex]:
+                xc = min(int(xs_arr[index, bpindex]), nx - 1)
+                yc = min(int(ys_arr[index, bpindex]), ny - 1)
+                # rr, cc = circle_perimeter(yc, xc, dotsize, shape=(ny, nx))
+                rr, cc = circle(yc, xc, dotsize, shape=(ny, nx))
+                frame[rr, cc, :] = colors[bpindex]
+        return frame
+
+    clip_marked = clip.fl(add_marker)
+    clip_marked.write_videofile(
+        filename,
+        codec="libx264",
+        fps=fps_og if fps is None else fps
+    )
+    clip_marked.close()
+
+    return
