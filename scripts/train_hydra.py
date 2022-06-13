@@ -171,8 +171,14 @@ def train(cfg: DictConfig):
     # ----------------------------------------------------------------------------------
     # get dali loader for video, eval network on it, save preds.
     # cfg.eval.test_videos_directory holds videos to predict.
-    filenames = check_video_paths(return_absolute_path(cfg.eval.test_videos_directory))
-    pretty_print_str("Found {} videos to predict on (in cfg.eval.test_videos_directory)".format(len(filenames)))
+    if cfg.eval.test_videos_directory is None:
+        filenames = []
+    else:
+        filenames = check_video_paths(return_absolute_path(
+            cfg.eval.test_videos_directory))
+        pretty_print_str(
+            "Found {} videos to predict on (in cfg.eval.test_videos_directory)".format(
+                len(filenames)))
 
     for video_file in filenames:
         assert os.path.isfile(video_file)
