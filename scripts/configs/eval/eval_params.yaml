@@ -25,6 +25,7 @@ fiftyone:
 
 # str with an absolute path to a directory containing videos for prediction.
 # (it's not absolute just for the toy example)
+# set to null to skip automatic video prediction from train_hydra.py script
 test_videos_directory: "toy_datasets/toymouseRunningData/unlabeled_videos"
 
 # str with an absolute path to directory in which you want to save .csv with predictions
@@ -34,7 +35,7 @@ saved_vid_preds_dir: "toy_datasets/toymouseRunningData"
 create_labeled_video: true
 
 # confidence threshold for plotting a vid
-confidence_thresh_for_vid: 0.5
+confidence_thresh_for_vid: 0.05
 
 # params for loading images from the video using nvidia-dali
 # TODO: remove, we're stopping to use this argument.
