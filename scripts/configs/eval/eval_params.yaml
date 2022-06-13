@@ -1,6 +1,7 @@
 # paths to the hydra config files in the output folder, OR absolute paths to such folders.
 hydra_paths: ["2021-12-15/04-11-43/"]
 
+# TODO: decide which arg stays and which doesn't (create_labeled_video)
 save_vids_after_training: True
 
 fiftyone:
@@ -31,6 +32,9 @@ saved_vid_preds_dir: "toy_datasets/toymouseRunningData"
 
 # create labeled video from each video in test_videos_directory
 create_labeled_video: true
+
+# confidence threshold for plotting a vid
+confidence_thresh_for_vid: 0.5
 
 # params for loading images from the video using nvidia-dali
 # TODO: remove, we're stopping to use this argument.
