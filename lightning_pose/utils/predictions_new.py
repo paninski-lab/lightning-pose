@@ -34,7 +34,14 @@ class PredictionHandler:
     def do_context(self):
         return self.data_module.dataset.do_context
 
-    def unpack_preds(self, preds: List[Tuple[TensorType["batch", "two_times_num_keypoints"], TensorType["batch", "num_keypoints"]]]) -> Tuple[TensorType["num_frames", "two_times_num_keypoints"], TensorType["num_frames", "num_keypoints"]]:
+    def unpack_preds(
+        self,
+        preds: List[Tuple[TensorType["batch", "two_times_num_keypoints"],
+                          TensorType["batch", "num_keypoints"]]]
+    ) -> Tuple[
+            TensorType["num_frames", "two_times_num_keypoints"],
+            TensorType["num_frames", "num_keypoints"]
+    ]:
         """ unpack list of preds coming out from pl.trainer.predict, confs tuples into tensors.
         It still returns unnecessary final rows, which should be discarded at the dataframe stage.
         This works for the output of predict_loader, suitable for batch_size=1, sequence_length=16, step=16"""
@@ -78,7 +85,7 @@ class PredictionHandler:
             preds_combined[-2:, :] = 0.0
         
         return preds_combined
-    
+
     def make_pred_arr_undo_resize(
         self,
         keypoints_np: np.array,
@@ -136,8 +143,11 @@ class PredictionHandler:
             df.loc[val, "set"] = np.repeat(key, len(val))
         return df
 
-    
-    def __call__(self, preds: List[Tuple[TensorType["batch", "two_times_num_keypoints"], TensorType["batch", "num_keypoints"]]])-> pd.DataFrame:
+    def __call__(
+        self,
+        preds: List[Tuple[TensorType["batch", "two_times_num_keypoints"],
+                          TensorType["batch", "num_keypoints"]]]
+    )-> pd.DataFrame:
         """
         Call this function to get a pandas dataframe of the predictions for a single video.
         Assuming you've already run trainer.predict(), and have a list of Tuple predictions.
@@ -148,7 +158,8 @@ class PredictionHandler:
             pd.DataFrame: index is (frame, bodypart, x, y, likelihood)
         """
         stacked_preds, stacked_confs = self.unpack_preds(preds=preds)
-        pred_arr = self.make_pred_arr_undo_resize(stacked_preds.numpy(), stacked_confs.numpy())
+        pred_arr = self.make_pred_arr_undo_resize(
+            stacked_preds.cpu().numpy(), stacked_confs.cpu().numpy())
         pdindex = self.make_dlc_pandas_index()
         df = pd.DataFrame(pred_arr, columns=pdindex)
         if self.video_file is None:
