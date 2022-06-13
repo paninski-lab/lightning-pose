@@ -7,7 +7,7 @@ import os
 import pandas as pd
 from pytorch_lightning.core.lightning import LightningModule
 from pytorch_lightning import LightningDataModule
-from skimage.draw import circle
+from skimage.draw import draw
 import time
 import torch
 from torch.utils.data import DataLoader
@@ -632,7 +632,7 @@ def make_cmap(number_colors, cmap="cool"):
 
 def create_labeled_video(
         clip, xs_arr, ys_arr, mask_array=None, dotsize=5, colormap="cool", fps=None,
-        add_frame_idx=True, filename="movie.mp4"):
+        filename="movie.mp4"):
     """Helper function for creating annotated videos.
 
     Parameters
@@ -651,8 +651,6 @@ def create_labeled_video(
         matplotlib color map for markers
     fps : float, optional
         None to default to fps of original video
-    add_frame_idx : bool, optional
-        put frame index in upper left corner
     filename : str, optional
         video file name
 
@@ -688,8 +686,7 @@ def create_labeled_video(
             if mask_array[index, bpindex]:
                 xc = min(int(xs_arr[index, bpindex]), nx - 1)
                 yc = min(int(ys_arr[index, bpindex]), ny - 1)
-                # rr, cc = circle_perimeter(yc, xc, dotsize, shape=(ny, nx))
-                rr, cc = circle(yc, xc, dotsize, shape=(ny, nx))
+                rr, cc = disk(center=(yc, xc), radius=dotsize, shape=(ny, nx))
                 frame[rr, cc, :] = colors[bpindex]
         return frame
 
