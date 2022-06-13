@@ -27,6 +27,9 @@ test_videos_directory: "toy_datasets/toymouseRunningData/unlabeled_videos"
 # str with an absolute path to directory in which you want to save .csv with predictions
 saved_vid_preds_dir: "toy_datasets/toymouseRunningData"
 
+# create labeled video from each video in test_videos_directory
+create_labeled_video: true
+
 # params for loading images from the video using nvidia-dali
 dali_parameters:
   # how many frames to grab at once from the video
