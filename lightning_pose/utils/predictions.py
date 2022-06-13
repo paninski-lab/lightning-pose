@@ -372,10 +372,6 @@ def _predict_frames(
     keypoints_np = np.zeros((n_frames_, model.num_keypoints * 2))
     confidence_np = np.zeros((n_frames_, model.num_keypoints))
 
-    if do_context:
-        kp_list = []
-        conf_list = []
-        heatmap_list = []
     if return_heatmaps:
         heatmaps_np = np.zeros(
             (
@@ -401,7 +397,7 @@ def _predict_frames(
                     image = batch["images"].to("cuda:%i" % gpu_id)
             else:
                 image = batch  # predicting from video
-            outputs = model.forward(image, do_context=model.do_context)
+            outputs = model.forward(image)
             if cfg.model.model_type == "heatmap":
                 pred_keypoints, confidence = model.run_subpixelmaxima(outputs)
                 # send to cpu
@@ -412,39 +408,25 @@ def _predict_frames(
                 pred_keypoints = outputs.detach().cpu().numpy()
                 confidence = np.zeros((outputs.shape[0], outputs.shape[1] // 2))
             n_frames_curr = pred_keypoints.shape[0]
-            if do_context == False:
-                if n_frames_counter + n_frames_curr > n_frames_:
-                    # final sequence
-                    final_batch_size = n_frames_ - n_frames_counter
-                    keypoints_np[n_frames_counter:] = pred_keypoints[:final_batch_size]
-                    confidence_np[n_frames_counter:] = confidence[:final_batch_size]
-                    if return_heatmaps:
-                        heatmaps_np[n_frames_counter:] = outputs[:final_batch_size]
-                    n_frames_curr = final_batch_size
-                else:  # at every sequence except the final
-                    keypoints_np[
+            if n_frames_counter + n_frames_curr > n_frames_:
+                # final sequence
+                final_batch_size = n_frames_ - n_frames_counter
+                keypoints_np[n_frames_counter:] = pred_keypoints[:final_batch_size]
+                confidence_np[n_frames_counter:] = confidence[:final_batch_size]
+                if return_heatmaps:
+                    heatmaps_np[n_frames_counter:] = outputs[:final_batch_size]
+                n_frames_curr = final_batch_size
+            else:  # at every sequence except the final
+                keypoints_np[
+                    n_frames_counter : n_frames_counter + n_frames_curr
+                ] = pred_keypoints
+                confidence_np[
+                    n_frames_counter : n_frames_counter + n_frames_curr
+                ] = confidence
+                if return_heatmaps:
+                    heatmaps_np[
                         n_frames_counter : n_frames_counter + n_frames_curr
-                    ] = pred_keypoints
-                    confidence_np[
-                        n_frames_counter : n_frames_counter + n_frames_curr
-                    ] = confidence
-                    if return_heatmaps:
-                        heatmaps_np[
-                            n_frames_counter : n_frames_counter + n_frames_curr
-                        ] = outputs
-                    
-            else: # we're doing context, so filling in inds differently (first two and last two frames are invalid.)
-                kp_list.append(pred_keypoints)
-                conf_list.append(confidence)
-        if do_context:
-            # stack and fill it in, not touching the first two and last two frames, for which we have no context.
-            kp_arr = np.vstack(kp_list)
-            conf_arr = np.vstack(conf_list)
-            assert(keypoints_np.shape[0] == kp_arr.shape[0] + 4)
-            keypoints_np[2:-2, :] = kp_arr
-            confidence_np[2:-2, :] = conf_arr
-            heatmaps_np = np.zeros((3,3)) # hack, can take care of that later
-
+                    ] = outputs
 
             n_frames_counter += n_frames_curr
         t_end = time.time()
