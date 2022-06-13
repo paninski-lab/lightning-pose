@@ -7,10 +7,11 @@ import pytorch_lightning as pl
 import torch
 import numpy as np
 import pandas as pd
+from moviepy.editor import VideoFileClip
 
 from lightning_pose.callbacks.callbacks import AnnealWeight
 from lightning_pose.utils.io import check_video_paths, return_absolute_data_paths, return_absolute_path
-from lightning_pose.utils.predictions import predict_dataset, make_pred_arr_undo_resize, get_csv_file, get_keypoint_names
+from lightning_pose.utils.predictions import create_labeled_video, predict_dataset, make_pred_arr_undo_resize, get_csv_file, get_keypoint_names
 from lightning_pose.utils.scripts import (
     get_data_module,
     get_dataset,
@@ -183,7 +184,22 @@ def train(cfg: DictConfig):
         # use create_labeled_videos() func.
         if cfg.eval.save_vids_after_training:
             pretty_print_str("Generating video...")
+            # TODO: wrap inside a func
+            os.makedirs(os.path.join(video_pred_dir, 'labeled_videos'), exist_ok=True)
+            video_file_labeled = base_vid_name_for_save + '_labeled.mp4'
+            video_clip = VideoFileClip(video_file)
+            
+            # transform df to numpy array
+            keypoints_arr = np.reshape(
+                    preds_df.to_numpy(), [preds_df.shape[0], -1, 3])
+            xs_arr = keypoints_arr[:, :, 0]
+            ys_arr = keypoints_arr[:, :, 1]
+            mask_array = keypoints_arr[:, :, 2] > cfg.eval.confidence_thresh_for_vid
+
             # do here the video generation
+            create_labeled_video(
+                    clip=video_clip, xs_arr=xs_arr, ys_arr=ys_arr,
+                    mask_array=mask_array, filename=video_file_labeled)
     
     # ----------------------------------------------------------------------------------
 
