@@ -162,7 +162,7 @@ def train(cfg: DictConfig):
         # base model: check we can build and run pipe and get a decent looking batch
         model_type = "context" if cfg.model.do_context else "base"
         # initialize
-        vid_pred_class = PrepareDALI(train_stage="predict", model_type=model_type, dali_config=data_module.dali_config, filenames=[video_file], resize_dims=[dataset.height, dataset.width])
+        vid_pred_class = PrepareDALI(train_stage="predict", model_type=model_type, dali_config=cfg.dali, filenames=[video_file], resize_dims=[dataset.height, dataset.width])
         # get loader
         predict_loader = vid_pred_class()
         # predict 
