@@ -135,9 +135,10 @@ class PredictionHandler:
         df["set"] = np.array(["unused"] * df.shape[0])
         
         dataset_split_indices = {
-        "train": self.data_module.train_dataset.indices,
-        "validation": self.data_module.val_dataset.indices,
-        "test": self.data_module.test_dataset.indices}
+            "train": self.data_module.train_dataset.indices,
+            "validation": self.data_module.val_dataset.indices,
+            "test": self.data_module.test_dataset.indices
+        }
         
         for key, val in dataset_split_indices.items():
             df.loc[val, "set"] = np.repeat(key, len(val))
@@ -165,4 +166,6 @@ class PredictionHandler:
         if self.video_file is None:
             # specify which image is train/test/val/unused
             df = self.add_split_indices_to_df(df)
+            df.index = self.data_module.dataset.image_names
+
         return df
