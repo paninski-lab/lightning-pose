@@ -2,6 +2,7 @@
 
 from omegaconf import DictConfig, OmegaConf, ListConfig
 import os
+import pandas as pd
 from typeguard import typechecked
 from typing import Any, List, Tuple, Union
 
@@ -73,6 +74,23 @@ def check_if_semi_supervised(
     else:
         semi_supervised = True
     return semi_supervised
+
+
+def load_label_csv_from_cfg(cfg: Union[DictConfig, dict]) -> pd.DataFrame:
+    """Helper function for easy loading.
+
+    Args:
+        cfg: DictConfig
+
+    Returns:
+        pd.DataFrame
+    """
+
+    csv_file = os.path.join(cfg["data"]["data_dir"], cfg["data"]["csv_file"])
+    labels_df = pd.read_csv(
+        csv_file, header=list(cfg["data"]["header_rows"]), index_col=0
+    )
+    return labels_df
 
 
 # --------------------------------------------------------------------------------------
