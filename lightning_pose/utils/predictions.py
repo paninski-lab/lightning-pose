@@ -5,6 +5,7 @@ import numpy as np
 from omegaconf import DictConfig, OmegaConf
 import os
 import pandas as pd
+import pytorch_lightning as pl
 from pytorch_lightning.core.lightning import LightningModule
 from pytorch_lightning import LightningDataModule
 from skimage.draw import disk
@@ -18,11 +19,11 @@ from typing import Callable, Dict, List, Literal, Optional, Tuple, Type, Union
 
 from lightning_pose.data.dali import LightningWrapper, ContextLightningWrapper
 from lightning_pose.utils.io import check_if_semi_supervised
+from lightning_pose.utils.predictions_new import PredictionHandler
 from lightning_pose.utils.scripts import pretty_print_str
 from lightning_pose.data.dali import video_pipe
 from nvidia.dali.plugin.pytorch import LastBatchPolicy
 from lightning_pose.data.utils import count_frames
-
 
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -74,10 +75,9 @@ def predict_dataset(
     data_module: LightningDataModule,
     ckpt_file: str,
     preds_file: str,
-    heatmap_file: Optional[str] = None,
     gpu_id: Optional[int] = None,
 ) -> None:
-    """Save predicted keypoints and heatmaps for a labeled dataset.
+    """Save predicted keypoints for a labeled dataset.
 
     Args:
         cfg: hydra config
@@ -85,8 +85,6 @@ def predict_dataset(
         ckpt_file: absolute path to the checkpoint of your trained model; requires .ckpt
             suffix
         preds_file: absolute filename for the predictions .csv file
-        heatmap_file: absolute filename for the heatmaps .h5 file; if None, no heatmaps
-            are saved
         gpu_id: specify which gpu to run prediction on
 
     """
@@ -94,46 +92,22 @@ def predict_dataset(
     model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
     if gpu_id is None:
         model.to(_TORCH_DEVICE)
+        gpu_id = 0
     else:
         model.to("cuda:%i" % gpu_id)
-    full_dataset = data_module.dataset
-    num_datapoints = len(full_dataset)
-    # recover the indices assuming we re-use the same random seed as in training
-    dataset_split_indices = {
-        "train": data_module.train_dataset.indices,
-        "validation": data_module.val_dataset.indices,
-        "test": data_module.test_dataset.indices,
-    }
 
-    full_dataloader = DataLoader(
-        dataset=full_dataset, batch_size=data_module.test_batch_size
-    )
-
-    df, heatmaps_np = _make_predictions(
-        cfg=cfg,
+    trainer = pl.Trainer(gpus=[gpu_id])
+    labeled_preds = trainer.predict(
         model=model,
-        dataloader=full_dataloader,
-        n_frames_=num_datapoints,
-        batch_size=data_module.test_batch_size,
-        return_heatmaps=bool(heatmap_file),
-        gpu_id=gpu_id,
+        dataloaders=data_module.full_labeled_dataloader(),
+        ckpt_path=ckpt_file,
+        return_predictions=True
     )
 
-    # add train/test/val column
-    df["set"] = np.array(["unused"] * df.shape[0])
-    # iterate over conditions and their indices, and add strs to dataframe
-    for key, val in dataset_split_indices.items():
-        df.loc[val, "set"] = np.repeat(key, len(val))
+    pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
+    labeled_preds_df = pred_handler(preds=labeled_preds)
+    labeled_preds_df.to_csv(preds_file)
 
-    # save predictions
-    save_dframe(df, preds_file)
-
-    # save heatmaps
-    if heatmaps_np is not None:
-        save_folder = os.path.dirname(heatmap_file)
-        if not os.path.isdir(save_folder):
-            os.makedirs(save_folder)
-        save_heatmaps(heatmaps_np, heatmap_file)
 
 @typechecked
 def predict_single_video(
@@ -482,6 +456,7 @@ def make_pred_arr_undo_resize(
     predictions[:, 2::3] = confidence_np
 
     return predictions
+
 
 @typechecked
 def get_csv_file(cfg: DictConfig) -> str:
