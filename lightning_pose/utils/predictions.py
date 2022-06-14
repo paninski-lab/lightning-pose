@@ -1,11 +1,13 @@
 """Functions for predicting keypoints on labeled datasets and unlabeled videos."""
 
+import matplotlib.pyplot as plt
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
 import os
 import pandas as pd
 from pytorch_lightning.core.lightning import LightningModule
 from pytorch_lightning import LightningDataModule
+from skimage.draw import disk
 import time
 import torch
 from torch.utils.data import DataLoader
@@ -14,9 +16,13 @@ from tqdm import tqdm
 from typeguard import typechecked
 from typing import Callable, Dict, List, Literal, Optional, Tuple, Type, Union
 
-from lightning_pose.data.dali import LightningWrapper
+from lightning_pose.data.dali import LightningWrapper, ContextLightningWrapper
 from lightning_pose.utils.io import check_if_semi_supervised
 from lightning_pose.utils.scripts import pretty_print_str
+from lightning_pose.data.dali import video_pipe
+from nvidia.dali.plugin.pytorch import LastBatchPolicy
+from lightning_pose.data.utils import count_frames
+
 
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -69,6 +75,7 @@ def predict_dataset(
     ckpt_file: str,
     preds_file: str,
     heatmap_file: Optional[str] = None,
+    gpu_id: Optional[int] = None,
 ) -> None:
     """Save predicted keypoints and heatmaps for a labeled dataset.
 
@@ -80,11 +87,15 @@ def predict_dataset(
         preds_file: absolute filename for the predictions .csv file
         heatmap_file: absolute filename for the heatmaps .h5 file; if None, no heatmaps
             are saved
+        gpu_id: specify which gpu to run prediction on
 
     """
 
     model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
-    model.to(_TORCH_DEVICE)
+    if gpu_id is None:
+        model.to(_TORCH_DEVICE)
+    else:
+        model.to("cuda:%i" % gpu_id)
     full_dataset = data_module.dataset
     num_datapoints = len(full_dataset)
     # recover the indices assuming we re-use the same random seed as in training
@@ -105,6 +116,7 @@ def predict_dataset(
         n_frames_=num_datapoints,
         batch_size=data_module.test_batch_size,
         return_heatmaps=bool(heatmap_file),
+        gpu_id=gpu_id,
     )
 
     # add train/test/val column
@@ -123,11 +135,11 @@ def predict_dataset(
             os.makedirs(save_folder)
         save_heatmaps(heatmaps_np, heatmap_file)
 
-
 @typechecked
 def predict_single_video(
     video_file: str,
     ckpt_file: str,
+    do_context: bool,
     cfg_file: Union[str, DictConfig],
     preds_file: str,
     heatmap_file: Optional[str] = None,
@@ -155,32 +167,40 @@ def predict_single_video(
             cfg.eval.dali_parameters.sequence_length.
         device (Literal[, optional): device for DALI to use. Defaults to "gpu".
         video_pipe_kwargs (dict, optional): any additional kwargs for DALI. Defaults to
-            {}.
+            {}. Includes "device_id" for running inference on a specfied gpu.
 
     Returns:
         Tuple[pd.DataFrame, Union[np.ndarray, None]]: pandas dataframe with predictions,
             and a potential numpy array with predicted heatmaps.
 
     """
-    from nvidia.dali.plugin.pytorch import LastBatchPolicy
-    from lightning_pose.data.dali import video_pipe
-    from lightning_pose.data.utils import count_frames
-    from lightning_pose.utils.scripts import pretty_print_str
-
+    
+    if do_context:
+        step = 1 # applies for both context and non-context
+        batch_size = 4 # TODO: make this configurable
+        sequence_length = 5 # hard coded -- this is the model
+    else: # usual static model 
+        batch_size = 1 # don't modify, change sequence length (exposed to user) instead
+        sequence_length = 16 # TODO: should be controlled from outside by cfg.eval.dali_parameters.sequence_length
+        step = sequence_length
     device_dict = get_devices(device)
 
     cfg = get_cfg_file(cfg_file=cfg_file)
     pretty_print_str(string="Loading trained model from %s... " % ckpt_file)
 
-    model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
-    model.to(device_dict["device_pt"])
-
     # set some defaults
-    batch_size = 1  # don't modify, change sequence length (exposed to user) instead
-    video_pipe_kwargs_defaults = {"num_threads": 2, "device_id": 0}
+    video_pipe_kwargs_defaults = {"num_threads": 2, "device_id": 0} # TODO: can have more threads. try 4? worked in a notebook.
     for key, val in video_pipe_kwargs_defaults.items():
         if key not in video_pipe_kwargs.keys():
             video_pipe_kwargs[key] = val
+
+    # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    # os.environ["CUDA_VISIBLE_DEVICES"] = str(video_pipe_kwargs["device_id"])
+    model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
+    if device_dict["device_pt"] != "cpu":
+        model.to("%s:%i" % (device_dict["device_pt"], video_pipe_kwargs["device_id"]))
+    else:
+        model.to(device_dict["device_pt"])
 
     check_prediction_file_format(save_file=preds_file)
     pretty_print_str(string="Building DALI video eval pipeline...")
@@ -193,22 +213,35 @@ def predict_single_video(
         ),
         batch_size=batch_size,
         sequence_length=sequence_length,
+        step=step,
         filenames=[video_file],
         random_shuffle=False,
         device=device_dict["device_dali"],
         name="reader",
         pad_sequences=True,
-        **video_pipe_kwargs
+        **video_pipe_kwargs,
     )
 
-    predict_loader = LightningWrapper(
-        pipe,
-        output_map=["x"],
-        last_batch_policy=LastBatchPolicy.FILL,
-        last_batch_padded=False,
-        auto_reset=False,
-        reader_name="reader",
-    )
+    # build dataloader
+    # each data loader returns 
+    if do_context:
+        predict_loader = ContextLightningWrapper(
+            pipe,
+            output_map=["x"],
+            last_batch_policy=LastBatchPolicy.PARTIAL,
+            auto_reset=False,  # TODO: I removed the auto_reset, but I don't know if it's needed. Think we'll loop over the dataset without resetting.
+            # num_batches=num_batches, # TODO: works also if num_batches = int
+        ) # TODO: there are other args in predict_loader that we don't have here. check if it's fine.
+    else:
+        predict_loader = LightningWrapper(
+            pipe,
+            output_map=["x"],
+            last_batch_policy=LastBatchPolicy.FILL,
+            last_batch_padded=False,
+            auto_reset=False,
+            reader_name="reader",
+        )
+    # TODO: got until here. seems like the LightningWrappe and pipe are like in my notebook
     # iterate through video
     n_frames_ = count_frames(video_file)  # total frames in video
     pretty_print_str(string="Predicting video at %s..." % video_file)
@@ -220,6 +253,7 @@ def predict_single_video(
         batch_size=sequence_length,  # note: different from the batch_size defined above
         data_name=video_file,
         return_heatmaps=bool(heatmap_file),
+        do_context=do_context,
     )
 
     try:
@@ -254,6 +288,8 @@ def _make_predictions(
     batch_size: int,
     data_name: str = "dataset",
     return_heatmaps: bool = False,
+    gpu_id: Optional[int] = None,
+    do_context: bool = False,
 ) -> Tuple[pd.DataFrame, Union[np.ndarray, None]]:
     """Wrapper function that predicts, resizes, and puts results in a dataframe.
 
@@ -266,6 +302,7 @@ def _make_predictions(
         batch_size (int): regular batch_size for images or sequence_length for videos
         data_name (str, optional): [description]. Defaults to "dataset".
         return_heatmaps (str, optional): [description]. Defaults to None.
+        gpu_id: specify which gpu to run prediction on
 
     Returns:
         Tuple[pd.DataFrame, Union[np.ndarray, None]]: keypoint dataframe and heatmaps
@@ -273,7 +310,15 @@ def _make_predictions(
     """
 
     keypoints_np, confidence_np, heatmaps_np = _predict_frames(
-        cfg, model, dataloader, n_frames_, batch_size, data_name, return_heatmaps,
+        cfg,
+        model,
+        dataloader,
+        n_frames_,
+        batch_size,
+        data_name,
+        return_heatmaps,
+        gpu_id,
+        do_context,
     )
     # unify keypoints and confidences into one numpy array, scale (x,y) coords by
     # resizing factor
@@ -301,6 +346,8 @@ def _predict_frames(
     batch_size: int,
     data_name: str = "dataset",
     return_heatmaps: bool = False,
+    gpu_id: Optional[int] = None,
+    do_context: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, Union[np.ndarray, None]]:
     """Predict all frames from a data loader without undoing the resize or reshaping.
 
@@ -313,6 +360,7 @@ def _predict_frames(
         batch_size (int): regular batch_size for images or sequence_length for videos
         data_name (str, optional): [description]. Defaults to "dataset".
         return_heatmaps (str, optional): [description]. Defaults to None.
+        gpu_id: specify which gpu to run prediction on
 
     Returns:
         Tuple[np.ndarray, np.ndarray, Union[np.ndarray, None]]: keypoints, confidences,
@@ -325,6 +373,7 @@ def _predict_frames(
 
     keypoints_np = np.zeros((n_frames_, model.num_keypoints * 2))
     confidence_np = np.zeros((n_frames_, model.num_keypoints))
+
     if return_heatmaps:
         heatmaps_np = np.zeros(
             (
@@ -343,7 +392,11 @@ def _predict_frames(
     with torch.inference_mode():
         for n, batch in enumerate(tqdm(dataloader, total=n_batches)):
             if type(batch) == dict:
-                image = batch["images"].to(_TORCH_DEVICE)  # predicting from dataset
+                # predicting from dataset
+                if gpu_id is None:
+                    image = batch["images"].to(_TORCH_DEVICE)
+                else:
+                    image = batch["images"].to("cuda:%i" % gpu_id)
             else:
                 image = batch  # predicting from video
             outputs = model.forward(image)
@@ -429,23 +482,6 @@ def make_pred_arr_undo_resize(
     predictions[:, 2::3] = confidence_np
 
     return predictions
-
-
-@typechecked
-def get_videos_in_dir(video_dir: str) -> List[str]:
-    # gather videos to process
-    # TODO: check if you're give a path to a single video?
-    pretty_print_str(string="Looking inside %s..." % video_dir)
-    assert os.path.isdir(video_dir)
-    all_files = [os.path.join(video_dir, f) for f in os.listdir(video_dir)]
-    video_files = []
-    for f in all_files:
-        if f.endswith(".mp4"):
-            video_files.append(f)
-    if len(video_files) == 0:
-        raise IOError("Did not find any video files (.mp4) in %s" % video_dir)
-    return video_files
-
 
 @typechecked
 def get_csv_file(cfg: DictConfig) -> str:
@@ -594,8 +630,87 @@ def save_dframe(df: pd.DataFrame, save_file: str) -> None:
 
 
 @typechecked
-def save_heatmaps(heatmaps_np: np.ndarray, save_file: str)-> None:
+def save_heatmaps(heatmaps_np: np.ndarray, save_file: str) -> None:
     import h5py
+
     assert save_file.endswith(".h5") or save_file.endswith(".hdf5")
     with h5py.File(save_file, "w") as hf:
         hf.create_dataset("heatmaps", data=heatmaps_np)
+
+
+def make_cmap(number_colors, cmap="cool"):
+    color_class = plt.cm.ScalarMappable(cmap=cmap)
+    C = color_class.to_rgba(np.linspace(0, 1, number_colors))
+    colors = (C[:, :3] * 255).astype(np.uint8)
+    return colors
+
+
+def create_labeled_video(
+        clip, xs_arr, ys_arr, mask_array=None, dotsize=5, colormap="cool", fps=None,
+        filename="movie.mp4"):
+    """Helper function for creating annotated videos.
+
+    Parameters
+    ----------
+    clip : moviepy.editor.VideoFileClip
+    xs_arr : np.ndarray
+        shape T x n_joints
+    ys_arr : np.ndarray
+        shape T x n_joints
+    mask_array : np.ndarray, boolean, optional
+        shape T x n_joints, same as df_x and df_y; any timepoints/joints with a False
+        entry will not be plotted
+    dotsize : int
+        size of marker dot on labeled video
+    colormap : str
+        matplotlib color map for markers
+    fps : float, optional
+        None to default to fps of original video
+    filename : str, optional
+        video file name
+
+    """
+
+    if mask_array is None:
+        mask_array = ~np.isnan(xs_arr)
+
+    n_frames, n_keypoints = xs_arr.shape
+
+    # Set colormap for each color
+    colors = make_cmap(n_keypoints, cmap=colormap)
+
+    nx, ny = clip.size
+    duration = int(clip.duration - clip.start)
+    fps_og = clip.fps
+
+    print(
+        "Duration of video [s]: {}, recorded with {} fps!".format(
+            np.round(duration, 2), np.round(fps_og, 2)))
+
+    # add marker to each frame t, where t is in sec
+    def add_marker(get_frame, t):
+        image = get_frame(t * 1.0)
+        # frame [ny x ny x 3]
+        frame = image.copy()
+        # convert from sec to indices
+        index = int(np.round(t * 1.0 * fps_og))
+        for bpindex in range(n_keypoints):
+            if index >= n_frames:
+                print('Skipped frame {}, marker {}'.format(index, bpindex))
+                continue
+            if mask_array[index, bpindex]:
+                xc = min(int(xs_arr[index, bpindex]), nx - 1)
+                yc = min(int(ys_arr[index, bpindex]), ny - 1)
+                rr, cc = disk(center=(yc, xc), radius=dotsize, shape=(ny, nx))
+                frame[rr, cc, :] = colors[bpindex]
+        return frame
+
+    clip_marked = clip.fl(add_marker)
+    clip_marked.write_videofile(
+        filename,
+        codec="libx264",
+        fps=fps_og if fps is None else fps
+    )
+    clip_marked.close()
+
+    return

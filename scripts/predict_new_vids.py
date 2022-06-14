@@ -1,12 +1,15 @@
 """Run inference on a list of models and videos."""
 
 import hydra
+from moviepy.editor import VideoFileClip
+import numpy as np
 from omegaconf import DictConfig, OmegaConf
 import os
 
 from typeguard import typechecked
 
 from lightning_pose.utils.predictions import get_videos_in_dir, predict_single_video
+from lightning_pose.utils.predictions import create_labeled_video
 from lightning_pose.utils.io import (
     check_if_semi_supervised,
     ckpt_path_from_base_path,
@@ -28,7 +31,8 @@ def predict_videos_in_dir(cfg: DictConfig):
     From that folder it'll read the info about the model, get the checkpoint, and
     predict on a new vid
 
-    If you need to predict multiple folders (each with one or more videos), define a --multirun and pass these directories as
+    If you need to predict multiple folders (each with one or more videos), define a
+    --multirun and pass these directories as
     cfg.eval.test_videos_directory='dir/1','dir/2'...
 
     NOTE: by decorating with hydra, the current working directory will be become the new
@@ -41,7 +45,8 @@ def predict_videos_in_dir(cfg: DictConfig):
         # cfg.eval.hydra_paths defines a list of relative paths to hydra folders
         # "YYYY-MM-DD/HH-MM-SS", and we extract an absolute path below
         absolute_cfg_path = return_absolute_path(hydra_relative_path, n_dirs_back=2)
-        # absolute_cfg_path will be the output path of the trained model we're using for predictions
+        # absolute_cfg_path will be the output path of the trained model we're using for
+        # predictions
         model_cfg = OmegaConf.load(
             os.path.join(absolute_cfg_path, ".hydra/config.yaml")
         )  # path for the cfg file saved from the current trained model
@@ -65,6 +70,7 @@ def predict_videos_in_dir(cfg: DictConfig):
         )
 
         for video_file in video_files:
+
             video_pred_path_handler = VideoPredPathHandler(
                 save_preds_dir=save_preds_dir,
                 video_file=video_file,
@@ -78,8 +84,23 @@ def predict_videos_in_dir(cfg: DictConfig):
                 cfg_file=model_cfg,
                 preds_file=preds_file,
                 sequence_length=cfg.eval.dali_parameters.sequence_length,
+                do_context=model_cfg.model.do_context,
             )
-            # this script is not doing anything with preds_df and heatmaps_np
+
+            if cfg.eval.get("create_labeled_video", False):
+
+                video_file_labeled = preds_file.replace(".csv", "_labeled.mp4")
+                video_clip = VideoFileClip(video_file)
+
+                keypoints_arr = np.reshape(
+                    preds_df.to_numpy(), [preds_df.shape[0], -1, 3])
+                xs_arr = keypoints_arr[:, :, 0]
+                ys_arr = keypoints_arr[:, :, 1]
+                mask_array = keypoints_arr[:, :, 2] > 0.04
+
+                create_labeled_video(
+                    clip=video_clip, xs_arr=xs_arr, ys_arr=ys_arr,
+                    mask_array=mask_array, filename=video_file_labeled)
 
 
 if __name__ == "__main__":

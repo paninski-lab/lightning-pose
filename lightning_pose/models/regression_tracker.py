@@ -166,7 +166,11 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
 
     @typechecked
-    def get_loss_inputs_unlabeled(self, batch: torch.Tensor) -> dict:
+    def get_loss_inputs_unlabeled(self, batch: Union[TensorType[
+        "sequence_length", "RGB":3, "image_height", "image_width", float
+    ], TensorType[
+        "sequence_length", "context":5, "RGB":3, "image_height", "image_width", float
+    ]]) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         representation = self.get_representations(batch)
         predicted_keypoints = self.final_layer(

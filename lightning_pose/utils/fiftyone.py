@@ -58,7 +58,6 @@ def get_image_tags(pred_df: pd.DataFrame) -> pd.Series:
     # zero -> unused, so explicitly replace
     # NOTE: can delete this at some point, pred_df now initialized w/ "unused"
     data_pt_tags = pred_df.iloc[:, -1].replace("0.0", "unused")
-    assert check_unique_tags(data_pt_tags=list(data_pt_tags))
     return data_pt_tags
 
 
@@ -67,7 +66,9 @@ def get_image_tags(pred_df: pd.DataFrame) -> pd.Series:
 # list/listconfig issue
 class FiftyOneKeypointBase:
     def __init__(
-        self, cfg: DictConfig, keypoints_to_plot: Optional[List[str]] = None,
+        self,
+        cfg: DictConfig,
+        keypoints_to_plot: Optional[List[str]] = None,
     ) -> None:
         self.cfg = cfg
         self.keypoints_to_plot = keypoints_to_plot
@@ -99,7 +100,7 @@ class FiftyOneKeypointBase:
         self.gt_data_dict: Dict[str, Dict[str, np.array]] = dfConverter(
             df=self.ground_truth_df, keypoint_names=self.keypoints_to_plot
         )()
-        self.model_abs_paths = self.get_model_abs_paths()
+        # self.model_abs_paths = self.get_model_abs_paths()
         #
         self.pred_csv_files = []  # override in subclasses
 
@@ -193,7 +194,9 @@ class FiftyOneKeypointBase:
 
     @typechecked
     def _slow_single_frame_build(
-        self, data_dict: Dict[str, Dict[str, np.array]], frame_idx: int,
+        self,
+        data_dict: Dict[str, Dict[str, np.array]],
+        frame_idx: int,
     ) -> List[fo.Keypoint]:
         # the output of this, is a the positions of all keypoints in a single frame for a single model.
         keypoints_list = []
@@ -208,7 +211,7 @@ class FiftyOneKeypointBase:
                             / self.img_height,
                         ]
                     ],
-                    confidence=data_dict[kp_name]["likelihood"][frame_idx],
+                    confidence=[data_dict[kp_name]["likelihood"][frame_idx]],
                     label=kp_name,  # sometimes plotted aggresively
                 )
             )
@@ -216,7 +219,9 @@ class FiftyOneKeypointBase:
 
     @typechecked
     def _fast_single_frame_build(
-        self, data_dict: Dict[str, Dict[str, np.array]], frame_idx: int,
+        self,
+        data_dict: Dict[str, Dict[str, np.array]],
+        frame_idx: int,
     ) -> List[fo.Keypoint]:
         # the output of this, is a the positions of all keypoints in a single frame for a single model.
         keypoint = [
@@ -227,7 +232,8 @@ class FiftyOneKeypointBase:
                         data_dict[kp_name]["coords"][frame_idx, 1] / self.img_height,
                     )
                     for kp_name in self.keypoints_to_plot
-                ]
+                ],
+                confidence=[data_dict[kp_name]["likelihood"][frame_idx] for kp_name in self.keypoints_to_plot]
             )
         ]
         return keypoint
@@ -277,13 +283,16 @@ class FiftyOneKeypointBase:
 
 class FiftyOneImagePlotter(FiftyOneKeypointBase):
     def __init__(
-        self, cfg: DictConfig, keypoints_to_plot: Optional[List[str]] = None,
+        self,
+        cfg: DictConfig,
+        keypoints_to_plot: Optional[List[str]] = None,
+        csv_filename: str = "predictions.csv",
     ) -> None:
         super().__init__(cfg=cfg, keypoints_to_plot=keypoints_to_plot)
 
+        model_abs_paths = self.get_model_abs_paths()
         self.pred_csv_files = [
-            os.path.join(model_dir, "predictions.csv")
-            for model_dir in self.model_abs_paths
+            os.path.join(model_dir, csv_filename) for model_dir in model_abs_paths
         ]
 
     @property
@@ -344,7 +353,10 @@ class FiftyOneImagePlotter(FiftyOneKeypointBase):
 
 class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
     def __init__(
-        self, cfg: DictConfig, keypoints_to_plot: Optional[List[str]] = None,
+        self,
+        cfg: DictConfig,
+        keypoints_to_plot: Optional[List[str]] = None,
+        **kwargs  # make robust to other inputs
     ) -> None:
         # initialize FiftyOneKeypointBase
         super().__init__(cfg=cfg, keypoints_to_plot=keypoints_to_plot)
@@ -417,7 +429,9 @@ class FiftyOneFactory:
     def __init__(self, dataset_to_create: Literal["images", "videos"]) -> None:
         self.dataset_to_create = dataset_to_create
 
-    def __call__(self,) -> Union[FiftyOneImagePlotter, FiftyOneKeypointVideoPlotter]:
+    def __call__(
+        self,
+    ) -> Union[FiftyOneImagePlotter, FiftyOneKeypointVideoPlotter]:
         if self.dataset_to_create == "images":
             return FiftyOneImagePlotter
         else:

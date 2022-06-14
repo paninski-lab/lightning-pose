@@ -1,6 +1,9 @@
 # paths to the hydra config files in the output folder, OR absolute paths to such folders.
 hydra_paths: ["2021-12-15/04-11-43/"]
 
+# TODO: decide which arg stays and which doesn't (create_labeled_video)
+save_vids_after_training: True
+
 fiftyone:
   # will be the name of the dataset (Mongo DB) created by FiftyOne. for video dataset, we will append dataset_name + "_video"
   dataset_name: "rick_data_test"
@@ -13,6 +16,10 @@ fiftyone:
   # whether to launch the app from the script (True), or from ipython (and have finer control over the outputs)
   launch_app_from_script: False
 
+  remote: True # for LAI, must be False
+  address: 127.0.0.1 # ip to launch the app on.
+  port: 5151 # port to launch the app on.
+
   # whether to create a "videos" or "images" dataset, since the processes are the same
   dataset_to_create: "images"
 
@@ -23,7 +30,14 @@ test_videos_directory: "toy_datasets/toymouseRunningData/unlabeled_videos"
 # str with an absolute path to directory in which you want to save .csv with predictions
 saved_vid_preds_dir: "toy_datasets/toymouseRunningData"
 
+# create labeled video from each video in test_videos_directory
+create_labeled_video: true
+
+# confidence threshold for plotting a vid
+confidence_thresh_for_vid: 0.5
+
 # params for loading images from the video using nvidia-dali
+# TODO: remove, we're stopping to use this argument.
 dali_parameters:
   # how many frames to grab at once from the video
   sequence_length: 16

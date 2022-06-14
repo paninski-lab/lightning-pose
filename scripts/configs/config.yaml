@@ -5,3 +5,4 @@ defaults:
   - model: model_params
   - eval: eval_params
   - callbacks: callback_params
+  - dali: dali_params

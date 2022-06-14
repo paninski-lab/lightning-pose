@@ -59,6 +59,7 @@ def get_dataset(
             csv_path=cfg.data.csv_file,
             header_rows=OmegaConf.to_object(cfg.data.header_rows),
             imgaug_transform=imgaug_transform,
+            do_context=cfg.model.do_context,
         )
     elif cfg.model.model_type == "heatmap":
         dataset = HeatmapDataset(
@@ -67,6 +68,7 @@ def get_dataset(
             header_rows=OmegaConf.to_object(cfg.data.header_rows),
             imgaug_transform=imgaug_transform,
             downsample_factor=cfg.data.downsample_factor,
+            do_context=cfg.model.do_context,
         )
     else:
         raise NotImplementedError(
@@ -131,6 +133,7 @@ def get_data_module(
             train_probability=cfg.training.train_prob,
             val_probability=cfg.training.val_prob,
             train_frames=cfg.training.train_frames,
+            dali_config=cfg.dali,
             unlabeled_sequence_length=cfg.training.unlabeled_sequence_length,
             torch_seed=cfg.training.rng_seed_data_pt,
             dali_seed=cfg.training.rng_seed_data_dali,
@@ -165,7 +168,7 @@ def get_loss_factories(
             loss_params_dict["unsupervised"][loss_name] = cfg_loss_dict[loss_name]
             loss_params_dict["unsupervised"][loss_name]["loss_name"] = loss_name
             # loss-specific parameters
-            if loss_name == "unimodal_mse" or loss_name == "unimodal_wasserstein":
+            if loss_name[:8] == "unimodal":
                 if cfg.model.model_type == "regression":
                     raise NotImplementedError(
                         f"unimodal loss can only be used with classes inheriting from "
@@ -249,6 +252,7 @@ def get_model(
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
+                do_context=cfg.model.do_context,
             )
         else:
             raise NotImplementedError(
@@ -281,6 +285,7 @@ def get_model(
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
+                do_context=cfg.model.do_context,
             )
         else:
             raise NotImplementedError(
