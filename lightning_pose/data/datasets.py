@@ -77,7 +77,10 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
         # load csv data
         # step 1
-        csv_file = os.path.join(root_directory, csv_path)
+        if os.path.isfile(csv_path):
+            csv_file = csv_path
+        else:
+            csv_file = os.path.join(root_directory, csv_path)
         if not os.path.exists(csv_file):
             # step 2: assume csv_path is absolute
             csv_file = csv_path
