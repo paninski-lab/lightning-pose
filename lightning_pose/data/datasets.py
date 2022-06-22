@@ -77,7 +77,10 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
         # load csv data
         # step 1
-        csv_file = os.path.join(root_directory, csv_path)
+        if os.path.isfile(csv_path):
+            csv_file = csv_path
+        else:
+            csv_file = os.path.join(root_directory, csv_path)
         if not os.path.exists(csv_file):
             # step 2: assume csv_path is absolute
             csv_file = csv_path
@@ -180,17 +183,33 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             list_idx = [idx_img - 2, idx_img - 1, idx_img, idx_img + 1, idx_img + 2]
             list_img_names = []
 
-            for items in list_idx:
-                img_name_new = img_name.replace(str(idx_img), str(items))
-                list_img_names.append(img_name_new)
+            for fr_num in list_idx:
+                # replace frame number with 0 if we're at the beginning of the video
+                fr_num = max(0, fr_num)
+                # split name into pieces
+                img_pieces = img_name.split("/")
+                # figure out length of integer
+                int_len = len(img_pieces[-1].replace(".png", "").replace("img", ""))
+                # replace original frame number with context frame number
+                img_pieces[-1] = "img%s.png" % str(fr_num).zfill(int_len)
+                list_img_names.append("/".join(img_pieces))
 
             # read the images from image list to create dataset
             keypoints_on_image = self.keypoints[idx]
-            list_images = []
             images = []
-            for names in list_img_names:
+            for name in list_img_names:
                 # read image from file and apply transformations (if any)
-                file_name = os.path.join(self.root_directory, names)
+                file_name = os.path.join(self.root_directory, name)
+                # current renaming scheme loses a leading zero when going down an order
+                # of magnitude, i.e. 1001 - 2 -> 999 instead of 0999
+                # if not os.path.isfile(file_name):
+                #     file_name = file_name.replace("img", "img0")
+                #     # handle case where we go up an order of magnitude, i.e.
+                #     # 009 -> 0010 instead of 010
+                #     if not os.path.isfile(file_name):
+                #         # take away leading zero added above, as well as leading zero no
+                #         # longer needed since we're moving up an order of magnitude
+                #         file_name = file_name.replace("img00", "img")
                 # if 1 color channel, change to 3.
                 image = Image.open(file_name).convert("RGB")
                 images.append(np.asarray(image))
