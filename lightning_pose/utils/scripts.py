@@ -263,7 +263,6 @@ def get_data_module(
             val_probability=cfg.training.val_prob,
             train_frames=cfg.training.train_frames,
             dali_config=cfg.dali,
-            unlabeled_sequence_length=cfg.training.unlabeled_sequence_length,
             torch_seed=cfg.training.rng_seed_data_pt,
             dali_seed=cfg.training.rng_seed_data_dali,
             device_id=cfg.training.gpu_id,
