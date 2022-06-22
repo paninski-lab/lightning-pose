@@ -12,6 +12,7 @@ from typeguard import typechecked
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
 from lightning_pose.data.utils import generate_heatmaps
+from lightning_pose.utils.io import get_keypoint_names
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -96,13 +97,19 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                     raise FileNotFoundError("Could not find csv file!")
                 csv_file = options[0]
 
-        csv_data = pd.read_csv(csv_file, header=header_rows)
-        self.keypoint_names = csv_data.columns.levels[0][1:]  # unused inside class
+        csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
+        self.keypoint_names = get_keypoint_names(
+            csv_file=csv_file, header_rows=header_rows)
+        if header_rows == [1, 2] or header_rows == [0, 1]:
+            # self.keypoint_names = csv_data.columns.levels[0]
+            # ^this returns a sorted list for some reason, don't want that
+            self.keypoint_names = [b[0] for b in csv_data.columns if b[1] == 'x']
+        elif header_rows == [0, 1, 2]:
+            # self.keypoint_names = csv_data.columns.levels[1]
+            self.keypoint_names = [b[1] for b in csv_data.columns if b[2] == 'x']
 
-        self.image_names = list(csv_data.iloc[:, 0])
-        self.keypoints = torch.tensor(
-            csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32
-        )
+        self.image_names = list(csv_data.index)
+        self.keypoints = torch.tensor(csv_data.to_numpy(), dtype=torch.float32)
         # convert to x,y coordinates
         self.keypoints = self.keypoints.reshape(self.keypoints.shape[0], -1, 2)
         if pytorch_transform_list is None:
