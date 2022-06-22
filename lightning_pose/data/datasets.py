@@ -12,6 +12,7 @@ from typeguard import typechecked
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
 from lightning_pose.data.utils import generate_heatmaps
+from lightning_pose.utils.io import get_keypoint_names
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -97,6 +98,8 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 csv_file = options[0]
 
         csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
+        self.keypoint_names = get_keypoint_names(
+            csv_file=csv_file, header_rows=header_rows)
         if header_rows == [1, 2] or header_rows == [0, 1]:
             # self.keypoint_names = csv_data.columns.levels[0]
             # ^this returns a sorted list for some reason, don't want that

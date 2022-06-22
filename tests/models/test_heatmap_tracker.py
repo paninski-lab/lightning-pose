@@ -2,6 +2,7 @@
 
 import copy
 import pytest
+import torch
 
 from lightning_pose.utils.scripts import get_loss_factories, get_model
 
@@ -23,6 +24,9 @@ def test_supervised_heatmap(cfg, heatmap_data_module, trainer, remove_logs):
 
     # train model for a couple epochs
     trainer.fit(model=model, datamodule=heatmap_data_module)
+
+    # remove tensors from gpu
+    torch.cuda.empty_cache()
 
     # clean up logging
     remove_logs()
@@ -51,6 +55,9 @@ def test_unsupervised_heatmap_temporal(
 
     # train model for a couple epochs
     trainer.fit(model=model, datamodule=heatmap_data_module_combined)
+
+    # remove tensors from gpu
+    torch.cuda.empty_cache()
 
     # clean up logging
     remove_logs()

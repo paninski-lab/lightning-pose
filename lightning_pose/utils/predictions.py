@@ -11,14 +11,13 @@ from pytorch_lightning import LightningDataModule
 from skimage.draw import disk
 import time
 import torch
-from torch.utils.data import DataLoader
 from torchtyping import patch_typeguard
 from tqdm import tqdm
 from typeguard import typechecked
-from typing import Callable, Dict, List, Literal, Optional, Tuple, Type, Union
+from typing import Dict, List, Literal, Optional, Tuple, Type, Union
 
 from lightning_pose.data.dali import LightningWrapper, ContextLightningWrapper
-from lightning_pose.utils.io import check_if_semi_supervised
+from lightning_pose.utils.io import get_keypoint_names
 from lightning_pose.utils.predictions_new import PredictionHandler
 from lightning_pose.utils.scripts import pretty_print_str
 from lightning_pose.data.dali import video_pipe
@@ -469,22 +468,6 @@ def get_csv_file(cfg: DictConfig) -> str:
     else:
         csv_file = ""
     return csv_file
-
-
-@typechecked
-def get_keypoint_names(cfg: DictConfig, csv_file: Optional[str] = None) -> List[str]:
-    if os.path.exists(csv_file):
-        if "header_rows" in cfg.data:
-            header_rows = list(cfg.data.header_rows)
-        else:
-            # assume dlc format
-            header_rows = [0, 1, 2]
-        df = pd.read_csv(csv_file, header=header_rows)
-        # collect marker names from multiindex header
-        keypoint_names = [c[0] for c in df.columns[1::2]]
-    else:
-        keypoint_names = ["bp_%i" % n for n in range(cfg.data.num_targets // 2)]
-    return keypoint_names
 
 
 @typechecked

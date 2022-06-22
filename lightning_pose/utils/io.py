@@ -4,7 +4,7 @@ from omegaconf import DictConfig, OmegaConf, ListConfig
 import os
 import pandas as pd
 from typeguard import typechecked
-from typing import Any, List, Tuple, Union
+from typing import Any, List, Tuple, Union, Optional
 
 
 @typechecked
@@ -76,6 +76,7 @@ def check_if_semi_supervised(
     return semi_supervised
 
 
+@typechecked
 def load_label_csv_from_cfg(cfg: Union[DictConfig, dict]) -> pd.DataFrame:
     """Helper function for easy loading.
 
@@ -91,6 +92,33 @@ def load_label_csv_from_cfg(cfg: Union[DictConfig, dict]) -> pd.DataFrame:
         csv_file, header=list(cfg["data"]["header_rows"]), index_col=0
     )
     return labels_df
+
+
+@typechecked
+def get_keypoint_names(
+    cfg: Optional[DictConfig] = None,
+    csv_file: Optional[str] = None,
+    header_rows: Optional[list] = None
+) -> List[str]:
+    if os.path.exists(csv_file):
+        if header_rows is None:
+            if "header_rows" in cfg.data:
+                header_rows = list(cfg.data.header_rows)
+            else:
+                # assume dlc format
+                header_rows = [0, 1, 2]
+        csv_data = pd.read_csv(csv_file, header=header_rows)
+        # collect marker names from multiindex header
+        if header_rows == [1, 2] or header_rows == [0, 1]:
+            # self.keypoint_names = csv_data.columns.levels[0]
+            # ^this returns a sorted list for some reason, don't want that
+            keypoint_names = [b[0] for b in csv_data.columns if b[1] == 'x']
+        elif header_rows == [0, 1, 2]:
+            # self.keypoint_names = csv_data.columns.levels[1]
+            keypoint_names = [b[1] for b in csv_data.columns if b[2] == 'x']
+    else:
+        keypoint_names = ["bp_%i" % n for n in range(cfg.data.num_targets // 2)]
+    return keypoint_names
 
 
 # --------------------------------------------------------------------------------------
