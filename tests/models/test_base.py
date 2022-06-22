@@ -9,7 +9,7 @@ from lightning_pose.models.base import BaseFeatureExtractor
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-BATCH_SIZE = 12
+BATCH_SIZE = 4
 HEIGHTS = [128, 256, 384]  # standard numbers, not going to bigger images due to memory
 WIDTHS = [120, 246, 380]  # similar but not square
 RESNET_VERSIONS = [18, 34, 50, 101, 152]

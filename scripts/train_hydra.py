@@ -10,8 +10,9 @@ import pandas as pd
 from moviepy.editor import VideoFileClip
 
 from lightning_pose.callbacks.callbacks import AnnealWeight
-from lightning_pose.utils.io import check_video_paths, return_absolute_data_paths, return_absolute_path
-from lightning_pose.utils.predictions import create_labeled_video, predict_dataset, make_pred_arr_undo_resize, get_csv_file, get_keypoint_names
+from lightning_pose.utils.io import check_video_paths, return_absolute_data_paths, \
+    return_absolute_path, get_keypoint_names
+from lightning_pose.utils.predictions import create_labeled_video, predict_dataset, make_pred_arr_undo_resize, get_csv_file
 from lightning_pose.utils.scripts import (
     get_data_module,
     get_dataset,
