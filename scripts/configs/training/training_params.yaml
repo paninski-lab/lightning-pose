@@ -54,9 +54,6 @@ check_val_every_n_epoch: 10
 # select gpu for training
 gpu_id: 0
 
-# batch size of unlabeled video data during training (contiguous frames)
-unlabeled_sequence_length: 16
-
 # rng seed for labeled batches
 rng_seed_data_pt: 42
 
