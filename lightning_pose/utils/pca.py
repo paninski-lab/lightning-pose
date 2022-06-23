@@ -304,6 +304,9 @@ class LinearGaussian(KeypointPCA):
     ):
         super().__init__(**kwargs)
         super().__call__() # clean data, fit pca, generate pca_object...
+        # TODO: here we do want to call another variant of __call__, that doesn't eliminate nans.
+        # get formatted data including nans
+        self.full_data_arr = self._format_data(data_arr=super()._get_data())
 
         self.parametrization = parametrization
         # derived quantities needed for both optional parametrizations
@@ -384,6 +387,74 @@ class LinearGaussian(KeypointPCA):
         mean_subtracted_observation = observation[valid_inds] - self.observation_mean[valid_inds]
         posterior_mean = posterior_covariance @ (valid_observation_projection.T @ valid_observation_precision @ mean_subtracted_observation + self.prior_precision @ self.prior_mean)
         return posterior_mean, posterior_covariance
+
+    def E_step_single(self, observation: TensorType["observation_dim", 1, float]) -> Tuple[TensorType["n_components_kept", 1, float], TensorType["n_components_kept", "n_components_kept", float]]:
+        """E step for a single observation, need to perform N such calls.
+        broken down into single observations because each of the N observations could have a variable number of missing values"""
+        posterior_mean, posterior_covariance = self.compute_posterior(observation=observation)
+        E_ZnZnTop = posterior_covariance + posterior_mean @ posterior_mean.T
+        return posterior_mean, E_ZnZnTop
+
+    def E_step(self, observations: TensorType["observation_dim", "num_samples", float]) -> Tuple[TensorType["n_components_kept", "num_samples", float], TensorType["n_components_kept", "n_components_kept", "num_samples", float]]:
+        """
+        E-step of the EM algorithm
+        """
+        posterior_means = torch.zeros(size=(self.n_components_kept, observations.shape[1]), device=observations.device)
+        per_obs_E_ZnZnTop = torch.zeros(size=(self.n_components_kept, self.n_components_kept, observations.shape[1]), device=observations.device)
+        
+        for i in range(observations.shape[1]):
+            # compute the posterior mean and covariance
+            posterior_mean, E_ZnZnTop = self.E_step_single(observations[:, i].reshape(-1, 1))
+            
+            posterior_means[:, i] = posterior_mean.squeeze()
+            per_obs_E_ZnZnTop[:, :, i] = E_ZnZnTop
+        
+        return posterior_means, per_obs_E_ZnZnTop
+    
+    def M_step_W_new(self, posterior_means: TensorType["n_components_kept", "num_obs", float], E_ZnZnTop: TensorType["n_components_kept", "n_components_kept", "num_obs", float], observations: TensorType["observation_dim", "num_obs", float]) -> TensorType["n_components_kept", "observation_dim", float]:
+        """
+        Bishop's 12.56
+        note that observations may include missing values. how to resolve this? 
+        assume we get N posteriors and N datapoints with missing values. loop inside.
+        """
+        # summing over num_observations
+        numerator: TensorType["obs_dim", "n_components_kept"] = torch.zeros_like(self.observation_projection) # TODO: not true, should be matrices
+        denominator: TensorType["n_components_kept", "n_components_kept"] = torch.zeros((E_ZnZnTop.shape[0], E_ZnZnTop.shape[1]))
+        mask_tensor = ~torch.isnan(observations)
+        for i in range(observations.shape[1]):
+            # extract the valid observations for this datapoint
+            obs = observations[:, i].reshape(-1, 1)
+            curr_diffs = torch.zeros_like(obs) # shape: (observation_dim, 1)
+            valid_inds = torch.where(mask_tensor[:, i])[0]
+            # compute the difference of the valid values, otherwise everything is zeros
+            # TODO: make sure that observation mean is updated
+            curr_diffs[valid_inds] = obs[valid_inds] - self.observation_mean[valid_inds]
+            curr_numerator: TensorType["obs_dim", "n_components_kept"]= curr_diffs @ posterior_means[:, i].reshape(-1, 1).T
+            curr_denominator: TensorType["n_components_kept", "n_components_kept"] = E_ZnZnTop[:, :, i]
+
+            # accumulate the numerator and denominator
+            numerator += curr_numerator
+            denominator += curr_denominator
+        
+        # Bishop's (12.56)
+        W_new = numerator @ torch.linalg.inv(denominator + torch.eye(denominator.shape[0]) * 1e-5)
+        return W_new
+    
+    def fit_EM_W(self, observations: TensorType["observation_dim", "num_obs", float], num_iterations: int = 100) -> None:
+        """
+        fit W model using the EM algorithm
+        assuming that the we have all observations, not just those clean obs
+        """
+        # initialize the W matrix
+        self.observation_mean.data = torch.nanmean(observations, dim=1)
+        for i in range(num_iterations):
+            # E-step
+            posterior_means, E_ZnZnTop = self.E_step(observations)
+            # M-step
+            W_new = self.M_step_W_new(posterior_means, E_ZnZnTop, observations)
+            self.observation_projection.data = W_new.data # save new W
+
+            print(f"iteration {i}")
     
     def predict(self, latent_mean: TensorType["n_components_kept", 1, float], latent_covariance: TensorType["n_components_kept", "n_components_kept", float]) -> Tuple[TensorType["observation_dim", 1, float], TensorType["observation_dim", "observation_dim", float]]:
         """compute the predictive distribution:
@@ -719,3 +790,48 @@ def format_multiview_data_for_pca(
         data_arr_views, dim=0
     )  # -> 2 * n_views X num_frames*num_bodyparts
     return data_arr.T  # note the transpose
+
+class ExpectationMaximization:
+    """ general EM class """
+    def __init__(self, n_iter = 100, tol = 1e-3, verbose = False):
+        self.n_iter = n_iter
+        self.tol = tol
+        self.verbose = verbose
+        self.objective = []
+
+    def E_step(self, data, model):
+        """
+        Args:
+            data: data to be fitted
+            model: model to be fitted
+        """
+        pass
+
+    def M_step(self, data, model):
+        """
+        Args:
+            data: data to be fitted
+            model: model to be fitted
+        """
+        pass
+
+    def eval_complete_data_log_likelihood(self, data, model):
+        """
+        Args:
+            data: data to be fitted
+            model: model to be fitted
+        """
+        pass
+
+    def fit(self, data, model):
+        """
+        Args:
+            data: data to be fitted
+            model: model to be fitted
+        """
+        # log objective before training
+        self.objective.append(self.eval_complete_data_log_likelihood(data, model))
+        for i in range(self.n_iter):
+            posterior_stats = self.E_step(data, model)
+            new_params = self.M_step(data, model, posterior_stats)
+            self.objective.append(self.eval_complete_data_log_likelihood(data, model))
