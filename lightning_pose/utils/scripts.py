@@ -264,8 +264,6 @@ def get_data_module(
             train_frames=cfg.training.train_frames,
             dali_config=cfg.dali,
             torch_seed=cfg.training.rng_seed_data_pt,
-            dali_seed=cfg.training.rng_seed_data_dali,
-            device_id=cfg.training.gpu_id,
         )
     return data_module
 

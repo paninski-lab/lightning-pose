@@ -187,9 +187,7 @@ class UnlabeledDataModule(BaseDataModule):
         val_probability: Optional[float] = None,
         test_probability: Optional[float] = None,
         train_frames: Optional[float] = None,
-        dali_seed: int = 123456,
         torch_seed: int = 42,
-        device_id: int = 0,
     ) -> None:
         """Data module that contains labeled and unlabeled data loaders.
 
@@ -210,9 +208,7 @@ class UnlabeledDataModule(BaseDataModule):
                 (exclusive) and defines the fraction of the initially selected
                 train frames
             torch_seed: control data splits
-            dali_seed: control randomness of unlabeled data loading
             torch_seed: control randomness of labeled data loading
-            device_id: gpu for unlabeled data loading
 
         """
         super().__init__(
@@ -232,9 +228,6 @@ class UnlabeledDataModule(BaseDataModule):
         self.filenames = check_video_paths(self.video_paths_list)
         self.num_workers_for_unlabeled = num_workers // 2
         self.num_workers_for_labeled = num_workers // 2
-        self.dali_seed = dali_seed
-        self.torch_seed = torch_seed
-        self.device_id = device_id
         self.dali_config = dali_config
         self.unlabeled_dataloader = None  # initialized in setup_unlabeled
         super().setup()
