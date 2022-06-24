@@ -12,6 +12,7 @@ learn_weights: False
 
 # resnet version for backbone:
 # resnet18 | resnet34 | resnet50 | resnet101 | resnet152
+# resnet50_3d
 # effb0 | effb1 | effb2
 backbone: resnet50
 
