@@ -23,6 +23,7 @@ from lightning_pose.models.base import (
 
 patch_typeguard()  # use before @typechecked
 
+
 @typechecked
 class HeatmapTracker(BaseSupervisedTracker):
     """Base model that produces heatmaps of keypoints from images."""
@@ -33,7 +34,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         loss_factory: LossFactory,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "effb0", "effb1", "effb2"] = "resnet50",
+            "resnet50_3d", "effb0", "effb1", "effb2"] = "resnet50",
         downsample_factor: Literal[2, 3] = 2,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
@@ -86,9 +87,10 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.temperature = torch.tensor(1000.0, device=self.device)  # soft argmax temp
         self.torch_seed = torch_seed
         self.do_context = do_context
-        self.representation_fc = torch.nn.Linear(5, 1, bias=False)
-        #         with torch.no_grad():
-        #             self.representation_fc.weight = nn.Parameter(torch.Tensor([[0.0, 0.0, 1.0, 0.0, 0.0]]))
+        if self.mode == "2d":
+            self.representation_fc = torch.nn.Linear(5, 1, bias=False)
+        elif self.mode == "3d":
+            self.representation_fc = torch.nn.Linear(8, 1, bias=False)
 
         # use this to log auxiliary information: rmse on labeled data
         self.rmse_loss = RegressionRMSELoss()
@@ -202,7 +204,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         ]) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Forward pass through the network."""
         representations = self.get_representations(images, self.do_context)
-        if self.do_context:
+        if self.do_context:  # and self.mode == "2d":
             representations: TensorType[
                 "batch", "features", "rep_height", "rep_width", 1
             ] = self.representation_fc(representations)
@@ -243,6 +245,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
         return (predicted_keypoints, confidence)
 
+
 @typechecked
 class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
     """Model produces heatmaps of keypoints from labeled/unlabeled images."""
@@ -254,7 +257,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         loss_factory_unsupervised: LossFactory,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "effb0", "effb1", "effb2"] = "resnet50",
+            "resnet50_3d", "effb0", "effb1", "effb2"] = "resnet50",
         downsample_factor: Literal[2, 3] = 2,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,

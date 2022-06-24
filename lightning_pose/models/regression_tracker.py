@@ -19,6 +19,7 @@ from lightning_pose.models.base import (
 patch_typeguard()  # use before @typechecked
 
 
+@typechecked
 class RegressionTracker(BaseSupervisedTracker):
     """Base model that produces (x, y) predictions of keypoints from images."""
 
@@ -29,7 +30,7 @@ class RegressionTracker(BaseSupervisedTracker):
         loss_factory: LossFactory,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "effb0", "effb1", "effb2"] = "resnet50",
+            "resnet50_3d", "effb0", "effb1", "effb2"] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         representation_dropout_rate: float = 0.2,
@@ -109,6 +110,7 @@ class RegressionTracker(BaseSupervisedTracker):
         }
 
 
+@typechecked
 class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTracker):
     """Model produces vectors of keypoints from labeled/unlabeled images."""
 
@@ -120,7 +122,7 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         loss_factory_unsupervised: LossFactory,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "effb0", "effb1", "effb2"] = "resnet50",
+            "resnet50_3d", "effb0", "effb1", "effb2"] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         representation_dropout_rate: float = 0.2,
