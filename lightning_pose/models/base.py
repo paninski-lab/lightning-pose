@@ -1,4 +1,4 @@
-"""Base class for resnet backbone that acts as a feature extractor."""
+"""Base class for backbone that acts as a feature extractor."""
 
 from pytorch_lightning.core.lightning import LightningModule
 import torch
@@ -17,38 +17,43 @@ MULTISTEPLR_GAMMA_DEFAULT = 0.5
 
 
 @typechecked
-def grab_resnet_backbone(
-    resnet_version: Literal[18, 34, 50, 101, 152] = 18,
+def grab_backbone(
+    backbone: Literal[
+        "resnet18", "resnet34", "resnet50", "resnet101", "resnet152", "effb0", "effb1",
+        "effb2"] = "resnet50",
     pretrained: bool = True,
-) -> models.resnet.ResNet:
-    """Load resnet architecture from torchvision.
+):
+    """Load backbone architecture from torchvision.
 
     Args:
-        resnet_version: choose network depth
+        backbone: choose network type and depth
         pretrained: True to load weights pretrained on imagenet
 
     Returns:
-        selected resnet architecture as a model object
+        selected backbone architecture as a model object
 
     """
-    resnets = {
-        18: models.resnet18,
-        34: models.resnet34,
-        50: models.resnet50,
-        101: models.resnet101,
-        152: models.resnet152,
+    backbone_dict = {
+        "resnet18": models.resnet18,
+        "resnet34": models.resnet34,
+        "resnet50": models.resnet50,
+        "resnet101": models.resnet101,
+        "resnet152": models.resnet152,
+        "effb0": models.efficientnet_b0,
+        "effb1": models.efficientnet_b1,
+        "effb2": models.efficientnet_b2,
     }
-    return resnets[resnet_version](pretrained)
+    return backbone_dict[backbone](pretrained)
 
 
 @typechecked
 def grab_layers_sequential(
-    model: models.resnet.ResNet, last_layer_ind: Optional[int] = None
+    model, last_layer_ind: Optional[int] = None
 ) -> torch.nn.modules.container.Sequential:
     """Package selected number of layers into a nn.Sequential object.
 
     Args:
-        model: original resnet model
+        model: original resnet or efficientnet model
         last_layer_ind: final layer to pass data through
 
     Returns:
@@ -98,13 +103,14 @@ class SemiSupervisedHeatmapBatchDict(TypedDict):
     ]]
 
 
-
 class BaseFeatureExtractor(LightningModule):
     """Object that contains the base resnet feature extractor."""
 
     def __init__(
         self,
-        resnet_version: Literal[18, 34, 50, 101, 152] = 18,
+        backbone: Literal[
+            "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
+            "effb0", "effb1", "effb2"] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         lr_scheduler: str = "multisteplr",
@@ -118,7 +124,7 @@ class BaseFeatureExtractor(LightningModule):
         classification tasks, so we truncate their final fully connected layer.
 
         Args:
-            resnet_version: which ResNet version to use; defaults to 18
+            backbone: which backbone version to use; defaults to resnet50
             pretrained: True to load weights pretrained on imagenet
             last_resnet_layer_to_get: Defaults to -2.
             lr_scheduler: how to schedule learning rate
@@ -128,14 +134,14 @@ class BaseFeatureExtractor(LightningModule):
         super().__init__()
         print("\n Initializing a {} instance.".format(self._get_name()))
 
-        self.resnet_version = resnet_version
-        base = grab_resnet_backbone(
-            resnet_version=self.resnet_version, pretrained=pretrained
-        )
-        self.num_fc_input_features = base.fc.in_features
+        self.backbone_arch = backbone
+        base = grab_backbone(backbone=self.backbone, pretrained=pretrained)
+        if "resnet" in self.backbone:
+            self.num_fc_input_features = base.fc.in_features
+        elif "eff" in self.backbone:
+            self.num_fc_input_features = base.classifier[-1].in_features
         self.backbone = grab_layers_sequential(
-            model=base,
-            last_layer_ind=last_resnet_layer_to_get,
+            model=base, last_layer_ind=last_resnet_layer_to_get,
         )
         self.lr_scheduler = lr_scheduler
         self.lr_scheduler_params = lr_scheduler_params
