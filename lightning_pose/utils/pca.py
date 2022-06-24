@@ -70,10 +70,11 @@ class KeypointPCA(object):
     ) -> TensorType["num_samples", -1]:
         return self._error_metric_factory[self.error_metric](data_arr=data_arr)
 
-    def _get_data(self) -> None:
-        self.data_arr, _ = DataExtractor(
+    def _get_data(self) -> TensorType["num_samples", "sample_dim"]:
+        data_arr, _ = DataExtractor(
             data_module=self.data_module, cond="train", extract_images=False
         )()
+        return data_arr
 
     def _multiview_format(
         self, data_arr: TensorType["num_original_samples", "num_original_dims"]
@@ -269,7 +270,7 @@ class KeypointPCA(object):
 
         # save training data in self.data_arr
         # TODO: consider putting in init
-        self._get_data()
+        self.data_arr = self._get_data()
 
         # modify self.data_arr in the case of multiview pca, else keep the same
         self.data_arr = self._format_data(data_arr=self.data_arr)
@@ -306,7 +307,7 @@ class LinearGaussian(KeypointPCA):
         super().__call__() # clean data, fit pca, generate pca_object...
         # TODO: here we do want to call another variant of __call__, that doesn't eliminate nans.
         # get formatted data including nans
-        self.full_data_arr = self._format_data(data_arr=super()._get_data())
+        self.full_data_arr = self._format_data(data_arr=self._get_data())
 
         self.parametrization = parametrization
         # derived quantities needed for both optional parametrizations
@@ -440,6 +441,9 @@ class LinearGaussian(KeypointPCA):
         W_new = numerator @ torch.linalg.inv(denominator + torch.eye(denominator.shape[0]) * 1e-5)
         return W_new
     
+    def EM_objective(self):
+        pass
+    
     def fit_EM_W(self, observations: TensorType["observation_dim", "num_obs", float], num_iterations: int = 100) -> None:
         """
         fit W model using the EM algorithm
@@ -453,6 +457,8 @@ class LinearGaussian(KeypointPCA):
             # M-step
             W_new = self.M_step_W_new(posterior_means, E_ZnZnTop, observations)
             self.observation_projection.data = W_new.data # save new W
+
+            # TODO: EM objective calculation
 
             print(f"iteration {i}")
     

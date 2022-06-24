@@ -60,7 +60,7 @@ def test_pca_keypoint_class(cfg, base_data_module_combined):
         mirrored_column_matches=cfg.data.mirrored_column_matches,
     )
 
-    kp_pca._get_data()
+    kp_pca.data_arr = kp_pca._get_data()
     assert kp_pca.data_arr.shape == (num_train_ims, 2 * num_keypoints)
 
     # from lightning_pose.utils.pca import get_train_data_for_pca
