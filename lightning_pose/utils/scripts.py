@@ -168,19 +168,19 @@ def get_dataset(
     from PIL import Image
     import os
 
-    image_name = os.path.join(data_dir)
-
-    def check_image_dims(self):
-        img_name = self.image_names[0]
-        # read image from file and apply transformations (if any)
-        file_name = os.path.join(self.root_directory, img_name)
-        # if 1 color channel, change to 3.
-        image = Image.open(file_name).convert("RGB")
-        assert image.shape == ()
-        # load one image (zeroth one)
-        # get the shape of that
-        # assert that it's equal to config file
-        pass
+    # image_name = os.path.join(data_dir)
+    #
+    # def check_image_dims(self):
+    #     img_name = self.image_names[0]
+    #     # read image from file and apply transformations (if any)
+    #     file_name = os.path.join(self.root_directory, img_name)
+    #     # if 1 color channel, change to 3.
+    #     image = Image.open(file_name).convert("RGB")
+    #     assert image.shape == ()
+    #     # load one image (zeroth one)
+    #     # get the shape of that
+    #     # assert that it's equal to config file
+    #     pass
 
     if cfg.model.model_type == "regression":
         dataset = BaseTrackingDataset(
