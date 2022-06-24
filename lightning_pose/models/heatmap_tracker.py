@@ -31,7 +31,9 @@ class HeatmapTracker(BaseSupervisedTracker):
         self,
         num_keypoints: int,
         loss_factory: LossFactory,
-        resnet_version: Literal[18, 34, 50, 101, 152] = 18,
+        backbone: Literal[
+            "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
+            "effb0", "effb1", "effb2"] = "resnet50",
         downsample_factor: Literal[2, 3] = 2,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
@@ -46,8 +48,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         Args:
             num_keypoints: number of body parts
             loss_factory: object to orchestrate loss computation
-            resnet_version: ResNet variant to be used (e.g. 18, 34, 50, 101,
-                or 152); essentially specifies how large the resnet will be
+            backbone: ResNet or EfficientNet variant to be used
             downsample_factor: make heatmap smaller than original frames to
                 save memory; subpixel operations are performed for increased
                 precision
@@ -67,7 +68,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         torch.manual_seed(torch_seed)
 
         super().__init__(
-            resnet_version=resnet_version,
+            backbone=backbone,
             pretrained=pretrained,
             last_resnet_layer_to_get=last_resnet_layer_to_get,
             lr_scheduler=lr_scheduler,
@@ -251,7 +252,9 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         num_keypoints: int,
         loss_factory: LossFactory,
         loss_factory_unsupervised: LossFactory,
-        resnet_version: Literal[18, 34, 50, 101, 152] = 18,
+        backbone: Literal[
+            "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
+            "effb0", "effb1", "effb2"] = "resnet50",
         downsample_factor: Literal[2, 3] = 2,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
@@ -268,8 +271,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             loss_factory: object to orchestrate supervised loss computation
             loss_factory_unsupervised: object to orchestrate unsupervised loss
                 computation
-            resnet_version: ResNet variant to be used (e.g. 18, 34, 50, 101,
-                or 152); essentially specifies how large the resnet will be
+            backbone: ResNet or EfficientNet variant to be used
             downsample_factor: make heatmap smaller than original frames to
                 save memory; subpixel operations are performed for increased
                 precision
@@ -287,7 +289,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         super().__init__(
             num_keypoints=num_keypoints,
             loss_factory=loss_factory,
-            resnet_version=resnet_version,
+            backbone=backbone,
             downsample_factor=downsample_factor,
             pretrained=pretrained,
             last_resnet_layer_to_get=last_resnet_layer_to_get,
@@ -305,10 +307,10 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
     def get_loss_inputs_unlabeled(
         self,
         batch: Union[TensorType[
-        "sequence_length", "RGB":3, "image_height", "image_width", float
-    ], TensorType[
-        "sequence_length", "context":5, "RGB":3, "image_height", "image_width", float
-    ]],
+            "sequence_length", "RGB":3, "image_height", "image_width", float
+        ], TensorType[
+            "sequence_length", "context":5, "RGB":3, "image_height", "image_width", float
+        ]],
     ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
