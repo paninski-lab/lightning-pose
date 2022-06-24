@@ -283,6 +283,9 @@ def test_linear_gaussian_init(cfg, base_data_module_combined):
         columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
         parametrization="Paninski"
     )
+    # assert that we're not excluding any observations in the full data arr. i.e., keeping nans
+    assert lgssm.full_data_arr.shape == (len(base_data_module_combined.train_dataset), 14 * 2)
+    
     PDP_T = lgssm.evecs.T @ lgssm.D @ lgssm.evecs
     assert torch.allclose(PDP_T, PDP_T.T)
 

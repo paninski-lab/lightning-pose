@@ -321,47 +321,92 @@ class LinearGaussian(KeypointPCA):
         
         self.pca_cov: TensorType["observation_dim", "observation_dim"] = torch.tensor(self.pca_object.get_covariance(), device=self.evecs.device, dtype=self.evecs.dtype)
 
-    
-    @property
-    def observation_mean(self) -> TensorType["observation_dim", 1]:
-        """ mean of the data as computed by the PCA class """
-        return self.parameters["mean"].unsqueeze(1)
-    
-    @property
-    def prior_mean(self) -> TensorType["n_components_kept", 1]:
-        """ X \sim N(0, D) for Paninski, X \sim N(0, I) for Bishop """
-        return torch.zeros((self._n_components_kept, 1))
-    
-    @property
-    def prior_precision(self) -> TensorType["n_components_kept", "n_components_kept"]:
+        self.learn_with_em = True # TODO: control from outside
+        
+        # set prior mean
+        # X \sim N(0, D) for Paninski, X \sim N(0, I) for Bishop
+        self.prior_mean: TensorType["n_components_kept", 1] = torch.zeros((self._n_components_kept, 1))
+
+        # set observation mean
+        if self.learn_with_em:
+            # nanmean of all the keypoints, without eliminating any images
+            self.observation_mean: TensorType["observation_dim", 1] = self.full_data_arr.T.nanmean(axis=1).unsqueeze(1)
+        else:
+            # just mean of fully observed images as computed by the PCA class
+            self.observation_mean: TensorType["observation_dim", 1] = self.parameters["mean"].unsqueeze(1)
+        
+        # set prior precision
         if self.parametrization == "Bishop":
-            return torch.eye(self._n_components_kept)
+            self.prior_precision: TensorType["n_components_kept", "n_components_kept"] = torch.eye(self._n_components_kept)
         elif self.parametrization == "Paninski":
-            return torch.linalg.inv(self.D)
-    
-    @property
-    def observation_precision(self) -> TensorType["observation_dim", "observation_dim"]:
-        """ precision of the data """
+            self.prior_precision: TensorType["n_components_kept", "n_components_kept"] = torch.linalg.inv(self.D)
+        
+        # set observation precision
         if self.parametrization == "Bishop":
             # identity matrix of size obs_dim X obs_dim 
             I = torch.eye(self.parameters["mean"].shape[0])
-            return torch.linalg.inv(I * self.sigma_2)
+            self.observation_precision: TensorType["observation_dim", "observation_dim"] = torch.linalg.inv(I * self.sigma_2)
         elif self.parametrization == "Paninski":
             # P: (M \times 2K), our A matrix
             PDP_T = self.evecs.T @ self.D @ self.evecs
             R = self.pca_cov - PDP_T # R is the covariance of the residuals, low-rank by construction
             R += torch.eye(R.shape[0]) * 1e-5 # add a small diagonal jitter to avoid singularity
-            return torch.linalg.inv(R)
-    
-    @property
-    def observation_projection(self) -> TensorType["observation_dim", "n_components_kept"]:
-        """ projection matrix from latent space to data space """
+            self.observation_precision: TensorType["observation_dim", "observation_dim"] = torch.linalg.inv(R)
+
+        # set observation projection
         if self.parametrization == "Bishop":
             # Eq. 7 in Tipping & Bishop, assuming R=I and the sqrt of a diagonal matrix is the sqrt of the diag entries
             # W_{ML} = U_q (\Lambda_q - \sigma^2 I)^{1/2}R
-            return self.evecs.T @ torch.sqrt(self.D - self.sigma_2*torch.eye(self.D.shape[0]))
+            self.observation_projection: TensorType["observation_dim", "n_components_kept"] = self.evecs.T @ torch.sqrt(self.D - self.sigma_2*torch.eye(self.D.shape[0]))
         elif self.parametrization == "Paninski":
-            return self.evecs.T
+            self.observation_projection: TensorType["observation_dim", "n_components_kept"] = self.evecs.T
+
+    
+    # @property
+    # def observation_mean(self) -> TensorType["observation_dim", 1]:
+    #     """ mean of the data  """
+    #     if self.learn_with_em:
+    #         # nanmean of all the obs, without eliminating any images
+    #         return self.full_data_arr.T.nanmean(axis=1).unsqueeze(1)
+    #     else:
+    #         # just mean of fully observed images as computed by the PCA class
+    #         return self.parameters["mean"].unsqueeze(1)
+    
+    # @property
+    # def prior_mean(self) -> TensorType["n_components_kept", 1]:
+    #     """ X \sim N(0, D) for Paninski, X \sim N(0, I) for Bishop """
+    #     return torch.zeros((self._n_components_kept, 1))
+    
+    # @property
+    # def prior_precision(self) -> TensorType["n_components_kept", "n_components_kept"]:
+    #     if self.parametrization == "Bishop":
+    #         return torch.eye(self._n_components_kept)
+    #     elif self.parametrization == "Paninski":
+    #         return torch.linalg.inv(self.D)
+    
+    # @property
+    # def observation_precision(self) -> TensorType["observation_dim", "observation_dim"]:
+    #     """ precision of the data """
+    #     if self.parametrization == "Bishop":
+    #         # identity matrix of size obs_dim X obs_dim 
+    #         I = torch.eye(self.parameters["mean"].shape[0])
+    #         return torch.linalg.inv(I * self.sigma_2)
+    #     elif self.parametrization == "Paninski":
+    #         # P: (M \times 2K), our A matrix
+    #         PDP_T = self.evecs.T @ self.D @ self.evecs
+    #         R = self.pca_cov - PDP_T # R is the covariance of the residuals, low-rank by construction
+    #         R += torch.eye(R.shape[0]) * 1e-5 # add a small diagonal jitter to avoid singularity
+    #         return torch.linalg.inv(R)
+    
+    # @property
+    # def observation_projection(self) -> TensorType["observation_dim", "n_components_kept"]:
+    #     """ projection matrix from latent space to data space """
+    #     if self.parametrization == "Bishop":
+    #         # Eq. 7 in Tipping & Bishop, assuming R=I and the sqrt of a diagonal matrix is the sqrt of the diag entries
+    #         # W_{ML} = U_q (\Lambda_q - \sigma^2 I)^{1/2}R
+    #         return self.evecs.T @ torch.sqrt(self.D - self.sigma_2*torch.eye(self.D.shape[0]))
+    #     elif self.parametrization == "Paninski":
+    #         return self.evecs.T
     
     def compute_likelihood_mean(self, latent: TensorType["n_components_kept", -1, float]) -> TensorType["observation_dim", -1, float]:
         """
@@ -400,8 +445,8 @@ class LinearGaussian(KeypointPCA):
         """
         E-step of the EM algorithm
         """
-        posterior_means = torch.zeros(size=(self.n_components_kept, observations.shape[1]), device=observations.device)
-        per_obs_E_ZnZnTop = torch.zeros(size=(self.n_components_kept, self.n_components_kept, observations.shape[1]), device=observations.device)
+        posterior_means = torch.zeros(size=(self._n_components_kept, observations.shape[1]), device=observations.device)
+        per_obs_E_ZnZnTop = torch.zeros(size=(self._n_components_kept, self._n_components_kept, observations.shape[1]), device=observations.device)
         
         for i in range(observations.shape[1]):
             # compute the posterior mean and covariance
@@ -412,7 +457,7 @@ class LinearGaussian(KeypointPCA):
         
         return posterior_means, per_obs_E_ZnZnTop
     
-    def M_step_W_new(self, posterior_means: TensorType["n_components_kept", "num_obs", float], E_ZnZnTop: TensorType["n_components_kept", "n_components_kept", "num_obs", float], observations: TensorType["observation_dim", "num_obs", float]) -> TensorType["n_components_kept", "observation_dim", float]:
+    def M_step_W_new(self, posterior_means: TensorType["n_components_kept", "num_obs", float], E_ZnZnTop: TensorType["n_components_kept", "n_components_kept", "num_obs", float], observations: TensorType["observation_dim", "num_obs", float]) -> TensorType["observation_dim", "n_components_kept", float]:
         """
         Bishop's 12.56
         note that observations may include missing values. how to resolve this? 
@@ -449,14 +494,17 @@ class LinearGaussian(KeypointPCA):
         fit W model using the EM algorithm
         assuming that the we have all observations, not just those clean obs
         """
-        # initialize the W matrix
-        self.observation_mean.data = torch.nanmean(observations, dim=1)
+        # self.observation_mean.data = torch.nanmean(observations, dim=1)
         for i in range(num_iterations):
             # E-step
+            print("iter {}".format(i))
+            print("entering E-step")
             posterior_means, E_ZnZnTop = self.E_step(observations)
             # M-step
+            print("entering M-step")
             W_new = self.M_step_W_new(posterior_means, E_ZnZnTop, observations)
-            self.observation_projection.data = W_new.data # save new W
+            print("W_new: {}".format(W_new))
+            self.observation_projection = torch.clone(W_new) # save new W
 
             # TODO: EM objective calculation
 
