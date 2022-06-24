@@ -321,9 +321,10 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
                 # add backbone to the params.
                 {
                     "params": self.upsampling_layers.parameters()
-                },  # important this is the 0th element, for BackboneFinetuning callback
-                {"params": self.representation_fc.parameters()},
-            ]
+                }] # important this is the 0th element, for BackboneFinetuning callback
+            
+            if self.do_context == True: 
+                params.append({"params": self.representation_fc.parameters()})
 
         else:
             # standard adam optimizer
@@ -447,9 +448,10 @@ class SemiSupervisedTrackerMixin(object):
                 # add backbone to the params.
                 {
                     "params": self.upsampling_layers.parameters()
-                },  # important this is the 0th element, for BackboneFinetuning callback
-                {"params": self.representation_fc.parameters()},
-            ]
+                }]  # important this is the 0th element, for BackboneFinetuning callback
+            if self.do_context == True:
+                params.append({"params": self.representation_fc.parameters()})
+            
 
         else:
             # standard adam optimizer
