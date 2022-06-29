@@ -62,8 +62,12 @@ def train(cfg: DictConfig):
     # model
     model = get_model(cfg=cfg, data_module=data_module, loss_factories=loss_factories)
     
-    if ("temporal" in cfg.model.losses_to_use) and model.do_context and not data_module.unlabeled_dataloader.context_sequences_successive:
-        raise ValueError("Temporal loss is not compatible with non-successive context sequences. Please change context_sequences_successive in data_module.py to True.")
+    if ("temporal" in cfg.model.losses_to_use) \
+            and model.do_context \
+            and not data_module.unlabeled_dataloader.context_sequences_successive:
+        raise ValueError(
+            f"Temporal loss is not compatible with non-successive context sequences. "
+            f"Please change context_sequences_successive in data_module.py to True.")
     
     # ----------------------------------------------------------------------------------
     # Set up and run training
