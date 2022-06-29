@@ -9,6 +9,8 @@ from torchtyping import TensorType, patch_typeguard
 import torchvision.models as models
 from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypedDict, Union
+from pl_bolts.models.self_supervised import SimCLR
+import pl_bolts
 
 patch_typeguard()  # use before @typechecked
 
@@ -119,7 +121,7 @@ class BaseFeatureExtractor(LightningModule):
         self,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "effb0", "effb1", "effb2"] = "resnet50",
+            "resnet50_3d", "resnet50_contrastive", "effb0", "effb1", "effb2"] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         lr_scheduler: str = "multisteplr",
@@ -150,6 +152,11 @@ class BaseFeatureExtractor(LightningModule):
         if "3d" in backbone:
             base = torch.hub.load(
                 'facebookresearch/pytorchvideo', 'slow_r50', pretrained=True)
+        elif backbone == "resnet50_contrastive":
+            # load resnet50 pretrained using SimCLR on imagenet
+            weight_path = 'https://pl-bolts-weights.s3.us-east-2.amazonaws.com/simclr/bolts_simclr_imagenet/simclr_imagenet.ckpt'
+            simclr = SimCLR.load_from_checkpoint(weight_path, strict=False)
+            base = simclr.encoder
         else:
             base = grab_backbone(backbone=backbone, pretrained=pretrained)
 
