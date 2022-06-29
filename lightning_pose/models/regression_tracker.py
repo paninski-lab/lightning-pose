@@ -30,13 +30,15 @@ class RegressionTracker(BaseSupervisedTracker):
         loss_factory: LossFactory,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "effb0", "effb1", "effb2"] = "resnet50",
+            "resnet50_3d", "resnet50_contrastive",
+            "efficientnet_b0", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         representation_dropout_rate: float = 0.2,
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
+        do_context: bool = True,
     ) -> None:
         """Base model that produces (x, y) coordinates of keypoints from images.
 
@@ -53,6 +55,7 @@ class RegressionTracker(BaseSupervisedTracker):
                 multisteplr
             lr_scheduler_params: params for specific learning rate schedulers
                 multisteplr: milestones, gamma
+            do_context: use temporal context frames to improve predictions
 
         """
 
@@ -73,6 +76,11 @@ class RegressionTracker(BaseSupervisedTracker):
         # TODO: consider removing dropout
         self.representation_dropout = nn.Dropout(p=representation_dropout_rate)
         self.torch_seed = torch_seed
+        self.do_context = do_context
+        if self.mode == "2d":
+            self.representation_fc = torch.nn.Linear(5, 1, bias=False)
+        elif self.mode == "3d":
+            self.representation_fc = torch.nn.Linear(8, 1, bias=False)
 
         # use this to log auxiliary information: rmse on labeled data
         self.rmse_loss = RegressionRMSELoss()
@@ -90,11 +98,18 @@ class RegressionTracker(BaseSupervisedTracker):
     @typechecked
     def forward(
         self,
-        images: TensorType["batch", "channels":3, "image_height", "image_width"],
-    ) -> TensorType["batch", "two_x_num_keypoints"]:
+        images: Union[
+            TensorType["batch", "channels":3, "image_height", "image_width"],
+            TensorType["batch", "frames", "channels":3, "image_height", "image_width"]]
+        ) -> TensorType["batch", "two_x_num_keypoints"]:
         """Forward pass through the network."""
-        representation = self.get_representations(images)
-        out = self.final_layer(self.reshape_representation(representation))
+        representations = self.get_representations(images)
+        if self.do_context:
+            # output of line below is of shape (batch, features, height, width, 1)
+            representations = self.representation_fc(representations)
+            # output of line below is of shape (batch, features, height, width)
+            representations = torch.squeeze(representations, 4)
+        out = self.final_layer(self.reshape_representation(representations))
         return out
 
     @typechecked
@@ -122,7 +137,8 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         loss_factory_unsupervised: LossFactory,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "effb0", "effb1", "effb2"] = "resnet50",
+            "resnet50_3d", "resnet50_contrastive",
+            "efficientnet_b0", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         representation_dropout_rate: float = 0.2,
