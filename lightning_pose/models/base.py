@@ -6,46 +6,14 @@ from torch import nn
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, MultiStepLR
 from torchtyping import TensorType, patch_typeguard
-import torchvision.models as models
+import torchvision.models as tvmodels
 from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypedDict, Union
-from pl_bolts.models.self_supervised import SimCLR
-import pl_bolts
 
 patch_typeguard()  # use before @typechecked
 
 MULTISTEPLR_MILESTONES_DEFAULT = [100, 200, 300]
 MULTISTEPLR_GAMMA_DEFAULT = 0.5
-
-
-@typechecked
-def grab_backbone(
-    backbone: Literal[
-        "resnet18", "resnet34", "resnet50", "resnet101", "resnet152", "effb0", "effb1",
-        "effb2"] = "resnet50",
-    pretrained: bool = True,
-):
-    """Load backbone architecture from torchvision.
-
-    Args:
-        backbone: choose network type and depth
-        pretrained: True to load weights pretrained on imagenet
-
-    Returns:
-        selected backbone architecture as a model object
-
-    """
-    backbone_dict = {
-        "resnet18": models.resnet18,
-        "resnet34": models.resnet34,
-        "resnet50": models.resnet50,
-        "resnet101": models.resnet101,
-        "resnet152": models.resnet152,
-        "effb0": models.efficientnet_b0,
-        "effb1": models.efficientnet_b1,
-        "effb2": models.efficientnet_b2,
-    }
-    return backbone_dict[backbone](pretrained)
 
 
 @typechecked
@@ -121,14 +89,15 @@ class BaseFeatureExtractor(LightningModule):
         self,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "resnet50_contrastive", "effb0", "effb1", "effb2"] = "resnet50",
+            "resnet50_3d", "resnet50_contrastive",
+            "efficientnet_b0", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[dict] = None,
         do_context=False,
     ) -> None:
-        """A ResNet model that takes in images and generates features.
+        """A CNN model that takes in images and generates features.
 
         ResNets will be loaded from torchvision and can be either pre-trained
         on ImageNet or randomly initialized. These were originally used for
@@ -151,14 +120,17 @@ class BaseFeatureExtractor(LightningModule):
         # load backbone weights
         if "3d" in backbone:
             base = torch.hub.load(
-                'facebookresearch/pytorchvideo', 'slow_r50', pretrained=True)
+                "facebookresearch/pytorchvideo", "slow_r50", pretrained=True)
         elif backbone == "resnet50_contrastive":
             # load resnet50 pretrained using SimCLR on imagenet
-            weight_path = 'https://pl-bolts-weights.s3.us-east-2.amazonaws.com/simclr/bolts_simclr_imagenet/simclr_imagenet.ckpt'
+            from pl_bolts.models.self_supervised import SimCLR
+            import pl_bolts
+            weight_path = "https://pl-bolts-weights.s3.us-east-2.amazonaws.com/simclr/bolts_simclr_imagenet/simclr_imagenet.ckpt"
             simclr = SimCLR.load_from_checkpoint(weight_path, strict=False)
             base = simclr.encoder
         else:
-            base = grab_backbone(backbone=backbone, pretrained=pretrained)
+            # load resnet or efficientnet models from torchvision.models
+            base = getattr(tvmodels, backbone)(pretrained)
 
         # get truncated version of backbone
         if "3d" in backbone:
