@@ -34,7 +34,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         loss_factory: LossFactory,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "effb0", "effb1", "effb2"] = "resnet50",
+            "resnet50_3d", "resnet50_contrastive", "effb0", "effb1", "effb2"] = "resnet50",
         downsample_factor: Literal[2, 3] = 2,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
@@ -257,7 +257,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         loss_factory_unsupervised: LossFactory,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "effb0", "effb1", "effb2"] = "resnet50",
+            "resnet50_3d", "resnet50_contrastive", "effb0", "effb1", "effb2"] = "resnet50",
         downsample_factor: Literal[2, 3] = 2,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
