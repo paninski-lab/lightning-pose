@@ -13,8 +13,8 @@ learn_weights: False
 # resnet version for backbone:
 # resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
 # resnet50_3d
-# effb0 | effb1 | effb2
-backbone: resnet50_contrastive
+# efficientnet_b0 | efficientnet_b1 | efficientnet_b2
+backbone: resnet50
 
 # prediction mode: "heatmap" | "regression" | "heatmap_context"
 model_type: "heatmap"
