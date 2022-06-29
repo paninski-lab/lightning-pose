@@ -34,7 +34,8 @@ class HeatmapTracker(BaseSupervisedTracker):
         loss_factory: LossFactory,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "resnet50_contrastive", "effb0", "effb1", "effb2"] = "resnet50",
+            "resnet50_3d", "resnet50_contrastive",
+            "efficientnet_b0", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
         downsample_factor: Literal[2, 3] = 2,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
@@ -62,6 +63,7 @@ class HeatmapTracker(BaseSupervisedTracker):
                 multisteplr
             lr_scheduler_params: params for specific learning rate schedulers
                 multisteplr: milestones, gamma
+            do_context: use temporal context frames to improve predictions
 
         """
 
@@ -200,11 +202,11 @@ class HeatmapTracker(BaseSupervisedTracker):
         self,
         images: Union[
             TensorType["batch", "channels":3, "image_height", "image_width"],
-            TensorType["batch", "frames", "channels":3, "image_height", "image_width"],
-        ]) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
+            TensorType["batch", "frames", "channels":3, "image_height", "image_width"]]
+    ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Forward pass through the network."""
         representations = self.get_representations(images, self.do_context)
-        if self.do_context:  # and self.mode == "2d":
+        if self.do_context:
             representations: TensorType[
                 "batch", "features", "rep_height", "rep_width", 1
             ] = self.representation_fc(representations)
@@ -257,7 +259,8 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         loss_factory_unsupervised: LossFactory,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "resnet50_contrastive", "effb0", "effb1", "effb2"] = "resnet50",
+            "resnet50_3d", "resnet50_contrastive",
+            "efficientnet_b0", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
         downsample_factor: Literal[2, 3] = 2,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
