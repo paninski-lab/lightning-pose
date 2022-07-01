@@ -23,6 +23,7 @@ from lightning_pose.models.base import (
 
 patch_typeguard()  # use before @typechecked
 
+
 @typechecked
 class HeatmapTracker(BaseSupervisedTracker):
     """Base model that produces heatmaps of keypoints from images."""
@@ -31,7 +32,10 @@ class HeatmapTracker(BaseSupervisedTracker):
         self,
         num_keypoints: int,
         loss_factory: LossFactory,
-        resnet_version: Literal[18, 34, 50, 101, 152] = 18,
+        backbone: Literal[
+            "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
+            "resnet50_3d", "resnet50_contrastive",
+            "efficientnet_b0", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
         downsample_factor: Literal[2, 3] = 2,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
@@ -46,8 +50,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         Args:
             num_keypoints: number of body parts
             loss_factory: object to orchestrate loss computation
-            resnet_version: ResNet variant to be used (e.g. 18, 34, 50, 101,
-                or 152); essentially specifies how large the resnet will be
+            backbone: ResNet or EfficientNet variant to be used
             downsample_factor: make heatmap smaller than original frames to
                 save memory; subpixel operations are performed for increased
                 precision
@@ -60,6 +63,7 @@ class HeatmapTracker(BaseSupervisedTracker):
                 multisteplr
             lr_scheduler_params: params for specific learning rate schedulers
                 multisteplr: milestones, gamma
+            do_context: use temporal context frames to improve predictions
 
         """
 
@@ -67,7 +71,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         torch.manual_seed(torch_seed)
 
         super().__init__(
-            resnet_version=resnet_version,
+            backbone=backbone,
             pretrained=pretrained,
             last_resnet_layer_to_get=last_resnet_layer_to_get,
             lr_scheduler=lr_scheduler,
@@ -85,9 +89,10 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.temperature = torch.tensor(1000.0, device=self.device)  # soft argmax temp
         self.torch_seed = torch_seed
         self.do_context = do_context
-        self.representation_fc = torch.nn.Linear(5, 1, bias=False)
-        #         with torch.no_grad():
-        #             self.representation_fc.weight = nn.Parameter(torch.Tensor([[0.0, 0.0, 1.0, 0.0, 0.0]]))
+        if self.mode == "2d":
+            self.representation_fc = torch.nn.Linear(5, 1, bias=False)
+        elif self.mode == "3d":
+            self.representation_fc = torch.nn.Linear(8, 1, bias=False)
 
         # use this to log auxiliary information: rmse on labeled data
         self.rmse_loss = RegressionRMSELoss()
@@ -197,8 +202,8 @@ class HeatmapTracker(BaseSupervisedTracker):
         self,
         images: Union[
             TensorType["batch", "channels":3, "image_height", "image_width"],
-            TensorType["batch", "frames", "channels":3, "image_height", "image_width"],
-        ]) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
+            TensorType["batch", "frames", "channels":3, "image_height", "image_width"]]
+    ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Forward pass through the network."""
         representations = self.get_representations(images, self.do_context)
         if self.do_context:
@@ -242,6 +247,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
         return (predicted_keypoints, confidence)
 
+
 @typechecked
 class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
     """Model produces heatmaps of keypoints from labeled/unlabeled images."""
@@ -251,7 +257,10 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         num_keypoints: int,
         loss_factory: LossFactory,
         loss_factory_unsupervised: LossFactory,
-        resnet_version: Literal[18, 34, 50, 101, 152] = 18,
+        backbone: Literal[
+            "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
+            "resnet50_3d", "resnet50_contrastive",
+            "efficientnet_b0", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
         downsample_factor: Literal[2, 3] = 2,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
@@ -268,8 +277,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             loss_factory: object to orchestrate supervised loss computation
             loss_factory_unsupervised: object to orchestrate unsupervised loss
                 computation
-            resnet_version: ResNet variant to be used (e.g. 18, 34, 50, 101,
-                or 152); essentially specifies how large the resnet will be
+            backbone: ResNet or EfficientNet variant to be used
             downsample_factor: make heatmap smaller than original frames to
                 save memory; subpixel operations are performed for increased
                 precision
@@ -287,7 +295,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         super().__init__(
             num_keypoints=num_keypoints,
             loss_factory=loss_factory,
-            resnet_version=resnet_version,
+            backbone=backbone,
             downsample_factor=downsample_factor,
             pretrained=pretrained,
             last_resnet_layer_to_get=last_resnet_layer_to_get,
@@ -305,10 +313,10 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
     def get_loss_inputs_unlabeled(
         self,
         batch: Union[TensorType[
-        "sequence_length", "RGB":3, "image_height", "image_width", float
-    ], TensorType[
-        "sequence_length", "context":5, "RGB":3, "image_height", "image_width", float
-    ]],
+            "sequence_length", "RGB":3, "image_height", "image_width", float
+        ], TensorType[
+            "sequence_length", "context":5, "RGB":3, "image_height", "image_width", float
+        ]],
     ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps

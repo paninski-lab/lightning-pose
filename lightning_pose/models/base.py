@@ -1,4 +1,4 @@
-"""Base class for resnet backbone that acts as a feature extractor."""
+"""Base class for backbone that acts as a feature extractor."""
 
 from pytorch_lightning.core.lightning import LightningModule
 import torch
@@ -6,7 +6,7 @@ from torch import nn
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, MultiStepLR
 from torchtyping import TensorType, patch_typeguard
-import torchvision.models as models
+import torchvision.models as tvmodels
 from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypedDict, Union
 
@@ -17,38 +17,13 @@ MULTISTEPLR_GAMMA_DEFAULT = 0.5
 
 
 @typechecked
-def grab_resnet_backbone(
-    resnet_version: Literal[18, 34, 50, 101, 152] = 18,
-    pretrained: bool = True,
-) -> models.resnet.ResNet:
-    """Load resnet architecture from torchvision.
-
-    Args:
-        resnet_version: choose network depth
-        pretrained: True to load weights pretrained on imagenet
-
-    Returns:
-        selected resnet architecture as a model object
-
-    """
-    resnets = {
-        18: models.resnet18,
-        34: models.resnet34,
-        50: models.resnet50,
-        101: models.resnet101,
-        152: models.resnet152,
-    }
-    return resnets[resnet_version](pretrained)
-
-
-@typechecked
 def grab_layers_sequential(
-    model: models.resnet.ResNet, last_layer_ind: Optional[int] = None
+    model, last_layer_ind: Optional[int] = None
 ) -> torch.nn.modules.container.Sequential:
     """Package selected number of layers into a nn.Sequential object.
 
     Args:
-        model: original resnet model
+        model: original resnet or efficientnet model
         last_layer_ind: final layer to pass data through
 
     Returns:
@@ -56,6 +31,15 @@ def grab_layers_sequential(
 
     """
     layers = list(model.children())[: last_layer_ind + 1]
+    return nn.Sequential(*layers)
+
+
+@typechecked
+def grab_layers_sequential_3d(model, last_layer_ind):
+    """This is to use a 3d model to extract features"""
+    # the AvgPool3d halves the feature maps dims
+    layers = list(model.children())[0][:last_layer_ind + 1] + \
+             [nn.AvgPool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2), padding=(0, 0, 0))]
     return nn.Sequential(*layers)
 
 
@@ -98,27 +82,29 @@ class SemiSupervisedHeatmapBatchDict(TypedDict):
     ]]
 
 
-
 class BaseFeatureExtractor(LightningModule):
     """Object that contains the base resnet feature extractor."""
 
     def __init__(
         self,
-        resnet_version: Literal[18, 34, 50, 101, 152] = 18,
+        backbone: Literal[
+            "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
+            "resnet50_3d", "resnet50_contrastive",
+            "efficientnet_b0", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[dict] = None,
         do_context=False,
     ) -> None:
-        """A ResNet model that takes in images and generates features.
+        """A CNN model that takes in images and generates features.
 
         ResNets will be loaded from torchvision and can be either pre-trained
         on ImageNet or randomly initialized. These were originally used for
         classification tasks, so we truncate their final fully connected layer.
 
         Args:
-            resnet_version: which ResNet version to use; defaults to 18
+            backbone: which backbone version to use; defaults to resnet50
             pretrained: True to load weights pretrained on imagenet
             last_resnet_layer_to_get: Defaults to -2.
             lr_scheduler: how to schedule learning rate
@@ -128,15 +114,41 @@ class BaseFeatureExtractor(LightningModule):
         super().__init__()
         print("\n Initializing a {} instance.".format(self._get_name()))
 
-        self.resnet_version = resnet_version
-        base = grab_resnet_backbone(
-            resnet_version=self.resnet_version, pretrained=pretrained
-        )
-        self.num_fc_input_features = base.fc.in_features
-        self.backbone = grab_layers_sequential(
-            model=base,
-            last_layer_ind=last_resnet_layer_to_get,
-        )
+        self.backbone_arch = backbone
+        self.mode = "3d" if "3d" in backbone else "2d"
+
+        # load backbone weights
+        if "3d" in backbone:
+            base = torch.hub.load(
+                "facebookresearch/pytorchvideo", "slow_r50", pretrained=True)
+        elif backbone == "resnet50_contrastive":
+            # load resnet50 pretrained using SimCLR on imagenet
+            from pl_bolts.models.self_supervised import SimCLR
+            import pl_bolts
+            weight_path = "https://pl-bolts-weights.s3.us-east-2.amazonaws.com/simclr/bolts_simclr_imagenet/simclr_imagenet.ckpt"
+            simclr = SimCLR.load_from_checkpoint(weight_path, strict=False)
+            base = simclr.encoder
+        else:
+            # load resnet or efficientnet models from torchvision.models
+            base = getattr(tvmodels, backbone)(pretrained)
+
+        # get truncated version of backbone
+        if "3d" in backbone:
+            self.backbone = grab_layers_sequential_3d(
+                model=base, last_layer_ind=last_resnet_layer_to_get)
+        else:
+            self.backbone = grab_layers_sequential(
+                model=base, last_layer_ind=last_resnet_layer_to_get,
+            )
+
+        # compute number of input features
+        if "resnet" in backbone and "3d" not in backbone:
+            self.num_fc_input_features = base.fc.in_features
+        elif "eff" in backbone:
+            self.num_fc_input_features = base.classifier[-1].in_features
+        elif "3d" in backbone:
+            self.num_fc_input_features = base.blocks[-1].proj.in_features // 2
+
         self.lr_scheduler = lr_scheduler
         self.lr_scheduler_params = lr_scheduler_params
         self.do_context = do_context
@@ -149,8 +161,8 @@ class BaseFeatureExtractor(LightningModule):
                 "batch", "frames", "RGB":3, "image_height", "image_width", float
             ],
         ],
-        do_context: bool=False,
-    ) -> TensorType["batch", "features", "rep_height", "rep_width", float]:
+        do_context: bool = False,
+    ):  # -> TensorType["batch", "features", "rep_height", "rep_width", float]:
         """Forward pass from images to feature maps.
 
         Wrapper around the backbone's feature_extractor() method for typechecking
@@ -167,30 +179,41 @@ class BaseFeatureExtractor(LightningModule):
             dimensions, and are not necessarily equal.
 
         """
-        if do_context:
-            batch, frames, channels, image_height, image_width = images.shape
-            frames_batch_shape = batch * frames
-            images_batch_frames: TensorType[
-                "batch*frames", "channels":3, "image_height", "image_width"
-            ] = images.reshape(frames_batch_shape, channels, image_height, image_width)
-            outputs: TensorType[
-                "batch*frames", "features", "rep_height", "rep_width"
-            ] = self.backbone(images_batch_frames)
-            outputs: TensorType[
-                "batch", "frames", "features", "rep_height", "rep_width"
-            ] = outputs.reshape(
-                images.shape[0],
-                images.shape[1],
-                outputs.shape[1],
-                outputs.shape[2],
-                outputs.shape[3],
-            )
+        if self.mode == "2d":
+            if do_context:
+                batch, frames, channels, image_height, image_width = images.shape
+                frames_batch_shape = batch * frames
+                images_batch_frames: TensorType[
+                    "batch*frames", "channels":3, "image_height", "image_width"
+                ] = images.reshape(frames_batch_shape, channels, image_height, image_width)
+                outputs: TensorType[
+                    "batch*frames", "features", "rep_height", "rep_width"
+                ] = self.backbone(images_batch_frames)
+                outputs: TensorType[
+                    "batch", "frames", "features", "rep_height", "rep_width"
+                ] = outputs.reshape(
+                    images.shape[0],
+                    images.shape[1],
+                    outputs.shape[1],
+                    outputs.shape[2],
+                    outputs.shape[3],
+                )
+                representations: TensorType[
+                    "batch", "features", "rep_height", "rep_width", "frames"
+                ] = torch.permute(outputs, (0, 2, 3, 4, 1))
+            else:
+                image_batch = images
+                representations = self.backbone(image_batch)
+        else:
+            # reshape to (batch, channels, frames, img_height, img_width)
+            images = torch.permute(images, (0, 2, 1, 3, 4))
+            # turn (0, 1, 2, 3, 4) into (0, 1, 1, 2, 2, 3, 3, 4)
+            images = torch.repeat_interleave(images, 2, dim=2)[:, :, 1:-1, ...]
+            output = self.backbone(images)
+            # representations = torch.mean(output, dim=2)
             representations: TensorType[
                 "batch", "features", "rep_height", "rep_width", "frames"
-            ] = torch.permute(outputs, (0, 2, 3, 4, 1))
-        else:
-            image_batch = images
-            representations = self.backbone(image_batch)
+            ] = torch.permute(output, (0, 1, 3, 4, 2))
 
         return representations
 

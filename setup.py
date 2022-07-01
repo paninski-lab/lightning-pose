@@ -16,6 +16,7 @@ install_requires = [
     "pillow",
     "pytest",
     "pytorch-lightning",
+    "lightning-bolts",
     "scikit-image",
     "sklearn",
     "torchtyping",
