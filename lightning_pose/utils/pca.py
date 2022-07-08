@@ -8,6 +8,7 @@ from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 from typing import List, Optional, Union, Literal, Dict, Any, Tuple
 import warnings
+from tqdm import tqdm
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import clean_any_nans, DataExtractor
@@ -305,7 +306,6 @@ class LinearGaussian(KeypointPCA):
     ):
         super().__init__(**kwargs)
         super().__call__() # clean data, fit pca, generate pca_object...
-        # TODO: here we do want to call another variant of __call__, that doesn't eliminate nans.
         # get formatted data including nans
         self.full_data_arr = self._format_data(data_arr=self._get_data())
 
@@ -486,29 +486,78 @@ class LinearGaussian(KeypointPCA):
         W_new = numerator @ torch.linalg.inv(denominator + torch.eye(denominator.shape[0]) * 1e-5)
         return W_new
     
-    def EM_objective(self):
-        pass
+    def EM_objective(self, observations: TensorType["observation_dim", "num_obs", float], posterior_means: TensorType["n_components_kept", "num_obs", float], E_ZnZnTop: TensorType["n_components_kept", "n_components_kept", "num_obs", float]) -> TensorType[(), float]:
+        # Bishop's (12.53) with missing data
+        D = observations.shape[0]
+        M = posterior_means.shape[0]
+        num_obs = observations.shape[1]
+        mask_tensor = ~torch.isnan(observations)
+        # summing over num_observations
+        obj = torch.tensor(0.0, device=observations.device)
+        for n in range(num_obs):
+            # extract the valid observations for this datapoint
+            obs = observations[:, n].reshape(-1, 1)
+            valid_inds = torch.where(mask_tensor[:, n])[0]
+
+            curr_post_mean = posterior_means[:, n].reshape(-1, 1)
+            curr_E_ZnZnTop = E_ZnZnTop[:, :, n]
+            # the shape of curr_diffs and valid_observation_projection will vary depending on whether there are missing values
+            curr_diffs: TensorType["valid_obs_inds", 1] = obs[valid_inds] - self.observation_mean[valid_inds]
+            valid_observation_projection: TensorType["valid_obs_inds", "n_components_kept"] = self.observation_projection[valid_inds, :]
+            # keeping the minus sign outside of the sum
+            # likelihood terms 
+            expected_log_like: TensorType[1, 1, float] = D/2. * torch.log(2. * np.pi * self.sigma_2) + (curr_diffs.T @ curr_diffs) / (2. * self.sigma_2) \
+                - ((curr_post_mean.T @ valid_observation_projection.T @ curr_diffs) / self.sigma_2) \
+                    + (torch.trace(curr_E_ZnZnTop @ valid_observation_projection.T @ valid_observation_projection) / (2. * self.sigma_2))
+            # prior terms
+            expected_log_prior: TensorType[(), float] = ((M/2.) * torch.log(2. * torch.tensor(np.pi))) + (1./2.)*torch.trace(curr_E_ZnZnTop)
+            
+            obj += -1.0 * (expected_log_like.squeeze() + expected_log_prior)
+        
+        return obj
     
-    def fit_EM_W(self, observations: TensorType["observation_dim", "num_obs", float], num_iterations: int = 100) -> None:
+    def fit_EM_W(self, observations: TensorType["observation_dim", "num_obs", float], num_iterations: int = 100) -> Tuple[List[float], List[np.ndarray]]:
         """
         fit W model using the EM algorithm
         assuming that the we have all observations, not just those clean obs
         """
         # self.observation_mean.data = torch.nanmean(observations, dim=1)
-        for i in range(num_iterations):
+        loss = []
+        W_mats = []
+        W_mats.append(self.observation_projection.cpu().numpy()) 
+        
+        for i in tqdm(range(num_iterations)):
             # E-step
-            print("iter {}".format(i))
-            print("entering E-step")
+            #print("iter {}".format(i))
+            #print("entering E-step")
             posterior_means, E_ZnZnTop = self.E_step(observations)
+
+            # TODO: modify the missing data to have new observations x_n and means \bar{x}
+            # this is intuitively the right thing to do. we just modify the missing data, not the entrire vector.
+
+
+            # log loss after E-step
+            loss.append(float(self.EM_objective(observations=observations, posterior_means=posterior_means, E_ZnZnTop=E_ZnZnTop)))
+            
             # M-step
-            print("entering M-step")
+            #print("entering M-step")
             W_new = self.M_step_W_new(posterior_means, E_ZnZnTop, observations)
-            print("W_new: {}".format(W_new))
+            #print("W_new: {}".format(W_new))
             self.observation_projection = torch.clone(W_new) # save new W
+            #print("observation_projection: {}".format(self.observation_projection))
+            # compute the loss
+            # log loss after M-step
+            loss.append(float(self.EM_objective(observations=observations, posterior_means=posterior_means, E_ZnZnTop=E_ZnZnTop)))
+            if i == 20:
+                break
+            # log reconstruction error in training.
+            W_mats.append(self.observation_projection.cpu().numpy())
 
-            # TODO: EM objective calculation
-
-            print(f"iteration {i}")
+        return loss, W_mats
+    
+    def iterative_prediction(self, observations: TensorType["observation_dim", "num_obs", float], posterior_means: TensorType["n_components_kept", "num_obs", float]) -> TensorType["n_components_kept", "num_obs", float]:
+        # TODO: infil just the missing data
+        pass
     
     def predict(self, latent_mean: TensorType["n_components_kept", 1, float], latent_covariance: TensorType["n_components_kept", "n_components_kept", float]) -> Tuple[TensorType["observation_dim", 1, float], TensorType["observation_dim", "observation_dim", float]]:
         """compute the predictive distribution:
@@ -650,6 +699,23 @@ class LGSSMOutlierDetector(LinearGaussian):
         fixed_output = self.fix_outliers(pred_vector, iterative_output)
         return {"flagged": iterative_output, "fixed": fixed_output}
 
+def r_squared_multivariate(y: TensorType["num_examples", "obs_dim"], y_hat: TensorType["num_examples", "obs_dim"]) -> float:
+    """
+    Compute the R-squared between multivariate outputs
+    """
+    # compute the mean of the y values
+    y_mean: TensorType["obs_dim"] = torch.mean(y, dim=0)
+    # compute the residuals
+    residuals = y - y_hat
+    # compute the mean of the residuals
+    residuals_mean: TensorType["obs_dim"] = torch.mean(residuals, dim=0)
+    # compute the squared residuals
+    ss_residuals = torch.linalg.norm(residuals-residuals_mean, ord=2, dim=1) ** 2 #torch.sum(residuals ** 2, dim=0)
+    # ss total
+    ss_total = torch.linalg.norm(y-y_mean, ord=2, dim=1) ** 2 #torch.sum(y ** 2, dim=0)
+    # compute the R-squared value
+    r_squared = 1 - ss_residuals.sum() / ss_total.sum()
+    return r_squared
 
 @typechecked
 def tile_inds(inds: Union[List[int], TensorType["num_valid_inds", int]]) -> Tuple[TensorType["num_valid_inds_squared", int], TensorType["num_valid_inds_squared", int]]:
@@ -669,6 +735,143 @@ def extract_blocks_from_inds(valid_inds: Union[List[int], TensorType["num_valid_
     inds_tuple = tile_inds(valid_inds)
     return cov_mat[inds_tuple].reshape(len(valid_inds), len(valid_inds))
 
+import pytorch_lightning as pl
+from torch.utils.data import TensorDataset, DataLoader
+
+class PPCA(pl.LightningModule):
+    """
+    Perform Probabilstic Principal Component Analysis on a dataset.
+    How to use (see ppca_notebook.ipynb):
+    ppca = PPCA(observation_dim=W.shape[0], latent_dim=W.shape[1])
+    # assuming you have W, mu, sigma_2
+    ppca.initialize_params(W=W.to(ppca.device), mu=mu.to(ppca.device), sigma_2=sigma_2.to(ppca.device))
+    train_dataloader = ppca.train_dataloader(observations=full_data_arr.to(ppca.device))
+    from pytorch_lightning.loggers import TensorBoardLogger
+    logger = TensorBoardLogger("tb_logs", name="ppca")
+    trainer = pl.Trainer(logger=logger, log_every_n_steps=1, max_epochs=10)
+    trainer.fit(ppca, train_dataloader)
+    """
+    def __init__(self, observation_dim: int, latent_dim: int) -> None:
+        super().__init__()
+        self.observation_dim=observation_dim
+        self.latent_dim=latent_dim
+        self.W = torch.nn.Parameter(data=torch.randn((observation_dim, latent_dim)))
+        self.mu = torch.nn.Parameter(data=torch.randn((observation_dim, 1)))
+        self.log_sigma_2 = torch.nn.Parameter(data=torch.tensor(0.0))
+        
+        # diagnostics
+        self.loss = []
+        self.loss_obs = []
+        self.loss_miss = []
+        self.norms = []
+    
+    def M(self) -> TensorType["latent_dim", "latent_dim"]:
+        return self.W.T @ self.W + torch.exp(self.log_sigma_2)* torch.eye(self.latent_dim)
+    
+    def compute_posterior(self, observation):
+        valid_inds = torch.where(~torch.isnan(observation))[0]
+        M_inv = torch.linalg.inv(self.M())
+        posterior_cov = torch.exp(self.log_sigma_2) * M_inv
+        valid_W = self.W[valid_inds, :]
+        mean_subtracted_observation = observation[valid_inds] - self.mu[valid_inds]
+        posterior_mean = M_inv @ valid_W.T @ mean_subtracted_observation
+        return posterior_mean, posterior_cov
+    
+    def predict(self, posterior_mean: TensorType["n_components_kept", 1, float], posterior_cov: TensorType["n_components_kept", "n_components_kept", float]) -> Tuple[TensorType["observation_dim", 1, float], TensorType["observation_dim", "observation_dim", float]]:
+        """compute the predictive distribution:
+        p(x) = \mathcal{N}(mu, Sigma)
+        where mu = A*posterior_mean + b
+        ans Sigma = A*posterior_cov*A^{\top} + R
+        compute preds for all data points, no missing vals.
+        you can later pick those dims of interest"""
+        predictive_mean = self.W @ posterior_mean + self.mu
+        predictive_covariance = self.W @ posterior_cov @ self.W.T + torch.linalg.inv(torch.exp(self.log_sigma_2)*torch.eye(self.observation_dim))
+        return predictive_mean, predictive_covariance
+    
+    def reconstruct(self, observation: TensorType["observation_dim", -1, float]) -> Dict[str, Tuple[TensorType, TensorType]]:
+        """
+        Compute the reconstruction of the data, given the posterior mean and covariance
+        """
+        # first compute the posterior mean and covariance
+        posterior_mean, posterior_covariance = self.compute_posterior(observation)
+        # then compute the predictive distribution
+        predictive_mean, predictive_covariance = self.predict(posterior_mean, posterior_covariance)
+        
+        return {"posterior": (posterior_mean, posterior_covariance), "reconstruction": (predictive_mean, predictive_covariance)}
+    
+    def initialize_params(self, W: Optional[torch.Tensor] = None, \
+                          mu: Optional[torch.Tensor] = None, \
+                          sigma_2: Optional[torch.Tensor] = None) -> None:
+        if W is not None:
+            assert(self.W.data.shape == W.shape)
+            self.W.data = torch.clone(W).contiguous()
+        
+        if mu is not None:
+            assert(self.mu.data.shape == mu.shape)
+            self.mu.data = torch.clone(mu).contiguous()
+        
+        if sigma_2 is not None:
+            assert(self.log_sigma_2.data.shape == sigma_2.shape)
+            self.log_sigma_2.data = torch.clone(torch.log(sigma_2)).contiguous()
+    
+    def compute_marginal_mean_cov(self) -> Tuple[torch.Tensor]:
+        cov = self.W @ self.W.T + torch.exp(self.log_sigma_2)*torch.eye(self.W.shape[0])
+        return self.mu, cov
+        
+    def compute_loss(self, data):
+        mask = ~torch.isnan(data)
+        mu, cov = self.compute_marginal_mean_cov()
+        # loop over n = 1, ..., N
+        mll = torch.tensor(0., device=data.device)
+        for n, x_n in enumerate(data):
+            # identify missing values and select right entries
+            valid_inds = torch.where(mask[n,:])[0]
+            mu_valid = mu[valid_inds]
+            cov_valid = extract_blocks_from_inds(valid_inds=valid_inds, cov_mat=cov)
+            cov_valid += torch.eye(cov_valid.shape[0])*1e-6
+            x_valid = x_n[valid_inds]
+            distr = torch.distributions.MultivariateNormal(mu_valid.squeeze(), cov_valid)
+            # compute log probability for current n
+            mll += distr.log_prob(x_valid)
+        return -mll / data.shape[0]
+    
+    def train_dataloader(self, observations: torch.Tensor):
+        dataset = TensorDataset(observations)
+        return DataLoader(dataset, batch_size=observations.shape[0])
+    
+    def configure_optimizers(self):
+        return torch.optim.LBFGS(self.parameters())
+        
+    def training_step(self, batch, batch_idx):
+        loss = self.compute_loss(batch[0])#.clone().contiguous())
+        self.loss.append(loss.detach().cpu().numpy())
+        self.log("average_nll", loss, prog_bar=True)
+        
+        # for debugging purpuses, slows things down a bit
+        self.record_training_metrics(batch)
+        
+        return loss
+    
+    def record_training_metrics(self, batch) -> None:
+        # for debugging purpuses, slows things down a bit
+        with torch.no_grad():
+            obs_w_miss_vals = (torch.isnan(batch[0]).sum(1)>0)
+            loss_miss = self.compute_loss(batch[0][obs_w_miss_vals])
+            loss_obs = self.compute_loss(batch[0][~obs_w_miss_vals])
+            self.loss_miss.append(loss_miss.detach().cpu().numpy())
+            self.loss_obs.append(loss_obs.detach().cpu().numpy())
+            
+            # perform posterior predict
+            recons = []
+            for i, data in enumerate(batch[0]):
+                recons.append(self.reconstruct(data.reshape(-1,1)))
+            reconstructions = torch.hstack([rec["reconstruction"][0].detach().cpu() for rec in recons]).T
+            # now we wanna compute pixel error for missing and observed images in training
+            arr_reshaped = batch[0].reshape(batch[0].shape[0], -1, 2)
+            recon_reshaped = reconstructions.reshape(reconstructions.shape[0], -1, 2)
+            norms = torch.linalg.norm(arr_reshaped - recon_reshaped, axis=2) # all images, single value per bodypart
+            # mean_norms = torch.nanmean(norms, axis=1) # consider logging w/o mean
+            self.norms.append(norms)
 
 @typechecked
 class ComponentChooser:

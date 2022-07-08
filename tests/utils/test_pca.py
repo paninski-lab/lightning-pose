@@ -383,7 +383,14 @@ def test_compute_posterior(cfg, base_data_module_combined):
             except RuntimeError:
                 assert False
 
-
+def test_r_squared():
+    from lightning_pose.utils.pca import r_squared_multivariate
+    test_y = torch.cat([torch.ones(3,1), torch.ones(3,1)*2], 1) + torch.randn(3,2)
+    test_y_hat = test_y
+    # equal vecs --> r_squared = 1
+    assert r_squared_multivariate(test_y, test_y_hat) == 1
+    test_y_hat = test_y + torch.randn(3,2) # add another randomness, making the two unequal
+    assert r_squared_multivariate(test_y, test_y_hat) < 1.
 
 
     # singleview_pca = KeypointPCA(

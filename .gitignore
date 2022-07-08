@@ -4,6 +4,7 @@ outputs/
 multirun/
 preds/
 scripts/figs/
+scripts/tb_logs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
