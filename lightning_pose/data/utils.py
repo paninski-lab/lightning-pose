@@ -294,5 +294,5 @@ def evaluate_heatmaps_at_location(
     j = torch.arange(heatmaps.shape[1]).reshape(1, -1, 1, 1)
     k = locs[:, :, None, 1, None].type(torch.int64)  # y first
     l = locs[:, :, 0, None, None].type(torch.int64)  # x second
-    vals = heatmaps[i, j, k, l].squeeze()
+    vals = heatmaps[i, j, k, l].squeeze(-1).squeeze(-1)  # get rid of singleton dims
     return vals
