@@ -200,61 +200,63 @@ def train(cfg: DictConfig):
     # ----------------------------------------------------------------------------------
     # get dali loader for video, eval network on it, save preds.
     # cfg.eval.test_videos_directory holds videos to predict.
-    if cfg.eval.test_videos_directory is None:
-        filenames = []
-    else:
-        filenames = check_video_paths(return_absolute_path(
-            cfg.eval.test_videos_directory))
-        pretty_print_str(
-            "Found {} videos to predict on (in cfg.eval.test_videos_directory)".format(
-                len(filenames)))
+    if cfg.eval.predict_vids_after_training:
+        pretty_print_str("Predicting videos...")
+        if cfg.eval.test_videos_directory is None:
+            filenames = []
+        else:
+            filenames = check_video_paths(return_absolute_path(
+                cfg.eval.test_videos_directory))
+            pretty_print_str(
+                "Found {} videos to predict on (in cfg.eval.test_videos_directory)".format(
+                    len(filenames)))
 
-    for video_file in filenames:
-        assert os.path.isfile(video_file)
-        pretty_print_str("Predicting video: {}...".format(video_file))
-        # base model: check we can build and run pipe and get a decent looking batch
-        model_type = "context" if cfg.model.do_context else "base"
-        # initialize
-        vid_pred_class = PrepareDALI(train_stage="predict", model_type=model_type, dali_config=cfg.dali, filenames=[video_file], resize_dims=[dataset.height, dataset.width])
-        # get loader
-        predict_loader = vid_pred_class()
-        # predict 
-        preds = trainer.predict(model=model, ckpt_path=best_ckpt, dataloaders=predict_loader, return_predictions=True)
-        # initialize prediction handler class, can process multiple vids with a shared cfg and data_module
-        pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=video_file)
-        # call this instance on a single vid's preds
-        preds_df = pred_handler(preds=preds)
-        # save the predictions to a csv
-        # e.g.,: '/home/jovyan/dali-seq-testing/test_vid_with_fr.mp4' -> 'test_vid_with_fr.csv'
-        base_vid_name_for_save = os.path.basename(video_file).split('.')[0]
-        video_pred_dir = os.path.join(hydra_output_directory, 'video_preds')
-        # create directory if it doesn't exist
-        os.makedirs(video_pred_dir, exist_ok=True)
-        preds_df.to_csv(os.path.join(video_pred_dir, "{}.csv".format(base_vid_name_for_save)))
-        
-        # TODO: generate a video if cfg.eval.save_video is True
-        # use create_labeled_videos() func.
-        if cfg.eval.save_vids_after_training:
-            pretty_print_str("Generating video...")
-            # TODO: wrap inside a func
-            labeled_vid_dir = os.path.join(video_pred_dir, 'labeled_videos')
-            os.makedirs(labeled_vid_dir, exist_ok=True)
-            video_file_labeled = os.path.join(labeled_vid_dir, base_vid_name_for_save + '_labeled.mp4')
-            video_clip = VideoFileClip(video_file)
+        for video_file in filenames:
+            assert os.path.isfile(video_file)
+            pretty_print_str("Predicting video: {}...".format(video_file))
+            # base model: check we can build and run pipe and get a decent looking batch
+            model_type = "context" if cfg.model.do_context else "base"
+            # initialize
+            vid_pred_class = PrepareDALI(train_stage="predict", model_type=model_type, dali_config=cfg.dali, filenames=[video_file], resize_dims=[dataset.height, dataset.width])
+            # get loader
+            predict_loader = vid_pred_class()
+            # predict 
+            preds = trainer.predict(model=model, ckpt_path=best_ckpt, dataloaders=predict_loader, return_predictions=True)
+            # initialize prediction handler class, can process multiple vids with a shared cfg and data_module
+            pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=video_file)
+            # call this instance on a single vid's preds
+            preds_df = pred_handler(preds=preds)
+            # save the predictions to a csv
+            # e.g.,: '/home/jovyan/dali-seq-testing/test_vid_with_fr.mp4' -> 'test_vid_with_fr.csv'
+            base_vid_name_for_save = os.path.basename(video_file).split('.')[0]
+            video_pred_dir = os.path.join(hydra_output_directory, 'video_preds')
+            # create directory if it doesn't exist
+            os.makedirs(video_pred_dir, exist_ok=True)
+            preds_df.to_csv(os.path.join(video_pred_dir, "{}.csv".format(base_vid_name_for_save)))
             
-            # transform df to numpy array
-            keypoints_arr = np.reshape(
-                    preds_df.to_numpy(), [preds_df.shape[0], -1, 3])
-            xs_arr = keypoints_arr[:, :, 0]
-            ys_arr = keypoints_arr[:, :, 1]
-            mask_array = keypoints_arr[:, :, 2] > cfg.eval.confidence_thresh_for_vid
+            # TODO: generate a video if cfg.eval.save_video is True
+            # use create_labeled_videos() func.
+            if cfg.eval.save_vids_after_training:
+                pretty_print_str("Generating video...")
+                # TODO: wrap inside a func
+                labeled_vid_dir = os.path.join(video_pred_dir, 'labeled_videos')
+                os.makedirs(labeled_vid_dir, exist_ok=True)
+                video_file_labeled = os.path.join(labeled_vid_dir, base_vid_name_for_save + '_labeled.mp4')
+                video_clip = VideoFileClip(video_file)
+                
+                # transform df to numpy array
+                keypoints_arr = np.reshape(
+                        preds_df.to_numpy(), [preds_df.shape[0], -1, 3])
+                xs_arr = keypoints_arr[:, :, 0]
+                ys_arr = keypoints_arr[:, :, 1]
+                mask_array = keypoints_arr[:, :, 2] > cfg.eval.confidence_thresh_for_vid
 
-            # do here the video generation
-            create_labeled_video(
-                    clip=video_clip, xs_arr=xs_arr, ys_arr=ys_arr,
-                    mask_array=mask_array, filename=video_file_labeled)
-    
-    # ----------------------------------------------------------------------------------
+                # do here the video generation
+                create_labeled_video(
+                        clip=video_clip, xs_arr=xs_arr, ys_arr=ys_arr,
+                        mask_array=mask_array, filename=video_file_labeled)
+        
+        # ----------------------------------------------------------------------------------
 
 
 def pretty_print(cfg):
