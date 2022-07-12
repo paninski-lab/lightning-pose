@@ -220,7 +220,7 @@ def check_video_paths(video_paths: Union[List[str], str]) -> list:
         filenames = video_paths
     elif isinstance(video_paths, str) and os.path.isfile(video_paths):
         # single video file
-        filenames = video_paths
+        filenames = [video_paths]
     elif isinstance(video_paths, str) and os.path.isdir(video_paths):
         # directory of videos
         filenames = get_videos_in_dir(video_paths)
@@ -229,6 +229,9 @@ def check_video_paths(video_paths: Union[List[str], str]) -> list:
             "`video_paths_list` must be a list of files, a single file, "
             + "or a directory name"
         )
+    for filename in filenames:
+        assert filename.endswith(".mp4"), "video files must be mp4 format!"
+
     return filenames
 
 
