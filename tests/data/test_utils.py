@@ -19,13 +19,16 @@ def test_data_extractor(base_data_module_combined):
         len(base_data_module_combined.dataset)
         * base_data_module_combined.train_probability
     )
-    keypoint_tensor, _ = DataExtractor(data_module=base_data_module_combined, cond="train")()
+    keypoint_tensor, _ = DataExtractor(
+        data_module=base_data_module_combined, cond="train")()
     assert keypoint_tensor.shape == (num_frames, 34)  # 72 = 0.8 * 90 images
 
-    keypoint_tensor, images_tensor = DataExtractor(data_module=base_data_module_combined, cond="train", extract_images=True)()
+    keypoint_tensor, images_tensor = DataExtractor(
+        data_module=base_data_module_combined, cond="train", extract_images=True)()
 
     assert images_tensor.shape == (num_frames, 3, 256, 256)
-    
+
+
 def test_split_sizes_from_probabilities():
 
     from lightning_pose.data.utils import split_sizes_from_probabilities
@@ -90,6 +93,40 @@ def test_count_frames(video_list):
         cap.release()
     num_frames_ = count_frames(video_list)
     assert num_frames == num_frames_
+
+
+def test_compute_num_train_frames():
+
+    from lightning_pose.data.utils import compute_num_train_frames
+
+    len_train_data = 10
+
+    # correctly defaults to data length with no train_frame arg
+    n_frames = compute_num_train_frames(len_train_data, train_frames=None)
+    assert n_frames == len_train_data
+
+    # correctly defaults to data length when train_frame arg too large
+    n_frames = compute_num_train_frames(len_train_data, train_frames=len_train_data + 1)
+    assert n_frames == len_train_data
+
+    # correctly defaults to data length when train_frame=1
+    n_frames = compute_num_train_frames(len_train_data, train_frames=1)
+    assert n_frames == len_train_data
+
+    # correctly uses integer
+    n_frames = compute_num_train_frames(len_train_data, train_frames=5)
+    assert n_frames == 5
+
+    # correctly uses fraction
+    n_frames = compute_num_train_frames(len_train_data, train_frames=0.5)
+    assert n_frames == 5
+
+    n_frames = compute_num_train_frames(len_train_data, train_frames=0.2)
+    assert n_frames == 2
+
+    # train_frames must be positive
+    with pytest.raises(ValueError):
+        compute_num_train_frames(len_train_data, train_frames=-1)
 
 
 def test_generate_heatmaps(cfg, heatmap_dataset):
