@@ -225,6 +225,28 @@ def test_generate_heatmaps_weird_shape(cfg, toy_data_dir):
     torch.cuda.empty_cache()  # remove tensors from gpu
 
 
+def test_evaluate_heatmaps_at_location():
+
+    from lightning_pose.data.utils import evaluate_heatmaps_at_location
+
+    n_batch = 5
+    n_keypoints = 6
+    height = 24
+    width = 12
+    heatmaps = torch.zeros((n_batch, n_keypoints, height, width))
+
+    h_locs = torch.randint(0, height, (n_batch, n_keypoints))
+    w_locs = torch.randint(0, width, (n_batch, n_keypoints))
+    locs = torch.stack([w_locs, h_locs], dim=2)  # x then y
+    # set heatmaps equal to 1 at these locations
+    for i, l1 in enumerate(locs):
+        for j, l2 in enumerate(l1):
+            heatmaps[i, j, l2[1], l2[0]] = 1.0
+
+    vals = evaluate_heatmaps_at_location(heatmaps=heatmaps, locs=locs)
+    assert torch.all(vals == 1.0)
+
+
 # def test_heatmap_generation():
 #
 #     # want to compare the output of our manual function to kornia's

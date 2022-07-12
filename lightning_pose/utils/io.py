@@ -230,8 +230,8 @@ def check_video_paths(video_paths: Union[List[str], str]) -> list:
             + "or a directory name"
         )
     for filename in filenames:
-        assert filename.endswith(".mp4"), "video file must be mp4!"
-    
+        assert filename.endswith(".mp4"), "video files must be mp4 format!"
+
     return filenames
 
 
