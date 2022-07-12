@@ -10,7 +10,8 @@ from typeguard import typechecked
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
 from lightning_pose.data.dali import PrepareDALI, LitDaliWrapper
-from lightning_pose.data.utils import split_sizes_from_probabilities
+from lightning_pose.data.utils import \
+    split_sizes_from_probabilities, compute_num_train_frames
 from lightning_pose.utils.io import check_video_paths
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -76,15 +77,15 @@ class BaseDataModule(pl.LightningDataModule):
 
     def setup(self, stage: Optional[str] = None):  # stage arg needed for ptl
 
+        if self.use_deterministic:
+            return
+
         datalen = self.dataset.__len__()
         print(
             "Number of labeled images in the full dataset (train+val+test): {}".format(
                 datalen
             )
         )
-
-        if self.use_deterministic:
-            return
 
         # split data based on provided probabilities
         data_splits_list = split_sizes_from_probabilities(
@@ -102,31 +103,14 @@ class BaseDataModule(pl.LightningDataModule):
 
         # further subsample training data if desired
         if self.train_frames is not None:
-            split = True
-            if self.train_frames >= len(self.train_dataset):
-                # take max number of train frames
-                print(
-                    "Warning! Requested training frames exceeds training "
-                    + "set size; using all"
-                )
-                n_frames = len(self.train_dataset)
-                split = False
-            elif self.train_frames == 1:
-                # assume this is a fraction; use full dataset
-                n_frames = len(self.train_dataset)
-                split = False
-            elif self.train_frames > 1:
-                # take this number of train frames
-                n_frames = int(self.train_frames)
-            elif self.train_frames > 0:
-                # take this fraction of train frames
-                n_frames = int(self.train_frames * len(self.train_dataset))
-            else:
-                raise ValueError("train_frames must be >0")
-            if split:  # a second split
-                self.train_dataset.indices = self.train_dataset.indices[
-                    :n_frames
-                ]  # this works well
+
+            n_frames = compute_num_train_frames(
+                len(self.train_dataset), self.train_frames)
+
+            if n_frames < len(self.train_dataset):
+                # split the data a second time to reflect further subsampling from
+                # train_frames
+                self.train_dataset.indices = self.train_dataset.indices[:n_frames]
 
         print(
             "Size of -- train set: {}, val set: {}, test set: {}".format(

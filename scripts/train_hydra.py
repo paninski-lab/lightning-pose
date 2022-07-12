@@ -10,9 +10,17 @@ import pandas as pd
 from moviepy.editor import VideoFileClip
 
 from lightning_pose.callbacks.callbacks import AnnealWeight
-from lightning_pose.utils.io import check_video_paths, return_absolute_data_paths, \
-    return_absolute_path, get_keypoint_names
-from lightning_pose.utils.predictions import create_labeled_video, predict_dataset, make_pred_arr_undo_resize, get_csv_file
+from lightning_pose.utils.io import (
+    check_video_paths,
+    return_absolute_data_paths,
+    return_absolute_path,
+    get_keypoint_names,
+)
+from lightning_pose.utils.predictions import (
+    create_labeled_video,
+    predict_dataset, make_pred_arr_undo_resize,
+    get_csv_file,
+)
 from lightning_pose.utils.scripts import (
     get_data_module,
     get_dataset,
@@ -21,9 +29,18 @@ from lightning_pose.utils.scripts import (
     get_model,
     pretty_print_str,
 )
-from lightning_pose.data.utils import count_frames
-# attempting to predict a video here
-from lightning_pose.data.dali import PrepareDALI, video_pipe, LightningWrapper, ContextLightningWrapper
+from lightning_pose.data.utils import (
+    count_frames,
+    compute_num_train_frames,
+    split_sizes_from_probabilities,
+)
+from lightning_pose.data.dali import (
+    PrepareDALI,
+    video_pipe,
+    LightningWrapper,
+    ContextLightningWrapper,
+)
+
 from nvidia.dali.plugin.pytorch import LastBatchPolicy
 from typing import List, Tuple
 from torchtyping import TensorType, patch_typeguard
@@ -107,22 +124,29 @@ def train(cfg: DictConfig):
                 type(cfg.training.gpu_id)
             )
         )
-    # # calculate limit_train_batches
-    # if cfg.training.limit_train_batches is None:
-    #     if type(data_module.train_dataloader()) is torch.utils.data.DataLoader:
-    #         num_batches = len(data_module.train_dataloader())
-    #     elif type(data_module.train_dataloader()) is dict:
-    #         num_batches = len(data_module.train_dataloader["labeled"])
-    #     print(num_batches)
-    #     exit()
-    #     limit_train_batches = np.ceil(len(data_module.train_dataset) / cfg.training.train_batch_size)
-    #     limit_train_batches = np.max([limit_train_batches, 10]) # 10 is minimum
-    #     print("limit_train_batches: {}".format(limit_train_batches))
-    # else: 
-    #     limit_train_batches = cfg.training.limit_train_batches
-    limit_train_batches = cfg.training.limit_train_batches
-    print("limit_train_batches={}".format(limit_train_batches))
-    # cannot access the data_module because train_dataset hasn't been setup yet.
+    # calculate limit_train_batches; for semi-supervised models, this tells us how many
+    # batches to take from each dataloader (labeled and unlabeled) during a given epoch.
+    # The default set here is to exhaust all batches from the labeled data loader, often
+    # leaving many video frames untouched. But the unlabeled data loader will be
+    # randomly reset for the next epoch. We also enforce a minimum value of 10 so that
+    # models with a small number of labeled frames will cycle through the dataset
+    # multiple times per epoch, which we have found to be useful empirically.
+    if cfg.training.limit_train_batches is None:
+        # TODO: small bit of redundant code from datamodule
+        datalen = dataset.__len__()
+        data_splits_list = split_sizes_from_probabilities(
+            datalen,
+            train_probability=cfg.training.train_prob,
+            val_probability=cfg.training.val_prob,
+        )
+        num_train_frames = compute_num_train_frames(
+            data_splits_list[0], cfg.training.get('train_frames', None))
+        num_labeled_batches = int(
+            np.ceil(num_train_frames / cfg.training.train_batch_size))
+        limit_train_batches = np.max([num_labeled_batches, 10])  # 10 is minimum
+    else:
+        limit_train_batches = cfg.training.limit_train_batches
+
     # set up trainer
     trainer = pl.Trainer(  # TODO: be careful with devices when scaling to multiple gpus
         gpus=gpus,

@@ -173,6 +173,48 @@ def count_frames(video_list: Union[List[str], str]) -> int:
 
 
 @typechecked
+def compute_num_train_frames(
+    len_train_dataset: int, train_frames: Optional[Union[int, float]] = None,
+) -> int:
+    """Quickly compute number of training frames for a given dataset.
+
+    Args:
+        len_train_dataset: total number of frames in training dataset
+        train_frames:
+            <=1 - fraction of total train frames used for training
+            >1 - number of total train frames used for training
+
+    Returns:
+    int
+        total number of train frames
+
+    """
+    if train_frames is None:
+        n_train_frames = len_train_dataset
+    else:
+        if train_frames >= len_train_dataset:
+            # take max number of train frames
+            print(
+                f"Warning! Requested training frames exceeds training set size; "
+                f"using all"
+            )
+            n_train_frames = len_train_dataset
+        elif train_frames == 1:
+            # assume this is a fraction; use full dataset
+            n_train_frames = len_train_dataset
+        elif train_frames > 1:
+            # take this number of train frames
+            n_train_frames = int(train_frames)
+        elif train_frames > 0:
+            # take this fraction of train frames
+            n_train_frames = int(train_frames * len_train_dataset)
+        else:
+            raise ValueError("train_frames must be >0")
+
+    return n_train_frames
+
+
+@typechecked
 def generate_heatmaps(
     keypoints: TensorType["batch", "num_keypoints", 2],
     height: int,  # height of full sized image
