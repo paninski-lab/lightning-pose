@@ -16,7 +16,13 @@ The process:
 scripts/grid-hpo.sh --script scripts/grid-run-test-1.sh --training.rng_seed_data_pt "[1,2]" --dali.base.train.sequence_length "[4,5]"
 
 # run on grid
-grid run --localdir scripts/grid-hpo.sh --script scripts/grid-run-test-1.sh --training.rng_seed_data_pt "[1,2]" --dali.base.train.sequence_length "[4,5]"
+grid run --name run-hydra-test --dockerfile Dockerfile \
+--localdir \
+--datastore_name mirror-mouse -- \ 
+scripts/grid-hpo.sh \
+--script scripts/grid-run-test-1.sh \
+--training.rng_seed_data_pt "[1,2]" \
+--dali.base.train.sequence_length "[4,5]"
 ```
 
 [grid-run-test-2.sh](scripts/grid-run-test-2.sh)
@@ -28,7 +34,13 @@ scripts/grid-hpo.sh --script scripts/grid-run-test-2.sh --training.rng_seed_data
 
 # run on grid
 
-grid run --localdir scripts/grid-hpo.sh --script scripts/grid-run-test-2.sh --training.rng_seed_data_pt "[1,2]" --dali.base.train.sequence_length "[4,5]"
+grid run --name run-hydra-test --dockerfile Dockerfile \
+--localdir \
+--datastore_name mirror-mouse -- \ 
+scripts/grid-hpo.sh \
+--script scripts/grid-run-test-2.sh \
+--training.rng_seed_data_pt "[1,2]" \
+--dali.base.train.sequence_length "[4,5]"
 ```
 
 [grid-run-hydra-1.sh](scripts/grid-run-hydra-1.sh)
@@ -39,5 +51,11 @@ scripts/grid-hpo.sh --script scripts/grid-run-hydra-1.sh --training.rng_seed_dat
 
 # run on grid
 
-grid run --localdir scripts/grid-run-hydra-1.sh --script scripts/grid-run-test.sh --training.rng_seed_data_pt "[1,2]" --dali.base.train.sequence_length "[4,5]"
+grid run --name run-hydra-test --dockerfile Dockerfile \
+--localdir --instance_type p3.2xlarge \
+--datastore_name mirror-mouse -- \ 
+scripts/grid-hpo.sh \
+--script scripts/grid-run-test-2.sh \
+--training.rng_seed_data_pt "[1,2]" \
+--dali.base.train.sequence_length "[4,5]"
 ```
