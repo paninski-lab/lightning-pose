@@ -131,11 +131,21 @@ class HeatmapTracker(BaseSupervisedTracker):
         # upsample heatmaps
         for _ in range(self.downsample_factor):
             heatmaps = pyrup(heatmaps)
+
         # find soft argmax
         softmaxes = spatial_softmax2d(heatmaps, temperature=self.temperature)
         preds = spatial_expectation2d(softmaxes, normalized_coordinates=False)
-        # compute predictions as softmax value at argmax
-        confidences = torch.amax(softmaxes, dim=(2, 3))
+
+        # compute confidences as softmax value at prediction
+        i = torch.arange(softmaxes.shape[0]).reshape(-1, 1, 1, 1)
+        j = torch.arange(softmaxes.shape[1]).reshape(1, -1, 1, 1)
+        k = preds[:, :, None, 1, None].type(torch.int64)  # y first
+        l = preds[:, :, 0, None, None].type(torch.int64)  # x second
+        confidences = softmaxes[i, j, k, l].squeeze()
+
+        # OLD BAD WAY
+        # confidences = torch.amax(softmaxes, dim=(2, 3))
+
         return preds.reshape(-1, self.num_targets), confidences
 
     def initialize_upsampling_layers(self) -> None:
