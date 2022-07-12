@@ -12,6 +12,7 @@ from typing_extensions import Literal
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau
 
+from lightning_pose.data.utils import evaluate_heatmaps_at_location
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.base import (
@@ -131,11 +132,17 @@ class HeatmapTracker(BaseSupervisedTracker):
         # upsample heatmaps
         for _ in range(self.downsample_factor):
             heatmaps = pyrup(heatmaps)
+
         # find soft argmax
         softmaxes = spatial_softmax2d(heatmaps, temperature=self.temperature)
         preds = spatial_expectation2d(softmaxes, normalized_coordinates=False)
-        # compute predictions as softmax value at argmax
-        confidences = torch.amax(softmaxes, dim=(2, 3))
+
+        # compute confidences as softmax value at prediction
+        confidences = evaluate_heatmaps_at_location(heatmaps=softmaxes, locs=preds)
+
+        # OLD BAD WAY
+        # confidences = torch.amax(softmaxes, dim=(2, 3))
+
         return preds.reshape(-1, self.num_targets), confidences
 
     def initialize_upsampling_layers(self) -> None:
