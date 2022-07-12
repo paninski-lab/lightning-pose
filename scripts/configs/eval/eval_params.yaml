@@ -2,7 +2,10 @@
 hydra_paths: ["2021-12-15/04-11-43/"]
 
 # TODO: decide which arg stays and which doesn't (create_labeled_video)
-save_vids_after_training: True
+# predict?
+predict_vids_after_training: false
+# save .mp4?
+save_vids_after_training: false
 
 fiftyone:
   # will be the name of the dataset (Mongo DB) created by FiftyOne. for video dataset, we will append dataset_name + "_video"
