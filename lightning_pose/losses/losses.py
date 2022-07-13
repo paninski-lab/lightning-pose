@@ -90,7 +90,7 @@ class Loss(pl.LightningModule):
 
     def rectify_epsilon(self, loss: torch.Tensor) -> torch.Tensor:
         # loss values below epsilon as masked to zero
-        loss = loss.masked_fill(mask=(loss - self.epsilon) < 0.0, value=0.0)
+        loss = F.relu(loss - self.epsilon)
         return loss
 
     def reduce_loss(self, loss: torch.Tensor, method: str = "mean") -> TensorType[()]:
@@ -386,11 +386,11 @@ class TemporalLoss(Loss):
         """Rectify supporting a list of epsilons, one per bodypart.
         Not implemented in Loss class, because shapes of broadcasting may vary"""
         # self.epsilon is a tensor initialized in parent class
-        # repeathing for broadcasting.
+        # repeating for broadcasting.
         # note: this unsqueezing doesn't affect anything if epsilon is a scalar tensor,
         # but it does if it's a tensor with multiple elements.
         epsilon = self.epsilon.unsqueeze(0).repeat(loss.shape[0], 1).to(loss.device)
-        return loss.masked_fill(mask=(loss - epsilon) < 0.0, value=0.0)
+        return F.relu(loss - epsilon)
 
     def remove_nans(self, **kwargs):
         # find nans in the targets, and do a masked_select operation
