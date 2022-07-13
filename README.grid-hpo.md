@@ -53,10 +53,10 @@ scripts/grid-hpo.sh --script scripts/grid-run-hydra-1.sh --training.rng_seed_dat
 # run on grid
 
 grid run --name run-hydra-test --dockerfile Dockerfile \
---localdir --instance_type p3.2xlarge \
+--localdir --instance_type g4dn.xlarge \
 --datastore_name mirror-mouse -- \
 scripts/grid-hpo.sh \
---script scripts/grid-run-test-2.sh \
---training.rng_seed_data_pt "[1,2]" \
+--script scripts/grid-run-hydra-1.sh \
+--training.rng_seed_data_pt "[0,1,2]" \
 --dali.base.train.sequence_length "[4,5]"
 ```
