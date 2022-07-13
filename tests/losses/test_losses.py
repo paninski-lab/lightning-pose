@@ -339,7 +339,7 @@ def test_temporal_loss_multi_epsilon_rectification():
     assert rectified.shape == torch.Size([batch_size - 1, 3])
     assert torch.all(rectified[:, 0] == 0.0)
     assert torch.all(rectified[:, 1] == 1.0)
-    assert torch.all(rectified[:, 2] == 0.4)
+    assert torch.allclose(rectified[:, 2], torch.tensor([0.1]))
 
     # each keypoint has different values in the batch dimension
     loss_tensor_fancier = torch.tensor(
@@ -348,7 +348,7 @@ def test_temporal_loss_multi_epsilon_rectification():
     temporal_loss = TemporalLoss(epsilon=[0.1, 0.15, 0.3])
     rectified = temporal_loss.rectify_epsilon(loss_tensor_fancier)
     assert rectified.shape == (2, 3)
-    assert torch.allclose(rectified[0, :], torch.tensor([1.0, 2.0, 1.5]))
+    assert torch.allclose(rectified[0, :], torch.tensor([0.9, 1.85, 1.2]))
     assert torch.allclose(rectified[1, :], torch.tensor([0.0, 0.0, 0.0]))
 
 
