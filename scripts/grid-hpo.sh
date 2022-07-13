@@ -15,6 +15,8 @@ touch test.$$.sh
 chmod a+x test.$$.sh
 
 # args must follow  follow --key value format
+# $0 is the script name, $1 is the first arg, $2 is the second arg, etc. in our case $1 is --key, $2 is value etc.
+# we have $I where I is the total number of args passed to the script. $# is the number of args.
 while true; do
   # assume --key and remove the leading --
 	key="${1:2}"
@@ -33,12 +35,14 @@ while true; do
   fi
   
   # advance to the next set of args
+  # assuming args are coming as --key value so jump 2 forward.
   shift
   shift
 done  
 
-# execute the modified script
+# append text to the modified script
 echo "${arg}" >> test.$$.sh
+# execute the modified script
 ./test.$$.sh
 
 
