@@ -256,7 +256,7 @@ def predict_single_video(
 def _make_predictions(
     cfg: DictConfig,
     model: LightningModule,
-    dataloader: Union[torch.utils.data.DataLoader, LightningWrapper],
+    dataloader: Union[torch.utils.data.DataLoader, LightningWrapper, ContextLightningWrapper],
     n_frames_: int,
     batch_size: int,
     data_name: str = "dataset",
@@ -314,7 +314,7 @@ def _make_predictions(
 def _predict_frames(
     cfg: DictConfig,
     model: LightningModule,
-    dataloader: Union[torch.utils.data.DataLoader, LightningWrapper],
+    dataloader: Union[torch.utils.data.DataLoader, LightningWrapper, ContextLightningWrapper],
     n_frames_: int,
     batch_size: int,
     data_name: str = "dataset",
