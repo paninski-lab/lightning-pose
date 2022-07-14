@@ -225,7 +225,6 @@ class HeatmapTracker(BaseSupervisedTracker):
                 "batch", "features", "rep_height", "rep_width"
             ] = torch.squeeze(representations, 4)
         heatmaps = self.heatmaps_from_representations(representations)
-        print(self.unnormalized_weights)
         # softmax temp stays 1 here; to modify for model predictions, see constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
 
