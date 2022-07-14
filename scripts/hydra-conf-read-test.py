@@ -43,7 +43,7 @@ grid run --instance_type t2.medium --localdir -- grid-hpo.sh --script scripts/hy
 grid run --instance_type t2.medium --localdir -- grid-hpo.sh --script scripts/hydra-conf-read-test.sh --config-path "['configs_mirror-mouse', 'configs']" --config-name "['config','config_mirror-mouse']"
 
 # actual run 
-grid run --instance_type g4dn.xlarge --localdir -- grid-hpo.sh --script scripts/train_hydra.sh --config-path "['configs_mirror-mouse', 'configs']" --config-name "['config','config_mirror-mouse']" --training.rng_seed_data_pt "[1,2]"
+grid run --dockerfile Dockerfile --instance_type g4dn.xlarge --localdir -- grid-hpo.sh --script scripts/train_hydra.sh --config-path "['configs_mirror-mouse', 'configs']" --config-name "['config','config_mirror-mouse']" --training.rng_seed_data_pt "[1,2]"
 
     """
     train()
