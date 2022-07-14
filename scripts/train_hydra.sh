@@ -1,4 +1,4 @@
-python scripts/hydra-conf-read-test.py --multirun \
+python scripts/train_hydra.py --multirun \
 training.max_epochs=11 \
 training.train_batch_size=8 \
 training.train_frames=125 \
