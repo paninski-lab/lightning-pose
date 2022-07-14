@@ -91,7 +91,9 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.torch_seed = torch_seed
         self.do_context = do_context
         if self.mode == "2d":
-            self.representation_fc = torch.nn.Linear(5, 1, bias=False)
+#             self.representation_fc = torch.nn.Linear(5, 1, bias=False)
+            self.unnormalized_weights = nn.parameter.Parameter(torch.Tensor([[.2, .2, .2, .2, .2]]), requires_grad=False)
+            self.representation_fc = lambda x: x @ torch.transpose(nn.functional.softmax(self.unnormalized_weights), 0, 1)
         elif self.mode == "3d":
             self.representation_fc = torch.nn.Linear(8, 1, bias=False)
 
@@ -164,8 +166,8 @@ class HeatmapTracker(BaseSupervisedTracker):
         # in their model, the pixel shuffle happens only for downsample_factor=2
         upsampling_layers = []
         upsampling_layers.append(nn.PixelShuffle(2))
-        # upsampling_layers.append(nn.BatchNorm2d(self.num_filters_for_upsampling // 4))
-        # upsampling_layers.append(nn.ReLU(inplace=True))
+#         upsampling_layers.append(nn.BatchNorm2d(self.num_filters_for_upsampling // 4))
+#         upsampling_layers.append(nn.ReLU(inplace=True))
         upsampling_layers.append(
             self.create_double_upsampling_layer(
                 in_channels=self.num_filters_for_upsampling // 4,
@@ -173,8 +175,8 @@ class HeatmapTracker(BaseSupervisedTracker):
             )
         )  # up to here results in downsample_factor=3
         if self.downsample_factor == 2:
-            # upsampling_layers.append(nn.BatchNorm2d(self.num_keypoints))
-            # upsampling_layers.append(nn.ReLU(inplace=True))
+#             upsampling_layers.append(nn.BatchNorm2d(self.num_keypoints))
+#             upsampling_layers.append(nn.ReLU(inplace=True))
             upsampling_layers.append(
                 self.create_double_upsampling_layer(
                     in_channels=self.num_keypoints,
@@ -203,7 +205,8 @@ class HeatmapTracker(BaseSupervisedTracker):
         representations: TensorType["batch", "features", "rep_height", "rep_width"],
     ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Wrapper around self.upsampling_layers for type and shape assertion."""
-        return self.upsampling_layers(representations)
+        heatmaps = self.upsampling_layers(representations)
+        return heatmaps
 
     def forward(
         self,
@@ -213,6 +216,7 @@ class HeatmapTracker(BaseSupervisedTracker):
     ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Forward pass through the network."""
         representations = self.get_representations(images, self.do_context)
+        
         if self.do_context:
             representations: TensorType[
                 "batch", "features", "rep_height", "rep_width", 1
@@ -221,6 +225,7 @@ class HeatmapTracker(BaseSupervisedTracker):
                 "batch", "features", "rep_height", "rep_width"
             ] = torch.squeeze(representations, 4)
         heatmaps = self.heatmaps_from_representations(representations)
+        print(self.unnormalized_weights)
         # softmax temp stays 1 here; to modify for model predictions, see constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
 

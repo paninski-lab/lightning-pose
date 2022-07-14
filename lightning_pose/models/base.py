@@ -345,7 +345,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
                 {
                     "params": self.upsampling_layers.parameters()
                 },  # important this is the 0th element, for BackboneFinetuning callback
-                {"params": self.representation_fc.parameters()},
+                {"params": self.unnormalized_weights},
             ]
 
         else:
@@ -471,7 +471,7 @@ class SemiSupervisedTrackerMixin(object):
                 {
                     "params": self.upsampling_layers.parameters()
                 },  # important this is the 0th element, for BackboneFinetuning callback
-                {"params": self.representation_fc.parameters()},
+                {"params": self.unnormalized_weights},
             ]
 
         else:
