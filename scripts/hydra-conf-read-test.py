@@ -24,4 +24,14 @@ def pretty_print(cfg):
     print("\n\n")
 
 if __name__ == "__main__":
+    """
+python scripts/hydra-conf-read-test.py
+python scripts/hydra-conf-read-test.py --config-dir scripts/configs --config-name config
+python scripts/hydra-conf-read-test.py --config-dir scripts/configs_mirror-mouse --config-name config_mirror-mouse
+grid run --localdir -- grid-hpo.sh --script scripts/hydra-conf-read-test.sh 
+grid run --localdir -- run grid-hpo.sh --script scripts/hydra-conf-read-test.sh --config-dir scripts/configs --config-name config
+grid run --localdir -- grid-hpo.sh --script scripts/hydra-conf-read-test.sh  --config-dir scripts/configs_mirror-mouse --config-name config_mirror-mouse
+
+    """
     train()
+
