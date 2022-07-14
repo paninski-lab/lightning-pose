@@ -34,12 +34,13 @@ python scripts/hydra-conf-read-test.py --config-dir scripts --config-name config
 python scripts/hydra-conf-read-test.py --config-path configs --config-name config
 python scripts/hydra-conf-read-test.py --config-path configs_mirror-mouse --config-name config_mirror-mouse 
 
-# config dir test
+# config dir and config path test
 grid run --instance_type t2.medium --localdir -- grid-hpo.sh --script scripts/hydra-conf-read-test.sh --config-dir "['scripts/configs_mirror-mouse', 'script/configs']" --config-name "['config','config_mirror-mouse']"
 
-# config path test
+# config path test with trailing hydra param
 grid run --instance_type t2.medium --localdir -- grid-hpo.sh --script scripts/hydra-conf-read-test.sh --config-path "['configs_mirror-mouse', 'configs']" --config-name "['config','config_mirror-mouse']" --training.rng_seed_data_pt "[1,2]"
 
+# config path test w/o trailing hydra param
 grid run --instance_type t2.medium --localdir -- grid-hpo.sh --script scripts/hydra-conf-read-test.sh --config-path "['configs_mirror-mouse', 'configs']" --config-name "['config','config_mirror-mouse']"
 
 # actual run 
