@@ -9,53 +9,40 @@ The process:
 
 # Review examples of proxy scripts
 
-[grid-run-test-1.sh](scripts/grid-run-test-1.sh)
+## test locally
+
+- read config file and perform local test
 
 ```
-# test locally
-scripts/grid-hpo.sh --script scripts/grid-run-test-1.sh --training.rng_seed_data_pt "[1,2]" --dali.base.train.sequence_length "[4,5]"
-
-# run on grid
-grid run --name run-hydra-test --dockerfile Dockerfile \
---localdir \
---datastore_name mirror-mouse -- \ 
-scripts/grid-hpo.sh \
---script scripts/grid-run-test-1.sh \
---training.rng_seed_data_pt "[1,2]" \
---dali.base.train.sequence_length "[4,5]"
+python scripts/hydra-conf-read-test.py
+# will still work but not correct
+python scripts/hydra-conf-read-test.py --config-dir scripts/configs_mirror-mouse  --config-name config
+python scripts/hydra-conf-read-test.py --config-dir scripts --config-name config
 ```
 
-[grid-run-test-2.sh](scripts/grid-run-test-2.sh)
-
+- correctly way to read the config
 ```
-# test locally
+python scripts/hydra-conf-read-test.py --config-path configs --config-name config
+python scripts/hydra-conf-read-test.py --config-path configs_mirror-mouse --config-name config_mirror-mouse 
+```
+## grid run
 
-scripts/grid-hpo.sh --script scripts/grid-run-test-2.sh --training.rng_seed_data_pt "[1,2]" --dali.base.train.sequence_length "[4,5]"
-
-# run on grid
-
-grid run --name run-hydra-test --dockerfile Dockerfile \
---localdir \
---datastore_name mirror-mouse -- \ 
-scripts/grid-hpo.sh \
---script scripts/grid-run-test-2.sh \
---training.rng_seed_data_pt "[1,2]" \
---dali.base.train.sequence_length "[4,5]"
+- config dir and config path test
+```  
+grid run --instance_type t2.medium --localdir -- grid-hpo.sh --script scripts/hydra-conf-read-test.sh --config-dir "['scripts/configs_mirror-mouse', 'script/configs']" --config-name "['config','config_mirror-mouse']"
 ```
 
-[grid-run-hydra-1.sh](scripts/grid-run-hydra-1.sh)
-
+- config path test with trailing hydra param
 ```
-# test locally
-scripts/grid-hpo.sh --script scripts/grid-run-hydra-1.sh --training.rng_seed_data_pt "[1,2]" --dali.base.train.sequence_length "[4,5]"
+grid run --instance_type t2.medium --localdir -- grid-hpo.sh --script scripts/hydra-conf-read-test.sh --config-path "['configs_mirror-mouse', 'configs']" --config-name "['config','config_mirror-mouse']" --training.rng_seed_data_pt "[1,2]"
+```
 
-# run on grid
+- config path test w/o trailing hydra param
+```
+grid run --instance_type t2.medium --localdir -- grid-hpo.sh --script scripts/hydra-conf-read-test.sh --config-path "['configs_mirror-mouse', 'configs']" --config-name "['config','config_mirror-mouse']"
+```
 
-grid run --name run-hydra-test --dockerfile Dockerfile \
---localdir --instance_type p3.2xlarge \
---datastore_name mirror-mouse -- \ 
-scripts/grid-hpo.sh \
---script scripts/grid-run-test-2.sh \
---training.rng_seed_data_pt "[1,2]" \
---dali.base.train.sequence_length "[4,5]"
+- actual run 
+```  
+grid run --dockerfile Dockerfile --instance_type g4dn.xlarge --localdir -- grid-hpo.sh --script scripts/train_hydra.sh --config-path "['configs_mirror-mouse', 'configs']" --config-name "['config','config_mirror-mouse']" --training.rng_seed_data_pt "[1,2]"
 ```
