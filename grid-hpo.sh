@@ -27,6 +27,7 @@ while true; do
     cp ${value} test.$$.sh
   else 
     if [[ "${key}" != "--config-name" && "${key}" != "--config-dir" && "${key}" != "--config-path" ]]; then
+      # if key is not --config-name, --config-dir, --config-path, then append it to the proxy script without --
       # remove the leading --
       key=${key:2}
       param_arg="${param_arg} ${key}=${value}"
@@ -42,6 +43,7 @@ while true; do
 done  
 
 # append text to the modified script
+# we first append the param args and then the --config args, otherwise hydra fails.
 echo "${param_arg} ${config_arg}" >> test.$$.sh
 # show on stdout for debugging
 echo "Running"
