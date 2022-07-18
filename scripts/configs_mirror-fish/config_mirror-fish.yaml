@@ -177,7 +177,7 @@ eval:
   # paths to the hydra config files in the output folder, OR absolute paths to such folders.
   hydra_paths: [" "]
   # predict?
-  predict_vids_after_training: true
+  predict_vids_after_training: false
   # save .mp4?
   save_vids_after_training: false
   fiftyone:
