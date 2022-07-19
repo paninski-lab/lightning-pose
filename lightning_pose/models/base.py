@@ -9,7 +9,7 @@ from torchtyping import TensorType, patch_typeguard
 import torchvision.models as tvmodels
 from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypedDict, Union
-
+from lightning_pose.data.dali import get_context_from_seq
 patch_typeguard()  # use before @typechecked
 
 MULTISTEPLR_MILESTONES_DEFAULT = [100, 200, 300]
@@ -160,6 +160,7 @@ class BaseFeatureExtractor(LightningModule):
             TensorType[
                 "batch", "frames", "RGB":3, "image_height", "image_width", float
             ],
+            TensorType["sequence_length", "RGB":3, "image_height", "image_width", float],
         ],
         do_context: bool = False,
     ):  # -> TensorType["batch", "features", "rep_height", "rep_width", float]:
@@ -181,30 +182,63 @@ class BaseFeatureExtractor(LightningModule):
         """
         if self.mode == "2d":
             if do_context:
-                batch, frames, channels, image_height, image_width = images.shape
-                frames_batch_shape = batch * frames
-                images_batch_frames: TensorType[
-                    "batch*frames", "channels":3, "image_height", "image_width"
-                ] = images.reshape(frames_batch_shape, channels, image_height, image_width)
-                outputs: TensorType[
-                    "batch*frames", "features", "rep_height", "rep_width"
-                ] = self.backbone(images_batch_frames)
-                outputs: TensorType[
-                    "batch", "frames", "features", "rep_height", "rep_width"
-                ] = outputs.reshape(
-                    images.shape[0],
-                    images.shape[1],
-                    outputs.shape[1],
-                    outputs.shape[2],
-                    outputs.shape[3],
-                )
+                # images.shape = (sequence_length, RGB, image_height, image_width)
+                if len(images.shape) == 5:
+                    # non-consecutive sequences. can be used for supervised and unsupervised models.
+                    batch, frames, channels, image_height, image_width = images.shape
+                    frames_batch_shape = batch * frames
+                    images_batch_frames: TensorType[
+                        "batch*frames", "channels":3, "image_height", "image_width"
+                    ] = images.reshape(frames_batch_shape, channels, image_height, image_width)
+                    outputs: TensorType[
+                        "batch*frames", "features", "rep_height", "rep_width"
+                    ] = self.backbone(images_batch_frames)
+                    outputs: TensorType[
+                        "batch", "frames", "features", "rep_height", "rep_width"
+                    ] = outputs.reshape(
+                        images.shape[0],
+                        images.shape[1],
+                        outputs.shape[1],
+                        outputs.shape[2],
+                        outputs.shape[3],
+                    )
+                elif len(images.shape) == 4:
+                    # we have a single sequence of frames from DALI (not a batch of sequences)
+                    # valid frame := a frame that has two frames before it and two frames after it
+                    # we push it as is through the backbone, and then use tiling to make it into (sequence_length, features, rep_height, rep_width, num_context_frames)
+                    # for now we discard the padded frames (first and last two)
+                    # the output will be one representation per valid frame
+                    sequence_length, channels, image_height, image_width = images.shape
+                    representations: TensorType[
+                        "sequence_length", "channels": 3, "rep_height", "rep_width"
+                    ] = self.backbone(images)
+                    # we need to tile the representations to make it into (num_valid_frames, features, rep_height, rep_width, num_context_frames)
+                    # TODO: context frames should be configurable
+                    tiled_representations = get_context_from_seq(img_seq = representations, context_length=5)
+                    # get rid of first and last two frames
+                    if tiled_representations.shape[0] < 5:
+                        raise RuntimeError("Not enough valid frames to make a context representation.")
+                    outputs = tiled_representations[2:-2, :, :, :, :]
+                    
+                # for both types of batches, we reshape in the same way
+                # context is in the last dimension for the linear layer.
                 representations: TensorType[
-                    "batch", "features", "rep_height", "rep_width", "frames"
-                ] = torch.permute(outputs, (0, 2, 3, 4, 1))
+                        "batch", "features", "rep_height", "rep_width", "frames"
+                    ] = torch.permute(outputs, (0, 2, 3, 4, 1))
+
+                # push through a linear layer to get the final representation
+                representations: TensorType[
+                    "batch", "features", "rep_height", "rep_width", 1
+                ] = self.representation_fc(representations)
+                # final squeeze
+                representations: TensorType[
+                    "batch", "features", "rep_height", "rep_width"
+                ] = torch.squeeze(representations, 4)
             else:
                 image_batch = images
                 representations = self.backbone(image_batch)
-        else:
+
+        elif self.mode == "3d":
             # reshape to (batch, channels, frames, img_height, img_width)
             images = torch.permute(images, (0, 2, 1, 3, 4))
             # turn (0, 1, 2, 3, 4) into (0, 1, 1, 2, 2, 3, 3, 4)

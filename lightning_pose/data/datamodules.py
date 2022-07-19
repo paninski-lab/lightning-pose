@@ -227,8 +227,7 @@ class UnlabeledDataModule(BaseDataModule):
             model_type="context" if self.dataset.do_context else "base",
             filenames=self.filenames,
             resize_dims=[self.dataset.height, self.dataset.width],
-            dali_config=self.dali_config
-        )
+            dali_config=self.dali_config)
 
         self.unlabeled_dataloader = dali_prep()
 

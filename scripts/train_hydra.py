@@ -84,7 +84,7 @@ def train(cfg: DictConfig):
             and not data_module.unlabeled_dataloader.context_sequences_successive:
         raise ValueError(
             f"Temporal loss is not compatible with non-successive context sequences. "
-            f"Please change context_sequences_successive in data_module.py to True.")
+            f"Please change cfg.dali.context.train.consecutive_sequences=True.")
     
     # ----------------------------------------------------------------------------------
     # Set up and run training

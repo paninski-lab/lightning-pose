@@ -213,17 +213,13 @@ class HeatmapTracker(BaseSupervisedTracker):
         images: Union[
             TensorType["batch", "channels":3, "image_height", "image_width"],
             TensorType["batch", "frames", "channels":3, "image_height", "image_width"]]
-    ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
+    ) -> TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Forward pass through the network."""
+        # we get one representation for each desired output. 
+        # in the case of unsupervised sequences + context, we have outputs for all images but the first two and last two.
+        # this is all handled internally by get_representations()
         representations = self.get_representations(images, self.do_context)
-        
-        if self.do_context:
-            representations: TensorType[
-                "batch", "features", "rep_height", "rep_width", 1
-            ] = self.representation_fc(representations)
-            representations: TensorType[
-                "batch", "features", "rep_height", "rep_width"
-            ] = torch.squeeze(representations, 4)
+
         heatmaps = self.heatmaps_from_representations(representations)
         # softmax temp stays 1 here; to modify for model predictions, see constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
