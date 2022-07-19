@@ -174,11 +174,14 @@ class LitDaliWrapper(DALIGenericIterator):
                 return out[0]["x"]
             else: # train with context. pipeline is like for "base" model. but we reshape images. assume batch_size=1
                 if self.context_sequences_successive:
+                    # same as for base model
                     raw_out = torch.tensor(
                     out[0]["x"][0, :, :, :, :],  # should be (sequence_length, 3, H, W)
                     dtype=torch.float)
-                    # reshape to (5, 3, H, W)
-                    return get_context_from_seq(img_seq=raw_out, context_length=5)
+                    return raw_out 
+                    # used to be reshaped to (5, 3, H, W):
+                    # return get_context_from_seq(img_seq=raw_out, context_length=5)
+                    
                 else: # grabbing independent 5-frame sequences
                     return out[0]["x"]
 
@@ -227,7 +230,7 @@ class PrepareDALI(object):
         self.dali_config = dali_config
         self.filenames = filenames
         self.frame_count = count_frames(self.filenames)
-        self.context_sequences_successive = context_sequences_successive
+        self.context_sequences_successive = self.dali_config["context"]["train"]["consecutive_sequences"]
         self._pipe_dict: dict = self._setup_pipe_dict(self.filenames)
 
     @property
@@ -239,7 +242,7 @@ class PrepareDALI(object):
         if self.model_type == "base":
             return int(np.ceil(self.frame_count / (pipe_dict["sequence_length"])))
         elif self.model_type == "context":
-            if pipe_dict["step"] == 1: # context_sequences_successive
+            if pipe_dict["step"] == 1: # 0-5, 1-6, 2-7, 3-8, 4-9 ...
                 return int(np.ceil(self.frame_count / (pipe_dict["batch_size"])))
             elif pipe_dict["step"] == pipe_dict["sequence_length"]: # context_sequences_successive = False
                 # taking the floor because during training we don't care about missing the last non-full batch. we prefer having fewer batches but valid.
@@ -283,11 +286,9 @@ class PrepareDALI(object):
         # train pipe args
         context_train_cfg = self.dali_config["context"]["train"]
         if self.context_sequences_successive:
-            # TODO: not fully controllable from outside yet.
-            # need to implement reshaphing at the representation level to allow more flex.
-            # grab a sequence of 8 frames and reshape it internally (sequence length will effectively be multiplied by 5)
+            # note: reusing the batch size argument
             dict_args["train"]["context"] = {"filenames": filenames, "resize_dims": self.resize_dims, 
-            "sequence_length": 8, "step": 8, "batch_size": 1, 
+            "sequence_length": context_train_cfg["batch_size"], "step": context_train_cfg["batch_size"], "batch_size": 1, 
             "seed": gen_cfg["seed"], "num_threads": gen_cfg["num_threads"], "device_id": gen_cfg["device_id"], 
             "random_shuffle": True, "device": gen_cfg["device"]}
         else:
@@ -310,7 +311,7 @@ class PrepareDALI(object):
         pipe = video_pipe(**pipe_args)
         return pipe
     
-    def _setup_dali_iterator_args(self) -> LitDaliWrapper:
+    def _setup_dali_iterator_args(self) -> dict:
         """ builds args for Lightning iterator"""
         dict_args = {}
         dict_args["predict"] = {"context": None, "base": None}
@@ -321,7 +322,7 @@ class PrepareDALI(object):
         dict_args["predict"]["base"] = {"num_iters": self.num_iters, "eval_mode": "predict", "do_context": False, "output_map": ["x"], "last_batch_policy": LastBatchPolicy.FILL, "last_batch_padded": False, "auto_reset": False, "reader_name": "reader"}
 
         # 5-frame context models
-        dict_args["train"]["context"] = {"num_iters": self.num_iters, "eval_mode": "train", "do_context": True, "output_map": ["x"], "last_batch_policy": LastBatchPolicy.PARTIAL, "auto_reset": True} # taken from datamodules.py. only difference is that we need to do context
+        dict_args["train"]["context"] = {"num_iters": self.num_iters, "eval_mode": "train", "do_context": True, "context_sequences_successive": self.context_sequences_successive,  "output_map": ["x"], "last_batch_policy": LastBatchPolicy.PARTIAL, "auto_reset": True} # taken from datamodules.py. only difference is that we need to do context
         dict_args["predict"]["context"] = {"num_iters": self.num_iters, "eval_mode": "predict", "do_context": True, "output_map": ["x"], "last_batch_policy": LastBatchPolicy.PARTIAL, "last_batch_padded": False, "auto_reset": False, "reader_name": "reader"}
 
         return dict_args
