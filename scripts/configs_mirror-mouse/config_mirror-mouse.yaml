@@ -127,7 +127,7 @@ dali:
   context: # not supporting context_sequences_successive
     train: # defaults: sequence_length=5, step=sequence_length
       batch_size: 8 # 8 times 5 = 40
-      random_shuffle: True # can select False if want successive sequences to be presented to network
+      consecutive_sequences: false # can select False if want successive sequences to be presented to network
 
     predict: # defaults: sequence_length=5, step=1
       batch_size: 8
