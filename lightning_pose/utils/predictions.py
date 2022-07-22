@@ -99,7 +99,6 @@ def predict_dataset(
     labeled_preds = trainer.predict(
         model=model,
         dataloaders=data_module.full_labeled_dataloader(),
-        ckpt_path=ckpt_file,
         return_predictions=True
     )
 
