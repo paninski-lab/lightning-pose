@@ -315,7 +315,8 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         self.loss_factory_unsup = loss_factory_unsupervised.to(self.device)
 
         # this attribute will be modified by AnnealWeight callback during training
-        self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
+        # self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
+        self.total_unsupervised_importance = torch.tensor(1.0)
 
     def get_loss_inputs_unlabeled(
         self,
