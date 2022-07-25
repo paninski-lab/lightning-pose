@@ -174,7 +174,8 @@ def count_frames(video_list: Union[List[str], str]) -> int:
 
 @typechecked
 def compute_num_train_frames(
-    len_train_dataset: int, train_frames: Optional[Union[int, float]] = None,
+    len_train_dataset: int,
+    train_frames: Optional[Union[int, float]] = None,
 ) -> int:
     """Quickly compute number of training frames for a given dataset.
 
@@ -284,15 +285,43 @@ def generate_heatmaps(
     return confidence
 
 
+# @typechecked
+# def evaluate_heatmaps_at_location(
+#     heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+#     locs: TensorType["batch", "num_keypoints", 2],
+# ) -> TensorType["batch", "num_keypoints"]:
+#     """Evaluate 4D heatmaps using a 3D location tensor (last dim is x, y coords)."""
+#     i = torch.arange(heatmaps.shape[0]).reshape(-1, 1, 1, 1)
+#     j = torch.arange(heatmaps.shape[1]).reshape(1, -1, 1, 1)
+#     k = locs[:, :, None, 1, None].type(torch.int64)  # y first
+#     l = locs[:, :, 0, None, None].type(torch.int64)  # x second
+#     vals = heatmaps[i, j, k, l].squeeze(-1).squeeze(-1)  # get rid of singleton dims
+#     return vals
+
+
 @typechecked
 def evaluate_heatmaps_at_location(
     heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
     locs: TensorType["batch", "num_keypoints", 2],
+    sigma: Union[float, int] = 1.25,  # sigma used for generating heatmaps
 ) -> TensorType["batch", "num_keypoints"]:
     """Evaluate 4D heatmaps using a 3D location tensor (last dim is x, y coords)."""
     i = torch.arange(heatmaps.shape[0]).reshape(-1, 1, 1, 1)
     j = torch.arange(heatmaps.shape[1]).reshape(1, -1, 1, 1)
-    k = locs[:, :, None, 1, None].type(torch.int64)  # y first
-    l = locs[:, :, 0, None, None].type(torch.int64)  # x second
-    vals = heatmaps[i, j, k, l].squeeze(-1).squeeze(-1)  # get rid of singleton dims
+    k = locs[:, :, None, 1, None].type(torch.int64)
+    l = locs[:, :, 0, None, None].type(torch.int64)
+    pix_to_consider = int(np.ceil(sigma * 2.0))  # get all pixels within two stds.
+    offsets = list(np.arange(-pix_to_consider, pix_to_consider + 1))
+    vals_all = []
+    for offset in offsets:
+        k_offset = k + offset
+        k_offset = torch.clamp(k_offset, min=0, max=heatmaps.shape[2] - 1)
+        for offset_2 in offsets:
+            l_offset = l + offset_2
+            l_offset = torch.clamp(l_offset, min=0, max=heatmaps.shape[3] - 1)
+            vals = (
+                heatmaps[i, j, k_offset, l_offset].squeeze(-1).squeeze(-1)
+            )  # get rid of singleton dims
+            vals_all.append(vals)
+    vals = torch.stack(vals_all, 0).sum(0)
     return vals
