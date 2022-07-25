@@ -22,7 +22,9 @@ class AnnealWeight(Callback):
         self.attr_name = attr_name
 
     def on_train_start(self, trainer, pl_module) -> None:
-        pl_module.register_buffer(self.attr_name, torch.tensor(self.init_val))
+        # Dan: removed buffer; seems to complicate checkpoint loading
+        # pl_module.register_buffer(self.attr_name, torch.tensor(self.init_val))
+        setattr(pl_module, self.attr_name, torch.tensor(self.init_val))
 
     def on_train_epoch_start(
         self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"
@@ -34,4 +36,6 @@ class AnnealWeight(Callback):
             value: float = min(
                 self.init_val + eff_epoch * self.increase_factor, self.final_val
             )
-            pl_module.register_buffer(self.attr_name, torch.tensor(value))
+            # Dan: removed buffer; seems to complicate checkpoint loading
+            # pl_module.register_buffer(self.attr_name, torch.tensor(value))
+            setattr(pl_module, self.attr_name, torch.tensor(value))
