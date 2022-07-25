@@ -147,6 +147,17 @@ def train(cfg: DictConfig):
     else:
         limit_train_batches = cfg.training.limit_train_batches
 
+    # setting up callbacks here so we can determine which ones are included per model type
+    callbacks = [early_stopping,
+            lr_monitor,
+            ckpt_callback,
+            transfer_unfreeze_callback]
+    
+    # we just need this callback for unsupervised models
+    if (cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None):
+        callbacks.append(anneal_weight_callback)
+    
+
     # set up trainer
     trainer = pl.Trainer(  # TODO: be careful with devices when scaling to multiple gpus
         gpus=gpus,
@@ -154,13 +165,7 @@ def train(cfg: DictConfig):
         min_epochs=cfg.training.min_epochs,
         check_val_every_n_epoch=cfg.training.check_val_every_n_epoch,
         log_every_n_steps=cfg.training.log_every_n_steps,
-        callbacks=[
-            early_stopping,
-            lr_monitor,
-            ckpt_callback,
-            transfer_unfreeze_callback,
-            anneal_weight_callback,
-        ],
+        callbacks=callbacks,
         logger=logger,
         limit_train_batches=limit_train_batches,
         accumulate_grad_batches=cfg.training.accumulate_grad_batches,
