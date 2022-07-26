@@ -304,16 +304,25 @@ def evaluate_heatmaps_at_location(
     heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
     locs: TensorType["batch", "num_keypoints", 2],
     sigma: Union[float, int] = 1.25,  # sigma used for generating heatmaps
+    num_stds: int = 2,  # num standard deviations of pixels to compute confidence
 ) -> TensorType["batch", "num_keypoints"]:
-    """Evaluate 4D heatmaps using a 3D location tensor (last dim is x, y coords)."""
-    num_pad = 3
-    heatmaps_padded = torch.zeros(heatmaps.shape[0], heatmaps.shape[1], heatmaps.shape[2] + num_pad*2, heatmaps.shape[3] + num_pad*2)
-    heatmaps_padded[:,:, num_pad:-num_pad, num_pad:-num_pad] = heatmaps
+    """Evaluate 4D heatmaps using a 3D location tensor (last dim is x, y coords). Since
+    the model outputs heatmaps with a standard deviation of sigma, confidence will be
+    spread across neighboring pixels. To account for this, confidence is computed by
+    taking all pixels within two standard deviations of the predicted pixel."""
+    pix_to_consider = int(np.floor(sigma * num_stds))  # get all pixels within num_stds.
+    num_pad = pix_to_consider
+    heatmaps_padded = torch.zeros(
+        heatmaps.shape[0],
+        heatmaps.shape[1],
+        heatmaps.shape[2] + num_pad * 2,
+        heatmaps.shape[3] + num_pad * 2,
+    )
+    heatmaps_padded[:, :, num_pad:-num_pad, num_pad:-num_pad] = heatmaps
     i = torch.arange(heatmaps_padded.shape[0]).reshape(-1, 1, 1, 1)
     j = torch.arange(heatmaps_padded.shape[1]).reshape(1, -1, 1, 1)
     k = locs[:, :, None, 1, None].type(torch.int64) + num_pad
     l = locs[:, :, 0, None, None].type(torch.int64) + num_pad
-    pix_to_consider = int(np.ceil(sigma * 2.0))  # get all pixels within two stds.
     offsets = list(np.arange(-pix_to_consider, pix_to_consider + 1))
     vals_all = []
     for offset in offsets:
