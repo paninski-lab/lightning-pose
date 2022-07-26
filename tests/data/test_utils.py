@@ -20,11 +20,13 @@ def test_data_extractor(base_data_module_combined):
         * base_data_module_combined.train_probability
     )
     keypoint_tensor, _ = DataExtractor(
-        data_module=base_data_module_combined, cond="train")()
+        data_module=base_data_module_combined, cond="train"
+    )()
     assert keypoint_tensor.shape == (num_frames, 34)  # 72 = 0.8 * 90 images
 
     keypoint_tensor, images_tensor = DataExtractor(
-        data_module=base_data_module_combined, cond="train", extract_images=True)()
+        data_module=base_data_module_combined, cond="train", extract_images=True
+    )()
 
     assert images_tensor.shape == (num_frames, 3, 256, 256)
 
@@ -241,11 +243,34 @@ def test_evaluate_heatmaps_at_location():
             h_locs = torch.randint(0, height, (n_batch, n_keypoints))
             w_locs = torch.randint(0, width, (n_batch, n_keypoints))
             locs = torch.stack([w_locs, h_locs], dim=2)  # x then y
-            # set heatmaps equal to 1 at these locations
+            # set heatmaps values to .2 at 5 locations near the central pixel.
             for i, l1 in enumerate(locs):
                 for j, l2 in enumerate(l1):
-                    heatmaps[i, j, l2[1], l2[0]] = 1.0
+                    l2_1_offset, l2_0_offset = l2[1] + 1, l2[0] + 1
+                    l2_1_offset = torch.clamp(l2_1_offset, min=0, max=height - 1)
+                    l2_0_offset = torch.clamp(l2_0_offset, min=0, max=width - 1)
+                    heatmaps[i, j, l2_1_offset, l2_0_offset] += 0.2
 
+                    l2_1_offset, l2_0_offset = l2[1] - 1, l2[0] - 1
+                    l2_1_offset = torch.clamp(l2_1_offset, min=0, max=height - 1)
+                    l2_0_offset = torch.clamp(l2_0_offset, min=0, max=width - 1)
+                    heatmaps[i, j, l2_1_offset, l2_0_offset] += 0.2
+
+                    l2_1_offset, l2_0_offset = l2[1], l2[0]
+                    l2_1_offset = torch.clamp(l2_1_offset, min=0, max=height - 1)
+                    l2_0_offset = torch.clamp(l2_0_offset, min=0, max=width - 1)
+                    heatmaps[i, j, l2_1_offset, l2_0_offset] += 0.2
+
+                    l2_1_offset, l2_0_offset = l2[1] + 1, l2[0] - 1
+                    l2_1_offset = torch.clamp(l2_1_offset, min=0, max=height - 1)
+                    l2_0_offset = torch.clamp(l2_0_offset, min=0, max=width - 1)
+                    heatmaps[i, j, l2_1_offset, l2_0_offset] += 0.2
+
+                    l2_1_offset, l2_0_offset = l2[1] - 1, l2[0] + 1
+                    l2_1_offset = torch.clamp(l2_1_offset, min=0, max=height - 1)
+                    l2_0_offset = torch.clamp(l2_0_offset, min=0, max=width - 1)
+                    heatmaps[i, j, l2_1_offset, l2_0_offset] += 0.2
+            # heatmap values should sum to 1 even when values are spread across the heatmap
             vals = evaluate_heatmaps_at_location(heatmaps=heatmaps, locs=locs)
             assert torch.all(vals == 1.0)
 
