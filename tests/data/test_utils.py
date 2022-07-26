@@ -244,7 +244,30 @@ def test_evaluate_heatmaps_at_location():
             # set heatmaps equal to 1 at these locations
             for i, l1 in enumerate(locs):
                 for j, l2 in enumerate(l1):
-                    heatmaps[i, j, l2[1], l2[0]] = 1.0
+                    l2_1_offset, l2_0_offset = l2[1]+1, l2[0]+1
+                    l2_1_offset = torch.clamp(l2_1_offset, min=0, max=height-1)
+                    l2_0_offset = torch.clamp(l2_0_offset, min=0, max=width-1)
+                    heatmaps[i, j, l2_1_offset, l2_0_offset] += .2
+                    
+                    l2_1_offset, l2_0_offset = l2[1]-1, l2[0]-1
+                    l2_1_offset = torch.clamp(l2_1_offset, min=0, max=height-1)
+                    l2_0_offset = torch.clamp(l2_0_offset, min=0, max=width-1)
+                    heatmaps[i, j, l2_1_offset, l2_0_offset] += .2
+                    
+                    l2_1_offset, l2_0_offset = l2[1], l2[0]
+                    l2_1_offset = torch.clamp(l2_1_offset, min=0, max=height-1)
+                    l2_0_offset = torch.clamp(l2_0_offset, min=0, max=width-1)
+                    heatmaps[i, j, l2_1_offset, l2_0_offset] += .2
+                    
+                    l2_1_offset, l2_0_offset = l2[1]+1, l2[0]-1
+                    l2_1_offset = torch.clamp(l2_1_offset, min=0, max=height-1)
+                    l2_0_offset = torch.clamp(l2_0_offset, min=0, max=width-1)
+                    heatmaps[i, j, l2_1_offset, l2_0_offset] += .2
+                    
+                    l2_1_offset, l2_0_offset = l2[1]-1, l2[0]+1
+                    l2_1_offset = torch.clamp(l2_1_offset, min=0, max=height-1)
+                    l2_0_offset = torch.clamp(l2_0_offset, min=0, max=width-1)
+                    heatmaps[i, j, l2_1_offset, l2_0_offset] += .2
 
             vals = evaluate_heatmaps_at_location(heatmaps=heatmaps, locs=locs)
             assert torch.all(vals == 1.0)
