@@ -1,12 +1,12 @@
 data:
   # dimensions of training images
   image_orig_dims:
-    height: 490
-    width: 680
+    width: 490
+    height: 680
   # resize dimensions to streamline model creation
   image_resize_dims:
-    height: 256
-    width: 384
+    width: 256
+    height: 384
   # ABSOLUTE path to data directory
   data_dir: "/datastores/hillman-fly"
   # ABSOLUTE path to unlabeled videos' directory
