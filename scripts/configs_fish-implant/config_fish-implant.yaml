@@ -173,7 +173,7 @@ training:
   # dlc-light- curated subset of dlc augmentations with more conservative param settings
   imgaug: default
   # batch size of labeled data during training
-  train_batch_size: 8
+  train_batch_size: 4
   # batch size of labeled data during validation
   val_batch_size: 48
   # batch size of labeled data during test
@@ -199,7 +199,7 @@ training:
   min_epochs: 100
   max_epochs: 750
   # frequency to log training metrics (one step is one batch)
-  log_every_n_steps: 10
+  log_every_n_steps: 5 # this dataset has fewer than 10 batches per epoch
   # frequency to log validation metrics
   check_val_every_n_epoch: 5
   # select gpu for training
@@ -255,11 +255,12 @@ dali:
 
   base:
     train:
-      sequence_length: 32 # 4 # step = sequence_length by default. done internally
+      sequence_length: 16 # 4 # step = sequence_length by default. done internally
 
     predict:
       # (train_batch_size + base.train.sequence_length) * 2 -> round down to nearest pow of 2
-      sequence_length: 96 # step = sequence_length by default. done internally.
+      # for fish-implant made it smaller to fit on g4dn.xlarge
+      sequence_length: 32 # step = sequence_length by default. done internally.
 
   context: # not supporting context_sequences_successive
     train: # defaults: sequence_length=5, step=sequence_length
@@ -331,7 +332,7 @@ eval:
     dataset_to_create: "images"
   # str with an absolute path to a directory containing videos for prediction.
   # (it's not absolute just for the toy example)
-  test_videos_directory: "/datastores/mirror-mouse/videos_new"
+  test_videos_directory: "/datastores/fish-implant/videos"
   # str with an absolute path to directory in which you want to save .csv with predictions
   saved_vid_preds_dir: "/home/jovyan"
   # create labeled video from each video in test_videos_directory
