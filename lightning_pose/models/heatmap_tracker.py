@@ -1,6 +1,6 @@
 """Models that produce heatmaps of keypoints from images."""
 
-from kornia.geometry.subpix import spatial_softmax2d, spatial_expectation2d
+from kornia.geometry.subpix import spatial_softmax2d, spatial_expectation2d, conv_soft_argmax2d
 from kornia.geometry.transform import pyrup
 from omegaconf import DictConfig
 import torch
@@ -24,6 +24,144 @@ from lightning_pose.models.base import (
 
 patch_typeguard()  # use before @typechecked
 
+def create_double_upsampling_layer(
+        in_channels: int,
+        out_channels: int,
+) -> torch.nn.ConvTranspose2d:
+    """Perform ConvTranspose2d to double the output shape."""
+    return nn.ConvTranspose2d(
+        in_channels=in_channels,
+        out_channels=out_channels,
+        kernel_size=(3, 3),
+        stride=(2, 2),
+        padding=(1, 1),
+        output_padding=(1, 1),
+    )
+
+class Upsampling_CRNN(torch.nn.Module):
+    def __init__(self, num_filters_for_upsampling, num_keypoints, upsampling_factor=2, hkernel=2, hstride=2, hpad=0):
+        """
+        Upsampling Convolutional RNN - initialize input and hidden weights.
+        """
+        super().__init__()
+        self.upsampling_factor = upsampling_factor
+        self.pixel_shuffle = nn.PixelShuffle(2)
+        if self.upsampling_factor == 2:
+            self.W_pre = create_double_upsampling_layer(
+                    in_channels=num_filters_for_upsampling // 4,
+                    out_channels=num_keypoints,
+            )
+            in_channels_rnn = num_keypoints
+        else:
+            in_channels_rnn = num_filters_for_upsampling // 4,
+    
+        self.W_f = create_double_upsampling_layer(
+                in_channels=in_channels_rnn,
+                out_channels=num_keypoints,
+        )
+        H_f_layers = []
+        H_f_layers.append(nn.Conv2d(
+                    in_channels=num_keypoints,
+                    out_channels=num_keypoints,
+                    kernel_size=(hkernel, hkernel),
+                    stride=(hstride, hstride),
+                    padding=(hpad, hpad),
+                    groups=num_keypoints,
+                )
+        )
+        H_f_layers.append(nn.ConvTranspose2d(
+                    in_channels=num_keypoints,
+                    out_channels=num_keypoints,
+                    kernel_size=(hkernel, hkernel),
+                    stride=(hstride, hstride),
+                    padding=(hpad, hpad),
+                    output_padding=(hpad, hpad),
+                    groups=num_keypoints,
+                )
+        ) 
+        self.H_f = nn.Sequential(*H_f_layers)
+
+        
+        self.W_b = create_double_upsampling_layer(
+                in_channels=in_channels_rnn,
+                out_channels=num_keypoints,
+        )
+        H_b_layers = []
+        H_b_layers.append(nn.Conv2d(
+                    in_channels=num_keypoints,
+                    out_channels=num_keypoints,
+                    kernel_size=(hkernel, hkernel),
+                    stride=(hstride, hstride),
+                    padding=(hpad, hpad),
+                    groups=num_keypoints,
+                )
+        )
+        H_b_layers.append(nn.ConvTranspose2d(
+                    in_channels=num_keypoints,
+                    out_channels=num_keypoints,
+                    kernel_size=(hkernel, hkernel),
+                    stride=(hstride, hstride),
+                    padding=(hpad, hpad),
+                    output_padding=(hpad, hpad),
+                    groups=num_keypoints,
+                )
+        ) 
+        self.H_b = nn.Sequential(*H_b_layers)
+        self.initialize_layers()
+        self.layers = torch.nn.ModuleList([self.W_pre, self.W_f, self.H_f, self.W_b, self.H_b])
+        
+    def initialize_layers(self):
+        if self.upsampling_factor == 2:
+            torch.nn.init.xavier_uniform_(self.W_pre.weight, gain=1.0)
+            torch.nn.init.zeros_(self.W_pre.bias)
+            
+        torch.nn.init.xavier_uniform_(self.W_f.weight, gain=1.0)
+        torch.nn.init.zeros_(self.W_f.bias)
+        for index, layer in enumerate(self.H_f):
+            torch.nn.init.xavier_uniform_(layer.weight, gain=1.0)
+            torch.nn.init.zeros_(layer.bias)
+        
+        torch.nn.init.xavier_uniform_(self.W_b.weight, gain=1.0)
+        torch.nn.init.zeros_(self.W_b.bias)
+        for index, layer in enumerate(self.H_b):
+            torch.nn.init.xavier_uniform_(layer.weight, gain=1.0)
+            torch.nn.init.zeros_(layer.bias)
+
+    def forward(self, representations):
+        representations = torch.permute(representations, (4, 0, 1, 2, 3)) #frames, batch, features, rep_height, rep_width
+        if self.upsampling_factor == 2:
+            #upsample once before passing through RNN
+            frames, batch, features, rep_height, rep_width = representations.shape
+            frames_batch_shape = batch * frames
+            representations_batch_frames: TensorType[
+                "batch*frames", "features", "rep_height", "rep_width"
+            ] = representations.reshape(frames_batch_shape, features, rep_height, rep_width)
+            x_tensor = self.W_pre(self.pixel_shuffle(representations_batch_frames))
+            x_tensor = x_tensor.reshape(
+                frames,
+                batch,
+                x_tensor.shape[1],
+                x_tensor.shape[2],
+                x_tensor.shape[3],
+            )
+            x_f = self.W_f(x_tensor[0])
+            for frame_batch in x_tensor[1:]: #forward pass
+                x_f = self.W_f(frame_batch) + self.H_f(x_f)
+            x_tensor_b = torch.flip(x_tensor, dims=[0])
+            x_b = self.W_b(x_tensor_b[0])
+            for frame_batch in x_tensor_b[1:]: #backwards pass
+                x_b = self.W_b(frame_batch) + self.H_b(x_b)
+        else:
+            x_tensor = representations
+            x_f = self.W_f(x_tensor[0])
+            for frame_batch in x_tensor[1:]: #forward pass
+                x_f = self.W_f(self.pixel_shuffle(frame_batch)) + self.H_f(x_f)
+            x_tensor_b = torch.flip(x_tensor, dims=[0])
+            x_b = self.W_b(x_tensor_b[0])
+            for frame_batch in x_tensor_b[1:]: #backwards pass
+                x_b = self.W_b(self.pixel_shuffle(frame_batch)) + self.H_b(x_b)          
+        heatmaps = (x_f + x_b) / 2
+        return heatmaps
 
 @typechecked
 class HeatmapTracker(BaseSupervisedTracker):
@@ -45,9 +183,9 @@ class HeatmapTracker(BaseSupervisedTracker):
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
         do_context: bool = True,
+        do_crnn: bool = False,
     ) -> None:
         """Initialize a DLC-like model with resnet backbone.
-
         Args:
             num_keypoints: number of body parts
             loss_factory: object to orchestrate loss computation
@@ -65,7 +203,7 @@ class HeatmapTracker(BaseSupervisedTracker):
             lr_scheduler_params: params for specific learning rate schedulers
                 multisteplr: milestones, gamma
             do_context: use temporal context frames to improve predictions
-
+            do_crnn: use CRNN to improve temporal predictions
         """
 
         # for reproducible weight initialization
@@ -77,14 +215,17 @@ class HeatmapTracker(BaseSupervisedTracker):
             last_resnet_layer_to_get=last_resnet_layer_to_get,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
+            do_context=do_context,
+            do_crnn=do_crnn,
         )
         self.num_keypoints = num_keypoints
         self.num_targets = num_keypoints * 2
         self.loss_factory = loss_factory.to(self.device)
         # TODO: downsample_factor may be in mismatch between datamodule and model.
         self.downsample_factor = downsample_factor
-        self.upsampling_layers = self.make_upsampling_layers()
-        self.initialize_upsampling_layers()
+        if self.mode != "crnn":
+            self.upsampling_layers = self.make_upsampling_layers()
+            self.initialize_upsampling_layers()
         self.output_shape = output_shape
         # TODO: temp=1000 works for 64x64 heatmaps, need to generalize to other shapes
         self.temperature = torch.tensor(1000.0, device=self.device)  # soft argmax temp
@@ -96,6 +237,11 @@ class HeatmapTracker(BaseSupervisedTracker):
             self.representation_fc = lambda x: x @ torch.transpose(nn.functional.softmax(self.unnormalized_weights), 0, 1)
         elif self.mode == "3d":
             self.representation_fc = torch.nn.Linear(8, 1, bias=False)
+        elif self.mode == "crnn":
+            self.unnormalized_weights = nn.parameter.Parameter(torch.Tensor([[.2, .2, .2, .2, .2]]), requires_grad=False)
+            self.crnn = Upsampling_CRNN(self.num_filters_for_upsampling, self.num_keypoints)
+            #overwrite upsampling layers
+            self.upsampling_layers = self.crnn.layers
 
         # use this to log auxiliary information: rmse on labeled data
         self.rmse_loss = RegressionRMSELoss()
@@ -121,15 +267,12 @@ class HeatmapTracker(BaseSupervisedTracker):
         TensorType["batch", "num_keypoints"],
     ]:
         """Use soft argmax on heatmaps.
-
         Args:
             heatmaps: output of upsampling layers
-
         Returns:
             tuple
                 - soft argmax of shape (batch, num_targets)
                 - confidences of shape (batch, num_keypoints)
-
         """
         # upsample heatmaps
         for _ in range(self.downsample_factor):
@@ -169,7 +312,7 @@ class HeatmapTracker(BaseSupervisedTracker):
 #         upsampling_layers.append(nn.BatchNorm2d(self.num_filters_for_upsampling // 4))
 #         upsampling_layers.append(nn.ReLU(inplace=True))
         upsampling_layers.append(
-            self.create_double_upsampling_layer(
+            create_double_upsampling_layer(
                 in_channels=self.num_filters_for_upsampling // 4,
                 out_channels=self.num_keypoints,
             )
@@ -178,34 +321,34 @@ class HeatmapTracker(BaseSupervisedTracker):
 #             upsampling_layers.append(nn.BatchNorm2d(self.num_keypoints))
 #             upsampling_layers.append(nn.ReLU(inplace=True))
             upsampling_layers.append(
-                self.create_double_upsampling_layer(
+                create_double_upsampling_layer(
                     in_channels=self.num_keypoints,
                     out_channels=self.num_keypoints,
                 )
             )
         return nn.Sequential(*upsampling_layers)
 
-    @staticmethod
-    def create_double_upsampling_layer(
-        in_channels: int,
-        out_channels: int,
-    ) -> torch.nn.ConvTranspose2d:
-        """Perform ConvTranspose2d to double the output shape."""
-        return nn.ConvTranspose2d(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=(3, 3),
-            stride=(2, 2),
-            padding=(1, 1),
-            output_padding=(1, 1),
-        )
-
     def heatmaps_from_representations(
         self,
-        representations: TensorType["batch", "features", "rep_height", "rep_width"],
+        representations: Union[TensorType["batch", "features", "rep_height", "rep_width"], 
+                               TensorType["batch", "features", "rep_height", "rep_width", "frames"]],
     ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Wrapper around self.upsampling_layers for type and shape assertion."""
-        heatmaps = self.upsampling_layers(representations)
+        if self.do_context:
+            if self.mode == "crnn":
+                heatmaps = self.crnn(representations)
+            else:
+                # push through a linear layer to get the final representation
+                representations: TensorType[
+                    "batch", "features", "rep_height", "rep_width", 1
+                ] = self.representation_fc(representations)
+                # final squeeze
+                representations: TensorType[
+                    "batch", "features", "rep_height", "rep_width"
+                ] = torch.squeeze(representations, 4)
+                heatmaps = self.upsampling_layers(representations)
+        else:
+            heatmaps = self.upsampling_layers(representations)
         return heatmaps
 
     def forward(
@@ -219,7 +362,6 @@ class HeatmapTracker(BaseSupervisedTracker):
         # in the case of unsupervised sequences + context, we have outputs for all images but the first two and last two.
         # this is all handled internally by get_representations()
         representations = self.get_representations(images, self.do_context)
-
         heatmaps = self.heatmaps_from_representations(representations)
         # softmax temp stays 1 here; to modify for model predictions, see constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
@@ -276,9 +418,9 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
         do_context: bool = True,
+        do_crnn: bool = False,
     ):
         """
-
         Args:
             num_keypoints: number of body parts
             loss_factory: object to orchestrate supervised loss computation
@@ -297,7 +439,8 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
                 multisteplr
             lr_scheduler_params: params for specific learning rate schedulers
                 multisteplr: milestones, gamma
-
+            do_context: use temporal context frames to improve predictions
+            do_crnn: use CRNN to improve temporal predictions
         """
         super().__init__(
             num_keypoints=num_keypoints,
@@ -311,6 +454,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
             do_context=do_context,
+            do_crnn=do_crnn,
         )
         self.loss_factory_unsup = loss_factory_unsupervised.to(self.device)
 

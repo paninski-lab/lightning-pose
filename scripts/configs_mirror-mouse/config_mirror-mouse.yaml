@@ -61,7 +61,7 @@ training:
   # dropout in final layers
   dropout_rate: 0.1
   # max training epochs; training may exit before due to early stopping
-  min_epochs: 100
+  min_epochs: 150
   max_epochs: 750
   # frequency to log training metrics (one step is one batch)
   log_every_n_steps: 10
@@ -107,9 +107,10 @@ model:
   # "mse" | "kl" | "js"
   heatmap_loss_type: "mse"
   # tt expt name
-  model_name: "biorxiv22a"
+  model_name: "rnn"
   # do context (5 frames)
-  do_context: false
+  do_context: true
+  do_crnn: true
 
 dali:
   general:
@@ -174,7 +175,7 @@ losses:
 
 eval:
   # paths to the hydra config files in the output folder, OR absolute paths to such folders.
-  hydra_paths: [" "]
+  hydra_paths: ["/home/jovyan/lightning-pose/outputs/2022-07-28/15-02-14"]
   # predict?
   predict_vids_after_training: true
   # save .mp4?
@@ -196,7 +197,7 @@ eval:
     dataset_to_create: "images"
   # str with an absolute path to a directory containing videos for prediction.
   # (it's not absolute just for the toy example)
-  test_videos_directory: "/datastores/mirror-mouse/videos_new"
+  test_videos_directory: "/datastores/mirror-mouse/videos_test"
   # str with an absolute path to directory in which you want to save .csv with predictions
   saved_vid_preds_dir: "/home/jovyan"
   # create labeled video from each video in test_videos_directory

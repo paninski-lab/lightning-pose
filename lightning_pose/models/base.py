@@ -1,3 +1,5 @@
+
+
 """Base class for backbone that acts as a feature extractor."""
 
 from pytorch_lightning.core.lightning import LightningModule
@@ -21,14 +23,11 @@ def grab_layers_sequential(
     model, last_layer_ind: Optional[int] = None
 ) -> torch.nn.modules.container.Sequential:
     """Package selected number of layers into a nn.Sequential object.
-
     Args:
         model: original resnet or efficientnet model
         last_layer_ind: final layer to pass data through
-
     Returns:
         potentially reduced backbone model
-
     """
     layers = list(model.children())[: last_layer_ind + 1]
     return nn.Sequential(*layers)
@@ -96,26 +95,26 @@ class BaseFeatureExtractor(LightningModule):
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[dict] = None,
         do_context=False,
+        do_crnn=False,
     ) -> None:
         """A CNN model that takes in images and generates features.
-
         ResNets will be loaded from torchvision and can be either pre-trained
         on ImageNet or randomly initialized. These were originally used for
         classification tasks, so we truncate their final fully connected layer.
-
         Args:
             backbone: which backbone version to use; defaults to resnet50
             pretrained: True to load weights pretrained on imagenet
             last_resnet_layer_to_get: Defaults to -2.
             lr_scheduler: how to schedule learning rate
             lr_scheduler_params: params for specific learning rate schedulers
-
         """
         super().__init__()
         print("\n Initializing a {} instance.".format(self._get_name()))
 
         self.backbone_arch = backbone
         self.mode = "3d" if "3d" in backbone else "2d"
+        if do_crnn:
+            self.mode = "crnn"
 
         # load backbone weights
         if "3d" in backbone:
@@ -165,22 +164,18 @@ class BaseFeatureExtractor(LightningModule):
         do_context: bool = False,
     ):  # -> TensorType["batch", "features", "rep_height", "rep_width", float]:
         """Forward pass from images to feature maps.
-
         Wrapper around the backbone's feature_extractor() method for typechecking
         purposes.
         See tests/models/test_base.py for example shapes.
-
         Args:
             images: a batch of images
             do_context: whether or not to use extra frames of context
-
         Returns:
             a representation of the images; features differ as a function of resnet
             version. Representation height and width differ as a function of image
             dimensions, and are not necessarily equal.
-
         """
-        if self.mode == "2d":
+        if self.mode == "2d" or self.mode == "crnn":
             if do_context:
                 # images.shape = (sequence_length, RGB, image_height, image_width)
                 if len(images.shape) == 5:
@@ -225,15 +220,6 @@ class BaseFeatureExtractor(LightningModule):
                 representations: TensorType[
                         "batch", "features", "rep_height", "rep_width", "frames"
                     ] = torch.permute(outputs, (0, 2, 3, 4, 1))
-
-                # push through a linear layer to get the final representation
-                representations: TensorType[
-                    "batch", "features", "rep_height", "rep_width", 1
-                ] = self.representation_fc(representations)
-                # final squeeze
-                representations: TensorType[
-                    "batch", "features", "rep_height", "rep_width"
-                ] = torch.squeeze(representations, 4)
             else:
                 image_batch = images
                 representations = self.backbone(image_batch)
@@ -248,19 +234,15 @@ class BaseFeatureExtractor(LightningModule):
             representations: TensorType[
                 "batch", "features", "rep_height", "rep_width", "frames"
             ] = torch.permute(output, (0, 1, 3, 4, 2))
-
         return representations
 
     def forward(self, images):
         """Forward pass from images to representations.
-
         Wrapper around self.get_representations().
         Fancier childern models will use get_representations() in their forward
         methods.
-
         Args:
             images (torch.tensor(float)): a batch of images.
-
         Returns:
             torch.tensor(float): a representation of the images.
         """
