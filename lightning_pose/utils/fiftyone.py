@@ -4,11 +4,11 @@ from typing import Dict, List, Optional, Union, Callable, Any, Literal
 import pandas as pd
 import numpy as np
 from omegaconf import DictConfig, OmegaConf, ListConfig
-from lightning_pose.utils.io import return_absolute_path, return_absolute_data_paths
 import os
 from typeguard import typechecked
 
-from lightning_pose.utils.predictions import get_videos_in_dir
+from lightning_pose.utils.io import get_videos_in_dir
+from lightning_pose.utils.io import return_absolute_path, return_absolute_data_paths
 from lightning_pose.utils.scripts import pretty_print_str
 
 
