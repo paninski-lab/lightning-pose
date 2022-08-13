@@ -10,6 +10,9 @@ import torchvision.models as tvmodels
 from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypedDict, Union
 from lightning_pose.data.dali import get_context_from_seq
+
+from lightning_pose.models.simclr_resnet import get_resnet
+
 patch_typeguard()  # use before @typechecked
 
 MULTISTEPLR_MILESTONES_DEFAULT = [100, 200, 300]
@@ -31,6 +34,26 @@ def grab_layers_sequential(
 
     """
     layers = list(model.children())[: last_layer_ind + 1]
+    print(layers)
+    return nn.Sequential(*layers)
+
+
+@typechecked
+def grab_layers_sequential_custom(
+    model, last_layer_ind: Optional[int] = None
+) -> torch.nn.modules.container.Sequential:
+    """Package selected number of layers into a nn.Sequential object.
+
+    Args:
+        model: original resnet or efficientnet model
+        last_layer_ind: final layer to pass data through
+
+    Returns:
+        potentially reduced backbone model
+
+    """
+    layers = list(model.children())[: last_layer_ind + 2]
+    print(layers)
     return nn.Sequential(*layers)
 
 
@@ -89,8 +112,8 @@ class BaseFeatureExtractor(LightningModule):
         self,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "resnet50_contrastive",
-            "efficientnet_b0", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
+            "resnet50_3d", "resnet50_contrastive", "resnet50_custom_c_256", "resnet50_custom_c_512", 
+            "resnet50_custom_c_nc", "efficientnet_b0", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         lr_scheduler: str = "multisteplr",
@@ -117,7 +140,7 @@ class BaseFeatureExtractor(LightningModule):
         self.backbone_arch = backbone
         self.mode = "3d" if "3d" in backbone else "2d"
 
-        # load backbone weights
+        # load backbone weightsmodel = SimCLR(num_samples=dm.num_samples, batch_size=dm.batch_size, dataset='cifar10')
         if "3d" in backbone:
             base = torch.hub.load(
                 "facebookresearch/pytorchvideo", "slow_r50", pretrained=True)
@@ -128,6 +151,17 @@ class BaseFeatureExtractor(LightningModule):
             weight_path = "https://pl-bolts-weights.s3.us-east-2.amazonaws.com/simclr/bolts_simclr_imagenet/simclr_imagenet.ckpt"
             simclr = SimCLR.load_from_checkpoint(weight_path, strict=False)
             base = simclr.encoder
+        elif "resnet50_custom_c" in backbone:
+            if "256" in backbone:
+                weight_path = "/home/av3016/simclr/torch_ckpts/model256.pth"
+            elif "512" in backbone:
+                weight_path = "/home/av3016/simclr/torch_ckpts/model512.pth"
+            else: 
+                weight_path = "/home/av3016/simclr/torch_ckpts/model_nc.pth"
+            # load resnet or efficientnet models from torchvision.models
+            base, _ = get_resnet()
+            # print(base.state_dict())
+            base.load_state_dict(torch.load(weight_path)['resnet'])
         else:
             # load resnet or efficientnet models from torchvision.models
             base = getattr(tvmodels, backbone)(pretrained)
@@ -136,6 +170,10 @@ class BaseFeatureExtractor(LightningModule):
         if "3d" in backbone:
             self.backbone = grab_layers_sequential_3d(
                 model=base, last_layer_ind=last_resnet_layer_to_get)
+        elif "custom" in backbone:
+            self.backbone = grab_layers_sequential_custom(
+                model=base, last_layer_ind=last_resnet_layer_to_get,
+            )
         else:
             self.backbone = grab_layers_sequential(
                 model=base, last_layer_ind=last_resnet_layer_to_get,
