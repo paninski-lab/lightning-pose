@@ -1,11 +1,14 @@
 """Extract frames to label from a list of videos."""
 
 import argparse
+import os
 
 from lightning_pose.utils.frame_selection import select_frame_idxs, export_frames
 
 
 def run():
+
+    args = parser.parse_args()
 
     for video_file in args.video_files:
 
