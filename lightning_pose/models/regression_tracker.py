@@ -15,6 +15,7 @@ from lightning_pose.models.base import (
     BaseSupervisedTracker,
     SemiSupervisedTrackerMixin,
 )
+from lightning_pose.models.simclr_resnet import get_resnet
 
 patch_typeguard()  # use before @typechecked
 
@@ -30,8 +31,8 @@ class RegressionTracker(BaseSupervisedTracker):
         loss_factory: LossFactory,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "resnet50_contrastive",
-            "efficientnet_b0", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
+            "resnet50_3d", "resnet50_contrastive", "resnet50_custom_c_256", "resnet50_custom_c_512",
+            "resnet50_custom_c_nc", "efficientnet_b0", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         representation_dropout_rate: float = 0.2,
@@ -104,6 +105,7 @@ class RegressionTracker(BaseSupervisedTracker):
         ) -> TensorType["batch", "two_x_num_keypoints"]:
         """Forward pass through the network."""
         representations = self.get_representations(images)
+        print(representations.shape)
         if self.do_context:
             # output of line below is of shape (batch, features, height, width, 1)
             representations = self.representation_fc(representations)
@@ -116,6 +118,7 @@ class RegressionTracker(BaseSupervisedTracker):
     def get_loss_inputs_labeled(self, batch_dict: BaseBatchDict) -> dict:
         """Return predicted coordinates for a batch of data."""
         representation = self.get_representations(batch_dict["images"])
+        print("loss inputs: " + representation.shape)
         predicted_keypoints = self.final_layer(
             self.reshape_representation(representation)
         )
@@ -137,8 +140,8 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         loss_factory_unsupervised: LossFactory,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "resnet50_contrastive",
-            "efficientnet_b0", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
+            "resnet50_3d", "resnet50_contrastive", "resnet50_custom_c_256", "resnet50_custom_c_512",
+            "resnet50_custom_c_nc", "efficientnet_b0", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         representation_dropout_rate: float = 0.2,

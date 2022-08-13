@@ -284,21 +284,6 @@ def generate_heatmaps(
 
     return confidence
 
-
-# @typechecked
-# def evaluate_heatmaps_at_location(
-#     heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
-#     locs: TensorType["batch", "num_keypoints", 2],
-# ) -> TensorType["batch", "num_keypoints"]:
-#     """Evaluate 4D heatmaps using a 3D location tensor (last dim is x, y coords)."""
-#     i = torch.arange(heatmaps.shape[0]).reshape(-1, 1, 1, 1)
-#     j = torch.arange(heatmaps.shape[1]).reshape(1, -1, 1, 1)
-#     k = locs[:, :, None, 1, None].type(torch.int64)  # y first
-#     l = locs[:, :, 0, None, None].type(torch.int64)  # x second
-#     vals = heatmaps[i, j, k, l].squeeze(-1).squeeze(-1)  # get rid of singleton dims
-#     return vals
-
-
 @typechecked
 def evaluate_heatmaps_at_location(
     heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
