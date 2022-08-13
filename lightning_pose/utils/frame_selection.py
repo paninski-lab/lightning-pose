@@ -113,7 +113,7 @@ def export_frames(video_file, save_dir, frame_idxs, format="png", n_digits=8):
     for frame, idx in zip(frames, frame_idxs):
         cv2.imwrite(
             filename=os.path.join(save_dir, "img%s.%s" % (str(idx).zfill(n_digits), format)),
-            image=frames
+            img=frame[0],
         )
 
 
