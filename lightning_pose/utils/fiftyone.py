@@ -207,11 +207,10 @@ class FiftyOneKeypointBase:
                     points=[
                         [
                             data_dict[kp_name]["coords"][frame_idx, 0] / self.img_width,
-                            data_dict[kp_name]["coords"][frame_idx, 1]
-                            / self.img_height,
+                            data_dict[kp_name]["coords"][frame_idx, 1] / self.img_height,
                         ]
                     ],
-                    confidence=[data_dict[kp_name]["likelihood"][frame_idx]],
+                    confidence=data_dict[kp_name]["likelihood"][frame_idx],
                     label=kp_name,  # sometimes plotted aggresively
                 )
             )
