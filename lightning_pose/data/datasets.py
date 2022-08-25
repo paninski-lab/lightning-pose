@@ -12,6 +12,7 @@ from typeguard import typechecked
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
 from lightning_pose.data.utils import generate_heatmaps
+from lightning_pose.utils.io import get_keypoint_names
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -21,7 +22,10 @@ patch_typeguard()  # use before @typechecked
 class BaseExampleDict(TypedDict):
     """Class for finer control over typechecking."""
 
-    images: TensorType["RGB":3, "image_height", "image_width"]
+    images: Union[
+        TensorType["RGB":3, "image_height", "image_width"],
+        TensorType["frames", "RGB":3, "image_height", "image_width"],
+    ]
     keypoints: TensorType["num_targets"]
     idxs: int
 
@@ -43,6 +47,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         header_rows: Optional[List[int]] = None,
         imgaug_transform: Optional[Callable] = None,
         pytorch_transform_list: Optional[List] = None,
+        do_context: bool = True,
     ) -> None:
         """Initialize a dataset for regression (rather than heatmap) models.
 
@@ -63,14 +68,19 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 Note: image_path is relative to the given root_directory
             header_rows: which rows in the csv are header rows
             transform: torchvision transform to apply to images
+            do_context: include additional frames of context if possible.
 
         """
         self.root_directory = root_directory
         self.imgaug_transform = imgaug_transform
+        self.do_context = do_context
 
         # load csv data
         # step 1
-        csv_file = os.path.join(root_directory, csv_path)
+        if os.path.isfile(csv_path):
+            csv_file = csv_path
+        else:
+            csv_file = os.path.join(root_directory, csv_path)
         if not os.path.exists(csv_file):
             # step 2: assume csv_path is absolute
             csv_file = csv_path
@@ -90,12 +100,19 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                     raise FileNotFoundError("Could not find csv file!")
                 csv_file = options[0]
 
-        csv_data = pd.read_csv(csv_file, header=header_rows)
-        self.keypoint_names = csv_data.columns.levels[0][1:]  # unused inside class
-        self.image_names = list(csv_data.iloc[:, 0])
-        self.keypoints = torch.tensor(
-            csv_data.iloc[:, 1:].to_numpy(), dtype=torch.float32
-        )
+        csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
+        self.keypoint_names = get_keypoint_names(
+            csv_file=csv_file, header_rows=header_rows)
+        if header_rows == [1, 2] or header_rows == [0, 1]:
+            # self.keypoint_names = csv_data.columns.levels[0]
+            # ^this returns a sorted list for some reason, don't want that
+            self.keypoint_names = [b[0] for b in csv_data.columns if b[1] == 'x']
+        elif header_rows == [0, 1, 2]:
+            # self.keypoint_names = csv_data.columns.levels[1]
+            self.keypoint_names = [b[1] for b in csv_data.columns if b[2] == 'x']
+
+        self.image_names = list(csv_data.index)
+        self.keypoints = torch.tensor(csv_data.to_numpy(), dtype=torch.float32)
         # convert to x,y coordinates
         self.keypoints = self.keypoints.reshape(self.keypoints.shape[0], -1, 2)
         if pytorch_transform_list is None:
@@ -124,36 +141,101 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         return len(self.image_names)
 
     @typechecked
-    def __getitem__(self, idx: int) -> BaseExampleDict:
-        # get img_name from self.image_names
+    def __getitem__(self, idx: int):
+
         img_name = self.image_names[idx]
-        # read image from file and apply transformations (if any)
-        file_name = os.path.join(self.root_directory, img_name)
-        # if 1 color channel, change to 3.
-        image = Image.open(file_name).convert("RGB")
 
-        # get current image keypoints from self.keypoints
-        keypoints_on_image = self.keypoints[idx]
-        if self.imgaug_transform is not None:
-            transformed_images, transformed_keypoints = self.imgaug_transform(
-                images=np.expand_dims(image, axis=0),
-                keypoints=np.expand_dims(keypoints_on_image, axis=0),
-            )  # expands add batch dim for imgaug
-            # get rid of the batch dim
-            transformed_images = transformed_images[0]
-            transformed_keypoints = transformed_keypoints[0]
-            # TODO: the problem below is that it messes up
-            # TODO: data.compute_heatmaps()
-            transformed_keypoints = transformed_keypoints.reshape(
-                transformed_keypoints.shape[0] * transformed_keypoints.shape[1]
+        if not self.do_context:
+            # read image from file and apply transformations (if any)
+            file_name = os.path.join(self.root_directory, img_name)
+            # if 1 color channel, change to 3.
+            image = Image.open(file_name).convert("RGB")
+            # get current image keypoints from self.keypoints
+            keypoints_on_image = self.keypoints[idx]
+            if self.imgaug_transform is not None:
+                transformed_images, transformed_keypoints = self.imgaug_transform(
+                    images=np.expand_dims(image, axis=0),
+                    keypoints=np.expand_dims(keypoints_on_image, axis=0),
+                )  # expands add batch dim for imgaug
+                # get rid of the batch dim
+                transformed_images = transformed_images[0]
+                transformed_keypoints = transformed_keypoints[0]
+                # TODO: the problem below is that it messes up
+                # TODO: data.compute_heatmaps()
+                transformed_keypoints = transformed_keypoints.reshape(
+                    transformed_keypoints.shape[0] * transformed_keypoints.shape[1]
+                )
+            else:
+                transformed_images = np.expand_dims(image, axis=0)
+                transformed_keypoints = np.expand_dims(keypoints_on_image, axis=0)
+
+            transformed_images = self.pytorch_transform(
+               transformed_images
             )
+            assert transformed_keypoints.shape == (self.num_targets,)
+
         else:
-            transformed_images = np.expand_dims(image, axis=0)
-            transformed_keypoints = np.expand_dims(keypoints_on_image, axis=0)
+            # get index of the image
+            idx_img = img_name.split("/")[-1].replace("img", "")
+            idx_img = int(idx_img.replace(".png", ""))
 
-        transformed_images = self.pytorch_transform(transformed_images)
-        assert transformed_keypoints.shape == (self.num_targets,)
+            # get the frames -> t-2, t-1, t, t+1, t + 2
+            list_idx = [idx_img - 2, idx_img - 1, idx_img, idx_img + 1, idx_img + 2]
+            list_img_names = []
 
+            for fr_num in list_idx:
+                # replace frame number with 0 if we're at the beginning of the video
+                fr_num = max(0, fr_num)
+                # split name into pieces
+                img_pieces = img_name.split("/")
+                # figure out length of integer
+                int_len = len(img_pieces[-1].replace(".png", "").replace("img", ""))
+                # replace original frame number with context frame number
+                img_pieces[-1] = "img%s.png" % str(fr_num).zfill(int_len)
+                list_img_names.append("/".join(img_pieces))
+
+            # read the images from image list to create dataset
+            keypoints_on_image = self.keypoints[idx]
+            images = []
+            for name in list_img_names:
+                # read image from file and apply transformations (if any)
+                file_name = os.path.join(self.root_directory, name)
+                # if 1 color channel, change to 3.
+                image = Image.open(file_name).convert("RGB")
+                images.append(np.asarray(image))
+
+            keypoints_on_image = torch.unsqueeze(keypoints_on_image, 0)
+            keypoints_on_image = list(keypoints_on_image.tile((5, 1, 1)).numpy())
+
+            if self.imgaug_transform is not None:
+                transformed_images, transformed_keypoints = self.imgaug_transform(
+                    images=images,
+                    keypoints=keypoints_on_image,
+                )  # expands add batch dim for imgaug
+                # get rid of the batch dim
+                transformed_images = np.asarray(transformed_images)
+                transformed_keypoints = transformed_keypoints[0]
+                # TODO: the problem below is that it messes up
+                # TODO: data.compute_heatmaps()
+                transformed_keypoints = transformed_keypoints.reshape(
+                    transformed_keypoints.shape[0] * transformed_keypoints.shape[1]
+                )
+            else:
+                transformed_images = np.asarray(images)
+                transformed_keypoints = keypoints_on_image[0]
+
+            for i, transformed_image in enumerate(transformed_images):
+                transformed_image = self.pytorch_transform(transformed_image)
+                if i == 0:
+                    image_frames_tensor = torch.unsqueeze(transformed_image, dim=0)
+                else:
+                    image_expand = torch.unsqueeze(transformed_image, dim=0)
+                    image_frames_tensor = torch.cat(
+                        (image_frames_tensor, image_expand), dim=0
+                    )
+
+            transformed_images = image_frames_tensor
+            assert transformed_keypoints.shape == (self.num_targets,)
         return {
             "images": transformed_images,
             "keypoints": torch.from_numpy(transformed_keypoints),
@@ -174,6 +256,7 @@ class HeatmapDataset(BaseTrackingDataset):
         pytorch_transform_list: Optional[List] = None,
         no_nans: bool = False,
         downsample_factor: int = 2,
+        do_context: bool = True,
     ) -> None:
         """Initialize the Heatmap Dataset.
 
@@ -196,6 +279,7 @@ class HeatmapDataset(BaseTrackingDataset):
             header_rows,
             imgaug_transform,
             pytorch_transform_list,
+            do_context,
         )
 
         if self.height % 128 != 0 or self.height % 128 != 0:
@@ -232,8 +316,8 @@ class HeatmapDataset(BaseTrackingDataset):
     @property
     def output_shape(self):
         return (
-            self.height // 2 ** self.downsample_factor,
-            self.width // 2 ** self.downsample_factor,
+            self.height // 2**self.downsample_factor,
+            self.width // 2**self.downsample_factor,
         )
 
     def compute_heatmaps(self):
@@ -251,13 +335,19 @@ class HeatmapDataset(BaseTrackingDataset):
         for idx in range(len(self.image_names)):
             example_dict: BaseExampleDict = super().__getitem__(idx)
             # super().__getitem__ returns flat keypoints, reshape to
+            if self.do_context:
+                image_height = example_dict["images"][0].shape[-2]
+                image_width = example_dict["images"][0].shape[-1]
+            else:
+                image_height = example_dict["images"].shape[-2]
+                image_width = example_dict["images"].shape[-1]
 
             y_heatmap = generate_heatmaps(
                 example_dict["keypoints"].reshape(
                     1, self.num_keypoints, 2
                 ),  # add batch dim
-                example_dict["images"].shape[-2],
-                example_dict["images"].shape[-1],
+                image_height,
+                image_width,
                 output_shape=self.output_shape,
                 sigma=self.output_sigma,
             )

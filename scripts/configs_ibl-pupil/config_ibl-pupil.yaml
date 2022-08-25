@@ -1,0 +1,194 @@
+data:
+  # dimensions of training images
+  image_orig_dims:
+    height: 100
+    width: 100
+  # resize dimensions to streamline model creation
+  image_resize_dims:
+    height: 128
+    width: 128
+  # ABSOLUTE path to data directory
+  data_dir: "/datastores/ibl-pupil"
+  # ABSOLUTE path to unlabeled videos' directory
+  video_dir: "/datastores/ibl-pupil/videos"
+  # location of labels; for ex script, this should be relative to `data_dir`
+  csv_file: "CollectedData_mic.csv"
+  # header rows to strip in label csv file
+  header_rows: [0, 1, 2]
+  # downsample heatmaps - 2 | 3
+  downsample_factor: 2
+  # total number of body parts
+  num_keypoints: 4
+  # base path for saving
+  # save_dir- "/media/mattw/behavior/results/pose-estimation"
+  columns_for_singleview_pca: [0, 1, 2, 3]
+
+training:
+  # select from one of several predefined image/video augmentation pipelines
+  # default- resizing only
+  # dlc- imgaug pipeline implemented in DLC 2.0 package
+  # dlc-light- curated subset of dlc augmentations with more conservative param settings
+  imgaug: default
+  # batch size of labeled data during training
+  train_batch_size: 32
+  # batch size of labeled data during validation
+  val_batch_size: 128
+  # batch size of labeled data during test
+  test_batch_size: 128
+  # fraction of labeled data used for training
+  train_prob: 0.8
+  # fraction of labeled data used for validation (remaining used for test)
+  val_prob: 0.1
+  # <=1 - fraction of total train frames (determined by `train_prob`) used for training
+  # >1 - number of total train frames used for training
+  train_frames: 1
+  # number of gpus to train a single model
+  num_gpus: 1
+  # number of cpu workers for data loaders
+  num_workers: 4
+  # epochs over which to assess validation metrics for early stopping
+  early_stop_patience: 3
+  # epoch at which backbone network weights begin updating
+  unfreezing_epoch: 25
+  # dropout in final layers
+  dropout_rate: 0.1
+  # max training epochs; training may exit before due to early stopping
+  min_epochs: 100
+  max_epochs: 750
+  # frequency to log training metrics (one step is one batch)
+  log_every_n_steps: 10
+  # frequency to log validation metrics
+  check_val_every_n_epoch: 5
+  # select gpu for training
+  gpu_id: 0
+  # rng seed for labeled batches
+  rng_seed_data_pt: 0
+  # rng seed for weight initialization
+  rng_seed_model_pt: 0
+  # how many batches to take before terminating an epoch
+  # (any dataloader that has less than limit_train_batches will be cycled over)
+  limit_train_batches: null
+  # if you have two dataloaders, you keep cycling over the smaller dataset
+  # before completing the larger one
+  multiple_trainloader_mode: "max_size_cycle"
+  profiler: null
+  # runs K small batches of size N before doing a backwards pass.
+  accumulate_grad_batches: 1
+  # learning rate scheduler
+  # multisteplr | [todo - reducelronplateau]
+  lr_scheduler: multisteplr
+  lr_scheduler_params:
+    multisteplr:
+      milestones: [100, 200, 300]
+      gamma: 0.5
+
+model:
+  # list of unsupervised losses
+  # "pca_singleview" | "pca_multiview" | "temporal" | "unimodal_mse" | ""
+  losses_to_use: []
+  # whether to learn the weights for the unsupervised losses
+  learn_weights: false
+  # resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
+  # resnet50_3d
+  # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
+  backbone: resnet50
+  # prediction mode - "heatmap" | "regression"
+  model_type: "heatmap"
+  # which heatmap loss to use
+  # "mse" | "kl" | "js"
+  heatmap_loss_type: "mse"
+  # tt expt name
+  model_name: "biorxiv22a"
+  # do context (5 frames)
+  do_context: false
+
+dali:
+  general:
+    num_threads: 4 # Number of threads for data loading; can be changed
+    device_id: 0 # GPU device id to use, can be changed
+    device: gpu # "cpu" or "gpu"
+    seed: 123456
+
+  base:
+    train:
+      sequence_length: 96 # step = sequence_length by default. done internally
+
+    predict:
+      # (train_batch_size + base.train.sequence_length) * 2 -> round down to nearest pow of 2
+      sequence_length: 192 # step = sequence_length by default. done internally.
+
+  context: # not supporting context_sequences_successive
+    train: # defaults: sequence_length=5, step=sequence_length
+      batch_size: 32
+      consecutive_sequences: true # can select False if want successive sequences to be presented to network
+
+    predict: # defaults: sequence_length=5, step=1
+      # (train_batch_size / 4 + context.train.batch_size) * 2 -> round down to nearest pow of 2
+      batch_size: 64
+
+losses:
+  # loss = projection onto the discarded eigenvectors
+  pca_singleview:
+    # weight in front of PCA loss
+    log_weight: 5.0
+    # predictions whould lie within the low-d subspace spanned by components that describe this fraction of variance
+    components_to_keep: 0.99
+    # percentile of reprojection errors on train data below which pca loss is zeroed out
+    empirical_epsilon_percentile: 1.00
+    # doing eff_epsilon = percentile(error, empirical_epsilon_percentile) * empirical_epsilon_multiplier
+    empirical_epsilon_multiplier: 1.0
+    # absolute error (in pixels) below which pca loss is zeroed out; if not null, this
+    # parameter takes precedence over `empirical_epsilon_percentile`
+    epsilon: null
+    error_metric: "reprojection_error" # "reprojection_error" | "proj_on_discarded_evecs"
+  # loss = norm of distance between successive timepoints
+  temporal:
+    # weight in front of temporal loss
+    log_weight: 5.0
+    # for epsilon insensitive rectification
+    # (in pixels; diffs below this are not penalized)
+    epsilon: 5.0
+
+eval:
+  # paths to the hydra config files in the output folder, OR absolute paths to such folders.
+  hydra_paths: [" "]
+  # predict?
+  predict_vids_after_training: true
+  # save .mp4?
+  save_vids_after_training: false
+  fiftyone:
+    # will be the name of the dataset (Mongo DB) created by FiftyOne. for video dataset, we will append dataset_name + "_video"
+    dataset_name: "ibl-pupil"
+    build_speed: "slow" # "slow"/"fast". "fast" drops keypoint name and confidence information for faster processing.
+    # if you want to manually provide a different model name to be displayed in FiftyOne
+    model_display_names: ["test_model"]
+    # whether to launch the app from the script (True), or from ipython (and have finer control over the outputs)
+    launch_app_from_script: false
+
+    remote: True # for LAI, must be False
+    address: 127.0.0.1 # ip to launch the app on.
+    port: 5151 # port to launch the app on.
+
+    # whether to create a "videos" or "images" dataset, since the processes are the same
+    dataset_to_create: "images"
+  # str with an absolute path to a directory containing videos for prediction.
+  # (it's not absolute just for the toy example)
+  test_videos_directory: "/datastores/ibl-pupil/videos_new"
+  # str with an absolute path to directory in which you want to save .csv with predictions
+  saved_vid_preds_dir: "/home/jovyan"
+  # create labeled video from each video in test_videos_directory
+  create_labeled_video: true
+  # confidence threshold for plotting a vid
+  confidence_thresh_for_vid: 0.05
+  # str with absolute path to the video file you want plotted with keypoints
+  video_file_to_plot: ""
+  # a list of strings, each points to a .csv file with predictions of a given model to the same video. will be combined with video_file_to_plot to make a visualization
+  pred_csv_files_to_plot: [" "]
+
+callbacks:
+  anneal_weight:
+    attr_name: "total_unsupervised_importance"
+    init_val: 0.0
+    increase_factor: 0.01
+    final_val: 1.0
+    freeze_until_epoch: 0

@@ -4,11 +4,11 @@ from typing import Dict, List, Optional, Union, Callable, Any, Literal
 import pandas as pd
 import numpy as np
 from omegaconf import DictConfig, OmegaConf, ListConfig
-from lightning_pose.utils.io import return_absolute_path, return_absolute_data_paths
 import os
 from typeguard import typechecked
 
-from lightning_pose.utils.predictions import get_videos_in_dir
+from lightning_pose.utils.io import get_videos_in_dir
+from lightning_pose.utils.io import return_absolute_path, return_absolute_data_paths
 from lightning_pose.utils.scripts import pretty_print_str
 
 
@@ -66,7 +66,9 @@ def get_image_tags(pred_df: pd.DataFrame) -> pd.Series:
 # list/listconfig issue
 class FiftyOneKeypointBase:
     def __init__(
-        self, cfg: DictConfig, keypoints_to_plot: Optional[List[str]] = None,
+        self,
+        cfg: DictConfig,
+        keypoints_to_plot: Optional[List[str]] = None,
     ) -> None:
         self.cfg = cfg
         self.keypoints_to_plot = keypoints_to_plot
@@ -192,7 +194,9 @@ class FiftyOneKeypointBase:
 
     @typechecked
     def _slow_single_frame_build(
-        self, data_dict: Dict[str, Dict[str, np.array]], frame_idx: int,
+        self,
+        data_dict: Dict[str, Dict[str, np.array]],
+        frame_idx: int,
     ) -> List[fo.Keypoint]:
         # the output of this, is a the positions of all keypoints in a single frame for a single model.
         keypoints_list = []
@@ -203,11 +207,10 @@ class FiftyOneKeypointBase:
                     points=[
                         [
                             data_dict[kp_name]["coords"][frame_idx, 0] / self.img_width,
-                            data_dict[kp_name]["coords"][frame_idx, 1]
-                            / self.img_height,
+                            data_dict[kp_name]["coords"][frame_idx, 1] / self.img_height,
                         ]
                     ],
-                    confidence=[data_dict[kp_name]["likelihood"][frame_idx]],
+                    confidence=data_dict[kp_name]["likelihood"][frame_idx],
                     label=kp_name,  # sometimes plotted aggresively
                 )
             )
@@ -215,7 +218,9 @@ class FiftyOneKeypointBase:
 
     @typechecked
     def _fast_single_frame_build(
-        self, data_dict: Dict[str, Dict[str, np.array]], frame_idx: int,
+        self,
+        data_dict: Dict[str, Dict[str, np.array]],
+        frame_idx: int,
     ) -> List[fo.Keypoint]:
         # the output of this, is a the positions of all keypoints in a single frame for a single model.
         keypoint = [
@@ -280,14 +285,13 @@ class FiftyOneImagePlotter(FiftyOneKeypointBase):
         self,
         cfg: DictConfig,
         keypoints_to_plot: Optional[List[str]] = None,
-        csv_filename: str = "predictions.csv"
+        csv_filename: str = "predictions.csv",
     ) -> None:
         super().__init__(cfg=cfg, keypoints_to_plot=keypoints_to_plot)
 
         model_abs_paths = self.get_model_abs_paths()
         self.pred_csv_files = [
-            os.path.join(model_dir, csv_filename)
-            for model_dir in model_abs_paths
+            os.path.join(model_dir, csv_filename) for model_dir in model_abs_paths
         ]
 
     @property
@@ -424,7 +428,9 @@ class FiftyOneFactory:
     def __init__(self, dataset_to_create: Literal["images", "videos"]) -> None:
         self.dataset_to_create = dataset_to_create
 
-    def __call__(self,) -> Union[FiftyOneImagePlotter, FiftyOneKeypointVideoPlotter]:
+    def __call__(
+        self,
+    ) -> Union[FiftyOneImagePlotter, FiftyOneKeypointVideoPlotter]:
         if self.dataset_to_create == "images":
             return FiftyOneImagePlotter
         else:

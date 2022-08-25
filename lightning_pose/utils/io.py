@@ -2,8 +2,9 @@
 
 from omegaconf import DictConfig, OmegaConf, ListConfig
 import os
+import pandas as pd
 from typeguard import typechecked
-from typing import Any, Tuple, Union
+from typing import Any, List, Tuple, Union, Optional
 
 
 @typechecked
@@ -75,10 +76,54 @@ def check_if_semi_supervised(
     return semi_supervised
 
 
+@typechecked
+def load_label_csv_from_cfg(cfg: Union[DictConfig, dict]) -> pd.DataFrame:
+    """Helper function for easy loading.
+
+    Args:
+        cfg: DictConfig
+
+    Returns:
+        pd.DataFrame
+    """
+
+    csv_file = os.path.join(cfg["data"]["data_dir"], cfg["data"]["csv_file"])
+    labels_df = pd.read_csv(
+        csv_file, header=list(cfg["data"]["header_rows"]), index_col=0
+    )
+    return labels_df
+
+
+@typechecked
+def get_keypoint_names(
+    cfg: Optional[DictConfig] = None,
+    csv_file: Optional[str] = None,
+    header_rows: Optional[list] = None
+) -> List[str]:
+    if os.path.exists(csv_file):
+        if header_rows is None:
+            if "header_rows" in cfg.data:
+                header_rows = list(cfg.data.header_rows)
+            else:
+                # assume dlc format
+                header_rows = [0, 1, 2]
+        csv_data = pd.read_csv(csv_file, header=header_rows)
+        # collect marker names from multiindex header
+        if header_rows == [1, 2] or header_rows == [0, 1]:
+            # self.keypoint_names = csv_data.columns.levels[0]
+            # ^this returns a sorted list for some reason, don't want that
+            keypoint_names = [b[0] for b in csv_data.columns if b[1] == 'x']
+        elif header_rows == [0, 1, 2]:
+            # self.keypoint_names = csv_data.columns.levels[1]
+            keypoint_names = [b[1] for b in csv_data.columns if b[2] == 'x']
+    else:
+        keypoint_names = ["bp_%i" % n for n in range(cfg.data.num_targets // 2)]
+    return keypoint_names
+
+
 # --------------------------------------------------------------------------------------
 # Path handling functions for running toy dataset
 # --------------------------------------------------------------------------------------
-
 
 @typechecked
 def return_absolute_path(possibly_relative_path: str, n_dirs_back=3) -> str:
@@ -124,10 +169,75 @@ def return_absolute_data_paths(data_cfg: DictConfig) -> Tuple[str, str]:
     return data_dir, video_dir
 
 
+@typechecked
+def get_videos_in_dir(video_dir: str) -> List[str]:
+    # gather videos to process
+    # TODO: check if you're give a path to a single video?
+    #pretty_print_str(string="Looking inside %s..." % video_dir)
+    assert os.path.isdir(video_dir)
+    all_files = [os.path.join(video_dir, f) for f in os.listdir(video_dir)]
+    video_files = []
+    for f in all_files:
+        if f.endswith(".mp4"):
+            video_files.append(f)
+    if len(video_files) == 0:
+        raise IOError("Did not find any video files (.mp4) in %s" % video_dir)
+    return video_files
+    # another version that worked -- glob.glob looks elegant. consider reintroducing.
+    #  # get input data
+    #     if isinstance(self.video_paths_list, list):
+    #         # presumably a list of files
+    #         filenames = self.video_paths_list
+    #     elif isinstance(self.video_paths_list, str) and os.path.isfile(
+    #         self.video_paths_list
+    #     ):
+    #         # single video file
+    #         filenames = self.video_paths_list
+    #     elif isinstance(self.video_paths_list, str) and os.path.isdir(
+    #         self.video_paths_list
+    #     ):
+    #         # directory of videos
+    #         import glob
+
+    #         extensions = ["mp4"]  # allowed file extensions
+    #         filenames = []
+    #         for extension in extensions:
+    #             filenames.extend(
+    #                 glob.glob(os.path.join(self.video_paths_list, "*.%s" % extension))
+    #             )
+    #     else:
+    #         raise ValueError(
+    #             "`video_paths_list` must be a list of files, a single file, "
+    #             + "or a directory name"
+    #         )
+
+
+@typechecked
+def check_video_paths(video_paths: Union[List[str], str]) -> list:
+    # get input data
+    if isinstance(video_paths, list):
+        # presumably a list of files
+        filenames = video_paths
+    elif isinstance(video_paths, str) and os.path.isfile(video_paths):
+        # single video file
+        filenames = [video_paths]
+    elif isinstance(video_paths, str) and os.path.isdir(video_paths):
+        # directory of videos
+        filenames = get_videos_in_dir(video_paths)
+    else:
+        raise ValueError(
+            "`video_paths_list` must be a list of files, a single file, "
+            + "or a directory name"
+        )
+    for filename in filenames:
+        assert filename.endswith(".mp4"), "video files must be mp4 format!"
+
+    return filenames
+
+
 # --------------------------------------------------------------------------------------
 # Path handling for predictions on new videos
 # --------------------------------------------------------------------------------------
-
 
 @typechecked
 class VideoPredPathHandler:

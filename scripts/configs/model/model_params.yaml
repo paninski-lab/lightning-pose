@@ -10,10 +10,13 @@ losses_to_use: ["pca_singleview"]
 # whether to learn the weights for the unsupervised losses
 learn_weights: False
 
-# resnet version for backbone: 18 | 34 | 50 | 101 | 152
-resnet_version: 50
+# resnet version for backbone:
+# resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
+# resnet50_3d
+# efficientnet_b0 | efficientnet_b1 | efficientnet_b2
+backbone: resnet50
 
-# prediction mode: "heatmap" | "regression"
+# prediction mode: "heatmap" | "regression" | "heatmap_context"
 model_type: "heatmap"
 
 # which heatmap loss to use: "mse" | "kl" | "js"
@@ -21,3 +24,6 @@ heatmap_loss_type: "mse"
 
 # directory name for model saving
 model_name: "my_base_toy_model"
+
+# do context (5 frames)
+do_context: False

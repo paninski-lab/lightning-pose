@@ -1,8 +1,10 @@
 lightning_logs/
+grid_artifacts/
 .vscode/
 outputs/
 multirun/
 preds/
+#scripts/configs_*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

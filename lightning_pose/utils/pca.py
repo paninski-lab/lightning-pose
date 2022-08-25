@@ -71,7 +71,9 @@ class KeypointPCA(object):
         return self._error_metric_factory[self.error_metric](data_arr=data_arr)
 
     def _get_data(self) -> None:
-        self.data_arr, _ = DataExtractor(data_module=self.data_module, cond="train", extract_images=False)()
+        self.data_arr, _ = DataExtractor(
+            data_module=self.data_module, cond="train", extract_images=False
+        )()
 
     def _multiview_format(
         self, data_arr: TensorType["num_original_samples", "num_original_dims"]
@@ -355,12 +357,16 @@ class ComponentChooser:
         assert type(
             self.components_to_keep is float
         )  # i.e., threshold crossing doesn't make sense with integer components_to_keep
-        components_to_keep = int(
-            np.where(self.cumsum_explained_variance >= self.components_to_keep)[0][0]
-        )
-        # cumsum is a d - 1 dimensional vector where the 0th element is the sum of the
-        # 0th and 1st element of the d dimensional vector it is summing over
-        return components_to_keep + 1
+        if self.components_to_keep != 1.0:
+            components_to_keep = int(
+                np.where(self.cumsum_explained_variance >= self.components_to_keep)[0][0]
+            )
+            # cumsum is a d - 1 dimensional vector where the 0th element is the sum of the
+            # 0th and 1st element of the d dimensional vector it is summing over
+            return components_to_keep + 1
+        else: # if we want to keep all components, we need to return the number of components
+            # we do this because there's an issue with == 1.0 in the cumsum_explained_variance
+            return len(self.fitted_pca_object.explained_variance_)
 
     def __call__(self) -> int:
         if type(self.components_to_keep) is int:

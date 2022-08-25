@@ -19,6 +19,7 @@ from lightning_pose.models.base import (
 patch_typeguard()  # use before @typechecked
 
 
+@typechecked
 class RegressionTracker(BaseSupervisedTracker):
     """Base model that produces (x, y) predictions of keypoints from images."""
 
@@ -27,21 +28,24 @@ class RegressionTracker(BaseSupervisedTracker):
         self,
         num_keypoints: int,
         loss_factory: LossFactory,
-        resnet_version: Literal[18, 34, 50, 101, 152] = 18,
+        backbone: Literal[
+            "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
+            "resnet50_3d", "resnet50_contrastive",
+            "efficientnet_b0", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         representation_dropout_rate: float = 0.2,
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
+        do_context: bool = True,
     ) -> None:
         """Base model that produces (x, y) coordinates of keypoints from images.
 
         Args:
             num_keypoints: number of body parts
             loss_factory: object to orchestrate loss computation
-            resnet_version: ResNet variant to be used (e.g. 18, 34, 50, 101,
-                or 152); essentially specifies how large the resnet will be
+            backbone: ResNet or EfficientNet variant to be used
             pretrained: True to load pretrained imagenet weights
             last_resnet_layer_to_get: skip final layers of backbone model
             representation_dropout_rate: dropout in the final fully connected
@@ -51,6 +55,7 @@ class RegressionTracker(BaseSupervisedTracker):
                 multisteplr
             lr_scheduler_params: params for specific learning rate schedulers
                 multisteplr: milestones, gamma
+            do_context: use temporal context frames to improve predictions
 
         """
 
@@ -58,7 +63,7 @@ class RegressionTracker(BaseSupervisedTracker):
         torch.manual_seed(torch_seed)
 
         super().__init__(
-            resnet_version=resnet_version,
+            backbone=backbone,
             pretrained=pretrained,
             last_resnet_layer_to_get=last_resnet_layer_to_get,
             lr_scheduler=lr_scheduler,
@@ -67,11 +72,15 @@ class RegressionTracker(BaseSupervisedTracker):
         self.num_keypoints = num_keypoints
         self.num_targets = self.num_keypoints * 2
         self.loss_factory = loss_factory
-        self.resnet_version = resnet_version
         self.final_layer = nn.Linear(self.num_fc_input_features, self.num_targets)
         # TODO: consider removing dropout
         self.representation_dropout = nn.Dropout(p=representation_dropout_rate)
         self.torch_seed = torch_seed
+        self.do_context = do_context
+        if self.mode == "2d":
+            self.representation_fc = torch.nn.Linear(5, 1, bias=False)
+        elif self.mode == "3d":
+            self.representation_fc = torch.nn.Linear(8, 1, bias=False)
 
         # use this to log auxiliary information: rmse on labeled data
         self.rmse_loss = RegressionRMSELoss()
@@ -89,11 +98,18 @@ class RegressionTracker(BaseSupervisedTracker):
     @typechecked
     def forward(
         self,
-        images: TensorType["batch", "channels":3, "image_height", "image_width"],
-    ) -> TensorType["batch", "two_x_num_keypoints"]:
+        images: Union[
+            TensorType["batch", "channels":3, "image_height", "image_width"],
+            TensorType["batch", "frames", "channels":3, "image_height", "image_width"]]
+        ) -> TensorType["batch", "two_x_num_keypoints"]:
         """Forward pass through the network."""
-        representation = self.get_representations(images)
-        out = self.final_layer(self.reshape_representation(representation))
+        representations = self.get_representations(images)
+        if self.do_context:
+            # output of line below is of shape (batch, features, height, width, 1)
+            representations = self.representation_fc(representations)
+            # output of line below is of shape (batch, features, height, width)
+            representations = torch.squeeze(representations, 4)
+        out = self.final_layer(self.reshape_representation(representations))
         return out
 
     @typechecked
@@ -109,6 +125,7 @@ class RegressionTracker(BaseSupervisedTracker):
         }
 
 
+@typechecked
 class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTracker):
     """Model produces vectors of keypoints from labeled/unlabeled images."""
 
@@ -118,7 +135,10 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         num_keypoints: int,
         loss_factory: LossFactory,
         loss_factory_unsupervised: LossFactory,
-        resnet_version: Literal[18, 34, 50, 101, 152] = 18,
+        backbone: Literal[
+            "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
+            "resnet50_3d", "resnet50_contrastive",
+            "efficientnet_b0", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         representation_dropout_rate: float = 0.2,
@@ -133,8 +153,7 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
             loss_factory: object to orchestrate supervised loss computation
             loss_factory_unsupervised: object to orchestrate unsupervised loss
                 computation
-            resnet_version: ResNet variant to be used (e.g. 18, 34, 50, 101,
-                or 152); essentially specifies how large the resnet will be
+            backbone: ResNet or EfficientNet variant to be used
             pretrained: True to load pretrained imagenet weights
             last_resnet_layer_to_get: skip final layers of original model
             representation_dropout_rate: dropout in the final fully connected
@@ -149,7 +168,7 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         super().__init__(
             num_keypoints=num_keypoints,
             loss_factory=loss_factory,
-            resnet_version=resnet_version,
+            backbone=backbone,
             pretrained=pretrained,
             representation_dropout_rate=representation_dropout_rate,
             last_resnet_layer_to_get=last_resnet_layer_to_get,
@@ -163,10 +182,15 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
             raise ValueError("cannot use unimodal loss in regression tracker")
 
         # this attribute will be modified by AnnealWeight callback during training
-        self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
+        self.total_unsupervised_importance = torch.tensor(1.0)
+        # self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
 
     @typechecked
-    def get_loss_inputs_unlabeled(self, batch: torch.Tensor) -> dict:
+    def get_loss_inputs_unlabeled(self, batch: Union[TensorType[
+        "sequence_length", "RGB":3, "image_height", "image_width", float
+        ], TensorType[
+            "sequence_length", "context":5, "RGB":3, "image_height", "image_width", float
+    ]]) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         representation = self.get_representations(batch)
         predicted_keypoints = self.final_layer(

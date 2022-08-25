@@ -90,7 +90,7 @@ class Loss(pl.LightningModule):
 
     def rectify_epsilon(self, loss: torch.Tensor) -> torch.Tensor:
         # loss values below epsilon as masked to zero
-        loss = loss.masked_fill_(mask=loss < self.epsilon, value=0.0)
+        loss = F.relu(loss - self.epsilon)
         return loss
 
     def reduce_loss(self, loss: torch.Tensor, method: str = "mean") -> TensorType[()]:
@@ -236,7 +236,7 @@ class HeatmapKLLoss(HeatmapLoss):
         loss = self.loss(
             predictions.unsqueeze(0) + 1e-10,
             targets.unsqueeze(0) + 1e-10,
-            reduction="none"
+            reduction="none",
         )
         return loss[0]
 
@@ -265,7 +265,7 @@ class HeatmapJSLoss(HeatmapLoss):
         loss = self.loss(
             predictions.unsqueeze(0) + 1e-10,
             targets.unsqueeze(0) + 1e-10,
-            reduction="none"
+            reduction="none",
         )
         return loss[0]
 
@@ -341,9 +341,9 @@ class PCALoss(Loss):
         self,
         predictions: TensorType["num_samples", "sample_dim"],
     ) -> TensorType["num_samples", -1]:
-        # compute either reprojection error or projection onto discarded evecs. they will vary in the last dim, hence -1.
+        # compute either reprojection error or projection onto discarded evecs.
+        # they will vary in the last dim, hence -1.
         return self.pca.compute_error(data_arr=predictions)
-        # was: return self.pca.compute_reprojection_error(data_arr=predictions)
 
     def __call__(
         self,
@@ -386,9 +386,11 @@ class TemporalLoss(Loss):
         """Rectify supporting a list of epsilons, one per bodypart.
         Not implemented in Loss class, because shapes of broadcasting may vary"""
         # self.epsilon is a tensor initialized in parent class
-        # repeathing for broadcasting. note: this unsqueezing doesn't affect anything if epsilon is a scalar tensor, but it does if it's a tensor with multiple elements.
+        # repeating for broadcasting.
+        # note: this unsqueezing doesn't affect anything if epsilon is a scalar tensor,
+        # but it does if it's a tensor with multiple elements.
         epsilon = self.epsilon.unsqueeze(0).repeat(loss.shape[0], 1).to(loss.device)
-        return loss.masked_fill(mask=loss < epsilon, value=0.0)
+        return F.relu(loss - epsilon)
 
     def remove_nans(self, **kwargs):
         # find nans in the targets, and do a masked_select operation
@@ -476,16 +478,16 @@ class UnimodalLoss(Loss):
     ]:
         # get rid of unsupervised targets with likely occlusions
         squeezed_predictions = predictions.reshape(
-            predictions.shape[0], predictions.shape[1], -1)
-        idxs_ignore = torch.max(squeezed_predictions, dim=-1).values < \
-            self.prob_threshold
+            predictions.shape[0], predictions.shape[1], -1
+        )
+        idxs_ignore = (
+            torch.max(squeezed_predictions, dim=-1).values < self.prob_threshold
+        )
         return targets[~idxs_ignore], predictions[~idxs_ignore]
 
     def compute_loss(
         self,
-        targets: TensorType[
-            "num_valid_keypoints", "heatmap_height", "heatmap_width"
-        ],
+        targets: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
         predictions: TensorType[
             "num_valid_keypoints", "heatmap_height", "heatmap_width"
         ],
@@ -497,13 +499,13 @@ class UnimodalLoss(Loss):
             return self.loss(
                 predictions.unsqueeze(0) + 1e-10,
                 targets.unsqueeze(0) + 1e-10,
-                reduction="none"
+                reduction="none",
             )
         elif self.loss_name == "unimodal_js":
             return self.loss(
                 predictions.unsqueeze(0) + 1e-10,
                 targets.unsqueeze(0) + 1e-10,
-                reduction="none"
+                reduction="none",
             )
         else:
             raise NotImplementedError
