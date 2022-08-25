@@ -8,7 +8,7 @@ from typeguard import typechecked
 from typing import List, Literal, Optional, Tuple, Union, Dict, Any
 import pytorch_lightning as pl
 import math
-
+import os, glob
 
 patch_typeguard()  # use before @typechecked
 
@@ -21,7 +21,7 @@ class DataExtractor(object):
         self,
         data_module: pl.LightningDataModule,
         cond: Literal["train", "test", "val"] = "train",
-        extract_images: bool = False
+        extract_images: bool = False,
     ) -> None:
         self.data_module = data_module
         self.cond = cond
@@ -56,7 +56,14 @@ class DataExtractor(object):
     @typechecked
     def iterate_over_dataloader(
         self, loader: torch.utils.data.DataLoader
-    ) -> Tuple[TensorType["num_examples", Any], Union[TensorType["num_examples", 3, "image_width", "image_height"], None]]:
+    ) -> Tuple[
+        TensorType["num_examples", Any],
+        Union[
+            TensorType["num_examples", 3, "image_width", "image_height"],
+            TensorType["num_examples", "frames", 3, "image_width", "image_height"],
+            None,
+        ],
+    ]:
         keypoints_list = []
         images_list = []
         for ind, batch in enumerate(loader):
@@ -66,18 +73,27 @@ class DataExtractor(object):
         concat_keypoints = torch.cat(keypoints_list, dim=0)
         if self.extract_images:
             concat_images = torch.cat(images_list, dim=0)
-            assert concat_images.shape == (self.dataset_length, 3, batch["images"].shape[2], batch["images"].shape[3])
         else:
             concat_images = None
         # assert that indeed the number of columns does not change after concatenation,
         # and that the number of rows is the dataset length.
         assert concat_keypoints.shape == (
-            self.dataset_length, keypoints_list[0].shape[1],
+            self.dataset_length,
+            keypoints_list[0].shape[1],
         )
         return concat_keypoints, concat_images
 
     @typechecked
-    def __call__(self) -> Tuple[TensorType["num_examples", Any], Union[TensorType["num_examples", 3, "image_width", "image_height"], None]]:
+    def __call__(
+        self,
+    ) -> Tuple[
+        TensorType["num_examples", Any],
+        Union[
+            TensorType["num_examples", 3, "image_width", "image_height"],
+            TensorType["num_examples", "frames", 3, "image_width", "image_height"],
+            None,
+        ],
+    ]:
         loader = self.get_loader()
         loader = self.verify_labeled_loader(loader)
         return self.iterate_over_dataloader(loader)
@@ -157,6 +173,49 @@ def count_frames(video_list: Union[List[str], str]) -> int:
 
 
 @typechecked
+def compute_num_train_frames(
+    len_train_dataset: int,
+    train_frames: Optional[Union[int, float]] = None,
+) -> int:
+    """Quickly compute number of training frames for a given dataset.
+
+    Args:
+        len_train_dataset: total number of frames in training dataset
+        train_frames:
+            <=1 - fraction of total train frames used for training
+            >1 - number of total train frames used for training
+
+    Returns:
+    int
+        total number of train frames
+
+    """
+    if train_frames is None:
+        n_train_frames = len_train_dataset
+    else:
+        if train_frames >= len_train_dataset:
+            # take max number of train frames
+            print(
+                f"Warning! Requested training frames exceeds training set size; "
+                f"using all"
+            )
+            n_train_frames = len_train_dataset
+        elif train_frames == 1:
+            # assume this is a fraction; use full dataset
+            n_train_frames = len_train_dataset
+        elif train_frames > 1:
+            # take this number of train frames
+            n_train_frames = int(train_frames)
+        elif train_frames > 0:
+            # take this fraction of train frames
+            n_train_frames = int(train_frames * len_train_dataset)
+        else:
+            raise ValueError("train_frames must be >0")
+
+    return n_train_frames
+
+
+@typechecked
 def generate_heatmaps(
     keypoints: TensorType["batch", "num_keypoints", 2],
     height: int,  # height of full sized image
@@ -203,7 +262,7 @@ def generate_heatmaps(
     confidence = (yy - keypoints[:, :, :, :1]) ** 2  # also flipped order here
     confidence += (xx - keypoints[:, :, :, 1:]) ** 2  # also flipped order here
     confidence *= -1
-    confidence /= 2 * sigma ** 2
+    confidence /= 2 * sigma**2
     confidence = torch.exp(confidence)
     if not normalize:
         confidence /= sigma * torch.sqrt(2 * torch.tensor(np.pi))
@@ -224,3 +283,55 @@ def generate_heatmaps(
         confidence = confidence / torch.sum(confidence, dim=(2, 3), keepdim=True)
 
     return confidence
+
+
+# @typechecked
+# def evaluate_heatmaps_at_location(
+#     heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+#     locs: TensorType["batch", "num_keypoints", 2],
+# ) -> TensorType["batch", "num_keypoints"]:
+#     """Evaluate 4D heatmaps using a 3D location tensor (last dim is x, y coords)."""
+#     i = torch.arange(heatmaps.shape[0]).reshape(-1, 1, 1, 1)
+#     j = torch.arange(heatmaps.shape[1]).reshape(1, -1, 1, 1)
+#     k = locs[:, :, None, 1, None].type(torch.int64)  # y first
+#     l = locs[:, :, 0, None, None].type(torch.int64)  # x second
+#     vals = heatmaps[i, j, k, l].squeeze(-1).squeeze(-1)  # get rid of singleton dims
+#     return vals
+
+
+@typechecked
+def evaluate_heatmaps_at_location(
+    heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+    locs: TensorType["batch", "num_keypoints", 2],
+    sigma: Union[float, int] = 1.25,  # sigma used for generating heatmaps
+    num_stds: int = 2,  # num standard deviations of pixels to compute confidence
+) -> TensorType["batch", "num_keypoints"]:
+    """Evaluate 4D heatmaps using a 3D location tensor (last dim is x, y coords). Since
+    the model outputs heatmaps with a standard deviation of sigma, confidence will be
+    spread across neighboring pixels. To account for this, confidence is computed by
+    taking all pixels within two standard deviations of the predicted pixel."""
+    pix_to_consider = int(np.floor(sigma * num_stds))  # get all pixels within num_stds.
+    num_pad = pix_to_consider
+    heatmaps_padded = torch.zeros(
+        heatmaps.shape[0],
+        heatmaps.shape[1],
+        heatmaps.shape[2] + num_pad * 2,
+        heatmaps.shape[3] + num_pad * 2,
+    )
+    heatmaps_padded[:, :, num_pad:-num_pad, num_pad:-num_pad] = heatmaps
+    i = torch.arange(heatmaps_padded.shape[0]).reshape(-1, 1, 1, 1)
+    j = torch.arange(heatmaps_padded.shape[1]).reshape(1, -1, 1, 1)
+    k = locs[:, :, None, 1, None].type(torch.int64) + num_pad
+    l = locs[:, :, 0, None, None].type(torch.int64) + num_pad
+    offsets = list(np.arange(-pix_to_consider, pix_to_consider + 1))
+    vals_all = []
+    for offset in offsets:
+        k_offset = k + offset
+        for offset_2 in offsets:
+            l_offset = l + offset_2
+            vals = (
+                heatmaps_padded[i, j, k_offset, l_offset].squeeze(-1).squeeze(-1)
+            )  # get rid of singleton dims
+            vals_all.append(vals)
+    vals = torch.stack(vals_all, 0).sum(0)
+    return vals

@@ -1,3 +1,9 @@
+# select from one of several predefined image/video augmentation pipelines
+# default: resizing only
+# dlc: imgaug pipeline implemented in DLC 2.0 package
+# dlc-light: curated subset of dlc augmentations with more conservative param settings
+imgaug: default
+
 # batch size of labeled data during training
 train_batch_size: 16
 
@@ -5,6 +11,7 @@ train_batch_size: 16
 val_batch_size: 16
 
 # batch size of labeled data during test
+# TODO: this is actually used interchangeably with sequence length in prediction. not amazing.
 test_batch_size: 16
 
 # fraction of labeled data used for training
@@ -33,7 +40,7 @@ unfreezing_epoch: 25
 dropout_rate: 0.1
 
 # min training epochs; training cannot terminate before. compare to unfreezing_epoch, check_val_every_n_epoch, early_stop_patience
-min_epochs: 100
+min_epochs: 125
 
 # max training epochs; training may exit before due to early stopping
 max_epochs: 500
@@ -47,20 +54,14 @@ check_val_every_n_epoch: 10
 # select gpu for training
 gpu_id: 0
 
-# batch size of unlabeled video data during training (contiguous frames)
-unlabeled_sequence_length: 16
-
 # rng seed for labeled batches
 rng_seed_data_pt: 42
-
-# rng seed for unlabeled videos
-rng_seed_data_dali: 43
 
 # rng seed for weight initialization
 rng_seed_model_pt: 44
 
 # how many batches to take before terminating an epoch (any dataloader that has less than limit_train_batches will be cycled over)
-limit_train_batches: 10
+limit_train_batches: null
 
 # if you have two dataloaders, you keep cycling over the smaller dataset berfore completing the larger one
 multiple_trainloader_mode: "max_size_cycle"

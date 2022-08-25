@@ -5,20 +5,24 @@ import numpy as np
 from omegaconf import DictConfig, OmegaConf
 import os
 import pandas as pd
+import pytorch_lightning as pl
 from pytorch_lightning.core.lightning import LightningModule
 from pytorch_lightning import LightningDataModule
 from skimage.draw import disk
 import time
 import torch
-from torch.utils.data import DataLoader
 from torchtyping import patch_typeguard
 from tqdm import tqdm
 from typeguard import typechecked
-from typing import Callable, Dict, List, Literal, Optional, Tuple, Type, Union
+from typing import Dict, List, Literal, Optional, Tuple, Type, Union
 
-from lightning_pose.data.dali import LightningWrapper
-from lightning_pose.utils.io import check_if_semi_supervised
+from lightning_pose.data.dali import LightningWrapper, ContextLightningWrapper
+from lightning_pose.utils.io import get_keypoint_names
+from lightning_pose.utils.predictions_new import PredictionHandler
 from lightning_pose.utils.scripts import pretty_print_str
+from lightning_pose.data.dali import video_pipe
+from nvidia.dali.plugin.pytorch import LastBatchPolicy
+from lightning_pose.data.utils import count_frames
 
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -70,10 +74,9 @@ def predict_dataset(
     data_module: LightningDataModule,
     ckpt_file: str,
     preds_file: str,
-    heatmap_file: Optional[str] = None,
-    gpu_id: Optional[int] = None
+    gpu_id: Optional[int] = None,
 ) -> None:
-    """Save predicted keypoints and heatmaps for a labeled dataset.
+    """Save predicted keypoints for a labeled dataset.
 
     Args:
         cfg: hydra config
@@ -81,8 +84,6 @@ def predict_dataset(
         ckpt_file: absolute path to the checkpoint of your trained model; requires .ckpt
             suffix
         preds_file: absolute filename for the predictions .csv file
-        heatmap_file: absolute filename for the heatmaps .h5 file; if None, no heatmaps
-            are saved
         gpu_id: specify which gpu to run prediction on
 
     """
@@ -90,52 +91,27 @@ def predict_dataset(
     model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
     if gpu_id is None:
         model.to(_TORCH_DEVICE)
+        gpu_id = 0
     else:
         model.to("cuda:%i" % gpu_id)
-    full_dataset = data_module.dataset
-    num_datapoints = len(full_dataset)
-    # recover the indices assuming we re-use the same random seed as in training
-    dataset_split_indices = {
-        "train": data_module.train_dataset.indices,
-        "validation": data_module.val_dataset.indices,
-        "test": data_module.test_dataset.indices,
-    }
 
-    full_dataloader = DataLoader(
-        dataset=full_dataset, batch_size=data_module.test_batch_size
-    )
-
-    df, heatmaps_np = _make_predictions(
-        cfg=cfg,
+    trainer = pl.Trainer(gpus=[gpu_id])
+    labeled_preds = trainer.predict(
         model=model,
-        dataloader=full_dataloader,
-        n_frames_=num_datapoints,
-        batch_size=data_module.test_batch_size,
-        return_heatmaps=bool(heatmap_file),
-        gpu_id=gpu_id,
+        dataloaders=data_module.full_labeled_dataloader(),
+        return_predictions=True
     )
 
-    # add train/test/val column
-    df["set"] = np.array(["unused"] * df.shape[0])
-    # iterate over conditions and their indices, and add strs to dataframe
-    for key, val in dataset_split_indices.items():
-        df.loc[val, "set"] = np.repeat(key, len(val))
-
-    # save predictions
-    save_dframe(df, preds_file)
-
-    # save heatmaps
-    if heatmaps_np is not None:
-        save_folder = os.path.dirname(heatmap_file)
-        if not os.path.isdir(save_folder):
-            os.makedirs(save_folder)
-        save_heatmaps(heatmaps_np, heatmap_file)
+    pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
+    labeled_preds_df = pred_handler(preds=labeled_preds)
+    labeled_preds_df.to_csv(preds_file)
 
 
 @typechecked
 def predict_single_video(
     video_file: str,
     ckpt_file: str,
+    do_context: bool,
     cfg_file: Union[str, DictConfig],
     preds_file: str,
     heatmap_file: Optional[str] = None,
@@ -170,19 +146,22 @@ def predict_single_video(
             and a potential numpy array with predicted heatmaps.
 
     """
-    from nvidia.dali.plugin.pytorch import LastBatchPolicy
-    from lightning_pose.data.dali import video_pipe
-    from lightning_pose.data.utils import count_frames
-    from lightning_pose.utils.scripts import pretty_print_str
-
+    
+    if do_context:
+        step = 1 # applies for both context and non-context
+        batch_size = 4 # TODO: make this configurable
+        sequence_length = 5 # hard coded -- this is the model
+    else: # usual static model 
+        batch_size = 1 # don't modify, change sequence length (exposed to user) instead
+        sequence_length = 16 # TODO: should be controlled from outside by cfg.eval.dali_parameters.sequence_length
+        step = sequence_length
     device_dict = get_devices(device)
 
     cfg = get_cfg_file(cfg_file=cfg_file)
     pretty_print_str(string="Loading trained model from %s... " % ckpt_file)
 
     # set some defaults
-    batch_size = 1  # don't modify, change sequence length (exposed to user) instead
-    video_pipe_kwargs_defaults = {"num_threads": 2, "device_id": 0}
+    video_pipe_kwargs_defaults = {"num_threads": 2, "device_id": 0} # TODO: can have more threads. try 4? worked in a notebook.
     for key, val in video_pipe_kwargs_defaults.items():
         if key not in video_pipe_kwargs.keys():
             video_pipe_kwargs[key] = val
@@ -206,22 +185,35 @@ def predict_single_video(
         ),
         batch_size=batch_size,
         sequence_length=sequence_length,
+        step=step,
         filenames=[video_file],
         random_shuffle=False,
         device=device_dict["device_dali"],
         name="reader",
         pad_sequences=True,
-        **video_pipe_kwargs
+        **video_pipe_kwargs,
     )
 
-    predict_loader = LightningWrapper(
-        pipe,
-        output_map=["x"],
-        last_batch_policy=LastBatchPolicy.FILL,
-        last_batch_padded=False,
-        auto_reset=False,
-        reader_name="reader",
-    )
+    # build dataloader
+    # each data loader returns 
+    if do_context:
+        predict_loader = ContextLightningWrapper(
+            pipe,
+            output_map=["x"],
+            last_batch_policy=LastBatchPolicy.PARTIAL,
+            auto_reset=False,  # TODO: I removed the auto_reset, but I don't know if it's needed. Think we'll loop over the dataset without resetting.
+            # num_batches=num_batches, # TODO: works also if num_batches = int
+        ) # TODO: there are other args in predict_loader that we don't have here. check if it's fine.
+    else:
+        predict_loader = LightningWrapper(
+            pipe,
+            output_map=["x"],
+            last_batch_policy=LastBatchPolicy.FILL,
+            last_batch_padded=False,
+            auto_reset=False,
+            reader_name="reader",
+        )
+    # TODO: got until here. seems like the LightningWrappe and pipe are like in my notebook
     # iterate through video
     n_frames_ = count_frames(video_file)  # total frames in video
     pretty_print_str(string="Predicting video at %s..." % video_file)
@@ -233,6 +225,7 @@ def predict_single_video(
         batch_size=sequence_length,  # note: different from the batch_size defined above
         data_name=video_file,
         return_heatmaps=bool(heatmap_file),
+        do_context=do_context,
     )
 
     try:
@@ -262,12 +255,13 @@ def predict_single_video(
 def _make_predictions(
     cfg: DictConfig,
     model: LightningModule,
-    dataloader: Union[torch.utils.data.DataLoader, LightningWrapper],
+    dataloader: Union[torch.utils.data.DataLoader, LightningWrapper, ContextLightningWrapper],
     n_frames_: int,
     batch_size: int,
     data_name: str = "dataset",
     return_heatmaps: bool = False,
     gpu_id: Optional[int] = None,
+    do_context: bool = False,
 ) -> Tuple[pd.DataFrame, Union[np.ndarray, None]]:
     """Wrapper function that predicts, resizes, and puts results in a dataframe.
 
@@ -288,8 +282,15 @@ def _make_predictions(
     """
 
     keypoints_np, confidence_np, heatmaps_np = _predict_frames(
-        cfg, model, dataloader, n_frames_, batch_size, data_name, return_heatmaps,
+        cfg,
+        model,
+        dataloader,
+        n_frames_,
+        batch_size,
+        data_name,
+        return_heatmaps,
         gpu_id,
+        do_context,
     )
     # unify keypoints and confidences into one numpy array, scale (x,y) coords by
     # resizing factor
@@ -312,12 +313,13 @@ def _make_predictions(
 def _predict_frames(
     cfg: DictConfig,
     model: LightningModule,
-    dataloader: Union[torch.utils.data.DataLoader, LightningWrapper],
+    dataloader: Union[torch.utils.data.DataLoader, LightningWrapper, ContextLightningWrapper],
     n_frames_: int,
     batch_size: int,
     data_name: str = "dataset",
     return_heatmaps: bool = False,
     gpu_id: Optional[int] = None,
+    do_context: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, Union[np.ndarray, None]]:
     """Predict all frames from a data loader without undoing the resize or reshaping.
 
@@ -343,6 +345,7 @@ def _predict_frames(
 
     keypoints_np = np.zeros((n_frames_, model.num_keypoints * 2))
     confidence_np = np.zeros((n_frames_, model.num_keypoints))
+
     if return_heatmaps:
         heatmaps_np = np.zeros(
             (
@@ -389,14 +392,14 @@ def _predict_frames(
                 n_frames_curr = final_batch_size
             else:  # at every sequence except the final
                 keypoints_np[
-                    n_frames_counter: n_frames_counter + n_frames_curr
+                    n_frames_counter : n_frames_counter + n_frames_curr
                 ] = pred_keypoints
                 confidence_np[
-                    n_frames_counter: n_frames_counter + n_frames_curr
+                    n_frames_counter : n_frames_counter + n_frames_curr
                 ] = confidence
                 if return_heatmaps:
                     heatmaps_np[
-                        n_frames_counter: n_frames_counter + n_frames_curr
+                        n_frames_counter : n_frames_counter + n_frames_curr
                     ] = outputs
 
             n_frames_counter += n_frames_curr
@@ -454,22 +457,6 @@ def make_pred_arr_undo_resize(
 
 
 @typechecked
-def get_videos_in_dir(video_dir: str) -> List[str]:
-    # gather videos to process
-    # TODO: check if you're give a path to a single video?
-    pretty_print_str(string="Looking inside %s..." % video_dir)
-    assert os.path.isdir(video_dir)
-    all_files = [os.path.join(video_dir, f) for f in os.listdir(video_dir)]
-    video_files = []
-    for f in all_files:
-        if f.endswith(".mp4"):
-            video_files.append(f)
-    if len(video_files) == 0:
-        raise IOError("Did not find any video files (.mp4) in %s" % video_dir)
-    return video_files
-
-
-@typechecked
 def get_csv_file(cfg: DictConfig) -> str:
     from lightning_pose.utils.io import return_absolute_data_paths
 
@@ -480,22 +467,6 @@ def get_csv_file(cfg: DictConfig) -> str:
     else:
         csv_file = ""
     return csv_file
-
-
-@typechecked
-def get_keypoint_names(cfg: DictConfig, csv_file: Optional[str] = None) -> List[str]:
-    if os.path.exists(csv_file):
-        if "header_rows" in cfg.data:
-            header_rows = list(cfg.data.header_rows)
-        else:
-            # assume dlc format
-            header_rows = [0, 1, 2]
-        df = pd.read_csv(csv_file, header=header_rows)
-        # collect marker names from multiindex header
-        keypoint_names = [c[0] for c in df.columns[1::2]]
-    else:
-        keypoint_names = ["bp_%i" % n for n in range(cfg.data.num_targets // 2)]
-    return keypoint_names
 
 
 @typechecked
@@ -616,8 +587,9 @@ def save_dframe(df: pd.DataFrame, save_file: str) -> None:
 
 
 @typechecked
-def save_heatmaps(heatmaps_np: np.ndarray, save_file: str)-> None:
+def save_heatmaps(heatmaps_np: np.ndarray, save_file: str) -> None:
     import h5py
+
     assert save_file.endswith(".h5") or save_file.endswith(".hdf5")
     with h5py.File(save_file, "w") as hf:
         hf.create_dataset("heatmaps", data=heatmaps_np)

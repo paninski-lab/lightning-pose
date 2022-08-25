@@ -8,11 +8,12 @@ import os
 
 from typeguard import typechecked
 
-from lightning_pose.utils.predictions import get_videos_in_dir, predict_single_video
+from lightning_pose.utils.predictions import predict_single_video
 from lightning_pose.utils.predictions import create_labeled_video
 from lightning_pose.utils.io import (
     check_if_semi_supervised,
     ckpt_path_from_base_path,
+    get_videos_in_dir,
     return_absolute_path,
     VideoPredPathHandler,
 )
@@ -83,7 +84,8 @@ def predict_videos_in_dir(cfg: DictConfig):
                 ckpt_file=ckpt_file,
                 cfg_file=model_cfg,
                 preds_file=preds_file,
-                sequence_length=cfg.eval.dali_parameters.sequence_length,
+                sequence_length=cfg.dali.base.predict.sequence_length,
+                do_context=model_cfg.model.do_context,
             )
 
             if cfg.eval.get("create_labeled_video", False):

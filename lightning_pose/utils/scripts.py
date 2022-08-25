@@ -21,14 +21,143 @@ from lightning_pose.utils.io import check_if_semi_supervised
 
 @typechecked
 def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
-    """Create simple data transform pipeline that resizes images."""
-    data_transform = iaa.Resize(
-        {
+    """Create simple data transform pipeline that augments images.
+
+    Args:
+        cfg: standard config file that carries around dataset info; relevant is the
+            parameter "cfg.training.imgaug" which can take on the following values:
+                default: resizing only
+                dlc: imgaug pipeline implemented in DLC 2.0 package
+                dlc-light: curated subset of dlc augmentations with more conservative
+                    parameter settings
+
+    """
+
+    kind = cfg.training.get("imgaug", "default")
+
+    data_transform = []
+
+    if kind == "default":
+        # resizing happens below
+        print("using default image augmentation pipeline (resizing only)")
+    elif kind == "dlc":
+
+        print("using dlc image augmentation pipeline")
+
+        apply_prob_0 = 0.5
+
+        # rotate
+        rotation = 25  # rotation uniformly sampled from (-rotation, +rotation)
+        data_transform.append(iaa.Sometimes(
+            0.4,
+            iaa.Affine(rotate=(-rotation, rotation))
+        ))
+        # motion blur
+        k = 5  # kernel size of blur
+        angle = 90  # blur direction uniformly sampled from (-angle, +angle)
+        data_transform.append(iaa.Sometimes(
+            apply_prob_0,
+            iaa.MotionBlur(k=k, angle=(-angle, angle))
+        ))
+        # coarse dropout
+        prct = 0.02  # drop `prct` of all pixels by converting them to black pixels
+        size_prct = 0.3  # drop pix on a low-res version of img that's `size_prct` of og
+        per_channel = 0.5  # per_channel transformations on `per_channel` frac of images
+        data_transform.append(iaa.Sometimes(
+            apply_prob_0,
+            iaa.CoarseDropout(p=prct, size_percent=size_prct, per_channel=per_channel)
+        ))
+        # elastic transform
+        alpha = (0, 10)  # controls strength of displacement
+        sigma = 5  # cotnrols smoothness of displacement
+        data_transform.append(iaa.Sometimes(
+            apply_prob_0,
+            iaa.ElasticTransformation(alpha=alpha, sigma=sigma)
+        ))
+        # hist eq
+        data_transform.append(iaa.Sometimes(
+            0.1,
+            iaa.AllChannelsHistogramEqualization()
+        ))
+        # clahe (contrast limited adaptive histogram equalization) -
+        # hist eq over image patches
+        data_transform.append(iaa.Sometimes(
+            0.1,
+            iaa.AllChannelsCLAHE()
+        ))
+        # emboss
+        alpha = (0, 0.5)  # overlay embossed image on original with alpha in this range
+        strength = (0.5, 1.5)  # strength of embossing lies in this range
+        data_transform.append(iaa.Sometimes(
+            0.1,
+            iaa.Emboss(alpha=alpha, strength=strength)
+        ))
+        # crop
+        crop_by = 0.15  # number of pix to crop on each side of img given as a fraction
+        data_transform.append(iaa.Sometimes(
+            0.4,
+            iaa.CropAndPad(percent=(-crop_by, crop_by), keep_size=False)
+        ))
+
+    elif kind == "dlc-light":
+
+        print("using dlc-light image augmentation pipeline")
+
+        apply_prob_0 = 0.25
+        apply_prob_1 = 0.10
+
+        # rotate
+        rotation = 10  # rotation uniformly sampled from (-rotation, +rotation)
+        data_transform.append(iaa.Sometimes(
+            apply_prob_0,
+            iaa.Affine(rotate=(-rotation, rotation))
+        ))
+        # motion blur
+        k = 3  # kernel size of blur
+        angle = 90  # blur direction uniformly sampled from (-angle, +angle)
+        data_transform.append(iaa.Sometimes(
+            apply_prob_0,
+            iaa.MotionBlur(k=k, angle=(-angle, angle))
+        ))
+        # elastic transform
+        alpha = (0, 10)  # controls strength of displacement
+        sigma = 5  # cotnrols smoothness of displacement
+        data_transform.append(iaa.Sometimes(
+            apply_prob_0,
+            iaa.ElasticTransformation(alpha=alpha, sigma=sigma)
+        ))
+        # clahe (contrast limited adaptive histogram equalization) -
+        # hist eq over image patches
+        data_transform.append(iaa.Sometimes(
+            apply_prob_1,
+            iaa.AllChannelsCLAHE()
+        ))
+        # crop
+        crop_by = 0.10  # number of pix to crop on each side of img given as a fraction
+        data_transform.append(iaa.Sometimes(
+            apply_prob_1,
+            iaa.CropAndPad(percent=(-crop_by, crop_by), keep_size=False)
+        ))
+        # resize
+        data_transform.append(
+            iaa.Resize({
+                "height": cfg.data.image_resize_dims.height,
+                "width": cfg.data.image_resize_dims.width}
+            ))
+
+    else:
+        raise NotImplementedError(
+            "must choose imgaug kind from 'default', 'dlc', 'dlc-light'"
+        )
+
+    # always apply resizing transform
+    data_transform.append(
+        iaa.Resize({
             "height": cfg.data.image_resize_dims.height,
-            "width": cfg.data.image_resize_dims.width,
-        }
-    )
-    return iaa.Sequential([data_transform])
+            "width": cfg.data.image_resize_dims.width}
+        ))
+
+    return iaa.Sequential(data_transform)
 
 
 @typechecked
@@ -39,26 +168,13 @@ def get_dataset(
     from PIL import Image
     import os
 
-    image_name = os.path.join(data_dir)
-
-    def check_image_dims(self):
-        img_name = self.image_names[0]
-        # read image from file and apply transformations (if any)
-        file_name = os.path.join(self.root_directory, img_name)
-        # if 1 color channel, change to 3.
-        image = Image.open(file_name).convert("RGB")
-        assert image.shape == ()
-        # load one image (zeroth one)
-        # get the shape of that
-        # assert that it's equal to config file
-        pass
-
     if cfg.model.model_type == "regression":
         dataset = BaseTrackingDataset(
             root_directory=data_dir,
             csv_path=cfg.data.csv_file,
             header_rows=OmegaConf.to_object(cfg.data.header_rows),
             imgaug_transform=imgaug_transform,
+            do_context=cfg.model.do_context,
         )
     elif cfg.model.model_type == "heatmap":
         dataset = HeatmapDataset(
@@ -67,6 +183,7 @@ def get_dataset(
             header_rows=OmegaConf.to_object(cfg.data.header_rows),
             imgaug_transform=imgaug_transform,
             downsample_factor=cfg.data.downsample_factor,
+            do_context=cfg.model.do_context,
         )
     else:
         raise NotImplementedError(
@@ -80,7 +197,9 @@ def get_dataset(
         cfg.data.image_orig_dims.height,
     ):
         raise ValueError(
-            "image_orig_dims in data configuration file is (width=%i, height=%i) but your image size is (width=%i, height=%i). Please update the data configuration file"
+            f"image_orig_dims in data configuration file is (width=%i, height=%i) but"
+            f" your image size is (width=%i, height=%i). Please update the data "
+            f"configuration file"
             % (
                 cfg.data.image_orig_dims.width,
                 cfg.data.image_orig_dims.height,
@@ -131,10 +250,8 @@ def get_data_module(
             train_probability=cfg.training.train_prob,
             val_probability=cfg.training.val_prob,
             train_frames=cfg.training.train_frames,
-            unlabeled_sequence_length=cfg.training.unlabeled_sequence_length,
+            dali_config=cfg.dali,
             torch_seed=cfg.training.rng_seed_data_pt,
-            dali_seed=cfg.training.rng_seed_data_dali,
-            device_id=cfg.training.gpu_id,
         )
     return data_module
 
@@ -234,7 +351,7 @@ def get_model(
             model = RegressionTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
-                resnet_version=cfg.model.resnet_version,
+                backbone=cfg.model.backbone,
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
@@ -243,12 +360,13 @@ def get_model(
             model = HeatmapTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
-                resnet_version=cfg.model.resnet_version,
+                backbone=cfg.model.backbone,
                 downsample_factor=cfg.data.downsample_factor,
                 output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
+                do_context=cfg.model.do_context,
             )
         else:
             raise NotImplementedError(
@@ -264,7 +382,7 @@ def get_model(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
                 loss_factory_unsupervised=loss_factories["unsupervised"],
-                resnet_version=cfg.model.resnet_version,
+                backbone=cfg.model.backbone,
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
@@ -275,12 +393,13 @@ def get_model(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
                 loss_factory_unsupervised=loss_factories["unsupervised"],
-                resnet_version=cfg.model.resnet_version,
+                backbone=cfg.model.backbone,
                 downsample_factor=cfg.data.downsample_factor,
                 output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
+                do_context=cfg.model.do_context,
             )
         else:
             raise NotImplementedError(

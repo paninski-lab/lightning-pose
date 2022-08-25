@@ -1,55 +1,51 @@
-Combine Grid HPO with Hydra Multirun
 
-The process:
+import hydra
+from omegaconf import DictConfig, ListConfig
+import os
 
-- Instead of using `grid run real_script_name.py`
-- Proxy the real script using [scripts/grid-hpo.sh](scripts/grid-hpo.sh)
-- Prepare the proxy script that has real_script_name.py
-- The proxy will execute `grid run scripts/grid-hpo.sh --script proxy.sh`
-- Grid HPO params will be added to the real script via the proxy.sh
+@hydra.main(config_path="configs", config_name="config")
+def train(cfg: DictConfig):
+    """Main fitting function, accessed from command line."""
 
-# Review examples of proxy scripts
+    print("Our Hydra config file:")
+    pretty_print(cfg)
 
-## test locally
+def pretty_print(cfg):
 
-- read config file and perform local test
+    for key, val in cfg.items():
+        if key == "eval":
+            continue
+        print("--------------------")
+        print("%s parameters" % key)
+        print("--------------------")
+        for k, v in val.items():
+            print("{}: {}".format(k, v))
+        print()
+    print("\n\n")
 
-```
+if __name__ == "__main__":
+    """
 python scripts/hydra-conf-read-test.py
-# will still work but not correct
+# will still work not not correct
 python scripts/hydra-conf-read-test.py --config-dir scripts/configs_mirror-mouse  --config-name config
 python scripts/hydra-conf-read-test.py --config-dir scripts --config-name config
-```
 
-- correctly way to read the config
-
-```
+# correctly way to read the file
 python scripts/hydra-conf-read-test.py --config-path configs --config-name config
-python scripts/hydra-conf-read-test.py --config-path configs_mirror-mouse --config-name config_mirror-mouse
-```
+python scripts/hydra-conf-read-test.py --config-path configs_mirror-mouse --config-name config_mirror-mouse 
 
-## grid run
-
-- config dir and config path test
-
-```
+# config dir and config path test
 grid run --instance_type t2.medium --localdir -- grid-hpo.sh --script scripts/hydra-conf-read-test.sh --config-dir "['scripts/configs_mirror-mouse', 'script/configs']" --config-name "['config','config_mirror-mouse']"
-```
 
-- config path test with trailing hydra param
-
-```
+# config path test with trailing hydra param
 grid run --instance_type t2.medium --localdir -- grid-hpo.sh --script scripts/hydra-conf-read-test.sh --config-path "['configs_mirror-mouse', 'configs']" --config-name "['config','config_mirror-mouse']" --training.rng_seed_data_pt "[1,2]"
-```
 
-- config path test w/o trailing hydra param
-
-```
+# config path test w/o trailing hydra param
 grid run --instance_type t2.medium --localdir -- grid-hpo.sh --script scripts/hydra-conf-read-test.sh --config-path "['configs_mirror-mouse', 'configs']" --config-name "['config','config_mirror-mouse']"
-```
 
-- actual run
-
-```
+# actual run 
 grid run --dockerfile Dockerfile --instance_type g4dn.xlarge --localdir -- grid-hpo.sh --script scripts/train_hydra.sh --config-path "['configs_mirror-mouse', 'configs']" --config-name "['config','config_mirror-mouse']" --training.rng_seed_data_pt "[1,2]"
-```
+
+    """
+    train()
+
