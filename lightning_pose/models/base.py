@@ -10,6 +10,7 @@ import torchvision.models as tvmodels
 from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypedDict, Union
 from lightning_pose.data.dali import get_context_from_seq
+
 patch_typeguard()  # use before @typechecked
 
 MULTISTEPLR_MILESTONES_DEFAULT = [100, 200, 300]
