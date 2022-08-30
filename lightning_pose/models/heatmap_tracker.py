@@ -91,11 +91,18 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.torch_seed = torch_seed
         self.do_context = do_context
         if self.mode == "2d":
-#             self.representation_fc = torch.nn.Linear(5, 1, bias=False)
-            self.unnormalized_weights = nn.parameter.Parameter(torch.Tensor([[.2, .2, .2, .2, .2]]), requires_grad=False)
-            self.representation_fc = lambda x: x @ torch.transpose(nn.functional.softmax(self.unnormalized_weights), 0, 1)
+            # self.representation_fc = torch.nn.Linear(5, 1, bias=False)
+            self.unnormalized_weights = nn.parameter.Parameter(
+                torch.Tensor([[0.2, 0.2, 0.2, 0.2, 0.2]]), requires_grad=False)
+            self.representation_fc = lambda x: x @ torch.transpose(
+                nn.functional.softmax(self.unnormalized_weights), 0, 1)
         elif self.mode == "3d":
-            self.representation_fc = torch.nn.Linear(8, 1, bias=False)
+            self.unnormalized_weights = nn.parameter.Parameter(
+                torch.Tensor([[0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125]]),
+                requires_grad=False
+            )
+            self.representation_fc = lambda x: x @ torch.transpose(
+                nn.functional.softmax(self.unnormalized_weights), 0, 1)
 
         # use this to log auxiliary information: rmse on labeled data
         self.rmse_loss = RegressionRMSELoss()
@@ -166,8 +173,8 @@ class HeatmapTracker(BaseSupervisedTracker):
         # in their model, the pixel shuffle happens only for downsample_factor=2
         upsampling_layers = []
         upsampling_layers.append(nn.PixelShuffle(2))
-#         upsampling_layers.append(nn.BatchNorm2d(self.num_filters_for_upsampling // 4))
-#         upsampling_layers.append(nn.ReLU(inplace=True))
+        # upsampling_layers.append(nn.BatchNorm2d(self.num_filters_for_upsampling // 4))
+        # upsampling_layers.append(nn.ReLU(inplace=True))
         upsampling_layers.append(
             self.create_double_upsampling_layer(
                 in_channels=self.num_filters_for_upsampling // 4,
@@ -175,8 +182,8 @@ class HeatmapTracker(BaseSupervisedTracker):
             )
         )  # up to here results in downsample_factor=3
         if self.downsample_factor == 2:
-#             upsampling_layers.append(nn.BatchNorm2d(self.num_keypoints))
-#             upsampling_layers.append(nn.ReLU(inplace=True))
+            # upsampling_layers.append(nn.BatchNorm2d(self.num_keypoints))
+            # upsampling_layers.append(nn.ReLU(inplace=True))
             upsampling_layers.append(
                 self.create_double_upsampling_layer(
                     in_channels=self.num_keypoints,
@@ -280,7 +287,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
-        do_context: bool = True,
+        do_context: bool = False,
     ):
         """
 
@@ -302,6 +309,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
                 multisteplr
             lr_scheduler_params: params for specific learning rate schedulers
                 multisteplr: milestones, gamma
+            do_context: use temporal context frames to improve predictions
 
         """
         super().__init__(
@@ -325,11 +333,10 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
 
     def get_loss_inputs_unlabeled(
         self,
-        batch: Union[TensorType[
-            "sequence_length", "RGB":3, "image_height", "image_width", float
-        ], TensorType[
-            "sequence_length", "context":5, "RGB":3, "image_height", "image_width", float
-        ]],
+        batch: Union[
+            TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
+            TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float]
+        ],
     ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps

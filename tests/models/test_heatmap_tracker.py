@@ -2,9 +2,8 @@
 
 import copy
 import pytest
-import torch
 
-from lightning_pose.utils.scripts import get_loss_factories, get_model
+from lightning_pose.utils.tests import run_model_test
 
 
 def test_supervised_heatmap(cfg, heatmap_data_module, video_dataloader, trainer, remove_logs):
@@ -12,78 +11,74 @@ def test_supervised_heatmap(cfg, heatmap_data_module, video_dataloader, trainer,
 
     cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.model_type = "heatmap"
-    cfg_tmp.model.do_context = False
     cfg_tmp.model.losses_to_use = []
-    
-    # build loss factory which orchestrates different losses
-    loss_factories = get_loss_factories(cfg=cfg_tmp, data_module=heatmap_data_module)
 
-    # build model
-    model = get_model(cfg=cfg_tmp, data_module=heatmap_data_module, loss_factories=loss_factories)
-
-    # train model for a couple epochs
-    trainer.fit(model=model, datamodule=heatmap_data_module)
-
-    # predict on labeled frames
-    trainer.predict(
-        model=model,
-        dataloaders=heatmap_data_module.full_labeled_dataloader(),
-        return_predictions=True,
+    run_model_test(
+        cfg=cfg_tmp,
+        data_module=heatmap_data_module,
+        video_dataloader=video_dataloader,
+        trainer=trainer,
+        remove_logs_fn=remove_logs,
     )
 
-    # predict on unlabeled video
-    trainer.predict(
-        model=model,
-        dataloaders=video_dataloader,
-        return_predictions=True,
+
+def test_supervised_heatmap_context(
+        cfg_context, heatmap_data_module_context, video_dataloader, trainer, remove_logs
+):
+    """Test the initialization and training of a supervised context heatmap model.
+
+    NOTE: the toy dataset is not a proper context dataset
+
+    """
+
+    cfg_tmp = copy.deepcopy(cfg_context)
+    cfg_tmp.model.model_type = "heatmap"
+    cfg_tmp.model.losses_to_use = []
+
+    run_model_test(
+        cfg=cfg_tmp,
+        data_module=heatmap_data_module_context,
+        video_dataloader=video_dataloader,
+        trainer=trainer,
+        remove_logs_fn=remove_logs,
     )
 
-    # remove tensors from gpu
-    torch.cuda.empty_cache()
 
-    # clean up logging
-    remove_logs()
-
-
-def test_unsupervised_heatmap_temporal(
+def test_semisupervised_heatmap_temporal(
     cfg, heatmap_data_module_combined, video_dataloader, trainer, remove_logs,
 ):
-    """Test the initialization and training of an unsupervised heatmap model."""
+    """Test the initialization and training of an semi-supervised heatmap model."""
 
     cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.model_type = "heatmap"
-    cfg_tmp.model.do_context = False
     cfg_tmp.model.losses_to_use = ["temporal"]
 
-    # build loss factory which orchestrates different losses
-    loss_factories = get_loss_factories(cfg=cfg_tmp, data_module=heatmap_data_module_combined)
-
-    # build model
-    model = get_model(
+    run_model_test(
         cfg=cfg_tmp,
         data_module=heatmap_data_module_combined,
-        loss_factories=loss_factories,
+        video_dataloader=video_dataloader,
+        trainer=trainer,
+        remove_logs_fn=remove_logs,
     )
 
-    # train model for a couple epochs
-    trainer.fit(model=model, datamodule=heatmap_data_module_combined)
 
-    # predict on labeled frames
-    trainer.predict(
-        model=model,
-        dataloaders=heatmap_data_module_combined.full_labeled_dataloader(),
-        return_predictions=True,
+def test_semisupervised_heatmap_pcasingleview_context(
+    cfg_context, heatmap_data_module_combined_context, video_dataloader, trainer, remove_logs,
+):
+    """Test the initialization and training of an semi-supervised heatmap context model.
+
+    NOTE: the toy dataset is not a proper context dataset
+
+    """
+
+    cfg_tmp = copy.deepcopy(cfg_context)
+    cfg_tmp.model.model_type = "heatmap"
+    cfg_tmp.model.losses_to_use = ["pca_singleview"]
+
+    run_model_test(
+        cfg=cfg_tmp,
+        data_module=heatmap_data_module_combined_context,
+        video_dataloader=video_dataloader,
+        trainer=trainer,
+        remove_logs_fn=remove_logs,
     )
-
-    # predict on unlabeled video
-    trainer.predict(
-        model=model,
-        dataloaders=video_dataloader,
-        return_predictions=True,
-    )
-
-    # remove tensors from gpu
-    torch.cuda.empty_cache()
-
-    # clean up logging
-    remove_logs()
