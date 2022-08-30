@@ -44,7 +44,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
-        do_context: bool = True,
+        do_context: bool = False,
     ) -> None:
         """Initialize a DLC-like model with resnet backbone.
 
@@ -216,10 +216,10 @@ class HeatmapTracker(BaseSupervisedTracker):
     ) -> TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Forward pass through the network."""
         # we get one representation for each desired output. 
-        # in the case of unsupervised sequences + context, we have outputs for all images but the first two and last two.
+        # in the case of unsupervised sequences + context, we have outputs for all images but the
+        # first two and last two.
         # this is all handled internally by get_representations()
         representations = self.get_representations(images, self.do_context)
-
         heatmaps = self.heatmaps_from_representations(representations)
         # softmax temp stays 1 here; to modify for model predictions, see constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
@@ -227,8 +227,7 @@ class HeatmapTracker(BaseSupervisedTracker):
     def get_loss_inputs_labeled(self, batch_dict: HeatmapBatchDict) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
-        predicted_heatmaps = self.forward(
-            batch_dict["images"])
+        predicted_heatmaps = self.forward(batch_dict["images"])
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
         return {
@@ -239,20 +238,26 @@ class HeatmapTracker(BaseSupervisedTracker):
             "confidences": confidence,
         }
     
-    def predict_step(self, batch: Union[dict, torch.Tensor], batch_idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def predict_step(
+        self,
+        batch: Union[dict, torch.Tensor],
+        batch_idx: int,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Predict heatmaps and keypoints for a batch of video frames.
         assuming a DALI video loader is passed in 
         trainer = Trainer(devices=8, accelerator="gpu")
         predictions = trainer.predict(model, data_loader) """
-        if isinstance(batch, dict): # labeled image dataloaders
+        if isinstance(batch, dict):
+            # labeled image dataloaders
             images = batch["images"]
-        else: # unlabeled dali video dataloaders
+        else:
+            # unlabeled dali video dataloaders
             images = batch
         # images -> heatmaps
         predicted_heatmaps = self.forward(images)
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
-        return (predicted_keypoints, confidence)
+        return predicted_keypoints, confidence
 
 
 @typechecked

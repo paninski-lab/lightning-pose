@@ -118,6 +118,7 @@ class LightningWrapper(DALIGenericIterator):
             dtype=torch.float,
         )  # careful: only valid for one sequence, i.e., batch size of 1.
 
+
 # TODO: see if can be easily merged.
 class ContextLightningWrapper(DALIGenericIterator):
     """wrapper around a DALI pipeline to get batches for ptl."""
@@ -189,6 +190,7 @@ class LitDaliWrapper(DALIGenericIterator):
         out = super().__next__()
         return self._modify_output(out)
 
+
 def get_context_from_seq(
     img_seq: TensorType["sequence_length", 3, "image_height", "image_width"],
     context_length: int,
@@ -211,6 +213,7 @@ def get_context_from_seq(
         # extract 5-frame sequences from the padded sequence
         train_seq[i] = padded_seq[i : i + context_length]
     return train_seq
+
 
 class PrepareDALI(object):
     
@@ -334,4 +337,3 @@ class PrepareDALI(object):
         pipe = self._get_dali_pipe()
         args = self._setup_dali_iterator_args()
         return LitDaliWrapper(pipe, **args[self.train_stage][self.model_type])
-    

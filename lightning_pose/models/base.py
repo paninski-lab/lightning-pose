@@ -214,10 +214,12 @@ class BaseFeatureExtractor(LightningModule):
                     ] = self.backbone(images)
                     # we need to tile the representations to make it into (num_valid_frames, features, rep_height, rep_width, num_context_frames)
                     # TODO: context frames should be configurable
-                    tiled_representations = get_context_from_seq(img_seq = representations, context_length=5)
+                    tiled_representations = get_context_from_seq(
+                        img_seq=representations, context_length=5)
                     # get rid of first and last two frames
                     if tiled_representations.shape[0] < 5:
-                        raise RuntimeError("Not enough valid frames to make a context representation.")
+                        raise RuntimeError(
+                            "Not enough valid frames to make a context representation.")
                     outputs = tiled_representations[2:-2, :, :, :, :]
                     
                 # for both types of batches, we reshape in the same way
