@@ -16,8 +16,10 @@ import torch
 from typing import Callable, List, Optional
 import yaml
 
+from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
+from lightning_pose.utils import get_gpu_list_from_cfg
 from lightning_pose.utils.io import get_videos_in_dir
 from lightning_pose.utils.scripts import (
     get_data_module,
@@ -25,27 +27,15 @@ from lightning_pose.utils.scripts import (
     get_imgaug_transform,
 )
 
-_TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
 TOY_DATA_ROOT_DIR = "toy_datasets/toymouseRunningData"
 
 
 @pytest.fixture
 def cfg() -> dict:
-    """Load all toy data config files without hydra."""
-
+    """Load all toy data config file without hydra."""
     base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
-    config_dir = os.path.join(base_dir, "scripts", "configs")
-
-    keys = ["data", "losses", "model", "training", "dali"]
-    cfg = {}
-
-    for key in keys:
-        cfg_tmp = os.path.join(config_dir, key, "%s_params.yaml" % key)
-        with open(cfg_tmp) as f:
-            dict_tmp = yaml.load(f, Loader=yaml.FullLoader)
-        cfg[key] = dict_tmp
-
+    config_file = os.path.join(base_dir, "scripts", "configs", "config.yaml")
+    cfg = yaml.load(open(config_file), Loader=yaml.FullLoader)
     return OmegaConf.create(cfg)
 
 
@@ -180,12 +170,32 @@ def heatmap_data_module_combined(cfg, heatmap_dataset) -> UnlabeledDataModule:
 
 
 @pytest.fixture
+def video_dataloader(cfg, base_dataset, video_list) -> LitDaliWrapper:
+    """Create a prediction dataloader for a new video."""
+
+    # setup
+    vid_pred_class = PrepareDALI(
+        train_stage="predict",
+        model_type="base",
+        dali_config=cfg.dali,
+        filenames=video_list,
+        resize_dims=[base_dataset.height, base_dataset.width]
+    )
+    video_dataloader = vid_pred_class()
+
+    # return to tests
+    yield video_dataloader
+
+    # cleanup after all tests have run (no more calls to yield)
+    del video_dataloader
+    torch.cuda.empty_cache()
+
+
+@pytest.fixture
 def trainer(cfg) -> pl.Trainer:
     """Create a basic pytorch lightning trainer for testing models."""
 
-    ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
-        monitor="val_supervised_loss"
-    )
+    ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(monitor="val_supervised_loss")
     transfer_unfreeze_callback = pl.callbacks.BackboneFinetuning(
         unfreeze_backbone_at_epoch=10,
         lambda_func=lambda epoch: 1.5,
@@ -193,21 +203,8 @@ def trainer(cfg) -> pl.Trainer:
         should_align=True,
         train_bn=True,
     )
-    # determine gpu setup
-    if _TORCH_DEVICE == "cpu":
-        gpus = 0
-    elif isinstance(cfg.training.gpu_id, list):
-        gpus = cfg.training.gpu_id
-    elif isinstance(cfg.training.gpu_id, ListConfig):
-        gpus = list(cfg.training.gpu_id)
-    elif isinstance(cfg.training.gpu_id, int):
-        gpus = [cfg.training.gpu_id]
-    else:
-        raise NotImplementedError(
-            "training.gpu_id must be list or int, not {}".format(
-                type(cfg.training.gpu_id)
-            )
-        )
+    gpus = get_gpu_list_from_cfg(cfg)
+
     trainer = pl.Trainer(
         gpus=gpus,
         max_epochs=2,

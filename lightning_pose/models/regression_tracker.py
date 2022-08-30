@@ -38,7 +38,7 @@ class RegressionTracker(BaseSupervisedTracker):
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
-        do_context: bool = True,
+        do_context: bool = False,
     ) -> None:
         """Base model that produces (x, y) coordinates of keypoints from images.
 
@@ -101,28 +101,42 @@ class RegressionTracker(BaseSupervisedTracker):
         images: Union[
             TensorType["batch", "channels":3, "image_height", "image_width"],
             TensorType["batch", "frames", "channels":3, "image_height", "image_width"]]
-        ) -> TensorType["batch", "two_x_num_keypoints"]:
+    ) -> TensorType["batch", "two_x_num_keypoints"]:
         """Forward pass through the network."""
-        representations = self.get_representations(images)
-        if self.do_context:
-            # output of line below is of shape (batch, features, height, width, 1)
-            representations = self.representation_fc(representations)
-            # output of line below is of shape (batch, features, height, width)
-            representations = torch.squeeze(representations, 4)
+        representations = self.get_representations(images, self.do_context)
         out = self.final_layer(self.reshape_representation(representations))
         return out
 
     @typechecked
     def get_loss_inputs_labeled(self, batch_dict: BaseBatchDict) -> dict:
         """Return predicted coordinates for a batch of data."""
-        representation = self.get_representations(batch_dict["images"])
-        predicted_keypoints = self.final_layer(
-            self.reshape_representation(representation)
-        )
+        representation = self.get_representations(batch_dict["images"], self.do_context)
+        predicted_keypoints = self.final_layer(self.reshape_representation(representation))
         return {
             "keypoints_targ": batch_dict["keypoints"],
             "keypoints_pred": predicted_keypoints,
         }
+
+    def predict_step(
+        self,
+        batch: Union[dict, torch.Tensor],
+        batch_idx: int,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Predict keypoints for a batch of video frames.
+        assuming a DALI video loader is passed in
+        trainer = Trainer(devices=8, accelerator="gpu")
+        predictions = trainer.predict(model, data_loader)
+        """
+        if isinstance(batch, dict):
+            # labeled image dataloaders
+            images = batch["images"]
+        else:
+            # unlabeled dali video dataloaders
+            images = batch
+        # images -> heatmaps
+        predicted_keypoints = self.forward(images)
+        confidence = torch.zeros((predicted_keypoints.shape[0], predicted_keypoints.shape[1] // 2))
+        return predicted_keypoints, confidence
 
 
 @typechecked
