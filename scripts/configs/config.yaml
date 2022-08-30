@@ -206,9 +206,9 @@ eval:
   hydra_paths: ["2021-12-15/04-11-43/"]
   # TODO: decide which arg stays and which doesn't (create_labeled_video)
   # predict?
-  predict_vids_after_training: false
+  predict_vids_after_training: true
   # save .mp4?
-  save_vids_after_training: false
+  save_vids_after_training: true
   fiftyone:
     # will be the name of the dataset (Mongo DB) created by FiftyOne. for video dataset, we will append dataset_name + "_video"
     dataset_name: "rick_data_test"
@@ -235,7 +235,7 @@ eval:
   # str with absolute path to the video file you want plotted with keypoints
   video_file_to_plot: "/home/jovyan/lightning-pose/toy_datasets/toymouseRunningData/unlabeled_videos/test_vid.mp4"
   # a list of strings, each points to a .csv file with predictions of a given model to the same video. will be combined with video_file_to_plot to make a visualization
-  pred_csv_files_to_plot: ["/home/jovyan/test_vid_heatmap_pca_multiview_7.500.csv"]
+  pred_csv_files_to_plot: ["/home/jovyan/test_vid_heatmap_pca_multiview_5.0.csv"]
 
 callbacks:
   anneal_weight:

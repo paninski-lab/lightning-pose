@@ -1,6 +1,0 @@
-anneal_weight:
-  attr_name: "total_unsupervised_importance"
-  init_val: 0.0
-  increase_factor: 0.01
-  final_val: 1.0
-  freeze_until_epoch: 0

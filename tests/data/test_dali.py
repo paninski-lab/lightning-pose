@@ -8,6 +8,7 @@ from lightning_pose.data.dali import video_pipe, LightningWrapper
 
 _DALI_DEVICE = "gpu" if torch.cuda.is_available() else "cpu"
 
+
 def test_video_pipe(video_list):
 
     batch_size = 2
@@ -71,6 +72,7 @@ def test_dali_wrapper(cfg, video_list):
         assert batch.shape == (seq_len, 3, im_height, im_width)
         # just check a single batch
         break
+
 
 def test_PrepareDALI(cfg, video_list):
     from lightning_pose.data.dali import PrepareDALI
