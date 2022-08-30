@@ -21,3 +21,10 @@ def get_gpu_list_from_cfg(cfg):
             )
         )
     return gpus
+
+
+def pretty_print_str(string: str, symbol: str = "-") -> None:
+    str_length = len(string)
+    print(symbol * str_length)
+    print(string)
+    print(symbol * str_length)

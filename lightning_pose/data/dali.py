@@ -22,6 +22,7 @@ _DALI_DEVICE = "gpu" if torch.cuda.is_available() else "cpu"
 
 patch_typeguard()  # use before @typechecked. TODO: new, make sure it doesn't mess things
 
+
 # cannot typecheck due to way pipeline_def decorator consumes additional args
 @pipeline_def
 def video_pipe(
@@ -61,6 +62,8 @@ def video_pipe(
             channel
         device: "cpu" | "gpu"
         name: pipeline name, used to string together DataNode elements
+        step: number of frames to advance on each read
+        pad_last_batch
 
     Returns:
         pipeline object to be fed to DALIGenericIterator
@@ -78,7 +81,7 @@ def video_pipe(
         normalized=False,
         name=name,
         dtype=types.DALIDataType.FLOAT,
-        pad_last_batch=pad_last_batch, # Important for context loaders
+        pad_last_batch=pad_last_batch,  # Important for context loaders
 
     )
     if resize_dims:
@@ -144,12 +147,22 @@ class ContextLightningWrapper(DALIGenericIterator):
 class LitDaliWrapper(DALIGenericIterator):
     """wrapper around a DALI pipeline to get batches for ptl."""
 
-    def __init__(self, *kargs, eval_mode: Literal["train", "predict"], num_iters: int = 1, do_context: bool = False, context_sequences_successive: bool = False, **kwargs):
+    def __init__(
+        self,
+        *args,
+        eval_mode: Literal["train", "predict"],
+        num_iters: int = 1,
+        do_context: bool = False,
+        context_sequences_successive: bool = False,
+        **kwargs
+    ):
         """ wrapper around DALIGenericIterator to get batches for pl.
         Args: 
-            num_iters: number of enumerations of dataloader (should be computed outside for now; should be fixed by lightning/dali teams)
+            num_iters: number of enumerations of dataloader (should be computed outside for now;
+                should be fixed by lightning/dali teams)
             do_context: whether model/loader use 5-frame context or not
-            """
+
+        """
         # TODO: add a case where we 
         self.num_iters = num_iters
         self.do_context = do_context
@@ -157,28 +170,36 @@ class LitDaliWrapper(DALIGenericIterator):
         self.context_sequences_successive = context_sequences_successive
         self.batch_sampler = 1 # hack to get around DALI-ptl issue
         # call parent
-        super().__init__(*kargs, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def __len__(self):
         return self.num_iters
     
-    def _modify_output(self, out) -> Union[TensorType["sequence_length", 3, "image_height", "image_width"], TensorType["batch", 5, 3, "image_height", "image_width"]]:
+    def _modify_output(
+            self, out
+        ) -> Union[
+                TensorType["sequence_length", 3, "image_height", "image_width"],
+                TensorType["batch", 5, 3, "image_height", "image_width"]
+            ]:
         """ modify output to be torch tensor. 
         looks different for context and non-context."""
-        if self.do_context == False:
+        if not self.do_context:
             return torch.tensor(
-            out[0]["x"][0, :, :, :, :],  # should be (sequence_length, 3, H, W)
-            dtype=torch.float,
-        )  # careful: only valid for one sequence, i.e., batch size of 1.
+                out[0]["x"][0, :, :, :, :],  # should be (sequence_length, 3, H, W)
+                dtype=torch.float,
+            )  # careful: only valid for one sequence, i.e., batch size of 1.
         else:
             if self.eval_mode == "predict":
                 return out[0]["x"]
-            else: # train with context. pipeline is like for "base" model. but we reshape images. assume batch_size=1
+            else:
+                # train with context. pipeline is like for "base" model. but we reshape images.
+                # assume batch_size=1
                 if self.context_sequences_successive:
                     # same as for base model
                     raw_out = torch.tensor(
-                    out[0]["x"][0, :, :, :, :],  # should be (sequence_length, 3, H, W)
-                    dtype=torch.float)
+                        out[0]["x"][0, :, :, :, :],  # should be (sequence_length, 3, H, W)
+                        dtype=torch.float
+                    )
                     return raw_out 
                     # used to be reshaped to (5, 3, H, W):
                     # return get_context_from_seq(img_seq=raw_out, context_length=5)
@@ -195,13 +216,11 @@ def get_context_from_seq(
     img_seq: TensorType["sequence_length", 3, "image_height", "image_width"],
     context_length: int,
 ) -> TensorType["sequence_length", "context_length", "rgb": 3, "image_height", "image_width"]:
-    pass
+    # pass
     # our goal is to extract 5-frame sequences from this sequence
-    img_shape = img_seq.shape[1:] # e.g., (3, H, W)
-    seq_len = img_seq.shape[0] # how many images in batch
-    train_seq = torch.zeros(
-        (seq_len, context_length, *img_shape), device=img_seq.device
-    )
+    img_shape = img_seq.shape[1:]  # e.g., (3, H, W)
+    seq_len = img_seq.shape[0]  # how many images in batch
+    train_seq = torch.zeros((seq_len, context_length, *img_shape), device=img_seq.device)
     # define pads: start pad repeats the zeroth image twice. end pad repeats the last image twice.
     # this is to give padding for the first and last frames of the sequence
     pad_start = torch.tile(img_seq[0].unsqueeze(0), (2, 1, 1, 1))
@@ -217,90 +236,150 @@ def get_context_from_seq(
 
 class PrepareDALI(object):
     
-    """
-    All the DALI stuff in one place.
+    """All the DALI stuff in one place.
+
     TODO: make sure the order of args when you mix is valid.
-    needs to know about context
     TODO: consider changing LightningWrapper args from num_batches to num_iter
-    Big picture: this will initialize the pipes and dataloaders which will be called only in Trainer.predict().
-    Another option -- make this valid for Trainer.train() as well, so the unlabeled stuff will be initialized here.
+
+    Big picture: this will initialize the pipes and dataloaders which will be called only in
+    Trainer.predict().
+
+    Another option -- make this valid for Trainer.train() as well, so the unlabeled stuff will be
+    initialized here.
+
     Thoughts: define a dict with args for pipe and data loader, per condition.
     """
-    def __init__(self, train_stage: Literal["predict", "train"], model_type: Literal["base", "context"], filenames: List[str], resize_dims: List[int], context_sequences_successive: bool = False, dali_config: Union[dict, DictConfig] = None):
+
+    def __init__(
+        self,
+        train_stage: Literal["predict", "train"],
+        model_type: Literal["base", "context"],
+        filenames: List[str],
+        resize_dims: List[int],
+        context_sequences_successive: bool = False,
+        dali_config: Union[dict, DictConfig] = None
+    ):
         self.train_stage = train_stage
         self.model_type = model_type
         self.resize_dims = resize_dims
         self.dali_config = dali_config
         self.filenames = filenames
         self.frame_count = count_frames(self.filenames)
-        self.context_sequences_successive = self.dali_config["context"]["train"]["consecutive_sequences"]
+        self.context_sequences_successive = \
+            self.dali_config["context"]["train"]["consecutive_sequences"]
         self._pipe_dict: dict = self._setup_pipe_dict(self.filenames)
 
     @property
     def num_iters(self) -> int:
         # count frames
-        # "how many times should we enumerate the data loader?""
-          # sum across vids
+        # "how many times should we enumerate the data loader?"
+        # sum across vids
         pipe_dict = self._pipe_dict[self.train_stage][self.model_type]
         if self.model_type == "base":
             return int(np.ceil(self.frame_count / (pipe_dict["sequence_length"])))
         elif self.model_type == "context":
             if pipe_dict["step"] == 1: # 0-5, 1-6, 2-7, 3-8, 4-9 ...
                 return int(np.ceil(self.frame_count / (pipe_dict["batch_size"])))
-            elif pipe_dict["step"] == pipe_dict["sequence_length"]: # context_sequences_successive = False
-                # taking the floor because during training we don't care about missing the last non-full batch. we prefer having fewer batches but valid.
-                return int(np.floor(self.frame_count / (pipe_dict["batch_size"] * pipe_dict["sequence_length"])))
+            elif pipe_dict["step"] == pipe_dict["sequence_length"]:
+                # context_sequences_successive = False
+                # taking the floor because during training we don't care about missing the last
+                # non-full batch. we prefer having fewer batches but valid.
+                return int(np.floor(
+                    self.frame_count / (pipe_dict["batch_size"] * pipe_dict["sequence_length"])))
             else:
                 raise NotImplementedError
     
     def _setup_pipe_dict(self, filenames: List[str]) -> Dict[str, dict]:
         """all of the pipe() args in one place"""
         dict_args = {}
-        dict_args["predict"] = {"context": None, "base": None}
-        dict_args["train"] = {"context": None, "base": None}
+        dict_args["predict"] = {"context": {}, "base": {}}
+        dict_args["train"] = {"context": {}, "base": {}}
         gen_cfg = self.dali_config["general"]
         
         # base (vanilla single-frame model), 
         # train pipe args
         base_train_cfg = self.dali_config["base"]["train"]
-        dict_args["train"]["base"] = {"filenames": filenames, "resize_dims": self.resize_dims, 
-        "sequence_length": base_train_cfg["sequence_length"], "step": base_train_cfg["sequence_length"], "batch_size": 1, 
-        "seed": gen_cfg["seed"], "num_threads": gen_cfg["num_threads"], "device_id": gen_cfg["device_id"], 
-        "random_shuffle": True, "device": gen_cfg["device"]}
+        dict_args["train"]["base"] = {
+            "filenames": filenames,
+            "resize_dims": self.resize_dims,
+            "sequence_length": base_train_cfg["sequence_length"],
+            "step": base_train_cfg["sequence_length"],
+            "batch_size": 1,
+            "seed": gen_cfg["seed"],
+            "num_threads": gen_cfg["num_threads"],
+            "device_id": gen_cfg["device_id"],
+            "random_shuffle": True,
+            "device": gen_cfg["device"],
+        }
 
         # base (vanilla model), predict pipe args 
         base_pred_cfg = self.dali_config["base"]["predict"]
-        dict_args["predict"]["base"] = {"filenames": filenames, "resize_dims": self.resize_dims, 
-        "sequence_length": base_pred_cfg["sequence_length"], "step": base_pred_cfg["sequence_length"], "batch_size": 1, 
-        "seed": gen_cfg["seed"], "num_threads":  gen_cfg["num_threads"], "device_id": gen_cfg["device_id"], 
-        "random_shuffle": False, "device": gen_cfg["device"], "name": "reader", 
-        "pad_sequences": True}
+        dict_args["predict"]["base"] = {
+            "filenames": filenames,
+            "resize_dims": self.resize_dims,
+            "sequence_length": base_pred_cfg["sequence_length"],
+            "step": base_pred_cfg["sequence_length"],
+            "batch_size": 1,
+            "seed": gen_cfg["seed"],
+            "num_threads":  gen_cfg["num_threads"],
+            "device_id": gen_cfg["device_id"],
+            "random_shuffle": False,
+            "device": gen_cfg["device"],
+            "name": "reader",
+            "pad_sequences": True
+        }
 
         # context (five-frame) model
         # predict pipe args
         context_pred_cfg = self.dali_config["context"]["predict"]
-        dict_args["predict"]["context"] = {"filenames": filenames, "resize_dims": self.resize_dims, 
-        "sequence_length": 5, "step": 1, "batch_size": context_pred_cfg["batch_size"], 
-        "num_threads": gen_cfg["num_threads"], 
-        "device_id": gen_cfg["device_id"], "random_shuffle": False, 
-        "device": gen_cfg["device"], "name": "reader", "seed": gen_cfg["seed"],
-        "pad_sequences": True, "pad_last_batch": True}
+        dict_args["predict"]["context"] = {
+            "filenames": filenames,
+            "resize_dims": self.resize_dims,
+            "sequence_length": 5,
+            "step": 1,
+            "batch_size": context_pred_cfg["batch_size"],
+            "num_threads": gen_cfg["num_threads"],
+            "device_id": gen_cfg["device_id"],
+            "random_shuffle": False,
+            "device": gen_cfg["device"],
+            "name": "reader",
+            "seed": gen_cfg["seed"],
+            "pad_sequences": True,
+            "pad_last_batch": True
+        }
 
         # train pipe args
         context_train_cfg = self.dali_config["context"]["train"]
         if self.context_sequences_successive:
             # note: reusing the batch size argument
-            dict_args["train"]["context"] = {"filenames": filenames, "resize_dims": self.resize_dims, 
-            "sequence_length": context_train_cfg["batch_size"], "step": context_train_cfg["batch_size"], "batch_size": 1, 
-            "seed": gen_cfg["seed"], "num_threads": gen_cfg["num_threads"], "device_id": gen_cfg["device_id"], 
-            "random_shuffle": True, "device": gen_cfg["device"]}
+            dict_args["train"]["context"] = {
+                "filenames": filenames,
+                "resize_dims": self.resize_dims,
+                "sequence_length": context_train_cfg["batch_size"],
+                "step": context_train_cfg["batch_size"],
+                "batch_size": 1,
+                "seed": gen_cfg["seed"],
+                "num_threads": gen_cfg["num_threads"],
+                "device_id": gen_cfg["device_id"],
+                "random_shuffle": True,
+                "device": gen_cfg["device"]
+            }
         else:
-            dict_args["train"]["context"] = {"filenames": filenames, "resize_dims": self.resize_dims, 
-            "sequence_length": 5, "step": 5, "batch_size": context_train_cfg["batch_size"], 
-            "num_threads": gen_cfg["num_threads"], 
-            "device_id": gen_cfg["device_id"], "random_shuffle": True, 
-            "device": gen_cfg["device"], "name": "reader", "seed": gen_cfg["seed"],
-            "pad_sequences": True, "pad_last_batch": False}
+            dict_args["train"]["context"] = {
+                "filenames": filenames,
+                "resize_dims": self.resize_dims,
+                "sequence_length": 5,
+                "step": 5,
+                "batch_size": context_train_cfg["batch_size"],
+                "num_threads": gen_cfg["num_threads"],
+                "device_id": gen_cfg["device_id"],
+                "random_shuffle": True,
+                "device": gen_cfg["device"],
+                "name": "reader",
+                "seed": gen_cfg["seed"],
+                "pad_sequences": True,
+                "pad_last_batch": False
+            }
             # our floor above should prevent us from getting to the very final batch.
         
         return dict_args
@@ -317,16 +396,49 @@ class PrepareDALI(object):
     def _setup_dali_iterator_args(self) -> dict:
         """ builds args for Lightning iterator"""
         dict_args = {}
-        dict_args["predict"] = {"context": None, "base": None}
-        dict_args["train"] = {"context": None, "base": None}
+        dict_args["predict"] = {"context": {}, "base": {}}
+        dict_args["train"] = {"context": {}, "base": {}}
 
         # base models (single-frame)
-        dict_args["train"]["base"] = {"num_iters": self.num_iters, "eval_mode": "train", "do_context": False, "output_map": ["x"], "last_batch_policy": LastBatchPolicy.PARTIAL, "auto_reset": True} # taken from datamodules.py. 
-        dict_args["predict"]["base"] = {"num_iters": self.num_iters, "eval_mode": "predict", "do_context": False, "output_map": ["x"], "last_batch_policy": LastBatchPolicy.FILL, "last_batch_padded": False, "auto_reset": False, "reader_name": "reader"}
+        dict_args["train"]["base"] = {
+            "num_iters": self.num_iters,
+            "eval_mode": "train",
+            "do_context": False,
+            "output_map": ["x"],
+            "last_batch_policy": LastBatchPolicy.PARTIAL,
+            "auto_reset": True
+        }
+        dict_args["predict"]["base"] = {
+            "num_iters": self.num_iters,
+            "eval_mode": "predict",
+            "do_context": False,
+            "output_map": ["x"],
+            "last_batch_policy": LastBatchPolicy.FILL,
+            "last_batch_padded": False,
+            "auto_reset": False,
+            "reader_name": "reader"
+        }
 
         # 5-frame context models
-        dict_args["train"]["context"] = {"num_iters": self.num_iters, "eval_mode": "train", "do_context": True, "context_sequences_successive": self.context_sequences_successive,  "output_map": ["x"], "last_batch_policy": LastBatchPolicy.PARTIAL, "auto_reset": True} # taken from datamodules.py. only difference is that we need to do context
-        dict_args["predict"]["context"] = {"num_iters": self.num_iters, "eval_mode": "predict", "do_context": True, "output_map": ["x"], "last_batch_policy": LastBatchPolicy.PARTIAL, "last_batch_padded": False, "auto_reset": False, "reader_name": "reader"}
+        dict_args["train"]["context"] = {
+            "num_iters": self.num_iters,
+            "eval_mode": "train",
+            "do_context": True,
+            "context_sequences_successive": self.context_sequences_successive,
+            "output_map": ["x"],
+            "last_batch_policy": LastBatchPolicy.PARTIAL,
+            "auto_reset": True
+        }  # taken from datamodules.py. only difference is that we need to do context
+        dict_args["predict"]["context"] = {
+            "num_iters": self.num_iters,
+            "eval_mode": "predict",
+            "do_context": True,
+            "output_map": ["x"],
+            "last_batch_policy": LastBatchPolicy.PARTIAL,
+            "last_batch_padded": False,
+            "auto_reset": False,
+            "reader_name": "reader"
+        }
 
         return dict_args
     
