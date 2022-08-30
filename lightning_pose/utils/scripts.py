@@ -1,10 +1,15 @@
 """Helper functions to build pipeline components from config dictionary."""
 
 import imgaug.augmenters as iaa
-from omegaconf import DictConfig, ListConfig, OmegaConf
+from moviepy.editor import VideoFileClip
+import numpy as np
+from omegaconf import DictConfig, OmegaConf
+import os
+import pytorch_lightning as pl
 from typeguard import typechecked
 from typing import Dict, Optional, Union
 
+from lightning_pose.data.dali import PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
 from lightning_pose.losses.factory import LossFactory
@@ -16,7 +21,10 @@ from lightning_pose.models.regression_tracker import (
     RegressionTracker,
     SemiSupervisedRegressionTracker,
 )
-from lightning_pose.utils.io import check_if_semi_supervised
+from lightning_pose.utils import get_gpu_list_from_cfg, pretty_print_str
+from lightning_pose.utils.io import check_if_semi_supervised, return_absolute_data_paths
+from lightning_pose.utils.predictions import load_model_from_checkpoint, create_labeled_video, \
+    PredictionHandler, predict_single_video
 
 
 @typechecked
@@ -355,6 +363,7 @@ def get_model(
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
+                do_context=cfg.model.do_context,
             )
         elif cfg.model.model_type == "heatmap":
             model = HeatmapTracker(
@@ -386,6 +395,7 @@ def get_model(
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
+                do_context=cfg.model.do_context,
             )
 
         elif cfg.model.model_type == "heatmap":
@@ -409,8 +419,49 @@ def get_model(
     return model
 
 
-def pretty_print_str(string: str, symbol: str = "-") -> None:
-    str_length = len(string)
-    print(symbol * str_length)
-    print(string)
-    print(symbol * str_length)
+@typechecked
+def export_predictions_and_labeled_video(
+    video_file: str,
+    cfg: DictConfig,
+    prediction_csv_file: str,
+    ckpt_file: str,
+    trainer: Optional[pl.Trainer] = None,
+    model: Optional[Union[
+        RegressionTracker,
+        HeatmapTracker,
+        SemiSupervisedRegressionTracker,
+        SemiSupervisedHeatmapTracker,
+    ]] = None,
+    data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
+    labeled_mp4_file: Optional[str] = None,
+) -> None:
+    """Export predictions csv and a labeled video for a single video file."""
+
+    # compute predictions
+    preds_df = predict_single_video(
+        video_file=video_file,
+        ckpt_file=ckpt_file,
+        cfg_file=cfg,
+        preds_file=prediction_csv_file,
+        trainer=trainer,
+        model=model,
+        data_module=data_module,
+    )
+
+    # create labeled video
+    if labeled_mp4_file is not None:
+        os.makedirs(os.path.dirname(labeled_mp4_file), exist_ok=True)
+        video_clip = VideoFileClip(video_file)
+        # transform df to numpy array
+        keypoints_arr = np.reshape(preds_df.to_numpy(), [preds_df.shape[0], -1, 3])
+        xs_arr = keypoints_arr[:, :, 0]
+        ys_arr = keypoints_arr[:, :, 1]
+        mask_array = keypoints_arr[:, :, 2] > cfg.eval.confidence_thresh_for_vid
+        # video generation
+        create_labeled_video(
+            clip=video_clip,
+            xs_arr=xs_arr,
+            ys_arr=ys_arr,
+            mask_array=mask_array,
+            filename=labeled_mp4_file,
+        )
