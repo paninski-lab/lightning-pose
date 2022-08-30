@@ -23,7 +23,6 @@ patch_typeguard()  # use before @typechecked
 class RegressionTracker(BaseSupervisedTracker):
     """Base model that produces (x, y) predictions of keypoints from images."""
 
-    @typechecked
     def __init__(
         self,
         num_keypoints: int,
@@ -78,9 +77,17 @@ class RegressionTracker(BaseSupervisedTracker):
         self.torch_seed = torch_seed
         self.do_context = do_context
         if self.mode == "2d":
-            self.representation_fc = torch.nn.Linear(5, 1, bias=False)
+            self.unnormalized_weights = nn.parameter.Parameter(
+                torch.Tensor([[0.2, 0.2, 0.2, 0.2, 0.2]]), requires_grad=False)
+            self.representation_fc = lambda x: x @ torch.transpose(
+                nn.functional.softmax(self.unnormalized_weights), 0, 1)
         elif self.mode == "3d":
-            self.representation_fc = torch.nn.Linear(8, 1, bias=False)
+            self.unnormalized_weights = nn.parameter.Parameter(
+                torch.Tensor([[0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125]]),
+                requires_grad=False
+            )
+            self.representation_fc = lambda x: x @ torch.transpose(
+                nn.functional.softmax(self.unnormalized_weights), 0, 1)
 
         # use this to log auxiliary information: rmse on labeled data
         self.rmse_loss = RegressionRMSELoss()
@@ -89,29 +96,32 @@ class RegressionTracker(BaseSupervisedTracker):
         self.save_hyperparameters(ignore="loss_factory")  # cannot be pickled
 
     @staticmethod
-    @typechecked
     def reshape_representation(
         representation: TensorType["batch", "features", "rep_height", "rep_width"]
     ) -> TensorType["batch", "features"]:
         return representation.reshape(representation.shape[0], representation.shape[1])
 
-    @typechecked
     def forward(
         self,
         images: Union[
             TensorType["batch", "channels":3, "image_height", "image_width"],
             TensorType["batch", "frames", "channels":3, "image_height", "image_width"]]
-    ) -> TensorType["batch", "two_x_num_keypoints"]:
+    ) -> TensorType["num_valid_outputs", "two_x_num_keypoints"]:
         """Forward pass through the network."""
+        # see input lines for shape of "images"
         representations = self.get_representations(images, self.do_context)
-        out = self.final_layer(self.reshape_representation(representations))
+        # "representations" is shape (batch, features, rep_height, rep_width)
+        reps_reshaped = self.reshape_representation(representations)
+        # reps_reshaped = self.representation_dropout(reps_reshaped)
+        # after reshaping, is shape (batch, features)
+        out = self.final_layer(reps_reshaped)
+        # "out" is shape (num_valid_outputs, 2 * num_keypoints) where `num_valid_outputs` is not
+        # necessarily the same as `batch` for context models (using unlabeled video data)
         return out
 
-    @typechecked
     def get_loss_inputs_labeled(self, batch_dict: BaseBatchDict) -> dict:
         """Return predicted coordinates for a batch of data."""
-        representation = self.get_representations(batch_dict["images"], self.do_context)
-        predicted_keypoints = self.final_layer(self.reshape_representation(representation))
+        predicted_keypoints = self.forward(batch_dict["images"])
         return {
             "keypoints_targ": batch_dict["keypoints"],
             "keypoints_pred": predicted_keypoints,
@@ -133,7 +143,7 @@ class RegressionTracker(BaseSupervisedTracker):
         else:
             # unlabeled dali video dataloaders
             images = batch
-        # images -> heatmaps
+        # images -> keypoints
         predicted_keypoints = self.forward(images)
         confidence = torch.zeros((predicted_keypoints.shape[0], predicted_keypoints.shape[1] // 2))
         return predicted_keypoints, confidence
@@ -159,6 +169,7 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
+        do_context: bool = False,
     ) -> None:
         """
 
@@ -177,6 +188,7 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
                 multisteplr
             lr_scheduler_params: params for specific learning rate schedulers
                 multisteplr: milestones, gamma
+            do_context: use temporal context frames to improve predictions
 
         """
         super().__init__(
@@ -189,6 +201,7 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
             torch_seed=torch_seed,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
+            do_context=do_context,
         )
         self.loss_factory_unsup = loss_factory_unsupervised
         loss_names = loss_factory_unsupervised.loss_instance_dict.keys()
@@ -200,14 +213,13 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         # self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
 
     @typechecked
-    def get_loss_inputs_unlabeled(self, batch: Union[TensorType[
-        "sequence_length", "RGB":3, "image_height", "image_width", float
-        ], TensorType[
-            "sequence_length", "context":5, "RGB":3, "image_height", "image_width", float
-    ]]) -> dict:
+    def get_loss_inputs_unlabeled(
+        self,
+        batch: Union[
+            TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
+            TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float]
+        ],
+    ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
-        representation = self.get_representations(batch)
-        predicted_keypoints = self.final_layer(
-            self.representation_dropout(self.reshape_representation(representation))
-        )  # TODO: consider removing representation dropout?
+        predicted_keypoints = self.forward(batch)
         return {"keypoints_pred": predicted_keypoints}

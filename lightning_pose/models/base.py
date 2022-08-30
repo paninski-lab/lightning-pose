@@ -185,7 +185,7 @@ class BaseFeatureExtractor(LightningModule):
             if do_context:
                 # images.shape = (sequence_length, RGB, image_height, image_width)
                 if len(images.shape) == 5:
-                    # non-consecutive sequences. can be used for supervised and unsupervised models.
+                    # non-consecutive sequences. can be used for supervised and unsupervised models
                     batch, frames, channels, image_height, image_width = images.shape
                     frames_batch_shape = batch * frames
                     images_batch_frames: TensorType[
@@ -206,14 +206,16 @@ class BaseFeatureExtractor(LightningModule):
                 elif len(images.shape) == 4:
                     # we have a single sequence of frames from DALI (not a batch of sequences)
                     # valid frame := a frame that has two frames before it and two frames after it
-                    # we push it as is through the backbone, and then use tiling to make it into (sequence_length, features, rep_height, rep_width, num_context_frames)
+                    # we push it as is through the backbone, and then use tiling to make it into
+                    # (sequence_length, features, rep_height, rep_width, num_context_frames)
                     # for now we discard the padded frames (first and last two)
                     # the output will be one representation per valid frame
                     sequence_length, channels, image_height, image_width = images.shape
                     representations: TensorType[
                         "sequence_length", "channels": 3, "rep_height", "rep_width"
                     ] = self.backbone(images)
-                    # we need to tile the representations to make it into (num_valid_frames, features, rep_height, rep_width, num_context_frames)
+                    # we need to tile the representations to make it into
+                    # (num_valid_frames, features, rep_height, rep_width, num_context_frames)
                     # TODO: context frames should be configurable
                     tiled_representations = get_context_from_seq(
                         img_seq=representations, context_length=5)
