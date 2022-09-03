@@ -1,5 +1,6 @@
 """Dataset/data module utilities."""
 
+import imgaug.augmenters as iaa
 from kornia import image_to_tensor
 import numpy as np
 import torch
@@ -22,10 +23,81 @@ class DataExtractor(object):
         data_module: pl.LightningDataModule,
         cond: Literal["train", "test", "val"] = "train",
         extract_images: bool = False,
+        remove_augmentations: bool = True,
     ) -> None:
-        self.data_module = data_module
         self.cond = cond
         self.extract_images = extract_images
+        self.remove_augmentations = remove_augmentations
+
+        if self.remove_augmentations:
+            imgaug_curr = data_module.dataset.imgaug_transform
+            if len(imgaug_curr) == 1 and isinstance(imgaug_curr[0], iaa.Resize):
+                # current augmentation just resizes; keep this
+                self.data_module = data_module
+            else:
+                from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
+                from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
+
+                # make new augmentation pipeline that just resizes
+                if not isinstance(imgaug_curr[-1], iaa.Resize):
+                    # we currently assume the last transform is resizing
+                    raise NotImplementedError
+                # keep the resizing aug
+                imgaug_new = iaa.Sequential([imgaug_curr[-1]])
+
+                # rebuild dataset with new aug pipeline
+                dataset_old = data_module.dataset
+                if isinstance(data_module.dataset, HeatmapDataset):
+                    dataset_new = HeatmapDataset(
+                        root_directory=dataset_old.root_directory,
+                        csv_path=dataset_old.csv_path,
+                        header_rows=dataset_old.header_rows,
+                        imgaug_transform=imgaug_new,
+                        downsample_factor=dataset_old.downsample_factor,
+                        do_context=dataset_old.do_context,
+                    )
+                elif isinstance(dataset_old, BaseTrackingDataset):
+                    dataset_new = BaseTrackingDataset(
+                        root_directory=dataset_old.root_directory,
+                        csv_path=dataset_old.csv_path,
+                        header_rows=dataset_old.header_rows,
+                        imgaug_transform=imgaug_new,
+                        do_context=dataset_old.do_context,
+                    )
+
+                # rebuild data_module with new dataset
+                if isinstance(data_module, UnlabeledDataModule):
+                    data_module_new = UnlabeledDataModule(
+                        dataset=dataset_new,
+                        video_paths_list=data_module.video_paths_list,
+                        train_batch_size=data_module.train_batch_size,
+                        val_batch_size=data_module.val_batch_size,
+                        test_batch_size=data_module.test_batch_size,
+                        num_workers=data_module.num_workers,
+                        train_probability=data_module.train_probability,
+                        val_probability=data_module.val_probability,
+                        train_frames=data_module.train_frames,
+                        dali_config=data_module.dali_config,
+                        torch_seed=data_module.torch_seed,
+                    )
+                elif isinstance(data_module, BaseDataModule):
+                    data_module_new = BaseDataModule(
+                        dataset=dataset_new,
+                        train_batch_size=data_module.train_batch_size,
+                        val_batch_size=data_module.val_batch_size,
+                        test_batch_size=data_module.test_batch_size,
+                        num_workers=data_module.num_workers,
+                        train_probability=data_module.train_probability,
+                        val_probability=data_module.val_probability,
+                        train_frames=data_module.train_frames,
+                        torch_seed=data_module.torch_seed,
+                    )
+                    # data_module_new.setup()
+
+                self.data_module = data_module_new
+
+        else:
+            self.data_module = data_module
 
     @property
     def dataset_length(self) -> int:
@@ -77,10 +149,7 @@ class DataExtractor(object):
             concat_images = None
         # assert that indeed the number of columns does not change after concatenation,
         # and that the number of rows is the dataset length.
-        assert concat_keypoints.shape == (
-            self.dataset_length,
-            keypoints_list[0].shape[1],
-        )
+        assert concat_keypoints.shape == (self.dataset_length, keypoints_list[0].shape[1])
         return concat_keypoints, concat_images
 
     @typechecked
@@ -329,9 +398,8 @@ def evaluate_heatmaps_at_location(
         k_offset = k + offset
         for offset_2 in offsets:
             l_offset = l + offset_2
-            vals = (
-                heatmaps_padded[i, j, k_offset, l_offset].squeeze(-1).squeeze(-1)
-            )  # get rid of singleton dims
+            # get rid of singleton dims
+            vals = heatmaps_padded[i, j, k_offset, l_offset].squeeze(-1).squeeze(-1)
             vals_all.append(vals)
     vals = torch.stack(vals_all, 0).sum(0)
     return vals

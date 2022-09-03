@@ -1,5 +1,6 @@
 """Dataset objects store images, labels, and functions for manipulation."""
 
+import imgaug.augmenters as iaa
 import numpy as np
 import os
 import pandas as pd
@@ -72,7 +73,10 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
         """
         self.root_directory = root_directory
+        self.csv_path = csv_path
+        self.header_rows = header_rows
         self.imgaug_transform = imgaug_transform
+        self.pytorch_transform_list = pytorch_transform_list
         self.do_context = do_context
 
         # load csv data
@@ -291,26 +295,21 @@ class HeatmapDataset(BaseTrackingDataset):
             exit()
 
         if no_nans:
+            # TODO: do we even want to keep this option around?
             # Checks for images with set of keypoints that include any nan, so
             # that they can be excluded from the data entirely, like DPK does
             self.fully_labeled_idxs = self.get_fully_labeled_idxs()
-            self.image_names = [
-                self.image_names[idx] for idx in self.fully_labeled_idxs
-            ]
-            self.keypoints = torch.index_select(
-                self.keypoints, 0, self.fully_labeled_idxs
-            )
+            self.image_names = [self.image_names[idx] for idx in self.fully_labeled_idxs]
+            self.keypoints = torch.index_select(self.keypoints, 0, self.fully_labeled_idxs)
             self.keypoints = torch.tensor(self.keypoints)
 
         self.downsample_factor = downsample_factor
-        # self.sigma = 5
         self.output_sigma = 1.25  # should be sigma/2 ^downsample factor
 
         # Compute heatmaps as preprocessing step
-        # check that max of heatmaps look good
         self.num_targets = torch.numel(self.keypoints[0])
         self.num_keypoints = self.num_targets // 2
-        self.label_heatmaps = None  # populated by `compute_heatmaps()`
+        self.label_heatmaps = None  # populated by `self.compute_heatmaps()`
         self.compute_heatmaps()
 
     @property
@@ -320,39 +319,54 @@ class HeatmapDataset(BaseTrackingDataset):
             self.width // 2**self.downsample_factor,
         )
 
+    def compute_heatmap(self, example_dict: BaseExampleDict):
+        """Compute 2D heatmaps from arbitrary (x, y) coordinates."""
+
+        if self.do_context:
+            image_height = example_dict["images"][0].shape[-2]
+            image_width = example_dict["images"][0].shape[-1]
+        else:
+            image_height = example_dict["images"].shape[-2]
+            image_width = example_dict["images"].shape[-1]
+
+        # reshape
+        keypoints = example_dict["keypoints"].reshape(self.num_keypoints, 2)
+
+        # introduce new nans where data augmentation has moved the keypoint out of the original
+        # frame
+        new_nans = torch.logical_or(
+            torch.lt(keypoints[:, 0], torch.tensor(0)),
+            torch.lt(keypoints[:, 1], torch.tensor(0)))
+        new_nans = torch.logical_or(
+            new_nans, torch.ge(keypoints[:, 0], torch.tensor(image_width)))
+        new_nans = torch.logical_or(
+            new_nans, torch.ge(keypoints[:, 1], torch.tensor(image_height)))
+        keypoints[new_nans, :] = torch.nan
+
+        y_heatmap = generate_heatmaps(
+            keypoints=keypoints.unsqueeze(0),  # add batch dim
+            height=image_height,
+            width=image_width,
+            output_shape=self.output_shape,
+            sigma=self.output_sigma,
+        )
+
+        return y_heatmap[0]
+
     def compute_heatmaps(self):
-        """Compute 2D heatmaps from (x, y) coordinates.
+        """Compute initial 2D heatmaps for all labeled data.
 
         original image dims e.g., (406, 396) ->
         resized image dims e.g., (384, 384) ->
         potentially downsampled heatmaps e.g., (96, 96)
 
         """
-
         label_heatmaps = torch.empty(
             size=(len(self.image_names), self.num_keypoints, *self.output_shape)
         )
         for idx in range(len(self.image_names)):
             example_dict: BaseExampleDict = super().__getitem__(idx)
-            # super().__getitem__ returns flat keypoints, reshape to
-            if self.do_context:
-                image_height = example_dict["images"][0].shape[-2]
-                image_width = example_dict["images"][0].shape[-1]
-            else:
-                image_height = example_dict["images"].shape[-2]
-                image_width = example_dict["images"].shape[-1]
-
-            y_heatmap = generate_heatmaps(
-                example_dict["keypoints"].reshape(
-                    1, self.num_keypoints, 2
-                ),  # add batch dim
-                image_height,
-                image_width,
-                output_shape=self.output_shape,
-                sigma=self.output_sigma,
-            )
-            assert y_heatmap.shape == (1, self.num_keypoints, *self.output_shape)
-            label_heatmaps[idx] = y_heatmap[0]
+            label_heatmaps[idx] = self.compute_heatmap(example_dict)
 
         self.label_heatmaps = label_heatmaps
 
@@ -365,7 +379,12 @@ class HeatmapDataset(BaseTrackingDataset):
 
         """
         example_dict: BaseExampleDict = super().__getitem__(idx)
-        example_dict["heatmaps"] = self.label_heatmaps[idx]
+        if len(self.imgaug_transform) == 1 and isinstance(self.imgaug_transform[0], iaa.Resize):
+            # we have a deterministic resizing augmentation; use precomputed heatmaps
+            example_dict["heatmaps"] = self.label_heatmaps[idx]
+        else:
+            # we have a random augmentation; need to recompute heatmaps
+            example_dict["heatmaps"] = self.compute_heatmap(example_dict)
         return example_dict
 
     def get_fully_labeled_idxs(self):  # TODO: make shorter
