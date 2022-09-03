@@ -16,12 +16,9 @@ def test_data_extractor(base_data_module_combined):
     from lightning_pose.data.utils import DataExtractor
 
     num_frames = (
-        len(base_data_module_combined.dataset)
-        * base_data_module_combined.train_probability
+        len(base_data_module_combined.dataset) * base_data_module_combined.train_probability
     )
-    keypoint_tensor, _ = DataExtractor(
-        data_module=base_data_module_combined, cond="train"
-    )()
+    keypoint_tensor, _ = DataExtractor(data_module=base_data_module_combined, cond="train")()
     assert keypoint_tensor.shape == (num_frames, 34)  # 72 = 0.8 * 90 images
 
     keypoint_tensor, images_tensor = DataExtractor(
@@ -273,6 +270,63 @@ def test_evaluate_heatmaps_at_location():
             # heatmap values should sum to 1 even when values are spread across the heatmap
             vals = evaluate_heatmaps_at_location(heatmaps=heatmaps, locs=locs)
             assert torch.all(vals == 1.0)
+
+    # more tests
+
+    batch = 1
+    num_keypoints = 1
+    heat_height = 32
+    heat_width = 32
+
+    # ----------------------------------
+    # make delta heatmap
+    # ----------------------------------
+    idx0 = 5
+    heatmaps = torch.zeros((batch, num_keypoints, heat_height, heat_width))
+    heatmaps[0, 0, idx0, idx0] = 1
+
+    # if we choose the correct location, do we get 1?
+    locs0 = torch.zeros((batch, num_keypoints, 2))
+    locs0[0, 0, 0] = idx0
+    locs0[0, 0, 1] = idx0
+    confs0 = evaluate_heatmaps_at_location(heatmaps, locs0)
+    assert confs0.shape == (batch, num_keypoints)
+    assert torch.allclose(confs0[0], torch.tensor(1.))
+
+    # if we choose almost the correct location, do we get 1?
+    idx1 = idx0 + 1
+    locs1 = torch.zeros((batch, num_keypoints, 2))
+    locs1[0, 0, 0] = idx1
+    locs1[0, 0, 1] = idx1
+    confs1 = evaluate_heatmaps_at_location(heatmaps, locs1)
+    assert torch.allclose(confs1[0], torch.tensor(1.))
+
+    # if we choose a completely wrong location, do we get 0?
+    idx2 = 25
+    locs2 = torch.zeros((batch, num_keypoints, 2))
+    locs2[0, 0, 0] = idx2
+    locs2[0, 0, 1] = idx2
+    confs2 = evaluate_heatmaps_at_location(heatmaps, locs2)
+    assert torch.allclose(confs2[0], torch.tensor(0.))
+
+    # ----------------------------------
+    # make a gaussain heatmap
+    # ----------------------------------
+    heatmaps_g = generate_heatmaps(
+        locs0, height=heat_height, width=heat_width, output_shape=(heat_height, heat_width))
+
+    # if we choose the correct location, do we get close to 1?
+    confs0_g = evaluate_heatmaps_at_location(heatmaps_g, locs0)
+    assert confs0_g[0] > 0
+    assert confs0_g[0] <= 1.0
+
+    # if we choose almost the correct location, do we get less than the correct location?
+    confs1_g = evaluate_heatmaps_at_location(heatmaps_g, locs1)
+    assert confs0_g[0] > confs1_g[0]
+
+    # if we choose a completely wrong location, do we get 0?
+    confs2_g = evaluate_heatmaps_at_location(heatmaps_g, locs2)
+    assert torch.allclose(confs2_g[0], torch.tensor(0.))
 
 
 # def test_heatmap_generation():

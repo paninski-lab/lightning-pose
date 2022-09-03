@@ -10,8 +10,7 @@ from typeguard import typechecked
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
 from lightning_pose.data.dali import PrepareDALI, LitDaliWrapper
-from lightning_pose.data.utils import \
-    split_sizes_from_probabilities, compute_num_train_frames
+from lightning_pose.data.utils import split_sizes_from_probabilities, compute_num_train_frames
 from lightning_pose.utils.io import check_video_paths
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
