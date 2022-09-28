@@ -1,5 +1,6 @@
 """Base class for backbone that acts as a feature extractor."""
 
+from email.policy import strict
 from pytorch_lightning.core.lightning import LightningModule
 import torch
 from torch import nn
@@ -12,6 +13,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypedDic
 from lightning_pose.data.dali import get_context_from_seq
 
 from lightning_pose.models.simclr_resnet import get_resnet
+from collections import OrderedDict
 
 patch_typeguard()  # use before @typechecked
 
@@ -34,26 +36,6 @@ def grab_layers_sequential(
 
     """
     layers = list(model.children())[: last_layer_ind + 1]
-    print(layers)
-    return nn.Sequential(*layers)
-
-
-@typechecked
-def grab_layers_sequential_custom(
-    model, last_layer_ind: Optional[int] = None
-) -> torch.nn.modules.container.Sequential:
-    """Package selected number of layers into a nn.Sequential object.
-
-    Args:
-        model: original resnet or efficientnet model
-        last_layer_ind: final layer to pass data through
-
-    Returns:
-        potentially reduced backbone model
-
-    """
-    layers = list(model.children())[: last_layer_ind + 2]
-    print(layers)
     return nn.Sequential(*layers)
 
 
@@ -113,7 +95,9 @@ class BaseFeatureExtractor(LightningModule):
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
             "resnet50_3d", "resnet50_contrastive", "resnet50_custom_c_256", "resnet50_custom_c_512", 
-            "resnet50_custom_c_nc", "efficientnet_b0", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
+            "resnet50_custom_c_nc", "resnet50_animal_apose", "resnet50_animal_ap10k", "efficientnet_b0", 
+            "resnet50_human_coco", "resnet50_human_coco_dark", "resnet50_human_jhmdb", "resnet50_human_res_rle",
+            "resnet50_human_top_res", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         lr_scheduler: str = "multisteplr",
@@ -144,6 +128,7 @@ class BaseFeatureExtractor(LightningModule):
         if "3d" in backbone:
             base = torch.hub.load(
                 "facebookresearch/pytorchvideo", "slow_r50", pretrained=True)
+
         elif backbone == "resnet50_contrastive":
             # load resnet50 pretrained using SimCLR on imagenet
             from pl_bolts.models.self_supervised import SimCLR
@@ -151,6 +136,7 @@ class BaseFeatureExtractor(LightningModule):
             weight_path = "https://pl-bolts-weights.s3.us-east-2.amazonaws.com/simclr/bolts_simclr_imagenet/simclr_imagenet.ckpt"
             simclr = SimCLR.load_from_checkpoint(weight_path, strict=False)
             base = simclr.encoder
+
         elif "resnet50_custom_c" in backbone:
             if "256" in backbone:
                 weight_path = "/home/av3016/simclr/torch_ckpts/model256.pth"
@@ -162,6 +148,43 @@ class BaseFeatureExtractor(LightningModule):
             base, _ = get_resnet()
             # print(base.state_dict())
             base.load_state_dict(torch.load(weight_path)['resnet'])
+
+        elif "resnet50_animal" in backbone:
+            base = getattr(tvmodels, "resnet50")(False)
+            backbone_type = '_'.join(backbone.split('_')[2:])
+            if backbone_type == 'apose':
+                anim_weights = 'https://download.openmmlab.com/mmpose/animal/resnet/res50_animalpose_256x256-e1f30bff_20210426.pth'
+            else:
+                anim_weights = 'https://download.openmmlab.com/mmpose/animal/resnet/res50_ap10k_256x256-35760eb8_20211029.pth'
+            # animal_weights = "/home/av3016/simclr/torch_ckpts/r50_%s.pth" % backbone_type
+            
+            state_dict = torch.load(anim_weights)["state_dict"]
+            new_state_dict = OrderedDict()
+            for key in state_dict:
+                if "backbone" in key:
+                    new_key = '.'.join(key.split('.')[1:])
+                    new_state_dict[new_key] = state_dict[key]
+            base.load_state_dict(new_state_dict, strict=False)
+
+        elif "resnet50_human" in backbone:
+            base = getattr(tvmodels, "resnet50")(False)
+            backbone_type = '_'.join(backbone.split('_')[2:])
+            # human_weights = "/home/av3016/simclr/torch_ckpts/%s.pth" % backbone_type
+            if backbone_type == 'jhmdb':
+                hum_weights = 'https://download.openmmlab.com/mmpose/top_down/resnet/res50_jhmdb_sub3_256x256-c4ec1a0b_20201122.pth'
+            elif backbone_type == 'res_rle':
+                hum_weights = 'https://download.openmmlab.com/mmpose/top_down/deeppose/deeppose_res50_mpii_256x256_rle-5f92a619_20220504.pth'
+            elif backbone_type == 'top_res':
+                hum_weights = 'https://download.openmmlab.com/mmpose/top_down/resnet/res50_mpii_256x256-418ffc88_20200812.pth'
+            
+            state_dict = torch.load(hum_weights)["state_dict"]
+            new_state_dict = OrderedDict()
+            for key in state_dict:
+                if "backbone" in key:
+                    new_key = '.'.join(key.split('.')[1:])
+                    new_state_dict[new_key] = state_dict[key]
+            base.load_state_dict(new_state_dict, strict=False)
+
         else:
             # load resnet or efficientnet models from torchvision.models
             base = getattr(tvmodels, backbone)(pretrained)
@@ -171,8 +194,8 @@ class BaseFeatureExtractor(LightningModule):
             self.backbone = grab_layers_sequential_3d(
                 model=base, last_layer_ind=last_resnet_layer_to_get)
         elif "custom" in backbone:
-            self.backbone = grab_layers_sequential_custom(
-                model=base, last_layer_ind=last_resnet_layer_to_get,
+            self.backbone = grab_layers_sequential(
+                model=base, last_layer_ind=last_resnet_layer_to_get+1,
             )
         else:
             self.backbone = grab_layers_sequential(
