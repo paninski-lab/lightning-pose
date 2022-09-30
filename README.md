@@ -69,7 +69,7 @@ NEEDS UPDATE
 
 For all of the scripts in our `scripts` folder, we rely on `hydra` to manage arguments in hierarchical config files. You have two options: edit the config file, or override it from the command line.
 
-* **Edit** a hydra config, that is, any of the files in `scripts/configs/config_folder/config_name.yaml`, and save it. Then run the script without arguments, e.g.,:
+* **Edit** the hydra config, that is, any of the parameters in `scripts/configs/config.yaml`, and save it. Then run the script without arguments, e.g.,:
 ```console
 foo@bar:~$ python scripts/train_hydra.py
 ```
@@ -81,7 +81,7 @@ foo@bar:~$ python scripts/train_hydra.py training.max_epochs=11
 If you happen to want to use a maximum of 11 epochs instead the default number (not recommended).
 
 ### Important configs
-* ``
+* TODO
 
 ## Training
 
@@ -127,7 +127,7 @@ In order to use this script more generally, you need to specify several paths:
 2. `eval.test_videos_directory`: path to a *folder* with new videos (not a single video)
 3. `eval.saved_vid_preds_dir`: optional path specifying where to save prediction csv files. If `null`, the predictions will be saved in `eval.test_videos_directory`.
 
-As above, you could directly edit `scripts/configs/eval/eval_params.yaml` and run
+As above, you could directly edit `scripts/configs/config.yaml` and run
 ```console
 foo@bar:~$ python scripts/predict_new_vids.py 
 ```

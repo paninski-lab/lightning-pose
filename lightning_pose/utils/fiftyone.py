@@ -9,7 +9,7 @@ from typeguard import typechecked
 
 from lightning_pose.utils.io import get_videos_in_dir
 from lightning_pose.utils.io import return_absolute_path, return_absolute_data_paths
-from lightning_pose.utils.scripts import pretty_print_str
+from lightning_pose.utils import pretty_print_str
 
 
 @typechecked
@@ -207,11 +207,10 @@ class FiftyOneKeypointBase:
                     points=[
                         [
                             data_dict[kp_name]["coords"][frame_idx, 0] / self.img_width,
-                            data_dict[kp_name]["coords"][frame_idx, 1]
-                            / self.img_height,
+                            data_dict[kp_name]["coords"][frame_idx, 1] / self.img_height,
                         ]
                     ],
-                    confidence=[data_dict[kp_name]["likelihood"][frame_idx]],
+                    confidence=data_dict[kp_name]["likelihood"][frame_idx],
                     label=kp_name,  # sometimes plotted aggresively
                 )
             )

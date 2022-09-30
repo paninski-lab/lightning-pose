@@ -47,7 +47,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
-        do_context: bool = True,
+        do_context: bool = False,
     ) -> None:
         """Initialize a DLC-like model with resnet backbone.
 
@@ -94,11 +94,18 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.torch_seed = torch_seed
         self.do_context = do_context
         if self.mode == "2d":
-#             self.representation_fc = torch.nn.Linear(5, 1, bias=False)
-            self.unnormalized_weights = nn.parameter.Parameter(torch.Tensor([[.2, .2, .2, .2, .2]]), requires_grad=False)
-            self.representation_fc = lambda x: x @ torch.transpose(nn.functional.softmax(self.unnormalized_weights), 0, 1)
+            # self.representation_fc = torch.nn.Linear(5, 1, bias=False)
+            self.unnormalized_weights = nn.parameter.Parameter(
+                torch.Tensor([[0.2, 0.2, 0.2, 0.2, 0.2]]), requires_grad=False)
+            self.representation_fc = lambda x: x @ torch.transpose(
+                nn.functional.softmax(self.unnormalized_weights), 0, 1)
         elif self.mode == "3d":
-            self.representation_fc = torch.nn.Linear(8, 1, bias=False)
+            self.unnormalized_weights = nn.parameter.Parameter(
+                torch.Tensor([[0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125]]),
+                requires_grad=False
+            )
+            self.representation_fc = lambda x: x @ torch.transpose(
+                nn.functional.softmax(self.unnormalized_weights), 0, 1)
 
         # use this to log auxiliary information: rmse on labeled data
         self.rmse_loss = RegressionRMSELoss()
@@ -169,8 +176,8 @@ class HeatmapTracker(BaseSupervisedTracker):
         # in their model, the pixel shuffle happens only for downsample_factor=2
         upsampling_layers = []
         upsampling_layers.append(nn.PixelShuffle(2))
-#         upsampling_layers.append(nn.BatchNorm2d(self.num_filters_for_upsampling // 4))
-#         upsampling_layers.append(nn.ReLU(inplace=True))
+        # upsampling_layers.append(nn.BatchNorm2d(self.num_filters_for_upsampling // 4))
+        # upsampling_layers.append(nn.ReLU(inplace=True))
         upsampling_layers.append(
             self.create_double_upsampling_layer(
                 in_channels=self.num_filters_for_upsampling // 4,
@@ -178,8 +185,8 @@ class HeatmapTracker(BaseSupervisedTracker):
             )
         )  # up to here results in downsample_factor=3
         if self.downsample_factor == 2:
-#             upsampling_layers.append(nn.BatchNorm2d(self.num_keypoints))
-#             upsampling_layers.append(nn.ReLU(inplace=True))
+            # upsampling_layers.append(nn.BatchNorm2d(self.num_keypoints))
+            # upsampling_layers.append(nn.ReLU(inplace=True))
             upsampling_layers.append(
                 self.create_double_upsampling_layer(
                     in_channels=self.num_keypoints,
@@ -219,10 +226,10 @@ class HeatmapTracker(BaseSupervisedTracker):
     ) -> TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Forward pass through the network."""
         # we get one representation for each desired output. 
-        # in the case of unsupervised sequences + context, we have outputs for all images but the first two and last two.
+        # in the case of unsupervised sequences + context, we have outputs for all images but the
+        # first two and last two.
         # this is all handled internally by get_representations()
         representations = self.get_representations(images, self.do_context)
-
         heatmaps = self.heatmaps_from_representations(representations)
         # softmax temp stays 1 here; to modify for model predictions, see constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
@@ -230,8 +237,7 @@ class HeatmapTracker(BaseSupervisedTracker):
     def get_loss_inputs_labeled(self, batch_dict: HeatmapBatchDict) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
-        predicted_heatmaps = self.forward(
-            batch_dict["images"])
+        predicted_heatmaps = self.forward(batch_dict["images"])
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
         return {
@@ -242,20 +248,26 @@ class HeatmapTracker(BaseSupervisedTracker):
             "confidences": confidence,
         }
     
-    def predict_step(self, batch: Union[dict, torch.Tensor], batch_idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def predict_step(
+        self,
+        batch: Union[dict, torch.Tensor],
+        batch_idx: int,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Predict heatmaps and keypoints for a batch of video frames.
         assuming a DALI video loader is passed in 
         trainer = Trainer(devices=8, accelerator="gpu")
         predictions = trainer.predict(model, data_loader) """
-        if isinstance(batch, dict): # labeled image dataloaders
+        if isinstance(batch, dict):
+            # labeled image dataloaders
             images = batch["images"]
-        else: # unlabeled dali video dataloaders
+        else:
+            # unlabeled dali video dataloaders
             images = batch
         # images -> heatmaps
         predicted_heatmaps = self.forward(images)
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
-        return (predicted_keypoints, confidence)
+        return predicted_keypoints, confidence
 
 
 @typechecked
@@ -280,7 +292,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
-        do_context: bool = True,
+        do_context: bool = False,
     ):
         """
 
@@ -302,6 +314,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
                 multisteplr
             lr_scheduler_params: params for specific learning rate schedulers
                 multisteplr: milestones, gamma
+            do_context: use temporal context frames to improve predictions
 
         """
         super().__init__(
@@ -325,11 +338,10 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
 
     def get_loss_inputs_unlabeled(
         self,
-        batch: Union[TensorType[
-            "sequence_length", "RGB":3, "image_height", "image_width", float
-        ], TensorType[
-            "sequence_length", "context":5, "RGB":3, "image_height", "image_width", float
-        ]],
+        batch: Union[
+            TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
+            TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float]
+        ],
     ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps

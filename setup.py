@@ -5,7 +5,6 @@ version = None
 
 install_requires = [
     "black",
-    "cv2",
     "fiftyone",
     "h5py",
     "hydra-core",
@@ -13,6 +12,7 @@ install_requires = [
     "kornia",
     "matplotlib",
     "moviepy",
+    "opencv-python",
     "pandas",
     "pillow",
     "pytest",

@@ -10,7 +10,7 @@ from lightning_pose.utils.fiftyone import (
 )
 import fiftyone as fo
 
-from lightning_pose.utils.scripts import pretty_print_str
+from lightning_pose.utils import pretty_print_str
 
 
 @hydra.main(config_path="configs", config_name="config")
