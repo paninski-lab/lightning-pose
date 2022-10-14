@@ -94,10 +94,9 @@ class BaseFeatureExtractor(LightningModule):
         self,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "resnet50_contrastive", "resnet50_custom_c_256", "resnet50_custom_c_512", 
-            "resnet50_custom_c_nc", "resnet50_animal_apose", "resnet50_animal_ap10k", "efficientnet_b0", 
-            "resnet50_human_coco", "resnet50_human_coco_dark", "resnet50_human_jhmdb", "resnet50_human_res_rle",
-            "resnet50_human_top_res", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
+            "resnet50_3d", "resnet50_contrastive", "resnet50_custom_c_256", "resnet50_custom_c_512", "resnet50_custom_fly",
+            "resnet50_custom_c_nc", "resnet50_animal_apose", "resnet50_animal_ap10k", "resnet50_human_jhmdb", 
+            "resnet50_human_res_rle", "resnet50_human_top_res"] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         lr_scheduler: str = "multisteplr",
@@ -137,16 +136,17 @@ class BaseFeatureExtractor(LightningModule):
             simclr = SimCLR.load_from_checkpoint(weight_path, strict=False)
             base = simclr.encoder
 
-        elif "resnet50_custom_c" in backbone:
+        elif "resnet50_custom" in backbone:
             if "256" in backbone:
                 weight_path = "/home/av3016/simclr/torch_ckpts/model256.pth"
             elif "512" in backbone:
                 weight_path = "/home/av3016/simclr/torch_ckpts/model512.pth"
+            elif "fly" in backbone:
+                weight_path = "/home/av3016/simclr/torch_ckpts/model_fly.pth"
             else: 
                 weight_path = "/home/av3016/simclr/torch_ckpts/model_nc.pth"
             # load resnet or efficientnet models from torchvision.models
             base, _ = get_resnet()
-            # print(base.state_dict())
             base.load_state_dict(torch.load(weight_path)['resnet'])
 
         elif "resnet50_animal" in backbone:
@@ -156,9 +156,8 @@ class BaseFeatureExtractor(LightningModule):
                 anim_weights = 'https://download.openmmlab.com/mmpose/animal/resnet/res50_animalpose_256x256-e1f30bff_20210426.pth'
             else:
                 anim_weights = 'https://download.openmmlab.com/mmpose/animal/resnet/res50_ap10k_256x256-35760eb8_20211029.pth'
-            # animal_weights = "/home/av3016/simclr/torch_ckpts/r50_%s.pth" % backbone_type
             
-            state_dict = torch.load(anim_weights)["state_dict"]
+            state_dict = torch.hub.load_state_dict_from_url(anim_weights)["state_dict"]
             new_state_dict = OrderedDict()
             for key in state_dict:
                 if "backbone" in key:
@@ -169,7 +168,6 @@ class BaseFeatureExtractor(LightningModule):
         elif "resnet50_human" in backbone:
             base = getattr(tvmodels, "resnet50")(False)
             backbone_type = '_'.join(backbone.split('_')[2:])
-            # human_weights = "/home/av3016/simclr/torch_ckpts/%s.pth" % backbone_type
             if backbone_type == 'jhmdb':
                 hum_weights = 'https://download.openmmlab.com/mmpose/top_down/resnet/res50_jhmdb_sub3_256x256-c4ec1a0b_20201122.pth'
             elif backbone_type == 'res_rle':
@@ -177,7 +175,7 @@ class BaseFeatureExtractor(LightningModule):
             elif backbone_type == 'top_res':
                 hum_weights = 'https://download.openmmlab.com/mmpose/top_down/resnet/res50_mpii_256x256-418ffc88_20200812.pth'
             
-            state_dict = torch.load(hum_weights)["state_dict"]
+            state_dict = torch.hub.load_state_dict_from_url(hum_weights)["state_dict"]
             new_state_dict = OrderedDict()
             for key in state_dict:
                 if "backbone" in key:
