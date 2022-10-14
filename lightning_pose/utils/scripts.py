@@ -260,6 +260,7 @@ def get_data_module(
             train_frames=cfg.training.train_frames,
             dali_config=cfg.dali,
             torch_seed=cfg.training.rng_seed_data_pt,
+            imgaug=cfg.training.get("imgaug", "default"),
         )
     return data_module
 

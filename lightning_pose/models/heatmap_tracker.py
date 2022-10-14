@@ -13,7 +13,7 @@ from typing_extensions import Literal
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau
 
-from lightning_pose.data.utils import evaluate_heatmaps_at_location
+from lightning_pose.data.utils import evaluate_heatmaps_at_location, undo_affine_transform
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.base import (
@@ -121,9 +121,7 @@ class HeatmapTracker(BaseSupervisedTracker):
 
     def run_subpixelmaxima(
         self,
-        heatmaps: TensorType[
-            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
-        ],
+        heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
     ) -> Tuple[
         TensorType["batch", "num_targets"],
         TensorType["batch", "num_keypoints"],
@@ -147,11 +145,8 @@ class HeatmapTracker(BaseSupervisedTracker):
         softmaxes = spatial_softmax2d(heatmaps, temperature=self.temperature)
         preds = spatial_expectation2d(softmaxes, normalized_coordinates=False)
 
-        # compute confidences as softmax value at prediction
+        # compute confidences as softmax value pooled around prediction
         confidences = evaluate_heatmaps_at_location(heatmaps=softmaxes, locs=preds)
-
-        # OLD BAD WAY
-        # confidences = torch.amax(softmaxes, dim=(2, 3))
 
         return preds.reshape(-1, self.num_targets), confidences
 
@@ -249,7 +244,7 @@ class HeatmapTracker(BaseSupervisedTracker):
     
     def predict_step(
         self,
-        batch,  #: Union[dict, torch.Tensor],
+        batch,  #: Union[dict, tuple],
         batch_idx: int,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Predict heatmaps and keypoints for a batch of video frames.
@@ -351,7 +346,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             # reshape to (seq_len, n_keypoints, 2)
             pred_kps = torch.reshape(predicted_keypoints, (predicted_keypoints.shape[0], -1, 2))
             # undo
-            pred_kps = undo_aug(pred_kps, transforms)
+            pred_kps = undo_affine_transform(pred_kps, transforms)
             # reshape to (seq_len, n_keypoints * 2)
             predicted_keypoints = torch.reshape(pred_kps, (pred_kps.shape[0], -1))
         return {
@@ -359,25 +354,3 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             "keypoints_pred": predicted_keypoints,
             "confidences": confidence,
         }
-
-
-def undo_aug(keypoints, transform):
-    # keypoints shape: (sequence_len, n_keypoints, 2)
-    # transform shape: (2, 3)
-    # create inverse matrix
-    mat = transform.detach().cpu().numpy()
-    mat_inv_ = np.linalg.inv(mat[:, :2])
-    mat_inv = np.hstack([mat_inv_, -mat_inv_ @ mat[:, -1, None]])
-    mat_inv_torch = torch.tensor(
-        mat_inv.T, requires_grad=True, dtype=torch.float, device=keypoints.device)
-    # add 1s to get keypoints in projective geometry coords
-    ones = torch.ones(
-        (keypoints.shape[0], keypoints.shape[1], 1),
-        dtype=keypoints.dtype,
-        device=keypoints.device,
-        requires_grad=False,
-    )
-    kps_aff = torch.concat([keypoints, ones], axis=2)
-    # apply inverse matrix
-    kps_noaug = torch.matmul(kps_aff, mat_inv_torch)
-    return kps_noaug
