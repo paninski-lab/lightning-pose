@@ -434,6 +434,7 @@ def export_predictions_and_labeled_video(
         SemiSupervisedHeatmapTracker,
     ]] = None,
     data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
+    gpu_id: Optional[int] = None,
     labeled_mp4_file: Optional[str] = None,
 ) -> None:
     """Export predictions csv and a labeled video for a single video file."""
@@ -444,6 +445,7 @@ def export_predictions_and_labeled_video(
         ckpt_file=ckpt_file,
         cfg_file=cfg,
         preds_file=prediction_csv_file,
+        gpu_id=gpu_id,
         trainer=trainer,
         model=model,
         data_module=data_module,

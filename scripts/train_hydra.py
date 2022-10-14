@@ -83,7 +83,7 @@ def train(cfg: DictConfig):
     transfer_unfreeze_callback = pl.callbacks.BackboneFinetuning(
         unfreeze_backbone_at_epoch=cfg.training.unfreezing_epoch,
         lambda_func=lambda epoch: 1.5,
-        backbone_initial_ratio_lr=   0.1,
+        backbone_initial_ratio_lr=0.1,
         should_align=True,
         train_bn=True,
     )
@@ -210,6 +210,7 @@ def train(cfg: DictConfig):
                 labeled_mp4_file=labeled_mp4_file,
                 trainer=trainer,
                 model=model,
+                gpu_id=cfg.training.gpu_id,
                 data_module=data_module_pred,
             )
 
