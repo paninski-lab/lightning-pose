@@ -11,10 +11,7 @@ import warnings
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import clean_any_nans, DataExtractor
-from lightning_pose.losses.helpers import (
-    EmpiricalEpsilon,
-    convert_dict_values_to_tensors,
-)
+from lightning_pose.losses.helpers import EmpiricalEpsilon, convert_dict_values_to_tensors
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -72,7 +69,8 @@ class KeypointPCA(object):
 
     def _get_data(self) -> None:
         self.data_arr, _ = DataExtractor(
-            data_module=self.data_module, cond="train", extract_images=False
+            data_module=self.data_module, cond="train", extract_images=False,
+            remove_augmentations=True,
         )()
 
     def _multiview_format(
@@ -206,10 +204,7 @@ class KeypointPCA(object):
         self.parameters = convert_dict_values_to_tensors(self.parameters, self.device)
 
         self.parameters["epsilon"] = EmpiricalEpsilon(
-            percentile=self.empirical_epsilon_percentile
-        )(
-            loss=self.compute_error()
-        )  # self.compute_reprojection_error()
+            percentile=self.empirical_epsilon_percentile)(loss=self.compute_error())
         # was loss=self._compute_reprojection_error() relying on the external func
 
     def reproject(

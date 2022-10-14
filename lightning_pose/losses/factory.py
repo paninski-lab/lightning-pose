@@ -39,18 +39,17 @@ class LossFactory(pl.LightningModule):
         loss_classes_dict = get_loss_classes()
         for loss, params in self.losses_params_dict.items():
             self.loss_instance_dict[loss] = loss_classes_dict[loss](
-                data_module=self.data_module, **params
-            )
+                data_module=self.data_module, **params)
 
     def _initialize_weight_parameter_dict(self):
         if self.learn_weights:
             loss_weights_dict = {}
-            for loss, loss_instance in self.losses_instance_dict.items():
+            for loss, loss_instance in self.loss_instance_dict.items():
                 loss_weights_dict[loss] = torch.nn.Parameter(
                     loss_instance.log_weight, requires_grad=True
                 )
                 # update the loss instance to have a Parameter instead of Tensor
-                # TODO: is it ok to do this before initing ParameterDict
+                # TODO: is it ok to do this before initing ParameterDict?
                 loss_instance.log_weight = loss_weights_dict[loss]
             self.loss_weights_parameter_dict = torch.nn.ParameterDict(loss_weights_dict)
         else:
@@ -94,7 +93,7 @@ class LossFactory(pl.LightningModule):
                 # \log(\sigma_i) for each weight i
                 # \log(\sigma_1 * \sigma_2 * ...) = \log(\sigma_1) + \log(\sigma_2) + ..
                 # 0.5 because log_weight is actually \log(\sigma^2) = 2 * \log(\sigma)
-                tot_loss += anneal_weight * 0.5 * self.loss_instance.log_weight
+                tot_loss += anneal_weight * 0.5 * loss_instance.log_weight
 
             # log weighted losses (unweighted losses auto-logged by loss instance)
             log_list += [
