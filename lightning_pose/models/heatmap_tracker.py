@@ -13,7 +13,6 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau
 
 from lightning_pose.data.utils import evaluate_heatmaps_at_location
-from lightning_pose.models.simclr_resnet import get_resnet
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.base import (
@@ -36,9 +35,8 @@ class HeatmapTracker(BaseSupervisedTracker):
         loss_factory: LossFactory,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "resnet50_contrastive", "resnet50_custom_c_256", "resnet50_custom_c_512", "resnet50_custom_fly",
-            "resnet50_custom_c_nc", "resnet50_animal_apose", "resnet50_animal_ap10k", "resnet50_human_jhmdb", 
-            "resnet50_human_res_rle", "resnet50_human_top_res"] = "resnet50",
+            "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k", 
+            "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"] = "resnet50",
         downsample_factor: Literal[2, 3] = 2,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
@@ -280,9 +278,8 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         loss_factory_unsupervised: LossFactory,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "resnet50_contrastive", "resnet50_custom_c_256", "resnet50_custom_c_512", "resnet50_custom_fly",
-            "resnet50_custom_c_nc", "resnet50_animal_apose", "resnet50_animal_ap10k", "resnet50_human_jhmdb", 
-            "resnet50_human_res_rle", "resnet50_human_top_res"] = "resnet50",
+            "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k", 
+            "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"] = "resnet50",
         downsample_factor: Literal[2, 3] = 2,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
