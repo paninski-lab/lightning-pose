@@ -96,7 +96,7 @@ class HeatmapTracker(BaseSupervisedTracker):
             self.unnormalized_weights = nn.parameter.Parameter(
                 torch.Tensor([[0.2, 0.2, 0.2, 0.2, 0.2]]), requires_grad=False)
             self.representation_fc = lambda x: x @ torch.transpose(
-                nn.functional.softmax(self.unnormalized_weights), 0, 1)
+                nn.functional.softmax(self.unnormalized_weights, dim=1), 0, 1)
         elif self.mode == "3d":
             self.unnormalized_weights = nn.parameter.Parameter(
                 torch.Tensor([[0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125]]),
