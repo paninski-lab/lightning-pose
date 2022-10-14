@@ -154,13 +154,26 @@ def train(cfg: DictConfig):
         raise FileNotFoundError(
             "Cannot find model checkpoint. Have you trained for too few epochs?"
         )
-    
+
+    # make unaugmented data_loader if necessary
+    if cfg.training.imgaug != "default":
+        cfg_pred = cfg.copy()
+        cfg_pred.training.imgaug = "default"
+        imgaug_transform_pred = get_imgaug_transform(cfg=cfg_pred)
+        dataset_pred = get_dataset(
+            cfg=cfg_pred, data_dir=data_dir, imgaug_transform=imgaug_transform_pred)
+        data_module_pred = get_data_module(
+            cfg=cfg_pred, dataset=dataset_pred, video_dir=video_dir)
+        data_module_pred.setup()
+    else:
+        data_module_pred = data_module
+
     # ----------------------------------------------------------------------------------
     # predict on all labeled frames (train/val/test)
     # ----------------------------------------------------------------------------------
     pretty_print_str("Predicting train/val/test images...")
     predict_dataset(
-        cfg=cfg, trainer=trainer, model=model, data_module=data_module, ckpt_file=best_ckpt,
+        cfg=cfg, trainer=trainer, model=model, data_module=data_module_pred, ckpt_file=best_ckpt,
         preds_file=os.path.join(hydra_output_directory, "predictions.csv"))
 
     # ----------------------------------------------------------------------------------
@@ -197,7 +210,7 @@ def train(cfg: DictConfig):
                 labeled_mp4_file=labeled_mp4_file,
                 trainer=trainer,
                 model=model,
-                data_module=data_module,
+                data_module=data_module_pred,
             )
 
 

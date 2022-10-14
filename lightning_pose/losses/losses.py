@@ -66,9 +66,7 @@ class Loss(pl.LightningModule):
         self.data_module = data_module
         # epsilon can either by a float or a list of floats
         self.epsilon = torch.tensor(epsilon, dtype=torch.float, device=self.device)
-        self.log_weight = torch.tensor(
-            log_weight, dtype=torch.float, device=self.device
-        )
+        self.log_weight = torch.tensor(log_weight, dtype=torch.float, device=self.device)
         self.loss_name = "base"
 
         self.reduce_methods_dict = {"mean": torch.mean, "sum": torch.sum}
@@ -297,6 +295,12 @@ class PCALoss(Loss):
             if mirrored_column_matches is None:
                 raise ValueError("must provide mirrored_column_matches in data config")
 
+        # TODO: solve issues with pca loss + data augmentation
+        # the current data_module contains datasets that are loaded using augmentations. the
+        # current solution is to pass the data module to KeypointPCA, which then passes it to
+        # DataExtractor; we will also pass a "no_augmentation" arg to DataExtractor which will
+        # rebuild the data module with only resizing augmentations, then extract the data.
+
         # initialize keypoint pca module
         # this module will fit pca on training data, and will define the error metric
         # and fuction to be used in model training.
@@ -375,9 +379,7 @@ class TemporalLoss(Loss):
         log_weight: float = 0.0,
         **kwargs,
     ) -> None:
-        super().__init__(
-            data_module=data_module, epsilon=epsilon, log_weight=log_weight
-        )
+        super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
         self.loss_name = "temporal"
 
     def rectify_epsilon(
@@ -553,9 +555,7 @@ class RegressionMSELoss(Loss):
         log_weight: float = 0.0,
         **kwargs,
     ) -> None:
-        super().__init__(
-            data_module=data_module, epsilon=epsilon, log_weight=log_weight
-        )
+        super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
         self.loss_name = "regression_mse"
 
     def remove_nans(
@@ -607,9 +607,7 @@ class RegressionRMSELoss(RegressionMSELoss):
         log_weight: float = 0.0,
         **kwargs,
     ) -> None:
-        super().__init__(
-            data_module=data_module, epsilon=epsilon, log_weight=log_weight
-        )
+        super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
         self.loss_name = "rmse"
 
     def compute_loss(

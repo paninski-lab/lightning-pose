@@ -34,6 +34,8 @@ from lightning_pose.models.regression_tracker import (
     SemiSupervisedRegressionTracker,
 )
 from lightning_pose.utils import pretty_print_str
+from lightning_pose.utils.io import return_absolute_data_paths
+
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -340,6 +342,7 @@ def predict_single_video(
     # ----------------------------------------------------------------------------------
     # base model: check we can build and run pipe and get a decent looking batch
     model_type = "context" if cfg.model.do_context else "base"
+    cfg.training.imgaug = "default"
 
     # initialize
     vid_pred_class = PrepareDALI(
@@ -363,10 +366,12 @@ def predict_single_video(
     # compute predictions
     # ----------------------------------------------------------------------------------
     if data_module is None:
-        data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
-        imgaug_transform = get_imgaug_transform(cfg=cfg)
-        dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
-        data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
+        # from lightning_pose.utils.scripts import get_imgaug_transform, get_dataset, get_data_module
+        # data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
+        # imgaug_transform = get_imgaug_transform(cfg=cfg)
+        # dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
+        # data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
+        raise NotImplementedError("need to rearrange functions in modules")
 
     # initialize prediction handler class
     pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=video_file)
