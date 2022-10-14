@@ -468,11 +468,11 @@ class SemiSupervisedTrackerMixin(object):
     @typechecked
     def evaluate_unlabeled(
         self,
-        batch: Union[TensorType[
-        "sequence_length", "RGB":3, "image_height", "image_width", float
-    ], TensorType[
-        "sequence_length", "context":5, "RGB":3, "image_height", "image_width", float
-    ]],
+        batch,  # Union[TensorType[
+    #     "sequence_length", "RGB":3, "image_height", "image_width", float
+    # ], TensorType[
+    #     "sequence_length", "context":5, "RGB":3, "image_height", "image_width", float
+    # ]],
         stage: Optional[Literal["train", "val", "test"]] = None,
         anneal_weight: Union[float, torch.Tensor] = 1.0,
     ) -> TensorType[(), float]:
@@ -498,7 +498,7 @@ class SemiSupervisedTrackerMixin(object):
     @typechecked
     def training_step(
         self,
-        train_batch: Union[SemiSupervisedBatchDict, SemiSupervisedHeatmapBatchDict],
+        train_batch,  # : Union[SemiSupervisedBatchDict, SemiSupervisedHeatmapBatchDict],
         batch_idx: int,
     ) -> Dict[str, TensorType[(), float]]:
         """Training step computes and logs both supervised and unsupervised losses."""

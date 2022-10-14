@@ -19,8 +19,7 @@ from typing import Dict, List, Literal, Optional, Tuple, Type, Union
 
 from lightning_pose.data.dali import (
     video_pipe,
-    LightningWrapper,
-    ContextLightningWrapper,
+    LitDaliWrapper,
     PrepareDALI,
 )
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
@@ -388,7 +387,7 @@ def predict_single_video(
 def _predict_frames(
     cfg: DictConfig,
     model: LightningModule,
-    dataloader: Union[torch.utils.data.DataLoader, LightningWrapper, ContextLightningWrapper],
+    dataloader: Union[torch.utils.data.DataLoader, LitDaliWrapper],
     n_frames_: int,
     batch_size: int,
     data_name: str = "dataset",
@@ -401,8 +400,7 @@ def _predict_frames(
     Args:
         cfg (DictConfig): hydra config.
         model (LightningModule): a loaded model ready to be evaluated.
-        dataloader (Union[torch.utils.data.DataLoader, LightningWrapper]): dataloader
-            ready to be iterated.
+        dataloader: dataloader ready to be iterated
         n_frames_ (int): total number of frames in the dataset or video
         batch_size (int): regular batch_size for images or sequence_length for videos
         data_name (str, optional): [description]. Defaults to "dataset".
