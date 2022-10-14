@@ -354,20 +354,6 @@ def generate_heatmaps(
     return confidence
 
 
-# @typechecked
-# def evaluate_heatmaps_at_location(
-#     heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
-#     locs: TensorType["batch", "num_keypoints", 2],
-# ) -> TensorType["batch", "num_keypoints"]:
-#     """Evaluate 4D heatmaps using a 3D location tensor (last dim is x, y coords)."""
-#     i = torch.arange(heatmaps.shape[0]).reshape(-1, 1, 1, 1)
-#     j = torch.arange(heatmaps.shape[1]).reshape(1, -1, 1, 1)
-#     k = locs[:, :, None, 1, None].type(torch.int64)  # y first
-#     l = locs[:, :, 0, None, None].type(torch.int64)  # x second
-#     vals = heatmaps[i, j, k, l].squeeze(-1).squeeze(-1)  # get rid of singleton dims
-#     return vals
-
-
 @typechecked
 def evaluate_heatmaps_at_location(
     heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
@@ -403,3 +389,45 @@ def evaluate_heatmaps_at_location(
             vals_all.append(vals)
     vals = torch.stack(vals_all, 0).sum(0)
     return vals
+
+
+@typechecked
+def undo_affine_transform(
+        keypoints: TensorType["seq_len", "n_keypoints", 2],
+        transform: Union[TensorType["seq_len", 2, 3], TensorType[2, 3]]
+) -> TensorType["seq_len", "n_keypoints", 2]:
+
+    # add 1s to get keypoints in projective geometry coords
+    ones = torch.ones(
+        (keypoints.shape[0], keypoints.shape[1], 1),
+        dtype=keypoints.dtype,
+        device=keypoints.device,
+        requires_grad=False,
+    )
+    kps_aff = torch.concat([keypoints, ones], axis=2)
+
+    mat = transform.detach().cpu().numpy()
+    if len(transform.shape) == 2:
+        # single transform for all frames; add batch dim
+        mat = mat[None, ...]
+
+    # create inverse matrices
+    mats_inv_torch = []
+    for idx in range(mat.shape[0]):
+        mat_inv_ = np.linalg.inv(mat[idx, :, :2])
+        mat_inv = np.hstack([mat_inv_, -mat_inv_ @ mat[idx, :, -1, None]])
+        mats_inv_torch.append(torch.tensor(
+            mat_inv.T, requires_grad=True, dtype=keypoints.dtype, device=keypoints.device))
+
+    # make a single block of inverse matrices
+    if len(mats_inv_torch) == 1:
+        # replicate this inverse matrix for each element of the batch
+        mat_inv_torch = torch.tile(mats_inv_torch[0].unsqueeze(0), dims=(keypoints.shape[0], 1, 1))
+    else:
+        # different transformation for each element of the batch
+        mat_inv_torch = torch.stack(mats_inv_torch, dim=0)
+
+    # apply inverse matrix to each element individually using batch matrix multiply
+    kps_noaug = torch.bmm(kps_aff, mat_inv_torch)
+
+    return kps_noaug

@@ -125,7 +125,8 @@ def test_base_data_module_combined(cfg, base_data_module_combined):
     assert list(batch["labeled"].keys()) == ["images", "keypoints", "idxs"]
     assert batch["labeled"]["images"].shape == (train_size, 3, im_height, im_width)
     assert batch["labeled"]["keypoints"].shape == (train_size, num_targets)
-    assert batch["unlabeled"].shape == (train_size, 3, im_height, im_width)
+    assert len(batch["unlabeled"]) == 2  # images, transforms
+    assert batch["unlabeled"][0].shape == (train_size, 3, im_height, im_width)
 
     # cleanup
     del loader
@@ -152,7 +153,8 @@ def test_heatmap_data_module_combined(cfg, heatmap_data_module_combined):
     assert batch["labeled"]["heatmaps"].shape == (
         train_size, num_targets // 2, im_height_ds, im_width_ds,
     )
-    assert batch["unlabeled"].shape == (train_size, 3, im_height, im_width)
+    assert len(batch["unlabeled"]) == 2  # images, transforms
+    assert batch["unlabeled"][0].shape == (train_size, 3, im_height, im_width)
 
     # cleanup
     del loader
