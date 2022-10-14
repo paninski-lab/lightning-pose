@@ -1,6 +1,5 @@
 """Base class for backbone that acts as a feature extractor."""
 
-from email.policy import strict
 from pytorch_lightning.core.lightning import LightningModule
 import torch
 from torch import nn
@@ -12,7 +11,6 @@ from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypedDict, Union
 from lightning_pose.data.dali import get_context_from_seq
 
-from lightning_pose.models.simclr_resnet import get_resnet
 from collections import OrderedDict
 
 patch_typeguard()  # use before @typechecked
@@ -94,9 +92,8 @@ class BaseFeatureExtractor(LightningModule):
         self,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "resnet50_contrastive", "resnet50_custom_c_256", "resnet50_custom_c_512", "resnet50_custom_fly",
-            "resnet50_custom_c_nc", "resnet50_animal_apose", "resnet50_animal_ap10k", "resnet50_human_jhmdb", 
-            "resnet50_human_res_rle", "resnet50_human_top_res"] = "resnet50",
+            "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k", 
+            "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         lr_scheduler: str = "multisteplr",
@@ -123,7 +120,7 @@ class BaseFeatureExtractor(LightningModule):
         self.backbone_arch = backbone
         self.mode = "3d" if "3d" in backbone else "2d"
 
-        # load backbone weightsmodel = SimCLR(num_samples=dm.num_samples, batch_size=dm.batch_size, dataset='cifar10')
+        # load backbone weights
         if "3d" in backbone:
             base = torch.hub.load(
                 "facebookresearch/pytorchvideo", "slow_r50", pretrained=True)
@@ -135,19 +132,6 @@ class BaseFeatureExtractor(LightningModule):
             weight_path = "https://pl-bolts-weights.s3.us-east-2.amazonaws.com/simclr/bolts_simclr_imagenet/simclr_imagenet.ckpt"
             simclr = SimCLR.load_from_checkpoint(weight_path, strict=False)
             base = simclr.encoder
-
-        elif "resnet50_custom" in backbone:
-            if "256" in backbone:
-                weight_path = "/home/av3016/simclr/torch_ckpts/model256.pth"
-            elif "512" in backbone:
-                weight_path = "/home/av3016/simclr/torch_ckpts/model512.pth"
-            elif "fly" in backbone:
-                weight_path = "/home/av3016/simclr/torch_ckpts/model_fly.pth"
-            else: 
-                weight_path = "/home/av3016/simclr/torch_ckpts/model_nc.pth"
-            # load resnet or efficientnet models from torchvision.models
-            base, _ = get_resnet()
-            base.load_state_dict(torch.load(weight_path)['resnet'])
 
         elif "resnet50_animal" in backbone:
             base = getattr(tvmodels, "resnet50")(False)
