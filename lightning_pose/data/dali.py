@@ -88,18 +88,24 @@ def video_pipe(
     if resize_dims:
         video = fn.resize(video, size=resize_dims)
     if data_aug:
-        # rotate
         size = (resize_dims[0] / 2, resize_dims[1] / 2)
         center = size  # / 2
+        # rotate + scale
         angle = fn.random.uniform(range=(-10, 10))
         matrix = fn.transforms.rotation(angle=angle, center=center)
+        scale = fn.random.uniform(range=(0.8, 1.2), shape=2)
+        matrix = fn.transforms.scale(matrix, scale=scale, center=center)
         video = fn.warp_affine(video, matrix=matrix, fill_value=0, inverse_map=False)
         # brightness contrast:
         contrast = fn.random.uniform(range=(0.75, 1.25))
-        video = fn.brightness_contrast(video, brightness=1.0, contrast=contrast)
+        brightness = fn.random.uniform(range=(0.75, 1.25))
+        video = fn.brightness_contrast(video, brightness=brightness, contrast=contrast)
         # shot noise
         factor = fn.random.uniform(range=(0.0, 10.0))
         video = fn.noise.shot(video, factor=factor)
+        # jpeg compression
+        quality = fn.random.uniform(range=(50, 100), dtype=dali_types.INT32)
+        video = fn.jpeg_compression_distortion(video, quality=quality)
     else:
         matrix = -1
     # video pixel range is [0, 255]; transform it to [0, 1].
@@ -164,24 +170,21 @@ class LitDaliWrapper(DALIGenericIterator):
             transform = out[0]["transform"][0].clone().detach().type(torch.float).requires_grad_(True)
             return images, transform
         else:
-            raise NotImplementedError("need to take into account data aug")
-            # if self.eval_mode == "predict":
-            #     return out[0]["x"]
-            # else:
-            #     # train with context. pipeline is like for "base" model. but we reshape images.
-            #     # assume batch_size=1
-            #     if self.context_sequences_successive:
-            #         # same as for base model
-            #         raw_out = torch.tensor(
-            #             out[0]["x"][0, :, :, :, :],  # should be (sequence_length, 3, H, W)
-            #             dtype=torch.float
-            #         )
-            #         return raw_out
-            #         # used to be reshaped to (5, 3, H, W):
-            #         # return get_context_from_seq(img_seq=raw_out, context_length=5)
-            #
-            #     else: # grabbing independent 5-frame sequences
-            #         return out[0]["x"]
+            if self.eval_mode == "predict":
+                return out[0]["x"], out[0]["transform"]
+            else:
+                # train with context. pipeline is like for "base" model. but we reshape images.
+                # assume batch_size=1
+                if self.context_sequences_successive:
+                    # same as for base model
+                    # should be (sequence_length, 3, H, W)
+                    raw_out = out[0]["x"][0, :, :, :, :].clone().detach().type(torch.float).requires_grad_(True)
+                    return raw_out
+                    # used to be reshaped to (5, 3, H, W):
+                    # return get_context_from_seq(img_seq=raw_out, context_length=5)
+
+                else: # grabbing independent 5-frame sequences
+                    return out[0]["x"]
 
     def __next__(self):
         out = super().__next__()
@@ -232,7 +235,6 @@ class PrepareDALI(object):
         model_type: Literal["base", "context"],
         filenames: List[str],
         resize_dims: List[int],
-        context_sequences_successive: bool = False,
         dali_config: Union[dict, DictConfig] = None
     ):
         self.train_stage = train_stage
