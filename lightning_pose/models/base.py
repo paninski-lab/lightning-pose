@@ -175,10 +175,6 @@ class BaseFeatureExtractor(LightningModule):
         if "3d" in backbone:
             self.backbone = grab_layers_sequential_3d(
                 model=base, last_layer_ind=last_resnet_layer_to_get)
-        elif "custom" in backbone:
-            self.backbone = grab_layers_sequential(
-                model=base, last_layer_ind=last_resnet_layer_to_get+1,
-            )
         else:
             self.backbone = grab_layers_sequential(
                 model=base, last_layer_ind=last_resnet_layer_to_get,
