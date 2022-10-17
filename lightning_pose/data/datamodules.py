@@ -171,6 +171,7 @@ class UnlabeledDataModule(BaseDataModule):
         test_probability: Optional[float] = None,
         train_frames: Optional[float] = None,
         torch_seed: int = 42,
+        imgaug: Literal["default", "dlc", "dlc-light"] = "default",
     ) -> None:
         """Data module that contains labeled and unlabeled data loaders.
 
@@ -192,6 +193,7 @@ class UnlabeledDataModule(BaseDataModule):
                 train frames
             torch_seed: control data splits
             torch_seed: control randomness of labeled data loading
+            imgaug: type of image augmentation to apply to unlabeled frames
 
         """
         super().__init__(
@@ -213,20 +215,20 @@ class UnlabeledDataModule(BaseDataModule):
         self.num_workers_for_labeled = num_workers // 2
         self.dali_config = dali_config
         self.unlabeled_dataloader = None  # initialized in setup_unlabeled
+        self.imgaug = imgaug
         super().setup()
         self.setup_unlabeled()
 
     def setup_unlabeled(self):
         """Sets up the unlabeled data loader."""
-        # dali prep
-        # TODO: currently not controlling context_frames_successive. internally it is
-        # set to False.
         dali_prep = PrepareDALI(
             train_stage="train",
             model_type="context" if self.dataset.do_context else "base",
             filenames=self.filenames,
             resize_dims=[self.dataset.height, self.dataset.width],
-            dali_config=self.dali_config)
+            dali_config=self.dali_config,
+            imgaug=self.imgaug,
+        )
 
         self.unlabeled_dataloader = dali_prep()
 
