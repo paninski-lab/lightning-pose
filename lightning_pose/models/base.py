@@ -484,8 +484,7 @@ class SemiSupervisedTrackerMixin(object):
         anneal_weight: Union[float, torch.Tensor] = 1.0,
     ) -> TensorType[(), float]:
         """Compute and log the losses on a batch of unlabeled data (frames only)."""
-        print(batch[0].shape)
-        print(batch[1].shape)
+
         # forward pass: collect predicted heatmaps and keypoints
         data_dict = self.get_loss_inputs_unlabeled(batch=batch)
 
