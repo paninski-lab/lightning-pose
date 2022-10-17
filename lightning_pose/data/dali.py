@@ -1,18 +1,16 @@
 """Data pipelines based on efficient video reading by nvidia dali package."""
 
-import cv2
 from nvidia.dali import pipeline_def
 import nvidia.dali.fn as fn
-from nvidia.dali.pipeline import Pipeline
 from nvidia.dali.plugin.pytorch import LastBatchPolicy
 from nvidia.dali.plugin.pytorch import DALIGenericIterator
 import nvidia.dali.types as types
 from omegaconf import DictConfig
 import torch
+from torchtyping import patch_typeguard, TensorType
 import numpy as np
 from typeguard import typechecked
-from typing import List, Dict, Optional, Union, Literal
-from torchtyping import TensorType, patch_typeguard
+from typing import List, Dict, Optional, Union, Literal, Tuple
 
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
@@ -39,11 +37,12 @@ def video_pipe(
     name: str = "reader",
     step: int = 1,
     pad_last_batch: bool = False,
+    imgaug: str = "default",
     # arguments consumed by decorator:
     # batch_size,
     # num_threads,
     # device_id
-) -> Pipeline:
+) -> tuple:
     """Generic video reader pipeline that loads videos, resizes, and normalizes.
 
     Args:
@@ -64,9 +63,11 @@ def video_pipe(
         name: pipeline name, used to string together DataNode elements
         step: number of frames to advance on each read
         pad_last_batch
+        imgaug
 
     Returns:
         pipeline object to be fed to DALIGenericIterator
+        data augmentation matrix (returned so that geometric transforms can be undone)
 
     """
     video = fn.readers.video(
@@ -82,10 +83,32 @@ def video_pipe(
         name=name,
         dtype=types.DALIDataType.FLOAT,
         pad_last_batch=pad_last_batch,  # Important for context loaders
-
     )
     if resize_dims:
         video = fn.resize(video, size=resize_dims)
+    if imgaug == "dlc" or imgaug == "dlc-light":
+        size = (resize_dims[0] / 2, resize_dims[1] / 2)
+        center = size  # / 2
+        # rotate + scale
+        angle = fn.random.uniform(range=(-10, 10))
+        matrix = fn.transforms.rotation(angle=angle, center=center)
+        scale = fn.random.uniform(range=(0.8, 1.2), shape=2)
+        matrix = fn.transforms.scale(matrix, scale=scale, center=center)
+        video = fn.warp_affine(video, matrix=matrix, fill_value=0, inverse_map=False)
+        # brightness contrast:
+        contrast = fn.random.uniform(range=(0.75, 1.25))
+        brightness = fn.random.uniform(range=(0.75, 1.25))
+        video = fn.brightness_contrast(video, brightness=brightness, contrast=contrast)
+        # # shot noise
+        factor = fn.random.uniform(range=(0.0, 10.0))
+        video = fn.noise.shot(video, factor=factor)
+        # jpeg compression
+        # quality = fn.random.uniform(range=(50, 100), dtype=types.INT32)
+        # video = fn.jpeg_compression_distortion(video, quality=quality)
+    else:
+        # choose arbitrary scalar (rather than a matrix) so that downstream operations know there
+        # is no geometric transforms to undo
+        matrix = -1
     # video pixel range is [0, 255]; transform it to [0, 1].
     # happens naturally in the torchvision transform to tensor.
     video = video / 255.0
@@ -96,52 +119,8 @@ def video_pipe(
         mean=normalization_mean,
         std=normalization_std,
     )
-    return transform
+    return transform, matrix
 
-
-class LightningWrapper(DALIGenericIterator):
-    """wrapper around a DALI pipeline to get batches for ptl."""
-
-    def __init__(self, *kargs, **kwargs):
-
-        # TODO: change name to "num_iters"
-        # collect number of batches computed outside of class
-        self.num_batches = kwargs.pop("num_batches", 1)
-
-        # call parent
-        super().__init__(*kargs, **kwargs)
-
-    def __len__(self):
-        return self.num_batches
-
-    def __next__(self):
-        out = super().__next__()
-        return torch.tensor(
-            out[0]["x"][0, :, :, :, :],  # should be (sequence_length, 3, H, W)
-            dtype=torch.float,
-        )  # careful: only valid for one sequence, i.e., batch size of 1.
-
-
-# TODO: see if can be easily merged.
-class ContextLightningWrapper(DALIGenericIterator):
-    """wrapper around a DALI pipeline to get batches for ptl."""
-
-    def __init__(self, *kargs, **kwargs):
-
-        # collect number of batches computed outside of class
-        self.num_batches = kwargs.pop("num_batches", 1)
-
-        # call parent
-        super().__init__(*kargs, **kwargs)
-
-    def __len__(self):
-        # TODO: careful here, this needs to be something different now
-        return self.num_batches
-
-    def __next__(self):
-        out = super().__next__()
-        return out[0]["x"]
-    
 
 @typechecked
 class LitDaliWrapper(DALIGenericIterator):
@@ -168,7 +147,7 @@ class LitDaliWrapper(DALIGenericIterator):
         self.do_context = do_context
         self.eval_mode = eval_mode
         self.context_sequences_successive = context_sequences_successive
-        self.batch_sampler = 1 # hack to get around DALI-ptl issue
+        self.batch_sampler = 1  # hack to get around DALI-ptl issue
         # call parent
         super().__init__(*args, **kwargs)
 
@@ -176,62 +155,53 @@ class LitDaliWrapper(DALIGenericIterator):
         return self.num_iters
     
     def _modify_output(
-            self, out
-        ) -> Union[
-                TensorType["sequence_length", 3, "image_height", "image_width"],
-                TensorType["batch", 5, 3, "image_height", "image_width"]
-            ]:
+        self, out
+    ) -> Tuple[
+            Union[
+                TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
+                TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float],
+            ],
+            Union[
+                TensorType["seq_len", 2, 3],
+                TensorType[2, 3],
+                TensorType["seq_len", 1],
+                TensorType[1],
+            ],
+    ]:
         """ modify output to be torch tensor. 
         looks different for context and non-context."""
-        if not self.do_context:
-            return torch.tensor(
-                out[0]["x"][0, :, :, :, :],  # should be (sequence_length, 3, H, W)
-                dtype=torch.float,
-            )  # careful: only valid for one sequence, i.e., batch size of 1.
-        else:
+        if self.do_context:
             if self.eval_mode == "predict":
-                return out[0]["x"]
+                # shape (sequence_length, 3, H, W)
+                images = out[0]["x"]
+                # shape (1,)
+                transform = out[0]["transform"]
             else:
-                # train with context. pipeline is like for "base" model. but we reshape images.
-                # assume batch_size=1
+                # train with context. pipeline is like for "base" model, but we reshape images
+                # further down. assume batch_size=1
                 if self.context_sequences_successive:
-                    # same as for base model
-                    raw_out = torch.tensor(
-                        out[0]["x"][0, :, :, :, :],  # should be (sequence_length, 3, H, W)
-                        dtype=torch.float
-                    )
-                    return raw_out 
-                    # used to be reshaped to (5, 3, H, W):
-                    # return get_context_from_seq(img_seq=raw_out, context_length=5)
-                    
-                else: # grabbing independent 5-frame sequences
-                    return out[0]["x"]
+                    # shape (sequence_length, 3, H, W)
+                    images = out[0]["x"][0, :, :, :, :]  # .clone().detach().type(torch.float)
+                    # shape (1,) or (2, 3)
+                    transform = out[0]["transform"][0]
+                else:
+                    # grabbing independent 5-frame sequences. batch_size > 1
+                    # shape (batch_size, sequence_length, 3, H, W)
+                    images = out[0]["x"]
+                    # shape (batch_size, 1) or (batch_size, 2, 3)
+                    transform = out[0]["transform"]
+        else:
+            # shape (sequence_length, 3, H, W)
+            # careful: only valid for one sequence, i.e., batch size of 1.
+            images = out[0]["x"][0, :, :, :, :]  # .clone().detach().type(torch.float)
+            # shape (1,) or (2, 3)
+            transform = out[0]["transform"][0]
+
+        return images, transform
 
     def __next__(self):
         out = super().__next__()
         return self._modify_output(out)
-
-
-def get_context_from_seq(
-    img_seq: TensorType["sequence_length", 3, "image_height", "image_width"],
-    context_length: int,
-) -> TensorType["sequence_length", "context_length", "rgb": 3, "image_height", "image_width"]:
-    # pass
-    # our goal is to extract 5-frame sequences from this sequence
-    img_shape = img_seq.shape[1:]  # e.g., (3, H, W)
-    seq_len = img_seq.shape[0]  # how many images in batch
-    train_seq = torch.zeros((seq_len, context_length, *img_shape), device=img_seq.device)
-    # define pads: start pad repeats the zeroth image twice. end pad repeats the last image twice.
-    # this is to give padding for the first and last frames of the sequence
-    pad_start = torch.tile(img_seq[0].unsqueeze(0), (2, 1, 1, 1))
-    pad_end = torch.tile(img_seq[-1].unsqueeze(0), (2, 1, 1, 1))
-    # pad the sequence
-    padded_seq = torch.cat((pad_start, img_seq, pad_end), dim=0)
-    # padded_seq = torch.cat((two_pad, img_seq, two_pad), dim=0)
-    for i in range(seq_len):
-        # extract 5-frame sequences from the padded sequence
-        train_seq[i] = padded_seq[i : i + context_length]
-    return train_seq
 
 
 class PrepareDALI(object):
@@ -256,8 +226,8 @@ class PrepareDALI(object):
         model_type: Literal["base", "context"],
         filenames: List[str],
         resize_dims: List[int],
-        context_sequences_successive: bool = False,
-        dali_config: Union[dict, DictConfig] = None
+        dali_config: Union[dict, DictConfig] = None,
+        imgaug: Optional[str] = "default",
     ):
         self.train_stage = train_stage
         self.model_type = model_type
@@ -267,7 +237,7 @@ class PrepareDALI(object):
         self.frame_count = count_frames(self.filenames)
         self.context_sequences_successive = \
             self.dali_config["context"]["train"]["consecutive_sequences"]
-        self._pipe_dict: dict = self._setup_pipe_dict(self.filenames)
+        self._pipe_dict: dict = self._setup_pipe_dict(self.filenames, imgaug)
 
     @property
     def num_iters(self) -> int:
@@ -289,13 +259,13 @@ class PrepareDALI(object):
             else:
                 raise NotImplementedError
     
-    def _setup_pipe_dict(self, filenames: List[str]) -> Dict[str, dict]:
+    def _setup_pipe_dict(self, filenames: List[str], imgaug: str) -> Dict[str, dict]:
         """all of the pipe() args in one place"""
         dict_args = {}
         dict_args["predict"] = {"context": {}, "base": {}}
         dict_args["train"] = {"context": {}, "base": {}}
         gen_cfg = self.dali_config["general"]
-        
+
         # base (vanilla single-frame model), 
         # train pipe args
         base_train_cfg = self.dali_config["base"]["train"]
@@ -310,6 +280,7 @@ class PrepareDALI(object):
             "device_id": gen_cfg["device_id"],
             "random_shuffle": True,
             "device": gen_cfg["device"],
+            "imgaug": imgaug,
         }
 
         # base (vanilla model), predict pipe args 
@@ -326,7 +297,8 @@ class PrepareDALI(object):
             "random_shuffle": False,
             "device": gen_cfg["device"],
             "name": "reader",
-            "pad_sequences": True
+            "pad_sequences": True,
+            "imgaug": "default",
         }
 
         # context (five-frame) model
@@ -345,7 +317,8 @@ class PrepareDALI(object):
             "name": "reader",
             "seed": gen_cfg["seed"],
             "pad_sequences": True,
-            "pad_last_batch": True
+            "pad_last_batch": True,
+            "imgaug": "default",
         }
 
         # train pipe args
@@ -362,7 +335,8 @@ class PrepareDALI(object):
                 "num_threads": gen_cfg["num_threads"],
                 "device_id": gen_cfg["device_id"],
                 "random_shuffle": True,
-                "device": gen_cfg["device"]
+                "device": gen_cfg["device"],
+                "imgaug": imgaug,
             }
         else:
             dict_args["train"]["context"] = {
@@ -378,7 +352,8 @@ class PrepareDALI(object):
                 "name": "reader",
                 "seed": gen_cfg["seed"],
                 "pad_sequences": True,
-                "pad_last_batch": False
+                "pad_last_batch": False,
+                "imgaug": imgaug,
             }
             # our floor above should prevent us from getting to the very final batch.
         
@@ -404,7 +379,7 @@ class PrepareDALI(object):
             "num_iters": self.num_iters,
             "eval_mode": "train",
             "do_context": False,
-            "output_map": ["x"],
+            "output_map": ["x", "transform"],
             "last_batch_policy": LastBatchPolicy.PARTIAL,
             "auto_reset": True
         }
@@ -412,7 +387,7 @@ class PrepareDALI(object):
             "num_iters": self.num_iters,
             "eval_mode": "predict",
             "do_context": False,
-            "output_map": ["x"],
+            "output_map": ["x", "transform"],
             "last_batch_policy": LastBatchPolicy.FILL,
             "last_batch_padded": False,
             "auto_reset": False,
@@ -425,7 +400,7 @@ class PrepareDALI(object):
             "eval_mode": "train",
             "do_context": True,
             "context_sequences_successive": self.context_sequences_successive,
-            "output_map": ["x"],
+            "output_map": ["x", "transform"],
             "last_batch_policy": LastBatchPolicy.PARTIAL,
             "auto_reset": True
         }  # taken from datamodules.py. only difference is that we need to do context
@@ -433,7 +408,7 @@ class PrepareDALI(object):
             "num_iters": self.num_iters,
             "eval_mode": "predict",
             "do_context": True,
-            "output_map": ["x"],
+            "output_map": ["x", "transform"],
             "last_batch_policy": LastBatchPolicy.PARTIAL,
             "last_batch_padded": False,
             "auto_reset": False,

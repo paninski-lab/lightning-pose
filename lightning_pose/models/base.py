@@ -9,7 +9,6 @@ from torchtyping import TensorType, patch_typeguard
 import torchvision.models as tvmodels
 from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypedDict, Union
-from lightning_pose.data.dali import get_context_from_seq
 
 from collections import OrderedDict
 
@@ -48,7 +47,6 @@ def grab_layers_sequential_3d(model, last_layer_ind):
 
 class BaseBatchDict(TypedDict):
     """Class for finer control over typechecking."""
-
     images: Union[
         TensorType["batch", "RGB":3, "image_height", "image_width", float],
         TensorType["batch", "frames", "RGB":3, "image_height", "image_width", float],
@@ -59,30 +57,39 @@ class BaseBatchDict(TypedDict):
 
 class HeatmapBatchDict(BaseBatchDict):
     """Class for finer control over typechecking."""
-
-    heatmaps: TensorType[
-        "batch", "num_keypoints", "heatmap_height", "heatmap_width", float
-    ]
+    heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width", float]
 
 
 class SemiSupervisedBatchDict(TypedDict):
     """Class for finer control over typechecking."""
-
     labeled: BaseBatchDict
-    unlabeled: TensorType[
-        "sequence_length", "RGB":3, "image_height", "image_width", float
+    unlabeled: Tuple[
+        Union[
+            TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
+            TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float],
+        ],
+        Union[
+            TensorType["seq_len", 2, 3, float],
+            TensorType[2, 3, float],
+            TensorType[1],
+        ],
     ]
 
 
 class SemiSupervisedHeatmapBatchDict(TypedDict):
     """Class for finer control over typechecking."""
-
     labeled: HeatmapBatchDict
-    unlabeled: Union[TensorType[
-        "sequence_length", "RGB":3, "image_height", "image_width", float
-    ], TensorType[
-        "sequence_length", "context":5, "RGB":3, "image_height", "image_width", float
-    ]]
+    unlabeled: Tuple[
+        Union[
+            TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
+            TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float],
+        ],
+        Union[
+            TensorType["seq_len", 2, 3, float],
+            TensorType[2, 3, float],
+            TensorType[1],
+        ],
+    ]
 
 
 class BaseFeatureExtractor(LightningModule):
@@ -196,13 +203,11 @@ class BaseFeatureExtractor(LightningModule):
         self,
         images: Union[
             TensorType["batch", "RGB":3, "image_height", "image_width", float],
-            TensorType[
-                "batch", "frames", "RGB":3, "image_height", "image_width", float
-            ],
+            TensorType["batch", "frames", "RGB":3, "image_height", "image_width", float],
             TensorType["sequence_length", "RGB":3, "image_height", "image_width", float],
         ],
         do_context: bool = False,
-    ):  # -> TensorType["batch", "features", "rep_height", "rep_width", float]:
+    ) -> TensorType["batch", "features", "rep_height", "rep_width", float]:
         """Forward pass from images to feature maps.
 
         Wrapper around the backbone's feature_extractor() method for typechecking
@@ -468,11 +473,13 @@ class SemiSupervisedTrackerMixin(object):
     @typechecked
     def evaluate_unlabeled(
         self,
-        batch: Union[TensorType[
-        "sequence_length", "RGB":3, "image_height", "image_width", float
-    ], TensorType[
-        "sequence_length", "context":5, "RGB":3, "image_height", "image_width", float
-    ]],
+        batch: Tuple[
+            Union[
+                TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
+                TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float],
+            ],
+            Union[TensorType["seq_len", 2, 3], TensorType[2, 3], TensorType[1]],
+        ],
         stage: Optional[Literal["train", "val", "test"]] = None,
         anneal_weight: Union[float, torch.Tensor] = 1.0,
     ) -> TensorType[(), float]:
@@ -617,3 +624,25 @@ class SemiSupervisedTrackerMixin(object):
     #         lr_schedulers.append(scheduler_weights)
     #
     #     return optimizers, lr_schedulers
+
+
+def get_context_from_seq(
+    img_seq: TensorType["seq_len", 3, "image_height", "image_width"],
+    context_length: int,
+) -> TensorType["seq_len", "context_length", "RGB": 3, "image_height", "image_width"]:
+    # pass
+    # our goal is to extract 5-frame sequences from this sequence
+    img_shape = img_seq.shape[1:]  # e.g., (3, H, W)
+    seq_len = img_seq.shape[0]  # how many images in batch
+    train_seq = torch.zeros((seq_len, context_length, *img_shape), device=img_seq.device)
+    # define pads: start pad repeats the zeroth image twice. end pad repeats the last image twice.
+    # this is to give padding for the first and last frames of the sequence
+    pad_start = torch.tile(img_seq[0].unsqueeze(0), (2, 1, 1, 1))
+    pad_end = torch.tile(img_seq[-1].unsqueeze(0), (2, 1, 1, 1))
+    # pad the sequence
+    padded_seq = torch.cat((pad_start, img_seq, pad_end), dim=0)
+    # padded_seq = torch.cat((two_pad, img_seq, two_pad), dim=0)
+    for i in range(seq_len):
+        # extract 5-frame sequences from the padded sequence
+        train_seq[i] = padded_seq[i : i + context_length]
+    return train_seq

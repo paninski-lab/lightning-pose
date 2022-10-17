@@ -148,14 +148,13 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx: int):
 
         img_name = self.image_names[idx]
+        keypoints_on_image = self.keypoints[idx]
 
         if not self.do_context:
             # read image from file and apply transformations (if any)
             file_name = os.path.join(self.root_directory, img_name)
             # if 1 color channel, change to 3.
             image = Image.open(file_name).convert("RGB")
-            # get current image keypoints from self.keypoints
-            keypoints_on_image = self.keypoints[idx]
             if self.imgaug_transform is not None:
                 transformed_images, transformed_keypoints = self.imgaug_transform(
                     images=np.expand_dims(image, axis=0),
@@ -163,19 +162,12 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 )  # expands add batch dim for imgaug
                 # get rid of the batch dim
                 transformed_images = transformed_images[0]
-                transformed_keypoints = transformed_keypoints[0]
-                # TODO: the problem below is that it messes up
-                # TODO: data.compute_heatmaps()
-                transformed_keypoints = transformed_keypoints.reshape(
-                    transformed_keypoints.shape[0] * transformed_keypoints.shape[1]
-                )
+                transformed_keypoints = transformed_keypoints[0].reshape(-1)
             else:
                 transformed_images = np.expand_dims(image, axis=0)
                 transformed_keypoints = np.expand_dims(keypoints_on_image, axis=0)
 
-            transformed_images = self.pytorch_transform(
-               transformed_images
-            )
+            transformed_images = self.pytorch_transform(transformed_images)
             assert transformed_keypoints.shape == (self.num_targets,)
 
         else:
@@ -199,7 +191,6 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 list_img_names.append("/".join(img_pieces))
 
             # read the images from image list to create dataset
-            keypoints_on_image = self.keypoints[idx]
             images = []
             for name in list_img_names:
                 # read image from file and apply transformations (if any)
@@ -208,25 +199,20 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 image = Image.open(file_name).convert("RGB")
                 images.append(np.asarray(image))
 
-            keypoints_on_image = torch.unsqueeze(keypoints_on_image, 0)
-            keypoints_on_image = list(keypoints_on_image.tile((5, 1, 1)).numpy())
-
             if self.imgaug_transform is not None:
-                transformed_images, transformed_keypoints = self.imgaug_transform(
-                    images=images,
-                    keypoints=keypoints_on_image,
-                )  # expands add batch dim for imgaug
-                # get rid of the batch dim
+                # need to apply the same transform to all context frames
+                seed = np.random.randint(low=0, high=123456)
+                transformed_images = []
+                for img in images:
+                    self.imgaug_transform.seed_(seed)
+                    transformed_image, transformed_keypoints = self.imgaug_transform(
+                        images=[img], keypoints=[keypoints_on_image.numpy()])
+                    transformed_images.append(transformed_image[0])
                 transformed_images = np.asarray(transformed_images)
-                transformed_keypoints = transformed_keypoints[0]
-                # TODO: the problem below is that it messes up
-                # TODO: data.compute_heatmaps()
-                transformed_keypoints = transformed_keypoints.reshape(
-                    transformed_keypoints.shape[0] * transformed_keypoints.shape[1]
-                )
+                transformed_keypoints = transformed_keypoints[0].reshape(-1)
             else:
                 transformed_images = np.asarray(images)
-                transformed_keypoints = keypoints_on_image[0]
+                transformed_keypoints = keypoints_on_image.numpy().reshape(-1)
 
             for i, transformed_image in enumerate(transformed_images):
                 transformed_image = self.pytorch_transform(transformed_image)
@@ -234,15 +220,14 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                     image_frames_tensor = torch.unsqueeze(transformed_image, dim=0)
                 else:
                     image_expand = torch.unsqueeze(transformed_image, dim=0)
-                    image_frames_tensor = torch.cat(
-                        (image_frames_tensor, image_expand), dim=0
-                    )
+                    image_frames_tensor = torch.cat((image_frames_tensor, image_expand), dim=0)
 
             transformed_images = image_frames_tensor
             assert transformed_keypoints.shape == (self.num_targets,)
+
         return {
-            "images": transformed_images,
-            "keypoints": torch.from_numpy(transformed_keypoints),
+            "images": transformed_images,  # shape (3, img_height, img_width) or (5, 3, H, W)
+            "keypoints": torch.from_numpy(transformed_keypoints),  # shape (n_targets,)
             "idxs": idx,
         }
 

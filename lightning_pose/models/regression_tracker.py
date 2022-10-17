@@ -8,6 +8,7 @@ from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from typing_extensions import Literal
 
+from lightning_pose.data.utils import evaluate_heatmaps_at_location, undo_affine_transform
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.base import (
@@ -129,7 +130,7 @@ class RegressionTracker(BaseSupervisedTracker):
 
     def predict_step(
         self,
-        batch: Union[dict, torch.Tensor],
+        batch: Union[dict, tuple],
         batch_idx: int,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Predict keypoints for a batch of video frames.
@@ -142,7 +143,7 @@ class RegressionTracker(BaseSupervisedTracker):
             images = batch["images"]
         else:
             # unlabeled dali video dataloaders
-            images = batch
+            images = batch[0]
         # images -> keypoints
         predicted_keypoints = self.forward(images)
         confidence = torch.zeros((predicted_keypoints.shape[0], predicted_keypoints.shape[1] // 2))
@@ -215,11 +216,23 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
     @typechecked
     def get_loss_inputs_unlabeled(
         self,
-        batch: Union[
-            TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
-            TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float]
+        batch: Tuple[
+            Union[
+                TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
+                TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float],
+            ],
+            Union[TensorType["seq_len", 2, 3], TensorType[2, 3], TensorType[1]],
         ],
     ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
-        predicted_keypoints = self.forward(batch)
+        images, transforms = batch
+        predicted_keypoints = self.forward(images)
+        # undo augmentation if needed
+        if transforms.shape[-1] == 3:
+            # reshape to (seq_len, n_keypoints, 2)
+            pred_kps = torch.reshape(predicted_keypoints, (predicted_keypoints.shape[0], -1, 2))
+            # undo
+            pred_kps = undo_affine_transform(pred_kps, transforms)
+            # reshape to (seq_len, n_keypoints * 2)
+            predicted_keypoints = torch.reshape(pred_kps, (pred_kps.shape[0], -1))
         return {"keypoints_pred": predicted_keypoints}

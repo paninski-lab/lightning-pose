@@ -2,6 +2,7 @@
 
 from kornia.geometry.subpix import spatial_softmax2d, spatial_expectation2d
 from kornia.geometry.transform import pyrup
+import numpy as np
 from omegaconf import DictConfig
 import torch
 from torch import nn
@@ -12,7 +13,7 @@ from typing_extensions import Literal
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau
 
-from lightning_pose.data.utils import evaluate_heatmaps_at_location
+from lightning_pose.data.utils import evaluate_heatmaps_at_location, undo_affine_transform
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.base import (
@@ -95,7 +96,7 @@ class HeatmapTracker(BaseSupervisedTracker):
             self.unnormalized_weights = nn.parameter.Parameter(
                 torch.Tensor([[0.2, 0.2, 0.2, 0.2, 0.2]]), requires_grad=False)
             self.representation_fc = lambda x: x @ torch.transpose(
-                nn.functional.softmax(self.unnormalized_weights), 0, 1)
+                nn.functional.softmax(self.unnormalized_weights, dim=1), 0, 1)
         elif self.mode == "3d":
             self.unnormalized_weights = nn.parameter.Parameter(
                 torch.Tensor([[0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125]]),
@@ -120,9 +121,7 @@ class HeatmapTracker(BaseSupervisedTracker):
 
     def run_subpixelmaxima(
         self,
-        heatmaps: TensorType[
-            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
-        ],
+        heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
     ) -> Tuple[
         TensorType["batch", "num_targets"],
         TensorType["batch", "num_keypoints"],
@@ -146,11 +145,8 @@ class HeatmapTracker(BaseSupervisedTracker):
         softmaxes = spatial_softmax2d(heatmaps, temperature=self.temperature)
         preds = spatial_expectation2d(softmaxes, normalized_coordinates=False)
 
-        # compute confidences as softmax value at prediction
+        # compute confidences as softmax value pooled around prediction
         confidences = evaluate_heatmaps_at_location(heatmaps=softmaxes, locs=preds)
-
-        # OLD BAD WAY
-        # confidences = torch.amax(softmaxes, dim=(2, 3))
 
         return preds.reshape(-1, self.num_targets), confidences
 
@@ -247,7 +243,7 @@ class HeatmapTracker(BaseSupervisedTracker):
     
     def predict_step(
         self,
-        batch: Union[dict, torch.Tensor],
+        batch: Union[dict, tuple],
         batch_idx: int,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Predict heatmaps and keypoints for a batch of video frames.
@@ -259,7 +255,7 @@ class HeatmapTracker(BaseSupervisedTracker):
             images = batch["images"]
         else:
             # unlabeled dali video dataloaders
-            images = batch
+            images = batch[0]
         # images -> heatmaps
         predicted_heatmaps = self.forward(images)
         # heatmaps -> keypoints
@@ -333,16 +329,28 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
 
     def get_loss_inputs_unlabeled(
         self,
-        batch: Union[
-            TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
-            TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float]
+        batch: Tuple[
+            Union[
+                TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
+                TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float],
+            ],
+            Union[TensorType["seq_len", 2, 3], TensorType[2, 3], TensorType[1]],
         ],
     ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
+        images, transforms = batch
         # images -> heatmaps
-        predicted_heatmaps = self.forward(batch)
+        predicted_heatmaps = self.forward(images)
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
+        # undo augmentation if needed
+        if transforms.shape[-1] == 3:
+            # reshape to (seq_len, n_keypoints, 2)
+            pred_kps = torch.reshape(predicted_keypoints, (predicted_keypoints.shape[0], -1, 2))
+            # undo
+            pred_kps = undo_affine_transform(pred_kps, transforms)
+            # reshape to (seq_len, n_keypoints * 2)
+            predicted_keypoints = torch.reshape(pred_kps, (pred_kps.shape[0], -1))
         return {
             "heatmaps_pred": predicted_heatmaps,
             "keypoints_pred": predicted_keypoints,
