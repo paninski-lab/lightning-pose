@@ -227,8 +227,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         # softmax temp stays 1 here; to modify for model predictions, see constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
 
-    # def get_loss_inputs_labeled(self, batch_dict: HeatmapBatchDict) -> dict:
-    def get_loss_inputs_labeled(self, batch_dict) -> dict:
+    def get_loss_inputs_labeled(self, batch_dict: HeatmapBatchDict) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
         predicted_heatmaps = self.forward(batch_dict["images"])

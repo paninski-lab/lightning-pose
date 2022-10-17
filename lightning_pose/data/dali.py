@@ -7,10 +7,10 @@ from nvidia.dali.plugin.pytorch import DALIGenericIterator
 import nvidia.dali.types as types
 from omegaconf import DictConfig
 import torch
+from torchtyping import patch_typeguard, TensorType
 import numpy as np
 from typeguard import typechecked
-from typing import List, Dict, Optional, Union, Literal
-from torchtyping import patch_typeguard
+from typing import List, Dict, Optional, Union, Literal, Tuple
 
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
@@ -106,6 +106,8 @@ def video_pipe(
         # quality = fn.random.uniform(range=(50, 100), dtype=types.INT32)
         # video = fn.jpeg_compression_distortion(video, quality=quality)
     else:
+        # choose arbitrary scalar (rather than a matrix) so that downstream operations know there
+        # is no geometric transforms to undo
         matrix = -1
     # video pixel range is [0, 255]; transform it to [0, 1].
     # happens naturally in the torchvision transform to tensor.
@@ -154,11 +156,18 @@ class LitDaliWrapper(DALIGenericIterator):
     
     def _modify_output(
         self, out
-    ) -> tuple:
-          #-> Union[
-          #      TensorType["sequence_length", 3, "image_height", "image_width"],
-          #      TensorType["batch", 5, 3, "image_height", "image_width"]
-          #  ]:
+    ) -> Tuple[
+            Union[
+                TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
+                TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float],
+            ],
+            Union[
+                TensorType["seq_len", 2, 3],
+                TensorType[2, 3],
+                TensorType["seq_len", 1],
+                TensorType[1],
+            ],
+    ]:
         """ modify output to be torch tensor. 
         looks different for context and non-context."""
         if self.do_context:

@@ -171,7 +171,7 @@ class UnlabeledDataModule(BaseDataModule):
         test_probability: Optional[float] = None,
         train_frames: Optional[float] = None,
         torch_seed: int = 42,
-        imgaug: str = "default",
+        imgaug: Literal["default", "dlc", "dlc-light"] = "default",
     ) -> None:
         """Data module that contains labeled and unlabeled data loaders.
 
