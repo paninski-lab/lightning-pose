@@ -29,8 +29,8 @@ class RegressionTracker(BaseSupervisedTracker):
         loss_factory: LossFactory,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "resnet50_contrastive",
-            "efficientnet_b0", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
+            "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k", 
+            "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         representation_dropout_rate: float = 0.2,
@@ -161,8 +161,8 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         loss_factory_unsupervised: LossFactory,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "resnet50_contrastive",
-            "efficientnet_b0", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
+            "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k", 
+            "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         representation_dropout_rate: float = 0.2,

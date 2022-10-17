@@ -11,6 +11,8 @@ from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypedDict, Union
 from lightning_pose.data.dali import get_context_from_seq
 
+from collections import OrderedDict
+
 patch_typeguard()  # use before @typechecked
 
 MULTISTEPLR_MILESTONES_DEFAULT = [100, 200, 300]
@@ -90,8 +92,8 @@ class BaseFeatureExtractor(LightningModule):
         self,
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "resnet50_contrastive",
-            "efficientnet_b0", "efficientnet_b1", "efficientnet_b2"] = "resnet50",
+            "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k", 
+            "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         lr_scheduler: str = "multisteplr",
@@ -122,6 +124,7 @@ class BaseFeatureExtractor(LightningModule):
         if "3d" in backbone:
             base = torch.hub.load(
                 "facebookresearch/pytorchvideo", "slow_r50", pretrained=True)
+
         elif backbone == "resnet50_contrastive":
             # load resnet50 pretrained using SimCLR on imagenet
             from pl_bolts.models.self_supervised import SimCLR
@@ -129,6 +132,41 @@ class BaseFeatureExtractor(LightningModule):
             weight_path = "https://pl-bolts-weights.s3.us-east-2.amazonaws.com/simclr/bolts_simclr_imagenet/simclr_imagenet.ckpt"
             simclr = SimCLR.load_from_checkpoint(weight_path, strict=False)
             base = simclr.encoder
+
+        elif "resnet50_animal" in backbone:
+            base = getattr(tvmodels, "resnet50")(False)
+            backbone_type = '_'.join(backbone.split('_')[2:])
+            if backbone_type == 'apose':
+                anim_weights = 'https://download.openmmlab.com/mmpose/animal/resnet/res50_animalpose_256x256-e1f30bff_20210426.pth'
+            else:
+                anim_weights = 'https://download.openmmlab.com/mmpose/animal/resnet/res50_ap10k_256x256-35760eb8_20211029.pth'
+            
+            state_dict = torch.hub.load_state_dict_from_url(anim_weights)["state_dict"]
+            new_state_dict = OrderedDict()
+            for key in state_dict:
+                if "backbone" in key:
+                    new_key = '.'.join(key.split('.')[1:])
+                    new_state_dict[new_key] = state_dict[key]
+            base.load_state_dict(new_state_dict, strict=False)
+
+        elif "resnet50_human" in backbone:
+            base = getattr(tvmodels, "resnet50")(False)
+            backbone_type = '_'.join(backbone.split('_')[2:])
+            if backbone_type == 'jhmdb':
+                hum_weights = 'https://download.openmmlab.com/mmpose/top_down/resnet/res50_jhmdb_sub3_256x256-c4ec1a0b_20201122.pth'
+            elif backbone_type == 'res_rle':
+                hum_weights = 'https://download.openmmlab.com/mmpose/top_down/deeppose/deeppose_res50_mpii_256x256_rle-5f92a619_20220504.pth'
+            elif backbone_type == 'top_res':
+                hum_weights = 'https://download.openmmlab.com/mmpose/top_down/resnet/res50_mpii_256x256-418ffc88_20200812.pth'
+            
+            state_dict = torch.hub.load_state_dict_from_url(hum_weights)["state_dict"]
+            new_state_dict = OrderedDict()
+            for key in state_dict:
+                if "backbone" in key:
+                    new_key = '.'.join(key.split('.')[1:])
+                    new_state_dict[new_key] = state_dict[key]
+            base.load_state_dict(new_state_dict, strict=False)
+
         else:
             # load resnet or efficientnet models from torchvision.models
             base = getattr(tvmodels, backbone)(pretrained)
