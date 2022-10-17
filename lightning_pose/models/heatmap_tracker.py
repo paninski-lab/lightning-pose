@@ -244,7 +244,7 @@ class HeatmapTracker(BaseSupervisedTracker):
     
     def predict_step(
         self,
-        batch,  #: Union[dict, tuple],
+        batch: Union[dict, tuple],
         batch_idx: int,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Predict heatmaps and keypoints for a batch of video frames.
@@ -330,10 +330,13 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
 
     def get_loss_inputs_unlabeled(
         self,
-        batch,  # : Union[
-        #     TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
-        #     TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float]
-        # ],
+        batch: Tuple[
+            Union[
+                TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
+                TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float],
+            ],
+            Union[TensorType["seq_len", 2, 3], TensorType[2, 3], TensorType[1]],
+        ],
     ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         images, transforms = batch
