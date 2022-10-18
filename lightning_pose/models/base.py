@@ -191,7 +191,6 @@ class BaseFeatureExtractor(LightningModule):
             TensorType["batch", "frames", "RGB":3, "image_height", "image_width"],
             TensorType["sequence_length", "RGB":3, "image_height", "image_width"],
         ],
-        do_context: bool = False,
     ) -> TensorType["new_batch", "features", "rep_height", "rep_width"]:
         """Forward pass from images to feature maps.
 
@@ -209,7 +208,7 @@ class BaseFeatureExtractor(LightningModule):
 
         """
         if self.mode == "2d":
-            if do_context:
+            if self.do_context:
                 # images.shape = (sequence_length, RGB, image_height, image_width)
                 if len(images.shape) == 5:
                     # non-consecutive sequences. can be used for supervised and unsupervised models
@@ -303,7 +302,7 @@ class BaseFeatureExtractor(LightningModule):
             a representation of the images.
 
         """
-        return self.get_representations(images, self.do_context)
+        return self.get_representations(images)
 
     def configure_optimizers(self) -> dict:
         """Select optimizer, lr scheduler, and metric for monitoring."""
