@@ -6,6 +6,7 @@ from omegaconf import DictConfig
 import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader, random_split
+from torchtyping import patch_typeguard
 from typeguard import typechecked
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
@@ -14,6 +15,8 @@ from lightning_pose.data.utils import split_sizes_from_probabilities, compute_nu
 from lightning_pose.utils.io import check_video_paths
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+patch_typeguard()  # use before @typechecked
 
 
 @typechecked
@@ -32,7 +35,7 @@ class BaseDataModule(pl.LightningDataModule):
         test_probability: Optional[float] = None,
         train_frames: Optional[Union[float, int]] = None,
         torch_seed: int = 42,
-    ) -> None:
+    ):
         """Data module splits a dataset into train, val, and test data loaders.
 
         Args:
@@ -154,7 +157,7 @@ class UnlabeledDataModule(BaseDataModule):
         train_frames: Optional[float] = None,
         torch_seed: int = 42,
         imgaug: Literal["default", "dlc", "dlc-light"] = "default",
-    ) -> None:
+    ):
         """Data module that contains labeled and unlabeled data loaders.
 
         Args:
@@ -212,7 +215,7 @@ class UnlabeledDataModule(BaseDataModule):
 
         self.unlabeled_dataloader = dali_prep()
 
-    def train_dataloader(self):
+    def train_dataloader(self) -> Dict[str, Union[torch.utils.data.DataLoader, LitDaliWrapper]]:
         loader = {
             "labeled": DataLoader(
                 self.train_dataset,

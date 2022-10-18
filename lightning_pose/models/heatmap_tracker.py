@@ -13,15 +13,13 @@ from typing_extensions import Literal
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau
 
-from lightning_pose.data.utils import evaluate_heatmaps_at_location, undo_affine_transform
+from lightning_pose.data.utils import (
+    evaluate_heatmaps_at_location, undo_affine_transform,
+    BaseLabeledBatchDict, HeatmapLabeledBatchDict, UnlabeledBatchDict
+)
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
-from lightning_pose.models.base import (
-    BaseBatchDict,
-    BaseSupervisedTracker,
-    HeatmapBatchDict,
-    SemiSupervisedTrackerMixin,
-)
+from lightning_pose.models.base import BaseSupervisedTracker, SemiSupervisedTrackerMixin
 
 patch_typeguard()  # use before @typechecked
 
@@ -37,7 +35,8 @@ class HeatmapTracker(BaseSupervisedTracker):
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
             "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k", 
-            "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"] = "resnet50",
+            "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"
+        ] = "resnet50",
         downsample_factor: Literal[2, 3] = 2,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
@@ -46,7 +45,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
         do_context: bool = False,
-    ) -> None:
+    ):
         """Initialize a DLC-like model with resnet backbone.
 
         Args:
@@ -122,10 +121,7 @@ class HeatmapTracker(BaseSupervisedTracker):
     def run_subpixelmaxima(
         self,
         heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
-    ) -> Tuple[
-        TensorType["batch", "num_targets"],
-        TensorType["batch", "num_keypoints"],
-    ]:
+    ) -> Tuple[TensorType["batch", "num_targets"], TensorType["batch", "num_keypoints"]]:
         """Use soft argmax on heatmaps.
 
         Args:
@@ -227,7 +223,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         # softmax temp stays 1 here; to modify for model predictions, see constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
 
-    def get_loss_inputs_labeled(self, batch_dict: HeatmapBatchDict) -> dict:
+    def get_loss_inputs_labeled(self, batch_dict: HeatmapLabeledBatchDict) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
         predicted_heatmaps = self.forward(batch_dict["images"])
@@ -243,19 +239,22 @@ class HeatmapTracker(BaseSupervisedTracker):
     
     def predict_step(
         self,
-        batch: Union[dict, tuple],
+        batch: Union[HeatmapLabeledBatchDict, UnlabeledBatchDict],
         batch_idx: int,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Predict heatmaps and keypoints for a batch of video frames.
-        assuming a DALI video loader is passed in 
-        trainer = Trainer(devices=8, accelerator="gpu")
-        predictions = trainer.predict(model, data_loader) """
-        if isinstance(batch, dict):
+
+        Assuming a DALI video loader is passed in
+        > trainer = Trainer(devices=8, accelerator="gpu")
+        > predictions = trainer.predict(model, data_loader)
+
+        """
+        if "images" in batch.keys():  # can't do isinstance(o, c) on TypedDicts
             # labeled image dataloaders
             images = batch["images"]
         else:
             # unlabeled dali video dataloaders
-            images = batch[0]
+            images = batch["frames"]
         # images -> heatmaps
         predicted_heatmaps = self.forward(images)
         # heatmaps -> keypoints
@@ -327,28 +326,18 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         # self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
         self.total_unsupervised_importance = torch.tensor(1.0)
 
-    def get_loss_inputs_unlabeled(
-        self,
-        batch: Tuple[
-            Union[
-                TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
-                TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float],
-            ],
-            Union[TensorType["seq_len", 2, 3], TensorType[2, 3], TensorType[1]],
-        ],
-    ) -> dict:
+    def get_loss_inputs_unlabeled(self, batch: UnlabeledBatchDict) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
-        images, transforms = batch
         # images -> heatmaps
-        predicted_heatmaps = self.forward(images)
+        predicted_heatmaps = self.forward(batch["frames"])
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
         # undo augmentation if needed
-        if transforms.shape[-1] == 3:
+        if batch["transforms"].shape[-1] == 3:
             # reshape to (seq_len, n_keypoints, 2)
             pred_kps = torch.reshape(predicted_keypoints, (predicted_keypoints.shape[0], -1, 2))
             # undo
-            pred_kps = undo_affine_transform(pred_kps, transforms)
+            pred_kps = undo_affine_transform(pred_kps, batch["transforms"])
             # reshape to (seq_len, n_keypoints * 2)
             predicted_keypoints = torch.reshape(pred_kps, (pred_kps.shape[0], -1))
         return {
