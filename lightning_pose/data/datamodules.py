@@ -15,16 +15,14 @@ from lightning_pose.utils.io import check_video_paths
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# TODO: add typechecks here
 
-
+@typechecked
 class BaseDataModule(pl.LightningDataModule):
     """Splits a labeled dataset into train, val, and test data loaders."""
 
     def __init__(
         self,
         dataset: torch.utils.data.Dataset,
-        use_deterministic: bool = False,
         train_batch_size: int = 16,
         val_batch_size: int = 16,
         test_batch_size: int = 1,
@@ -39,7 +37,6 @@ class BaseDataModule(pl.LightningDataModule):
 
         Args:
             dataset: base dataset to be split into train/val/test
-            use_deterministic: TODO: use deterministic split of data...?
             train_batch_size: number of samples of training batches
             val_batch_size: number of samples in validation batches
             test_batch_size: number of samples in test batches
@@ -61,10 +58,6 @@ class BaseDataModule(pl.LightningDataModule):
         self.val_batch_size = val_batch_size
         self.test_batch_size = test_batch_size
         self.num_workers = num_workers
-        # maybe can make the view information more general when deciding on a
-        # specific format for csv files
-        self.use_deterministic = use_deterministic
-        # info about dataset splits
         self.train_probability = train_probability
         self.val_probability = val_probability
         self.test_probability = test_probability
@@ -76,15 +69,8 @@ class BaseDataModule(pl.LightningDataModule):
 
     def setup(self, stage: Optional[str] = None):  # stage arg needed for ptl
 
-        if self.use_deterministic:
-            return
-
         datalen = self.dataset.__len__()
-        print(
-            "Number of labeled images in the full dataset (train+val+test): {}".format(
-                datalen
-            )
-        )
+        print("Number of labeled images in the full dataset (train+val+test): {}".format(datalen))
 
         # split data based on provided probabilities
         data_splits_list = split_sizes_from_probabilities(
@@ -116,10 +102,6 @@ class BaseDataModule(pl.LightningDataModule):
                 len(self.train_dataset), len(self.val_dataset), len(self.test_dataset)
             )
         )
-    
-    def setup_video_prediction(self, video: str):
-        """ this will depend on context flag in dataset"""
-        pass
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
         return DataLoader(
@@ -153,6 +135,7 @@ class BaseDataModule(pl.LightningDataModule):
         )
 
 
+@typechecked
 class UnlabeledDataModule(BaseDataModule):
     """Data module that contains labeled and unlabled data loaders."""
 
@@ -161,7 +144,6 @@ class UnlabeledDataModule(BaseDataModule):
         dataset: torch.utils.data.Dataset,
         video_paths_list: Union[List[str], str],
         dali_config: Union[dict, DictConfig],
-        use_deterministic: bool = False,
         train_batch_size: int = 16,
         val_batch_size: int = 16,
         test_batch_size: int = 1,
@@ -178,7 +160,6 @@ class UnlabeledDataModule(BaseDataModule):
         Args:
             dataset: pytorch Dataset for labeled data
             video_paths_list: absolute paths of videos ("unlabeled" data)
-            use_deterministic: TODO: use deterministic split of data...?
             train_batch_size: number of samples of training batches
             val_batch_size: number of samples in validation batches
             test_batch_size: number of samples in test batches
@@ -198,7 +179,6 @@ class UnlabeledDataModule(BaseDataModule):
         """
         super().__init__(
             dataset=dataset,
-            use_deterministic=use_deterministic,
             train_batch_size=train_batch_size,
             val_batch_size=val_batch_size,
             test_batch_size=test_batch_size,
@@ -243,11 +223,3 @@ class UnlabeledDataModule(BaseDataModule):
             "unlabeled": self.unlabeled_dataloader,
         }
         return loader
-
-    # TODO: check if necessary
-    def predict_dataloader(self):
-        return DataLoader(
-            self.test_dataset,
-            batch_size=self.test_batch_size,
-            num_workers=self.num_workers_for_labeled,
-        )
