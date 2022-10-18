@@ -254,8 +254,8 @@ class BaseFeatureExtractor(LightningModule):
                 # for both types of batches, we reshape in the same way
                 # context is in the last dimension for the linear layer.
                 representations: TensorType[
-                        "batch", "features", "rep_height", "rep_width", "frames"
-                    ] = torch.permute(outputs, (0, 2, 3, 4, 1))
+                    "batch", "features", "rep_height", "rep_width", "frames"
+                ] = torch.permute(outputs, (0, 2, 3, 4, 1))
 
                 # push through a linear layer to get the final representation
                 representations: TensorType[
@@ -279,6 +279,14 @@ class BaseFeatureExtractor(LightningModule):
             representations: TensorType[
                 "batch", "features", "rep_height", "rep_width", "frames"
             ] = torch.permute(output, (0, 1, 3, 4, 2))
+            # push through a linear layer to get the final representation
+            representations: TensorType[
+                "batch", "features", "rep_height", "rep_width", 1
+            ] = self.representation_fc(representations)
+            # final squeeze
+            representations: TensorType[
+                "batch", "features", "rep_height", "rep_width"
+            ] = torch.squeeze(representations, 4)
 
         return representations
 
