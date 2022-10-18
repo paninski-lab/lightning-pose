@@ -18,7 +18,7 @@ from lightning_pose.data.utils import count_frames
 
 _DALI_DEVICE = "gpu" if torch.cuda.is_available() else "cpu"
 
-patch_typeguard()  # use before @typechecked. TODO: new, make sure it doesn't mess things
+patch_typeguard()  # use before @typechecked
 
 
 # cannot typecheck due to way pipeline_def decorator consumes additional args
@@ -43,7 +43,7 @@ def video_pipe(
     # num_threads,
     # device_id
 ) -> tuple:
-    """Generic video reader pipeline that loads videos, resizes, and normalizes.
+    """Generic video reader pipeline that loads videos, resizes, augments, and normalizes.
 
     Args:
         filenames: list of absolute paths of video files to feed through
@@ -135,14 +135,16 @@ class LitDaliWrapper(DALIGenericIterator):
         context_sequences_successive: bool = False,
         **kwargs
     ):
-        """ wrapper around DALIGenericIterator to get batches for pl.
-        Args: 
+        """Wrapper around DALIGenericIterator to get batches for pl.
+
+        Args:
+            eval_mode
             num_iters: number of enumerations of dataloader (should be computed outside for now;
                 should be fixed by lightning/dali teams)
             do_context: whether model/loader use 5-frame context or not
+            context_sequences_successive
 
         """
-        # TODO: add a case where we 
         self.num_iters = num_iters
         self.do_context = do_context
         self.eval_mode = eval_mode
@@ -168,12 +170,11 @@ class LitDaliWrapper(DALIGenericIterator):
                 TensorType[1],
             ],
     ]:
-        """ modify output to be torch tensor. 
-        looks different for context and non-context."""
+        """Modify output based on train/predict and context/non-context."""
         if self.do_context:
             if self.eval_mode == "predict":
                 # shape (sequence_length, 3, H, W)
-                images = out[0]["x"]
+                frames = out[0]["frames"]
                 # shape (1,)
                 transform = out[0]["transform"]
             else:
@@ -181,43 +182,38 @@ class LitDaliWrapper(DALIGenericIterator):
                 # further down. assume batch_size=1
                 if self.context_sequences_successive:
                     # shape (sequence_length, 3, H, W)
-                    images = out[0]["x"][0, :, :, :, :]  # .clone().detach().type(torch.float)
+                    frames = out[0]["frames"][0, :, :, :, :]
                     # shape (1,) or (2, 3)
                     transform = out[0]["transform"][0]
                 else:
                     # grabbing independent 5-frame sequences. batch_size > 1
                     # shape (batch_size, sequence_length, 3, H, W)
-                    images = out[0]["x"]
+                    frames = out[0]["frames"]
                     # shape (batch_size, 1) or (batch_size, 2, 3)
                     transform = out[0]["transform"]
         else:
             # shape (sequence_length, 3, H, W)
             # careful: only valid for one sequence, i.e., batch size of 1.
-            images = out[0]["x"][0, :, :, :, :]  # .clone().detach().type(torch.float)
+            frames = out[0]["frames"][0, :, :, :, :]
             # shape (1,) or (2, 3)
             transform = out[0]["transform"][0]
 
-        return images, transform
+        return frames, transform
 
     def __next__(self):
         out = super().__next__()
         return self._modify_output(out)
 
 
+@typechecked
 class PrepareDALI(object):
-    
     """All the DALI stuff in one place.
+
+    Big picture: this will initialize the pipes and dataloaders for both training and prediction.
 
     TODO: make sure the order of args when you mix is valid.
     TODO: consider changing LightningWrapper args from num_batches to num_iter
 
-    Big picture: this will initialize the pipes and dataloaders which will be called only in
-    Trainer.predict().
-
-    Another option -- make this valid for Trainer.train() as well, so the unlabeled stuff will be
-    initialized here.
-
-    Thoughts: define a dict with args for pipe and data loader, per condition.
     """
 
     def __init__(
@@ -266,8 +262,7 @@ class PrepareDALI(object):
         dict_args["train"] = {"context": {}, "base": {}}
         gen_cfg = self.dali_config["general"]
 
-        # base (vanilla single-frame model), 
-        # train pipe args
+        # base (vanilla single-frame model), train pipe args
         base_train_cfg = self.dali_config["base"]["train"]
         dict_args["train"]["base"] = {
             "filenames": filenames,
@@ -283,7 +278,7 @@ class PrepareDALI(object):
             "imgaug": imgaug,
         }
 
-        # base (vanilla model), predict pipe args 
+        # base (vanilla single-frame model), predict pipe args
         base_pred_cfg = self.dali_config["base"]["predict"]
         dict_args["predict"]["base"] = {
             "filenames": filenames,
@@ -298,11 +293,10 @@ class PrepareDALI(object):
             "device": gen_cfg["device"],
             "name": "reader",
             "pad_sequences": True,
-            "imgaug": "default",
+            "imgaug": "default",  # no imgaug when predicting
         }
 
-        # context (five-frame) model
-        # predict pipe args
+        # context (five-frame) model, predict pipe args
         context_pred_cfg = self.dali_config["context"]["predict"]
         dict_args["predict"]["context"] = {
             "filenames": filenames,
@@ -318,12 +312,13 @@ class PrepareDALI(object):
             "seed": gen_cfg["seed"],
             "pad_sequences": True,
             "pad_last_batch": True,
-            "imgaug": "default",
+            "imgaug": "default",  # no imgaug when predicting
         }
 
-        # train pipe args
+        # context (five-frame) model, train pipe args
         context_train_cfg = self.dali_config["context"]["train"]
         if self.context_sequences_successive:
+            # grab a single sequence of frames, will resize into 5-frame chunks later
             # note: reusing the batch size argument
             dict_args["train"]["context"] = {
                 "filenames": filenames,
@@ -339,6 +334,7 @@ class PrepareDALI(object):
                 "imgaug": imgaug,
             }
         else:
+            # grab multiple non-successive 5-frame chunks
             dict_args["train"]["context"] = {
                 "filenames": filenames,
                 "resize_dims": self.resize_dims,
@@ -379,7 +375,7 @@ class PrepareDALI(object):
             "num_iters": self.num_iters,
             "eval_mode": "train",
             "do_context": False,
-            "output_map": ["x", "transform"],
+            "output_map": ["frames", "transform"],
             "last_batch_policy": LastBatchPolicy.PARTIAL,
             "auto_reset": True
         }
@@ -387,7 +383,7 @@ class PrepareDALI(object):
             "num_iters": self.num_iters,
             "eval_mode": "predict",
             "do_context": False,
-            "output_map": ["x", "transform"],
+            "output_map": ["frames", "transform"],
             "last_batch_policy": LastBatchPolicy.FILL,
             "last_batch_padded": False,
             "auto_reset": False,
@@ -400,7 +396,7 @@ class PrepareDALI(object):
             "eval_mode": "train",
             "do_context": True,
             "context_sequences_successive": self.context_sequences_successive,
-            "output_map": ["x", "transform"],
+            "output_map": ["frames", "transform"],
             "last_batch_policy": LastBatchPolicy.PARTIAL,
             "auto_reset": True
         }  # taken from datamodules.py. only difference is that we need to do context
@@ -408,7 +404,7 @@ class PrepareDALI(object):
             "num_iters": self.num_iters,
             "eval_mode": "predict",
             "do_context": True,
-            "output_map": ["x", "transform"],
+            "output_map": ["frames", "transform"],
             "last_batch_policy": LastBatchPolicy.PARTIAL,
             "last_batch_padded": False,
             "auto_reset": False,

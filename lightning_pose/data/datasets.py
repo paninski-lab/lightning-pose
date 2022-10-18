@@ -21,8 +21,7 @@ patch_typeguard()  # use before @typechecked
 
 
 class BaseExampleDict(TypedDict):
-    """Class for finer control over typechecking."""
-
+    """Return type when calling __getitem__() on BaseTrackingDataset."""
     images: Union[
         TensorType["RGB":3, "image_height", "image_width"],
         TensorType["frames", "RGB":3, "image_height", "image_width"],
@@ -32,22 +31,20 @@ class BaseExampleDict(TypedDict):
 
 
 class HeatmapExampleDict(BaseExampleDict):
-    """Class for finer control over typechecking."""
-
+    """Return type when calling __getitem__() on HeatmapTrackingDataset."""
     heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width"]
 
 
+@typechecked
 class BaseTrackingDataset(torch.utils.data.Dataset):
     """Base dataset that contains images and keypoints as (x, y) pairs."""
 
-    @typechecked
     def __init__(
         self,
         root_directory: str,
         csv_path: str,
         header_rows: Optional[List[int]] = None,
         imgaug_transform: Optional[Callable] = None,
-        pytorch_transform_list: Optional[List] = None,
         do_context: bool = True,
     ) -> None:
         """Initialize a dataset for regression (rather than heatmap) models.
@@ -68,7 +65,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 (image_path, bodypart_1_x, bodypart_1_y, ..., bodypart_n_y)
                 Note: image_path is relative to the given root_directory
             header_rows: which rows in the csv are header rows
-            transform: torchvision transform to apply to images
+            imgaug_transform: imgaug transform pipeline to apply to images
             do_context: include additional frames of context if possible.
 
         """
@@ -76,7 +73,6 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         self.csv_path = csv_path
         self.header_rows = header_rows
         self.imgaug_transform = imgaug_transform
-        self.pytorch_transform_list = pytorch_transform_list
         self.do_context = do_context
 
         # load csv data
@@ -119,14 +115,14 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         self.keypoints = torch.tensor(csv_data.to_numpy(), dtype=torch.float32)
         # convert to x,y coordinates
         self.keypoints = self.keypoints.reshape(self.keypoints.shape[0], -1, 2)
-        if pytorch_transform_list is None:
-            pytorch_transform_list = []  # make the None an empty list
-        pytorch_transform_list += [
+
+        # send image to tensor and normalize
+        pytorch_transform_list = [
             transforms.ToTensor(),
             transforms.Normalize(mean=_IMAGENET_MEAN, std=_IMAGENET_STD),
         ]
-
         self.pytorch_transform = transforms.Compose(pytorch_transform_list)
+
         # keypoints has been already transformed above
         self.num_targets = self.keypoints.shape[1] * 2
         self.num_keypoints = self.keypoints.shape[1]
@@ -144,8 +140,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
     def __len__(self) -> int:
         return len(self.image_names)
 
-    @typechecked
-    def __getitem__(self, idx: int):
+    def __getitem__(self, idx: int) -> dict:
 
         img_name = self.image_names[idx]
         keypoints_on_image = self.keypoints[idx]
@@ -168,7 +163,6 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 transformed_keypoints = np.expand_dims(keypoints_on_image, axis=0)
 
             transformed_images = self.pytorch_transform(transformed_images)
-            assert transformed_keypoints.shape == (self.num_targets,)
 
         else:
             # get index of the image
@@ -178,7 +172,6 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             # get the frames -> t-2, t-1, t, t+1, t + 2
             list_idx = [idx_img - 2, idx_img - 1, idx_img, idx_img + 1, idx_img + 2]
             list_img_names = []
-
             for fr_num in list_idx:
                 # replace frame number with 0 if we're at the beginning of the video
                 fr_num = max(0, fr_num)
@@ -199,6 +192,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 image = Image.open(file_name).convert("RGB")
                 images.append(np.asarray(image))
 
+            # apply data aug pipeline
             if self.imgaug_transform is not None:
                 # need to apply the same transform to all context frames
                 seed = np.random.randint(low=0, high=123456)
@@ -214,6 +208,8 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 transformed_images = np.asarray(images)
                 transformed_keypoints = keypoints_on_image.numpy().reshape(-1)
 
+            # send frames to tensors and normalize
+            # need to loop through because ToTensor transform only operates on single images
             for i, transformed_image in enumerate(transformed_images):
                 transformed_image = self.pytorch_transform(transformed_image)
                 if i == 0:
@@ -223,7 +219,8 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                     image_frames_tensor = torch.cat((image_frames_tensor, image_expand), dim=0)
 
             transformed_images = image_frames_tensor
-            assert transformed_keypoints.shape == (self.num_targets,)
+
+        assert transformed_keypoints.shape == (self.num_targets,)
 
         return {
             "images": transformed_images,  # shape (3, img_height, img_width) or (5, 3, H, W)
@@ -233,6 +230,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
 
 # the only addition here, should be the heatmap creation method.
+@typechecked
 class HeatmapDataset(BaseTrackingDataset):
     """Heatmap dataset that contains the images and keypoints in 2D arrays."""
 
@@ -242,8 +240,6 @@ class HeatmapDataset(BaseTrackingDataset):
         csv_path: str,
         header_rows: Optional[List[int]] = None,
         imgaug_transform: Optional[Callable] = None,
-        pytorch_transform_list: Optional[List] = None,
-        no_nans: bool = False,
         downsample_factor: int = 2,
         do_context: bool = True,
     ) -> None:
@@ -251,24 +247,23 @@ class HeatmapDataset(BaseTrackingDataset):
 
         Args:
             root_directory: path to data directory
-            cav_path: path to CSV or h5 file  (within root_directory). CSV file
+            csv_path: path to CSV or h5 file  (within root_directory). CSV file
                 should be in the form
                 (image_path, bodypart_1_x, bodypart_1_y, ..., bodypart_n_y)
                 Note: image_path is relative to the given root_directory
             header_rows: which rows in the csv are header rows
-            transform: torchvision transform to resize the images, image
-                dimensions must be repeatably divisible by 2
-            no_nans: whether or not to throw out all frames that have occluded
-                keypoints
+            imgaug_transform: imgaug transform pipeline to apply to images
+            downsample_factor: factor by which to downsample original image dims to have a smaller
+                heatmap
+            do_context: include additional frames of context if possible
 
         """
         super().__init__(
-            root_directory,
-            csv_path,
-            header_rows,
-            imgaug_transform,
-            pytorch_transform_list,
-            do_context,
+            root_directory=root_directory,
+            csv_path=csv_path,
+            header_rows=header_rows,
+            imgaug_transform=imgaug_transform,
+            do_context=do_context,
         )
 
         if self.height % 128 != 0 or self.height % 128 != 0:
@@ -278,15 +273,6 @@ class HeatmapDataset(BaseTrackingDataset):
             )
             print("current image dimensions after transformation are:")
             exit()
-
-        if no_nans:
-            # TODO: do we even want to keep this option around?
-            # Checks for images with set of keypoints that include any nan, so
-            # that they can be excluded from the data entirely, like DPK does
-            self.fully_labeled_idxs = self.get_fully_labeled_idxs()
-            self.image_names = [self.image_names[idx] for idx in self.fully_labeled_idxs]
-            self.keypoints = torch.index_select(self.keypoints, 0, self.fully_labeled_idxs)
-            self.keypoints = torch.tensor(self.keypoints)
 
         self.downsample_factor = downsample_factor
         self.output_sigma = 1.25  # should be sigma/2 ^downsample factor
@@ -355,7 +341,6 @@ class HeatmapDataset(BaseTrackingDataset):
 
         self.label_heatmaps = label_heatmaps
 
-    @typechecked
     def __getitem__(self, idx: int) -> HeatmapExampleDict:
         """Get an example from the dataset.
 
@@ -371,11 +356,3 @@ class HeatmapDataset(BaseTrackingDataset):
             # we have a random augmentation; need to recompute heatmaps
             example_dict["heatmaps"] = self.compute_heatmap(example_dict)
         return example_dict
-
-    def get_fully_labeled_idxs(self):  # TODO: make shorter
-        nan_check = torch.isnan(self.keypoints)
-        nan_check = nan_check[:, :, 0]
-        nan_check = ~nan_check
-        annotated = torch.all(nan_check, dim=1)
-        annotated_index = torch.where(annotated)
-        return annotated_index[0]
