@@ -1,16 +1,22 @@
 """Base class for backbone that acts as a feature extractor."""
 
+from omegaconf import DictConfig
 from pytorch_lightning.core.lightning import LightningModule
 import torch
 from torch import nn
 from torch.optim import Adam
-from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, MultiStepLR
+from torch.optim.lr_scheduler import MultiStepLR
 from torchtyping import TensorType, patch_typeguard
 import torchvision.models as tvmodels
 from typeguard import typechecked
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypedDict, Union
+from typing import Dict, Literal, Optional, Tuple, Union
 
 from collections import OrderedDict
+
+from lightning_pose.data.utils import (
+    BaseLabeledBatchDict, HeatmapLabeledBatchDict, UnlabeledBatchDict,
+    SemiSupervisedBatchDict, SemiSupervisedHeatmapBatchDict
+)
 
 patch_typeguard()  # use before @typechecked
 
@@ -19,9 +25,7 @@ MULTISTEPLR_GAMMA_DEFAULT = 0.5
 
 
 @typechecked
-def grab_layers_sequential(
-    model, last_layer_ind: Optional[int] = None
-) -> torch.nn.modules.container.Sequential:
+def grab_layers_sequential(model, last_layer_ind: int) -> torch.nn.Sequential:
     """Package selected number of layers into a nn.Sequential object.
 
     Args:
@@ -37,7 +41,7 @@ def grab_layers_sequential(
 
 
 @typechecked
-def grab_layers_sequential_3d(model, last_layer_ind):
+def grab_layers_sequential_3d(model, last_layer_ind: int) -> torch.nn.Sequential:
     """This is to use a 3d model to extract features"""
     # the AvgPool3d halves the feature maps dims
     layers = list(model.children())[0][:last_layer_ind + 1] + \
@@ -45,53 +49,35 @@ def grab_layers_sequential_3d(model, last_layer_ind):
     return nn.Sequential(*layers)
 
 
-class BaseBatchDict(TypedDict):
-    """Class for finer control over typechecking."""
-    images: Union[
-        TensorType["batch", "RGB":3, "image_height", "image_width", float],
-        TensorType["batch", "frames", "RGB":3, "image_height", "image_width", float],
-    ]
-    keypoints: TensorType["batch", "num_targets", float]
-    idxs: TensorType["batch", int]
+@typechecked
+def get_context_from_sequence(
+    img_seq: Union[
+        TensorType["seq_len", "RGB":3, "image_height", "image_width"],
+        TensorType["seq_len", "n_features", "rep_height", "rep_width"],
+    ],
+    context_length: int,
+) -> Union[
+        TensorType["seq_len", "context_length", "RGB": 3, "image_height", "image_width"],
+        TensorType["seq_len", "context_length", "n_features", "rep_height", "rep_width"],
+]:
+    # our goal is to extract 5-frame sequences from this sequence
+    img_shape = img_seq.shape[1:]  # e.g., (3, H, W)
+    seq_len = img_seq.shape[0]  # how many images in batch
+    train_seq = torch.zeros((seq_len, context_length, *img_shape), device=img_seq.device)
+    # define pads: start pad repeats the zeroth image twice. end pad repeats the last image twice.
+    # this is to give padding for the first and last frames of the sequence
+    pad_start = torch.tile(img_seq[0].unsqueeze(0), (2, 1, 1, 1))
+    pad_end = torch.tile(img_seq[-1].unsqueeze(0), (2, 1, 1, 1))
+    # pad the sequence
+    padded_seq = torch.cat((pad_start, img_seq, pad_end), dim=0)
+    # padded_seq = torch.cat((two_pad, img_seq, two_pad), dim=0)
+    for i in range(seq_len):
+        # extract 5-frame sequences from the padded sequence
+        train_seq[i] = padded_seq[i:i + context_length]
+    return train_seq
 
 
-class HeatmapBatchDict(BaseBatchDict):
-    """Class for finer control over typechecking."""
-    heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width", float]
-
-
-class SemiSupervisedBatchDict(TypedDict):
-    """Class for finer control over typechecking."""
-    labeled: BaseBatchDict
-    unlabeled: Tuple[
-        Union[
-            TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
-            TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float],
-        ],
-        Union[
-            TensorType["seq_len", 2, 3, float],
-            TensorType[2, 3, float],
-            TensorType[1],
-        ],
-    ]
-
-
-class SemiSupervisedHeatmapBatchDict(TypedDict):
-    """Class for finer control over typechecking."""
-    labeled: HeatmapBatchDict
-    unlabeled: Tuple[
-        Union[
-            TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
-            TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float],
-        ],
-        Union[
-            TensorType["seq_len", 2, 3, float],
-            TensorType[2, 3, float],
-            TensorType[1],
-        ],
-    ]
-
-
+@typechecked
 class BaseFeatureExtractor(LightningModule):
     """Object that contains the base resnet feature extractor."""
 
@@ -104,9 +90,9 @@ class BaseFeatureExtractor(LightningModule):
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         lr_scheduler: str = "multisteplr",
-        lr_scheduler_params: Optional[dict] = None,
-        do_context=False,
-    ) -> None:
+        lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
+        do_context: bool = False,
+    ):
         """A CNN model that takes in images and generates features.
 
         ResNets will be loaded from torchvision and can be either pre-trained
@@ -129,19 +115,17 @@ class BaseFeatureExtractor(LightningModule):
 
         # load backbone weights
         if "3d" in backbone:
-            base = torch.hub.load(
-                "facebookresearch/pytorchvideo", "slow_r50", pretrained=True)
+            base = torch.hub.load("facebookresearch/pytorchvideo", "slow_r50", pretrained=True)
 
         elif backbone == "resnet50_contrastive":
             # load resnet50 pretrained using SimCLR on imagenet
             from pl_bolts.models.self_supervised import SimCLR
-            import pl_bolts
             weight_path = "https://pl-bolts-weights.s3.us-east-2.amazonaws.com/simclr/bolts_simclr_imagenet/simclr_imagenet.ckpt"
             simclr = SimCLR.load_from_checkpoint(weight_path, strict=False)
             base = simclr.encoder
 
         elif "resnet50_animal" in backbone:
-            base = getattr(tvmodels, "resnet50")(False)
+            base = getattr(tvmodels, "resnet50")(pretrained=False)
             backbone_type = '_'.join(backbone.split('_')[2:])
             if backbone_type == 'apose':
                 anim_weights = 'https://download.openmmlab.com/mmpose/animal/resnet/res50_animalpose_256x256-e1f30bff_20210426.pth'
@@ -157,7 +141,7 @@ class BaseFeatureExtractor(LightningModule):
             base.load_state_dict(new_state_dict, strict=False)
 
         elif "resnet50_human" in backbone:
-            base = getattr(tvmodels, "resnet50")(False)
+            base = getattr(tvmodels, "resnet50")(pretrained=False)
             backbone_type = '_'.join(backbone.split('_')[2:])
             if backbone_type == 'jhmdb':
                 hum_weights = 'https://download.openmmlab.com/mmpose/top_down/resnet/res50_jhmdb_sub3_256x256-c4ec1a0b_20201122.pth'
@@ -176,7 +160,7 @@ class BaseFeatureExtractor(LightningModule):
 
         else:
             # load resnet or efficientnet models from torchvision.models
-            base = getattr(tvmodels, backbone)(pretrained)
+            base = getattr(tvmodels, backbone)(pretrained=pretrained)
 
         # get truncated version of backbone
         if "3d" in backbone:
@@ -202,16 +186,15 @@ class BaseFeatureExtractor(LightningModule):
     def get_representations(
         self,
         images: Union[
-            TensorType["batch", "RGB":3, "image_height", "image_width", float],
-            TensorType["batch", "frames", "RGB":3, "image_height", "image_width", float],
-            TensorType["sequence_length", "RGB":3, "image_height", "image_width", float],
+            TensorType["batch", "RGB":3, "image_height", "image_width"],
+            TensorType["batch", "frames", "RGB":3, "image_height", "image_width"],
+            TensorType["sequence_length", "RGB":3, "image_height", "image_width"],
         ],
         do_context: bool = False,
-    ) -> TensorType["batch", "features", "rep_height", "rep_width", float]:
+    ) -> TensorType["new_batch", "features", "rep_height", "rep_width"]:
         """Forward pass from images to feature maps.
 
-        Wrapper around the backbone's feature_extractor() method for typechecking
-        purposes.
+        Wrapper around the backbone's feature_extractor() method for typechecking purposes.
         See tests/models/test_base.py for example shapes.
 
         Args:
@@ -260,7 +243,7 @@ class BaseFeatureExtractor(LightningModule):
                     # we need to tile the representations to make it into
                     # (num_valid_frames, features, rep_height, rep_width, num_context_frames)
                     # TODO: context frames should be configurable
-                    tiled_representations = get_context_from_seq(
+                    tiled_representations = get_context_from_sequence(
                         img_seq=representations, context_length=5)
                     # get rid of first and last two frames
                     if tiled_representations.shape[0] < 5:
@@ -299,22 +282,29 @@ class BaseFeatureExtractor(LightningModule):
 
         return representations
 
-    def forward(self, images):
+    def forward(
+        self,
+        images: Union[
+            TensorType["batch", "RGB":3, "image_height", "image_width"],
+            TensorType["batch", "seq_length", "RGB":3, "image_height", "image_width"],
+            TensorType["seq_length", "RGB":3, "image_height", "image_width"],
+        ],
+    ) -> TensorType["batch", "features", "rep_height", "rep_width"]:
         """Forward pass from images to representations.
 
         Wrapper around self.get_representations().
-        Fancier childern models will use get_representations() in their forward
-        methods.
+        Fancier childern models will use get_representations() in their forward methods.
 
         Args:
-            images (torch.tensor(float)): a batch of images.
+            images: a batch of images.
 
         Returns:
-            torch.tensor(float): a representation of the images.
+            a representation of the images.
+
         """
         return self.get_representations(images, self.do_context)
 
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> dict:
         """Select optimizer, lr scheduler, and metric for monitoring."""
 
         # standard adam optimizer
@@ -346,21 +336,20 @@ class BaseFeatureExtractor(LightningModule):
         }
 
 
+@typechecked
 class BaseSupervisedTracker(BaseFeatureExtractor):
     """Base class for supervised trackers."""
 
-    @typechecked
     def get_loss_inputs_labeled(
         self,
-        batch_dict: Union[BaseBatchDict, HeatmapBatchDict],
+        batch_dict: Union[BaseLabeledBatchDict, HeatmapLabeledBatchDict],
     ) -> dict:
         """Return predicted coordinates for a batch of data."""
         raise NotImplementedError
 
-    @typechecked
     def evaluate_labeled(
         self,
-        batch_dict: Union[BaseBatchDict, HeatmapBatchDict],
+        batch_dict: Union[BaseLabeledBatchDict, HeatmapLabeledBatchDict],
         stage: Optional[Literal["train", "val", "test"]] = None,
     ) -> TensorType[(), float]:
         """Compute and log the losses on a batch of labeled data."""
@@ -385,35 +374,31 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
 
         return loss
 
-    @typechecked
     def training_step(
         self,
-        train_batch: Union[BaseBatchDict, HeatmapBatchDict],
+        train_batch: Union[BaseLabeledBatchDict, HeatmapLabeledBatchDict],
         batch_idx: int,
     ) -> Dict[str, TensorType[(), float]]:
         """Base training step, a wrapper around the `evaluate_labeled` method."""
         loss = self.evaluate_labeled(train_batch, "train")
         return {"loss": loss}
 
-    @typechecked
     def validation_step(
         self,
-        val_batch: Union[BaseBatchDict, HeatmapBatchDict],
+        val_batch: Union[BaseLabeledBatchDict, HeatmapLabeledBatchDict],
         batch_idx: int,
     ) -> None:
         """Base validation step, a wrapper around the `evaluate_labeled` method."""
         self.evaluate_labeled(val_batch, "val")
 
-    @typechecked
     def test_step(
         self,
-        test_batch: Union[BaseBatchDict, HeatmapBatchDict],
+        test_batch: Union[BaseLabeledBatchDict, HeatmapLabeledBatchDict],
         batch_idx: int,
     ) -> None:
         """Base test step, a wrapper around the `evaluate_labeled` method."""
         self.evaluate_labeled(test_batch, "test")
 
-    @typechecked
     def configure_optimizers(self) -> dict:
         """Select optimizer, lr scheduler, and metric for monitoring."""
 
@@ -462,24 +447,17 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         }
 
 
+@typechecked
 class SemiSupervisedTrackerMixin(object):
     """Mixin class providing training step function for semi-supervised models."""
 
-    @typechecked
-    def get_loss_inputs_unlabeled(self, batch: torch.Tensor) -> dict:
+    def get_loss_inputs_unlabeled(self, batch: UnlabeledBatchDict) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         raise NotImplementedError
 
-    @typechecked
     def evaluate_unlabeled(
         self,
-        batch: Tuple[
-            Union[
-                TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
-                TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float],
-            ],
-            Union[TensorType["seq_len", 2, 3], TensorType[2, 3], TensorType[1]],
-        ],
+        batch: UnlabeledBatchDict,
         stage: Optional[Literal["train", "val", "test"]] = None,
         anneal_weight: Union[float, torch.Tensor] = 1.0,
     ) -> TensorType[(), float]:
@@ -502,7 +480,6 @@ class SemiSupervisedTrackerMixin(object):
 
         return loss
 
-    @typechecked
     def training_step(
         self,
         train_batch: Union[SemiSupervisedBatchDict, SemiSupervisedHeatmapBatchDict],
@@ -543,23 +520,22 @@ class SemiSupervisedTrackerMixin(object):
 
         return {"loss": total_loss}
 
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> dict:
         """Single optimizer with different learning rates."""
 
         if getattr(self, "upsampling_layers", None) is not None:
-            # check if heatmap
+            # if we're here this is a heatmap model
             params = [
                 # {"params": self.backbone.parameters()},
-                #  don't uncomment above line; the BackboneFinetuning callback should
+                # don't uncomment above line; the BackboneFinetuning callback should
                 # add backbone to the params.
-                {
-                    "params": self.upsampling_layers.parameters()
-                },  # important this is the 0th element, for BackboneFinetuning callback
+                # important this is the 0th element, for BackboneFinetuning callback
+                {"params": self.upsampling_layers.parameters()},
                 {"params": self.unnormalized_weights},
             ]
 
         else:
-            # standard adam optimizer
+            # standard adam optimizer for regression model
             params = filter(lambda p: p.requires_grad, self.parameters())
 
         # define different learning rate for weights in front of unsupervised losses
@@ -581,16 +557,13 @@ class SemiSupervisedTrackerMixin(object):
                 gamma = MULTISTEPLR_GAMMA_DEFAULT
             else:
                 milestones = self.lr_scheduler_params.get(
-                    "milestones", MULTISTEPLR_MILESTONES_DEFAULT
-                )
+                    "milestones", MULTISTEPLR_MILESTONES_DEFAULT)
                 gamma = self.lr_scheduler_params.get("gamma", MULTISTEPLR_GAMMA_DEFAULT)
 
             scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
 
         else:
-            raise NotImplementedError(
-                "'%s' is an invalid LR scheduler" % self.lr_scheduler
-            )
+            raise NotImplementedError("'%s' is an invalid LR scheduler" % self.lr_scheduler)
 
         return {
             "optimizer": optimizer,
@@ -624,25 +597,3 @@ class SemiSupervisedTrackerMixin(object):
     #         lr_schedulers.append(scheduler_weights)
     #
     #     return optimizers, lr_schedulers
-
-
-def get_context_from_seq(
-    img_seq: TensorType["seq_len", 3, "image_height", "image_width"],
-    context_length: int,
-) -> TensorType["seq_len", "context_length", "RGB": 3, "image_height", "image_width"]:
-    # pass
-    # our goal is to extract 5-frame sequences from this sequence
-    img_shape = img_seq.shape[1:]  # e.g., (3, H, W)
-    seq_len = img_seq.shape[0]  # how many images in batch
-    train_seq = torch.zeros((seq_len, context_length, *img_shape), device=img_seq.device)
-    # define pads: start pad repeats the zeroth image twice. end pad repeats the last image twice.
-    # this is to give padding for the first and last frames of the sequence
-    pad_start = torch.tile(img_seq[0].unsqueeze(0), (2, 1, 1, 1))
-    pad_end = torch.tile(img_seq[-1].unsqueeze(0), (2, 1, 1, 1))
-    # pad the sequence
-    padded_seq = torch.cat((pad_start, img_seq, pad_end), dim=0)
-    # padded_seq = torch.cat((two_pad, img_seq, two_pad), dim=0)
-    for i in range(seq_len):
-        # extract 5-frame sequences from the padded sequence
-        train_seq[i] = padded_seq[i : i + context_length]
-    return train_seq

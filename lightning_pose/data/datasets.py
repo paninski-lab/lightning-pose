@@ -7,32 +7,18 @@ import pandas as pd
 from PIL import Image
 import torch
 from torchvision import transforms
-from typing import Callable, List, Literal, Optional, Tuple, TypedDict, Union
+from typing import Callable, List, Optional
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
-from lightning_pose.data.utils import generate_heatmaps
+from lightning_pose.data.utils import \
+    generate_heatmaps, BaseLabeledExampleDict, HeatmapLabeledExampleDict
 from lightning_pose.utils.io import get_keypoint_names
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 patch_typeguard()  # use before @typechecked
-
-
-class BaseExampleDict(TypedDict):
-    """Return type when calling __getitem__() on BaseTrackingDataset."""
-    images: Union[
-        TensorType["RGB":3, "image_height", "image_width"],
-        TensorType["frames", "RGB":3, "image_height", "image_width"],
-    ]
-    keypoints: TensorType["num_targets"]
-    idxs: int
-
-
-class HeatmapExampleDict(BaseExampleDict):
-    """Return type when calling __getitem__() on HeatmapTrackingDataset."""
-    heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width"]
 
 
 @typechecked
@@ -46,7 +32,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         header_rows: Optional[List[int]] = None,
         imgaug_transform: Optional[Callable] = None,
         do_context: bool = True,
-    ) -> None:
+    ):
         """Initialize a dataset for regression (rather than heatmap) models.
 
         The csv file of labels will be searched for in the following order:
@@ -128,19 +114,19 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         self.num_keypoints = self.keypoints.shape[1]
 
     @property
-    def height(self):
+    def height(self) -> int:
         # assume resizing transformation is the last imgaug one
         return self.imgaug_transform[-1].get_parameters()[0][0].value
 
     @property
-    def width(self):
+    def width(self) -> int:
         # assume resizing transformation is the last imgaug one
         return self.imgaug_transform[-1].get_parameters()[0][1].value
 
     def __len__(self) -> int:
         return len(self.image_names)
 
-    def __getitem__(self, idx: int) -> dict:
+    def __getitem__(self, idx: int) -> BaseLabeledExampleDict:
 
         img_name = self.image_names[idx]
         keypoints_on_image = self.keypoints[idx]
@@ -222,11 +208,11 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
         assert transformed_keypoints.shape == (self.num_targets,)
 
-        return {
-            "images": transformed_images,  # shape (3, img_height, img_width) or (5, 3, H, W)
-            "keypoints": torch.from_numpy(transformed_keypoints),  # shape (n_targets,)
-            "idxs": idx,
-        }
+        return BaseLabeledExampleDict(
+            images=transformed_images,  # shape (3, img_height, img_width) or (5, 3, H, W)
+            keypoints=torch.from_numpy(transformed_keypoints),  # shape (n_targets,)
+            idxs=idx,
+        )
 
 
 # the only addition here, should be the heatmap creation method.
@@ -242,7 +228,7 @@ class HeatmapDataset(BaseTrackingDataset):
         imgaug_transform: Optional[Callable] = None,
         downsample_factor: int = 2,
         do_context: bool = True,
-    ) -> None:
+    ):
         """Initialize the Heatmap Dataset.
 
         Args:
@@ -284,13 +270,16 @@ class HeatmapDataset(BaseTrackingDataset):
         self.compute_heatmaps()
 
     @property
-    def output_shape(self):
+    def output_shape(self) -> tuple:
         return (
             self.height // 2**self.downsample_factor,
             self.width // 2**self.downsample_factor,
         )
 
-    def compute_heatmap(self, example_dict: BaseExampleDict):
+    def compute_heatmap(
+        self,
+        example_dict: BaseLabeledExampleDict
+    ) -> TensorType["num_keypoints", "heatmap_height", "heatmap_width"]:
         """Compute 2D heatmaps from arbitrary (x, y) coordinates."""
 
         if self.do_context:
@@ -336,19 +325,19 @@ class HeatmapDataset(BaseTrackingDataset):
             size=(len(self.image_names), self.num_keypoints, *self.output_shape)
         )
         for idx in range(len(self.image_names)):
-            example_dict: BaseExampleDict = super().__getitem__(idx)
+            example_dict: BaseLabeledExampleDict = super().__getitem__(idx)
             label_heatmaps[idx] = self.compute_heatmap(example_dict)
 
         self.label_heatmaps = label_heatmaps
 
-    def __getitem__(self, idx: int) -> HeatmapExampleDict:
+    def __getitem__(self, idx: int) -> HeatmapLabeledExampleDict:
         """Get an example from the dataset.
 
         Calls the base dataset to get an image and a label, then additionally
         returns the corresponding heatmap.
 
         """
-        example_dict: BaseExampleDict = super().__getitem__(idx)
+        example_dict: BaseLabeledExampleDict = super().__getitem__(idx)
         if len(self.imgaug_transform) == 1 and isinstance(self.imgaug_transform[0], iaa.Resize):
             # we have a deterministic resizing augmentation; use precomputed heatmaps
             example_dict["heatmaps"] = self.label_heatmaps[idx]
