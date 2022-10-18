@@ -68,6 +68,7 @@ class RegressionTracker(BaseSupervisedTracker):
             last_resnet_layer_to_get=last_resnet_layer_to_get,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
+            do_context=do_context,
         )
         self.num_keypoints = num_keypoints
         self.num_targets = self.num_keypoints * 2
@@ -81,14 +82,14 @@ class RegressionTracker(BaseSupervisedTracker):
             self.unnormalized_weights = nn.parameter.Parameter(
                 torch.Tensor([[0.2, 0.2, 0.2, 0.2, 0.2]]), requires_grad=False)
             self.representation_fc = lambda x: x @ torch.transpose(
-                nn.functional.softmax(self.unnormalized_weights), 0, 1)
+                nn.functional.softmax(self.unnormalized_weights, dim=1), 0, 1)
         elif self.mode == "3d":
             self.unnormalized_weights = nn.parameter.Parameter(
                 torch.Tensor([[0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125]]),
                 requires_grad=False
             )
             self.representation_fc = lambda x: x @ torch.transpose(
-                nn.functional.softmax(self.unnormalized_weights), 0, 1)
+                nn.functional.softmax(self.unnormalized_weights, dim=1), 0, 1)
 
         # use this to log auxiliary information: rmse on labeled data
         self.rmse_loss = RegressionRMSELoss()
@@ -106,11 +107,12 @@ class RegressionTracker(BaseSupervisedTracker):
         self,
         images: Union[
             TensorType["batch", "channels":3, "image_height", "image_width"],
-            TensorType["batch", "frames", "channels":3, "image_height", "image_width"]]
+            TensorType["batch", "frames", "channels":3, "image_height", "image_width"]
+        ],
     ) -> TensorType["num_valid_outputs", "two_x_num_keypoints"]:
         """Forward pass through the network."""
         # see input lines for shape of "images"
-        representations = self.get_representations(images, self.do_context)
+        representations = self.get_representations(images)
         # "representations" is shape (batch, features, rep_height, rep_width)
         reps_reshaped = self.reshape_representation(representations)
         # reps_reshaped = self.representation_dropout(reps_reshaped)

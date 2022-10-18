@@ -77,6 +77,7 @@ class HeatmapTracker(BaseSupervisedTracker):
             last_resnet_layer_to_get=last_resnet_layer_to_get,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
+            do_context=do_context,
         )
         self.num_keypoints = num_keypoints
         self.num_targets = num_keypoints * 2
@@ -102,7 +103,7 @@ class HeatmapTracker(BaseSupervisedTracker):
                 requires_grad=False
             )
             self.representation_fc = lambda x: x @ torch.transpose(
-                nn.functional.softmax(self.unnormalized_weights), 0, 1)
+                nn.functional.softmax(self.unnormalized_weights, dim=1), 0, 1)
 
         # use this to log auxiliary information: rmse on labeled data
         self.rmse_loss = RegressionRMSELoss()
@@ -211,14 +212,15 @@ class HeatmapTracker(BaseSupervisedTracker):
         self,
         images: Union[
             TensorType["batch", "channels":3, "image_height", "image_width"],
-            TensorType["batch", "frames", "channels":3, "image_height", "image_width"]]
+            TensorType["batch", "frames", "channels":3, "image_height", "image_width"]
+        ],
     ) -> TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Forward pass through the network."""
         # we get one representation for each desired output. 
         # in the case of unsupervised sequences + context, we have outputs for all images but the
         # first two and last two.
         # this is all handled internally by get_representations()
-        representations = self.get_representations(images, self.do_context)
+        representations = self.get_representations(images)
         heatmaps = self.heatmaps_from_representations(representations)
         # softmax temp stays 1 here; to modify for model predictions, see constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
