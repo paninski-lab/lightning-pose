@@ -31,7 +31,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         csv_path: str,
         header_rows: Optional[List[int]] = None,
         imgaug_transform: Optional[Callable] = None,
-        do_context: bool = True,
+        do_context: bool = False,
     ):
         """Initialize a dataset for regression (rather than heatmap) models.
 
@@ -227,7 +227,7 @@ class HeatmapDataset(BaseTrackingDataset):
         header_rows: Optional[List[int]] = None,
         imgaug_transform: Optional[Callable] = None,
         downsample_factor: int = 2,
-        do_context: bool = True,
+        do_context: bool = False,
     ):
         """Initialize the Heatmap Dataset.
 

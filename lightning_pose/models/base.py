@@ -86,7 +86,8 @@ class BaseFeatureExtractor(LightningModule):
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
             "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k", 
-            "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"] = "resnet50",
+            "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"
+        ] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         lr_scheduler: str = "multisteplr",
