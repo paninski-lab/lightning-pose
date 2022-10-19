@@ -10,11 +10,11 @@ data:
     height: 384
 
   # ABSOLUTE path to data directory
-  data_dir: "/datastores/fish-implant"
+  data_dir: "/datastores/fish_implant"
   # ABSOLUTE path to unlabeled videos' directory
-  video_dir: "/datastores/fish-implant/videos"
+  video_dir: "/datastores/fish_implant/videos"
   # location of labels; for example script, this should be relative to `data_dir`
-  csv_file: "multicam_labeledFrames.csv"
+  csv_file: "master_multicam_labeledFrames.csv"
   # header rows to strip in label csv file
   header_rows: [0, 1, 2]
   # downsample heatmaps - 2 | 3
@@ -171,7 +171,7 @@ training:
   # default- resizing only
   # dlc- imgaug pipeline implemented in DLC 2.0 package
   # dlc-light- curated subset of dlc augmentations with more conservative param settings
-  imgaug: default
+  imgaug: dlc
   # batch size of labeled data during training
   train_batch_size: 4
   # batch size of labeled data during validation
@@ -259,7 +259,7 @@ dali:
 
     predict:
       # (train_batch_size + base.train.sequence_length) * 2 -> round down to nearest pow of 2
-      # for fish-implant made it smaller to fit on g4dn.xlarge
+      # for fish_implant made it smaller to fit on g4dn.xlarge
       sequence_length: 32 # step = sequence_length by default. done internally.
 
   context: # not supporting context_sequences_successive
@@ -317,7 +317,7 @@ eval:
   save_vids_after_training: true
   fiftyone:
     # will be the name of the dataset (Mongo DB) created by FiftyOne. for video dataset, we will append dataset_name + "_video"
-    dataset_name: "mirror-mouse"
+    dataset_name: "implant-fish"
     build_speed: "slow" # "slow"/"fast". "fast" drops keypoint name and confidence information for faster processing.
     # if you want to manually provide a different model name to be displayed in FiftyOne
     model_display_names: ["test_model"]
@@ -332,13 +332,13 @@ eval:
     dataset_to_create: "images"
   # str with an absolute path to a directory containing videos for prediction.
   # (it's not absolute just for the toy example)
-  test_videos_directory: "/datastores/fish-implant/videos"
+  test_videos_directory: "/datastores/fish_implant/videos"
   # str with an absolute path to directory in which you want to save .csv with predictions
   saved_vid_preds_dir: "/home/jovyan"
   # create labeled video from each video in test_videos_directory
   create_labeled_video: true
   # confidence threshold for plotting a vid
-  confidence_thresh_for_vid: 0.5
+  confidence_thresh_for_vid: 0.9
   # str with absolute path to the video file you want plotted with keypoints
   video_file_to_plot: ""
   # a list of strings, each points to a .csv file with predictions of a given model to the same video. will be combined with video_file_to_plot to make a visualization
