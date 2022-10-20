@@ -191,7 +191,10 @@ class BaseFeatureExtractor(LightningModule):
             TensorType["batch", "frames", "RGB":3, "image_height", "image_width"],
             TensorType["sequence_length", "RGB":3, "image_height", "image_width"],
         ],
-    ) -> TensorType["new_batch", "features", "rep_height", "rep_width"]:
+    ) -> Union[
+         TensorType["new_batch", "features", "rep_height", "rep_width"],
+         TensorType["new_batch", "features", "rep_height", "rep_width", "frames"],
+    ]:
         """Forward pass from images to feature maps.
 
         Wrapper around the backbone's feature_extractor() method for typechecking purposes.
@@ -256,15 +259,6 @@ class BaseFeatureExtractor(LightningModule):
                 representations: TensorType[
                     "batch", "features", "rep_height", "rep_width", "frames"
                 ] = torch.permute(outputs, (0, 2, 3, 4, 1))
-
-                # push through a linear layer to get the final representation
-                representations: TensorType[
-                    "batch", "features", "rep_height", "rep_width", 1
-                ] = self.representation_fc(representations)
-                # final squeeze
-                representations: TensorType[
-                    "batch", "features", "rep_height", "rep_width"
-                ] = torch.squeeze(representations, 4)
             else:
                 image_batch = images
                 representations = self.backbone(image_batch)
@@ -279,14 +273,6 @@ class BaseFeatureExtractor(LightningModule):
             representations: TensorType[
                 "batch", "features", "rep_height", "rep_width", "frames"
             ] = torch.permute(output, (0, 1, 3, 4, 2))
-            # push through a linear layer to get the final representation
-            representations: TensorType[
-                "batch", "features", "rep_height", "rep_width", 1
-            ] = self.representation_fc(representations)
-            # final squeeze
-            representations: TensorType[
-                "batch", "features", "rep_height", "rep_width"
-            ] = torch.squeeze(representations, 4)
 
         return representations
 
@@ -297,7 +283,10 @@ class BaseFeatureExtractor(LightningModule):
             TensorType["batch", "seq_length", "RGB":3, "image_height", "image_width"],
             TensorType["seq_length", "RGB":3, "image_height", "image_width"],
         ],
-    ) -> TensorType["batch", "features", "rep_height", "rep_width"]:
+    ) -> Union[
+         TensorType["new_batch", "features", "rep_height", "rep_width"],
+         TensorType["new_batch", "features", "rep_height", "rep_width", "frames"],
+    ]:
         """Forward pass from images to representations.
 
         Wrapper around self.get_representations().
