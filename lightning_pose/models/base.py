@@ -416,7 +416,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
                 # {"params": self.backbone.parameters()},
                 # important this is the 0th element, for BackboneFinetuning callback
                 {"params": self.upsampling_layers.parameters()},
-                {"params": self.unnormalized_weights},
+                # {"params": self.unnormalized_weights},
             ]
         else:
             # standard adam optimizer
@@ -498,7 +498,7 @@ class SemiSupervisedTrackerMixin(object):
 
         return {"loss": total_loss}
 
-    def get_params(self):
+    def get_parameters(self):
 
         if getattr(self, "upsampling_layers", None) is not None:
             # if we're here this is a heatmap model
@@ -521,6 +521,8 @@ class SemiSupervisedTrackerMixin(object):
                 "params": self.loss_factory_unsup.loss_weights_parameter_dict.parameters(),
                 "lr": 1e-2,
             })
+
+        return params
 
     # # single optimizer with different learning rates
     # def configure_optimizers(self):
