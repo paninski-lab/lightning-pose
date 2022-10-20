@@ -81,7 +81,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         )
         self.num_keypoints = num_keypoints
         self.num_targets = num_keypoints * 2
-        self.loss_factory = loss_factory.to(self.device)
+        self.loss_factory = loss_factory
         # TODO: downsample_factor may be in mismatch between datamodule and model.
         self.downsample_factor = downsample_factor
         self.upsampling_layers = self.make_upsampling_layers()
@@ -92,7 +92,6 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.torch_seed = torch_seed
         self.do_context = do_context
         if self.mode == "2d":
-            # self.representation_fc = torch.nn.Linear(5, 1, bias=False)
             self.unnormalized_weights = nn.parameter.Parameter(
                 torch.Tensor([[0.2, 0.2, 0.2, 0.2, 0.2]]), requires_grad=False)
             self.representation_fc = lambda x: x @ torch.transpose(
@@ -202,10 +201,26 @@ class HeatmapTracker(BaseSupervisedTracker):
 
     def heatmaps_from_representations(
         self,
-        representations: TensorType["batch", "features", "rep_height", "rep_width"],
+        representations: Union[
+            TensorType["batch", "features", "rep_height", "rep_width"],
+            TensorType["batch", "features", "rep_height", "rep_width", "frames"],
+        ],
     ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
-        """Wrapper around self.upsampling_layers for type and shape assertion."""
+        """Handle context frames then upsample to get final heatmaps."""
+
+        # handle context frames first
+        if (self.mode == "2d" and self.do_context) or self.mode == "3d":
+            # push through a linear layer to get the final representation
+            # input shape (batch, features, rep_height, rep_width, frames)
+            # output shape (batch, features, rep_height, rep_width, 1)
+            representations = self.representation_fc(representations)
+            # final squeeze
+            # output shape (batch, features, rep_height, rep_width)
+            representations = torch.squeeze(representations, 4)
+
+        # upsample representations to get heatmaps
         heatmaps = self.upsampling_layers(representations)
+
         return heatmaps
 
     def forward(
