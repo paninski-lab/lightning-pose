@@ -34,7 +34,6 @@ class RegressionTracker(BaseSupervisedTracker):
         ] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
-        representation_dropout_rate: float = 0.2,
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
@@ -48,8 +47,6 @@ class RegressionTracker(BaseSupervisedTracker):
             backbone: ResNet or EfficientNet variant to be used
             pretrained: True to load pretrained imagenet weights
             last_resnet_layer_to_get: skip final layers of backbone model
-            representation_dropout_rate: dropout in the final fully connected
-                layers
             torch_seed: make weight initialization reproducible
             lr_scheduler: how to schedule learning rate
                 multisteplr
@@ -74,8 +71,6 @@ class RegressionTracker(BaseSupervisedTracker):
         self.num_targets = self.num_keypoints * 2
         self.loss_factory = loss_factory
         self.final_layer = nn.Linear(self.num_fc_input_features, self.num_targets)
-        # TODO: consider removing dropout
-        self.representation_dropout = nn.Dropout(p=representation_dropout_rate)
         self.torch_seed = torch_seed
         self.do_context = do_context
         if self.mode == "2d":
@@ -97,12 +92,6 @@ class RegressionTracker(BaseSupervisedTracker):
         # necessary so we don't have to pass in model arguments when loading
         self.save_hyperparameters(ignore="loss_factory")  # cannot be pickled
 
-    @staticmethod
-    def reshape_representation(
-        representation: TensorType["batch", "features", "rep_height", "rep_width"]
-    ) -> TensorType["batch", "features"]:
-        return representation.reshape(representation.shape[0], representation.shape[1])
-
     def forward(
         self,
         images: Union[
@@ -113,9 +102,17 @@ class RegressionTracker(BaseSupervisedTracker):
         """Forward pass through the network."""
         # see input lines for shape of "images"
         representations = self.get_representations(images)
+        # handle context frames first
+        if (self.mode == "2d" and self.do_context) or self.mode == "3d":
+            # push through a linear layer to get the final representation
+            # input shape (batch, features, rep_height, rep_width, frames)
+            # output shape (batch, features, rep_height, rep_width, 1)
+            representations = self.representation_fc(representations)
+            # final squeeze
+            # output shape (batch, features, rep_height, rep_width)
+            representations = torch.squeeze(representations, 4)
         # "representations" is shape (batch, features, rep_height, rep_width)
-        reps_reshaped = self.reshape_representation(representations)
-        # reps_reshaped = self.representation_dropout(reps_reshaped)
+        reps_reshaped = representations.reshape(representations.shape[0], representations.shape[1])
         # after reshaping, is shape (batch, features)
         out = self.final_layer(reps_reshaped)
         # "out" is shape (num_valid_outputs, 2 * num_keypoints) where `num_valid_outputs` is not
@@ -171,7 +168,6 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         ] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
-        representation_dropout_rate: float = 0.2,
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
@@ -187,8 +183,6 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
             backbone: ResNet or EfficientNet variant to be used
             pretrained: True to load pretrained imagenet weights
             last_resnet_layer_to_get: skip final layers of original model
-            representation_dropout_rate: dropout in the final fully connected
-                layers
             torch_seed: make weight initialization reproducible
             lr_scheduler: how to schedule learning rate
                 multisteplr
@@ -202,7 +196,6 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
             loss_factory=loss_factory,
             backbone=backbone,
             pretrained=pretrained,
-            representation_dropout_rate=representation_dropout_rate,
             last_resnet_layer_to_get=last_resnet_layer_to_get,
             torch_seed=torch_seed,
             lr_scheduler=lr_scheduler,
