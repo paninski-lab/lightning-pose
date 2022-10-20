@@ -1,0 +1,402 @@
+"""Models that produce heatmaps of keypoints from images."""
+
+from kornia.geometry.subpix import spatial_softmax2d, spatial_expectation2d
+from kornia.geometry.transform import pyrup
+import numpy as np
+from omegaconf import DictConfig
+import torch
+from torch import nn
+from torchtyping import TensorType, patch_typeguard
+from typeguard import typechecked
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, Union
+from typing_extensions import Literal
+from torch.optim import Adam
+from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau
+
+from lightning_pose.data.utils import (
+    evaluate_heatmaps_at_location, undo_affine_transform,
+    BaseLabeledBatchDict, HeatmapLabeledBatchDict, UnlabeledBatchDict
+)
+from lightning_pose.losses.factory import LossFactory
+from lightning_pose.losses.losses import RegressionRMSELoss
+from lightning_pose.models.base import SemiSupervisedTrackerMixin
+from lightning_pose.models.heatmap_tracker import HeatmapTracker
+
+patch_typeguard()  # use before @typechecked
+
+
+@typechecked
+class HeatmapTrackerMHCRNN(HeatmapTracker):
+    """Multi-headed Convolutional RNN network that handles context frames."""
+
+    def __init__(
+        self,
+        num_keypoints: int,
+        loss_factory: LossFactory,
+        backbone: Literal[
+            "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
+            "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k",
+            "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"
+        ] = "resnet50",
+        downsample_factor: Literal[2, 3] = 2,
+        pretrained: bool = True,
+        last_resnet_layer_to_get: int = -3,
+        output_shape: Optional[tuple] = None,  # change
+        torch_seed: int = 123,
+        lr_scheduler: str = "multisteplr",
+        lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
+    ):
+        """Initialize a DLC-like model with resnet backbone.
+
+        Args:
+            num_keypoints: number of body parts
+            loss_factory: object to orchestrate loss computation
+            backbone: ResNet or EfficientNet variant to be used
+            downsample_factor: make heatmap smaller than original frames to
+                save memory; subpixel operations are performed for increased
+                precision
+            pretrained: True to load pretrained imagenet weights
+            last_resnet_layer_to_get: skip final layers of backbone model
+            output_shape: hard-coded image size to avoid dynamic shape
+                computations
+            torch_seed: make weight initialization reproducible
+            lr_scheduler: how to schedule learning rate
+                multisteplr
+            lr_scheduler_params: params for specific learning rate schedulers
+                multisteplr: milestones, gamma
+
+        """
+
+        # for reproducible weight initialization
+        torch.manual_seed(torch_seed)
+
+        super().__init__(
+            num_keypoints=num_keypoints,
+            loss_factory=loss_factory,
+            backbone=backbone,
+            downsample_factor=downsample_factor,
+            pretrained=pretrained,
+            last_resnet_layer_to_get=last_resnet_layer_to_get,
+            output_shape=output_shape,
+            torch_seed=torch_seed,
+            lr_scheduler=lr_scheduler,
+            lr_scheduler_params=lr_scheduler_params,
+            do_context=True,
+        )
+
+        if self.mode == "3d":
+            raise NotImplementedError
+
+        # create upsampling layers for crnn
+        self.crnn = UpsamplingCRNN(self.num_filters_for_upsampling, self.num_keypoints)
+        self.upsampling_layers_rnn = self.crnn.layers
+
+        # alias parent upsampling layers for single frame
+        self.upsampling_layers_sf = self.upsampling_layers
+
+    def heatmaps_from_representations(
+        self,
+        representations: TensorType["batch", "features", "rep_height", "rep_width", "frames"],
+    ) -> Tuple[
+         TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+         TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+    ]:
+        """Handle context frames then upsample to get final heatmaps."""
+        # permute to shape (frames, batch, features, rep_height, rep_width)
+        representations = torch.permute(representations, (4, 0, 1, 2, 3))
+        heatmaps_crnn = self.crnn(representations)
+        heatmaps_sf = self.upsampling_layers_sf(representations[2])
+
+        return heatmaps_crnn, heatmaps_sf
+
+    def forward(
+        self,
+        images: Union[
+            TensorType["batch", "channels":3, "image_height", "image_width"],
+            TensorType["batch", "frames", "channels":3, "image_height", "image_width"]
+        ],
+    ) -> Tuple[
+         TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"],
+         TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"],
+    ]:
+        """Forward pass through the network."""
+
+        # we get one representation for each desired output.
+        representations = self.get_representations(images)
+        heatmaps_crnn, heatmaps_sf = self.heatmaps_from_representations(representations)
+
+        # normalize heatmaps
+        # softmax temp stays 1 here; to modify for model predictions, see constructor
+        heatmaps_crnn_norm = spatial_softmax2d(heatmaps_crnn, temperature=torch.tensor([1.0]))
+        heatmaps_sf_norm = spatial_softmax2d(heatmaps_sf, temperature=torch.tensor([1.0]))
+
+        return heatmaps_crnn_norm, heatmaps_sf_norm
+
+    def get_loss_inputs_labeled(self, batch_dict: HeatmapLabeledBatchDict) -> dict:
+        """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
+        # images -> heatmaps
+        pred_heatmaps_crnn, pred_heatmaps_sf = self.forward(batch_dict["images"])
+        # heatmaps -> keypoints
+        pred_keypoints_crnn, confidence_crnn = self.run_subpixelmaxima(pred_heatmaps_crnn)
+        pred_keypoints_sf, confidence_sf = self.run_subpixelmaxima(pred_heatmaps_sf)
+        return {
+            "heatmaps_targ": torch.cat([batch_dict["heatmaps"], batch_dict["heatmaps"]], dim=0),
+            "heatmaps_pred": torch.cat([pred_heatmaps_crnn, pred_heatmaps_sf], dim=0),
+            "keypoints_targ": torch.cat([batch_dict["keypoints"], batch_dict["keypoints"]], dim=0),
+            "keypoints_pred": torch.cat([pred_keypoints_crnn, pred_keypoints_sf], dim=0),
+            "confidences": torch.cat([confidence_crnn, confidence_sf], dim=0),
+        }
+
+    def predict_step(
+        self,
+        batch: Union[dict, torch.Tensor], batch_idx: int
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Predict heatmaps and keypoints for a batch of video frames.
+
+        Assuming a DALI video loader is passed in
+        > trainer = Trainer(devices=8, accelerator="gpu")
+        > predictions = trainer.predict(model, data_loader)
+
+        """
+        if "images" in batch.keys():  # can't do isinstance(o, c) on TypedDicts
+            # labeled image dataloaders
+            images = batch["images"]
+        else:
+            # unlabeled dali video dataloaders
+            images = batch["frames"]
+
+        # images -> heatmaps
+        pred_heatmaps_crnn, pred_heatmaps_sf = self.forward(images)
+        # heatmaps -> keypoints
+        pred_keypoints_crnn, confidence_crnn = self.run_subpixelmaxima(pred_heatmaps_crnn)
+        pred_keypoints_sf, confidence_sf = self.run_subpixelmaxima(pred_heatmaps_sf)
+        # reshape keypoints to be (batch, n_keypoints, 2)
+        pred_keypoints_sf = pred_keypoints_sf.reshape(pred_keypoints_sf.shape[0], -1, 2)
+        pred_keypoints_crnn = pred_keypoints_crnn.reshape(pred_keypoints_crnn.shape[0], -1, 2)
+        # find higher confidence indices
+        crnn_conf_gt = torch.gt(confidence_crnn, confidence_sf)
+        # select higher confidence indices
+        pred_keypoints_sf[crnn_conf_gt] = pred_keypoints_crnn[crnn_conf_gt]
+        confidence_sf[crnn_conf_gt] = confidence_crnn[crnn_conf_gt]
+
+        return pred_keypoints_sf.reshape(pred_keypoints_sf.shape[0], -1), confidence_sf
+
+    def get_params(self):
+        params = [
+            # don't uncomment line below
+            # the BackboneFinetuning callback should add backbone to the params.
+            # {"params": self.backbone.parameters()},
+            # important this is the 0th element, for BackboneFinetuning callback
+            {"params": self.upsampling_layers_rnn.parameters()},
+            {"params": self.upsampling_layers_sf.parameters()},
+            {"params": self.unnormalized_weights},
+        ]
+        return params
+
+
+@typechecked
+class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrackerMHCRNN):
+    """Model produces heatmaps of keypoints from labeled/unlabeled images."""
+
+    def __init__(
+        self,
+        num_keypoints: int,
+        loss_factory: LossFactory,
+        loss_factory_unsupervised: LossFactory,
+        backbone: Literal[
+            "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
+            "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k",
+            "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"] = "resnet50",
+        downsample_factor: Literal[2, 3] = 2,
+        pretrained: bool = True,
+        last_resnet_layer_to_get: int = -3,
+        output_shape: Optional[tuple] = None,
+        torch_seed: int = 123,
+        lr_scheduler: str = "multisteplr",
+        lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
+        do_context: bool = False,
+    ):
+        """
+
+        Args:
+            num_keypoints: number of body parts
+            loss_factory: object to orchestrate supervised loss computation
+            loss_factory_unsupervised: object to orchestrate unsupervised loss
+                computation
+            backbone: ResNet or EfficientNet variant to be used
+            downsample_factor: make heatmap smaller than original frames to
+                save memory; subpixel operations are performed for increased
+                precision
+            pretrained: True to load pretrained imagenet weights
+            last_resnet_layer_to_get: skip final layers of original model
+            output_shape: hard-coded image size to avoid dynamic shape
+                computations
+            torch_seed: make weight initialization reproducible
+            lr_scheduler: how to schedule learning rate
+                multisteplr
+            lr_scheduler_params: params for specific learning rate schedulers
+                multisteplr: milestones, gamma
+            do_context: use temporal context frames to improve predictions
+
+        """
+        super().__init__(
+            num_keypoints=num_keypoints,
+            loss_factory=loss_factory,
+            backbone=backbone,
+            downsample_factor=downsample_factor,
+            pretrained=pretrained,
+            last_resnet_layer_to_get=last_resnet_layer_to_get,
+            output_shape=output_shape,
+            torch_seed=torch_seed,
+            lr_scheduler=lr_scheduler,
+            lr_scheduler_params=lr_scheduler_params,
+            do_context=do_context,
+        )
+        self.loss_factory_unsup = loss_factory_unsupervised.to(self.device)
+
+        # this attribute will be modified by AnnealWeight callback during training
+        # self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
+        self.total_unsupervised_importance = torch.tensor(1.0)
+
+    def get_loss_inputs_unlabeled(self, batch: UnlabeledBatchDict) -> dict:
+        """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
+        # images -> heatmaps
+        predicted_heatmaps = self.forward(batch["frames"])
+        # heatmaps -> keypoints
+        predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
+        # undo augmentation if needed
+        if batch["transforms"].shape[-1] == 3:
+            # reshape to (seq_len, n_keypoints, 2)
+            pred_kps = torch.reshape(predicted_keypoints, (predicted_keypoints.shape[0], -1, 2))
+            # undo
+            pred_kps = undo_affine_transform(pred_kps, batch["transforms"])
+            # reshape to (seq_len, n_keypoints * 2)
+            predicted_keypoints = torch.reshape(pred_kps, (pred_kps.shape[0], -1))
+        return {
+            "heatmaps_pred": predicted_heatmaps,
+            "keypoints_pred": predicted_keypoints,
+            "confidences": confidence,
+        }
+
+
+class UpsamplingCRNN(torch.nn.Module):
+
+    def __init__(
+            self, num_filters_for_upsampling, num_keypoints, upsampling_factor=2, hkernel=2,
+            hstride=2, hpad=0, nfilters_channel=16):
+        """Upsampling Convolutional RNN - initialize input and hidden weights."""
+
+        super().__init__()
+        self.upsampling_factor = upsampling_factor
+        self.pixel_shuffle = nn.PixelShuffle(2)
+        if self.upsampling_factor == 2:
+            self.W_pre = HeatmapTracker.create_double_upsampling_layer(
+                in_channels=num_filters_for_upsampling // 4,
+                out_channels=num_keypoints,
+            )
+            in_channels_rnn = num_keypoints
+        else:
+            in_channels_rnn = num_filters_for_upsampling // 4,
+
+        self.W_f = HeatmapTracker.create_double_upsampling_layer(
+            in_channels=in_channels_rnn,
+            out_channels=num_keypoints,
+        )
+        H_f_layers = []
+        H_f_layers.append(nn.Conv2d(
+            in_channels=num_keypoints,
+            out_channels=num_keypoints * nfilters_channel,
+            kernel_size=(hkernel, hkernel),
+            stride=(hstride, hstride),
+            padding=(hpad, hpad),
+            groups=num_keypoints,
+        ))
+        H_f_layers.append(nn.ConvTranspose2d(
+            in_channels=num_keypoints * nfilters_channel,
+            out_channels=num_keypoints,
+            kernel_size=(hkernel, hkernel),
+            stride=(hstride, hstride),
+            padding=(hpad, hpad),
+            output_padding=(hpad, hpad),
+            groups=num_keypoints,
+        ))
+        self.H_f = nn.Sequential(*H_f_layers)
+
+        self.W_b = HeatmapTracker.create_double_upsampling_layer(
+            in_channels=in_channels_rnn,
+            out_channels=num_keypoints,
+        )
+        H_b_layers = []
+        H_b_layers.append(nn.Conv2d(
+            in_channels=num_keypoints,
+            out_channels=num_keypoints * nfilters_channel,
+            kernel_size=(hkernel, hkernel),
+            stride=(hstride, hstride),
+            padding=(hpad, hpad),
+            groups=num_keypoints,
+        ))
+        H_b_layers.append(nn.ConvTranspose2d(
+            in_channels=num_keypoints * nfilters_channel,
+            out_channels=num_keypoints,
+            kernel_size=(hkernel, hkernel),
+            stride=(hstride, hstride),
+            padding=(hpad, hpad),
+            output_padding=(hpad, hpad),
+            groups=num_keypoints,
+        ))
+        self.H_b = nn.Sequential(*H_b_layers)
+        self.initialize_layers()
+        self.layers = torch.nn.ModuleList([self.W_pre, self.W_f, self.H_f, self.W_b, self.H_b])
+
+    def initialize_layers(self):
+        if self.upsampling_factor == 2:
+            torch.nn.init.xavier_uniform_(self.W_pre.weight, gain=1.0)
+            torch.nn.init.zeros_(self.W_pre.bias)
+
+        torch.nn.init.xavier_uniform_(self.W_f.weight, gain=1.0)
+        torch.nn.init.zeros_(self.W_f.bias)
+        for index, layer in enumerate(self.H_f):
+            torch.nn.init.xavier_uniform_(layer.weight, gain=1.0)
+            torch.nn.init.zeros_(layer.bias)
+
+        torch.nn.init.xavier_uniform_(self.W_b.weight, gain=1.0)
+        torch.nn.init.zeros_(self.W_b.bias)
+        for index, layer in enumerate(self.H_b):
+            torch.nn.init.xavier_uniform_(layer.weight, gain=1.0)
+            torch.nn.init.zeros_(layer.bias)
+
+    def forward(self, representations):
+        if self.upsampling_factor == 2:
+            # upsample once before passing through RNN
+            frames, batch, features, rep_height, rep_width = representations.shape
+            frames_batch_shape = batch * frames
+            representations_batch_frames: TensorType[
+                "batch*frames", "features", "rep_height", "rep_width"
+            ] = representations.reshape(frames_batch_shape, features, rep_height, rep_width)
+            x_tensor = self.W_pre(self.pixel_shuffle(representations_batch_frames))
+            x_tensor = x_tensor.reshape(
+                frames,
+                batch,
+                x_tensor.shape[1],
+                x_tensor.shape[2],
+                x_tensor.shape[3],
+            )
+            x_f = self.W_f(x_tensor[0])
+            for frame_batch in x_tensor[1:]:  # forward pass
+                x_f = self.W_f(frame_batch) + self.H_f(x_f)
+            x_tensor_b = torch.flip(x_tensor, dims=[0])
+            x_b = self.W_b(x_tensor_b[0])
+            for frame_batch in x_tensor_b[1:]:  # backwards pass
+                x_b = self.W_b(frame_batch) + self.H_b(x_b)
+        else:
+            x_tensor = representations
+            x_f = self.W_f(self.pixel_shuffle(x_tensor[0]))
+            for frame_batch in x_tensor[1:]:  # forward pass
+                x_f = self.W_f(self.pixel_shuffle(frame_batch)) + self.H_f(x_f)
+            x_tensor_b = torch.flip(x_tensor, dims=[0])
+            x_b = self.W_b(self.pixel_shuffle(x_tensor_b[0]))
+            for frame_batch in x_tensor_b[1:]:  # backwards pass
+                x_b = self.W_b(self.pixel_shuffle(frame_batch)) + self.H_b(x_b)
+        heatmaps = (x_f + x_b) / 2
+
+        return heatmaps
