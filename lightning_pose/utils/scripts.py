@@ -195,7 +195,7 @@ def get_dataset(
             header_rows=OmegaConf.to_object(cfg.data.header_rows),
             imgaug_transform=imgaug_transform,
             downsample_factor=cfg.data.downsample_factor,
-            do_context=cfg.model.do_context,
+            do_context=cfg.model.model_type == "heatmap_mhcrnn" or cfg.model.do_context,
         )
     else:
         raise NotImplementedError(

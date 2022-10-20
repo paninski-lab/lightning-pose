@@ -38,6 +38,7 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
+        **kwargs,
     ):
         """Initialize a DLC-like model with resnet backbone.
 
@@ -174,7 +175,7 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
 
         return pred_keypoints_sf.reshape(pred_keypoints_sf.shape[0], -1), confidence_sf
 
-    def get_params(self):
+    def get_parameters(self):
         params = [
             # don't uncomment line below
             # the BackboneFinetuning callback should add backbone to the params.
@@ -182,7 +183,6 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
             # important this is the 0th element, for BackboneFinetuning callback
             {"params": self.upsampling_layers_rnn.parameters()},
             {"params": self.upsampling_layers_sf.parameters()},
-            {"params": self.unnormalized_weights},
         ]
         return params
 
@@ -208,6 +208,7 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
+        **kwargs,
     ):
         """
 
@@ -278,6 +279,23 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
             "keypoints_pred": torch.cat([pred_keypoints_crnn, pred_keypoints_sf], dim=0),
             "confidences": torch.cat([confidence_crnn, confidence_sf], dim=0),
         }
+
+    def get_parameters(self):
+        params = [
+            # don't uncomment line below
+            # the BackboneFinetuning callback should add backbone to the params.
+            # {"params": self.backbone.parameters()},
+            # important this is the 0th element, for BackboneFinetuning callback
+            {"params": self.upsampling_layers_rnn.parameters()},
+            {"params": self.upsampling_layers_sf.parameters()},
+        ]
+        # define different learning rate for weights in front of unsupervised losses
+        if len(self.loss_factory_unsup.loss_weights_parameter_dict) > 0:
+            params.append({
+                "params": self.loss_factory_unsup.loss_weights_parameter_dict.parameters(),
+                "lr": 1e-2,
+            })
+        return params
 
 
 class UpsamplingCRNN(torch.nn.Module):
