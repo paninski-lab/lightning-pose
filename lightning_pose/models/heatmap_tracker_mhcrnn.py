@@ -1,8 +1,6 @@
 """Models that produce heatmaps of keypoints from images."""
 
-from kornia.geometry.subpix import spatial_softmax2d, spatial_expectation2d
-from kornia.geometry.transform import pyrup
-import numpy as np
+from kornia.geometry.subpix import spatial_softmax2d
 from omegaconf import DictConfig
 import torch
 from torch import nn
@@ -10,15 +8,10 @@ from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, Union
 from typing_extensions import Literal
-from torch.optim import Adam
-from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau
 
 from lightning_pose.data.utils import (
-    evaluate_heatmaps_at_location, undo_affine_transform,
-    BaseLabeledBatchDict, HeatmapLabeledBatchDict, UnlabeledBatchDict
-)
+    undo_affine_transform, HeatmapLabeledBatchDict, UnlabeledBatchDict)
 from lightning_pose.losses.factory import LossFactory
-from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.base import SemiSupervisedTrackerMixin
 from lightning_pose.models.heatmap_tracker import HeatmapTracker
 
@@ -206,7 +199,8 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
         backbone: Literal[
             "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
             "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k",
-            "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"] = "resnet50",
+            "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"
+        ] = "resnet50",
         downsample_factor: Literal[2, 3] = 2,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
@@ -214,7 +208,6 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
-        do_context: bool = False,
     ):
         """
 
@@ -236,7 +229,6 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
                 multisteplr
             lr_scheduler_params: params for specific learning rate schedulers
                 multisteplr: milestones, gamma
-            do_context: use temporal context frames to improve predictions
 
         """
         super().__init__(
@@ -250,7 +242,6 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
             torch_seed=torch_seed,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
-            do_context=do_context,
         )
         self.loss_factory_unsup = loss_factory_unsupervised.to(self.device)
 
@@ -261,21 +252,31 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
     def get_loss_inputs_unlabeled(self, batch: UnlabeledBatchDict) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
-        predicted_heatmaps = self.forward(batch["frames"])
+        pred_heatmaps_crnn, pred_heatmaps_sf = self.forward(batch["frames"])
         # heatmaps -> keypoints
-        predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
+        pred_keypoints_crnn, confidence_crnn = self.run_subpixelmaxima(pred_heatmaps_crnn)
+        pred_keypoints_sf, confidence_sf = self.run_subpixelmaxima(pred_heatmaps_sf)
+
         # undo augmentation if needed
         if batch["transforms"].shape[-1] == 3:
             # reshape to (seq_len, n_keypoints, 2)
-            pred_kps = torch.reshape(predicted_keypoints, (predicted_keypoints.shape[0], -1, 2))
+            pred_kps = torch.reshape(pred_keypoints_crnn, (pred_keypoints_crnn.shape[0], -1, 2))
             # undo
             pred_kps = undo_affine_transform(pred_kps, batch["transforms"])
             # reshape to (seq_len, n_keypoints * 2)
-            predicted_keypoints = torch.reshape(pred_kps, (pred_kps.shape[0], -1))
+            pred_keypoints_crnn = torch.reshape(pred_kps, (pred_kps.shape[0], -1))
+
+            # reshape to (seq_len, n_keypoints, 2)
+            pred_kps = torch.reshape(pred_keypoints_sf, (pred_keypoints_sf.shape[0], -1, 2))
+            # undo
+            pred_kps = undo_affine_transform(pred_kps, batch["transforms"])
+            # reshape to (seq_len, n_keypoints * 2)
+            pred_keypoints_sf = torch.reshape(pred_kps, (pred_kps.shape[0], -1))
+
         return {
-            "heatmaps_pred": predicted_heatmaps,
-            "keypoints_pred": predicted_keypoints,
-            "confidences": confidence,
+            "heatmaps_pred": torch.cat([pred_heatmaps_crnn, pred_heatmaps_sf], dim=0),
+            "keypoints_pred": torch.cat([pred_keypoints_crnn, pred_keypoints_sf], dim=0),
+            "confidences": torch.cat([confidence_crnn, confidence_sf], dim=0),
         }
 
 
