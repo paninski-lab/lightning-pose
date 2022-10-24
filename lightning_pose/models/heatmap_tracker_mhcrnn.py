@@ -298,11 +298,27 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
         return params
 
 
+@typechecked
 class UpsamplingCRNN(torch.nn.Module):
+    """Bidirectional Convolutional RNN network that handles heatmaps of context frames.
+
+    The input to the CRNN is a set of heatmaps at times t-k, ..., t, ...t+k, one heatmap for each
+    timepoint/keypoint
+
+    The output of the CRNN is a single heatmap for each keypoint
+
+    """
 
     def __init__(
-            self, num_filters_for_upsampling, num_keypoints, upsampling_factor=2, hkernel=2,
-            hstride=2, hpad=0, nfilters_channel=16):
+        self,
+        num_filters_for_upsampling: int,
+        num_keypoints: int,
+        upsampling_factor: int = 2,
+        hkernel: int = 2,
+        hstride: int = 2,
+        hpad: int = 0,
+        nfilters_channel: int = 16
+    ) -> None:
         """Upsampling Convolutional RNN - initialize input and hidden weights."""
 
         super().__init__()
@@ -384,9 +400,15 @@ class UpsamplingCRNN(torch.nn.Module):
             torch.nn.init.xavier_uniform_(layer.weight, gain=1.0)
             torch.nn.init.zeros_(layer.bias)
 
-    def forward(self, representations):
+    def forward(
+        self,
+        representations: TensorType["frames", "batch", "features", "rep_height", "rep_width"]
+    ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
+
+        # expand representations in spatial domain using pixel shuffle to create heatmaps
         if self.upsampling_factor == 2:
-            # upsample once before passing through RNN
+            # upsample once more before passing through RNN
+            # need to reshape to push through convolution layers
             frames, batch, features, rep_height, rep_width = representations.shape
             frames_batch_shape = batch * frames
             representations_batch_frames: TensorType[
@@ -400,22 +422,19 @@ class UpsamplingCRNN(torch.nn.Module):
                 x_tensor.shape[2],
                 x_tensor.shape[3],
             )
-            x_f = self.W_f(x_tensor[0])
-            for frame_batch in x_tensor[1:]:  # forward pass
-                x_f = self.W_f(frame_batch) + self.H_f(x_f)
-            x_tensor_b = torch.flip(x_tensor, dims=[0])
-            x_b = self.W_b(x_tensor_b[0])
-            for frame_batch in x_tensor_b[1:]:  # backwards pass
-                x_b = self.W_b(frame_batch) + self.H_b(x_b)
         else:
-            x_tensor = representations
-            x_f = self.W_f(self.pixel_shuffle(x_tensor[0]))
-            for frame_batch in x_tensor[1:]:  # forward pass
-                x_f = self.W_f(self.pixel_shuffle(frame_batch)) + self.H_f(x_f)
-            x_tensor_b = torch.flip(x_tensor, dims=[0])
-            x_b = self.W_b(self.pixel_shuffle(x_tensor_b[0]))
-            for frame_batch in x_tensor_b[1:]:  # backwards pass
-                x_b = self.W_b(self.pixel_shuffle(frame_batch)) + self.H_b(x_b)
+            x_tensor = self.pixel_shuffle(representations)
+
+        # push heatmaps through CRNN
+        x_f = self.W_f(x_tensor[0])
+        for frame_batch in x_tensor[1:]:  # forward pass
+            x_f = self.W_f(frame_batch) + self.H_f(x_f)
+        x_tensor_b = torch.flip(x_tensor, dims=[0])
+        x_b = self.W_b(x_tensor_b[0])
+        for frame_batch in x_tensor_b[1:]:  # backwards pass
+            x_b = self.W_b(frame_batch) + self.H_b(x_b)
+
+        # average forward/backward heatmaps
         heatmaps = (x_f + x_b) / 2
 
         return heatmaps

@@ -212,11 +212,13 @@ class HeatmapTracker(BaseSupervisedTracker):
         if (self.mode == "2d" and self.do_context) or self.mode == "3d":
             # push through a linear layer to get the final representation
             # input shape (batch, features, rep_height, rep_width, frames)
-            # output shape (batch, features, rep_height, rep_width, 1)
-            representations = self.representation_fc(representations)
+            representations: TensorType[
+                "batch", "features", "rep_height", "rep_width", "frames"
+            ] = self.representation_fc(representations)
             # final squeeze
-            # output shape (batch, features, rep_height, rep_width)
-            representations = torch.squeeze(representations, 4)
+            representations: TensorType[
+                "batch", "features", "rep_height", "rep_width"
+            ] = torch.squeeze(representations, 4)
 
         # upsample representations to get heatmaps
         heatmaps = self.upsampling_layers(representations)
