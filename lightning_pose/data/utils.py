@@ -382,9 +382,8 @@ def generate_heatmaps(
     nan_idxs = torch.isnan(keypoints)[:, :, 0]
     xv = torch.arange(out_width, device=keypoints.device)
     yv = torch.arange(out_height, device=keypoints.device)
-    xx, yy = torch.meshgrid(
-        yv, xv
-    )  # note flipped order because of pytorch's ij and numpy's xy indexing for meshgrid
+    # note flipped order because of pytorch's ij and numpy's xy indexing for meshgrid
+    xx, yy = torch.meshgrid(yv, xv, indexing='ij')
     # adds batch and num_keypoints dimensions to grids
     xx = xx.unsqueeze(0).unsqueeze(0)
     yy = yy.unsqueeze(0).unsqueeze(0)
@@ -459,7 +458,7 @@ def undo_affine_transform(
         (keypoints.shape[0], keypoints.shape[1], 1),
         dtype=keypoints.dtype,
         device=keypoints.device,
-        requires_grad=False,
+        requires_grad=True,
     )
     kps_aff = torch.concat([keypoints, ones], axis=2)
 
