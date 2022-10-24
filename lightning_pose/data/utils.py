@@ -3,13 +3,12 @@
 import imgaug.augmenters as iaa
 from kornia import image_to_tensor
 import numpy as np
+from nvidia.dali.plugin.pytorch import DALIGenericIterator
 import torch
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 from typing import List, Literal, Optional, Tuple, Union, Dict, Any, TypedDict
 import pytorch_lightning as pl
-import math
-import os, glob
 
 patch_typeguard()  # use before @typechecked
 
@@ -58,8 +57,12 @@ class UnlabeledBatchDict(TypedDict):
         TensorType["null":1, float],
         torch.Tensor,
     ]
-    # MW: need to include torch.Tensor in Union, getting some error about torch.AnnotatedAlias that
-    # I don't understand
+    # transforms shapes
+    # (seq_len, 2, 3): different transform for each sequence
+    # (2, 3): same transform for all returned frames/keypoints
+    # (seq_len, 1): no transforms
+    # (1,): no transforms
+    # torch.Tensor: necessary, getting error about torch.AnnotatedAlias that I don't understand
 
 
 class SemiSupervisedBatchDict(TypedDict):
@@ -74,6 +77,12 @@ class SemiSupervisedHeatmapBatchDict(TypedDict):
     unlabeled: UnlabeledBatchDict
 
 
+class SemiSupervisedDataLoaderDict(TypedDict):
+    """Return type when calling train/val/test_dataloader() on semi-supervised models."""
+    labeled: torch.utils.data.DataLoader
+    unlabeled: DALIGenericIterator
+
+
 @typechecked
 class DataExtractor(object):
     """Helper class to extract all data from a data module."""
@@ -84,7 +93,7 @@ class DataExtractor(object):
         cond: Literal["train", "test", "val"] = "train",
         extract_images: bool = False,
         remove_augmentations: bool = True,
-    ):
+    ) -> None:
         self.cond = cond
         self.extract_images = extract_images
         self.remove_augmentations = remove_augmentations
@@ -164,7 +173,7 @@ class DataExtractor(object):
         name = "%s_dataset" % self.cond
         return len(getattr(self.data_module, name))
 
-    def get_loader(self) -> Union[torch.utils.data.DataLoader, dict]:
+    def get_loader(self) -> Union[torch.utils.data.DataLoader, SemiSupervisedDataLoaderDict]:
         if self.cond == "train":
             return self.data_module.train_dataloader()
         if self.cond == "val":
@@ -172,20 +181,21 @@ class DataExtractor(object):
         if self.cond == "test":
             return self.data_module.test_dataloader()
 
+    @staticmethod
     def verify_labeled_loader(
-        self,
-        loader: Union[torch.utils.data.DataLoader, dict]
+        loader: Union[torch.utils.data.DataLoader, SemiSupervisedDataLoaderDict]
     ) -> torch.utils.data.DataLoader:
-        if type(loader) is dict and "labeled" in list(loader.keys()):
+        if isinstance(loader, torch.utils.data.DataLoader):
+            labeled_loader = loader
+        else:
             # if we have a dictionary of dataloaders, we take the loader called
             # "labeled" (the loader called "unlabeled" doesn't have keypoints)
             labeled_loader = loader["labeled"]
-        else:
-            labeled_loader = loader
         return labeled_loader
 
     def iterate_over_dataloader(
-        self, loader: torch.utils.data.DataLoader
+        self,
+        loader: torch.utils.data.DataLoader
     ) -> Tuple[
         TensorType["num_examples", Any],
         Union[
@@ -453,18 +463,22 @@ def undo_affine_transform(
     )
     kps_aff = torch.concat([keypoints, ones], axis=2)
 
-    mat = transform.detach().cpu().numpy()
+    mat = torch.clone(transform).detach()
     if len(transform.shape) == 2:
         # single transform for all frames; add batch dim
-        mat = mat[None, ...]
+        mat = mat.unsqueeze(0)
 
     # create inverse matrices
     mats_inv_torch = []
     for idx in range(mat.shape[0]):
-        mat_inv_ = np.linalg.inv(mat[idx, :, :2])
-        mat_inv = np.hstack([mat_inv_, -mat_inv_ @ mat[idx, :, -1, None]])
+        mat_inv_ = torch.linalg.inv(mat[idx, :, :2])
+        mat_inv = torch.concat([mat_inv_, torch.matmul(-mat_inv_, mat[idx, :, -1, None])], dim=1)
         mats_inv_torch.append(torch.tensor(
-            mat_inv.T, requires_grad=True, dtype=keypoints.dtype, device=keypoints.device))
+            torch.transpose(mat_inv, 1, 0),
+            dtype=keypoints.dtype,
+            device=keypoints.device,
+            requires_grad=True,
+        ))
 
     # make a single block of inverse matrices
     if len(mats_inv_torch) == 1:

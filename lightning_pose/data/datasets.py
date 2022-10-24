@@ -32,7 +32,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         header_rows: Optional[List[int]] = None,
         imgaug_transform: Optional[Callable] = None,
         do_context: bool = False,
-    ):
+    ) -> None:
         """Initialize a dataset for regression (rather than heatmap) models.
 
         The csv file of labels will be searched for in the following order:
@@ -228,7 +228,7 @@ class HeatmapDataset(BaseTrackingDataset):
         imgaug_transform: Optional[Callable] = None,
         downsample_factor: int = 2,
         do_context: bool = False,
-    ):
+    ) -> None:
         """Initialize the Heatmap Dataset.
 
         Args:
@@ -282,13 +282,6 @@ class HeatmapDataset(BaseTrackingDataset):
     ) -> TensorType["num_keypoints", "heatmap_height", "heatmap_width"]:
         """Compute 2D heatmaps from arbitrary (x, y) coordinates."""
 
-        if self.do_context:
-            image_height = example_dict["images"][0].shape[-2]
-            image_width = example_dict["images"][0].shape[-1]
-        else:
-            image_height = example_dict["images"].shape[-2]
-            image_width = example_dict["images"].shape[-1]
-
         # reshape
         keypoints = example_dict["keypoints"].reshape(self.num_keypoints, 2)
 
@@ -298,15 +291,15 @@ class HeatmapDataset(BaseTrackingDataset):
             torch.lt(keypoints[:, 0], torch.tensor(0)),
             torch.lt(keypoints[:, 1], torch.tensor(0)))
         new_nans = torch.logical_or(
-            new_nans, torch.ge(keypoints[:, 0], torch.tensor(image_width)))
+            new_nans, torch.ge(keypoints[:, 0], torch.tensor(self.width)))
         new_nans = torch.logical_or(
-            new_nans, torch.ge(keypoints[:, 1], torch.tensor(image_height)))
+            new_nans, torch.ge(keypoints[:, 1], torch.tensor(self.height)))
         keypoints[new_nans, :] = torch.nan
 
         y_heatmap = generate_heatmaps(
             keypoints=keypoints.unsqueeze(0),  # add batch dim
-            height=image_height,
-            width=image_width,
+            height=self.height,
+            width=self.width,
             output_shape=self.output_shape,
             sigma=self.output_sigma,
         )
