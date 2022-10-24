@@ -63,7 +63,7 @@ def test_PrepareDALI(cfg, video_list):
 
     # always sequence length should be fixed.
     for i, batch in enumerate(loader):
-        assert batch[0].shape == (cfg.dali.base.predict.sequence_length, 3, 256, 256)
+        assert batch["frames"].shape == (cfg.dali.base.predict.sequence_length, 3, 256, 256)
     assert(i == num_iters-1)  # we have the right number of batches drawn
 
     # context model, different looking batch and shapes 
@@ -89,15 +89,15 @@ def test_PrepareDALI(cfg, video_list):
     # property of this video and the context.
     for i, batch in enumerate(loader):
         if i < num_iters-1:
-            assert batch[0].shape == (cfg.dali.context.predict.batch_size, 5, 3, 256, 256)
+            assert batch["frames"].shape == (cfg.dali.context.predict.batch_size, 5, 3, 256, 256)
         elif i == num_iters-1:
-            assert batch[0].shape == (2, 5, 3, 256, 256)
+            assert batch["frames"].shape == (2, 5, 3, 256, 256)
     assert(i == num_iters-1)
 
     # now on the final batch, check that we're actually grabing 5-frame sequences
-    # assert that frame 1 in batch[0] is frame 0 in batch[1]
-    assert torch.allclose(batch[0][0][1], batch[0][1][0])
+    # assert that frame 1 in batch 0 is frame 0 in batch 1
+    assert torch.allclose(batch["frames"][0][1], batch["frames"][1][0])
 
     # last sequence of 5 frames, with a step=1, means that only the 0th image is an actual image.
     # the rest is padding. so image 1 and -1 are identical.
-    assert torch.allclose(batch[0][1][1], batch[0][1][-1])
+    assert torch.allclose(batch["frames"][1][1], batch["frames"][1][-1])

@@ -69,8 +69,9 @@ def select_frame_idxs(video_file, resize_dims=64, n_clusters=20):
         # batches.append(batch)
         # take mean over color channel, remove spatial dims
         # result is shape (batch_size, height * width)
-        batches.append(
-            torch.reshape(torch.mean(batch, dim=1), (batch.shape[0], -1)).detach().cpu().numpy())
+        batches.append(torch.reshape(
+            torch.mean(batch["images"], dim=1),
+            (batch["images"].shape[0], -1)).detach().cpu().numpy())
     batches = np.concatenate(batches, axis=0)
 
     # ---------------------------------------------------------

@@ -3,15 +3,84 @@
 import imgaug.augmenters as iaa
 from kornia import image_to_tensor
 import numpy as np
+from nvidia.dali.plugin.pytorch import DALIGenericIterator
 import torch
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
-from typing import List, Literal, Optional, Tuple, Union, Dict, Any
+from typing import List, Literal, Optional, Tuple, Union, Dict, Any, TypedDict
 import pytorch_lightning as pl
-import math
-import os, glob
 
 patch_typeguard()  # use before @typechecked
+
+
+# below are a bunch of classes that streamline data typechecking
+class BaseLabeledExampleDict(TypedDict):
+    """Return type when calling __getitem__() on BaseTrackingDataset."""
+    images: Union[
+        TensorType["RGB":3, "image_height", "image_width"],
+        TensorType["frames", "RGB":3, "image_height", "image_width"],
+    ]
+    keypoints: TensorType["num_targets"]
+    idxs: int
+
+
+class HeatmapLabeledExampleDict(BaseLabeledExampleDict):
+    """Return type when calling __getitem__() on HeatmapTrackingDataset."""
+    heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width"]
+
+
+class BaseLabeledBatchDict(TypedDict):
+    """Batch type for base labeled data."""
+    images: Union[
+        TensorType["batch", "RGB":3, "image_height", "image_width", float],
+        TensorType["batch", "frames", "RGB":3, "image_height", "image_width", float],
+    ]
+    keypoints: TensorType["batch", "num_targets", float]
+    idxs: TensorType["batch", int]
+
+
+class HeatmapLabeledBatchDict(BaseLabeledBatchDict):
+    """Batch type for heatmap labeled data."""
+    heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width", float]
+
+
+class UnlabeledBatchDict(TypedDict):
+    """Batch type for unlabeled data."""
+    frames: Union[
+        TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
+        TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float],
+    ]
+    transforms: Union[
+        TensorType["seq_len", "h":2, "w":3, float],
+        TensorType["h":2, "w":3, float],
+        TensorType["seq_len", "null":1, float],
+        TensorType["null":1, float],
+        torch.Tensor,
+    ]
+    # transforms shapes
+    # (seq_len, 2, 3): different transform for each sequence
+    # (2, 3): same transform for all returned frames/keypoints
+    # (seq_len, 1): no transforms
+    # (1,): no transforms
+    # torch.Tensor: necessary, getting error about torch.AnnotatedAlias that I don't understand
+
+
+class SemiSupervisedBatchDict(TypedDict):
+    """Batch type for base labeled+unlabeled data."""
+    labeled: BaseLabeledBatchDict
+    unlabeled: UnlabeledBatchDict
+
+
+class SemiSupervisedHeatmapBatchDict(TypedDict):
+    """Batch type for heatmap labeled+unlabeled data."""
+    labeled: HeatmapLabeledBatchDict
+    unlabeled: UnlabeledBatchDict
+
+
+class SemiSupervisedDataLoaderDict(TypedDict):
+    """Return type when calling train/val/test_dataloader() on semi-supervised models."""
+    labeled: torch.utils.data.DataLoader
+    unlabeled: DALIGenericIterator
 
 
 @typechecked
@@ -104,8 +173,7 @@ class DataExtractor(object):
         name = "%s_dataset" % self.cond
         return len(getattr(self.data_module, name))
 
-    @typechecked
-    def get_loader(self) -> Union[torch.utils.data.DataLoader, dict]:
+    def get_loader(self) -> Union[torch.utils.data.DataLoader, SemiSupervisedDataLoaderDict]:
         if self.cond == "train":
             return self.data_module.train_dataloader()
         if self.cond == "val":
@@ -113,21 +181,21 @@ class DataExtractor(object):
         if self.cond == "test":
             return self.data_module.test_dataloader()
 
-    @typechecked
+    @staticmethod
     def verify_labeled_loader(
-        self, loader: Union[torch.utils.data.DataLoader, dict]
+        loader: Union[torch.utils.data.DataLoader, SemiSupervisedDataLoaderDict]
     ) -> torch.utils.data.DataLoader:
-        if type(loader) is dict and "labeled" in list(loader.keys()):
+        if isinstance(loader, torch.utils.data.DataLoader):
+            labeled_loader = loader
+        else:
             # if we have a dictionary of dataloaders, we take the loader called
             # "labeled" (the loader called "unlabeled" doesn't have keypoints)
             labeled_loader = loader["labeled"]
-        else:
-            labeled_loader = loader
         return labeled_loader
 
-    @typechecked
     def iterate_over_dataloader(
-        self, loader: torch.utils.data.DataLoader
+        self,
+        loader: torch.utils.data.DataLoader
     ) -> Tuple[
         TensorType["num_examples", Any],
         Union[
@@ -152,7 +220,6 @@ class DataExtractor(object):
         assert concat_keypoints.shape == (self.dataset_length, keypoints_list[0].shape[1])
         return concat_keypoints, concat_images
 
-    @typechecked
     def __call__(
         self,
     ) -> Tuple[
@@ -292,7 +359,6 @@ def generate_heatmaps(
     output_shape: Tuple[int, int],  # dimensions of downsampled heatmap
     sigma: Union[float, int] = 1.25,  # sigma used for generating heatmaps
     normalize: bool = True,
-    nan_heatmap_mode: str = "zero",
 ) -> TensorType["batch", "num_keypoints", "height", "width"]:
     """Generate 2D Gaussian heatmaps from mean and sigma.
 
@@ -303,9 +369,6 @@ def generate_heatmaps(
         output_shape: dimensions of downsampled heatmap, (height, width)
         sigma: control spread of gaussian
         normalize: normalize to a probability distribution (heatmap sums to one)
-        nan_heatmap_mode: flag for how to treat nans: "uniform" | "zero"
-            "uniform" returns a uniform probability distribution
-            "zero" returns all zeros
 
     Returns:
         batch of 2D heatmaps
@@ -333,23 +396,17 @@ def generate_heatmaps(
     confidence *= -1
     confidence /= 2 * sigma**2
     confidence = torch.exp(confidence)
-    if not normalize:
-        confidence /= sigma * torch.sqrt(2 * torch.tensor(np.pi))
-    else:
-        nan_heatmap_mode = "uniform"  # so normalization doesn't fail
 
-    if nan_heatmap_mode == "uniform":
-        uniform_heatmap = torch.ones(
-            (out_height, out_width), device=keypoints.device
-        ) / (out_height * out_width)
-        confidence[nan_idxs] = uniform_heatmap
-    else:  # nan_heatmap_mode == "zero"
-        zero_heatmap = torch.zeros((out_height, out_width), device=keypoints.device)
-        confidence[nan_idxs] = zero_heatmap
+    # replace nans with uniform heatmap
+    uniform_heatmap = torch.ones(
+        (out_height, out_width), device=keypoints.device) / (out_height * out_width)
+    confidence[nan_idxs] = uniform_heatmap
 
     if normalize:
         # normalize all heatmaps to one
         confidence = confidence / torch.sum(confidence, dim=(2, 3), keepdim=True)
+    else:
+        confidence /= sigma * torch.sqrt(2 * torch.tensor(np.pi))
 
     return confidence
 
@@ -393,9 +450,9 @@ def evaluate_heatmaps_at_location(
 
 @typechecked
 def undo_affine_transform(
-        keypoints: TensorType["seq_len", "n_keypoints", 2],
-        transform: Union[TensorType["seq_len", 2, 3], TensorType[2, 3]]
-) -> TensorType["seq_len", "n_keypoints", 2]:
+    keypoints: TensorType["seq_len", "num_keypoints", 2],
+    transform: Union[TensorType["seq_len", 2, 3], TensorType[2, 3]]
+) -> TensorType["seq_len", "num_keypoints", 2]:
 
     # add 1s to get keypoints in projective geometry coords
     ones = torch.ones(
@@ -406,18 +463,22 @@ def undo_affine_transform(
     )
     kps_aff = torch.concat([keypoints, ones], axis=2)
 
-    mat = transform.detach().cpu().numpy()
+    mat = torch.clone(transform).detach()
     if len(transform.shape) == 2:
         # single transform for all frames; add batch dim
-        mat = mat[None, ...]
+        mat = mat.unsqueeze(0)
 
     # create inverse matrices
     mats_inv_torch = []
     for idx in range(mat.shape[0]):
-        mat_inv_ = np.linalg.inv(mat[idx, :, :2])
-        mat_inv = np.hstack([mat_inv_, -mat_inv_ @ mat[idx, :, -1, None]])
+        mat_inv_ = torch.linalg.inv(mat[idx, :, :2])
+        mat_inv = torch.concat([mat_inv_, torch.matmul(-mat_inv_, mat[idx, :, -1, None])], dim=1)
         mats_inv_torch.append(torch.tensor(
-            mat_inv.T, requires_grad=True, dtype=keypoints.dtype, device=keypoints.device))
+            torch.transpose(mat_inv, 1, 0),
+            dtype=keypoints.dtype,
+            device=keypoints.device,
+            requires_grad=True,
+        ))
 
     # make a single block of inverse matrices
     if len(mats_inv_torch) == 1:
