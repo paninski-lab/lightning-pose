@@ -35,7 +35,7 @@ class KeypointPCA(object):
         mirrored_column_matches: Optional[Union[ListConfig, List]] = None,
         columns_for_singleview_pca: Optional[Union[ListConfig, List]] = None,
         device: Union[Literal["cuda", "cpu"], torch.device] = "cpu",
-    ):
+    ) -> None:
         self.loss_type = loss_type
         self.error_metric = error_metric
         self.data_module = data_module

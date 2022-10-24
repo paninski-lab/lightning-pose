@@ -197,9 +197,7 @@ def get_dataset(
         raise NotImplementedError(
             "%s is an invalid cfg.model.model_type" % cfg.model.model_type
         )
-    image = Image.open(
-        os.path.join(dataset.root_directory, dataset.image_names[0])
-    ).convert("RGB")
+    image = Image.open(os.path.join(dataset.root_directory, dataset.image_names[0])).convert("RGB")
     if image.size != (
         cfg.data.image_orig_dims.width,
         cfg.data.image_orig_dims.height,
