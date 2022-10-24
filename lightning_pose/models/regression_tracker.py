@@ -39,7 +39,7 @@ class RegressionTracker(BaseSupervisedTracker):
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
         do_context: bool = False,
-    ):
+    ) -> None:
         """Base model that produces (x, y) coordinates of keypoints from images.
 
         Args:
@@ -176,7 +176,7 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
         do_context: bool = False,
-    ):
+    ) -> None:
         """
 
         Args:

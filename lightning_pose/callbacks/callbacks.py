@@ -13,7 +13,7 @@ class AnnealWeight(Callback):
         increase_factor: float = 0.01,
         final_val: float = 1.0,
         freeze_until_epoch: int = 0,
-    ):
+    ) -> None:
         super().__init__()
         self.init_val = init_val
         self.increase_factor = increase_factor

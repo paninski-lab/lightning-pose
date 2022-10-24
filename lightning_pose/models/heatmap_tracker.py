@@ -45,7 +45,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
         do_context: bool = False,
-    ):
+    ) -> None:
         """Initialize a DLC-like model with resnet backbone.
 
         Args:
@@ -285,7 +285,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
         do_context: bool = False,
-    ):
+    ) -> None:
         """
 
         Args:

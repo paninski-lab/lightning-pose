@@ -134,7 +134,7 @@ class LitDaliWrapper(DALIGenericIterator):
         do_context: bool = False,
         context_sequences_successive: bool = False,
         **kwargs
-    ):
+    ) -> None:
         """Wrapper around DALIGenericIterator to get batches for pl.
 
         Args:
@@ -155,37 +155,47 @@ class LitDaliWrapper(DALIGenericIterator):
 
     def __len__(self) -> int:
         return self.num_iters
-    
-    def _modify_output(self, out) -> UnlabeledBatchDict:
+
+    @staticmethod
+    def _dali_output_to_tensors(
+        batch: list,
+        num_sequences: Literal["single", "multi"]
+    ) -> UnlabeledBatchDict:
+
+        if num_sequences == "single":  # always batch_size=1
+            # shape (sequence_length, 3, H, W)
+            frames = batch[0]["frames"][0, :, :, :, :]
+            # shape (1,) or (2, 3)
+            transforms = batch[0]["transforms"][0]
+        else:  # multiple independent five-frame sequences
+            # shape (sequence_length, 3, H, W) OR (batch_size, sequence_length, 3, H, W)
+            frames = batch[0]["frames"]
+            # shape (1,) OR (batch_size, 1) or (batch_size, 2, 3)
+            transforms = batch[0]["transforms"]
+
+        return UnlabeledBatchDict(frames=frames, transforms=transforms)
+
+    def _modify_output(self, batch: list) -> UnlabeledBatchDict:
         """Modify output based on train/predict and context/non-context."""
         if self.do_context:
             if self.eval_mode == "predict":
-                # shape (sequence_length, 3, H, W)
-                frames = out[0]["frames"]
-                # shape (1,)
-                transforms = out[0]["transforms"]
+                unlabeled_batch_dict = self._dali_output_to_tensors(
+                    batch=batch, num_sequences="multi")
             else:
-                # train with context. pipeline is like for "base" model, but we reshape images
-                # further down. assume batch_size=1
                 if self.context_sequences_successive:
-                    # shape (sequence_length, 3, H, W)
-                    frames = out[0]["frames"][0, :, :, :, :]
-                    # shape (1,) or (2, 3)
-                    transforms = out[0]["transforms"][0]
+                    # pipeline is like for "base" model, but we reshape images further down
+                    # assume batch_size=1
+                    unlabeled_batch_dict = self._dali_output_to_tensors(
+                        batch=batch, num_sequences="single")
                 else:
                     # grabbing independent 5-frame sequences. batch_size > 1
-                    # shape (batch_size, sequence_length, 3, H, W)
-                    frames = out[0]["frames"]
-                    # shape (batch_size, 1) or (batch_size, 2, 3)
-                    transforms = out[0]["transforms"]
+                    unlabeled_batch_dict = self._dali_output_to_tensors(
+                        batch=batch, num_sequences="multi")
         else:
-            # shape (sequence_length, 3, H, W)
-            # careful: only valid for one sequence, i.e., batch size of 1.
-            frames = out[0]["frames"][0, :, :, :, :]
-            # shape (1,) or (2, 3)
-            transforms = out[0]["transforms"][0]
+            unlabeled_batch_dict = self._dali_output_to_tensors(
+                batch=batch, num_sequences="single")
 
-        return UnlabeledBatchDict(frames=frames, transforms=transforms)
+        return unlabeled_batch_dict
 
     def __next__(self) -> UnlabeledBatchDict:
         out = super().__next__()
@@ -211,7 +221,7 @@ class PrepareDALI(object):
         resize_dims: List[int],
         dali_config: Union[dict, DictConfig] = None,
         imgaug: Optional[str] = "default",
-    ):
+    ) -> None:
         self.train_stage = train_stage
         self.model_type = model_type
         self.resize_dims = resize_dims
@@ -305,7 +315,8 @@ class PrepareDALI(object):
         # context (five-frame) model, train pipe args
         context_train_cfg = self.dali_config["context"]["train"]
         if self.context_sequences_successive:
-            # grab a single sequence of frames, will resize into 5-frame chunks later
+            # grab a single sequence of frames, will resize into 5-frame chunks at the
+            # representation level inside BaseFeatureExtractor
             # note: reusing the batch size argument
             dict_args["train"]["context"] = {
                 "filenames": filenames,
@@ -352,7 +363,12 @@ class PrepareDALI(object):
         return pipe
     
     def _setup_dali_iterator_args(self) -> dict:
-        """ builds args for Lightning iterator"""
+        """Builds args for Lightning iterator.
+
+        If you want to extract more outputs from DALI, e.g., optical flow, you should also add
+        this in the "output_map" arg
+
+        """
         dict_args = {}
         dict_args["predict"] = {"context": {}, "base": {}}
         dict_args["train"] = {"context": {}, "base": {}}

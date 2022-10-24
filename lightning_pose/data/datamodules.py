@@ -8,10 +8,11 @@ import torch
 from torch.utils.data import DataLoader, random_split
 from torchtyping import patch_typeguard
 from typeguard import typechecked
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union, TypedDict
 
 from lightning_pose.data.dali import PrepareDALI, LitDaliWrapper
-from lightning_pose.data.utils import split_sizes_from_probabilities, compute_num_train_frames
+from lightning_pose.data.utils import (
+    split_sizes_from_probabilities, compute_num_train_frames, SemiSupervisedDataLoaderDict)
 from lightning_pose.utils.io import check_video_paths
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -35,7 +36,7 @@ class BaseDataModule(pl.LightningDataModule):
         test_probability: Optional[float] = None,
         train_frames: Optional[Union[float, int]] = None,
         torch_seed: int = 42,
-    ):
+    ) -> None:
         """Data module splits a dataset into train, val, and test data loaders.
 
         Args:
@@ -157,7 +158,7 @@ class UnlabeledDataModule(BaseDataModule):
         train_frames: Optional[float] = None,
         torch_seed: int = 42,
         imgaug: Literal["default", "dlc", "dlc-light"] = "default",
-    ):
+    ) -> None:
         """Data module that contains labeled and unlabeled data loaders.
 
         Args:
@@ -215,14 +216,14 @@ class UnlabeledDataModule(BaseDataModule):
 
         self.unlabeled_dataloader = dali_prep()
 
-    def train_dataloader(self) -> Dict[str, Union[torch.utils.data.DataLoader, LitDaliWrapper]]:
-        loader = {
-            "labeled": DataLoader(
+    def train_dataloader(self) -> SemiSupervisedDataLoaderDict:
+        loader = SemiSupervisedDataLoaderDict(
+            labeled=DataLoader(
                 self.train_dataset,
                 batch_size=self.train_batch_size,
                 num_workers=self.num_workers_for_labeled,
                 persistent_workers=True,
             ),
-            "unlabeled": self.unlabeled_dataloader,
-        }
+            unlabeled=self.unlabeled_dataloader,
+        )
         return loader

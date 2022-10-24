@@ -93,7 +93,7 @@ class BaseFeatureExtractor(LightningModule):
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
         do_context: bool = False,
-    ):
+    ) -> None:
         """A CNN model that takes in images and generates features.
 
         ResNets will be loaded from torchvision and can be either pre-trained
