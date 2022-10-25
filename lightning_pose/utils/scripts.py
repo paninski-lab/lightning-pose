@@ -13,13 +13,17 @@ from lightning_pose.data.dali import PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
 from lightning_pose.losses.factory import LossFactory
+from lightning_pose.models.regression_tracker import (
+    RegressionTracker,
+    SemiSupervisedRegressionTracker,
+)
 from lightning_pose.models.heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
 )
-from lightning_pose.models.regression_tracker import (
-    RegressionTracker,
-    SemiSupervisedRegressionTracker,
+from lightning_pose.models.heatmap_tracker_mhcrnn import (
+    HeatmapTrackerMHCRNN,
+    SemiSupervisedHeatmapTrackerMHCRNN,
 )
 from lightning_pose.utils import get_gpu_list_from_cfg, pretty_print_str
 from lightning_pose.utils.io import check_if_semi_supervised, return_absolute_data_paths
@@ -184,14 +188,14 @@ def get_dataset(
             imgaug_transform=imgaug_transform,
             do_context=cfg.model.do_context,
         )
-    elif cfg.model.model_type == "heatmap":
+    elif cfg.model.model_type == "heatmap" or cfg.model.model_type == "heatmap_mhcrnn":
         dataset = HeatmapDataset(
             root_directory=data_dir,
             csv_path=cfg.data.csv_file,
             header_rows=OmegaConf.to_object(cfg.data.header_rows),
             imgaug_transform=imgaug_transform,
             downsample_factor=cfg.data.downsample_factor,
-            do_context=cfg.model.do_context,
+            do_context=cfg.model.model_type == "heatmap_mhcrnn" or cfg.model.do_context,
         )
     else:
         raise NotImplementedError(
@@ -275,10 +279,9 @@ def get_loss_factories(
 
     # collect all supervised losses in a dict; no extra params needed
     # set "log_weight = 0.0" so that weight = 1 and effective weight is (1 / 2)
-    if cfg.model.model_type == "heatmap":
-        loss_params_dict["supervised"]["heatmap_" + cfg.model.heatmap_loss_type] = {
-            "log_weight": 0.0
-        }
+    if cfg.model.model_type == "heatmap" or cfg.model.model_type == "heatmap_mhcrnn":
+        loss_name = "heatmap_" + cfg.model.heatmap_loss_type
+        loss_params_dict["supervised"][loss_name] = {"log_weight": 0.0}
     else:
         loss_params_dict["supervised"][cfg.model.model_type] = {"log_weight": 0.0}
 
@@ -342,12 +345,7 @@ def get_model(
     cfg: DictConfig,
     data_module: Union[BaseDataModule, UnlabeledDataModule],
     loss_factories: Dict[str, LossFactory],
-) -> Union[
-    RegressionTracker,
-    HeatmapTracker,
-    SemiSupervisedRegressionTracker,
-    SemiSupervisedHeatmapTracker,
-]:
+) -> pl.LightningModule:
     """Create model: regression or heatmap based, supervised or semi-supervised."""
 
     lr_scheduler = cfg.training["lr_scheduler"]
@@ -375,6 +373,17 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 do_context=cfg.model.do_context,
+            )
+        elif cfg.model.model_type == "heatmap_mhcrnn":
+            model = HeatmapTrackerMHCRNN(
+                num_keypoints=cfg.data.num_keypoints,
+                loss_factory=loss_factories["supervised"],
+                backbone=cfg.model.backbone,
+                downsample_factor=cfg.data.downsample_factor,
+                output_shape=data_module.dataset.output_shape,
+                torch_seed=cfg.training.rng_seed_model_pt,
+                lr_scheduler=lr_scheduler,
+                lr_scheduler_params=lr_scheduler_params,
             )
         else:
             raise NotImplementedError(
@@ -409,6 +418,18 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 do_context=cfg.model.do_context,
+            )
+        elif cfg.model.model_type == "heatmap_mhcrnn":
+            model = SemiSupervisedHeatmapTrackerMHCRNN(
+                num_keypoints=cfg.data.num_keypoints,
+                loss_factory=loss_factories["supervised"],
+                loss_factory_unsupervised=loss_factories["unsupervised"],
+                backbone=cfg.model.backbone,
+                downsample_factor=cfg.data.downsample_factor,
+                output_shape=data_module.dataset.output_shape,
+                torch_seed=cfg.training.rng_seed_model_pt,
+                lr_scheduler=lr_scheduler,
+                lr_scheduler_params=lr_scheduler_params,
             )
         else:
             raise NotImplementedError(

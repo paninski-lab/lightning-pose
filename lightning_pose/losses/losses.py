@@ -138,12 +138,8 @@ class HeatmapLoss(Loss):
 
     def remove_nans(
         self,
-        targets: TensorType[
-            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
-        ],
-        predictions: TensorType[
-            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
-        ],
+        targets: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+        predictions: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
     ) -> Tuple[
         TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
         TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
@@ -159,12 +155,8 @@ class HeatmapLoss(Loss):
 
     def __call__(
         self,
-        heatmaps_targ: TensorType[
-            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
-        ],
-        heatmaps_pred: TensorType[
-            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
-        ],
+        heatmaps_targ: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+        heatmaps_pred: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
         stage: Optional[Literal["train", "val", "test"]] = None,
         **kwargs,
     ) -> Tuple[TensorType[()], List[dict]]:
@@ -199,9 +191,7 @@ class HeatmapMSELoss(HeatmapLoss):
     def compute_loss(
         self,
         targets: TensorType["batch_x_num_keypoints", "heatmap_height", "heatmap_width"],
-        predictions: TensorType[
-            "batch_x_num_keypoints", "heatmap_height", "heatmap_width"
-        ],
+        predictions: TensorType["batch_x_num_keypoints", "heatmap_height", "heatmap_width"],
     ) -> TensorType["batch_x_num_keypoints", "heatmap_height", "heatmap_width"]:
         h = targets.shape[1]
         w = targets.shape[2]
@@ -227,9 +217,7 @@ class HeatmapKLLoss(HeatmapLoss):
     def compute_loss(
         self,
         targets: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
-        predictions: TensorType[
-            "num_valid_keypoints", "heatmap_height", "heatmap_width"
-        ],
+        predictions: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
     ) -> TensorType["num_valid_keypoints"]:
         loss = self.loss(
             predictions.unsqueeze(0) + 1e-10,
@@ -256,9 +244,7 @@ class HeatmapJSLoss(HeatmapLoss):
     def compute_loss(
         self,
         targets: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
-        predictions: TensorType[
-            "num_valid_keypoints", "heatmap_height", "heatmap_width"
-        ],
+        predictions: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
     ) -> TensorType["num_valid_keypoints"]:
         loss = self.loss(
             predictions.unsqueeze(0) + 1e-10,
@@ -468,12 +454,8 @@ class UnimodalLoss(Loss):
 
     def remove_nans(
         self,
-        targets: TensorType[
-            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
-        ],
-        predictions: TensorType[
-            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
-        ],
+        targets: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+        predictions: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
     ) -> Tuple[
         TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
         TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
@@ -490,9 +472,7 @@ class UnimodalLoss(Loss):
     def compute_loss(
         self,
         targets: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
-        predictions: TensorType[
-            "num_valid_keypoints", "heatmap_height", "heatmap_width"
-        ],
+        predictions: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
     ) -> torch.Tensor:
 
         if self.loss_name == "unimodal_mse":
@@ -515,9 +495,7 @@ class UnimodalLoss(Loss):
     def __call__(
         self,
         keypoints_pred: TensorType["batch", "two_x_num_keypoints"],
-        heatmaps_pred: TensorType[
-            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
-        ],
+        heatmaps_pred: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
         stage: Optional[Literal["train", "val", "test"]] = None,
         **kwargs,
     ) -> Tuple[TensorType[()], List[dict]]:

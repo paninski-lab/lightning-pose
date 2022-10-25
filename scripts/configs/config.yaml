@@ -101,12 +101,14 @@ model:
   losses_to_use: ["pca_singleview"]
   # whether to learn the weights for the unsupervised losses
   learn_weights: False
-  # resnet version for backbone:
+  # backbone network:
   # resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
   # resnet50_3d
+  # resnet50_animalpose_apose | resnet50_animal_ap10k
+  # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res
   # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
   backbone: resnet50
-  # prediction mode: "heatmap" | "regression" | "heatmap_context"
+  # prediction mode: "regression" | "heatmap" | "heatmap_mhcrnn"
   model_type: "heatmap"
   # which heatmap loss to use: "mse" | "kl" | "js"
   heatmap_loss_type: "mse"
@@ -216,8 +218,8 @@ eval:
     # if you want to manually provide a different model name to be displayed in FiftyOne
     model_display_names: ["test_model"]
     # whether to launch the app from the script (True), or from ipython (and have finer control over the outputs)
-    launch_app_from_script: False
-    remote: True # for LAI, must be False
+    launch_app_from_script: false
+    remote: true # for LAI, must be False
     address: 127.0.0.1 # ip to launch the app on.
     port: 5151 # port to launch the app on.
     # whether to create a "videos" or "images" dataset, since the processes are the same
