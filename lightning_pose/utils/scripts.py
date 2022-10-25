@@ -455,6 +455,7 @@ def export_predictions_and_labeled_video(
     data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
     gpu_id: Optional[int] = None,
     labeled_mp4_file: Optional[str] = None,
+    save_heatmaps: Optional[bool] = False,
 ) -> None:
     """Export predictions csv and a labeled video for a single video file."""
 
@@ -468,6 +469,7 @@ def export_predictions_and_labeled_video(
         trainer=trainer,
         model=model,
         data_module=data_module,
+        save_heatmaps=save_heatmaps,
     )
 
     # create labeled video

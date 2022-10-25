@@ -260,7 +260,8 @@ class HeatmapTracker(BaseSupervisedTracker):
         self,
         batch: Union[HeatmapLabeledBatchDict, UnlabeledBatchDict],
         batch_idx: int,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        return_heatmaps: Optional[bool] = False,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         """Predict heatmaps and keypoints for a batch of video frames.
 
         Assuming a DALI video loader is passed in
@@ -278,7 +279,10 @@ class HeatmapTracker(BaseSupervisedTracker):
         predicted_heatmaps = self.forward(images)
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
-        return predicted_keypoints, confidence
+        if return_heatmaps:
+            return predicted_keypoints, confidence, predicted_heatmaps
+        else:
+            return predicted_keypoints, confidence
 
 
 @typechecked

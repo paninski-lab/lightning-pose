@@ -143,8 +143,10 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
 
     def predict_step(
         self,
-        batch: Union[dict, torch.Tensor], batch_idx: int
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        batch: Union[HeatmapLabeledBatchDict, UnlabeledBatchDict],
+        batch_idx: int,
+        return_heatmaps: Optional[bool] = False,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         """Predict heatmaps and keypoints for a batch of video frames.
 
         Assuming a DALI video loader is passed in
@@ -171,9 +173,14 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         crnn_conf_gt = torch.gt(confidence_crnn, confidence_sf)
         # select higher confidence indices
         pred_keypoints_sf[crnn_conf_gt] = pred_keypoints_crnn[crnn_conf_gt]
+        pred_keypoints_sf = pred_keypoints_sf.reshape(pred_keypoints_sf.shape[0], -1)
         confidence_sf[crnn_conf_gt] = confidence_crnn[crnn_conf_gt]
 
-        return pred_keypoints_sf.reshape(pred_keypoints_sf.shape[0], -1), confidence_sf
+        if return_heatmaps:
+            pred_heatmaps_sf[crnn_conf_gt] = pred_heatmaps_crnn[crnn_conf_gt]
+            return pred_keypoints_sf, confidence_sf, pred_heatmaps_sf
+        else:
+            return pred_keypoints_sf, confidence_sf
 
     def get_parameters(self):
         params = [
