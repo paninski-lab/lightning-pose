@@ -11,7 +11,6 @@ from pytorch_lightning import LightningDataModule
 from skimage.draw import disk
 import time
 import torch
-# from torch import __init__
 from torchtyping import TensorType, patch_typeguard
 from tqdm import tqdm
 from typeguard import typechecked
@@ -41,6 +40,7 @@ _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 patch_typeguard()  # use before @typechecked
 
 
+@typechecked
 def get_devices(device: Literal["gpu", "cuda", "cpu"]) -> Dict[str, str]:
     """Get pytorch and dali device strings."""
     if device == "gpu" or device == "cuda":
@@ -54,6 +54,7 @@ def get_devices(device: Literal["gpu", "cuda", "cpu"]) -> Dict[str, str]:
     return {"device_pt": device_pt, "device_dali": device_dali}
 
 
+@typechecked
 def get_cfg_file(cfg_file: Union[str, DictConfig]):
     """Load yaml configuration files."""
     if isinstance(cfg_file, str):
@@ -100,11 +101,12 @@ class PredictionHandler:
 
     def unpack_preds(
         self,
-        preds: List[Tuple[TensorType["batch", "two_times_num_keypoints"],
-                          TensorType["batch", "num_keypoints"]]]
+        preds: List[Tuple[
+            TensorType["batch", "two_times_num_keypoints"], TensorType["batch", "num_keypoints"]
+        ]]
     ) -> Tuple[
-            TensorType["num_frames", "two_times_num_keypoints"],
-            TensorType["num_frames", "num_keypoints"]
+        TensorType["num_frames", "two_times_num_keypoints"],
+        TensorType["num_frames", "num_keypoints"]
     ]:
         """ unpack list of preds coming out from pl.trainer.predict, confs tuples into tensors.
         It still returns unnecessary final rows, which should be discarded at the dataframe stage.
@@ -114,11 +116,16 @@ class PredictionHandler:
         stacked_preds = torch.vstack([pred[0] for pred in preds])
         stacked_confs = torch.vstack([pred[1] for pred in preds])
 
-        if self.video_file is not None: # dealing with dali loaders
+        if self.video_file is not None:  # dealing with dali loaders
             if self.do_context:
                 # fix shifts in the context model
                 stacked_preds = self.fix_context_preds_confs(stacked_preds)
-                stacked_confs = self.fix_context_preds_confs(stacked_confs, is_confidence=True)
+                if self.cfg.model.model_type == "heatmap_mhcrnn":
+                    stacked_confs = self.fix_context_preds_confs(
+                        stacked_confs, zero_pad_confidence=False)
+                else:
+                    stacked_confs = self.fix_context_preds_confs(
+                        stacked_confs, zero_pad_confidence=True)
             else:
                 # in this dataloader, the last sequence has a few extra frames.
                 num_rows_to_discard = stacked_preds.shape[0] - self.frame_count
@@ -128,21 +135,24 @@ class PredictionHandler:
 
         return stacked_preds, stacked_confs
 
-    def fix_context_preds_confs(self, stacked_preds: TensorType, is_confidence: bool = False):
+    @staticmethod
+    def fix_context_preds_confs(stacked_preds: TensorType, zero_pad_confidence: bool = False):
         """
-        In the context model, ind=0 is associated with image[2], and ind=1 is associated with image[3],
-        so we need to shift the predictions and confidences by two and eliminate the edges.
-        NOTE: confidences are not zero in the first and last two images, they are instead replicas of images[-2] and images[-3]
+        In the context model, ind=0 is associated with image[2], and ind=1 is associated with
+        image[3], so we need to shift the predictions and confidences by two and eliminate the
+        edges.
+        NOTE: confidences are not zero in the first and last two images, they are instead replicas
+        of images[-2] and images[-3]
         """
         # first pad the first two rows for which we have no valid preds.
-        preds_1 = torch.tile(stacked_preds[0], (2,1)) # copying twice the prediction for image[2]
-        preds_2 = stacked_preds[0:-2] # throw out the last two rows.
+        preds_1 = torch.tile(stacked_preds[0], (2, 1))  # copying twice the prediction for image[2]
+        preds_2 = stacked_preds[0:-2]  # throw out the last two rows.
         preds_combined = torch.vstack([preds_1, preds_2])
         # after concat this has the same length. everything is shifted by two rows.
         # but we don't have valid predictions for the last two elements, so we pad with element -3.
         preds_combined[-2:, :] = preds_combined[-3, :]
 
-        if is_confidence == True:
+        if zero_pad_confidence:
             # zeroing out those first and last two rows (after we've shifted everything above)
             preds_combined[:2, :] = 0.0
             preds_combined[-2:, :] = 0.0
@@ -204,8 +214,9 @@ class PredictionHandler:
 
     def __call__(
         self,
-        preds: List[Tuple[TensorType["batch", "two_times_num_keypoints"],
-                          TensorType["batch", "num_keypoints"]]]
+        preds: List[Tuple[
+            TensorType["batch", "two_times_num_keypoints"], TensorType["batch", "num_keypoints"]
+        ]]
     )-> pd.DataFrame:
         """
         Call this function to get a pandas dataframe of the predictions for a single video.
@@ -298,6 +309,7 @@ def predict_single_video(
         SemiSupervisedHeatmapTracker,
     ]] = None,
     data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
+    save_heatmaps: Optional[bool] = False,
 ) -> pd.DataFrame:
     """Make predictions for a single video, loading frame sequences using DALI.
 
@@ -316,6 +328,7 @@ def predict_single_video(
         trainer:
         model:
         data_module:
+        save_heatmaps:
 
     Returns:
         pd.DataFrame: pandas dataframe with predictions
@@ -330,8 +343,10 @@ def predict_single_video(
     if gpu_id is None:
         model.to(_TORCH_DEVICE)
         gpu_id = 0
+        cfg.dali.general.device_id = 0
     else:
         model.to("cuda:%i" % gpu_id)
+        cfg.dali.general.device_id = gpu_id
 
     if trainer is None:
         trainer = pl.Trainer(gpus=[gpu_id])
@@ -339,11 +354,9 @@ def predict_single_video(
     # ----------------------------------------------------------------------------------
     # set up
     # ----------------------------------------------------------------------------------
-    # base model: check we can build and run pipe and get a decent looking batch
+    # initialize
     model_type = "context" if cfg.model.do_context else "base"
     cfg.training.imgaug = "default"
-
-    # initialize
     vid_pred_class = PrepareDALI(
         train_stage="predict",
         model_type=model_type,
@@ -354,12 +367,31 @@ def predict_single_video(
     # get loader
     predict_loader = vid_pred_class()
 
-    preds = trainer.predict(
-        model=model,
-        ckpt_path=ckpt_file,
-        dataloaders=predict_loader,
-        return_predictions=True,
-    )
+    # initialize prediction handler class
+    pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=video_file)
+
+    # use a different function for now to return heatmaps
+    if save_heatmaps:
+        if predict_loader.do_context:
+            batch_size = cfg.dali.context.predict.batch_size
+        else:
+            batch_size = cfg.dali.base.predict.sequence_length
+        keypoints, confidences, heatmaps = _predict_frames(
+            cfg=cfg, model=model, dataloader=predict_loader, n_frames_=pred_handler.frame_count,
+            batch_size=batch_size, return_heatmaps=True)
+        preds = [(torch.tensor(keypoints), torch.tensor(confidences))]
+        if heatmaps is not None:
+            heatmaps_file = preds_file.replace(".csv", "_heatmaps.npy")
+            os.makedirs(os.path.dirname(heatmaps_file), exist_ok=True)
+            np.save(heatmaps_file, heatmaps)
+
+    else:
+        preds = trainer.predict(
+            model=model,
+            ckpt_path=ckpt_file,
+            dataloaders=predict_loader,
+            return_predictions=True,
+        )
 
     # ----------------------------------------------------------------------------------
     # compute predictions
@@ -372,8 +404,6 @@ def predict_single_video(
         # data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
         raise NotImplementedError("need to rearrange functions in modules")
 
-    # initialize prediction handler class
-    pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=video_file)
     # call this instance on a single vid's preds
     preds_df = pred_handler(preds=preds)
     # save the predictions to a csv; create directory if it doesn't exist
@@ -390,12 +420,9 @@ def _predict_frames(
     dataloader: Union[torch.utils.data.DataLoader, LitDaliWrapper],
     n_frames_: int,
     batch_size: int,
-    data_name: str = "dataset",
     return_heatmaps: bool = False,
-    gpu_id: Optional[int] = None,
-    do_context: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, Union[np.ndarray, None]]:
-    """Predict all frames from a data loader without undoing the resize or reshaping.
+    """Predict all frames in a data loader without undoing the resize/reshape; can return heatmaps.
 
     Args:
         cfg (DictConfig): hydra config.
@@ -403,9 +430,7 @@ def _predict_frames(
         dataloader: dataloader ready to be iterated
         n_frames_ (int): total number of frames in the dataset or video
         batch_size (int): regular batch_size for images or sequence_length for videos
-        data_name (str, optional): [description]. Defaults to "dataset".
         return_heatmaps (str, optional): [description]. Defaults to None.
-        gpu_id: specify which gpu to run prediction on
 
     Returns:
         Tuple[np.ndarray, np.ndarray, Union[np.ndarray, None]]: keypoints, confidences,
@@ -413,47 +438,55 @@ def _predict_frames(
 
     """
 
-    if cfg.model.model_type != "heatmap":
+    if "heatmap" not in cfg.model.model_type:
         return_heatmaps = False
 
     keypoints_np = np.zeros((n_frames_, model.num_keypoints * 2))
     confidence_np = np.zeros((n_frames_, model.num_keypoints))
 
     if return_heatmaps:
-        heatmaps_np = np.zeros(
-            (
-                n_frames_,
-                model.num_keypoints,
-                model.output_shape[0],  # // (2 ** model.downsample_factor),
-                model.output_shape[1],  # // (2 ** model.downsample_factor)
-            )
-        )
+        heatmaps_np = np.zeros((
+            n_frames_,
+            model.num_keypoints,
+            model.output_shape[0],  # // (2 ** model.downsample_factor),
+            model.output_shape[1],  # // (2 ** model.downsample_factor)
+        ))
     else:
         heatmaps_np = None
+
     t_beg = time.time()
     n_frames_counter = 0  # total frames processed
     n_batches = int(np.ceil(n_frames_ / batch_size))
     n = -1
     with torch.inference_mode():
         for n, batch in enumerate(tqdm(dataloader, total=n_batches)):
-            if type(batch) == dict:
-                # predicting from dataset
-                if gpu_id is None:
-                    image = batch["images"].to(_TORCH_DEVICE)
-                else:
-                    image = batch["images"].to("cuda:%i" % gpu_id)
-            else:
-                image = batch  # predicting from video
-            outputs = model.forward(image)
+
             if cfg.model.model_type == "heatmap":
-                pred_keypoints, confidence = model.run_subpixelmaxima(outputs)
-                # send to cpu
+                # push batch through model
+                pred_keypoints, confidence, pred_heatmaps = model.predict_step(
+                    batch=batch, batch_idx=n, return_heatmaps=return_heatmaps)
+                # send to numpy
                 pred_keypoints = pred_keypoints.detach().cpu().numpy()
                 confidence = confidence.detach().cpu().numpy()
-                outputs = outputs.detach().cpu().numpy()
+                pred_heatmaps = pred_heatmaps.detach().cpu().numpy()
+
+            elif cfg.model.model_type == "heatmap_mhcrnn":
+                # push batch through model
+                pred_keypoints, confidence, pred_heatmaps = model.predict_step(
+                    batch=batch, batch_idx=n, return_heatmaps=return_heatmaps)
+                # send to numpy
+                pred_keypoints = pred_keypoints.detach().cpu().numpy()
+                confidence = confidence.detach().cpu().numpy()
+                pred_heatmaps = pred_heatmaps.detach().cpu().numpy()
+
             else:
-                pred_keypoints = outputs.detach().cpu().numpy()
-                confidence = np.zeros((outputs.shape[0], outputs.shape[1] // 2))
+                # push batch through model
+                pred_keypoints, confidence = model.predict_step(batch=batch, batch_idx=n)
+                # send to numpy
+                pred_keypoints = pred_keypoints.detach().cpu().numpy()
+                confidence = confidence.detach().cpu().numpy()
+                pred_heatmaps = None
+
             n_frames_curr = pred_keypoints.shape[0]
             if n_frames_counter + n_frames_curr > n_frames_:
                 # final sequence
@@ -461,34 +494,20 @@ def _predict_frames(
                 keypoints_np[n_frames_counter:] = pred_keypoints[:final_batch_size]
                 confidence_np[n_frames_counter:] = confidence[:final_batch_size]
                 if return_heatmaps:
-                    heatmaps_np[n_frames_counter:] = outputs[:final_batch_size]
+                    heatmaps_np[n_frames_counter:] = pred_heatmaps[:final_batch_size]
                 n_frames_curr = final_batch_size
             else:  # at every sequence except the final
-                keypoints_np[
-                    n_frames_counter : n_frames_counter + n_frames_curr
-                ] = pred_keypoints
-                confidence_np[
-                    n_frames_counter : n_frames_counter + n_frames_curr
-                ] = confidence
+                keypoints_np[n_frames_counter:n_frames_counter + n_frames_curr] = pred_keypoints
+                confidence_np[n_frames_counter:n_frames_counter + n_frames_curr] = confidence
                 if return_heatmaps:
-                    heatmaps_np[
-                        n_frames_counter : n_frames_counter + n_frames_curr
-                    ] = outputs
+                    heatmaps_np[n_frames_counter:n_frames_counter + n_frames_curr] = pred_heatmaps
 
             n_frames_counter += n_frames_curr
+
         t_end = time.time()
-        if n == -1:
-            print(
-                "WARNING: issue processing %s" % data_name
-            )  # TODO: what can go wrong here?
-            return None, None, None
-        else:
-            pretty_print_str(
-                "inference speed: %1.2f fr/sec" % ((n * batch_size) / (t_end - t_beg))
-            )
-            # for regression networks, confidence_np will be all zeros,
-            # heatmaps_np will be None
-            return keypoints_np, confidence_np, heatmaps_np
+        pretty_print_str("inference speed: %1.2f fr/sec" % ((n * batch_size) / (t_end - t_beg)))
+        # for regression networks, confidence_np will be all zeros, heatmaps_np will be None
+        return keypoints_np, confidence_np, heatmaps_np
 
 
 @typechecked
@@ -599,8 +618,9 @@ def make_cmap(number_colors: int, cmap: str = "cool"):
 
 
 def create_labeled_video(
-        clip, xs_arr, ys_arr, mask_array=None, dotsize=5, colormap="cool", fps=None,
-        filename="movie.mp4"):
+    clip, xs_arr, ys_arr, mask_array=None, dotsize=5, colormap="cool", fps=None,
+    filename="movie.mp4"
+):
     """Helper function for creating annotated videos.
 
     Parameters
