@@ -133,6 +133,7 @@ class RegressionTracker(BaseSupervisedTracker):
         self,
         batch: Union[BaseLabeledBatchDict, UnlabeledBatchDict],
         batch_idx: int,
+        **kwargs,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Predict keypoints for a batch of video frames.
 
