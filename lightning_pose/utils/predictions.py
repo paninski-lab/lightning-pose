@@ -116,11 +116,16 @@ class PredictionHandler:
         stacked_preds = torch.vstack([pred[0] for pred in preds])
         stacked_confs = torch.vstack([pred[1] for pred in preds])
 
-        if self.video_file is not None: # dealing with dali loaders
+        if self.video_file is not None:  # dealing with dali loaders
             if self.do_context:
                 # fix shifts in the context model
                 stacked_preds = self.fix_context_preds_confs(stacked_preds)
-                stacked_confs = self.fix_context_preds_confs(stacked_confs, is_confidence=True)
+                if self.cfg.model.model_type == "heatmap_mhcrnn":
+                    stacked_confs = self.fix_context_preds_confs(
+                        stacked_confs, zero_pad_confidence=False)
+                else:
+                    stacked_confs = self.fix_context_preds_confs(
+                        stacked_confs, zero_pad_confidence=True)
             else:
                 # in this dataloader, the last sequence has a few extra frames.
                 num_rows_to_discard = stacked_preds.shape[0] - self.frame_count
@@ -131,11 +136,13 @@ class PredictionHandler:
         return stacked_preds, stacked_confs
 
     @staticmethod
-    def fix_context_preds_confs(stacked_preds: TensorType, is_confidence: bool = False):
+    def fix_context_preds_confs(stacked_preds: TensorType, zero_pad_confidence: bool = False):
         """
-        In the context model, ind=0 is associated with image[2], and ind=1 is associated with image[3],
-        so we need to shift the predictions and confidences by two and eliminate the edges.
-        NOTE: confidences are not zero in the first and last two images, they are instead replicas of images[-2] and images[-3]
+        In the context model, ind=0 is associated with image[2], and ind=1 is associated with
+        image[3], so we need to shift the predictions and confidences by two and eliminate the
+        edges.
+        NOTE: confidences are not zero in the first and last two images, they are instead replicas
+        of images[-2] and images[-3]
         """
         # first pad the first two rows for which we have no valid preds.
         preds_1 = torch.tile(stacked_preds[0], (2, 1))  # copying twice the prediction for image[2]
@@ -145,7 +152,7 @@ class PredictionHandler:
         # but we don't have valid predictions for the last two elements, so we pad with element -3.
         preds_combined[-2:, :] = preds_combined[-3, :]
 
-        if is_confidence:
+        if zero_pad_confidence:
             # zeroing out those first and last two rows (after we've shifted everything above)
             preds_combined[:2, :] = 0.0
             preds_combined[-2:, :] = 0.0
