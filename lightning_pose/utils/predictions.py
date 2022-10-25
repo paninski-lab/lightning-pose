@@ -515,34 +515,28 @@ def get_model_class(map_type: str, semi_supervised: bool) -> Type[LightningModul
     """
     if not semi_supervised:
         if map_type == "regression":
-            from lightning_pose.models.regression_tracker import RegressionTracker
-
-            return RegressionTracker
+            from lightning_pose.models.regression_tracker import RegressionTracker as Model
         elif map_type == "heatmap":
-            from lightning_pose.models.heatmap_tracker import HeatmapTracker
-
-            return HeatmapTracker
+            from lightning_pose.models.heatmap_tracker import HeatmapTracker as Model
+        elif map_type == "heatmap_mhcrnn":
+            from lightning_pose.models.heatmap_tracker_mhcrnn import HeatmapTrackerMHCRNN as Model
         else:
             raise NotImplementedError(
                 "%s is an invalid model_type for a fully supervised model" % map_type
             )
     else:
         if map_type == "regression":
-            from lightning_pose.models.regression_tracker import (
-                SemiSupervisedRegressionTracker,
-            )
-
-            return SemiSupervisedRegressionTracker
+            from lightning_pose.models.regression_tracker import SemiSupervisedRegressionTracker as Model
         elif map_type == "heatmap":
-            from lightning_pose.models.heatmap_tracker import (
-                SemiSupervisedHeatmapTracker,
-            )
-
-            return SemiSupervisedHeatmapTracker
+            from lightning_pose.models.heatmap_tracker import SemiSupervisedHeatmapTracker as Model
+        elif map_type == "heatmap_mhcrnn":
+            from lightning_pose.models.heatmap_tracker_mhcrnn import SemiSupervisedHeatmapTrackerMHCRNN as Model
         else:
             raise NotImplementedError(
                 "%s is an invalid model_type for a semi-supervised model" % map_type
             )
+
+    return Model
 
 
 @typechecked

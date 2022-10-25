@@ -79,4 +79,5 @@ def test_heatmap_dataset_context(cfg, heatmap_dataset_context):
 
 
 def test_equal_return_sizes(base_dataset, heatmap_dataset):
-    assert torch.equal(base_dataset[0]["images"], heatmap_dataset[0]["images"])
+    # can only assert the batches are the same if not using imgaug pipeline
+    assert base_dataset[0]["images"].shape == heatmap_dataset[0]["images"].shape

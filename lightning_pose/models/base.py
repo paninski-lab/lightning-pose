@@ -191,7 +191,10 @@ class BaseFeatureExtractor(LightningModule):
             TensorType["batch", "frames", "RGB":3, "image_height", "image_width"],
             TensorType["sequence_length", "RGB":3, "image_height", "image_width"],
         ],
-    ) -> TensorType["new_batch", "features", "rep_height", "rep_width"]:
+    ) -> Union[
+         TensorType["new_batch", "features", "rep_height", "rep_width"],
+         TensorType["new_batch", "features", "rep_height", "rep_width", "frames"],
+    ]:
         """Forward pass from images to feature maps.
 
         Wrapper around the backbone's feature_extractor() method for typechecking purposes.
@@ -256,15 +259,6 @@ class BaseFeatureExtractor(LightningModule):
                 representations: TensorType[
                     "batch", "features", "rep_height", "rep_width", "frames"
                 ] = torch.permute(outputs, (0, 2, 3, 4, 1))
-
-                # push through a linear layer to get the final representation
-                representations: TensorType[
-                    "batch", "features", "rep_height", "rep_width", 1
-                ] = self.representation_fc(representations)
-                # final squeeze
-                representations: TensorType[
-                    "batch", "features", "rep_height", "rep_width"
-                ] = torch.squeeze(representations, 4)
             else:
                 image_batch = images
                 representations = self.backbone(image_batch)
@@ -279,14 +273,6 @@ class BaseFeatureExtractor(LightningModule):
             representations: TensorType[
                 "batch", "features", "rep_height", "rep_width", "frames"
             ] = torch.permute(output, (0, 1, 3, 4, 2))
-            # push through a linear layer to get the final representation
-            representations: TensorType[
-                "batch", "features", "rep_height", "rep_width", 1
-            ] = self.representation_fc(representations)
-            # final squeeze
-            representations: TensorType[
-                "batch", "features", "rep_height", "rep_width"
-            ] = torch.squeeze(representations, 4)
 
         return representations
 
@@ -297,7 +283,10 @@ class BaseFeatureExtractor(LightningModule):
             TensorType["batch", "seq_length", "RGB":3, "image_height", "image_width"],
             TensorType["seq_length", "RGB":3, "image_height", "image_width"],
         ],
-    ) -> TensorType["batch", "features", "rep_height", "rep_width"]:
+    ) -> Union[
+         TensorType["new_batch", "features", "rep_height", "rep_width"],
+         TensorType["new_batch", "features", "rep_height", "rep_width", "frames"],
+    ]:
         """Forward pass from images to representations.
 
         Wrapper around self.get_representations().
@@ -312,11 +301,10 @@ class BaseFeatureExtractor(LightningModule):
         """
         return self.get_representations(images)
 
-    def configure_optimizers(self) -> dict:
-        """Select optimizer, lr scheduler, and metric for monitoring."""
+    def get_parameters(self):
+        return filter(lambda p: p.requires_grad, self.parameters())
 
-        # standard adam optimizer
-        optimizer = Adam(filter(lambda p: p.requires_grad, self.parameters()), lr=1e-3)
+    def get_scheduler(self, optimizer):
 
         # define a scheduler that reduces the base learning rate
         if self.lr_scheduler == "multisteplr" or self.lr_scheduler == "multistep_lr":
@@ -326,16 +314,27 @@ class BaseFeatureExtractor(LightningModule):
                 gamma = MULTISTEPLR_GAMMA_DEFAULT
             else:
                 milestones = self.lr_scheduler_params.get(
-                    "milestones", MULTISTEPLR_MILESTONES_DEFAULT
-                )
+                    "milestones", MULTISTEPLR_MILESTONES_DEFAULT)
                 gamma = self.lr_scheduler_params.get("gamma", MULTISTEPLR_GAMMA_DEFAULT)
 
             scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
 
         else:
-            raise NotImplementedError(
-                "'%s' is an invalid LR scheduler" % self.lr_scheduler
-            )
+            raise NotImplementedError("'%s' is an invalid LR scheduler" % self.lr_scheduler)
+
+        return scheduler
+
+    def configure_optimizers(self) -> dict:
+        """Select optimizer, lr scheduler, and metric for monitoring."""
+
+        # get trainable params
+        params = self.get_parameters()
+
+        # init standard adam optimizer
+        optimizer = Adam(params, lr=1e-3)
+
+        # get learning rate scheduler
+        scheduler = self.get_scheduler(optimizer)
 
         return {
             "optimizer": optimizer,
@@ -407,52 +406,23 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         """Base test step, a wrapper around the `evaluate_labeled` method."""
         self.evaluate_labeled(test_batch, "test")
 
-    def configure_optimizers(self) -> dict:
-        """Select optimizer, lr scheduler, and metric for monitoring."""
+    def get_parameters(self):
 
         if getattr(self, "upsampling_layers", None) is not None:
-
             # single optimizer with single learning rate
             params = [
+                # don't uncomment line below;
+                # the BackboneFinetuning callback should add backbone to the params
                 # {"params": self.backbone.parameters()},
-                #  don't uncomment above line; the BackboneFinetuning callback should
-                # add backbone to the params.
-                {
-                    "params": self.upsampling_layers.parameters()
-                },  # important this is the 0th element, for BackboneFinetuning callback
-                {"params": self.unnormalized_weights},
+                # important this is the 0th element, for BackboneFinetuning callback
+                {"params": self.upsampling_layers.parameters()},
+                # {"params": self.unnormalized_weights},
             ]
-
         else:
             # standard adam optimizer
             params = filter(lambda p: p.requires_grad, self.parameters())
 
-        optimizer = Adam(params, lr=1e-3)
-
-        # define a scheduler that reduces the base learning rate
-        if self.lr_scheduler == "multisteplr" or self.lr_scheduler == "multistep_lr":
-
-            if self.lr_scheduler_params is None:
-                milestones = MULTISTEPLR_MILESTONES_DEFAULT
-                gamma = MULTISTEPLR_GAMMA_DEFAULT
-            else:
-                milestones = self.lr_scheduler_params.get(
-                    "milestones", MULTISTEPLR_MILESTONES_DEFAULT
-                )
-                gamma = self.lr_scheduler_params.get("gamma", MULTISTEPLR_GAMMA_DEFAULT)
-
-            scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
-
-        else:
-            raise NotImplementedError(
-                "'%s' is an invalid LR scheduler" % self.lr_scheduler
-            )
-
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": scheduler,
-            "monitor": "val_supervised_loss",
-        }
+        return params
 
 
 @typechecked
@@ -528,15 +498,14 @@ class SemiSupervisedTrackerMixin(object):
 
         return {"loss": total_loss}
 
-    def configure_optimizers(self) -> dict:
-        """Single optimizer with different learning rates."""
+    def get_parameters(self):
 
         if getattr(self, "upsampling_layers", None) is not None:
             # if we're here this is a heatmap model
             params = [
+                # don't uncomment line below;
+                # the BackboneFinetuning callback should add backbone to the params
                 # {"params": self.backbone.parameters()},
-                # don't uncomment above line; the BackboneFinetuning callback should
-                # add backbone to the params.
                 # important this is the 0th element, for BackboneFinetuning callback
                 {"params": self.upsampling_layers.parameters()},
                 {"params": self.unnormalized_weights},
@@ -548,36 +517,12 @@ class SemiSupervisedTrackerMixin(object):
 
         # define different learning rate for weights in front of unsupervised losses
         if len(self.loss_factory_unsup.loss_weights_parameter_dict) > 0:
-            params.append(
-                {
-                    "params": self.loss_factory_unsup.loss_weights_parameter_dict.parameters(),
-                    "lr": 1e-2,
-                }
-            )
+            params.append({
+                "params": self.loss_factory_unsup.loss_weights_parameter_dict.parameters(),
+                "lr": 1e-2,
+            })
 
-        optimizer = Adam(params, lr=1e-3)
-
-        # define a scheduler that reduces the base learning rate
-        if self.lr_scheduler == "multisteplr" or self.lr_scheduler == "multistep_lr":
-
-            if self.lr_scheduler_params is None:
-                milestones = MULTISTEPLR_MILESTONES_DEFAULT
-                gamma = MULTISTEPLR_GAMMA_DEFAULT
-            else:
-                milestones = self.lr_scheduler_params.get(
-                    "milestones", MULTISTEPLR_MILESTONES_DEFAULT)
-                gamma = self.lr_scheduler_params.get("gamma", MULTISTEPLR_GAMMA_DEFAULT)
-
-            scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
-
-        else:
-            raise NotImplementedError("'%s' is an invalid LR scheduler" % self.lr_scheduler)
-
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": scheduler,
-            "monitor": "val_supervised_loss",
-        }
+        return params
 
     # # single optimizer with different learning rates
     # def configure_optimizers(self):
