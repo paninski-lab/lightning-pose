@@ -415,6 +415,103 @@ class TemporalLoss(Loss):
 
 
 @typechecked
+class TemporalHeatmapLoss(Loss):
+    """Penalize temporal differences for each heatmap.
+
+    Motion model: x_t = x_(t-1) + e_t, e_t ~ N(0, s)
+
+    """
+
+    def __init__(
+        self,
+        loss_name: Literal["temporal_heatmap_mse", "temporal_heatmap_kl"],
+        data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
+        epsilon: Union[float, List[float]] = 0.0,
+        prob_threshold: float = 0.0,
+        log_weight: float = 0.0,
+        **kwargs,
+    ) -> None:
+        super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight),
+        self.loss_name = loss_name
+        # self.hmloss = kl_div_loss_2d if self.loss_name == "temporal_heatmap_kl" else None
+
+        if self.loss_name == "temporal_heatmap_mse":
+            self.hmloss = None
+        elif self.loss_name == "temporal_heatmap_kl":
+            self.hmloss = kl_div_loss_2d
+        else:
+            raise NotImplementedError
+
+        self.prob_threshold = torch.tensor(
+            prob_threshold, dtype=torch.float, device=self.device
+        )
+
+    def rectify_epsilon(
+        self, loss: TensorType["batch_minus_one", "num_valid_keypoints"]
+    ) -> TensorType["batch_minus_one", "num_valid_keypoints"]:
+        """Rectify supporting a list of epsilons, one per bodypart.
+        Not implemented in Loss class, because shapes of broadcasting may vary"""
+        # self.epsilon is a tensor initialized in parent class
+        # repeating for broadcasting.
+        # note: this unsqueezing doesn't affect anything if epsilon is a scalar tensor,
+        # but it does if it's a tensor with multiple elements.
+        epsilon = self.epsilon.unsqueeze(0).repeat(loss.shape[0], 1).to(loss.device)
+        return F.relu(loss - epsilon)
+
+    def remove_nans(
+        self,
+        predictions: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]
+    ) -> TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"]:
+        # find nans in the targets, and do a masked_select operation
+        # get rid of unsupervised targets with likely occlusions
+        squeezed_predictions = predictions.reshape(predictions.shape[0], predictions.shape[1], -1)
+        idxs_ignore = (
+            torch.max(squeezed_predictions, dim=-1).values < self.prob_threshold
+        )
+        union_idxs_ignore = idxs_ignore[0]
+        for i in range(1, predictions.shape[0]):
+            union_idxs_ignore = torch.logical_or(union_idxs_ignore, idxs_ignore[i])
+
+        idxs_ignore = union_idxs_ignore.repeat(predictions.shape[0], 1)
+
+        return predictions[~idxs_ignore]
+    
+    def compute_loss(
+        self,
+        predictions: TensorType["batch", "num_valid_keypoints", "heatmap_height", "heatmap_width"]
+    ) -> TensorType["batch_minus_one", "num_valid_keypoints"]:
+        # compute the differences between matching heatmaps for each keypoint
+        diffs = torch.zeros((predictions.shape[0] - 1, predictions.shape[1]))
+
+        for i in range(diffs.shape[0]):
+            if self.loss_name == "temporal_heatmap_mse":
+                diffs[i] = F.mse_loss(predictions[i], predictions[i+1], reduction="none")
+            elif self.loss_name == "temporal_heatmap_kl":
+                diffs[i] = self.hmloss(
+                    predictions[i].unsqueeze(0) + 1e-10,
+                    predictions[i+1].unsqueeze(0) + 1e-10,
+                    reduction="none",
+                )
+        
+        return diffs
+
+    def __call__(
+        self,
+        heatmaps_pred: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+        stage: Optional[Literal["train", "val", "test"]] = None,
+        **kwargs,
+    ) -> Tuple[TensorType[()], List[dict]]:
+
+        clean_predictions = self.remove_nans(heatmaps_pred)
+        elementwise_loss = self.compute_loss(predictions=clean_predictions)
+        epsilon_insensitive_loss = self.rectify_epsilon(loss=elementwise_loss)
+        scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
+        logs = self.log_loss(loss=scalar_loss, stage=stage)
+
+        return self.weight * scalar_loss, logs
+
+
+@typechecked
 class UnimodalLoss(Loss):
     """Encourage heatmaps to be unimodal using various measures."""
 
@@ -615,6 +712,8 @@ def get_loss_classes() -> Dict[str, Type[Loss]]:
         "pca_multiview": PCALoss,
         "pca_singleview": PCALoss,
         "temporal": TemporalLoss,
+        "temporal_heatmap_mse": TemporalHeatmapLoss,
+        "temporal_heatmap_kl": TemporalHeatmapLoss,
         "unimodal_mse": UnimodalLoss,
         "unimodal_kl": UnimodalLoss,
         "unimodal_js": UnimodalLoss,
