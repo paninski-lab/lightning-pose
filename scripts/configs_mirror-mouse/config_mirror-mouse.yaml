@@ -49,7 +49,7 @@ training:
   val_prob: 0.1
   # <=1 - fraction of total train frames (determined by `train_prob`) used for training
   # >1 - number of total train frames used for training
-  train_frames: 1
+  train_frames: 75
   # number of gpus to train a single model
   num_gpus: 1
   # number of cpu workers for data loaders
@@ -94,7 +94,7 @@ training:
 model:
   # list of unsupervised losses
   # "pca_singleview" | "pca_multiview" | "temporal" | "unimodal_mse" | "unimodal_kl"
-  losses_to_use: []
+  losses_to_use: ["temporal_heatmap_kl"]
   # whether to learn the weights for the unsupervised losses
   learn_weights: false
   # resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
@@ -171,6 +171,12 @@ losses:
     # for epsilon insensitive rectification
     # (in pixels; diffs below this are not penalized)
     epsilon: 20.0
+  temporal_heatmap_kl:
+    # weight in front of temporal loss
+    log_weight: 5.0
+    # for epsilon insensitive rectification
+    # (in pixels; diffs below this are not penalized)
+    epsilon: 2.0
 
 eval:
   # paths to the hydra config files in the output folder, OR absolute paths to such folders.
@@ -198,7 +204,7 @@ eval:
   # (it's not absolute just for the toy example)
   test_videos_directory: "/datastores/mirror-mouse/videos_new"
   # str with an absolute path to directory in which you want to save .csv with predictions
-  saved_vid_preds_dir: "/home/jovyan"
+  saved_vid_preds_dir: ""
   # create labeled video from each video in test_videos_directory
   create_labeled_video: true
   # confidence threshold for plotting a vid

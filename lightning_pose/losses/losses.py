@@ -460,21 +460,21 @@ class TemporalHeatmapLoss(Loss):
 
     def remove_nans(
         self,
-        predictions: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]
+        original_preds: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+        prediction_diffs: TensorType["batch_minus_one", "num_keypoints", "heatmap_height", "heatmap_width"]
     ) -> TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"]:
         # find nans in the targets, and do a masked_select operation
         # get rid of unsupervised targets with likely occlusions
-        squeezed_predictions = predictions.reshape(predictions.shape[0], predictions.shape[1], -1)
+        squeezed_predictions = original_preds.reshape(original_preds.shape[0], original_preds.shape[1], -1)
         idxs_ignore = (
             torch.max(squeezed_predictions, dim=-1).values < self.prob_threshold
         )
-        union_idxs_ignore = idxs_ignore[0]
-        for i in range(1, predictions.shape[0]):
-            union_idxs_ignore = torch.logical_or(union_idxs_ignore, idxs_ignore[i])
+        # ignore the loss values in the diff where one of the heatmaps is 'nan'
+        union_idxs_ignore = torch.zeros(prediction_diffs.shape)
+        for i in range(prediction_diffs.shape[0]):
+            union_idxs_ignore[i] = torch.logical_or(idxs_ignore[i], idxs_ignore[i+1])
 
-        idxs_ignore = union_idxs_ignore.repeat(predictions.shape[0], 1)
-
-        return predictions[~idxs_ignore]
+        return prediction_diffs[~union_idxs_ignore]
     
     def compute_loss(
         self,
@@ -502,9 +502,9 @@ class TemporalHeatmapLoss(Loss):
         **kwargs,
     ) -> Tuple[TensorType[()], List[dict]]:
 
-        clean_predictions = self.remove_nans(heatmaps_pred)
-        elementwise_loss = self.compute_loss(predictions=clean_predictions)
-        epsilon_insensitive_loss = self.rectify_epsilon(loss=elementwise_loss)
+        elementwise_loss = self.compute_loss(predictions=heatmaps_pred)
+        clean_loss = self.remove_nans(original_preds=heatmaps_pred, prediction_diffs=elementwise_loss)
+        epsilon_insensitive_loss = self.rectify_epsilon(loss=clean_loss)
         scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
         logs = self.log_loss(loss=scalar_loss, stage=stage)
 
