@@ -49,7 +49,7 @@ training:
   val_prob: 0.1
   # <=1 - fraction of total train frames (determined by `train_prob`) used for training
   # >1 - number of total train frames used for training
-  train_frames: 75
+  train_frames: 1
   # number of gpus to train a single model
   num_gpus: 1
   # number of cpu workers for data loaders
@@ -94,7 +94,7 @@ training:
 model:
   # list of unsupervised losses
   # "pca_singleview" | "pca_multiview" | "temporal" | "unimodal_mse" | "unimodal_kl"
-  losses_to_use: ["temporal_heatmap_kl"]
+  losses_to_use: []
   # whether to learn the weights for the unsupervised losses
   learn_weights: false
   # resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
