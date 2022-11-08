@@ -396,7 +396,7 @@ def generate_heatmaps(
     heatmaps = torch.exp(heatmaps)
     # normalize all heatmaps to one
     heatmaps = heatmaps / torch.sum(heatmaps, dim=(2, 3), keepdim=True)
-    # replace nans with zeros heatmaps
+    # replace nans with zeros heatmaps (all zeros heatmaps are ignored in the supervised heatmap loss)
     zeros_heatmap = torch.zeros((out_height, out_width), device=keypoints.device)
     heatmaps[nan_idxs] = zeros_heatmap
     return heatmaps
