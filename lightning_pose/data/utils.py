@@ -379,7 +379,6 @@ def generate_heatmaps(
     keypoints[:, :, 1] *= out_height / height
     keypoints[:, :, 0] *= out_width / width
     nan_idxs = torch.isnan(keypoints)[:, :, 0]
-    nan_idxs = nan_idxs
     xv = torch.arange(out_width, device=keypoints.device)
     yv = torch.arange(out_height, device=keypoints.device)
     # note flipped order because of pytorch's ij and numpy's xy indexing for meshgrid
@@ -390,17 +389,17 @@ def generate_heatmaps(
     # adds dimension corresponding to the first dimension of the 2d grid
     keypoints = keypoints.unsqueeze(2)
     # evaluates 2d gaussian with mean equal to the keypoint and var equal to sigma^2
-    confidence = (yy - keypoints[:, :, :, :1]) ** 2  # also flipped order here
-    confidence += (xx - keypoints[:, :, :, 1:]) ** 2  # also flipped order here
-    confidence *= -1
-    confidence /= 2 * sigma**2
-    confidence = torch.exp(confidence)
+    heatmaps = (yy - keypoints[:, :, :, :1]) ** 2  # also flipped order here
+    heatmaps += (xx - keypoints[:, :, :, 1:]) ** 2  # also flipped order here
+    heatmaps *= -1
+    heatmaps /= 2 * sigma**2
+    heatmaps = torch.exp(heatmaps)
     # normalize all heatmaps to one
-    confidence = confidence / torch.sum(confidence, dim=(2, 3), keepdim=True)
+    heatmaps = heatmaps / torch.sum(heatmaps, dim=(2, 3), keepdim=True)
     # replace nans with zeros heatmaps
     zeros_heatmap = torch.zeros((out_height, out_width), device=keypoints.device)
-    confidence[nan_idxs] = zeros_heatmap
-    return confidence
+    heatmaps[nan_idxs] = zeros_heatmap
+    return heatmaps
 
 
 @typechecked
