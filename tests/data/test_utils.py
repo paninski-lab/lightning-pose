@@ -16,16 +16,18 @@ def test_data_extractor(base_data_module_combined):
     from lightning_pose.data.utils import DataExtractor
 
     num_frames = (
-        len(base_data_module_combined.dataset)
-        * base_data_module_combined.train_probability
+        len(base_data_module_combined.dataset) * base_data_module_combined.train_probability
     )
     keypoint_tensor, _ = DataExtractor(data_module=base_data_module_combined, cond="train")()
     assert keypoint_tensor.shape == (num_frames, 34)  # 72 = 0.8 * 90 images
 
-    keypoint_tensor, images_tensor = DataExtractor(data_module=base_data_module_combined, cond="train", extract_images=True)()
+    keypoint_tensor, images_tensor = DataExtractor(
+        data_module=base_data_module_combined, cond="train", extract_images=True
+    )()
 
     assert images_tensor.shape == (num_frames, 3, 256, 256)
-    
+
+
 def test_split_sizes_from_probabilities():
 
     from lightning_pose.data.utils import split_sizes_from_probabilities
@@ -90,6 +92,40 @@ def test_count_frames(video_list):
         cap.release()
     num_frames_ = count_frames(video_list)
     assert num_frames == num_frames_
+
+
+def test_compute_num_train_frames():
+
+    from lightning_pose.data.utils import compute_num_train_frames
+
+    len_train_data = 10
+
+    # correctly defaults to data length with no train_frame arg
+    n_frames = compute_num_train_frames(len_train_data, train_frames=None)
+    assert n_frames == len_train_data
+
+    # correctly defaults to data length when train_frame arg too large
+    n_frames = compute_num_train_frames(len_train_data, train_frames=len_train_data + 1)
+    assert n_frames == len_train_data
+
+    # correctly defaults to data length when train_frame=1
+    n_frames = compute_num_train_frames(len_train_data, train_frames=1)
+    assert n_frames == len_train_data
+
+    # correctly uses integer
+    n_frames = compute_num_train_frames(len_train_data, train_frames=5)
+    assert n_frames == 5
+
+    # correctly uses fraction
+    n_frames = compute_num_train_frames(len_train_data, train_frames=0.5)
+    assert n_frames == 5
+
+    n_frames = compute_num_train_frames(len_train_data, train_frames=0.2)
+    assert n_frames == 2
+
+    # train_frames must be positive
+    with pytest.raises(ValueError):
+        compute_num_train_frames(len_train_data, train_frames=-1)
 
 
 def test_generate_heatmaps(cfg, heatmap_dataset):
@@ -187,6 +223,132 @@ def test_generate_heatmaps_weird_shape(cfg, toy_data_dir):
     del softmaxes_torch, preds_torch, confidences_torch
     torch.cuda.empty_cache()  # remove tensors from gpu
 
+
+def test_evaluate_heatmaps_at_location():
+
+    from lightning_pose.data.utils import evaluate_heatmaps_at_location
+
+    height = 24
+    width = 12
+
+    # make sure this works when we have a single frame and/or keypoint
+    for n_batch in [1, 5]:
+        for n_keypoints in [1, 6]:
+
+            heatmaps = torch.zeros((n_batch, n_keypoints, height, width))
+
+            h_locs = torch.randint(0, height, (n_batch, n_keypoints))
+            w_locs = torch.randint(0, width, (n_batch, n_keypoints))
+            locs = torch.stack([w_locs, h_locs], dim=2)  # x then y
+            # set heatmaps values to .2 at 5 locations near the central pixel.
+            for i, l1 in enumerate(locs):
+                for j, l2 in enumerate(l1):
+                    l2_1_offset, l2_0_offset = l2[1] + 1, l2[0] + 1
+                    l2_1_offset = torch.clamp(l2_1_offset, min=0, max=height - 1)
+                    l2_0_offset = torch.clamp(l2_0_offset, min=0, max=width - 1)
+                    heatmaps[i, j, l2_1_offset, l2_0_offset] += 0.2
+
+                    l2_1_offset, l2_0_offset = l2[1] - 1, l2[0] - 1
+                    l2_1_offset = torch.clamp(l2_1_offset, min=0, max=height - 1)
+                    l2_0_offset = torch.clamp(l2_0_offset, min=0, max=width - 1)
+                    heatmaps[i, j, l2_1_offset, l2_0_offset] += 0.2
+
+                    l2_1_offset, l2_0_offset = l2[1], l2[0]
+                    l2_1_offset = torch.clamp(l2_1_offset, min=0, max=height - 1)
+                    l2_0_offset = torch.clamp(l2_0_offset, min=0, max=width - 1)
+                    heatmaps[i, j, l2_1_offset, l2_0_offset] += 0.2
+
+                    l2_1_offset, l2_0_offset = l2[1] + 1, l2[0] - 1
+                    l2_1_offset = torch.clamp(l2_1_offset, min=0, max=height - 1)
+                    l2_0_offset = torch.clamp(l2_0_offset, min=0, max=width - 1)
+                    heatmaps[i, j, l2_1_offset, l2_0_offset] += 0.2
+
+                    l2_1_offset, l2_0_offset = l2[1] - 1, l2[0] + 1
+                    l2_1_offset = torch.clamp(l2_1_offset, min=0, max=height - 1)
+                    l2_0_offset = torch.clamp(l2_0_offset, min=0, max=width - 1)
+                    heatmaps[i, j, l2_1_offset, l2_0_offset] += 0.2
+            # heatmap values should sum to 1 even when values are spread across the heatmap
+            vals = evaluate_heatmaps_at_location(heatmaps=heatmaps, locs=locs)
+            assert torch.all(vals == 1.0)
+
+    # more tests
+
+    batch = 1
+    num_keypoints = 1
+    heat_height = 32
+    heat_width = 32
+
+    # ----------------------------------
+    # make delta heatmap
+    # ----------------------------------
+    idx0 = 5
+    heatmaps = torch.zeros((batch, num_keypoints, heat_height, heat_width))
+    heatmaps[0, 0, idx0, idx0] = 1
+
+    # if we choose the correct location, do we get 1?
+    locs0 = torch.zeros((batch, num_keypoints, 2))
+    locs0[0, 0, 0] = idx0
+    locs0[0, 0, 1] = idx0
+    confs0 = evaluate_heatmaps_at_location(heatmaps, locs0)
+    assert confs0.shape == (batch, num_keypoints)
+    assert torch.allclose(confs0[0], torch.tensor(1.))
+
+    # if we choose almost the correct location, do we get 1?
+    idx1 = idx0 + 1
+    locs1 = torch.zeros((batch, num_keypoints, 2))
+    locs1[0, 0, 0] = idx1
+    locs1[0, 0, 1] = idx1
+    confs1 = evaluate_heatmaps_at_location(heatmaps, locs1)
+    assert torch.allclose(confs1[0], torch.tensor(1.))
+
+    # if we choose a completely wrong location, do we get 0?
+    idx2 = 25
+    locs2 = torch.zeros((batch, num_keypoints, 2))
+    locs2[0, 0, 0] = idx2
+    locs2[0, 0, 1] = idx2
+    confs2 = evaluate_heatmaps_at_location(heatmaps, locs2)
+    assert torch.allclose(confs2[0], torch.tensor(0.))
+
+    # ----------------------------------
+    # make a gaussain heatmap
+    # ----------------------------------
+    heatmaps_g = generate_heatmaps(
+        locs0, height=heat_height, width=heat_width, output_shape=(heat_height, heat_width))
+
+    # if we choose the correct location, do we get close to 1?
+    confs0_g = evaluate_heatmaps_at_location(heatmaps_g, locs0)
+    assert confs0_g[0] > 0
+    assert confs0_g[0] <= 1.0
+
+    # if we choose almost the correct location, do we get less than the correct location?
+    confs1_g = evaluate_heatmaps_at_location(heatmaps_g, locs1)
+    assert confs0_g[0] > confs1_g[0]
+
+    # if we choose a completely wrong location, do we get 0?
+    confs2_g = evaluate_heatmaps_at_location(heatmaps_g, locs2)
+    assert torch.allclose(confs2_g[0], torch.tensor(0.))
+
+
+def test_undo_affine_transform():
+
+    from lightning_pose.data.utils import undo_affine_transform
+
+    seq_len = 5
+    n_keypoints = 6
+    keypoints = torch.normal(mean=torch.zeros((seq_len, n_keypoints, 2)))
+
+    # test single transform
+    transform_mat = torch.normal(mean=torch.zeros((2, 3)))
+    keypoints_aug = torch.matmul(keypoints, transform_mat[:, :2].T) + transform_mat[:, -1]
+    keypoints_noaug = undo_affine_transform(keypoints_aug, transform_mat)
+    assert torch.allclose(keypoints, keypoints_noaug, atol=1e-4)
+
+    # test individual transforms
+    transform_mat = torch.normal(mean=torch.zeros((seq_len, 2, 3)))
+    keypoints_aug = torch.bmm(keypoints, transform_mat[:, :, :2].transpose(2, 1)) \
+                    + transform_mat[:, :, -1].unsqueeze(1)
+    keypoints_noaug = undo_affine_transform(keypoints_aug, transform_mat)
+    assert torch.allclose(keypoints, keypoints_noaug, atol=1e-4)
 
 # def test_heatmap_generation():
 #

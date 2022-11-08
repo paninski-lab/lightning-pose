@@ -25,20 +25,10 @@ def test_train_loader_iter(base_data_module_combined):
         image_counter += len(batch["labeled"]["keypoints"])
         assert type(batch) is dict
         assert type(batch["labeled"]) is dict
-        assert type(batch["unlabeled"]) is torch.Tensor
-        assert check_lists_equal(
-            list(batch["labeled"].keys()), ["images", "keypoints", "idxs"]
-        )
-        # print(type(batch["labeled"]))
-        # print(batch["labeled"])
-        # print(batch)
+        assert type(batch["unlabeled"]) is dict
+        assert type(batch["unlabeled"]["frames"]) is torch.Tensor
+        assert check_lists_equal(list(batch["labeled"].keys()), ["images", "keypoints", "idxs"])
     assert image_counter == dataset_length
-
-    # access only the labeled loader
-    # labeled_loader = base_data_module_combined.train_dataloader()["labeled"]
-    # print(type(labeled_loader))
-    # for i, b in enumerate(labeled_loader):
-    #     print(i, b.keys(), len(b["keypoints"]))
 
 
 def test_pca_keypoint_class(cfg, base_data_module_combined):

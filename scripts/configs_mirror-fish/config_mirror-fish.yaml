@@ -1,57 +1,60 @@
 data:
-  # dimensions of the raw training images. your computer will tell you WIDTH X HEIGHT
+  # dimensions of training images
   image_orig_dims:
-    width: 396
-    height: 406
-  # resize dimensions: we do this internally to accelerate training. make sure its a multiple of 128.
+    height: 384
+    width: 512
+  # resize dimensions to streamline model creation
   image_resize_dims:
-    width: 256
     height: 256
-  # ABSOLUTE path to data directory. the below is just a toy example for running Getting Started scripts
-  data_dir: toy_datasets/toymouseRunningData
-  # ABSOLUTE path to unlabeled videos' directory. the below is just a toy example for running Getting Started scripts (TODO: Matt, can have multiple vids)
-  video_dir: unlabeled_videos
+    width: 384
+  # ABSOLUTE path to data directory
+  data_dir: "/datastores/mirror-fish"
+  # ABSOLUTE path to unlabeled videos' directory
+  video_dir: "/datastores/mirror-fish/videos"
   # location of labels; for example script, this should be relative to `data_dir`
-  csv_file: CollectedData_.csv
+  csv_file: "CollectedData.csv"
   # header rows to strip in label csv file
-  header_rows: [1, 2]
-  # downsample heatmaps: 2 | 3
+  header_rows: [0, 1, 2]
+  # downsample heatmaps - 2 | 3
   downsample_factor: 2
   # total number of body parts
-  num_keypoints: 17
+  num_keypoints: 45
   # for mirrored setups with all keypoints defined in same csv file, define matching
   # columns for different keypoints (assumes x-y-x-y interleaving)
   # each list corresponds to a single view, so in the example below there are 2 views
   # keypoint 0 is from view 0 and matches up with keypoint 8 from view 2
   # columns that correspond to keypoints only labeled in a single view are omitted
+  # TODO: what if a keypoint is labeled in more than 1 but not all views?
   # this info is only used for the multiview pca loss
   mirrored_column_matches:
-    - [0, 1, 2, 3, 4, 5, 6]
-    - [8, 9, 10, 11, 12, 13, 14]
-  columns_for_singleview_pca: [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14]
+    - [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+    - [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
+    - [30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44]
+  # all labels in multiple views w/ <40 nans
+  columns_for_singleview_pca:
+    [0, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 21, 23, 24, 25, 36, 38, 41]
 
 training:
   # select from one of several predefined image/video augmentation pipelines
-  # default: resizing only
-  # dlc: imgaug pipeline implemented in DLC 2.0 package
-  # dlc-light: curated subset of dlc augmentations with more conservative param settings
+  # default- resizing only
+  # dlc- imgaug pipeline implemented in DLC 2.0 package
+  # dlc-light- curated subset of dlc augmentations with more conservative param settings
   imgaug: default
   # batch size of labeled data during training
-  train_batch_size: 16
+  train_batch_size: 8
   # batch size of labeled data during validation
-  val_batch_size: 16
+  val_batch_size: 48
   # batch size of labeled data during test
-  # TODO: this is actually used interchangeably with sequence length in prediction. not amazing.
-  test_batch_size: 16
+  test_batch_size: 48
   # fraction of labeled data used for training
   train_prob: 0.8
   # fraction of labeled data used for validation (remaining used for test)
   val_prob: 0.1
-  # <=1: fraction of total train frames (determined by `train_prob`) used for training
-  # >1: number of total train frames used for training
+  # <=1 - fraction of total train frames (determined by `train_prob`) used for training
+  # >1 - number of total train frames used for training
   train_frames: 1
   # number of gpus to train a single model
-  num_gpus: 0
+  num_gpus: 1
   # number of cpu workers for data loaders
   num_workers: 4
   # epochs over which to assess validation metrics for early stopping
@@ -60,60 +63,53 @@ training:
   unfreezing_epoch: 25
   # dropout in final layers
   dropout_rate: 0.1
-  # min training epochs; training cannot terminate before. compare to unfreezing_epoch, check_val_every_n_epoch, early_stop_patience
-  min_epochs: 125
   # max training epochs; training may exit before due to early stopping
-  max_epochs: 500
+  min_epochs: 100
+  max_epochs: 750
   # frequency to log training metrics (one step is one batch)
-  log_every_n_steps: 1
+  log_every_n_steps: 10
   # frequency to log validation metrics
-  check_val_every_n_epoch: 10
+  check_val_every_n_epoch: 5
   # select gpu for training
   gpu_id: 0
   # rng seed for labeled batches
-  rng_seed_data_pt: 42
+  rng_seed_data_pt: 0
   # rng seed for weight initialization
-  rng_seed_model_pt: 44
-  # how many batches to take before terminating an epoch (any dataloader that has less than limit_train_batches will be cycled over)
+  rng_seed_model_pt: 0
+  # how many batches to take before terminating an epoch
+  # (any dataloader that has less than limit_train_batches will be cycled over)
   limit_train_batches: null
-  # if you have two dataloaders, you keep cycling over the smaller dataset berfore completing the larger one
-  multiple_trainloader_mode: max_size_cycle
+  # if you have two dataloaders, you keep cycling over the smaller dataset
+  # before completing the larger one
+  multiple_trainloader_mode: "max_size_cycle"
   profiler: null
   # runs K small batches of size N before doing a backwards pass.
-  accumulate_grad_batches: 2
+  accumulate_grad_batches: 1
   # learning rate scheduler
-  # multisteplr | [todo: reducelronplateau]
+  # multisteplr | [todo - reducelronplateau]
   lr_scheduler: multisteplr
-  # multisteplr scheduler params
   lr_scheduler_params:
     multisteplr:
       milestones: [100, 200, 300]
       gamma: 0.5
 
 model:
-  # list of unsupervised losses:
-  # - "pca_singleview"
-  # - "pca_multiview"
-  # - "temporal"
-  # - "unimodal_mse"
-  # - "unimodal_kl"
-  # - null: if null, assume a model is supervised.
-  losses_to_use: ["pca_singleview"]
+  # list of unsupervised losses
+  # "pca_singleview" | "pca_multiview" | "temporal" | "unimodal" | ""
+  losses_to_use: []
   # whether to learn the weights for the unsupervised losses
   learn_weights: false
-  # backbone network:
   # resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
   # resnet50_3d
-  # resnet50_animalpose_apose | resnet50_animal_ap10k
-  # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res
   # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
   backbone: resnet50
-  # prediction mode: regression | heatmap | heatmap_mhcrnn
-  model_type: heatmap
-  # which heatmap loss to use: mse | kl | js
-  heatmap_loss_type: mse
-  # directory name for model saving
-  model_name: my_base_toy_model
+  # prediction mode - "heatmap" | "regression"
+  model_type: "heatmap"
+  # which heatmap loss to use
+  # "mse" | "wasserstein"
+  heatmap_loss_type: "mse"
+  # tt expt name
+  model_name: "biorxiv22a"
   # do context (5 frames)
   do_context: false
 
@@ -123,17 +119,23 @@ dali:
     device_id: 0 # GPU device id to use, can be changed
     device: gpu # "cpu" or "gpu"
     seed: 123456
+
   base:
     train:
       sequence_length: 16 # step = sequence_length by default. done internally
+
     predict:
+      # (train_batch_size + base.train.sequence_length) * 2 -> round down to nearest pow of 2
       sequence_length: 64 # step = sequence_length by default. done internally.
-  context:
+
+  context: # not supporting context_sequences_successive
     train: # defaults: sequence_length=5, step=sequence_length
-      batch_size: 6 # 6 times 5 = 30
-      consecutive_sequences: True # can select False if want successive sequences to be presented to network
+      batch_size: 8
+      consecutive_sequences: true # can select False if want successive sequences to be presented to network
+
     predict: # defaults: sequence_length=5, step=1
-      batch_size: 16
+      # (train_batch_size / 4 + context.train.batch_size) * 2 -> round down to nearest pow of 2
+      batch_size: 12
 
 losses:
   # loss = projection onto the discarded eigenvectors
@@ -149,7 +151,7 @@ losses:
     # absolute error (in pixels) below which pca loss is zeroed out; if not null, this
     # parameter takes precedence over `empirical_epsilon_percentile`
     epsilon: null
-    error_metric: reprojection_error # reprojection_error | proj_on_discarded_evecs
+    error_metric: "reprojection_error" # "reprojection_error" | "proj_on_discarded_evecs"
   # loss = projection onto the discarded eigenvectors
   pca_singleview:
     # weight in front of PCA loss
@@ -163,85 +165,54 @@ losses:
     # absolute error (in pixels) below which pca loss is zeroed out; if not null, this
     # parameter takes precedence over `empirical_epsilon_percentile`
     epsilon: null
-    error_metric: reprojection_error # reprojection_error | proj_on_discarded_evecs
+    error_metric: "reprojection_error" # "reprojection_error" | "proj_on_discarded_evecs"
   # loss = norm of distance between successive timepoints
   temporal:
     # weight in front of temporal loss
     log_weight: 5.0
-    # for epsilon insensitive rectification (in pixels; diffs below this are not penalized)
-    # either a float or a list of floats, one for each keypoint according to the order in the csv columns
-    epsilon:
-      [
-        12.9,
-        11.3,
-        10.5,
-        12.0,
-        5.0,
-        7.3,
-        0.7,
-        61.8,
-        11.2,
-        9.9,
-        9.7,
-        10.1,
-        4.8,
-        4.9,
-        1.0,
-        19.2,
-        6.8,
-      ]
-  # loss = mse loss between generated heatmap and ideal gaussian heatmap with same center as generated heatmap
-  unimodal_mse:
-    # weight in front of unimodal loss
-    log_weight: 6.5
-    # ignore heatmaps with a max prob less than epsilon (so loss is not applied to occlusions)
-    prob_threshold: 0.0
-  # loss = kl loss between generated heatmap and ideal gaussian heatmap with same center as generated heatmap
-  unimodal_kl:
-    # weight in front of unimodal loss
-    log_weight: 6.5
-    # ignore heatmaps with a max prob less than epsilon (so loss is not applied to occlusions)
-    prob_threshold: 0.0
+    # for epsilon insensitive rectification
+    # (in pixels; diffs below this are not penalized)
+    epsilon: 10.0
 
 eval:
   # paths to the hydra config files in the output folder, OR absolute paths to such folders.
-  hydra_paths: ["2021-12-15/04-11-43/"]
-  # TODO: decide which arg stays and which doesn't (create_labeled_video)
+  hydra_paths: [" "]
   # predict?
   predict_vids_after_training: true
   # save .mp4?
-  save_vids_after_training: true
+  save_vids_after_training: false
   fiftyone:
     # will be the name of the dataset (Mongo DB) created by FiftyOne. for video dataset, we will append dataset_name + "_video"
-    dataset_name: rick_data_test
-    build_speed: slow # slow/fast. "fast" drops keypoint name and confidence information for faster processing.
+    dataset_name: "mirror-fish"
+    build_speed: "slow" # "slow"/"fast". "fast" drops keypoint name and confidence information for faster processing.
     # if you want to manually provide a different model name to be displayed in FiftyOne
     model_display_names: ["test_model"]
     # whether to launch the app from the script (True), or from ipython (and have finer control over the outputs)
     launch_app_from_script: false
-    remote: true # for LAI, must be False
+
+    remote: True # for LAI, must be False
     address: 127.0.0.1 # ip to launch the app on.
     port: 5151 # port to launch the app on.
+
     # whether to create a "videos" or "images" dataset, since the processes are the same
-    dataset_to_create: images
+    dataset_to_create: "images"
   # str with an absolute path to a directory containing videos for prediction.
   # (it's not absolute just for the toy example)
-  # set to null to skip automatic video prediction from train_hydra.py script
-  test_videos_directory: toy_datasets/toymouseRunningData/unlabeled_videos
+  test_videos_directory: "/datastores/mirror-fish/videos_new"
   # str with an absolute path to directory in which you want to save .csv with predictions
-  saved_vid_preds_dir: toy_datasets/toymouseRunningData
+  saved_vid_preds_dir: "/home/jovyan"
   # create labeled video from each video in test_videos_directory
-  create_labeled_video: true
+  create_labeled_video: false
   # confidence threshold for plotting a vid
   confidence_thresh_for_vid: 0.05
   # str with absolute path to the video file you want plotted with keypoints
-  video_file_to_plot: /home/jovyan/lightning-pose/toy_datasets/toymouseRunningData/unlabeled_videos/test_vid.mp4
+  video_file_to_plot: ""
   # a list of strings, each points to a .csv file with predictions of a given model to the same video. will be combined with video_file_to_plot to make a visualization
-  pred_csv_files_to_plot: ["/home/jovyan/test_vid_heatmap_pca_multiview_5.0.csv"]
+  pred_csv_files_to_plot: [" "]
 
 callbacks:
   anneal_weight:
-    attr_name: total_unsupervised_importance
+    attr_name: "total_unsupervised_importance"
     init_val: 0.0
     increase_factor: 0.01
     final_val: 1.0

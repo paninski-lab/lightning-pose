@@ -1,8 +1,10 @@
 lightning_logs/
+grid_artifacts/
 .vscode/
 outputs/
 multirun/
 preds/
+#scripts/configs_*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -144,3 +146,4 @@ dmypy.json
 toy_datasets/toymouseRunningData/unlabeled_videos/*.csv
 toy_datasets/toymouseRunningData/unlabeled_videos/test_vid_labeled.mp4
 toy_datasets/toymouseRunningData/unlabeled_videos/test_vid_*.mp4
+toy_datasets/toymouseRunningData/barObstacleScaling1/*.npy
