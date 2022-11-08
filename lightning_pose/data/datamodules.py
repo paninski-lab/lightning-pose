@@ -2,25 +2,31 @@
 
 from nvidia.dali.plugin.pytorch import LastBatchPolicy
 import os
+from omegaconf import DictConfig
 import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader, random_split
+from torchtyping import patch_typeguard
 from typeguard import typechecked
-from typing import List, Literal, Optional, Tuple, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union, TypedDict
 
-from lightning_pose.data.dali import video_pipe, LightningWrapper
-from lightning_pose.data.utils import split_sizes_from_probabilities
+from lightning_pose.data.dali import PrepareDALI, LitDaliWrapper
+from lightning_pose.data.utils import (
+    split_sizes_from_probabilities, compute_num_train_frames, SemiSupervisedDataLoaderDict)
+from lightning_pose.utils.io import check_video_paths
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
+patch_typeguard()  # use before @typechecked
 
+
+@typechecked
 class BaseDataModule(pl.LightningDataModule):
     """Splits a labeled dataset into train, val, and test data loaders."""
 
     def __init__(
         self,
         dataset: torch.utils.data.Dataset,
-        use_deterministic: bool = False,
         train_batch_size: int = 16,
         val_batch_size: int = 16,
         test_batch_size: int = 1,
@@ -35,7 +41,6 @@ class BaseDataModule(pl.LightningDataModule):
 
         Args:
             dataset: base dataset to be split into train/val/test
-            use_deterministic: TODO: use deterministic split of data...?
             train_batch_size: number of samples of training batches
             val_batch_size: number of samples in validation batches
             test_batch_size: number of samples in test batches
@@ -57,10 +62,6 @@ class BaseDataModule(pl.LightningDataModule):
         self.val_batch_size = val_batch_size
         self.test_batch_size = test_batch_size
         self.num_workers = num_workers
-        # maybe can make the view information more general when deciding on a
-        # specific format for csv files
-        self.use_deterministic = use_deterministic
-        # info about dataset splits
         self.train_probability = train_probability
         self.val_probability = val_probability
         self.test_probability = test_probability
@@ -73,14 +74,7 @@ class BaseDataModule(pl.LightningDataModule):
     def setup(self, stage: Optional[str] = None):  # stage arg needed for ptl
 
         datalen = self.dataset.__len__()
-        print(
-            "Number of labeled images in the full dataset (train+val+test): {}".format(
-                datalen
-            )
-        )
-
-        if self.use_deterministic:
-            return
+        print("Number of labeled images in the full dataset (train+val+test): {}".format(datalen))
 
         # split data based on provided probabilities
         data_splits_list = split_sizes_from_probabilities(
@@ -98,31 +92,14 @@ class BaseDataModule(pl.LightningDataModule):
 
         # further subsample training data if desired
         if self.train_frames is not None:
-            split = True
-            if self.train_frames >= len(self.train_dataset):
-                # take max number of train frames
-                print(
-                    "Warning! Requested training frames exceeds training "
-                    + "set size; using all"
-                )
-                n_frames = len(self.train_dataset)
-                split = False
-            elif self.train_frames == 1:
-                # assume this is a fraction; use full dataset
-                n_frames = len(self.train_dataset)
-                split = False
-            elif self.train_frames > 1:
-                # take this number of train frames
-                n_frames = int(self.train_frames)
-            elif self.train_frames > 0:
-                # take this fraction of train frames
-                n_frames = int(self.train_frames * len(self.train_dataset))
-            else:
-                raise ValueError("train_frames must be >0")
-            if split:  # a second split
-                self.train_dataset.indices = self.train_dataset.indices[
-                    :n_frames
-                ]  # this works well
+
+            n_frames = compute_num_train_frames(
+                len(self.train_dataset), self.train_frames)
+
+            if n_frames < len(self.train_dataset):
+                # split the data a second time to reflect further subsampling from
+                # train_frames
+                self.train_dataset.indices = self.train_dataset.indices[:n_frames]
 
         print(
             "Size of -- train set: {}, val set: {}, test set: {}".format(
@@ -130,7 +107,7 @@ class BaseDataModule(pl.LightningDataModule):
             )
         )
 
-    def train_dataloader(self):
+    def train_dataloader(self) -> torch.utils.data.DataLoader:
         return DataLoader(
             self.train_dataset,
             batch_size=self.train_batch_size,
@@ -138,7 +115,7 @@ class BaseDataModule(pl.LightningDataModule):
             persistent_workers=True,
         )
 
-    def val_dataloader(self):
+    def val_dataloader(self) -> torch.utils.data.DataLoader:
         return DataLoader(
             self.val_dataset,
             batch_size=self.val_batch_size,
@@ -146,14 +123,23 @@ class BaseDataModule(pl.LightningDataModule):
             persistent_workers=True,
         )
 
-    def test_dataloader(self):
+    def test_dataloader(self) -> torch.utils.data.DataLoader:
         return DataLoader(
             self.test_dataset,
             batch_size=self.test_batch_size,
             num_workers=self.num_workers,
         )
+    
+    def full_labeled_dataloader(self) -> torch.utils.data.DataLoader:
+        return DataLoader(
+            self.dataset,
+            batch_size=self.val_batch_size,
+            num_workers=self.num_workers,
+            shuffle=False,
+        )
 
 
+@typechecked
 class UnlabeledDataModule(BaseDataModule):
     """Data module that contains labeled and unlabled data loaders."""
 
@@ -161,7 +147,7 @@ class UnlabeledDataModule(BaseDataModule):
         self,
         dataset: torch.utils.data.Dataset,
         video_paths_list: Union[List[str], str],
-        use_deterministic: bool = False,
+        dali_config: Union[dict, DictConfig],
         train_batch_size: int = 16,
         val_batch_size: int = 16,
         test_batch_size: int = 1,
@@ -170,18 +156,14 @@ class UnlabeledDataModule(BaseDataModule):
         val_probability: Optional[float] = None,
         test_probability: Optional[float] = None,
         train_frames: Optional[float] = None,
-        unlabeled_batch_size: int = 1,
-        unlabeled_sequence_length: int = 16,
-        dali_seed: int = 123456,
         torch_seed: int = 42,
-        device_id: int = 0,
+        imgaug: Literal["default", "dlc", "dlc-light"] = "default",
     ) -> None:
         """Data module that contains labeled and unlabeled data loaders.
 
         Args:
             dataset: pytorch Dataset for labeled data
             video_paths_list: absolute paths of videos ("unlabeled" data)
-            use_deterministic: TODO: use deterministic split of data...?
             train_batch_size: number of samples of training batches
             val_batch_size: number of samples in validation batches
             test_batch_size: number of samples in test batches
@@ -195,18 +177,12 @@ class UnlabeledDataModule(BaseDataModule):
                 (exclusive) and defines the fraction of the initially selected
                 train frames
             torch_seed: control data splits
-            unlabeled_batch_size: number of sequences to load per unlabeled
-                batch
-            unlabeled_sequence_length: number of frames per sequence of
-                unlabeled data
-            dali_seed: control randomness of unlabeled data loading
             torch_seed: control randomness of labeled data loading
-            device_id: gpu for unlabeled data loading
+            imgaug: type of image augmentation to apply to unlabeled frames
 
         """
         super().__init__(
             dataset=dataset,
-            use_deterministic=use_deterministic,
             train_batch_size=train_batch_size,
             val_batch_size=val_batch_size,
             test_batch_size=test_batch_size,
@@ -218,90 +194,36 @@ class UnlabeledDataModule(BaseDataModule):
             torch_seed=torch_seed,
         )
         self.video_paths_list = video_paths_list
+        self.filenames = check_video_paths(self.video_paths_list)
         self.num_workers_for_unlabeled = num_workers // 2
         self.num_workers_for_labeled = num_workers // 2
-        assert unlabeled_batch_size == 1, "LightningWrapper expects batch size of 1"
-        self.unlabeled_batch_size = unlabeled_batch_size
-        self.unlabeled_sequence_length = unlabeled_sequence_length
-        self.dali_seed = dali_seed
-        self.torch_seed = torch_seed
-        self.device_id = device_id
+        self.dali_config = dali_config
         self.unlabeled_dataloader = None  # initialized in setup_unlabeled
+        self.imgaug = imgaug
         super().setup()
         self.setup_unlabeled()
 
     def setup_unlabeled(self):
-
-        from lightning_pose.data.utils import count_frames
-
-        # get input data
-        if isinstance(self.video_paths_list, list):
-            # presumably a list of files
-            filenames = self.video_paths_list
-        elif isinstance(self.video_paths_list, str) and os.path.isfile(
-            self.video_paths_list
-        ):
-            # single video file
-            filenames = self.video_paths_list
-        elif isinstance(self.video_paths_list, str) and os.path.isdir(
-            self.video_paths_list
-        ):
-            # directory of videos
-            import glob
-
-            extensions = ["mp4"]  # allowed file extensions
-            filenames = []
-            for extension in extensions:
-                filenames.extend(
-                    glob.glob(os.path.join(self.video_paths_list, "*.%s" % extension))
-                )
-        else:
-            raise ValueError(
-                "`video_paths_list` must be a list of files, a single file, "
-                + "or a directory name"
-            )
-
-        data_pipe = video_pipe(
-            filenames=filenames,
+        """Sets up the unlabeled data loader."""
+        dali_prep = PrepareDALI(
+            train_stage="train",
+            model_type="context" if self.dataset.do_context else "base",
+            filenames=self.filenames,
             resize_dims=[self.dataset.height, self.dataset.width],
-            random_shuffle=True,
-            seed=self.dali_seed,
-            sequence_length=self.unlabeled_sequence_length,
-            batch_size=self.unlabeled_batch_size,
-            num_threads=self.num_workers_for_unlabeled,
-            device_id=self.device_id,
+            dali_config=self.dali_config,
+            imgaug=self.imgaug,
         )
 
-        # compute number of batches
-        total_frames = count_frames(filenames)  # sum across vids
-        num_batches = int(
-            total_frames // self.unlabeled_sequence_length
-        )  # assuming batch_size==1
+        self.unlabeled_dataloader = dali_prep()
 
-        self.unlabeled_dataloader = LightningWrapper(
-            data_pipe,
-            output_map=["x"],
-            last_batch_policy=LastBatchPolicy.PARTIAL,
-            auto_reset=True,  # TODO: auto reset on each epoch - is this random?
-            num_batches=num_batches,
-        )
-
-    def train_dataloader(self):
-        loader = {
-            "labeled": DataLoader(
+    def train_dataloader(self) -> SemiSupervisedDataLoaderDict:
+        loader = SemiSupervisedDataLoaderDict(
+            labeled=DataLoader(
                 self.train_dataset,
                 batch_size=self.train_batch_size,
                 num_workers=self.num_workers_for_labeled,
                 persistent_workers=True,
             ),
-            "unlabeled": self.unlabeled_dataloader,
-        }
-        return loader
-
-    # TODO: check if necessary
-    def predict_dataloader(self):
-        return DataLoader(
-            self.test_dataset,
-            batch_size=self.test_batch_size,
-            num_workers=self.num_workers_for_labeled,
+            unlabeled=self.unlabeled_dataloader,
         )
+        return loader

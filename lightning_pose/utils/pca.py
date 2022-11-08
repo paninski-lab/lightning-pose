@@ -11,10 +11,7 @@ import warnings
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import clean_any_nans, DataExtractor
-from lightning_pose.losses.helpers import (
-    EmpiricalEpsilon,
-    convert_dict_values_to_tensors,
-)
+from lightning_pose.losses.helpers import EmpiricalEpsilon, convert_dict_values_to_tensors
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -38,7 +35,7 @@ class KeypointPCA(object):
         mirrored_column_matches: Optional[Union[ListConfig, List]] = None,
         columns_for_singleview_pca: Optional[Union[ListConfig, List]] = None,
         device: Union[Literal["cuda", "cpu"], torch.device] = "cpu",
-    ):
+    ) -> None:
         self.loss_type = loss_type
         self.error_metric = error_metric
         self.data_module = data_module
@@ -71,7 +68,10 @@ class KeypointPCA(object):
         return self._error_metric_factory[self.error_metric](data_arr=data_arr)
 
     def _get_data(self) -> None:
-        self.data_arr, _ = DataExtractor(data_module=self.data_module, cond="train", extract_images=False)()
+        self.data_arr, _ = DataExtractor(
+            data_module=self.data_module, cond="train", extract_images=False,
+            remove_augmentations=True,
+        )()
 
     def _multiview_format(
         self, data_arr: TensorType["num_original_samples", "num_original_dims"]
@@ -204,10 +204,7 @@ class KeypointPCA(object):
         self.parameters = convert_dict_values_to_tensors(self.parameters, self.device)
 
         self.parameters["epsilon"] = EmpiricalEpsilon(
-            percentile=self.empirical_epsilon_percentile
-        )(
-            loss=self.compute_error()
-        )  # self.compute_reprojection_error()
+            percentile=self.empirical_epsilon_percentile)(loss=self.compute_error())
         # was loss=self._compute_reprojection_error() relying on the external func
 
     def reproject(
@@ -355,12 +352,16 @@ class ComponentChooser:
         assert type(
             self.components_to_keep is float
         )  # i.e., threshold crossing doesn't make sense with integer components_to_keep
-        components_to_keep = int(
-            np.where(self.cumsum_explained_variance >= self.components_to_keep)[0][0]
-        )
-        # cumsum is a d - 1 dimensional vector where the 0th element is the sum of the
-        # 0th and 1st element of the d dimensional vector it is summing over
-        return components_to_keep + 1
+        if self.components_to_keep != 1.0:
+            components_to_keep = int(
+                np.where(self.cumsum_explained_variance >= self.components_to_keep)[0][0]
+            )
+            # cumsum is a d - 1 dimensional vector where the 0th element is the sum of the
+            # 0th and 1st element of the d dimensional vector it is summing over
+            return components_to_keep + 1
+        else: # if we want to keep all components, we need to return the number of components
+            # we do this because there's an issue with == 1.0 in the cumsum_explained_variance
+            return len(self.fitted_pca_object.explained_variance_)
 
     def __call__(self) -> int:
         if type(self.components_to_keep) is int:

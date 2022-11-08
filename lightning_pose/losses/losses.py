@@ -66,9 +66,7 @@ class Loss(pl.LightningModule):
         self.data_module = data_module
         # epsilon can either by a float or a list of floats
         self.epsilon = torch.tensor(epsilon, dtype=torch.float, device=self.device)
-        self.log_weight = torch.tensor(
-            log_weight, dtype=torch.float, device=self.device
-        )
+        self.log_weight = torch.tensor(log_weight, dtype=torch.float, device=self.device)
         self.loss_name = "base"
 
         self.reduce_methods_dict = {"mean": torch.mean, "sum": torch.sum}
@@ -90,7 +88,7 @@ class Loss(pl.LightningModule):
 
     def rectify_epsilon(self, loss: torch.Tensor) -> torch.Tensor:
         # loss values below epsilon as masked to zero
-        loss = loss.masked_fill_(mask=loss < self.epsilon, value=0.0)
+        loss = F.relu(loss - self.epsilon)
         return loss
 
     def reduce_loss(self, loss: torch.Tensor, method: str = "mean") -> TensorType[()]:
@@ -140,12 +138,8 @@ class HeatmapLoss(Loss):
 
     def remove_nans(
         self,
-        targets: TensorType[
-            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
-        ],
-        predictions: TensorType[
-            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
-        ],
+        targets: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+        predictions: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
     ) -> Tuple[
         TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
         TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
@@ -161,12 +155,8 @@ class HeatmapLoss(Loss):
 
     def __call__(
         self,
-        heatmaps_targ: TensorType[
-            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
-        ],
-        heatmaps_pred: TensorType[
-            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
-        ],
+        heatmaps_targ: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+        heatmaps_pred: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
         stage: Optional[Literal["train", "val", "test"]] = None,
         **kwargs,
     ) -> Tuple[TensorType[()], List[dict]]:
@@ -201,9 +191,7 @@ class HeatmapMSELoss(HeatmapLoss):
     def compute_loss(
         self,
         targets: TensorType["batch_x_num_keypoints", "heatmap_height", "heatmap_width"],
-        predictions: TensorType[
-            "batch_x_num_keypoints", "heatmap_height", "heatmap_width"
-        ],
+        predictions: TensorType["batch_x_num_keypoints", "heatmap_height", "heatmap_width"],
     ) -> TensorType["batch_x_num_keypoints", "heatmap_height", "heatmap_width"]:
         h = targets.shape[1]
         w = targets.shape[2]
@@ -229,14 +217,12 @@ class HeatmapKLLoss(HeatmapLoss):
     def compute_loss(
         self,
         targets: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
-        predictions: TensorType[
-            "num_valid_keypoints", "heatmap_height", "heatmap_width"
-        ],
+        predictions: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
     ) -> TensorType["num_valid_keypoints"]:
         loss = self.loss(
             predictions.unsqueeze(0) + 1e-10,
             targets.unsqueeze(0) + 1e-10,
-            reduction="none"
+            reduction="none",
         )
         return loss[0]
 
@@ -258,14 +244,12 @@ class HeatmapJSLoss(HeatmapLoss):
     def compute_loss(
         self,
         targets: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
-        predictions: TensorType[
-            "num_valid_keypoints", "heatmap_height", "heatmap_width"
-        ],
+        predictions: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
     ) -> TensorType["num_valid_keypoints"]:
         loss = self.loss(
             predictions.unsqueeze(0) + 1e-10,
             targets.unsqueeze(0) + 1e-10,
-            reduction="none"
+            reduction="none",
         )
         return loss[0]
 
@@ -296,6 +280,12 @@ class PCALoss(Loss):
         if loss_name == "pca_multiview":
             if mirrored_column_matches is None:
                 raise ValueError("must provide mirrored_column_matches in data config")
+
+        # TODO: solve issues with pca loss + data augmentation
+        # the current data_module contains datasets that are loaded using augmentations. the
+        # current solution is to pass the data module to KeypointPCA, which then passes it to
+        # DataExtractor; we will also pass a "no_augmentation" arg to DataExtractor which will
+        # rebuild the data module with only resizing augmentations, then extract the data.
 
         # initialize keypoint pca module
         # this module will fit pca on training data, and will define the error metric
@@ -341,9 +331,9 @@ class PCALoss(Loss):
         self,
         predictions: TensorType["num_samples", "sample_dim"],
     ) -> TensorType["num_samples", -1]:
-        # compute either reprojection error or projection onto discarded evecs. they will vary in the last dim, hence -1.
+        # compute either reprojection error or projection onto discarded evecs.
+        # they will vary in the last dim, hence -1.
         return self.pca.compute_error(data_arr=predictions)
-        # was: return self.pca.compute_reprojection_error(data_arr=predictions)
 
     def __call__(
         self,
@@ -375,9 +365,7 @@ class TemporalLoss(Loss):
         log_weight: float = 0.0,
         **kwargs,
     ) -> None:
-        super().__init__(
-            data_module=data_module, epsilon=epsilon, log_weight=log_weight
-        )
+        super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
         self.loss_name = "temporal"
 
     def rectify_epsilon(
@@ -386,9 +374,11 @@ class TemporalLoss(Loss):
         """Rectify supporting a list of epsilons, one per bodypart.
         Not implemented in Loss class, because shapes of broadcasting may vary"""
         # self.epsilon is a tensor initialized in parent class
-        # repeathing for broadcasting. note: this unsqueezing doesn't affect anything if epsilon is a scalar tensor, but it does if it's a tensor with multiple elements.
+        # repeating for broadcasting.
+        # note: this unsqueezing doesn't affect anything if epsilon is a scalar tensor,
+        # but it does if it's a tensor with multiple elements.
         epsilon = self.epsilon.unsqueeze(0).repeat(loss.shape[0], 1).to(loss.device)
-        return loss.masked_fill(mask=loss < epsilon, value=0.0)
+        return F.relu(loss - epsilon)
 
     def remove_nans(self, **kwargs):
         # find nans in the targets, and do a masked_select operation
@@ -464,31 +454,25 @@ class UnimodalLoss(Loss):
 
     def remove_nans(
         self,
-        targets: TensorType[
-            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
-        ],
-        predictions: TensorType[
-            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
-        ],
+        targets: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+        predictions: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
     ) -> Tuple[
         TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
         TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
     ]:
         # get rid of unsupervised targets with likely occlusions
         squeezed_predictions = predictions.reshape(
-            predictions.shape[0], predictions.shape[1], -1)
-        idxs_ignore = torch.max(squeezed_predictions, dim=-1).values < \
-            self.prob_threshold
+            predictions.shape[0], predictions.shape[1], -1
+        )
+        idxs_ignore = (
+            torch.max(squeezed_predictions, dim=-1).values < self.prob_threshold
+        )
         return targets[~idxs_ignore], predictions[~idxs_ignore]
 
     def compute_loss(
         self,
-        targets: TensorType[
-            "num_valid_keypoints", "heatmap_height", "heatmap_width"
-        ],
-        predictions: TensorType[
-            "num_valid_keypoints", "heatmap_height", "heatmap_width"
-        ],
+        targets: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
+        predictions: TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
     ) -> torch.Tensor:
 
         if self.loss_name == "unimodal_mse":
@@ -497,13 +481,13 @@ class UnimodalLoss(Loss):
             return self.loss(
                 predictions.unsqueeze(0) + 1e-10,
                 targets.unsqueeze(0) + 1e-10,
-                reduction="none"
+                reduction="none",
             )
         elif self.loss_name == "unimodal_js":
             return self.loss(
                 predictions.unsqueeze(0) + 1e-10,
                 targets.unsqueeze(0) + 1e-10,
-                reduction="none"
+                reduction="none",
             )
         else:
             raise NotImplementedError
@@ -511,9 +495,7 @@ class UnimodalLoss(Loss):
     def __call__(
         self,
         keypoints_pred: TensorType["batch", "two_x_num_keypoints"],
-        heatmaps_pred: TensorType[
-            "batch", "num_keypoints", "heatmap_height", "heatmap_width"
-        ],
+        heatmaps_pred: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
         stage: Optional[Literal["train", "val", "test"]] = None,
         **kwargs,
     ) -> Tuple[TensorType[()], List[dict]]:
@@ -551,9 +533,7 @@ class RegressionMSELoss(Loss):
         log_weight: float = 0.0,
         **kwargs,
     ) -> None:
-        super().__init__(
-            data_module=data_module, epsilon=epsilon, log_weight=log_weight
-        )
+        super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
         self.loss_name = "regression_mse"
 
     def remove_nans(
@@ -605,9 +585,7 @@ class RegressionRMSELoss(RegressionMSELoss):
         log_weight: float = 0.0,
         **kwargs,
     ) -> None:
-        super().__init__(
-            data_module=data_module, epsilon=epsilon, log_weight=log_weight
-        )
+        super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
         self.loss_name = "rmse"
 
     def compute_loss(
