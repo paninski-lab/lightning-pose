@@ -358,7 +358,6 @@ def generate_heatmaps(
     width: int,  # width of full sized image
     output_shape: Tuple[int, int],  # dimensions of downsampled heatmap
     sigma: Union[float, int] = 1.25,  # sigma used for generating heatmaps
-    normalize: bool = True,
 ) -> TensorType["batch", "num_keypoints", "height", "width"]:
     """Generate 2D Gaussian heatmaps from mean and sigma.
 
@@ -380,6 +379,7 @@ def generate_heatmaps(
     keypoints[:, :, 1] *= out_height / height
     keypoints[:, :, 0] *= out_width / width
     nan_idxs = torch.isnan(keypoints)[:, :, 0]
+    nan_idxs = nan_idxs
     xv = torch.arange(out_width, device=keypoints.device)
     yv = torch.arange(out_height, device=keypoints.device)
     # note flipped order because of pytorch's ij and numpy's xy indexing for meshgrid
@@ -395,18 +395,11 @@ def generate_heatmaps(
     confidence *= -1
     confidence /= 2 * sigma**2
     confidence = torch.exp(confidence)
-
-    # replace nans with uniform heatmap
-    uniform_heatmap = torch.ones(
-        (out_height, out_width), device=keypoints.device) / (out_height * out_width)
-    confidence[nan_idxs] = uniform_heatmap
-
-    if normalize:
-        # normalize all heatmaps to one
-        confidence = confidence / torch.sum(confidence, dim=(2, 3), keepdim=True)
-    else:
-        confidence /= sigma * torch.sqrt(2 * torch.tensor(np.pi))
-
+    # normalize all heatmaps to one
+    confidence = confidence / torch.sum(confidence, dim=(2, 3), keepdim=True)
+    # replace nans with zeros heatmaps
+    zeros_heatmap = torch.zeros((out_height, out_width), device=keypoints.device)
+    confidence[nan_idxs] = zeros_heatmap
     return confidence
 
 
