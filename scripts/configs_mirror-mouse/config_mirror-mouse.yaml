@@ -53,7 +53,7 @@ training:
   # number of gpus to train a single model
   num_gpus: 1
   # number of cpu workers for data loaders
-  num_workers: 4
+  num_workers: 8
   # epochs over which to assess validation metrics for early stopping
   early_stop_patience: 3
   # epoch at which backbone network weights begin updating
@@ -171,12 +171,19 @@ losses:
     # for epsilon insensitive rectification
     # (in pixels; diffs below this are not penalized)
     epsilon: 20.0
+    # nan removal value. 
+    # (in prob; heatmaps with max prob values are removed)
+    prob_threshold: 0.05
+  # loss = kl loss between heatmaps in successive timepoints
   temporal_heatmap_kl:
     # weight in front of temporal loss
     log_weight: 5.0
     # for epsilon insensitive rectification
     # (in pixels; diffs below this are not penalized)
-    epsilon: 2.0
+    epsilon: 7.0
+    # nan removal value. 
+    # (in prob; heatmaps with max prob values are removed)
+    prob_threshold: 0.05
 
 eval:
   # paths to the hydra config files in the output folder, OR absolute paths to such folders.
@@ -204,7 +211,7 @@ eval:
   # (it's not absolute just for the toy example)
   test_videos_directory: "/datastores/mirror-mouse/videos_new"
   # str with an absolute path to directory in which you want to save .csv with predictions
-  saved_vid_preds_dir: ""
+  saved_vid_preds_dir: "/home/jovyan"
   # create labeled video from each video in test_videos_directory
   create_labeled_video: true
   # confidence threshold for plotting a vid
