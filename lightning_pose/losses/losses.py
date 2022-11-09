@@ -362,11 +362,16 @@ class TemporalLoss(Loss):
         self,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
         epsilon: Union[float, List[float]] = 0.0,
+        prob_threshold: float = 0.0,
         log_weight: float = 0.0,
         **kwargs,
     ) -> None:
         super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
         self.loss_name = "temporal"
+
+        self.prob_threshold = torch.tensor(
+            prob_threshold, dtype=torch.float, device=self.device
+        )
 
     def rectify_epsilon(
         self, loss: TensorType["batch_minus_one", "num_keypoints"]
@@ -380,9 +385,22 @@ class TemporalLoss(Loss):
         epsilon = self.epsilon.unsqueeze(0).repeat(loss.shape[0], 1).to(loss.device)
         return F.relu(loss - epsilon)
 
-    def remove_nans(self, **kwargs):
+    def remove_nans(
+        self,
+        loss: TensorType["batch_minus_one", "num_keypoints", "heatmap_height", "heatmap_width"],
+        confidences: TensorType["batch", "num_keypoints"]
+    ) -> TensorType["batch_minus_one", "num_keypoints"]:
         # find nans in the targets, and do a masked_select operation
-        pass
+        # get rid of unsupervised targets with extremely uncertain predictions or likely occlusions
+        # squeezed_predictions = original_preds.reshape(original_preds.shape[0], original_preds.shape[1], -1)
+        idxs_ignore = (confidences < self.prob_threshold)
+        # ignore the loss values in the diff where one of the heatmaps is 'nan'
+        union_idxs_ignore = torch.zeros((loss.shape[0], loss.shape[1])).type(torch.ByteTensor)
+        for i in range(loss.shape[0]):
+            union_idxs_ignore[i] = torch.logical_or(idxs_ignore[i], idxs_ignore[i+1])
+
+        loss[union_idxs_ignore] = 0
+        return loss
 
     def compute_loss(
         self,
@@ -403,12 +421,14 @@ class TemporalLoss(Loss):
     def __call__(
         self,
         keypoints_pred: TensorType["batch", "two_x_num_keypoints"],
+        confidences: TensorType["batch", "num_keypoints"],
         stage: Optional[Literal["train", "val", "test"]] = None,
         **kwargs,
     ) -> Tuple[TensorType[()], List[dict]]:
 
         elementwise_loss = self.compute_loss(predictions=keypoints_pred)
-        epsilon_insensitive_loss = self.rectify_epsilon(loss=elementwise_loss)
+        clean_loss = self.remove_nans(loss=elementwise_loss, confidences=confidences)
+        epsilon_insensitive_loss = self.rectify_epsilon(loss=clean_loss)
         scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
         logs = self.log_loss(loss=scalar_loss, stage=stage)
         return self.weight * scalar_loss, logs
@@ -460,17 +480,15 @@ class TemporalHeatmapLoss(Loss):
 
     def remove_nans(
         self,
-        original_preds: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]
+        confidences: TensorType["batch", "num_keypoints"]
     ) -> TensorType["batch_minus_one", "num_keypoints"]:
         # find nans in the targets, and do a masked_select operation
-        # get rid of unsupervised targets with likely occlusions
-        squeezed_predictions = original_preds.reshape(original_preds.shape[0], original_preds.shape[1], -1)
-        idxs_ignore = (
-            torch.max(squeezed_predictions, dim=-1).values < self.prob_threshold
-        )
+        # get rid of unsupervised targets with extremely uncertain predictions or likely occlusions
+        # squeezed_predictions = original_preds.reshape(original_preds.shape[0], original_preds.shape[1], -1)
+        idxs_ignore = (confidences < self.prob_threshold)
         # ignore the loss values in the diff where one of the heatmaps is 'nan'
-        union_idxs_ignore = torch.zeros((original_preds.shape[0] - 1, original_preds.shape[1])).type(torch.ByteTensor)
-        for i in range(original_preds.shape[0] - 1):
+        union_idxs_ignore = torch.zeros((confidences.shape[0] - 1, confidences.shape[1])).type(torch.ByteTensor)
+        for i in range(confidences.shape[0] - 1):
             union_idxs_ignore[i] = torch.logical_or(idxs_ignore[i], idxs_ignore[i+1])
 
         return union_idxs_ignore
@@ -497,13 +515,14 @@ class TemporalHeatmapLoss(Loss):
     def __call__(
         self,
         heatmaps_pred: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+        confidences: TensorType["batch", "num_keypoints"],
         stage: Optional[Literal["train", "val", "test"]] = None,
         **kwargs,
     ) -> Tuple[TensorType[()], List[dict]]:
 
         elementwise_loss = self.compute_loss(predictions=heatmaps_pred)
         # doing remove nan after loss is computed to get rid of specific keypoints so diff is not affected
-        nan_mask = self.remove_nans(original_preds=heatmaps_pred)
+        nan_mask = self.remove_nans(confidences=confidences)
         if self.loss_name == "temporal_heatmap_mse":
             zero = torch.zeros((heatmaps_pred.shape[2], heatmaps_pred.shape[3]))
         else:
