@@ -53,7 +53,7 @@ def select_frame_idxs(video_file, resize_dims=64, n_clusters=20):
         "num_iters": num_iters,
         "eval_mode": "predict",
         "do_context": False,
-        "output_map": ["x"],
+        "output_map": ["frames", "transforms"],
         "last_batch_policy": LastBatchPolicy.FILL,
         #     "last_batch_padded": True,
         "auto_reset": False,
@@ -70,8 +70,8 @@ def select_frame_idxs(video_file, resize_dims=64, n_clusters=20):
         # take mean over color channel, remove spatial dims
         # result is shape (batch_size, height * width)
         batches.append(torch.reshape(
-            torch.mean(batch["images"], dim=1),
-            (batch["images"].shape[0], -1)).detach().cpu().numpy())
+            torch.mean(batch["frames"], dim=1),
+            (batch["frames"].shape[0], -1)).detach().cpu().numpy())
     batches = np.concatenate(batches, axis=0)
 
     # ---------------------------------------------------------
