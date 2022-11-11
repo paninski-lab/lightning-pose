@@ -387,7 +387,7 @@ class TemporalLoss(Loss):
 
     def remove_nans(
         self,
-        loss: TensorType["batch_minus_one", "num_keypoints", "heatmap_height", "heatmap_width"],
+        elementwise_loss: TensorType["batch_minus_one", "num_keypoints"],
         confidences: TensorType["batch", "num_keypoints"]
     ) -> TensorType["batch_minus_one", "num_keypoints"]:
         # find nans in the targets, and do a masked_select operation
@@ -395,12 +395,14 @@ class TemporalLoss(Loss):
         # squeezed_predictions = original_preds.reshape(original_preds.shape[0], original_preds.shape[1], -1)
         idxs_ignore = (confidences < self.prob_threshold)
         # ignore the loss values in the diff where one of the heatmaps is 'nan'
-        union_idxs_ignore = torch.zeros((loss.shape[0], loss.shape[1])).type(torch.ByteTensor)
-        for i in range(loss.shape[0]):
+        union_idxs_ignore = torch.zeros((elementwise_loss.shape[0], elementwise_loss.shape[1])).type(torch.ByteTensor)
+        for i in range(elementwise_loss.shape[0]):
             union_idxs_ignore[i] = torch.logical_or(idxs_ignore[i], idxs_ignore[i+1])
 
-        loss[union_idxs_ignore] = 0
-        return loss
+        clean_loss = elementwise_loss.clone()
+        clean_loss[union_idxs_ignore] = 0
+        return clean_loss
+
 
     def compute_loss(
         self,
@@ -427,7 +429,7 @@ class TemporalLoss(Loss):
     ) -> Tuple[TensorType[()], List[dict]]:
 
         elementwise_loss = self.compute_loss(predictions=keypoints_pred)
-        clean_loss = self.remove_nans(loss=elementwise_loss, confidences=confidences)
+        clean_loss = self.remove_nans(elementwise_loss=elementwise_loss, confidences=confidences)
         epsilon_insensitive_loss = self.rectify_epsilon(loss=clean_loss)
         scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
         logs = self.log_loss(loss=scalar_loss, stage=stage)
