@@ -86,7 +86,7 @@ class RegressionTracker(BaseSupervisedTracker):
             self.representation_fc = lambda x: x @ torch.transpose(
                 nn.functional.softmax(self.unnormalized_weights, dim=1), 0, 1)
 
-        # use this to log auxiliary information: rmse on labeled data
+        # use this to log auxiliary information: pixel_error on labeled data
         self.rmse_loss = RegressionRMSELoss()
 
         # necessary so we don't have to pass in model arguments when loading
