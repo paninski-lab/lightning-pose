@@ -55,8 +55,7 @@ class Loss(pl.LightningModule):
         """
 
         Args:
-            data_module: give losses access to data for computing data-specific loss
-                params
+            data_module: give losses access to data for computing data-specific loss params
             epsilon: loss values below epsilon will be zeroed out
             log_weight: natural log of the weight in front of the loss term in the final
                 objective function
@@ -281,7 +280,6 @@ class PCALoss(Loss):
             if mirrored_column_matches is None:
                 raise ValueError("must provide mirrored_column_matches in data config")
 
-        # TODO: solve issues with pca loss + data augmentation
         # the current data_module contains datasets that are loaded using augmentations. the
         # current solution is to pass the data module to KeypointPCA, which then passes it to
         # DataExtractor; we will also pass a "no_augmentation" arg to DataExtractor which will

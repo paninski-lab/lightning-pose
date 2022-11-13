@@ -530,28 +530,3 @@ def test_get_loss_classes():
     loss_classes = get_loss_classes()
     for loss_name, loss_class in loss_classes.items():
         assert issubclass(loss_class, Loss)
-
-
-# def test_zero_removal():
-#     zeroes = torch.zeros((1, 2, 48, 48))
-#     ones = torch.ones((1, 3, 48, 48))
-#     one_example = torch.cat([zeroes, ones, zeroes], dim=1)
-#     second_example = torch.cat([ones, zeroes, zeroes], dim=1)
-#     batch = torch.cat([one_example, second_example], dim=0)
-#
-#     # now zeroes check
-#     squeezed_batch = batch.reshape(batch.shape[0], batch.shape[1], -1)
-#     all_zeroes = torch.all(squeezed_batch == 0.0, dim=-1)
-#     assert (
-#         all_zeroes
-#         == torch.tensor(
-#             [
-#                 [True, True, False, False, False, True, True],
-#                 [False, False, False, True, True, True, True],
-#             ]
-#         )
-#     ).all()
-#     print(all_zeroes.shape)
-#     # mask = all_zeroes.reshape(all_zeroes.shape[0], all_zeroes.shape[1], 1, 1)
-#     assert batch[~all_zeroes].shape == (6, 48, 48)
-#     assert (batch[~all_zeroes].flatten() == 1.0).all()

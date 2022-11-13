@@ -88,9 +88,7 @@ def load_label_csv_from_cfg(cfg: Union[DictConfig, dict]) -> pd.DataFrame:
     """
 
     csv_file = os.path.join(cfg["data"]["data_dir"], cfg["data"]["csv_file"])
-    labels_df = pd.read_csv(
-        csv_file, header=list(cfg["data"]["header_rows"]), index_col=0
-    )
+    labels_df = pd.read_csv(csv_file, header=list(cfg["data"]["header_rows"]), index_col=0)
     return labels_df
 
 
