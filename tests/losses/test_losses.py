@@ -119,7 +119,6 @@ def test_pca_singleview_loss(cfg, base_data_module):
 
     pca_loss = PCALoss(
         loss_name="pca_singleview",
-        error_metric="reprojection_error",
         components_to_keep=2,
         data_module=base_data_module,
         columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
@@ -137,7 +136,7 @@ def test_pca_singleview_loss(cfg, base_data_module):
     assert logs[0]["value"] == loss / pca_loss.weight
     assert logs[1]["name"] == "pca_singleview_weight"
     assert logs[1]["value"] == pca_loss.weight
-    # #  TODO: commented out the test below, it doesn't make sense, and fails when when we apply the keypoint filtering
+    #  TODO: commented out the test below, it doesn't make sense, and fails when we apply the keypoint filtering
 
     # # -----------------------------
     # # test pca loss on fake dataset
@@ -171,62 +170,49 @@ def test_pca_multiview_loss(cfg, base_data_module):
 
     # raise exception when mirrored_column_matches arg is not provided
     with pytest.raises(ValueError):
-        PCALoss(
-            loss_name="pca_multiview",
-            error_metric="reprojection_error",
-            data_module=base_data_module,
-        )
+        PCALoss(loss_name="pca_multiview", data_module=base_data_module)
 
-    for metric in ["reprojection_error", "proj_on_discarded_evecs"]:
-        pca_loss = PCALoss(
-            loss_name="pca_multiview",
-            error_metric=metric,
-            components_to_keep=3,
-            data_module=base_data_module,
-            mirrored_column_matches=cfg.data.mirrored_column_matches,
-            device=device,
-        )
+    pca_loss = PCALoss(
+        loss_name="pca_multiview",
+        components_to_keep=3,
+        data_module=base_data_module,
+        mirrored_column_matches=cfg.data.mirrored_column_matches,
+        device=device,
+    )
 
-        # ----------------------------
-        # test pca loss on toy dataset
-        # ----------------------------
-        keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets)
-        # shape = (batch_size, num_keypoints * 2)
-        # this all happens in PCALoss.__call__() but keeping it since we want to look at pre reduction loss
-        keypoints_pred = keypoints_pred.reshape(
-            keypoints_pred.shape[0], -1, 2
-        )  # shape = (batch_size, num_keypoints, 2)
-        keypoints_pred = format_multiview_data_for_pca(
-            data_arr=keypoints_pred,
-            mirrored_column_matches=cfg.data.mirrored_column_matches,
-        )
-        pre_reduction_loss = pca_loss.compute_loss(keypoints_pred)
-        if metric == "proj_on_discarded_evecs":
-            # shape = (num_samples * num_keypoints, 1)
-            pre_reduction_loss.shape == (
-                keypoints_pred.shape[0] * len(cfg.data.mirrored_column_matches[0]),
-                1,
-            )
+    # ----------------------------
+    # test pca loss on toy dataset
+    # ----------------------------
+    keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets)
+    # shape = (batch_size, num_keypoints * 2)
+    # this all happens in PCALoss.__call__() but keeping it since we want to look at pre reduction
+    # loss
+    keypoints_pred = keypoints_pred.reshape(
+        keypoints_pred.shape[0], -1, 2
+    )  # shape = (batch_size, num_keypoints, 2)
+    keypoints_pred = format_multiview_data_for_pca(
+        data_arr=keypoints_pred,
+        mirrored_column_matches=cfg.data.mirrored_column_matches,
+    )
+    pre_reduction_loss = pca_loss.compute_loss(keypoints_pred)
+    # shape = (num_samples, num_keypoints, num_views)
+    pre_reduction_loss.shape == (
+        keypoints_pred.shape[0],
+        len(cfg.data.mirrored_column_matches[0]),
+        2,  # for 2 views in this toy dataset
+    )
 
-        if metric == "reprojection_error":
-            # shape = (num_samples, num_keypoints, num_views)
-            pre_reduction_loss.shape == (
-                keypoints_pred.shape[0],
-                len(cfg.data.mirrored_column_matches[0]),
-                2,  # for 2 views in this toy dataset
-            )
+    # draw some numbers again, and reshape within the class
+    keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets)
 
-        # draw some numbers again, and reshape within the class
-        keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets)
+    loss, logs = pca_loss(keypoints_pred, stage=stage)
 
-        loss, logs = pca_loss(keypoints_pred, stage=stage)
-
-        assert loss.shape == torch.Size([])
-        assert loss > 0.0
-        assert logs[0]["name"] == "%s_pca_multiview_loss" % stage
-        assert logs[0]["value"] == loss / pca_loss.weight
-        assert logs[1]["name"] == "pca_multiview_weight"
-        assert logs[1]["value"] == pca_loss.weight
+    assert loss.shape == torch.Size([])
+    assert loss > 0.0
+    assert logs[0]["name"] == "%s_pca_multiview_loss" % stage
+    assert logs[0]["value"] == loss / pca_loss.weight
+    assert logs[1]["name"] == "pca_multiview_weight"
+    assert logs[1]["value"] == pca_loss.weight
 
     # -----------------------------
     # test pca loss on fake dataset
@@ -235,7 +221,6 @@ def test_pca_multiview_loss(cfg, base_data_module):
     # TODO: this is not how we currently compute reprojection. we now add mean in the final stage
     pca_loss = PCALoss(
         loss_name="pca_multiview",
-        error_metric="reprojection_error",
         components_to_keep=3,
         data_module=base_data_module,
         mirrored_column_matches=cfg.data.mirrored_column_matches,
