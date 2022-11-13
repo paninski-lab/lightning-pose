@@ -510,7 +510,6 @@ def compute_metrics(
         # build pca object
         pca = KeypointPCA(
             loss_type="pca_singleview",
-            error_metric="reprojection_error",
             data_module=data_module,
             components_to_keep=cfg.losses.pca_singleview.components_to_keep,
             empirical_epsilon_percentile=cfg.losses.pca_singleview.empirical_epsilon_percentile,
@@ -527,7 +526,6 @@ def compute_metrics(
         # build pca object
         pca = KeypointPCA(
             loss_type="pca_multiview",
-            error_metric="reprojection_error",
             data_module=data_module,
             components_to_keep=cfg.losses.pca_singleview.components_to_keep,
             empirical_epsilon_percentile=cfg.losses.pca_singleview.empirical_epsilon_percentile,

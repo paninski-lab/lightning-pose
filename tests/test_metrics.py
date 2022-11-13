@@ -60,7 +60,6 @@ def test_pca_singleview_reprojection_error(cfg, base_data_module):
     # initialize an instance
     kp_pca = KeypointPCA(
         loss_type="pca_singleview",
-        error_metric="reprojection_error",
         data_module=base_data_module,
         components_to_keep=3,
         empirical_epsilon_percentile=0.99,
@@ -88,7 +87,6 @@ def test_pca_multiview_reprojection_error(cfg, base_data_module):
     # initialize an instance
     kp_pca = KeypointPCA(
         loss_type="pca_multiview",
-        error_metric="reprojection_error",
         data_module=base_data_module,
         components_to_keep=3,
         empirical_epsilon_percentile=0.99,
