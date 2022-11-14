@@ -484,6 +484,8 @@ def compute_metrics(
         metrics_to_compute = ["temporal"]
     else:  # labeled data
         metrics_to_compute = ["pixel_error"]
+    # for either labeled and unlabeled data, if a pca loss is specified in config, we compute the
+    # associated metric
     if cfg.data.get("columns_for_singleview_pca", None) is not None \
             and len(cfg.data.columns_for_singleview_pca) != 0:
         metrics_to_compute += ["pca_singleview"]
@@ -515,6 +517,7 @@ def compute_metrics(
             empirical_epsilon_percentile=cfg.losses.pca_singleview.empirical_epsilon_percentile,
             columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
         )
+        # re-fit pca on the labeled data to get params
         pca()
         # compute reprojection error
         pcasv_error_per_keypoint = pca_singleview_reprojection_error(keypoints_pred, pca, cfg)
@@ -531,6 +534,7 @@ def compute_metrics(
             empirical_epsilon_percentile=cfg.losses.pca_singleview.empirical_epsilon_percentile,
             mirrored_column_matches=cfg.data.mirrored_column_matches,
         )
+        # re-fit pca on the labeled data to get params
         pca()
         # compute reprojection error
         pcamv_error_per_keypoint = pca_multiview_reprojection_error(keypoints_pred, pca, cfg)
