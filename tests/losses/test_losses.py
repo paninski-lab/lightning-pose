@@ -351,6 +351,8 @@ def test_unimodal_mse_loss():
         size=(batch_size, 2 * num_keypoints),
         device=device,
     )
+    confidences = torch.rand(size=(batch_size, num_keypoints), device=device)
+
     heatmaps_pred = torch.ones(
         size=(batch_size, num_keypoints, img_size_ds, img_size_ds),
         device=device,
@@ -365,6 +367,7 @@ def test_unimodal_mse_loss():
     loss, logs = uni_loss(
         keypoints_pred=keypoints_pred,
         heatmaps_pred=heatmaps_pred,
+        confidences=confidences,
         stage=stage,
     )
     assert loss.shape == torch.Size([])
@@ -390,6 +393,8 @@ def test_unimodal_kl_loss():
         size=(batch_size, 2 * num_keypoints),
         device=device,
     )
+    confidences = torch.rand(size=(batch_size, num_keypoints), device=device)
+
     heatmaps_pred = spatial_softmax2d(torch.randn(
         size=(batch_size, num_keypoints, img_size_ds, img_size_ds),
         device=device,
@@ -404,6 +409,7 @@ def test_unimodal_kl_loss():
     loss, logs = uni_loss(
         keypoints_pred=keypoints_pred,
         heatmaps_pred=heatmaps_pred,
+        confidences=confidences,
         stage=stage,
     )
     assert loss.shape == torch.Size([])
@@ -429,6 +435,8 @@ def test_unimodal_js_loss():
         size=(batch_size, 2 * num_keypoints),
         device=device,
     )
+    confidences = torch.rand(size=(batch_size, num_keypoints), device=device)
+
     heatmaps_pred = spatial_softmax2d(torch.randn(
         size=(batch_size, num_keypoints, img_size_ds, img_size_ds),
         device=device,
@@ -443,6 +451,7 @@ def test_unimodal_js_loss():
     loss, logs = uni_loss(
         keypoints_pred=keypoints_pred,
         heatmaps_pred=heatmaps_pred,
+        confidences=confidences,
         stage=stage,
     )
     assert loss.shape == torch.Size([])
