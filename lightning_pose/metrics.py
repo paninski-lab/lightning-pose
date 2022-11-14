@@ -42,12 +42,13 @@ def temporal_norm(keypoints_pred: Union[np.ndarray, torch.Tensor]) -> np.ndarray
     if not isinstance(keypoints_pred, torch.Tensor):
         keypoints_pred = torch.tensor(keypoints_pred, device=t_loss.device, dtype=torch.float32)
 
+    # (samples, n_keypoints, 2) -> (samples, n_keypoints * 2)
     if len(keypoints_pred.shape) != 2:
         keypoints_pred = keypoints_pred.reshape(keypoints_pred.shape[0], -1)
 
     # compute loss with already-implemented class
     t_norm = t_loss.compute_loss(keypoints_pred)
-    # prepend nan vector
+    # prepend nan vector; no temporal norm for the very first frame
     t_norm = np.vstack([np.nan * np.zeros((1, t_norm.shape[1])), t_norm.numpy()])
 
     return t_norm
@@ -77,25 +78,15 @@ def pca_singleview_reprojection_error(
 
     pca_cols = pca.columns_for_singleview_pca
 
-    # resize predictions to training dims (where pca is computed)
-    keypoints_pred_resize = _resize_keypoints(
-        cfg, keypoints_pred=keypoints_pred, orig_to_resize=True)
-
-    # compute reprojection
-    # adding a reshaping since the loss class expects a single last dim with num_keypoints * 2
-    data_arr = pca._format_data(
-        data_arr=keypoints_pred_resize.reshape(keypoints_pred_resize.shape[0], -1))
-    reproj = pca.reproject(data_arr=data_arr)
-    keypoints_reproj_resize = reproj.reshape(reproj.shape[0], reproj.shape[1] // 2, 2)
-
-    # resize reprojections back to original dims
-    keypoints_reproj = _resize_keypoints(cfg, keypoints_reproj_resize, orig_to_resize=False)
+    # resize->reformat->reprojection->resize
+    keypoints_reproj = _resize_reproject_resize(cfg, pca, keypoints_pred)
 
     # compute pixel error
     error_pca = pixel_error(
         keypoints_pred[:, pca_cols, :].cpu().numpy(), keypoints_reproj.cpu().numpy())
 
-    # next, put this back into a full keypoints pred arr
+    # next, put this back into a full keypoints pred arr; keypoints not included in pose for pca
+    # are set to nan
     error_all = np.nan * np.zeros((original_dims[0], original_dims[1]))
     error_all[:, pca_cols] = error_pca
 
@@ -127,19 +118,8 @@ def pca_multiview_reprojection_error(
 
     mirrored_column_matches = list(pca.mirrored_column_matches)
 
-    # resize predictions to training dims (where pca is computed)
-    keypoints_pred_resize = _resize_keypoints(
-        cfg, keypoints_pred=keypoints_pred, orig_to_resize=True)
-
-    # compute reprojection
-    # adding a reshaping below the loss class expects a single last dim with num_keypoints * 2
-    data_arr = pca._format_data(
-        data_arr=keypoints_pred_resize.reshape(keypoints_pred_resize.shape[0], -1))
-    reproj = pca.reproject(data_arr=data_arr)
-    keypoints_reproj_resize = reproj.reshape(reproj.shape[0], reproj.shape[1] // 2, 2)
-
-    # resize reprojections back to original dims
-    keypoints_reproj = _resize_keypoints(cfg, keypoints_reproj_resize, orig_to_resize=False)
+    # resize->reformat->reprojection->resize
+    keypoints_reproj = _resize_reproject_resize(cfg, pca, keypoints_pred)
 
     # put original keypoints in same format
     keypoints_pred_reformat = pca._format_data(
@@ -161,6 +141,26 @@ def pca_multiview_reprojection_error(
         error_all[:, cols] = error_pca[:, :, c]  # just the columns belonging to view c
 
     return error_all
+
+
+def _resize_reproject_resize(cfg, pca, keypoints_pred):
+    """Helper function for both pca singleview and pca multiview metrics."""
+
+    # resize predictions to training dims (where pca is computed)
+    keypoints_pred_resize = _resize_keypoints(
+        cfg, keypoints_pred=keypoints_pred, orig_to_resize=True)
+
+    # compute reprojection
+    # adding a reshaping since the loss class expects a single last dim with num_keypoints * 2
+    data_arr = pca._format_data(
+        data_arr=keypoints_pred_resize.reshape(keypoints_pred_resize.shape[0], -1))
+    reproj = pca.reproject(data_arr=data_arr)
+    keypoints_reproj_resize = reproj.reshape(reproj.shape[0], reproj.shape[1] // 2, 2)
+
+    # resize reprojections back to original dims
+    keypoints_reproj = _resize_keypoints(cfg, keypoints_reproj_resize, orig_to_resize=False)
+
+    return keypoints_reproj
 
 
 def _resize_keypoints(cfg, keypoints_pred, orig_to_resize):
