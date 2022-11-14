@@ -387,21 +387,21 @@ class TemporalLoss(Loss):
 
     def remove_nans(
         self,
-        elementwise_loss: TensorType["batch_minus_one", "num_keypoints"],
+        loss: TensorType["batch_minus_one", "num_keypoints"],
         confidences: TensorType["batch", "num_keypoints"]
     ) -> TensorType["batch_minus_one", "num_keypoints"]:
         # find nans in the targets, and do a masked_select operation
         # get rid of unsupervised targets with extremely uncertain predictions or likely occlusions
-        # squeezed_predictions = original_preds.reshape(original_preds.shape[0], original_preds.shape[1], -1)
         idxs_ignore = (confidences < self.prob_threshold)
         # ignore the loss values in the diff where one of the heatmaps is 'nan'
-        union_idxs_ignore = torch.zeros((elementwise_loss.shape[0], elementwise_loss.shape[1])).type(torch.ByteTensor)
-        for i in range(elementwise_loss.shape[0]):
+        union_idxs_ignore = torch.zeros(
+            (confidences.shape[0] - 1, confidences.shape[1]), 
+            dtype=torch.bool).to(_TORCH_DEVICE)
+        for i in range(confidences.shape[0] - 1):
             union_idxs_ignore[i] = torch.logical_or(idxs_ignore[i], idxs_ignore[i+1])
 
-        clean_loss = elementwise_loss.clone()
-        clean_loss[union_idxs_ignore] = 0
-        return clean_loss
+        loss[union_idxs_ignore] = 0.
+        return loss
 
 
     def compute_loss(
@@ -423,13 +423,16 @@ class TemporalLoss(Loss):
     def __call__(
         self,
         keypoints_pred: TensorType["batch", "two_x_num_keypoints"],
-        confidences: TensorType["batch", "num_keypoints"],
+        confidences: TensorType["batch", "num_keypoints"] = None,
         stage: Optional[Literal["train", "val", "test"]] = None,
         **kwargs,
     ) -> Tuple[TensorType[()], List[dict]]:
 
         elementwise_loss = self.compute_loss(predictions=keypoints_pred)
-        clean_loss = self.remove_nans(elementwise_loss=elementwise_loss, confidences=confidences)
+        clean_loss = self.remove_nans(
+            loss=elementwise_loss, 
+            confidences=confidences) if confidences is not None \
+            else elementwise_loss
         epsilon_insensitive_loss = self.rectify_epsilon(loss=clean_loss)
         scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
         logs = self.log_loss(loss=scalar_loss, stage=stage)
@@ -455,7 +458,6 @@ class TemporalHeatmapLoss(Loss):
     ) -> None:
         super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight),
         self.loss_name = loss_name
-        # self.hmloss = kl_div_loss_2d if self.loss_name == "temporal_heatmap_kl" else None
 
         if self.loss_name == "temporal_heatmap_mse":
             self.hmloss = None
@@ -482,29 +484,39 @@ class TemporalHeatmapLoss(Loss):
 
     def remove_nans(
         self,
-        confidences: TensorType["batch", "num_keypoints"]
+        confidences: TensorType["batch", "num_keypoints"],
+        loss: TensorType["batch_minus_one", "num_keypoints"]
     ) -> TensorType["batch_minus_one", "num_keypoints"]:
         # find nans in the targets, and do a masked_select operation
         # get rid of unsupervised targets with extremely uncertain predictions or likely occlusions
-        # squeezed_predictions = original_preds.reshape(original_preds.shape[0], original_preds.shape[1], -1)
         idxs_ignore = (confidences < self.prob_threshold)
         # ignore the loss values in the diff where one of the heatmaps is 'nan'
-        union_idxs_ignore = torch.zeros((confidences.shape[0] - 1, confidences.shape[1])).type(torch.ByteTensor)
+        union_idxs_ignore = torch.zeros(
+            (confidences.shape[0] - 1, confidences.shape[1]),
+            dtype=torch.bool).to(_TORCH_DEVICE)
         for i in range(confidences.shape[0] - 1):
             union_idxs_ignore[i] = torch.logical_or(idxs_ignore[i], idxs_ignore[i+1])
 
-        return union_idxs_ignore
+        loss[union_idxs_ignore] = 0.
+        return loss
     
     def compute_loss(
         self,
         predictions: TensorType["batch", "num_valid_keypoints", "heatmap_height", "heatmap_width"]
     ) -> TensorType["batch_minus_one", "num_valid_keypoints"]:
         # compute the differences between matching heatmaps for each keypoint
-        diffs = torch.zeros((predictions.shape[0] - 1, predictions.shape[1]))
+
+        diffs = torch.zeros(
+            (predictions.shape[0] - 1, 
+            predictions.shape[1])).to(_TORCH_DEVICE)
 
         for i in range(diffs.shape[0]):
             if self.loss_name == "temporal_heatmap_mse":
-                diffs[i] = F.mse_loss(predictions[i], predictions[i+1], reduction="none")
+                curr_mse = F.mse_loss(
+                    predictions[i], 
+                    predictions[i+1], 
+                    reduction="none").reshape(predictions.shape[1], -1)
+                diffs[i] = torch.mean(curr_mse, dim=-1)
             elif self.loss_name == "temporal_heatmap_kl":
                 diffs[i] = self.hmloss(
                     predictions[i].unsqueeze(0) + 1e-10,
@@ -523,14 +535,9 @@ class TemporalHeatmapLoss(Loss):
     ) -> Tuple[TensorType[()], List[dict]]:
 
         elementwise_loss = self.compute_loss(predictions=heatmaps_pred)
-        # doing remove nan after loss is computed to get rid of specific keypoints so diff is not affected
-        nan_mask = self.remove_nans(confidences=confidences)
-        if self.loss_name == "temporal_heatmap_mse":
-            zero = torch.zeros((heatmaps_pred.shape[2], heatmaps_pred.shape[3]))
-        else:
-            zero = 0
-        elementwise_loss[nan_mask] = zero
-        epsilon_insensitive_loss = self.rectify_epsilon(loss=elementwise_loss)
+        # remove nan after loss is computed to get rid of diff vals with a bad heatmap
+        clean_loss = self.remove_nans(confidences=confidences, loss=elementwise_loss)
+        epsilon_insensitive_loss = self.rectify_epsilon(loss=clean_loss)
         scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
         logs = self.log_loss(loss=scalar_loss, stage=stage)
 
