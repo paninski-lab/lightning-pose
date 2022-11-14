@@ -367,13 +367,13 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         # compute and log loss on labeled data
         loss, log_list = self.loss_factory(stage=stage, **data_dict)
 
-        # compute and log rmse loss on labeled data
+        # compute and log pixel_error loss on labeled data
         loss_rmse, _ = self.rmse_loss(stage=stage, **data_dict)
 
         if stage:
             # log overall supervised loss
             self.log(f"{stage}_supervised_loss", loss, prog_bar=True)
-            # log supervised rmse
+            # log supervised pixel_error
             self.log(f"{stage}_supervised_rmse", loss_rmse)
             # log individual supervised losses
             for log_dict in log_list:
