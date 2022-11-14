@@ -12,8 +12,8 @@ from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
-from lightning_pose.data.utils import \
-    generate_heatmaps, BaseLabeledExampleDict, HeatmapLabeledExampleDict
+from lightning_pose.data.utils import generate_heatmaps
+from lightning_pose.data.utils import BaseLabeledExampleDict, HeatmapLabeledExampleDict
 from lightning_pose.utils.io import get_keypoint_names
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"

@@ -26,6 +26,7 @@ from lightning_pose.utils.scripts import (
     get_imgaug_transform,
     get_loss_factories,
     get_model,
+    compute_metrics,
 )
 
 
@@ -172,9 +173,13 @@ def train(cfg: DictConfig):
     # predict on all labeled frames (train/val/test)
     # ----------------------------------------------------------------------------------
     pretty_print_str("Predicting train/val/test images...")
+    # compute and save frame-wise predictions
+    preds_file = os.path.join(hydra_output_directory, "predictions.csv")
     predict_dataset(
         cfg=cfg, trainer=trainer, model=model, data_module=data_module_pred, ckpt_file=best_ckpt,
-        preds_file=os.path.join(hydra_output_directory, "predictions.csv"))
+        preds_file=preds_file)
+    # compute and save various metrics
+    compute_metrics(cfg=cfg, preds_file=preds_file, data_module=data_module)
 
     # ----------------------------------------------------------------------------------
     # predict folder of videos
@@ -214,6 +219,8 @@ def train(cfg: DictConfig):
                 data_module=data_module_pred,
                 save_heatmaps=cfg.eval.get("predict_vids_after_training_save_heatmaps", False),
             )
+            # compute and save various metrics
+            compute_metrics(cfg=cfg, preds_file=prediction_csv_file, data_module=data_module)
 
 
 def pretty_print(cfg):
