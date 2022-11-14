@@ -354,20 +354,19 @@ def compute_num_train_frames(
 @typechecked
 def generate_heatmaps(
     keypoints: TensorType["batch", "num_keypoints", 2],
-    height: int,  # height of full sized image
-    width: int,  # width of full sized image
-    output_shape: Tuple[int, int],  # dimensions of downsampled heatmap
-    sigma: Union[float, int] = 1.25,  # sigma used for generating heatmaps
+    height: int,  
+    width: int,  
+    output_shape: Tuple[int, int],  
+    sigma: Union[float, int] = 1.25, 
 ) -> TensorType["batch", "num_keypoints", "height", "width"]:
     """Generate 2D Gaussian heatmaps from mean and sigma.
 
     Args:
         keypoints: coordinates that serve as mean of gaussian bump
-        height: height of original image (pixels)
-        width: width of original image (pixels)
+        height: height of reshaped image (pixels, e.g., 128, 256, 512...)
+        width: width of reshaped image (pixels, e.g., 128, 256, 512...)
         output_shape: dimensions of downsampled heatmap, (height, width)
         sigma: control spread of gaussian
-        normalize: normalize to a probability distribution (heatmap sums to one)
 
     Returns:
         batch of 2D heatmaps
