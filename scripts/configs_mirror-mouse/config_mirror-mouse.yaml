@@ -177,10 +177,19 @@ losses:
   # loss = kl loss between heatmaps in successive timepoints
   temporal_heatmap_kl:
     # weight in front of temporal loss
+    log_weight: 7.0
+    # for epsilon insensitive rectification
+    # (in pixels; diffs below this are not penalized)
+    epsilon: 5.0
+    # nan removal value. 
+    # (in prob; heatmaps with max prob values are removed)
+    prob_threshold: 0.05
+  temporal_heatmap_mse:
+    # weight in front of temporal loss
     log_weight: 5.0
     # for epsilon insensitive rectification
     # (in pixels; diffs below this are not penalized)
-    epsilon: 7.0
+    epsilon: 20.0
     # nan removal value. 
     # (in prob; heatmaps with max prob values are removed)
     prob_threshold: 0.05
