@@ -55,8 +55,7 @@ class Loss(pl.LightningModule):
         """
 
         Args:
-            data_module: give losses access to data for computing data-specific loss
-                params
+            data_module: give losses access to data for computing data-specific loss params
             epsilon: loss values below epsilon will be zeroed out
             log_weight: natural log of the weight in front of the loss term in the final
                 objective function
@@ -261,7 +260,6 @@ class PCALoss(Loss):
     def __init__(
         self,
         loss_name: Literal["pca_singleview", "pca_multiview"],
-        error_metric: Literal["reprojection_error", "proj_on_discarded_evecs"],
         components_to_keep: Union[int, float] = 0.95,
         empirical_epsilon_percentile: float = 0.99,
         epsilon: Optional[float] = None,
@@ -275,13 +273,11 @@ class PCALoss(Loss):
     ) -> None:
         super().__init__(data_module=data_module, log_weight=log_weight)
         self.loss_name = loss_name
-        self.error_metric = error_metric
 
         if loss_name == "pca_multiview":
             if mirrored_column_matches is None:
                 raise ValueError("must provide mirrored_column_matches in data config")
 
-        # TODO: solve issues with pca loss + data augmentation
         # the current data_module contains datasets that are loaded using augmentations. the
         # current solution is to pass the data module to KeypointPCA, which then passes it to
         # DataExtractor; we will also pass a "no_augmentation" arg to DataExtractor which will
@@ -292,7 +288,6 @@ class PCALoss(Loss):
         # and fuction to be used in model training.
         self.pca = KeypointPCA(
             loss_type=self.loss_name,
-            error_metric=self.error_metric,
             data_module=data_module,
             components_to_keep=components_to_keep,
             empirical_epsilon_percentile=empirical_epsilon_percentile,
@@ -333,7 +328,7 @@ class PCALoss(Loss):
     ) -> TensorType["num_samples", -1]:
         # compute either reprojection error or projection onto discarded evecs.
         # they will vary in the last dim, hence -1.
-        return self.pca.compute_error(data_arr=predictions)
+        return self.pca.compute_reprojection_error(data_arr=predictions)
 
     def __call__(
         self,

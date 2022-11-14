@@ -10,14 +10,14 @@ from lightning_pose.data.dali import video_pipe, LitDaliWrapper
 from lightning_pose.data.utils import count_frames
 
 
-def select_frame_idxs(video_file, resize_dims=64, n_clusters=20):
-    """
+def select_frame_idxs(video_file: str, resize_dims: int = 64, n_clusters: int = 20) -> np.ndarray:
+    """Cluster a low-dimensional representation of high motion energy frames.
 
     Parameters
     ----------
-    video_file
-    resize_dims
-    n_clusters
+    video_file: absolute path to video file from which to select frames
+    resize_dims: height AND width of resizing operation to make PCA faster
+    n_clusters: total number of frames to return
 
     Returns
     -------
@@ -53,7 +53,7 @@ def select_frame_idxs(video_file, resize_dims=64, n_clusters=20):
         "num_iters": num_iters,
         "eval_mode": "predict",
         "do_context": False,
-        "output_map": ["x"],
+        "output_map": ["frames", "transforms"],
         "last_batch_policy": LastBatchPolicy.FILL,
         #     "last_batch_padded": True,
         "auto_reset": False,
@@ -70,8 +70,8 @@ def select_frame_idxs(video_file, resize_dims=64, n_clusters=20):
         # take mean over color channel, remove spatial dims
         # result is shape (batch_size, height * width)
         batches.append(torch.reshape(
-            torch.mean(batch["images"], dim=1),
-            (batch["images"].shape[0], -1)).detach().cpu().numpy())
+            torch.mean(batch["frames"], dim=1),
+            (batch["frames"].shape[0], -1)).detach().cpu().numpy())
     batches = np.concatenate(batches, axis=0)
 
     # ---------------------------------------------------------
@@ -106,11 +106,41 @@ def select_frame_idxs(video_file, resize_dims=64, n_clusters=20):
     return idxs_prototypes
 
 
-def export_frames(video_file, save_dir, frame_idxs, format="png", n_digits=8):
+def export_frames(
+    video_file: str,
+    save_dir: str,
+    frame_idxs: np.ndarray,
+    format: str = "png",
+    n_digits: int = 8,
+    context_frames: int = 0,
+):
+    """
+
+    Parameters
+    ----------
+    video_file: absolute path to video file from which to select frames
+    save_dir: absolute path to directory in which selected frames are saved
+    frame_idxs: indices of frames to grab
+    format: only "png" currently supported
+    n_digits: number of digits in image names
+    context_frames: number of frames on either side of selected frame to also save
+
+    """
 
     cap = cv2.VideoCapture(video_file)
+
+    # expand frame_idxs to include context frames
+    if context_frames > 0:
+        context_vec = np.arange(-context_frames, context_frames + 1)
+        frame_idxs = (frame_idxs.squeeze()[None, :] + context_vec[:, None]).flatten()
+        frame_idxs.sort()
+        frame_idxs = frame_idxs[frame_idxs >= 0]
+        frame_idxs = frame_idxs[frame_idxs < int(cap.get(cv2.CAP_PROP_FRAME_COUNT))]
+
+    # load frames from video
     frames = get_frames_from_idxs(cap, frame_idxs)
 
+    # save out frames
     for frame, idx in zip(frames, frame_idxs):
         cv2.imwrite(
             filename=os.path.join(save_dir, "img%s.%s" % (str(idx).zfill(n_digits), format)),
