@@ -169,6 +169,24 @@ losses:
     # for epsilon insensitive rectification
     # (in pixels; diffs below this are not penalized)
     epsilon: 20.0
+  # loss = mse between unimodal heatmap and predicted heatmap
+  unimodal_mse:
+    # weight in front of unimodal loss
+    log_weight: 6.5
+    # ignore heatmaps with a max prob less than epsilon (so loss is not applied to occlusions)
+    prob_threshold: 0.05
+  # loss = kl loss between generated heatmap and ideal gaussian heatmap with same center as generated heatmap
+  unimodal_kl:
+    # weight in front of unimodal loss
+    log_weight: 6.5
+    # ignore heatmaps with a max prob less than epsilon (so loss is not applied to occlusions)
+    prob_threshold: 0.05
+  # same but jensen-shannon divergence
+  unimodal_js:
+    # weight in front of unimodal loss
+    log_weight: 6.5
+    # ignore heatmaps with a max prob less than epsilon (so loss is not applied to occlusions)
+    prob_threshold: 0.05
 
 eval:
   # paths to the hydra config files in the output folder, OR absolute paths to such folders.
