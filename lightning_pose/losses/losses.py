@@ -460,6 +460,7 @@ class UnimodalLoss(Loss):
         Args: 
             targets: (batch, num_keypoints, heatmap_height, heatmap_width)
             predictions: (batch, num_keypoints, heatmap_height, heatmap_width)
+            confidences: (batch, num_keypoints)
         Returns:
             clean targets: (num_valid_keypoints, heatmap_height, heatmap_width), concatenated across different images and keypoints
             clean predictions: (num_valid_keypoints, heatmap_height, heatmap_width), concatenated across different images and keypoints
@@ -494,15 +495,19 @@ class UnimodalLoss(Loss):
 
     def __call__(
         self,
-        keypoints_pred: TensorType["batch", "two_x_num_keypoints"],
+        keypoints_pred_augmented: TensorType["batch", "two_x_num_keypoints"],
         heatmaps_pred: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
         confidences: TensorType["batch", "num_keypoints"],
         stage: Optional[Literal["train", "val", "test"]] = None,
         **kwargs,
     ) -> Tuple[TensorType[()], List[dict]]:
+        """Compute unimodal loss.
+        Args:
+            keypoints_pred_augmented: (batch, 2 * num_keypoints) these are in the augmented image space
+            heatmaps_pred: (batch, num_keypoints, heatmap_height, heatmap_width) these are also in the augmented space, matching the keypoints_pred_augmented"""
 
         # turn keypoint predictions into unimodal heatmaps
-        keypoints_pred = keypoints_pred.reshape(keypoints_pred.shape[0], -1, 2)
+        keypoints_pred = keypoints_pred_augmented.reshape(keypoints_pred_augmented.shape[0], -1, 2)
         heatmaps_ideal = generate_heatmaps(  # this process doesn't compute gradients
             keypoints=keypoints_pred,
             height=self.original_image_height,

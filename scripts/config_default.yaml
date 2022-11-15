@@ -170,6 +170,26 @@ losses:
     # for epsilon insensitive rectification
     # (in pixels; diffs below this are not penalized)
     epsilon: 20.0
+  
+  unimodal_mse:
+    # weight in front of unimodal_mse loss
+    log_weight: 5.0
+
+    prob_threshold: 0.05 # we compute this loss only for heatmaps with confidence prob > prob_threshold
+  
+  unimodal_kl:
+    # weight in front of unimodal_mse loss
+    log_weight: 5.0
+
+    prob_threshold: 0.05 # we compute this loss only for heatmaps with confidence prob > prob_threshold
+  
+  unimodal_js:
+    # weight in front of unimodal_js loss
+    log_weight: 5.0
+
+    prob_threshold: 0.05 # we compute this loss only for heatmaps with confidence prob > prob_threshold
+  
+
 
 eval:
   # paths to the hydra config files in the output folder, OR absolute paths to such folders.
