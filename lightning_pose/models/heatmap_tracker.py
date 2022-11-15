@@ -355,17 +355,22 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         # images -> heatmaps
         predicted_heatmaps = self.forward(batch["frames"])
         # heatmaps -> keypoints
-        predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
+        predicted_keypoints_augmented, confidence = self.run_subpixelmaxima(predicted_heatmaps)
+
         # undo augmentation if needed
         if batch["transforms"].shape[-1] == 3:
             # reshape to (seq_len, n_keypoints, 2)
-            pred_kps = torch.reshape(predicted_keypoints, (predicted_keypoints.shape[0], -1, 2))
+            pred_kps = torch.reshape(predicted_keypoints_augmented, (predicted_keypoints_augmented.shape[0], -1, 2))
             # undo
             pred_kps = undo_affine_transform(pred_kps, batch["transforms"])
             # reshape to (seq_len, n_keypoints * 2)
             predicted_keypoints = torch.reshape(pred_kps, (pred_kps.shape[0], -1))
+        else:
+            predicted_keypoints = predicted_keypoints_augmented
+
         return {
-            "heatmaps_pred": predicted_heatmaps,
-            "keypoints_pred": predicted_keypoints,
+            "heatmaps_pred": predicted_heatmaps, # if augmented, these are the augmented heatmaps
+            "keypoints_pred": predicted_keypoints, # if we augmented, these are the original keypoints
+            "keypoints_pred_augmented": predicted_keypoints_augmented, # these keypoints match heatmaps_pred, all are augmented
             "confidences": confidence,
         }
