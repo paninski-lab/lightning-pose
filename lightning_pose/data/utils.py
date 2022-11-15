@@ -395,7 +395,8 @@ def generate_heatmaps(
     heatmaps = torch.exp(heatmaps)
     # normalize all heatmaps to one
     heatmaps = heatmaps / torch.sum(heatmaps, dim=(2, 3), keepdim=True)
-    # replace nans with zeros heatmaps (all zeros heatmaps are ignored in the supervised heatmap loss)
+    # replace nans with zeros heatmaps
+    # (all zeros heatmaps are ignored in the supervised heatmap loss)
     zeros_heatmap = torch.zeros((out_height, out_width), device=keypoints.device)
     heatmaps[nan_idxs] = zeros_heatmap
     return heatmaps
@@ -414,15 +415,17 @@ def evaluate_heatmaps_at_location(
     taking all pixels within two standard deviations of the predicted pixel."""
     pix_to_consider = int(np.floor(sigma * num_stds))  # get all pixels within num_stds.
     num_pad = pix_to_consider
-    heatmaps_padded = torch.zeros(
+    heatmaps_padded = torch.zeros((
         heatmaps.shape[0],
         heatmaps.shape[1],
         heatmaps.shape[2] + num_pad * 2,
         heatmaps.shape[3] + num_pad * 2,
+        ),
+        device=heatmaps.device,
     )
     heatmaps_padded[:, :, num_pad:-num_pad, num_pad:-num_pad] = heatmaps
-    i = torch.arange(heatmaps_padded.shape[0]).reshape(-1, 1, 1, 1)
-    j = torch.arange(heatmaps_padded.shape[1]).reshape(1, -1, 1, 1)
+    i = torch.arange(heatmaps_padded.shape[0], device=heatmaps_padded.device).reshape(-1, 1, 1, 1)
+    j = torch.arange(heatmaps_padded.shape[1], device=heatmaps_padded.device).reshape(1, -1, 1, 1)
     k = locs[:, :, None, 1, None].type(torch.int64) + num_pad
     l = locs[:, :, 0, None, None].type(torch.int64) + num_pad
     offsets = list(np.arange(-pix_to_consider, pix_to_consider + 1))
