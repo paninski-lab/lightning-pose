@@ -33,8 +33,8 @@ from lightning_pose.models.heatmap_tracker_mhcrnn import (
     SemiSupervisedHeatmapTrackerMHCRNN,
 )
 from lightning_pose.utils import get_gpu_list_from_cfg, pretty_print_str
-from lightning_pose.utils.io import check_if_semi_supervised, return_absolute_data_paths
-from lightning_pose.utils.io import get_keypoint_names
+from lightning_pose.utils.io import return_absolute_path, return_absolute_data_paths
+from lightning_pose.utils.io import check_if_semi_supervised, get_keypoint_names
 from lightning_pose.utils.pca import KeypointPCA
 from lightning_pose.utils.predictions import load_model_from_checkpoint, create_labeled_video, \
     PredictionHandler, predict_single_video
@@ -457,7 +457,8 @@ def compute_metrics(
     """Compute various metrics on predictions csv file."""
 
     # get keypoint names
-    labels_file = os.path.join(cfg["data"]["data_dir"], cfg["data"]["csv_file"])
+    labels_file = return_absolute_path(
+        os.path.join(cfg["data"]["data_dir"], cfg["data"]["csv_file"]))
     labels_df = pd.read_csv(labels_file, header=list(cfg["data"]["header_rows"]), index_col=0)
     keypoint_names = get_keypoint_names(
         cfg, csv_file=labels_file, header_rows=list(cfg["data"]["header_rows"]))
