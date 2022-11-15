@@ -58,7 +58,7 @@ def temporal_norm(keypoints_pred: Union[np.ndarray, torch.Tensor]) -> np.ndarray
 def pca_singleview_reprojection_error(
     keypoints_pred: Union[np.ndarray, torch.Tensor],
     pca: KeypointPCA,
-    cfg: DictConfig,
+    cfg: Union[DictConfig, dict],
 ) -> np.ndarray:
     """PCA reprojection error.
 
@@ -97,7 +97,7 @@ def pca_singleview_reprojection_error(
 def pca_multiview_reprojection_error(
     keypoints_pred: Union[np.ndarray, torch.Tensor],
     pca: KeypointPCA,
-    cfg: DictConfig,
+    cfg: Union[DictConfig, dict],
 ) -> np.ndarray:
     """PCA reprojection error.
 
