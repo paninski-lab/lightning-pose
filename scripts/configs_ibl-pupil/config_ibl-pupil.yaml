@@ -28,7 +28,7 @@ training:
   # default- resizing only
   # dlc- imgaug pipeline implemented in DLC 2.0 package
   # dlc-light- curated subset of dlc augmentations with more conservative param settings
-  imgaug: default
+  imgaug: dlc
   # batch size of labeled data during training
   train_batch_size: 32
   # batch size of labeled data during validation
@@ -88,10 +88,13 @@ model:
   losses_to_use: []
   # whether to learn the weights for the unsupervised losses
   learn_weights: false
+  # backbone network:
   # resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
   # resnet50_3d
+  # resnet50_animalpose_apose | resnet50_animal_ap10k
+  # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res
   # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
-  backbone: resnet50
+  backbone: resnet50_animal_ap10k
   # prediction mode - "heatmap" | "regression"
   model_type: "heatmap"
   # which heatmap loss to use
@@ -111,7 +114,7 @@ dali:
 
   base:
     train:
-      sequence_length: 96 # step = sequence_length by default. done internally
+      sequence_length: 64 # step = sequence_length by default. done internally
 
     predict:
       # (train_batch_size + base.train.sequence_length) * 2 -> round down to nearest pow of 2
@@ -146,7 +149,7 @@ losses:
     log_weight: 5.0
     # for epsilon insensitive rectification
     # (in pixels; diffs below this are not penalized)
-    epsilon: 5.0
+    epsilon: 10.0
 
 eval:
   # paths to the hydra config files in the output folder, OR absolute paths to such folders.
