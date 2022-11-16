@@ -196,7 +196,7 @@ training:
   # dropout in final layers
   dropout_rate: 0.1
   # max training epochs; training may exit before due to early stopping
-  min_epochs: 100
+  min_epochs: 125
   max_epochs: 750
   # frequency to log training metrics (one step is one batch)
   log_every_n_steps: 5 # this dataset has fewer than 10 batches per epoch
@@ -232,10 +232,13 @@ model:
   losses_to_use: []
   # whether to learn the weights for the unsupervised losses
   learn_weights: false
+  # backbone network:
   # resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
   # resnet50_3d
+  # resnet50_animalpose_apose | resnet50_animal_ap10k
+  # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res
   # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
-  backbone: resnet50
+  backbone: resnet50_animal_ap10k
   # prediction mode - "heatmap" | "regression"
   model_type: "heatmap"
   # which heatmap loss to use
@@ -285,7 +288,6 @@ losses:
     # absolute error (in pixels) below which pca loss is zeroed out; if not null, this
     # parameter takes precedence over `empirical_epsilon_percentile`
     epsilon: null
-    error_metric: "reprojection_error" # "reprojection_error" | "proj_on_discarded_evecs"
   # loss = projection onto the discarded eigenvectors
   pca_singleview:
     # weight in front of PCA loss
@@ -299,14 +301,13 @@ losses:
     # absolute error (in pixels) below which pca loss is zeroed out; if not null, this
     # parameter takes precedence over `empirical_epsilon_percentile`
     epsilon: null
-    error_metric: "reprojection_error" # "reprojection_error" | "proj_on_discarded_evecs"
   # loss = norm of distance between successive timepoints
   temporal:
     # weight in front of temporal loss
     log_weight: 5.0
     # for epsilon insensitive rectification
     # (in pixels; diffs below this are not penalized)
-    epsilon: 20.0
+    epsilon: 10.0
 
 eval:
   # paths to the hydra config files in the output folder, OR absolute paths to such folders.
@@ -314,7 +315,7 @@ eval:
   # predict?
   predict_vids_after_training: true
   # save .mp4?
-  save_vids_after_training: true
+  save_vids_after_training: false
   fiftyone:
     # will be the name of the dataset (Mongo DB) created by FiftyOne. for video dataset, we will append dataset_name + "_video"
     dataset_name: "implant-fish"

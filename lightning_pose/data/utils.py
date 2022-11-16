@@ -354,20 +354,19 @@ def compute_num_train_frames(
 @typechecked
 def generate_heatmaps(
     keypoints: TensorType["batch", "num_keypoints", 2],
-    height: int,  # height of full sized image
-    width: int,  # width of full sized image
-    output_shape: Tuple[int, int],  # dimensions of downsampled heatmap
-    sigma: Union[float, int] = 1.25,  # sigma used for generating heatmaps
+    height: int,  
+    width: int,  
+    output_shape: Tuple[int, int],  
+    sigma: Union[float, int] = 1.25, 
 ) -> TensorType["batch", "num_keypoints", "height", "width"]:
     """Generate 2D Gaussian heatmaps from mean and sigma.
 
     Args:
         keypoints: coordinates that serve as mean of gaussian bump
-        height: height of original image (pixels)
-        width: width of original image (pixels)
+        height: height of reshaped image (pixels, e.g., 128, 256, 512...)
+        width: width of reshaped image (pixels, e.g., 128, 256, 512...)
         output_shape: dimensions of downsampled heatmap, (height, width)
         sigma: control spread of gaussian
-        normalize: normalize to a probability distribution (heatmap sums to one)
 
     Returns:
         batch of 2D heatmaps
@@ -396,7 +395,8 @@ def generate_heatmaps(
     heatmaps = torch.exp(heatmaps)
     # normalize all heatmaps to one
     heatmaps = heatmaps / torch.sum(heatmaps, dim=(2, 3), keepdim=True)
-    # replace nans with zeros heatmaps (all zeros heatmaps are ignored in the supervised heatmap loss)
+    # replace nans with zeros heatmaps
+    # (all zeros heatmaps are ignored in the supervised heatmap loss)
     zeros_heatmap = torch.zeros((out_height, out_width), device=keypoints.device)
     heatmaps[nan_idxs] = zeros_heatmap
     return heatmaps
@@ -415,15 +415,17 @@ def evaluate_heatmaps_at_location(
     taking all pixels within two standard deviations of the predicted pixel."""
     pix_to_consider = int(np.floor(sigma * num_stds))  # get all pixels within num_stds.
     num_pad = pix_to_consider
-    heatmaps_padded = torch.zeros(
+    heatmaps_padded = torch.zeros((
         heatmaps.shape[0],
         heatmaps.shape[1],
         heatmaps.shape[2] + num_pad * 2,
         heatmaps.shape[3] + num_pad * 2,
+        ),
+        device=heatmaps.device,
     )
     heatmaps_padded[:, :, num_pad:-num_pad, num_pad:-num_pad] = heatmaps
-    i = torch.arange(heatmaps_padded.shape[0]).reshape(-1, 1, 1, 1)
-    j = torch.arange(heatmaps_padded.shape[1]).reshape(1, -1, 1, 1)
+    i = torch.arange(heatmaps_padded.shape[0], device=heatmaps_padded.device).reshape(-1, 1, 1, 1)
+    j = torch.arange(heatmaps_padded.shape[1], device=heatmaps_padded.device).reshape(1, -1, 1, 1)
     k = locs[:, :, None, 1, None].type(torch.int64) + num_pad
     l = locs[:, :, 0, None, None].type(torch.int64) + num_pad
     offsets = list(np.arange(-pix_to_consider, pix_to_consider + 1))

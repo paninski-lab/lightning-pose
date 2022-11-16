@@ -209,7 +209,7 @@ class PredictionHandler:
         }
 
         for key, val in dataset_split_indices.items():
-            df.loc[val, "set"] = np.repeat(key, len(val))
+            df.loc[val, ("set", "", "")] = np.repeat(key, len(val))
         return df
 
     def __call__(
