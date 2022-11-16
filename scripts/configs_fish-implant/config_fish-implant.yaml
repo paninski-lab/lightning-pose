@@ -232,10 +232,13 @@ model:
   losses_to_use: []
   # whether to learn the weights for the unsupervised losses
   learn_weights: false
+  # backbone network:
   # resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
   # resnet50_3d
+  # resnet50_animalpose_apose | resnet50_animal_ap10k
+  # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res
   # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
-  backbone: resnet50
+  backbone: resnet50_animal_ap10k
   # prediction mode - "heatmap" | "regression"
   model_type: "heatmap"
   # which heatmap loss to use
@@ -304,7 +307,7 @@ losses:
     log_weight: 5.0
     # for epsilon insensitive rectification
     # (in pixels; diffs below this are not penalized)
-    epsilon: 20.0
+    epsilon: 10.0
 
 eval:
   # paths to the hydra config files in the output folder, OR absolute paths to such folders.
@@ -312,7 +315,7 @@ eval:
   # predict?
   predict_vids_after_training: true
   # save .mp4?
-  save_vids_after_training: true
+  save_vids_after_training: false
   fiftyone:
     # will be the name of the dataset (Mongo DB) created by FiftyOne. for video dataset, we will append dataset_name + "_video"
     dataset_name: "implant-fish"
