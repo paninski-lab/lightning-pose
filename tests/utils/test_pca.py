@@ -43,7 +43,6 @@ def test_pca_keypoint_class(cfg, base_data_module_combined):
     # initialize an instance
     kp_pca = KeypointPCA(
         loss_type="pca_multiview",
-        error_metric="reprojection_error",
         data_module=base_data_module_combined,
         components_to_keep=3,
         empirical_epsilon_percentile=0.3,
@@ -111,7 +110,6 @@ def test_pca_keypoint_class(cfg, base_data_module_combined):
     # the number of workers in the datamodule from 8 to 4 and it seems to be working now
     kp_pca_2 = KeypointPCA(
         loss_type="pca_multiview",
-        error_metric="reprojection_error",
         data_module=base_data_module_combined,
         components_to_keep=3,
         empirical_epsilon_percentile=0.3,
@@ -163,7 +161,6 @@ def test_singleview_format_and_loss(cfg, base_data_module_combined):
     # initialize an instance
     singleview_pca = KeypointPCA(
         loss_type="pca_singleview",
-        error_metric="reprojection_error",
         data_module=base_data_module_combined,
         components_to_keep=6,
         empirical_epsilon_percentile=1.0,
@@ -176,7 +173,7 @@ def test_singleview_format_and_loss(cfg, base_data_module_combined):
     # num selected keypoints in the cfg is 14, so we should have 14 * 2 columns
     assert data_arr.shape == (n_batches, 14 * 2)
 
-    err = singleview_pca.compute_error(data_arr=data_arr)
+    err = singleview_pca.compute_reprojection_error(data_arr=data_arr)
     assert err.shape == (n_batches, 14)
 
 
@@ -229,78 +226,3 @@ def test_component_chooser():
 
     # less explained variance -> less components kept
     assert ComponentChooser(pca, 0.20)() < ComponentChooser(pca, 0.90)()
-
-
-def test_compute_pca_reprojection_error():
-    """this test checks the mean-centered pca loss implemented in the old utils.pca.compute_pca_reprojection_error function"""
-
-    from lightning_pose.utils.pca import compute_pca_reprojection_error
-
-    # make two eigenvecs, each 4D
-    kept_evecs = torch.eye(n=4, device="cpu")[:, :2].T
-    # random projection matrix from kept_evecs to obs
-    projection_to_obs = torch.randn(size=(10, 2), device="cpu")
-    # make observations
-    obs = projection_to_obs @ kept_evecs
-    mean = obs.mean(dim=0)
-    good_arr_for_pca = obs - mean.unsqueeze(0)  # subtract mean
-    # first matmul projects to 2D, second matmul projects back to 4D
-    reproj = good_arr_for_pca @ kept_evecs.T @ kept_evecs
-    # assert that reproj=good_arr_for_pca
-    assert torch.allclose(reproj - good_arr_for_pca, torch.zeros_like(input=reproj))
-
-    print(obs.shape)
-    print(kept_evecs.shape)
-    print(mean.shape)
-    # now verify the pca loss
-    # TODO: compute_pca_reprojection_error became a part of KeypointPCA. consider removing.
-    pca_loss = compute_pca_reprojection_error(
-        clean_pca_arr=obs,
-        kept_eigenvectors=kept_evecs,
-        mean=mean,
-    )
-
-    assert torch.mean(pca_loss) == 0.0
-
-
-# def test_undo_formatting():
-#     from lightning_pose.utils.pca import (
-#         format_multiview_data_for_pca,
-#         undo_format_multiview_data_for_pca,
-#     )
-
-#     coords = torch.cat(
-#         [
-#             1.0 * torch.arange(1, 5).unsqueeze(-1),
-#             2.0 * torch.arange(1, 5).unsqueeze(-1),
-#         ],
-#         dim=-1,
-#     ).unsqueeze(
-#         0
-#     )  # each coord is scaled differently
-#     batched_coords = torch.cat(
-#         [1.0 * coords, 10.0 * coords, 100.0 * coords], dim=0
-#     )  # each batch element is scaled differently
-#     print(batched_coords)
-#     print(batched_coords.shape)
-#     mirrored_inds = [[0, 1], [2, 3]]
-
-#     keypoints_pred = format_multiview_data_for_pca(
-#         data_arr=batched_coords,
-#         mirrored_column_matches=mirrored_inds,
-#     )
-#     assert keypoints_pred.shape == (
-#         batched_coords.shape[0] * batched_coords.shape[-1],
-#         batched_coords.shape[1],
-#     )
-#     print(batched_coords)
-#     print(keypoints_pred)
-
-#     # now undo formatting
-#     reverted_preds = undo_format_multiview_data_for_pca(
-#         multiview_arr=keypoints_pred, mirrored_column_matches=mirrored_inds
-#     )
-#     print(batched_coords)
-#     print(reverted_preds)
-# no format for pca
-# test_tensor = torch.tensor(data = 2)

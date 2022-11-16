@@ -28,7 +28,6 @@ class KeypointPCA(object):
     def __init__(
         self,
         loss_type: Literal["pca_singleview", "pca_multiview"],
-        error_metric: Literal["reprojection_error", "proj_on_discarded_evecs"],
         data_module: Union[UnlabeledDataModule, BaseDataModule],
         components_to_keep: Optional[Union[int, float]] = 0.95,
         empirical_epsilon_percentile: float = 90.0,
@@ -37,7 +36,6 @@ class KeypointPCA(object):
         device: Union[Literal["cuda", "cpu"], torch.device] = "cpu",
     ) -> None:
         self.loss_type = loss_type
-        self.error_metric = error_metric
         self.data_module = data_module
         self.components_to_keep = components_to_keep
         self.empirical_epsilon_percentile = empirical_epsilon_percentile
@@ -47,25 +45,12 @@ class KeypointPCA(object):
         self.device = device
 
     @property
-    def _error_metric_factory(self):
-        metrics = {
-            "reprojection_error": self.compute_reprojection_error,
-            "proj_on_discarded_evecs": self.compute_discarded_evec_error,
-        }
-        return metrics
-
-    @property
     def _format_factory(self) -> Dict[str, Any]:
         formats = {
             "pca_multiview": self._multiview_format,
             "pca_singleview": self._singleview_format,
         }
         return formats
-
-    def compute_error(
-        self, data_arr: Optional[TensorType["num_samples", "sample_dim"]] = None
-    ) -> TensorType["num_samples", -1]:
-        return self._error_metric_factory[self.error_metric](data_arr=data_arr)
 
     def _get_data(self) -> None:
         self.data_arr, _ = DataExtractor(
@@ -75,9 +60,7 @@ class KeypointPCA(object):
 
     def _multiview_format(
         self, data_arr: TensorType["num_original_samples", "num_original_dims"]
-    ) -> TensorType[
-        "num_original_samples_times_num_selected_keypoints", "two_times_num_views"
-    ]:
+    ) -> TensorType["num_original_samples_times_num_selected_keypoints", "two_times_num_views"]:
         # original shape = (batch, 2 * num_keypoints) where `num_keypoints` includes
         # keypoints views from multiple views.
         data_arr = data_arr.reshape(data_arr.shape[0], data_arr.shape[1] // 2, 2)
@@ -117,22 +100,6 @@ class KeypointPCA(object):
         #         "num_original_samples_times_num_selected_keypoints", "two_times_num_views"
         #     ]],  # multiview
         return self._format_factory[self.loss_type](data_arr=data_arr)
-
-    # def _format_data(self) -> None:
-    #     # TODO: check that the two format end up having same rows/columns division
-    #     if self.data_arr is not None:
-    #         if self.loss_type == "pca_multiview":
-    #             self.data_arr = self.data_arr.reshape(
-    #                 self.data_arr.shape[0], self.data_arr.shape[1] // 2, 2
-    #             )
-    #             self.data_arr = format_multiview_data_for_pca(
-    #                 data_arr=self.data_arr,
-    #                 mirrored_column_matches=self.mirrored_column_matches,
-    #             )
-    #         else:
-    #             # no need to format single-view data unless you want to exclude columns
-    #             if self.columns_for_singleview_pca is not None:
-    #                 self.data_arr = self.data_arr[:, self.columns_for_singleview_pca]
 
     def _clean_any_nans(self) -> None:
         # we count nans along the first dimension, i.e., columns. We remove those rows
@@ -192,20 +159,15 @@ class KeypointPCA(object):
         pca_prints(self.pca_object, self.loss_type, self._n_components_kept)
 
     def _set_parameter_dict(self) -> None:
-        # TODO: parameters of pca, need to send over to the loss param dict
         self.parameters = {}  # dict with same keys as loss_param_dict
         self.parameters["mean"] = self.pca_object.mean_
-        self.parameters["kept_eigenvectors"] = self.pca_object.components_[
-            : self._n_components_kept
-        ]
-        self.parameters["discarded_eigenvectors"] = self.pca_object.components_[
-            self._n_components_kept :
-        ]
+        self.parameters["kept_eigenvectors"] = \
+            self.pca_object.components_[:self._n_components_kept]
+        self.parameters["discarded_eigenvectors"] = \
+            self.pca_object.components_[self._n_components_kept:]
         self.parameters = convert_dict_values_to_tensors(self.parameters, self.device)
-
         self.parameters["epsilon"] = EmpiricalEpsilon(
-            percentile=self.empirical_epsilon_percentile)(loss=self.compute_error())
-        # was loss=self._compute_reprojection_error() relying on the external func
+            percentile=self.empirical_epsilon_percentile)(loss=self.compute_reprojection_error())
 
     def reproject(
         self, data_arr: Optional[TensorType["num_samples", "sample_dim"]] = None
@@ -236,29 +198,6 @@ class KeypointPCA(object):
         reprojection = low_d_projection @ evecs + mean
         return reprojection
 
-    def project_onto_discarded_evecs(
-        self, data_arr: Optional[TensorType["num_samples", "sample_dim"]] = None
-    ) -> Optional[TensorType["num_samples", "num_discarded_evecs"]]:
-        if data_arr is None:
-            data_arr = self.data_arr.to(self.device)
-        discarded_evecs = self.parameters["discarded_eigenvectors"]
-        mean = self.parameters["mean"].unsqueeze(0)
-        # mean subtract
-        centered_data = data_arr - mean
-        # project onto discarded components
-        return centered_data @ discarded_evecs.T
-
-    def compute_discarded_evec_error(
-        self, data_arr: Optional[TensorType["num_samples", "sample_dim"]] = None
-    ) -> TensorType["num_samples", 1]:
-        """returns a single error for all keypoints in a sample"""
-        if data_arr is None:
-            data_arr = self.data_arr.to(self.device)
-
-        proj = self.project_onto_discarded_evecs(data_arr=data_arr)
-        loss = torch.linalg.norm(proj, dim=1)
-        return loss.reshape(data_arr.shape[0], 1)
-
     def compute_reprojection_error(
         self, data_arr: Optional[TensorType["num_samples", "sample_dim"]] = None
     ) -> TensorType["num_samples", "sample_dim_over_two"]:
@@ -274,14 +213,7 @@ class KeypointPCA(object):
 
         return reprojection_loss
 
-    # def _compute_reproj_error(self) -> torch.Tensor:
-    #     return compute_pca_reprojection_error(
-    #         self.data_arr.to(self.device),
-    #         self.parameters["kept_eigenvectors"],
-    #         self.parameters["mean"],
-    #     )
-
-    def __call__(self):
+    def __call__(self) -> None:
 
         # TODO: think if we always like to override data_arr.
         # should we need a copy of it to undo the nan stuff?
@@ -370,71 +302,6 @@ class ComponentChooser:
             return (
                 self._find_first_threshold_cross()
             )  # find that integer that crosses the minimum explained variance
-
-
-# TODO: the function below was in usage until Mar 21, 2022. Integrating it into the pca class
-@typechecked
-def compute_pca_reprojection_error(
-    clean_pca_arr: TensorType["samples", "observation_dim"],
-    kept_eigenvectors: TensorType["latent_dim", "observation_dim"],
-    mean: TensorType["observation_dim"],
-) -> TensorType["samples", "observation_dim_div_by_two"]:
-
-    # first verify that the pca array has observations divisible by 2
-    # (corresponding to (x,y) coords)
-    assert clean_pca_arr.shape[1] % 2 == 0
-
-    # mean-center
-    clean_pca_arr = clean_pca_arr - mean.unsqueeze(0)
-
-    # project down into low-d space, then back up to observation space
-    reprojection_arr = (
-        clean_pca_arr @ kept_eigenvectors.T @ kept_eigenvectors
-    )  # e.g., (214, 4) X (4, 3) X (3, 4) = (214, 4) as we started
-
-    # compute difference between original array and its reprojection
-    # multiview:
-    # - num_samples: num_samples X num_bodyparts
-    # - observation_dim: 2 x num_views
-    # singleview:
-    # - num_samples: num_samples
-    # - observation_dim: 2 X num_bodyparts
-    diff = clean_pca_arr - reprojection_arr
-
-    # reshape to get a per sample/keypoint values:
-    diff_arr_per_keypoint = diff.reshape(diff.shape[0], diff.shape[1] // 2, 2)
-    reprojection_loss = torch.linalg.norm(diff_arr_per_keypoint, dim=2)
-
-    # print("reprojection_loss.shape: {}".format(reprojection_loss.shape))
-    # print("diff: {}".format(diff[:5, :]))
-    # print("diff_arr_per_keypoint: {}".format(diff_arr_per_keypoint[:5, :, :]))
-
-    return reprojection_loss
-
-
-@typechecked
-def add_params_to_loss_dict(
-    data_module: UnlabeledDataModule,
-    loss_key: Literal["pca_singleview", "pca_multiview"],
-    **kwargs
-):
-    # TODO: be careful of dtype (for half-precision training) and device (for multinode)
-    print("original data_module.loss_param_dict")
-    print(data_module.loss_param_dict[loss_key])
-    for param_name, param_val in kwargs.items():
-        # make it a tensor and send to device
-        tensor_param = torch.tensor(
-            param_val,
-            dtype=torch.float32,
-            device=_TORCH_DEVICE,
-        )
-        print(
-            "modifying data_module.loss_param_dict[%s][%s] with:"
-            % (loss_key, param_name)
-        )
-        print(tensor_param)
-        # save in dict
-        data_module.loss_param_dict[loss_key][param_name] = tensor_param
 
 
 @typechecked
