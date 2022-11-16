@@ -584,17 +584,23 @@ class UnimodalLoss(Loss):
         self,
         targets: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
         predictions: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+        confidences: TensorType["batch", "num_keypoints"],
     ) -> Tuple[
         TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
         TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
     ]:
-        # get rid of unsupervised targets with likely occlusions
-        squeezed_predictions = predictions.reshape(
-            predictions.shape[0], predictions.shape[1], -1
-        )
-        idxs_ignore = (
-            torch.max(squeezed_predictions, dim=-1).values < self.prob_threshold
-        )
+        """Remove nans from targets and predictions.
+        Args: 
+            targets: (batch, num_keypoints, heatmap_height, heatmap_width)
+            predictions: (batch, num_keypoints, heatmap_height, heatmap_width)
+            confidences: (batch, num_keypoints)
+        Returns:
+            clean targets: (num_valid_keypoints, heatmap_height, heatmap_width), concatenated across different images and keypoints
+            clean predictions: (num_valid_keypoints, heatmap_height, heatmap_width), concatenated across different images and keypoints
+        """
+        # use confidences to get rid of unsupervised targets with likely occlusions
+        idxs_ignore = (confidences < self.prob_threshold)
+
         return targets[~idxs_ignore], predictions[~idxs_ignore]
 
     def compute_loss(
@@ -622,14 +628,19 @@ class UnimodalLoss(Loss):
 
     def __call__(
         self,
-        keypoints_pred: TensorType["batch", "two_x_num_keypoints"],
+        keypoints_pred_augmented: TensorType["batch", "two_x_num_keypoints"],
         heatmaps_pred: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+        confidences: TensorType["batch", "num_keypoints"],
         stage: Optional[Literal["train", "val", "test"]] = None,
         **kwargs,
     ) -> Tuple[TensorType[()], List[dict]]:
+        """Compute unimodal loss.
+        Args:
+            keypoints_pred_augmented: (batch, 2 * num_keypoints) these are in the augmented image space
+            heatmaps_pred: (batch, num_keypoints, heatmap_height, heatmap_width) these are also in the augmented space, matching the keypoints_pred_augmented"""
 
         # turn keypoint predictions into unimodal heatmaps
-        keypoints_pred = keypoints_pred.reshape(keypoints_pred.shape[0], -1, 2)
+        keypoints_pred = keypoints_pred_augmented.reshape(keypoints_pred_augmented.shape[0], -1, 2)
         heatmaps_ideal = generate_heatmaps(  # this process doesn't compute gradients
             keypoints=keypoints_pred,
             height=self.original_image_height,
@@ -637,10 +648,11 @@ class UnimodalLoss(Loss):
             output_shape=(self.downsampled_image_height, self.downsampled_image_width),
         )
 
-        # compare unimodal heatmaps with predicted heatmaps
+        # remove invisible keypoints according to confidences
         clean_targets, clean_predictions = self.remove_nans(
-            targets=heatmaps_ideal, predictions=heatmaps_pred
+            targets=heatmaps_ideal, predictions=heatmaps_pred, confidences=confidences
         )
+        # compute loss just on the valid heatmaps
         elementwise_loss = self.compute_loss(
             targets=clean_targets, predictions=clean_predictions
         )

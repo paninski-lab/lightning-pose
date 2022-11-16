@@ -193,13 +193,19 @@ losses:
     # weight in front of unimodal loss
     log_weight: 6.5
     # ignore heatmaps with a max prob less than epsilon (so loss is not applied to occlusions)
-    prob_threshold: 0.0
+    prob_threshold: 0.05
   # loss = kl loss between generated heatmap and ideal gaussian heatmap with same center as generated heatmap
   unimodal_kl:
     # weight in front of unimodal loss
     log_weight: 6.5
     # ignore heatmaps with a max prob less than epsilon (so loss is not applied to occlusions)
-    prob_threshold: 0.0
+    prob_threshold: 0.05
+  
+  unimodal_js:
+    # weight in front of unimodal loss
+    log_weight: 6.5
+    # ignore heatmaps with a max prob less than epsilon (so loss is not applied to occlusions)
+    prob_threshold: 0.05
 
 eval:
   # paths to the hydra config files in the output folder, OR absolute paths to such folders.
