@@ -395,8 +395,10 @@ class TemporalLoss(Loss):
         for i in range(confidences.shape[0] - 1):
             union_idxs_ignore[i] = torch.logical_or(idxs_ignore[i], idxs_ignore[i+1])
 
-        loss[union_idxs_ignore] = 0.
-        return loss
+        # clone loss and zero out the nan values
+        clean_loss = loss.clone()
+        clean_loss[union_idxs_ignore] = 0.
+        return clean_loss
 
 
     def compute_loss(
@@ -424,6 +426,7 @@ class TemporalLoss(Loss):
     ) -> Tuple[TensorType[()], List[dict]]:
 
         elementwise_loss = self.compute_loss(predictions=keypoints_pred)
+        # do remove nans with loss to remove temporal difference values
         clean_loss = self.remove_nans(
             loss=elementwise_loss, 
             confidences=confidences) if confidences is not None \
