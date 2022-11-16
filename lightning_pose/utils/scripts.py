@@ -33,8 +33,8 @@ from lightning_pose.models.heatmap_tracker_mhcrnn import (
     SemiSupervisedHeatmapTrackerMHCRNN,
 )
 from lightning_pose.utils import get_gpu_list_from_cfg, pretty_print_str
-from lightning_pose.utils.io import check_if_semi_supervised, return_absolute_data_paths
-from lightning_pose.utils.io import get_keypoint_names
+from lightning_pose.utils.io import return_absolute_path, return_absolute_data_paths
+from lightning_pose.utils.io import check_if_semi_supervised, get_keypoint_names
 from lightning_pose.utils.pca import KeypointPCA
 from lightning_pose.utils.predictions import load_model_from_checkpoint, create_labeled_video, \
     PredictionHandler, predict_single_video
@@ -457,7 +457,8 @@ def compute_metrics(
     """Compute various metrics on predictions csv file."""
 
     # get keypoint names
-    labels_file = os.path.join(cfg["data"]["data_dir"], cfg["data"]["csv_file"])
+    labels_file = return_absolute_path(
+        os.path.join(cfg["data"]["data_dir"], cfg["data"]["csv_file"]))
     labels_df = pd.read_csv(labels_file, header=list(cfg["data"]["header_rows"]), index_col=0)
     keypoint_names = get_keypoint_names(
         cfg, csv_file=labels_file, header_rows=list(cfg["data"]["header_rows"]))
@@ -470,11 +471,13 @@ def compute_metrics(
         is_video = False
         tmp = pred_df.iloc[:, :-1].to_numpy().reshape(pred_df.shape[0], -1, 3)
         index = labels_df.index
+        set = pred_df.iloc[:, -1].to_numpy()
     else:
         # these are predictions on video data
         is_video = True
         tmp = pred_df.to_numpy().reshape(pred_df.shape[0], -1, 3)
         index = pred_df.index
+        set = None
 
     keypoints_pred = tmp[:, :, :2]  # shape (samples, n_keypoints, 2)
     # confidences = tmp[:, :, -1]  # shape (samples, n_keypoints)
@@ -498,6 +501,9 @@ def compute_metrics(
         keypoints_true = labels_df.to_numpy().reshape(labels_df.shape[0], -1, 2)
         error_per_keypoint = pixel_error(keypoints_true, keypoints_pred)
         error_df = pd.DataFrame(error_per_keypoint, index=index, columns=keypoint_names)
+        # add train/val/test split
+        if set is not None:
+            error_df["set"] = set
         save_file = preds_file.replace(".csv", "_pixel_error.csv")
         error_df.to_csv(save_file)
 
@@ -505,6 +511,9 @@ def compute_metrics(
         temporal_norm_per_keypoint = temporal_norm(keypoints_pred)
         temporal_norm_df = pd.DataFrame(
             temporal_norm_per_keypoint, index=index, columns=keypoint_names)
+        # add train/val/test split
+        if set is not None:
+            temporal_norm_df["set"] = set
         save_file = preds_file.replace(".csv", "_temporal_norm.csv")
         temporal_norm_df.to_csv(save_file)
 
@@ -522,6 +531,9 @@ def compute_metrics(
         # compute reprojection error
         pcasv_error_per_keypoint = pca_singleview_reprojection_error(keypoints_pred, pca, cfg)
         pcasv_df = pd.DataFrame(pcasv_error_per_keypoint, index=index, columns=keypoint_names)
+        # add train/val/test split
+        if set is not None:
+            pcasv_df["set"] = set
         save_file = preds_file.replace(".csv", "_pca_singleview_error.csv")
         pcasv_df.to_csv(save_file)
 
@@ -539,6 +551,9 @@ def compute_metrics(
         # compute reprojection error
         pcamv_error_per_keypoint = pca_multiview_reprojection_error(keypoints_pred, pca, cfg)
         pcamv_df = pd.DataFrame(pcamv_error_per_keypoint, index=index, columns=keypoint_names)
+        # add train/val/test split
+        if set is not None:
+            pcamv_df["set"] = set
         save_file = preds_file.replace(".csv", "_pca_multiview_error.csv")
         pcamv_df.to_csv(save_file)
 
