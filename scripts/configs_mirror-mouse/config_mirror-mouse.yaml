@@ -53,7 +53,7 @@ training:
   # number of gpus to train a single model
   num_gpus: 1
   # number of cpu workers for data loaders
-  num_workers: 8
+  num_workers: 4
   # epochs over which to assess validation metrics for early stopping
   early_stop_patience: 3
   # epoch at which backbone network weights begin updating
