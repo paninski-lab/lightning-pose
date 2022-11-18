@@ -150,6 +150,9 @@ losses:
     # for epsilon insensitive rectification
     # (in pixels; diffs below this are not penalized)
     epsilon: 20.0
+    # nan removal value. 
+    # (in prob; heatmaps with max prob values are removed)
+    prob_threshold: 0.05
   # loss = mse loss between generated heatmap and ideal gaussian heatmap with
   # same center as generated heatmap
   unimodal_mse:
