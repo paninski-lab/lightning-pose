@@ -173,6 +173,9 @@ losses:
     # for epsilon insensitive rectification
     # (in pixels; diffs below this are not penalized)
     epsilon: 20.0
+    # nan removal value. 
+    # (in prob; heatmaps with max prob values are removed)
+    prob_threshold: 0.05
 
 eval:
   # paths to the hydra config files in the output folder, OR absolute paths to such folders.
