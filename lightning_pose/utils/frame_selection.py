@@ -5,6 +5,8 @@ from nvidia.dali.plugin.pytorch import LastBatchPolicy
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 import torch
+from tqdm import tqdm
+
 
 from lightning_pose.data.dali import video_pipe, LitDaliWrapper
 from lightning_pose.data.utils import count_frames
@@ -65,7 +67,7 @@ def select_frame_idxs(video_file: str, resize_dims: int = 64, n_clusters: int = 
 
     # collect all data
     batches = []
-    for batch in iterator:
+    for batch in tqdm(iterator):
         # batches.append(batch)
         # take mean over color channel, remove spatial dims
         # result is shape (batch_size, height * width)
