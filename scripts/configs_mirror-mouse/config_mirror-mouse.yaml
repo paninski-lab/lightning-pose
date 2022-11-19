@@ -194,6 +194,7 @@ losses:
     epsilon: 20.0
     # nan removal threshold value. 
     # (in prob; heatmaps with confidences below this value are removed)
+    prob_threshold: 0.05
   # loss = mse between unimodal heatmap and predicted heatmap
   unimodal_mse:
     # weight in front of unimodal loss
