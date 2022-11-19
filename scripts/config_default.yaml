@@ -193,26 +193,24 @@ losses:
     # nan removal threshold value. 
     # (in prob; heatmaps with confidences below this value are removed)
     prob_threshold: 0.05
-  
+  # loss = mse between model heatmap and idealized gaussian heatmap centered on softargmax
   unimodal_mse:
     # weight in front of unimodal_mse loss
     log_weight: 5.0
-
-    prob_threshold: 0.05 # we compute this loss only for heatmaps with confidence prob > prob_threshold
-  
+    # we compute this loss only for heatmaps with confidence prob > prob_threshold
+    prob_threshold: 0.05
+  # loss = kl divergence between model heatmap and idealized gaussian heatmap centered on softargmax
   unimodal_kl:
     # weight in front of unimodal_mse loss
     log_weight: 5.0
-
-    prob_threshold: 0.05 # we compute this loss only for heatmaps with confidence prob > prob_threshold
-  
+    # we compute this loss only for heatmaps with confidence prob > prob_threshold
+    prob_threshold: 0.05
+  # loss = jensen-shannon divergence between model heatmap and idealized gaussian heatmap centered on softargmax
   unimodal_js:
     # weight in front of unimodal_js loss
     log_weight: 5.0
-
-    prob_threshold: 0.05 # we compute this loss only for heatmaps with confidence prob > prob_threshold
-  
-
+    # we compute this loss only for heatmaps with confidence prob > prob_threshold
+    prob_threshold: 0.05
 
 eval:
   # paths to the hydra config files in the output folder, OR absolute paths to such folders.
@@ -244,7 +242,7 @@ eval:
   # create labeled video from each video in test_videos_directory
   create_labeled_video: true
   # confidence threshold for plotting a vid
-  confidence_thresh_for_vid: 0.05
+  confidence_thresh_for_vid: 0.90
   # str with absolute path to the video file you want plotted with keypoints
   video_file_to_plot: ""
   # a list of strings, each points to a .csv file with predictions of a given model to the same video. will be combined with video_file_to_plot to make a visualization
@@ -257,3 +255,10 @@ callbacks:
     increase_factor: 0.01
     final_val: 1.0
     freeze_until_epoch: 0
+
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}
