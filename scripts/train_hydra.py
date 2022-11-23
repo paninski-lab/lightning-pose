@@ -179,7 +179,10 @@ def train(cfg: DictConfig):
         cfg=cfg, trainer=trainer, model=model, data_module=data_module_pred, ckpt_file=best_ckpt,
         preds_file=preds_file)
     # compute and save various metrics
-    compute_metrics(cfg=cfg, preds_file=preds_file, data_module=data_module_pred)
+    try:
+        compute_metrics(cfg=cfg, preds_file=preds_file, data_module=data_module_pred)
+    except:
+        pass
 
     # ----------------------------------------------------------------------------------
     # predict folder of videos
@@ -220,7 +223,11 @@ def train(cfg: DictConfig):
                 save_heatmaps=cfg.eval.get("predict_vids_after_training_save_heatmaps", False),
             )
             # compute and save various metrics
-            compute_metrics(cfg=cfg, preds_file=prediction_csv_file, data_module=data_module_pred)
+            try:
+                compute_metrics(
+                    cfg=cfg, preds_file=prediction_csv_file, data_module=data_module_pred)
+            except:
+                continue
 
     # ----------------------------------------------------------------------------------
     # predict on OOD frames
@@ -247,7 +254,10 @@ def train(cfg: DictConfig):
         cfg=cfg_ood, trainer=trainer, model=model, data_module=data_module_ood,
         ckpt_file=best_ckpt, preds_file=preds_file_ood)
     # compute and save various metrics
-    compute_metrics(cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood)
+    try:
+        compute_metrics(cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood)
+    except:
+        pass
 
 
 def pretty_print(cfg):
