@@ -365,7 +365,7 @@ def test_unimodal_mse_loss():
         downsampled_image_width=img_size_ds,
     )
     loss, logs = uni_loss(
-        keypoints_pred=keypoints_pred,
+        keypoints_pred_augmented=keypoints_pred,
         heatmaps_pred=heatmaps_pred,
         confidences=confidences,
         stage=stage,
@@ -407,7 +407,7 @@ def test_unimodal_kl_loss():
         downsampled_image_width=img_size_ds,
     )
     loss, logs = uni_loss(
-        keypoints_pred=keypoints_pred,
+        keypoints_pred_augmented=keypoints_pred,
         heatmaps_pred=heatmaps_pred,
         confidences=confidences,
         stage=stage,
@@ -449,7 +449,7 @@ def test_unimodal_js_loss():
         downsampled_image_width=img_size_ds,
     )
     loss, logs = uni_loss(
-        keypoints_pred=keypoints_pred,
+        keypoints_pred_augmented=keypoints_pred,
         heatmaps_pred=heatmaps_pred,
         confidences=confidences,
         stage=stage,
