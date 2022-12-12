@@ -26,6 +26,23 @@ patch_typeguard()  # use before @typechecked
 
 
 @typechecked
+def upsample(
+    inputs: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+) -> TensorType["batch", "num_keypoints", "2 x heatmap_height", "2 x heatmap_width"]:
+    """Upsample batch of heatmaps using interpolation (no learned weights).
+
+    This is a copy of kornia's pyrup function but with better defaults.
+    """
+    kernel = _get_pyramid_gaussian_kernel()
+    _, _, height, width = inputs.shape
+    # align_corners=False is important!! otherwise the offsets below don't hold
+    inputs_up = nn.functional.interpolate(
+        inputs, size=(height * 2, width * 2), mode='bicubic', align_corners=False)
+    inputs_up = filter2d(inputs_up, kernel, border_type='constant')
+    return inputs_up
+
+
+@typechecked
 class HeatmapTracker(BaseSupervisedTracker):
     """Base model that produces heatmaps of keypoints from images."""
 
@@ -134,15 +151,6 @@ class HeatmapTracker(BaseSupervisedTracker):
                 - confidences of shape (batch, num_keypoints)
 
         """
-
-        def upsample(inputs):  # copy of kornia's pyrup function but with better defaults
-            kernel = _get_pyramid_gaussian_kernel()
-            _, _, height, width = inputs.shape
-            # align_corners=False is important!! otherwise the offsets below don't hold
-            inputs_up = nn.functional.interpolate(
-                inputs, size=(height * 2, width * 2), mode='bicubic', align_corners=False)
-            inputs_up = filter2d(inputs_up, kernel, border_type='constant')
-            return inputs_up
 
         # upsample heatmaps
         for _ in range(self.downsample_factor):
