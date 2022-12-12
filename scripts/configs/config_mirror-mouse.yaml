@@ -1,16 +1,16 @@
 data:
   # dimensions of training images
   image_orig_dims:
-    height: 384
-    width: 512
+    height: 406
+    width: 396
   # resize dimensions to streamline model creation
   image_resize_dims:
     height: 256
-    width: 384
+    width: 256
   # ABSOLUTE path to data directory
-  data_dir: "/datastores/mirror-fish"
+  data_dir: "/datastores/mirror-mouse"
   # ABSOLUTE path to unlabeled videos' directory
-  video_dir: "/datastores/mirror-fish/videos"
+  video_dir: "/datastores/mirror-mouse/videos"
   # location of labels; for example script, this should be relative to `data_dir`
   csv_file: "CollectedData.csv"
   # header rows to strip in label csv file
@@ -18,7 +18,7 @@ data:
   # downsample heatmaps - 2 | 3
   downsample_factor: 2
   # total number of body parts
-  num_keypoints: 45
+  num_keypoints: 17
   # for mirrored setups with all keypoints defined in same csv file, define matching
   # columns for different keypoints (assumes x-y-x-y interleaving)
   # each list corresponds to a single view, so in the example below there are 2 views
@@ -27,12 +27,9 @@ data:
   # TODO: what if a keypoint is labeled in more than 1 but not all views?
   # this info is only used for the multiview pca loss
   mirrored_column_matches:
-    - [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
-    - [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
-    - [30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44]
-  # all labels in multiple views w/ <40 nans
-  columns_for_singleview_pca:
-    [0, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 21, 23, 24, 25, 36, 38, 41]
+    - [0, 1, 2, 3, 4, 5, 6]
+    - [8, 9, 10, 11, 12, 13, 14]
+  columns_for_singleview_pca: [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14]
 
 training:
   # select from one of several predefined image/video augmentation pipelines
@@ -64,7 +61,7 @@ training:
   # dropout in final layers
   dropout_rate: 0.1
   # max training epochs; training may exit before due to early stopping
-  min_epochs: 125
+  min_epochs: 300
   max_epochs: 750
   # frequency to log training metrics (one step is one batch)
   log_every_n_steps: 10
@@ -78,6 +75,7 @@ training:
   rng_seed_model_pt: 0
   # how many batches to take before terminating an epoch
   # (any dataloader that has less than limit_train_batches will be cycled over)
+  # THIS IS IMPORTANT!
   limit_train_batches: null
   # if you have two dataloaders, you keep cycling over the smaller dataset
   # before completing the larger one
@@ -90,12 +88,12 @@ training:
   lr_scheduler: multisteplr
   lr_scheduler_params:
     multisteplr:
-      milestones: [100, 200, 300]
+      milestones: [150, 200, 250]
       gamma: 0.5
 
 model:
   # list of unsupervised losses
-  # "pca_singleview" | "pca_multiview" | "temporal" | "unimodal" | ""
+  # "pca_singleview" | "pca_multiview" | "temporal" | "unimodal_mse" | "unimodal_kl"
   losses_to_use: []
   # whether to learn the weights for the unsupervised losses
   learn_weights: false
@@ -109,7 +107,7 @@ model:
   # prediction mode - "heatmap" | "regression"
   model_type: "heatmap"
   # which heatmap loss to use
-  # "mse" | "wasserstein"
+  # "mse" | "kl" | "js"
   heatmap_loss_type: "mse"
   # tt expt name
   model_name: "biorxiv22a"
@@ -125,20 +123,20 @@ dali:
 
   base:
     train:
-      sequence_length: 16 # step = sequence_length by default. done internally
+      sequence_length: 32 # 4 # step = sequence_length by default. done internally
 
     predict:
       # (train_batch_size + base.train.sequence_length) * 2 -> round down to nearest pow of 2
-      sequence_length: 64 # step = sequence_length by default. done internally.
+      sequence_length: 96 # step = sequence_length by default. done internally.
 
   context: # not supporting context_sequences_successive
     train: # defaults: sequence_length=5, step=sequence_length
-      batch_size: 8
+      batch_size: 16
       consecutive_sequences: true # can select False if want successive sequences to be presented to network
 
     predict: # defaults: sequence_length=5, step=1
       # (train_batch_size / 4 + context.train.batch_size) * 2 -> round down to nearest pow of 2
-      batch_size: 12
+      batch_size: 16
 
 losses:
   # loss = projection onto the discarded eigenvectors
@@ -173,9 +171,46 @@ losses:
     log_weight: 5.0
     # for epsilon insensitive rectification
     # (in pixels; diffs below this are not penalized)
-    epsilon: 10.0
+    epsilon: 20.0
     # nan removal value. 
     # (in prob; heatmaps with max prob values are removed)
+    prob_threshold: 0.05
+  # loss = kl loss between heatmaps in successive timepoints
+  temporal_heatmap_kl:
+    # weight in front of temporal heatmap loss
+    log_weight: 7.0
+    # for epsilon insensitive rectification
+    # (in kl loss values; diffs below this are not penalized)
+    epsilon: 5.0
+    # nan removal threshold value. 
+    # (in prob; heatmaps with confidences below this value are removed)
+    prob_threshold: 0.05
+  # loss = mse between heatmaps in successive timepoints
+  temporal_heatmap_mse:
+    # weight in front of temporal heatmap loss
+    log_weight: 5.0
+    # for epsilon insensitive rectification
+    # (in mse values; diffs below this are not penalized)
+    epsilon: 20.0
+    # nan removal threshold value. 
+    # (in prob; heatmaps with confidences below this value are removed)
+  # loss = mse between unimodal heatmap and predicted heatmap
+  unimodal_mse:
+    # weight in front of unimodal loss
+    log_weight: 6.5
+    # ignore heatmaps with a max prob less than epsilon (so loss is not applied to occlusions)
+    prob_threshold: 0.05
+  # loss = kl loss between generated heatmap and ideal gaussian heatmap with same center as generated heatmap
+  unimodal_kl:
+    # weight in front of unimodal loss
+    log_weight: 6.5
+    # ignore heatmaps with a max prob less than epsilon (so loss is not applied to occlusions)
+    prob_threshold: 0.05
+  # same but jensen-shannon divergence
+  unimodal_js:
+    # weight in front of unimodal loss
+    log_weight: 6.5
+    # ignore heatmaps with a max prob less than epsilon (so loss is not applied to occlusions)
     prob_threshold: 0.05
 
 eval:
@@ -187,14 +222,14 @@ eval:
   save_vids_after_training: false
   fiftyone:
     # will be the name of the dataset (Mongo DB) created by FiftyOne. for video dataset, we will append dataset_name + "_video"
-    dataset_name: "mirror-fish"
+    dataset_name: "mirror-mouse"
     build_speed: "slow" # "slow"/"fast". "fast" drops keypoint name and confidence information for faster processing.
     # if you want to manually provide a different model name to be displayed in FiftyOne
     model_display_names: ["test_model"]
     # whether to launch the app from the script (True), or from ipython (and have finer control over the outputs)
     launch_app_from_script: false
 
-    remote: True # for LAI, must be False
+    remote: true # for LAI, must be False
     address: 127.0.0.1 # ip to launch the app on.
     port: 5151 # port to launch the app on.
 
@@ -202,11 +237,11 @@ eval:
     dataset_to_create: "images"
   # str with an absolute path to a directory containing videos for prediction.
   # (it's not absolute just for the toy example)
-  test_videos_directory: "/datastores/mirror-fish/videos_new"
+  test_videos_directory: "/datastores/mirror-mouse/videos_new"
   # str with an absolute path to directory in which you want to save .csv with predictions
   saved_vid_preds_dir: "/home/jovyan"
   # create labeled video from each video in test_videos_directory
-  create_labeled_video: false
+  create_labeled_video: true
   # confidence threshold for plotting a vid
   confidence_thresh_for_vid: 0.05
   # str with absolute path to the video file you want plotted with keypoints
