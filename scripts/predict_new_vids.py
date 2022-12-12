@@ -60,7 +60,8 @@ def predict_videos_in_dir(cfg: DictConfig):
         absolute_cfg_path = return_absolute_path(hydra_relative_path, n_dirs_back=2)
 
         # load model
-        model_cfg = OmegaConf.load(os.path.join(absolute_cfg_path, ".hydra/config.yaml"))
+        model_cfg = OmegaConf.load(os.path.join(
+            absolute_cfg_path, ".hydra/configs/config_toy-dataset.yaml"))
         ckpt_file = ckpt_path_from_base_path(
             base_path=absolute_cfg_path, model_name=model_cfg.model.model_name
         )
@@ -77,9 +78,7 @@ def predict_videos_in_dir(cfg: DictConfig):
             # save to where the videos are. may get an exception
             save_preds_dir = cfg.eval.test_videos_directory
         else:
-            save_preds_dir = return_absolute_path(
-                cfg.eval.saved_vid_preds_dir, n_dirs_back=3
-            )
+            save_preds_dir = return_absolute_path(cfg.eval.saved_vid_preds_dir, n_dirs_back=3)
 
         # loop over videos in a provided directory
         video_files = get_videos_in_dir(return_absolute_path(cfg.eval.test_videos_directory))

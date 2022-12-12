@@ -34,7 +34,7 @@ TOY_DATA_ROOT_DIR = "toy_datasets/toymouseRunningData"
 def cfg() -> dict:
     """Load all toy data config file without hydra."""
     base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
-    config_file = os.path.join(base_dir, "scripts", "configs", "config.yaml")
+    config_file = os.path.join(base_dir, "scripts", "configs", "config_toy-dataset.yaml")
     cfg = yaml.load(open(config_file), Loader=yaml.FullLoader)
     cfg["model"]["do_context"] = False
     return OmegaConf.create(cfg)
@@ -44,7 +44,7 @@ def cfg() -> dict:
 def cfg_context() -> dict:
     """Load all toy data config file without hydra."""
     base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
-    config_file = os.path.join(base_dir, "scripts", "configs", "config.yaml")
+    config_file = os.path.join(base_dir, "scripts", "configs", "config_toy-dataset.yaml")
     cfg = yaml.load(open(config_file), Loader=yaml.FullLoader)
     cfg["model"]["do_context"] = True
     # make small batches so that we can run on a gpu with limited memory
