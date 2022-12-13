@@ -19,7 +19,7 @@ install_requires = [
     "pytorch-lightning",
     "lightning-bolts",
     "scikit-image",
-    "sklearn",
+    "scikit-learn",
     "torchtyping",
     "torchvision",
     "typeguard",

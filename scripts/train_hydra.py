@@ -3,6 +3,7 @@
 import hydra
 from omegaconf import DictConfig
 import os
+import shutil
 import pytorch_lightning as pl
 import torch
 import numpy as np
@@ -80,7 +81,7 @@ def train(cfg: DictConfig):
         mode="min",
     )
     lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval="epoch")
-    ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(monitor="val_supervised_loss")
+    ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(monitor="val_supervised_loss", dirpath=os.getcwd())
     transfer_unfreeze_callback = pl.callbacks.BackboneFinetuning(
         unfreeze_backbone_at_epoch=cfg.training.unfreezing_epoch,
         lambda_func=lambda epoch: 1.5,
@@ -142,6 +143,8 @@ def train(cfg: DictConfig):
 
     # train model!
     trainer.fit(model=model, datamodule=data_module)
+
+    shutil.move(ckpt_callback.dirpath, trainer.default_root_dir)
 
     # ----------------------------------------------------------------------------------
     # Post-training analysis

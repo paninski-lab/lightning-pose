@@ -8,5 +8,6 @@ nvidia-pyindex
 # pip install --extra-index-url https://developer.download.nvidia.com/compute/redist --upgrade nvidia-dali-cuda110
 --extra-index-url https://developer.download.nvidia.com/compute/redist
 nvidia-dali-cuda110
+decorator==4.4.2
 
--e .
+# -e .
