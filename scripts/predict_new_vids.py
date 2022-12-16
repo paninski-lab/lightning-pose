@@ -29,7 +29,7 @@ no need to loop over models or folders. we do need to loop over videos within a 
 however, keeping cfg.eval.hydra_paths is useful for the fiftyone image plotting. so keep"""
 
 
-@hydra.main(config_path="configs", config_name="config")
+@hydra.main(config_path="configs", config_name="config_toy-dataset")
 def predict_videos_in_dir(cfg: DictConfig):
     """
     This script will work with a path to a trained model's hydra folder
@@ -60,8 +60,7 @@ def predict_videos_in_dir(cfg: DictConfig):
         absolute_cfg_path = return_absolute_path(hydra_relative_path, n_dirs_back=2)
 
         # load model
-        model_cfg = OmegaConf.load(os.path.join(
-            absolute_cfg_path, ".hydra/configs/config_toy-dataset.yaml"))
+        model_cfg = OmegaConf.load(os.path.join(absolute_cfg_path, ".hydra/configs/config.yaml"))
         ckpt_file = ckpt_path_from_base_path(
             base_path=absolute_cfg_path, model_name=model_cfg.model.model_name
         )
