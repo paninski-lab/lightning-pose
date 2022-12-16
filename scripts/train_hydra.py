@@ -30,7 +30,7 @@ from lightning_pose.utils.scripts import (
 )
 
 
-@hydra.main(config_path="configs", config_name="config")
+@hydra.main(config_path="configs", config_name="config_toy-dataset")
 def train(cfg: DictConfig):
     """Main fitting function, accessed from command line."""
 
