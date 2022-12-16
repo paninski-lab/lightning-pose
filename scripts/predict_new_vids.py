@@ -60,7 +60,7 @@ def predict_videos_in_dir(cfg: DictConfig):
         absolute_cfg_path = return_absolute_path(hydra_relative_path, n_dirs_back=2)
 
         # load model
-        model_cfg = OmegaConf.load(os.path.join(absolute_cfg_path, ".hydra/configs/config.yaml"))
+        model_cfg = OmegaConf.load(os.path.join(absolute_cfg_path, ".hydra/config.yaml"))
         ckpt_file = ckpt_path_from_base_path(
             base_path=absolute_cfg_path, model_name=model_cfg.model.model_name
         )
