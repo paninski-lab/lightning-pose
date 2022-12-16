@@ -61,7 +61,7 @@ training:
   # dropout in final layers
   dropout_rate: 0.1
   # min training epochs; training cannot terminate before. compare to unfreezing_epoch, check_val_every_n_epoch, early_stop_patience
-  min_epochs: 125
+  min_epochs: 300
   # max training epochs; training may exit before due to early stopping
   max_epochs: 500
   # frequency to log training metrics (one step is one batch)
@@ -87,7 +87,7 @@ training:
   # multisteplr scheduler params
   lr_scheduler_params:
     multisteplr:
-      milestones: [100, 200, 300]
+      milestones: [150, 200, 250]
       gamma: 0.5
 
 model:
