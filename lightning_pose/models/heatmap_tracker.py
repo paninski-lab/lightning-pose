@@ -55,7 +55,7 @@ class HeatmapTracker(BaseSupervisedTracker):
             "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k", 
             "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"
         ] = "resnet50",
-        downsample_factor: Literal[2, 3] = 2,
+        downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
         output_shape: Optional[tuple] = None,  # change
@@ -70,9 +70,8 @@ class HeatmapTracker(BaseSupervisedTracker):
             num_keypoints: number of body parts
             loss_factory: object to orchestrate loss computation
             backbone: ResNet or EfficientNet variant to be used
-            downsample_factor: make heatmap smaller than original frames to
-                save memory; subpixel operations are performed for increased
-                precision
+            downsample_factor: make heatmap smaller than original frames to save memory; subpixel
+                operations are performed for increased precision
             pretrained: True to load pretrained imagenet weights
             last_resnet_layer_to_get: skip final layers of backbone model
             output_shape: hard-coded image size to avoid dynamic shape
@@ -131,10 +130,6 @@ class HeatmapTracker(BaseSupervisedTracker):
     @property
     def num_filters_for_upsampling(self) -> int:
         return self.num_fc_input_features
-
-    @property
-    def coordinate_scale(self) -> TensorType[(), int]:
-        return torch.tensor(2**self.downsample_factor, device=self.device)
 
     def run_subpixelmaxima(
         self,
@@ -197,7 +192,8 @@ class HeatmapTracker(BaseSupervisedTracker):
                 out_channels=self.num_keypoints,
             )
         )  # up to here results in downsample_factor=3
-        if self.downsample_factor == 2:
+        for _ in range(4 - self.downsample_factor - 1):
+            # add another upsampling layer to account for heatmap downsampling
             # upsampling_layers.append(nn.BatchNorm2d(self.num_keypoints))
             # upsampling_layers.append(nn.ReLU(inplace=True))
             upsampling_layers.append(
@@ -323,7 +319,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k", 
             "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"
         ] = "resnet50",
-        downsample_factor: Literal[2, 3] = 2,
+        downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
         output_shape: Optional[tuple] = None,

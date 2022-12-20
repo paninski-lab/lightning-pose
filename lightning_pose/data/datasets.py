@@ -7,7 +7,7 @@ import pandas as pd
 from PIL import Image
 import torch
 from torchvision import transforms
-from typing import Callable, List, Optional
+from typing import Callable, List, Literal, Optional
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 
@@ -226,7 +226,7 @@ class HeatmapDataset(BaseTrackingDataset):
         csv_path: str,
         header_rows: Optional[List[int]] = None,
         imgaug_transform: Optional[Callable] = None,
-        downsample_factor: int = 2,
+        downsample_factor: Literal[1, 2, 3] = 2,
         do_context: bool = False,
     ) -> None:
         """Initialize the Heatmap Dataset.
