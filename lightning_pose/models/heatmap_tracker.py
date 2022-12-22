@@ -1,7 +1,8 @@
 """Models that produce heatmaps of keypoints from images."""
 
+from kornia.filters import filter2d
 from kornia.geometry.subpix import spatial_softmax2d, spatial_expectation2d
-from kornia.geometry.transform import pyrup
+from kornia.geometry.transform.pyramid import _get_pyramid_gaussian_kernel
 import numpy as np
 from omegaconf import DictConfig
 import torch
@@ -14,14 +15,31 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau
 
 from lightning_pose.data.utils import (
+    BaseLabeledBatchDict, HeatmapLabeledBatchDict, UnlabeledBatchDict,
     evaluate_heatmaps_at_location, undo_affine_transform,
-    BaseLabeledBatchDict, HeatmapLabeledBatchDict, UnlabeledBatchDict
 )
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.base import BaseSupervisedTracker, SemiSupervisedTrackerMixin
 
 patch_typeguard()  # use before @typechecked
+
+
+@typechecked
+def upsample(
+    inputs: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+) -> TensorType["batch", "num_keypoints", "2 x heatmap_height", "2 x heatmap_width"]:
+    """Upsample batch of heatmaps using interpolation (no learned weights).
+
+    This is a copy of kornia's pyrup function but with better defaults.
+    """
+    kernel = _get_pyramid_gaussian_kernel()
+    _, _, height, width = inputs.shape
+    # align_corners=False is important!! otherwise the offsets below don't hold
+    inputs_up = nn.functional.interpolate(
+        inputs, size=(height * 2, width * 2), mode='bicubic', align_corners=False)
+    inputs_up = filter2d(inputs_up, kernel, border_type='constant')
+    return inputs_up
 
 
 @typechecked
@@ -37,7 +55,7 @@ class HeatmapTracker(BaseSupervisedTracker):
             "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k", 
             "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"
         ] = "resnet50",
-        downsample_factor: Literal[2, 3] = 2,
+        downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
         output_shape: Optional[tuple] = None,  # change
@@ -52,9 +70,8 @@ class HeatmapTracker(BaseSupervisedTracker):
             num_keypoints: number of body parts
             loss_factory: object to orchestrate loss computation
             backbone: ResNet or EfficientNet variant to be used
-            downsample_factor: make heatmap smaller than original frames to
-                save memory; subpixel operations are performed for increased
-                precision
+            downsample_factor: make heatmap smaller than original frames to save memory; subpixel
+                operations are performed for increased precision
             pretrained: True to load pretrained imagenet weights
             last_resnet_layer_to_get: skip final layers of backbone model
             output_shape: hard-coded image size to avoid dynamic shape
@@ -114,10 +131,6 @@ class HeatmapTracker(BaseSupervisedTracker):
     def num_filters_for_upsampling(self) -> int:
         return self.num_fc_input_features
 
-    @property
-    def coordinate_scale(self) -> TensorType[(), int]:
-        return torch.tensor(2**self.downsample_factor, device=self.device)
-
     def run_subpixelmaxima(
         self,
         heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
@@ -133,16 +146,22 @@ class HeatmapTracker(BaseSupervisedTracker):
                 - confidences of shape (batch, num_keypoints)
 
         """
+
         # upsample heatmaps
         for _ in range(self.downsample_factor):
-            heatmaps = pyrup(heatmaps)
-
+            heatmaps = upsample(heatmaps)
         # find soft argmax
         softmaxes = spatial_softmax2d(heatmaps, temperature=self.temperature)
         preds = spatial_expectation2d(softmaxes, normalized_coordinates=False)
-
         # compute confidences as softmax value pooled around prediction
         confidences = evaluate_heatmaps_at_location(heatmaps=softmaxes, locs=preds)
+        # fix grid offsets from upsampling
+        if self.downsample_factor == 1:
+            preds -= 0.5
+        elif self.downsample_factor == 2:
+            preds -= 1.5
+        elif self.downsample_factor == 3:
+            preds -= 2.5
 
         return preds.reshape(-1, self.num_targets), confidences
 
@@ -173,7 +192,8 @@ class HeatmapTracker(BaseSupervisedTracker):
                 out_channels=self.num_keypoints,
             )
         )  # up to here results in downsample_factor=3
-        if self.downsample_factor == 2:
+        for _ in range(4 - self.downsample_factor - 1):
+            # add another upsampling layer to account for heatmap downsampling
             # upsampling_layers.append(nn.BatchNorm2d(self.num_keypoints))
             # upsampling_layers.append(nn.ReLU(inplace=True))
             upsampling_layers.append(
@@ -299,7 +319,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k", 
             "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"
         ] = "resnet50",
-        downsample_factor: Literal[2, 3] = 2,
+        downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -3,
         output_shape: Optional[tuple] = None,
