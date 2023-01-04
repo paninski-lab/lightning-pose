@@ -12,7 +12,7 @@ data:
   # ABSOLUTE path to unlabeled videos' directory
   video_dir: "/datastores/fly/videos"
   # location of labels; for example script, this should be relative to `data_dir`
-  csv_file: "CollectedData_mrw.csv"
+  csv_file: "CollectedData.csv"
   # header rows to strip in label csv file
   header_rows: [0, 1, 2]
   # downsample heatmaps - 2 | 3
@@ -49,7 +49,7 @@ training:
   # epochs over which to assess validation metrics for early stopping
   early_stop_patience: 3
   # epoch at which backbone network weights begin updating
-  unfreezing_epoch: 25
+  unfreezing_epoch: 20
   # dropout in final layers
   dropout_rate: 0.1
   # max training epochs; training may exit before due to early stopping
@@ -150,7 +150,7 @@ losses:
     # for epsilon insensitive rectification
     # (in pixels; diffs below this are not penalized)
     epsilon: 20.0
-    # nan removal value. 
+    # nan removal value.
     # (in prob; heatmaps with max prob values are removed)
     prob_threshold: 0.05
   # loss = mse loss between generated heatmap and ideal gaussian heatmap with
