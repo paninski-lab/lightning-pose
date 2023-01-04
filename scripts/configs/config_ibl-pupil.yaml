@@ -12,7 +12,7 @@ data:
   # ABSOLUTE path to unlabeled videos' directory
   video_dir: "/datastores/ibl-pupil/videos"
   # location of labels; for ex script, this should be relative to `data_dir`
-  csv_file: "CollectedData_mic.csv"
+  csv_file: "CollectedData.csv"
   # header rows to strip in label csv file
   header_rows: [0, 1, 2]
   # downsample heatmaps - 2 | 3
@@ -49,7 +49,7 @@ training:
   # epochs over which to assess validation metrics for early stopping
   early_stop_patience: 3
   # epoch at which backbone network weights begin updating
-  unfreezing_epoch: 25
+  unfreezing_epoch: 20
   # dropout in final layers
   dropout_rate: 0.1
   # max training epochs; training may exit before due to early stopping
@@ -149,8 +149,9 @@ losses:
     log_weight: 5.0
     # for epsilon insensitive rectification
     # (in pixels; diffs below this are not penalized)
-    epsilon: 10.0
-      # nan removal value. 
+    epsilon:
+      10.0
+      # nan removal value.
     # (in prob; heatmaps with max prob values are removed)
     prob_threshold: 0.05
 
@@ -182,7 +183,7 @@ eval:
   # str with an absolute path to directory in which you want to save .csv with predictions
   saved_vid_preds_dir: "/home/jovyan"
   # create labeled video from each video in test_videos_directory
-  create_labeled_video: true
+  create_labeled_video: false
   # confidence threshold for plotting a vid
   confidence_thresh_for_vid: 0.05
   # str with absolute path to the video file you want plotted with keypoints

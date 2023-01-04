@@ -57,7 +57,7 @@ training:
   # epochs over which to assess validation metrics for early stopping
   early_stop_patience: 3
   # epoch at which backbone network weights begin updating
-  unfreezing_epoch: 25
+  unfreezing_epoch: 20
   # dropout in final layers
   dropout_rate: 0.1
   # min training epochs; training cannot terminate before. compare to unfreezing_epoch, check_val_every_n_epoch, early_stop_patience
@@ -188,7 +188,7 @@ losses:
         19.2,
         6.8,
       ]
-    # nan removal value. 
+    # nan removal value.
     # (in prob; heatmaps with max prob values are removed)
     prob_threshold: 0.05
   # loss = mse loss between generated heatmap and ideal gaussian heatmap with same center as generated heatmap
@@ -203,7 +203,7 @@ losses:
     log_weight: 6.5
     # ignore heatmaps with a max prob less than epsilon (so loss is not applied to occlusions)
     prob_threshold: 0.05
-  
+
   unimodal_js:
     # weight in front of unimodal loss
     log_weight: 6.5
@@ -244,7 +244,8 @@ eval:
   # str with absolute path to the video file you want plotted with keypoints
   video_file_to_plot: /home/jovyan/lightning-pose/toy_datasets/toymouseRunningData/unlabeled_videos/test_vid.mp4
   # a list of strings, each points to a .csv file with predictions of a given model to the same video. will be combined with video_file_to_plot to make a visualization
-  pred_csv_files_to_plot: ["/home/jovyan/test_vid_heatmap_pca_multiview_5.0.csv"]
+  pred_csv_files_to_plot:
+    ["/home/jovyan/test_vid_heatmap_pca_multiview_5.0.csv"]
 
 callbacks:
   anneal_weight:
