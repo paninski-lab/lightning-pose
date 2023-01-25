@@ -150,7 +150,7 @@ losses:
     # for epsilon insensitive rectification
     # (in pixels; diffs below this are not penalized)
     epsilon:
-      10.0
+      4.0 # used to be 10
       # nan removal value.
     # (in prob; heatmaps with max prob values are removed)
     prob_threshold: 0.05
