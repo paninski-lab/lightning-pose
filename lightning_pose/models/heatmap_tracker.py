@@ -165,6 +165,53 @@ class HeatmapTracker(BaseSupervisedTracker):
 
         return preds.reshape(-1, self.num_targets), confidences
 
+    def run_hard_argmax(
+        self,
+        heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+    ) -> Tuple[TensorType["batch", "num_targets"], TensorType["batch", "num_keypoints"]]:
+        """Use hard argmax on heatmaps.
+
+        Args:
+            heatmaps: output of upsampling layers
+
+        Returns:
+            tuple
+                - hard argmax of shape (batch, num_targets)
+                - confidences of shape (batch, num_keypoints)
+
+        """
+
+        # upsample heatmaps
+        for _ in range(self.downsample_factor):
+            heatmaps = upsample(heatmaps)
+        # find hard argmax
+        softmaxes = spatial_softmax2d(heatmaps, temperature=self.temperature)
+        preds = self._spatial_argmax2d(softmaxes)
+        # compute confidences as softmax value pooled around prediction
+        confidences = evaluate_heatmaps_at_location(heatmaps=softmaxes, locs=preds)
+        # fix grid offsets from upsampling
+        if self.downsample_factor == 1:
+            preds -= 0.5
+        elif self.downsample_factor == 2:
+            preds -= 1.5
+        elif self.downsample_factor == 3:
+            preds -= 2.5
+
+        return preds.reshape(-1, self.num_targets), confidences
+
+    @staticmethod
+    def _spatial_argmax2d(heatmaps):
+        flat_indexes = heatmaps.flatten(start_dim=-2).argmax(-1)
+        B = heatmaps.shape[0]
+        N = heatmaps.shape[1]
+        peaks = torch.zeros(B, N, 2, device=heatmaps.device, dtype=torch.float32)
+        for i in range(B):
+            for j in range(N):
+                idxs_ = divmod(flat_indexes[i, j].item(), heatmaps.shape[-1])
+                peaks[i, j, 0] = idxs_[1]  # x coords
+                peaks[i, j, 1] = idxs_[0]  # y coords
+        return peaks
+
     def initialize_upsampling_layers(self) -> None:
         """Intialize the Conv2DTranspose upsampling layers."""
         # TODO: test that running this method changes the weights and biases
@@ -299,6 +346,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         predicted_heatmaps = self.forward(images)
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
+        # predicted_keypoints, confidence = self.run_hard_argmax(predicted_heatmaps)
         if return_heatmaps:
             return predicted_keypoints, confidence, predicted_heatmaps
         else:
