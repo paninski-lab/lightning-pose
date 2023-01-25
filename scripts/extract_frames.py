@@ -13,6 +13,9 @@ def run():
 
     for video_file in args.video_files:
 
+        print(f"============== extracting frames from {video_file} ================")
+        print("does this video file exist? %s" % ("YES" if os.path.exists(video_file) else "NO"))
+
         idxs_selected = select_frame_idxs(
             video_file=video_file, resize_dims=64, n_clusters=args.n_frames_per_video)
 

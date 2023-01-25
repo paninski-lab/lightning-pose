@@ -300,6 +300,7 @@ def predict_single_video(
     ckpt_file: str,
     cfg_file: Union[str, DictConfig],
     preds_file: str,
+    data_module: Union[BaseDataModule, UnlabeledDataModule],
     gpu_id: Optional[int] = None,
     trainer: Optional[pl.Trainer] = None,
     model: Optional[Union[
@@ -308,7 +309,6 @@ def predict_single_video(
         SemiSupervisedRegressionTracker,
         SemiSupervisedHeatmapTracker,
     ]] = None,
-    data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
     save_heatmaps: Optional[bool] = False,
 ) -> pd.DataFrame:
     """Make predictions for a single video, loading frame sequences using DALI.
@@ -324,10 +324,10 @@ def predict_single_video(
         cfg_file (Union[str, DictConfig]): either a hydra config or a path pointing to
             one, with all the model specs. needed for loading the model.
         preds_file (str): absolute filename for the predictions .csv file
+        data_module:
         gpu_id (int): specify which gpu to run prediction on
         trainer:
         model:
-        data_module:
         save_heatmaps:
 
     Returns:
@@ -336,20 +336,20 @@ def predict_single_video(
     """
 
     cfg = get_cfg_file(cfg_file=cfg_file)
+    gpu_id = 0 if gpu_id is None else gpu_id
+    cfg.training.gpu_id = gpu_id
+    cfg.dali.general.device_id = gpu_id
 
+    delete_model = False
     if model is None:
         model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
+        delete_model = True
+    model.to("cuda:%i" % gpu_id)
 
-    if gpu_id is None:
-        model.to(_TORCH_DEVICE)
-        gpu_id = 0
-        cfg.dali.general.device_id = 0
-    else:
-        model.to("cuda:%i" % gpu_id)
-        cfg.dali.general.device_id = gpu_id
-
+    delete_trainer = False
     if trainer is None:
         trainer = pl.Trainer(gpus=[gpu_id])
+        delete_trainer = True
 
     # ----------------------------------------------------------------------------------
     # set up
@@ -369,6 +369,10 @@ def predict_single_video(
 
     # initialize prediction handler class
     pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=video_file)
+
+    # ----------------------------------------------------------------------------------
+    # compute predictions
+    # ----------------------------------------------------------------------------------
 
     # use a different function for now to return heatmaps
     if save_heatmaps:
@@ -393,22 +397,19 @@ def predict_single_video(
             return_predictions=True,
         )
 
-    # ----------------------------------------------------------------------------------
-    # compute predictions
-    # ----------------------------------------------------------------------------------
-    if data_module is None:
-        # from lightning_pose.utils.scripts import get_imgaug_transform, get_dataset, get_data_module
-        # data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
-        # imgaug_transform = get_imgaug_transform(cfg=cfg)
-        # dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
-        # data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
-        raise NotImplementedError("need to rearrange functions in modules")
-
     # call this instance on a single vid's preds
     preds_df = pred_handler(preds=preds)
     # save the predictions to a csv; create directory if it doesn't exist
     os.makedirs(os.path.dirname(preds_file), exist_ok=True)
     preds_df.to_csv(preds_file)
+
+    # clear up memory
+    if delete_model:
+        del model
+    if delete_trainer:
+        del trainer
+    del predict_loader
+    torch.cuda.empty_cache()
 
     return preds_df
 
@@ -605,6 +606,13 @@ def load_model_from_checkpoint(
 
     if eval:
         model.eval()
+
+    # clear up memory
+    del imgaug_transform
+    del dataset
+    del data_module
+    del loss_factories
+    torch.cuda.empty_cache()
 
     return model
 
