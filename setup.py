@@ -17,6 +17,7 @@ install_requires = [
     "pillow",
     "pytest",
     "pytorch-lightning",
+    "tensorboard", # was previously in pytorch-lightning
     "lightning-bolts",
     "scikit-image",
     "scikit-learn",
