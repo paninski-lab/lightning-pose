@@ -60,7 +60,7 @@ training:
   # epochs over which to assess validation metrics for early stopping
   early_stop_patience: 3
   # epoch at which backbone network weights begin updating
-  unfreezing_epoch: 25
+  unfreezing_epoch: 20
   # dropout in final layers
   dropout_rate: 0.1
   # max training epochs; training may exit before due to early stopping
@@ -105,7 +105,7 @@ model:
   # resnet50_animalpose_apose | resnet50_animal_ap10k
   # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res
   # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
-  backbone: resnet50_animal_ap10k
+  backbone: resnet50 # resnet50_animal_ap10k
   # prediction mode - "heatmap" | "regression"
   model_type: "heatmap"
   # which heatmap loss to use
@@ -174,7 +174,7 @@ losses:
     # for epsilon insensitive rectification
     # (in pixels; diffs below this are not penalized)
     epsilon: 10.0
-    # nan removal value. 
+    # nan removal value.
     # (in prob; heatmaps with max prob values are removed)
     prob_threshold: 0.05
 

@@ -57,7 +57,7 @@ training:
   # epochs over which to assess validation metrics for early stopping
   early_stop_patience: 3
   # epoch at which backbone network weights begin updating
-  unfreezing_epoch: 25
+  unfreezing_epoch: 20 # was 20 in December runs; reverted.
   # dropout in final layers
   dropout_rate: 0.1
   # max training epochs; training may exit before due to early stopping
@@ -103,7 +103,7 @@ model:
   # resnet50_animalpose_apose | resnet50_animal_ap10k
   # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res
   # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
-  backbone: resnet50_animal_ap10k
+  backbone: resnet50 # resnet50_animal_ap10k
   # prediction mode - "heatmap" | "regression"
   model_type: "heatmap"
   # which heatmap loss to use
@@ -172,7 +172,7 @@ losses:
     # for epsilon insensitive rectification
     # (in pixels; diffs below this are not penalized)
     epsilon: 20.0
-    # nan removal value. 
+    # nan removal value.
     # (in prob; heatmaps with max prob values are removed)
     prob_threshold: 0.05
   # loss = kl loss between heatmaps in successive timepoints
@@ -182,7 +182,7 @@ losses:
     # for epsilon insensitive rectification
     # (in kl loss values; diffs below this are not penalized)
     epsilon: 5.0
-    # nan removal threshold value. 
+    # nan removal threshold value.
     # (in prob; heatmaps with confidences below this value are removed)
     prob_threshold: 0.05
   # loss = mse between heatmaps in successive timepoints
@@ -192,7 +192,7 @@ losses:
     # for epsilon insensitive rectification
     # (in mse values; diffs below this are not penalized)
     epsilon: 20.0
-    # nan removal threshold value. 
+    # nan removal threshold value.
     # (in prob; heatmaps with confidences below this value are removed)
   # loss = mse between unimodal heatmap and predicted heatmap
   unimodal_mse:
@@ -241,7 +241,7 @@ eval:
   # str with an absolute path to directory in which you want to save .csv with predictions
   saved_vid_preds_dir: "/home/jovyan"
   # create labeled video from each video in test_videos_directory
-  create_labeled_video: true
+  create_labeled_video: false
   # confidence threshold for plotting a vid
   confidence_thresh_for_vid: 0.05
   # str with absolute path to the video file you want plotted with keypoints
