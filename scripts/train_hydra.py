@@ -61,7 +61,7 @@ def train(cfg: DictConfig):
     
     if ("temporal" in cfg.model.losses_to_use) \
             and model.do_context \
-            and not data_module.unlabeled_dataloader.context_sequences_successive:
+            and not cfg.dali["context"]["train"]["consecutive_sequences"]:
         raise ValueError(
             f"Temporal loss is not compatible with non-successive context sequences. "
             f"Please change cfg.dali.context.train.consecutive_sequences=True.")

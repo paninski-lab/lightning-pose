@@ -14,6 +14,7 @@ from lightning_pose.data.dali import PrepareDALI, LitDaliWrapper
 from lightning_pose.data.utils import (
     split_sizes_from_probabilities, compute_num_train_frames, SemiSupervisedDataLoaderDict)
 from lightning_pose.utils.io import check_video_paths
+from pytorch_lightning.accelerators.cuda import CUDAAccelerator
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -200,11 +201,23 @@ class UnlabeledDataModule(BaseDataModule):
         self.dali_config = dali_config
         self.unlabeled_dataloader = None  # initialized in setup_unlabeled
         self.imgaug = imgaug
-        super().setup()
+
+        # TODO: Setup shouldn't be called here.
+        # super().setup()
+        # self.setup_unlabeled()
+
+    def setup(self, stage: Optional[str] = None):
+        super().setup(stage)
         self.setup_unlabeled()
 
     def setup_unlabeled(self):
         """Sets up the unlabeled data loader."""
+        trainer = self.trainer
+        self.dali_config["general"]["device_id"] = trainer.device_ids[trainer.local_rank]
+        self.dali_config["general"]["device"] = "gpu" if isinstance(trainer.accelerator, CUDAAccelerator) else "cpu"
+        self.dali_config["general"]["num_shards"] = trainer.world_size
+        self.dali_config["general"]["shard_id"] = trainer.global_rank
+
         dali_prep = PrepareDALI(
             train_stage="train",
             model_type="context" if self.dataset.do_context else "base",

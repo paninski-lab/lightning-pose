@@ -16,8 +16,6 @@ from typing import List, Dict, Optional, Union, Literal, Tuple
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
 from lightning_pose.data.utils import count_frames, UnlabeledBatchDict
 
-_DALI_DEVICE = "gpu" if torch.cuda.is_available() else "cpu"
-
 patch_typeguard()  # use before @typechecked
 
 
@@ -33,7 +31,9 @@ def video_pipe(
     initial_fill: int = 16,
     normalization_mean: List[float] = _IMAGENET_MEAN,
     normalization_std: List[float] = _IMAGENET_STD,
-    device: str = _DALI_DEVICE,
+    device: str = "cpu",
+    num_shards: int = 1,
+    shard_id: int = 0,
     name: str = "reader",
     step: int = 1,
     pad_last_batch: bool = False,
@@ -72,6 +72,8 @@ def video_pipe(
     """
     video = fn.readers.video(
         device=device,
+        num_shards=num_shards,
+        shard_id=shard_id,
         filenames=filenames,
         random_shuffle=random_shuffle,
         seed=seed,
@@ -273,6 +275,8 @@ class PrepareDALI(object):
             "device_id": gen_cfg["device_id"],
             "random_shuffle": True,
             "device": gen_cfg["device"],
+            "num_shards": gen_cfg["num_shards"],
+            "shard_id": gen_cfg["shard_id"],
             "imgaug": imgaug,
         }
 
@@ -289,6 +293,8 @@ class PrepareDALI(object):
             "device_id": gen_cfg["device_id"],
             "random_shuffle": False,
             "device": gen_cfg["device"],
+            "num_shards": gen_cfg["num_shards"],
+            "shard_id": gen_cfg["shard_id"],
             "name": "reader",
             "pad_sequences": True,
             "imgaug": "default",  # no imgaug when predicting
@@ -306,6 +312,8 @@ class PrepareDALI(object):
             "device_id": gen_cfg["device_id"],
             "random_shuffle": False,
             "device": gen_cfg["device"],
+            "num_shards": gen_cfg["num_shards"],
+            "shard_id": gen_cfg["shard_id"],
             "name": "reader",
             "seed": gen_cfg["seed"],
             "pad_sequences": True,
@@ -330,6 +338,8 @@ class PrepareDALI(object):
                 "device_id": gen_cfg["device_id"],
                 "random_shuffle": True,
                 "device": gen_cfg["device"],
+                "num_shards": gen_cfg["num_shards"],
+                "shard_id": gen_cfg["shard_id"],
                 "imgaug": imgaug,
             }
         else:
@@ -344,6 +354,8 @@ class PrepareDALI(object):
                 "device_id": gen_cfg["device_id"],
                 "random_shuffle": True,
                 "device": gen_cfg["device"],
+                "num_shards": gen_cfg["num_shards"],
+                "shard_id": gen_cfg["shard_id"],
                 "name": "reader",
                 "seed": gen_cfg["seed"],
                 "pad_sequences": True,
