@@ -117,6 +117,14 @@ class PredictionHandler:
         stacked_confs = torch.vstack([pred[1] for pred in preds])
 
         if self.video_file is not None:  # dealing with dali loaders
+            
+            # DB: this used to be an else but I think it should apply to all dataloaders now
+            # first we chop off the last few rows that are not part of the video
+            num_rows_to_discard = stacked_preds.shape[0] - self.frame_count
+            if num_rows_to_discard > 0:
+                stacked_preds = stacked_preds[:-num_rows_to_discard]
+                stacked_confs = stacked_confs[:-num_rows_to_discard]
+
             if self.do_context:
                 # fix shifts in the context model
                 stacked_preds = self.fix_context_preds_confs(stacked_preds)
@@ -126,13 +134,8 @@ class PredictionHandler:
                 else:
                     stacked_confs = self.fix_context_preds_confs(
                         stacked_confs, zero_pad_confidence=True)
-            else:
+            # else:
                 # in this dataloader, the last sequence has a few extra frames.
-                num_rows_to_discard = stacked_preds.shape[0] - self.frame_count
-                if num_rows_to_discard > 0:
-                    stacked_preds = stacked_preds[:-num_rows_to_discard]
-                    stacked_confs = stacked_confs[:-num_rows_to_discard]
-
         return stacked_preds, stacked_confs
 
     @staticmethod
