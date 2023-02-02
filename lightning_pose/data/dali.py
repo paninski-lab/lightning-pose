@@ -256,6 +256,8 @@ class PrepareDALI(object):
                     self.frame_count / (pipe_dict["batch_size"] * pipe_dict["sequence_length"])))
             # the case of prediction with a single sequence at a time and internal model reshapes
             elif (pipe_dict["batch_size"]==1) and (pipe_dict["step"] == (pipe_dict["sequence_length"] - 4)):
+                if pipe_dict["step"] <= 0:
+                    raise ValueError("step cannot be 0, please modify cfg.dali.context.predict.sequence_length to be > 4")
                 return int(np.ceil(self.frame_count / pipe_dict["step"]))
             else:
                 raise NotImplementedError
