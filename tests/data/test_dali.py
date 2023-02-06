@@ -76,7 +76,7 @@ def test_PrepareDALI(cfg, video_list):
     # can we run pipe?
     pipe_out = pipe.run()
     sequences_out = pipe_out[0].as_cpu().as_array()
-    assert sequences_out.shape == (cfg.dali.context.predict.batch_size, 5, 3, 256, 256)
+    assert sequences_out.shape == (1, cfg.dali.context.predict.sequence_length, 3, 256, 256)
 
     vid_pred_class = PrepareDALI(
         train_stage="predict", model_type="context", filenames=filenames, dali_config=cfg.dali,
@@ -88,16 +88,14 @@ def test_PrepareDALI(cfg, video_list):
     # this one assumes we're gonna have only two images in the last batch. this is a specific
     # property of this video and the context.
     for i, batch in enumerate(loader):
-        if i < num_iters-1:
-            assert batch["frames"].shape == (cfg.dali.context.predict.batch_size, 5, 3, 256, 256)
-        elif i == num_iters-1:
-            assert batch["frames"].shape == (2, 5, 3, 256, 256)
+        assert batch["frames"].shape == (cfg.dali.context.predict.sequence_length, 3, 256, 256)
     assert(i == num_iters-1)
 
+    # OLD TESTS: for when we loaded 5-frame batches
     # now on the final batch, check that we're actually grabing 5-frame sequences
     # assert that frame 1 in batch 0 is frame 0 in batch 1
-    assert torch.allclose(batch["frames"][0][1], batch["frames"][1][0])
+    # assert torch.allclose(batch["frames"][0][1], batch["frames"][1][0])
 
     # last sequence of 5 frames, with a step=1, means that only the 0th image is an actual image.
     # the rest is padding. so image 1 and -1 are identical.
-    assert torch.allclose(batch["frames"][1][1], batch["frames"][1][-1])
+    # assert torch.allclose(batch["frames"][1][1], batch["frames"][1][-1])

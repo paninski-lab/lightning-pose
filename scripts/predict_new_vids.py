@@ -68,8 +68,11 @@ def predict_videos_in_dir(cfg: DictConfig):
 
         # load data module, which contains info about keypoint names, etc.
         data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
+        print("getting imgaug transform...")
         imgaug_transform = get_imgaug_transform(cfg=cfg)
+        print("getting dataset...")
         dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
+        print("getting data module...")
         data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
 
         # determine a directory in which to save video prediction csv files
