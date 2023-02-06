@@ -118,7 +118,7 @@ model:
 
 dali:
   general:
-    num_threads: 4 # Number of threads for data loading; can be changed
+    num_threads: 1 # Number of threads for data loading; can be changed
     device_id: 0 # GPU device id to use, can be changed
     device: gpu # "cpu" or "gpu"
     seed: 123456
@@ -137,8 +137,7 @@ dali:
       consecutive_sequences: true # can select False if want successive sequences to be presented to network
 
     predict: # defaults: sequence_length=5, step=1
-      # (train_batch_size / 4 + context.train.batch_size) * 2 -> round down to nearest pow of 2
-      batch_size: 12
+      sequence_length: 64
 
 losses:
   # loss = projection onto the discarded eigenvectors
