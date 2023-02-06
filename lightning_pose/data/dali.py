@@ -180,8 +180,12 @@ class LitDaliWrapper(DALIGenericIterator):
         """Modify output based on train/predict and context/non-context."""
         if self.do_context:
             if self.eval_mode == "predict":
+                # DB: the commented line was for a batch of 5-frame sequences
+                # unlabeled_batch_dict = self._dali_output_to_tensors(
+                #     batch=batch, num_sequences="multi")
+                # DB: for batch_size=1 and a single sequence of 5 frames
                 unlabeled_batch_dict = self._dali_output_to_tensors(
-                    batch=batch, num_sequences="multi")
+                        batch=batch, num_sequences="single")
             else:
                 if self.context_sequences_successive:
                     # pipeline is like for "base" model, but we reshape images further down
@@ -250,6 +254,16 @@ class PrepareDALI(object):
                 # non-full batch. we prefer having fewer batches but valid.
                 return int(np.floor(
                     self.frame_count / (pipe_dict["batch_size"] * pipe_dict["sequence_length"])))
+            # the case of prediction with a single sequence at a time and internal model reshapes
+            elif (pipe_dict["batch_size"]==1) and (pipe_dict["step"] == (pipe_dict["sequence_length"] - 4)):
+                if pipe_dict["step"] <= 0:
+                    raise ValueError("step cannot be 0, please modify cfg.dali.context.predict.sequence_length to be > 4")
+                # remove the first sequence
+                data_except_first_batch = self.frame_count - pipe_dict["sequence_length"]
+                # calculate how many "step"s are needed to get at least to the end
+                # count back the first sequence
+                num_iters = int(np.ceil(data_except_first_batch / pipe_dict["step"])) + 1
+                return num_iters
             else:
                 raise NotImplementedError
     
@@ -299,9 +313,9 @@ class PrepareDALI(object):
         dict_args["predict"]["context"] = {
             "filenames": filenames,
             "resize_dims": self.resize_dims,
-            "sequence_length": 5,
-            "step": 1,
-            "batch_size": context_pred_cfg["batch_size"],
+            "sequence_length": context_pred_cfg["sequence_length"],
+            "step": context_pred_cfg["sequence_length"] - 4,
+            "batch_size": 1,
             "num_threads": gen_cfg["num_threads"],
             "device_id": gen_cfg["device_id"],
             "random_shuffle": False,
@@ -309,7 +323,7 @@ class PrepareDALI(object):
             "name": "reader",
             "seed": gen_cfg["seed"],
             "pad_sequences": True,
-            "pad_last_batch": True,
+            # "pad_last_batch": True,
             "imgaug": "default",  # no imgaug when predicting
         }
 
@@ -409,7 +423,7 @@ class PrepareDALI(object):
             "eval_mode": "predict",
             "do_context": True,
             "output_map": ["frames", "transforms"],
-            "last_batch_policy": LastBatchPolicy.PARTIAL,
+            "last_batch_policy": LastBatchPolicy.FILL, # LastBatchPolicy.PARTIAL,
             "last_batch_padded": False,
             "auto_reset": False,
             "reader_name": "reader"
