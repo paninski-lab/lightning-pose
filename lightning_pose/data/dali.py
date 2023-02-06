@@ -258,7 +258,12 @@ class PrepareDALI(object):
             elif (pipe_dict["batch_size"]==1) and (pipe_dict["step"] == (pipe_dict["sequence_length"] - 4)):
                 if pipe_dict["step"] <= 0:
                     raise ValueError("step cannot be 0, please modify cfg.dali.context.predict.sequence_length to be > 4")
-                return int(np.ceil(self.frame_count / pipe_dict["step"]))
+                # remove the first sequence
+                data_except_first_batch = self.frame_count - pipe_dict["sequence_length"]
+                # calculate how many "step"s are needed to get at least to the end
+                # count back the first sequence
+                num_iters = int(np.ceil(data_except_first_batch / pipe_dict["step"])) + 1
+                return num_iters
             else:
                 raise NotImplementedError
     
