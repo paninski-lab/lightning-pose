@@ -118,7 +118,7 @@ dali:
 
     predict:
       # (train_batch_size + base.train.sequence_length) * 2 -> round down to nearest pow of 2
-      sequence_length: 64 # step = sequence_length by default. done internally.
+      sequence_length: 192 # step = sequence_length by default. done internally.
 
   context: # not supporting context_sequences_successive
     train: # defaults: sequence_length=5, step=sequence_length
