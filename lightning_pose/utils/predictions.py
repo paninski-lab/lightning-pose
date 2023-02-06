@@ -121,7 +121,7 @@ class PredictionHandler:
             # DB: this used to be an else but I think it should apply to all dataloaders now
             # first we chop off the last few rows that are not part of the video
             # next: 
-            # for baseline: chop extra empty frames from last sequence. 
+            # for baseline: chop extra empty frames from last sequence.
             num_rows_to_discard = stacked_preds.shape[0] - self.frame_count
             if num_rows_to_discard > 0:
                 stacked_preds = stacked_preds[:-num_rows_to_discard]
@@ -155,12 +155,10 @@ class PredictionHandler:
         preds_combined = torch.vstack([preds_1, preds_2])
         # repat the last one twice 
         if preds_combined.shape[0] == self.frame_count:
-            print(f"preds_combined.shape[0]  = {preds_combined.shape[0]} == self.frame_count = {self.frame_count}, modifying last two rows")
             # i.e., after concat this has the length of the video.
             # but we don't have valid predictions for the last two elements, so we pad with element -3.
             preds_combined[-2:, :] = preds_combined[-3, :]
         else:
-            print(f"preds_combined.shape[0] = {preds_combined.shape[0]} != self.frame_count = {self.frame_count}, padding with last row")
             # we don't have as many predictions as frames; pad with final entry which is valid.
             n_pad = self.frame_count - preds_combined.shape[0]
             preds_combined = torch.vstack([preds_combined, torch.tile(preds_combined[0], (n_pad, 1))])

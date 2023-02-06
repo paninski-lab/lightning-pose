@@ -134,7 +134,7 @@ dali:
 
     predict: # defaults: sequence_length=5, step=1
       # (train_batch_size / 4 + context.train.batch_size) * 2 -> round down to nearest pow of 2
-      batch_size: 16
+      sequence_length: 96
 
 losses:
   # loss = projection onto the discarded eigenvectors
