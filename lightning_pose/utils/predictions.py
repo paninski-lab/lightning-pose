@@ -120,10 +120,13 @@ class PredictionHandler:
             
             # DB: this used to be an else but I think it should apply to all dataloaders now
             # first we chop off the last few rows that are not part of the video
+            # next: 
+            # for baseline: chop extra empty frames from last sequence.
             num_rows_to_discard = stacked_preds.shape[0] - self.frame_count
             if num_rows_to_discard > 0:
                 stacked_preds = stacked_preds[:-num_rows_to_discard]
                 stacked_confs = stacked_confs[:-num_rows_to_discard]
+            # for context: missing the first two frames, have to handle with the last two frames still.
 
             if self.do_context:
                 # fix shifts in the context model
@@ -138,8 +141,7 @@ class PredictionHandler:
                 # in this dataloader, the last sequence has a few extra frames.
         return stacked_preds, stacked_confs
 
-    @staticmethod
-    def fix_context_preds_confs(stacked_preds: TensorType, zero_pad_confidence: bool = False):
+    def fix_context_preds_confs(self, stacked_preds: TensorType, zero_pad_confidence: bool = False):
         """
         In the context model, ind=0 is associated with image[2], and ind=1 is associated with
         image[3], so we need to shift the predictions and confidences by two and eliminate the
@@ -151,9 +153,15 @@ class PredictionHandler:
         preds_1 = torch.tile(stacked_preds[0], (2, 1))  # copying twice the prediction for image[2]
         preds_2 = stacked_preds[0:-2]  # throw out the last two rows.
         preds_combined = torch.vstack([preds_1, preds_2])
-        # after concat this has the same length. everything is shifted by two rows.
-        # but we don't have valid predictions for the last two elements, so we pad with element -3.
-        preds_combined[-2:, :] = preds_combined[-3, :]
+        # repat the last one twice 
+        if preds_combined.shape[0] == self.frame_count:
+            # i.e., after concat this has the length of the video.
+            # but we don't have valid predictions for the last two elements, so we pad with element -3.
+            preds_combined[-2:, :] = preds_combined[-3, :]
+        else:
+            # we don't have as many predictions as frames; pad with final entry which is valid.
+            n_pad = self.frame_count - preds_combined.shape[0]
+            preds_combined = torch.vstack([preds_combined, torch.tile(preds_combined[0], (n_pad, 1))])
 
         if zero_pad_confidence:
             # zeroing out those first and last two rows (after we've shifted everything above)
