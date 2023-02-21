@@ -53,53 +53,85 @@ machine by running
 foo@bar:~$ pytest
 ```
 
-## Datasets
-NEEDS UPDATE
-* `BaseDataset`: images + keypoint coordinates.
-* `HeatmapDataset`: images + heatmaps.
-* `SemiSupervisedDataset`: images + sequences of unlabeled videos + heatmaps.
-
-## Models 
-NEEDS UPDATE
-* `RegressionTracker`: images -> labeled keypoint coordinates.
-* `HeatmapTracker`: images -> labeled heatmaps.
-* `SemiSupervisedHeatmapTracker`: images + sequences of unlabeled videos -> labeled heatmaps + unlabeled heatmaps. Supports multiple losses on the unlabeled videos.
-
 ## Working with `hydra`
 
-For all of the scripts in our `scripts` folder, we rely on `hydra` to manage arguments in hierarchical config files. You have two options: edit the config file, or override it from the command line.
+For all of the scripts in our `scripts` folder, we rely on `hydra` to manage arguments in 
+config files. You have two options: directly edit the config file, or override it from the command 
+line.
 
-* **Edit** the hydra config, that is, any of the parameters in `scripts/configs/config.yaml`, and save it. Then run the script without arguments, e.g.,:
+* **Edit** the hydra config, that is, any of the parameters in `scripts/configs/config.yaml`, 
+and save it. Then run the script without arguments, e.g.,:
 ```console
 foo@bar:~$ python scripts/train_hydra.py
 ```
 
-* **Override** the argument from the command line:
+* **Override** the argument from the command line; for example, if you want to use a maximum of 11
+epochs instead of the default number (not recommended):
 ```console
 foo@bar:~$ python scripts/train_hydra.py training.max_epochs=11
 ```
-If you happen to want to use a maximum of 11 epochs instead the default number (not recommended).
 
-### Important configs
-* TODO
+### Important arguments
+Below is a list of some commonly modified arguments related to model architecture/training. See
+the file `scripts/configs/config_default.yaml` for a complete list of arguments and their defaults. 
+When training a model on a new dataset, you must copy/paste this default config and update the 
+arguments to match your data.
+* training.train_batch_size (default: `16`) - batch size for labeled data
+* training.min_epochs (default: `300`)
+* training.max_epochs (default: `750`)
+* model.model_type (default: `heatmap`)
+    * regression: model directly outputs an (x, y) prediction for each keypoint; not recommended
+    * heatmap: model outputs a 2D heatmap for each keypoint
+    * heatmap_mhcrnn: the "multi-head convolutional RNN", this model takes a temporal window of 
+    frames as input, and outputs two heatmaps: one "context-aware" and one "static". The prediction 
+    with the highest confidence is automatically chosen. Must also set `model.do_context=True`.
+* model.do_context (default: `False`) - set to `True` when using `model.model_type=heatmap_mhcrnn`.
+* model.losses_to_use (default: `[]`) - this argument relates to the unsupervised losses. An empty 
+list indicates a fully supervised model. Each element of the list corresponds to an unsupervised
+loss. For example,
+`model.losses_to_use=[pca_multiview,temporal]` will fit both a pca_multiview loss and a temporal 
+loss. Options include:
+    * pca_multiview: penalize inconsistencies between multiple camera views
+    * pca_singleview: penalize implausible body configurations
+    * temporal: penalize large temporal jumps
+
+See the `losses` section of `scripts/configs/config_default.yaml` for more details on the various 
+losses and their associated hyperparameters. The default values in the config file are reasonable 
+for a range of datasets.
+
+Some arguments related to video loading, both for semi-supervised models and when predicting new 
+videos with any of the models:
+* dali.base.train.sequence_length (default: `32`) - number of unlabeled frames per batch in 
+`regression` and `heatmap` models (i.e. "base" models that do not use temporal context frames)
+* dali.base.predict.sequence_length (default: `96`) - batch size when predicting on a new video with 
+a "base" model
+* dali.context.train.batch_size (default: `16`) - number of unlabeled frames per batch in 
+`heatmap_mhcrnn` model (i.e. "context" models that utilize temporal context frames); each frame in 
+this batch will be accompanied by context frames, so the true batch size will actually be larger 
+than this number
+* dali.context.predict.sequence_length (default: `96`) - batch size when predicting on a ndew video
+with a "context" model
 
 ## Training
 
 ```console
 foo@bar:~$ python scripts/train_hydra.py
 ```
-In case your config file isn't at `lightning-pose/scripts/configs`, which is common if you have multiple projects.
+In case your config file isn't located in `lightning-pose/scripts/configs`, which is common if you 
+have multiple projects, run:
 
 ```console
 foo@bar:~$ python scripts/train_hydra.py \
   --config-path="<PATH/TO/YOUR/CONFIGS/DIR>" \
-  --config-name="<CONFIG_NAME_.yaml>"
+  --config-name="<CONFIG_NAME.yaml>"
 ```
 
 ## Logs and saved models
 
 The outputs of the training script, namely the model checkpoints and `Tensorboard` logs, 
-will be saved at the `lightning-pose/outputs/YYYY-MM-DD/HH-MM-SS/tb_logs` directory.
+will be saved at the `lightning-pose/outputs/YYYY-MM-DD/HH-MM-SS/tb_logs` directory. (Note: this 
+behavior can be changed by updating `hydra.run.dir` in the config yaml to an absolute path of your 
+choosing.)
 
 To view the logged losses with tensorboard in your browser, in the command line, run:
 
@@ -139,119 +171,18 @@ eval.test_videos_directory="/absolute/path/to/unlabeled_videos" \
 eval.saved_vid_preds_dir="/absolute/path/to/dir"
 ```
 
-## `FiftyOne`
-You can visualize the predictions of one or multiple trained models, either on the `train/test/val` 
-images or on test videos. 
-Add details about the app...
-The first step is to create a `FiftyOne.Dataset` (i.e., a Mongo database pointing to images, keypoint predictions, names, and confidences.)
-### Creating `FiftyOne.Dataset` for train/test/val predictions
-```console
-foo@bar:~$ python scripts/create_fiftyone_dataset.py \
-eval.fiftyone.dataset_to_create="images" \
-eval.fiftyone.dataset_name=<YOUR_DATASET_NAME> \
-eval.fiftyone.build_speed="slow" \
-eval.hydra_paths=["</ABSOLUTE/PATH/TO/HYDRA/DIR/1>", "</ABSOLUTE/PATH/TO/HYDRA/DIR/1>"] \
-eval.fiftyone.model_display_names=["<NAME_FOR_MODEL_1>","<NAME_FOR_MODEL_2>"]
-```
-These arguments could also be edited and saved in the config files if needed.
-Note that `eval.hydra_paths` are absolute paths to directories with trained models you want to use for prediction. Each directory contains a `predictions.csv` file. 
-You can also use the relative form 
-```
-eval.hydra_paths: ["YYYY-MM-DD/HH-MM-SS/", "YYYY-MM-DD/HH-MM-SS/"]
-```
-which will look in the `lightning-pose/outputs` directory for these subdirectories.
-You can choose meaningful display names for the models above using `eval.fiftyone.model_display_names`, e.g., 
-```
-eval.fiftyone.model_display_names: ["supervised", "temporal"]
-```
-The output of this command will include `Created FiftyOne dataset called: <NAME>.`. Use that name when you load the dataset from python.
+## Diagnostics
 
-### Launching the FiftyOne app
-Open an `ipython` session from your terminal. 
-```console
-foo@bar:~$ ipython
-```
-Now in Python, we import fiftyone, load the dataset we created, and launch the app
-```
-In [1]: import fiftyone as fo
-In [2]: dataset = fo.load_dataset("YOUR_DATASET_NAME") # loads an existing dataset created by scripts/create_fiftyone_dataset.py which prints its name
-In [3]: session = fo.launch_app(dataset) # launches the app
+Beyond providing access to loss values throughout training with Tensorboard, the Lightning Pose
+package also offers several diagnostic tools to compare the performance of trained models on 
+labeled frames and unlabeled videos.
 
-# Do stuff in the App..., and click the bookmark when you finish
-
-# Say you want to export images to disc after you've done some filtering in the app
-
-In [4]: view = session.view # point just to the current view
-
-# define a config file for style
-In [5]: import fiftyone.utils.annotations as foua
-In [6]: config = foua.DrawConfig(
-        {
-            "keypoints_size": 9, # can adjust this number after inspecting images
-            "show_keypoints_names": False,
-            "show_keypoints_labels": False,
-            "show_keypoints_attr_names": False,
-            "per_keypoints_label_colors": False,
-        }
-    )
-In [7]: export_dir = "/ABSOLUTE/PATH/TO/DIR" # a directory where you want the images saved
-In [8]: label_fields = ["YOUR_LABELED_FIELD_1", "YOUR_LABELED_FIELD_1", ... ] # "LABELS" in the app, i.e., model preds and/or ground truth data
-In [9]: view.draw_labels(export_dir, label_fields=label_fields, config=config)
-```
-
-When you're in the app: the app will show `LABELS` (for images) or `FRAME LABELS` (for videos) on the left. Click the downward arrow next to it. It will drop down a menu which (if `eval.fiftyone.build_speed == "slow"`) will allow you to filter by `Labels` (keypoint names), or `Confidence`. When `eval.fiftyone_build_speed == "fast"`) we do not store `Labels` and `Confidence` information. Play around with these; a typical good threshold is `0.05-0.1` Once you're happy, you can click on the orange bookmark icon to save the filters you applied. Then from code, you can call `view = session.view` and proceed from there.
-
-
-### Creating `FiftyOne.Dataset` for videos
-```console
-foo@bar:~$ python scripts/create_fiftyone_dataset.py \
-eval.fiftyone.dataset_to_create="videos" \
-eval.fiftyone.dataset_name=<YOUR_DATASET_NAME> \
-eval.fiftyone.build_speed="slow" \
-eval.hydra_paths=["</ABSOLUTE/PATH/TO/HYDRA/DIR/1>","</ABSOLUTE/PATH/TO/HYDRA/DIR/1>"] \
-eval.fiftyone.model_display_names=["<NAME_FOR_MODEL_1>","<NAME_FOR_MODEL_2>"]
-eval.test_videos_directory="</ABSOLUTE/PATH/TO/VIDEOS/DIR>" \
-eval.video_file_to_plot="</ABSOLUTE/PATH/TO/VIDEO.mp4>" \
-eval.pred_csv_files_to_plot=["</ABSOLUTE/PATH/TO/PREDS_1.csv>","</ABSOLUTE/PATH/TO/PREDS_2.csv>"]
-```
-Again, you may just edit the config and run
-```console
-foo@bar:~$ python scripts/create_fiftyone_dataset.py
-```
-**Note**: for videos longer than a few minutes, creating a detailed `FiftyOne.Dataset` may take a very long time. Until next releases, please implement your own visualization method for longer videos.
-
-Now, open `ipython` and launch the app similarly to the above.
-Note, that the app may complain about the video format, in which case, within ipython, reencode the video:
-```
-In [8]: fouv.reencode_video("</ABSOLUTE/PATH/TO/VIDEO.mp4>", output_path="</NEW/ABSOLUTE/PATH/TO/VIDEO.mp4>")
-```
-If you want to save a video to local directory,
-# TODO -- verify
-```
-foua.draw_labeled_video(dataset[fo_video_class.video], outpath, config=config)
-In [9]: view.draw_labels(export_dir, label_fields=label_fields, config=config)
-
-```
-### Filtering according to confidence and bodypart
-```
-import fiftyone as fo
-from fiftyone import ViewField as F
-
-def simul_filter(sample_collection, fields, confidence=None, labels=None):
-    view = sample_collection.view()
-    for field in fields:
-        if labels is not None:
-            view = view.filter_labels(field, F("label").is_in(labels))
-
-        if confidence is not None:
-            view = view.filter_labels(field, F("confidence") > confidence)
-
-    return view
-
-dataset = fo.load_dataset(...)
-
-session = fo.launch_app(dataset)
-
-session.view = simul_filter(dataset, ["long", "list", "of", "fields"], confidence=0.5, labels=["nose"])
-```
-
+1. Fiftyone: this component provides tools for visualizing the predictions of one or more trained
+models on labeled frames or on test videos. See the documentation [here](docs/fiftyone.md). 
+2. [TODO] Streamlit: this component provides tools for quantifying model performance across a range of
+metrics for both labeled frames and unlabeled videos:
+    * Pixel error (labeled data only)
+    * Temporal norm (unlabeled data only)
+    * Pose PCA error (if `data.columns_for_singleview_pca` is not `null` in the config file)
+    * Multi-view consistency error (if `data.mirrored_column_matches` is not `null` in the config 
+    file)
