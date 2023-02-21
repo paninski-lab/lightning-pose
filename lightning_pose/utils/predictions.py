@@ -353,7 +353,8 @@ def predict_single_video(
 
     delete_model = False
     if model is None:
-        model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
+        model = load_model_from_checkpoint(
+            cfg=cfg, ckpt_file=ckpt_file, eval=True, data_module=data_module)
         delete_model = True
     model.to("cuda:%i" % gpu_id)
 
@@ -388,7 +389,7 @@ def predict_single_video(
     # use a different function for now to return heatmaps
     if save_heatmaps:
         if predict_loader.do_context:
-            batch_size = cfg.dali.context.predict.batch_size
+            batch_size = cfg.dali.context.predict.sequence_length
         else:
             batch_size = cfg.dali.base.predict.sequence_length
         keypoints, confidences, heatmaps = _predict_frames(
@@ -572,7 +573,7 @@ def get_model_class(map_type: str, semi_supervised: bool) -> Type[LightningModul
 
 @typechecked
 def load_model_from_checkpoint(
-    cfg: DictConfig, ckpt_file: str, eval: bool = False
+    cfg: DictConfig, ckpt_file: str, eval: bool = False, data_module=None,
 ) -> LightningModule:
     """this will have: path to a specific .ckpt file which we extract using other funcs
     will also take the standard hydra config file"""
@@ -588,10 +589,14 @@ def load_model_from_checkpoint(
     )
 
     # get loss factories
-    data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
-    imgaug_transform = get_imgaug_transform(cfg=cfg)
-    dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
-    data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
+    delete_extras = False
+    if not data_module:
+        # create data module if not provided as input
+        delete_extras = True
+        data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
+        imgaug_transform = get_imgaug_transform(cfg=cfg)
+        dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
+        data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
     loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
 
     # pick the right model class
@@ -619,9 +624,10 @@ def load_model_from_checkpoint(
         model.eval()
 
     # clear up memory
-    del imgaug_transform
-    del dataset
-    del data_module
+    if delete_extras:
+        del imgaug_transform
+        del dataset
+        del data_module
     del loss_factories
     torch.cuda.empty_cache()
 
