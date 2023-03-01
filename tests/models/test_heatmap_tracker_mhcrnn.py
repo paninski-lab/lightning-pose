@@ -25,7 +25,11 @@ def test_supervised_heatmap_mhcrnn(
 
 
 def test_semisupervised_heatmap_mhcrnn_pcasingleview(
-    cfg_context, heatmap_data_module_combined_context, video_dataloader, trainer, remove_logs,
+    cfg_context,
+    heatmap_data_module_combined_context,
+    video_dataloader,
+    trainer,
+    remove_logs,
 ):
     """Test the initialization and training of an semi-supervised heatmap mhcrnn model.
 
