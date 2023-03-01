@@ -22,9 +22,9 @@ def test_backbone():
     # check architecture properties when we truncate network at index at
     # `last_resnet_layer_to_get`
     for ind, backbone in enumerate(BACKBONES):
-        model = BaseFeatureExtractor(
-            backbone=backbone, last_resnet_layer_to_get=-3
-        ).to(_TORCH_DEVICE)
+        model = BaseFeatureExtractor(backbone=backbone, last_resnet_layer_to_get=-3).to(
+            _TORCH_DEVICE
+        )
         if "resnet" in backbone:
             resnet_v = int(backbone.replace("resnet", ""))
             if resnet_v <= 34:  # last block is BasicBlock
