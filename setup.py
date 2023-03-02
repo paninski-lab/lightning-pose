@@ -9,6 +9,7 @@ install_requires = [
     "h5py",
     "hydra-core",
     "imgaug",
+    "kaleido",
     "kornia",
     "matplotlib",
     "moviepy",
@@ -19,11 +20,14 @@ install_requires = [
     "pytorch-lightning",
     "tensorboard", # was previously in pytorch-lightning
     "lightning-bolts",
+    "seaborn",
     "scikit-image",
     "scikit-learn",
+    "streamlit",
     "torchtyping",
     "torchvision",
     "typeguard",
+    "typing",
 ]
 
 
