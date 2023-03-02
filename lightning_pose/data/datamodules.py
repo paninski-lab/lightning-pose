@@ -12,7 +12,10 @@ from typing import Dict, List, Literal, Optional, Tuple, Union, TypedDict
 
 from lightning_pose.data.dali import PrepareDALI, LitDaliWrapper
 from lightning_pose.data.utils import (
-    split_sizes_from_probabilities, compute_num_train_frames, SemiSupervisedDataLoaderDict)
+    split_sizes_from_probabilities,
+    compute_num_train_frames,
+    SemiSupervisedDataLoaderDict,
+)
 from lightning_pose.utils.io import check_video_paths
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -94,7 +97,8 @@ class BaseDataModule(pl.LightningDataModule):
         if self.train_frames is not None:
 
             n_frames = compute_num_train_frames(
-                len(self.train_dataset), self.train_frames)
+                len(self.train_dataset), self.train_frames
+            )
 
             if n_frames < len(self.train_dataset):
                 # split the data a second time to reflect further subsampling from
@@ -129,7 +133,7 @@ class BaseDataModule(pl.LightningDataModule):
             batch_size=self.test_batch_size,
             num_workers=self.num_workers,
         )
-    
+
     def full_labeled_dataloader(self) -> torch.utils.data.DataLoader:
         return DataLoader(
             self.dataset,
