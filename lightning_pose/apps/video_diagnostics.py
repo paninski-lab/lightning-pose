@@ -1,33 +1,6 @@
 """Analyze predictions on video data.
 
-Users select an arbitrary number of csvs (one per model) from their file system
-
-The app creates plots for:
-- time series/likelihoods of a selected keypoint (x or y coord) for each model
-- boxplot/histogram of temporal norms for each model
-- boxplot/histogram of multiview pca reprojection errors for each model
-
-to run from command line:
-> streamlit run /path/to/video_diagnostics.py
-
-optionally, multiple prediction files can be specified from the command line; each must be
-preceded by "--prediction_files":
-> streamlit run /path/to/video_diagnostics.py --
---prediction_files=/path/to/pred0.csv --prediction_files=/path/to/pred1.csv
-
-optionally, names for each prediction file can be specified from the command line; each must be
-preceded by "--model_names":
-> streamlit run /path/to/video_diagnostics.py --
---prediction_files=/path/to/pred0.csv --model_names=model0
---prediction_files=/path/to/pred1.csv --model_names=model1
-
-optionally, a data config file can be specified from the command line
-> streamlit run /path/to/video_diagnostics.py -- --data_cfg=/path/to/cfg.yaml
-
-Notes:
-    - this file should only contain the streamlit logic for the user interface
-    - data processing should come from (cached) functions imported from diagnsotics.reports
-    - plots should come from (non-cached) functions imported from diagnostics.visualizations
+Refer to apps.md for information on how to use this file.
 
 """
 
@@ -42,23 +15,6 @@ from lightning_pose.apps.utils import build_precomputed_metrics_df, get_col_name
 from lightning_pose.apps.utils import update_vid_metric_files_list, get_all_videos
 from lightning_pose.apps.plots import get_y_label
 from lightning_pose.apps.plots import make_seaborn_catplot, make_plotly_catplot, plot_precomputed_traces
-
-
-@st.cache(allow_output_mutation=True)
-def update_video_file(curr_file, new_file_list):
-    """Cannot use `update_single_file` for both or there will be cache collisons."""
-    if curr_file is None and len(new_file_list) > 0:
-        # pull file from cli args; wrap in Path so that it looks like an UploadedFile object
-        # returned by streamlit's file_uploader
-        ret_file = Path(new_file_list[0])
-    else:
-        ret_file = curr_file
-    return ret_file
-
-
-def increase_submits(n_submits=0):
-    return n_submits + 1
-
 
 st.session_state["n_submits"] = 0
 
@@ -79,12 +35,6 @@ def run():
     # choose from the different videos that were predicted
     video_to_plot = st.selectbox(
         "Select a video:", [*all_videos_], key="video")
-
-    # uploaded_files_: list = st.sidebar.file_uploader(
-    #     "Choose one or more CSV files", accept_multiple_files=True, type="csv",
-    # )
-    # check to see if a prediction files were provided externally via cli arg
-    # uploaded_files, using_cli_preds = update_file_list(uploaded_files_, args.prediction_files)
 
     prediction_files = update_vid_metric_files_list(video=video_to_plot, model_preds_folder=args.model_folders)
 
@@ -125,12 +75,6 @@ def run():
         # change dframes key names to new ones
         for n_name, o_name in zip(new_names, og_names):
             dframes_metrics[n_name] = dframes_metrics.pop(o_name)
-
-        video_file_ = None
-        # check to see if a video file was provided externally via cli arg
-        video_file = update_video_file(video_file_, args.video_file)
-        if isinstance(video_file, Path):
-            video_file = str(video_file)
 
         # ---------------------------------------------------
         # compute metrics
@@ -197,6 +141,5 @@ if __name__ == "__main__":
 
     parser.add_argument('--model_folders', action='append', default=[])
     parser.add_argument('--model_names', action='append', default=[])
-    parser.add_argument('--video_file', action='append', default=[])
 
     run()

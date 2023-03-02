@@ -13,7 +13,7 @@ The model_folder arguments require the ABSOLUTE paths to the model outputs folde
 ### Running app from the command line for train/test/val metrics
 Multiple models can be compared as follows, where the model folder for each model must be preceded by "--model_folders" and the name for each model to be displayed in the app must be preceded by "--model_names".
 ```console
-foo@bar:~$ streamlit run /path/to/labeled_frame_diagnostics.py --
+foo@bar:~$ streamlit run /path/to/lightning_pose/apps/labeled_frame_diagnostics.py --
 --model_folders=/absolute/path/to/model0/outputs --model_names=model0
 --model_folders=/absolute/path/to/model1/outputs --model_names=model1
 ```
@@ -34,7 +34,7 @@ This operates identically to labeled_frame_diagnostics above.
 ### Running app from the command line for train/test/val metrics
 Multiple models can be compared as follows, where the model folder for each model must be preceded by "--model_folders" and the name for each model to be displayed in the app must be preceded by "--model_names".
 ```console
-foo@bar:~$ streamlit run /path/to/video_diagnostics.py --
+foo@bar:~$ streamlit run /path/to/lightning_pose/apps/video_diagnostics.py --
 --model_folders=/absolute/path/to/model0/outputs --model_names=model0
 --model_folders=/absolute/path/to/model1/outputs --model_names=model1
 ```

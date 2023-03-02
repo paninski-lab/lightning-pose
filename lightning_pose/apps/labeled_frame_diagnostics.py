@@ -1,36 +1,6 @@
 """Analyze predictions on labeled frames.
 
-Users select an arbitrary number of csvs (one per model) from their file system
-
-The app creates plots for:
-- plot of a selected metric (e.g. pixel errors) for each model (bar/box/violin/etc)
-- scatterplot of a selected metric between two models
-
-to run from command line:
-> streamlit run /path/to/labeled_frame_diagnostics.py
-
-optionally, a ground truth labels file can be specified from the command line
-(note the two sets of double dashes):
-> streamlit run /path/to/labeled_frame_diagnostics.py -- --labels_csv=/path/to/file.csv
-
-optionally, multiple prediction files can be specified from the command line; each must be
-preceded by "--prediction_files":
-> streamlit run /path/to/labeled_frame_diagnostics.py --
---prediction_files=/path/to/pred0.csv --prediction_files=/path/to/pred1.csv
-
-optionally, names for each prediction file can be specified from the command line; each must be
-preceded by "--model_names":
-> streamlit run /path/to/labeled_frame_diagnostics.py --
---prediction_files=/path/to/pred0.csv --model_names=model0
---prediction_files=/path/to/pred1.csv --model_names=model1
-
-optionally, a data config file can be specified from the command line
-> streamlit run /path/to/labeled_frame_diagnostics.py -- --data_cfg=/path/to/cfg.yaml
-
-Notes:
-    - this file should only contain the streamlit logic for the user interface
-    - data processing should come from (cached) functions imported from diagnsotics.reports
-    - plots should come from (non-cached) functions imported from diagnostics.visualizations
+Refer to apps.md for information on how to use this file.
 
 """
 
@@ -47,22 +17,6 @@ import os
 from lightning_pose.apps.utils import build_precomputed_metrics_df, concat_dfs, get_df_box, get_df_scatter
 from lightning_pose.apps.utils import update_labeled_file_list
 from lightning_pose.apps.plots import make_seaborn_catplot, make_plotly_scatterplot, get_y_label
-
-@st.cache(allow_output_mutation=True)
-def update_cfg_file(curr_file, new_file_list):
-    """Cannot use `update_single_file` for both or there will be cache collisons."""
-    if curr_file is None and len(new_file_list) > 0:
-        # pull file from cli args; wrap in Path so that it looks like an UploadedFile object
-        # returned by streamlit's file_uploader
-        ret_file = Path(new_file_list[0])
-    else:
-        ret_file = curr_file
-    return ret_file
-
-
-def increase_submits(n_submits=0):
-    return n_submits + 1
-
 
 st.session_state["n_submits"] = 0
 

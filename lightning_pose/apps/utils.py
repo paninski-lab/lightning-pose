@@ -16,32 +16,6 @@ pcasv_error_key = "pca singleview"
 
 
 @st.cache(allow_output_mutation=True)
-def update_single_file(curr_file: str, new_file_list: list):
-    if curr_file is None and len(new_file_list) > 0:
-        # pull file from cli args; wrap in Path so that it looks like an UploadedFile object
-        # returned by streamlit's file_uploader
-        ret_file = Path(new_file_list[0])
-    else:
-        ret_file = curr_file
-    return ret_file
-
-
-@st.cache(allow_output_mutation=True)
-def update_file_list(curr_file_list: list, new_file_list: list):
-    use_cli_preds = False
-    if len(curr_file_list) == 0 and len(new_file_list) > 0:
-        # pull label file from cli args; wrap in Path so that it looks like an UploadedFile object
-        # returned by streamlit's file_uploader
-        ret_files = []
-        for file in new_file_list:
-            ret_files.append(Path(file))
-        use_cli_preds = True
-    else:
-        ret_files = curr_file_list
-    return ret_files, use_cli_preds
-
-
-@st.cache(allow_output_mutation=True)
 def update_labeled_file_list(model_preds_folder: list):
     # use_cli_preds = False
     per_model_preds = []
