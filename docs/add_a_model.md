@@ -55,7 +55,17 @@ data through the model and computing and logging the losses.
 
 ## Implementing your own model
 Now that we've covered some necessary background, let's look at the how to implement a fully 
-supervised and semi-supervised heatmap tracker.
+supervised and semi-supervised heatmap tracker. The easiest way to parse this information is to 
+open up the file `lightning_pose/models/heatmap_tracker.py` and follow along with the text below to
+see how these ideas are implemented in practice. 
+
+A second example can be found in 
+`lightning_pose/models/heatmap_tracker.py`, which implements the fully- and semi-supervised 
+versions of the temporal context network. 
+
+Finally, a third example can be found in `lightning_pose/models/regression_tracker.py`, which 
+implements a fully- and semi-supervised trackers that omit heatmaps and directly predict (x, y)
+coordinates. 
 
 #### Fully supervised model
 The `HeatmapTracker` class (found in `lightning_pose/models/heatmap_tracker.py`) inherits from 
@@ -95,7 +105,27 @@ this method can implement non-differentiable operations to choose the final coor
 hard argmax instead of the soft argmax required for training.
 
 #### Semi-supervised model
+The `SemiSupervisedHeatmapTracker` class (found in `lightning_pose/models/heatmap_tracker.py`) 
+inherits from _both_ `HeatmapTracker` - which gives it access to the feature extractor, heatmap
+prediction head, and labeled data loss computation - and `SemiSupervisedTrackerMixin` - which 
+gives it access to unlabeled data loss computation. This class (as well as any other class you
+want to build that uses unsupervised losses) must implement two methods. The first is the 
+`__init__` method, which should call the `__init__` method of the parent class(es), and also builds 
+the unsupervised losses themselves. 
+This is fully taken care of by the loss factory object, which must be an input to
+the semi-supervised model's constructor (more info on this below). 
+The second method is called `get_loss_inputs_unlabeled` and, like its sibling function 
+`get_loss_inputs_labeled` in the fully supervised model, is responsible for two steps:
+1. process batch through both feature extractor and head to get heatmaps
+2. process heatmaps to get (x, y) coordinates
 
+As above, this method will return a dict with a set of standard key names, which will not
+include target heatmaps or keypoints since those are formed from labeled data and we are dealing 
+exclusively with unlabeled data in this method.
+
+You do _not_ need to implement a `predict_step` method since the "semi-supervised" aspect of this
+model only affects training and not inference; therefore during inference the `predict_step` of the
+fully supervised model will be used.
 
 ## How to integrate your model into the Lightning Pose pipeline
 Once you've implemented your model, the next step is to integrate it into the larger repo so that 
@@ -103,5 +133,68 @@ it can take advantage of the available training and evaluation infrastructure. W
 this process from the outside in.
 
 #### Step 1: update the yaml config file
-#### Step 2:
-#### Step 3:
+The default configuration file at `lightning_pose/scripts/configs/config_default.yaml` enumerates 
+all possible hyperparameters needed for building and training a model. If your new model requires
+additional hyperparameters that you wish to control externally, include these in the config file.
+Inside the pipeline, when initializing the model, you will have access to every key-value pair in
+this file.
+
+There is a field `model.model_type` which you can use to specify your model - the current supported
+values are "regression", "heatmap", and "heatmap_mhcrnn". Add your new model name to this list. If 
+your model requires context frames, ensure that you also set `model.do_context: true`, which will
+build a data generator that serves context frames to the model with both labeled and, if needed,
+unlabeled data.
+
+The basic training script can be found at `scripts/train_hydra.py`. You do not
+need to update anything in this script to accommodate your new model, but this script uses several
+helper functions that we will update next.
+ 
+#### Step 2: update `get_dataset`
+The first helper function you need to update is `lightning_pose.utils.scripts.get_dataset`, 
+which creates a torch Dataset object associated with your model. 
+For example, the regression-based models do not need a dataset that returns heatmaps, whereas the 
+heatmap-based models do. 
+In this function you will see the `if/else` statement that creates a dataset based on the model 
+type; include your model in this `if/else` statement.
+
+#### Step 3: update `get_loss_factories`
+If your model requires heatmaps for training, in order to ensure the heatmap losses are properly 
+logged you need to add your model to the first `if/else` statement in the function
+`lightning_pose.utils.scripts.get_loss_factories` (you will see "heatmap" and "heatmap_mhcrnn" 
+models already represented there). 
+Note that if your model uses heatmaps you will also be able to select from several heatmap losses 
+in the config file using the `model.heatmap_loss_type` key.
+
+#### Step 4: update `get_model`
+This next helper function - `lightning_pose.utils.scripts.get_model` - is what translates the 
+key-value pairs from the config file to constructing the actual model. 
+You will see examples of all other models in this function; include your model accordingly.
+
+#### Step 5: update `get_model_class`
+Finally, there is helper function `lightning_pose.utils.predictions.get_model_class` which is used
+to seamlessly load model parameters from checkpoint files. Again, there are various `if/else`
+statements where your model should be incorporated.
+
+#### Step 6: optional and miscellanious additons
+* if you find yourself needing to write a new DALI dataloader to support your model training, you
+might also need to update `lightning_pose.utils.predictions.PredictionHandler`
+* if your model uses heatmaps and you would like to save out heatmaps for each keypoint/frame when
+running inference on a new video, you'll need to update the legacy function 
+`lightning_pose.utils.predictions._predict_frames`, which will be called by the function
+`lightning_pose.utils.predictions.predict_single_video` when using `save_heatmaps=True`
+
+#### Step 7: ADD UNIT TESTS!
+Not only is this good coding practice, it makes debugging your model easier! Make a new file in the 
+directory `tests/models` that follow the same pattern as the other files there. We provide many 
+convenience functions that allow you to set up units tests for fully supervised models, context 
+models, and semi-supervised models (and combinations thereof). 
+Let's take the fully-supervised heatmap model as an example; once you write the test you can run it
+from the command line like so:
+```bash
+foo@bar:~$ pytest tests/models/test_heatmap_tracker.py::test_supervised_heatmap
+```
+This test will build your model using the helper functions above (like `get_model`) and train it
+for several epochs using the toy dataset that comes packaged with this repo.
+
+
+And that's it!
