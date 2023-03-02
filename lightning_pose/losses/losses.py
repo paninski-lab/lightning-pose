@@ -383,23 +383,22 @@ class TemporalLoss(Loss):
     def remove_nans(
         self,
         loss: TensorType["batch_minus_one", "num_keypoints"],
-        confidences: TensorType["batch", "num_keypoints"]
+        confidences: TensorType["batch", "num_keypoints"],
     ) -> TensorType["batch_minus_one", "num_keypoints"]:
         # find nans in the targets, and do a masked_select operation
         # get rid of unsupervised targets with extremely uncertain predictions or likely occlusions
-        idxs_ignore = (confidences < self.prob_threshold)
+        idxs_ignore = confidences < self.prob_threshold
         # ignore the loss values in the diff where one of the heatmaps is 'nan'
         union_idxs_ignore = torch.zeros(
-            (confidences.shape[0] - 1, confidences.shape[1]), 
-            dtype=torch.bool).to(_TORCH_DEVICE)
+            (confidences.shape[0] - 1, confidences.shape[1]), dtype=torch.bool
+        ).to(_TORCH_DEVICE)
         for i in range(confidences.shape[0] - 1):
-            union_idxs_ignore[i] = torch.logical_or(idxs_ignore[i], idxs_ignore[i+1])
+            union_idxs_ignore[i] = torch.logical_or(idxs_ignore[i], idxs_ignore[i + 1])
 
         # clone loss and zero out the nan values
         clean_loss = loss.clone()
-        clean_loss[union_idxs_ignore] = 0.
+        clean_loss[union_idxs_ignore] = 0.0
         return clean_loss
-
 
     def compute_loss(
         self,
@@ -427,10 +426,11 @@ class TemporalLoss(Loss):
 
         elementwise_loss = self.compute_loss(predictions=keypoints_pred)
         # do remove nans with loss to remove temporal difference values
-        clean_loss = self.remove_nans(
-            loss=elementwise_loss, 
-            confidences=confidences) if confidences is not None \
+        clean_loss = (
+            self.remove_nans(loss=elementwise_loss, confidences=confidences)
+            if confidences is not None
             else elementwise_loss
+        )
         epsilon_insensitive_loss = self.rectify_epsilon(loss=clean_loss)
         scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
         logs = self.log_loss(loss=scalar_loss, stage=stage)
@@ -454,7 +454,7 @@ class TemporalHeatmapLoss(Loss):
         log_weight: float = 0.0,
         **kwargs,
     ) -> None:
-        super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight),
+        super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
         self.loss_name = loss_name
 
         if self.loss_name == "temporal_heatmap_mse":
@@ -483,45 +483,44 @@ class TemporalHeatmapLoss(Loss):
     def remove_nans(
         self,
         confidences: TensorType["batch", "num_keypoints"],
-        loss: TensorType["batch_minus_one", "num_keypoints"]
+        loss: TensorType["batch_minus_one", "num_keypoints"],
     ) -> TensorType["batch_minus_one", "num_keypoints"]:
         # find nans in the targets, and do a masked_select operation
         # get rid of unsupervised targets with extremely uncertain predictions or likely occlusions
-        idxs_ignore = (confidences < self.prob_threshold)
+        idxs_ignore = confidences < self.prob_threshold
         # ignore the loss values in the diff where one of the heatmaps is 'nan'
         union_idxs_ignore = torch.zeros(
-            (confidences.shape[0] - 1, confidences.shape[1]),
-            dtype=torch.bool).to(_TORCH_DEVICE)
+            (confidences.shape[0] - 1, confidences.shape[1]), dtype=torch.bool
+        ).to(_TORCH_DEVICE)
         for i in range(confidences.shape[0] - 1):
-            union_idxs_ignore[i] = torch.logical_or(idxs_ignore[i], idxs_ignore[i+1])
+            union_idxs_ignore[i] = torch.logical_or(idxs_ignore[i], idxs_ignore[i + 1])
 
-        loss[union_idxs_ignore] = 0.
+        loss[union_idxs_ignore] = 0.0
         return loss
-    
+
     def compute_loss(
         self,
-        predictions: TensorType["batch", "num_valid_keypoints", "heatmap_height", "heatmap_width"]
+        predictions: TensorType["batch", "num_valid_keypoints", "heatmap_height", "heatmap_width"],
     ) -> TensorType["batch_minus_one", "num_valid_keypoints"]:
         # compute the differences between matching heatmaps for each keypoint
 
-        diffs = torch.zeros(
-            (predictions.shape[0] - 1, 
-            predictions.shape[1])).to(_TORCH_DEVICE)
+        diffs = torch.zeros((predictions.shape[0] - 1, predictions.shape[1])).to(
+            _TORCH_DEVICE
+        )
 
         for i in range(diffs.shape[0]):
             if self.loss_name == "temporal_heatmap_mse":
                 curr_mse = F.mse_loss(
-                    predictions[i], 
-                    predictions[i+1], 
-                    reduction="none").reshape(predictions.shape[1], -1)
+                    predictions[i], predictions[i + 1], reduction="none"
+                ).reshape(predictions.shape[1], -1)
                 diffs[i] = torch.mean(curr_mse, dim=-1)
             elif self.loss_name == "temporal_heatmap_kl":
                 diffs[i] = self.hmloss(
                     predictions[i].unsqueeze(0) + 1e-10,
-                    predictions[i+1].unsqueeze(0) + 1e-10,
+                    predictions[i + 1].unsqueeze(0) + 1e-10,
                     reduction="none",
                 )
-        
+
         return diffs
 
     def __call__(
