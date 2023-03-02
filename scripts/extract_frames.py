@@ -34,8 +34,9 @@ def run():
             np.savetxt(
                 os.path.join(save_dir, "selected_frames.csv"),
                 np.sort(frames_to_label),
-                delimiter=',',
-                fmt="%s")
+                delimiter=",",
+                fmt="%s"
+            )
 
         export_frames(
             video_file=video_file, save_dir=save_dir, frame_idxs=idxs_selected, format=format,
