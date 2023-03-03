@@ -6,7 +6,9 @@ import pytest
 from lightning_pose.utils.tests import run_model_test
 
 
-def test_supervised_heatmap(cfg, heatmap_data_module, video_dataloader, trainer, remove_logs):
+def test_supervised_heatmap(
+    cfg, heatmap_data_module, video_dataloader, trainer, remove_logs
+):
     """Test the initialization and training of a supervised heatmap model."""
 
     cfg_tmp = copy.deepcopy(cfg)
@@ -23,7 +25,7 @@ def test_supervised_heatmap(cfg, heatmap_data_module, video_dataloader, trainer,
 
 
 def test_supervised_heatmap_context(
-        cfg_context, heatmap_data_module_context, video_dataloader, trainer, remove_logs
+    cfg_context, heatmap_data_module_context, video_dataloader, trainer, remove_logs
 ):
     """Test the initialization and training of a supervised context heatmap model.
 
@@ -45,7 +47,11 @@ def test_supervised_heatmap_context(
 
 
 def test_semisupervised_heatmap_temporal(
-    cfg, heatmap_data_module_combined, video_dataloader, trainer, remove_logs,
+    cfg,
+    heatmap_data_module_combined,
+    video_dataloader,
+    trainer,
+    remove_logs,
 ):
     """Test the initialization and training of an semi-supervised heatmap model."""
 
@@ -63,7 +69,11 @@ def test_semisupervised_heatmap_temporal(
 
 
 def test_semisupervised_heatmap_pcasingleview_context(
-    cfg_context, heatmap_data_module_combined_context, video_dataloader, trainer, remove_logs,
+    cfg_context,
+    heatmap_data_module_combined_context,
+    video_dataloader,
+    trainer,
+    remove_logs,
 ):
     """Test the initialization and training of an semi-supervised heatmap context model.
 

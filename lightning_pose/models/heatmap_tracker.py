@@ -15,8 +15,11 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau
 
 from lightning_pose.data.utils import (
-    BaseLabeledBatchDict, HeatmapLabeledBatchDict, UnlabeledBatchDict,
-    evaluate_heatmaps_at_location, undo_affine_transform,
+    BaseLabeledBatchDict,
+    HeatmapLabeledBatchDict,
+    UnlabeledBatchDict,
+    evaluate_heatmaps_at_location,
+    undo_affine_transform,
 )
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
@@ -37,8 +40,9 @@ def upsample(
     _, _, height, width = inputs.shape
     # align_corners=False is important!! otherwise the offsets below don't hold
     inputs_up = nn.functional.interpolate(
-        inputs, size=(height * 2, width * 2), mode='bicubic', align_corners=False)
-    inputs_up = filter2d(inputs_up, kernel, border_type='constant')
+        inputs, size=(height * 2, width * 2), mode="bicubic", align_corners=False
+    )
+    inputs_up = filter2d(inputs_up, kernel, border_type="constant")
     return inputs_up
 
 
@@ -51,9 +55,18 @@ class HeatmapTracker(BaseSupervisedTracker):
         num_keypoints: int,
         loss_factory: LossFactory,
         backbone: Literal[
-            "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k", 
-            "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"
+            "resnet18",
+            "resnet34",
+            "resnet50",
+            "resnet101",
+            "resnet152",
+            "resnet50_3d",
+            "resnet50_contrastive",
+            "resnet50_animal_apose",
+            "resnet50_animal_ap10k",
+            "resnet50_human_jhmdb",
+            "resnet50_human_res_rle",
+            "resnet50_human_top_res",
         ] = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
@@ -110,16 +123,21 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.do_context = do_context
         if self.mode == "2d":
             self.unnormalized_weights = nn.parameter.Parameter(
-                torch.Tensor([[0.2, 0.2, 0.2, 0.2, 0.2]]), requires_grad=False)
-            self.representation_fc = lambda x: x @ torch.transpose(
-                nn.functional.softmax(self.unnormalized_weights, dim=1), 0, 1)
-        elif self.mode == "3d":
-            self.unnormalized_weights = nn.parameter.Parameter(
-                torch.Tensor([[0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125]]),
-                requires_grad=False
+                torch.Tensor([[0.2, 0.2, 0.2, 0.2, 0.2]]), requires_grad=False
             )
             self.representation_fc = lambda x: x @ torch.transpose(
-                nn.functional.softmax(self.unnormalized_weights, dim=1), 0, 1)
+                nn.functional.softmax(self.unnormalized_weights, dim=1), 0, 1
+            )
+        elif self.mode == "3d":
+            self.unnormalized_weights = nn.parameter.Parameter(
+                torch.Tensor(
+                    [[0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125]]
+                ),
+                requires_grad=False,
+            )
+            self.representation_fc = lambda x: x @ torch.transpose(
+                nn.functional.softmax(self.unnormalized_weights, dim=1), 0, 1
+            )
 
         # use this to log auxiliary information: pixel_error on labeled data
         self.rmse_loss = RegressionRMSELoss()
@@ -322,13 +340,16 @@ class HeatmapTracker(BaseSupervisedTracker):
             "keypoints_pred": predicted_keypoints,
             "confidences": confidence,
         }
-    
+
     def predict_step(
         self,
         batch: Union[HeatmapLabeledBatchDict, UnlabeledBatchDict],
         batch_idx: int,
         return_heatmaps: Optional[bool] = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+    ) -> Union[
+        Tuple[torch.Tensor, torch.Tensor],
+        Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+    ]:
         """Predict heatmaps and keypoints for a batch of video frames.
 
         Assuming a DALI video loader is passed in
@@ -363,9 +384,18 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         loss_factory: LossFactory,
         loss_factory_unsupervised: LossFactory,
         backbone: Literal[
-            "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k", 
-            "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"
+            "resnet18",
+            "resnet34",
+            "resnet50",
+            "resnet101",
+            "resnet152",
+            "resnet50_3d",
+            "resnet50_contrastive",
+            "resnet50_animal_apose",
+            "resnet50_animal_ap10k",
+            "resnet50_human_jhmdb",
+            "resnet50_human_res_rle",
+            "resnet50_human_top_res",
         ] = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
@@ -437,8 +467,8 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             predicted_keypoints = predicted_keypoints_augmented
 
         return {
-            "heatmaps_pred": predicted_heatmaps, # if augmented, these are the augmented heatmaps
-            "keypoints_pred": predicted_keypoints, # if we augmented, these are the original keypoints
-            "keypoints_pred_augmented": predicted_keypoints_augmented, # these keypoints match heatmaps_pred, all are augmented
+            "heatmaps_pred": predicted_heatmaps,  # if augmented, these are the augmented heatmaps
+            "keypoints_pred": predicted_keypoints,  # if we augmented, these are the original keypoints
+            "keypoints_pred_augmented": predicted_keypoints_augmented,  # these keypoints match heatmaps_pred, all are augmented
             "confidences": confidence,
         }

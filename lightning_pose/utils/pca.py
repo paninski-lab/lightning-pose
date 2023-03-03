@@ -291,7 +291,7 @@ class ComponentChooser:
             # cumsum is a d - 1 dimensional vector where the 0th element is the sum of the
             # 0th and 1st element of the d dimensional vector it is summing over
             return components_to_keep + 1
-        else: # if we want to keep all components, we need to return the number of components
+        else:  # if we want to keep all components, we need to return the number of components
             # we do this because there's an issue with == 1.0 in the cumsum_explained_variance
             return len(self.fitted_pca_object.explained_variance_)
 

@@ -185,20 +185,24 @@ class LitDaliWrapper(DALIGenericIterator):
                 #     batch=batch, num_sequences="multi")
                 # DB: for batch_size=1 and a single sequence of 5 frames
                 unlabeled_batch_dict = self._dali_output_to_tensors(
-                        batch=batch, num_sequences="single")
+                    batch=batch, num_sequences="single"
+                )
             else:
                 if self.context_sequences_successive:
                     # pipeline is like for "base" model, but we reshape images further down
                     # assume batch_size=1
                     unlabeled_batch_dict = self._dali_output_to_tensors(
-                        batch=batch, num_sequences="single")
+                        batch=batch, num_sequences="single"
+                    )
                 else:
                     # grabbing independent 5-frame sequences. batch_size > 1
                     unlabeled_batch_dict = self._dali_output_to_tensors(
-                        batch=batch, num_sequences="multi")
+                        batch=batch, num_sequences="multi"
+                    )
         else:
             unlabeled_batch_dict = self._dali_output_to_tensors(
-                batch=batch, num_sequences="single")
+                batch=batch, num_sequences="single"
+            )
 
         return unlabeled_batch_dict
 
@@ -299,7 +303,7 @@ class PrepareDALI(object):
             "step": base_pred_cfg["sequence_length"],
             "batch_size": 1,
             "seed": gen_cfg["seed"],
-            "num_threads":  gen_cfg["num_threads"],
+            "num_threads": gen_cfg["num_threads"],
             "device_id": gen_cfg["device_id"],
             "random_shuffle": False,
             "device": gen_cfg["device"],
@@ -365,9 +369,9 @@ class PrepareDALI(object):
                 "imgaug": imgaug,
             }
             # our floor above should prevent us from getting to the very final batch.
-        
+
         return dict_args
-    
+
     def _get_dali_pipe(self):
         """
         Return a DALI pipe with predefined args.
@@ -376,7 +380,7 @@ class PrepareDALI(object):
         pipe_args = self._pipe_dict[self.train_stage][self.model_type]
         pipe = video_pipe(**pipe_args)
         return pipe
-    
+
     def _setup_dali_iterator_args(self) -> dict:
         """Builds args for Lightning iterator.
 
@@ -395,7 +399,7 @@ class PrepareDALI(object):
             "do_context": False,
             "output_map": ["frames", "transforms"],
             "last_batch_policy": LastBatchPolicy.PARTIAL,
-            "auto_reset": True
+            "auto_reset": True,
         }
         dict_args["predict"]["base"] = {
             "num_iters": self.num_iters,
@@ -405,7 +409,7 @@ class PrepareDALI(object):
             "last_batch_policy": LastBatchPolicy.FILL,
             "last_batch_padded": False,
             "auto_reset": False,
-            "reader_name": "reader"
+            "reader_name": "reader",
         }
 
         # 5-frame context models
@@ -416,21 +420,21 @@ class PrepareDALI(object):
             "context_sequences_successive": self.context_sequences_successive,
             "output_map": ["frames", "transforms"],
             "last_batch_policy": LastBatchPolicy.PARTIAL,
-            "auto_reset": True
+            "auto_reset": True,
         }  # taken from datamodules.py. only difference is that we need to do context
         dict_args["predict"]["context"] = {
             "num_iters": self.num_iters,
             "eval_mode": "predict",
             "do_context": True,
             "output_map": ["frames", "transforms"],
-            "last_batch_policy": LastBatchPolicy.FILL, # LastBatchPolicy.PARTIAL,
+            "last_batch_policy": LastBatchPolicy.FILL,  # LastBatchPolicy.PARTIAL,
             "last_batch_padded": False,
             "auto_reset": False,
-            "reader_name": "reader"
+            "reader_name": "reader",
         }
 
         return dict_args
-    
+
     def __call__(self) -> LitDaliWrapper:
         """
         Returns a LightningWrapper object.

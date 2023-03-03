@@ -16,9 +16,12 @@ def test_data_extractor(base_data_module_combined):
     from lightning_pose.data.utils import DataExtractor
 
     num_frames = (
-        len(base_data_module_combined.dataset) * base_data_module_combined.train_probability
+        len(base_data_module_combined.dataset)
+        * base_data_module_combined.train_probability
     )
-    keypoint_tensor, _ = DataExtractor(data_module=base_data_module_combined, cond="train")()
+    keypoint_tensor, _ = DataExtractor(
+        data_module=base_data_module_combined, cond="train"
+    )()
     assert keypoint_tensor.shape == (num_frames, 34)  # 72 = 0.8 * 90 images
 
     keypoint_tensor, images_tensor = DataExtractor(
@@ -291,7 +294,7 @@ def test_evaluate_heatmaps_at_location():
     locs0[0, 0, 1] = idx0
     confs0 = evaluate_heatmaps_at_location(heatmaps, locs0)
     assert confs0.shape == (batch, num_keypoints)
-    assert torch.allclose(confs0[0], torch.tensor(1.))
+    assert torch.allclose(confs0[0], torch.tensor(1.0))
 
     # if we choose almost the correct location, do we get 1?
     idx1 = idx0 + 1
@@ -299,7 +302,7 @@ def test_evaluate_heatmaps_at_location():
     locs1[0, 0, 0] = idx1
     locs1[0, 0, 1] = idx1
     confs1 = evaluate_heatmaps_at_location(heatmaps, locs1)
-    assert torch.allclose(confs1[0], torch.tensor(1.))
+    assert torch.allclose(confs1[0], torch.tensor(1.0))
 
     # if we choose a completely wrong location, do we get 0?
     idx2 = 25
@@ -307,13 +310,17 @@ def test_evaluate_heatmaps_at_location():
     locs2[0, 0, 0] = idx2
     locs2[0, 0, 1] = idx2
     confs2 = evaluate_heatmaps_at_location(heatmaps, locs2)
-    assert torch.allclose(confs2[0], torch.tensor(0.))
+    assert torch.allclose(confs2[0], torch.tensor(0.0))
 
     # ----------------------------------
     # make a gaussain heatmap
     # ----------------------------------
     heatmaps_g = generate_heatmaps(
-        locs0, height=heat_height, width=heat_width, output_shape=(heat_height, heat_width))
+        locs0,
+        height=heat_height,
+        width=heat_width,
+        output_shape=(heat_height, heat_width),
+    )
 
     # if we choose the correct location, do we get close to 1?
     confs0_g = evaluate_heatmaps_at_location(heatmaps_g, locs0)
@@ -326,7 +333,7 @@ def test_evaluate_heatmaps_at_location():
 
     # if we choose a completely wrong location, do we get 0?
     confs2_g = evaluate_heatmaps_at_location(heatmaps_g, locs2)
-    assert torch.allclose(confs2_g[0], torch.tensor(0.))
+    assert torch.allclose(confs2_g[0], torch.tensor(0.0))
 
 
 def test_undo_affine_transform():
@@ -345,10 +352,12 @@ def test_undo_affine_transform():
 
     # test individual transforms
     transform_mat = torch.normal(mean=torch.zeros((seq_len, 2, 3)))
-    keypoints_aug = torch.bmm(keypoints, transform_mat[:, :, :2].transpose(2, 1)) \
-                    + transform_mat[:, :, -1].unsqueeze(1)
+    keypoints_aug = torch.bmm(
+        keypoints, transform_mat[:, :, :2].transpose(2, 1)
+    ) + transform_mat[:, :, -1].unsqueeze(1)
     keypoints_noaug = undo_affine_transform(keypoints_aug, transform_mat)
     assert torch.allclose(keypoints, keypoints_noaug, atol=1e-4)
+
 
 # def test_heatmap_generation():
 #

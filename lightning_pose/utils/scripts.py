@@ -36,8 +36,12 @@ from lightning_pose.utils import get_gpu_list_from_cfg, pretty_print_str
 from lightning_pose.utils.io import return_absolute_path, return_absolute_data_paths
 from lightning_pose.utils.io import check_if_semi_supervised, get_keypoint_names
 from lightning_pose.utils.pca import KeypointPCA
-from lightning_pose.utils.predictions import load_model_from_checkpoint, create_labeled_video, \
-    PredictionHandler, predict_single_video
+from lightning_pose.utils.predictions import (
+    load_model_from_checkpoint,
+    create_labeled_video,
+    PredictionHandler,
+    predict_single_video,
+)
 
 
 @typechecked
@@ -317,8 +321,8 @@ def get_loss_factories(
                     "original_image_width"
                 ] = width_og
                 # record downsampled image dims
-                height_ds = int(height_og // (2**cfg.data.downsample_factor))
-                width_ds = int(width_og // (2**cfg.data.downsample_factor))
+                height_ds = int(height_og // (2 ** cfg.data.downsample_factor))
+                width_ds = int(width_og // (2 ** cfg.data.downsample_factor))
                 loss_params_dict["unsupervised"][loss_name][
                     "downsampled_image_height"
                 ] = height_ds
@@ -489,11 +493,15 @@ def compute_metrics(
         metrics_to_compute = ["pixel_error"]
     # for either labeled and unlabeled data, if a pca loss is specified in config, we compute the
     # associated metric
-    if cfg.data.get("columns_for_singleview_pca", None) is not None \
-            and len(cfg.data.columns_for_singleview_pca) != 0:
+    if (
+        cfg.data.get("columns_for_singleview_pca", None) is not None
+        and len(cfg.data.columns_for_singleview_pca) != 0
+    ):
         metrics_to_compute += ["pca_singleview"]
-    if cfg.data.get("mirrored_column_matches", None) is not None \
-            and len(cfg.data.mirrored_column_matches) != 0:
+    if (
+        cfg.data.get("mirrored_column_matches", None) is not None
+        and len(cfg.data.mirrored_column_matches) != 0
+    ):
         metrics_to_compute += ["pca_multiview"]
 
     # compute metrics; csv files will be saved to the same directory the prdictions are stored in
@@ -510,7 +518,8 @@ def compute_metrics(
     if "temporal" in metrics_to_compute:
         temporal_norm_per_keypoint = temporal_norm(keypoints_pred)
         temporal_norm_df = pd.DataFrame(
-            temporal_norm_per_keypoint, index=index, columns=keypoint_names)
+            temporal_norm_per_keypoint, index=index, columns=keypoint_names
+        )
         # add train/val/test split
         if set is not None:
             temporal_norm_df["set"] = set
@@ -565,14 +574,16 @@ def export_predictions_and_labeled_video(
     prediction_csv_file: str,
     ckpt_file: str,
     trainer: Optional[pl.Trainer] = None,
-    model: Optional[Union[
-        RegressionTracker,
-        HeatmapTracker,
-        HeatmapTrackerMHCRNN,
-        SemiSupervisedRegressionTracker,
-        SemiSupervisedHeatmapTracker,
-        SemiSupervisedHeatmapTrackerMHCRNN,
-    ]] = None,
+    model: Optional[
+        Union[
+            RegressionTracker,
+            HeatmapTracker,
+            HeatmapTrackerMHCRNN,
+            SemiSupervisedRegressionTracker,
+            SemiSupervisedHeatmapTracker,
+            SemiSupervisedHeatmapTrackerMHCRNN,
+        ]
+    ] = None,
     data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
     gpu_id: Optional[int] = None,
     labeled_mp4_file: Optional[str] = None,

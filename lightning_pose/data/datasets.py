@@ -88,14 +88,15 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
         csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
         self.keypoint_names = get_keypoint_names(
-            csv_file=csv_file, header_rows=header_rows)
+            csv_file=csv_file, header_rows=header_rows
+        )
         if header_rows == [1, 2] or header_rows == [0, 1]:
             # self.keypoint_names = csv_data.columns.levels[0]
             # ^this returns a sorted list for some reason, don't want that
-            self.keypoint_names = [b[0] for b in csv_data.columns if b[1] == 'x']
+            self.keypoint_names = [b[0] for b in csv_data.columns if b[1] == "x"]
         elif header_rows == [0, 1, 2]:
             # self.keypoint_names = csv_data.columns.levels[1]
-            self.keypoint_names = [b[1] for b in csv_data.columns if b[2] == 'x']
+            self.keypoint_names = [b[1] for b in csv_data.columns if b[2] == "x"]
 
         self.image_names = list(csv_data.index)
         self.keypoints = torch.tensor(csv_data.to_numpy(), dtype=torch.float32)
@@ -186,7 +187,8 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 for img in images:
                     self.imgaug_transform.seed_(seed)
                     transformed_image, transformed_keypoints = self.imgaug_transform(
-                        images=[img], keypoints=[keypoints_on_image.numpy()])
+                        images=[img], keypoints=[keypoints_on_image.numpy()]
+                    )
                     transformed_images.append(transformed_image[0])
                 transformed_images = np.asarray(transformed_images)
                 transformed_keypoints = transformed_keypoints[0].reshape(-1)
@@ -272,13 +274,12 @@ class HeatmapDataset(BaseTrackingDataset):
     @property
     def output_shape(self) -> tuple:
         return (
-            self.height // 2**self.downsample_factor,
-            self.width // 2**self.downsample_factor,
+            self.height // 2 ** self.downsample_factor,
+            self.width // 2 ** self.downsample_factor,
         )
 
     def compute_heatmap(
-        self,
-        example_dict: BaseLabeledExampleDict
+        self, example_dict: BaseLabeledExampleDict
     ) -> TensorType["num_keypoints", "heatmap_height", "heatmap_width"]:
         """Compute 2D heatmaps from arbitrary (x, y) coordinates."""
 
@@ -289,11 +290,14 @@ class HeatmapDataset(BaseTrackingDataset):
         # frame
         new_nans = torch.logical_or(
             torch.lt(keypoints[:, 0], torch.tensor(0)),
-            torch.lt(keypoints[:, 1], torch.tensor(0)))
+            torch.lt(keypoints[:, 1], torch.tensor(0)),
+        )
         new_nans = torch.logical_or(
-            new_nans, torch.ge(keypoints[:, 0], torch.tensor(self.width)))
+            new_nans, torch.ge(keypoints[:, 0], torch.tensor(self.width))
+        )
         new_nans = torch.logical_or(
-            new_nans, torch.ge(keypoints[:, 1], torch.tensor(self.height)))
+            new_nans, torch.ge(keypoints[:, 1], torch.tensor(self.height))
+        )
         keypoints[new_nans, :] = torch.nan
 
         y_heatmap = generate_heatmaps(
