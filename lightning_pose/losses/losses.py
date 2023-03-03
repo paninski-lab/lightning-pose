@@ -595,7 +595,7 @@ class UnimodalLoss(Loss):
             clean predictions: (num_valid_keypoints, heatmap_height, heatmap_width), concatenated across different images and keypoints
         """
         # use confidences to get rid of unsupervised targets with likely occlusions
-        idxs_ignore = (confidences < self.prob_threshold)
+        idxs_ignore = confidences < self.prob_threshold
 
         return targets[~idxs_ignore], predictions[~idxs_ignore]
 
