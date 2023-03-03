@@ -186,4 +186,5 @@ metrics for both labeled frames and unlabeled videos:
     * Pose PCA error (if `data.columns_for_singleview_pca` is not `null` in the config file)
     * Multi-view consistency error (if `data.mirrored_column_matches` is not `null` in the config 
     file)
+
 See the documentation [here](docs/apps.md).
