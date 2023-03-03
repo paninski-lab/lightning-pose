@@ -170,11 +170,11 @@ def _resize_keypoints(cfg, keypoints_pred, orig_to_resize):
     y_resize = cfg.data.image_resize_dims.height
     y_og = cfg.data.image_orig_dims.height
     if orig_to_resize:
-        sx = (x_resize / x_og)
-        sy = (y_resize / y_og)
+        sx = x_resize / x_og
+        sy = y_resize / y_og
     else:
-        sx = (x_og / x_resize)
-        sy = (y_og / y_resize)
+        sx = x_og / x_resize
+        sy = y_og / y_resize
     if isinstance(keypoints_pred, np.ndarray):
         keypoints_resize = np.copy(keypoints_pred)
     else:
