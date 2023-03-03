@@ -6,7 +6,9 @@ import pytest
 from lightning_pose.utils.tests import run_model_test
 
 
-def test_supervised_regression(cfg, base_data_module, video_dataloader, trainer, remove_logs):
+def test_supervised_regression(
+    cfg, base_data_module, video_dataloader, trainer, remove_logs
+):
     """Test the initialization and training of a supervised regression model."""
 
     cfg_tmp = copy.deepcopy(cfg)
@@ -22,7 +24,8 @@ def test_supervised_regression(cfg, base_data_module, video_dataloader, trainer,
 
 
 def test_supervised_regression_context(
-        cfg_context, base_data_module_context, video_dataloader, trainer, remove_logs):
+    cfg_context, base_data_module_context, video_dataloader, trainer, remove_logs
+):
     """Test the initialization and training of a supervised regression model.
 
     NOTE: the toy dataset is not a proper context dataset
@@ -42,7 +45,11 @@ def test_supervised_regression_context(
 
 
 def test_semisupervised_regression_temporal(
-    cfg, base_data_module_combined, video_dataloader, trainer, remove_logs,
+    cfg,
+    base_data_module_combined,
+    video_dataloader,
+    trainer,
+    remove_logs,
 ):
     """Test the initialization and training of an unsupervised regression model."""
 
@@ -59,7 +66,11 @@ def test_semisupervised_regression_temporal(
 
 
 def test_semisupervised_regression_pcasingleview_context(
-    cfg_context, base_data_module_combined_context, video_dataloader, trainer, remove_logs,
+    cfg_context,
+    base_data_module_combined_context,
+    video_dataloader,
+    trainer,
+    remove_logs,
 ):
     """Test the initialization and training of an semi-supervised regression context model.
 

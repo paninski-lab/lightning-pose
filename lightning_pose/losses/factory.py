@@ -39,7 +39,8 @@ class LossFactory(pl.LightningModule):
         loss_classes_dict = get_loss_classes()
         for loss, params in self.losses_params_dict.items():
             self.loss_instance_dict[loss] = loss_classes_dict[loss](
-                data_module=self.data_module, **params)
+                data_module=self.data_module, **params
+            )
 
     def _initialize_weight_parameter_dict(self):
         if self.learn_weights:

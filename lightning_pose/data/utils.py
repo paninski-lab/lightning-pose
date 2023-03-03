@@ -16,6 +16,7 @@ patch_typeguard()  # use before @typechecked
 # below are a bunch of classes that streamline data typechecking
 class BaseLabeledExampleDict(TypedDict):
     """Return type when calling __getitem__() on BaseTrackingDataset."""
+
     images: Union[
         TensorType["RGB":3, "image_height", "image_width"],
         TensorType["frames", "RGB":3, "image_height", "image_width"],
@@ -26,11 +27,13 @@ class BaseLabeledExampleDict(TypedDict):
 
 class HeatmapLabeledExampleDict(BaseLabeledExampleDict):
     """Return type when calling __getitem__() on HeatmapTrackingDataset."""
+
     heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width"]
 
 
 class BaseLabeledBatchDict(TypedDict):
     """Batch type for base labeled data."""
+
     images: Union[
         TensorType["batch", "RGB":3, "image_height", "image_width", float],
         TensorType["batch", "frames", "RGB":3, "image_height", "image_width", float],
@@ -41,11 +44,13 @@ class BaseLabeledBatchDict(TypedDict):
 
 class HeatmapLabeledBatchDict(BaseLabeledBatchDict):
     """Batch type for heatmap labeled data."""
+
     heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width", float]
 
 
 class UnlabeledBatchDict(TypedDict):
     """Batch type for unlabeled data."""
+
     frames: Union[
         TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
         TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float],
@@ -67,18 +72,21 @@ class UnlabeledBatchDict(TypedDict):
 
 class SemiSupervisedBatchDict(TypedDict):
     """Batch type for base labeled+unlabeled data."""
+
     labeled: BaseLabeledBatchDict
     unlabeled: UnlabeledBatchDict
 
 
 class SemiSupervisedHeatmapBatchDict(TypedDict):
     """Batch type for heatmap labeled+unlabeled data."""
+
     labeled: HeatmapLabeledBatchDict
     unlabeled: UnlabeledBatchDict
 
 
 class SemiSupervisedDataLoaderDict(TypedDict):
     """Return type when calling train/val/test_dataloader() on semi-supervised models."""
+
     labeled: torch.utils.data.DataLoader
     unlabeled: DALIGenericIterator
 
@@ -354,10 +362,10 @@ def compute_num_train_frames(
 @typechecked
 def generate_heatmaps(
     keypoints: TensorType["batch", "num_keypoints", 2],
-    height: int,  
-    width: int,  
-    output_shape: Tuple[int, int],  
-    sigma: Union[float, int] = 1.25, 
+    height: int,
+    width: int,
+    output_shape: Tuple[int, int],
+    sigma: Union[float, int] = 1.25,
 ) -> TensorType["batch", "num_keypoints", "height", "width"]:
     """Generate 2D Gaussian heatmaps from mean and sigma.
 
@@ -381,7 +389,7 @@ def generate_heatmaps(
     xv = torch.arange(out_width, device=keypoints.device)
     yv = torch.arange(out_height, device=keypoints.device)
     # note flipped order because of pytorch's ij and numpy's xy indexing for meshgrid
-    xx, yy = torch.meshgrid(yv, xv, indexing='ij')
+    xx, yy = torch.meshgrid(yv, xv, indexing="ij")
     # adds batch and num_keypoints dimensions to grids
     xx = xx.unsqueeze(0).unsqueeze(0)
     yy = yy.unsqueeze(0).unsqueeze(0)
@@ -391,7 +399,7 @@ def generate_heatmaps(
     heatmaps = (yy - keypoints[:, :, :, :1]) ** 2  # also flipped order here
     heatmaps += (xx - keypoints[:, :, :, 1:]) ** 2  # also flipped order here
     heatmaps *= -1
-    heatmaps /= 2 * sigma**2
+    heatmaps /= 2 * sigma ** 2
     heatmaps = torch.exp(heatmaps)
     # normalize all heatmaps to one
     heatmaps = heatmaps / torch.sum(heatmaps, dim=(2, 3), keepdim=True)
@@ -444,7 +452,7 @@ def evaluate_heatmaps_at_location(
 @typechecked
 def undo_affine_transform(
     keypoints: TensorType["seq_len", "num_keypoints", 2],
-    transform: Union[TensorType["seq_len", 2, 3], TensorType[2, 3]]
+    transform: Union[TensorType["seq_len", 2, 3], TensorType[2, 3]],
 ) -> TensorType["seq_len", "num_keypoints", 2]:
 
     # add 1s to get keypoints in projective geometry coords

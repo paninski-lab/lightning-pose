@@ -96,7 +96,7 @@ def load_label_csv_from_cfg(cfg: Union[DictConfig, dict]) -> pd.DataFrame:
 def get_keypoint_names(
     cfg: Optional[DictConfig] = None,
     csv_file: Optional[str] = None,
-    header_rows: Optional[list] = None
+    header_rows: Optional[list] = None,
 ) -> List[str]:
     if os.path.exists(csv_file):
         if header_rows is None:
@@ -110,10 +110,10 @@ def get_keypoint_names(
         if header_rows == [1, 2] or header_rows == [0, 1]:
             # self.keypoint_names = csv_data.columns.levels[0]
             # ^this returns a sorted list for some reason, don't want that
-            keypoint_names = [b[0] for b in csv_data.columns if b[1] == 'x']
+            keypoint_names = [b[0] for b in csv_data.columns if b[1] == "x"]
         elif header_rows == [0, 1, 2]:
             # self.keypoint_names = csv_data.columns.levels[1]
-            keypoint_names = [b[1] for b in csv_data.columns if b[2] == 'x']
+            keypoint_names = [b[1] for b in csv_data.columns if b[2] == "x"]
     else:
         keypoint_names = ["bp_%i" % n for n in range(cfg.data.num_targets // 2)]
     return keypoint_names
@@ -122,6 +122,7 @@ def get_keypoint_names(
 # --------------------------------------------------------------------------------------
 # Path handling functions for running toy dataset
 # --------------------------------------------------------------------------------------
+
 
 @typechecked
 def return_absolute_path(possibly_relative_path: str, n_dirs_back=3) -> str:
@@ -171,7 +172,7 @@ def return_absolute_data_paths(data_cfg: DictConfig) -> Tuple[str, str]:
 def get_videos_in_dir(video_dir: str) -> List[str]:
     # gather videos to process
     # TODO: check if you're give a path to a single video?
-    #pretty_print_str(string="Looking inside %s..." % video_dir)
+    # pretty_print_str(string="Looking inside %s..." % video_dir)
     assert os.path.isdir(video_dir)
     all_files = [os.path.join(video_dir, f) for f in os.listdir(video_dir)]
     video_files = []
@@ -236,6 +237,7 @@ def check_video_paths(video_paths: Union[List[str], str]) -> list:
 # --------------------------------------------------------------------------------------
 # Path handling for predictions on new videos
 # --------------------------------------------------------------------------------------
+
 
 @typechecked
 class VideoPredPathHandler:

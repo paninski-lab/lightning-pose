@@ -12,7 +12,7 @@ def test_empirical_epsilon():
     ee = EmpiricalEpsilon(percentile=90)
 
     # numpy array as input
-    loss = np.arange(101, dtype='float')
+    loss = np.arange(101, dtype="float")
     p = ee(loss)
     assert p == 90
 
