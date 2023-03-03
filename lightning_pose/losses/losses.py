@@ -363,10 +363,7 @@ class TemporalLoss(Loss):
     ) -> None:
         super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
         self.loss_name = "temporal"
-
-        self.prob_threshold = torch.tensor(
-            prob_threshold, dtype=torch.float, device=self.device
-        )
+        self.prob_threshold = torch.tensor(prob_threshold, dtype=torch.float, device=self.device)
 
     def rectify_epsilon(
         self, loss: TensorType["batch_minus_one", "num_keypoints"]
