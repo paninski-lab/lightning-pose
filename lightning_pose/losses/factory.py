@@ -1,6 +1,6 @@
 """High-level loss class that orchestrates the individual losses."""
 
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked

@@ -8,7 +8,7 @@ import torch
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
 from typing import List, Literal, Optional, Tuple, Union, Dict, Any, TypedDict
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 
 # patch_typeguard()  # use before #@typechecked
 

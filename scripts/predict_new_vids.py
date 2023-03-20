@@ -5,7 +5,7 @@ from moviepy.editor import VideoFileClip
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
 import os
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 from typeguard import typechecked
 
 # from lightning_pose.utils.predictions import predict_single_video

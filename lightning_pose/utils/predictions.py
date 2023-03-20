@@ -5,7 +5,7 @@ import numpy as np
 from omegaconf import DictConfig, OmegaConf
 import os
 import pandas as pd
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 from pytorch_lightning import LightningModule
 from pytorch_lightning import LightningDataModule
 from skimage.draw import disk

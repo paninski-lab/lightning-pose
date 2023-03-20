@@ -3,7 +3,7 @@
 import hydra
 from omegaconf import DictConfig
 import os
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 import numpy as np
 
