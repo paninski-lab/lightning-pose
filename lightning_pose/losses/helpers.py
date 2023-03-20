@@ -6,17 +6,17 @@ from typeguard import typechecked
 from torchtyping import TensorType, patch_typeguard
 from typing import Tuple, Union, Dict, List, Literal
 
-# patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before #@typechecked
 
 
 class EmpiricalEpsilon:
     """Find percentile value of a given loss tensor."""
 
-    @typechecked
+    #@typechecked
     def __init__(self, percentile: float) -> None:
         self.percentile = percentile
 
-    @typechecked
+    #@typechecked
     def __call__(self, loss: Union[torch.Tensor, np.array]) -> float:
         """Compute the percentile of some loss, to use an for epsilon-insensitive loss.
 
@@ -34,7 +34,7 @@ class EmpiricalEpsilon:
         return np.nanpercentile(flattened_loss, self.percentile, axis=0)
 
 
-@typechecked
+#@typechecked
 def convert_dict_values_to_tensors(
     param_dict: Dict[str, Union[np.array, float]],
     device: Union[Literal["cpu", "cuda"], torch.device],

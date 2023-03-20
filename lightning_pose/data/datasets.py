@@ -18,10 +18,10 @@ from lightning_pose.utils.io import get_keypoint_names
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before #@typechecked
 
 
-@typechecked
+#@typechecked
 class BaseTrackingDataset(torch.utils.data.Dataset):
     """Base dataset that contains images and keypoints as (x, y) pairs."""
 
@@ -218,7 +218,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
 
 # the only addition here, should be the heatmap creation method.
-@typechecked
+#@typechecked
 class HeatmapDataset(BaseTrackingDataset):
     """Heatmap dataset that contains the images and keypoints in 2D arrays."""
 
