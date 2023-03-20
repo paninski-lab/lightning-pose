@@ -304,7 +304,7 @@ def predict_dataset(
         model.to("cuda:%i" % gpu_id)
 
     if trainer is None:
-        trainer = pl.Trainer(gpus=[gpu_id])
+        trainer = pl.Trainer(devices=[gpu_id], accelerator="auto")
 
     labeled_preds = trainer.predict(
         model=model,
