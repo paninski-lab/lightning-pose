@@ -351,7 +351,8 @@ def trainer(cfg) -> pl.Trainer:
     gpus = get_gpu_list_from_cfg(cfg)
 
     trainer = pl.Trainer(
-        gpus=gpus,
+        accelerator="gpu", # TODO: control from outside
+        devices=1, # TODO: control from outside
         max_epochs=2,
         min_epochs=2,
         check_val_every_n_epoch=1,
