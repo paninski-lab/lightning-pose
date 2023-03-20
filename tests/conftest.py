@@ -10,7 +10,7 @@ import imgaug.augmenters as iaa
 from omegaconf import ListConfig, OmegaConf
 import os
 import pytest
-import pytorch_lightning as pl
+import lightning as L
 import shutil
 import torch
 from typing import Callable, List, Optional
@@ -337,11 +337,11 @@ def video_dataloader(cfg, base_dataset, video_list) -> LitDaliWrapper:
 
 
 @pytest.fixture
-def trainer(cfg) -> pl.Trainer:
+def trainer(cfg) -> L.Trainer:
     """Create a basic pytorch lightning trainer for testing models."""
 
-    ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(monitor="val_supervised_loss")
-    transfer_unfreeze_callback = pl.callbacks.BackboneFinetuning(
+    ckpt_callback = L.callbacks.model_checkpoint.ModelCheckpoint(monitor="val_supervised_loss")
+    transfer_unfreeze_callback = L.callbacks.BackboneFinetuning(
         unfreeze_backbone_at_epoch=10,
         lambda_func=lambda epoch: 1.5,
         backbone_initial_ratio_lr=0.1,
@@ -350,7 +350,7 @@ def trainer(cfg) -> pl.Trainer:
     )
     gpus = get_gpu_list_from_cfg(cfg)
 
-    trainer = pl.Trainer(
+    trainer = L.Trainer(
         accelerator="gpu", # TODO: control from outside
         devices=1, # TODO: control from outside
         max_epochs=2,
