@@ -21,13 +21,13 @@ from lightning_pose.data.utils import (
     SemiSupervisedHeatmapBatchDict,
 )
 
-# patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before #@typechecked
 
 MULTISTEPLR_MILESTONES_DEFAULT = [100, 200, 300]
 MULTISTEPLR_GAMMA_DEFAULT = 0.5
 
 
-@typechecked
+#@typechecked
 def grab_layers_sequential(model, last_layer_ind: int) -> torch.nn.Sequential:
     """Package selected number of layers into a nn.Sequential object.
 
@@ -43,7 +43,7 @@ def grab_layers_sequential(model, last_layer_ind: int) -> torch.nn.Sequential:
     return nn.Sequential(*layers)
 
 
-@typechecked
+#@typechecked
 def grab_layers_sequential_3d(model, last_layer_ind: int) -> torch.nn.Sequential:
     """This is to use a 3d model to extract features"""
     # the AvgPool3d halves the feature maps dims
@@ -52,7 +52,7 @@ def grab_layers_sequential_3d(model, last_layer_ind: int) -> torch.nn.Sequential
     return nn.Sequential(*layers)
 
 
-@typechecked
+#@typechecked
 def get_context_from_sequence(
     img_seq: Union[
         TensorType["seq_len", "RGB":3, "image_height", "image_width"],
@@ -80,7 +80,7 @@ def get_context_from_sequence(
     return train_seq
 
 
-@typechecked
+#@typechecked
 class BaseFeatureExtractor(LightningModule):
     """Object that contains the base resnet feature extractor."""
 
@@ -358,7 +358,7 @@ class BaseFeatureExtractor(LightningModule):
         }
 
 
-@typechecked
+#@typechecked
 class BaseSupervisedTracker(BaseFeatureExtractor):
     """Base class for supervised trackers."""
 
@@ -440,7 +440,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         return params
 
 
-@typechecked
+#@typechecked
 class SemiSupervisedTrackerMixin(object):
     """Mixin class providing training step function for semi-supervised models."""
 

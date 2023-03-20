@@ -20,10 +20,10 @@ from lightning_pose.utils.io import check_video_paths
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before #@typechecked
 
 
-@typechecked
+#@typechecked
 class BaseDataModule(pl.LightningDataModule):
     """Splits a labeled dataset into train, val, and test data loaders."""
 
@@ -143,7 +143,7 @@ class BaseDataModule(pl.LightningDataModule):
         )
 
 
-@typechecked
+#@typechecked
 class UnlabeledDataModule(BaseDataModule):
     """Data module that contains labeled and unlabled data loaders."""
 

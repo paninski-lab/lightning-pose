@@ -9,13 +9,13 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.losses.losses import get_loss_classes
 
-# patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before #@typechecked
 
 
 class LossFactory(pl.LightningModule):
     """Factory object that contains an object for each specified loss."""
 
-    @typechecked
+    #@typechecked
     def __init__(
         self,
         losses_params_dict: Dict[str, dict],
@@ -58,7 +58,7 @@ class LossFactory(pl.LightningModule):
             # no parameter module optimized
             self.loss_weights_parameter_dict = {}
 
-    @typechecked
+    #@typechecked
     def __call__(
         self,
         stage: Optional[Literal["train", "val", "test"]] = None,

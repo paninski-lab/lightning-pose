@@ -37,10 +37,10 @@ from lightning_pose.utils.io import return_absolute_data_paths
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before #@typechecked
 
 
-@typechecked
+#@typechecked
 def get_devices(device: Literal["gpu", "cuda", "cpu"]) -> Dict[str, str]:
     """Get pytorch and dali device strings."""
     if device == "gpu" or device == "cuda":
@@ -54,7 +54,7 @@ def get_devices(device: Literal["gpu", "cuda", "cpu"]) -> Dict[str, str]:
     return {"device_pt": device_pt, "device_dali": device_dali}
 
 
-@typechecked
+#@typechecked
 def get_cfg_file(cfg_file: Union[str, DictConfig]):
     """Load yaml configuration files."""
     if isinstance(cfg_file, str):
@@ -260,7 +260,7 @@ class PredictionHandler:
         return df
 
 
-@typechecked
+#@typechecked
 def predict_dataset(
     cfg: DictConfig,
     data_module: LightningDataModule,
@@ -319,7 +319,7 @@ def predict_dataset(
     return labeled_preds_df
 
 
-@typechecked
+#@typechecked
 def predict_single_video(
     video_file: str,
     ckpt_file: str,
@@ -448,7 +448,7 @@ def predict_single_video(
     return preds_df
 
 
-@typechecked
+#@typechecked
 def _predict_frames(
     cfg: DictConfig,
     model: LightningModule,
@@ -549,7 +549,7 @@ def _predict_frames(
         return keypoints_np, confidence_np, heatmaps_np
 
 
-@typechecked
+#@typechecked
 def make_dlc_pandas_index(cfg: DictConfig, keypoint_names: List[str]) -> pd.MultiIndex:
     xyl_labels = ["x", "y", "likelihood"]
     pdindex = pd.MultiIndex.from_product(
@@ -559,7 +559,7 @@ def make_dlc_pandas_index(cfg: DictConfig, keypoint_names: List[str]) -> pd.Mult
     return pdindex
 
 
-@typechecked
+#@typechecked
 def get_model_class(map_type: str, semi_supervised: bool) -> Type[LightningModule]:
     """[summary]
 
@@ -597,7 +597,7 @@ def get_model_class(map_type: str, semi_supervised: bool) -> Type[LightningModul
     return Model
 
 
-@typechecked
+#@typechecked
 def load_model_from_checkpoint(
     cfg: DictConfig, ckpt_file: str, eval: bool = False, data_module=None,
 ) -> LightningModule:
@@ -662,7 +662,7 @@ def load_model_from_checkpoint(
     return model
 
 
-@typechecked
+#@typechecked
 def make_cmap(number_colors: int, cmap: str = "cool"):
     color_class = plt.cm.ScalarMappable(cmap=cmap)
     C = color_class.to_rgba(np.linspace(0, 1, number_colors))

@@ -7,7 +7,7 @@ from typeguard import typechecked
 from typing import Any, List, Tuple, Union, Optional
 
 
-@typechecked
+#@typechecked
 def ckpt_path_from_base_path(
     base_path: str,
     model_name: str,
@@ -46,7 +46,7 @@ def ckpt_path_from_base_path(
     return model_ckpt_path
 
 
-@typechecked
+#@typechecked
 def check_if_semi_supervised(
     losses_to_use: Union[ListConfig, list, None] = None
 ) -> bool:
@@ -76,7 +76,7 @@ def check_if_semi_supervised(
     return semi_supervised
 
 
-@typechecked
+#@typechecked
 def load_label_csv_from_cfg(cfg: Union[DictConfig, dict]) -> pd.DataFrame:
     """Helper function for easy loading.
 
@@ -92,7 +92,7 @@ def load_label_csv_from_cfg(cfg: Union[DictConfig, dict]) -> pd.DataFrame:
     return labels_df
 
 
-@typechecked
+#@typechecked
 def get_keypoint_names(
     cfg: Optional[DictConfig] = None,
     csv_file: Optional[str] = None,
@@ -124,7 +124,7 @@ def get_keypoint_names(
 # --------------------------------------------------------------------------------------
 
 
-@typechecked
+#@typechecked
 def return_absolute_path(possibly_relative_path: str, n_dirs_back=3) -> str:
     """Return absolute path from possibly relative path."""
     if os.path.isabs(possibly_relative_path):
@@ -143,7 +143,7 @@ def return_absolute_path(possibly_relative_path: str, n_dirs_back=3) -> str:
     return abs_path
 
 
-@typechecked
+#@typechecked
 def return_absolute_data_paths(data_cfg: DictConfig) -> Tuple[str, str]:
     """Generate absolute path for our example toy data.
 
@@ -168,7 +168,7 @@ def return_absolute_data_paths(data_cfg: DictConfig) -> Tuple[str, str]:
     return data_dir, video_dir
 
 
-@typechecked
+#@typechecked
 def get_videos_in_dir(video_dir: str) -> List[str]:
     # gather videos to process
     # TODO: check if you're give a path to a single video?
@@ -211,7 +211,7 @@ def get_videos_in_dir(video_dir: str) -> List[str]:
     #         )
 
 
-@typechecked
+#@typechecked
 def check_video_paths(video_paths: Union[List[str], str]) -> list:
     # get input data
     if isinstance(video_paths, list):
@@ -239,7 +239,7 @@ def check_video_paths(video_paths: Union[List[str], str]) -> list:
 # --------------------------------------------------------------------------------------
 
 
-@typechecked
+#@typechecked
 class VideoPredPathHandler:
     """class that defines filename for a predictions .csv file, given video file and
     model specs.
