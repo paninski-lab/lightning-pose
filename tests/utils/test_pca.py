@@ -5,7 +5,8 @@ import pytest
 import torch
 
 from lightning_pose.utils.pca import KeypointPCA
-
+# from pytorch_lightning.trainer.supporters import CombinedLoader
+from lightning.pytorch.utilities import CombinedLoader
 
 def check_lists_equal(list_1, list_2):
     return len(list_1) == len(list_2) and sorted(list_1) == sorted(list_2)
@@ -16,7 +17,6 @@ def test_train_loader_iter(base_data_module_combined):
     # TODO: this is just messing around with dataloaders
     # good educationally, not great as a test. keep somehow.
     dataset_length = len(base_data_module_combined.train_dataset)
-    from pytorch_lightning.trainer.supporters import CombinedLoader
 
     loaders = base_data_module_combined.train_dataloader()
     combined_loader = CombinedLoader(loaders)

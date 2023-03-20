@@ -1,7 +1,8 @@
 """Test datamodule functionality."""
 
 import pytest
-from pytorch_lightning.trainer.supporters import CombinedLoader
+# from pytorch_lightning.trainer.supporters import CombinedLoader
+from lightning.pytorch.utilities import CombinedLoader
 import torch
 
 
