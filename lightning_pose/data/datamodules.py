@@ -3,7 +3,7 @@
 from nvidia.dali.plugin.pytorch import LastBatchPolicy
 import os
 from omegaconf import DictConfig
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 from torch.utils.data import DataLoader, random_split
 from torchtyping import patch_typeguard

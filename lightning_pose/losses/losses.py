@@ -21,7 +21,7 @@ The general flow of each loss class is as follows:
 
 from kornia.losses import js_div_loss_2d, kl_div_loss_2d
 from omegaconf import ListConfig
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 from torch.nn import functional as F
 from torchtyping import TensorType, patch_typeguard

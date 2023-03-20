@@ -1,5 +1,5 @@
 from pytorch_lightning.callbacks import Callback
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 
 
