@@ -9,7 +9,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.losses.losses import get_loss_classes
 
-patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before @typechecked
 
 
 class LossFactory(pl.LightningModule):
