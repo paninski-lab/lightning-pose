@@ -25,7 +25,7 @@ from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.base import BaseSupervisedTracker, SemiSupervisedTrackerMixin
 
-patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before @typechecked
 
 
 @typechecked

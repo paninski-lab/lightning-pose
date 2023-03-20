@@ -15,7 +15,7 @@ from lightning_pose.losses.helpers import EmpiricalEpsilon, convert_dict_values_
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before @typechecked
 
 # TODO: think about exporting out the data-getting procedure to its own class so that we
 # can support general arrays, like arrays with predictions.

@@ -10,7 +10,7 @@ from typeguard import typechecked
 from typing import List, Literal, Optional, Tuple, Union, Dict, Any, TypedDict
 import pytorch_lightning as pl
 
-patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before @typechecked
 
 
 # below are a bunch of classes that streamline data typechecking

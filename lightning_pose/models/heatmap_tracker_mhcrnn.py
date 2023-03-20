@@ -18,7 +18,7 @@ from lightning_pose.losses.factory import LossFactory
 from lightning_pose.models.base import SemiSupervisedTrackerMixin
 from lightning_pose.models.heatmap_tracker import HeatmapTracker
 
-patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before @typechecked
 
 
 @typechecked

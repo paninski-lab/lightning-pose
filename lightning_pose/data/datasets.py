@@ -18,7 +18,7 @@ from lightning_pose.utils.io import get_keypoint_names
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before @typechecked
 
 
 @typechecked

@@ -6,7 +6,7 @@ from typeguard import typechecked
 from torchtyping import TensorType, patch_typeguard
 from typing import Tuple, Union, Dict, List, Literal
 
-patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before @typechecked
 
 
 class EmpiricalEpsilon:

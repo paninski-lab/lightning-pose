@@ -21,7 +21,7 @@ from lightning_pose.data.utils import (
     SemiSupervisedHeatmapBatchDict,
 )
 
-patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before @typechecked
 
 MULTISTEPLR_MILESTONES_DEFAULT = [100, 200, 300]
 MULTISTEPLR_GAMMA_DEFAULT = 0.5
