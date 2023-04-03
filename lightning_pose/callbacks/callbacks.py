@@ -1,4 +1,4 @@
-from pytorch_lightning.callbacks import Callback
+from lightning.pytorch.callbacks import Callback
 import lightning.pytorch as pl
 import torch
 

@@ -18,10 +18,13 @@ def test_train_loader_iter(base_data_module_combined):
     # good educationally, not great as a test. keep somehow.
     dataset_length = len(base_data_module_combined.train_dataset)
 
-    loaders = base_data_module_combined.train_dataloader()
-    combined_loader = CombinedLoader(loaders)
+    combined_loader = base_data_module_combined.train_dataloader()
+    # the default mode of CombinedLoader changes in Lightning 2.0. we manually take the iterbles inside the combined_loader, and make a new class that cycles only over the labeled dataloader.
+    combined_loader = CombinedLoader(combined_loader.iterables, mode="min_size")
     image_counter = 0
     for i, batch in enumerate(combined_loader):
+        print(i)
+
         image_counter += len(batch["labeled"]["keypoints"])
         assert type(batch) is dict
         assert type(batch["labeled"]) is dict

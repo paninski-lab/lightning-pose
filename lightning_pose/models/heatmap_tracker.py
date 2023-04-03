@@ -143,7 +143,9 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.rmse_loss = RegressionRMSELoss()
 
         # necessary so we don't have to pass in model arguments when loading
-        self.save_hyperparameters(ignore="loss_factory")  # cannot be pickled
+        # added loss_factory_unsupervised which might come from the SemiSupervisedHeatmapTracker.__super__(). Otherwise it's ignored.
+        # that's important so that it doesn't try to pickle the dali loaders.
+        self.save_hyperparameters(ignore=["loss_factory", "loss_factory_unsupervised"])  # cannot be pickled
 
     @property
     def num_filters_for_upsampling(self) -> int:

@@ -17,6 +17,8 @@ from lightning_pose.data.utils import (
     SemiSupervisedDataLoaderDict,
 )
 from lightning_pose.utils.io import check_video_paths
+from lightning.pytorch.utilities import CombinedLoader
+
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -230,4 +232,4 @@ class UnlabeledDataModule(BaseDataModule):
             ),
             unlabeled=self.unlabeled_dataloader,
         )
-        return loader
+        return CombinedLoader(loader, mode="max_size_cycle")

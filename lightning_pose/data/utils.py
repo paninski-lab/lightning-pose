@@ -198,7 +198,7 @@ class DataExtractor(object):
         else:
             # if we have a dictionary of dataloaders, we take the loader called
             # "labeled" (the loader called "unlabeled" doesn't have keypoints)
-            labeled_loader = loader["labeled"]
+            labeled_loader = loader.iterables["labeled"]
         return labeled_loader
 
     def iterate_over_dataloader(
