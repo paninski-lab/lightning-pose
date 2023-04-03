@@ -1,7 +1,7 @@
 """Base class for backbone that acts as a feature extractor."""
 
 from omegaconf import DictConfig
-from pytorch_lightning import LightningModule
+from lightning.pytorch import LightningModule
 import torch
 from torch import nn
 from torch.optim import Adam
