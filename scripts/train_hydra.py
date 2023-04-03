@@ -132,7 +132,8 @@ def train(cfg: DictConfig):
 
     # set up trainer
     trainer = pl.Trainer(  # TODO: be careful with devices when scaling to multiple gpus
-        gpus=gpus,
+        accelerator="gpu", # TODO: control from outside
+        devices=1, # TODO: control from outside
         max_epochs=cfg.training.max_epochs,
         min_epochs=cfg.training.min_epochs,
         check_val_every_n_epoch=cfg.training.check_val_every_n_epoch,
@@ -141,7 +142,6 @@ def train(cfg: DictConfig):
         logger=logger,
         limit_train_batches=limit_train_batches,
         accumulate_grad_batches=cfg.training.accumulate_grad_batches,
-        multiple_trainloader_mode=cfg.training.multiple_trainloader_mode,
         profiler=cfg.training.profiler,
     )
 
