@@ -10,7 +10,7 @@ import imgaug.augmenters as iaa
 from omegaconf import ListConfig, OmegaConf
 import os
 import pytest
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import shutil
 import torch
 from typing import Callable, List, Optional
@@ -232,7 +232,7 @@ def base_data_module_combined(cfg, base_dataset) -> UnlabeledDataModule:
     data_module = get_data_module(
         cfg_tmp,
         dataset=base_dataset,
-        video_dir=os.path.join(TOY_DATA_ROOT_DIR, "unlabeled_videos")
+        video_dir=os.path.join(TOY_DATA_ROOT_DIR, "unlabeled_videos"),
     )
     # data_module.setup()  # already done in UnlabeledDataModule constructor
 
@@ -245,7 +245,9 @@ def base_data_module_combined(cfg, base_dataset) -> UnlabeledDataModule:
 
 
 @pytest.fixture
-def base_data_module_combined_context(cfg_context, base_dataset_context) -> UnlabeledDataModule:
+def base_data_module_combined_context(
+    cfg_context, base_dataset_context
+) -> UnlabeledDataModule:
     """Create a combined data module for regression models."""
 
     # setup
@@ -254,7 +256,7 @@ def base_data_module_combined_context(cfg_context, base_dataset_context) -> Unla
     data_module = get_data_module(
         cfg_tmp,
         dataset=base_dataset_context,
-        video_dir=os.path.join(TOY_DATA_ROOT_DIR, "unlabeled_videos")
+        video_dir=os.path.join(TOY_DATA_ROOT_DIR, "unlabeled_videos"),
     )
     # data_module.setup()  # already done in UnlabeledDataModule constructor
 
@@ -276,7 +278,7 @@ def heatmap_data_module_combined(cfg, heatmap_dataset) -> UnlabeledDataModule:
     data_module = get_data_module(
         cfg_tmp,
         dataset=heatmap_dataset,
-        video_dir=os.path.join(TOY_DATA_ROOT_DIR, "unlabeled_videos")
+        video_dir=os.path.join(TOY_DATA_ROOT_DIR, "unlabeled_videos"),
     )
     # data_module.setup()  # already done in UnlabeledDataModule constructor
 
@@ -290,7 +292,8 @@ def heatmap_data_module_combined(cfg, heatmap_dataset) -> UnlabeledDataModule:
 
 @pytest.fixture
 def heatmap_data_module_combined_context(
-        cfg_context, heatmap_dataset_context) -> UnlabeledDataModule:
+    cfg_context, heatmap_dataset_context
+) -> UnlabeledDataModule:
     """Create a combined data module for heatmap models."""
 
     # setup
@@ -299,7 +302,7 @@ def heatmap_data_module_combined_context(
     data_module = get_data_module(
         cfg_tmp,
         dataset=heatmap_dataset_context,
-        video_dir=os.path.join(TOY_DATA_ROOT_DIR, "unlabeled_videos")
+        video_dir=os.path.join(TOY_DATA_ROOT_DIR, "unlabeled_videos"),
     )
     # data_module.setup()  # already done in UnlabeledDataModule constructor
 
@@ -321,7 +324,7 @@ def video_dataloader(cfg, base_dataset, video_list) -> LitDaliWrapper:
         model_type="base",
         dali_config=cfg.dali,
         filenames=video_list,
-        resize_dims=[base_dataset.height, base_dataset.width]
+        resize_dims=[base_dataset.height, base_dataset.width],
     )
     video_dataloader = vid_pred_class()
 
@@ -348,7 +351,8 @@ def trainer(cfg) -> pl.Trainer:
     gpus = get_gpu_list_from_cfg(cfg)
 
     trainer = pl.Trainer(
-        gpus=gpus,
+        accelerator="gpu", # TODO: control from outside
+        devices=1, # TODO: control from outside
         max_epochs=2,
         min_epochs=2,
         check_val_every_n_epoch=1,
@@ -366,6 +370,7 @@ def remove_logs() -> Callable:
         base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
         logging_dir = os.path.join(base_dir, "lightning_logs")
         shutil.rmtree(logging_dir)
+
     return _remove_logs
 
 

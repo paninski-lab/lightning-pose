@@ -57,7 +57,7 @@ training:
   # epochs over which to assess validation metrics for early stopping
   early_stop_patience: 3
   # epoch at which backbone network weights begin updating
-  unfreezing_epoch: 20
+  unfreezing_epoch: 20 # was 20 in December runs; reverted.
   # dropout in final layers
   dropout_rate: 0.1
   # max training epochs; training may exit before due to early stopping
@@ -77,9 +77,6 @@ training:
   # (any dataloader that has less than limit_train_batches will be cycled over)
   # THIS IS IMPORTANT!
   limit_train_batches: null
-  # if you have two dataloaders, you keep cycling over the smaller dataset
-  # before completing the larger one
-  multiple_trainloader_mode: "max_size_cycle"
   profiler: null
   # runs K small batches of size N before doing a backwards pass.
   accumulate_grad_batches: 1
@@ -103,7 +100,7 @@ model:
   # resnet50_animalpose_apose | resnet50_animal_ap10k
   # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res
   # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
-  backbone: resnet50_animal_ap10k
+  backbone: resnet50 # resnet50_animal_ap10k
   # prediction mode - "heatmap" | "regression"
   model_type: "heatmap"
   # which heatmap loss to use
@@ -116,7 +113,7 @@ model:
 
 dali:
   general:
-    num_threads: 4 # Number of threads for data loading; can be changed
+    num_threads: 1 # Number of threads for data loading; can be changed
     device_id: 0 # GPU device id to use, can be changed
     device: gpu # "cpu" or "gpu"
     seed: 123456
@@ -127,7 +124,7 @@ dali:
 
     predict:
       # (train_batch_size + base.train.sequence_length) * 2 -> round down to nearest pow of 2
-      sequence_length: 96 # step = sequence_length by default. done internally.
+      sequence_length: 128 # step = sequence_length by default. done internally.
 
   context: # not supporting context_sequences_successive
     train: # defaults: sequence_length=5, step=sequence_length
@@ -136,7 +133,7 @@ dali:
 
     predict: # defaults: sequence_length=5, step=1
       # (train_batch_size / 4 + context.train.batch_size) * 2 -> round down to nearest pow of 2
-      batch_size: 16
+      sequence_length: 96
 
 losses:
   # loss = projection onto the discarded eigenvectors

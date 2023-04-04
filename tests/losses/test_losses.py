@@ -395,10 +395,12 @@ def test_unimodal_kl_loss():
     )
     confidences = torch.rand(size=(batch_size, num_keypoints), device=device)
 
-    heatmaps_pred = spatial_softmax2d(torch.randn(
-        size=(batch_size, num_keypoints, img_size_ds, img_size_ds),
-        device=device,
-    ))
+    heatmaps_pred = spatial_softmax2d(
+        torch.randn(
+            size=(batch_size, num_keypoints, img_size_ds, img_size_ds),
+            device=device,
+        )
+    )
     uni_loss = UnimodalLoss(
         loss_name="unimodal_kl",
         original_image_height=img_size,
@@ -437,10 +439,12 @@ def test_unimodal_js_loss():
     )
     confidences = torch.rand(size=(batch_size, num_keypoints), device=device)
 
-    heatmaps_pred = spatial_softmax2d(torch.randn(
-        size=(batch_size, num_keypoints, img_size_ds, img_size_ds),
-        device=device,
-    ))
+    heatmaps_pred = spatial_softmax2d(
+        torch.randn(
+            size=(batch_size, num_keypoints, img_size_ds, img_size_ds),
+            device=device,
+        )
+    )
     uni_loss = UnimodalLoss(
         loss_name="unimodal_js",
         original_image_height=img_size,
@@ -514,7 +518,7 @@ def test_regression_rmse_loss():
     mse, _ = mse_loss(labels, preds, stage=stage)
     rmse, _ = rmse_loss(labels, preds, stage=stage)
     assert rmse == true_rmse
-    assert mse == true_rmse**2.0
+    assert mse == true_rmse ** 2.0
 
 
 def test_get_loss_classes():

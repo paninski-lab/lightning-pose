@@ -1,6 +1,6 @@
 """High-level loss class that orchestrates the individual losses."""
 
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 from torchtyping import TensorType, patch_typeguard
 from typeguard import typechecked
@@ -9,13 +9,13 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.losses.losses import get_loss_classes
 
-patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before #@typechecked
 
 
 class LossFactory(pl.LightningModule):
     """Factory object that contains an object for each specified loss."""
 
-    @typechecked
+    #@typechecked
     def __init__(
         self,
         losses_params_dict: Dict[str, dict],
@@ -39,7 +39,8 @@ class LossFactory(pl.LightningModule):
         loss_classes_dict = get_loss_classes()
         for loss, params in self.losses_params_dict.items():
             self.loss_instance_dict[loss] = loss_classes_dict[loss](
-                data_module=self.data_module, **params)
+                data_module=self.data_module, **params
+            )
 
     def _initialize_weight_parameter_dict(self):
         if self.learn_weights:
@@ -57,7 +58,7 @@ class LossFactory(pl.LightningModule):
             # no parameter module optimized
             self.loss_weights_parameter_dict = {}
 
-    @typechecked
+    #@typechecked
     def __call__(
         self,
         stage: Optional[Literal["train", "val", "test"]] = None,

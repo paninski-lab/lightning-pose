@@ -3,7 +3,7 @@
 import hydra
 from omegaconf import DictConfig
 import os
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 import numpy as np
 
@@ -58,14 +58,17 @@ def train(cfg: DictConfig):
 
     # model
     model = get_model(cfg=cfg, data_module=data_module, loss_factories=loss_factories)
-    
-    if ("temporal" in cfg.model.losses_to_use) \
-            and model.do_context \
-            and not data_module.unlabeled_dataloader.context_sequences_successive:
+
+    if (
+        ("temporal" in cfg.model.losses_to_use)
+        and model.do_context
+        and not data_module.unlabeled_dataloader.context_sequences_successive
+    ):
         raise ValueError(
             f"Temporal loss is not compatible with non-successive context sequences. "
-            f"Please change cfg.dali.context.train.consecutive_sequences=True.")
-    
+            f"Please change cfg.dali.context.train.consecutive_sequences=True."
+        )
+
     # ----------------------------------------------------------------------------------
     # Set up and run training
     # ----------------------------------------------------------------------------------
@@ -118,16 +121,19 @@ def train(cfg: DictConfig):
             val_probability=cfg.training.val_prob,
         )
         num_train_frames = compute_num_train_frames(
-            data_splits_list[0], cfg.training.get('train_frames', None))
+            data_splits_list[0], cfg.training.get("train_frames", None)
+        )
         num_labeled_batches = int(
-            np.ceil(num_train_frames / cfg.training.train_batch_size))
+            np.ceil(num_train_frames / cfg.training.train_batch_size)
+        )
         limit_train_batches = np.max([num_labeled_batches, 10])  # 10 is minimum
     else:
         limit_train_batches = cfg.training.limit_train_batches
 
     # set up trainer
     trainer = pl.Trainer(  # TODO: be careful with devices when scaling to multiple gpus
-        gpus=gpus,
+        accelerator="gpu", # TODO: control from outside
+        devices=1, # TODO: control from outside
         max_epochs=cfg.training.max_epochs,
         min_epochs=cfg.training.min_epochs,
         check_val_every_n_epoch=cfg.training.check_val_every_n_epoch,
@@ -136,7 +142,6 @@ def train(cfg: DictConfig):
         logger=logger,
         limit_train_batches=limit_train_batches,
         accumulate_grad_batches=cfg.training.accumulate_grad_batches,
-        multiple_trainloader_mode=cfg.training.multiple_trainloader_mode,
         profiler=cfg.training.profiler,
     )
 
@@ -150,7 +155,7 @@ def train(cfg: DictConfig):
     print("Hydra output directory: {}".format(hydra_output_directory))
     # get best ckpt
     best_ckpt = os.path.abspath(trainer.checkpoint_callback.best_model_path)
-    # check if best_ckpt is a file 
+    # check if best_ckpt is a file
     if not os.path.isfile(best_ckpt):
         raise FileNotFoundError(
             "Cannot find model checkpoint. Have you trained for too few epochs?"
@@ -162,9 +167,11 @@ def train(cfg: DictConfig):
         cfg_pred.training.imgaug = "default"
         imgaug_transform_pred = get_imgaug_transform(cfg=cfg_pred)
         dataset_pred = get_dataset(
-            cfg=cfg_pred, data_dir=data_dir, imgaug_transform=imgaug_transform_pred)
+            cfg=cfg_pred, data_dir=data_dir, imgaug_transform=imgaug_transform_pred
+        )
         data_module_pred = get_data_module(
-            cfg=cfg_pred, dataset=dataset_pred, video_dir=video_dir)
+            cfg=cfg_pred, dataset=dataset_pred, video_dir=video_dir
+        )
         data_module_pred.setup()
     else:
         data_module_pred = data_module
@@ -176,8 +183,13 @@ def train(cfg: DictConfig):
     # compute and save frame-wise predictions
     preds_file = os.path.join(hydra_output_directory, "predictions.csv")
     predict_dataset(
-        cfg=cfg, trainer=trainer, model=model, data_module=data_module_pred, ckpt_file=best_ckpt,
-        preds_file=preds_file)
+        cfg=cfg,
+        trainer=trainer,
+        model=model,
+        data_module=data_module_pred,
+        ckpt_file=best_ckpt,
+        preds_file=preds_file,
+    )
     # compute and save various metrics
     try:
         compute_metrics(cfg=cfg, preds_file=preds_file, data_module=data_module_pred)
@@ -225,7 +237,8 @@ def train(cfg: DictConfig):
             # compute and save various metrics
             try:
                 compute_metrics(
-                    cfg=cfg, preds_file=prediction_csv_file, data_module=data_module_pred)
+                    cfg=cfg, preds_file=prediction_csv_file, data_module=data_module_pred
+                )
             except:
                 continue
 
@@ -244,16 +257,23 @@ def train(cfg: DictConfig):
         # build dataset/datamodule
         imgaug_transform_ood = get_imgaug_transform(cfg=cfg_ood)
         dataset_ood = get_dataset(
-            cfg=cfg_ood, data_dir=data_dir, imgaug_transform=imgaug_transform_ood)
+            cfg=cfg_ood, data_dir=data_dir, imgaug_transform=imgaug_transform_ood
+        )
         data_module_ood = get_data_module(
-            cfg=cfg_ood, dataset=dataset_ood, video_dir=video_dir)
+            cfg=cfg_ood, dataset=dataset_ood, video_dir=video_dir
+        )
         data_module_ood.setup()
         pretty_print_str("Predicting OOD images...")
         # compute and save frame-wise predictions
         preds_file_ood = os.path.join(hydra_output_directory, "predictions_new.csv")
         predict_dataset(
-            cfg=cfg_ood, trainer=trainer, model=model, data_module=data_module_ood,
-            ckpt_file=best_ckpt, preds_file=preds_file_ood)
+            cfg=cfg_ood,
+            trainer=trainer,
+            model=model,
+            data_module=data_module_ood,
+            ckpt_file=best_ckpt,
+            preds_file=preds_file_ood,
+        )
         # compute and save various metrics
         try:
             compute_metrics(cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood)

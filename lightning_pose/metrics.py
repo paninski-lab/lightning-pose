@@ -7,7 +7,7 @@ from typeguard import typechecked
 from lightning_pose.utils.pca import KeypointPCA
 
 
-@typechecked
+#@typechecked
 def pixel_error(keypoints_true: np.ndarray, keypoints_pred: np.ndarray) -> np.ndarray:
     """Root mean square error between true and predicted keypoints.
 
@@ -23,7 +23,7 @@ def pixel_error(keypoints_true: np.ndarray, keypoints_pred: np.ndarray) -> np.nd
     return pixel_error
 
 
-@typechecked
+#@typechecked
 def temporal_norm(keypoints_pred: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
     """Norm of difference between keypoints on successive time bins.
 
@@ -54,7 +54,7 @@ def temporal_norm(keypoints_pred: Union[np.ndarray, torch.Tensor]) -> np.ndarray
     return t_norm
 
 
-@typechecked
+#@typechecked
 def pca_singleview_reprojection_error(
     keypoints_pred: Union[np.ndarray, torch.Tensor],
     pca: KeypointPCA,
@@ -93,7 +93,7 @@ def pca_singleview_reprojection_error(
     return error_all
 
 
-@typechecked
+#@typechecked
 def pca_multiview_reprojection_error(
     keypoints_pred: Union[np.ndarray, torch.Tensor],
     pca: KeypointPCA,
@@ -170,11 +170,11 @@ def _resize_keypoints(cfg, keypoints_pred, orig_to_resize):
     y_resize = cfg.data.image_resize_dims.height
     y_og = cfg.data.image_orig_dims.height
     if orig_to_resize:
-        sx = (x_resize / x_og)
-        sy = (y_resize / y_og)
+        sx = x_resize / x_og
+        sy = y_resize / y_og
     else:
-        sx = (x_og / x_resize)
-        sy = (y_og / y_resize)
+        sx = x_og / x_resize
+        sy = y_og / y_resize
     if isinstance(keypoints_pred, np.ndarray):
         keypoints_resize = np.copy(keypoints_pred)
     else:

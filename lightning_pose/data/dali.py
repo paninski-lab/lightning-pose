@@ -18,7 +18,7 @@ from lightning_pose.data.utils import count_frames, UnlabeledBatchDict
 
 _DALI_DEVICE = "gpu" if torch.cuda.is_available() else "cpu"
 
-patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before #@typechecked
 
 
 # cannot typecheck due to way pipeline_def decorator consumes additional args
@@ -123,7 +123,7 @@ def video_pipe(
     return transform, matrix
 
 
-@typechecked
+# #@typechecked
 class LitDaliWrapper(DALIGenericIterator):
     """wrapper around a DALI pipeline to get batches for ptl."""
 
@@ -180,21 +180,29 @@ class LitDaliWrapper(DALIGenericIterator):
         """Modify output based on train/predict and context/non-context."""
         if self.do_context:
             if self.eval_mode == "predict":
+                # DB: the commented line was for a batch of 5-frame sequences
+                # unlabeled_batch_dict = self._dali_output_to_tensors(
+                #     batch=batch, num_sequences="multi")
+                # DB: for batch_size=1 and a single sequence of 5 frames
                 unlabeled_batch_dict = self._dali_output_to_tensors(
-                    batch=batch, num_sequences="multi")
+                    batch=batch, num_sequences="single"
+                )
             else:
                 if self.context_sequences_successive:
                     # pipeline is like for "base" model, but we reshape images further down
                     # assume batch_size=1
                     unlabeled_batch_dict = self._dali_output_to_tensors(
-                        batch=batch, num_sequences="single")
+                        batch=batch, num_sequences="single"
+                    )
                 else:
                     # grabbing independent 5-frame sequences. batch_size > 1
                     unlabeled_batch_dict = self._dali_output_to_tensors(
-                        batch=batch, num_sequences="multi")
+                        batch=batch, num_sequences="multi"
+                    )
         else:
             unlabeled_batch_dict = self._dali_output_to_tensors(
-                batch=batch, num_sequences="single")
+                batch=batch, num_sequences="single"
+            )
 
         return unlabeled_batch_dict
 
@@ -203,7 +211,7 @@ class LitDaliWrapper(DALIGenericIterator):
         return self._modify_output(out)
 
 
-@typechecked
+# #@typechecked
 class PrepareDALI(object):
     """All the DALI stuff in one place.
 
@@ -250,6 +258,16 @@ class PrepareDALI(object):
                 # non-full batch. we prefer having fewer batches but valid.
                 return int(np.floor(
                     self.frame_count / (pipe_dict["batch_size"] * pipe_dict["sequence_length"])))
+            # the case of prediction with a single sequence at a time and internal model reshapes
+            elif (pipe_dict["batch_size"]==1) and (pipe_dict["step"] == (pipe_dict["sequence_length"] - 4)):
+                if pipe_dict["step"] <= 0:
+                    raise ValueError("step cannot be 0, please modify cfg.dali.context.predict.sequence_length to be > 4")
+                # remove the first sequence
+                data_except_first_batch = self.frame_count - pipe_dict["sequence_length"]
+                # calculate how many "step"s are needed to get at least to the end
+                # count back the first sequence
+                num_iters = int(np.ceil(data_except_first_batch / pipe_dict["step"])) + 1
+                return num_iters
             else:
                 raise NotImplementedError
     
@@ -285,7 +303,7 @@ class PrepareDALI(object):
             "step": base_pred_cfg["sequence_length"],
             "batch_size": 1,
             "seed": gen_cfg["seed"],
-            "num_threads":  gen_cfg["num_threads"],
+            "num_threads": gen_cfg["num_threads"],
             "device_id": gen_cfg["device_id"],
             "random_shuffle": False,
             "device": gen_cfg["device"],
@@ -299,9 +317,9 @@ class PrepareDALI(object):
         dict_args["predict"]["context"] = {
             "filenames": filenames,
             "resize_dims": self.resize_dims,
-            "sequence_length": 5,
-            "step": 1,
-            "batch_size": context_pred_cfg["batch_size"],
+            "sequence_length": context_pred_cfg["sequence_length"],
+            "step": context_pred_cfg["sequence_length"] - 4,
+            "batch_size": 1,
             "num_threads": gen_cfg["num_threads"],
             "device_id": gen_cfg["device_id"],
             "random_shuffle": False,
@@ -309,7 +327,7 @@ class PrepareDALI(object):
             "name": "reader",
             "seed": gen_cfg["seed"],
             "pad_sequences": True,
-            "pad_last_batch": True,
+            # "pad_last_batch": True,
             "imgaug": "default",  # no imgaug when predicting
         }
 
@@ -351,9 +369,9 @@ class PrepareDALI(object):
                 "imgaug": imgaug,
             }
             # our floor above should prevent us from getting to the very final batch.
-        
+
         return dict_args
-    
+
     def _get_dali_pipe(self):
         """
         Return a DALI pipe with predefined args.
@@ -362,7 +380,7 @@ class PrepareDALI(object):
         pipe_args = self._pipe_dict[self.train_stage][self.model_type]
         pipe = video_pipe(**pipe_args)
         return pipe
-    
+
     def _setup_dali_iterator_args(self) -> dict:
         """Builds args for Lightning iterator.
 
@@ -381,7 +399,7 @@ class PrepareDALI(object):
             "do_context": False,
             "output_map": ["frames", "transforms"],
             "last_batch_policy": LastBatchPolicy.PARTIAL,
-            "auto_reset": True
+            "auto_reset": True,
         }
         dict_args["predict"]["base"] = {
             "num_iters": self.num_iters,
@@ -391,7 +409,7 @@ class PrepareDALI(object):
             "last_batch_policy": LastBatchPolicy.FILL,
             "last_batch_padded": False,
             "auto_reset": False,
-            "reader_name": "reader"
+            "reader_name": "reader",
         }
 
         # 5-frame context models
@@ -402,21 +420,21 @@ class PrepareDALI(object):
             "context_sequences_successive": self.context_sequences_successive,
             "output_map": ["frames", "transforms"],
             "last_batch_policy": LastBatchPolicy.PARTIAL,
-            "auto_reset": True
+            "auto_reset": True,
         }  # taken from datamodules.py. only difference is that we need to do context
         dict_args["predict"]["context"] = {
             "num_iters": self.num_iters,
             "eval_mode": "predict",
             "do_context": True,
             "output_map": ["frames", "transforms"],
-            "last_batch_policy": LastBatchPolicy.PARTIAL,
+            "last_batch_policy": LastBatchPolicy.FILL,  # LastBatchPolicy.PARTIAL,
             "last_batch_padded": False,
             "auto_reset": False,
-            "reader_name": "reader"
+            "reader_name": "reader",
         }
 
         return dict_args
-    
+
     def __call__(self) -> LitDaliWrapper:
         """
         Returns a LightningWrapper object.

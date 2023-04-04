@@ -13,6 +13,9 @@ def run():
 
     for video_file in args.video_files:
 
+        print(f"============== extracting frames from {video_file} ================")
+        print("does this video file exist? %s" % ("YES" if os.path.exists(video_file) else "NO"))
+
         idxs_selected = select_frame_idxs(
             video_file=video_file, resize_dims=64, n_clusters=args.n_frames_per_video)
 
@@ -31,8 +34,9 @@ def run():
             np.savetxt(
                 os.path.join(save_dir, "selected_frames.csv"),
                 np.sort(frames_to_label),
-                delimiter=',',
-                fmt="%s")
+                delimiter=",",
+                fmt="%s"
+            )
 
         export_frames(
             video_file=video_file, save_dir=save_dir, frame_idxs=idxs_selected, format=format,

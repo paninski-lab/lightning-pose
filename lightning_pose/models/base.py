@@ -1,7 +1,7 @@
 """Base class for backbone that acts as a feature extractor."""
 
 from omegaconf import DictConfig
-from pytorch_lightning.core.lightning import LightningModule
+from lightning.pytorch import LightningModule
 import torch
 from torch import nn
 from torch.optim import Adam
@@ -14,17 +14,20 @@ from typing import Dict, Literal, Optional, Tuple, Union
 from collections import OrderedDict
 
 from lightning_pose.data.utils import (
-    BaseLabeledBatchDict, HeatmapLabeledBatchDict, UnlabeledBatchDict,
-    SemiSupervisedBatchDict, SemiSupervisedHeatmapBatchDict
+    BaseLabeledBatchDict,
+    HeatmapLabeledBatchDict,
+    UnlabeledBatchDict,
+    SemiSupervisedBatchDict,
+    SemiSupervisedHeatmapBatchDict,
 )
 
-patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before #@typechecked
 
 MULTISTEPLR_MILESTONES_DEFAULT = [100, 200, 300]
 MULTISTEPLR_GAMMA_DEFAULT = 0.5
 
 
-@typechecked
+#@typechecked
 def grab_layers_sequential(model, last_layer_ind: int) -> torch.nn.Sequential:
     """Package selected number of layers into a nn.Sequential object.
 
@@ -40,7 +43,7 @@ def grab_layers_sequential(model, last_layer_ind: int) -> torch.nn.Sequential:
     return nn.Sequential(*layers)
 
 
-@typechecked
+#@typechecked
 def grab_layers_sequential_3d(model, last_layer_ind: int) -> torch.nn.Sequential:
     """This is to use a 3d model to extract features"""
     # the AvgPool3d halves the feature maps dims
@@ -49,7 +52,7 @@ def grab_layers_sequential_3d(model, last_layer_ind: int) -> torch.nn.Sequential
     return nn.Sequential(*layers)
 
 
-@typechecked
+#@typechecked
 def get_context_from_sequence(
     img_seq: Union[
         TensorType["seq_len", "RGB":3, "image_height", "image_width"],
@@ -73,20 +76,29 @@ def get_context_from_sequence(
     # padded_seq = torch.cat((two_pad, img_seq, two_pad), dim=0)
     for i in range(seq_len):
         # extract 5-frame sequences from the padded sequence
-        train_seq[i] = padded_seq[i:i + context_length]
+        train_seq[i] = padded_seq[i : i + context_length]
     return train_seq
 
 
-@typechecked
+#@typechecked
 class BaseFeatureExtractor(LightningModule):
     """Object that contains the base resnet feature extractor."""
 
     def __init__(
         self,
         backbone: Literal[
-            "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k", 
-            "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"
+            "resnet18",
+            "resnet34",
+            "resnet50",
+            "resnet101",
+            "resnet152",
+            "resnet50_3d",
+            "resnet50_contrastive",
+            "resnet50_animal_apose",
+            "resnet50_animal_ap10k",
+            "resnet50_human_jhmdb",
+            "resnet50_human_res_rle",
+            "resnet50_human_top_res",
         ] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
@@ -121,41 +133,42 @@ class BaseFeatureExtractor(LightningModule):
         elif backbone == "resnet50_contrastive":
             # load resnet50 pretrained using SimCLR on imagenet
             from pl_bolts.models.self_supervised import SimCLR
+
             weight_path = "https://pl-bolts-weights.s3.us-east-2.amazonaws.com/simclr/bolts_simclr_imagenet/simclr_imagenet.ckpt"
             simclr = SimCLR.load_from_checkpoint(weight_path, strict=False)
             base = simclr.encoder
 
         elif "resnet50_animal" in backbone:
             base = getattr(tvmodels, "resnet50")(pretrained=False)
-            backbone_type = '_'.join(backbone.split('_')[2:])
-            if backbone_type == 'apose':
-                anim_weights = 'https://download.openmmlab.com/mmpose/animal/resnet/res50_animalpose_256x256-e1f30bff_20210426.pth'
+            backbone_type = "_".join(backbone.split("_")[2:])
+            if backbone_type == "apose":
+                anim_weights = "https://download.openmmlab.com/mmpose/animal/resnet/res50_animalpose_256x256-e1f30bff_20210426.pth"
             else:
-                anim_weights = 'https://download.openmmlab.com/mmpose/animal/resnet/res50_ap10k_256x256-35760eb8_20211029.pth'
-            
+                anim_weights = "https://download.openmmlab.com/mmpose/animal/resnet/res50_ap10k_256x256-35760eb8_20211029.pth"
+
             state_dict = torch.hub.load_state_dict_from_url(anim_weights)["state_dict"]
             new_state_dict = OrderedDict()
             for key in state_dict:
                 if "backbone" in key:
-                    new_key = '.'.join(key.split('.')[1:])
+                    new_key = ".".join(key.split(".")[1:])
                     new_state_dict[new_key] = state_dict[key]
             base.load_state_dict(new_state_dict, strict=False)
 
         elif "resnet50_human" in backbone:
             base = getattr(tvmodels, "resnet50")(pretrained=False)
-            backbone_type = '_'.join(backbone.split('_')[2:])
-            if backbone_type == 'jhmdb':
-                hum_weights = 'https://download.openmmlab.com/mmpose/top_down/resnet/res50_jhmdb_sub3_256x256-c4ec1a0b_20201122.pth'
-            elif backbone_type == 'res_rle':
-                hum_weights = 'https://download.openmmlab.com/mmpose/top_down/deeppose/deeppose_res50_mpii_256x256_rle-5f92a619_20220504.pth'
-            elif backbone_type == 'top_res':
-                hum_weights = 'https://download.openmmlab.com/mmpose/top_down/resnet/res50_mpii_256x256-418ffc88_20200812.pth'
-            
+            backbone_type = "_".join(backbone.split("_")[2:])
+            if backbone_type == "jhmdb":
+                hum_weights = "https://download.openmmlab.com/mmpose/top_down/resnet/res50_jhmdb_sub3_256x256-c4ec1a0b_20201122.pth"
+            elif backbone_type == "res_rle":
+                hum_weights = "https://download.openmmlab.com/mmpose/top_down/deeppose/deeppose_res50_mpii_256x256_rle-5f92a619_20220504.pth"
+            elif backbone_type == "top_res":
+                hum_weights = "https://download.openmmlab.com/mmpose/top_down/resnet/res50_mpii_256x256-418ffc88_20200812.pth"
+
             state_dict = torch.hub.load_state_dict_from_url(hum_weights)["state_dict"]
             new_state_dict = OrderedDict()
             for key in state_dict:
                 if "backbone" in key:
-                    new_key = '.'.join(key.split('.')[1:])
+                    new_key = ".".join(key.split(".")[1:])
                     new_state_dict[new_key] = state_dict[key]
             base.load_state_dict(new_state_dict, strict=False)
 
@@ -166,7 +179,8 @@ class BaseFeatureExtractor(LightningModule):
         # get truncated version of backbone
         if "3d" in backbone:
             self.backbone = grab_layers_sequential_3d(
-                model=base, last_layer_ind=last_resnet_layer_to_get)
+                model=base, last_layer_ind=last_resnet_layer_to_get
+            )
         else:
             self.backbone = grab_layers_sequential(
                 model=base, last_layer_ind=last_resnet_layer_to_get,
@@ -192,8 +206,8 @@ class BaseFeatureExtractor(LightningModule):
             TensorType["sequence_length", "RGB":3, "image_height", "image_width"],
         ],
     ) -> Union[
-         TensorType["new_batch", "features", "rep_height", "rep_width"],
-         TensorType["new_batch", "features", "rep_height", "rep_width", "frames"],
+        TensorType["new_batch", "features", "rep_height", "rep_width"],
+        TensorType["new_batch", "features", "rep_height", "rep_width", "frames"],
     ]:
         """Forward pass from images to feature maps.
 
@@ -212,7 +226,6 @@ class BaseFeatureExtractor(LightningModule):
         """
         if self.mode == "2d":
             if self.do_context:
-                # images.shape = (sequence_length, RGB, image_height, image_width)
                 if len(images.shape) == 5:
                     # non-consecutive sequences. can be used for supervised and unsupervised models
                     batch, frames, channels, image_height, image_width = images.shape
@@ -241,19 +254,21 @@ class BaseFeatureExtractor(LightningModule):
                     # the output will be one representation per valid frame
                     sequence_length, channels, image_height, image_width = images.shape
                     representations: TensorType[
-                        "sequence_length", "channels": 3, "rep_height", "rep_width"
+                        "sequence_length", "channels":3, "rep_height", "rep_width"
                     ] = self.backbone(images)
                     # we need to tile the representations to make it into
                     # (num_valid_frames, features, rep_height, rep_width, num_context_frames)
                     # TODO: context frames should be configurable
                     tiled_representations = get_context_from_sequence(
-                        img_seq=representations, context_length=5)
+                        img_seq=representations, context_length=5
+                    )
                     # get rid of first and last two frames
                     if tiled_representations.shape[0] < 5:
                         raise RuntimeError(
-                            "Not enough valid frames to make a context representation.")
+                            "Not enough valid frames to make a context representation."
+                        )
                     outputs = tiled_representations[2:-2, :, :, :, :]
-                    
+
                 # for both types of batches, we reshape in the same way
                 # context is in the last dimension for the linear layer.
                 representations: TensorType[
@@ -284,8 +299,8 @@ class BaseFeatureExtractor(LightningModule):
             TensorType["seq_length", "RGB":3, "image_height", "image_width"],
         ],
     ) -> Union[
-         TensorType["new_batch", "features", "rep_height", "rep_width"],
-         TensorType["new_batch", "features", "rep_height", "rep_width", "frames"],
+        TensorType["new_batch", "features", "rep_height", "rep_width"],
+        TensorType["new_batch", "features", "rep_height", "rep_width", "frames"],
     ]:
         """Forward pass from images to representations.
 
@@ -343,7 +358,7 @@ class BaseFeatureExtractor(LightningModule):
         }
 
 
-@typechecked
+#@typechecked
 class BaseSupervisedTracker(BaseFeatureExtractor):
     """Base class for supervised trackers."""
 
@@ -425,7 +440,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         return params
 
 
-@typechecked
+#@typechecked
 class SemiSupervisedTrackerMixin(object):
     """Mixin class providing training step function for semi-supervised models."""
 

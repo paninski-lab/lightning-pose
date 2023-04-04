@@ -10,15 +10,18 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, Union
 from typing_extensions import Literal
 
 from lightning_pose.data.utils import (
-    undo_affine_transform, HeatmapLabeledBatchDict, UnlabeledBatchDict)
+    undo_affine_transform,
+    HeatmapLabeledBatchDict,
+    UnlabeledBatchDict,
+)
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.models.base import SemiSupervisedTrackerMixin
 from lightning_pose.models.heatmap_tracker import HeatmapTracker
 
-patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before #@typechecked
 
 
-@typechecked
+#@typechecked
 class HeatmapTrackerMHCRNN(HeatmapTracker):
     """Multi-headed Convolutional RNN network that handles context frames."""
 
@@ -27,9 +30,18 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         num_keypoints: int,
         loss_factory: LossFactory,
         backbone: Literal[
-            "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k",
-            "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"
+            "resnet18",
+            "resnet34",
+            "resnet50",
+            "resnet101",
+            "resnet152",
+            "resnet50_3d",
+            "resnet50_contrastive",
+            "resnet50_animal_apose",
+            "resnet50_animal_ap10k",
+            "resnet50_human_jhmdb",
+            "resnet50_human_res_rle",
+            "resnet50_human_top_res",
         ] = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
@@ -146,7 +158,10 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         batch: Union[HeatmapLabeledBatchDict, UnlabeledBatchDict],
         batch_idx: int,
         return_heatmaps: Optional[bool] = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+    ) -> Union[
+        Tuple[torch.Tensor, torch.Tensor],
+        Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+    ]:
         """Predict heatmaps and keypoints for a batch of video frames.
 
         Assuming a DALI video loader is passed in
@@ -194,7 +209,7 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         return params
 
 
-@typechecked
+#@typechecked
 class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrackerMHCRNN):
     """Model produces heatmaps of keypoints from labeled/unlabeled images."""
 
@@ -204,9 +219,18 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
         loss_factory: LossFactory,
         loss_factory_unsupervised: LossFactory,
         backbone: Literal[
-            "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k",
-            "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"
+            "resnet18",
+            "resnet34",
+            "resnet50",
+            "resnet101",
+            "resnet152",
+            "resnet50_3d",
+            "resnet50_contrastive",
+            "resnet50_animal_apose",
+            "resnet50_animal_ap10k",
+            "resnet50_human_jhmdb",
+            "resnet50_human_res_rle",
+            "resnet50_human_top_res",
         ] = "resnet50",
         downsample_factor: Literal[2, 3] = 2,
         pretrained: bool = True,
@@ -305,7 +329,7 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
         return params
 
 
-@typechecked
+#@typechecked
 class UpsamplingCRNN(torch.nn.Module):
     """Bidirectional Convolutional RNN network that handles heatmaps of context frames.
 
@@ -324,7 +348,7 @@ class UpsamplingCRNN(torch.nn.Module):
         hkernel: int = 2,
         hstride: int = 2,
         hpad: int = 0,
-        nfilters_channel: int = 16
+        nfilters_channel: int = 16,
     ) -> None:
         """Upsampling Convolutional RNN - initialize input and hidden weights."""
 
@@ -338,30 +362,34 @@ class UpsamplingCRNN(torch.nn.Module):
             )
             in_channels_rnn = num_keypoints
         else:
-            in_channels_rnn = num_filters_for_upsampling // 4,
+            in_channels_rnn = num_filters_for_upsampling // 4
 
         self.W_f = HeatmapTracker.create_double_upsampling_layer(
             in_channels=in_channels_rnn,
             out_channels=num_keypoints,
         )
         H_f_layers = []
-        H_f_layers.append(nn.Conv2d(
-            in_channels=num_keypoints,
-            out_channels=num_keypoints * nfilters_channel,
-            kernel_size=(hkernel, hkernel),
-            stride=(hstride, hstride),
-            padding=(hpad, hpad),
-            groups=num_keypoints,
-        ))
-        H_f_layers.append(nn.ConvTranspose2d(
-            in_channels=num_keypoints * nfilters_channel,
-            out_channels=num_keypoints,
-            kernel_size=(hkernel, hkernel),
-            stride=(hstride, hstride),
-            padding=(hpad, hpad),
-            output_padding=(hpad, hpad),
-            groups=num_keypoints,
-        ))
+        H_f_layers.append(
+            nn.Conv2d(
+                in_channels=num_keypoints,
+                out_channels=num_keypoints * nfilters_channel,
+                kernel_size=(hkernel, hkernel),
+                stride=(hstride, hstride),
+                padding=(hpad, hpad),
+                groups=num_keypoints,
+            )
+        )
+        H_f_layers.append(
+            nn.ConvTranspose2d(
+                in_channels=num_keypoints * nfilters_channel,
+                out_channels=num_keypoints,
+                kernel_size=(hkernel, hkernel),
+                stride=(hstride, hstride),
+                padding=(hpad, hpad),
+                output_padding=(hpad, hpad),
+                groups=num_keypoints,
+            )
+        )
         self.H_f = nn.Sequential(*H_f_layers)
 
         self.W_b = HeatmapTracker.create_double_upsampling_layer(
@@ -369,23 +397,27 @@ class UpsamplingCRNN(torch.nn.Module):
             out_channels=num_keypoints,
         )
         H_b_layers = []
-        H_b_layers.append(nn.Conv2d(
-            in_channels=num_keypoints,
-            out_channels=num_keypoints * nfilters_channel,
-            kernel_size=(hkernel, hkernel),
-            stride=(hstride, hstride),
-            padding=(hpad, hpad),
-            groups=num_keypoints,
-        ))
-        H_b_layers.append(nn.ConvTranspose2d(
-            in_channels=num_keypoints * nfilters_channel,
-            out_channels=num_keypoints,
-            kernel_size=(hkernel, hkernel),
-            stride=(hstride, hstride),
-            padding=(hpad, hpad),
-            output_padding=(hpad, hpad),
-            groups=num_keypoints,
-        ))
+        H_b_layers.append(
+            nn.Conv2d(
+                in_channels=num_keypoints,
+                out_channels=num_keypoints * nfilters_channel,
+                kernel_size=(hkernel, hkernel),
+                stride=(hstride, hstride),
+                padding=(hpad, hpad),
+                groups=num_keypoints,
+            )
+        )
+        H_b_layers.append(
+            nn.ConvTranspose2d(
+                in_channels=num_keypoints * nfilters_channel,
+                out_channels=num_keypoints,
+                kernel_size=(hkernel, hkernel),
+                stride=(hstride, hstride),
+                padding=(hpad, hpad),
+                output_padding=(hpad, hpad),
+                groups=num_keypoints,
+            )
+        )
         self.H_b = nn.Sequential(*H_b_layers)
         self.initialize_layers()
         self.layers = torch.nn.ModuleList([self.W_pre, self.W_f, self.H_f, self.W_b, self.H_b])

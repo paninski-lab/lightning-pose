@@ -30,7 +30,7 @@ training:
   # dlc-light- curated subset of dlc augmentations with more conservative param settings
   imgaug: dlc
   # batch size of labeled data during training
-  train_batch_size: 32
+  train_batch_size: 64 # was 32 in previous runs
   # batch size of labeled data during validation
   val_batch_size: 128
   # batch size of labeled data during test
@@ -68,9 +68,6 @@ training:
   # how many batches to take before terminating an epoch
   # (any dataloader that has less than limit_train_batches will be cycled over)
   limit_train_batches: null
-  # if you have two dataloaders, you keep cycling over the smaller dataset
-  # before completing the larger one
-  multiple_trainloader_mode: "max_size_cycle"
   profiler: null
   # runs K small batches of size N before doing a backwards pass.
   accumulate_grad_batches: 1
@@ -107,7 +104,7 @@ model:
 
 dali:
   general:
-    num_threads: 4 # Number of threads for data loading; can be changed
+    num_threads: 1 # Number of threads for data loading; can be changed
     device_id: 0 # GPU device id to use, can be changed
     device: gpu # "cpu" or "gpu"
     seed: 123456
@@ -126,8 +123,7 @@ dali:
       consecutive_sequences: true # can select False if want successive sequences to be presented to network
 
     predict: # defaults: sequence_length=5, step=1
-      # (train_batch_size / 4 + context.train.batch_size) * 2 -> round down to nearest pow of 2
-      batch_size: 64
+      sequence_length: 192
 
 losses:
   # loss = projection onto the discarded eigenvectors
@@ -150,7 +146,7 @@ losses:
     # for epsilon insensitive rectification
     # (in pixels; diffs below this are not penalized)
     epsilon:
-      10.0
+      4.0 # used to be 10
       # nan removal value.
     # (in prob; heatmaps with max prob values are removed)
     prob_threshold: 0.05

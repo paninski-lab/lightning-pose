@@ -1,7 +1,8 @@
 """Test datamodule functionality."""
 
 import pytest
-from pytorch_lightning.trainer.supporters import CombinedLoader
+# from pytorch_lightning.trainer.supporters import CombinedLoader
+from lightning.pytorch.utilities import CombinedLoader
 import torch
 
 
@@ -49,7 +50,10 @@ def test_heatmap_datamodule(cfg, heatmap_data_module):
     assert batch["images"].shape == (train_size, 3, im_height, im_width)
     assert batch["keypoints"].shape == (train_size, num_targets)
     assert batch["heatmaps"].shape == (
-        train_size, num_targets // 2, im_height_ds, im_width_ds,
+        train_size,
+        num_targets // 2,
+        im_height_ds,
+        im_width_ds,
     )
     assert batch["heatmaps"].shape[2:] == heatmap_data_module.dataset.output_shape
 
@@ -152,7 +156,10 @@ def test_heatmap_data_module_combined(cfg, heatmap_data_module_combined):
     assert batch["labeled"]["images"].shape == (train_size, 3, im_height, im_width)
     assert batch["labeled"]["keypoints"].shape == (train_size, num_targets)
     assert batch["labeled"]["heatmaps"].shape == (
-        train_size, num_targets // 2, im_height_ds, im_width_ds,
+        train_size,
+        num_targets // 2,
+        im_height_ds,
+        im_width_ds,
     )
     assert batch["unlabeled"]["frames"].shape == (train_size, 3, im_height, im_width)
 
