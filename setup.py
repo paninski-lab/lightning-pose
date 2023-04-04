@@ -17,7 +17,8 @@ install_requires = [
     "pandas",
     "pillow",
     "pytest",
-    "pytorch-lightning",
+    "lightning",
+    # "pytorch-lightning",
     "tensorboard", # was previously in pytorch-lightning
     "lightning-bolts",
     "seaborn",

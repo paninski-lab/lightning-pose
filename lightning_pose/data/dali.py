@@ -18,7 +18,7 @@ from lightning_pose.data.utils import count_frames, UnlabeledBatchDict
 
 _DALI_DEVICE = "gpu" if torch.cuda.is_available() else "cpu"
 
-patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before #@typechecked
 
 
 # cannot typecheck due to way pipeline_def decorator consumes additional args
@@ -123,7 +123,7 @@ def video_pipe(
     return transform, matrix
 
 
-@typechecked
+# #@typechecked
 class LitDaliWrapper(DALIGenericIterator):
     """wrapper around a DALI pipeline to get batches for ptl."""
 
@@ -211,7 +211,7 @@ class LitDaliWrapper(DALIGenericIterator):
         return self._modify_output(out)
 
 
-@typechecked
+# #@typechecked
 class PrepareDALI(object):
     """All the DALI stuff in one place.
 

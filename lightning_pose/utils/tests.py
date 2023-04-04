@@ -12,6 +12,10 @@ def run_model_test(cfg, data_module, video_dataloader, trainer, remove_logs_fn):
     # build model
     model = get_model(cfg=cfg, data_module=data_module, loss_factories=loss_factories)
 
+    print("====")
+    print("model: ", type(model))
+    print(type(model).__bases__)
+    print("====")
     # train model for a couple epochs
     trainer.fit(model=model, datamodule=data_module)
 

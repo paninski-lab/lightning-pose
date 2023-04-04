@@ -15,13 +15,13 @@ from lightning_pose.losses.helpers import EmpiricalEpsilon, convert_dict_values_
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before #@typechecked
 
 # TODO: think about exporting out the data-getting procedure to its own class so that we
 # can support general arrays, like arrays with predictions.
 
 
-@typechecked
+#@typechecked
 class KeypointPCA(object):
     """Class to collect data from a dataloader and compute PCA params."""
 
@@ -240,7 +240,7 @@ class KeypointPCA(object):
         self._set_parameter_dict()
 
 
-@typechecked
+#@typechecked
 class ComponentChooser:
     """Determine the number of PCA components to keep."""
 
@@ -304,7 +304,7 @@ class ComponentChooser:
             )  # find that integer that crosses the minimum explained variance
 
 
-@typechecked
+#@typechecked
 def pca_prints(pca: PCA, condition: str, components_to_keep: int) -> None:
     print("Results of running PCA ({}) on keypoints:".format(condition))
     print(
@@ -318,7 +318,7 @@ def pca_prints(pca: PCA, condition: str, components_to_keep: int) -> None:
     print("Variance explained by {} components: {}".format(components_to_keep, tev))
 
 
-@typechecked
+#@typechecked
 def format_multiview_data_for_pca(
     data_arr: TensorType["batch", "num_keypoints", "2"],
     mirrored_column_matches: Union[ListConfig, list],

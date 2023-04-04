@@ -18,10 +18,10 @@ from lightning_pose.losses.factory import LossFactory
 from lightning_pose.models.base import SemiSupervisedTrackerMixin
 from lightning_pose.models.heatmap_tracker import HeatmapTracker
 
-patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before #@typechecked
 
 
-@typechecked
+#@typechecked
 class HeatmapTrackerMHCRNN(HeatmapTracker):
     """Multi-headed Convolutional RNN network that handles context frames."""
 
@@ -209,7 +209,7 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         return params
 
 
-@typechecked
+#@typechecked
 class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrackerMHCRNN):
     """Model produces heatmaps of keypoints from labeled/unlabeled images."""
 
@@ -329,7 +329,7 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
         return params
 
 
-@typechecked
+#@typechecked
 class UpsamplingCRNN(torch.nn.Module):
     """Bidirectional Convolutional RNN network that handles heatmaps of context frames.
 

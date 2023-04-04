@@ -21,7 +21,7 @@ The general flow of each loss class is as follows:
 
 from kornia.losses import js_div_loss_2d, kl_div_loss_2d
 from omegaconf import ListConfig
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 from torch.nn import functional as F
 from torchtyping import TensorType, patch_typeguard
@@ -38,10 +38,10 @@ from lightning_pose.utils.pca import (
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before #@typechecked
 
 
-@typechecked
+#@typechecked
 class Loss(pl.LightningModule):
     """Parent class for all losses."""
 
@@ -123,7 +123,7 @@ class Loss(pl.LightningModule):
         raise NotImplementedError
 
 
-@typechecked
+#@typechecked
 class HeatmapLoss(Loss):
     """Parent class for different heatmap losses (MSE, Wasserstein, etc)."""
 
@@ -174,7 +174,7 @@ class HeatmapLoss(Loss):
         return self.weight * scalar_loss, logs
 
 
-@typechecked
+#@typechecked
 class HeatmapMSELoss(HeatmapLoss):
     """MSE loss between heatmaps."""
 
@@ -199,7 +199,7 @@ class HeatmapMSELoss(HeatmapLoss):
         return loss
 
 
-@typechecked
+#@typechecked
 class HeatmapKLLoss(HeatmapLoss):
     """Kullback-Leibler loss between heatmaps."""
 
@@ -226,7 +226,7 @@ class HeatmapKLLoss(HeatmapLoss):
         return loss[0]
 
 
-@typechecked
+#@typechecked
 class HeatmapJSLoss(HeatmapLoss):
     """Kullback-Leibler loss between heatmaps."""
 
@@ -253,7 +253,7 @@ class HeatmapJSLoss(HeatmapLoss):
         return loss[0]
 
 
-@typechecked
+#@typechecked
 class PCALoss(Loss):
     """Penalize predictions that fall outside a low-dimensional subspace."""
 
@@ -345,7 +345,7 @@ class PCALoss(Loss):
         return self.weight * scalar_loss, logs
 
 
-@typechecked
+#@typechecked
 class TemporalLoss(Loss):
     """Penalize temporal differences for each target.
 
@@ -434,7 +434,7 @@ class TemporalLoss(Loss):
         return self.weight * scalar_loss, logs
 
 
-@typechecked
+#@typechecked
 class TemporalHeatmapLoss(Loss):
     """Penalize temporal differences for each heatmap.
 
@@ -538,7 +538,7 @@ class TemporalHeatmapLoss(Loss):
         return self.weight * scalar_loss, logs
 
 
-@typechecked
+#@typechecked
 class UnimodalLoss(Loss):
     """Encourage heatmaps to be unimodal using various measures."""
 
@@ -658,7 +658,7 @@ class UnimodalLoss(Loss):
         return self.weight * scalar_loss, logs
 
 
-@typechecked
+#@typechecked
 class RegressionMSELoss(Loss):
     """MSE loss between ground truth and predicted coordinates."""
 
@@ -710,7 +710,7 @@ class RegressionMSELoss(Loss):
         return self.weight * scalar_loss, logs
 
 
-@typechecked
+#@typechecked
 class RegressionRMSELoss(RegressionMSELoss):
     """Root MSE loss between ground truth and predicted coordinates."""
 
@@ -735,7 +735,7 @@ class RegressionRMSELoss(RegressionMSELoss):
         return torch.sqrt(loss)
 
 
-@typechecked
+#@typechecked
 def get_loss_classes() -> Dict[str, Type[Loss]]:
     """Get a dict with all the loss classes.
 
