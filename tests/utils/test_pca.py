@@ -5,7 +5,8 @@ import pytest
 import torch
 
 from lightning_pose.utils.pca import KeypointPCA
-
+# from pytorch_lightning.trainer.supporters import CombinedLoader
+from lightning.pytorch.utilities import CombinedLoader
 
 def check_lists_equal(list_1, list_2):
     return len(list_1) == len(list_2) and sorted(list_1) == sorted(list_2)
@@ -16,18 +17,22 @@ def test_train_loader_iter(base_data_module_combined):
     # TODO: this is just messing around with dataloaders
     # good educationally, not great as a test. keep somehow.
     dataset_length = len(base_data_module_combined.train_dataset)
-    from pytorch_lightning.trainer.supporters import CombinedLoader
 
-    loaders = base_data_module_combined.train_dataloader()
-    combined_loader = CombinedLoader(loaders)
+    combined_loader = base_data_module_combined.train_dataloader()
+    # the default mode of CombinedLoader changes in Lightning 2.0. we manually take the iterbles inside the combined_loader, and make a new class that cycles only over the labeled dataloader.
+    combined_loader = CombinedLoader(combined_loader.iterables, mode="min_size")
     image_counter = 0
     for i, batch in enumerate(combined_loader):
+        print(i)
+
         image_counter += len(batch["labeled"]["keypoints"])
         assert type(batch) is dict
         assert type(batch["labeled"]) is dict
         assert type(batch["unlabeled"]) is dict
         assert type(batch["unlabeled"]["frames"]) is torch.Tensor
-        assert check_lists_equal(list(batch["labeled"].keys()), ["images", "keypoints", "idxs"])
+        assert check_lists_equal(
+            list(batch["labeled"].keys()), ["images", "keypoints", "idxs"]
+        )
     assert image_counter == dataset_length
 
 

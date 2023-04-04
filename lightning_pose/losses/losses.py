@@ -21,7 +21,7 @@ The general flow of each loss class is as follows:
 
 from kornia.losses import js_div_loss_2d, kl_div_loss_2d
 from omegaconf import ListConfig
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 from torch.nn import functional as F
 from torchtyping import TensorType, patch_typeguard
@@ -38,10 +38,10 @@ from lightning_pose.utils.pca import (
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before #@typechecked
 
 
-@typechecked
+#@typechecked
 class Loss(pl.LightningModule):
     """Parent class for all losses."""
 
@@ -123,7 +123,7 @@ class Loss(pl.LightningModule):
         raise NotImplementedError
 
 
-@typechecked
+#@typechecked
 class HeatmapLoss(Loss):
     """Parent class for different heatmap losses (MSE, Wasserstein, etc)."""
 
@@ -174,7 +174,7 @@ class HeatmapLoss(Loss):
         return self.weight * scalar_loss, logs
 
 
-@typechecked
+#@typechecked
 class HeatmapMSELoss(HeatmapLoss):
     """MSE loss between heatmaps."""
 
@@ -199,7 +199,7 @@ class HeatmapMSELoss(HeatmapLoss):
         return loss
 
 
-@typechecked
+#@typechecked
 class HeatmapKLLoss(HeatmapLoss):
     """Kullback-Leibler loss between heatmaps."""
 
@@ -226,7 +226,7 @@ class HeatmapKLLoss(HeatmapLoss):
         return loss[0]
 
 
-@typechecked
+#@typechecked
 class HeatmapJSLoss(HeatmapLoss):
     """Kullback-Leibler loss between heatmaps."""
 
@@ -253,7 +253,7 @@ class HeatmapJSLoss(HeatmapLoss):
         return loss[0]
 
 
-@typechecked
+#@typechecked
 class PCALoss(Loss):
     """Penalize predictions that fall outside a low-dimensional subspace."""
 
@@ -345,7 +345,7 @@ class PCALoss(Loss):
         return self.weight * scalar_loss, logs
 
 
-@typechecked
+#@typechecked
 class TemporalLoss(Loss):
     """Penalize temporal differences for each target.
 
@@ -363,10 +363,7 @@ class TemporalLoss(Loss):
     ) -> None:
         super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
         self.loss_name = "temporal"
-
-        self.prob_threshold = torch.tensor(
-            prob_threshold, dtype=torch.float, device=self.device
-        )
+        self.prob_threshold = torch.tensor(prob_threshold, dtype=torch.float, device=self.device)
 
     def rectify_epsilon(
         self, loss: TensorType["batch_minus_one", "num_keypoints"]
@@ -383,23 +380,22 @@ class TemporalLoss(Loss):
     def remove_nans(
         self,
         loss: TensorType["batch_minus_one", "num_keypoints"],
-        confidences: TensorType["batch", "num_keypoints"]
+        confidences: TensorType["batch", "num_keypoints"],
     ) -> TensorType["batch_minus_one", "num_keypoints"]:
         # find nans in the targets, and do a masked_select operation
         # get rid of unsupervised targets with extremely uncertain predictions or likely occlusions
-        idxs_ignore = (confidences < self.prob_threshold)
+        idxs_ignore = confidences < self.prob_threshold
         # ignore the loss values in the diff where one of the heatmaps is 'nan'
         union_idxs_ignore = torch.zeros(
-            (confidences.shape[0] - 1, confidences.shape[1]), 
-            dtype=torch.bool).to(_TORCH_DEVICE)
+            (confidences.shape[0] - 1, confidences.shape[1]), dtype=torch.bool
+        ).to(_TORCH_DEVICE)
         for i in range(confidences.shape[0] - 1):
-            union_idxs_ignore[i] = torch.logical_or(idxs_ignore[i], idxs_ignore[i+1])
+            union_idxs_ignore[i] = torch.logical_or(idxs_ignore[i], idxs_ignore[i + 1])
 
         # clone loss and zero out the nan values
         clean_loss = loss.clone()
-        clean_loss[union_idxs_ignore] = 0.
+        clean_loss[union_idxs_ignore] = 0.0
         return clean_loss
-
 
     def compute_loss(
         self,
@@ -427,17 +423,18 @@ class TemporalLoss(Loss):
 
         elementwise_loss = self.compute_loss(predictions=keypoints_pred)
         # do remove nans with loss to remove temporal difference values
-        clean_loss = self.remove_nans(
-            loss=elementwise_loss, 
-            confidences=confidences) if confidences is not None \
+        clean_loss = (
+            self.remove_nans(loss=elementwise_loss, confidences=confidences)
+            if confidences is not None
             else elementwise_loss
+        )
         epsilon_insensitive_loss = self.rectify_epsilon(loss=clean_loss)
         scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
         logs = self.log_loss(loss=scalar_loss, stage=stage)
         return self.weight * scalar_loss, logs
 
 
-@typechecked
+#@typechecked
 class TemporalHeatmapLoss(Loss):
     """Penalize temporal differences for each heatmap.
 
@@ -454,7 +451,7 @@ class TemporalHeatmapLoss(Loss):
         log_weight: float = 0.0,
         **kwargs,
     ) -> None:
-        super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight),
+        super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
         self.loss_name = loss_name
 
         if self.loss_name == "temporal_heatmap_mse":
@@ -483,45 +480,44 @@ class TemporalHeatmapLoss(Loss):
     def remove_nans(
         self,
         confidences: TensorType["batch", "num_keypoints"],
-        loss: TensorType["batch_minus_one", "num_keypoints"]
+        loss: TensorType["batch_minus_one", "num_keypoints"],
     ) -> TensorType["batch_minus_one", "num_keypoints"]:
         # find nans in the targets, and do a masked_select operation
         # get rid of unsupervised targets with extremely uncertain predictions or likely occlusions
-        idxs_ignore = (confidences < self.prob_threshold)
+        idxs_ignore = confidences < self.prob_threshold
         # ignore the loss values in the diff where one of the heatmaps is 'nan'
         union_idxs_ignore = torch.zeros(
-            (confidences.shape[0] - 1, confidences.shape[1]),
-            dtype=torch.bool).to(_TORCH_DEVICE)
+            (confidences.shape[0] - 1, confidences.shape[1]), dtype=torch.bool
+        ).to(_TORCH_DEVICE)
         for i in range(confidences.shape[0] - 1):
-            union_idxs_ignore[i] = torch.logical_or(idxs_ignore[i], idxs_ignore[i+1])
+            union_idxs_ignore[i] = torch.logical_or(idxs_ignore[i], idxs_ignore[i + 1])
 
-        loss[union_idxs_ignore] = 0.
+        loss[union_idxs_ignore] = 0.0
         return loss
-    
+
     def compute_loss(
         self,
-        predictions: TensorType["batch", "num_valid_keypoints", "heatmap_height", "heatmap_width"]
+        predictions: TensorType["batch", "num_valid_keypoints", "heatmap_height", "heatmap_width"],
     ) -> TensorType["batch_minus_one", "num_valid_keypoints"]:
         # compute the differences between matching heatmaps for each keypoint
 
-        diffs = torch.zeros(
-            (predictions.shape[0] - 1, 
-            predictions.shape[1])).to(_TORCH_DEVICE)
+        diffs = torch.zeros((predictions.shape[0] - 1, predictions.shape[1])).to(
+            _TORCH_DEVICE
+        )
 
         for i in range(diffs.shape[0]):
             if self.loss_name == "temporal_heatmap_mse":
                 curr_mse = F.mse_loss(
-                    predictions[i], 
-                    predictions[i+1], 
-                    reduction="none").reshape(predictions.shape[1], -1)
+                    predictions[i], predictions[i + 1], reduction="none"
+                ).reshape(predictions.shape[1], -1)
                 diffs[i] = torch.mean(curr_mse, dim=-1)
             elif self.loss_name == "temporal_heatmap_kl":
                 diffs[i] = self.hmloss(
                     predictions[i].unsqueeze(0) + 1e-10,
-                    predictions[i+1].unsqueeze(0) + 1e-10,
+                    predictions[i + 1].unsqueeze(0) + 1e-10,
                     reduction="none",
                 )
-        
+
         return diffs
 
     def __call__(
@@ -542,7 +538,7 @@ class TemporalHeatmapLoss(Loss):
         return self.weight * scalar_loss, logs
 
 
-@typechecked
+#@typechecked
 class UnimodalLoss(Loss):
     """Encourage heatmaps to be unimodal using various measures."""
 
@@ -599,7 +595,7 @@ class UnimodalLoss(Loss):
             clean predictions: (num_valid_keypoints, heatmap_height, heatmap_width), concatenated across different images and keypoints
         """
         # use confidences to get rid of unsupervised targets with likely occlusions
-        idxs_ignore = (confidences < self.prob_threshold)
+        idxs_ignore = confidences < self.prob_threshold
 
         return targets[~idxs_ignore], predictions[~idxs_ignore]
 
@@ -662,7 +658,7 @@ class UnimodalLoss(Loss):
         return self.weight * scalar_loss, logs
 
 
-@typechecked
+#@typechecked
 class RegressionMSELoss(Loss):
     """MSE loss between ground truth and predicted coordinates."""
 
@@ -714,7 +710,7 @@ class RegressionMSELoss(Loss):
         return self.weight * scalar_loss, logs
 
 
-@typechecked
+#@typechecked
 class RegressionRMSELoss(RegressionMSELoss):
     """Root MSE loss between ground truth and predicted coordinates."""
 
@@ -739,7 +735,7 @@ class RegressionRMSELoss(RegressionMSELoss):
         return torch.sqrt(loss)
 
 
-@typechecked
+#@typechecked
 def get_loss_classes() -> Dict[str, Type[Loss]]:
     """Get a dict with all the loss classes.
 

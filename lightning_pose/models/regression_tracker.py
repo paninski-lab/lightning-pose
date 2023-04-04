@@ -9,17 +9,19 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from typing_extensions import Literal
 
 from lightning_pose.data.utils import (
-    evaluate_heatmaps_at_location, undo_affine_transform,
-    BaseLabeledBatchDict, UnlabeledBatchDict
+    evaluate_heatmaps_at_location,
+    undo_affine_transform,
+    BaseLabeledBatchDict,
+    UnlabeledBatchDict,
 )
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.base import BaseSupervisedTracker, SemiSupervisedTrackerMixin
 
-patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before #@typechecked
 
 
-@typechecked
+#@typechecked
 class RegressionTracker(BaseSupervisedTracker):
     """Base model that produces (x, y) predictions of keypoints from images."""
 
@@ -28,9 +30,18 @@ class RegressionTracker(BaseSupervisedTracker):
         num_keypoints: int,
         loss_factory: LossFactory,
         backbone: Literal[
-            "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k", 
-            "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"
+            "resnet18",
+            "resnet34",
+            "resnet50",
+            "resnet101",
+            "resnet152",
+            "resnet50_3d",
+            "resnet50_contrastive",
+            "resnet50_animal_apose",
+            "resnet50_animal_ap10k",
+            "resnet50_human_jhmdb",
+            "resnet50_human_res_rle",
+            "resnet50_human_top_res",
         ] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
@@ -90,13 +101,16 @@ class RegressionTracker(BaseSupervisedTracker):
         self.rmse_loss = RegressionRMSELoss()
 
         # necessary so we don't have to pass in model arguments when loading
-        self.save_hyperparameters(ignore="loss_factory")  # cannot be pickled
+        # added loss_factory_unsupervised which might come from the SemiSupervisedHeatmapTracker.__super__(). Otherwise it's ignored.
+        # that's important so that it doesn't try to pickle the dali loaders.
+        self.save_hyperparameters(ignore=["loss_factory", "loss_factory_unsupervised"])  # cannot be pickled
+
 
     def forward(
         self,
         images: Union[
             TensorType["batch", "channels":3, "image_height", "image_width"],
-            TensorType["batch", "frames", "channels":3, "image_height", "image_width"]
+            TensorType["batch", "frames", "channels":3, "image_height", "image_width"],
         ],
     ) -> TensorType["num_valid_outputs", "two_x_num_keypoints"]:
         """Forward pass through the network."""
@@ -140,7 +154,7 @@ class RegressionTracker(BaseSupervisedTracker):
         Assuming a DALI video loader is passed in
         > trainer = Trainer(devices=8, accelerator="gpu")
         > predictions = trainer.predict(model, data_loader)
-        
+
         """
         if "images" in batch.keys():  # can't do isinstance(o, c) on TypedDicts
             # labeled image dataloaders
@@ -155,7 +169,7 @@ class RegressionTracker(BaseSupervisedTracker):
         return predicted_keypoints, confidence
 
 
-@typechecked
+#@typechecked
 class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTracker):
     """Model produces vectors of keypoints from labeled/unlabeled images."""
 
@@ -165,9 +179,18 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         loss_factory: LossFactory,
         loss_factory_unsupervised: LossFactory,
         backbone: Literal[
-            "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
-            "resnet50_3d", "resnet50_contrastive", "resnet50_animal_apose", "resnet50_animal_ap10k", 
-            "resnet50_human_jhmdb", "resnet50_human_res_rle", "resnet50_human_top_res"
+            "resnet18",
+            "resnet34",
+            "resnet50",
+            "resnet101",
+            "resnet152",
+            "resnet50_3d",
+            "resnet50_contrastive",
+            "resnet50_animal_apose",
+            "resnet50_animal_ap10k",
+            "resnet50_human_jhmdb",
+            "resnet50_human_res_rle",
+            "resnet50_human_top_res",
         ] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,

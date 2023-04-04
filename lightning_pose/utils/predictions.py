@@ -5,8 +5,8 @@ import numpy as np
 from omegaconf import DictConfig, OmegaConf
 import os
 import pandas as pd
-import pytorch_lightning as pl
-from pytorch_lightning.core.lightning import LightningModule
+import lightning.pytorch as pl
+from pytorch_lightning import LightningModule
 from pytorch_lightning import LightningDataModule
 from skimage.draw import disk
 import time
@@ -37,10 +37,10 @@ from lightning_pose.utils.io import return_absolute_data_paths
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before #@typechecked
 
 
-@typechecked
+#@typechecked
 def get_devices(device: Literal["gpu", "cuda", "cpu"]) -> Dict[str, str]:
     """Get pytorch and dali device strings."""
     if device == "gpu" or device == "cuda":
@@ -54,7 +54,7 @@ def get_devices(device: Literal["gpu", "cuda", "cpu"]) -> Dict[str, str]:
     return {"device_pt": device_pt, "device_dali": device_dali}
 
 
-@typechecked
+#@typechecked
 def get_cfg_file(cfg_file: Union[str, DictConfig]):
     """Load yaml configuration files."""
     if isinstance(cfg_file, str):
@@ -69,12 +69,11 @@ def get_cfg_file(cfg_file: Union[str, DictConfig]):
 
 
 class PredictionHandler:
-
     def __init__(
         self,
         cfg: DictConfig,
         data_module: pl.LightningDataModule,
-        video_file: Union[str, None]
+        video_file: Union[str, None],
     ) -> None:
 
         self.cfg = cfg
@@ -101,14 +100,17 @@ class PredictionHandler:
 
     def unpack_preds(
         self,
-        preds: List[Tuple[
-            TensorType["batch", "two_times_num_keypoints"], TensorType["batch", "num_keypoints"]
-        ]]
+        preds: List[
+            Tuple[
+                TensorType["batch", "two_times_num_keypoints"],
+                TensorType["batch", "num_keypoints"],
+            ]
+        ],
     ) -> Tuple[
         TensorType["num_frames", "two_times_num_keypoints"],
-        TensorType["num_frames", "num_keypoints"]
+        TensorType["num_frames", "num_keypoints"],
     ]:
-        """ unpack list of preds coming out from pl.trainer.predict, confs tuples into tensors.
+        """unpack list of preds coming out from pl.trainer.predict, confs tuples into tensors.
         It still returns unnecessary final rows, which should be discarded at the dataframe stage.
         This works for the output of predict_loader, suitable for batch_size=1, sequence_length=16, step=16"""
         # stack the predictions into rows.
@@ -117,26 +119,35 @@ class PredictionHandler:
         stacked_confs = torch.vstack([pred[1] for pred in preds])
 
         if self.video_file is not None:  # dealing with dali loaders
+
+            # DB: this used to be an else but I think it should apply to all dataloaders now
+            # first we chop off the last few rows that are not part of the video
+            # next:
+            # for baseline: chop extra empty frames from last sequence.
+            num_rows_to_discard = stacked_preds.shape[0] - self.frame_count
+            if num_rows_to_discard > 0:
+                stacked_preds = stacked_preds[:-num_rows_to_discard]
+                stacked_confs = stacked_confs[:-num_rows_to_discard]
+            # for context: missing the first two frames, have to handle with the last two frames still.
+
             if self.do_context:
                 # fix shifts in the context model
                 stacked_preds = self.fix_context_preds_confs(stacked_preds)
                 if self.cfg.model.model_type == "heatmap_mhcrnn":
                     stacked_confs = self.fix_context_preds_confs(
-                        stacked_confs, zero_pad_confidence=False)
+                        stacked_confs, zero_pad_confidence=False
+                    )
                 else:
                     stacked_confs = self.fix_context_preds_confs(
-                        stacked_confs, zero_pad_confidence=True)
-            else:
-                # in this dataloader, the last sequence has a few extra frames.
-                num_rows_to_discard = stacked_preds.shape[0] - self.frame_count
-                if num_rows_to_discard > 0:
-                    stacked_preds = stacked_preds[:-num_rows_to_discard]
-                    stacked_confs = stacked_confs[:-num_rows_to_discard]
-
+                        stacked_confs, zero_pad_confidence=True
+                    )
+            # else:
+            # in this dataloader, the last sequence has a few extra frames.
         return stacked_preds, stacked_confs
 
-    @staticmethod
-    def fix_context_preds_confs(stacked_preds: TensorType, zero_pad_confidence: bool = False):
+    def fix_context_preds_confs(
+        self, stacked_preds: TensorType, zero_pad_confidence: bool = False
+    ):
         """
         In the context model, ind=0 is associated with image[2], and ind=1 is associated with
         image[3], so we need to shift the predictions and confidences by two and eliminate the
@@ -148,9 +159,15 @@ class PredictionHandler:
         preds_1 = torch.tile(stacked_preds[0], (2, 1))  # copying twice the prediction for image[2]
         preds_2 = stacked_preds[0:-2]  # throw out the last two rows.
         preds_combined = torch.vstack([preds_1, preds_2])
-        # after concat this has the same length. everything is shifted by two rows.
-        # but we don't have valid predictions for the last two elements, so we pad with element -3.
-        preds_combined[-2:, :] = preds_combined[-3, :]
+        # repat the last one twice
+        if preds_combined.shape[0] == self.frame_count:
+            # i.e., after concat this has the length of the video.
+            # but we don't have valid predictions for the last two elements, so we pad with element -3.
+            preds_combined[-2:, :] = preds_combined[-3, :]
+        else:
+            # we don't have as many predictions as frames; pad with final entry which is valid.
+            n_pad = self.frame_count - preds_combined.shape[0]
+            preds_combined = torch.vstack([preds_combined, torch.tile(preds_combined[0], (n_pad, 1))])
 
         if zero_pad_confidence:
             # zeroing out those first and last two rows (after we've shifted everything above)
@@ -198,14 +215,13 @@ class PredictionHandler:
         return make_dlc_pandas_index(cfg=self.cfg, keypoint_names=self.keypoint_names)
 
     def add_split_indices_to_df(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add split indices to the dataframe.
-        """
+        """Add split indices to the dataframe."""
         df["set"] = np.array(["unused"] * df.shape[0])
 
         dataset_split_indices = {
             "train": self.data_module.train_dataset.indices,
             "validation": self.data_module.val_dataset.indices,
-            "test": self.data_module.test_dataset.indices
+            "test": self.data_module.test_dataset.indices,
         }
 
         for key, val in dataset_split_indices.items():
@@ -214,10 +230,13 @@ class PredictionHandler:
 
     def __call__(
         self,
-        preds: List[Tuple[
-            TensorType["batch", "two_times_num_keypoints"], TensorType["batch", "num_keypoints"]
-        ]]
-    )-> pd.DataFrame:
+        preds: List[
+            Tuple[
+                TensorType["batch", "two_times_num_keypoints"],
+                TensorType["batch", "num_keypoints"],
+            ]
+        ],
+    ) -> pd.DataFrame:
         """
         Call this function to get a pandas dataframe of the predictions for a single video.
         Assuming you've already run trainer.predict(), and have a list of Tuple predictions.
@@ -229,7 +248,8 @@ class PredictionHandler:
         """
         stacked_preds, stacked_confs = self.unpack_preds(preds=preds)
         pred_arr = self.make_pred_arr_undo_resize(
-            stacked_preds.cpu().numpy(), stacked_confs.cpu().numpy())
+            stacked_preds.cpu().numpy(), stacked_confs.cpu().numpy()
+        )
         pdindex = self.make_dlc_pandas_index()
         df = pd.DataFrame(pred_arr, columns=pdindex)
         if self.video_file is None:
@@ -240,7 +260,7 @@ class PredictionHandler:
         return df
 
 
-@typechecked
+#@typechecked
 def predict_dataset(
     cfg: DictConfig,
     data_module: LightningDataModule,
@@ -248,12 +268,14 @@ def predict_dataset(
     preds_file: str,
     gpu_id: Optional[int] = None,
     trainer: Optional[pl.Trainer] = None,
-    model: Optional[Union[
-        RegressionTracker,
-        HeatmapTracker,
-        SemiSupervisedRegressionTracker,
-        SemiSupervisedHeatmapTracker,
-    ]] = None,
+    model: Optional[
+        Union[
+            RegressionTracker,
+            HeatmapTracker,
+            SemiSupervisedRegressionTracker,
+            SemiSupervisedHeatmapTracker,
+        ]
+    ] = None,
 ) -> pd.DataFrame:
     """Save predicted keypoints for a labeled dataset.
 
@@ -282,10 +304,13 @@ def predict_dataset(
         model.to("cuda:%i" % gpu_id)
 
     if trainer is None:
-        trainer = pl.Trainer(gpus=[gpu_id])
+        trainer = pl.Trainer(devices=[gpu_id], accelerator="auto")
 
     labeled_preds = trainer.predict(
-        model=model, dataloaders=data_module.full_labeled_dataloader(), return_predictions=True)
+        model=model,
+        dataloaders=data_module.full_labeled_dataloader(),
+        return_predictions=True,
+    )
 
     pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
     labeled_preds_df = pred_handler(preds=labeled_preds)
@@ -294,21 +319,23 @@ def predict_dataset(
     return labeled_preds_df
 
 
-@typechecked
+#@typechecked
 def predict_single_video(
     video_file: str,
     ckpt_file: str,
     cfg_file: Union[str, DictConfig],
     preds_file: str,
+    data_module: Union[BaseDataModule, UnlabeledDataModule],
     gpu_id: Optional[int] = None,
     trainer: Optional[pl.Trainer] = None,
-    model: Optional[Union[
-        RegressionTracker,
-        HeatmapTracker,
-        SemiSupervisedRegressionTracker,
-        SemiSupervisedHeatmapTracker,
-    ]] = None,
-    data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
+    model: Optional[
+        Union[
+            RegressionTracker,
+            HeatmapTracker,
+            SemiSupervisedRegressionTracker,
+            SemiSupervisedHeatmapTracker,
+        ]
+    ] = None,
     save_heatmaps: Optional[bool] = False,
 ) -> pd.DataFrame:
     """Make predictions for a single video, loading frame sequences using DALI.
@@ -324,10 +351,10 @@ def predict_single_video(
         cfg_file (Union[str, DictConfig]): either a hydra config or a path pointing to
             one, with all the model specs. needed for loading the model.
         preds_file (str): absolute filename for the predictions .csv file
+        data_module:
         gpu_id (int): specify which gpu to run prediction on
         trainer:
         model:
-        data_module:
         save_heatmaps:
 
     Returns:
@@ -336,20 +363,22 @@ def predict_single_video(
     """
 
     cfg = get_cfg_file(cfg_file=cfg_file)
+    gpu_id = 0 if gpu_id is None else gpu_id
+    cfg.training.gpu_id = gpu_id
+    cfg.dali.general.device_id = gpu_id
 
+    delete_model = False
     if model is None:
-        model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
+        model = load_model_from_checkpoint(
+            cfg=cfg, ckpt_file=ckpt_file, eval=True, data_module=data_module
+        )
+        delete_model = True
+    model.to("cuda:%i" % gpu_id)
 
-    if gpu_id is None:
-        model.to(_TORCH_DEVICE)
-        gpu_id = 0
-        cfg.dali.general.device_id = 0
-    else:
-        model.to("cuda:%i" % gpu_id)
-        cfg.dali.general.device_id = gpu_id
-
+    delete_trainer = False
     if trainer is None:
         trainer = pl.Trainer(gpus=[gpu_id])
+        delete_trainer = True
 
     # ----------------------------------------------------------------------------------
     # set up
@@ -370,15 +399,24 @@ def predict_single_video(
     # initialize prediction handler class
     pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=video_file)
 
+    # ----------------------------------------------------------------------------------
+    # compute predictions
+    # ----------------------------------------------------------------------------------
+
     # use a different function for now to return heatmaps
     if save_heatmaps:
         if predict_loader.do_context:
-            batch_size = cfg.dali.context.predict.batch_size
+            batch_size = cfg.dali.context.predict.sequence_length
         else:
             batch_size = cfg.dali.base.predict.sequence_length
         keypoints, confidences, heatmaps = _predict_frames(
-            cfg=cfg, model=model, dataloader=predict_loader, n_frames_=pred_handler.frame_count,
-            batch_size=batch_size, return_heatmaps=True)
+            cfg=cfg,
+            model=model,
+            dataloader=predict_loader,
+            n_frames_=pred_handler.frame_count,
+            batch_size=batch_size,
+            return_heatmaps=True,
+        )
         preds = [(torch.tensor(keypoints), torch.tensor(confidences))]
         if heatmaps is not None:
             heatmaps_file = preds_file.replace(".csv", "_heatmaps.npy")
@@ -393,27 +431,24 @@ def predict_single_video(
             return_predictions=True,
         )
 
-    # ----------------------------------------------------------------------------------
-    # compute predictions
-    # ----------------------------------------------------------------------------------
-    if data_module is None:
-        # from lightning_pose.utils.scripts import get_imgaug_transform, get_dataset, get_data_module
-        # data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
-        # imgaug_transform = get_imgaug_transform(cfg=cfg)
-        # dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
-        # data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
-        raise NotImplementedError("need to rearrange functions in modules")
-
     # call this instance on a single vid's preds
     preds_df = pred_handler(preds=preds)
     # save the predictions to a csv; create directory if it doesn't exist
     os.makedirs(os.path.dirname(preds_file), exist_ok=True)
     preds_df.to_csv(preds_file)
 
+    # clear up memory
+    if delete_model:
+        del model
+    if delete_trainer:
+        del trainer
+    del predict_loader
+    torch.cuda.empty_cache()
+
     return preds_df
 
 
-@typechecked
+#@typechecked
 def _predict_frames(
     cfg: DictConfig,
     model: LightningModule,
@@ -464,7 +499,8 @@ def _predict_frames(
             if cfg.model.model_type == "heatmap":
                 # push batch through model
                 pred_keypoints, confidence, pred_heatmaps = model.predict_step(
-                    batch=batch, batch_idx=n, return_heatmaps=return_heatmaps)
+                    batch=batch, batch_idx=n, return_heatmaps=return_heatmaps
+                )
                 # send to numpy
                 pred_keypoints = pred_keypoints.detach().cpu().numpy()
                 confidence = confidence.detach().cpu().numpy()
@@ -473,7 +509,8 @@ def _predict_frames(
             elif cfg.model.model_type == "heatmap_mhcrnn":
                 # push batch through model
                 pred_keypoints, confidence, pred_heatmaps = model.predict_step(
-                    batch=batch, batch_idx=n, return_heatmaps=return_heatmaps)
+                    batch=batch, batch_idx=n, return_heatmaps=return_heatmaps
+                )
                 # send to numpy
                 pred_keypoints = pred_keypoints.detach().cpu().numpy()
                 confidence = confidence.detach().cpu().numpy()
@@ -481,7 +518,9 @@ def _predict_frames(
 
             else:
                 # push batch through model
-                pred_keypoints, confidence = model.predict_step(batch=batch, batch_idx=n)
+                pred_keypoints, confidence = model.predict_step(
+                    batch=batch, batch_idx=n
+                )
                 # send to numpy
                 pred_keypoints = pred_keypoints.detach().cpu().numpy()
                 confidence = confidence.detach().cpu().numpy()
@@ -510,7 +549,7 @@ def _predict_frames(
         return keypoints_np, confidence_np, heatmaps_np
 
 
-@typechecked
+#@typechecked
 def make_dlc_pandas_index(cfg: DictConfig, keypoint_names: List[str]) -> pd.MultiIndex:
     xyl_labels = ["x", "y", "likelihood"]
     pdindex = pd.MultiIndex.from_product(
@@ -520,7 +559,7 @@ def make_dlc_pandas_index(cfg: DictConfig, keypoint_names: List[str]) -> pd.Mult
     return pdindex
 
 
-@typechecked
+#@typechecked
 def get_model_class(map_type: str, semi_supervised: bool) -> Type[LightningModule]:
     """[summary]
 
@@ -558,9 +597,9 @@ def get_model_class(map_type: str, semi_supervised: bool) -> Type[LightningModul
     return Model
 
 
-@typechecked
+#@typechecked
 def load_model_from_checkpoint(
-    cfg: DictConfig, ckpt_file: str, eval: bool = False
+    cfg: DictConfig, ckpt_file: str, eval: bool = False, data_module=None,
 ) -> LightningModule:
     """this will have: path to a specific .ckpt file which we extract using other funcs
     will also take the standard hydra config file"""
@@ -576,10 +615,16 @@ def load_model_from_checkpoint(
     )
 
     # get loss factories
-    data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
-    imgaug_transform = get_imgaug_transform(cfg=cfg)
-    dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
-    data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
+    delete_extras = False
+    if not data_module:
+        # create data module if not provided as input
+        delete_extras = True
+        data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
+        imgaug_transform = get_imgaug_transform(cfg=cfg)
+        dataset = get_dataset(
+            cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform
+        )
+        data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
     loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
 
     # pick the right model class
@@ -606,10 +651,18 @@ def load_model_from_checkpoint(
     if eval:
         model.eval()
 
+    # clear up memory
+    if delete_extras:
+        del imgaug_transform
+        del dataset
+        del data_module
+    del loss_factories
+    torch.cuda.empty_cache()
+
     return model
 
 
-@typechecked
+#@typechecked
 def make_cmap(number_colors: int, cmap: str = "cool"):
     color_class = plt.cm.ScalarMappable(cmap=cmap)
     C = color_class.to_rgba(np.linspace(0, 1, number_colors))
@@ -618,8 +671,14 @@ def make_cmap(number_colors: int, cmap: str = "cool"):
 
 
 def create_labeled_video(
-    clip, xs_arr, ys_arr, mask_array=None, dotsize=5, colormap="cool", fps=None,
-    filename="movie.mp4"
+    clip,
+    xs_arr,
+    ys_arr,
+    mask_array=None,
+    dotsize=5,
+    colormap="cool",
+    fps=None,
+    filename="movie.mp4",
 ):
     """Helper function for creating annotated videos.
 
@@ -658,7 +717,9 @@ def create_labeled_video(
 
     print(
         "Duration of video [s]: {}, recorded with {} fps!".format(
-            np.round(duration, 2), np.round(fps_og, 2)))
+            np.round(duration, 2), np.round(fps_og, 2)
+        )
+    )
 
     # add marker to each frame t, where t is in sec
     def add_marker(get_frame, t):
@@ -669,7 +730,7 @@ def create_labeled_video(
         index = int(np.round(t * 1.0 * fps_og))
         for bpindex in range(n_keypoints):
             if index >= n_frames:
-                print('Skipped frame {}, marker {}'.format(index, bpindex))
+                print("Skipped frame {}, marker {}".format(index, bpindex))
                 continue
             if mask_array[index, bpindex]:
                 xc = min(int(xs_arr[index, bpindex]), nx - 1)
@@ -680,9 +741,7 @@ def create_labeled_video(
 
     clip_marked = clip.fl(add_marker)
     clip_marked.write_videofile(
-        filename,
-        codec="libx264",
-        fps=fps_og if fps is None else fps
+        filename, codec="libx264", fps=fps_og if fps is None else fps
     )
     clip_marked.close()
 

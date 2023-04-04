@@ -59,7 +59,7 @@ def select_frame_idxs(video_file: str, resize_dims: int = 64, n_clusters: int = 
         "last_batch_policy": LastBatchPolicy.FILL,
         #     "last_batch_padded": True,
         "auto_reset": False,
-        "reader_name": "reader"
+        "reader_name": "reader",
     }
 
     # build iterator
@@ -71,9 +71,14 @@ def select_frame_idxs(video_file: str, resize_dims: int = 64, n_clusters: int = 
         # batches.append(batch)
         # take mean over color channel, remove spatial dims
         # result is shape (batch_size, height * width)
-        batches.append(torch.reshape(
-            torch.mean(batch["frames"], dim=1),
-            (batch["frames"].shape[0], -1)).detach().cpu().numpy())
+        batches.append(
+            torch.reshape(
+                torch.mean(batch["frames"], dim=1), (batch["frames"].shape[0], -1)
+            )
+            .detach()
+            .cpu()
+            .numpy()
+        )
     batches = np.concatenate(batches, axis=0)
 
     # ---------------------------------------------------------
@@ -174,11 +179,12 @@ def get_frames_from_idxs(cap, idxs):
         if ret:
             if fr == 0:
                 height, width, _ = frame.shape
-                frames = np.zeros((n_frames, 1, height, width), dtype='uint8')
+                frames = np.zeros((n_frames, 1, height, width), dtype="uint8")
             frames[fr, 0, :, :] = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         else:
             print(
-                'warning! reached end of video; returning blank frames for remainder of ' +
-                'requested indices')
+                "warning! reached end of video; returning blank frames for remainder of "
+                + "requested indices"
+            )
             break
     return frames
