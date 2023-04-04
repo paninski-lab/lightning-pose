@@ -3,7 +3,7 @@
 from nvidia.dali.plugin.pytorch import LastBatchPolicy
 import os
 from omegaconf import DictConfig
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 from torch.utils.data import DataLoader, random_split
 from torchtyping import patch_typeguard
@@ -17,13 +17,15 @@ from lightning_pose.data.utils import (
     SemiSupervisedDataLoaderDict,
 )
 from lightning_pose.utils.io import check_video_paths
+from lightning.pytorch.utilities import CombinedLoader
+
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before #@typechecked
 
 
-@typechecked
+#@typechecked
 class BaseDataModule(pl.LightningDataModule):
     """Splits a labeled dataset into train, val, and test data loaders."""
 
@@ -143,7 +145,7 @@ class BaseDataModule(pl.LightningDataModule):
         )
 
 
-@typechecked
+#@typechecked
 class UnlabeledDataModule(BaseDataModule):
     """Data module that contains labeled and unlabled data loaders."""
 
@@ -230,4 +232,4 @@ class UnlabeledDataModule(BaseDataModule):
             ),
             unlabeled=self.unlabeled_dataloader,
         )
-        return loader
+        return CombinedLoader(loader, mode="max_size_cycle")

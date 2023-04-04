@@ -18,10 +18,10 @@ from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.base import BaseSupervisedTracker, SemiSupervisedTrackerMixin
 
-patch_typeguard()  # use before @typechecked
+# patch_typeguard()  # use before #@typechecked
 
 
-@typechecked
+#@typechecked
 class RegressionTracker(BaseSupervisedTracker):
     """Base model that produces (x, y) predictions of keypoints from images."""
 
@@ -101,7 +101,10 @@ class RegressionTracker(BaseSupervisedTracker):
         self.rmse_loss = RegressionRMSELoss()
 
         # necessary so we don't have to pass in model arguments when loading
-        self.save_hyperparameters(ignore="loss_factory")  # cannot be pickled
+        # added loss_factory_unsupervised which might come from the SemiSupervisedHeatmapTracker.__super__(). Otherwise it's ignored.
+        # that's important so that it doesn't try to pickle the dali loaders.
+        self.save_hyperparameters(ignore=["loss_factory", "loss_factory_unsupervised"])  # cannot be pickled
+
 
     def forward(
         self,
@@ -166,7 +169,7 @@ class RegressionTracker(BaseSupervisedTracker):
         return predicted_keypoints, confidence
 
 
-@typechecked
+#@typechecked
 class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTracker):
     """Model produces vectors of keypoints from labeled/unlabeled images."""
 

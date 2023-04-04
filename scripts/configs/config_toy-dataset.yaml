@@ -76,8 +76,6 @@ training:
   rng_seed_model_pt: 44
   # how many batches to take before terminating an epoch (any dataloader that has less than limit_train_batches will be cycled over)
   limit_train_batches: null
-  # if you have two dataloaders, you keep cycling over the smaller dataset berfore completing the larger one
-  multiple_trainloader_mode: max_size_cycle
   profiler: null
   # runs K small batches of size N before doing a backwards pass.
   accumulate_grad_batches: 2
