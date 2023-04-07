@@ -167,48 +167,27 @@ def return_absolute_data_paths(data_cfg: DictConfig) -> Tuple[str, str]:
     assert os.path.isdir(video_dir) or os.path.isfile(video_dir)
     return data_dir, video_dir
 
+# def find_vids_in_dir(folder_path: str) -> List[str]:
+#     # get all video files in directory
+#     vid_files = [f for f in os.listdir(folder_path) if f.endswith((".mp4", ".avi", ".mov"))]
+#     # get absolute paths of video files and check that they exist
+#     absolute_paths = [os.path.join(folder_path, v) for v in vid_files if os.path.isfile(os.path.join(folder_path, v))]
+#     return absolute_paths
 
 #@typechecked
-def get_videos_in_dir(video_dir: str) -> List[str]:
+def get_videos_in_dir(video_dir: str, return_mp4_only: bool = True) -> List[str]:
     # gather videos to process
     # TODO: check if you're give a path to a single video?
-    # pretty_print_str(string="Looking inside %s..." % video_dir)
     assert os.path.isdir(video_dir)
-    all_files = [os.path.join(video_dir, f) for f in os.listdir(video_dir)]
-    video_files = []
-    for f in all_files:
-        if f.endswith(".mp4"):
-            video_files.append(f)
-    if len(video_files) == 0:
-        raise IOError("Did not find any video files (.mp4) in %s" % video_dir)
-    return video_files
-    # another version that worked -- glob.glob looks elegant. consider reintroducing.
-    #  # get input data
-    #     if isinstance(self.video_paths_list, list):
-    #         # presumably a list of files
-    #         filenames = self.video_paths_list
-    #     elif isinstance(self.video_paths_list, str) and os.path.isfile(
-    #         self.video_paths_list
-    #     ):
-    #         # single video file
-    #         filenames = self.video_paths_list
-    #     elif isinstance(self.video_paths_list, str) and os.path.isdir(
-    #         self.video_paths_list
-    #     ):
-    #         # directory of videos
-    #         import glob
+    # get all video files in directory, from allowed formats
+    allowed_formats = (".mp4", ".avi", ".mov")
+    if return_mp4_only == True:
+        allowed_formats = ".mp4"
+    video_files = [os.path.join(video_dir, f) for f in os.listdir(video_dir) if f.endswith(allowed_formats)]
 
-    #         extensions = ["mp4"]  # allowed file extensions
-    #         filenames = []
-    #         for extension in extensions:
-    #             filenames.extend(
-    #                 glob.glob(os.path.join(self.video_paths_list, "*.%s" % extension))
-    #             )
-    #     else:
-    #         raise ValueError(
-    #             "`video_paths_list` must be a list of files, a single file, "
-    #             + "or a directory name"
-    #         )
+    if len(video_files) == 0:
+        raise IOError("Did not find any valid video files in %s" % video_dir)
+    return video_files
 
 
 #@typechecked
