@@ -1,11 +1,8 @@
 import os 
-from lightning_pose.utils.video_preprocessing import find_vids_in_dir, reencode_video, check_codec_format
+from lightning_pose.utils.video_ops import reencode_video, check_codec_format
+from lightning_pose.utils.io import get_videos_in_dir
 import argparse 
 import shutil
-
-# Use the shutil.copy() method to copy the file from the source to the destination
-
-
 
 # argparse boilerplate
 parser = argparse.ArgumentParser(description='Process some integers.')
@@ -21,7 +18,7 @@ if __name__ == "__main__":
     print(f"Checking video folder {args.folder_path}...")
     print("=================================")
     # find .mov/.avi/.mp4 videos in directory
-    videos_list = find_vids_in_dir(args.folder_path)
+    videos_list = get_videos_in_dir(args.folder_path, return_mp4_only=False)
     # make new dir for reencoded vids
     new_dir_name = args.folder_path + '_reencoded'
     os.makedirs(new_dir_name, exist_ok=True)
