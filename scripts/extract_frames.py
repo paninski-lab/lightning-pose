@@ -4,7 +4,7 @@ import argparse
 import numpy as np
 import os
 
-from lightning_pose.utils.frame_selection import select_frame_idxs, export_frames
+from lightning_pose.utils.video_ops import select_frame_idxs, export_frames
 
 
 def run():
