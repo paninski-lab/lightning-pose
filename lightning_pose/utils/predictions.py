@@ -298,13 +298,12 @@ def predict_dataset(
         model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
 
     if gpu_id is None:
-        model.to(_TORCH_DEVICE)
         gpu_id = 0
-    else:
-        model.to("cuda:%i" % gpu_id)
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
 
     if trainer is None:
-        trainer = pl.Trainer(devices=[gpu_id], accelerator="auto")
+        trainer = pl.Trainer(devices=1, accelerator="auto")
 
     labeled_preds = trainer.predict(
         model=model,
@@ -366,6 +365,7 @@ def predict_single_video(
     gpu_id = 0 if gpu_id is None else gpu_id
     cfg.training.gpu_id = gpu_id
     cfg.dali.general.device_id = gpu_id
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
 
     delete_model = False
     if model is None:
@@ -377,7 +377,7 @@ def predict_single_video(
 
     delete_trainer = False
     if trainer is None:
-        trainer = pl.Trainer(gpus=[gpu_id])
+        trainer = pl.Trainer(accelerator="gpu", devices=1)
         delete_trainer = True
 
     # ----------------------------------------------------------------------------------
