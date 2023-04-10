@@ -75,8 +75,8 @@ class FiftyOneKeypointBase:
         self.dataset_name = self.cfg.eval.fiftyone.dataset_name
         self.data_dir, self.video_dir = return_absolute_data_paths(
             cfg.data, cfg.eval.fiftyone.get("n_dirs_back", 3))
-        self.df_header_rows: List[int] = OmegaConf.to_object(cfg.data.header_rows)
-        # TODO: [0, 1] in toy dataset, [1,2] in actual ones, standardize
+        # hard-code this for now
+        self.df_header_rows: List[int] = [1, 2]  # OmegaConf.to_object(cfg.data.header_rows)
         # ground_truth_df is not necessary but useful for keypoint names
         self.ground_truth_df: pd.DataFrame = pd.read_csv(
             os.path.join(self.data_dir, self.cfg.data.csv_file),
