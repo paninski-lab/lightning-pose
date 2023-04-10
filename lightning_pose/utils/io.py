@@ -125,7 +125,7 @@ def get_keypoint_names(
 
 
 #@typechecked
-def return_absolute_path(possibly_relative_path: str, n_dirs_back=3) -> str:
+def return_absolute_path(possibly_relative_path: str, n_dirs_back: int = 3) -> str:
     """Return absolute path from possibly relative path."""
     if os.path.isabs(possibly_relative_path):
         # absolute path already; do nothing
@@ -144,7 +144,7 @@ def return_absolute_path(possibly_relative_path: str, n_dirs_back=3) -> str:
 
 
 #@typechecked
-def return_absolute_data_paths(data_cfg: DictConfig) -> Tuple[str, str]:
+def return_absolute_data_paths(data_cfg: DictConfig, n_dirs_back: int = 3) -> Tuple[str, str]:
     """Generate absolute path for our example toy data.
 
     @hydra.main decorator switches the cwd when executing the decorated function, e.g.,
@@ -152,12 +152,13 @@ def return_absolute_data_paths(data_cfg: DictConfig) -> Tuple[str, str]:
 
     Args:
         data_cfg (DictConfig): data config file with paths to data and video folders.
+        n_dirs_back (int):
 
     Returns:
         Tuple[str, str]: absolute paths to data and video folders.
 
     """
-    data_dir = return_absolute_path(data_cfg.data_dir)
+    data_dir = return_absolute_path(data_cfg.data_dir, n_dirs_back=n_dirs_back)
     if os.path.isabs(data_cfg.video_dir):
         video_dir = data_cfg.video_dir
     else:
