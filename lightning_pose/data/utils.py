@@ -5,12 +5,10 @@ from kornia import image_to_tensor
 import numpy as np
 from nvidia.dali.plugin.pytorch import DALIGenericIterator
 import torch
-from torchtyping import TensorType, patch_typeguard
+from torchtyping import TensorType
 from typeguard import typechecked
 from typing import List, Literal, Optional, Tuple, Union, Dict, Any, TypedDict
 import lightning.pytorch as pl
-
-# patch_typeguard()  # use before #@typechecked
 
 
 # below are a bunch of classes that streamline data typechecking
@@ -91,7 +89,6 @@ class SemiSupervisedDataLoaderDict(TypedDict):
     unlabeled: DALIGenericIterator
 
 
-#@typechecked
 class DataExtractor(object):
     """Helper class to extract all data from a data module."""
 
@@ -243,7 +240,7 @@ class DataExtractor(object):
         return self.iterate_over_dataloader(loader)
 
 
-#@typechecked
+@typechecked
 def split_sizes_from_probabilities(
     total_number: int,
     train_probability: float,
@@ -286,7 +283,7 @@ def split_sizes_from_probabilities(
     return [train_number, val_number, test_number]
 
 
-#@typechecked
+@typechecked
 def clean_any_nans(data: torch.Tensor, dim: int) -> torch.Tensor:
     """Remove samples from a data array that contain nans."""
     # currently supports only 2D arrays
@@ -299,7 +296,7 @@ def clean_any_nans(data: torch.Tensor, dim: int) -> torch.Tensor:
         return data[~nan_bool]
 
 
-#@typechecked
+@typechecked
 def count_frames(video_list: Union[List[str], str]) -> int:
     """Simple function to count the number of frames in a video or a list of videos."""
 
@@ -316,7 +313,7 @@ def count_frames(video_list: Union[List[str], str]) -> int:
     return num_frames
 
 
-#@typechecked
+@typechecked
 def compute_num_train_frames(
     len_train_dataset: int,
     train_frames: Optional[Union[int, float]] = None,

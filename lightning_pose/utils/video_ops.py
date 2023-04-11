@@ -7,6 +7,7 @@ from sklearn.cluster import KMeans
 import torch
 from tqdm import tqdm
 import subprocess
+from typeguard import typechecked
 from typing import List
 
 
@@ -14,6 +15,7 @@ from lightning_pose.data.dali import video_pipe, LitDaliWrapper
 from lightning_pose.data.utils import count_frames
 
 
+@typechecked
 def select_frame_idxs(video_file: str, resize_dims: int = 64, n_clusters: int = 20) -> np.ndarray:
     """Cluster a low-dimensional representation of high motion energy frames.
 
@@ -115,6 +117,7 @@ def select_frame_idxs(video_file: str, resize_dims: int = 64, n_clusters: int = 
     return idxs_prototypes
 
 
+@typechecked
 def export_frames(
     video_file: str,
     save_dir: str,
@@ -192,6 +195,7 @@ def get_frames_from_idxs(cap, idxs):
     return frames
 
 
+@typechecked
 def reencode_video(input_file: str, output_file: str) -> None:
     """ a function that executes ffmpeg from a subprocess
     reencodes video into H.264 coded format
@@ -202,6 +206,8 @@ def reencode_video(input_file: str, output_file: str) -> None:
     ffmpeg_cmd = f'ffmpeg -i {input_file} -c:v libx264 -c:a copy -y {output_file}'
     subprocess.run(ffmpeg_cmd, shell=True)
 
+
+@typechecked
 def check_codec_format(input_file: str):
     # Run FFprobe command to get video codec version
     # command = ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_version", "-of", "default=noprint_wrappers=1:nokey=1", input_file]
@@ -217,6 +223,3 @@ def check_codec_format(input_file: str):
         # print('Video does not use H.264 codec')
         is_codec = False
     return is_codec
-
-
-

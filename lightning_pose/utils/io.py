@@ -7,7 +7,7 @@ from typeguard import typechecked
 from typing import Any, List, Tuple, Union, Optional
 
 
-#@typechecked
+@typechecked
 def ckpt_path_from_base_path(
     base_path: str,
     model_name: str,
@@ -46,7 +46,7 @@ def ckpt_path_from_base_path(
     return model_ckpt_path
 
 
-#@typechecked
+@typechecked
 def check_if_semi_supervised(
     losses_to_use: Union[ListConfig, list, None] = None
 ) -> bool:
@@ -76,7 +76,7 @@ def check_if_semi_supervised(
     return semi_supervised
 
 
-#@typechecked
+@typechecked
 def load_label_csv_from_cfg(cfg: Union[DictConfig, dict]) -> pd.DataFrame:
     """Helper function for easy loading.
 
@@ -92,7 +92,7 @@ def load_label_csv_from_cfg(cfg: Union[DictConfig, dict]) -> pd.DataFrame:
     return labels_df
 
 
-#@typechecked
+@typechecked
 def get_keypoint_names(
     cfg: Optional[DictConfig] = None,
     csv_file: Optional[str] = None,
@@ -123,8 +123,7 @@ def get_keypoint_names(
 # Path handling functions for running toy dataset
 # --------------------------------------------------------------------------------------
 
-
-#@typechecked
+@typechecked
 def return_absolute_path(possibly_relative_path: str, n_dirs_back: int = 3) -> str:
     """Return absolute path from possibly relative path."""
     if os.path.isabs(possibly_relative_path):
@@ -143,7 +142,7 @@ def return_absolute_path(possibly_relative_path: str, n_dirs_back: int = 3) -> s
     return abs_path
 
 
-#@typechecked
+@typechecked
 def return_absolute_data_paths(data_cfg: DictConfig, n_dirs_back: int = 3) -> Tuple[str, str]:
     """Generate absolute path for our example toy data.
 
@@ -168,6 +167,7 @@ def return_absolute_data_paths(data_cfg: DictConfig, n_dirs_back: int = 3) -> Tu
     assert os.path.isdir(video_dir) or os.path.isfile(video_dir)
     return data_dir, video_dir
 
+
 # def find_vids_in_dir(folder_path: str) -> List[str]:
 #     # get all video files in directory
 #     vid_files = [f for f in os.listdir(folder_path) if f.endswith((".mp4", ".avi", ".mov"))]
@@ -175,7 +175,8 @@ def return_absolute_data_paths(data_cfg: DictConfig, n_dirs_back: int = 3) -> Tu
 #     absolute_paths = [os.path.join(folder_path, v) for v in vid_files if os.path.isfile(os.path.join(folder_path, v))]
 #     return absolute_paths
 
-#@typechecked
+
+@typechecked
 def get_videos_in_dir(video_dir: str, return_mp4_only: bool = True) -> List[str]:
     # gather videos to process
     # TODO: check if you're give a path to a single video?
@@ -191,7 +192,7 @@ def get_videos_in_dir(video_dir: str, return_mp4_only: bool = True) -> List[str]
     return video_files
 
 
-#@typechecked
+@typechecked
 def check_video_paths(video_paths: Union[List[str], str]) -> list:
     # get input data
     if isinstance(video_paths, list):
@@ -218,8 +219,7 @@ def check_video_paths(video_paths: Union[List[str], str]) -> list:
 # Path handling for predictions on new videos
 # --------------------------------------------------------------------------------------
 
-
-#@typechecked
+@typechecked
 class VideoPredPathHandler:
     """class that defines filename for a predictions .csv file, given video file and
     model specs.
