@@ -1,7 +1,7 @@
 #:!/usr/bin/env python
 from setuptools import find_packages, setup
 
-version = None
+VERSION = None
 
 install_requires = [
     "black",
@@ -18,8 +18,7 @@ install_requires = [
     "pillow",
     "pytest",
     "lightning",
-    # "pytorch-lightning",
-    "tensorboard", # was previously in pytorch-lightning
+    "tensorboard",
     "lightning-bolts",
     "seaborn",
     "scikit-image",
@@ -35,7 +34,7 @@ install_requires = [
 setup(
     name="lightning-pose",
     packages=find_packages(),
-    version=version,
+    version=VERSION,
     description="Convnets for tracking body poses",
     author="Dan Biderman",
     install_requires=install_requires,  # load_requirements(PATH_ROOT),
