@@ -6,8 +6,6 @@ from omegaconf import DictConfig
 import lightning.pytorch as pl
 import torch
 from torch.utils.data import DataLoader, random_split
-from torchtyping import patch_typeguard
-from typeguard import typechecked
 from typing import Dict, List, Literal, Optional, Tuple, Union, TypedDict
 
 from lightning_pose.data.dali import PrepareDALI, LitDaliWrapper
@@ -22,10 +20,7 @@ from lightning.pytorch.utilities import CombinedLoader
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# patch_typeguard()  # use before #@typechecked
 
-
-#@typechecked
 class BaseDataModule(pl.LightningDataModule):
     """Splits a labeled dataset into train, val, and test data loaders."""
 
@@ -145,7 +140,6 @@ class BaseDataModule(pl.LightningDataModule):
         )
 
 
-#@typechecked
 class UnlabeledDataModule(BaseDataModule):
     """Data module that contains labeled and unlabled data loaders."""
 

@@ -3,7 +3,7 @@
 from omegaconf import DictConfig
 import torch
 from torch import nn
-from torchtyping import TensorType, patch_typeguard
+from torchtyping import TensorType
 from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from typing_extensions import Literal
@@ -18,10 +18,7 @@ from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.base import BaseSupervisedTracker, SemiSupervisedTrackerMixin
 
-# patch_typeguard()  # use before #@typechecked
 
-
-#@typechecked
 class RegressionTracker(BaseSupervisedTracker):
     """Base model that produces (x, y) predictions of keypoints from images."""
 
@@ -169,7 +166,7 @@ class RegressionTracker(BaseSupervisedTracker):
         return predicted_keypoints, confidence
 
 
-#@typechecked
+@typechecked
 class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTracker):
     """Model produces vectors of keypoints from labeled/unlabeled images."""
 
