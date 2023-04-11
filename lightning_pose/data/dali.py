@@ -7,9 +7,7 @@ from nvidia.dali.plugin.pytorch import DALIGenericIterator
 import nvidia.dali.types as types
 from omegaconf import DictConfig
 import torch
-from torchtyping import patch_typeguard, TensorType
 import numpy as np
-from typeguard import typechecked
 from typing import List, Dict, Optional, Union, Literal, Tuple
 
 
@@ -17,8 +15,6 @@ from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
 from lightning_pose.data.utils import count_frames, UnlabeledBatchDict
 
 _DALI_DEVICE = "gpu" if torch.cuda.is_available() else "cpu"
-
-# patch_typeguard()  # use before #@typechecked
 
 
 # cannot typecheck due to way pipeline_def decorator consumes additional args
@@ -123,7 +119,6 @@ def video_pipe(
     return transform, matrix
 
 
-# #@typechecked
 class LitDaliWrapper(DALIGenericIterator):
     """wrapper around a DALI pipeline to get batches for ptl."""
 
@@ -211,7 +206,6 @@ class LitDaliWrapper(DALIGenericIterator):
         return self._modify_output(out)
 
 
-# #@typechecked
 class PrepareDALI(object):
     """All the DALI stuff in one place.
 
@@ -259,9 +253,13 @@ class PrepareDALI(object):
                 return int(np.floor(
                     self.frame_count / (pipe_dict["batch_size"] * pipe_dict["sequence_length"])))
             # the case of prediction with a single sequence at a time and internal model reshapes
-            elif (pipe_dict["batch_size"]==1) and (pipe_dict["step"] == (pipe_dict["sequence_length"] - 4)):
+            elif (pipe_dict["batch_size"] == 1) \
+                    and (pipe_dict["step"] == (pipe_dict["sequence_length"] - 4)):
                 if pipe_dict["step"] <= 0:
-                    raise ValueError("step cannot be 0, please modify cfg.dali.context.predict.sequence_length to be > 4")
+                    raise ValueError(
+                        "step cannot be 0, please modify "
+                        "cfg.dali.context.predict.sequence_length to be > 4"
+                    )
                 # remove the first sequence
                 data_except_first_batch = self.frame_count - pipe_dict["sequence_length"]
                 # calculate how many "step"s are needed to get at least to the end

@@ -24,7 +24,7 @@ from omegaconf import ListConfig
 import lightning.pytorch as pl
 import torch
 from torch.nn import functional as F
-from torchtyping import TensorType, patch_typeguard
+from torchtyping import TensorType
 from typeguard import typechecked
 from typing import Any, Callable, Dict, Tuple, List, Literal, Optional, Union, Type
 import warnings
@@ -37,8 +37,6 @@ from lightning_pose.utils.pca import (
 )
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
-# patch_typeguard()  # use before #@typechecked
 
 
 #@typechecked
@@ -735,7 +733,7 @@ class RegressionRMSELoss(RegressionMSELoss):
         return torch.sqrt(loss)
 
 
-#@typechecked
+@typechecked
 def get_loss_classes() -> Dict[str, Type[Loss]]:
     """Get a dict with all the loss classes.
 
