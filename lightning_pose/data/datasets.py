@@ -8,8 +8,7 @@ from PIL import Image
 import torch
 from torchvision import transforms
 from typing import Callable, List, Literal, Optional
-from torchtyping import TensorType, patch_typeguard
-from typeguard import typechecked
+from torchtyping import TensorType
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
 from lightning_pose.data.utils import generate_heatmaps
@@ -18,10 +17,7 @@ from lightning_pose.utils.io import get_keypoint_names
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# patch_typeguard()  # use before #@typechecked
 
-
-#@typechecked
 class BaseTrackingDataset(torch.utils.data.Dataset):
     """Base dataset that contains images and keypoints as (x, y) pairs."""
 
@@ -218,7 +214,6 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
 
 # the only addition here, should be the heatmap creation method.
-#@typechecked
 class HeatmapDataset(BaseTrackingDataset):
     """Heatmap dataset that contains the images and keypoints in 2D arrays."""
 

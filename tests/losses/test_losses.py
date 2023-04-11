@@ -136,7 +136,8 @@ def test_pca_singleview_loss(cfg, base_data_module):
     assert logs[0]["value"] == loss / pca_loss.weight
     assert logs[1]["name"] == "pca_singleview_weight"
     assert logs[1]["value"] == pca_loss.weight
-    #  TODO: commented out the test below, it doesn't make sense, and fails when we apply the keypoint filtering
+
+    # TODO: commented out below, doesn't make sense, and fails when we apply keypoint filtering
 
     # # -----------------------------
     # # test pca loss on fake dataset
