@@ -12,12 +12,12 @@ from lightning_pose.utils.io import return_absolute_path, return_absolute_data_p
 from lightning_pose.utils import pretty_print_str
 
 
-#@typechecked
+@typechecked
 def check_lists_equal(list_1: list, list_2: list) -> bool:
     return len(list_1) == len(list_2) and sorted(list_1) == sorted(list_2)
 
 
-#@typechecked
+@typechecked
 def remove_string_w_substring_from_list(
     strings: List[str], substring: str
 ) -> List[str]:
@@ -27,7 +27,7 @@ def remove_string_w_substring_from_list(
     return strings
 
 
-#@typechecked
+@typechecked
 def check_unique_tags(data_pt_tags: List[str]) -> bool:
     uniques = list(np.unique(data_pt_tags))
     cond_list = ["test", "train", "validation"]
@@ -38,7 +38,7 @@ def check_unique_tags(data_pt_tags: List[str]) -> bool:
     return flag
 
 
-#@typechecked
+@typechecked
 def check_dataset(dataset: fo.Dataset) -> None:
     pretty_print_str("Checking FiftyOne.Dataset by computing metadata... ")
     try:
@@ -51,7 +51,7 @@ def check_dataset(dataset: fo.Dataset) -> None:
         )
 
 
-#@typechecked
+@typechecked
 def get_image_tags(pred_df: pd.DataFrame) -> pd.Series:
     # last column indicates if the image was used for training, testing, validation or
     # unused at all
@@ -193,7 +193,7 @@ class FiftyOneKeypointBase:
     #         )
     #     return keypoints_list
 
-    #@typechecked
+    @typechecked
     def _slow_single_frame_build(
         self,
         data_dict: Dict[str, Dict[str, np.array]],
@@ -217,7 +217,7 @@ class FiftyOneKeypointBase:
             )
         return keypoints_list
 
-    #@typechecked
+    @typechecked
     def _fast_single_frame_build(
         self,
         data_dict: Dict[str, Dict[str, np.array]],
@@ -239,7 +239,7 @@ class FiftyOneKeypointBase:
         return keypoint
 
     # have two options here, "fast" and "slow"
-    #@typechecked
+    @typechecked
     def build_single_frame_keypoints(
         self, data_dict: Dict[str, Dict[str, np.array]], frame_idx: int
     ) -> List[fo.Keypoint]:
@@ -252,7 +252,7 @@ class FiftyOneKeypointBase:
                 data_dict=data_dict, frame_idx=frame_idx
             )
 
-    #@typechecked
+    @typechecked
     def get_keypoints_per_image(
         self, data_dict: Dict[str, Dict[str, np.array]]
     ) -> List[fo.Keypoints]:
@@ -266,7 +266,7 @@ class FiftyOneKeypointBase:
             keypoints_list.append(fo.Keypoints(keypoints=single_frame_keypoints_list))
         return keypoints_list
 
-    #@typechecked
+    @typechecked
     def get_pred_keypoints_dict(self) -> Dict[str, List[fo.Keypoints]]:
         pred_keypoints_dict = {}
         # loop over the dictionary with predictions per model
@@ -281,6 +281,7 @@ class FiftyOneKeypointBase:
         raise NotImplementedError
 
 
+@typechecked
 class FiftyOneImagePlotter(FiftyOneKeypointBase):
     def __init__(
         self,
@@ -313,13 +314,11 @@ class FiftyOneImagePlotter(FiftyOneKeypointBase):
 
         return absolute_list
 
-    #@typechecked
     def get_gt_keypoints_list(self) -> List[fo.Keypoints]:
         # for each frame, extract ground-truth keypoint information
         print("Collecting ground-truth keypoints...")
         return self.get_keypoints_per_image(self.gt_data_dict)
 
-    #@typechecked
     def create_dataset(self) -> fo.Dataset:
         samples = []
         # read each model's csv into a pandas dataframe
@@ -351,6 +350,7 @@ class FiftyOneImagePlotter(FiftyOneKeypointBase):
         return fiftyone_dataset
 
 
+@typechecked
 class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
     def __init__(
         self,
@@ -401,8 +401,9 @@ class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
         return dataset
 
 
-#@typechecked
+@typechecked
 class dfConverter:
+
     def __init__(self, df: pd.DataFrame, keypoint_names: List[str]) -> None:
         self.df = df
         self.keypoint_names = keypoint_names
@@ -425,13 +426,13 @@ class dfConverter:
         return full_dict
 
 
+@typechecked
 class FiftyOneFactory:
+
     def __init__(self, dataset_to_create: Literal["images", "videos"]) -> None:
         self.dataset_to_create = dataset_to_create
 
-    def __call__(
-        self,
-    ) -> Union[FiftyOneImagePlotter, FiftyOneKeypointVideoPlotter]:
+    def __call__(self) -> Union[FiftyOneImagePlotter, FiftyOneKeypointVideoPlotter]:
         if self.dataset_to_create == "images":
             return FiftyOneImagePlotter
         else:

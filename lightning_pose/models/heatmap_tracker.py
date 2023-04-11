@@ -7,7 +7,7 @@ import numpy as np
 from omegaconf import DictConfig
 import torch
 from torch import nn
-from torchtyping import TensorType, patch_typeguard
+from torchtyping import TensorType
 from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, Union
 from typing_extensions import Literal
@@ -25,10 +25,7 @@ from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.base import BaseSupervisedTracker, SemiSupervisedTrackerMixin
 
-# patch_typeguard()  # use before #@typechecked
 
-
-#@typechecked
 def upsample(
     inputs: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
 ) -> TensorType["batch", "num_keypoints", "2 x heatmap_height", "2 x heatmap_width"]:
@@ -46,7 +43,6 @@ def upsample(
     return inputs_up
 
 
-#@typechecked
 class HeatmapTracker(BaseSupervisedTracker):
     """Base model that produces heatmaps of keypoints from images."""
 
@@ -376,7 +372,6 @@ class HeatmapTracker(BaseSupervisedTracker):
             return predicted_keypoints, confidence
 
 
-#@typechecked
 class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
     """Model produces heatmaps of keypoints from labeled/unlabeled images."""
 
