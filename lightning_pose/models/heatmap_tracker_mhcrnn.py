@@ -4,7 +4,7 @@ from kornia.geometry.subpix import spatial_softmax2d
 from omegaconf import DictConfig
 import torch
 from torch import nn
-from torchtyping import TensorType, patch_typeguard
+from torchtyping import TensorType
 from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, Union
 from typing_extensions import Literal
@@ -18,10 +18,7 @@ from lightning_pose.losses.factory import LossFactory
 from lightning_pose.models.base import SemiSupervisedTrackerMixin
 from lightning_pose.models.heatmap_tracker import HeatmapTracker
 
-# patch_typeguard()  # use before #@typechecked
 
-
-#@typechecked
 class HeatmapTrackerMHCRNN(HeatmapTracker):
     """Multi-headed Convolutional RNN network that handles context frames."""
 
@@ -209,7 +206,7 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         return params
 
 
-#@typechecked
+@typechecked
 class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrackerMHCRNN):
     """Model produces heatmaps of keypoints from labeled/unlabeled images."""
 
@@ -329,7 +326,6 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
         return params
 
 
-#@typechecked
 class UpsamplingCRNN(torch.nn.Module):
     """Bidirectional Convolutional RNN network that handles heatmaps of context frames.
 

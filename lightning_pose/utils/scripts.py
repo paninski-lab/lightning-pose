@@ -44,7 +44,7 @@ from lightning_pose.utils.predictions import (
 )
 
 
-#@typechecked
+@typechecked
 def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
     """Create simple data transform pipeline that augments images.
 
@@ -185,7 +185,7 @@ def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
     return iaa.Sequential(data_transform)
 
 
-#@typechecked
+@typechecked
 def get_dataset(
     cfg: DictConfig, data_dir: str, imgaug_transform: iaa.Sequential
 ) -> Union[BaseTrackingDataset, HeatmapDataset]:
@@ -233,7 +233,7 @@ def get_dataset(
     return dataset
 
 
-#@typechecked
+@typechecked
 def get_data_module(
     cfg: DictConfig,
     dataset: Union[BaseTrackingDataset, HeatmapDataset],
@@ -280,7 +280,7 @@ def get_data_module(
     return data_module
 
 
-#@typechecked
+@typechecked
 def get_loss_factories(
     cfg: DictConfig, data_module: Union[BaseDataModule, UnlabeledDataModule]
 ) -> dict:
@@ -353,7 +353,7 @@ def get_loss_factories(
     return {"supervised": loss_factory_sup, "unsupervised": loss_factory_unsup}
 
 
-#@typechecked
+@typechecked
 def get_model(
     cfg: DictConfig,
     data_module: Union[BaseDataModule, UnlabeledDataModule],
@@ -452,7 +452,7 @@ def get_model(
     return model
 
 
-#@typechecked
+@typechecked
 def compute_metrics(
     cfg: DictConfig,
     preds_file: str,
@@ -567,7 +567,7 @@ def compute_metrics(
         pcamv_df.to_csv(save_file)
 
 
-#@typechecked
+@typechecked
 def export_predictions_and_labeled_video(
     video_file: str,
     cfg: DictConfig,
