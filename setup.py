@@ -18,6 +18,7 @@ install_requires = [
     "pillow",
     "pytest",
     "lightning",
+    "nvidia-dali-cuda120",
     "tensorboard",
     "lightning-bolts",
     "seaborn",

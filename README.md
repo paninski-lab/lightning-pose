@@ -44,7 +44,7 @@ Then move into the newly-created repository folder, and install dependencies:
 
 ```console
 foo@bar:~$ cd lightning-pose
-foo@bar:~$ pip install -r requirements.txt
+foo@bar:~$ pip install -e .
 ```
 
 You should be ready to go! You may verify that all the unit tests are passing on your
@@ -91,13 +91,13 @@ arguments to match your data.
     frames as input, and outputs two heatmaps: one "context-aware" and one "static". The prediction
     with the highest confidence is automatically chosen. Must also set `model.do_context=True`.
 - model.do_context (default: `False`) - set to `True` when using `model.model_type=heatmap_mhcrnn`.
-- model.losses_to_use (default: `[]`) - this argument relates to the unsupervised losses. An empty
+- model.losses*to_use (default: `[]`) - this argument relates to the unsupervised losses. An empty
   list indicates a fully supervised model. Each element of the list corresponds to an unsupervised
   loss. For example,
   `model.losses_to_use=[pca_multiview,temporal]` will fit both a pca_multiview loss and a temporal
   loss. Options include:
-  _ pca_multiview: penalize inconsistencies between multiple camera views
-  _ pca_singleview: penalize implausible body configurations \* temporal: penalize large temporal jumps
+  * pca*multiview: penalize inconsistencies between multiple camera views
+  * pca_singleview: penalize implausible body configurations \* temporal: penalize large temporal jumps
 
 See the `losses` section of `scripts/configs/config_default.yaml` for more details on the various
 losses and their associated hyperparameters. The default values in the config file are reasonable
