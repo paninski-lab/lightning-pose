@@ -1,0 +1,12 @@
+include *.md
+include *.sh
+recursive-include assets *.png
+recursive-include docs *.md
+recursive-include lightning_pose *.py
+recursive-include scripts *.py
+recursive-include scripts *.sh
+recursive-include scripts *.yaml
+recursive-include tests *.py
+recursive-include toy_datasets *.csv
+recursive-include toy_datasets *.mp4
+recursive-include toy_datasets *.png

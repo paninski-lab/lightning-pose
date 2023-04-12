@@ -1,7 +1,11 @@
 #:!/usr/bin/env python
 from setuptools import find_packages, setup
 
-version = None
+VERSION = "0.0.1"  # was previously None
+
+# add the README.md file to the long_description
+with open("README.md", "r") as fh:
+    long_description = fh.read()
 
 install_requires = [
     "black",
@@ -18,8 +22,8 @@ install_requires = [
     "pillow",
     "pytest",
     "lightning",
-    # "pytorch-lightning",
-    "tensorboard", # was previously in pytorch-lightning
+    "nvidia-dali-cuda120",
+    "tensorboard",
     "lightning-bolts",
     "seaborn",
     "scikit-image",
@@ -35,11 +39,13 @@ install_requires = [
 setup(
     name="lightning-pose",
     packages=find_packages(),
-    version=version,
-    description="Convnets for tracking body poses",
-    author="Dan Biderman",
+    version=VERSION,
+    description="Semi-supervised pose estimation using Lightning.",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    author="Dan Biderman and Matt Whiteway",
     install_requires=install_requires,  # load_requirements(PATH_ROOT),
     author_email="danbider@gmail.com",
     url="https://github.com/danbider/lightning-pose",
-    keywords=["machine learning", "deep learning"],
+    keywords=["machine learning", "deep learning", "computer_vision"],
 )
