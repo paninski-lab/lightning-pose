@@ -1,4 +1,4 @@
-![Wide Lightning Pose Logo](assets/images/LightningPose_horizontal_light.png)
+![](https://github.com/danbider/lightning-pose/raw/main/assets/images/LightningPose_horizontal_light.png)
 Convolutional Networks for pose tracking implemented in **Pytorch Lightning**,
 supporting massively accelerated training on _unlabeled_ videos using **NVIDIA DALI**.
 
@@ -91,13 +91,13 @@ arguments to match your data.
     frames as input, and outputs two heatmaps: one "context-aware" and one "static". The prediction
     with the highest confidence is automatically chosen. Must also set `model.do_context=True`.
 - model.do_context (default: `False`) - set to `True` when using `model.model_type=heatmap_mhcrnn`.
-- model.losses*to_use (default: `[]`) - this argument relates to the unsupervised losses. An empty
+- model.losses\*to_use (default: `[]`) - this argument relates to the unsupervised losses. An empty
   list indicates a fully supervised model. Each element of the list corresponds to an unsupervised
   loss. For example,
   `model.losses_to_use=[pca_multiview,temporal]` will fit both a pca_multiview loss and a temporal
   loss. Options include:
-  * pca*multiview: penalize inconsistencies between multiple camera views
-  * pca_singleview: penalize implausible body configurations \* temporal: penalize large temporal jumps
+  - pca\*multiview: penalize inconsistencies between multiple camera views
+  - pca_singleview: penalize implausible body configurations \* temporal: penalize large temporal jumps
 
 See the `losses` section of `scripts/configs/config_default.yaml` for more details on the various
 losses and their associated hyperparameters. The default values in the config file are reasonable
