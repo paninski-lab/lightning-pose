@@ -63,11 +63,13 @@ def get_image_tags(pred_df: pd.DataFrame) -> pd.Series:
 # force typechecking over the entire class. right now fails due to some
 # list/listconfig issue
 class FiftyOneKeypointBase:
+
     def __init__(
         self,
         cfg: DictConfig,
         keypoints_to_plot: Optional[List[str]] = None,
     ) -> None:
+
         self.cfg = cfg
         self.keypoints_to_plot = keypoints_to_plot
         self.dataset_name = self.cfg.eval.fiftyone.dataset_name
@@ -191,7 +193,7 @@ class FiftyOneKeypointBase:
     #         )
     #     return keypoints_list
 
-    @typechecked
+    # @typechecked
     def _slow_single_frame_build(
         self,
         data_dict: Dict[str, Dict[str, np.array]],
@@ -215,7 +217,7 @@ class FiftyOneKeypointBase:
             )
         return keypoints_list
 
-    @typechecked
+    # @typechecked
     def _fast_single_frame_build(
         self,
         data_dict: Dict[str, Dict[str, np.array]],
@@ -237,7 +239,7 @@ class FiftyOneKeypointBase:
         return keypoint
 
     # have two options here, "fast" and "slow"
-    @typechecked
+    # @typechecked
     def build_single_frame_keypoints(
         self, data_dict: Dict[str, Dict[str, np.array]], frame_idx: int
     ) -> List[fo.Keypoint]:
@@ -250,7 +252,7 @@ class FiftyOneKeypointBase:
                 data_dict=data_dict, frame_idx=frame_idx
             )
 
-    @typechecked
+    # @typechecked
     def get_keypoints_per_image(
         self, data_dict: Dict[str, Dict[str, np.array]]
     ) -> List[fo.Keypoints]:
@@ -264,7 +266,7 @@ class FiftyOneKeypointBase:
             keypoints_list.append(fo.Keypoints(keypoints=single_frame_keypoints_list))
         return keypoints_list
 
-    @typechecked
+    # @typechecked
     def get_pred_keypoints_dict(self) -> Dict[str, List[fo.Keypoints]]:
         pred_keypoints_dict = {}
         # loop over the dictionary with predictions per model
@@ -279,8 +281,9 @@ class FiftyOneKeypointBase:
         raise NotImplementedError
 
 
-@typechecked
+# @typechecked
 class FiftyOneImagePlotter(FiftyOneKeypointBase):
+
     def __init__(
         self,
         cfg: DictConfig,
@@ -348,8 +351,9 @@ class FiftyOneImagePlotter(FiftyOneKeypointBase):
         return fiftyone_dataset
 
 
-@typechecked
+# @typechecked
 class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
+
     def __init__(
         self,
         cfg: DictConfig,
@@ -399,7 +403,7 @@ class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
         return dataset
 
 
-@typechecked
+# @typechecked
 class dfConverter:
 
     def __init__(self, df: pd.DataFrame, keypoint_names: List[str]) -> None:
