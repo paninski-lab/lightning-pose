@@ -261,7 +261,7 @@ class PredictionHandler:
 @typechecked
 def predict_dataset(
     cfg: DictConfig,
-    data_module: LightningDataModule,
+    data_module: BaseDataModule,
     ckpt_file: str,
     preds_file: str,
     gpu_id: Optional[int] = None,
