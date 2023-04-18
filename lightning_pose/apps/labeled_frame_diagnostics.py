@@ -91,16 +91,21 @@ def run():
         # ---------------------------------------------------
         st.header("Select data to plot")
 
-        # choose from individual keypoints, their mean, or all at once
-        keypoint_to_plot = st.selectbox(
-            "Select a keypoint:", ["mean", "ALL", *keypoint_names], key="keypoint")
+        col0, col1, col2 = st.columns(3)
 
-        # choose which metric to plot
-        metric_to_plot = st.selectbox("Select a metric:", metric_options, key="metric")
-        y_label = get_y_label(metric_to_plot)
+        with col0:
+            # choose from individual keypoints, their mean, or all at once
+            keypoint_to_plot = st.selectbox(
+                "Keypoint:", ["mean", "ALL", *keypoint_names], key="keypoint")
 
-        # choose data split - train/val/test/unused
-        data_type = st.selectbox("Select data partition:", data_types, key="data partition")
+        with col1:
+            # choose which metric to plot
+            metric_to_plot = st.selectbox("Metric:", metric_options, key="metric")
+            y_label = get_y_label(metric_to_plot)
+
+        with col2:
+            # choose data split - train/val/test/unused
+            data_type = st.selectbox("Train/Val/Test:", data_types, key="data partition")
 
         # ---------------------------------------------------
         # plot metrics for all modelsz
@@ -109,9 +114,16 @@ def run():
         st.header("Compare multiple models")
 
         # enumerate plotting options
-        plot_type = st.selectbox("Pick a plot type:", catplot_options)
-        plot_epsilon = st.text_input("Epsilon", 0)
-        plot_scale = st.radio("Select y-axis scale", scale_options)
+        col3, col4, col5 = st.columns(3)
+
+        with col3:
+            plot_type = st.selectbox("Plot style:", catplot_options)
+
+        with col4:
+            plot_epsilon = st.text_input("Metric threshold", 0)
+
+        with col5:
+            plot_scale = st.radio("Y-axis scale", scale_options, horizontal=True)
 
         # filter data
         df_metrics_filt = df_metrics[metric_to_plot][df_metrics[metric_to_plot].set == data_type]
@@ -153,15 +165,21 @@ def run():
         # ---------------------------------------------------
 
         st.header("Compare two models")
-        model_0 = st.selectbox(
-            "Model 0 (x-axis):", new_names, key="model_0")
-        model_1 = st.selectbox(
-            "Model 1 (y-axis):", [n for n in new_names if n != model_0], key="model_1")
+
+        col6, col7, col8 = st.columns(3)
+
+        with col6:
+            model_0 = st.selectbox("Model 0 (x-axis):", new_names, key="model_0")
+
+        with col7:
+            new_names_ = [n for n in new_names if n != model_0]
+            model_1 = st.selectbox("Model 1 (y-axis):", new_names_, key="model_1")
+
+        with col8:
+            plot_scatter_scale = st.radio("Axes scale", scale_options, horizontal=True)
 
         df_tmp0 = df_metrics[metric_to_plot][df_metrics[metric_to_plot].model_name == model_0]
         df_tmp1 = df_metrics[metric_to_plot][df_metrics[metric_to_plot].model_name == model_1]
-
-        plot_scatter_scale = st.radio("Select axes scale", ["linear", "log"])
 
         if keypoint_to_plot == "ALL":
 

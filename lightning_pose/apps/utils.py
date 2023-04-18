@@ -15,7 +15,7 @@ pcamv_error_key = "pca multiview"
 pcasv_error_key = "pca singleview"
 
 
-@st.cache(allow_output_mutation=True)
+@st.cache_resource
 def update_labeled_file_list(model_preds_folder: list):
     # use_cli_preds = False
     per_model_preds = []
@@ -30,7 +30,7 @@ def update_labeled_file_list(model_preds_folder: list):
     return per_model_preds
 
 
-@st.cache(allow_output_mutation=True)
+@st.cache_resource
 def update_vid_metric_files_list(video: str, model_preds_folder: list):
     per_vid_preds = []
     for i in range(len(model_preds_folder)):
@@ -45,7 +45,7 @@ def update_vid_metric_files_list(video: str, model_preds_folder: list):
     return per_vid_preds
 
 
-@st.cache(allow_output_mutation=True)
+@st.cache_resource
 def get_all_videos(model_preds_folder: list):
     # find each video that is predicted on by the models; wrap in Path so that it looks like an UploadedFile object
     # returned by streamlit's file_uploader
@@ -64,7 +64,7 @@ def get_all_videos(model_preds_folder: list):
     return list(ret_videos)
 
 
-@st.cache
+@st.cache_data
 def concat_dfs(dframes: Dict[str, pd.DataFrame]) -> Tuple[pd.DataFrame, List[str]]:
     counter = 0
     for model_name, dframe in dframes.items():
@@ -79,7 +79,8 @@ def concat_dfs(dframes: Dict[str, pd.DataFrame]) -> Tuple[pd.DataFrame, List[str
         counter += 1
     return df_concat, base_colnames
 
-@st.cache
+
+@st.cache_data
 def get_df_box(df_orig, keypoint_names, model_names):
     df_boxes = []
     for keypoint in keypoint_names:
@@ -94,7 +95,7 @@ def get_df_box(df_orig, keypoint_names, model_names):
     return pd.concat(df_boxes)
 
 
-@st.cache
+@st.cache_data
 def get_df_scatter(df_0, df_1, data_type, model_names, keypoint_names):
     df_scatters = []
     for keypoint in keypoint_names:
@@ -124,7 +125,7 @@ def get_full_name(keypoint: str, coordinate: str, model: str) -> str:
 # ----------------------------------------------
 # compute metrics
 # ----------------------------------------------
-@st.cache
+@st.cache_data
 def build_precomputed_metrics_df(
     dframes: Dict[str, pd.DataFrame], keypoint_names: List[str], **kwargs
 ) -> dict:
@@ -150,7 +151,8 @@ def build_precomputed_metrics_df(
 
     return concat_dfs
 
-@st.cache
+
+@st.cache_data
 def get_precomputed_error(
     df: pd.DataFrame, keypoint_names: List[str], model_name: str
 ) -> pd.DataFrame:
@@ -163,7 +165,7 @@ def get_precomputed_error(
     return df_
 
 
-@st.cache
+@st.cache_data
 def compute_confidence(
         df: pd.DataFrame, keypoint_names: List[str], model_name: str, **kwargs
 ) -> pd.DataFrame:
@@ -189,19 +191,3 @@ def compute_confidence(
         df_["img_file"] = df.index
 
     return df_
-
-
-@st.cache
-def compute_temporal_norms(
-    df: pd.DataFrame, keypoint_names: List[str], model_name: str, **kwargs
-) -> pd.DataFrame:
-    # compute the norm just for one dataframe
-    df_norms = pd.DataFrame(columns=keypoint_names)
-    diffs = df.diff(periods=1)  # not using .abs
-    for col in keypoint_names:  # loop over keypoints
-        df_norms[col] = diffs[col][["x", "y"]].apply(
-            np.linalg.norm, axis=1
-        )  # norm of the difference for that keypoint
-    df_norms["model_name"] = model_name
-    df_norms["mean"] = df_norms[keypoint_names[:-1]].mean(axis=1)
-    return df_norms

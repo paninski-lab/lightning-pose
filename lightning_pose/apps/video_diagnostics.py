@@ -33,8 +33,7 @@ def run():
     all_videos_: list = get_all_videos(args.model_folders)
 
     # choose from the different videos that were predicted
-    video_to_plot = st.selectbox(
-        "Select a video:", [*all_videos_], key="video")
+    video_to_plot = st.sidebar.selectbox("Select a video:", [*all_videos_], key="video")
 
     prediction_files = update_vid_metric_files_list(video=video_to_plot, model_preds_folder=args.model_folders)
 
@@ -90,15 +89,21 @@ def run():
         # plot diagnostics
         # ---------------------------------------------------
 
-        # choose which metric to plot
-        metric_to_plot = st.selectbox("Select a metric:", metric_options, key="metric")
+        col00, col01, col02 = st.columns(3)
+
+        with col00:
+            # choose which metric to plot
+            metric_to_plot = st.selectbox("Metric:", metric_options, key="metric")
+
+        with col01:
+            # plot diagnostic averaged overall all keypoints
+            plot_type = st.selectbox("Plot style:", catplot_options, key="plot_type")
+
+        with col02:
+            plot_scale = st.radio("Y-axis scale", scale_options, key="plot_scale", horizontal=True)
 
         x_label = "Model Name"
         y_label = get_y_label(metric_to_plot)
-
-        # plot diagnostic averaged overall all keypoints
-        plot_type = st.selectbox("Select a plot type:", catplot_options, key="plot_type")
-        plot_scale = st.radio("Select y-axis scale", scale_options, key="plot_scale")
         log_y = False if plot_scale == "linear" else True
         fig_cat = make_seaborn_catplot(
             x="model_name", y="mean", data=df_metrics[metric_to_plot], log_y=log_y, x_label=x_label,
@@ -126,10 +131,17 @@ def run():
         # ---------------------------------------------------
         st.header("Trace diagnostics")
 
-        models = st.multiselect(
-            "Select models:", pd.Series(list(dframes_metrics.keys())), default=list(dframes_metrics.keys())
-        )
-        keypoint = st.selectbox("Select a keypoint:", pd.Series(keypoint_names))
+        col10, col11 = st.columns(2)
+
+        with col10:
+            models = st.multiselect(
+                "Models:", 
+                pd.Series(list(dframes_metrics.keys())), default=list(dframes_metrics.keys())
+            )
+
+        with col11:
+            keypoint = st.selectbox("Keypoint:", pd.Series(keypoint_names))
+
         cols = get_col_names(keypoint, "x", models)
         fig_traces = plot_precomputed_traces(df_metrics, df_concat, cols)
         st.plotly_chart(fig_traces)
