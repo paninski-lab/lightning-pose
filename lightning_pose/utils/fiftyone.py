@@ -18,9 +18,7 @@ def check_lists_equal(list_1: list, list_2: list) -> bool:
 
 
 @typechecked
-def remove_string_w_substring_from_list(
-    strings: List[str], substring: str
-) -> List[str]:
+def remove_string_w_substring_from_list(strings: List[str], substring: str) -> List[str]:
     for s in strings:
         if substring in s:
             strings.remove(s)
@@ -426,7 +424,7 @@ class dfConverter:
         return full_dict
 
 
-@typechecked
+# @typechecked
 class FiftyOneFactory:
 
     def __init__(self, dataset_to_create: Literal["images", "videos"]) -> None:
