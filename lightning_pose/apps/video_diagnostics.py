@@ -16,8 +16,6 @@ from lightning_pose.apps.utils import update_vid_metric_files_list, get_all_vide
 from lightning_pose.apps.plots import get_y_label
 from lightning_pose.apps.plots import make_seaborn_catplot, make_plotly_catplot, plot_precomputed_traces
 
-st.session_state["n_submits"] = 0
-
 catplot_options = ["boxen", "box", "bar", "violin", "strip"]
 scale_options = ["linear", "log"]
 
@@ -35,7 +33,8 @@ def run():
     # choose from the different videos that were predicted
     video_to_plot = st.sidebar.selectbox("Select a video:", [*all_videos_], key="video")
 
-    prediction_files = update_vid_metric_files_list(video=video_to_plot, model_preds_folder=args.model_folders)
+    prediction_files = update_vid_metric_files_list(
+        video=video_to_plot, model_preds_folder=args.model_folders)
 
     if len(prediction_files) > 0:  # otherwise don't try to proceed
 
@@ -74,6 +73,7 @@ def run():
         # change dframes key names to new ones
         for n_name, o_name in zip(new_names, og_names):
             dframes_metrics[n_name] = dframes_metrics.pop(o_name)
+            dframes_traces[n_name] = dframes_traces.pop(o_name)
 
         # ---------------------------------------------------
         # compute metrics

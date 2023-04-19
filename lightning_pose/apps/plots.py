@@ -52,20 +52,26 @@ def make_seaborn_catplot(
     return fig
 
 
-def make_plotly_catplot(x, y, data, x_label, y_label, title, plot_type="box"):
+def make_plotly_catplot(
+        x, y, data, x_label, y_label, title, log_y=False, plot_type="box", 
+        fig_height=500, fig_width=500,
+    ):
     if plot_type == "box" or plot_type == "boxen":
-        fig = px.box(data, x=x, y=y)
+        fig = px.box(data, x=x, y=y, log_y=log_y)
     elif plot_type == "violin":
-        fig = px.violin(big_df_filtered, x="model_name", y=keypoint_to_plot, log_y=log_y)
+        fig = px.violin(data, x=x, y=y, log_y=log_y, box=True)
     elif plot_type == "strip":
-        fig = px.strip(big_df_filtered, x="model_name", y=keypoint_to_plot, log_y=log_y)
-    elif plot_type == "bar":
-        fig = px.bar(big_df_filtered, x="model_name", y=keypoint_error, log_y=log_y)
+        fig = px.strip(data, x=x, y=y, log_y=log_y)
+    # elif plot_type == "bar":
+    #     fig = px.bar(data, x=x, y=y, log_y=log_y)
     elif plot_type == "hist":
         fig = px.histogram(
             data, x=x, color="model_name", marginal="rug", barmode="overlay",
         )
-    fig.update_layout(yaxis_title=y_label, xaxis_title=x_label, title=title)
+    fig.update_layout(
+        yaxis_title=y_label, xaxis_title=x_label, title=title, 
+        height=fig_height, width=fig_width,
+    )
 
     return fig
 
