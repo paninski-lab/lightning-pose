@@ -8,9 +8,9 @@ data:
     height: 256
     width: 256
   # ABSOLUTE path to data directory
-  data_dir: "/datastores/mirror-mouse"
+  data_dir: "/home/zeus/content/lightning-pose/data/mirror-mouse"
   # ABSOLUTE path to unlabeled videos' directory
-  video_dir: "/datastores/mirror-mouse/videos"
+  video_dir: "/home/zeus/content/lightning-pose/data/mirror-mouse/videos"
   # location of labels; for example script, this should be relative to `data_dir`
   csv_file: "CollectedData.csv"
   # header rows to strip in label csv file
@@ -234,9 +234,9 @@ eval:
     dataset_to_create: "images"
   # str with an absolute path to a directory containing videos for prediction.
   # (it's not absolute just for the toy example)
-  test_videos_directory: "/datastores/mirror-mouse/videos_new"
+  test_videos_directory: "/home/zeus/content/lightning-pose/data/mirror-mouse/videos"
   # str with an absolute path to directory in which you want to save .csv with predictions
-  saved_vid_preds_dir: "/home/jovyan"
+  saved_vid_preds_dir: "/home/zeus"
   # create labeled video from each video in test_videos_directory
   create_labeled_video: false
   # confidence threshold for plotting a vid
