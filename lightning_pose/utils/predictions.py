@@ -557,8 +557,8 @@ def make_dlc_pandas_index(cfg: DictConfig, keypoint_names: List[str]) -> pd.Mult
     return pdindex
 
 
-@typechecked
-def get_model_class(map_type: str, semi_supervised: bool) -> Type[LightningModule]:
+# @typechecked
+def get_model_class(map_type: str, semi_supervised: bool) -> LightningModule:
     """[summary]
 
     Args:
@@ -595,7 +595,7 @@ def get_model_class(map_type: str, semi_supervised: bool) -> Type[LightningModul
     return Model
 
 
-@typechecked
+# @typechecked
 def load_model_from_checkpoint(
     cfg: DictConfig, ckpt_file: str, eval: bool = False, data_module=None,
 ) -> LightningModule:
