@@ -4,6 +4,7 @@ grid_artifacts/
 outputs/
 multirun/
 preds/
+data/
 #scripts/configs_*
 
 # Byte-compiled / optimized / DLL files
