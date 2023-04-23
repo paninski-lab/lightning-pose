@@ -16,7 +16,7 @@ from lightning_pose.apps.utils import update_vid_metric_files_list, get_all_vide
 from lightning_pose.apps.plots import get_y_label
 from lightning_pose.apps.plots import make_seaborn_catplot, make_plotly_catplot, plot_precomputed_traces
 
-catplot_options = ["boxen", "box", "bar", "violin", "strip"]
+catplot_options = ["boxen", "box", "bar", "violin", "strip", "hist"]
 scale_options = ["linear", "log"]
 
 
@@ -105,26 +105,30 @@ def run():
         x_label = "Model Name"
         y_label = get_y_label(metric_to_plot)
         log_y = False if plot_scale == "linear" else True
-        fig_cat = make_seaborn_catplot(
-            x="model_name", y="mean", data=df_metrics[metric_to_plot], log_y=log_y, x_label=x_label,
-            y_label=y_label, title="Average over all keypoints", plot_type=plot_type)
-        st.pyplot(fig_cat)
+        
+        # DB: commented out seaborn for visual coherence
+        # fig_cat = make_seaborn_catplot(
+        #     x="model_name", y="mean", data=df_metrics[metric_to_plot], log_y=log_y, x_label=x_label,
+        #     y_label=y_label, title="Average over all keypoints", plot_type=plot_type)
+        # st.pyplot(fig_cat)
 
+        
         # select keypoint to plot
         keypoint_to_plot = st.selectbox(
             "Select a keypoint:", pd.Series([*keypoint_names, "mean"]), key="keypoint_to_plot",
         )
-        # show boxplot per keypoint
-        fig_box = make_plotly_catplot(
-            x="model_name", y=keypoint_to_plot, data=df_metrics[metric_to_plot], x_label=x_label,
-            y_label=y_label, title=keypoint_to_plot, plot_type="box")
-        st.plotly_chart(fig_box)
-        # show histogram per keypoint
-        fig_hist = make_plotly_catplot(
+        
+        if plot_type != "hist":
+            # show plot per keypoint
+            plotly_flex_fig = make_plotly_catplot(
+                x="model_name", y=keypoint_to_plot, data=df_metrics[metric_to_plot], x_label=x_label,
+                y_label=y_label, title=keypoint_to_plot, plot_type=plot_type)
+        else:
+            plotly_flex_fig = make_plotly_catplot(
             x=keypoint_to_plot, y=None, data=df_metrics[metric_to_plot], x_label=y_label,
             y_label="Frame count", title=keypoint_to_plot, plot_type="hist"
-        )
-        st.plotly_chart(fig_hist)
+            )
+        st.plotly_chart(plotly_flex_fig)
 
         # ---------------------------------------------------
         # plot traces
