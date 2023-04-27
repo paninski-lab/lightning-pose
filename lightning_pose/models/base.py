@@ -12,6 +12,7 @@ from typeguard import typechecked
 from typing import Dict, Literal, Optional, Tuple, Union
 
 from collections import OrderedDict
+from segment_anything import sam_model_registry
 
 from lightning_pose.data.utils import (
     BaseLabeledBatchDict,
@@ -96,6 +97,7 @@ class BaseFeatureExtractor(LightningModule):
             "resnet50_human_jhmdb",
             "resnet50_human_res_rle",
             "resnet50_human_top_res",
+            "vit_h_sam",
         ] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
@@ -121,11 +123,12 @@ class BaseFeatureExtractor(LightningModule):
         print("\n Initializing a {} instance.".format(self._get_name()))
 
         self.backbone_arch = backbone
-        self.mode = "3d" if "3d" in backbone else "2d"
+        self.mode = "2d"
 
         # load backbone weights
         if "3d" in backbone:
             base = torch.hub.load("facebookresearch/pytorchvideo", "slow_r50", pretrained=True)
+            self.mode = "3d"
 
         elif backbone == "resnet50_contrastive":
             # load resnet50 pretrained using SimCLR on imagenet
@@ -168,7 +171,13 @@ class BaseFeatureExtractor(LightningModule):
                     new_key = ".".join(key.split(".")[1:])
                     new_state_dict[new_key] = state_dict[key]
             base.load_state_dict(new_state_dict, strict=False)
-
+        elif "vit_h_sam" in backbone:
+            checkpoint_url = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth"
+            state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)
+            base = sam_model_registry["vit_h"]()
+            base.load_state_dict(state_dict)
+            self.mode = "transformer"
+            
         else:
             # load resnet or efficientnet models from torchvision.models
             base = getattr(tvmodels, backbone)(pretrained=pretrained)
@@ -178,6 +187,8 @@ class BaseFeatureExtractor(LightningModule):
             self.backbone = grab_layers_sequential_3d(
                 model=base, last_layer_ind=last_resnet_layer_to_get
             )
+        elif 'sam' in backbone:
+            self.backbone = base.image_encoder
         else:
             self.backbone = grab_layers_sequential(
                 model=base, last_layer_ind=last_resnet_layer_to_get,
@@ -190,10 +201,14 @@ class BaseFeatureExtractor(LightningModule):
             self.num_fc_input_features = base.classifier[-1].in_features
         elif "3d" in backbone:
             self.num_fc_input_features = base.blocks[-1].proj.in_features // 2
+        elif 'sam' in backbone:
+            self.num_fc_input_features = self.backbone.neck[-2].in_channels
 
         self.lr_scheduler = lr_scheduler
         self.lr_scheduler_params = lr_scheduler_params
         self.do_context = do_context
+
+        self.backbone.cuda()
 
     def get_representations(
         self,
@@ -285,7 +300,10 @@ class BaseFeatureExtractor(LightningModule):
             representations: TensorType[
                 "batch", "features", "rep_height", "rep_width", "frames"
             ] = torch.permute(output, (0, 1, 3, 4, 2))
-
+        elif self.mode == "transformer":
+            with torch.no_grad(): # TODO: temporary no_grad
+                representations = self.backbone(images)
+                
         return representations
 
     def forward(
