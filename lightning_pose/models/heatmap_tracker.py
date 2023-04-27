@@ -63,6 +63,7 @@ class HeatmapTracker(BaseSupervisedTracker):
             "resnet50_human_jhmdb",
             "resnet50_human_res_rle",
             "resnet50_human_top_res",
+            "vit_h_sam",
         ] = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
