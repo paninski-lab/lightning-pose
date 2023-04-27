@@ -208,8 +208,6 @@ class BaseFeatureExtractor(LightningModule):
         self.lr_scheduler_params = lr_scheduler_params
         self.do_context = do_context
 
-        self.backbone.cuda()
-
     def get_representations(
         self,
         images: Union[
