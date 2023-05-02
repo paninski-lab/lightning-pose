@@ -3,6 +3,7 @@
 from omegaconf import DictConfig
 from lightning.pytorch import LightningModule
 import torch
+from functools import partial
 from torch import nn
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
@@ -12,7 +13,7 @@ from typeguard import typechecked
 from typing import Dict, Literal, Optional, Tuple, Union
 
 from collections import OrderedDict
-from segment_anything import sam_model_registry
+from segment_anything.modeling import ImageEncoderViT
 
 from lightning_pose.data.utils import (
     BaseLabeledBatchDict,
@@ -174,8 +175,28 @@ class BaseFeatureExtractor(LightningModule):
         elif "vit_h_sam" in backbone:
             checkpoint_url = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth"
             state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)
-            base = sam_model_registry["vit_h"]()
-            base.load_state_dict(state_dict)
+            encoder_embed_dim = 1280
+            encoder_depth = 32
+            encoder_num_heads = 16
+            encoder_global_attn_indexes = (7, 15, 23, 31)
+            prompt_embed_dim = 256
+            image_size = 256
+            vit_patch_size = 16
+            base = ImageEncoderViT(
+                    depth=encoder_depth,
+                    embed_dim=encoder_embed_dim,
+                    img_size=image_size,
+                    mlp_ratio=4,
+                    norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
+                    num_heads=encoder_num_heads,
+                    patch_size=vit_patch_size,
+                    qkv_bias=True,
+                    use_rel_pos=True,
+                    global_attn_indexes=encoder_global_attn_indexes,
+                    window_size=14,
+                    out_chans=prompt_embed_dim,
+                )
+            base.load_state_dict(state_dict, strict=False)
             self.mode = "transformer"
             
         else:
@@ -188,7 +209,7 @@ class BaseFeatureExtractor(LightningModule):
                 model=base, last_layer_ind=last_resnet_layer_to_get
             )
         elif 'sam' in backbone:
-            self.backbone = base.image_encoder
+            self.backbone = base
         else:
             self.backbone = grab_layers_sequential(
                 model=base, last_layer_ind=last_resnet_layer_to_get,
@@ -299,8 +320,7 @@ class BaseFeatureExtractor(LightningModule):
                 "batch", "features", "rep_height", "rep_width", "frames"
             ] = torch.permute(output, (0, 1, 3, 4, 2))
         elif self.mode == "transformer":
-            with torch.no_grad(): # TODO: temporary no_grad
-                representations = self.backbone(images)
+            representations = self.backbone(images)
                 
         return representations
 
