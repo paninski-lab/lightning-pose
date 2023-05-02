@@ -118,7 +118,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.temperature = torch.tensor(1000.0, device=self.device)  # soft argmax temp
         self.torch_seed = torch_seed
         self.do_context = do_context
-        if self.mode == "2d":
+        if self.mode == "2d" or self.mode == "transformer":
             self.unnormalized_weights = nn.parameter.Parameter(
                 torch.Tensor([[0.2, 0.2, 0.2, 0.2, 0.2]]), requires_grad=False
             )
