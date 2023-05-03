@@ -8,7 +8,7 @@ Preprint: [Lightning Pose: improved animal pose estimation via semi-supervised l
 ![GitHub](https://img.shields.io/github/license/danbider/lightning-pose)
 ![PyPI](https://img.shields.io/pypi/v/lightning-pose)
 
-### Built with the coolest Deep Learning packages
+Built with the coolest Deep Learning packages
 
 - `pytorch-lightning` for multiple-GPU training and to minimize boilerplate code
 - `nvidia-DALI` for accelerated GPU dataloading
@@ -16,6 +16,10 @@ Preprint: [Lightning Pose: improved animal pose estimation via semi-supervised l
 - `kornia` for differntiable computer vision ops
 - `FiftyOne` for visualizing model predictions
 - `Tensorboard` to visually diagnoze training performance
+
+## Community
+
+Lightning Pose is primarily maintained by [Dan Biderman](https://dan-biderman.netlify.app) (Columbia University) and [Matt Whiteway](https://themattinthehatt.github.io/) (Columbia University).
 
 ## Requirements
 
