@@ -5,6 +5,8 @@ supporting massively accelerated training on _unlabeled_ videos using **NVIDIA D
 Preprint: [Lightning Pose: improved animal pose estimation via semi-supervised learning, Bayesian ensembling, and cloud-native open-source tools](https://www.biorxiv.org/content/10.1101/2023.04.28.538703v1)
 
 [![Discord](https://img.shields.io/discord/1103381776895856720)](https://discord.gg/tDUPdRj4BM)
+![GitHub](https://img.shields.io/github/license/danbider/lightning-pose)
+![PyPI](https://img.shields.io/pypi/v/lightning-pose)
 
 ### Built with the coolest Deep Learning packages
 
