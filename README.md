@@ -2,7 +2,7 @@
 Pose estimation models implemented in **Pytorch Lightning**,
 supporting massively accelerated training on _unlabeled_ videos using **NVIDIA DALI**. The whole thing can be orchestrated with **Hydra** if you so choose.
 
-Preprint: [Lightning Pose: improved animal pose estimation via semi-supervised learning, Bayesian ensembling, and cloud-native open-source tools](hhttps://www.biorxiv.org/content/10.1101/2023.04.28.538703v1)
+Preprint: [Lightning Pose: improved animal pose estimation via semi-supervised learning, Bayesian ensembling, and cloud-native open-source tools](https://www.biorxiv.org/content/10.1101/2023.04.28.538703v1)
 
 [![Discord](https://img.shields.io/discord/1103381776895856720)](https://discord.gg/tDUPdRj4BM)
 
