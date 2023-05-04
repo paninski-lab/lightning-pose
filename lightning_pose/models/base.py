@@ -209,6 +209,7 @@ class BaseFeatureExtractor(LightningModule):
                 model=base, last_layer_ind=last_resnet_layer_to_get
             )
         elif 'sam' in backbone:
+            base.neck = nn.Sequential()
             self.backbone = base
         else:
             self.backbone = grab_layers_sequential(
@@ -223,7 +224,7 @@ class BaseFeatureExtractor(LightningModule):
         elif "3d" in backbone:
             self.num_fc_input_features = base.blocks[-1].proj.in_features // 2
         elif 'sam' in backbone:
-            self.num_fc_input_features = self.backbone.neck[-2].in_channels
+            self.num_fc_input_features = base.blocks[-1].mlp.lin2.out_features
 
         self.lr_scheduler = lr_scheduler
         self.lr_scheduler_params = lr_scheduler_params
