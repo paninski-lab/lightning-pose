@@ -2,9 +2,12 @@
 
 Refer to apps.md for information on how to use this file.
 
+streamlit run labeled_frame_diagnostics.py -- --model_dir "/home/zeus/content/Pose-app/data/demo/models"
+
 """
 
 import argparse
+import copy
 import numpy as np
 import streamlit as st
 import seaborn as sns
@@ -34,10 +37,37 @@ def run():
 
     st.sidebar.header("Data Settings")
 
-    prediction_files = update_labeled_file_list(args.model_folders)
+    # add a multiselect that shows existing model folders, and allows the user to de-select models
+    # assume we have args.model_dir and we search two levels down for model folders
+    # list a all subfolders in model_dir, going three levels down. just folders not files
+    model_folders = []
+    for root, dirs, files in os.walk(args.model_dir):
+        if root.count(os.sep) - args.model_dir.count(os.sep) == 2:
+            model_folders.append(root)
+    
+    # get everything but the last two levels of the path for one example folder
+    # we need this to construct the full path to the model folders, without showing all to users
+    path_example = model_folders[0]
+    path_example = path_example.split('/')[:-2]
+    path_example = os.path.join(*path_example)
+    
+    # just to get the last two levels of the path
+    fs = []
+    for f in model_folders:
+        fs.append(f.split('/')[-2:])
+    model_folders_vis = [os.path.join(*f) for f in fs]
+    selected_models_vis = st.sidebar.multiselect("Model folders", model_folders_vis, model_folders_vis)
+
+    selected_models = ["/" + os.path.join(path_example, f) for f in selected_models_vis]
+    
+    # search for prediction files in the selected model folders
+    prediction_files = update_labeled_file_list(selected_models)
+
+    st.text(prediction_files)
 
     # col wrap when plotting results from all keypoints
     n_cols = 3
+    model_names = copy.copy(selected_models_vis)
 
     if len(prediction_files) > 0:  # otherwise don't try to proceed
 
@@ -46,10 +76,8 @@ def run():
         # ---------------------------------------------------
         dframes_metrics = defaultdict(dict)
         for p, model_pred_files in enumerate(prediction_files):
-            # use provided names from cli
-            if len(args.model_names) > 0:
-                model_name = args.model_names[p]
-                model_folder = args.model_folders[p]
+            model_name = model_names[p]
+            model_folder = selected_models[p]
 
             for model_pred_file in model_pred_files:
                 model_pred_file_path = os.path.join(model_folder, model_pred_file)
@@ -133,7 +161,7 @@ def run():
 
             # filter data
             df_metrics_filt = df_metrics[metric_to_plot][df_metrics[metric_to_plot].set == data_type]
-            n_frames_per_dtype = df_metrics_filt.shape[0] // len(args.model_folders)
+            n_frames_per_dtype = df_metrics_filt.shape[0] // len(selected_models) # len(args.model_folders)
 
             # plot data
             title = '%s (%i %s frames)' % (keypoint_to_plot, n_frames_per_dtype, data_type)
@@ -233,8 +261,6 @@ def run():
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-
-    parser.add_argument('--model_names', action='append', default=[])
-    parser.add_argument('--model_folders', action='append', default=[])
+    parser.add_argument('--model_dir', type=str, default="/home/zeus/content/Pose-app/data/demo/models")
 
     run()
