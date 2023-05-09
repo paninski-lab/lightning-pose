@@ -17,7 +17,7 @@ from collections import defaultdict
 
 from lightning_pose.apps.utils import build_precomputed_metrics_df, get_col_names, concat_dfs
 from lightning_pose.apps.utils import update_vid_metric_files_list, get_all_videos
-from lightning_pose.apps.utils import get_model_folders, get_path_example, get_model_folders_vis
+from lightning_pose.apps.utils import get_model_folders, get_model_folders_vis
 from lightning_pose.apps.plots import get_y_label
 from lightning_pose.apps.plots import make_seaborn_catplot, make_plotly_catplot, plot_precomputed_traces
 
@@ -31,14 +31,14 @@ def run():
 
     st.title("Video Diagnostics")
 
+    # check if args.model_dir is a dir, if not, raise an error
+    if not os.path.isdir(args.model_dir):
+        st.text(f"--model_dir {args.model_dir} does not exist. \nPlease check the path and try again.")
+
     st.sidebar.header("Data Settings")
 
     # ----- selecting which models to use -----
     model_folders = get_model_folders(args.model_dir)
-    
-    # get everything but the last two levels of the path for one example folder
-    # we need this to construct the full path to the model folders, without showing all to users
-    path_example = get_path_example(model_folders)
     
     # get the last two levels of each path to be presented to user
     model_folders_vis = get_model_folders_vis(model_folders)
@@ -46,7 +46,7 @@ def run():
     selected_models_vis = st.sidebar.multiselect("Select models", model_folders_vis, model_folders_vis)
 
     # append this to full path
-    selected_models = ["/" + os.path.join(path_example, f) for f in selected_models_vis]
+    selected_models = ["/" + os.path.join(args.model_dir, f) for f in selected_models_vis]
     
     # ----- selecting videos to analyze -----
     all_videos_: list = get_all_videos(selected_models)

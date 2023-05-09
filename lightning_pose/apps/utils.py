@@ -201,14 +201,6 @@ def get_model_folders(model_dir):
             model_folders.append(root)
     return model_folders
 
-# get everything but the last two levels of the path for one example folder
-# we need this to construct the full path to the model folders, without showing all to users
-def get_path_example(model_folders):
-    path_example = model_folders[0]
-    path_example = path_example.split('/')[:-2]
-    path_example = os.path.join(*path_example)
-    return path_example
-
 # just to get the last two levels of the path
 def get_model_folders_vis(model_folders):
     fs = []

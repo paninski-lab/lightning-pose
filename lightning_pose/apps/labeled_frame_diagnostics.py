@@ -19,7 +19,7 @@ import os
 
 from lightning_pose.apps.utils import build_precomputed_metrics_df, get_df_box, get_df_scatter
 from lightning_pose.apps.utils import update_labeled_file_list
-from lightning_pose.apps.utils import get_model_folders, get_path_example, get_model_folders_vis 
+from lightning_pose.apps.utils import get_model_folders, get_model_folders_vis 
 from lightning_pose.apps.plots import make_seaborn_catplot, make_plotly_scatterplot, get_y_label
 from lightning_pose.apps.plots import make_plotly_catplot
 
@@ -35,15 +35,15 @@ def run():
 
     st.title("Labeled Frame Diagnostics")
 
+    # check if args.model_dir is a dir, if not, raise an error
+    if not os.path.isdir(args.model_dir):
+        st.text(f"--model_dir {args.model_dir} does not exist. \nPlease check the path and try again.")
+
     st.sidebar.header("Data Settings")
 
     # add a multiselect that shows existing model folders, and allows the user to de-select models
     # assume we have args.model_dir and we search two levels down for model folders
     model_folders = get_model_folders(args.model_dir)
-    
-    # get everything but the last two levels of the path for one example folder
-    # we need this to construct the full path to the model folders, without showing all to users
-    path_example = get_path_example(model_folders)
     
     # get the last two levels of each path to be presented to user
     model_folders_vis = get_model_folders_vis(model_folders)
@@ -51,7 +51,7 @@ def run():
     selected_models_vis = st.sidebar.multiselect("Select models", model_folders_vis, model_folders_vis)
 
     # append this to full path
-    selected_models = ["/" + os.path.join(path_example, f) for f in selected_models_vis]
+    selected_models = ["/" + os.path.join(args.model_dir, f) for f in selected_models_vis]
     
     # search for prediction files in the selected model folders
     prediction_files = update_labeled_file_list(selected_models)
@@ -152,7 +152,7 @@ def run():
 
             # filter data
             df_metrics_filt = df_metrics[metric_to_plot][df_metrics[metric_to_plot].set == data_type]
-            n_frames_per_dtype = df_metrics_filt.shape[0] // len(selected_models) # len(args.model_folders)
+            n_frames_per_dtype = df_metrics_filt.shape[0] // len(selected_models)
 
             # plot data
             title = '%s (%i %s frames)' % (keypoint_to_plot, n_frames_per_dtype, data_type)
@@ -252,6 +252,6 @@ def run():
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_dir', type=str, default="/home/zeus/content/Pose-app/data/demo/models")
+    parser.add_argument('--model_dir', type=str, default=[])
 
     run()
