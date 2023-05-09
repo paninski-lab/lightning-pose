@@ -19,6 +19,7 @@ import os
 
 from lightning_pose.apps.utils import build_precomputed_metrics_df, get_df_box, get_df_scatter
 from lightning_pose.apps.utils import update_labeled_file_list
+from lightning_pose.apps.utils import get_model_folders, get_path_example, get_model_folders_vis 
 from lightning_pose.apps.plots import make_seaborn_catplot, make_plotly_scatterplot, get_y_label
 from lightning_pose.apps.plots import make_plotly_catplot
 
@@ -27,7 +28,6 @@ catplot_options = ["box", "violin", "strip"]  # for plotly
 scale_options = ["linear", "log"]
 
 st.set_page_config(layout="wide")
-
 
 def run():
 
@@ -39,25 +39,18 @@ def run():
 
     # add a multiselect that shows existing model folders, and allows the user to de-select models
     # assume we have args.model_dir and we search two levels down for model folders
-    # list a all subfolders in model_dir, going three levels down. just folders not files
-    model_folders = []
-    for root, dirs, files in os.walk(args.model_dir):
-        if root.count(os.sep) - args.model_dir.count(os.sep) == 2:
-            model_folders.append(root)
+    model_folders = get_model_folders(args.model_dir)
     
     # get everything but the last two levels of the path for one example folder
     # we need this to construct the full path to the model folders, without showing all to users
-    path_example = model_folders[0]
-    path_example = path_example.split('/')[:-2]
-    path_example = os.path.join(*path_example)
+    path_example = get_path_example(model_folders)
     
-    # just to get the last two levels of the path
-    fs = []
-    for f in model_folders:
-        fs.append(f.split('/')[-2:])
-    model_folders_vis = [os.path.join(*f) for f in fs]
+    # get the last two levels of each path to be presented to user
+    model_folders_vis = get_model_folders_vis(model_folders)
+
     selected_models_vis = st.sidebar.multiselect("Model folders", model_folders_vis, model_folders_vis)
 
+    # append this to full path
     selected_models = ["/" + os.path.join(path_example, f) for f in selected_models_vis]
     
     # search for prediction files in the selected model folders
