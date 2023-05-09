@@ -191,3 +191,20 @@ def compute_confidence(
         df_["img_file"] = df.index
 
     return df_
+
+#------------ utils related to model finding in dir ---------
+# write a function that finds all model folders in the model_dir
+def get_model_folders(model_dir):
+    model_folders = []
+    for root, dirs, files in os.walk(model_dir):
+        if root.count(os.sep) - model_dir.count(os.sep) == 2:
+            model_folders.append(root)
+    return model_folders
+
+# just to get the last two levels of the path
+def get_model_folders_vis(model_folders):
+    fs = []
+    for f in model_folders:
+        fs.append(f.split('/')[-2:])
+    model_folders_vis = [os.path.join(*f) for f in fs]
+    return model_folders_vis
