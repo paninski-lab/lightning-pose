@@ -43,7 +43,7 @@ def run():
     # get the last two levels of each path to be presented to user
     model_folders_vis = get_model_folders_vis(model_folders)
 
-    selected_models_vis = st.sidebar.multiselect("Select models", model_folders_vis, model_folders_vis)
+    selected_models_vis = st.sidebar.multiselect("Select models", model_folders_vis, default=None)
 
     # append this to full path
     selected_models = ["/" + os.path.join(args.model_dir, f) for f in selected_models_vis]

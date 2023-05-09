@@ -48,7 +48,7 @@ def run():
     # get the last two levels of each path to be presented to user
     model_folders_vis = get_model_folders_vis(model_folders)
 
-    selected_models_vis = st.sidebar.multiselect("Select models", model_folders_vis, model_folders_vis)
+    selected_models_vis = st.sidebar.multiselect("Select models", model_folders_vis, default=None)
 
     # append this to full path
     selected_models = ["/" + os.path.join(args.model_dir, f) for f in selected_models_vis]
@@ -67,8 +67,9 @@ def run():
         # ---------------------------------------------------
         dframes_metrics = defaultdict(dict)
         for p, model_pred_files in enumerate(prediction_files):
-            model_name = model_names[p]
-            model_folder = selected_models[p]
+            if len(model_names) > 0:
+                model_name = model_names[p]
+                model_folder = selected_models[p]
 
             for model_pred_file in model_pred_files:
                 model_pred_file_path = os.path.join(model_folder, model_pred_file)
