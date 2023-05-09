@@ -2,10 +2,14 @@
 
 Refer to apps.md for information on how to use this file.
 
+streamlit run video_diagnostics.py -- --model_dir "/home/zeus/content/Pose-app/data/demo/models"
+
+
 """
 
 import argparse
 import os
+import copy
 import pandas as pd
 from pathlib import Path
 import streamlit as st
@@ -13,6 +17,7 @@ from collections import defaultdict
 
 from lightning_pose.apps.utils import build_precomputed_metrics_df, get_col_names, concat_dfs
 from lightning_pose.apps.utils import update_vid_metric_files_list, get_all_videos
+from lightning_pose.apps.utils import get_model_folders, get_path_example, get_model_folders_vis
 from lightning_pose.apps.plots import get_y_label
 from lightning_pose.apps.plots import make_seaborn_catplot, make_plotly_catplot, plot_precomputed_traces
 
@@ -28,13 +33,31 @@ def run():
 
     st.sidebar.header("Data Settings")
 
-    all_videos_: list = get_all_videos(args.model_folders)
+    # ----- selecting which models to use -----
+    model_folders = get_model_folders(args.model_dir)
+    
+    # get everything but the last two levels of the path for one example folder
+    # we need this to construct the full path to the model folders, without showing all to users
+    path_example = get_path_example(model_folders)
+    
+    # get the last two levels of each path to be presented to user
+    model_folders_vis = get_model_folders_vis(model_folders)
+
+    selected_models_vis = st.sidebar.multiselect("Select models", model_folders_vis, model_folders_vis)
+
+    # append this to full path
+    selected_models = ["/" + os.path.join(path_example, f) for f in selected_models_vis]
+    
+    # ----- selecting videos to analyze -----
+    all_videos_: list = get_all_videos(selected_models)
 
     # choose from the different videos that were predicted
     video_to_plot = st.sidebar.selectbox("Select a video:", [*all_videos_], key="video")
 
     prediction_files = update_vid_metric_files_list(
-        video=video_to_plot, model_preds_folder=args.model_folders)
+        video=video_to_plot, model_preds_folder=selected_models)
+    
+    model_names = copy.copy(selected_models_vis)
 
     if len(prediction_files) > 0:  # otherwise don't try to proceed
 
@@ -45,9 +68,9 @@ def run():
         dframes_traces = {}
         for p, model_pred_files in enumerate(prediction_files):
             # use provided names from cli
-            if len(args.model_names) > 0:
-                model_name = args.model_names[p]
-                model_folder = args.model_folders[p]
+            if len(model_names) > 0:
+                model_name = model_names[p]
+                model_folder = selected_models[p]
 
             for model_pred_file in model_pred_files:
                 model_pred_file_path = os.path.join(model_folder, 'video_preds', model_pred_file)
@@ -155,7 +178,6 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--model_folders', action='append', default=[])
-    parser.add_argument('--model_names', action='append', default=[])
+    parser.add_argument('--model_dir', type=str, default="/home/zeus/content/Pose-app/data/demo/models")
 
     run()

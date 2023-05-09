@@ -48,15 +48,13 @@ def run():
     # get the last two levels of each path to be presented to user
     model_folders_vis = get_model_folders_vis(model_folders)
 
-    selected_models_vis = st.sidebar.multiselect("Model folders", model_folders_vis, model_folders_vis)
+    selected_models_vis = st.sidebar.multiselect("Select models", model_folders_vis, model_folders_vis)
 
     # append this to full path
     selected_models = ["/" + os.path.join(path_example, f) for f in selected_models_vis]
     
     # search for prediction files in the selected model folders
     prediction_files = update_labeled_file_list(selected_models)
-
-    st.text(prediction_files)
 
     # col wrap when plotting results from all keypoints
     n_cols = 3
