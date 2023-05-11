@@ -258,8 +258,11 @@ class HeatmapTracker(BaseSupervisedTracker):
                 out_channels=self.num_keypoints,
             )
         )  # up to here results in downsample_factor=3
-        for _ in range(4 - self.downsample_factor - 1):
-            # add another upsampling layer to account for heatmap downsampling
+        n_layers_to_build = 4 - self.downsample_factor - 1
+        if self.backbone_arch in ["vit_h_sam", "vit_b_sam"]:
+            n_layers_to_build = -1
+        for _ in range(n_layers_to_build):
+            # add upsampling layer to account for heatmap downsampling
             # upsampling_layers.append(nn.BatchNorm2d(self.num_keypoints))
             # upsampling_layers.append(nn.ReLU(inplace=True))
             upsampling_layers.append(
