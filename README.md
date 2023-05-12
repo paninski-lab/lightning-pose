@@ -8,14 +8,13 @@ Preprint: [Lightning Pose: improved animal pose estimation via semi-supervised l
 ![GitHub](https://img.shields.io/github/license/danbider/lightning-pose)
 ![PyPI](https://img.shields.io/pypi/v/lightning-pose)
 
-
 ## Community
 
-Lightning Pose is primarily maintained by [Dan Biderman](https://dan-biderman.netlify.app) (Columbia University) and [Matt Whiteway](https://themattinthehatt.github.io/) (Columbia University).
+Lightning Pose is primarily maintained by [Dan Biderman](https://dan-biderman.netlify.app) (Columbia University) and [Matt Whiteway](https://themattinthehatt.github.io/) (Columbia University). Come chat with us in Discord.
 
 ## Requirements
 
-Your (potentially remote) machine has a Linux operating system, at least one GPU and **CUDA 12** installed. This
+Your (potentially remote) machine has a Linux operating system, at least one GPU and **CUDA 11.0-12.x** installed. This
 is a requirement for **NVIDIA DALI**.
 
 ## Installation
@@ -54,6 +53,20 @@ machine by running
 
 ```console
 foo@bar:~$ pytest
+```
+
+## Docker users
+
+Use the appropriate Dockerfiles in this directory to build a Docker image (currently supported for CUDA 11.X only):
+
+```console
+docker build -f Dockerfile.cuda11 -t my-image:cuda11 .
+```
+
+Run code inside a container (following [this tutorial](https://docs.docker.com/get-started/)):
+
+```console
+docker run -it --rm --gpus all my-image:cuda11
 ```
 
 ## Working with `hydra`
