@@ -1,11 +1,38 @@
 #:!/usr/bin/env python
 from setuptools import find_packages, setup
+import subprocess
+import re
 
 VERSION = "0.0.1"  # was previously None
 
 # add the README.md file to the long_description
 with open("README.md", "r") as fh:
     long_description = fh.read()
+
+def get_cuda_version():
+    try:
+        output = subprocess.check_output(["nvcc", "--version"]).decode()
+        match = re.search(r"release (\d+\.\d+)", output)
+        if match:
+            return float(match.group(1))
+        else:
+            return None
+    except FileNotFoundError:
+        raise FileNotFoundError("nvcc not found. Install CUDA and make sure it's in your path.")
+        return None
+
+cuda_version = get_cuda_version()
+
+if cuda_version is not None:
+    if 11.0 <= cuda_version < 12.0:
+        dali = "nvidia-dali-cuda110"
+    elif 12.0 <= cuda_version < 13.0:
+        dali = "nvidia-dali-cuda120"
+    else:
+        raise ValueError("Unsupported CUDA version.")
+else:
+    raise ValueError("CUDA not found.")
+print(f"Found CUDA version: {cuda_version}, using DALI: {dali}")
 
 install_requires = [
     "black==23.3.0",
@@ -22,7 +49,7 @@ install_requires = [
     "pillow==9.5.0",
     "pytest==7.3.1",
     "lightning",
-    "nvidia-dali-cuda120==1.25.0",
+    dali,
     "tensorboard==2.13.0",
     "lightning-bolts==0.6.0.post1",
     "seaborn==0.12.2",
