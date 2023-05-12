@@ -9,19 +9,24 @@ VERSION = "0.0.1"  # was previously None
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
+
 def get_cuda_version():
-    try:
-        output = subprocess.check_output(["nvcc", "--version"]).decode()
-        match = re.search(r"release (\d+\.\d+)", output)
-        if match:
-            return float(match.group(1))
-        else:
-            return None
-    except FileNotFoundError:
-        raise FileNotFoundError("nvcc not found. Install CUDA and make sure it's in your path.")
-        return None
+    nvcc_paths = ["nvcc", "/usr/local/cuda/bin/nvcc"]
+    for nvcc in nvcc_paths:
+        try:
+            output = subprocess.check_output([nvcc, "--version"]).decode()
+            match = re.search(r"release (\d+\.\d+)", output)
+            if match:
+                return float(match.group(1))
+        except FileNotFoundError:
+            continue
+
+    print("nvcc is not installed.")
+    return None
+
 
 cuda_version = get_cuda_version()
+
 
 if cuda_version is not None:
     if 11.0 <= cuda_version < 12.0:
@@ -33,6 +38,7 @@ if cuda_version is not None:
 else:
     raise ValueError("CUDA not found.")
 print(f"Found CUDA version: {cuda_version}, using DALI: {dali}")
+
 
 install_requires = [
     "black==23.3.0",
