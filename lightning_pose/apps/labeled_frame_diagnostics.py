@@ -2,9 +2,12 @@
 
 Refer to apps.md for information on how to use this file.
 
+streamlit run labeled_frame_diagnostics.py -- --model_dir "/home/zeus/content/Pose-app/data/demo/models"
+
 """
 
 import argparse
+import copy
 import numpy as np
 import streamlit as st
 import seaborn as sns
@@ -16,6 +19,7 @@ import os
 
 from lightning_pose.apps.utils import build_precomputed_metrics_df, get_df_box, get_df_scatter
 from lightning_pose.apps.utils import update_labeled_file_list
+from lightning_pose.apps.utils import get_model_folders, get_model_folders_vis 
 from lightning_pose.apps.plots import make_seaborn_catplot, make_plotly_scatterplot, get_y_label
 from lightning_pose.apps.plots import make_plotly_catplot
 
@@ -25,19 +29,36 @@ scale_options = ["linear", "log"]
 
 st.set_page_config(layout="wide")
 
-
 def run():
 
     args = parser.parse_args()
 
     st.title("Labeled Frame Diagnostics")
 
+    # check if args.model_dir is a dir, if not, raise an error
+    if not os.path.isdir(args.model_dir):
+        st.text(f"--model_dir {args.model_dir} does not exist. \nPlease check the path and try again.")
+
     st.sidebar.header("Data Settings")
 
-    prediction_files = update_labeled_file_list(args.model_folders)
+    # add a multiselect that shows existing model folders, and allows the user to de-select models
+    # assume we have args.model_dir and we search two levels down for model folders
+    model_folders = get_model_folders(args.model_dir)
+    
+    # get the last two levels of each path to be presented to user
+    model_folders_vis = get_model_folders_vis(model_folders)
+
+    selected_models_vis = st.sidebar.multiselect("Select models", model_folders_vis, default=None)
+
+    # append this to full path
+    selected_models = ["/" + os.path.join(args.model_dir, f) for f in selected_models_vis]
+    
+    # search for prediction files in the selected model folders
+    prediction_files = update_labeled_file_list(selected_models)
 
     # col wrap when plotting results from all keypoints
     n_cols = 3
+    model_names = copy.copy(selected_models_vis)
 
     if len(prediction_files) > 0:  # otherwise don't try to proceed
 
@@ -46,10 +67,9 @@ def run():
         # ---------------------------------------------------
         dframes_metrics = defaultdict(dict)
         for p, model_pred_files in enumerate(prediction_files):
-            # use provided names from cli
-            if len(args.model_names) > 0:
-                model_name = args.model_names[p]
-                model_folder = args.model_folders[p]
+            if len(model_names) > 0:
+                model_name = model_names[p]
+                model_folder = selected_models[p]
 
             for model_pred_file in model_pred_files:
                 model_pred_file_path = os.path.join(model_folder, model_pred_file)
@@ -133,7 +153,7 @@ def run():
 
             # filter data
             df_metrics_filt = df_metrics[metric_to_plot][df_metrics[metric_to_plot].set == data_type]
-            n_frames_per_dtype = df_metrics_filt.shape[0] // len(args.model_folders)
+            n_frames_per_dtype = df_metrics_filt.shape[0] // len(selected_models)
 
             # plot data
             title = '%s (%i %s frames)' % (keypoint_to_plot, n_frames_per_dtype, data_type)
@@ -233,8 +253,6 @@ def run():
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-
-    parser.add_argument('--model_names', action='append', default=[])
-    parser.add_argument('--model_folders', action='append', default=[])
+    parser.add_argument('--model_dir', type=str, default=[])
 
     run()
