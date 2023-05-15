@@ -5,7 +5,7 @@ from omegaconf import DictConfig
 import os
 import lightning.pytorch as pl
 
-from lightning_pose.utils import pretty_print_str
+from lightning_pose.utils import pretty_print_str, pretty_print_cfg
 from lightning_pose.utils.io import (
     check_video_paths,
     return_absolute_data_paths,
@@ -30,7 +30,7 @@ def train(cfg: DictConfig):
     """Main fitting function, accessed from command line."""
 
     print("Our Hydra config file:")
-    pretty_print(cfg)
+    pretty_print_cfg(cfg)
 
     # path handling for toy data
     data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
@@ -220,20 +220,6 @@ def train(cfg: DictConfig):
             compute_metrics(cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood)
         except Exception as e:
             print(f"Error computing metrics\n{e}")
-
-
-def pretty_print(cfg):
-
-    for key, val in cfg.items():
-        if key == "eval":
-            continue
-        print("--------------------")
-        print("%s parameters" % key)
-        print("--------------------")
-        for k, v in val.items():
-            print("{}: {}".format(k, v))
-        print()
-    print("\n\n")
 
 
 if __name__ == "__main__":
