@@ -10,7 +10,7 @@ import lightning.pytorch as pl
 from typeguard import typechecked
 from typing import Dict, Optional, Union
 
-from lightning_pose.callbacks.callbacks import AnnealWeight
+from lightning_pose.callbacks import AnnealWeight
 from lightning_pose.data.dali import PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
