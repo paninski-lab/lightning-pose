@@ -532,7 +532,7 @@ def calculate_train_batches(
     else:
         limit_train_batches = cfg.training.limit_train_batches
 
-    return limit_train_batches
+    return int(limit_train_batches)
 
 
 @typechecked
