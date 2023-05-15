@@ -485,6 +485,8 @@ def get_callbacks(cfg: DictConfig) -> list:
     if (cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None):
         callbacks.append(anneal_weight_callback)
 
+    return callbacks
+
 
 @typechecked
 def calculate_train_batches(
