@@ -458,31 +458,41 @@ def get_model(
 
 
 @typechecked
-def get_callbacks(cfg: DictConfig) -> list:
+def get_callbacks(
+    cfg: DictConfig,
+    early_stopping=True,
+    lr_monitor=True,
+    ckpt_model=True,
+    backbone_unfreeze=True,
+) -> list:
 
-    early_stopping = pl.callbacks.EarlyStopping(
-        monitor="val_supervised_loss",
-        patience=cfg.training.early_stop_patience,
-        mode="min",
-    )
-    lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval="epoch")
-    ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(monitor="val_supervised_loss")
-    transfer_unfreeze_callback = pl.callbacks.BackboneFinetuning(
-        unfreeze_backbone_at_epoch=cfg.training.unfreezing_epoch,
-        lambda_func=lambda epoch: 1.5,
-        backbone_initial_ratio_lr=0.1,
-        should_align=True,
-        train_bn=True,
-    )
-    anneal_weight_callback = AnnealWeight(**cfg.callbacks.anneal_weight)
-    callbacks = [
-        early_stopping,
-        lr_monitor,
-        ckpt_callback,
-        transfer_unfreeze_callback
-    ]
+    callbacks = []
+
+    if early_stopping:
+        early_stopping = pl.callbacks.EarlyStopping(
+            monitor="val_supervised_loss",
+            patience=cfg.training.early_stop_patience,
+            mode="min",
+        )
+        callbacks.append(early_stopping)
+    if lr_monitor:
+        lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval="epoch")
+        callbacks.append(lr_monitor)
+    if ckpt_model:
+        ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(monitor="val_supervised_loss")
+        callbacks.append(ckpt_callback)
+    if backbone_unfreeze:
+        transfer_unfreeze_callback = pl.callbacks.BackboneFinetuning(
+            unfreeze_backbone_at_epoch=cfg.training.unfreezing_epoch,
+            lambda_func=lambda epoch: 1.5,
+            backbone_initial_ratio_lr=0.1,
+            should_align=True,
+            train_bn=True,
+        )
+        callbacks.append(transfer_unfreeze_callback)
     # we just need this callback for unsupervised models
     if (cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None):
+        anneal_weight_callback = AnnealWeight(**cfg.callbacks.anneal_weight)
         callbacks.append(anneal_weight_callback)
 
     return callbacks
