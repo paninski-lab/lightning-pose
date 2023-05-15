@@ -63,11 +63,21 @@ Use the appropriate Dockerfiles in this directory to build a Docker image (curre
 docker build -f Dockerfile.cuda11 -t my-image:cuda11 .
 ```
 
+```console
+docker build -f Dockerfile.cuda12 -t my-image:cuda12 .
+```
+
 Run code inside a container (following [this tutorial](https://docs.docker.com/get-started/)):
 
 ```console
 docker run -it --rm --gpus all my-image:cuda11
 ```
+
+```console
+docker run -it --rm --gpus all --shm-size 1024m my-image:cuda12
+```
+
+For a g4dn.xlarge AWS EC2 instance adding the flag `--shm-size=256m` will provide the necessary memory to execute.
 
 ## Working with `hydra`
 
