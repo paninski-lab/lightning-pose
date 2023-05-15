@@ -4,15 +4,8 @@ import hydra
 from omegaconf import DictConfig
 import os
 import lightning.pytorch as pl
-import torch
-import numpy as np
 
-from lightning_pose.callbacks.callbacks import AnnealWeight
-from lightning_pose.data.utils import (
-    compute_num_train_frames,
-    split_sizes_from_probabilities,
-)
-from lightning_pose.utils import get_gpu_list_from_cfg, pretty_print_str
+from lightning_pose.utils import pretty_print_str, pretty_print_cfg
 from lightning_pose.utils.io import (
     check_video_paths,
     return_absolute_data_paths,
@@ -26,6 +19,8 @@ from lightning_pose.utils.scripts import (
     get_imgaug_transform,
     get_loss_factories,
     get_model,
+    get_callbacks,
+    calculate_train_batches,
     compute_metrics,
 )
 
@@ -35,7 +30,7 @@ def train(cfg: DictConfig):
     """Main fitting function, accessed from command line."""
 
     print("Our Hydra config file:")
-    pretty_print(cfg)
+    pretty_print_cfg(cfg)
 
     # path handling for toy data
     data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
@@ -76,64 +71,16 @@ def train(cfg: DictConfig):
     # logger
     logger = pl.loggers.TensorBoardLogger("tb_logs", name=cfg.model.model_name)
 
-    # callbacks
-    early_stopping = pl.callbacks.EarlyStopping(
-        monitor="val_supervised_loss",
-        patience=cfg.training.early_stop_patience,
-        mode="min",
-    )
-    lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval="epoch")
-    ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(monitor="val_supervised_loss")
-    transfer_unfreeze_callback = pl.callbacks.BackboneFinetuning(
-        unfreeze_backbone_at_epoch=cfg.training.unfreezing_epoch,
-        lambda_func=lambda epoch: 1.5,
-        backbone_initial_ratio_lr=0.1,
-        should_align=True,
-        train_bn=True,
-    )
-    anneal_weight_callback = AnnealWeight(**cfg.callbacks.anneal_weight)
-    callbacks = [
-        early_stopping,
-        lr_monitor,
-        ckpt_callback,
-        transfer_unfreeze_callback
-    ]
-    # we just need this callback for unsupervised models
-    if (cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None):
-        callbacks.append(anneal_weight_callback)
+    # early stopping, learning rate monitoring, model checkpointing, backbone unfreezing
+    callbacks = get_callbacks(cfg)
 
-    # determine gpu setup
-    gpus = get_gpu_list_from_cfg(cfg)
-
-    # calculate limit_train_batches; for semi-supervised models, this tells us how many
-    # batches to take from each dataloader (labeled and unlabeled) during a given epoch.
-    # The default set here is to exhaust all batches from the labeled data loader, often
-    # leaving many video frames untouched. But the unlabeled data loader will be
-    # randomly reset for the next epoch. We also enforce a minimum value of 10 so that
-    # models with a small number of labeled frames will cycle through the dataset
-    # multiple times per epoch, which we have found to be useful empirically.
-    if cfg.training.limit_train_batches is None:
-        # TODO: small bit of redundant code from datamodule
-        datalen = dataset.__len__()
-        data_splits_list = split_sizes_from_probabilities(
-            datalen,
-            train_probability=cfg.training.train_prob,
-            val_probability=cfg.training.val_prob,
-        )
-        num_train_frames = compute_num_train_frames(
-            data_splits_list[0], cfg.training.get("train_frames", None)
-        )
-        num_labeled_batches = int(
-            np.ceil(num_train_frames / cfg.training.train_batch_size)
-        )
-        limit_train_batches = np.max([num_labeled_batches, 10])  # 10 is minimum
-    else:
-        limit_train_batches = cfg.training.limit_train_batches
+    # calculate number of batches for both labeled and unlabeled data per epoch
+    limit_train_batches = calculate_train_batches(cfg, dataset)
 
     # set up trainer
     trainer = pl.Trainer(  # TODO: be careful with devices when scaling to multiple gpus
-        accelerator="gpu", # TODO: control from outside
-        devices=1, # TODO: control from outside
+        accelerator="gpu",  # TODO: control from outside
+        devices=1,  # TODO: control from outside
         max_epochs=cfg.training.max_epochs,
         min_epochs=cfg.training.min_epochs,
         check_val_every_n_epoch=cfg.training.check_val_every_n_epoch,
@@ -157,9 +104,7 @@ def train(cfg: DictConfig):
     best_ckpt = os.path.abspath(trainer.checkpoint_callback.best_model_path)
     # check if best_ckpt is a file
     if not os.path.isfile(best_ckpt):
-        raise FileNotFoundError(
-            "Cannot find model checkpoint. Have you trained for too few epochs?"
-        )
+        raise FileNotFoundError("Cannot find checkpoint. Have you trained for too few epochs?")
 
     # make unaugmented data_loader if necessary
     if cfg.training.imgaug != "default":
@@ -169,9 +114,7 @@ def train(cfg: DictConfig):
         dataset_pred = get_dataset(
             cfg=cfg_pred, data_dir=data_dir, imgaug_transform=imgaug_transform_pred
         )
-        data_module_pred = get_data_module(
-            cfg=cfg_pred, dataset=dataset_pred, video_dir=video_dir
-        )
+        data_module_pred = get_data_module(cfg=cfg_pred, dataset=dataset_pred, video_dir=video_dir)
         data_module_pred.setup()
     else:
         data_module_pred = data_module
@@ -193,8 +136,8 @@ def train(cfg: DictConfig):
     # compute and save various metrics
     try:
         compute_metrics(cfg=cfg, preds_file=preds_file, data_module=data_module_pred)
-    except:
-        pass
+    except Exception as e:
+        print(f"Error computing metrics\n{e}")
 
     # ----------------------------------------------------------------------------------
     # predict folder of videos
@@ -206,11 +149,10 @@ def train(cfg: DictConfig):
         else:
             filenames = check_video_paths(return_absolute_path(cfg.eval.test_videos_directory))
             pretty_print_str(
-                "Found {} videos to predict on (in cfg.eval.test_videos_directory)".format(
-                    len(filenames)))
+                f"Found {len(filenames)} videos to predict on (in cfg.eval.test_videos_directory)")
         for video_file in filenames:
             assert os.path.isfile(video_file)
-            pretty_print_str("Predicting video: {}...".format(video_file))
+            pretty_print_str(f"Predicting video: {video_file}...")
             # get save name for prediction csv file
             video_pred_dir = os.path.join(hydra_output_directory, "video_preds")
             video_pred_name = os.path.splitext(os.path.basename(video_file))[0]
@@ -239,7 +181,8 @@ def train(cfg: DictConfig):
                 compute_metrics(
                     cfg=cfg, preds_file=prediction_csv_file, data_module=data_module_pred
                 )
-            except:
+            except Exception as e:
+                print(f"Error predicting on video {video_file}:\n{e}")
                 continue
 
     # ----------------------------------------------------------------------------------
@@ -259,9 +202,7 @@ def train(cfg: DictConfig):
         dataset_ood = get_dataset(
             cfg=cfg_ood, data_dir=data_dir, imgaug_transform=imgaug_transform_ood
         )
-        data_module_ood = get_data_module(
-            cfg=cfg_ood, dataset=dataset_ood, video_dir=video_dir
-        )
+        data_module_ood = get_data_module(cfg=cfg_ood, dataset=dataset_ood, video_dir=video_dir)
         data_module_ood.setup()
         pretty_print_str("Predicting OOD images...")
         # compute and save frame-wise predictions
@@ -277,22 +218,8 @@ def train(cfg: DictConfig):
         # compute and save various metrics
         try:
             compute_metrics(cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood)
-        except:
-            pass
-
-
-def pretty_print(cfg):
-
-    for key, val in cfg.items():
-        if key == "eval":
-            continue
-        print("--------------------")
-        print("%s parameters" % key)
-        print("--------------------")
-        for k, v in val.items():
-            print("{}: {}".format(k, v))
-        print()
-    print("\n\n")
+        except Exception as e:
+            print(f"Error computing metrics\n{e}")
 
 
 if __name__ == "__main__":
