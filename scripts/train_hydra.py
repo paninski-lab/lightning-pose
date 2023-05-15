@@ -104,14 +104,16 @@ def train(cfg: DictConfig):
     best_ckpt = os.path.abspath(trainer.checkpoint_callback.best_model_path)
     # check if best_ckpt is a file
     if not os.path.isfile(best_ckpt):
-        raise FileNotFoundError("Cannot find model checkpoint. Have you trained for too few epochs?")
+        raise FileNotFoundError("Cannot find checkpoint. Have you trained for too few epochs?")
 
     # make unaugmented data_loader if necessary
     if cfg.training.imgaug != "default":
         cfg_pred = cfg.copy()
         cfg_pred.training.imgaug = "default"
         imgaug_transform_pred = get_imgaug_transform(cfg=cfg_pred)
-        dataset_pred = get_dataset(cfg=cfg_pred, data_dir=data_dir, imgaug_transform=imgaug_transform_pred)
+        dataset_pred = get_dataset(
+            cfg=cfg_pred, data_dir=data_dir, imgaug_transform=imgaug_transform_pred
+        )
         data_module_pred = get_data_module(cfg=cfg_pred, dataset=dataset_pred, video_dir=video_dir)
         data_module_pred.setup()
     else:
@@ -146,7 +148,8 @@ def train(cfg: DictConfig):
             filenames = []
         else:
             filenames = check_video_paths(return_absolute_path(cfg.eval.test_videos_directory))
-            pretty_print_str(f"Found {len(filenames)} videos to predict on (in cfg.eval.test_videos_directory)")
+            pretty_print_str(
+                f"Found {len(filenames)} videos to predict on (in cfg.eval.test_videos_directory)")
         for video_file in filenames:
             assert os.path.isfile(video_file)
             pretty_print_str(f"Predicting video: {video_file}...")
@@ -175,7 +178,9 @@ def train(cfg: DictConfig):
             )
             # compute and save various metrics
             try:
-                compute_metrics(cfg=cfg, preds_file=prediction_csv_file, data_module=data_module_pred)
+                compute_metrics(
+                    cfg=cfg, preds_file=prediction_csv_file, data_module=data_module_pred
+                )
             except Exception as e:
                 print(f"Error predicting on video {video_file}:\n{e}")
                 continue
@@ -194,7 +199,9 @@ def train(cfg: DictConfig):
         cfg_ood.training.train_frames = 1
         # build dataset/datamodule
         imgaug_transform_ood = get_imgaug_transform(cfg=cfg_ood)
-        dataset_ood = get_dataset(cfg=cfg_ood, data_dir=data_dir, imgaug_transform=imgaug_transform_ood)
+        dataset_ood = get_dataset(
+            cfg=cfg_ood, data_dir=data_dir, imgaug_transform=imgaug_transform_ood
+        )
         data_module_ood = get_data_module(cfg=cfg_ood, dataset=dataset_ood, video_dir=video_dir)
         data_module_ood.setup()
         pretty_print_str("Predicting OOD images...")

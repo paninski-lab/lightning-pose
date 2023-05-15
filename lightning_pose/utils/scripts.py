@@ -492,13 +492,14 @@ def calculate_train_batches(
     dataset: Optional[Union[BaseTrackingDataset, HeatmapDataset]] = None
 ) -> int:
     """
-    For semi-supervised models, this tells us how many batches to take from each dataloader (labeled and unlabeled)
-    during a given epoch.
-    The default set here is to exhaust all batches from the labeled data loader, often leaving many video frames
-    untouched.
+    For semi-supervised models, this tells us how many batches to take from each dataloader
+    (labeled and unlabeled) during a given epoch.
+    The default set here is to exhaust all batches from the labeled data loader, often leaving
+    many video frames untouched.
     But the unlabeled data loader will be randomly reset for the next epoch.
-    We also enforce a minimum value of 10 so that models with a small number of labeled frames will cycle through the
-    dataset multiple times per epoch, which we have found to be useful empirically.
+    We also enforce a minimum value of 10 so that models with a small number of labeled frames will
+    cycle through the dataset multiple times per epoch, which we have found to be useful
+    empirically.
 
     """
     if cfg.training.limit_train_batches is None:
