@@ -37,7 +37,7 @@ if cuda_version is not None:
         raise print(
             "WARNING! Unsupported CUDA version. Some training/inference features will not work.")
 else:
-    raise ValueError("WARNING! CUDA not found. Some training/inference features will not work.")
+    raise print("WARNING! CUDA not found. Some training/inference features will not work.")
 
 print(f"Found CUDA version: {cuda_version}, using DALI: {dali}")
 
