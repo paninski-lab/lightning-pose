@@ -33,7 +33,7 @@ if cuda_version is not None:
     elif 12.0 <= cuda_version < 13.0:
         dali = "nvidia-dali-cuda120"
     else:
-        dali = None
+        dali = "nvidia-dali-cuda110"
         raise print(
             "WARNING! Unsupported CUDA version. Some training/inference features will not work.")
 else:
