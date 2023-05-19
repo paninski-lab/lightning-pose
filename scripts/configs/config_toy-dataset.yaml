@@ -35,7 +35,7 @@ training:
   # default: resizing only
   # dlc: imgaug pipeline implemented in DLC 2.0 package
   # dlc-light: curated subset of dlc augmentations with more conservative param settings
-  imgaug: default
+  imgaug: dlc
   # batch size of labeled data during training
   train_batch_size: 16
   # batch size of labeled data during validation
