@@ -32,6 +32,8 @@ def run():
     st.title("Video Diagnostics")
 
     # check if args.model_dir is a dir, if not, raise an error
+    if args.make_dir:
+        os.makedirs(args.model_dir, exist_ok=True)
     if not os.path.isdir(args.model_dir):
         st.text(f"--model_dir {args.model_dir} does not exist. \nPlease check the path and try again.")
 
@@ -178,6 +180,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--model_dir', type=str, default="/home/zeus/content/Pose-app/data/demo/models")
+    parser.add_argument('--model_dir', type=str, default=[])
+    parser.add_argument('--make_dir', action='store_true', default=False)
 
     run()
