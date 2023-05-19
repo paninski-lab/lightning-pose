@@ -21,7 +21,7 @@ from lightning_pose.apps.utils import get_model_folders, get_model_folders_vis
 from lightning_pose.apps.plots import get_y_label
 from lightning_pose.apps.plots import make_seaborn_catplot, make_plotly_catplot, plot_precomputed_traces
 
-catplot_options = ["boxen", "box", "bar", "violin", "strip", "hist"]
+catplot_options = ["boxen", "box", "violin", "strip", "hist"]
 scale_options = ["linear", "log"]
 
 
@@ -147,7 +147,7 @@ def run():
             # show plot per keypoint
             plotly_flex_fig = make_plotly_catplot(
                 x="model_name", y=keypoint_to_plot, data=df_metrics[metric_to_plot], x_label=x_label,
-                y_label=y_label, title=keypoint_to_plot, plot_type=plot_type)
+                y_label=y_label, title=keypoint_to_plot, plot_type=plot_type, log_y=log_y)
         else:
             plotly_flex_fig = make_plotly_catplot(
             x=keypoint_to_plot, y=None, data=df_metrics[metric_to_plot], x_label=y_label,
