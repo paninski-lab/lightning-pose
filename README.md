@@ -57,7 +57,7 @@ foo@bar:~$ pytest
 
 ## Docker users
 
-Use the appropriate Dockerfiles in this directory to build a Docker image (currently supported for CUDA 11.X only):
+Use the appropriate Dockerfiles in this directory to build a Docker image:
 
 ```console
 docker build -f Dockerfile.cuda11 -t my-image:cuda11 .
@@ -74,10 +74,10 @@ docker run -it --rm --gpus all my-image:cuda11
 ```
 
 ```console
-docker run -it --rm --gpus all --shm-size 1024m my-image:cuda12
+docker run -it --rm --gpus all --shm-size 256m my-image:cuda12
 ```
 
-For a g4dn.xlarge AWS EC2 instance adding the flag `--shm-size=256m` will provide the necessary memory to execute.
+For a g4dn.xlarge AWS EC2 instance adding the flag `--shm-size=256m` will provide the necessary memory to execute. The '--gpus all' flag is necessary to allow Docker to access the required drivers for Nvidia DALI to work properly. 
 
 ## Working with `hydra`
 
