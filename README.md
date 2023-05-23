@@ -8,6 +8,12 @@ Preprint: [Lightning Pose: improved animal pose estimation via semi-supervised l
 ![GitHub](https://img.shields.io/github/license/danbider/lightning-pose)
 ![PyPI](https://img.shields.io/pypi/v/lightning-pose)
 
+## Try our demo!
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/danbider/lightning-pose/blob/main/scripts/litpose_training_demo.ipynb)
+
+Train a network on a toy dataset and visualize the results in Google Colab (select "GPU runtime".)
+
 ## Community
 
 Lightning Pose is primarily maintained by [Dan Biderman](https://dan-biderman.netlify.app) (Columbia University) and [Matt Whiteway](https://themattinthehatt.github.io/) (Columbia University). Come chat with us in Discord.
