@@ -104,9 +104,7 @@ def train(cfg: DictConfig):
     best_ckpt = os.path.abspath(trainer.checkpoint_callback.best_model_path)
     # check if best_ckpt is a file
     if not os.path.isfile(best_ckpt):
-        raise FileNotFoundError(
-            "Cannot find checkpoint. Have you trained for too few epochs?"
-        )
+        raise FileNotFoundError("Cannot find checkpoint. Have you trained for too few epochs?")
 
     # make unaugmented data_loader if necessary
     if cfg.training.imgaug != "default":
@@ -116,9 +114,7 @@ def train(cfg: DictConfig):
         dataset_pred = get_dataset(
             cfg=cfg_pred, data_dir=data_dir, imgaug_transform=imgaug_transform_pred
         )
-        data_module_pred = get_data_module(
-            cfg=cfg_pred, dataset=dataset_pred, video_dir=video_dir
-        )
+        data_module_pred = get_data_module(cfg=cfg_pred, dataset=dataset_pred, video_dir=video_dir)
         data_module_pred.setup()
     else:
         data_module_pred = data_module
@@ -219,9 +215,7 @@ def train(cfg: DictConfig):
         dataset_ood = get_dataset(
             cfg=cfg_ood, data_dir=data_dir, imgaug_transform=imgaug_transform_ood
         )
-        data_module_ood = get_data_module(
-            cfg=cfg_ood, dataset=dataset_ood, video_dir=video_dir
-        )
+        data_module_ood = get_data_module(cfg=cfg_ood, dataset=dataset_ood, video_dir=video_dir)
         data_module_ood.setup()
         pretty_print_str("Predicting OOD images...")
         # compute and save frame-wise predictions
