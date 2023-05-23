@@ -12,7 +12,7 @@ Preprint: [Lightning Pose: improved animal pose estimation via semi-supervised l
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/danbider/lightning-pose/blob/main/scripts/litpose_training_demo.ipynb)
 
-Train a network on a toy dataset and visualize the results in Google Colab (select "GPU runtime".)
+Train a network on a toy dataset and visualize the results in Google Colab.
 
 ## Community
 
