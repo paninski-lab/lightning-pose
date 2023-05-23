@@ -128,7 +128,6 @@ class LitDaliWrapper(DALIGenericIterator):
         eval_mode: Literal["train", "predict"],
         num_iters: int = 1,
         do_context: bool = False,
-        context_sequences_successive: bool = False,
         **kwargs
     ) -> None:
         """Wrapper around DALIGenericIterator to get batches for pl.
@@ -138,13 +137,11 @@ class LitDaliWrapper(DALIGenericIterator):
             num_iters: number of enumerations of dataloader (should be computed outside for now;
                 should be fixed by lightning/dali teams)
             do_context: whether model/loader use 5-frame context or not
-            context_sequences_successive
 
         """
         self.num_iters = num_iters
         self.do_context = do_context
         self.eval_mode = eval_mode
-        self.context_sequences_successive = context_sequences_successive
         self.batch_sampler = 1  # hack to get around DALI-ptl issue
         # call parent
         super().__init__(*args, **kwargs)
@@ -153,57 +150,19 @@ class LitDaliWrapper(DALIGenericIterator):
         return self.num_iters
 
     @staticmethod
-    def _dali_output_to_tensors(
-        batch: list,
-        num_sequences: Literal["single", "multi"]
-    ) -> UnlabeledBatchDict:
+    def _dali_output_to_tensors(batch: list) -> UnlabeledBatchDict:
 
-        if num_sequences == "single":  # always batch_size=1
-            # shape (sequence_length, 3, H, W)
-            frames = batch[0]["frames"][0, :, :, :, :]
-            # shape (1,) or (2, 3)
-            transforms = batch[0]["transforms"][0]
-        else:  # multiple independent five-frame sequences
-            # shape (sequence_length, 3, H, W) OR (batch_size, sequence_length, 3, H, W)
-            frames = batch[0]["frames"]
-            # shape (1,) OR (batch_size, 1) or (batch_size, 2, 3)
-            transforms = batch[0]["transforms"]
+        # always batch_size=1
+        # shape (sequence_length, 3, H, W)
+        frames = batch[0]["frames"][0, :, :, :, :]
+        # shape (1,) or (2, 3)
+        transforms = batch[0]["transforms"][0]
 
         return UnlabeledBatchDict(frames=frames, transforms=transforms)
 
-    def _modify_output(self, batch: list) -> UnlabeledBatchDict:
-        """Modify output based on train/predict and context/non-context."""
-        if self.do_context:
-            if self.eval_mode == "predict":
-                # DB: the commented line was for a batch of 5-frame sequences
-                # unlabeled_batch_dict = self._dali_output_to_tensors(
-                #     batch=batch, num_sequences="multi")
-                # DB: for batch_size=1 and a single sequence of 5 frames
-                unlabeled_batch_dict = self._dali_output_to_tensors(
-                    batch=batch, num_sequences="single"
-                )
-            else:
-                if self.context_sequences_successive:
-                    # pipeline is like for "base" model, but we reshape images further down
-                    # assume batch_size=1
-                    unlabeled_batch_dict = self._dali_output_to_tensors(
-                        batch=batch, num_sequences="single"
-                    )
-                else:
-                    # grabbing independent 5-frame sequences. batch_size > 1
-                    unlabeled_batch_dict = self._dali_output_to_tensors(
-                        batch=batch, num_sequences="multi"
-                    )
-        else:
-            unlabeled_batch_dict = self._dali_output_to_tensors(
-                batch=batch, num_sequences="single"
-            )
-
-        return unlabeled_batch_dict
-
     def __next__(self) -> UnlabeledBatchDict:
-        out = super().__next__()
-        return self._modify_output(out)
+        batch = super().__next__()
+        return self._dali_output_to_tensors(batch=batch)
 
 
 class PrepareDALI(object):
@@ -231,8 +190,6 @@ class PrepareDALI(object):
         self.dali_config = dali_config
         self.filenames = filenames
         self.frame_count = count_frames(self.filenames)
-        self.context_sequences_successive = \
-            self.dali_config["context"]["train"]["consecutive_sequences"]
         self._pipe_dict: dict = self._setup_pipe_dict(self.filenames, imgaug)
 
     @property
@@ -247,14 +204,14 @@ class PrepareDALI(object):
             if pipe_dict["step"] == 1: # 0-5, 1-6, 2-7, 3-8, 4-9 ...
                 return int(np.ceil(self.frame_count / (pipe_dict["batch_size"])))
             elif pipe_dict["step"] == pipe_dict["sequence_length"]:
-                # context_sequences_successive = False
                 # taking the floor because during training we don't care about missing the last
                 # non-full batch. we prefer having fewer batches but valid.
                 return int(np.floor(
                     self.frame_count / (pipe_dict["batch_size"] * pipe_dict["sequence_length"])))
-            # the case of prediction with a single sequence at a time and internal model reshapes
             elif (pipe_dict["batch_size"] == 1) \
                     and (pipe_dict["step"] == (pipe_dict["sequence_length"] - 4)):
+                # the case of prediction with a single sequence at a time and internal model
+                # reshapes
                 if pipe_dict["step"] <= 0:
                     raise ValueError(
                         "step cannot be 0, please modify "
@@ -330,43 +287,24 @@ class PrepareDALI(object):
         }
 
         # context (five-frame) model, train pipe args
+        # grab a single sequence of frames, will resize into 5-frame chunks at the
+        # representation level inside BaseFeatureExtractor
+        # note: reusing the batch size argument
         context_train_cfg = self.dali_config["context"]["train"]
-        if self.context_sequences_successive:
-            # grab a single sequence of frames, will resize into 5-frame chunks at the
-            # representation level inside BaseFeatureExtractor
-            # note: reusing the batch size argument
-            dict_args["train"]["context"] = {
-                "filenames": filenames,
-                "resize_dims": self.resize_dims,
-                "sequence_length": context_train_cfg["batch_size"],
-                "step": context_train_cfg["batch_size"],
-                "batch_size": 1,
-                "seed": gen_cfg["seed"],
-                "num_threads": gen_cfg["num_threads"],
-                "device_id": gen_cfg["device_id"],
-                "random_shuffle": True,
-                "device": gen_cfg["device"],
-                "imgaug": imgaug,
-            }
-        else:
-            # grab multiple non-successive 5-frame chunks
-            dict_args["train"]["context"] = {
-                "filenames": filenames,
-                "resize_dims": self.resize_dims,
-                "sequence_length": 5,
-                "step": 5,
-                "batch_size": context_train_cfg["batch_size"],
-                "num_threads": gen_cfg["num_threads"],
-                "device_id": gen_cfg["device_id"],
-                "random_shuffle": True,
-                "device": gen_cfg["device"],
-                "name": "reader",
-                "seed": gen_cfg["seed"],
-                "pad_sequences": True,
-                "pad_last_batch": False,
-                "imgaug": imgaug,
-            }
-            # our floor above should prevent us from getting to the very final batch.
+        dict_args["train"]["context"] = {
+            "filenames": filenames,
+            "resize_dims": self.resize_dims,
+            "sequence_length": context_train_cfg["batch_size"],
+            "step": context_train_cfg["batch_size"],
+            "batch_size": 1,
+            "seed": gen_cfg["seed"],
+            "num_threads": gen_cfg["num_threads"],
+            "device_id": gen_cfg["device_id"],
+            "random_shuffle": True,
+            "device": gen_cfg["device"],
+            "imgaug": imgaug,
+        }
+        # our floor above should prevent us from getting to the very final batch.
 
         return dict_args
 
@@ -415,7 +353,6 @@ class PrepareDALI(object):
             "num_iters": self.num_iters,
             "eval_mode": "train",
             "do_context": True,
-            "context_sequences_successive": self.context_sequences_successive,
             "output_map": ["frames", "transforms"],
             "last_batch_policy": LastBatchPolicy.PARTIAL,
             "auto_reset": True,
