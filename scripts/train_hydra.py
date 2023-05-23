@@ -147,9 +147,14 @@ def train(cfg: DictConfig):
         if cfg.eval.test_videos_directory is None:
             filenames = []
         else:
-            filenames = check_video_paths(return_absolute_path(cfg.eval.test_videos_directory))
+            filenames = check_video_paths(
+                return_absolute_path(cfg.eval.test_videos_directory)
+            )
+            vidstr = "video" if (len(filenames) == 1) else "videos"
             pretty_print_str(
-                f"Found {len(filenames)} videos to predict on (in cfg.eval.test_videos_directory)")
+                f"Found {len(filenames)} {vidstr} to predict on (in cfg.eval.test_videos_directory)"
+            )
+
         for video_file in filenames:
             assert os.path.isfile(video_file)
             pretty_print_str(f"Predicting video: {video_file}...")
@@ -160,7 +165,9 @@ def train(cfg: DictConfig):
             # get save name labeled video csv
             if cfg.eval.save_vids_after_training:
                 labeled_vid_dir = os.path.join(video_pred_dir, "labeled_videos")
-                labeled_mp4_file = os.path.join(labeled_vid_dir, video_pred_name + "_labeled.mp4")
+                labeled_mp4_file = os.path.join(
+                    labeled_vid_dir, video_pred_name + "_labeled.mp4"
+                )
             else:
                 labeled_mp4_file = None
             # predict on video
@@ -174,12 +181,16 @@ def train(cfg: DictConfig):
                 model=model,
                 gpu_id=cfg.training.gpu_id,
                 data_module=data_module_pred,
-                save_heatmaps=cfg.eval.get("predict_vids_after_training_save_heatmaps", False),
+                save_heatmaps=cfg.eval.get(
+                    "predict_vids_after_training_save_heatmaps", False
+                ),
             )
             # compute and save various metrics
             try:
                 compute_metrics(
-                    cfg=cfg, preds_file=prediction_csv_file, data_module=data_module_pred
+                    cfg=cfg,
+                    preds_file=prediction_csv_file,
+                    data_module=data_module_pred,
                 )
             except Exception as e:
                 print(f"Error predicting on video {video_file}:\n{e}")
@@ -189,7 +200,9 @@ def train(cfg: DictConfig):
     # predict on OOD frames
     # ----------------------------------------------------------------------------------
     # update config file to point to OOD data
-    csv_file_ood = os.path.join(cfg.data.data_dir, cfg.data.csv_file).replace(".csv", "_new.csv")
+    csv_file_ood = os.path.join(cfg.data.data_dir, cfg.data.csv_file).replace(
+        ".csv", "_new.csv"
+    )
     if os.path.exists(csv_file_ood):
         cfg_ood = cfg.copy()
         cfg_ood.data.csv_file = csv_file_ood
@@ -217,7 +230,9 @@ def train(cfg: DictConfig):
         )
         # compute and save various metrics
         try:
-            compute_metrics(cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood)
+            compute_metrics(
+                cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood
+            )
         except Exception as e:
             print(f"Error computing metrics\n{e}")
 
