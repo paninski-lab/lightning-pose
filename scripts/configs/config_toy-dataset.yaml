@@ -129,7 +129,6 @@ dali:
   context:
     train: # defaults: sequence_length=5, step=sequence_length
       batch_size: 6 # 6 times 5 = 30
-      consecutive_sequences: True # can select False if want successive sequences to be presented to network
     predict: # defaults: sequence_length=5, step=1
       sequence_length: 64
 

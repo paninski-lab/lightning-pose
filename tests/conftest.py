@@ -54,7 +54,6 @@ def cfg_context() -> dict:
     cfg["training"]["test_batch_size"] = 4
     cfg["training"]["imgaug"] = "default"  # so pca tests don't break
     cfg["dali"]["context"]["train"]["batch_size"] = 8
-    cfg["dali"]["context"]["train"]["consecutive_sequences"] = True
     return OmegaConf.create(cfg)
 
 

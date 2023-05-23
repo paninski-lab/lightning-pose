@@ -5,6 +5,7 @@ outputs/
 multirun/
 preds/
 data/
+scripts/.ipynb_checkpoints
 #scripts/configs_*
 
 # Byte-compiled / optimized / DLL files

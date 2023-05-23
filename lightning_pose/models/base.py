@@ -224,7 +224,7 @@ class BaseFeatureExtractor(LightningModule):
         if self.mode == "2d":
             if self.do_context:
                 if len(images.shape) == 5:
-                    # non-consecutive sequences. can be used for supervised and unsupervised models
+                    # non-consecutive sequences, used for batches of labeled data during training
                     batch, frames, channels, image_height, image_width = images.shape
                     frames_batch_shape = batch * frames
                     images_batch_frames: TensorType[

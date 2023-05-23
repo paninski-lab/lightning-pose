@@ -106,20 +106,15 @@ dali:
     device_id: 0 # GPU device id to use, can be changed
     device: gpu # "cpu" or "gpu"
     seed: 123456
-
   base:
     train:
       sequence_length: 64 # step = sequence_length by default. done internally
-
     predict:
       # (train_batch_size + base.train.sequence_length) * 2 -> round down to nearest pow of 2
       sequence_length: 192 # step = sequence_length by default. done internally.
-
-  context: # not supporting context_sequences_successive
+  context:
     train: # defaults: sequence_length=5, step=sequence_length
       batch_size: 32
-      consecutive_sequences: true # can select False if want successive sequences to be presented to network
-
     predict: # defaults: sequence_length=5, step=1
       # (train_batch_size / 4 + context.train.batch_size) * 2 -> round down to nearest pow of 2
       sequence_length: 192
