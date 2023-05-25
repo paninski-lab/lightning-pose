@@ -54,7 +54,9 @@ foo@bar:~$ cd lightning-pose
 foo@bar:~$ pip install -e .
 ```
 
-You should be ready to go! You may verify that all the unit tests are passing on your
+This installation might take between 3-10 minutes, depending on your machine and internet connection.
+
+Now you should be ready to go! You may verify that all the unit tests are passing on your
 machine by running
 
 ```console
@@ -83,7 +85,7 @@ docker run -it --rm --gpus all my-image:cuda11
 docker run -it --rm --gpus all --shm-size 256m my-image:cuda12
 ```
 
-For a g4dn.xlarge AWS EC2 instance adding the flag `--shm-size=256m` will provide the necessary memory to execute. The '--gpus all' flag is necessary to allow Docker to access the required drivers for Nvidia DALI to work properly. 
+For a g4dn.xlarge AWS EC2 instance adding the flag `--shm-size=256m` will provide the necessary memory to execute. The '--gpus all' flag is necessary to allow Docker to access the required drivers for Nvidia DALI to work properly.
 
 ## Working with `hydra`
 
