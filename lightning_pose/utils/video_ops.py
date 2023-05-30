@@ -83,7 +83,7 @@ def select_frame_idxs(video_file: str, resize_dims: int = 64, n_clusters: int = 
             .cpu()
             .numpy()
         )
-    batches = np.concatenate(batches, axis=0)
+    batches = np.concatenate(batches, axis=0)[:(frame_count - 2)]  # leave room for context
 
     # ---------------------------------------------------------
     # get example frames by using kmeans in pc space (high me)
@@ -97,11 +97,11 @@ def select_frame_idxs(video_file: str, resize_dims: int = 64, n_clusters: int = 
     idxs_high_me = np.where(me > np.percentile(me, 50))[0]
 
     # compute pca over high me frames
-    pca_obj = PCA(n_components=32)
+    pca_obj = PCA(n_components=np.min([batches[idxs_high_me].shape[0], 32]))
     embedding = pca_obj.fit_transform(X=batches[idxs_high_me])
 
     # cluster low-d pca embeddings
-    kmeans_obj = KMeans(n_clusters=n_clusters)
+    kmeans_obj = KMeans(n_clusters=n_clusters, n_init="auto")
     kmeans_obj.fit(X=embedding)
 
     # find high me frame that is closest to each cluster center
@@ -148,6 +148,7 @@ def export_frames(
         frame_idxs.sort()
         frame_idxs = frame_idxs[frame_idxs >= 0]
         frame_idxs = frame_idxs[frame_idxs < int(cap.get(cv2.CAP_PROP_FRAME_COUNT))]
+        frame_idxs = np.unique(frame_idxs)
 
     # load frames from video
     frames = get_frames_from_idxs(cap, frame_idxs)
