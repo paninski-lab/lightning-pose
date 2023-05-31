@@ -96,12 +96,14 @@ def select_frame_idxs(video_file: str, resize_dims: int = 64, n_clusters: int = 
     # take absolute values and sum over all pixels to get motion energy
     me = np.sum(np.abs(me), axis=1)
 
-    # find high me frames, defined as those with me larger than 50th percentile me
-    idxs_high_me = np.where(me > np.percentile(me, 50))[0]
+    # find high me frames, defined as those with me larger than nth percentile me
+    prctile = 50 if frame_count < 1e5 else 75  # take fewer frames if there are many
+    idxs_high_me = np.where(me > np.percentile(me, prctile))[0]
 
     # compute pca over high me frames
     pca_obj = PCA(n_components=np.min([batches[idxs_high_me].shape[0], 32]))
     embedding = pca_obj.fit_transform(X=batches[idxs_high_me])
+    del batches  # free up memory
 
     # cluster low-d pca embeddings
     kmeans_obj = KMeans(n_clusters=n_clusters, n_init="auto")
