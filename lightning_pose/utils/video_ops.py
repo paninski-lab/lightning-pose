@@ -198,26 +198,35 @@ def get_frames_from_idxs(cap, idxs):
 
 @typechecked
 def reencode_video(input_file: str, output_file: str) -> None:
-    """ a function that executes ffmpeg from a subprocess
-    reencodes video into H.264 coded format
-    input_file: str with abspath to existing video
-    outputfile: str with abspath to to new video"""
-    assert os.path.isfile(input_file), "input video does not exist." # input file exists
-    assert os.path.isdir(os.path.dirname(output_file)), "saving folder %s does not exist." % os.path.dirname(output_file) # folder for saving outputs exists
-    ffmpeg_cmd = f'ffmpeg -i {input_file} -c:v libx264 -c:a copy -y {output_file}'
+    """reencodes video into H.264 coded format using ffmpeg from a subprocess.
+
+    Args:
+        input_file: abspath to existing video
+        output_file: abspath to to new video
+
+    """
+
+    # check input file exists
+    assert os.path.isfile(input_file), "input video does not exist."
+    # check directory for saving outputs exists
+    assert os.path.isdir(
+        os.path.dirname(output_file)), \
+        f"saving folder {os.path.dirname(output_file)} does not exist."
+    ffmpeg_cmd = f'ffmpeg -i {input_file} -c:v libx264 -pix_fmt yuv420p -c:a copy -y {output_file}'
     subprocess.run(ffmpeg_cmd, shell=True)
 
 
 @typechecked
 def check_codec_format(input_file: str):
-    # Run FFprobe command to get video codec version
-    # command = ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_version", "-of", "default=noprint_wrappers=1:nokey=1", input_file]
+    """Run FFprobe command to get video codec and pixel format."""
+
     ffmpeg_cmd = f'ffmpeg -i {input_file}'
     output_str = subprocess.run(ffmpeg_cmd, shell=True, capture_output=True, text=True)
-    output_str = output_str.stderr # stderr because the ffmpeg command has no output file. but the stderr still has codec info.
+    # stderr because the ffmpeg command has no output file, but the stderr still has codec info.
+    output_str = output_str.stderr
 
-    # search for h264
-    if output_str.find('h264') != -1:
+    # search for correct codec (h264) and pixel format (yuv420p)
+    if output_str.find('h264') != -1 and output_str.find('yuv420p') != -1:
         # print('Video uses H.264 codec')
         is_codec = True
     else:
