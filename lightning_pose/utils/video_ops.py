@@ -81,7 +81,7 @@ def select_frame_idxs(video_file: str, resize_dims: int = 64, n_clusters: int = 
             )
             .detach()
             .cpu()
-            .numpy()
+            .numpy().astype(np.float16)  # reduce memory overhead
         )
     batches = np.concatenate(batches, axis=0)[:(frame_count - 2)]  # leave room for context
 
@@ -89,7 +89,10 @@ def select_frame_idxs(video_file: str, resize_dims: int = 64, n_clusters: int = 
     # get example frames by using kmeans in pc space (high me)
     # ---------------------------------------------------------
     # take temporal diffs
-    me = np.concatenate([np.zeros((1, batches.shape[1])), np.diff(batches, axis=0)])
+    me = np.concatenate([
+        np.zeros((1, batches.shape[1])).astype(np.float16),
+        np.diff(batches, axis=0)
+    ])
     # take absolute values and sum over all pixels to get motion energy
     me = np.sum(np.abs(me), axis=1)
 
