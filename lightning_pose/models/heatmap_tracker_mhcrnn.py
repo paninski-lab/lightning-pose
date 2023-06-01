@@ -70,6 +70,9 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
 
         """
 
+        if downsample_factor != 2:
+            raise NotImplementedError("MHCRNN currently only implements downsample_factor=2")
+
         # for reproducible weight initialization
         torch.manual_seed(torch_seed)
 
