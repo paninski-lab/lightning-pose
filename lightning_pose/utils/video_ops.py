@@ -89,6 +89,7 @@ def select_frame_idxs(video_file: str, resize_dims: int = 64, n_clusters: int = 
     # get example frames by using kmeans in pc space (high me)
     # ---------------------------------------------------------
     # take temporal diffs
+    print('computing motion energy...')
     me = np.concatenate([
         np.zeros((1, batches.shape[1])).astype(np.float16),
         np.diff(batches, axis=0)
@@ -101,11 +102,13 @@ def select_frame_idxs(video_file: str, resize_dims: int = 64, n_clusters: int = 
     idxs_high_me = np.where(me > np.percentile(me, prctile))[0]
 
     # compute pca over high me frames
+    print('performing pca over high motion energy frames...')
     pca_obj = PCA(n_components=np.min([batches[idxs_high_me].shape[0], 32]))
     embedding = pca_obj.fit_transform(X=batches[idxs_high_me])
     del batches  # free up memory
 
     # cluster low-d pca embeddings
+    print('performing kmeans clustering...')
     kmeans_obj = KMeans(n_clusters=n_clusters, n_init="auto")
     kmeans_obj.fit(X=embedding)
 
@@ -118,6 +121,12 @@ def select_frame_idxs(video_file: str, resize_dims: int = 64, n_clusters: int = 
     idxs_prototypes_ = np.argmin(dists, axis=0)
     # now index into high me frames to get overall indices
     idxs_prototypes = idxs_high_me[idxs_prototypes_]
+
+    # free up gpu
+    del batch
+    del pipe
+    del iterator
+    torch.cuda.empty_cache()
 
     return idxs_prototypes
 
@@ -159,6 +168,7 @@ def export_frames(
     frames = get_frames_from_idxs(cap, frame_idxs)
 
     # save out frames
+    os.makedirs(save_dir, exist_ok=True)
     for frame, idx in zip(frames, frame_idxs):
         cv2.imwrite(
             filename=os.path.join(save_dir, "img%s.%s" % (str(idx).zfill(n_digits), format)),
