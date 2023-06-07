@@ -162,44 +162,13 @@ class FiftyOneKeypointBase:
             )()
             self.preds_pandas_df_dict[model_name] = temp_df
 
-    # #@typechecked
-    # def build_single_frame_keypoint_list(
-    #     self,
-    #     df: pd.DataFrame,
-    #     frame_idx: int,
-    # ) -> List[fo.Keypoint]:
-    #     # the output of this, is a the positions of all keypoints in a single frame for a single model.
-    #     keypoints_list = []
-    #     for kp_name in self.keypoints_to_plot:  # loop over names
-    #         if "likelihood" in df[kp_name]:
-    #             confidence = df[kp_name]["likelihood"][frame_idx]
-    #         else:  # gt data has no confidence, but we call it 1.0 for simplicity
-    #             confidence = 1.0  # also works if we make it None
-    #         # "bodyparts" it appears in the csv as we read it right now, but should be ignored
-    #         if kp_name == "bodyparts":
-    #             continue
-    #         # write a single keypoint's position, confidence, and name
-    #         keypoints_list.append(
-    #             fo.Keypoint(
-    #                 points=[
-    #                     [
-    #                         df[kp_name]["x"][frame_idx] / self.img_width,
-    #                         df[kp_name]["y"][frame_idx] / self.img_height,
-    #                     ]
-    #                 ],
-    #                 confidence=confidence,
-    #                 label=kp_name,  # sometimes plotted aggresively
-    #             )
-    #         )
-    #     return keypoints_list
-
     # @typechecked
     def _slow_single_frame_build(
         self,
         data_dict: Dict[str, Dict[str, np.array]],
         frame_idx: int,
     ) -> List[fo.Keypoint]:
-        # the output of this, is a the positions of all keypoints in a single frame for a single model.
+        # output: the positions of all keypoints in a single frame for a single model
         keypoints_list = []
         for kp_name in self.keypoints_to_plot:  # loop over names
             # write a single keypoint's position, confidence, and name
@@ -211,7 +180,7 @@ class FiftyOneKeypointBase:
                             data_dict[kp_name]["coords"][frame_idx, 1] / self.img_height,
                         ]
                     ],
-                    confidence=data_dict[kp_name]["likelihood"][frame_idx],
+                    confidence=[data_dict[kp_name]["likelihood"][frame_idx]],
                     label=kp_name,  # sometimes plotted aggresively
                 )
             )
@@ -223,7 +192,7 @@ class FiftyOneKeypointBase:
         data_dict: Dict[str, Dict[str, np.array]],
         frame_idx: int,
     ) -> List[fo.Keypoint]:
-        # the output of this, is a the positions of all keypoints in a single frame for a single model.
+        # output: the positions of all keypoints in a single frame for a single model
         keypoint = [
             fo.Keypoint(
                 points=[
@@ -233,7 +202,9 @@ class FiftyOneKeypointBase:
                     )
                     for kp_name in self.keypoints_to_plot
                 ],
-                confidence=[data_dict[kp_name]["likelihood"][frame_idx] for kp_name in self.keypoints_to_plot]
+                confidence=[
+                    data_dict[kp_name]["likelihood"][frame_idx]
+                    for kp_name in self.keypoints_to_plot]
             )
         ]
         return keypoint
