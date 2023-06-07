@@ -104,9 +104,6 @@ model:
 
 dali:
   general:
-    num_threads: 1 # Number of threads for data loading; can be changed
-    device_id: 0 # GPU device id to use, can be changed
-    device: gpu # "cpu" or "gpu"
     seed: 123456
   base:
     train:
