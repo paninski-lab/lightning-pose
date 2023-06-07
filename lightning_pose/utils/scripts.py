@@ -519,7 +519,7 @@ def calculate_train_batches(
     empirically.
 
     """
-    if cfg.training.limit_train_batches is None:
+    if cfg.training.get("limit_train_batches", None) is None:
         # TODO: small bit of redundant code from datamodule
         datalen = dataset.__len__()
         data_splits_list = split_sizes_from_probabilities(
@@ -530,9 +530,7 @@ def calculate_train_batches(
         num_train_frames = compute_num_train_frames(
             data_splits_list[0], cfg.training.get("train_frames", None)
         )
-        num_labeled_batches = int(
-            np.ceil(num_train_frames / cfg.training.train_batch_size)
-        )
+        num_labeled_batches = int(np.ceil(num_train_frames / cfg.training.train_batch_size))
         limit_train_batches = np.max([num_labeled_batches, 10])  # 10 is minimum
     else:
         limit_train_batches = cfg.training.limit_train_batches
