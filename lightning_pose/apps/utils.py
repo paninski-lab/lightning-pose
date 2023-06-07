@@ -5,7 +5,7 @@ import pandas as pd
 from pathlib import Path
 import streamlit as st
 import os
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 from collections import defaultdict
 
 pix_error_key = "pixel error"
@@ -16,27 +16,34 @@ pcasv_error_key = "pca singleview"
 
 
 @st.cache_resource
-def update_labeled_file_list(model_preds_folder: list):
-    # use_cli_preds = False
+def update_labeled_file_list(model_preds_folders: list, use_ood: bool = False):
     per_model_preds = []
-    for i in range(len(model_preds_folder)):
-        # pull labeled results from each model folder; wrap in Path so that it looks like an UploadedFile object
-        model_preds = [f for f in os.listdir(model_preds_folder[i]) if os.path.isfile(os.path.join(model_preds_folder[i], f))]
+    for model_pred_folder in model_preds_folders:
+        # pull labeled results from each model folder
+        # wrap in Path so that it looks like an UploadedFile object
+        model_preds = [f for f in os.listdir(model_pred_folder)
+                       if os.path.isfile(os.path.join(model_pred_folder, f))]
         ret_files = []
         for file in model_preds:
-            if 'predictions' in file and 'new' not in file:
-                ret_files.append(Path(file))
+            if 'predictions' in file:
+                if 'new' not in file and not use_ood:
+                    ret_files.append(Path(file))
+                elif 'new' in file and use_ood:
+                    ret_files.append(Path(file))
+                else:
+                    pass
         per_model_preds.append(ret_files)
     return per_model_preds
 
 
 @st.cache_resource
-def update_vid_metric_files_list(video: str, model_preds_folder: list):
+def update_vid_metric_files_list(video: str, model_preds_folders: list):
     per_vid_preds = []
-    for i in range(len(model_preds_folder)):
-        # pull each prediction file associated with a particular video; wrap in Path so that it looks like an UploadedFile object
-        model_preds = [f for f in os.listdir(os.path.join(model_preds_folder[i], 'video_preds')) \
-        if os.path.isfile(os.path.join(model_preds_folder[i], 'video_preds', f))]
+    for model_preds_folder in model_preds_folders:
+        # pull each prediction file associated with a particular video
+        # wrap in Path so that it looks like an UploadedFile object
+        model_preds = [f for f in os.listdir(os.path.join(model_preds_folder, 'video_preds'))
+                       if os.path.isfile(os.path.join(model_preds_folder, 'video_preds', f))]
         ret_files = []
         for file in model_preds:
             if video in file:
@@ -46,13 +53,14 @@ def update_vid_metric_files_list(video: str, model_preds_folder: list):
 
 
 @st.cache_resource
-def get_all_videos(model_preds_folder: list):
-    # find each video that is predicted on by the models; wrap in Path so that it looks like an UploadedFile object
+def get_all_videos(model_preds_folders: list):
+    # find each video that is predicted on by the models
+    # wrap in Path so that it looks like an UploadedFile object
     # returned by streamlit's file_uploader
     ret_videos = set()
-    for i in range(len(model_preds_folder)):
-        model_preds = [f for f in os.listdir(os.path.join(model_preds_folder[i], 'video_preds')) \
-        if os.path.isfile(os.path.join(model_preds_folder[i], 'video_preds', f))]
+    for model_preds_folder in model_preds_folders:
+        model_preds = [f for f in os.listdir(os.path.join(model_preds_folder, 'video_preds'))
+                       if os.path.isfile(os.path.join(model_preds_folder, 'video_preds', f))]
         for file in model_preds:
             if 'temporal' in file:
                 vid_file = file.split('_temporal_norm.csv')[0]
@@ -60,7 +68,6 @@ def get_all_videos(model_preds_folder: list):
             elif 'temporal' not in file and 'pca' not in file:
                 vid_file = file.split('.csv')[0]
                 ret_videos.add(vid_file)
-    
     return list(ret_videos)
 
 
@@ -133,7 +140,8 @@ def build_precomputed_metrics_df(
     for model_name, df_dict in dframes.items():
         for metric_name, df in df_dict.items():
             if 'confidence' in metric_name:
-                df_ = compute_confidence(df=df, keypoint_names=keypoint_names, model_name=model_name, **kwargs)
+                df_ = compute_confidence(
+                    df=df, keypoint_names=keypoint_names, model_name=model_name, **kwargs)
                 concat_dfs[conf_error_key].append(df_)
 
             df_ = get_precomputed_error(df, keypoint_names, model_name, **kwargs)
@@ -167,8 +175,7 @@ def get_precomputed_error(
 
 @st.cache_data
 def compute_confidence(
-        df: pd.DataFrame, keypoint_names: List[str], model_name: str, **kwargs
-) -> pd.DataFrame:
+        df: pd.DataFrame, keypoint_names: List[str], model_name: str, **kwargs) -> pd.DataFrame:
 
     if df.shape[1] % 3 == 1:
         # get rid of "set" column if present
@@ -192,14 +199,20 @@ def compute_confidence(
 
     return df_
 
-#------------ utils related to model finding in dir ---------
+
+# ------------ utils related to model finding in dir ---------
 # write a function that finds all model folders in the model_dir
 def get_model_folders(model_dir):
+    # strip trailing slash if present
+    if model_dir[-1] == os.sep:
+        model_dir = model_dir[:-1]
     model_folders = []
+    # find all directories two levels deep
     for root, dirs, files in os.walk(model_dir):
         if root.count(os.sep) - model_dir.count(os.sep) == 2:
             model_folders.append(root)
     return model_folders
+
 
 # just to get the last two levels of the path
 def get_model_folders_vis(model_folders):

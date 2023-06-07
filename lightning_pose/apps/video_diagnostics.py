@@ -35,7 +35,8 @@ def run():
     if args.make_dir:
         os.makedirs(args.model_dir, exist_ok=True)
     if not os.path.isdir(args.model_dir):
-        st.text(f"--model_dir {args.model_dir} does not exist. \nPlease check the path and try again.")
+        st.text(f"--model_dir {args.model_dir} does not exist."
+                f"\nPlease check the path and try again.")
 
     st.sidebar.header("Data Settings")
 
@@ -57,7 +58,7 @@ def run():
     video_to_plot = st.sidebar.selectbox("Select a video:", [*all_videos_], key="video")
 
     prediction_files = update_vid_metric_files_list(
-        video=video_to_plot, model_preds_folder=selected_models)
+        video=video_to_plot, model_preds_folders=selected_models)
     
     model_names = copy.copy(selected_models_vis)
 
@@ -78,7 +79,9 @@ def run():
                 model_pred_file_path = os.path.join(model_folder, 'video_preds', model_pred_file)
                 if not isinstance(model_pred_file, Path):
                     model_pred_file.seek(0)  # reset buffer after reading
-                if 'pca' in str(model_pred_file) or 'temporal' in str(model_pred_file) or 'pixel' in str(model_pred_file):
+                if 'pca' in str(model_pred_file) \
+                        or 'temporal' in str(model_pred_file) \
+                        or 'pixel' in str(model_pred_file):
                     dframe = pd.read_csv(model_pred_file_path, index_col=None)
                     dframes_metrics[model_name][str(model_pred_file)] = dframe
                 else:
@@ -137,7 +140,6 @@ def run():
         #     y_label=y_label, title="Average over all keypoints", plot_type=plot_type)
         # st.pyplot(fig_cat)
 
-        
         # select keypoint to plot
         keypoint_to_plot = st.selectbox(
             "Select a keypoint:", pd.Series([*keypoint_names, "mean"]), key="keypoint_to_plot",
@@ -146,12 +148,14 @@ def run():
         if plot_type != "hist":
             # show plot per keypoint
             plotly_flex_fig = make_plotly_catplot(
-                x="model_name", y=keypoint_to_plot, data=df_metrics[metric_to_plot], x_label=x_label,
-                y_label=y_label, title=keypoint_to_plot, plot_type=plot_type, log_y=log_y)
+                x="model_name", y=keypoint_to_plot, data=df_metrics[metric_to_plot],
+                x_label=x_label, y_label=y_label, title=keypoint_to_plot, plot_type=plot_type,
+                log_y=log_y
+            )
         else:
             plotly_flex_fig = make_plotly_catplot(
-            x=keypoint_to_plot, y=None, data=df_metrics[metric_to_plot], x_label=y_label,
-            y_label="Frame count", title=keypoint_to_plot, plot_type="hist"
+                x=keypoint_to_plot, y=None, data=df_metrics[metric_to_plot],
+                x_label=y_label, y_label="Frame count", title=keypoint_to_plot, plot_type="hist",
             )
         st.plotly_chart(plotly_flex_fig)
 
