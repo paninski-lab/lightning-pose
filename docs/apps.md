@@ -1,7 +1,7 @@
 # Labeled Frame Diagnostics
 
 Analyze predictions of one or more networks on the `train/test/val` images.
-From within `.../lightning-pose/lightning_pose/apps`, run:
+From within `lightning-pose/lightning_pose/apps`, run:
 ```
 streamlit run labeled_frame_diagnostics.py -- --model_dir <ABOLUTE_PATH_TO_HYDRA_OUTPUTS_DIRECTORY>
 ```
@@ -15,7 +15,7 @@ The app shows:
 
 # Video Diagnostics
 Visualizes multiple networks' predictions on a test video.
-From within `.../lightning-pose/lightning_pose/apps`, run:
+From within `lightning-pose/lightning_pose/apps`, run:
 ```
 streamlit run video_diagnostics.py -- --model_dir <ABOLUTE_PATH_TO_HYDRA_OUTPUTS_DIRECTORY>
 ```

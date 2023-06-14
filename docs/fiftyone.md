@@ -5,7 +5,7 @@ images or on test videos, using the [FifyOne](https://voxel51.com/) package. Add
 The first step is to create a `FiftyOne.Dataset` (i.e., a Mongo database pointing to images, keypoint predictions, names, and confidences.)
 ### Creating `FiftyOne.Dataset` for train/test/val predictions
 ```console
-foo@bar:~$ python scripts/create_fiftyone_dataset.py \
+python scripts/create_fiftyone_dataset.py \
 eval.fiftyone.dataset_to_create="images" \
 eval.fiftyone.dataset_name=<YOUR_DATASET_NAME> \
 eval.fiftyone.build_speed="slow" \
@@ -63,7 +63,7 @@ When you're in the app: the app will show `LABELS` (for images) or `FRAME LABELS
 
 ### Creating `FiftyOne.Dataset` for videos
 ```console
-foo@bar:~$ python scripts/create_fiftyone_dataset.py \
+python scripts/create_fiftyone_dataset.py \
 eval.fiftyone.dataset_to_create="videos" \
 eval.fiftyone.dataset_name=<YOUR_DATASET_NAME> \
 eval.fiftyone.build_speed="slow" \
@@ -75,7 +75,7 @@ eval.pred_csv_files_to_plot=["</ABSOLUTE/PATH/TO/PREDS_1.csv>","</ABSOLUTE/PATH/
 ```
 Again, you may just edit the config and run
 ```console
-foo@bar:~$ python scripts/create_fiftyone_dataset.py
+python scripts/create_fiftyone_dataset.py
 ```
 **Note**: for videos longer than a few minutes, creating a detailed `FiftyOne.Dataset` may take a very long time. Until next releases, please implement your own visualization method for longer videos.
 

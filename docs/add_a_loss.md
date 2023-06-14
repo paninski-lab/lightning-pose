@@ -149,7 +149,7 @@ the file `tests/losses/losses.py` that follows the same pattern as the other fun
 Let's take the temporal loss as an example again; once you write the test you can run it
 from the command line like so:
 ```bash
-foo@bar:~$ pytest tests/losses/test_losses.py::test_temporal_loss
+pytest tests/losses/test_losses.py::test_temporal_loss
 ```
 Make sure to include as many corner-cases as possible in your test suite.
 
