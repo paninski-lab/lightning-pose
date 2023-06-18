@@ -69,6 +69,7 @@ install_requires = [
     "typeguard==3.0.2",
     "typing==3.7.4.3",
     "botocore==1.27.59",
+    "segment_anything @ git+https://github.com/facebookresearch/segment-anything.git",
 ]
 
 
