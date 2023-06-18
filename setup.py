@@ -20,7 +20,6 @@ def get_cuda_version():
                 return float(match.group(1))
         except FileNotFoundError:
             continue
-
     print("nvcc is not installed.")
     return None
 
@@ -34,9 +33,12 @@ if cuda_version is not None:
     elif 12.0 <= cuda_version < 13.0:
         dali = "nvidia-dali-cuda120"
     else:
-        raise ValueError("Unsupported CUDA version.")
+        dali = "nvidia-dali-cuda110"
+        print("WARNING! Unsupported CUDA version. Some training/inference features will not work.")
 else:
-    raise ValueError("CUDA not found.")
+    dali = "nvidia-dali-cuda110"
+    print("WARNING! CUDA not found. Some training/inference features will not work.")
+
 print(f"Found CUDA version: {cuda_version}, using DALI: {dali}")
 
 

@@ -8,6 +8,12 @@ Preprint: [Lightning Pose: improved animal pose estimation via semi-supervised l
 ![GitHub](https://img.shields.io/github/license/danbider/lightning-pose)
 ![PyPI](https://img.shields.io/pypi/v/lightning-pose)
 
+## Try our demo!
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/danbider/lightning-pose/blob/main/scripts/litpose_training_demo.ipynb)
+
+Train a network on a toy dataset and visualize the results in Google Colab.
+
 ## Community
 
 Lightning Pose is primarily maintained by [Dan Biderman](https://dan-biderman.netlify.app) (Columbia University) and [Matt Whiteway](https://themattinthehatt.github.io/) (Columbia University). Come chat with us in Discord.
@@ -25,42 +31,53 @@ As you would do for any other repository --
 Create a conda environment:
 
 ```console
-foo@bar:~$ conda create --name <YOUR_ENVIRONMENT_NAME> python=3.8
+conda create --name <YOUR_ENVIRONMENT_NAME> python=3.8
 ```
 
 and activate it:
 
 ```console
-foo@bar:~$ conda activate <YOUR_ENVIRONMENT_NAME>
+conda activate <YOUR_ENVIRONMENT_NAME>
 ```
 
 Move into the folder where you want to place the repository folder, and then download it from GitHub:
 
 ```console
-foo@bar:~$ cd <SOME_FOLDER>
-foo@bar:~$ git clone https://github.com/danbider/lightning-pose.git
+cd <SOME_FOLDER>
+git clone https://github.com/danbider/lightning-pose.git
 ```
 
 Then move into the newly-created repository folder, and install dependencies:
 
 ```console
-foo@bar:~$ cd lightning-pose
-foo@bar:~$ pip install -e .
+cd lightning-pose
+pip install -e .
 ```
 
-You should be ready to go! You may verify that all the unit tests are passing on your
+This installation might take between 3-10 minutes, depending on your machine and internet connection.
+
+If you are using Ubuntu 22.04 or newer, you'll need an additional update for the Fiftyone package:
+```console
+pip install fiftyone-db-ubuntu2204
+```
+
+Now you should be ready to go! You may verify that all the unit tests are passing on your
 machine by running
 
 ```console
-foo@bar:~$ pytest
+pytest
 ```
 
 ## Docker users
 
-Use the appropriate Dockerfiles in this directory to build a Docker image (currently supported for CUDA 11.X only):
+Use the appropriate Dockerfiles in this directory to build a Docker image:
 
 ```console
 docker build -f Dockerfile.cuda11 -t my-image:cuda11 .
+```
+
+```console
+docker build -f Dockerfile.cuda12 -t my-image:cuda12 .
 ```
 
 Run code inside a container (following [this tutorial](https://docs.docker.com/get-started/)):
@@ -68,6 +85,12 @@ Run code inside a container (following [this tutorial](https://docs.docker.com/g
 ```console
 docker run -it --rm --gpus all my-image:cuda11
 ```
+
+```console
+docker run -it --rm --gpus all --shm-size 256m my-image:cuda12
+```
+
+For a g4dn.xlarge AWS EC2 instance adding the flag `--shm-size=256m` will provide the necessary memory to execute. The '--gpus all' flag is necessary to allow Docker to access the required drivers for Nvidia DALI to work properly.
 
 ## Working with `hydra`
 
@@ -79,14 +102,14 @@ line.
   and save it. Then run the script without arguments, e.g.,:
 
 ```console
-foo@bar:~$ python scripts/train_hydra.py
+python scripts/train_hydra.py
 ```
 
 - **Override** the argument from the command line; for example, if you want to use a maximum of 11
   epochs instead of the default number (not recommended):
 
 ```console
-foo@bar:~$ python scripts/train_hydra.py training.max_epochs=11
+python scripts/train_hydra.py training.max_epochs=11
 ```
 
 See more documentation on the arguments [here](docs/config.md).
@@ -94,16 +117,14 @@ See more documentation on the arguments [here](docs/config.md).
 ## Training
 
 ```console
-foo@bar:~$ python scripts/train_hydra.py
+python scripts/train_hydra.py
 ```
 
 In case your config file isn't located in `lightning-pose/scripts/configs`, which is common if you
 have multiple projects, run:
 
 ```console
-foo@bar:~$ python scripts/train_hydra.py \
-  --config-path="<PATH/TO/YOUR/CONFIGS/DIR>" \
-  --config-name="<CONFIG_NAME.yaml>"
+python scripts/train_hydra.py --config-path="<PATH/TO/YOUR/CONFIGS/DIR>" --config-name="<CONFIG_NAME.yaml>"
 ```
 
 ## Logs and saved models
@@ -116,7 +137,7 @@ choosing.)
 To view the logged losses with tensorboard in your browser, in the command line, run:
 
 ```console
-foo@bar:~$ tensorboard --logdir outputs/YYYY-MM-DD/
+tensorboard --logdir outputs/YYYY-MM-DD/
 ```
 
 where you use the date in which you ran the model. Click on the provided link in the
@@ -130,7 +151,7 @@ frame and save it as a `.csv` or `.h5` file.
 To do so for the example dataset, run:
 
 ```console
-foo@bar:~$ python scripts/predict_new_vids.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"]
+python scripts/predict_new_vids.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"]
 ```
 
 using the same hydra path as before.
@@ -144,13 +165,13 @@ In order to use this script more generally, you need to specify several paths:
 As above, you could directly edit `scripts/configs/config.yaml` and run
 
 ```console
-foo@bar:~$ python scripts/predict_new_vids.py
+python scripts/predict_new_vids.py
 ```
 
 or override these arguments in the command line.
 
 ```console
-foo@bar:~$ python scripts/predict_new_vids.py eval.hydra_paths=["2022-01-18/01-03-45"] \
+scripts/predict_new_vids.py eval.hydra_paths=["2022-01-18/01-03-45"] \
 eval.test_videos_directory="/absolute/path/to/unlabeled_videos" \
 eval.saved_vid_preds_dir="/absolute/path/to/dir"
 ```

@@ -29,6 +29,7 @@ scale_options = ["linear", "log"]
 
 st.set_page_config(layout="wide")
 
+
 def run():
 
     args = parser.parse_args()
@@ -36,8 +37,11 @@ def run():
     st.title("Labeled Frame Diagnostics")
 
     # check if args.model_dir is a dir, if not, raise an error
+    if args.make_dir:
+        os.makedirs(args.model_dir, exist_ok=True)
     if not os.path.isdir(args.model_dir):
-        st.text(f"--model_dir {args.model_dir} does not exist. \nPlease check the path and try again.")
+        st.text(f"--model_dir {args.model_dir} does not exist."
+                f"\nPlease check the path and try again.")
 
     st.sidebar.header("Data Settings")
 
@@ -54,7 +58,7 @@ def run():
     selected_models = ["/" + os.path.join(args.model_dir, f) for f in selected_models_vis]
     
     # search for prediction files in the selected model folders
-    prediction_files = update_labeled_file_list(selected_models)
+    prediction_files = update_labeled_file_list(selected_models, use_ood=args.use_ood)
 
     # col wrap when plotting results from all keypoints
     n_cols = 3
@@ -75,7 +79,9 @@ def run():
                 model_pred_file_path = os.path.join(model_folder, model_pred_file)
                 if not isinstance(model_pred_file, Path):
                     model_pred_file.seek(0)  # reset buffer after reading
-                if 'pca' in str(model_pred_file) or 'temporal' in str(model_pred_file) or 'pixel' in str(model_pred_file):
+                if 'pca' in str(model_pred_file) \
+                        or 'temporal' in str(model_pred_file) \
+                        or 'pixel' in str(model_pred_file):
                     dframe = pd.read_csv(model_pred_file_path, index_col=None)
                     dframes_metrics[model_name][str(model_pred_file)] = dframe
                 else:
@@ -254,5 +260,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_dir', type=str, default=[])
+    parser.add_argument('--make_dir', action='store_true', default=False)
+    parser.add_argument('--use_ood', action='store_true', default=False)
 
     run()

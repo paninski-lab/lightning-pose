@@ -19,12 +19,12 @@ import yaml
 from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
-from lightning_pose.utils import get_gpu_list_from_cfg
 from lightning_pose.utils.io import get_videos_in_dir
 from lightning_pose.utils.scripts import (
-    get_data_module,
-    get_dataset,
     get_imgaug_transform,
+    get_dataset,
+    get_data_module,
+    get_callbacks,
 )
 
 TOY_DATA_ROOT_DIR = "toy_datasets/toymouseRunningData"
@@ -37,6 +37,7 @@ def cfg() -> dict:
     config_file = os.path.join(base_dir, "scripts", "configs", "config_toy-dataset.yaml")
     cfg = yaml.load(open(config_file), Loader=yaml.FullLoader)
     cfg["model"]["do_context"] = False
+    cfg["training"]["imgaug"] = "default"  # so pca tests don't break
     return OmegaConf.create(cfg)
 
 
@@ -51,8 +52,8 @@ def cfg_context() -> dict:
     cfg["training"]["train_batch_size"] = 4
     cfg["training"]["val_batch_size"] = 4
     cfg["training"]["test_batch_size"] = 4
+    cfg["training"]["imgaug"] = "default"  # so pca tests don't break
     cfg["dali"]["context"]["train"]["batch_size"] = 8
-    cfg["dali"]["context"]["train"]["consecutive_sequences"] = True
     return OmegaConf.create(cfg)
 
 
@@ -340,24 +341,18 @@ def video_dataloader(cfg, base_dataset, video_list) -> LitDaliWrapper:
 def trainer(cfg) -> pl.Trainer:
     """Create a basic pytorch lightning trainer for testing models."""
 
-    ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(monitor="val_supervised_loss")
-    transfer_unfreeze_callback = pl.callbacks.BackboneFinetuning(
-        unfreeze_backbone_at_epoch=10,
-        lambda_func=lambda epoch: 1.5,
-        backbone_initial_ratio_lr=0.1,
-        should_align=True,
-        train_bn=True,
-    )
-    gpus = get_gpu_list_from_cfg(cfg)
+    cfg.training.unfreezing_epoch = 10
+    callbacks = get_callbacks(
+        cfg, early_stopping=False, lr_monitor=False, ckpt_model=True, backbone_unfreeze=True)
 
     trainer = pl.Trainer(
-        accelerator="gpu", # TODO: control from outside
-        devices=1, # TODO: control from outside
+        accelerator="gpu",  # TODO: control from outside
+        devices=1,  # TODO: control from outside
         max_epochs=2,
         min_epochs=2,
         check_val_every_n_epoch=1,
         log_every_n_steps=1,
-        callbacks=[ckpt_callback, transfer_unfreeze_callback],
+        callbacks=callbacks,
         limit_train_batches=2,
     )
 

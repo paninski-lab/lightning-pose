@@ -264,7 +264,6 @@ def predict_dataset(
     data_module: BaseDataModule,
     ckpt_file: str,
     preds_file: str,
-    gpu_id: Optional[int] = None,
     trainer: Optional[pl.Trainer] = None,
     model: Optional[
         Union[
@@ -283,7 +282,6 @@ def predict_dataset(
         ckpt_file: absolute path to the checkpoint of your trained model; requires .ckpt
             suffix
         preds_file: absolute filename for the predictions .csv file
-        gpu_id: specify which gpu to run prediction on
         trainer
         model
 
@@ -294,11 +292,6 @@ def predict_dataset(
 
     if model is None:
         model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
-
-    if gpu_id is None:
-        gpu_id = 0
-
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
 
     if trainer is None:
         trainer = pl.Trainer(devices=1, accelerator="auto")
@@ -323,7 +316,6 @@ def predict_single_video(
     cfg_file: Union[str, DictConfig],
     preds_file: str,
     data_module: Union[BaseDataModule, UnlabeledDataModule],
-    gpu_id: Optional[int] = None,
     trainer: Optional[pl.Trainer] = None,
     model: Optional[
         Union[
@@ -349,7 +341,6 @@ def predict_single_video(
             one, with all the model specs. needed for loading the model.
         preds_file (str): absolute filename for the predictions .csv file
         data_module:
-        gpu_id (int): specify which gpu to run prediction on
         trainer:
         model:
         save_heatmaps:
@@ -360,10 +351,6 @@ def predict_single_video(
     """
 
     cfg = get_cfg_file(cfg_file=cfg_file)
-    gpu_id = 0 if gpu_id is None else gpu_id
-    cfg.training.gpu_id = gpu_id
-    cfg.dali.general.device_id = gpu_id
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
 
     delete_model = False
     if model is None:
@@ -371,7 +358,7 @@ def predict_single_video(
             cfg=cfg, ckpt_file=ckpt_file, eval=True, data_module=data_module
         )
         delete_model = True
-    model.to("cuda:%i" % gpu_id)
+    model.to("cuda")
 
     delete_trainer = False
     if trainer is None:

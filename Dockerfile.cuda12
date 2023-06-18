@@ -1,0 +1,25 @@
+FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt update -y && apt install -y ffmpeg \
+        libsm6 \
+        libxext6 \
+        curl \
+        ca-certificates \
+        sudo \
+        git \
+        python3.10 \
+        python3-pip \
+        python3-opencv \
+        xorg \
+        nvidia-driver-460
+
+RUN rm /usr/bin/python3 && ln -s python3.10 /usr/bin/python3
+
+RUN python3 -m pip install -U pip && python3 -m pip install -U setuptools
+
+COPY ./ /lightning-pose
+WORKDIR /lightning-pose
+
+RUN python3 -m pip install -e .

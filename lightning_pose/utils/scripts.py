@@ -10,9 +10,11 @@ import lightning.pytorch as pl
 from typeguard import typechecked
 from typing import Dict, Optional, Union
 
+from lightning_pose.callbacks import AnnealWeight
 from lightning_pose.data.dali import PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
+from lightning_pose.data.utils import compute_num_train_frames, split_sizes_from_probabilities
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.metrics import (
     pixel_error,
@@ -32,9 +34,12 @@ from lightning_pose.models.heatmap_tracker_mhcrnn import (
     HeatmapTrackerMHCRNN,
     SemiSupervisedHeatmapTrackerMHCRNN,
 )
-from lightning_pose.utils import get_gpu_list_from_cfg, pretty_print_str
-from lightning_pose.utils.io import return_absolute_path, return_absolute_data_paths
-from lightning_pose.utils.io import check_if_semi_supervised, get_keypoint_names
+from lightning_pose.utils.io import (
+    check_if_semi_supervised,
+    get_keypoint_names,
+    return_absolute_path,
+    return_absolute_data_paths,
+)
 from lightning_pose.utils.pca import KeypointPCA
 from lightning_pose.utils.predictions import (
     load_model_from_checkpoint,
@@ -453,6 +458,82 @@ def get_model(
 
 
 @typechecked
+def get_callbacks(
+    cfg: DictConfig,
+    early_stopping=True,
+    lr_monitor=True,
+    ckpt_model=True,
+    backbone_unfreeze=True,
+) -> list:
+
+    callbacks = []
+
+    if early_stopping:
+        early_stopping = pl.callbacks.EarlyStopping(
+            monitor="val_supervised_loss",
+            patience=cfg.training.early_stop_patience,
+            mode="min",
+        )
+        callbacks.append(early_stopping)
+    if lr_monitor:
+        lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval="epoch")
+        callbacks.append(lr_monitor)
+    if ckpt_model:
+        ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(monitor="val_supervised_loss")
+        callbacks.append(ckpt_callback)
+    if backbone_unfreeze:
+        transfer_unfreeze_callback = pl.callbacks.BackboneFinetuning(
+            unfreeze_backbone_at_epoch=cfg.training.unfreezing_epoch,
+            lambda_func=lambda epoch: 1.5,
+            backbone_initial_ratio_lr=0.1,
+            should_align=True,
+            train_bn=True,
+        )
+        callbacks.append(transfer_unfreeze_callback)
+    # we just need this callback for unsupervised models
+    if (cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None):
+        anneal_weight_callback = AnnealWeight(**cfg.callbacks.anneal_weight)
+        callbacks.append(anneal_weight_callback)
+
+    return callbacks
+
+
+@typechecked
+def calculate_train_batches(
+    cfg: DictConfig,
+    dataset: Optional[Union[BaseTrackingDataset, HeatmapDataset]] = None
+) -> int:
+    """
+    For semi-supervised models, this tells us how many batches to take from each dataloader
+    (labeled and unlabeled) during a given epoch.
+    The default set here is to exhaust all batches from the labeled data loader, often leaving
+    many video frames untouched.
+    But the unlabeled data loader will be randomly reset for the next epoch.
+    We also enforce a minimum value of 10 so that models with a small number of labeled frames will
+    cycle through the dataset multiple times per epoch, which we have found to be useful
+    empirically.
+
+    """
+    if cfg.training.get("limit_train_batches", None) is None:
+        # TODO: small bit of redundant code from datamodule
+        datalen = dataset.__len__()
+        data_splits_list = split_sizes_from_probabilities(
+            datalen,
+            train_probability=cfg.training.train_prob,
+            val_probability=cfg.training.val_prob,
+        )
+        num_train_frames = compute_num_train_frames(
+            data_splits_list[0], cfg.training.get("train_frames", None)
+        )
+        num_labeled_batches = int(np.ceil(num_train_frames / cfg.training.train_batch_size))
+        limit_train_batches = np.max([num_labeled_batches, 10])  # 10 is minimum
+    else:
+        limit_train_batches = cfg.training.limit_train_batches
+
+    return int(limit_train_batches)
+
+
+@typechecked
 def compute_metrics(
     cfg: DictConfig,
     preds_file: str,
@@ -585,7 +666,6 @@ def export_predictions_and_labeled_video(
         ]
     ] = None,
     data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
-    gpu_id: Optional[int] = None,
     labeled_mp4_file: Optional[str] = None,
     save_heatmaps: Optional[bool] = False,
 ) -> None:
@@ -597,7 +677,6 @@ def export_predictions_and_labeled_video(
         ckpt_file=ckpt_file,
         cfg_file=cfg,
         preds_file=prediction_csv_file,
-        gpu_id=gpu_id,
         trainer=trainer,
         model=model,
         data_module=data_module,

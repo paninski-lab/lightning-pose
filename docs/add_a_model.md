@@ -191,7 +191,7 @@ models, and semi-supervised models (and combinations thereof).
 Let's take the fully-supervised heatmap model as an example; once you write the test you can run it
 from the command line like so:
 ```bash
-foo@bar:~$ pytest tests/models/test_heatmap_tracker.py::test_supervised_heatmap
+pytest tests/models/test_heatmap_tracker.py::test_supervised_heatmap
 ```
 This test will build your model using the helper functions above (like `get_model`) and train it
 for several epochs using the toy dataset that comes packaged with this repo.

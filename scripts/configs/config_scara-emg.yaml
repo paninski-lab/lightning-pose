@@ -71,13 +71,6 @@ training:
   rng_seed_data_pt: 0 #scara: 42
   # rng seed for weight initialization
   rng_seed_model_pt: 0 #scara: 44
-  # how many batches to take before terminating an epoch
-  # (any dataloader that has less than limit_train_batches will be cycled over)
-  # THIS IS IMPORTANT!
-  limit_train_batches: null #scara: 100
-  profiler: null #scara: "simple"
-  # runs K small batches of size N before doing a backwards pass.
-  accumulate_grad_batches: 1 #scara: 2
   # learning rate scheduler
   # multisteplr | [todo - reducelronplateau]
   lr_scheduler: multisteplr
@@ -108,24 +101,16 @@ model:
 
 dali:
   general:
-    num_threads: 1 # Number of threads for data loading; can be changed
-    device_id: 0 # GPU device id to use, can be changed
-    device: gpu # "cpu" or "gpu"
     seed: 123456
-
   base:
     train:
       sequence_length: 32 # 4 # step = sequence_length by default. done internally
-
     predict:
       # (train_batch_size + base.train.sequence_length) * 2 -> round down to nearest pow of 2
       sequence_length: 96 # step = sequence_length by default. done internally.
-
-  context: # not supporting context_sequences_successive
+  context:
     train: # defaults: sequence_length=5, step=sequence_length
       batch_size: 16
-      consecutive_sequences: true # can select False if want successive sequences to be presented to network
-
     predict: # defaults: sequence_length=5, step=1
       sequence_length: 96
 
