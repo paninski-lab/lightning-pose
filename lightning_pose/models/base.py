@@ -99,6 +99,7 @@ class BaseFeatureExtractor(LightningModule):
             "resnet50_human_res_rle",
             "resnet50_human_top_res",
             "vit_h_sam",
+            "vit_b_sam",
         ] = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
