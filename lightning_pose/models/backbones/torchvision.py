@@ -4,7 +4,7 @@ from typeguard import typechecked
 
 
 @typechecked
-def build_backbone(backbone_arch: str, pretrained: bool = True):
+def build_backbone(backbone_arch: str, pretrained: bool = True, **kwargs):
     """Load backbone weights for resnets, efficientnets, and other models from torchvision.
 
     Args:

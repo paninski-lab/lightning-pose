@@ -59,6 +59,7 @@ class BaseFeatureExtractor(LightningModule):
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
         do_context: bool = False,
+        image_size: int = 256,
     ) -> None:
         """A CNN model that takes in images and generates features.
 
@@ -71,6 +72,7 @@ class BaseFeatureExtractor(LightningModule):
             pretrained: True to load weights pretrained on imagenet (torchvision models only)
             lr_scheduler: how to schedule learning rate
             lr_scheduler_params: params for specific learning rate schedulers
+            image_size:
 
         """
         super().__init__()
@@ -86,6 +88,7 @@ class BaseFeatureExtractor(LightningModule):
         self.backbone, self.mode, self.num_fc_input_features = build_backbone(
             backbone_arch=self.backbone_arch,
             pretrained=pretrained,
+            image_size=image_size,  # for ViTs only
         )
 
         self.lr_scheduler = lr_scheduler
