@@ -29,7 +29,6 @@ class RegressionTracker(BaseSupervisedTracker):
         loss_factory: LossFactory,
         backbone: ALLOWED_BACKBONES = "resnet50",
         pretrained: bool = True,
-        last_resnet_layer_to_get: int = -2,
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
@@ -42,7 +41,6 @@ class RegressionTracker(BaseSupervisedTracker):
             loss_factory: object to orchestrate loss computation
             backbone: ResNet or EfficientNet variant to be used
             pretrained: True to load pretrained imagenet weights
-            last_resnet_layer_to_get: skip final layers of backbone model
             torch_seed: make weight initialization reproducible
             lr_scheduler: how to schedule learning rate
                 multisteplr
@@ -58,7 +56,6 @@ class RegressionTracker(BaseSupervisedTracker):
         super().__init__(
             backbone=backbone,
             pretrained=pretrained,
-            last_resnet_layer_to_get=last_resnet_layer_to_get,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
             do_context=do_context,
@@ -86,10 +83,10 @@ class RegressionTracker(BaseSupervisedTracker):
         self.rmse_loss = RegressionRMSELoss()
 
         # necessary so we don't have to pass in model arguments when loading
-        # added loss_factory_unsupervised which might come from the SemiSupervisedHeatmapTracker.__super__(). Otherwise it's ignored.
+        # added loss_factory_unsupervised which might come from the
+        # SemiSupervisedHeatmapTracker.__super__(). Otherwise it's ignored.
         # that's important so that it doesn't try to pickle the dali loaders.
-        self.save_hyperparameters(ignore=["loss_factory", "loss_factory_unsupervised"])  # cannot be pickled
-
+        self.save_hyperparameters(ignore=["loss_factory", "loss_factory_unsupervised"])
 
     def forward(
         self,
@@ -165,7 +162,6 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         loss_factory_unsupervised: LossFactory,
         backbone: ALLOWED_BACKBONES = "resnet50",
         pretrained: bool = True,
-        last_resnet_layer_to_get: int = -2,
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
@@ -180,7 +176,6 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
                 computation
             backbone: ResNet or EfficientNet variant to be used
             pretrained: True to load pretrained imagenet weights
-            last_resnet_layer_to_get: skip final layers of original model
             torch_seed: make weight initialization reproducible
             lr_scheduler: how to schedule learning rate
                 multisteplr
@@ -194,7 +189,6 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
             loss_factory=loss_factory,
             backbone=backbone,
             pretrained=pretrained,
-            last_resnet_layer_to_get=last_resnet_layer_to_get,
             torch_seed=torch_seed,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,

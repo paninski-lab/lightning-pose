@@ -54,7 +54,6 @@ class HeatmapTracker(BaseSupervisedTracker):
         backbone: ALLOWED_BACKBONES = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
-        last_resnet_layer_to_get: int = -3,
         output_shape: Optional[tuple] = None,  # change
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
@@ -70,7 +69,6 @@ class HeatmapTracker(BaseSupervisedTracker):
             downsample_factor: make heatmap smaller than original frames to save memory; subpixel
                 operations are performed for increased precision
             pretrained: True to load pretrained imagenet weights
-            last_resnet_layer_to_get: skip final layers of backbone model
             output_shape: hard-coded image size to avoid dynamic shape
                 computations
             torch_seed: make weight initialization reproducible
@@ -88,7 +86,6 @@ class HeatmapTracker(BaseSupervisedTracker):
         super().__init__(
             backbone=backbone,
             pretrained=pretrained,
-            last_resnet_layer_to_get=last_resnet_layer_to_get,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
             do_context=do_context,
@@ -375,7 +372,6 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         backbone: ALLOWED_BACKBONES = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
-        last_resnet_layer_to_get: int = -3,
         output_shape: Optional[tuple] = None,
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
@@ -394,7 +390,6 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
                 save memory; subpixel operations are performed for increased
                 precision
             pretrained: True to load pretrained imagenet weights
-            last_resnet_layer_to_get: skip final layers of original model
             output_shape: hard-coded image size to avoid dynamic shape
                 computations
             torch_seed: make weight initialization reproducible
@@ -411,7 +406,6 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             backbone=backbone,
             downsample_factor=downsample_factor,
             pretrained=pretrained,
-            last_resnet_layer_to_get=last_resnet_layer_to_get,
             output_shape=output_shape,
             torch_seed=torch_seed,
             lr_scheduler=lr_scheduler,
