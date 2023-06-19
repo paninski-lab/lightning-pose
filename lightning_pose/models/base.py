@@ -60,6 +60,7 @@ class BaseFeatureExtractor(LightningModule):
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
         do_context: bool = False,
         image_size: int = 256,
+        model_type: Literal["heatmap", "regression"] = "heatmap",
     ) -> None:
         """A CNN model that takes in images and generates features.
 
@@ -72,7 +73,8 @@ class BaseFeatureExtractor(LightningModule):
             pretrained: True to load weights pretrained on imagenet (torchvision models only)
             lr_scheduler: how to schedule learning rate
             lr_scheduler_params: params for specific learning rate schedulers
-            image_size:
+            image_size: height/width of frames
+            model_type: type of model
 
         """
         super().__init__()
@@ -88,6 +90,7 @@ class BaseFeatureExtractor(LightningModule):
         self.backbone, self.mode, self.num_fc_input_features = build_backbone(
             backbone_arch=self.backbone_arch,
             pretrained=pretrained,
+            model_type=model_type,  # for torchvision only
             image_size=image_size,  # for ViTs only
         )
 
@@ -121,7 +124,7 @@ class BaseFeatureExtractor(LightningModule):
             dimensions, and are not necessarily equal.
 
         """
-        if self.mode == "2d":
+        if self.mode == "2d" or self.mode == "transformer":
             if self.do_context:
                 if len(images.shape) == 5:
                     # non-consecutive sequences, used for batches of labeled data during training
@@ -172,8 +175,7 @@ class BaseFeatureExtractor(LightningModule):
                     "batch", "features", "rep_height", "rep_width", "frames"
                 ] = torch.permute(outputs, (0, 2, 3, 4, 1))
             else:
-                image_batch = images
-                representations = self.backbone(image_batch)
+                representations = self.backbone(images)
 
         elif self.mode == "3d":
             # reshape to (batch, channels, frames, img_height, img_width)
@@ -185,9 +187,7 @@ class BaseFeatureExtractor(LightningModule):
             representations: TensorType[
                 "batch", "features", "rep_height", "rep_width", "frames"
             ] = torch.permute(output, (0, 1, 3, 4, 2))
-        elif self.mode == "transformer":
-            representations = self.backbone(images)
-                
+
         return representations
 
     def forward(

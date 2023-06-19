@@ -73,13 +73,18 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
             do_context=True,
+            **kwargs,
         )
 
         if self.mode == "3d":
             raise NotImplementedError
 
         # create upsampling layers for crnn
-        self.crnn = UpsamplingCRNN(self.num_filters_for_upsampling, self.num_keypoints)
+        self.crnn = UpsamplingCRNN(
+            num_filters_for_upsampling=self.num_filters_for_upsampling,
+            num_keypoints=self.num_keypoints,
+            upsampling_factor=1 if "vit" in backbone else 2,
+        )
         self.upsampling_layers_rnn = self.crnn.layers
 
         # alias parent upsampling layers for single frame
@@ -96,7 +101,7 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         # permute to shape (frames, batch, features, rep_height, rep_width)
         representations = torch.permute(representations, (4, 0, 1, 2, 3))
         heatmaps_crnn = self.crnn(representations)
-        heatmaps_sf = self.upsampling_layers_sf(representations[2])
+        heatmaps_sf = self.upsampling_layers_sf(representations[2])  # index 2 == middle frame
 
         return heatmaps_crnn, heatmaps_sf
 
@@ -243,6 +248,7 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
             torch_seed=torch_seed,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
+            **kwargs,
         )
         self.loss_factory_unsup = loss_factory_unsupervised.to(self.device)
 
@@ -312,7 +318,7 @@ class UpsamplingCRNN(torch.nn.Module):
         self,
         num_filters_for_upsampling: int,
         num_keypoints: int,
-        upsampling_factor: int = 2,
+        upsampling_factor: Literal[1, 2] = 2,
         hkernel: int = 2,
         hstride: int = 2,
         hpad: int = 0,
@@ -388,7 +394,10 @@ class UpsamplingCRNN(torch.nn.Module):
         )
         self.H_b = nn.Sequential(*H_b_layers)
         self.initialize_layers()
-        self.layers = torch.nn.ModuleList([self.W_pre, self.W_f, self.H_f, self.W_b, self.H_b])
+        if self.upsampling_factor == 2:
+            self.layers = torch.nn.ModuleList([self.W_pre, self.W_f, self.H_f, self.W_b, self.H_b])
+        else:
+            self.layers = torch.nn.ModuleList([self.W_f, self.H_f, self.W_b, self.H_b])
 
     def initialize_layers(self):
         if self.upsampling_factor == 2:
