@@ -63,6 +63,8 @@ class HeatmapTracker(BaseSupervisedTracker):
             "resnet50_human_jhmdb",
             "resnet50_human_res_rle",
             "resnet50_human_top_res",
+            "vit_h_sam",
+            "vit_b_sam",
         ] = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
@@ -109,7 +111,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.num_targets = num_keypoints * 2
         self.loss_factory = loss_factory
         # TODO: downsample_factor may be in mismatch between datamodule and model.
-        self.downsample_factor = downsample_factor
+        self.downsample_factor = downsample_factor 
         self.upsampling_layers = self.make_upsampling_layers()
         self.initialize_upsampling_layers()
         self.output_shape = output_shape
@@ -117,7 +119,8 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.temperature = torch.tensor(1000.0, device=self.device)  # soft argmax temp
         self.torch_seed = torch_seed
         self.do_context = do_context
-        if self.mode == "2d":
+
+        if self.mode == "2d" or self.mode == "transformer":
             self.unnormalized_weights = nn.parameter.Parameter(
                 torch.Tensor([[0.2, 0.2, 0.2, 0.2, 0.2]]), requires_grad=False
             )
@@ -255,8 +258,11 @@ class HeatmapTracker(BaseSupervisedTracker):
                 out_channels=self.num_keypoints,
             )
         )  # up to here results in downsample_factor=3
-        for _ in range(4 - self.downsample_factor - 1):
-            # add another upsampling layer to account for heatmap downsampling
+        n_layers_to_build = 4 - self.downsample_factor - 1
+        if self.backbone_arch in ["vit_h_sam", "vit_b_sam"]:
+            n_layers_to_build = -1
+        for _ in range(n_layers_to_build):
+            # add upsampling layer to account for heatmap downsampling
             # upsampling_layers.append(nn.BatchNorm2d(self.num_keypoints))
             # upsampling_layers.append(nn.ReLU(inplace=True))
             upsampling_layers.append(
