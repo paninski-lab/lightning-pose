@@ -14,17 +14,14 @@ HEIGHTS = [128, 256, 384]  # standard numbers, not going to bigger images due to
 WIDTHS = [120, 246, 380]  # similar but not square
 BACKBONES = ["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"]
 
-# TODO: add efficientnet
+# TODO: add efficientnet, vit
 
 
 def test_backbone():
 
-    # check architecture properties when we truncate network at index at
-    # `last_resnet_layer_to_get`
+    # check architecture properties
     for ind, backbone in enumerate(BACKBONES):
-        model = BaseFeatureExtractor(backbone=backbone, last_resnet_layer_to_get=-3).to(
-            _TORCH_DEVICE
-        )
+        model = BaseFeatureExtractor(backbone=backbone).to(_TORCH_DEVICE)
         if "resnet" in backbone:
             resnet_v = int(backbone.replace("resnet", ""))
             if resnet_v <= 34:  # last block is BasicBlock
@@ -86,42 +83,9 @@ def test_representation_shapes_truncated_resnet():
                 size=(BATCH_SIZE, 3, HEIGHTS[ind_image], WIDTHS[ind_image]),
                 device=_TORCH_DEVICE,
             )
-            model = BaseFeatureExtractor(
-                backbone=backbone, last_resnet_layer_to_get=-3
-            ).to(_TORCH_DEVICE)
+            model = BaseFeatureExtractor(backbone=backbone).to(_TORCH_DEVICE)
             representations = model(fake_image_batch)
             assert representations.shape == shape_list_pre_pool[ind_image][ind]
-            # remove model/data from gpu; then cache can be cleared
-            del model
-            del fake_image_batch
-            del representations
-    torch.cuda.empty_cache()  # remove tensors from gpu
-
-
-def test_representation_shapes_full_resnet():
-    # assuming you're taking everything but the resnet's FC layer
-    repres_shape_list_all_but_fc = [
-        torch.Size([BATCH_SIZE, 512, 1, 1]),
-        torch.Size([BATCH_SIZE, 512, 1, 1]),
-        torch.Size([BATCH_SIZE, 2048, 1, 1]),
-        torch.Size([BATCH_SIZE, 2048, 1, 1]),
-        torch.Size([BATCH_SIZE, 2048, 1, 1]),
-    ]
-    for ind_image in range(len(HEIGHTS)):
-        for ind, backbone in enumerate(BACKBONES):
-            if "resnet" not in backbone:
-                continue
-            if _TORCH_DEVICE == "cuda":
-                torch.cuda.empty_cache()
-            fake_image_batch = torch.rand(
-                size=(BATCH_SIZE, 3, HEIGHTS[ind_image], WIDTHS[ind_image]),
-                device=_TORCH_DEVICE,
-            )
-            model = BaseFeatureExtractor(
-                backbone=backbone, last_resnet_layer_to_get=-2
-            ).to(_TORCH_DEVICE)
-            representations = model(fake_image_batch)
-            assert representations.shape == repres_shape_list_all_but_fc[ind]
             # remove model/data from gpu; then cache can be cleared
             del model
             del fake_image_batch
