@@ -1,14 +1,16 @@
 from functools import partial
 from segment_anything.modeling import ImageEncoderViT
+import torch
 from typeguard import typechecked
 
 
 @typechecked
-def build_backbone(backbone_arch: str, **kwargs):
+def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
     """Load backbone weights for resnet models.
 
     Args:
         backbone_arch: which backbone version/weights to use
+        image_size: height/width in pixels of images (must be square)
 
     Returns:
         tuple
@@ -29,7 +31,7 @@ def build_backbone(backbone_arch: str, **kwargs):
         encoder_num_heads = 16
         encoder_global_attn_indexes = (7, 15, 23, 31)
         prompt_embed_dim = 256
-        image_size = 256
+        image_size = image_size
         vit_patch_size = 16
         base = ImageEncoderViT(
             depth=encoder_depth,
@@ -47,7 +49,7 @@ def build_backbone(backbone_arch: str, **kwargs):
         )
         base.load_state_dict(state_dict, strict=False)
 
-    elif "vit_b_sam" in backbone:
+    elif "vit_b_sam" in backbone_arch:
         ckpt_url = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth"
         state_dict = torch.hub.load_state_dict_from_url(ckpt_url)
         encoder_embed_dim = 768
@@ -55,7 +57,7 @@ def build_backbone(backbone_arch: str, **kwargs):
         encoder_num_heads = 12
         encoder_global_attn_indexes = (2, 5, 8, 11)
         prompt_embed_dim = 256
-        image_size = 256
+        image_size = image_size
         vit_patch_size = 16
         base = ImageEncoderViT(
             depth=encoder_depth,
