@@ -12,56 +12,66 @@ _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 4
 HEIGHTS = [128, 256, 384]  # standard numbers, not going to bigger images due to memory
 WIDTHS = [120, 246, 380]  # similar but not square
-BACKBONES = ["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"]
+RESNET_BACKBONES = ["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"]
+EFFICIENTNET_BACKBONES = ["efficientnet_b0", "efficientnet_b1", "efficientnet_b2"]
+# TODO: add vit
 
-# TODO: add efficientnet, vit
 
+def test_backbones_resnet():
 
-def test_backbone():
-
-    # check architecture properties
-    for ind, backbone in enumerate(BACKBONES):
+    for ind, backbone in enumerate(RESNET_BACKBONES):
         model = BaseFeatureExtractor(backbone=backbone).to(_TORCH_DEVICE)
-        if "resnet" in backbone:
-            resnet_v = int(backbone.replace("resnet", ""))
-            if resnet_v <= 34:  # last block is BasicBlock
-                assert (
-                    type(list(model.backbone.children())[-3][-1])
-                    == torchvision.models.resnet.BasicBlock
-                )
-            else:  # different arch; BottleneckBlock
-                assert (
-                    type(list(model.backbone.children())[-3][-1])
-                    == torchvision.models.resnet.Bottleneck
-                )
+        resnet_v = int(backbone.replace("resnet", ""))
+        if resnet_v <= 34:  # last block is BasicBlock
+            assert (
+                type(list(model.backbone.children())[-3][-1])
+                == torchvision.models.resnet.BasicBlock
+            )
+        else:  # different arch; BottleneckBlock
+            assert (
+                type(list(model.backbone.children())[-3][-1])
+                == torchvision.models.resnet.Bottleneck
+            )
         # remove model from gpu; then cache can be cleared
         del model
         torch.cuda.empty_cache()  # remove tensors from gpu
 
 
-def test_representation_shapes_truncated_resnet():
+def test_backbones_efficientnet():
+    for ind, backbone in enumerate(EFFICIENTNET_BACKBONES):
+        model = BaseFeatureExtractor(backbone=backbone).to(_TORCH_DEVICE)
+        assert (
+            type(list(model.backbone.children())[-1][-2][0])
+            == torchvision.models.efficientnet.MBConv
+        )
+        # remove model from gpu; then cache can be cleared
+        del model
+        torch.cuda.empty_cache()  # remove tensors from gpu
+
+
+def test_representation_shapes_resnet():
 
     # loop over different backbone versions and make sure that the resulting
     # representation shapes make sense
 
-    # assuming you're truncating before average pool; that depends on image shape
-    repres_shape_list_truncated_before_avg_pool_small_image = [
-        torch.Size([BATCH_SIZE, 512, 4, 4]),
-        torch.Size([BATCH_SIZE, 512, 4, 4]),
-        torch.Size([BATCH_SIZE, 2048, 4, 4]),
-        torch.Size([BATCH_SIZE, 2048, 4, 4]),
-        torch.Size([BATCH_SIZE, 2048, 4, 4]),
+    # 128x120
+    rep_shape_list_small_image = [
+        torch.Size([BATCH_SIZE, 512, 4, 4]),  # resnet18
+        torch.Size([BATCH_SIZE, 512, 4, 4]),  # resnet34
+        torch.Size([BATCH_SIZE, 2048, 4, 4]),  # resnet50
+        torch.Size([BATCH_SIZE, 2048, 4, 4]),  # resnet101
+        torch.Size([BATCH_SIZE, 2048, 4, 4]),  # resnet152
     ]
-
-    repres_shape_list_truncated_before_avg_pool_medium_image = [
+    # 256x246
+    rep_shape_list_medium_image = [
         torch.Size([BATCH_SIZE, 512, 8, 8]),
         torch.Size([BATCH_SIZE, 512, 8, 8]),
         torch.Size([BATCH_SIZE, 2048, 8, 8]),
         torch.Size([BATCH_SIZE, 2048, 8, 8]),
         torch.Size([BATCH_SIZE, 2048, 8, 8]),
     ]
-
-    repres_shape_list_truncated_before_avg_pool_big_image = [
+    # 384x380
+    rep_shape_list_large_image = [
         torch.Size([BATCH_SIZE, 512, 12, 12]),
         torch.Size([BATCH_SIZE, 512, 12, 12]),
         torch.Size([BATCH_SIZE, 2048, 12, 12]),
@@ -69,25 +79,74 @@ def test_representation_shapes_truncated_resnet():
         torch.Size([BATCH_SIZE, 2048, 12, 12]),
     ]
     shape_list_pre_pool = [
-        repres_shape_list_truncated_before_avg_pool_small_image,
-        repres_shape_list_truncated_before_avg_pool_medium_image,
-        repres_shape_list_truncated_before_avg_pool_big_image,
+        rep_shape_list_small_image,
+        rep_shape_list_medium_image,
+        rep_shape_list_large_image,
     ]
-    for ind_image in range(len(HEIGHTS)):
-        for ind, backbone in enumerate(BACKBONES):
-            if "resnet" not in backbone:
-                continue
-            if _TORCH_DEVICE == "cuda":
-                torch.cuda.empty_cache()
+
+    for idx_backbone, backbone in enumerate(RESNET_BACKBONES):
+        if _TORCH_DEVICE == "cuda":
+            torch.cuda.empty_cache()
+        model = BaseFeatureExtractor(backbone=backbone).to(_TORCH_DEVICE)
+        for idx_image in range(len(HEIGHTS)):
             fake_image_batch = torch.rand(
-                size=(BATCH_SIZE, 3, HEIGHTS[ind_image], WIDTHS[ind_image]),
+                size=(BATCH_SIZE, 3, HEIGHTS[idx_image], WIDTHS[idx_image]),
                 device=_TORCH_DEVICE,
             )
-            model = BaseFeatureExtractor(backbone=backbone).to(_TORCH_DEVICE)
             representations = model(fake_image_batch)
-            assert representations.shape == shape_list_pre_pool[ind_image][ind]
+            assert representations.shape == shape_list_pre_pool[idx_image][idx_backbone]
             # remove model/data from gpu; then cache can be cleared
-            del model
             del fake_image_batch
             del representations
+        del model
+
+    torch.cuda.empty_cache()  # remove tensors from gpu
+
+
+def test_representation_shapes_efficientnet():
+
+    # loop over different backbone versions and make sure that the resulting
+    # representation shapes make sense
+
+    # 128x120
+    rep_shape_list_small_image = [
+        torch.Size([BATCH_SIZE, 1280, 4, 4]),  # efficientnet_b0
+        torch.Size([BATCH_SIZE, 1280, 4, 4]),  # efficientnet_b1
+        torch.Size([BATCH_SIZE, 1408, 4, 4]),  # efficientnet_b2
+    ]
+    # 256x246
+    rep_shape_list_medium_image = [
+        torch.Size([BATCH_SIZE, 1280, 8, 8]),
+        torch.Size([BATCH_SIZE, 1280, 8, 8]),
+        torch.Size([BATCH_SIZE, 1408, 8, 8]),
+    ]
+    # 384x380
+    rep_shape_list_large_image = [
+        torch.Size([BATCH_SIZE, 1280, 12, 12]),
+        torch.Size([BATCH_SIZE, 1280, 12, 12]),
+        torch.Size([BATCH_SIZE, 1408, 12, 12]),
+    ]
+    shape_list_pre_pool = [
+        rep_shape_list_small_image,
+        rep_shape_list_medium_image,
+        rep_shape_list_large_image,
+    ]
+
+    for idx_backbone, backbone in enumerate(EFFICIENTNET_BACKBONES):
+        if _TORCH_DEVICE == "cuda":
+            torch.cuda.empty_cache()
+        model = BaseFeatureExtractor(backbone=backbone).to(_TORCH_DEVICE)
+        print(backbone)
+        for idx_image in range(len(HEIGHTS)):
+            fake_image_batch = torch.rand(
+                size=(BATCH_SIZE, 3, HEIGHTS[idx_image], WIDTHS[idx_image]),
+                device=_TORCH_DEVICE,
+            )
+            representations = model(fake_image_batch)
+            assert representations.shape == shape_list_pre_pool[idx_image][idx_backbone]
+            # remove model/data from gpu; then cache can be cleared
+            del fake_image_batch
+            del representations
+        del model
+
     torch.cuda.empty_cache()  # remove tensors from gpu
