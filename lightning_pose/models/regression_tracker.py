@@ -73,18 +73,11 @@ class RegressionTracker(BaseSupervisedTracker):
         self.final_layer = nn.Linear(self.num_fc_input_features, self.num_targets)
         self.torch_seed = torch_seed
         self.do_context = do_context
-        if self.mode == "2d" or self.mode == "transformer":
-            self.unnormalized_weights = nn.parameter.Parameter(
-                torch.Tensor([[0.2, 0.2, 0.2, 0.2, 0.2]]), requires_grad=False)
-            self.representation_fc = lambda x: x @ torch.transpose(
-                nn.functional.softmax(self.unnormalized_weights, dim=1), 0, 1)
-        elif self.mode == "3d":
-            self.unnormalized_weights = nn.parameter.Parameter(
-                torch.Tensor([[0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125]]),
-                requires_grad=False
-            )
-            self.representation_fc = lambda x: x @ torch.transpose(
-                nn.functional.softmax(self.unnormalized_weights, dim=1), 0, 1)
+
+        self.unnormalized_weights = nn.parameter.Parameter(
+            torch.Tensor([[0.2, 0.2, 0.2, 0.2, 0.2]]), requires_grad=False)
+        self.representation_fc = lambda x: x @ torch.transpose(
+            nn.functional.softmax(self.unnormalized_weights, dim=1), 0, 1)
 
         # use this to log auxiliary information: pixel_error on labeled data
         self.rmse_loss = RegressionRMSELoss()
@@ -106,9 +99,7 @@ class RegressionTracker(BaseSupervisedTracker):
         # see input lines for shape of "images"
         representations = self.get_representations(images)
         # handle context frames first
-        if (self.mode == "2d" and self.do_context) \
-                or (self.mode == "transformer" and self.do_context) \
-                or self.mode == "3d":
+        if self.do_context:
             # push through a linear layer to get the final representation
             # input shape (batch, features, rep_height, rep_width, frames)
             representations: TensorType[

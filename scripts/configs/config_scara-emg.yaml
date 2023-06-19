@@ -86,7 +86,6 @@ model:
   # whether to learn the weights for the unsupervised losses
   learn_weights: false
   # resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
-  # resnet50_3d
   # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
   backbone: resnet50
   # prediction mode - "heatmap" | "regression"

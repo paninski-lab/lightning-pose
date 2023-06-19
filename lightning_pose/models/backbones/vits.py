@@ -15,12 +15,9 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
     Returns:
         tuple
             - backbone: pytorch model
-            - mode (str): "transformer"
             - num_fc_input_features (int): number of input features to fully connected layer
 
     """
-
-    mode = "transformer"
 
     # load backbone weights
     if "vit_h_sam" in backbone_arch:
@@ -80,4 +77,4 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
 
     num_fc_input_features = base.neck[-2].in_channels
 
-    return base, mode, num_fc_input_features
+    return base, num_fc_input_features

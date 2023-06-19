@@ -76,9 +76,6 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
             **kwargs,
         )
 
-        if self.mode == "3d":
-            raise NotImplementedError
-
         # create upsampling layers for crnn
         self.crnn = UpsamplingCRNN(
             num_filters_for_upsampling=self.num_filters_for_upsampling,

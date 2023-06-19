@@ -6,7 +6,6 @@ ALLOWED_BACKBONES = Literal[
     "resnet50",
     "resnet101",
     "resnet152",
-    "resnet50_3d",
     "resnet50_contrastive",
     "resnet50_animal_apose",
     "resnet50_animal_ap10k",
