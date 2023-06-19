@@ -22,7 +22,7 @@ from lightning_pose.data.utils import (
     SemiSupervisedBatchDict,
     SemiSupervisedHeatmapBatchDict,
 )
-
+from lightning_pose.models import ALLOWED_BACKBONES
 
 MULTISTEPLR_MILESTONES_DEFAULT = [100, 200, 300]
 MULTISTEPLR_GAMMA_DEFAULT = 0.5
@@ -85,22 +85,7 @@ class BaseFeatureExtractor(LightningModule):
 
     def __init__(
         self,
-        backbone: Literal[
-            "resnet18",
-            "resnet34",
-            "resnet50",
-            "resnet101",
-            "resnet152",
-            "resnet50_3d",
-            "resnet50_contrastive",
-            "resnet50_animal_apose",
-            "resnet50_animal_ap10k",
-            "resnet50_human_jhmdb",
-            "resnet50_human_res_rle",
-            "resnet50_human_top_res",
-            "vit_h_sam",
-            "vit_b_sam",
-        ] = "resnet50",
+        backbone: ALLOWED_BACKBONES = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         lr_scheduler: str = "multisteplr",
