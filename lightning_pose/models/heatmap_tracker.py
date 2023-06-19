@@ -59,6 +59,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
         do_context: bool = False,
+        **kwargs,
     ) -> None:
         """Initialize a DLC-like model with resnet backbone.
 
@@ -89,6 +90,7 @@ class HeatmapTracker(BaseSupervisedTracker):
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
             do_context=do_context,
+            **kwargs,
         )
         self.num_keypoints = num_keypoints
         self.num_targets = num_keypoints * 2
@@ -125,9 +127,10 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.rmse_loss = RegressionRMSELoss()
 
         # necessary so we don't have to pass in model arguments when loading
-        # added loss_factory_unsupervised which might come from the SemiSupervisedHeatmapTracker.__super__(). Otherwise it's ignored.
+        # added loss_factory_unsupervised which might come from the
+        # SemiSupervisedHeatmapTracker.__super__(). Otherwise it's ignored.
         # that's important so that it doesn't try to pickle the dali loaders.
-        self.save_hyperparameters(ignore=["loss_factory", "loss_factory_unsupervised"])  # cannot be pickled
+        self.save_hyperparameters(ignore=["loss_factory", "loss_factory_unsupervised"])
 
     @property
     def num_filters_for_upsampling(self) -> int:
@@ -281,7 +284,9 @@ class HeatmapTracker(BaseSupervisedTracker):
         """Handle context frames then upsample to get final heatmaps."""
 
         # handle context frames first
-        if (self.mode == "2d" and self.do_context) or self.mode == "3d":
+        if (self.mode == "2d" and self.do_context) \
+                or (self.mode == "transformer" and self.do_context) \
+                or self.mode == "3d":
             # push through a linear layer to get the final representation
             # input shape (batch, features, rep_height, rep_width, frames)
             representations: TensorType[
@@ -377,6 +382,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
         do_context: bool = False,
+        **kwargs,
     ) -> None:
         """
 
@@ -411,6 +417,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
             do_context=do_context,
+            **kwargs,
         )
         self.loss_factory_unsup = loss_factory_unsupervised.to(self.device)
 

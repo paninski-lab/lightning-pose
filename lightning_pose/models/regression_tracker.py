@@ -33,6 +33,7 @@ class RegressionTracker(BaseSupervisedTracker):
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
         do_context: bool = False,
+        **kwargs,
     ) -> None:
         """Base model that produces (x, y) coordinates of keypoints from images.
 
@@ -53,20 +54,26 @@ class RegressionTracker(BaseSupervisedTracker):
         # for reproducible weight initialization
         torch.manual_seed(torch_seed)
 
+        if "vit" in backbone:
+            raise ValueError("Regression trackers are not compatible with ViT backbones")
+
         super().__init__(
             backbone=backbone,
             pretrained=pretrained,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
             do_context=do_context,
+            model_type="regression",
+            **kwargs,
         )
+
         self.num_keypoints = num_keypoints
         self.num_targets = self.num_keypoints * 2
         self.loss_factory = loss_factory
         self.final_layer = nn.Linear(self.num_fc_input_features, self.num_targets)
         self.torch_seed = torch_seed
         self.do_context = do_context
-        if self.mode == "2d":
+        if self.mode == "2d" or self.mode == "transformer":
             self.unnormalized_weights = nn.parameter.Parameter(
                 torch.Tensor([[0.2, 0.2, 0.2, 0.2, 0.2]]), requires_grad=False)
             self.representation_fc = lambda x: x @ torch.transpose(
@@ -99,7 +106,9 @@ class RegressionTracker(BaseSupervisedTracker):
         # see input lines for shape of "images"
         representations = self.get_representations(images)
         # handle context frames first
-        if (self.mode == "2d" and self.do_context) or self.mode == "3d":
+        if (self.mode == "2d" and self.do_context) \
+                or (self.mode == "transformer" and self.do_context) \
+                or self.mode == "3d":
             # push through a linear layer to get the final representation
             # input shape (batch, features, rep_height, rep_width, frames)
             representations: TensorType[
@@ -166,6 +175,7 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
         do_context: bool = False,
+        **kwargs,
     ) -> None:
         """
 
@@ -193,6 +203,7 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
             do_context=do_context,
+            **kwargs,
         )
         self.loss_factory_unsup = loss_factory_unsupervised
         loss_names = loss_factory_unsupervised.loss_instance_dict.keys()

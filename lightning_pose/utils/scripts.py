@@ -374,6 +374,12 @@ def get_model(
     lr_scheduler = cfg.training["lr_scheduler"]
     lr_scheduler_params = cfg.training["lr_scheduler_params"][lr_scheduler]
     semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
+    image_h = cfg.data.image_resize_dims.height
+    image_w = cfg.data.image_resize_dims.width
+    if "vit" in cfg.model.backbone:
+        if image_h != image_w:
+            raise RuntimeError("ViT model requires resized height and width to be equal")
+
     if not semi_supervised:
         if cfg.model.model_type == "regression":
             model = RegressionTracker(
@@ -384,6 +390,7 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 do_context=cfg.model.do_context,
+                image_size=image_h,  # only used by ViT
             )
         elif cfg.model.model_type == "heatmap":
             model = HeatmapTracker(
@@ -396,6 +403,7 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 do_context=cfg.model.do_context,
+                image_size=image_h,  # only used by ViT
             )
         elif cfg.model.model_type == "heatmap_mhcrnn":
             model = HeatmapTrackerMHCRNN(
@@ -407,14 +415,13 @@ def get_model(
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
+                image_size=image_h,  # only used by ViT
             )
         else:
             raise NotImplementedError(
                 "%s is an invalid cfg.model.model_type for a fully supervised model"
                 % cfg.model.model_type
             )
-        # add losses onto initialized model
-        # model.add_loss_factory(loss_factories["supervised"])
 
     else:
         if cfg.model.model_type == "regression":
@@ -427,6 +434,7 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 do_context=cfg.model.do_context,
+                image_size=image_h,  # only used by ViT
             )
 
         elif cfg.model.model_type == "heatmap":
@@ -441,6 +449,7 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 do_context=cfg.model.do_context,
+                image_size=image_h,  # only used by ViT
             )
         elif cfg.model.model_type == "heatmap_mhcrnn":
             model = SemiSupervisedHeatmapTrackerMHCRNN(
@@ -453,12 +462,14 @@ def get_model(
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
+                image_size=image_h,  # only used by ViT
             )
         else:
             raise NotImplementedError(
                 "%s is an invalid cfg.model.model_type for a semi-supervised model"
                 % cfg.model.model_type
             )
+
     return model
 
 

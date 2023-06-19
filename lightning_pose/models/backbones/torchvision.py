@@ -4,7 +4,9 @@ from typeguard import typechecked
 
 
 @typechecked
-def build_backbone(backbone_arch: str, pretrained: bool = True, **kwargs):
+def build_backbone(
+    backbone_arch: str, pretrained: bool = True, model_type: str = "heatmap", **kwargs,
+) -> tuple:
     """Load backbone weights for resnets, efficientnets, and other models from torchvision.
 
     Args:
@@ -72,10 +74,11 @@ def build_backbone(backbone_arch: str, pretrained: bool = True, **kwargs):
         base = getattr(tvmodels, backbone_arch)(pretrained=pretrained)
 
     # get truncated version of backbone; don't include final avg pool
+    last_layer_ind = -3 if model_type == "heatmap" else -2
     if "3d" in backbone_arch:
-        backbone = grab_layers_sequential_3d(model=base, last_layer_ind=-3)
+        backbone = grab_layers_sequential_3d(model=base, last_layer_ind=last_layer_ind)
     else:
-        backbone = grab_layers_sequential(model=base, last_layer_ind=-3)
+        backbone = grab_layers_sequential(model=base, last_layer_ind=last_layer_ind)
 
     # compute number of input features
     if "resnet" in backbone_arch and "3d" not in backbone_arch:
