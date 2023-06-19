@@ -16,6 +16,7 @@ from lightning_pose.data.utils import (
 )
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
+from lightning_pose.models import ALLOWED_BACKBONES
 from lightning_pose.models.base import BaseSupervisedTracker, SemiSupervisedTrackerMixin
 
 
@@ -26,20 +27,7 @@ class RegressionTracker(BaseSupervisedTracker):
         self,
         num_keypoints: int,
         loss_factory: LossFactory,
-        backbone: Literal[
-            "resnet18",
-            "resnet34",
-            "resnet50",
-            "resnet101",
-            "resnet152",
-            "resnet50_3d",
-            "resnet50_contrastive",
-            "resnet50_animal_apose",
-            "resnet50_animal_ap10k",
-            "resnet50_human_jhmdb",
-            "resnet50_human_res_rle",
-            "resnet50_human_top_res",
-        ] = "resnet50",
+        backbone: ALLOWED_BACKBONES = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         torch_seed: int = 123,
@@ -175,20 +163,7 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         num_keypoints: int,
         loss_factory: LossFactory,
         loss_factory_unsupervised: LossFactory,
-        backbone: Literal[
-            "resnet18",
-            "resnet34",
-            "resnet50",
-            "resnet101",
-            "resnet152",
-            "resnet50_3d",
-            "resnet50_contrastive",
-            "resnet50_animal_apose",
-            "resnet50_animal_ap10k",
-            "resnet50_human_jhmdb",
-            "resnet50_human_res_rle",
-            "resnet50_human_top_res",
-        ] = "resnet50",
+        backbone: ALLOWED_BACKBONES = "resnet50",
         pretrained: bool = True,
         last_resnet_layer_to_get: int = -2,
         torch_seed: int = 123,
