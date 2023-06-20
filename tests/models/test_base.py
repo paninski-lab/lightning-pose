@@ -106,6 +106,7 @@ def test_representation_shapes_resnet():
                 size=(BATCH_SIZE, 3, HEIGHTS[idx_image], WIDTHS[idx_image]),
                 device=_TORCH_DEVICE,
             )
+            # representation dim depends on both image size and backbone network
             representations = model(fake_image_batch)
             assert representations.shape == shape_list_pre_pool[idx_image][idx_backbone]
             # remove model/data from gpu; then cache can be cleared
@@ -155,6 +156,7 @@ def test_representation_shapes_efficientnet():
                 device=_TORCH_DEVICE,
             )
             representations = model(fake_image_batch)
+            # representation dim depends on both image size and backbone network
             assert representations.shape == shape_list_pre_pool[idx_image][idx_backbone]
             # remove model/data from gpu; then cache can be cleared
             del fake_image_batch
@@ -198,6 +200,7 @@ def test_representation_shapes_vit():
                 size=(BATCH_SIZE, 3, HEIGHTS[idx_image], HEIGHTS[idx_image]),
                 device=_TORCH_DEVICE,
             )
+            # representation dim depends on both image size and backbone network
             representations = model(fake_image_batch)
             assert representations.shape == shape_list_pre_pool[idx_image][idx_backbone]
             # remove model/data from gpu; then cache can be cleared
