@@ -16,22 +16,16 @@ def build_backbone(
     Args:
         backbone_arch: which backbone version/weights to use
         pretrained: True to load weights pretrained on imagenet
+        model_type: "heatmap" or "regression"
 
     Returns:
         tuple
             - backbone: pytorch model
-            - mode (str): "2d" or "3d"
             - num_fc_input_features (int): number of input features to fully connected layer
 
     """
 
-    mode = "2d"
-
-    if "3d" in backbone_arch:
-        base = torch.hub.load("facebookresearch/pytorchvideo", "slow_r50", pretrained=True)
-        mode = "3d"
-
-    elif backbone_arch == "resnet50_contrastive":
+    if backbone_arch == "resnet50_contrastive":
         # load resnet50 pretrained using SimCLR on imagenet
         from pl_bolts.models.self_supervised import SimCLR
 
@@ -110,22 +104,17 @@ def build_backbone(
 
     # get truncated version of backbone; don't include final avg pool
     last_layer_ind = -3 if model_type == "heatmap" else -2
-    if "3d" in backbone_arch:
-        backbone = grab_layers_sequential_3d(model=base, last_layer_ind=last_layer_ind)
-    else:
-        backbone = grab_layers_sequential(model=base, last_layer_ind=last_layer_ind)
+    backbone = grab_layers_sequential(model=base, last_layer_ind=last_layer_ind)
 
     # compute number of input features
-    if "resnet" in backbone_arch and "3d" not in backbone_arch:
+    if "resnet" in backbone_arch:
         num_fc_input_features = base.fc.in_features
     elif "eff" in backbone_arch:
         num_fc_input_features = base.classifier[-1].in_features
-    elif "3d" in backbone_arch:
-        num_fc_input_features = base.blocks[-1].proj.in_features // 2
     else:
         raise NotImplementedError
 
-    return backbone, mode, num_fc_input_features
+    return backbone, num_fc_input_features
 
 
 @typechecked
@@ -141,13 +130,4 @@ def grab_layers_sequential(model, last_layer_ind: int) -> torch.nn.Sequential:
 
     """
     layers = list(model.children())[: last_layer_ind + 1]
-    return torch.nn.Sequential(*layers)
-
-
-@typechecked
-def grab_layers_sequential_3d(model, last_layer_ind: int) -> torch.nn.Sequential:
-    """This is to use a 3d model to extract features"""
-    # the AvgPool3d halves the feature maps dims
-    layers = list(model.children())[0][:last_layer_ind + 1] + \
-             [torch.nn.AvgPool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2), padding=(0, 0, 0))]
     return torch.nn.Sequential(*layers)

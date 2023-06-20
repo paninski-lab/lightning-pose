@@ -93,9 +93,7 @@ class BaseDataModule(pl.LightningDataModule):
         # further subsample training data if desired
         if self.train_frames is not None:
 
-            n_frames = compute_num_train_frames(
-                len(self.train_dataset), self.train_frames
-            )
+            n_frames = compute_num_train_frames(len(self.train_dataset), self.train_frames)
 
             if n_frames < len(self.train_dataset):
                 # split the data a second time to reflect further subsampling from

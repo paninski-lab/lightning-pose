@@ -13,8 +13,6 @@ data:
   video_dir: null
   # location of labels; for example script, this should be relative to `data_dir`
   csv_file: "CollectedData.csv"
-  # header rows to strip in label csv file
-  header_rows: [0, 1, 2]
   # downsample heatmaps - 2 | 3
   downsample_factor: 2
   # total number of body parts
@@ -56,8 +54,6 @@ training:
   early_stop_patience: 3
   # epoch at which backbone network weights begin updating
   unfreezing_epoch: 20
-  # dropout in final layers
-  dropout_rate: 0.1
   # max training epochs; training may exit before due to early stopping
   min_epochs: 300
   max_epochs: 750
@@ -83,11 +79,8 @@ model:
   # list of unsupervised losses
   # "pca_singleview" | "pca_multiview" | "temporal" | "unimodal_mse" | "unimodal_kl"
   losses_to_use: []
-  # whether to learn the weights for the unsupervised losses
-  learn_weights: false
   # backbone network:
   # resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
-  # resnet50_3d
   # resnet50_animalpose_apose | resnet50_animal_ap10k
   # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res
   # efficientnet_b0 | efficientnet_b1 | efficientnet_b2

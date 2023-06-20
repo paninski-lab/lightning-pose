@@ -87,7 +87,7 @@ class BaseFeatureExtractor(LightningModule):
         else:
             from lightning_pose.models.backbones.torchvision import build_backbone
 
-        self.backbone, self.mode, self.num_fc_input_features = build_backbone(
+        self.backbone, self.num_fc_input_features = build_backbone(
             backbone_arch=self.backbone_arch,
             pretrained=pretrained,
             model_type=model_type,  # for torchvision only
@@ -124,69 +124,57 @@ class BaseFeatureExtractor(LightningModule):
             dimensions, and are not necessarily equal.
 
         """
-        if self.mode == "2d" or self.mode == "transformer":
-            if self.do_context:
-                if len(images.shape) == 5:
-                    # non-consecutive sequences, used for batches of labeled data during training
-                    batch, frames, channels, image_height, image_width = images.shape
-                    frames_batch_shape = batch * frames
-                    images_batch_frames: TensorType[
-                        "batch*frames", "channels":3, "image_height", "image_width"
-                    ] = images.reshape(frames_batch_shape, channels, image_height, image_width)
-                    outputs: TensorType[
-                        "batch*frames", "features", "rep_height", "rep_width"
-                    ] = self.backbone(images_batch_frames)
-                    outputs: TensorType[
-                        "batch", "frames", "features", "rep_height", "rep_width"
-                    ] = outputs.reshape(
-                        images.shape[0],
-                        images.shape[1],
-                        outputs.shape[1],
-                        outputs.shape[2],
-                        outputs.shape[3],
-                    )
-                elif len(images.shape) == 4:
-                    # we have a single sequence of frames from DALI (not a batch of sequences)
-                    # valid frame := a frame that has two frames before it and two frames after it
-                    # we push it as is through the backbone, and then use tiling to make it into
-                    # (sequence_length, features, rep_height, rep_width, num_context_frames)
-                    # for now we discard the padded frames (first and last two)
-                    # the output will be one representation per valid frame
-                    sequence_length, channels, image_height, image_width = images.shape
-                    representations: TensorType[
-                        "sequence_length", "channels":3, "rep_height", "rep_width"
-                    ] = self.backbone(images)
-                    # we need to tile the representations to make it into
-                    # (num_valid_frames, features, rep_height, rep_width, num_context_frames)
-                    # TODO: context frames should be configurable
-                    tiled_representations = get_context_from_sequence(
-                        img_seq=representations, context_length=5
-                    )
-                    # get rid of first and last two frames
-                    if tiled_representations.shape[0] < 5:
-                        raise RuntimeError(
-                            "Not enough valid frames to make a context representation."
-                        )
-                    outputs = tiled_representations[2:-2, :, :, :, :]
-
-                # for both types of batches, we reshape in the same way
-                # context is in the last dimension for the linear layer.
+        if self.do_context:
+            if len(images.shape) == 5:
+                # non-consecutive sequences, used for batches of labeled data during training
+                batch, frames, channels, image_height, image_width = images.shape
+                frames_batch_shape = batch * frames
+                images_batch_frames: TensorType[
+                    "batch*frames", "channels":3, "image_height", "image_width"
+                ] = images.reshape(frames_batch_shape, channels, image_height, image_width)
+                outputs: TensorType[
+                    "batch*frames", "features", "rep_height", "rep_width"
+                ] = self.backbone(images_batch_frames)
+                outputs: TensorType[
+                    "batch", "frames", "features", "rep_height", "rep_width"
+                ] = outputs.reshape(
+                    images.shape[0],
+                    images.shape[1],
+                    outputs.shape[1],
+                    outputs.shape[2],
+                    outputs.shape[3],
+                )
+            elif len(images.shape) == 4:
+                # we have a single sequence of frames from DALI (not a batch of sequences)
+                # valid frame := a frame that has two frames before it and two frames after it
+                # we push it as is through the backbone, and then use tiling to make it into
+                # (sequence_length, features, rep_height, rep_width, num_context_frames)
+                # for now we discard the padded frames (first and last two)
+                # the output will be one representation per valid frame
+                sequence_length, channels, image_height, image_width = images.shape
                 representations: TensorType[
-                    "batch", "features", "rep_height", "rep_width", "frames"
-                ] = torch.permute(outputs, (0, 2, 3, 4, 1))
-            else:
-                representations = self.backbone(images)
+                    "sequence_length", "channels":3, "rep_height", "rep_width"
+                ] = self.backbone(images)
+                # we need to tile the representations to make it into
+                # (num_valid_frames, features, rep_height, rep_width, num_context_frames)
+                # TODO: context frames should be configurable
+                tiled_representations = get_context_from_sequence(
+                    img_seq=representations, context_length=5
+                )
+                # get rid of first and last two frames
+                if tiled_representations.shape[0] < 5:
+                    raise RuntimeError(
+                        "Not enough valid frames to make a context representation."
+                    )
+                outputs = tiled_representations[2:-2, :, :, :, :]
 
-        elif self.mode == "3d":
-            # reshape to (batch, channels, frames, img_height, img_width)
-            images = torch.permute(images, (0, 2, 1, 3, 4))
-            # turn (0, 1, 2, 3, 4) into (0, 1, 1, 2, 2, 3, 3, 4)
-            images = torch.repeat_interleave(images, 2, dim=2)[:, :, 1:-1, ...]
-            output = self.backbone(images)
-            # representations = torch.mean(output, dim=2)
+            # for both types of batches, we reshape in the same way
+            # context is in the last dimension for the linear layer.
             representations: TensorType[
                 "batch", "features", "rep_height", "rep_width", "frames"
-            ] = torch.permute(output, (0, 1, 3, 4, 2))
+            ] = torch.permute(outputs, (0, 2, 3, 4, 1))
+        else:
+            representations = self.backbone(images)
 
         return representations
 
@@ -428,13 +416,6 @@ class SemiSupervisedTrackerMixin(object):
             # standard adam optimizer for regression model
             params = filter(lambda p: p.requires_grad, self.parameters())
 
-        # define different learning rate for weights in front of unsupervised losses
-        if len(self.loss_factory_unsup.loss_weights_parameter_dict) > 0:
-            params.append({
-                "params": self.loss_factory_unsup.loss_weights_parameter_dict.parameters(),
-                "lr": 1e-2,
-            })
-
         return params
 
     # # single optimizer with different learning rates
@@ -452,14 +433,5 @@ class SemiSupervisedTrackerMixin(object):
     #
     #     optimizers = [optimizer]
     #     lr_schedulers = [scheduler]
-    #
-    #     if self.learn_weights:
-    #         params_weights = [{"params": self.loss_weights_dict.parameters()}]
-    #         optimizer_weights = Adam(params_weights, lr=1e-3)
-    #         optimizers.append(optimizer_weights)
-    #         scheduler_weights = MultiStepLR(
-    #             optimizer, milestones=[100, 200, 300], gamma=0.5
-    #         )
-    #         lr_schedulers.append(scheduler_weights)
     #
     #     return optimizers, lr_schedulers

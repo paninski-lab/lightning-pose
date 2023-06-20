@@ -291,7 +291,9 @@ def predict_dataset(
     """
 
     if model is None:
-        model = load_model_from_checkpoint(cfg=cfg, ckpt_file=ckpt_file, eval=True)
+        model = load_model_from_checkpoint(
+            cfg=cfg, ckpt_file=ckpt_file, eval=True, data_module=data_module,
+        )
 
     if trainer is None:
         trainer = pl.Trainer(devices=1, accelerator="auto")
@@ -606,9 +608,7 @@ def load_model_from_checkpoint(
         delete_extras = True
         data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
         imgaug_transform = get_imgaug_transform(cfg=cfg)
-        dataset = get_dataset(
-            cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform
-        )
+        dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
         data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
     loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
 

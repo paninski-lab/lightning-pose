@@ -95,7 +95,7 @@ def run():
         new_names = []
         og_names = list(dframes_metrics.keys())
         for name in og_names:
-            new_name = st.sidebar.text_input(label="", value=name)
+            new_name = st.sidebar.text_input(label="name", value=name, label_visibility="hidden")
             new_names.append(new_name)
 
         # change dframes key names to new ones

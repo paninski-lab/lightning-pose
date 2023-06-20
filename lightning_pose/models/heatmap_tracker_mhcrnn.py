@@ -62,6 +62,8 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         # for reproducible weight initialization
         torch.manual_seed(torch_seed)
 
+        if "do_context" in kwargs.keys():
+            del kwargs["do_context"]
         super().__init__(
             num_keypoints=num_keypoints,
             loss_factory=loss_factory,
@@ -75,9 +77,6 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
             do_context=True,
             **kwargs,
         )
-
-        if self.mode == "3d":
-            raise NotImplementedError
 
         # create upsampling layers for crnn
         self.crnn = UpsamplingCRNN(
@@ -295,12 +294,6 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
             {"params": self.upsampling_layers_rnn.parameters()},
             {"params": self.upsampling_layers_sf.parameters()},
         ]
-        # define different learning rate for weights in front of unsupervised losses
-        if len(self.loss_factory_unsup.loss_weights_parameter_dict) > 0:
-            params.append({
-                "params": self.loss_factory_unsup.loss_weights_parameter_dict.parameters(),
-                "lr": 1e-2,
-            })
         return params
 
 
