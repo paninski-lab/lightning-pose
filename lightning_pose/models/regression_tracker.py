@@ -90,9 +90,9 @@ class RegressionTracker(BaseSupervisedTracker):
         self.rmse_loss = RegressionRMSELoss()
 
         # necessary so we don't have to pass in model arguments when loading
-        # added loss_factory_unsupervised which might come from the
-        # SemiSupervisedHeatmapTracker.__super__(). Otherwise it's ignored.
-        # that's important so that it doesn't try to pickle the dali loaders.
+        # also, "loss_factory" and "loss_factory_unsupervised" cannot be pickled
+        # (loss_factory_unsupervised might come from SemiSupervisedRegressionTracker.__super__().
+        # otherwise it's ignored, important so that it doesn't try to pickle the dali loaders)
         self.save_hyperparameters(ignore=["loss_factory", "loss_factory_unsupervised"])
 
     def forward(
