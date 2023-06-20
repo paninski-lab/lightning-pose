@@ -215,6 +215,7 @@ class HeatmapDataset(BaseTrackingDataset):
         imgaug_transform: Optional[Callable] = None,
         downsample_factor: Literal[1, 2, 3] = 2,
         do_context: bool = False,
+        uniform_heatmaps: bool = False,
     ) -> None:
         """Initialize the Heatmap Dataset.
 
@@ -249,6 +250,7 @@ class HeatmapDataset(BaseTrackingDataset):
 
         self.downsample_factor = downsample_factor
         self.output_sigma = 1.25  # should be sigma/2 ^downsample factor
+        self.uniform_heatmaps = uniform_heatmaps
 
         # Compute heatmaps as preprocessing step
         self.num_targets = torch.numel(self.keypoints[0])
@@ -291,6 +293,7 @@ class HeatmapDataset(BaseTrackingDataset):
             width=self.width,
             output_shape=self.output_shape,
             sigma=self.output_sigma,
+            uniform_heatmaps=self.uniform_heatmaps,
         )
 
         return y_heatmap[0]

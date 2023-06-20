@@ -212,6 +212,7 @@ def get_dataset(
             imgaug_transform=imgaug_transform,
             downsample_factor=cfg.data.downsample_factor,
             do_context=cfg.model.model_type == "heatmap_mhcrnn" or cfg.model.do_context,
+            uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
         )
     else:
         raise NotImplementedError(
@@ -332,6 +333,10 @@ def get_loss_factories(
                 loss_params_dict["unsupervised"][loss_name][
                     "downsampled_image_width"
                 ] = width_ds
+                if loss_name[:8] == "unimodal":
+                    loss_params_dict["unsupervised"][loss_name][
+                        "uniform_heatmaps"
+                    ] = cfg.training.get("uniform_heatmaps_for_nan_keypoints", False)
             elif loss_name == "pca_multiview":
                 loss_params_dict["unsupervised"][loss_name][
                     "mirrored_column_matches"

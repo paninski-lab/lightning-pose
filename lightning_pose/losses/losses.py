@@ -550,6 +550,7 @@ class UnimodalLoss(Loss):
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
         prob_threshold: float = 0.0,
         log_weight: float = 0.0,
+        uniform_heatmaps: bool = False,
         **kwargs,
     ) -> None:
 
@@ -560,6 +561,7 @@ class UnimodalLoss(Loss):
         self.original_image_width = original_image_width
         self.downsampled_image_height = downsampled_image_height
         self.downsampled_image_width = downsampled_image_width
+        self.uniform_heatmaps = uniform_heatmaps
 
         self.prob_threshold = torch.tensor(
             prob_threshold, dtype=torch.float, device=self.device
@@ -640,6 +642,7 @@ class UnimodalLoss(Loss):
             height=self.original_image_height,
             width=self.original_image_width,
             output_shape=(self.downsampled_image_height, self.downsampled_image_width),
+            uniform_heatmaps=self.uniform_heatmaps,
         )
 
         # remove invisible keypoints according to confidences

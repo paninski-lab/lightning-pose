@@ -361,6 +361,7 @@ def generate_heatmaps(
     width: int,
     output_shape: Tuple[int, int],
     sigma: Union[float, int] = 1.25,
+    uniform_heatmaps: bool = False,
 ) -> TensorType["batch", "num_keypoints", "height", "width"]:
     """Generate 2D Gaussian heatmaps from mean and sigma.
 
@@ -400,8 +401,13 @@ def generate_heatmaps(
     heatmaps = heatmaps / torch.sum(heatmaps, dim=(2, 3), keepdim=True)
     # replace nans with zeros heatmaps
     # (all zeros heatmaps are ignored in the supervised heatmap loss)
-    zeros_heatmap = torch.zeros((out_height, out_width), device=keypoints.device)
-    heatmaps[nan_idxs] = zeros_heatmap
+    if uniform_heatmaps:
+        filler_heatmap = torch.ones(
+        (out_height, out_width), device=keypoints.device) / (out_height * out_width)
+    else:
+        filler_heatmap = torch.zeros((out_height, out_width), device=keypoints.device)
+
+    heatmaps[nan_idxs] = filler_heatmap
     return heatmaps
 
 
