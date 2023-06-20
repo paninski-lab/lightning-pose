@@ -171,6 +171,63 @@ def test_generate_heatmaps(cfg, heatmap_dataset):
     torch.cuda.empty_cache()  # remove tensors from gpu
 
 
+def test_generate_uniform_heatmaps(cfg, toy_data_dir):
+
+    from lightning_pose.utils.scripts import get_imgaug_transform, get_dataset
+
+    # update config
+    cfg_tmp = copy.deepcopy(cfg)
+    cfg_tmp.model.model_type = "heatmap"
+    cfg_tmp.training.uniform_heatmaps_for_nan_keypoints = True
+
+    # build dataset with these new image dimensions
+    imgaug_transform = get_imgaug_transform(cfg_tmp)
+    heatmap_dataset = get_dataset(
+        cfg_tmp,
+        data_dir=toy_data_dir,
+        imgaug_transform=imgaug_transform,
+    )
+
+    im_height = cfg.data.image_resize_dims.height
+    im_width = cfg.data.image_resize_dims.width
+
+    batch = heatmap_dataset.__getitem__(idx=0)
+    heatmap_gt = batch["heatmaps"].unsqueeze(0)
+    keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
+    
+    heatmap_uniform_torch = generate_heatmaps(
+        keypts_gt,
+        height=im_height,
+        width=im_width,
+        output_shape=(heatmap_gt.shape[2], heatmap_gt.shape[3]),
+        uniform_heatmaps=True,
+    )
+
+    # find soft argmax and confidence of ground truth heatmap
+    softmaxes_gt = spatial_softmax2d(
+        heatmap_gt.to(_TORCH_DEVICE), temperature=torch.tensor(100).to(_TORCH_DEVICE)
+    )
+    preds_gt = spatial_expectation2d(softmaxes_gt, normalized_coordinates=False)
+    confidences_gt = torch.amax(softmaxes_gt, dim=(2, 3))
+
+    # find soft argmax and confidence of generated heatmap
+    softmaxes_torch = spatial_softmax2d(
+        heatmap_uniform_torch.to(_TORCH_DEVICE), temperature=torch.tensor(100).to(_TORCH_DEVICE)
+    )
+    preds_torch = spatial_expectation2d(softmaxes_torch, normalized_coordinates=False)
+    confidences_torch = torch.amax(softmaxes_torch, dim=(2, 3))
+
+    assert (preds_gt == preds_torch).all()
+    assert (confidences_gt == confidences_torch).all()
+
+    # cleanup
+    del batch
+    del heatmap_gt, keypts_gt
+    del softmaxes_gt, preds_gt, confidences_gt
+    del softmaxes_torch, preds_torch, confidences_torch
+    torch.cuda.empty_cache()  # remove tensors from gpu
+
+
 def test_generate_heatmaps_weird_shape(cfg, toy_data_dir):
 
     from lightning_pose.utils.scripts import get_imgaug_transform, get_dataset
