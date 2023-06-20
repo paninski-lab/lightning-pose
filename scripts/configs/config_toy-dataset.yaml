@@ -58,8 +58,6 @@ training:
   early_stop_patience: 3
   # epoch at which backbone network weights begin updating
   unfreezing_epoch: 20
-  # dropout in final layers
-  dropout_rate: 0.1
   # min training epochs; training cannot terminate before. compare to unfreezing_epoch, check_val_every_n_epoch, early_stop_patience
   min_epochs: 300
   # max training epochs; training may exit before due to early stopping
