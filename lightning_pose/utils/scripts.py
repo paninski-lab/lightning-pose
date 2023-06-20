@@ -350,7 +350,6 @@ def get_loss_factories(
     loss_factory_unsup = LossFactory(
         losses_params_dict=loss_params_dict["unsupervised"],
         data_module=data_module,
-        learn_weights=cfg.model.learn_weights,
     )
 
     return {"supervised": loss_factory_sup, "unsupervised": loss_factory_unsup}

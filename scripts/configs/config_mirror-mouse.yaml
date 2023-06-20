@@ -81,8 +81,6 @@ model:
   # list of unsupervised losses
   # "pca_singleview" | "pca_multiview" | "temporal" | "unimodal_mse" | "unimodal_kl"
   losses_to_use: []
-  # whether to learn the weights for the unsupervised losses
-  learn_weights: false
   # backbone network:
   # resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
   # resnet50_animalpose_apose | resnet50_animal_ap10k

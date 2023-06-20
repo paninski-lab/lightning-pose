@@ -416,13 +416,6 @@ class SemiSupervisedTrackerMixin(object):
             # standard adam optimizer for regression model
             params = filter(lambda p: p.requires_grad, self.parameters())
 
-        # define different learning rate for weights in front of unsupervised losses
-        if len(self.loss_factory_unsup.loss_weights_parameter_dict) > 0:
-            params.append({
-                "params": self.loss_factory_unsup.loss_weights_parameter_dict.parameters(),
-                "lr": 1e-2,
-            })
-
         return params
 
     # # single optimizer with different learning rates
@@ -440,14 +433,5 @@ class SemiSupervisedTrackerMixin(object):
     #
     #     optimizers = [optimizer]
     #     lr_schedulers = [scheduler]
-    #
-    #     if self.learn_weights:
-    #         params_weights = [{"params": self.loss_weights_dict.parameters()}]
-    #         optimizer_weights = Adam(params_weights, lr=1e-3)
-    #         optimizers.append(optimizer_weights)
-    #         scheduler_weights = MultiStepLR(
-    #             optimizer, milestones=[100, 200, 300], gamma=0.5
-    #         )
-    #         lr_schedulers.append(scheduler_weights)
     #
     #     return optimizers, lr_schedulers

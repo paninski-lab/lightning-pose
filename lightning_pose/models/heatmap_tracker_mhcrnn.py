@@ -294,12 +294,6 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
             {"params": self.upsampling_layers_rnn.parameters()},
             {"params": self.upsampling_layers_sf.parameters()},
         ]
-        # define different learning rate for weights in front of unsupervised losses
-        if len(self.loss_factory_unsup.loss_weights_parameter_dict) > 0:
-            params.append({
-                "params": self.loss_factory_unsup.loss_weights_parameter_dict.parameters(),
-                "lr": 1e-2,
-            })
         return params
 
 
