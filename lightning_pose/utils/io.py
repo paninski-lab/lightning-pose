@@ -88,7 +88,7 @@ def load_label_csv_from_cfg(cfg: Union[DictConfig, dict]) -> pd.DataFrame:
     """
 
     csv_file = os.path.join(cfg["data"]["data_dir"], cfg["data"]["csv_file"])
-    labels_df = pd.read_csv(csv_file, header=list(cfg["data"]["header_rows"]), index_col=0)
+    labels_df = pd.read_csv(csv_file, header=[0, 1, 2], index_col=0)
     return labels_df
 
 
@@ -96,7 +96,7 @@ def load_label_csv_from_cfg(cfg: Union[DictConfig, dict]) -> pd.DataFrame:
 def get_keypoint_names(
     cfg: Optional[DictConfig] = None,
     csv_file: Optional[str] = None,
-    header_rows: Optional[list] = None,
+    header_rows: Optional[list] = [0, 1, 2],
 ) -> List[str]:
     if os.path.exists(csv_file):
         if header_rows is None:

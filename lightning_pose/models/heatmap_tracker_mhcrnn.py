@@ -62,6 +62,8 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         # for reproducible weight initialization
         torch.manual_seed(torch_seed)
 
+        if "do_context" in kwargs.keys():
+            del kwargs["do_context"]
         super().__init__(
             num_keypoints=num_keypoints,
             loss_factory=loss_factory,

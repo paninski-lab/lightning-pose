@@ -15,8 +15,6 @@ data:
   video_dir: "/datastores/fish_implant/videos"
   # location of labels; for example script, this should be relative to `data_dir`
   csv_file: "master_multicam_labeledFrames.csv"
-  # header rows to strip in label csv file
-  header_rows: [0, 1, 2]
   # downsample heatmaps - 2 | 3
   downsample_factor: 2
   # total number of body parts

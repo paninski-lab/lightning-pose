@@ -13,8 +13,6 @@ data:
   video_dir: "/datastores/ibl-paw/videos"
   # location of labels; for ex script, this should be relative to `data_dir`
   csv_file: "CollectedData.csv"
-  # header rows to strip in label csv file
-  header_rows: [0, 1, 2]
   # downsample heatmaps - 2 | 3
   downsample_factor: 2
   # total number of body parts

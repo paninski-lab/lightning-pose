@@ -76,7 +76,7 @@ class FiftyOneKeypointBase:
         self.data_dir, self.video_dir = return_absolute_data_paths(
             cfg.data, cfg.eval.fiftyone.get("n_dirs_back", 3))
         # hard-code this for now
-        self.df_header_rows: List[int] = [1, 2]  # OmegaConf.to_object(cfg.data.header_rows)
+        self.df_header_rows: List[int] = [1, 2]
         # ground_truth_df is not necessary but useful for keypoint names
         self.ground_truth_df: pd.DataFrame = pd.read_csv(
             os.path.join(self.data_dir, self.cfg.data.csv_file),
@@ -154,8 +154,7 @@ class FiftyOneKeypointBase:
         self.preds_pandas_df_dict = {}
         for model_name, pred_csv_file in zip(self.model_names, self.pred_csv_files):
             # assuming that each path of saved logs has a predictions.csv file in it
-            # don't use cfg.data.header_rows; always assume [1, 2] since our code
-            # generated the predictions
+            # always assume [1, 2] since our code generated the predictions
             temp_df = pd.read_csv(pred_csv_file, header=[1, 2])
             self.model_preds_dict[model_name] = dfConverter(
                 temp_df, self.keypoints_to_plot

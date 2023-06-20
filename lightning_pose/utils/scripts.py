@@ -202,7 +202,6 @@ def get_dataset(
         dataset = BaseTrackingDataset(
             root_directory=data_dir,
             csv_path=cfg.data.csv_file,
-            header_rows=OmegaConf.to_object(cfg.data.header_rows),
             imgaug_transform=imgaug_transform,
             do_context=cfg.model.do_context,
         )
@@ -210,7 +209,6 @@ def get_dataset(
         dataset = HeatmapDataset(
             root_directory=data_dir,
             csv_path=cfg.data.csv_file,
-            header_rows=OmegaConf.to_object(cfg.data.header_rows),
             imgaug_transform=imgaug_transform,
             downsample_factor=cfg.data.downsample_factor,
             do_context=cfg.model.model_type == "heatmap_mhcrnn" or cfg.model.do_context,
@@ -555,9 +553,9 @@ def compute_metrics(
     # get keypoint names
     labels_file = return_absolute_path(
         os.path.join(cfg["data"]["data_dir"], cfg["data"]["csv_file"]))
-    labels_df = pd.read_csv(labels_file, header=list(cfg["data"]["header_rows"]), index_col=0)
+    labels_df = pd.read_csv(labels_file, header=[0, 1, 2], index_col=0)
     keypoint_names = get_keypoint_names(
-        cfg, csv_file=labels_file, header_rows=list(cfg["data"]["header_rows"]))
+        cfg, csv_file=labels_file, header_rows=[0, 1, 2])
 
     # load predictions
     pred_df = pd.read_csv(preds_file, header=[0, 1, 2], index_col=0)

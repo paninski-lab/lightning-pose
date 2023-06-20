@@ -13,8 +13,6 @@ data:
   video_dir: unlabeled_videos
   # location of labels; for example script, this should be relative to `data_dir`
   csv_file: CollectedData_.csv
-  # header rows to strip in label csv file
-  header_rows: [1, 2]
   # downsample heatmaps: 2 | 3
   downsample_factor: 2
   # total number of body parts
