@@ -15,6 +15,7 @@ from lightning_pose.data.utils import (
     UnlabeledBatchDict,
 )
 from lightning_pose.losses.factory import LossFactory
+from lightning_pose.models import ALLOWED_BACKBONES
 from lightning_pose.models.base import SemiSupervisedTrackerMixin
 from lightning_pose.models.heatmap_tracker import HeatmapTracker
 
@@ -26,23 +27,9 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         self,
         num_keypoints: int,
         loss_factory: LossFactory,
-        backbone: Literal[
-            "resnet18",
-            "resnet34",
-            "resnet50",
-            "resnet101",
-            "resnet152",
-            "resnet50_3d",
-            "resnet50_contrastive",
-            "resnet50_animal_apose",
-            "resnet50_animal_ap10k",
-            "resnet50_human_jhmdb",
-            "resnet50_human_res_rle",
-            "resnet50_human_top_res",
-        ] = "resnet50",
+        backbone: ALLOWED_BACKBONES = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
-        last_resnet_layer_to_get: int = -3,
         output_shape: Optional[tuple] = None,  # change
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
@@ -59,7 +46,6 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
                 save memory; subpixel operations are performed for increased
                 precision
             pretrained: True to load pretrained imagenet weights
-            last_resnet_layer_to_get: skip final layers of backbone model
             output_shape: hard-coded image size to avoid dynamic shape
                 computations
             torch_seed: make weight initialization reproducible
@@ -82,19 +68,23 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
             backbone=backbone,
             downsample_factor=downsample_factor,
             pretrained=pretrained,
-            last_resnet_layer_to_get=last_resnet_layer_to_get,
             output_shape=output_shape,
             torch_seed=torch_seed,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
             do_context=True,
+            **kwargs,
         )
 
         if self.mode == "3d":
             raise NotImplementedError
 
         # create upsampling layers for crnn
-        self.crnn = UpsamplingCRNN(self.num_filters_for_upsampling, self.num_keypoints)
+        self.crnn = UpsamplingCRNN(
+            num_filters_for_upsampling=self.num_filters_for_upsampling,
+            num_keypoints=self.num_keypoints,
+            upsampling_factor=1 if "vit" in backbone else 2,
+        )
         self.upsampling_layers_rnn = self.crnn.layers
 
         # alias parent upsampling layers for single frame
@@ -111,7 +101,7 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         # permute to shape (frames, batch, features, rep_height, rep_width)
         representations = torch.permute(representations, (4, 0, 1, 2, 3))
         heatmaps_crnn = self.crnn(representations)
-        heatmaps_sf = self.upsampling_layers_sf(representations[2])
+        heatmaps_sf = self.upsampling_layers_sf(representations[2])  # index 2 == middle frame
 
         return heatmaps_crnn, heatmaps_sf
 
@@ -218,23 +208,9 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
         num_keypoints: int,
         loss_factory: LossFactory,
         loss_factory_unsupervised: LossFactory,
-        backbone: Literal[
-            "resnet18",
-            "resnet34",
-            "resnet50",
-            "resnet101",
-            "resnet152",
-            "resnet50_3d",
-            "resnet50_contrastive",
-            "resnet50_animal_apose",
-            "resnet50_animal_ap10k",
-            "resnet50_human_jhmdb",
-            "resnet50_human_res_rle",
-            "resnet50_human_top_res",
-        ] = "resnet50",
+        backbone: ALLOWED_BACKBONES = "resnet50",
         downsample_factor: Literal[2, 3] = 2,
         pretrained: bool = True,
-        last_resnet_layer_to_get: int = -3,
         output_shape: Optional[tuple] = None,
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
@@ -253,7 +229,6 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
                 save memory; subpixel operations are performed for increased
                 precision
             pretrained: True to load pretrained imagenet weights
-            last_resnet_layer_to_get: skip final layers of original model
             output_shape: hard-coded image size to avoid dynamic shape
                 computations
             torch_seed: make weight initialization reproducible
@@ -269,11 +244,11 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
             backbone=backbone,
             downsample_factor=downsample_factor,
             pretrained=pretrained,
-            last_resnet_layer_to_get=last_resnet_layer_to_get,
             output_shape=output_shape,
             torch_seed=torch_seed,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
+            **kwargs,
         )
         self.loss_factory_unsup = loss_factory_unsupervised.to(self.device)
 
@@ -343,7 +318,7 @@ class UpsamplingCRNN(torch.nn.Module):
         self,
         num_filters_for_upsampling: int,
         num_keypoints: int,
-        upsampling_factor: int = 2,
+        upsampling_factor: Literal[1, 2] = 2,
         hkernel: int = 2,
         hstride: int = 2,
         hpad: int = 0,
@@ -419,7 +394,10 @@ class UpsamplingCRNN(torch.nn.Module):
         )
         self.H_b = nn.Sequential(*H_b_layers)
         self.initialize_layers()
-        self.layers = torch.nn.ModuleList([self.W_pre, self.W_f, self.H_f, self.W_b, self.H_b])
+        if self.upsampling_factor == 2:
+            self.layers = torch.nn.ModuleList([self.W_pre, self.W_f, self.H_f, self.W_b, self.H_b])
+        else:
+            self.layers = torch.nn.ModuleList([self.W_f, self.H_f, self.W_b, self.H_b])
 
     def initialize_layers(self):
         if self.upsampling_factor == 2:

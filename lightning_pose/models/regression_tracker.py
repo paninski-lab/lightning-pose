@@ -16,6 +16,7 @@ from lightning_pose.data.utils import (
 )
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
+from lightning_pose.models import ALLOWED_BACKBONES
 from lightning_pose.models.base import BaseSupervisedTracker, SemiSupervisedTrackerMixin
 
 
@@ -26,26 +27,13 @@ class RegressionTracker(BaseSupervisedTracker):
         self,
         num_keypoints: int,
         loss_factory: LossFactory,
-        backbone: Literal[
-            "resnet18",
-            "resnet34",
-            "resnet50",
-            "resnet101",
-            "resnet152",
-            "resnet50_3d",
-            "resnet50_contrastive",
-            "resnet50_animal_apose",
-            "resnet50_animal_ap10k",
-            "resnet50_human_jhmdb",
-            "resnet50_human_res_rle",
-            "resnet50_human_top_res",
-        ] = "resnet50",
+        backbone: ALLOWED_BACKBONES = "resnet50",
         pretrained: bool = True,
-        last_resnet_layer_to_get: int = -2,
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
         do_context: bool = False,
+        **kwargs,
     ) -> None:
         """Base model that produces (x, y) coordinates of keypoints from images.
 
@@ -54,7 +42,6 @@ class RegressionTracker(BaseSupervisedTracker):
             loss_factory: object to orchestrate loss computation
             backbone: ResNet or EfficientNet variant to be used
             pretrained: True to load pretrained imagenet weights
-            last_resnet_layer_to_get: skip final layers of backbone model
             torch_seed: make weight initialization reproducible
             lr_scheduler: how to schedule learning rate
                 multisteplr
@@ -67,21 +54,26 @@ class RegressionTracker(BaseSupervisedTracker):
         # for reproducible weight initialization
         torch.manual_seed(torch_seed)
 
+        if "vit" in backbone:
+            raise ValueError("Regression trackers are not compatible with ViT backbones")
+
         super().__init__(
             backbone=backbone,
             pretrained=pretrained,
-            last_resnet_layer_to_get=last_resnet_layer_to_get,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
             do_context=do_context,
+            model_type="regression",
+            **kwargs,
         )
+
         self.num_keypoints = num_keypoints
         self.num_targets = self.num_keypoints * 2
         self.loss_factory = loss_factory
         self.final_layer = nn.Linear(self.num_fc_input_features, self.num_targets)
         self.torch_seed = torch_seed
         self.do_context = do_context
-        if self.mode == "2d":
+        if self.mode == "2d" or self.mode == "transformer":
             self.unnormalized_weights = nn.parameter.Parameter(
                 torch.Tensor([[0.2, 0.2, 0.2, 0.2, 0.2]]), requires_grad=False)
             self.representation_fc = lambda x: x @ torch.transpose(
@@ -98,10 +90,10 @@ class RegressionTracker(BaseSupervisedTracker):
         self.rmse_loss = RegressionRMSELoss()
 
         # necessary so we don't have to pass in model arguments when loading
-        # added loss_factory_unsupervised which might come from the SemiSupervisedHeatmapTracker.__super__(). Otherwise it's ignored.
-        # that's important so that it doesn't try to pickle the dali loaders.
-        self.save_hyperparameters(ignore=["loss_factory", "loss_factory_unsupervised"])  # cannot be pickled
-
+        # also, "loss_factory" and "loss_factory_unsupervised" cannot be pickled
+        # (loss_factory_unsupervised might come from SemiSupervisedRegressionTracker.__super__().
+        # otherwise it's ignored, important so that it doesn't try to pickle the dali loaders)
+        self.save_hyperparameters(ignore=["loss_factory", "loss_factory_unsupervised"])
 
     def forward(
         self,
@@ -114,7 +106,9 @@ class RegressionTracker(BaseSupervisedTracker):
         # see input lines for shape of "images"
         representations = self.get_representations(images)
         # handle context frames first
-        if (self.mode == "2d" and self.do_context) or self.mode == "3d":
+        if (self.mode == "2d" and self.do_context) \
+                or (self.mode == "transformer" and self.do_context) \
+                or self.mode == "3d":
             # push through a linear layer to get the final representation
             # input shape (batch, features, rep_height, rep_width, frames)
             representations: TensorType[
@@ -175,26 +169,13 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         num_keypoints: int,
         loss_factory: LossFactory,
         loss_factory_unsupervised: LossFactory,
-        backbone: Literal[
-            "resnet18",
-            "resnet34",
-            "resnet50",
-            "resnet101",
-            "resnet152",
-            "resnet50_3d",
-            "resnet50_contrastive",
-            "resnet50_animal_apose",
-            "resnet50_animal_ap10k",
-            "resnet50_human_jhmdb",
-            "resnet50_human_res_rle",
-            "resnet50_human_top_res",
-        ] = "resnet50",
+        backbone: ALLOWED_BACKBONES = "resnet50",
         pretrained: bool = True,
-        last_resnet_layer_to_get: int = -2,
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
         do_context: bool = False,
+        **kwargs,
     ) -> None:
         """
 
@@ -205,7 +186,6 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
                 computation
             backbone: ResNet or EfficientNet variant to be used
             pretrained: True to load pretrained imagenet weights
-            last_resnet_layer_to_get: skip final layers of original model
             torch_seed: make weight initialization reproducible
             lr_scheduler: how to schedule learning rate
                 multisteplr
@@ -219,11 +199,11 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
             loss_factory=loss_factory,
             backbone=backbone,
             pretrained=pretrained,
-            last_resnet_layer_to_get=last_resnet_layer_to_get,
             torch_seed=torch_seed,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
             do_context=do_context,
+            **kwargs,
         )
         self.loss_factory_unsup = loss_factory_unsupervised
         loss_names = loss_factory_unsupervised.loss_instance_dict.keys()

@@ -23,6 +23,7 @@ from lightning_pose.data.utils import (
 )
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
+from lightning_pose.models import ALLOWED_BACKBONES
 from lightning_pose.models.base import BaseSupervisedTracker, SemiSupervisedTrackerMixin
 
 
@@ -50,30 +51,15 @@ class HeatmapTracker(BaseSupervisedTracker):
         self,
         num_keypoints: int,
         loss_factory: LossFactory,
-        backbone: Literal[
-            "resnet18",
-            "resnet34",
-            "resnet50",
-            "resnet101",
-            "resnet152",
-            "resnet50_3d",
-            "resnet50_contrastive",
-            "resnet50_animal_apose",
-            "resnet50_animal_ap10k",
-            "resnet50_human_jhmdb",
-            "resnet50_human_res_rle",
-            "resnet50_human_top_res",
-            "vit_h_sam",
-            "vit_b_sam",
-        ] = "resnet50",
+        backbone: ALLOWED_BACKBONES = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
-        last_resnet_layer_to_get: int = -3,
         output_shape: Optional[tuple] = None,  # change
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
         do_context: bool = False,
+        **kwargs,
     ) -> None:
         """Initialize a DLC-like model with resnet backbone.
 
@@ -84,7 +70,6 @@ class HeatmapTracker(BaseSupervisedTracker):
             downsample_factor: make heatmap smaller than original frames to save memory; subpixel
                 operations are performed for increased precision
             pretrained: True to load pretrained imagenet weights
-            last_resnet_layer_to_get: skip final layers of backbone model
             output_shape: hard-coded image size to avoid dynamic shape
                 computations
             torch_seed: make weight initialization reproducible
@@ -102,10 +87,10 @@ class HeatmapTracker(BaseSupervisedTracker):
         super().__init__(
             backbone=backbone,
             pretrained=pretrained,
-            last_resnet_layer_to_get=last_resnet_layer_to_get,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
             do_context=do_context,
+            **kwargs,
         )
         self.num_keypoints = num_keypoints
         self.num_targets = num_keypoints * 2
@@ -142,9 +127,10 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.rmse_loss = RegressionRMSELoss()
 
         # necessary so we don't have to pass in model arguments when loading
-        # added loss_factory_unsupervised which might come from the SemiSupervisedHeatmapTracker.__super__(). Otherwise it's ignored.
-        # that's important so that it doesn't try to pickle the dali loaders.
-        self.save_hyperparameters(ignore=["loss_factory", "loss_factory_unsupervised"])  # cannot be pickled
+        # also, "loss_factory" and "loss_factory_unsupervised" cannot be pickled
+        # (loss_factory_unsupervised might come from SemiSupervisedHeatmapTracker.__super__().
+        # otherwise it's ignored, important so that it doesn't try to pickle the dali loaders)
+        self.save_hyperparameters(ignore=["loss_factory", "loss_factory_unsupervised"])
 
     @property
     def num_filters_for_upsampling(self) -> int:
@@ -298,7 +284,9 @@ class HeatmapTracker(BaseSupervisedTracker):
         """Handle context frames then upsample to get final heatmaps."""
 
         # handle context frames first
-        if (self.mode == "2d" and self.do_context) or self.mode == "3d":
+        if (self.mode == "2d" and self.do_context) \
+                or (self.mode == "transformer" and self.do_context) \
+                or self.mode == "3d":
             # push through a linear layer to get the final representation
             # input shape (batch, features, rep_height, rep_width, frames)
             representations: TensorType[
@@ -386,28 +374,15 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         num_keypoints: int,
         loss_factory: LossFactory,
         loss_factory_unsupervised: LossFactory,
-        backbone: Literal[
-            "resnet18",
-            "resnet34",
-            "resnet50",
-            "resnet101",
-            "resnet152",
-            "resnet50_3d",
-            "resnet50_contrastive",
-            "resnet50_animal_apose",
-            "resnet50_animal_ap10k",
-            "resnet50_human_jhmdb",
-            "resnet50_human_res_rle",
-            "resnet50_human_top_res",
-        ] = "resnet50",
+        backbone: ALLOWED_BACKBONES = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
-        last_resnet_layer_to_get: int = -3,
         output_shape: Optional[tuple] = None,
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
         do_context: bool = False,
+        **kwargs,
     ) -> None:
         """
 
@@ -421,7 +396,6 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
                 save memory; subpixel operations are performed for increased
                 precision
             pretrained: True to load pretrained imagenet weights
-            last_resnet_layer_to_get: skip final layers of original model
             output_shape: hard-coded image size to avoid dynamic shape
                 computations
             torch_seed: make weight initialization reproducible
@@ -438,12 +412,12 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             backbone=backbone,
             downsample_factor=downsample_factor,
             pretrained=pretrained,
-            last_resnet_layer_to_get=last_resnet_layer_to_get,
             output_shape=output_shape,
             torch_seed=torch_seed,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
             do_context=do_context,
+            **kwargs,
         )
         self.loss_factory_unsup = loss_factory_unsupervised.to(self.device)
 

@@ -26,7 +26,7 @@ def test_supervised_regression(
 def test_supervised_regression_context(
     cfg_context, base_data_module_context, video_dataloader, trainer, remove_logs
 ):
-    """Test the initialization and training of a supervised regression model.
+    """Test the initialization and training of a supervised regression context model.
 
     NOTE: the toy dataset is not a proper context dataset
 
@@ -51,7 +51,7 @@ def test_semisupervised_regression_temporal(
     trainer,
     remove_logs,
 ):
-    """Test the initialization and training of an unsupervised regression model."""
+    """Test the initialization and training of a semi-supervised regression model."""
 
     cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.model_type = "regression"
@@ -72,7 +72,7 @@ def test_semisupervised_regression_pcasingleview_context(
     trainer,
     remove_logs,
 ):
-    """Test the initialization and training of an semi-supervised regression context model.
+    """Test the initialization and training of a semi-supervised regression context model.
 
     NOTE: the toy dataset is not a proper context dataset
 

@@ -3,17 +3,11 @@
 from omegaconf import DictConfig
 from lightning.pytorch import LightningModule
 import torch
-from functools import partial
-from torch import nn
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from torchtyping import TensorType
-import torchvision.models as tvmodels
 from typeguard import typechecked
-from typing import Dict, Literal, Optional, Tuple, Union
-
-from collections import OrderedDict
-from segment_anything.modeling import ImageEncoderViT
+from typing import Dict, Literal, Optional, Union
 
 from lightning_pose.data.utils import (
     BaseLabeledBatchDict,
@@ -22,35 +16,10 @@ from lightning_pose.data.utils import (
     SemiSupervisedBatchDict,
     SemiSupervisedHeatmapBatchDict,
 )
-
+from lightning_pose.models import ALLOWED_BACKBONES
 
 MULTISTEPLR_MILESTONES_DEFAULT = [100, 200, 300]
 MULTISTEPLR_GAMMA_DEFAULT = 0.5
-
-
-@typechecked
-def grab_layers_sequential(model, last_layer_ind: int) -> torch.nn.Sequential:
-    """Package selected number of layers into a nn.Sequential object.
-
-    Args:
-        model: original resnet or efficientnet model
-        last_layer_ind: final layer to pass data through
-
-    Returns:
-        potentially reduced backbone model
-
-    """
-    layers = list(model.children())[: last_layer_ind + 1]
-    return nn.Sequential(*layers)
-
-
-@typechecked
-def grab_layers_sequential_3d(model, last_layer_ind: int) -> torch.nn.Sequential:
-    """This is to use a 3d model to extract features"""
-    # the AvgPool3d halves the feature maps dims
-    layers = list(model.children())[0][:last_layer_ind + 1] + \
-             [nn.AvgPool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2), padding=(0, 0, 0))]
-    return nn.Sequential(*layers)
 
 
 def get_context_from_sequence(
@@ -85,27 +54,13 @@ class BaseFeatureExtractor(LightningModule):
 
     def __init__(
         self,
-        backbone: Literal[
-            "resnet18",
-            "resnet34",
-            "resnet50",
-            "resnet101",
-            "resnet152",
-            "resnet50_3d",
-            "resnet50_contrastive",
-            "resnet50_animal_apose",
-            "resnet50_animal_ap10k",
-            "resnet50_human_jhmdb",
-            "resnet50_human_res_rle",
-            "resnet50_human_top_res",
-            "vit_h_sam",
-            "vit_b_sam",
-        ] = "resnet50",
+        backbone: ALLOWED_BACKBONES = "resnet50",
         pretrained: bool = True,
-        last_resnet_layer_to_get: int = -2,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
         do_context: bool = False,
+        image_size: int = 256,
+        model_type: Literal["heatmap", "regression"] = "heatmap",
     ) -> None:
         """A CNN model that takes in images and generates features.
 
@@ -115,143 +70,29 @@ class BaseFeatureExtractor(LightningModule):
 
         Args:
             backbone: which backbone version to use; defaults to resnet50
-            pretrained: True to load weights pretrained on imagenet
-            last_resnet_layer_to_get: Defaults to -2.
+            pretrained: True to load weights pretrained on imagenet (torchvision models only)
             lr_scheduler: how to schedule learning rate
             lr_scheduler_params: params for specific learning rate schedulers
+            image_size: height/width of frames
+            model_type: type of model
 
         """
         super().__init__()
         print("\n Initializing a {} instance.".format(self._get_name()))
 
         self.backbone_arch = backbone
-        self.mode = "2d"
 
-        # load backbone weights
-        if "3d" in backbone:
-            base = torch.hub.load("facebookresearch/pytorchvideo", "slow_r50", pretrained=True)
-            self.mode = "3d"
-
-        elif backbone == "resnet50_contrastive":
-            # load resnet50 pretrained using SimCLR on imagenet
-            from pl_bolts.models.self_supervised import SimCLR
-
-            weight_path = "https://pl-bolts-weights.s3.us-east-2.amazonaws.com/simclr/bolts_simclr_imagenet/simclr_imagenet.ckpt"
-            simclr = SimCLR.load_from_checkpoint(weight_path, strict=False)
-            base = simclr.encoder
-
-        elif "resnet50_animal" in backbone:
-            base = getattr(tvmodels, "resnet50")(pretrained=False)
-            backbone_type = "_".join(backbone.split("_")[2:])
-            if backbone_type == "apose":
-                anim_weights = "https://download.openmmlab.com/mmpose/animal/resnet/res50_animalpose_256x256-e1f30bff_20210426.pth"
-            else:
-                anim_weights = "https://download.openmmlab.com/mmpose/animal/resnet/res50_ap10k_256x256-35760eb8_20211029.pth"
-
-            state_dict = torch.hub.load_state_dict_from_url(anim_weights)["state_dict"]
-            new_state_dict = OrderedDict()
-            for key in state_dict:
-                if "backbone" in key:
-                    new_key = ".".join(key.split(".")[1:])
-                    new_state_dict[new_key] = state_dict[key]
-            base.load_state_dict(new_state_dict, strict=False)
-
-        elif "resnet50_human" in backbone:
-            base = getattr(tvmodels, "resnet50")(pretrained=False)
-            backbone_type = "_".join(backbone.split("_")[2:])
-            if backbone_type == "jhmdb":
-                hum_weights = "https://download.openmmlab.com/mmpose/top_down/resnet/res50_jhmdb_sub3_256x256-c4ec1a0b_20201122.pth"
-            elif backbone_type == "res_rle":
-                hum_weights = "https://download.openmmlab.com/mmpose/top_down/deeppose/deeppose_res50_mpii_256x256_rle-5f92a619_20220504.pth"
-            elif backbone_type == "top_res":
-                hum_weights = "https://download.openmmlab.com/mmpose/top_down/resnet/res50_mpii_256x256-418ffc88_20200812.pth"
-
-            state_dict = torch.hub.load_state_dict_from_url(hum_weights)["state_dict"]
-            new_state_dict = OrderedDict()
-            for key in state_dict:
-                if "backbone" in key:
-                    new_key = ".".join(key.split(".")[1:])
-                    new_state_dict[new_key] = state_dict[key]
-            base.load_state_dict(new_state_dict, strict=False)
-        elif "vit_h_sam" in backbone:
-            checkpoint_url = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth"
-            state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)
-            encoder_embed_dim = 1280
-            encoder_depth = 32
-            encoder_num_heads = 16
-            encoder_global_attn_indexes = (7, 15, 23, 31)
-            prompt_embed_dim = 256
-            image_size = 256
-            vit_patch_size = 16
-            base = ImageEncoderViT(
-                    depth=encoder_depth,
-                    embed_dim=encoder_embed_dim,
-                    img_size=image_size,
-                    mlp_ratio=4,
-                    norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
-                    num_heads=encoder_num_heads,
-                    patch_size=vit_patch_size,
-                    qkv_bias=True,
-                    use_rel_pos=True,
-                    global_attn_indexes=encoder_global_attn_indexes,
-                    window_size=14,
-                    out_chans=prompt_embed_dim,
-                )
-            base.load_state_dict(state_dict, strict=False)
-            self.mode = "transformer"
-            
-        elif "vit_b_sam" in backbone:
-            checkpoint_url = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth"
-            state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)
-            encoder_embed_dim = 768
-            encoder_depth = 12
-            encoder_num_heads = 12
-            encoder_global_attn_indexes = [2, 5, 8, 11]
-            prompt_embed_dim = 256
-            image_size = 256
-            vit_patch_size = 16
-            base = ImageEncoderViT(
-                    depth=encoder_depth,
-                    embed_dim=encoder_embed_dim,
-                    img_size=image_size,
-                    mlp_ratio=4,
-                    norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
-                    num_heads=encoder_num_heads,
-                    patch_size=vit_patch_size,
-                    qkv_bias=True,
-                    use_rel_pos=True,
-                    global_attn_indexes=encoder_global_attn_indexes,
-                    window_size=14,
-                    out_chans=prompt_embed_dim,
-                )
-            base.load_state_dict(state_dict, strict=False)
-            self.mode = "transformer"
-            
+        if "sam" in self.backbone_arch:
+            from lightning_pose.models.backbones.vits import build_backbone
         else:
-            # load resnet or efficientnet models from torchvision.models
-            base = getattr(tvmodels, backbone)(pretrained=pretrained)
+            from lightning_pose.models.backbones.torchvision import build_backbone
 
-        # get truncated version of backbone
-        if "3d" in backbone:
-            self.backbone = grab_layers_sequential_3d(
-                model=base, last_layer_ind=last_resnet_layer_to_get
-            )
-        elif 'sam' in backbone:
-            self.backbone = base
-        else:
-            self.backbone = grab_layers_sequential(
-                model=base, last_layer_ind=last_resnet_layer_to_get,
-            )
-
-        # compute number of input features
-        if "resnet" in backbone and "3d" not in backbone:
-            self.num_fc_input_features = base.fc.in_features
-        elif "eff" in backbone:
-            self.num_fc_input_features = base.classifier[-1].in_features
-        elif "3d" in backbone:
-            self.num_fc_input_features = base.blocks[-1].proj.in_features // 2
-        elif 'sam' in backbone:
-            self.num_fc_input_features = base.neck[-2].in_channels
+        self.backbone, self.mode, self.num_fc_input_features = build_backbone(
+            backbone_arch=self.backbone_arch,
+            pretrained=pretrained,
+            model_type=model_type,  # for torchvision only
+            image_size=image_size,  # for ViTs only
+        )
 
         self.lr_scheduler = lr_scheduler
         self.lr_scheduler_params = lr_scheduler_params
@@ -283,7 +124,7 @@ class BaseFeatureExtractor(LightningModule):
             dimensions, and are not necessarily equal.
 
         """
-        if self.mode == "2d":
+        if self.mode == "2d" or self.mode == "transformer":
             if self.do_context:
                 if len(images.shape) == 5:
                     # non-consecutive sequences, used for batches of labeled data during training
@@ -334,8 +175,7 @@ class BaseFeatureExtractor(LightningModule):
                     "batch", "features", "rep_height", "rep_width", "frames"
                 ] = torch.permute(outputs, (0, 2, 3, 4, 1))
             else:
-                image_batch = images
-                representations = self.backbone(image_batch)
+                representations = self.backbone(images)
 
         elif self.mode == "3d":
             # reshape to (batch, channels, frames, img_height, img_width)
@@ -347,9 +187,7 @@ class BaseFeatureExtractor(LightningModule):
             representations: TensorType[
                 "batch", "features", "rep_height", "rep_width", "frames"
             ] = torch.permute(output, (0, 1, 3, 4, 2))
-        elif self.mode == "transformer":
-            representations = self.backbone(images)
-                
+
         return representations
 
     def forward(
