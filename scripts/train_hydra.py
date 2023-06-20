@@ -169,7 +169,6 @@ def train(cfg: DictConfig):
                 labeled_mp4_file=labeled_mp4_file,
                 trainer=trainer,
                 model=model,
-                gpu_id=cfg.training.gpu_id,
                 data_module=data_module_pred,
                 save_heatmaps=cfg.eval.get(
                     "predict_vids_after_training_save_heatmaps", False
