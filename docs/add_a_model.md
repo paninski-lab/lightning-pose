@@ -60,7 +60,7 @@ open up the file `lightning_pose/models/heatmap_tracker.py` and follow along wit
 see how these ideas are implemented in practice. 
 
 A second example can be found in 
-`lightning_pose/models/heatmap_tracker.py`, which implements the fully- and semi-supervised 
+`lightning_pose/models/heatmap_tracker_mhcrnn.py`, which implements the fully- and semi-supervised 
 versions of the temporal context network. 
 
 Finally, a third example can be found in `lightning_pose/models/regression_tracker.py`, which 

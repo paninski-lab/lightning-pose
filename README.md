@@ -26,7 +26,7 @@ Come chat with us in Discord.
 ## Getting Started
 This package provides tools for training and evaluating models on already labeled data and 
 unlabeled video clips. 
-See the [documentation](docs/data_format.md) for the data formats required by lightning pose. 
+See the [documentation](docs/directory_structures.md) for the data formats required by lightning pose. 
 
 We also offer a [browser-based application](https://github.com/Lightning-Universe/Pose-app) that 
 supports the full life cycle of a pose estimation project, from data annotation to model training 
@@ -108,7 +108,7 @@ python scripts/train_hydra.py
 ```
 
 To train a model on your own dataset, follow these steps:
-1. ensure your data is in the [proper data format](docs/data_format.md)
+1. ensure your data is in the [proper data format](docs/directory_structures.md)
 2. copy the file `scripts/configs/config_default.yaml` to another directory and rename it. 
 You will then need to update the various fields to match your dataset (such as image height and width). 
 See other config files in `scripts/configs/` for examples.
@@ -117,6 +117,9 @@ created file:
 ```console
 python scripts/train_hydra.py --config-path="<PATH/TO/YOUR/CONFIGS/DIR>" --config-name="<CONFIG_NAME.yaml>"
 ```
+
+You can find more information on the structure of the model directories 
+[here](docs/directory_structures.md).
 
 ## Working with `hydra`
 

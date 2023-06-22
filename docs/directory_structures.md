@@ -1,0 +1,70 @@
+# Directory structures for Lightning Pose
+
+## Data directory structure
+
+Lightning Pose requires data to be stored in a particular manner.
+Also see the example dataset provided in `lightning-pose/data/mirror-mouse-example`.
+
+    /path/to/project/
+      ├── labeled-data/
+      ├── videos/
+      └── CollectedData.csv
+
+* `CollectedData.csv`: hand labels in human-readable format (more below). 
+Note that this file can take any name, and needs to be specified in the config file under 
+`data.csv_file`.
+
+* `labeled-data/`: contains images that correspond to the labels, and can include subdirectories.
+The directory name, any subdirectory names, and image names are all flexible, as long as they are
+consistent with the first row of `CollectedData.csv`.
+
+* `videos/`: when training semi-supervised models, the videos in this directory will be used for 
+computing the unsupervised losses. This directory can take any name, and needs to be specified in
+the config file under `data.video_dir`.
+
+### Converting DLC projects to Lightning Pose format
+TODO.
+
+### Converting other projects to Lightning Pose format
+Coming soon. If you have labeled data from other pose estimation packages (like SLEAP or DPK) and
+would like to try out Lightning Pose, please 
+[raise an issue](https://github.com/danbider/lightning-pose/issues).
+
+## Model directory structure
+
+If you train a model using our script `lightning-pose/scripts/train_hydra.py`, a directory will be
+created with the following structure. The default is to save models in a directory called `outputs`
+inside the Lightning Pose directory; to change this, update the config fields `hydra.run.dir` and
+`hydra.sweep.dir` with absolute paths of your choosing.
+
+    /path/to/models/YYYY-MM-DD/HH-MM-SS/
+      ├── tb_logs/
+      ├── video_preds/
+      │   └── labeled_videos/
+      ├── config.yaml
+      ├── predictions.csv
+      ├── predictions_pca_multiview_error.csv
+      ├── predictions_pca_singleview_error.csv
+      └── predictions_pixel_error.csv
+      
+* `tb_logs/`: model weights
+
+* `video_preds/`: predictions and metrics from videos. 
+The config field `eval.test_videos_directory` points to a directory of videos;
+if `eval.predict_vids_after_training` is set to `true`, all videos in the indicated direcotry will
+be run through the model upon training completion and results stored here.
+
+* `video_preds/labeled_videos/`: labeled mp4s. 
+The config field `eval.test_videos_directory` points to a directory of videos;
+if `eval.save_vids_after_training` is set to `true`, all videos in the indicated direcotry will
+be run through the model upon training completion and results stored here. 
+
+* `predictions.csv`: predictions on labeled data
+
+* `predictions_pca_multiview_error.csv`: 
+if applicable, pca multiview reprojection error for labeled data
+
+* `predictions_pca_singleview_error.csv`: 
+if applicable, pca singleview reprojection error for labeled data
+
+* `predictions_pixel_error.csv`: pixel error for labeled data
