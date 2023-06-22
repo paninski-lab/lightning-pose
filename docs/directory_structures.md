@@ -22,8 +22,14 @@ consistent with the first row of `CollectedData.csv`.
 computing the unsupervised losses. This directory can take any name, and needs to be specified in
 the config file under `data.video_dir`.
 
-### Converting DLC projects to Lightning Pose format
-TODO.
+## Converting DLC projects to Lightning Pose format
+Once you have installed Lightning Pose, you can convert previous DLC projects into the proper 
+Lightning Pose format by running the following script from the command line 
+(make sure to activate the conda environment):
+```console
+python scripts/converters/dlc2lp.py --dlc_dir=/path/to/dlc_dir --lp_dir=/path/to/lp_dir
+```
+That's it! After this you will need to update your config file with the correct paths.
 
 ### Converting other projects to Lightning Pose format
 Coming soon. If you have labeled data from other pose estimation packages (like SLEAP or DPK) and

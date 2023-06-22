@@ -26,7 +26,8 @@ Come chat with us in Discord.
 ## Getting Started
 This package provides tools for training and evaluating models on already labeled data and 
 unlabeled video clips. 
-See the [documentation](docs/directory_structures.md) for the data formats required by lightning pose. 
+See the [documentation](docs/directory_structures.md) for the data formats required by 
+Lightning Pose (and how to convert a DeepLabCut dataset into a Lightning Pose dataset). 
 
 We also offer a [browser-based application](https://github.com/Lightning-Universe/Pose-app) that 
 supports the full life cycle of a pose estimation project, from data annotation to model training 
