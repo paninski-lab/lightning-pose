@@ -16,7 +16,7 @@ Note that this file can take any name, and needs to be specified in the config f
 
 * `labeled-data/`: contains images that correspond to the labels, and can include subdirectories.
 The directory name, any subdirectory names, and image names are all flexible, as long as they are
-consistent with the first row of `CollectedData.csv`.
+consistent with the first column of `CollectedData.csv`.
 
 * `videos/`: when training semi-supervised models, the videos in this directory will be used for 
 computing the unsupervised losses. This directory can take any name, and needs to be specified in
