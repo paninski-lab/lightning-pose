@@ -13,7 +13,7 @@ import fiftyone as fo
 from lightning_pose.utils import pretty_print_str
 
 
-@hydra.main(config_path="configs", config_name="config_toy-dataset")
+@hydra.main(config_path="configs", config_name="config_mirror-mouse-example")
 def build_fo_dataset(cfg: DictConfig) -> None:
     pretty_print_str(
         "Launching a job that creates %s FiftyOne.Dataset"

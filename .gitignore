@@ -4,7 +4,6 @@ grid_artifacts/
 outputs/
 multirun/
 preds/
-data/
 scripts/.ipynb_checkpoints
 #scripts/configs_*
 

@@ -124,8 +124,9 @@ For all of the scripts in our `scripts` folder, we rely on `hydra` to manage arg
 config files. You have two options: directly edit the config file, or override it from the command
 line.
 
-- **Edit** the hydra config, that is, any of the parameters in, e.g., `scripts/configs/config_toy-dataset.yaml`,
-  and save it. Then run the script without arguments:
+- **Edit** the hydra config, that is, any of the parameters in, e.g., 
+`scripts/configs/config_mirror-mouse-example.yaml`, and save it. 
+Then run the script without arguments:
 ```console
 python scripts/train_hydra.py
 ```
@@ -181,7 +182,7 @@ python scripts/predict_new_vids.py
 or override these arguments in the command line:
 ```console
 scripts/predict_new_vids.py eval.hydra_paths=["2022-01-18/01-03-45"] \
-eval.test_videos_directory="/absolute/path/to/unlabeled_videos" \
+eval.test_videos_directory="/absolute/path/to/videos" \
 eval.saved_vid_preds_dir="/absolute/path/to/dir"
 ```
 

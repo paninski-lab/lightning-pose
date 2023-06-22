@@ -27,14 +27,14 @@ from lightning_pose.utils.scripts import (
     get_callbacks,
 )
 
-TOY_DATA_ROOT_DIR = "toy_datasets/toymouseRunningData"
+TOY_DATA_ROOT_DIR = "data/mirror-mouse-example"
 
 
 @pytest.fixture
 def cfg() -> dict:
     """Load all toy data config file without hydra."""
     base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
-    config_file = os.path.join(base_dir, "scripts", "configs", "config_toy-dataset.yaml")
+    config_file = os.path.join(base_dir, "scripts", "configs", "config_mirror-mouse-example.yaml")
     cfg = yaml.load(open(config_file), Loader=yaml.FullLoader)
     cfg["model"]["do_context"] = False
     cfg["training"]["imgaug"] = "default"  # so pca tests don't break
@@ -45,7 +45,7 @@ def cfg() -> dict:
 def cfg_context() -> dict:
     """Load all toy data config file without hydra."""
     base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
-    config_file = os.path.join(base_dir, "scripts", "configs", "config_toy-dataset.yaml")
+    config_file = os.path.join(base_dir, "scripts", "configs", "config_mirror-mouse-example.yaml")
     cfg = yaml.load(open(config_file), Loader=yaml.FullLoader)
     cfg["model"]["do_context"] = True
     # make small batches so that we can run on a gpu with limited memory
@@ -233,7 +233,7 @@ def base_data_module_combined(cfg, base_dataset) -> UnlabeledDataModule:
     data_module = get_data_module(
         cfg_tmp,
         dataset=base_dataset,
-        video_dir=os.path.join(TOY_DATA_ROOT_DIR, "unlabeled_videos"),
+        video_dir=os.path.join(TOY_DATA_ROOT_DIR, "videos"),
     )
     # data_module.setup()  # already done in UnlabeledDataModule constructor
 
@@ -257,7 +257,7 @@ def base_data_module_combined_context(
     data_module = get_data_module(
         cfg_tmp,
         dataset=base_dataset_context,
-        video_dir=os.path.join(TOY_DATA_ROOT_DIR, "unlabeled_videos"),
+        video_dir=os.path.join(TOY_DATA_ROOT_DIR, "videos"),
     )
     # data_module.setup()  # already done in UnlabeledDataModule constructor
 
@@ -279,7 +279,7 @@ def heatmap_data_module_combined(cfg, heatmap_dataset) -> UnlabeledDataModule:
     data_module = get_data_module(
         cfg_tmp,
         dataset=heatmap_dataset,
-        video_dir=os.path.join(TOY_DATA_ROOT_DIR, "unlabeled_videos"),
+        video_dir=os.path.join(TOY_DATA_ROOT_DIR, "videos"),
     )
     # data_module.setup()  # already done in UnlabeledDataModule constructor
 
@@ -303,7 +303,7 @@ def heatmap_data_module_combined_context(
     data_module = get_data_module(
         cfg_tmp,
         dataset=heatmap_dataset_context,
-        video_dir=os.path.join(TOY_DATA_ROOT_DIR, "unlabeled_videos"),
+        video_dir=os.path.join(TOY_DATA_ROOT_DIR, "videos"),
     )
     # data_module.setup()  # already done in UnlabeledDataModule constructor
 
@@ -371,7 +371,7 @@ def remove_logs() -> Callable:
 
 @pytest.fixture
 def video_list() -> List[str]:
-    return get_videos_in_dir(os.path.join(TOY_DATA_ROOT_DIR, "unlabeled_videos"))
+    return get_videos_in_dir(os.path.join(TOY_DATA_ROOT_DIR, "videos"))
 
 
 @pytest.fixture
