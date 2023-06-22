@@ -6,6 +6,9 @@ set of docs are intended for developers, and include information on how to add n
 models.
 
 ## Docs for users
+* [Data formats](data_format.md): how frames, videos, and labels need to be organized for use by
+Lightning Pose
+
 * [Fiftyone](fiftyone.md): plot model predictions overlaid on labeled frames or unlabeled videos
 
 * [Streamlit](apps.md): plot metrics on labeled data (pixel errors, confidences, pca reprojection 
