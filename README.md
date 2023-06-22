@@ -120,7 +120,7 @@ python scripts/train_hydra.py --config-path="<PATH/TO/YOUR/CONFIGS/DIR>" --confi
 ```
 
 You can find more information on the structure of the model directories 
-[here](docs/directory_structures.md).
+[here](docs/directory_structures.md#model-directory-structure).
 
 ## Working with `hydra`
 
