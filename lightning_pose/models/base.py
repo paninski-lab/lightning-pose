@@ -61,6 +61,7 @@ class BaseFeatureExtractor(LightningModule):
         do_context: bool = False,
         image_size: int = 256,
         model_type: Literal["heatmap", "regression"] = "heatmap",
+        **kwargs,
     ) -> None:
         """A CNN model that takes in images and generates features.
 
