@@ -2,25 +2,25 @@
 
 ## Data directory structure
 
-Lightning Pose requires data to be stored in a particular manner.
-Also see the example dataset provided in `lightning-pose/data/mirror-mouse-example`.
+Lightning Pose assumes the following project directory structure, as in the example dataset
+provided in `lightning-pose/data/mirror-mouse-example`.
 
     /path/to/project/
-      ├── labeled-data/
-      ├── videos/
-      └── CollectedData.csv
+      ├── <LABELED_DATA_DIR>/
+      ├── <VIDEO_DIR>/
+      └── <YOUR_LABELED_FRAMES>.csv
 
-* `CollectedData.csv`: hand labels in human-readable format (more below). 
+* `<YOUR_LABELED_FRAMES>.csv`: a table with keypoint labels (rows: frames; columns: keypoints). 
 Note that this file can take any name, and needs to be specified in the config file under 
 `data.csv_file`.
 
-* `labeled-data/`: contains images that correspond to the labels, and can include subdirectories.
+* `<LABELED_DATA_DIR>/`: contains images that correspond to the labels, and can include subdirectories.
 The directory name, any subdirectory names, and image names are all flexible, as long as they are
-consistent with the first column of `CollectedData.csv`.
+consistent with the first column of `<YOUR_LABELED_FRAMES>.csv`.
 
-* `videos/`: when training semi-supervised models, the videos in this directory will be used for 
-computing the unsupervised losses. This directory can take any name, and needs to be specified in
-the config file under `data.video_dir`.
+* `<VIDEO_DIR>/`: when training semi-supervised models, the videos in this directory will be used 
+for computing the unsupervised losses. This directory can take any name, and needs to be specified 
+in the config file under `data.video_dir`.
 
 ## Converting DLC projects to Lightning Pose format
 Once you have installed Lightning Pose, you can convert previous DLC projects into the proper 
@@ -67,10 +67,13 @@ be run through the model upon training completion and results stored here.
 
 * `predictions.csv`: predictions on labeled data
 
-* `predictions_pca_multiview_error.csv`: 
-if applicable, pca multiview reprojection error for labeled data
+* `predictions_pixel_error.csv`: Euclidean distance between the predictions in `predictions.csv` 
+and the labeled keypoints (in `<YOUR_LABELED_FRAMES>.csv`) per keypoint and frame.
 
-* `predictions_pca_singleview_error.csv`: 
-if applicable, pca singleview reprojection error for labeled data
+We also compute all supervised losses, where applicable, and store them (per keypoint and frame) in
+the following csvs:
+* `predictions_pca_multiview_error.csv`: pca multiview reprojection error between predictions and
+labeled keypoints
 
-* `predictions_pixel_error.csv`: pixel error for labeled data
+* `predictions_pca_singleview_error.csv`: pca singleview reprojection error between predictions and
+labeled keypoints

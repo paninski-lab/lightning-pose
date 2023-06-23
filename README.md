@@ -143,7 +143,13 @@ python scripts/train_hydra.py training.max_epochs=11
 
 Or, for your own dataset,
 ```console
-python scripts/train_hydra.py  --config-path="<PATH/TO/YOUR/CONFIGS/DIR>" --config-name="<CONFIG_NAME.yaml> training.max_epochs=11
+python scripts/train_hydra.py --config-path="<PATH/TO/YOUR/CONFIGS/DIR>" --config-name="<CONFIG_NAME.yaml> training.max_epochs=11
+```
+
+We also recommend trying out training with automatic resizing to smaller images first; 
+this allows for larger batch sizes/fewer Out Of Memory errors on the GPU:
+```console
+python scripts/train_hydra.py --config-path="<PATH/TO/YOUR/CONFIGS/DIR>" --config-name="<CONFIG_NAME.yaml> data.image_resize_dims.height=256 data.image_resize_dims.width=256
 ```
 
 See more documentation on the config file fields [here](docs/config.md).

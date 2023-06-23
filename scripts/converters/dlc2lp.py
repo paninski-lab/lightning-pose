@@ -7,8 +7,8 @@ import shutil
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dlc_dir', type=str)
-parser.add_argument('--lp_dir', type=str)
+parser.add_argument("--dlc_dir", type=str)
+parser.add_argument("--lp_dir", type=str)
 args = parser.parse_args()
 dlc_dir = args.dlc_dir
 lp_dir = args.lp_dir
@@ -24,33 +24,40 @@ if dlc_dir == lp_dir:
     raise NameError(f"dlc_dir and lp_dir cannot be the same")
 
 # find all labeled data in DLC project
-dirs = os.listdir(os.path.join(dlc_dir, 'labeled-data'))
+dirs = os.listdir(os.path.join(dlc_dir, "labeled-data"))
 dirs.sort()
 dfs = []
 for d in dirs:
     print(d)
     try:
-        csv_file = glob.glob(os.path.join(dlc_dir, 'labeled-data', d, 'CollectedData*.csv'))[0]
+        csv_file = glob.glob(os.path.join(dlc_dir, "labeled-data", d, "CollectedData*.csv"))[0]
         df_tmp = pd.read_csv(csv_file, header=[0, 1, 2], index_col=0)
         if len(df_tmp.index.unique()) != df_tmp.shape[0]:
             # new DLC labeling scheme that splits video/image in different cells
-            vids = df_tmp.loc[:, ('Unnamed: 1_level_0', 'Unnamed: 1_level_1', 'Unnamed: 1_level_2')]
-            imgs = df_tmp.loc[:, ('Unnamed: 2_level_0', 'Unnamed: 2_level_1', 'Unnamed: 2_level_2')]
-            new_col = [f'labeled-data/{v}/{i}' for v, i in zip(vids, imgs)]
-            df_tmp1 = df_tmp.drop(('Unnamed: 1_level_0', 'Unnamed: 1_level_1', 'Unnamed: 1_level_2'), axis=1)
-            df_tmp2 = df_tmp1.drop(('Unnamed: 2_level_0', 'Unnamed: 2_level_1', 'Unnamed: 2_level_2'), axis=1)
+            vids = df_tmp.loc[
+                   :, ("Unnamed: 1_level_0", "Unnamed: 1_level_1", "Unnamed: 1_level_2")]
+            imgs = df_tmp.loc[
+                   :, ("Unnamed: 2_level_0", "Unnamed: 2_level_1", "Unnamed: 2_level_2")]
+            new_col = [f"labeled-data/{v}/{i}" for v, i in zip(vids, imgs)]
+            df_tmp1 = df_tmp.drop(
+                ("Unnamed: 1_level_0", "Unnamed: 1_level_1", "Unnamed: 1_level_2"), axis=1,
+            )
+            df_tmp2 = df_tmp1.drop(
+                ("Unnamed: 2_level_0", "Unnamed: 2_level_1", "Unnamed: 2_level_2"), axis=1,
+            )
             df_tmp2.index = new_col
             df_tmp = df_tmp2
     except IndexError:
         try:
-            h5_file = glob.glob(os.path.join(dlc_dir, 'labeled-data', d, 'CollectedData*.h5'))[0]
+            h5_file = glob.glob(os.path.join(dlc_dir, "labeled-data", d, "CollectedData*.h5"))[0]
             df_tmp = pd.read_hdf(h5_file)
             if type(df_tmp.index) == pd.core.indexes.multi.MultiIndex:
                 # new DLC labeling scheme that splits video/image in different cells
                 imgs = [i[2] for i in df_tmp.index]
                 vids = [df_tmp.index[0][1] for _ in imgs]
-                new_col = [f'labeled-data/{v}/{i}' for v, i in zip(vids, imgs)]
-                df_tmp1 = df_tmp.reset_index().drop(columns='level_0').drop(columns='level_1').drop(columns='level_2')
+                new_col = [f"labeled-data/{v}/{i}" for v, i in zip(vids, imgs)]
+                df_tmp1 = df_tmp.reset_index().drop(
+                    columns="level_0").drop(columns="level_1").drop(columns="level_2")
                 df_tmp1.index = new_col
                 df_tmp = df_tmp1
         except IndexError:
