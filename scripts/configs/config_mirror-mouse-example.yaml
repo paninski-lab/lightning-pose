@@ -8,11 +8,11 @@ data:
     width: 256
     height: 256
   # ABSOLUTE path to data directory. the below is just a toy example for running Getting Started scripts
-  data_dir: toy_datasets/toymouseRunningData
+  data_dir: data/mirror-mouse-example
   # ABSOLUTE path to unlabeled videos' directory. the below is just a toy example for running Getting Started scripts (TODO: Matt, can have multiple vids)
-  video_dir: unlabeled_videos
+  video_dir: videos
   # location of labels; for example script, this should be relative to `data_dir`
-  csv_file: CollectedData_.csv
+  csv_file: CollectedData.csv
   # downsample heatmaps: 2 | 3
   downsample_factor: 2
   # total number of body parts
@@ -216,15 +216,13 @@ eval:
   # str with an absolute path to a directory containing videos for prediction.
   # (it's not absolute just for the toy example)
   # set to null to skip automatic video prediction from train_hydra.py script
-  test_videos_directory: toy_datasets/toymouseRunningData/unlabeled_videos
+  test_videos_directory: data/mirror-mouse-example/videos
   # str with an absolute path to directory in which you want to save .csv with predictions
-  saved_vid_preds_dir: toy_datasets/toymouseRunningData
-  # create labeled video from each video in test_videos_directory
-  create_labeled_video: true
+  saved_vid_preds_dir: data/mirror-mouse-example
   # confidence threshold for plotting a vid
   confidence_thresh_for_vid: 0.05
   # str with absolute path to the video file you want plotted with keypoints
-  video_file_to_plot: /home/jovyan/lightning-pose/toy_datasets/toymouseRunningData/unlabeled_videos/test_vid.mp4
+  video_file_to_plot: /home/jovyan/lightning-pose/data/mirror-mouse-example/videos/test_vid.mp4
   # a list of strings, each points to a .csv file with predictions of a given model to the same video. will be combined with video_file_to_plot to make a visualization
   pred_csv_files_to_plot:
     ["/home/jovyan/test_vid_heatmap_pca_multiview_5.0.csv"]

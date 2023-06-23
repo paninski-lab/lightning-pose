@@ -29,7 +29,7 @@ no need to loop over models or folders. we do need to loop over videos within a 
 however, keeping cfg.eval.hydra_paths is useful for the fiftyone image plotting. so keep"""
 
 
-@hydra.main(config_path="configs", config_name="config_toy-dataset")
+@hydra.main(config_path="configs", config_name="config_mirror-mouse-example")
 def predict_videos_in_dir(cfg: DictConfig):
     """
     This script will work with a path to a trained model's hydra folder
@@ -94,7 +94,7 @@ def predict_videos_in_dir(cfg: DictConfig):
             )
             prediction_csv_file = video_pred_path_handler()
 
-            if cfg.eval.get("create_labeled_video", False):
+            if cfg.eval.get("save_vids_after_training", False):
                 labeled_mp4_file = prediction_csv_file.replace(".csv", "_labeled.mp4")
             else:
                 labeled_mp4_file = None

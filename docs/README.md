@@ -6,6 +6,11 @@ set of docs are intended for developers, and include information on how to add n
 models.
 
 ## Docs for users
+* [Data formats](directory_structures.md): how frames, videos, and labels need to be organized for 
+use by Lightning Pose. 
+Also see the example dataset provided in `lightning-pose/data/mirror-mouse-example`.
+This page also describes the structure of the model directories output by Lightning Pose.
+
 * [Fiftyone](fiftyone.md): plot model predictions overlaid on labeled frames or unlabeled videos
 
 * [Streamlit](apps.md): plot metrics on labeled data (pixel errors, confidences, pca reprojection 

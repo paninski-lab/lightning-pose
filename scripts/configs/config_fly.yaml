@@ -161,8 +161,6 @@ eval:
   test_videos_directory: "/datastores/fly/videos_new"
   # str with an absolute path to directory in which you want to save .csv with predictions
   saved_vid_preds_dir: "/home/jovyan"
-  # create labeled video from each video in test_videos_directory
-  create_labeled_video: false
   # confidence threshold for plotting a vid
   confidence_thresh_for_vid: 0.05
   # str with absolute path to the video file you want plotted with keypoints
