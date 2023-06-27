@@ -8,8 +8,6 @@ import os
 import lightning.pytorch as pl
 from typeguard import typechecked
 
-# from lightning_pose.utils.predictions import predict_single_video
-# from lightning_pose.utils.predictions import create_labeled_video
 from lightning_pose.utils import get_gpu_list_from_cfg
 from lightning_pose.utils.io import (
     check_if_semi_supervised,
@@ -17,7 +15,6 @@ from lightning_pose.utils.io import (
     get_videos_in_dir,
     return_absolute_path,
     return_absolute_data_paths,
-    VideoPredPathHandler,
 )
 from lightning_pose.utils.predictions import load_model_from_checkpoint
 from lightning_pose.utils.scripts import get_imgaug_transform, get_dataset, get_data_module
@@ -27,6 +24,62 @@ from lightning_pose.utils.scripts import export_predictions_and_labeled_video
 hydra will orchestrate both. advanatages -- in the future we could parallelize to new machines.
 no need to loop over models or folders. we do need to loop over videos within a folder.
 however, keeping cfg.eval.hydra_paths is useful for the fiftyone image plotting. so keep"""
+
+
+@typechecked
+class VideoPredPathHandler:
+    """class that defines filename for a predictions .csv file, given video file and
+    model specs.
+    """
+
+    def __init__(
+        self, save_preds_dir: str, video_file: str, model_cfg: DictConfig
+    ) -> None:
+        self.video_file = video_file
+        self.save_preds_dir = save_preds_dir
+        self.model_cfg = model_cfg
+        self.check_input_paths()
+
+    @property
+    def video_basename(self) -> str:
+        return os.path.basename(self.video_file).split(".")[0]
+
+    @property
+    def loss_str(self) -> str:
+        semi_supervised = check_if_semi_supervised(self.model_cfg.model.losses_to_use)
+        loss_names = []
+        loss_weights = []
+        loss_str = ""
+        if semi_supervised:  # add the loss names and weights
+            loss_str = ""
+            if len(self.model_cfg.model.losses_to_use) > 0:
+                loss_names = list(self.model_cfg.model.losses_to_use)
+                for loss in loss_names:
+                    loss_weights.append(self.model_cfg.losses[loss]["log_weight"])
+
+                loss_str = ""
+                for loss, weight in zip(loss_names, loss_weights):
+                    loss_str += "_" + loss + "_" + str(weight)
+
+            else:  # fully supervised, return empty string
+                loss_str = ""
+        return loss_str
+
+    def check_input_paths(self) -> None:
+        assert os.path.isfile(self.video_file)
+        assert os.path.isdir(self.save_preds_dir)
+
+    def build_pred_file_basename(self, extra_str="") -> str:
+        return "%s_%s%s%s.csv" % (
+            self.video_basename,
+            self.model_cfg.model.model_type,
+            self.loss_str,
+            extra_str,
+        )
+
+    def __call__(self, extra_str="") -> str:
+        pred_file_basename = self.build_pred_file_basename(extra_str=extra_str)
+        return os.path.join(self.save_preds_dir, pred_file_basename)
 
 
 @hydra.main(config_path="configs", config_name="config_mirror-mouse-example")

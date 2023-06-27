@@ -16,11 +16,7 @@ from tqdm import tqdm
 from typeguard import typechecked
 from typing import Dict, List, Literal, Optional, Tuple, Type, Union
 
-from lightning_pose.data.dali import (
-    video_pipe,
-    LitDaliWrapper,
-    PrepareDALI,
-)
+from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import count_frames
 from lightning_pose.models.heatmap_tracker import (
@@ -32,24 +28,9 @@ from lightning_pose.models.regression_tracker import (
     SemiSupervisedRegressionTracker,
 )
 from lightning_pose.utils import pretty_print_str
-from lightning_pose.utils.io import return_absolute_data_paths
 
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
-
-@typechecked
-def get_devices(device: Literal["gpu", "cuda", "cpu"]) -> Dict[str, str]:
-    """Get pytorch and dali device strings."""
-    if device == "gpu" or device == "cuda":
-        device_pt = "cuda"
-        device_dali = "gpu"
-    elif device == "cpu":
-        device_pt = "cpu"
-        device_dali = "cpu"
-    else:
-        raise NotImplementedError("must choose 'gpu' or 'cpu' for `device` argument")
-    return {"device_pt": device_pt, "device_dali": device_dali}
 
 
 @typechecked

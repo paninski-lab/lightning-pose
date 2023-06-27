@@ -1,10 +1,10 @@
 """Path handling functions."""
 
-from omegaconf import DictConfig, OmegaConf, ListConfig
+from omegaconf import DictConfig, ListConfig
 import os
 import pandas as pd
 from typeguard import typechecked
-from typing import Any, List, Tuple, Union, Optional
+from typing import List, Tuple, Union, Optional
 
 
 @typechecked
@@ -205,63 +205,3 @@ def check_video_paths(video_paths: Union[List[str], str]) -> list:
         assert filename.endswith(".mp4"), "video files must be mp4 format!"
 
     return filenames
-
-
-# --------------------------------------------------------------------------------------
-# Path handling for predictions on new videos
-# --------------------------------------------------------------------------------------
-
-@typechecked
-class VideoPredPathHandler:
-    """class that defines filename for a predictions .csv file, given video file and
-    model specs.
-    """
-
-    def __init__(
-        self, save_preds_dir: str, video_file: str, model_cfg: DictConfig
-    ) -> None:
-        self.video_file = video_file
-        self.save_preds_dir = save_preds_dir
-        self.model_cfg = model_cfg
-        self.check_input_paths()
-
-    @property
-    def video_basename(self) -> str:
-        return os.path.basename(self.video_file).split(".")[0]
-
-    @property
-    def loss_str(self) -> str:
-        semi_supervised = check_if_semi_supervised(self.model_cfg.model.losses_to_use)
-        loss_names = []
-        loss_weights = []
-        loss_str = ""
-        if semi_supervised:  # add the loss names and weights
-            loss_str = ""
-            if len(self.model_cfg.model.losses_to_use) > 0:
-                loss_names = list(self.model_cfg.model.losses_to_use)
-                for loss in loss_names:
-                    loss_weights.append(self.model_cfg.losses[loss]["log_weight"])
-
-                loss_str = ""
-                for loss, weight in zip(loss_names, loss_weights):
-                    loss_str += "_" + loss + "_" + str(weight)
-
-            else:  # fully supervised, return empty string
-                loss_str = ""
-        return loss_str
-
-    def check_input_paths(self) -> None:
-        assert os.path.isfile(self.video_file)
-        assert os.path.isdir(self.save_preds_dir)
-
-    def build_pred_file_basename(self, extra_str="") -> str:
-        return "%s_%s%s%s.csv" % (
-            self.video_basename,
-            self.model_cfg.model.model_type,
-            self.loss_str,
-            extra_str,
-        )
-
-    def __call__(self, extra_str="") -> str:
-        pred_file_basename = self.build_pred_file_basename(extra_str=extra_str)
-        return os.path.join(self.save_preds_dir, pred_file_basename)
