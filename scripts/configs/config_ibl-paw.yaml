@@ -8,15 +8,19 @@ data:
     height: 128
     width: 128
   # ABSOLUTE path to data directory
-  data_dir: "/datastores/ibl-paw"
+  data_dir: /datastores/ibl-paw
   # ABSOLUTE path to unlabeled videos' directory
-  video_dir: "/datastores/ibl-paw/videos"
+  video_dir: /datastores/ibl-paw/videos
   # location of labels; for ex script, this should be relative to `data_dir`
-  csv_file: "CollectedData.csv"
+  csv_file: CollectedData.csv
   # downsample heatmaps - 2 | 3
   downsample_factor: 2
-  # total number of body parts
+  # total number of keypoints
   num_keypoints: 2
+  # keypoint names
+  keypoint_names:
+  - paw_l
+  - paw_r
   columns_for_singleview_pca: [0, 1]
 
 training:

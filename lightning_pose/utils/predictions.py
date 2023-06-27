@@ -70,9 +70,27 @@ class PredictionHandler:
     def __init__(
         self,
         cfg: DictConfig,
-        data_module: pl.LightningDataModule,
-        video_file: Union[str, None],
+        data_module: Optional[pl.LightningDataModule] = None,
+        video_file: Optional[str] = None,
     ) -> None:
+        """
+
+        Args
+            cfg
+            data_module
+            video_file
+
+        """
+
+        # check args: data_module is optional under certain conditions
+        if data_module is None:
+            if video_file is None:
+                raise ValueError("must pass data_module to constructor if predicting on a dataset")
+            if cfg.data.get("keypoint_names", None) is None \
+                    and cfg.data.get("keypoints", None) is None:
+                raise ValueError(
+                    "must include `keypoint_names` or `keypoints` field in cfg.data if not "
+                    "passing data_module as an argument to PredictionHandler")
 
         self.cfg = cfg
         self.data_module = data_module
@@ -90,11 +108,19 @@ class PredictionHandler:
 
     @property
     def keypoint_names(self):
-        return self.data_module.dataset.keypoint_names
+        if self.cfg.data.get("keypoint_names", None) is not None:
+            return self.cfg.data.keypoint_names
+        elif self.cfg.data.get("keypoints", None) is not None:
+            return self.cfg.data.keypoints
+        else:
+            return self.data_module.dataset.keypoint_names
 
     @property
     def do_context(self):
-        return self.data_module.dataset.do_context
+        if self.data_module:
+            return self.data_module.dataset.do_context
+        else:
+            return self.cfg.model.do_context
 
     def unpack_preds(
         self,
@@ -126,7 +152,7 @@ class PredictionHandler:
             if num_rows_to_discard > 0:
                 stacked_preds = stacked_preds[:-num_rows_to_discard]
                 stacked_confs = stacked_confs[:-num_rows_to_discard]
-            # for context: missing the first two frames, have to handle with the last two frames still.
+            # for context: missing first two frames, have to handle with the last two frames still
 
             if self.do_context:
                 # fix shifts in the context model
@@ -160,7 +186,7 @@ class PredictionHandler:
         # repat the last one twice
         if preds_combined.shape[0] == self.frame_count:
             # i.e., after concat this has the length of the video.
-            # but we don't have valid predictions for the last two elements, so we pad with element -3.
+            # we don't have valid predictions for the last two elements, so we pad with element -3
             preds_combined[-2:, :] = preds_combined[-3, :]
         else:
             # we don't have as many predictions as frames; pad with final entry which is valid.
@@ -586,10 +612,29 @@ def get_model_class(map_type: str, semi_supervised: bool) -> LightningModule:
 
 # @typechecked
 def load_model_from_checkpoint(
-    cfg: DictConfig, ckpt_file: str, eval: bool = False, data_module=None,
+    cfg: DictConfig,
+    ckpt_file: str,
+    eval: bool = False,
+    data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
+    skip_data_module: bool = False,
 ) -> LightningModule:
-    """this will have: path to a specific .ckpt file which we extract using other funcs
-    will also take the standard hydra config file"""
+    """Load Lightning Pose model from checkpoint file.
+
+    Args:
+        cfg: model config
+        ckpt_file: absolute path to model checkpoint
+        eval: True for eval mode, False for train mode
+        data_module: used to initialize unsupervised losses
+        skip_data_module: if `data_module` is not None this is ignored.
+            If False and `data_module=None`, a data module is created from the config file and
+            unsupervised losses are accessible in the model.
+            If True and `data_module=None`, the unsupervised losses are not accessible in the
+            model; this is recommended for running inference on new videos
+
+    Returns:
+        model as a Lightning Module
+
+    """
     from lightning_pose.utils.io import (
         check_if_semi_supervised,
         return_absolute_data_paths,
@@ -603,14 +648,17 @@ def load_model_from_checkpoint(
 
     # get loss factories
     delete_extras = False
-    if not data_module:
+    if not data_module and not skip_data_module:
         # create data module if not provided as input
         delete_extras = True
         data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
         imgaug_transform = get_imgaug_transform(cfg=cfg)
         dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
         data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
-    loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
+    if not data_module:
+        loss_factories = {"supervised": None, "unsupervised": None}
+    else:
+        loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
 
     # pick the right model class
     semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
@@ -667,24 +715,16 @@ def create_labeled_video(
 ):
     """Helper function for creating annotated videos.
 
-    Parameters
-    ----------
-    clip : moviepy.editor.VideoFileClip
-    xs_arr : np.ndarray
-        shape T x n_joints
-    ys_arr : np.ndarray
-        shape T x n_joints
-    mask_array : np.ndarray, boolean, optional
-        shape T x n_joints, same as df_x and df_y; any timepoints/joints with a False
-        entry will not be plotted
-    dotsize : int
-        size of marker dot on labeled video
-    colormap : str
-        matplotlib color map for markers
-    fps : float, optional
-        None to default to fps of original video
-    filename : str, optional
-        video file name
+    Args
+        clip (moviepy.editor.VideoFileClip)
+        xs_arr (np.ndarray): shape T x n_joints
+        ys_arr (np.ndarray): shape T x n_joints
+        mask_array (np.ndarray, boolean): shape T x n_joints, same as df_x and df_y;
+            any timepoints/joints with a False entry will not be plotted
+        dotsize (int): size of marker dot on labeled video
+        colormap (str): matplotlib color map for markers
+        fps (float, optional): None to default to fps of original video
+        filename (str, optional): video file name
 
     """
 

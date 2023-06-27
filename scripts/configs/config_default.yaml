@@ -12,11 +12,13 @@ data:
   # ABSOLUTE path to unlabeled videos' directory
   video_dir: null
   # location of labels; this should be relative to `data_dir`
-  csv_file: "CollectedData.csv"
+  csv_file: CollectedData.csv
   # downsample heatmaps - 2 | 3
   downsample_factor: 2
-  # total number of body parts
+  # total number of keypoints
   num_keypoints: null
+  # keypoint names
+  keypoint_names: null
   # for mirrored setups with all keypoints defined in same csv file, define matching
   # columns for different keypoints (assumes x-y-x-y interleaving)
   # each list corresponds to a single view, so in the example below there are 2 views

@@ -1,3 +1,4 @@
+import gc
 import torch
 
 from lightning_pose.utils.scripts import get_loss_factories, get_model
@@ -31,6 +32,9 @@ def run_model_test(cfg, data_module, video_dataloader, trainer, remove_logs_fn):
     trainer.predict(model=model, dataloaders=video_dataloader, return_predictions=True)
 
     # remove tensors from gpu
+    del loss_factories
+    del model
+    gc.collect()
     torch.cuda.empty_cache()
 
     # clean up logging

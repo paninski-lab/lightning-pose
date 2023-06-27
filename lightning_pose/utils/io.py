@@ -168,14 +168,6 @@ def return_absolute_data_paths(data_cfg: DictConfig, n_dirs_back: int = 3) -> Tu
     return data_dir, video_dir
 
 
-# def find_vids_in_dir(folder_path: str) -> List[str]:
-#     # get all video files in directory
-#     vid_files = [f for f in os.listdir(folder_path) if f.endswith((".mp4", ".avi", ".mov"))]
-#     # get absolute paths of video files and check that they exist
-#     absolute_paths = [os.path.join(folder_path, v) for v in vid_files if os.path.isfile(os.path.join(folder_path, v))]
-#     return absolute_paths
-
-
 @typechecked
 def get_videos_in_dir(video_dir: str, return_mp4_only: bool = True) -> List[str]:
     # gather videos to process

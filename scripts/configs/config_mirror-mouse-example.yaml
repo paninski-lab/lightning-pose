@@ -15,8 +15,27 @@ data:
   csv_file: CollectedData.csv
   # downsample heatmaps: 2 | 3
   downsample_factor: 2
-  # total number of body parts
+  # total number of keypoints
   num_keypoints: 17
+  # keypoint names
+  keypoint_names:
+    - paw1LH_top
+    - paw2LF_top
+    - paw3RF_top
+    - paw4RH_top
+    - tailBase_top
+    - tailMid_top
+    - nose_top
+    - obs_top
+    - paw1LH_bot
+    - paw2LF_bot
+    - paw3RF_bot
+    - paw4RH_bot
+    - tailBase_bot
+    - tailMid_bot
+    - nose_bot
+    - obsHigh_bot
+    - obsLow_bot
   # for mirrored setups with all keypoints defined in same csv file, define matching
   # columns for different keypoints (assumes x-y-x-y interleaving)
   # each list corresponds to a single view, so in the example below there are 2 views

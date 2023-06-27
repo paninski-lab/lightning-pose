@@ -8,17 +8,21 @@ data:
     height: 128
     width: 128
   # ABSOLUTE path to data directory
-  data_dir: "/datastores/ibl-pupil"
+  data_dir: /datastores/ibl-pupil
   # ABSOLUTE path to unlabeled videos' directory
-  video_dir: "/datastores/ibl-pupil/videos"
+  video_dir: /datastores/ibl-pupil/videos
   # location of labels; for ex script, this should be relative to `data_dir`
-  csv_file: "CollectedData.csv"
+  csv_file: CollectedData.csv
   # downsample heatmaps - 2 | 3
   downsample_factor: 2
-  # total number of body parts
+  # total number of keypoints
   num_keypoints: 4
-  # base path for saving
-  # save_dir- "/media/mattw/behavior/results/pose-estimation"
+  # keypoint names
+  keypoint_names:
+  - pupil_top_r
+  - pupil_right_r
+  - pupil_bottom_r
+  - pupil_left_r
   columns_for_singleview_pca: [0, 1, 2, 3]
 
 training:
