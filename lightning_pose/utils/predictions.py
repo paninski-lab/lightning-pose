@@ -109,9 +109,9 @@ class PredictionHandler:
     @property
     def keypoint_names(self):
         if self.cfg.data.get("keypoint_names", None) is not None:
-            return self.cfg.data.keypoint_names
+            return list(self.cfg.data.keypoint_names)
         elif self.cfg.data.get("keypoints", None) is not None:
-            return self.cfg.data.keypoints
+            return list(self.cfg.data.keypoints)
         else:
             return self.data_module.dataset.keypoint_names
 

@@ -50,7 +50,7 @@ class HeatmapTracker(BaseSupervisedTracker):
     def __init__(
         self,
         num_keypoints: int,
-        loss_factory: LossFactory,
+        loss_factory: Optional[LossFactory] = None,
         backbone: ALLOWED_BACKBONES = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
@@ -359,8 +359,8 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
     def __init__(
         self,
         num_keypoints: int,
-        loss_factory: LossFactory,
-        loss_factory_unsupervised: LossFactory,
+        loss_factory: Optional[LossFactory] = None,
+        loss_factory_unsupervised: Optional[LossFactory] = None,
         backbone: ALLOWED_BACKBONES = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
@@ -406,7 +406,10 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             do_context=do_context,
             **kwargs,
         )
-        self.loss_factory_unsup = loss_factory_unsupervised.to(self.device)
+        if loss_factory_unsupervised:
+            self.loss_factory_unsup = loss_factory_unsupervised.to(self.device)
+        else:
+            self.loss_factory_unsup = None
 
         # this attribute will be modified by AnnealWeight callback during training
         # self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))

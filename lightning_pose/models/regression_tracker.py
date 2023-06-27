@@ -26,7 +26,7 @@ class RegressionTracker(BaseSupervisedTracker):
     def __init__(
         self,
         num_keypoints: int,
-        loss_factory: LossFactory,
+        loss_factory: Optional[LossFactory] = None,
         backbone: ALLOWED_BACKBONES = "resnet50",
         pretrained: bool = True,
         torch_seed: int = 123,
@@ -158,8 +158,8 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
     def __init__(
         self,
         num_keypoints: int,
-        loss_factory: LossFactory,
-        loss_factory_unsupervised: LossFactory,
+        loss_factory: Optional[LossFactory] = None,
+        loss_factory_unsupervised: Optional[LossFactory] = None,
         backbone: ALLOWED_BACKBONES = "resnet50",
         pretrained: bool = True,
         torch_seed: int = 123,
