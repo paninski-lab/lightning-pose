@@ -31,3 +31,5 @@ where to store the model code,
 how to make it visible to users, 
 how to provide hyperparameters for model construction, 
 and how to connect it to data loaders and losses
+
+* [General contributing guidelines](contributing.md): pull requests, testing, linting, etc.
