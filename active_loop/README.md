@@ -15,32 +15,34 @@ Codebase:
 - [x] How to combine the frames from different methods? 
 - [x] create a new file `iteration_active_loop/experiment0/${method}_${num_frames}` with the `new_frames (and their labels)*` (labels available in debug mode or from user).
 - [x] merge previous run train frames in `CollectedData.csv` in new `${method}_${num_frames}_CollectedData.csv`  file.
-- [x] update parameters in exp. config file (for example `configs/config_ibl_experiment.yaml`) to point to the updated `${method}_${num_frames}_CollectedData.csv`  file.
+- [x] update parameters in exp. config file (for example `configs/config_ibl_experiment.yaml`) to point to the updated `${method}_${num_frames}_CollectedData.csv`  file*.
 
 
-# Example:
+# Pipeline:
 
-- loop_iteration(method, data, loop_number)
+```
+loop_iteration(method, data, loop_number)
   - if loop_number = 0
     - make data/iterations_folder
   - if loop_number > 0
-    - copy `CollectedData.csv` (keep track)
     - run `select_frames(method)` on data.
-      - output `iteration_#/'selected_frames/$method.csv'` rank on each frame.
-      - call function `select_frames('all_methods')`: picks N frames from all methods.
-      - make folder labeled_videos/frames (queryuser*)
-      - make `CollectedData.csv` inside of iteration folder and move to data/
+      - [x] output `iteration_#/'selected_frames_$method.csv'` which has the selected frames given a method
+      - [ ] call function `select_frames('all_methods')`: picks N frames from all methods 
+  - output is `new_train_data.csv`
+```
 
-- Launch experiment:
+
+Launch experiment:
 - [x] Step 0: start with folder with videos: `data/` 
   - split labeled data and unlabeled data into train/val/test + test_across_loop_iterations.
     - `Collected.csv` labeled: ibl1/Collected.csv 1 video with 1k labels (to train model)
     - `Collected_new.csv` unlabeled-videos: ibl1_corruption_level (to eval model, used to select frames)
     - `Collected_test_loop.csv`test_across_loop_iterations: not in the bucket to be labeled (ibl1_gaussian_noise_5, ibl1_brightness_5) (to compare across active_loop iterations) 
-- [x] Step 1: Select initial frames to label
-  - loop_iteration(method='random', data=unlabeled videos)
+- [x] Step 1: Select frames to label
+  - loop_iteration(method='random', data, loop_number)
 - [x] Step 2: Train a model:
-  - this produces an outputs/#/#/ with `predictions.csv`, `predictions_new.csv`, `predictions_test_loop.csv`checkpoints,etc.
-  - `CollectedData.csv`  = loop_iteration_#(method='random', data=`predictions.csv`)
-  - GO back to step 1.
-
+  - run `train_hydra.py `
+    - this produces an outputs/#/#/ with `predictions.csv`, `predictions_new.csv`, `predictions_test_loop.csv`checkpoints,etc.
+- [x] Step 3: select frames for active loop 
+  - `random_CollectedData.csv`  = loop_iteration_#(method='random', data=`predictions.csv`)
+    - Go back to step 1. train_frames, where data.csv_file points to new `random_CollectedData.csv` file
