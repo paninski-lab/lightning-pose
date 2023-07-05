@@ -1,6 +1,7 @@
 from functools import partial
-from segment_anything.modeling import ImageEncoderViT
+
 import torch
+from segment_anything.modeling import ImageEncoderViT
 from typeguard import typechecked
 
 

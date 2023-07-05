@@ -4,9 +4,11 @@ import numpy as np
 import pytest
 import torch
 
-from lightning_pose.utils.pca import KeypointPCA
 # from pytorch_lightning.trainer.supporters import CombinedLoader
 from lightning.pytorch.utilities import CombinedLoader
+
+from lightning_pose.utils.pca import KeypointPCA
+
 
 def check_lists_equal(list_1, list_2):
     return len(list_1) == len(list_2) and sorted(list_1) == sorted(list_2)
@@ -185,9 +187,9 @@ def test_singleview_format_and_loss(cfg, base_data_module_combined):
 def test_component_chooser():
 
     # create fake data for PCA
+    import numpy as np
     from sklearn.datasets import load_diabetes
     from sklearn.decomposition import PCA
-    import numpy as np
 
     diabetes = load_diabetes()
     data_for_pca = diabetes.data

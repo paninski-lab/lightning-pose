@@ -1,18 +1,22 @@
 """Dataset objects store images, labels, and functions for manipulation."""
 
+import os
+from typing import Callable, List, Literal, Optional
+
 import imgaug.augmenters as iaa
 import numpy as np
-import os
 import pandas as pd
-from PIL import Image
 import torch
-from torchvision import transforms
-from typing import Callable, List, Literal, Optional
+from PIL import Image
 from torchtyping import TensorType
+from torchvision import transforms
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
-from lightning_pose.data.utils import generate_heatmaps
-from lightning_pose.data.utils import BaseLabeledExampleDict, HeatmapLabeledExampleDict
+from lightning_pose.data.utils import (
+    BaseLabeledExampleDict,
+    HeatmapLabeledExampleDict,
+    generate_heatmaps,
+)
 from lightning_pose.utils.io import get_keypoint_names
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"

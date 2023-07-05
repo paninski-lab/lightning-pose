@@ -1,18 +1,19 @@
 """Models that produce heatmaps of keypoints from images."""
 
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, Union
+
+import torch
 from kornia.geometry.subpix import spatial_softmax2d
 from omegaconf import DictConfig
-import torch
 from torch import nn
 from torchtyping import TensorType
 from typeguard import typechecked
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, Union
 from typing_extensions import Literal
 
 from lightning_pose.data.utils import (
-    undo_affine_transform,
     HeatmapLabeledBatchDict,
     UnlabeledBatchDict,
+    undo_affine_transform,
 )
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.models import ALLOWED_BACKBONES

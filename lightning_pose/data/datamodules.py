@@ -1,22 +1,22 @@
 """Data modules split a dataset into train, val, and test modules."""
 
-from nvidia.dali.plugin.pytorch import LastBatchPolicy
 import os
-from omegaconf import DictConfig
+from typing import Dict, List, Literal, Optional, Tuple, TypedDict, Union
+
 import lightning.pytorch as pl
 import torch
+from lightning.pytorch.utilities import CombinedLoader
+from nvidia.dali.plugin.pytorch import LastBatchPolicy
+from omegaconf import DictConfig
 from torch.utils.data import DataLoader, random_split
-from typing import Dict, List, Literal, Optional, Tuple, Union, TypedDict
 
-from lightning_pose.data.dali import PrepareDALI, LitDaliWrapper
+from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
 from lightning_pose.data.utils import (
-    split_sizes_from_probabilities,
-    compute_num_train_frames,
     SemiSupervisedDataLoaderDict,
+    compute_num_train_frames,
+    split_sizes_from_probabilities,
 )
 from lightning_pose.utils.io import check_video_paths
-from lightning.pytorch.utilities import CombinedLoader
-
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 

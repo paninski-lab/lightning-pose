@@ -19,22 +19,20 @@ The general flow of each loss class is as follows:
 
 """
 
-from kornia.losses import js_div_loss_2d, kl_div_loss_2d
-from omegaconf import ListConfig
+import warnings
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, Union
+
 import lightning.pytorch as pl
 import torch
+from kornia.losses import js_div_loss_2d, kl_div_loss_2d
+from omegaconf import ListConfig
 from torch.nn import functional as F
 from torchtyping import TensorType
 from typeguard import typechecked
-from typing import Any, Callable, Dict, Tuple, List, Literal, Optional, Union, Type
-import warnings
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import generate_heatmaps
-from lightning_pose.utils.pca import (
-    KeypointPCA,
-    format_multiview_data_for_pca,
-)
+from lightning_pose.utils.pca import KeypointPCA, format_multiview_data_for_pca
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 

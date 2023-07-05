@@ -1,18 +1,19 @@
 """Models that produce heatmaps of keypoints from images."""
 
-from kornia.filters import filter2d
-from kornia.geometry.subpix import spatial_softmax2d, spatial_expectation2d
-from kornia.geometry.transform.pyramid import _get_pyramid_gaussian_kernel
-import numpy as np
-from omegaconf import DictConfig
-import torch
-from torch import nn
-from torchtyping import TensorType
-from typeguard import typechecked
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, Union
-from typing_extensions import Literal
+
+import numpy as np
+import torch
+from kornia.filters import filter2d
+from kornia.geometry.subpix import spatial_expectation2d, spatial_softmax2d
+from kornia.geometry.transform.pyramid import _get_pyramid_gaussian_kernel
+from omegaconf import DictConfig
+from torch import nn
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau
+from torchtyping import TensorType
+from typeguard import typechecked
+from typing_extensions import Literal
 
 from lightning_pose.data.utils import (
     BaseLabeledBatchDict,

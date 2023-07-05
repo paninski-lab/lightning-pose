@@ -1,14 +1,15 @@
 """Helper functions to build pipeline components from config dictionary."""
 
-import imgaug.augmenters as iaa
-from moviepy.editor import VideoFileClip
-import numpy as np
-from omegaconf import DictConfig, OmegaConf
 import os
-import pandas as pd
-import lightning.pytorch as pl
-from typeguard import typechecked
 from typing import Dict, Optional, Union
+
+import imgaug.augmenters as iaa
+import lightning.pytorch as pl
+import numpy as np
+import pandas as pd
+from moviepy.editor import VideoFileClip
+from omegaconf import DictConfig, OmegaConf
+from typeguard import typechecked
 
 from lightning_pose.callbacks import AnnealWeight
 from lightning_pose.data.dali import PrepareDALI
@@ -17,34 +18,31 @@ from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
 from lightning_pose.data.utils import compute_num_train_frames, split_sizes_from_probabilities
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.metrics import (
+    pca_multiview_reprojection_error,
+    pca_singleview_reprojection_error,
     pixel_error,
     temporal_norm,
-    pca_singleview_reprojection_error,
-    pca_multiview_reprojection_error,
+)
+from lightning_pose.models.heatmap_tracker import HeatmapTracker, SemiSupervisedHeatmapTracker
+from lightning_pose.models.heatmap_tracker_mhcrnn import (
+    HeatmapTrackerMHCRNN,
+    SemiSupervisedHeatmapTrackerMHCRNN,
 )
 from lightning_pose.models.regression_tracker import (
     RegressionTracker,
     SemiSupervisedRegressionTracker,
 )
-from lightning_pose.models.heatmap_tracker import (
-    HeatmapTracker,
-    SemiSupervisedHeatmapTracker,
-)
-from lightning_pose.models.heatmap_tracker_mhcrnn import (
-    HeatmapTrackerMHCRNN,
-    SemiSupervisedHeatmapTrackerMHCRNN,
-)
 from lightning_pose.utils.io import (
     check_if_semi_supervised,
     get_keypoint_names,
-    return_absolute_path,
     return_absolute_data_paths,
+    return_absolute_path,
 )
 from lightning_pose.utils.pca import KeypointPCA
 from lightning_pose.utils.predictions import (
-    load_model_from_checkpoint,
-    create_labeled_video,
     PredictionHandler,
+    create_labeled_video,
+    load_model_from_checkpoint,
     predict_single_video,
 )
 
@@ -195,8 +193,9 @@ def get_dataset(
     cfg: DictConfig, data_dir: str, imgaug_transform: iaa.Sequential
 ) -> Union[BaseTrackingDataset, HeatmapDataset]:
     """Create a dataset that contains labeled data."""
-    from PIL import Image
     import os
+
+    from PIL import Image
 
     if cfg.model.model_type == "regression":
         dataset = BaseTrackingDataset(

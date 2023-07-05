@@ -1,7 +1,8 @@
-import numpy as np
-from omegaconf import DictConfig
-import torch
 from typing import Optional, Union
+
+import numpy as np
+import torch
+from omegaconf import DictConfig
 from typeguard import typechecked
 
 from lightning_pose.utils.pca import KeypointPCA

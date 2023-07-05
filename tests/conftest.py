@@ -6,25 +6,26 @@ construction relies heavily on the utility functions provided in `utils/scripts.
 """
 
 import copy
-import imgaug.augmenters as iaa
-from omegaconf import ListConfig, OmegaConf
 import os
-import pytest
-import lightning.pytorch as pl
 import shutil
-import torch
 from typing import Callable, List, Optional
+
+import imgaug.augmenters as iaa
+import lightning.pytorch as pl
+import pytest
+import torch
 import yaml
+from omegaconf import ListConfig, OmegaConf
 
 from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
 from lightning_pose.utils.io import get_videos_in_dir
 from lightning_pose.utils.scripts import (
-    get_imgaug_transform,
-    get_dataset,
-    get_data_module,
     get_callbacks,
+    get_data_module,
+    get_dataset,
+    get_imgaug_transform,
 )
 
 TOY_DATA_ROOT_DIR = "data/mirror-mouse-example"

@@ -1,6 +1,7 @@
 """Test the initialization and training of heatmap models."""
 
 import copy
+
 import pytest
 
 from lightning_pose.utils.tests import run_model_test

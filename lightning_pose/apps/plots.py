@@ -1,11 +1,11 @@
 """A collection of visualizations for various pose estimation performance metrics."""
 
-from matplotlib import pyplot as plt
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import seaborn as sns
+from matplotlib import pyplot as plt
+from plotly.subplots import make_subplots
 
 pix_error_key = "pixel error"
 conf_error_key = "confidence"

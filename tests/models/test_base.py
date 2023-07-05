@@ -7,7 +7,6 @@ import torchvision
 
 from lightning_pose.models.base import BaseFeatureExtractor
 
-
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 BATCH_SIZE = 2

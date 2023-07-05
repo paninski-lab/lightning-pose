@@ -1,14 +1,15 @@
 """Dataset/data module utilities."""
 
+from typing import Any, Dict, List, Literal, Optional, Tuple, TypedDict, Union
+
 import imgaug.augmenters as iaa
-from kornia import image_to_tensor
+import lightning.pytorch as pl
 import numpy as np
-from nvidia.dali.plugin.pytorch import DALIGenericIterator
 import torch
+from kornia import image_to_tensor
+from nvidia.dali.plugin.pytorch import DALIGenericIterator
 from torchtyping import TensorType
 from typeguard import typechecked
-from typing import List, Literal, Optional, Tuple, Union, Dict, Any, TypedDict
-import lightning.pytorch as pl
 
 
 # below are a bunch of classes that streamline data typechecking

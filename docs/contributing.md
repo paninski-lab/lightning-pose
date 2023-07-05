@@ -37,4 +37,7 @@ are run from the command line in the Lightning Pose repo:
 flake8 .
 ```
 
-* `black`: reformats code into PEP standards
+* `isort`: automatically sorts import statements
+```bash
+isort .
+```

@@ -8,18 +8,29 @@ streamlit run video_diagnostics.py -- --model_dir "/home/zeus/content/Pose-app/d
 """
 
 import argparse
-import os
 import copy
-import pandas as pd
-from pathlib import Path
-import streamlit as st
+import os
 from collections import defaultdict
+from pathlib import Path
 
-from lightning_pose.apps.utils import build_precomputed_metrics_df, get_col_names, concat_dfs
-from lightning_pose.apps.utils import update_vid_metric_files_list, get_all_videos
-from lightning_pose.apps.utils import get_model_folders, get_model_folders_vis
-from lightning_pose.apps.plots import get_y_label
-from lightning_pose.apps.plots import make_seaborn_catplot, make_plotly_catplot, plot_precomputed_traces
+import pandas as pd
+import streamlit as st
+
+from lightning_pose.apps.plots import (
+    get_y_label,
+    make_plotly_catplot,
+    make_seaborn_catplot,
+    plot_precomputed_traces,
+)
+from lightning_pose.apps.utils import (
+    build_precomputed_metrics_df,
+    concat_dfs,
+    get_all_videos,
+    get_col_names,
+    get_model_folders,
+    get_model_folders_vis,
+    update_vid_metric_files_list,
+)
 
 catplot_options = ["boxen", "box", "violin", "strip", "hist"]
 scale_options = ["linear", "log"]

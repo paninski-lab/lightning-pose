@@ -1,10 +1,11 @@
 """Test data utils functionality."""
 
 import copy
-from kornia.geometry.subpix import spatial_softmax2d, spatial_expectation2d
-from kornia.geometry.transform import pyrup
+
 import pytest
 import torch
+from kornia.geometry.subpix import spatial_expectation2d, spatial_softmax2d
+from kornia.geometry.transform import pyrup
 
 from lightning_pose.data.utils import generate_heatmaps
 
@@ -85,8 +86,9 @@ def test_clean_any_nans():
 
 
 def test_count_frames(video_list):
-    from lightning_pose.data.utils import count_frames
     import cv2
+
+    from lightning_pose.data.utils import count_frames
 
     num_frames = 0
     for video_file in video_list:
@@ -173,7 +175,7 @@ def test_generate_heatmaps(cfg, heatmap_dataset):
 
 def test_generate_uniform_heatmaps(cfg, toy_data_dir):
 
-    from lightning_pose.utils.scripts import get_imgaug_transform, get_dataset
+    from lightning_pose.utils.scripts import get_dataset, get_imgaug_transform
 
     # update config
     cfg_tmp = copy.deepcopy(cfg)
@@ -230,7 +232,7 @@ def test_generate_uniform_heatmaps(cfg, toy_data_dir):
 
 def test_generate_heatmaps_weird_shape(cfg, toy_data_dir):
 
-    from lightning_pose.utils.scripts import get_imgaug_transform, get_dataset
+    from lightning_pose.utils.scripts import get_dataset, get_imgaug_transform
 
     img_shape = (384, 256)
 

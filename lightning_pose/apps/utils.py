@@ -1,12 +1,13 @@
 """Utility functions for streamlit apps."""
 
+import os
+from collections import defaultdict
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
 import numpy as np
 import pandas as pd
-from pathlib import Path
 import streamlit as st
-import os
-from typing import List, Dict, Tuple, Optional
-from collections import defaultdict
 
 pix_error_key = "pixel error"
 conf_error_key = "confidence"

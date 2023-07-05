@@ -1,6 +1,6 @@
-from lightning.pytorch.callbacks import Callback
 import lightning.pytorch as pl
 import torch
+from lightning.pytorch.callbacks import Callback
 
 
 class AnnealWeight(Callback):

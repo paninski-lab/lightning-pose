@@ -1,9 +1,10 @@
 """High-level loss class that orchestrates the individual losses."""
 
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
+
 import lightning.pytorch as pl
 import torch
 from torchtyping import TensorType
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.losses.losses import get_loss_classes

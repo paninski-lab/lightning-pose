@@ -1,34 +1,30 @@
 """Functions for predicting keypoints on labeled datasets and unlabeled videos."""
 
+import os
+import time
+from typing import Dict, List, Literal, Optional, Tuple, Type, Union
+
+import lightning.pytorch as pl
 import matplotlib.pyplot as plt
 import numpy as np
-from omegaconf import DictConfig, OmegaConf
-import os
 import pandas as pd
-import lightning.pytorch as pl
-from pytorch_lightning import LightningModule
-from pytorch_lightning import LightningDataModule
-from skimage.draw import disk
-import time
 import torch
+from omegaconf import DictConfig, OmegaConf
+from pytorch_lightning import LightningDataModule, LightningModule
+from skimage.draw import disk
 from torchtyping import TensorType
 from tqdm import tqdm
 from typeguard import typechecked
-from typing import Dict, List, Literal, Optional, Tuple, Type, Union
 
 from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import count_frames
-from lightning_pose.models.heatmap_tracker import (
-    HeatmapTracker,
-    SemiSupervisedHeatmapTracker,
-)
+from lightning_pose.models.heatmap_tracker import HeatmapTracker, SemiSupervisedHeatmapTracker
 from lightning_pose.models.regression_tracker import (
     RegressionTracker,
     SemiSupervisedRegressionTracker,
 )
 from lightning_pose.utils import pretty_print_str
-
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -578,11 +574,15 @@ def get_model_class(map_type: str, semi_supervised: bool) -> LightningModule:
             )
     else:
         if map_type == "regression":
-            from lightning_pose.models.regression_tracker import SemiSupervisedRegressionTracker as Model
+            from lightning_pose.models.regression_tracker import (
+                SemiSupervisedRegressionTracker as Model,
+            )
         elif map_type == "heatmap":
             from lightning_pose.models.heatmap_tracker import SemiSupervisedHeatmapTracker as Model
         elif map_type == "heatmap_mhcrnn":
-            from lightning_pose.models.heatmap_tracker_mhcrnn import SemiSupervisedHeatmapTrackerMHCRNN as Model
+            from lightning_pose.models.heatmap_tracker_mhcrnn import (
+                SemiSupervisedHeatmapTrackerMHCRNN as Model,
+            )
         else:
             raise NotImplementedError(
                 "%s is an invalid model_type for a semi-supervised model" % map_type
@@ -616,10 +616,7 @@ def load_model_from_checkpoint(
         model as a Lightning Module
 
     """
-    from lightning_pose.utils.io import (
-        check_if_semi_supervised,
-        return_absolute_data_paths,
-    )
+    from lightning_pose.utils.io import check_if_semi_supervised, return_absolute_data_paths
     from lightning_pose.utils.scripts import (
         get_data_module,
         get_dataset,

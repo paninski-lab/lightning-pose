@@ -8,20 +8,29 @@ streamlit run labeled_frame_diagnostics.py -- --model_dir "/home/zeus/content/Po
 
 import argparse
 import copy
-import numpy as np
-import streamlit as st
-import seaborn as sns
-import pandas as pd
-from pathlib import Path
-import numpy as np
-from collections import defaultdict
 import os
+from collections import defaultdict
+from pathlib import Path
 
-from lightning_pose.apps.utils import build_precomputed_metrics_df, get_df_box, get_df_scatter
-from lightning_pose.apps.utils import update_labeled_file_list
-from lightning_pose.apps.utils import get_model_folders, get_model_folders_vis 
-from lightning_pose.apps.plots import make_seaborn_catplot, make_plotly_scatterplot, get_y_label
-from lightning_pose.apps.plots import make_plotly_catplot
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import streamlit as st
+
+from lightning_pose.apps.plots import (
+    get_y_label,
+    make_plotly_catplot,
+    make_plotly_scatterplot,
+    make_seaborn_catplot,
+)
+from lightning_pose.apps.utils import (
+    build_precomputed_metrics_df,
+    get_df_box,
+    get_df_scatter,
+    get_model_folders,
+    get_model_folders_vis,
+    update_labeled_file_list,
+)
 
 # catplot_options = ["boxen", "box", "bar", "violin", "strip"]  # for seaborn
 catplot_options = ["box", "violin", "strip"]  # for plotly

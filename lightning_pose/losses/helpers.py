@@ -1,9 +1,10 @@
 """Helper functions for losses."""
 
-import torch
+from typing import Dict, List, Literal, Tuple, Union
+
 import numpy as np
+import torch
 from typeguard import typechecked
-from typing import Tuple, Union, Dict, List, Literal
 
 
 class EmpiricalEpsilon:

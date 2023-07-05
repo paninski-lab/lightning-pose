@@ -1,8 +1,8 @@
 """Test dali dataloading functionality."""
 
-from nvidia.dali.plugin.pytorch import LastBatchPolicy
 import pytest
 import torch
+from nvidia.dali.plugin.pytorch import LastBatchPolicy
 
 from lightning_pose.data.dali import video_pipe
 
@@ -36,8 +36,9 @@ def test_video_pipe(video_list):
 
 
 def test_PrepareDALI(cfg, video_list):
-    from lightning_pose.data.dali import PrepareDALI
     import os
+
+    from lightning_pose.data.dali import PrepareDALI
 
     filenames = video_list
     assert os.path.isfile(filenames[0])

@@ -1,18 +1,17 @@
 """Data pipelines based on efficient video reading by nvidia dali package."""
 
-from nvidia.dali import pipeline_def
-import nvidia.dali.fn as fn
-from nvidia.dali.plugin.pytorch import LastBatchPolicy
-from nvidia.dali.plugin.pytorch import DALIGenericIterator
-import nvidia.dali.types as types
-from omegaconf import DictConfig
-import torch
-import numpy as np
-from typing import List, Dict, Optional, Union, Literal, Tuple
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
+import numpy as np
+import nvidia.dali.fn as fn
+import nvidia.dali.types as types
+import torch
+from nvidia.dali import pipeline_def
+from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
+from omegaconf import DictConfig
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
-from lightning_pose.data.utils import count_frames, UnlabeledBatchDict
+from lightning_pose.data.utils import UnlabeledBatchDict, count_frames
 
 _DALI_DEVICE = "gpu" if torch.cuda.is_available() else "cpu"
 
