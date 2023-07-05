@@ -1,16 +1,16 @@
 """Visualize predictions of models in a fiftyone dashboard."""
 
+import fiftyone as fo
 import hydra
 from omegaconf import DictConfig
+
+from lightning_pose.utils import pretty_print_str
 from lightning_pose.utils.fiftyone import (
+    FiftyOneFactory,
     FiftyOneImagePlotter,
     FiftyOneKeypointVideoPlotter,
     check_dataset,
-    FiftyOneFactory,
 )
-import fiftyone as fo
-
-from lightning_pose.utils import pretty_print_str
 
 
 @hydra.main(config_path="configs", config_name="config_mirror-mouse-example")

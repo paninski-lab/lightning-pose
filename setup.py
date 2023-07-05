@@ -1,7 +1,8 @@
-#:!/usr/bin/env python
-from setuptools import find_packages, setup
-import subprocess
+
 import re
+import subprocess
+
+from setuptools import find_packages, setup
 
 VERSION = "0.0.2"  # was previously None
 

@@ -1,4 +1,5 @@
 import gc
+
 import torch
 
 from lightning_pose.utils.scripts import get_loss_factories, get_model

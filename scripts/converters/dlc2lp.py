@@ -1,10 +1,10 @@
 import argparse
 import glob
-import numpy as np
 import os
-import pandas as pd
 import shutil
 
+import numpy as np
+import pandas as pd
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dlc_dir", type=str)

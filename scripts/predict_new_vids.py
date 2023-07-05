@@ -1,11 +1,12 @@
 """Run inference on a list of models and videos."""
 
-import hydra
-from moviepy.editor import VideoFileClip
-import numpy as np
-from omegaconf import DictConfig, OmegaConf
 import os
+
+import hydra
 import lightning.pytorch as pl
+import numpy as np
+from moviepy.editor import VideoFileClip
+from omegaconf import DictConfig, OmegaConf
 from typeguard import typechecked
 
 from lightning_pose.utils import get_gpu_list_from_cfg
@@ -13,12 +14,16 @@ from lightning_pose.utils.io import (
     check_if_semi_supervised,
     ckpt_path_from_base_path,
     get_videos_in_dir,
-    return_absolute_path,
     return_absolute_data_paths,
+    return_absolute_path,
 )
 from lightning_pose.utils.predictions import load_model_from_checkpoint
-from lightning_pose.utils.scripts import get_imgaug_transform, get_dataset, get_data_module
-from lightning_pose.utils.scripts import export_predictions_and_labeled_video
+from lightning_pose.utils.scripts import (
+    export_predictions_and_labeled_video,
+    get_data_module,
+    get_dataset,
+    get_imgaug_transform,
+)
 
 """ this script will get two imporant args. model to use and video folder to process.
 hydra will orchestrate both. advanatages -- in the future we could parallelize to new machines.

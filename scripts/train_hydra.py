@@ -1,11 +1,12 @@
 """Example model training script."""
 
-import hydra
-from omegaconf import DictConfig
 import os
-import lightning.pytorch as pl
 
-from lightning_pose.utils import pretty_print_str, pretty_print_cfg
+import hydra
+import lightning.pytorch as pl
+from omegaconf import DictConfig
+
+from lightning_pose.utils import pretty_print_cfg, pretty_print_str
 from lightning_pose.utils.io import (
     check_video_paths,
     return_absolute_data_paths,
@@ -13,15 +14,15 @@ from lightning_pose.utils.io import (
 )
 from lightning_pose.utils.predictions import predict_dataset
 from lightning_pose.utils.scripts import (
+    calculate_train_batches,
+    compute_metrics,
     export_predictions_and_labeled_video,
+    get_callbacks,
     get_data_module,
     get_dataset,
     get_imgaug_transform,
     get_loss_factories,
     get_model,
-    get_callbacks,
-    calculate_train_batches,
-    compute_metrics,
 )
 
 

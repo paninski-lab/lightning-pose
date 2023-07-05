@@ -1,9 +1,10 @@
 """Test datamodule functionality."""
 
 import pytest
+import torch
+
 # from pytorch_lightning.trainer.supporters import CombinedLoader
 from lightning.pytorch.utilities import CombinedLoader
-import torch
 
 
 def test_base_datamodule(cfg, base_data_module):

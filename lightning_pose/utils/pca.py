@@ -1,16 +1,17 @@
 """PCA class to assist with computing PCA losses."""
 
+import warnings
+from typing import Any, Dict, List, Literal, Optional, Union
+
 import numpy as np
-from omegaconf import DictConfig, ListConfig
-from sklearn.decomposition import PCA
 import torch
+from omegaconf import ListConfig
+from sklearn.decomposition import PCA
 from torchtyping import TensorType
 from typeguard import typechecked
-from typing import List, Optional, Union, Literal, Dict, Any
-import warnings
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
-from lightning_pose.data.utils import clean_any_nans, DataExtractor
+from lightning_pose.data.utils import DataExtractor, clean_any_nans
 from lightning_pose.losses.helpers import EmpiricalEpsilon, convert_dict_values_to_tensors
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -139,9 +140,9 @@ class KeypointPCA(object):
             self._n_components_kept = 3
             if self._n_components_kept != self.components_to_keep:
                 warnings.warn(
-                    "for {} loss, you specified {} components_to_keep, but we will instead keep {} components".format(
-                        self.loss_type, self.components_to_keep, self._n_components_kept
-                    )
+                    f"for {self.loss_type} loss, you specified {self.components_to_keep} "
+                    f"components_to_keep, but we will instead keep {self._n_components_kept} "
+                    f"components"
                 )
         elif self.loss_type == "pca_singleview":
             if self.pca_object is not None:
@@ -263,17 +264,15 @@ class ComponentChooser:
         if type(self.components_to_keep) is int:
             if self.components_to_keep > self.fitted_pca_object.n_components_:
                 raise ValueError(
-                    "components_to_keep was set to {}, exceeding the maximum value of {} observation dims".format(
-                        self.components_to_keep, self.fitted_pca_object.n_components_
-                    )
+                    f"components_to_keep was set to {self.components_to_keep}, exceeding the "
+                    f"maximum value of {self.fitted_pca_object.n_components_} observation dims"
                 )
         # if float, ensure a proportion between 0.0-1.0
         elif type(self.components_to_keep) is float:
             if self.components_to_keep < 0.0 or self.components_to_keep > 1.0:
                 raise ValueError(
-                    "components_to_keep was set to {} while it has to be between 0.0 and 1.0".format(
-                        self.components_to_keep
-                    )
+                    f"components_to_keep was set to {self.components_to_keep} while it has to be "
+                    f"between 0.0 and 1.0"
                 )
 
     def _find_first_threshold_cross(self) -> int:

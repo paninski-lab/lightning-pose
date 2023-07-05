@@ -8,25 +8,30 @@ streamlit run video_diagnostics.py -- --model_dir "/home/zeus/content/Pose-app/d
 """
 
 import argparse
-import os
 import copy
-import pandas as pd
-from pathlib import Path
-import streamlit as st
+import os
 from collections import defaultdict
+from pathlib import Path
 
-from lightning_pose.apps.utils import build_precomputed_metrics_df, get_col_names, concat_dfs
-from lightning_pose.apps.utils import update_vid_metric_files_list, get_all_videos
-from lightning_pose.apps.utils import get_model_folders, get_model_folders_vis
-from lightning_pose.apps.plots import get_y_label
-from lightning_pose.apps.plots import make_seaborn_catplot, make_plotly_catplot, plot_precomputed_traces
+import pandas as pd
+import streamlit as st
+
+from lightning_pose.apps.plots import get_y_label, make_plotly_catplot, plot_precomputed_traces
+from lightning_pose.apps.utils import (
+    build_precomputed_metrics_df,
+    concat_dfs,
+    get_all_videos,
+    get_col_names,
+    get_model_folders,
+    get_model_folders_vis,
+    update_vid_metric_files_list,
+)
 
 catplot_options = ["boxen", "box", "violin", "strip", "hist"]
 scale_options = ["linear", "log"]
 
 
 def run():
-
     args = parser.parse_args()
 
     st.title("Video Diagnostics")
@@ -35,22 +40,28 @@ def run():
     if args.make_dir:
         os.makedirs(args.model_dir, exist_ok=True)
     if not os.path.isdir(args.model_dir):
-        st.text(f"--model_dir {args.model_dir} does not exist."
-                f"\nPlease check the path and try again.")
+        st.text(
+            f"--model_dir {args.model_dir} does not exist."
+            f"\nPlease check the path and try again."
+        )
 
     st.sidebar.header("Data Settings")
 
     # ----- selecting which models to use -----
     model_folders = get_model_folders(args.model_dir)
-    
+
     # get the last two levels of each path to be presented to user
     model_folders_vis = get_model_folders_vis(model_folders)
 
-    selected_models_vis = st.sidebar.multiselect("Select models", model_folders_vis, default=None)
+    selected_models_vis = st.sidebar.multiselect(
+        "Select models", model_folders_vis, default=None
+    )
 
     # append this to full path
-    selected_models = ["/" + os.path.join(args.model_dir, f) for f in selected_models_vis]
-    
+    selected_models = [
+        "/" + os.path.join(args.model_dir, f) for f in selected_models_vis
+    ]
+
     # ----- selecting videos to analyze -----
     all_videos_: list = get_all_videos(selected_models)
 
@@ -58,12 +69,12 @@ def run():
     video_to_plot = st.sidebar.selectbox("Select a video:", [*all_videos_], key="video")
 
     prediction_files = update_vid_metric_files_list(
-        video=video_to_plot, model_preds_folders=selected_models)
-    
+        video=video_to_plot, model_preds_folders=selected_models
+    )
+
     model_names = copy.copy(selected_models_vis)
 
     if len(prediction_files) > 0:  # otherwise don't try to proceed
-
         # ---------------------------------------------------
         # load data
         # ---------------------------------------------------
@@ -76,26 +87,34 @@ def run():
                 model_folder = selected_models[p]
 
             for model_pred_file in model_pred_files:
-                model_pred_file_path = os.path.join(model_folder, 'video_preds', model_pred_file)
+                model_pred_file_path = os.path.join(
+                    model_folder, "video_preds", model_pred_file
+                )
                 if not isinstance(model_pred_file, Path):
                     model_pred_file.seek(0)  # reset buffer after reading
-                if 'pca' in str(model_pred_file) \
-                        or 'temporal' in str(model_pred_file) \
-                        or 'pixel' in str(model_pred_file):
+                if (
+                    "pca" in str(model_pred_file)
+                    or "temporal" in str(model_pred_file)
+                    or "pixel" in str(model_pred_file)
+                ):
                     dframe = pd.read_csv(model_pred_file_path, index_col=None)
                     dframes_metrics[model_name][str(model_pred_file)] = dframe
                 else:
-                    dframe = pd.read_csv(model_pred_file_path, header=[1, 2], index_col=0)
+                    dframe = pd.read_csv(
+                        model_pred_file_path, header=[1, 2], index_col=0
+                    )
                     dframes_traces[model_name] = dframe
-                    dframes_metrics[model_name]['confidence'] = dframe
-                data_types = dframe.iloc[:, -1].unique()
+                    dframes_metrics[model_name]["confidence"] = dframe
+                # data_types = dframe.iloc[:, -1].unique()
 
         # edit model names if desired, to simplify plotting
         st.sidebar.write("Model display names (editable)")
         new_names = []
         og_names = list(dframes_metrics.keys())
         for name in og_names:
-            new_name = st.sidebar.text_input(label="name", value=name, label_visibility="hidden")
+            new_name = st.sidebar.text_input(
+                label="name", value=name, label_visibility="hidden"
+            )
             new_names.append(new_name)
 
         # change dframes key names to new ones
@@ -110,7 +129,8 @@ def run():
         # concat dataframes, collapsing hierarchy and making df fatter.
         df_concat, keypoint_names = concat_dfs(dframes_traces)
         df_metrics = build_precomputed_metrics_df(
-            dframes=dframes_metrics, keypoint_names=keypoint_names)
+            dframes=dframes_metrics, keypoint_names=keypoint_names
+        )
         metric_options = list(df_metrics.keys())
 
         # ---------------------------------------------------
@@ -128,34 +148,50 @@ def run():
             plot_type = st.selectbox("Plot style:", catplot_options, key="plot_type")
 
         with col02:
-            plot_scale = st.radio("Y-axis scale", scale_options, key="plot_scale", horizontal=True)
+            plot_scale = st.radio(
+                "Y-axis scale", scale_options, key="plot_scale", horizontal=True
+            )
 
         x_label = "Model Name"
         y_label = get_y_label(metric_to_plot)
         log_y = False if plot_scale == "linear" else True
-        
+
         # DB: commented out seaborn for visual coherence
         # fig_cat = make_seaborn_catplot(
-        #     x="model_name", y="mean", data=df_metrics[metric_to_plot], log_y=log_y, x_label=x_label,
-        #     y_label=y_label, title="Average over all keypoints", plot_type=plot_type)
+        #     x="model_name", y="mean", data=df_metrics[metric_to_plot], log_y=log_y,
+        #     x_label=x_label, y_label=y_label, title="Average over all keypoints",
+        #     plot_type=plot_type
+        # )
         # st.pyplot(fig_cat)
 
         # select keypoint to plot
         keypoint_to_plot = st.selectbox(
-            "Select a keypoint:", pd.Series([*keypoint_names, "mean"]), key="keypoint_to_plot",
+            "Select a keypoint:",
+            pd.Series([*keypoint_names, "mean"]),
+            key="keypoint_to_plot",
         )
-        
+
         if plot_type != "hist":
             # show plot per keypoint
             plotly_flex_fig = make_plotly_catplot(
-                x="model_name", y=keypoint_to_plot, data=df_metrics[metric_to_plot],
-                x_label=x_label, y_label=y_label, title=keypoint_to_plot, plot_type=plot_type,
-                log_y=log_y
+                x="model_name",
+                y=keypoint_to_plot,
+                data=df_metrics[metric_to_plot],
+                x_label=x_label,
+                y_label=y_label,
+                title=keypoint_to_plot,
+                plot_type=plot_type,
+                log_y=log_y,
             )
         else:
             plotly_flex_fig = make_plotly_catplot(
-                x=keypoint_to_plot, y=None, data=df_metrics[metric_to_plot],
-                x_label=y_label, y_label="Frame count", title=keypoint_to_plot, plot_type="hist",
+                x=keypoint_to_plot,
+                y=None,
+                data=df_metrics[metric_to_plot],
+                x_label=y_label,
+                y_label="Frame count",
+                title=keypoint_to_plot,
+                plot_type="hist",
             )
         st.plotly_chart(plotly_flex_fig)
 
@@ -168,8 +204,9 @@ def run():
 
         with col10:
             models = st.multiselect(
-                "Models:", 
-                pd.Series(list(dframes_metrics.keys())), default=list(dframes_metrics.keys())
+                "Models:",
+                pd.Series(list(dframes_metrics.keys())),
+                default=list(dframes_metrics.keys()),
             )
 
         with col11:
@@ -181,10 +218,9 @@ def run():
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--model_dir', type=str, default=[])
-    parser.add_argument('--make_dir', action='store_true', default=False)
+    parser.add_argument("--model_dir", type=str, default=[])
+    parser.add_argument("--make_dir", action="store_true", default=False)
 
     run()

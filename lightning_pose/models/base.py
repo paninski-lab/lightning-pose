@@ -1,20 +1,21 @@
 """Base class for backbone that acts as a feature extractor."""
 
-from omegaconf import DictConfig
-from lightning.pytorch import LightningModule
+from typing import Dict, Literal, Optional, Union
+
 import torch
+from lightning.pytorch import LightningModule
+from omegaconf import DictConfig
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from torchtyping import TensorType
 from typeguard import typechecked
-from typing import Dict, Literal, Optional, Union
 
 from lightning_pose.data.utils import (
     BaseLabeledBatchDict,
     HeatmapLabeledBatchDict,
-    UnlabeledBatchDict,
     SemiSupervisedBatchDict,
     SemiSupervisedHeatmapBatchDict,
+    UnlabeledBatchDict,
 )
 from lightning_pose.models import ALLOWED_BACKBONES
 

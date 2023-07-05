@@ -1,21 +1,17 @@
 """Models that produce heatmaps of keypoints from images."""
 
-from kornia.filters import filter2d
-from kornia.geometry.subpix import spatial_softmax2d, spatial_expectation2d
-from kornia.geometry.transform.pyramid import _get_pyramid_gaussian_kernel
-import numpy as np
-from omegaconf import DictConfig
+from typing import Optional, Tuple, Union
+
 import torch
+from kornia.filters import filter2d
+from kornia.geometry.subpix import spatial_expectation2d, spatial_softmax2d
+from kornia.geometry.transform.pyramid import _get_pyramid_gaussian_kernel
+from omegaconf import DictConfig
 from torch import nn
 from torchtyping import TensorType
-from typeguard import typechecked
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, Union
 from typing_extensions import Literal
-from torch.optim import Adam
-from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau
 
 from lightning_pose.data.utils import (
-    BaseLabeledBatchDict,
     HeatmapLabeledBatchDict,
     UnlabeledBatchDict,
     evaluate_heatmaps_at_location,
@@ -29,7 +25,7 @@ from lightning_pose.models.base import BaseSupervisedTracker, SemiSupervisedTrac
 
 def upsample(
     inputs: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
-) -> TensorType["batch", "num_keypoints", "2 x heatmap_height", "2 x heatmap_width"]:
+) -> TensorType["batch", "num_keypoints", "two_x_heatmap_height", "two_x_heatmap_width"]:
     """Upsample batch of heatmaps using interpolation (no learned weights).
 
     This is a copy of kornia's pyrup function but with better defaults.
@@ -96,7 +92,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         self.num_targets = num_keypoints * 2
         self.loss_factory = loss_factory
         # TODO: downsample_factor may be in mismatch between datamodule and model.
-        self.downsample_factor = downsample_factor 
+        self.downsample_factor = downsample_factor
         self.upsampling_layers = self.make_upsampling_layers()
         self.initialize_upsampling_layers()
         self.output_shape = output_shape
@@ -297,7 +293,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         ],
     ) -> TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Forward pass through the network."""
-        # we get one representation for each desired output. 
+        # we get one representation for each desired output.
         # in the case of unsupervised sequences + context, we have outputs for all images but the
         # first two and last two.
         # this is all handled internally by get_representations()
@@ -425,7 +421,10 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         # undo augmentation if needed
         if batch["transforms"].shape[-1] == 3:
             # reshape to (seq_len, n_keypoints, 2)
-            pred_kps = torch.reshape(predicted_keypoints_augmented, (predicted_keypoints_augmented.shape[0], -1, 2))
+            pred_kps = torch.reshape(
+                predicted_keypoints_augmented,
+                (predicted_keypoints_augmented.shape[0], -1, 2)
+            )
             # undo
             pred_kps = undo_affine_transform(pred_kps, batch["transforms"])
             # reshape to (seq_len, n_keypoints * 2)
@@ -434,8 +433,8 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             predicted_keypoints = predicted_keypoints_augmented
 
         return {
-            "heatmaps_pred": predicted_heatmaps,  # if augmented, these are the augmented heatmaps
-            "keypoints_pred": predicted_keypoints,  # if we augmented, these are the original keypoints
-            "keypoints_pred_augmented": predicted_keypoints_augmented,  # these keypoints match heatmaps_pred, all are augmented
+            "heatmaps_pred": predicted_heatmaps,  # if augmented, augmented heatmaps
+            "keypoints_pred": predicted_keypoints,  # if augmented, original keypoints
+            "keypoints_pred_augmented": predicted_keypoints_augmented,  # match heatmaps_pred
             "confidences": confidence,
         }

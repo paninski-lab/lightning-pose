@@ -1,34 +1,30 @@
 """Functions for predicting keypoints on labeled datasets and unlabeled videos."""
 
+import os
+import time
+from typing import List, Optional, Tuple, Union
+
+import lightning.pytorch as pl
 import matplotlib.pyplot as plt
 import numpy as np
-from omegaconf import DictConfig, OmegaConf
-import os
 import pandas as pd
-import lightning.pytorch as pl
-from pytorch_lightning import LightningModule
-from pytorch_lightning import LightningDataModule
-from skimage.draw import disk
-import time
 import torch
+from omegaconf import DictConfig, OmegaConf
+from pytorch_lightning import LightningModule
+from skimage.draw import disk
 from torchtyping import TensorType
 from tqdm import tqdm
 from typeguard import typechecked
-from typing import Dict, List, Literal, Optional, Tuple, Type, Union
 
 from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import count_frames
-from lightning_pose.models.heatmap_tracker import (
-    HeatmapTracker,
-    SemiSupervisedHeatmapTracker,
-)
+from lightning_pose.models.heatmap_tracker import HeatmapTracker, SemiSupervisedHeatmapTracker
 from lightning_pose.models.regression_tracker import (
     RegressionTracker,
     SemiSupervisedRegressionTracker,
 )
 from lightning_pose.utils import pretty_print_str
-
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -117,7 +113,9 @@ class PredictionHandler:
     ]:
         """unpack list of preds coming out from pl.trainer.predict, confs tuples into tensors.
         It still returns unnecessary final rows, which should be discarded at the dataframe stage.
-        This works for the output of predict_loader, suitable for batch_size=1, sequence_length=16, step=16"""
+        This works for the output of predict_loader, suitable for
+        batch_size=1, sequence_length=16, step=16
+        """
         # stack the predictions into rows.
         # loop over the batches, and stack
         stacked_preds = torch.vstack([pred[0] for pred in preds])
@@ -172,7 +170,9 @@ class PredictionHandler:
         else:
             # we don't have as many predictions as frames; pad with final entry which is valid.
             n_pad = self.frame_count - preds_combined.shape[0]
-            preds_combined = torch.vstack([preds_combined, torch.tile(preds_combined[0], (n_pad, 1))])
+            preds_combined = torch.vstack(
+                [preds_combined, torch.tile(preds_combined[0], (n_pad, 1))]
+            )
 
         if zero_pad_confidence:
             # zeroing out those first and last two rows (after we've shifted everything above)
@@ -578,11 +578,15 @@ def get_model_class(map_type: str, semi_supervised: bool) -> LightningModule:
             )
     else:
         if map_type == "regression":
-            from lightning_pose.models.regression_tracker import SemiSupervisedRegressionTracker as Model
+            from lightning_pose.models.regression_tracker import (
+                SemiSupervisedRegressionTracker as Model,
+            )
         elif map_type == "heatmap":
             from lightning_pose.models.heatmap_tracker import SemiSupervisedHeatmapTracker as Model
         elif map_type == "heatmap_mhcrnn":
-            from lightning_pose.models.heatmap_tracker_mhcrnn import SemiSupervisedHeatmapTrackerMHCRNN as Model
+            from lightning_pose.models.heatmap_tracker_mhcrnn import (
+                SemiSupervisedHeatmapTrackerMHCRNN as Model,
+            )
         else:
             raise NotImplementedError(
                 "%s is an invalid model_type for a semi-supervised model" % map_type
@@ -616,10 +620,7 @@ def load_model_from_checkpoint(
         model as a Lightning Module
 
     """
-    from lightning_pose.utils.io import (
-        check_if_semi_supervised,
-        return_absolute_data_paths,
-    )
+    from lightning_pose.utils.io import check_if_semi_supervised, return_absolute_data_paths
     from lightning_pose.utils.scripts import (
         get_data_module,
         get_dataset,

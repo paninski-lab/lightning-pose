@@ -1,12 +1,12 @@
 """Utility functions for streamlit apps."""
 
-import numpy as np
-import pandas as pd
-from pathlib import Path
-import streamlit as st
 import os
-from typing import List, Dict, Tuple, Optional
 from collections import defaultdict
+from pathlib import Path
+from typing import Dict, List, Tuple
+
+import pandas as pd
+import streamlit as st
 
 pix_error_key = "pixel error"
 conf_error_key = "confidence"
@@ -21,14 +21,17 @@ def update_labeled_file_list(model_preds_folders: list, use_ood: bool = False):
     for model_pred_folder in model_preds_folders:
         # pull labeled results from each model folder
         # wrap in Path so that it looks like an UploadedFile object
-        model_preds = [f for f in os.listdir(model_pred_folder)
-                       if os.path.isfile(os.path.join(model_pred_folder, f))]
+        model_preds = [
+            f
+            for f in os.listdir(model_pred_folder)
+            if os.path.isfile(os.path.join(model_pred_folder, f))
+        ]
         ret_files = []
         for file in model_preds:
-            if 'predictions' in file:
-                if 'new' not in file and not use_ood:
+            if "predictions" in file:
+                if "new" not in file and not use_ood:
                     ret_files.append(Path(file))
-                elif 'new' in file and use_ood:
+                elif "new" in file and use_ood:
                     ret_files.append(Path(file))
                 else:
                     pass
@@ -42,8 +45,11 @@ def update_vid_metric_files_list(video: str, model_preds_folders: list):
     for model_preds_folder in model_preds_folders:
         # pull each prediction file associated with a particular video
         # wrap in Path so that it looks like an UploadedFile object
-        model_preds = [f for f in os.listdir(os.path.join(model_preds_folder, 'video_preds'))
-                       if os.path.isfile(os.path.join(model_preds_folder, 'video_preds', f))]
+        model_preds = [
+            f
+            for f in os.listdir(os.path.join(model_preds_folder, "video_preds"))
+            if os.path.isfile(os.path.join(model_preds_folder, "video_preds", f))
+        ]
         ret_files = []
         for file in model_preds:
             if video in file:
@@ -59,14 +65,17 @@ def get_all_videos(model_preds_folders: list):
     # returned by streamlit's file_uploader
     ret_videos = set()
     for model_preds_folder in model_preds_folders:
-        model_preds = [f for f in os.listdir(os.path.join(model_preds_folder, 'video_preds'))
-                       if os.path.isfile(os.path.join(model_preds_folder, 'video_preds', f))]
+        model_preds = [
+            f
+            for f in os.listdir(os.path.join(model_preds_folder, "video_preds"))
+            if os.path.isfile(os.path.join(model_preds_folder, "video_preds", f))
+        ]
         for file in model_preds:
-            if 'temporal' in file:
-                vid_file = file.split('_temporal_norm.csv')[0]
+            if "temporal" in file:
+                vid_file = file.split("_temporal_norm.csv")[0]
                 ret_videos.add(vid_file)
-            elif 'temporal' not in file and 'pca' not in file:
-                vid_file = file.split('.csv')[0]
+            elif "temporal" not in file and "pca" not in file:
+                vid_file = file.split(".csv")[0]
                 ret_videos.add(vid_file)
     return list(ret_videos)
 
@@ -106,12 +115,16 @@ def get_df_box(df_orig, keypoint_names, model_names):
 def get_df_scatter(df_0, df_1, data_type, model_names, keypoint_names):
     df_scatters = []
     for keypoint in keypoint_names:
-        df_scatters.append(pd.DataFrame({
-            "img_file": df_0.img_file[df_0.set == data_type],
-            "keypoint": keypoint,
-            model_names[0]: df_0[keypoint][df_0.set == data_type],
-            model_names[1]: df_1[keypoint][df_1.set == data_type],
-        }))
+        df_scatters.append(
+            pd.DataFrame(
+                {
+                    "img_file": df_0.img_file[df_0.set == data_type],
+                    "keypoint": keypoint,
+                    model_names[0]: df_0[keypoint][df_0.set == data_type],
+                    model_names[1]: df_1[keypoint][df_1.set == data_type],
+                }
+            )
+        )
     return pd.concat(df_scatters)
 
 
@@ -139,19 +152,23 @@ def build_precomputed_metrics_df(
     concat_dfs = defaultdict(list)
     for model_name, df_dict in dframes.items():
         for metric_name, df in df_dict.items():
-            if 'confidence' in metric_name:
+            if "confidence" in metric_name:
                 df_ = compute_confidence(
-                    df=df, keypoint_names=keypoint_names, model_name=model_name, **kwargs)
+                    df=df,
+                    keypoint_names=keypoint_names,
+                    model_name=model_name,
+                    **kwargs
+                )
                 concat_dfs[conf_error_key].append(df_)
 
             df_ = get_precomputed_error(df, keypoint_names, model_name, **kwargs)
-            if 'single' in metric_name:
+            if "single" in metric_name:
                 concat_dfs[pcasv_error_key].append(df_)
-            elif 'multi' in metric_name:
+            elif "multi" in metric_name:
                 concat_dfs[pcamv_error_key].append(df_)
-            elif 'temporal' in metric_name:
+            elif "temporal" in metric_name:
                 concat_dfs[temp_norm_error_key].append(df_)
-            elif 'pixel' in metric_name:
+            elif "pixel" in metric_name:
                 concat_dfs[pix_error_key].append(df_)
 
     for key in concat_dfs.keys():
@@ -168,15 +185,15 @@ def get_precomputed_error(
     df_ = df
     df_["model_name"] = model_name
     df_["mean"] = df_[keypoint_names[:-1]].mean(axis=1)
-    df_.rename(columns={df.columns[0]:'img_file'}, inplace=True)
+    df_.rename(columns={df.columns[0]: "img_file"}, inplace=True)
 
     return df_
 
 
 @st.cache_data
 def compute_confidence(
-        df: pd.DataFrame, keypoint_names: List[str], model_name: str, **kwargs) -> pd.DataFrame:
-
+    df: pd.DataFrame, keypoint_names: List[str], model_name: str, **kwargs
+) -> pd.DataFrame:
     if df.shape[1] % 3 == 1:
         # get rid of "set" column if present
         tmp = df.iloc[:, :-1].to_numpy().reshape(df.shape[0], -1, 3)
@@ -218,6 +235,6 @@ def get_model_folders(model_dir):
 def get_model_folders_vis(model_folders):
     fs = []
     for f in model_folders:
-        fs.append(f.split('/')[-2:])
+        fs.append(f.split("/")[-2:])
     model_folders_vis = [os.path.join(*f) for f in fs]
     return model_folders_vis

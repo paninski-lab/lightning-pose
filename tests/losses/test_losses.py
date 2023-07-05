@@ -1,12 +1,10 @@
 """Test loss classes."""
 
-import torch
 import numpy as np
 import pytest
-import yaml
+import torch
 
 from lightning_pose.utils.pca import format_multiview_data_for_pca
-
 
 stage = "train"
 device = "cpu"
@@ -382,6 +380,7 @@ def test_unimodal_mse_loss():
 def test_unimodal_kl_loss():
 
     from kornia.geometry.subpix import spatial_softmax2d
+
     from lightning_pose.losses.losses import UnimodalLoss
 
     img_size = 48
@@ -426,6 +425,7 @@ def test_unimodal_kl_loss():
 def test_unimodal_js_loss():
 
     from kornia.geometry.subpix import spatial_softmax2d
+
     from lightning_pose.losses.losses import UnimodalLoss
 
     img_size = 48

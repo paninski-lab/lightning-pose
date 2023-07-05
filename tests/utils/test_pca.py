@@ -3,10 +3,10 @@
 import numpy as np
 import pytest
 import torch
+from lightning.pytorch.utilities import CombinedLoader
 
 from lightning_pose.utils.pca import KeypointPCA
-# from pytorch_lightning.trainer.supporters import CombinedLoader
-from lightning.pytorch.utilities import CombinedLoader
+
 
 def check_lists_equal(list_1, list_2):
     return len(list_1) == len(list_2) and sorted(list_1) == sorted(list_2)
@@ -19,7 +19,9 @@ def test_train_loader_iter(base_data_module_combined):
     dataset_length = len(base_data_module_combined.train_dataset)
 
     combined_loader = base_data_module_combined.train_dataloader()
-    # the default mode of CombinedLoader changes in Lightning 2.0. we manually take the iterbles inside the combined_loader, and make a new class that cycles only over the labeled dataloader.
+    # the default mode of CombinedLoader changes in Lightning 2.0
+    # we manually take the iterbles inside the combined_loader, and make a new class that cycles
+    # only over the labeled dataloader
     combined_loader = CombinedLoader(combined_loader.iterables, mode="min_size")
     image_counter = 0
     for i, batch in enumerate(combined_loader):
@@ -187,7 +189,6 @@ def test_component_chooser():
     # create fake data for PCA
     from sklearn.datasets import load_diabetes
     from sklearn.decomposition import PCA
-    import numpy as np
 
     diabetes = load_diabetes()
     data_for_pca = diabetes.data

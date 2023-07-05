@@ -1,5 +1,5 @@
-from omegaconf import ListConfig
 import torch
+from omegaconf import ListConfig
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
