@@ -1,0 +1,32 @@
+active_loop:
+  current_iteration: 1
+  experiment_cfg: "/data/libraries/lightning-pose/active_loop/configs/config_ibl_experiment.yaml"
+  num_iterations: 3
+  iterations_folder: "iteration_active_loop/experiment0" #relative to data_dir
+
+iteration_x:
+
+iteration_0:
+  # output_prev_run: where the outputs of the last iteration are saved
+  # method: "random"  active learning method
+  # num_frames: null where the new frames are located
+
+iteration_1:
+  output_prev_run: "/data/libraries/lightning-pose/outputs/2023-07-05/11-24-03"
+  csv_file_prev_run: "../CollectedData.csv"
+  method: "random"
+  num_frames: 10
+  #csv_file:
+
+iteration_2:
+  output_prev_run:
+  method: "random"
+  num_frames: 10
+  #csv_file:
+
+iteration_3:
+  output_prev_run:
+  method: "random"
+  num_frames: 10
+  #csv_file:
+
