@@ -3,7 +3,7 @@ from setuptools import find_packages, setup
 import subprocess
 import re
 
-VERSION = "0.0.1"  # was previously None
+VERSION = "0.0.2"  # was previously None
 
 # add the README.md file to the long_description
 with open("README.md", "r") as fh:
