@@ -1,12 +1,11 @@
 """Dataset/data module utilities."""
 
-from typing import Any, Dict, List, Literal, Optional, Tuple, TypedDict, Union
+from typing import Any, List, Literal, Optional, Tuple, TypedDict, Union
 
 import imgaug.augmenters as iaa
 import lightning.pytorch as pl
 import numpy as np
 import torch
-from kornia import image_to_tensor
 from nvidia.dali.plugin.pytorch import DALIGenericIterator
 from torchtyping import TensorType
 from typeguard import typechecked
@@ -44,7 +43,9 @@ class BaseLabeledBatchDict(TypedDict):
 class HeatmapLabeledBatchDict(BaseLabeledBatchDict):
     """Batch type for heatmap labeled data."""
 
-    heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width", float]
+    heatmaps: TensorType[
+        "batch", "num_keypoints", "heatmap_height", "heatmap_width", float
+    ]
 
 
 class UnlabeledBatchDict(TypedDict):
@@ -52,7 +53,9 @@ class UnlabeledBatchDict(TypedDict):
 
     frames: Union[
         TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
-        TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float],
+        TensorType[
+            "seq_len", "context":5, "RGB":3, "image_height", "image_width", float
+        ],
     ]
     transforms: Union[
         TensorType["seq_len", "h":2, "w":3, float],
@@ -110,8 +113,14 @@ class DataExtractor(object):
                 # current augmentation just resizes; keep this
                 self.data_module = data_module
             else:
-                from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
-                from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
+                from lightning_pose.data.datamodules import (
+                    BaseDataModule,
+                    UnlabeledDataModule,
+                )
+                from lightning_pose.data.datasets import (
+                    BaseTrackingDataset,
+                    HeatmapDataset,
+                )
 
                 # make new augmentation pipeline that just resizes
                 if not isinstance(imgaug_curr[-1], iaa.Resize):
@@ -177,7 +186,9 @@ class DataExtractor(object):
         name = "%s_dataset" % self.cond
         return len(getattr(self.data_module, name))
 
-    def get_loader(self) -> Union[torch.utils.data.DataLoader, SemiSupervisedDataLoaderDict]:
+    def get_loader(
+        self,
+    ) -> Union[torch.utils.data.DataLoader, SemiSupervisedDataLoaderDict]:
         if self.cond == "train":
             return self.data_module.train_dataloader()
         if self.cond == "val":
@@ -198,8 +209,7 @@ class DataExtractor(object):
         return labeled_loader
 
     def iterate_over_dataloader(
-        self,
-        loader: torch.utils.data.DataLoader
+        self, loader: torch.utils.data.DataLoader
     ) -> Tuple[
         TensorType["num_examples", Any],
         Union[
@@ -221,7 +231,10 @@ class DataExtractor(object):
             concat_images = None
         # assert that indeed the number of columns does not change after concatenation,
         # and that the number of rows is the dataset length.
-        assert concat_keypoints.shape == (self.dataset_length, keypoints_list[0].shape[1])
+        assert concat_keypoints.shape == (
+            self.dataset_length,
+            keypoints_list[0].shape[1],
+        )
         return concat_keypoints, concat_images
 
     def __call__(
@@ -335,10 +348,7 @@ def compute_num_train_frames(
     else:
         if train_frames >= len_train_dataset:
             # take max number of train frames
-            print(
-                f"Warning! Requested training frames exceeds training set size; "
-                f"using all"
-            )
+            print("Warning! Requested training frames exceeds training set size; using all")
             n_train_frames = len_train_dataset
         elif train_frames == 1:
             # assume this is a fraction; use full dataset
@@ -355,7 +365,7 @@ def compute_num_train_frames(
     return n_train_frames
 
 
-#@typechecked
+# @typechecked
 def generate_heatmaps(
     keypoints: TensorType["batch", "num_keypoints", 2],
     height: int,
@@ -396,7 +406,7 @@ def generate_heatmaps(
     heatmaps = (yy - keypoints[:, :, :, :1]) ** 2  # also flipped order here
     heatmaps += (xx - keypoints[:, :, :, 1:]) ** 2  # also flipped order here
     heatmaps *= -1
-    heatmaps /= 2 * sigma ** 2
+    heatmaps /= 2 * sigma**2
     heatmaps = torch.exp(heatmaps)
     # normalize all heatmaps to one
     heatmaps = heatmaps / torch.sum(heatmaps, dim=(2, 3), keepdim=True)
@@ -404,7 +414,8 @@ def generate_heatmaps(
     # (all zeros heatmaps are ignored in the supervised heatmap loss)
     if uniform_heatmaps:
         filler_heatmap = torch.ones(
-        (out_height, out_width), device=keypoints.device) / (out_height * out_width)
+            (out_height, out_width), device=keypoints.device
+        ) / (out_height * out_width)
     else:
         filler_heatmap = torch.zeros((out_height, out_width), device=keypoints.device)
 
@@ -412,7 +423,7 @@ def generate_heatmaps(
     return heatmaps
 
 
-#@typechecked
+# @typechecked
 def evaluate_heatmaps_at_location(
     heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
     locs: TensorType["batch", "num_keypoints", 2],
@@ -425,38 +436,42 @@ def evaluate_heatmaps_at_location(
     taking all pixels within two standard deviations of the predicted pixel."""
     pix_to_consider = int(np.floor(sigma * num_stds))  # get all pixels within num_stds.
     num_pad = pix_to_consider
-    heatmaps_padded = torch.zeros((
-        heatmaps.shape[0],
-        heatmaps.shape[1],
-        heatmaps.shape[2] + num_pad * 2,
-        heatmaps.shape[3] + num_pad * 2,
+    heatmaps_padded = torch.zeros(
+        (
+            heatmaps.shape[0],
+            heatmaps.shape[1],
+            heatmaps.shape[2] + num_pad * 2,
+            heatmaps.shape[3] + num_pad * 2,
         ),
         device=heatmaps.device,
     )
     heatmaps_padded[:, :, num_pad:-num_pad, num_pad:-num_pad] = heatmaps
-    i = torch.arange(heatmaps_padded.shape[0], device=heatmaps_padded.device).reshape(-1, 1, 1, 1)
-    j = torch.arange(heatmaps_padded.shape[1], device=heatmaps_padded.device).reshape(1, -1, 1, 1)
+    i = torch.arange(heatmaps_padded.shape[0], device=heatmaps_padded.device).reshape(
+        -1, 1, 1, 1
+    )
+    j = torch.arange(heatmaps_padded.shape[1], device=heatmaps_padded.device).reshape(
+        1, -1, 1, 1
+    )
     k = locs[:, :, None, 1, None].type(torch.int64) + num_pad
-    l = locs[:, :, 0, None, None].type(torch.int64) + num_pad
+    m = locs[:, :, 0, None, None].type(torch.int64) + num_pad
     offsets = list(np.arange(-pix_to_consider, pix_to_consider + 1))
     vals_all = []
     for offset in offsets:
         k_offset = k + offset
         for offset_2 in offsets:
-            l_offset = l + offset_2
+            m_offset = m + offset_2
             # get rid of singleton dims
-            vals = heatmaps_padded[i, j, k_offset, l_offset].squeeze(-1).squeeze(-1)
+            vals = heatmaps_padded[i, j, k_offset, m_offset].squeeze(-1).squeeze(-1)
             vals_all.append(vals)
     vals = torch.stack(vals_all, 0).sum(0)
     return vals
 
 
-#@typechecked
+# @typechecked
 def undo_affine_transform(
     keypoints: TensorType["seq_len", "num_keypoints", 2],
     transform: Union[TensorType["seq_len", 2, 3], TensorType[2, 3]],
 ) -> TensorType["seq_len", "num_keypoints", 2]:
-
     # add 1s to get keypoints in projective geometry coords
     ones = torch.ones(
         (keypoints.shape[0], keypoints.shape[1], 1),
@@ -475,18 +490,24 @@ def undo_affine_transform(
     mats_inv_torch = []
     for idx in range(mat.shape[0]):
         mat_inv_ = torch.linalg.inv(mat[idx, :, :2])
-        mat_inv = torch.concat([mat_inv_, torch.matmul(-mat_inv_, mat[idx, :, -1, None])], dim=1)
-        mats_inv_torch.append(torch.tensor(
-            torch.transpose(mat_inv, 1, 0),
-            dtype=keypoints.dtype,
-            device=keypoints.device,
-            requires_grad=True,
-        ))
+        mat_inv = torch.concat(
+            [mat_inv_, torch.matmul(-mat_inv_, mat[idx, :, -1, None])], dim=1
+        )
+        mats_inv_torch.append(
+            torch.tensor(
+                torch.transpose(mat_inv, 1, 0),
+                dtype=keypoints.dtype,
+                device=keypoints.device,
+                requires_grad=True,
+            )
+        )
 
     # make a single block of inverse matrices
     if len(mats_inv_torch) == 1:
         # replicate this inverse matrix for each element of the batch
-        mat_inv_torch = torch.tile(mats_inv_torch[0].unsqueeze(0), dims=(keypoints.shape[0], 1, 1))
+        mat_inv_torch = torch.tile(
+            mats_inv_torch[0].unsqueeze(0), dims=(keypoints.shape[0], 1, 1)
+        )
     else:
         # different transformation for each element of the batch
         mat_inv_torch = torch.stack(mats_inv_torch, dim=0)

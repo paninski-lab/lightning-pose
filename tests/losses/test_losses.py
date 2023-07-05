@@ -3,7 +3,6 @@
 import numpy as np
 import pytest
 import torch
-import yaml
 
 from lightning_pose.utils.pca import format_multiview_data_for_pca
 

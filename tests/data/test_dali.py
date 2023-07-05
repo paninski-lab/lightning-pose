@@ -1,8 +1,6 @@
 """Test dali dataloading functionality."""
 
-import pytest
 import torch
-from nvidia.dali.plugin.pytorch import LastBatchPolicy
 
 from lightning_pose.data.dali import video_pipe
 

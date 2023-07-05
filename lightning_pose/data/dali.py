@@ -1,6 +1,6 @@
 """Data pipelines based on efficient video reading by nvidia dali package."""
 
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Dict, List, Literal, Optional, Union
 
 import numpy as np
 import nvidia.dali.fn as fn
@@ -150,7 +150,6 @@ class LitDaliWrapper(DALIGenericIterator):
 
     @staticmethod
     def _dali_output_to_tensors(batch: list) -> UnlabeledBatchDict:
-
         # always batch_size=1
         # shape (sequence_length, 3, H, W)
         frames = batch[0]["frames"][0, :, :, :, :]
@@ -200,15 +199,20 @@ class PrepareDALI(object):
         if self.model_type == "base":
             return int(np.ceil(self.frame_count / (pipe_dict["sequence_length"])))
         elif self.model_type == "context":
-            if pipe_dict["step"] == 1: # 0-5, 1-6, 2-7, 3-8, 4-9 ...
+            if pipe_dict["step"] == 1:  # 0-5, 1-6, 2-7, 3-8, 4-9 ...
                 return int(np.ceil(self.frame_count / (pipe_dict["batch_size"])))
             elif pipe_dict["step"] == pipe_dict["sequence_length"]:
                 # taking the floor because during training we don't care about missing the last
                 # non-full batch. we prefer having fewer batches but valid.
-                return int(np.floor(
-                    self.frame_count / (pipe_dict["batch_size"] * pipe_dict["sequence_length"])))
-            elif (pipe_dict["batch_size"] == 1) \
-                    and (pipe_dict["step"] == (pipe_dict["sequence_length"] - 4)):
+                return int(
+                    np.floor(
+                        self.frame_count
+                        / (pipe_dict["batch_size"] * pipe_dict["sequence_length"])
+                    )
+                )
+            elif (pipe_dict["batch_size"] == 1) and (
+                pipe_dict["step"] == (pipe_dict["sequence_length"] - 4)
+            ):
                 # the case of prediction with a single sequence at a time and internal model
                 # reshapes
                 if pipe_dict["step"] <= 0:
@@ -217,14 +221,18 @@ class PrepareDALI(object):
                         "cfg.dali.context.predict.sequence_length to be > 4"
                     )
                 # remove the first sequence
-                data_except_first_batch = self.frame_count - pipe_dict["sequence_length"]
+                data_except_first_batch = (
+                    self.frame_count - pipe_dict["sequence_length"]
+                )
                 # calculate how many "step"s are needed to get at least to the end
                 # count back the first sequence
-                num_iters = int(np.ceil(data_except_first_batch / pipe_dict["step"])) + 1
+                num_iters = (
+                    int(np.ceil(data_except_first_batch / pipe_dict["step"])) + 1
+                )
                 return num_iters
             else:
                 raise NotImplementedError
-    
+
     def _setup_pipe_dict(self, filenames: List[str], imgaug: str) -> Dict[str, dict]:
         """all of the pipe() args in one place"""
         dict_args = {}

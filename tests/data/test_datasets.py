@@ -1,6 +1,5 @@
 """Test basic dataset functionality."""
 
-import pytest
 import torch
 
 

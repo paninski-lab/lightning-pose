@@ -2,7 +2,7 @@
 
 Refer to apps.md for information on how to use this file.
 
-streamlit run labeled_frame_diagnostics.py -- --model_dir "/home/zeus/content/Pose-app/data/demo/models"
+streamlit run labeled_frame_diagnostics.py -- --model_dir ".../Pose-app/data/demo/models"
 
 """
 
@@ -21,7 +21,6 @@ from lightning_pose.apps.plots import (
     get_y_label,
     make_plotly_catplot,
     make_plotly_scatterplot,
-    make_seaborn_catplot,
 )
 from lightning_pose.apps.utils import (
     build_precomputed_metrics_df,
@@ -40,7 +39,6 @@ st.set_page_config(layout="wide")
 
 
 def run():
-
     args = parser.parse_args()
 
     st.title("Labeled Frame Diagnostics")
@@ -57,7 +55,7 @@ def run():
     # add a multiselect that shows existing model folders, and allows the user to de-select models
     # assume we have args.model_dir and we search two levels down for model folders
     model_folders = get_model_folders(args.model_dir)
-    
+
     # get the last two levels of each path to be presented to user
     model_folders_vis = get_model_folders_vis(model_folders)
 
@@ -65,7 +63,7 @@ def run():
 
     # append this to full path
     selected_models = ["/" + os.path.join(args.model_dir, f) for f in selected_models_vis]
-    
+
     # search for prediction files in the selected model folders
     prediction_files = update_labeled_file_list(selected_models, use_ood=args.use_ood)
 
@@ -74,7 +72,6 @@ def run():
     model_names = copy.copy(selected_models_vis)
 
     if len(prediction_files) > 0:  # otherwise don't try to proceed
-
         # ---------------------------------------------------
         # load data
         # ---------------------------------------------------
@@ -116,9 +113,11 @@ def run():
 
         # concat dataframes, collapsing hierarchy and making df fatter.
         keypoint_names = list(
-            [c[0] for c in dframes_metrics[new_names[0]]["confidence"].columns[1::3]])
+            [c[0] for c in dframes_metrics[new_names[0]]["confidence"].columns[1::3]]
+        )
         df_metrics = build_precomputed_metrics_df(
-            dframes=dframes_metrics, keypoint_names=keypoint_names)
+            dframes=dframes_metrics, keypoint_names=keypoint_names
+        )
         metric_options = list(df_metrics.keys())
 
         # ---------------------------------------------------'
@@ -131,7 +130,8 @@ def run():
         with col0:
             # choose from individual keypoints, their mean, or all at once
             keypoint_to_plot = st.selectbox(
-                "Keypoint:", ["mean", "ALL", *keypoint_names], key="keypoint")
+                "Keypoint:", ["mean", "ALL", *keypoint_names], key="keypoint"
+            )
 
         with col1:
             # choose which metric to plot
@@ -151,7 +151,6 @@ def run():
         # ---------------------------------------------------
 
         with sup_col00:
-
             st.header("Compare multiple models")
 
             # enumerate plotting options
@@ -167,7 +166,9 @@ def run():
                 plot_scale = st.radio("Y-axis scale", scale_options, horizontal=True)
 
             # filter data
-            df_metrics_filt = df_metrics[metric_to_plot][df_metrics[metric_to_plot].set == data_type]
+            df_metrics_filt = df_metrics[metric_to_plot][
+                df_metrics[metric_to_plot].set == data_type
+            ]
             n_frames_per_dtype = df_metrics_filt.shape[0] // len(selected_models)
 
             # plot data
@@ -189,15 +190,19 @@ def run():
                 else:
                     top = 0.9
                 fig_box.fig.subplots_adjust(top=top)
-                fig_box.fig.suptitle("All keypoints (%i %s frames)" % (n_frames_per_dtype, data_type))
+                fig_box.fig.suptitle(
+                    f"All keypoints ({n_frames_per_dtype} {data_type} frames)"
+                )
                 st.pyplot(fig_box)
 
             else:
-
                 st.markdown("###")
                 fig_box = make_plotly_catplot(
-                    x="model_name", y=keypoint_to_plot, 
-                    data=df_metrics_filt[df_metrics_filt[keypoint_to_plot] > int(plot_epsilon)], 
+                    x="model_name",
+                    y=keypoint_to_plot,
+                    data=df_metrics_filt[
+                        df_metrics_filt[keypoint_to_plot] > int(plot_epsilon)
+                    ],
                     x_label="Model name",
                     y_label=y_label,
                     title=title,
@@ -217,7 +222,6 @@ def run():
         # scatterplots
         # ---------------------------------------------------
         with sup_col01:
-
             st.header("Compare two models")
 
             col6, col7, col8 = st.columns(3)

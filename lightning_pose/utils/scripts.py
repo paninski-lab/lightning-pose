@@ -12,7 +12,6 @@ from omegaconf import DictConfig, OmegaConf
 from typeguard import typechecked
 
 from lightning_pose.callbacks import AnnealWeight
-from lightning_pose.data.dali import PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
 from lightning_pose.data.utils import compute_num_train_frames, split_sizes_from_probabilities
@@ -35,14 +34,11 @@ from lightning_pose.models.regression_tracker import (
 from lightning_pose.utils.io import (
     check_if_semi_supervised,
     get_keypoint_names,
-    return_absolute_data_paths,
     return_absolute_path,
 )
 from lightning_pose.utils.pca import KeypointPCA
 from lightning_pose.utils.predictions import (
-    PredictionHandler,
     create_labeled_video,
-    load_model_from_checkpoint,
     predict_single_video,
 )
 
@@ -223,15 +219,10 @@ def get_dataset(
         cfg.data.image_orig_dims.height,
     ):
         raise ValueError(
-            f"image_orig_dims in data configuration file is (width=%i, height=%i) but"
-            f" your image size is (width=%i, height=%i). Please update the data "
-            f"configuration file"
-            % (
-                cfg.data.image_orig_dims.width,
-                cfg.data.image_orig_dims.height,
-                image.size[0],
-                image.size[1],
-            )
+            f"image_orig_dims in data configuration file is "
+            f"(width={cfg.data.image_orig_dims.width}, height={cfg.data.image_orig_dims.height}) "
+            f"but your image size is (width={image.size[0]}, height={image.size[1]}). "
+            f"Please update the data configuration file"
         )
     return dataset
 
@@ -311,8 +302,8 @@ def get_loss_factories(
             if loss_name[:8] == "unimodal" or loss_name[:15] == "temporal_heatmap":
                 if cfg.model.model_type == "regression":
                     raise NotImplementedError(
-                        f"unimodal loss can only be used with classes inheriting from "
-                        f"HeatmapTracker. \nYou specified a RegressionTracker model."
+                        "unimodal loss can only be used with classes inheriting from "
+                        "HeatmapTracker. \nYou specified a RegressionTracker model."
                     )
                 # record original image dims (after initial resizing)
                 height_og = cfg.data.image_resize_dims.height
@@ -491,7 +482,9 @@ def get_callbacks(
         lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval="epoch")
         callbacks.append(lr_monitor)
     if ckpt_model:
-        ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(monitor="val_supervised_loss")
+        ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
+            monitor="val_supervised_loss"
+        )
         callbacks.append(ckpt_callback)
     if backbone_unfreeze:
         transfer_unfreeze_callback = pl.callbacks.BackboneFinetuning(

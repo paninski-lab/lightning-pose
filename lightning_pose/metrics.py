@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Union
 
 import numpy as np
 import torch
@@ -111,7 +111,6 @@ def pca_multiview_reprojection_error(
         shape (samples, n_keypoints)
 
     """
-    from lightning_pose.utils.pca import format_multiview_data_for_pca
 
     if not isinstance(keypoints_pred, torch.Tensor):
         keypoints_pred = torch.tensor(keypoints_pred, device=pca.device, dtype=torch.float32)

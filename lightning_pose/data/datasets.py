@@ -87,7 +87,9 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 csv_file = options[0]
 
         csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
-        self.keypoint_names = get_keypoint_names(csv_file=csv_file, header_rows=header_rows)
+        self.keypoint_names = get_keypoint_names(
+            csv_file=csv_file, header_rows=header_rows
+        )
         self.image_names = list(csv_data.index)
         self.keypoints = torch.tensor(csv_data.to_numpy(), dtype=torch.float32)
         # convert to x,y coordinates
@@ -118,7 +120,6 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         return len(self.image_names)
 
     def __getitem__(self, idx: int) -> BaseLabeledExampleDict:
-
         img_name = self.image_names[idx]
         keypoints_on_image = self.keypoints[idx]
 
@@ -194,7 +195,9 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                     image_frames_tensor = torch.unsqueeze(transformed_image, dim=0)
                 else:
                     image_expand = torch.unsqueeze(transformed_image, dim=0)
-                    image_frames_tensor = torch.cat((image_frames_tensor, image_expand), dim=0)
+                    image_frames_tensor = torch.cat(
+                        (image_frames_tensor, image_expand), dim=0
+                    )
 
             transformed_images = image_frames_tensor
 
@@ -265,8 +268,8 @@ class HeatmapDataset(BaseTrackingDataset):
     @property
     def output_shape(self) -> tuple:
         return (
-            self.height // 2 ** self.downsample_factor,
-            self.width // 2 ** self.downsample_factor,
+            self.height // 2**self.downsample_factor,
+            self.width // 2**self.downsample_factor,
         )
 
     def compute_heatmap(
@@ -327,7 +330,9 @@ class HeatmapDataset(BaseTrackingDataset):
 
         """
         example_dict: BaseLabeledExampleDict = super().__getitem__(idx)
-        if len(self.imgaug_transform) == 1 and isinstance(self.imgaug_transform[0], iaa.Resize):
+        if len(self.imgaug_transform) == 1 and isinstance(
+            self.imgaug_transform[0], iaa.Resize
+        ):
             # we have a deterministic resizing augmentation; use precomputed heatmaps
             example_dict["heatmaps"] = self.label_heatmaps[idx]
         else:

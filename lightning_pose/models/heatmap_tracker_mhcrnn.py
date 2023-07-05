@@ -1,6 +1,6 @@
 """Models that produce heatmaps of keypoints from images."""
 
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, Union
+from typing import Optional, Tuple, Union
 
 import torch
 from kornia.geometry.subpix import spatial_softmax2d
@@ -94,8 +94,8 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         self,
         representations: TensorType["batch", "features", "rep_height", "rep_width", "frames"],
     ) -> Tuple[
-         TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
-         TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+            TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+            TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
     ]:
         """Handle context frames then upsample to get final heatmaps."""
         # permute to shape (frames, batch, features, rep_height, rep_width)
@@ -112,8 +112,8 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
             TensorType["batch", "frames", "channels":3, "image_height", "image_width"]
         ],
     ) -> Tuple[
-         TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"],
-         TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"],
+            TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"],
+            TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"],
     ]:
         """Forward pass through the network."""
 

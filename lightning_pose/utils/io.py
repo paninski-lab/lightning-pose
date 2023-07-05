@@ -176,9 +176,13 @@ def get_videos_in_dir(video_dir: str, return_mp4_only: bool = True) -> List[str]
     assert os.path.isdir(video_dir)
     # get all video files in directory, from allowed formats
     allowed_formats = (".mp4", ".avi", ".mov")
-    if return_mp4_only == True:
+    if return_mp4_only:
         allowed_formats = ".mp4"
-    video_files = [os.path.join(video_dir, f) for f in os.listdir(video_dir) if f.endswith(allowed_formats)]
+    video_files = [
+        os.path.join(video_dir, f)
+        for f in os.listdir(video_dir)
+        if f.endswith(allowed_formats)
+    ]
 
     if len(video_files) == 0:
         raise IOError("Did not find any valid video files in %s" % video_dir)

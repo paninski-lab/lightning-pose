@@ -30,7 +30,7 @@ def build_backbone(
         # load resnet50 pretrained using SimCLR on imagenet
         from pl_bolts.models.self_supervised import SimCLR
 
-        ckpt_url = "https://pl-bolts-weights.s3.us-east-2.amazonaws.com/simclr/bolts_simclr_imagenet/simclr_imagenet.ckpt"
+        ckpt_url = "https://pl-bolts-weights.s3.us-east-2.amazonaws.com/simclr/bolts_simclr_imagenet/simclr_imagenet.ckpt"  # noqa: E501
         simclr = SimCLR.load_from_checkpoint(ckpt_url, strict=False)
         base = simclr.encoder
 
@@ -38,9 +38,9 @@ def build_backbone(
         base = getattr(tvmodels, "resnet50")(weights=None)
         backbone_type = "_".join(backbone_arch.split("_")[2:])
         if backbone_type == "apose":
-            ckpt_url = "https://download.openmmlab.com/mmpose/animal/resnet/res50_animalpose_256x256-e1f30bff_20210426.pth"
+            ckpt_url = "https://download.openmmlab.com/mmpose/animal/resnet/res50_animalpose_256x256-e1f30bff_20210426.pth"  # noqa: E501
         else:
-            ckpt_url = "https://download.openmmlab.com/mmpose/animal/resnet/res50_ap10k_256x256-35760eb8_20211029.pth"
+            ckpt_url = "https://download.openmmlab.com/mmpose/animal/resnet/res50_ap10k_256x256-35760eb8_20211029.pth"  # noqa: E501
 
         state_dict = torch.hub.load_state_dict_from_url(ckpt_url)["state_dict"]
         new_state_dict = OrderedDict()
@@ -54,11 +54,11 @@ def build_backbone(
         base = getattr(tvmodels, "resnet50")(weights=None)
         backbone_type = "_".join(backbone_arch.split("_")[2:])
         if backbone_type == "jhmdb":
-            ckpt_url = "https://download.openmmlab.com/mmpose/top_down/resnet/res50_jhmdb_sub3_256x256-c4ec1a0b_20201122.pth"
+            ckpt_url = "https://download.openmmlab.com/mmpose/top_down/resnet/res50_jhmdb_sub3_256x256-c4ec1a0b_20201122.pth"  # noqa: E501
         elif backbone_type == "res_rle":
-            ckpt_url = "https://download.openmmlab.com/mmpose/top_down/deeppose/deeppose_res50_mpii_256x256_rle-5f92a619_20220504.pth"
+            ckpt_url = "https://download.openmmlab.com/mmpose/top_down/deeppose/deeppose_res50_mpii_256x256_rle-5f92a619_20220504.pth"  # noqa: E501
         elif backbone_type == "top_res":
-            ckpt_url = "https://download.openmmlab.com/mmpose/top_down/resnet/res50_mpii_256x256-418ffc88_20200812.pth"
+            ckpt_url = "https://download.openmmlab.com/mmpose/top_down/resnet/res50_mpii_256x256-418ffc88_20200812.pth"  # noqa: E501
 
         state_dict = torch.hub.load_state_dict_from_url(ckpt_url)["state_dict"]
         new_state_dict = OrderedDict()

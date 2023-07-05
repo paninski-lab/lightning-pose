@@ -1,6 +1,5 @@
 """Test functionality of base model classes."""
 
-import pytest
 import segment_anything
 import torch
 import torchvision

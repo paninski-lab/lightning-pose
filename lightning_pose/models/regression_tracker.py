@@ -1,18 +1,16 @@
 """Models that produce (x, y) coordinates of keypoints from images."""
 
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 from omegaconf import DictConfig
 from torch import nn
 from torchtyping import TensorType
 from typeguard import typechecked
-from typing_extensions import Literal
 
 from lightning_pose.data.utils import (
     BaseLabeledBatchDict,
     UnlabeledBatchDict,
-    evaluate_heatmaps_at_location,
     undo_affine_transform,
 )
 from lightning_pose.losses.factory import LossFactory

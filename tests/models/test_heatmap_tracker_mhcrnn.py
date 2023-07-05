@@ -2,8 +2,6 @@
 
 import copy
 
-import pytest
-
 from lightning_pose.utils.tests import run_model_test
 
 

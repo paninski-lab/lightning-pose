@@ -32,7 +32,7 @@ pytest
 Linters automatically find (and sometimes fix) formatting issues in the code. We use three, which
 are run from the command line in the Lightning Pose repo:
 
-* `flake8`: warns of syntax errors, possible bugs, stylistic errors, etc.
+* `flake8`: warns of syntax errors, possible bugs, stylistic errors, etc. Please fix these!
 ```bash
 flake8 .
 ```

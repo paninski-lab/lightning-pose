@@ -1,16 +1,15 @@
 import os
-from typing import Any, Callable, Dict, List, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional, Union
 
 import fiftyone as fo
 import numpy as np
 import pandas as pd
-from omegaconf import DictConfig, ListConfig, OmegaConf
+from omegaconf import DictConfig
 from tqdm import tqdm
 from typeguard import typechecked
 
 from lightning_pose.utils import pretty_print_str
 from lightning_pose.utils.io import (
-    get_videos_in_dir,
     return_absolute_data_paths,
     return_absolute_path,
 )
@@ -298,7 +297,8 @@ class FiftyOneImagePlotter(FiftyOneKeypointBase):
         samples = []
         # read each model's csv into a pandas dataframe
         self.load_model_predictions()
-        # assumes that train,test,val split is identical for all the different models. may be different with ensembling.
+        # assumes that train,test,val split is identical for all the different models
+        # may be different with ensembling
         self.data_tags = get_image_tags(self.preds_pandas_df_dict[self.model_names[0]])
         # build the ground-truth keypoints per image
         gt_keypoints_list = self.get_gt_keypoints_list()

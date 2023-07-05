@@ -2,7 +2,7 @@
 
 import os
 import time
-from typing import Dict, List, Literal, Optional, Tuple, Type, Union
+from typing import List, Optional, Tuple, Union
 
 import lightning.pytorch as pl
 import matplotlib.pyplot as plt
@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import torch
 from omegaconf import DictConfig, OmegaConf
-from pytorch_lightning import LightningDataModule, LightningModule
+from pytorch_lightning import LightningModule
 from skimage.draw import disk
 from torchtyping import TensorType
 from tqdm import tqdm
@@ -113,7 +113,9 @@ class PredictionHandler:
     ]:
         """unpack list of preds coming out from pl.trainer.predict, confs tuples into tensors.
         It still returns unnecessary final rows, which should be discarded at the dataframe stage.
-        This works for the output of predict_loader, suitable for batch_size=1, sequence_length=16, step=16"""
+        This works for the output of predict_loader, suitable for
+        batch_size=1, sequence_length=16, step=16
+        """
         # stack the predictions into rows.
         # loop over the batches, and stack
         stacked_preds = torch.vstack([pred[0] for pred in preds])
@@ -168,7 +170,9 @@ class PredictionHandler:
         else:
             # we don't have as many predictions as frames; pad with final entry which is valid.
             n_pad = self.frame_count - preds_combined.shape[0]
-            preds_combined = torch.vstack([preds_combined, torch.tile(preds_combined[0], (n_pad, 1))])
+            preds_combined = torch.vstack(
+                [preds_combined, torch.tile(preds_combined[0], (n_pad, 1))]
+            )
 
         if zero_pad_confidence:
             # zeroing out those first and last two rows (after we've shifted everything above)

@@ -20,7 +20,7 @@ The general flow of each loss class is as follows:
 """
 
 import warnings
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, Union
+from typing import Dict, List, Literal, Optional, Tuple, Type, Union
 
 import lightning.pytorch as pl
 import torch
@@ -32,12 +32,12 @@ from typeguard import typechecked
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import generate_heatmaps
-from lightning_pose.utils.pca import KeypointPCA, format_multiview_data_for_pca
+from lightning_pose.utils.pca import KeypointPCA
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-#@typechecked
+# @typechecked
 class Loss(pl.LightningModule):
     """Parent class for all losses."""
 
@@ -119,7 +119,7 @@ class Loss(pl.LightningModule):
         raise NotImplementedError
 
 
-#@typechecked
+# @typechecked
 class HeatmapLoss(Loss):
     """Parent class for different heatmap losses (MSE, Wasserstein, etc)."""
 
@@ -170,7 +170,7 @@ class HeatmapLoss(Loss):
         return self.weight * scalar_loss, logs
 
 
-#@typechecked
+# @typechecked
 class HeatmapMSELoss(HeatmapLoss):
     """MSE loss between heatmaps."""
 
@@ -195,7 +195,7 @@ class HeatmapMSELoss(HeatmapLoss):
         return loss
 
 
-#@typechecked
+# @typechecked
 class HeatmapKLLoss(HeatmapLoss):
     """Kullback-Leibler loss between heatmaps."""
 
@@ -222,7 +222,7 @@ class HeatmapKLLoss(HeatmapLoss):
         return loss[0]
 
 
-#@typechecked
+# @typechecked
 class HeatmapJSLoss(HeatmapLoss):
     """Kullback-Leibler loss between heatmaps."""
 
@@ -249,7 +249,7 @@ class HeatmapJSLoss(HeatmapLoss):
         return loss[0]
 
 
-#@typechecked
+# @typechecked
 class PCALoss(Loss):
     """Penalize predictions that fall outside a low-dimensional subspace."""
 
@@ -341,7 +341,7 @@ class PCALoss(Loss):
         return self.weight * scalar_loss, logs
 
 
-#@typechecked
+# @typechecked
 class TemporalLoss(Loss):
     """Penalize temporal differences for each target.
 
@@ -430,7 +430,7 @@ class TemporalLoss(Loss):
         return self.weight * scalar_loss, logs
 
 
-#@typechecked
+# @typechecked
 class TemporalHeatmapLoss(Loss):
     """Penalize temporal differences for each heatmap.
 
@@ -534,7 +534,7 @@ class TemporalHeatmapLoss(Loss):
         return self.weight * scalar_loss, logs
 
 
-#@typechecked
+# @typechecked
 class UnimodalLoss(Loss):
     """Encourage heatmaps to be unimodal using various measures."""
 
@@ -584,13 +584,13 @@ class UnimodalLoss(Loss):
         TensorType["num_valid_keypoints", "heatmap_height", "heatmap_width"],
     ]:
         """Remove nans from targets and predictions.
-        Args: 
+        Args:
             targets: (batch, num_keypoints, heatmap_height, heatmap_width)
             predictions: (batch, num_keypoints, heatmap_height, heatmap_width)
             confidences: (batch, num_keypoints)
         Returns:
-            clean targets: (num_valid_keypoints, heatmap_height, heatmap_width), concatenated across different images and keypoints
-            clean predictions: (num_valid_keypoints, heatmap_height, heatmap_width), concatenated across different images and keypoints
+            clean targets: concatenated across different images and keypoints
+            clean predictions: concatenated across different images and keypoints
         """
         # use confidences to get rid of unsupervised targets with likely occlusions
         idxs_ignore = confidences < self.prob_threshold
@@ -630,8 +630,10 @@ class UnimodalLoss(Loss):
     ) -> Tuple[TensorType[()], List[dict]]:
         """Compute unimodal loss.
         Args:
-            keypoints_pred_augmented: (batch, 2 * num_keypoints) these are in the augmented image space
-            heatmaps_pred: (batch, num_keypoints, heatmap_height, heatmap_width) these are also in the augmented space, matching the keypoints_pred_augmented"""
+            keypoints_pred_augmented: these are in the augmented image space
+            heatmaps_pred: these are also in the augmented space, matching the
+                keypoints_pred_augmented
+        """
 
         # turn keypoint predictions into unimodal heatmaps
         keypoints_pred = keypoints_pred_augmented.reshape(keypoints_pred_augmented.shape[0], -1, 2)
@@ -657,7 +659,7 @@ class UnimodalLoss(Loss):
         return self.weight * scalar_loss, logs
 
 
-#@typechecked
+# @typechecked
 class RegressionMSELoss(Loss):
     """MSE loss between ground truth and predicted coordinates."""
 
@@ -709,7 +711,7 @@ class RegressionMSELoss(Loss):
         return self.weight * scalar_loss, logs
 
 
-#@typechecked
+# @typechecked
 class RegressionRMSELoss(RegressionMSELoss):
     """Root MSE loss between ground truth and predicted coordinates."""
 

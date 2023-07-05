@@ -1,6 +1,6 @@
 """Helper functions for losses."""
 
-from typing import Dict, List, Literal, Tuple, Union
+from typing import Dict, Literal, Union
 
 import numpy as np
 import torch
@@ -30,7 +30,7 @@ class EmpiricalEpsilon:
         return np.nanpercentile(flattened_loss, self.percentile, axis=0)
 
 
-# @typechecked
+@typechecked
 def convert_dict_values_to_tensors(
     param_dict: Dict[str, Union[np.array, float]],
     device: Union[Literal["cpu", "cuda"], torch.device],

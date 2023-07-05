@@ -8,14 +8,14 @@ construction relies heavily on the utility functions provided in `utils/scripts.
 import copy
 import os
 import shutil
-from typing import Callable, List, Optional
+from typing import Callable, List
 
 import imgaug.augmenters as iaa
 import lightning.pytorch as pl
 import pytest
 import torch
 import yaml
-from omegaconf import ListConfig, OmegaConf
+from omegaconf import OmegaConf
 
 from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule

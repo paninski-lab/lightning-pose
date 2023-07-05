@@ -5,7 +5,6 @@ import copy
 import pytest
 import torch
 from kornia.geometry.subpix import spatial_expectation2d, spatial_softmax2d
-from kornia.geometry.transform import pyrup
 
 from lightning_pose.data.utils import generate_heatmaps
 
@@ -196,7 +195,7 @@ def test_generate_uniform_heatmaps(cfg, toy_data_dir):
     batch = heatmap_dataset.__getitem__(idx=0)
     heatmap_gt = batch["heatmaps"].unsqueeze(0)
     keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
-    
+
     heatmap_uniform_torch = generate_heatmaps(
         keypts_gt,
         height=im_height,

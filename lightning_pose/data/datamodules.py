@@ -1,16 +1,14 @@
 """Data modules split a dataset into train, val, and test modules."""
 
-import os
-from typing import Dict, List, Literal, Optional, Tuple, TypedDict, Union
+from typing import List, Literal, Optional, Union
 
 import lightning.pytorch as pl
 import torch
 from lightning.pytorch.utilities import CombinedLoader
-from nvidia.dali.plugin.pytorch import LastBatchPolicy
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader, random_split
 
-from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
+from lightning_pose.data.dali import PrepareDALI
 from lightning_pose.data.utils import (
     SemiSupervisedDataLoaderDict,
     compute_num_train_frames,
@@ -72,9 +70,12 @@ class BaseDataModule(pl.LightningDataModule):
         self.torch_seed = torch_seed
 
     def setup(self, stage: Optional[str] = None):  # stage arg needed for ptl
-
         datalen = self.dataset.__len__()
-        print("Number of labeled images in the full dataset (train+val+test): {}".format(datalen))
+        print(
+            "Number of labeled images in the full dataset (train+val+test): {}".format(
+                datalen
+            )
+        )
 
         # split data based on provided probabilities
         data_splits_list = split_sizes_from_probabilities(
@@ -92,8 +93,9 @@ class BaseDataModule(pl.LightningDataModule):
 
         # further subsample training data if desired
         if self.train_frames is not None:
-
-            n_frames = compute_num_train_frames(len(self.train_dataset), self.train_frames)
+            n_frames = compute_num_train_frames(
+                len(self.train_dataset), self.train_frames
+            )
 
             if n_frames < len(self.train_dataset):
                 # split the data a second time to reflect further subsampling from
