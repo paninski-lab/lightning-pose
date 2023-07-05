@@ -9,10 +9,7 @@ from tqdm import tqdm
 from typeguard import typechecked
 
 from lightning_pose.utils import pretty_print_str
-from lightning_pose.utils.io import (
-    return_absolute_data_paths,
-    return_absolute_path,
-)
+from lightning_pose.utils.io import return_absolute_data_paths, return_absolute_path
 
 
 @typechecked

@@ -3,7 +3,6 @@
 import numpy as np
 import pytest
 import torch
-
 from lightning.pytorch.utilities import CombinedLoader
 
 from lightning_pose.utils.pca import KeypointPCA

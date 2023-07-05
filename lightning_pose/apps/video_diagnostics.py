@@ -16,11 +16,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from lightning_pose.apps.plots import (
-    get_y_label,
-    make_plotly_catplot,
-    plot_precomputed_traces,
-)
+from lightning_pose.apps.plots import get_y_label, make_plotly_catplot, plot_precomputed_traces
 from lightning_pose.apps.utils import (
     build_precomputed_metrics_df,
     concat_dfs,

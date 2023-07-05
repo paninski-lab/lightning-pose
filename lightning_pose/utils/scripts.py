@@ -37,10 +37,7 @@ from lightning_pose.utils.io import (
     return_absolute_path,
 )
 from lightning_pose.utils.pca import KeypointPCA
-from lightning_pose.utils.predictions import (
-    create_labeled_video,
-    predict_single_video,
-)
+from lightning_pose.utils.predictions import create_labeled_video, predict_single_video
 
 
 @typechecked

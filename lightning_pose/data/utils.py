@@ -113,14 +113,8 @@ class DataExtractor(object):
                 # current augmentation just resizes; keep this
                 self.data_module = data_module
             else:
-                from lightning_pose.data.datamodules import (
-                    BaseDataModule,
-                    UnlabeledDataModule,
-                )
-                from lightning_pose.data.datasets import (
-                    BaseTrackingDataset,
-                    HeatmapDataset,
-                )
+                from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
+                from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
 
                 # make new augmentation pipeline that just resizes
                 if not isinstance(imgaug_curr[-1], iaa.Resize):
