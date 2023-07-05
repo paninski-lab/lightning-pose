@@ -8,7 +8,7 @@ import os
 import pandas as pd
 import lightning.pytorch as pl
 from typeguard import typechecked
-from typing import Dict, Optional, Union
+from typing import Any, Dict, Optional, Union
 
 from lightning_pose.callbacks import AnnealWeight
 from lightning_pose.data.dali import PrepareDALI
@@ -48,6 +48,7 @@ from lightning_pose.utils.predictions import (
     predict_single_video,
 )
 
+from lightning_pose.utils.logging_debug import add_to_logger
 
 @typechecked
 def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
@@ -551,6 +552,7 @@ def compute_metrics(
     cfg: DictConfig,
     preds_file: str,
     data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
+    logger: Optional[Any] = None,
 ) -> None:
     """Compute various metrics on predictions csv file."""
 
@@ -608,6 +610,7 @@ def compute_metrics(
             error_df["set"] = set
         save_file = preds_file.replace(".csv", "_pixel_error.csv")
         error_df.to_csv(save_file)
+        add_to_logger(logger, error_df, "pixel_error", preds_file, index)
 
     if "temporal" in metrics_to_compute:
         temporal_norm_per_keypoint = temporal_norm(keypoints_pred)
@@ -619,6 +622,7 @@ def compute_metrics(
             temporal_norm_df["set"] = set
         save_file = preds_file.replace(".csv", "_temporal_norm.csv")
         temporal_norm_df.to_csv(save_file)
+        add_to_logger(logger, temporal_norm_df, "temporal_norm", preds_file, index)
 
     if "pca_singleview" in metrics_to_compute:
         # build pca object
@@ -639,6 +643,7 @@ def compute_metrics(
             pcasv_df["set"] = set
         save_file = preds_file.replace(".csv", "_pca_singleview_error.csv")
         pcasv_df.to_csv(save_file)
+        add_to_logger(logger, pcasv_df, "pca_singleview_error", preds_file, index)
 
     if "pca_multiview" in metrics_to_compute:
         # build pca object
@@ -659,6 +664,8 @@ def compute_metrics(
             pcamv_df["set"] = set
         save_file = preds_file.replace(".csv", "_pca_multiview_error.csv")
         pcamv_df.to_csv(save_file)
+        add_to_logger(logger, pcamv_df, "pca_multiview_error", preds_file, index)
+
 
 
 @typechecked

@@ -218,3 +218,7 @@ wandb:
   params:
     project:
     entity:
+
+active_loop:
+# location of active loop labels; for ex script, this should be relative to `data_dir`
+  csv_file: "../CollectedData_active_test.csv"

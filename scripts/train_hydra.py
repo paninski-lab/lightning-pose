@@ -183,6 +183,7 @@ def train(cfg: DictConfig):
                     cfg=cfg,
                     preds_file=prediction_csv_file,
                     data_module=data_module_pred,
+                    logger=logger,
                 )
             except Exception as e:
                 print(f"Error predicting on video {video_file}:\n{e}")
@@ -223,7 +224,8 @@ def train(cfg: DictConfig):
         # compute and save various metrics
         try:
             compute_metrics(
-                cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood
+                cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood,
+                logger=logger,
             )
         except Exception as e:
             print(f"Error computing metrics\n{e}")
@@ -232,9 +234,10 @@ def train(cfg: DictConfig):
     # predict on active loop test frames
     # ----------------------------------------------------------------------------------
     # update config file to point to OOD data
-    csv_file_ood = os.path.join(cfg.data.data_dir, cfg.data.csv_file).replace(
-        "_new.csv", "_active_test.csv"
-    )
+    if cfg.get('active_loop', None) is None:
+        return hydra_output_directory
+
+    csv_file_ood = os.path.join(cfg.data.data_dir, cfg.active_loop.csv_file)
     if os.path.exists(csv_file_ood):
         cfg_ood = cfg.copy()
         cfg_ood.data.csv_file = csv_file_ood
@@ -263,7 +266,8 @@ def train(cfg: DictConfig):
         # compute and save various metrics
         try:
             compute_metrics(
-                cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood
+                cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood,
+                logger=logger,
             )
         except Exception as e:
             print(f"Error computing metrics\n{e}")

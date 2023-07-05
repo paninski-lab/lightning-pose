@@ -17,7 +17,7 @@ python scripts/train_hydra.py \
   training.max_epochs=11 \
   wandb.logger=1 \
   wandb.params.project="lp-demo-paw" \
-  data.csv_file=${csv_iter1} \
+  #data.csv_file=${csv_iter1} \
 
 popd
 
