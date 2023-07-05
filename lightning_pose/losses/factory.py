@@ -1,6 +1,6 @@
 """High-level loss class that orchestrates the individual losses."""
 
-from typing import Dict, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 import lightning.pytorch as pl
 import torch
