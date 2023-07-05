@@ -59,7 +59,10 @@ def train(cfg: DictConfig):
     # ----------------------------------------------------------------------------------
 
     # logger
-    logger = pl.loggers.TensorBoardLogger("tb_logs", name=cfg.model.model_name)
+    if cfg.wandb.logger:
+        logger = pl.loggers.WandbLogger(save_dir="tb_logs", name=cfg.model.model_name, **cfg.wandb.params)
+    else:
+        logger = pl.loggers.TensorBoardLogger("tb_logs", name=cfg.model.model_name)
 
     # early stopping, learning rate monitoring, model checkpointing, backbone unfreezing
     callbacks = get_callbacks(cfg)
@@ -224,6 +227,48 @@ def train(cfg: DictConfig):
             )
         except Exception as e:
             print(f"Error computing metrics\n{e}")
+
+    # ----------------------------------------------------------------------------------
+    # predict on active loop test frames
+    # ----------------------------------------------------------------------------------
+    # update config file to point to OOD data
+    csv_file_ood = os.path.join(cfg.data.data_dir, cfg.data.csv_file).replace(
+        "_new.csv", "_active_test.csv"
+    )
+    if os.path.exists(csv_file_ood):
+        cfg_ood = cfg.copy()
+        cfg_ood.data.csv_file = csv_file_ood
+        cfg_ood.training.imgaug = "default"
+        cfg_ood.training.train_prob = 1
+        cfg_ood.training.val_prob = 0
+        cfg_ood.training.train_frames = 1
+        # build dataset/datamodule
+        imgaug_transform_ood = get_imgaug_transform(cfg=cfg_ood)
+        dataset_ood = get_dataset(
+            cfg=cfg_ood, data_dir=data_dir, imgaug_transform=imgaug_transform_ood
+        )
+        data_module_ood = get_data_module(cfg=cfg_ood, dataset=dataset_ood, video_dir=video_dir)
+        data_module_ood.setup()
+        pretty_print_str("Predicting on Active Loop Test images...")
+        # compute and save frame-wise predictions
+        preds_file_ood = os.path.join(hydra_output_directory, "predictions_active_test.csv")
+        predict_dataset(
+            cfg=cfg_ood,
+            trainer=trainer,
+            model=model,
+            data_module=data_module_ood,
+            ckpt_file=best_ckpt,
+            preds_file=preds_file_ood,
+        )
+        # compute and save various metrics
+        try:
+            compute_metrics(
+                cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood
+            )
+        except Exception as e:
+            print(f"Error computing metrics\n{e}")
+
+    return hydra_output_directory
 
 
 if __name__ == "__main__":
