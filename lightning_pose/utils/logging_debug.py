@@ -32,7 +32,7 @@ def add_to_logger(logger, error_df, error_name, preds_file, index):
     mean_error = np.nanmean(error_value)
 
     logger.experiment.log(
-      {'extra_metrics/{}/{}'.format(error_name,directory): mean_error,
+      {'extra_metrics/{}/{}'.format(error_name, directory): mean_error,
        #'extra_metrics/directory': directory,
        #'video': directory,
        #'pred_file': preds_name,
