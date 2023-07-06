@@ -4,7 +4,7 @@ import subprocess
 
 from setuptools import find_packages, setup
 
-VERSION = "0.0.2"  # was previously None
+VERSION = "0.0.2"
 
 # add the README.md file to the long_description
 with open("README.md", "r") as fh:
@@ -70,7 +70,6 @@ install_requires = [
     "typeguard==3.0.2",
     "typing==3.7.4.3",
     "botocore==1.27.59",
-    "segment_anything @ git+https://github.com/facebookresearch/segment-anything.git",
 ]
 
 

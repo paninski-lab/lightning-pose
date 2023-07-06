@@ -85,7 +85,14 @@ class BaseFeatureExtractor(LightningModule):
         self.backbone_arch = backbone
 
         if "sam" in self.backbone_arch:
-            from lightning_pose.models.backbones.vits import build_backbone
+            raise NotImplementedError(
+                "segment-anything backbones are not supported in this branch."
+                "If you are running the code from a github installation, switch to the branch"
+                "features/vit."
+                "If you have pip installed lightning pose, there is no access to segment-anything"
+                "models due to dependency/installation issues. "
+                "For more information please contatct the package maintainers."
+            )
         else:
             from lightning_pose.models.backbones.torchvision import build_backbone
 
