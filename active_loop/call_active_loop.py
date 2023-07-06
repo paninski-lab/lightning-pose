@@ -173,8 +173,9 @@ def call_active_all(active_cfg):
 
         # step 2: train model using exp_cfg
         train_output_dir = run_train(exp_cfg)
+
         # step 3: call active loop
-        iteration_key = 'iteration_{}'.format(current_iteration)
+        iteration_key = 'iteration_{}'.format(current_iteration + 1)
         active_cfg.active_loop.current_iteration = current_iteration
         active_cfg[iteration_key].output_prev_run = train_output_dir
         active_cfg[iteration_key].csv_file_prev_run = exp_cfg.data.csv_file
@@ -183,7 +184,7 @@ def call_active_all(active_cfg):
 
         # update config file
         exp_cfg.data.csv_file = new_train_file
-        exp_cfg.model.model_name = 'iter_{}_{}'.format(current_iteration,
+        exp_cfg.model.model_name = 'iter_{}_{}'.format(current_iteration + 1,
                                                        active_cfg[iteration_key].method)
 
     # write new active_cfg file
