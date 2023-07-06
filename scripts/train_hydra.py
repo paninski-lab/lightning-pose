@@ -28,12 +28,19 @@ from lightning_pose.utils.scripts import (
 @hydra.main(config_path="configs", config_name="config_mirror-mouse-example")
 def train(cfg: DictConfig):
     """Main fitting function, accessed from command line."""
-
     print("Our Hydra config file:")
     pretty_print_cfg(cfg)
 
     # path handling for toy data
     data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
+
+    # ----- dev run -------
+    fast_dev_run = cfg.training.get("fast_dev_run", False)
+    if fast_dev_run:
+        cfg.training.check_val_every_n_epoch = 1
+        cfg.training.min_epochs = 1
+        cfg.training.max_epochs = 1
+        cfg.training.train_frames = 0.1
 
     # ----------------------------------------------------------------------------------
     # Set up data/model objects
@@ -96,7 +103,7 @@ def train(cfg: DictConfig):
     # get best ckpt
     best_ckpt = os.path.abspath(trainer.checkpoint_callback.best_model_path)
     # check if best_ckpt is a file
-    if not os.path.isfile(best_ckpt):
+    if not os.path.isfile(best_ckpt) and not fast_dev_run:
         raise FileNotFoundError("Cannot find checkpoint. Have you trained for too few epochs?")
 
     # make unaugmented data_loader if necessary
@@ -234,7 +241,7 @@ def train(cfg: DictConfig):
     # predict on active loop test frames
     # ----------------------------------------------------------------------------------
     # update config file to point to OOD data
-    if cfg.get('active_loop', None) is None:
+    if cfg.active_loop.get('csv_file', None) is None:
         return hydra_output_directory
 
     csv_file_ood = os.path.join(cfg.data.data_dir, cfg.active_loop.csv_file)
