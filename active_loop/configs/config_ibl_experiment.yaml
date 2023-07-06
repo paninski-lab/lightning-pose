@@ -76,6 +76,7 @@ training:
     multisteplr:
       milestones: [150, 200, 250]
       gamma: 0.5
+  fast_dev_run: false
 
 model:
   # list of unsupervised losses
@@ -214,10 +215,11 @@ callbacks:
 
 # New active learning flags:
 wandb:
-  logger: false
+  logger: True
   params:
     project:
     entity:
+    tags:
 
 active_loop:
 # location of active loop labels; for ex script, this should be relative to `data_dir`
