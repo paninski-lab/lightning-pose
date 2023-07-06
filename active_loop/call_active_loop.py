@@ -3,13 +3,15 @@
 Call active loop functions
 """
 import os
-import shutil
 import random
 import pandas as pd
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import OmegaConf
 import sys
 from pathlib import Path
 import numpy as np
+from hydra import compose, initialize, initialize_config_dir
+from datetime import datetime
+import wandb
 
 def initialize_iteration_folder(data_dir):
     """ Initialize the iteration folder
@@ -18,16 +20,6 @@ def initialize_iteration_folder(data_dir):
     """
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
-    # train_data_file_prev_run = os.path.join(
-    #    active_iter_cfg.iteration_folder,
-    #    os.path.basename(active_iter_cfg.train_data_file_prev_run))
-    #eval_data_file_prev_run = train_data_file_prev_run.replace('.csv', '_new.csv')
-
-    #if not os.path.exists(train_data_file_prev_run):
-    #    shutil.copy(active_iter_cfg.train_data_file_prev_run, train_data_file_prev_run)
-    #if not os.path.exists(train_data_file_prev_run):
-    #    shutil.copy(active_iter_cfg.eval_data_file_prev_run, eval_data_file_prev_run)
-
 
 
 def select_frames(active_iter_cfg):
@@ -99,14 +91,13 @@ def update_config_yaml(config_file, merged_data_dir):
     OmegaConf.save(cfg, config_file)
 
 
-def active_loop_step(active_loop_cfg_file):
+def active_loop_step(active_loop_cfg):
     """
-    TODO(haotianxiansti) update explanations
+    TODO(haotianxiansti) update comments
     TODO(haotianxiansti) update to use hydra?
     # Step 6: Launch the next active_loop iteration
     """
     # read yaml file
-    active_loop_cfg = OmegaConf.load(active_loop_cfg_file)
     experiment_cfg = OmegaConf.load(active_loop_cfg.active_loop.experiment_cfg)
 
     # read params for current active loop iteration
@@ -152,10 +143,71 @@ def active_loop_step(active_loop_cfg_file):
     # run algorithm with new config file
     # make relative to data_dir
     relpath = os.path.relpath(active_iter_cfg.train_data_file, experiment_cfg.data.data_dir)
-    print('rerun algorithm with new config file:\n{}'.format(relpath))
+    #print('rerun algorithm with new config file:\n{}'.format(relpath), flush=True)
 
     return relpath
 
 
+def call_active_all(active_cfg):
+    """
+    # Step 5: Call active learning algorithm
+    :param config:
+    :return:
+    """
+    # Read experiment config file
+    exp_cfg = OmegaConf.load(active_cfg.active_loop.experiment_cfg)
+
+    # inherit params from active loop:
+    exp_cfg.wandb.params.project = active_cfg.project
+    if active_cfg.active_loop.fast_dev_run == 1:
+        exp_cfg.training.fast_dev_run = True
+
+    num_iterations = active_cfg.active_loop.end_iteration - active_cfg.active_loop.start_iteration + 1
+    for current_iteration in range(active_cfg.active_loop.start_iteration,
+                                   active_cfg.active_loop.end_iteration + 1):
+        print('\n\n Experiment iter {}'.format(current_iteration), flush=True)
+
+        if current_iteration == 0:
+            # step 1: select frames to label is skipped in demo mode.
+            exp_cfg.model.model_name = 'iter_{}_{}'.format(current_iteration, 'baseline')
+
+        # step 2: train model using exp_cfg
+        train_output_dir = run_train(exp_cfg)
+        # step 3: call active loop
+        iteration_key = 'iteration_{}'.format(current_iteration)
+        active_cfg.active_loop.current_iteration = current_iteration
+        active_cfg[iteration_key].output_prev_run = train_output_dir
+        active_cfg[iteration_key].csv_file_prev_run = exp_cfg.data.csv_file
+        #print('\n\nActive loop config after iter {}'.format(current_iteration), active_cfg, flush=True)
+        new_train_file = active_loop_step(active_cfg)
+
+        # update config file
+        exp_cfg.data.csv_file = new_train_file
+        exp_cfg.model.model_name = 'iter_{}_{}'.format(current_iteration,
+                                                       active_cfg[iteration_key].method)
+
+    # write new active_cfg file
+    return active_cfg
+
+
+def run_train(cfg):
+    sys.path.append(os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts'))
+    import train_hydra
+    cwd = os.getcwd()
+    today_str = datetime.now().strftime("%y-%m-%d")
+    ctime_str = datetime.now().strftime("%H-%M-%S")
+    new_dir = f"./outputs/{today_str}/{ctime_str}"
+    os.makedirs(new_dir, exist_ok=False)
+    os.chdir(new_dir)
+    train_output_dir = train_hydra.train(cfg)
+    os.chdir(cwd)
+    wandb.finish()
+    return train_output_dir
+
+
 if __name__ == "__main__":
-    active_loop_step(sys.argv[1])
+    # read active config file
+    active_loop_cfg = OmegaConf.load(sys.argv[1])
+    # active_loop_step(active_loop_cfg)
+    call_active_all(active_loop_cfg)
