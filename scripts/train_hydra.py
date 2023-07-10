@@ -227,6 +227,7 @@ def train(cfg: DictConfig):
             data_module=data_module_ood,
             ckpt_file=best_ckpt,
             preds_file=preds_file_ood,
+            manual_step=True,
         )
         # compute and save various metrics
         try:

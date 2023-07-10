@@ -280,6 +280,7 @@ def predict_dataset(
             SemiSupervisedHeatmapTracker,
         ]
     ] = None,
+    manual_step: bool = False,
 ) -> pd.DataFrame:
     """Save predicted keypoints for a labeled dataset.
 
@@ -305,16 +306,31 @@ def predict_dataset(
     if trainer is None:
         trainer = pl.Trainer(devices=1, accelerator="auto")
 
-    labeled_preds = trainer.predict(
+
+    if manual_step:
+        # disable grads + batchnorm + dropout
+        # https://lightning.ai/docs/pytorch/stable/common/lightning_module.html
+        torch.set_grad_enabled(False)
+        model.eval()
+        labeled_preds = []
+
+        for batch_idx, batch in enumerate(data_module.full_labeled_dataloader()):
+            pred = model.predict_step(batch, batch_idx, return_heatmaps=True)
+            labeled_preds.append(pred)
+    else:
+        labeled_preds = trainer.predict(
         model=model,
         dataloaders=data_module.full_labeled_dataloader(),
         return_predictions=True,
+        return_heatmaps=True,
     )
 
     pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
     labeled_preds_df = pred_handler(preds=labeled_preds)
     labeled_preds_df.to_csv(preds_file)
 
+    # TODO:compute margin from heatmaps in labeled_preds
+    # store margin in csv
     return labeled_preds_df
 
 
