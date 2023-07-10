@@ -8,10 +8,11 @@ Codebase:
 - Step 2: 
 - [x] Given a` predictions_new.csv file` select N frames at random <>
   - AL methods: Fix videos which you want to label.
-        random sampling: input: predictions file: output: `random_frames.csv` .Possibly multiple runs, possibly data from multiple models.
-        margin sampling: input: callback when creating predictions file that computes the margins in the heatmap and output: `margin_frames.csv`
-        ensemble sampling: input: multiple predictions file (from different models), output: `ensemble_frames.csv`
-        error-loss based sampling: input predictions file, outputs: `loss_frames.csv` (reprojection error, smoothing error)
+    - [X] random sampling: input: predictions file: output: `random_frames.csv` .Possibly multiple runs, possibly data from multiple models.
+    - [ ] random sampling wo low energy 
+    - [ ] margin sampling: input: callback when creating predictions file that computes the margins in the heatmap and output: `margin_frames.csv`
+    - [ ] ensemble sampling: input: multiple predictions file (from different models), output: `ensemble_frames.csv`
+    - [ ] error-loss based sampling: input predictions file, outputs: `loss_frames.csv` (reprojection error, smoothing error)
 - [x] How to combine the frames from different methods? 
 - [x] create a new file `iteration_active_loop/experiment0/${method}_${num_frames}` with the `new_frames (and their labels)*` (labels available in debug mode or from user).
 - [x] merge previous run train frames in `CollectedData.csv` in new `${method}_${num_frames}_CollectedData.csv`  file.
