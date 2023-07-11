@@ -322,7 +322,6 @@ def predict_dataset(
         model=model,
         dataloaders=data_module.full_labeled_dataloader(),
         return_predictions=True,
-        return_heatmaps=True,
     )
 
     pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
