@@ -688,6 +688,7 @@ def export_predictions_and_labeled_video(
     data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
     labeled_mp4_file: Optional[str] = None,
     save_heatmaps: Optional[bool] = False,
+    manual_step: Optional[str] = False,
 ) -> None:
     """Export predictions csv and a labeled video for a single video file."""
 
