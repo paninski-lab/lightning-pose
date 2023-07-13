@@ -48,6 +48,11 @@ def select_frames(active_iter_cfg):
         # Select the top N rows with the smallest sum
         selected_frames = all_data.nsmallest(num_frames, 'sum')
         selected_frames = selected_frames.drop('sum', axis=1)
+    elif method == 'ensemble':
+        for file in active_iter_cfg.eval_data_file_prev_run:
+            all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0, 1, 2], index_col=0)
+
+        NotImplementedError(f'{method} is not implemented yet.')
     else:
         NotImplementedError(f'{method} is not implemented yet.')
 
