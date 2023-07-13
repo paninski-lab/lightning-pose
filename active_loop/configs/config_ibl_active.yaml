@@ -9,13 +9,13 @@ active_loop:
   end_iteration: 3
 
 iteration_x:
-  output_prev_run:  # where the outputs of the last iteration are saved
-  csv_file_prev_run:  # where the csv file of the last iteration is saved
+  output_prev_run:  [] # where the outputs of the last iteration are saved
+  csv_file_prev_run: [] # where the csv file of the last iteration is saved
   method: "random"  #active learning method
   num_frames:   # where the new frames are located
 
 iteration_1:
-  output_prev_run: # example: "/data/libraries/lightning-pose/outputs/2023-07-05/11-24-03"
+  output_prev_run: # example: ["/data/libraries/lightning-pose/outputs/2023-07-05/11-24-03",]
   csv_file_prev_run: "../CollaectedData.csv"
   method: "random"
   num_frames: 10
