@@ -1,10 +1,10 @@
-project: "active_debug"
+project: "active_ibl1"
 
 active_loop:
   current_iteration:
   experiment_cfg: "/data/libraries/lightning-pose/active_loop/configs/config_ibl_experiment.yaml"
   iterations_folder: "iteration_active_loop/experiment0" #relative to data_dir
-  fast_dev_run: 1
+  fast_dev_run: 0
   start_iteration: 0
   end_iteration: 3
 
