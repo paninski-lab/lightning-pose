@@ -40,13 +40,25 @@ def select_frames(active_iter_cfg):
       # select random frames from eval data in prev run.
       all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0,1,2], index_col=0)
       selected_indices = np.unique(random.sample(range(len(all_data)), num_frames))  # Get index from either places
-      selected_rows = all_data.iloc[selected_indices]
-      selected_indices_file = f'iteration_{method}_indices.csv'
-      selected_indices_file = os.path.join(output_dir, selected_indices_file)
-      selected_rows.to_csv(selected_indices_file)
-    else:
-      NotImplementedError(f'{method} is not implemented yet.')
+      selected_frames = all_data.iloc[selected_indices]
+    elif method == 'uncertainity_sampling':
+        all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0, 1, 2], index_col=0)
+        # Calculate the sum of columns 4, 7, 10, and 13
+        all_data['sum'] = all_data.iloc[:, [3, 6]].sum(axis=1)
+        # Select the top N rows with the smallest sum
+        selected_frames = all_data.nsmallest(num_frames, 'sum')
+        selected_frames = selected_frames.drop('sum', axis=1)
+    elif method == 'ensemble':
+        for file in active_iter_cfg.eval_data_file_prev_run:
+            all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0, 1, 2], index_col=0)
 
+        NotImplementedError(f'{method} is not implemented yet.')
+    else:
+        NotImplementedError(f'{method} is not implemented yet.')
+
+    selected_indices_file = f'iteration_{method}_indices.csv'
+    selected_indices_file = os.path.join(output_dir, selected_indices_file)
+    selected_frames.to_csv(selected_indices_file)
     return selected_indices_file
 
 

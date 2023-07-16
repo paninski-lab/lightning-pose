@@ -47,3 +47,10 @@ Launch experiment:
 - [x] Step 3: select frames for active loop 
   - `random_CollectedData.csv`  = loop_iteration_#(method='random', data=`predictions.csv`)
     - Go back to step 1. train_frames, where data.csv_file points to new `random_CollectedData.csv` file
+
+# Baselines:
+- [x] Random sampling
+- [x] Ensemble Baseline:
+  - train 4 models each with different seeds, each will produce files `predictions.csv`, `predictions_new.csv`
+  - calculate the variance across the predictions of the models.
+  - select frames with the highest variance.
