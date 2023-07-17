@@ -41,18 +41,107 @@ def select_frames(active_iter_cfg):
       all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0,1,2], index_col=0)
       selected_indices = np.unique(random.sample(range(len(all_data)), num_frames))  # Get index from either places
       selected_frames = all_data.iloc[selected_indices]
-    elif method == 'uncertainity_sampling':
-        all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0, 1, 2], index_col=0)
-        # Calculate the sum of columns 4, 7, 10, and 13
-        all_data['sum'] = all_data.iloc[:, [3, 6]].sum(axis=1)
-        # Select the top N rows with the smallest sum
-        selected_frames = all_data.nsmallest(num_frames, 'sum')
-        selected_frames = selected_frames.drop('sum', axis=1)
-    elif method == 'ensemble':
-        for file in active_iter_cfg.eval_data_file_prev_run:
-            all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0, 1, 2], index_col=0)
+    elif method == 'uncertainity sampling':
+      all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0,1,2], index_col=0)
 
-        NotImplementedError(f'{method} is not implemented yet.')
+      all_data['sum'] = all_data.iloc[:, [3, 6]].sum(axis=1)
+
+    # Select the top 10 rows with the smallest sum
+      selected_frames = all_data.nsmallest(num_frames, 'sum')
+
+      selected_frames = selected_frames.drop('sum', axis=1)
+
+      selected_indices_file = f'iteration_{method}_indices.csv'
+      selected_indices_file = os.path.join(output_dir, selected_indices_file)
+
+    # Save the selected frames to a CSV file
+      selected_frames.to_csv(selected_indices_file)
+
+    elif method == 'margin sampling':
+      all_data_collect_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0,1,2],index_col=0)
+
+      all_data=pd.read_csv('/content/drive/MyDrive/Ibl 1 Outputs/Outputs/2023-07-13/04-22-29_margin_sampling_iter_2/predictions_new.csv', header=[0,1,2],index_col=0)
+
+      all_data['sum'] = all_data.iloc[:, [4,8,12,16]].sum(axis=1)
+
+    # Select the top 10 rows with the smallest sum
+      selected_frames = all_data.nsmallest(num_frames, 'sum')
+
+      all_data=all_data.drop('sum', axis=1)
+
+      selected_frames = selected_frames.drop('sum', axis=1)
+
+      selected_frames.to_csv("test.csv")
+
+      selected_frames.set_index(('scorer', 'bodyparts', 'coords'), inplace=True)
+
+      all_data_collect_data.set_index(('scorer', 'bodyparts', 'coords'), inplace=True)
+
+      matched_rows=all_data_collect_data.loc[selected_frames.index]
+
+      '''
+      all_data_collect_data=all_data_collect_data.reset_index()
+      matched_rows=matched_rows.reset_index()
+
+      matched_rows.to_csv("test_match.csv")
+      '''
+      selected_indices_file = f'iteration_{method}_indices.csv'
+
+      selected_indices_file = os.path.join(output_dir, selected_indices_file)
+
+    # Save the selected frames to a CSV file
+      matched_rows.to_csv(selected_indices_file)
+
+    elif method == 'Ensembling':
+      
+      all_data_collect_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0,1,2],index_col=0)
+
+      folder_path = "/content/drive/MyDrive/Ibl 1 Outputs/Outputs/2023-07-17/Iteration New"
+      seed=0
+      pd_file={}
+      finger={}
+
+      for i in range(8):
+        finger[str(i)]=pd.DataFrame()
+      while seed<6:
+          for file in os.listdir(folder_path):
+
+              file_path = os.path.join(folder_path, file)
+              if file_path.endswith("predictions_new_iteration1_seed_"+str(seed)+".csv"):
+                pd_file[str(seed)]=pd.read_csv(file_path, header=[0,1,2], index_col=0)#file_path
+                seed+=1
+
+
+      for i in range(6):
+        finger[str(0)]=pd.concat([finger[str(0)],pd_file[str(i)].iloc[:,[0]]],axis=1)
+        finger[str(1)]=pd.concat([finger[str(1)],pd_file[str(i)].iloc[:,[1]]],axis=1)
+        finger[str(2)]=pd.concat([finger[str(2)],pd_file[str(i)].iloc[:,[3]]],axis=1)
+        finger[str(3)]=pd.concat([finger[str(3)],pd_file[str(i)].iloc[:,[4]]],axis=1)
+        finger[str(4)]=pd.concat([finger[str(4)],pd_file[str(i)].iloc[:,[6]]],axis=1)
+        finger[str(5)]=pd.concat([finger[str(5)],pd_file[str(i)].iloc[:,[7]]],axis=1)
+        finger[str(6)]=pd.concat([finger[str(6)],pd_file[str(i)].iloc[:,[9]]],axis=1)
+        finger[str(7)]=pd.concat([finger[str(7)],pd_file[str(i)].iloc[:,[10]]],axis=1)
+
+      for i in range(8):
+        finger[str(i)]=finger[str(i)].var(axis=1)
+
+      combined_df = pd.concat([finger[str(i)] for i in range(8)], axis=1)
+      combined_df=combined_df.sum(axis=1)
+      var_df=pd.read_csv("/content/drive/MyDrive/Ibl 1 Outputs/Outputs/2023-07-17/Iteration New/predictions_new_iteration1_seed_0.csv", header=[0,1,2], index_col=0)
+      var_df = var_df.reindex(combined_df.index)
+      var_df["var"]=pd.DataFrame(combined_df)
+      selected_frames = var_df.nlargest(num_frames, "var")
+      selected_frames=selected_frames.drop("var", axis=1)
+      #selected_frames.set_index(('scorer', 'bodyparts', 'coords'), inplace=True)
+
+      #all_data_collect_data.set_index(('scorer', 'bodyparts', 'coords'), inplace=True)
+
+      matched_rows=all_data_collect_data.loc[selected_frames.index]
+
+      selected_indices_file = f'iteration_{method}_indices.csv'
+      selected_indices_file = os.path.join(output_dir, selected_indices_file)
+    # Save the selected frames to a CSV file
+      matched_rows.to_csv(selected_indices_file)
     else:
         NotImplementedError(f'{method} is not implemented yet.')
 
