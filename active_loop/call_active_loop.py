@@ -59,8 +59,11 @@ def select_frames(active_iter_cfg):
 
     elif method == 'margin sampling':
       all_data_collect_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0,1,2],index_col=0)
-
-      all_data=pd.read_csv('/content/drive/MyDrive/Ibl 1 Outputs/Outputs/2023-07-13/04-22-29_margin_sampling_iter_2/predictions_new.csv', header=[0,1,2],index_col=0)
+      #prev_output_dir
+      for file in os.listdir(folder_path):
+          file_path = os.path.join(prev_output_dir, file)
+          if file_path.endswith("predictions_new.csv"):
+            all_data=pd.read_csv(file_path, header=[0,1,2],index_col=0)
 
       all_data['sum'] = all_data.iloc[:, [4,8,12,16]].sum(axis=1)
 
@@ -70,8 +73,6 @@ def select_frames(active_iter_cfg):
       all_data=all_data.drop('sum', axis=1)
 
       selected_frames = selected_frames.drop('sum', axis=1)
-
-      selected_frames.to_csv("test.csv")
 
       selected_frames.set_index(('scorer', 'bodyparts', 'coords'), inplace=True)
 
@@ -94,60 +95,48 @@ def select_frames(active_iter_cfg):
 
     elif method == 'Ensembling':
       
-      all_data_collect_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0,1,2],index_col=0)
+      all_data_collect_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0,1,2],index_col=0) #prediction_new.csv
 
-      folder_path = "/content/drive/MyDrive/Ibl 1 Outputs/Outputs/2023-07-17/Iteration New"
-      seed=0
+      folder_path = prev_output_dir
       pd_file={}
       finger={}
-
-      for i in range(8):
+      num_finger_coord=num_keypoints*2
+      for i in range(num_finger_coord):
         finger[str(i)]=pd.DataFrame()
-      while seed<6:
-          for file in os.listdir(folder_path):
+      seed=0
 
+      while seed<len(seeds_list):
+        for file in os.listdir(folder_path):
               file_path = os.path.join(folder_path, file)
-              if file_path.endswith("predictions_new_iteration1_seed_"+str(seed)+".csv"):
+              if file_path.endswith("predictions_new_seed_"+str(seed)+".csv"): #change#########
                 pd_file[str(seed)]=pd.read_csv(file_path, header=[0,1,2], index_col=0)#file_path
                 seed+=1
 
-
-      for i in range(6):
-        finger[str(0)]=pd.concat([finger[str(0)],pd_file[str(i)].iloc[:,[0]]],axis=1)
-        finger[str(1)]=pd.concat([finger[str(1)],pd_file[str(i)].iloc[:,[1]]],axis=1)
-        finger[str(2)]=pd.concat([finger[str(2)],pd_file[str(i)].iloc[:,[3]]],axis=1)
-        finger[str(3)]=pd.concat([finger[str(3)],pd_file[str(i)].iloc[:,[4]]],axis=1)
-        finger[str(4)]=pd.concat([finger[str(4)],pd_file[str(i)].iloc[:,[6]]],axis=1)
-        finger[str(5)]=pd.concat([finger[str(5)],pd_file[str(i)].iloc[:,[7]]],axis=1)
-        finger[str(6)]=pd.concat([finger[str(6)],pd_file[str(i)].iloc[:,[9]]],axis=1)
-        finger[str(7)]=pd.concat([finger[str(7)],pd_file[str(i)].iloc[:,[10]]],axis=1)
+      column_num=[0,1,3,4,6,7,9,10]
+      for i in range(len(seeds_list)):
+        for finger_num in range(num_finger_coord):
+          finger[str(finger_num)]=pd.concat([finger[str(finger_num)],pd_file[str(i)].iloc[:,[column_num[finger_num]]]],axis=1)
 
       for i in range(8):
         finger[str(i)]=finger[str(i)].var(axis=1)
 
       combined_df = pd.concat([finger[str(i)] for i in range(8)], axis=1)
       combined_df=combined_df.sum(axis=1)
-      var_df=pd.read_csv("/content/drive/MyDrive/Ibl 1 Outputs/Outputs/2023-07-17/Iteration New/predictions_new_iteration1_seed_0.csv", header=[0,1,2], index_col=0)
+      var_df=pd.read_csv(file_path, header=[0,1,2], index_col=0)
       var_df = var_df.reindex(combined_df.index)
       var_df["var"]=pd.DataFrame(combined_df)
       selected_frames = var_df.nlargest(num_frames, "var")
       selected_frames=selected_frames.drop("var", axis=1)
-      #selected_frames.set_index(('scorer', 'bodyparts', 'coords'), inplace=True)
-
-      #all_data_collect_data.set_index(('scorer', 'bodyparts', 'coords'), inplace=True)
-
       matched_rows=all_data_collect_data.loc[selected_frames.index]
-
       selected_indices_file = f'iteration_{method}_indices.csv'
       selected_indices_file = os.path.join(output_dir, selected_indices_file)
     # Save the selected frames to a CSV file
       matched_rows.to_csv(selected_indices_file)
-    else:
-        NotImplementedError(f'{method} is not implemented yet.')
+      matched_rows.to_csv("/content/test_new.csv")
 
-    selected_indices_file = f'iteration_{method}_indices.csv'
-    selected_indices_file = os.path.join(output_dir, selected_indices_file)
-    selected_frames.to_csv(selected_indices_file)
+    else:
+      NotImplementedError(f'{method} is not implemented yet.')
+
     return selected_indices_file
 
 
