@@ -132,7 +132,6 @@ def select_frames(active_iter_cfg):
       selected_indices_file = os.path.join(output_dir, selected_indices_file)
     # Save the selected frames to a CSV file
       matched_rows.to_csv(selected_indices_file)
-      matched_rows.to_csv("/content/test_new.csv")
 
     else:
       NotImplementedError(f'{method} is not implemented yet.')
