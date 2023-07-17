@@ -13,6 +13,40 @@ from hydra import compose, initialize, initialize_config_dir
 from datetime import datetime
 import wandb
 
+
+def low_energy_random_sampling(energy_func, all_data,num_frames):
+    """
+    Args:
+        energy_func (callable): Energy Function
+        num_frames (int): number of Frames
+
+    Returns:
+        samples (list): List of Indcie
+        
+    """
+    samples = []
+    while len(samples) < num_frames:
+
+
+        sample = np.unique(random.sample(range(len(all_data)), 1))
+
+
+        energy = energy_func(sample)
+        
+        probability = np.exp(-energy)
+        
+        uniform_sample = np.unique(random.sample(range(len(all_data)), 1))
+        
+        if uniform_sample < probability:
+            samples.append(int(sample))
+    
+    return np.array(samples)
+
+
+def energy_function(x):
+    return x**2
+
+
 def initialize_iteration_folder(data_dir):
     """ Initialize the iteration folder
     :param data_dir: where the iteration folder will be created.
@@ -39,7 +73,7 @@ def select_frames(active_iter_cfg):
     if method == 'random':
       # select random frames from eval data in prev run.
       all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0,1,2], index_col=0)
-      selected_indices = np.unique(random.sample(range(len(all_data)), num_frames))  # Get index from either places
+      selected_indices = low_energy_random_sampling(energy_function,all_data , num_frames)#np.unique(random.sample(range(len(all_data)), num_frames))  # Get index from either places
       selected_frames = all_data.iloc[selected_indices]
     elif method == 'uncertainity sampling':
       all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0,1,2], index_col=0)
