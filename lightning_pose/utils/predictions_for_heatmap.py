@@ -232,31 +232,43 @@ class PredictionHandler:
         y_og = self.cfg.data.image_orig_dims.height
         predictions[:, 1::4] = keypoints_np[:, 1::2] / y_resize * y_og
         predictions[:, 2::4] = confidence_np
-        heat_np_list_1=list()
-        heat_np_list_2=list()
-        heat_np_list_3=list()
-        heat_np_list_4=list()
+        '''heat_np_list_1=list()
+                heat_np_list_2=list()
+                heat_np_list_3=list()
+                heat_np_list_4=list()
+                for n in range(heat_np.shape[0]):
+                  heat1=heat_np[n][0]
+                  diff=cal_qudra(heat1)
+                  heat_np_list_1.append(diff)
+                  heat2=heat_np[n][1]
+                  diff=cal_qudra(heat2)
+                  heat_np_list_2.append(diff)
+                  heat3=heat_np[n][2]
+                  diff=cal_qudra(heat3)
+                  heat_np_list_3.append(diff)
+                  heat4=heat_np[n][3]
+                  diff=cal_qudra(heat4)
+                  heat_np_list_4.append(diff)
+                heat_np_1=np.array(heat_np_list_1)
+                heat_np_2=np.array(heat_np_list_2)
+                heat_np_3=np.array(heat_np_list_3)
+                heat_np_4=np.array(heat_np_list_4)
+                predictions[:, 3]=heat_np_1
+                predictions[:, 7]=heat_np_2
+                predictions[:, 11]=heat_np_3
+                predictions[:, 15]=heat_np_4
+        '''
+        heat_np_list={}
+        seg_num=4
+        for i in range(seg_num):
+          heat_np_list[str(i)]=list()
         for n in range(heat_np.shape[0]):
-          heat1=heat_np[n][0]
-          diff=cal_qudra(heat1)
-          heat_np_list_1.append(diff)
-          heat2=heat_np[n][1]
-          diff=cal_qudra(heat2)
-          heat_np_list_2.append(diff)
-          heat3=heat_np[n][2]
-          diff=cal_qudra(heat3)
-          heat_np_list_3.append(diff)
-          heat4=heat_np[n][3]
-          diff=cal_qudra(heat4)
-          heat_np_list_4.append(diff)
-        heat_np_1=np.array(heat_np_list_1)
-        heat_np_2=np.array(heat_np_list_2)
-        heat_np_3=np.array(heat_np_list_3)
-        heat_np_4=np.array(heat_np_list_4)
-        predictions[:, 3]=heat_np_1
-        predictions[:, 7]=heat_np_2
-        predictions[:, 11]=heat_np_3
-        predictions[:, 15]=heat_np_4
+          for i in range(seg_num):
+            diff=cal_qudra(heat_np[n][i])
+            heat_np_list[str(i)].append(diff)
+        column_heatmap=[3,7,11,15]
+        for i in range(seg_num):
+          predictions[:, column_heatmap[i]]=np.array(heat_np_list[str(i)])
         
 
 
