@@ -56,7 +56,7 @@ def initialize_iteration_folder(data_dir):
         os.makedirs(data_dir)
 
 
-def select_frames(active_iter_cfg,num_keypoints,seeds_list):
+def select_frames(active_iter_cfg,num_keypoints,seeds_list,prev_output_dir):
     """
     Step 2: select frames to label
     Implement the logic for selecting frames based on the specified method:
@@ -68,14 +68,20 @@ def select_frames(active_iter_cfg,num_keypoints,seeds_list):
     method = active_iter_cfg.method
     num_frames = active_iter_cfg.num_frames
     output_dir = active_iter_cfg.iteration_folder
-    prev_output_dir=active_iter_cfg.output_prev_run #parent dir for prediction csv
-
+    #prev_output_dir=active_iter_cfg.output_prev_run #parent dir for prediction csv
+    
     # We need to know the index of our selected data (list)
     if method == 'random':
       # select random frames from eval data in prev run.
       all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0,1,2], index_col=0)
       selected_indices = low_energy_random_sampling(energy_function,all_data , num_frames)#np.unique(random.sample(range(len(all_data)), num_frames))  # Get index from either places
       selected_frames = all_data.iloc[selected_indices]
+      matched_rows=all_data.loc[selected_frames.index]
+      selected_indices_file = f'iteration_{method}_indices.csv'
+      selected_indices_file = os.path.join(output_dir, selected_indices_file)
+    # Save the selected frames to a CSV file
+      matched_rows.to_csv(selected_indices_file)
+
     elif method == 'uncertainity sampling':
       all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0,1,2], index_col=0)
 
@@ -261,7 +267,8 @@ def active_loop_step(active_loop_cfg):
 
     num_keypoints=experiment_cfg.data.num_keypoints
     seeds_list=[0,1,2,3,4,5]
-    selected_frames_file = select_frames(active_iter_cfg,num_keypoints,seeds_list)
+    prev_output_dir=active_iter_cfg.output_prev_run
+    selected_frames_file = select_frames(active_iter_cfg,num_keypoints,seeds_list,prev_output_dir)
 
     # Now, we have in the directory:
     # created Collected_data_new_merged and Collected_data_merged.csv
@@ -303,7 +310,7 @@ def call_active_all(active_cfg):
         # step 3: call active loop
         iteration_key = 'iteration_{}'.format(current_iteration + 1)
         active_cfg.active_loop.current_iteration = current_iteration
-        active_cfg[iteration_key].output_prev_run = train_output_dir
+        #active_cfg[iteration_key].output_prev_run = train_output_dir #need to uncomment
         active_cfg[iteration_key].csv_file_prev_run = exp_cfg.data.csv_file
         #print('\n\nActive loop config after iter {}'.format(current_iteration), active_cfg, flush=True)
         new_train_file = active_loop_step(active_cfg)
