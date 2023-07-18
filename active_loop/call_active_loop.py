@@ -308,6 +308,8 @@ def call_active_all(active_cfg):
         train_output_dir = run_train(exp_cfg)
 
         # step 3: call active loop
+        if current_iteration + 1 >  active_cfg.active_loop.end_iteration:
+          break
         iteration_key = 'iteration_{}'.format(current_iteration + 1)
         active_cfg.active_loop.current_iteration = current_iteration
         #active_cfg[iteration_key].output_prev_run = train_output_dir #need to uncomment
