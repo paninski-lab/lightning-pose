@@ -68,6 +68,7 @@ def select_frames(active_iter_cfg,num_keypoints,seeds_list):
     method = active_iter_cfg.method
     num_frames = active_iter_cfg.num_frames
     output_dir = active_iter_cfg.iteration_folder
+    prev_output_dir=active_iter_cfg.output_prev_run #parent dir for prediction csv
 
     # We need to know the index of our selected data (list)
     if method == 'random':
