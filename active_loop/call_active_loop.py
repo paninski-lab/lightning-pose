@@ -56,7 +56,7 @@ def initialize_iteration_folder(data_dir):
         os.makedirs(data_dir)
 
 
-def select_frames(active_iter_cfg):
+def select_frames(active_iter_cfg,num_keypoints,seeds_list):
     """
     Step 2: select frames to label
     Implement the logic for selecting frames based on the specified method:
@@ -258,7 +258,9 @@ def active_loop_step(active_loop_cfg):
     #  TODO(haotianxiansti):  add code for iter 0 (select frames when no labeles are present)
     initialize_iteration_folder(active_iter_cfg.iteration_folder)
 
-    selected_frames_file = select_frames(active_iter_cfg)
+    num_keypoints=experiment_cfg.data.num_keypoints
+    seeds_list=[0,1,2,3,4,5]
+    selected_frames_file = select_frames(active_iter_cfg,num_keypoints,seeds_list)
 
     # Now, we have in the directory:
     # created Collected_data_new_merged and Collected_data_merged.csv
