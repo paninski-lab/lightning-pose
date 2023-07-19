@@ -342,7 +342,7 @@ def run_train(active_iter_cfg,cfg):
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts'))
     import train_hydra
 
-    if active_iter_cfg.use_ensemble:
+    if active_iter_cfg.use_ensemble==True:
 
       cwd = os.getcwd()
       today_str = datetime.now().strftime("%y-%m-%d")
