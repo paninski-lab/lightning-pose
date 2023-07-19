@@ -312,7 +312,7 @@ def call_active_all(active_cfg):
           break
         iteration_key = 'iteration_{}'.format(current_iteration + 1)
         active_cfg.active_loop.current_iteration = current_iteration
-        #active_cfg[iteration_key].output_prev_run = train_output_dir #need to uncomment
+        active_cfg[iteration_key].output_prev_run = train_output_dir #need to uncomment
         active_cfg[iteration_key].csv_file_prev_run = exp_cfg.data.csv_file
         #print('\n\nActive loop config after iter {}'.format(current_iteration), active_cfg, flush=True)
         new_train_file = active_loop_step(active_cfg)
