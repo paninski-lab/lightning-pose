@@ -56,7 +56,7 @@ def initialize_iteration_folder(data_dir):
         os.makedirs(data_dir)
 
 
-def select_frames(active_iter_cfg,num_keypoints,seeds_list,prev_output_dir):
+def select_frames(active_iter_cfg,num_keypoints,seeds_list,prev_output_dir,tar):
     """
     Step 2: select frames to label
     Implement the logic for selecting frames based on the specified method:
@@ -145,15 +145,20 @@ def select_frames(active_iter_cfg,num_keypoints,seeds_list,prev_output_dir):
       for i in range(num_finger_coord):
         finger[str(i)]=pd.DataFrame()
       seed=0
-
+      
       while seed<len(seeds_list):
         for file in os.listdir(folder_path):
               file_path = os.path.join(folder_path, file)
-              if file_path.endswith("predictions_new_seed_"+str(seed)+".csv"): #change#########
+              if file_path.endswith("predictions_new_seed"+str(seed)+".csv"): #change#########
                 pd_file[str(seed)]=pd.read_csv(file_path, header=[0,1,2], index_col=0)#file_path
                 seed+=1
 
-      column_num=[0,1,3,4,6,7,9,10]
+      print(pd_file[str(0)].shape)
+      print(num_finger_coord)
+      column_num=list()
+      for s in range(pd_file[str(0)].shape[0]):
+        if s%3 !=2:
+          column_num.append(s)
       for i in range(len(seeds_list)):
         for finger_num in range(num_finger_coord):
           finger[str(finger_num)]=pd.concat([finger[str(finger_num)],pd_file[str(i)].iloc[:,[column_num[finger_num]]]],axis=1)
@@ -266,9 +271,12 @@ def active_loop_step(active_loop_cfg):
     initialize_iteration_folder(active_iter_cfg.iteration_folder)
 
     num_keypoints=experiment_cfg.data.num_keypoints
-    seeds_list=[0,1,2,3,4,5]
-    prev_output_dir=active_iter_cfg.output_prev_run
-    selected_frames_file = select_frames(active_iter_cfg,num_keypoints,seeds_list,prev_output_dir)
+    seeds_list=active_iter_cfg.use_seeds
+    iteration_key_next = 'iteration_{}'.format(iteration_number+1)
+    active_iter_cfg_next = active_loop_cfg[iteration_key_next]
+    prev_output_dir=active_iter_cfg_next.output_prev_run
+    tar=active_loop_cfg.project
+    selected_frames_file = select_frames(active_iter_cfg,num_keypoints,seeds_list,prev_output_dir,tar)
 
     # Now, we have in the directory:
     # created Collected_data_new_merged and Collected_data_merged.csv
@@ -307,12 +315,13 @@ def call_active_all(active_cfg):
             exp_cfg.model.model_name = 'iter_{}_{}'.format(current_iteration, 'baseline')
 
         # step 2: train model using exp_cfg
-        train_output_dir = run_train(exp_cfg)
+        iteration_key_current = 'iteration_{}'.format(current_iteration)
+        train_output_dir = run_train(active_cfg[iteration_key_current],exp_cfg) #think here!!!
 
         # step 3: call active loop
         if current_iteration + 1 >  active_cfg.active_loop.end_iteration:
           break
-        iteration_key = 'iteration_{}'.format(current_iteration + 1)
+        iteration_key = 'iteration_{}'.format(current_iteration + 1) #think here!!!#####
         active_cfg.active_loop.current_iteration = current_iteration
         active_cfg[iteration_key].output_prev_run = train_output_dir #need to uncomment
         active_cfg[iteration_key].csv_file_prev_run = exp_cfg.data.csv_file
@@ -328,19 +337,38 @@ def call_active_all(active_cfg):
     return active_cfg
 
 
-def run_train(cfg):
+def run_train(active_iter_cfg,cfg):
     sys.path.append(os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts'))
     import train_hydra
-    cwd = os.getcwd()
-    today_str = datetime.now().strftime("%y-%m-%d")
-    ctime_str = datetime.now().strftime("%H-%M-%S")
-    new_dir = f"./outputs/{today_str}/{ctime_str}"
-    os.makedirs(new_dir, exist_ok=False)
-    os.chdir(new_dir)
-    train_output_dir = train_hydra.train(cfg)
-    os.chdir(cwd)
-    wandb.finish()
+
+    if active_iter_cfg.use_ensemble:
+
+      cwd = os.getcwd()
+      today_str = datetime.now().strftime("%y-%m-%d")
+      ctime_str = datetime.now().strftime("%H-%M-%S")
+      new_dir = f"./ensemble/{today_str}/{ctime_str}"
+      os.makedirs(new_dir, exist_ok=False)
+      os.chdir(new_dir)
+      for seed in range(len(active_iter_cfg.use_seeds)):
+
+        cfg.training.rng_seed_model_pt=active_iter_cfg.use_seeds[seed]
+        train_output_dir = train_hydra.train(cfg)
+      os.chdir(cwd)
+      wandb.finish()
+
+    else:
+
+      cwd = os.getcwd()
+      today_str = datetime.now().strftime("%y-%m-%d")
+      ctime_str = datetime.now().strftime("%H-%M-%S")
+      new_dir = f"./outputs/{today_str}/{ctime_str}"
+      os.makedirs(new_dir, exist_ok=False)
+      os.chdir(new_dir)
+      train_output_dir = train_hydra.train(cfg)
+      os.chdir(cwd)
+      wandb.finish()
+
     return train_output_dir
 
 
