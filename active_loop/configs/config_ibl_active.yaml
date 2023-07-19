@@ -1,12 +1,14 @@
-project: "active_ibl1"
+project: "active_mirror_mouse"
 
 active_loop:
   current_iteration:
-  experiment_cfg: "/data/libraries/lightning-pose/active_loop/configs/config_ibl_experiment.yaml"
+  experiment_cfg: "/content/lightning-pose/scripts/configs/config_mirror-mouse for_Haotian.yaml"
   iterations_folder: "iteration_active_loop/experiment0" #relative to data_dir
   fast_dev_run: 0
   start_iteration: 0
   end_iteration: 3
+  use_ensemble: True
+  use_seeds: [0,1]
 
 iteration_x:
   output_prev_run:  [] # where the outputs of the last iteration are saved
@@ -14,22 +16,39 @@ iteration_x:
   method: "random"  #active learning method
   num_frames:   # where the new frames are located
 
+iteration_0:
+  output_prev_run: # example: ["/data/libraries/lightning-pose/outputs/2023-07-05/11-24-03",]
+  csv_file_prev_run: "/content/drive/MyDrive/mirror-mouse/CollectedData.csv"
+  method: "Ensembling"
+  num_frames: 10
+  use_ensemble: True
+  use_seeds: [0,1]
+  #csv_file:
+
 iteration_1:
   output_prev_run: # example: ["/data/libraries/lightning-pose/outputs/2023-07-05/11-24-03",]
-  csv_file_prev_run: "../CollaectedData.csv"
-  method: "random"
+  csv_file_prev_run: "/content/drive/MyDrive/ibl1 2/CollectedData.csv"
+  method: "Ensembling"
   num_frames: 10
+  use_ensemble: True
+  use_seeds: [0,1]
   #csv_file:
 
 iteration_2:
   output_prev_run:
   method: "random"
   num_frames: 10
+  use_ensemble: Fasle
+  use_seeds: [0,1]
   #csv_file:
 
 iteration_3:
   output_prev_run:
   method: "random"
   num_frames: 10
+  use_ensemble: Fasle
+  use_seeds: [0,1]
   #csv_file:
+
+
 
