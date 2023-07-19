@@ -298,6 +298,8 @@ def call_active_all(active_cfg):
     num_iterations = active_cfg.active_loop.end_iteration - active_cfg.active_loop.start_iteration + 1
     for current_iteration in range(active_cfg.active_loop.start_iteration,
                                    active_cfg.active_loop.end_iteration + 1):
+
+        current_iteration=active_cfg.active_loop.current_iteration
         print('\n\n Experiment iter {}'.format(current_iteration), flush=True)
 
         if current_iteration == 0:
