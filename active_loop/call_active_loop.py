@@ -347,7 +347,7 @@ def run_train(active_iter_cfg,cfg):
       cwd = os.getcwd()
       today_str = datetime.now().strftime("%y-%m-%d")
       ctime_str = datetime.now().strftime("%H-%M-%S")
-      new_dir = f"./ensemble/{today_str}/{ctime_str}"
+      new_dir = f"./outputs/{today_str}/{ctime_str}_ensemble_iter_{str(current_iteration)}"
       os.makedirs(new_dir, exist_ok=False)
       os.chdir(new_dir)
       for seed in range(len(active_iter_cfg.use_seeds)):
@@ -362,7 +362,7 @@ def run_train(active_iter_cfg,cfg):
       cwd = os.getcwd()
       today_str = datetime.now().strftime("%y-%m-%d")
       ctime_str = datetime.now().strftime("%H-%M-%S")
-      new_dir = f"./outputs/{today_str}/{ctime_str}"
+      new_dir = f"./outputs/{today_str}/{ctime_str}_iter_{str(current_iteration)}"
       os.makedirs(new_dir, exist_ok=False)
       os.chdir(new_dir)
       cfg.training.rng_seed_model_pt=0
