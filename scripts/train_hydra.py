@@ -219,24 +219,46 @@ def train(cfg: DictConfig):
         data_module_ood.setup()
         pretty_print_str("Predicting OOD images...")
         # compute and save frame-wise predictions
-        preds_file_ood = os.path.join(hydra_output_directory, "predictions_new.csv")
-        predict_dataset(
-            cfg=cfg_ood,
-            trainer=trainer,
-            model=model,
-            data_module=data_module_ood,
-            ckpt_file=best_ckpt,
-            preds_file=preds_file_ood,
-            manual_step=True,
-        )
-        # compute and save various metrics
-        try:
-            compute_metrics(
-                cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood,
-                logger=logger,
-            )
-        except Exception as e:
-            print(f"Error computing metrics\n{e}")
+        if cfg_ood.training.use_ensemble:
+          seed=cfg_ood.training.rng_seed_model_pt
+          preds_file_ood = os.path.join(hydra_output_directory, "predictions_new_seed"+str(seed)+".csv")
+          predict_dataset(
+              cfg=cfg_ood,
+              trainer=trainer,
+              model=model,
+              data_module=data_module_ood,
+              ckpt_file=best_ckpt,
+              preds_file=preds_file_ood,
+              manual_step=True,
+          )
+          # compute and save various metrics
+          try:
+              compute_metrics(
+                  cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood,
+                  #logger=logger,
+              )
+          except Exception as e:
+              print(f"Error computing metrics\n{e}")
+
+        else:
+          preds_file_ood = os.path.join(hydra_output_directory, "predictions_new.csv")
+          predict_dataset(
+              cfg=cfg_ood,
+              trainer=trainer,
+              model=model,
+              data_module=data_module_ood,
+              ckpt_file=best_ckpt,
+              preds_file=preds_file_ood,
+              manual_step=True,
+          )
+          # compute and save various metrics
+          try:
+              compute_metrics(
+                  cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood,
+                  #logger=logger,
+              )
+          except Exception as e:
+              print(f"Error computing metrics\n{e}")
 
     # ----------------------------------------------------------------------------------
     # predict on active loop test frames
