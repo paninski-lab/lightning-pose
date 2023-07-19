@@ -316,7 +316,7 @@ def call_active_all(active_cfg):
 
         # step 2: train model using exp_cfg
         iteration_key_current = 'iteration_{}'.format(current_iteration)
-        train_output_dir = run_train(active_cfg[iteration_key_current],exp_cfg) #think here!!!
+        train_output_dir = run_train(active_cfg[iteration_key_current],exp_cfg, current_iteration) #think here!!!
 
         # step 3: call active loop
         if current_iteration + 1 >  active_cfg.active_loop.end_iteration:
@@ -337,7 +337,7 @@ def call_active_all(active_cfg):
     return active_cfg
 
 
-def run_train(active_iter_cfg,cfg):
+def run_train(active_iter_cfg,cfg, current_iteration):
     sys.path.append(os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts'))
     import train_hydra
