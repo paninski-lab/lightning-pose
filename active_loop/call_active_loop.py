@@ -365,6 +365,8 @@ def run_train(active_iter_cfg,cfg):
       new_dir = f"./outputs/{today_str}/{ctime_str}"
       os.makedirs(new_dir, exist_ok=False)
       os.chdir(new_dir)
+      cfg.training.rng_seed_model_pt=0
+      cfg.training.use_ensemble=False
       train_output_dir = train_hydra.train(cfg)
       os.chdir(cwd)
       wandb.finish()
