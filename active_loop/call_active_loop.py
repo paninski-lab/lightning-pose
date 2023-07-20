@@ -200,6 +200,11 @@ def merge_collected_data(active_iter_cfg, selected_frames_file):
 
     train_data_file = os.path.join(active_iter_cfg.train_data_file_prev_run)
     train_data = pd.read_csv(train_data_file, header=[0,1,2], index_col=0)
+
+    act_test_data_file=os.path.join(active_iter_cfg.train_data_file_prev_run).replace(".csv","_active_test.csv") ### New Add
+    act_test_data = pd.read_csv(act_test_data_file, header=[0,1,2], index_col=0)
+    act_test_data.to_csv(active_iter_cfg.act_test_data_file) ### New Add cp active_test csv to new iteration dir.
+    
     # read selected frames
     selected_frames_df = pd.read_csv(selected_frames_file, header=[0,1,2], index_col=0)
 
@@ -253,6 +258,7 @@ def active_loop_step(active_loop_cfg):
     train_data_file_prev_run = str(Path(experiment_cfg.data.data_dir,
                                         active_iter_cfg.csv_file_prev_run))
     eval_data_file_prev_run = train_data_file_prev_run.replace('.csv', '_new.csv')
+    act_test_data_file_prev_run=train_data_file_prev_run.replace('.csv', '_active_test.csv') ### New add
 
     # update params to config file
     active_iter_cfg.iteration_key = iteration_key
@@ -261,12 +267,15 @@ def active_loop_step(active_loop_cfg):
     active_iter_cfg.iteration_folder = iteration_folder
     active_iter_cfg.train_data_file_prev_run = train_data_file_prev_run
     active_iter_cfg.eval_data_file_prev_run = eval_data_file_prev_run
+    active_iter_cfg.act_test_data_file_prev_run = act_test_data_file_prev_run ### New add
+
     active_iter_cfg.train_data_file = os.path.join(
         active_iter_cfg.iteration_folder,
         '{}_{}'.format(active_iter_cfg.iteration_prefix,
                        os.path.basename(train_data_file_prev_run))
     )
     active_iter_cfg.eval_data_file = active_iter_cfg.train_data_file.replace('.csv', '_new.csv')
+    active_iter_cfg.act_test_data_file = active_iter_cfg.train_data_file.replace('.csv', '_active_test.csv') ### New add
 
     # Active Loop parameters
     # Step 1: Initialize the iteration folder
