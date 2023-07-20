@@ -250,6 +250,7 @@ def train(cfg: DictConfig):
               ckpt_file=best_ckpt,
               preds_file=preds_file_ood,
               manual_step=True,
+             #typecheck="None" only for margin sampling
           )
           # compute and save various metrics
           try:
