@@ -100,24 +100,24 @@ def select_frames(active_iter_cfg,num_keypoints,seeds_list,prev_output_dir,tar):
 
     elif method == 'margin sampling':
       all_data_collect_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0,1,2],index_col=0)
-      #prev_output_dir
+      folder_path=prev_output_dir
       for file in os.listdir(folder_path):
           file_path = os.path.join(prev_output_dir, file)
           if file_path.endswith("predictions_new.csv"):
             all_data=pd.read_csv(file_path, header=[0,1,2],index_col=0)
 
-      all_data['sum'] = all_data.iloc[:, [4,8,12,16]].sum(axis=1)
+      all_data['sum'] = all_data.sum(axis=1)
 
     # Select the top 10 rows with the smallest sum
       selected_frames = all_data.nsmallest(num_frames, 'sum')
 
-      all_data=all_data.drop('sum', axis=1)
+      #all_data=all_data.drop('sum', axis=1)
 
       selected_frames = selected_frames.drop('sum', axis=1)
 
-      selected_frames.set_index(('scorer', 'bodyparts', 'coords'), inplace=True)
+      #selected_frames.set_index(('scorer', 'bodyparts', 'coords'), inplace=True)
 
-      all_data_collect_data.set_index(('scorer', 'bodyparts', 'coords'), inplace=True)
+      #all_data_collect_data.set_index(('scorer', 'bodyparts', 'coords'), inplace=True)
 
       matched_rows=all_data_collect_data.loc[selected_frames.index]
 
