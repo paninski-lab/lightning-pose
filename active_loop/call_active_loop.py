@@ -272,7 +272,7 @@ def active_loop_step(active_loop_cfg):
 
     num_keypoints=experiment_cfg.data.num_keypoints
     seeds_list=active_iter_cfg.use_seeds
-    iteration_key_next = 'iteration_{}'.format(iteration_number+1)
+    iteration_key_next = 'iteration_{}'.format(iteration_number) # +1 is removed
     active_iter_cfg_next = active_loop_cfg[iteration_key_next]
     prev_output_dir=active_iter_cfg_next.output_prev_run
     tar=active_loop_cfg.project
