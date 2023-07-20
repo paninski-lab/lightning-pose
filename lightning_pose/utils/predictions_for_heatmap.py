@@ -66,6 +66,7 @@ class PredictionHandler:
         cfg: DictConfig,
         data_module: Optional[pl.LightningDataModule] = None,
         video_file: Optional[str] = None,
+        typecheck: str = "None",
     ) -> None:
         """
 
@@ -89,6 +90,7 @@ class PredictionHandler:
         self.cfg = cfg
         self.data_module = data_module
         self.video_file = video_file
+        self.typecheck=typecheck
         if video_file is not None:
             assert os.path.isfile(video_file)
 
@@ -266,13 +268,17 @@ class PredictionHandler:
           for i in range(seg_num):
             diff=cal_qudra(heat_np[n][i])
             heat_np_list[str(i)].append(diff)
-        column_heatmap=[3,7,11,15]
+        column_heatmap=list()
+        for s in range(confidence_np.shape[1] * 4):
+          if s%4 ==3:
+            column_heatmap.append(s)
+
         for i in range(seg_num):
           predictions[:, column_heatmap[i]]=np.array(heat_np_list[str(i)])
         
 
 
-        return predictions
+        return predictions, column_heatmap
 
     def make_dlc_pandas_index(self) -> pd.MultiIndex:
 
@@ -312,17 +318,30 @@ class PredictionHandler:
             pd.DataFrame: index is (frame, bodypart, x, y, likelihood)
         """
         stacked_preds, stacked_confs, stacked_heat = self.unpack_preds(preds=preds)
-        pred_arr = self.make_pred_arr_undo_resize(
+        pred_arr, column_heatmap = self.make_pred_arr_undo_resize(
             stacked_preds.cpu().numpy(), stacked_confs.cpu().numpy(), stacked_heat.cpu().numpy()
         )
         pdindex = self.make_dlc_pandas_index()
         df = pd.DataFrame(pred_arr, columns=pdindex)
+        
+        
+        
+        
         if self.video_file is None:
             # specify which image is train/test/val/unused
             df = self.add_split_indices_to_df(df)
             df.index = self.data_module.dataset.image_names
+        
+        #df['sum'] = df.iloc[:,column_heatmap].sum(axis=1)
+        #df.sort_values(by='sum')
+        #df_margin=df.iloc[:,column_heatmap]
+        #df_margin.to_csv("/content/margin.csv")
+        #df.drop('sum',axis=1)
+        #df.drop(df.iloc[:,column_heatmap], axis=1, inplace=True)
 
-        return df
+        df.to_csv("/content/test.csv")
+
+        return df,column_heatmap
 
 
 @typechecked
@@ -341,6 +360,7 @@ def predict_dataset(
         ]
     ] = None,
     manual_step: bool = False,
+    typecheck: str= "None",
 ) -> pd.DataFrame:
     """Save predicted keypoints for a labeled dataset.
 
@@ -390,10 +410,18 @@ def predict_dataset(
         return_predictions=True,
     )
 
-    pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
-    labeled_preds_df = pred_handler(preds=labeled_preds)
+    pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None,typecheck=typecheck)
+    labeled_preds_df, column_heatmap= pred_handler(preds=labeled_preds)
+    #labeled_preds_df.to_csv("/content/labeled_preds.csv")
+    
+    print("######",typecheck)
+    if typecheck == "unlabelled":
+      df_margin=labeled_preds_df.iloc[:,column_heatmap]
+      preds_file_margin=preds_file.replace(".csv","_"+typecheck+"_margin.csv")
+      df_margin.to_csv(preds_file_margin)
+      
+    labeled_preds_df.drop(labeled_preds_df.iloc[:,column_heatmap], axis=1, inplace=True)
     labeled_preds_df.to_csv(preds_file)
-
     # TODO:compute margin from heatmaps in labeled_preds
     # store margin in csv
     return labeled_preds_df
