@@ -168,8 +168,11 @@ def select_frames(active_iter_cfg,num_keypoints,seeds_list,prev_output_dir,tar):
 
       combined_df = pd.concat([finger[str(i)] for i in range(8)], axis=1)
       combined_df=combined_df.sum(axis=1)
+      file_new=os.path.dirname(file_path)
+      file_path = os.path.join(file_new, "predictions_new_seed"+str(0)+".csv")
       var_df=pd.read_csv(file_path, header=[0,1,2], index_col=0)
-      var_df = var_df.reindex(combined_df.index)
+      #var_df=pd.read_csv(file_path, header=[0,1,2], index_col=0)
+      #var_df = var_df.reindex(combined_df.index)
       var_df["var"]=pd.DataFrame(combined_df)
       selected_frames = var_df.nlargest(num_frames, "var")
       selected_frames=selected_frames.drop("var", axis=1)
