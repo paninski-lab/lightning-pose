@@ -70,6 +70,7 @@ training:
     multisteplr:
       milestones: [150, 200, 250]
       gamma: 0.5
+  use_ensemble: True
 
 model:
   # list of unsupervised losses
