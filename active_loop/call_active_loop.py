@@ -350,6 +350,7 @@ def run_train(active_iter_cfg,cfg, current_iteration):
       new_dir = f"./outputs/{today_str}/{ctime_str}_ensemble_iter_{str(current_iteration)}"
       os.makedirs(new_dir, exist_ok=False)
       os.chdir(new_dir)
+      cfg.training.use_ensemble=True
       for seed in range(len(active_iter_cfg.use_seeds)):
 
         cfg.training.rng_seed_model_pt=active_iter_cfg.use_seeds[seed]
