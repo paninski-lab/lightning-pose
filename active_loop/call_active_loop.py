@@ -12,6 +12,49 @@ import numpy as np
 from hydra import compose, initialize, initialize_config_dir
 from datetime import datetime
 import wandb
+import copy
+
+import pandas as pd
+import os
+from lightning_pose.utils.io import get_keypoint_names
+#%%
+def find_common_elements(*lists):
+  # Convert each list to sets and find the intersection of all sets
+  common_elements = set(lists[0]).intersection(*lists[1:])
+  return list(common_elements)
+
+def calculate_ensemble_frames(prev_output_dirs, num_frames, header_rows=[0,1,2]):
+  all_keypoints = []
+  all_indices = []
+  # Find common elements across all csv files
+  for run_idx, folder_path in enumerate(prev_output_dirs):
+    csv_file = os.path.join(folder_path, "predictions_new.csv")
+    csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
+    all_indices.append(csv_data.index.values)
+  common_elements = np.asarray(find_common_elements(*all_indices))
+
+  # read xy keypoints from each csv file
+  for run_idx, folder_path in enumerate(prev_output_dirs):
+    csv_file = os.path.join(folder_path, "predictions_new.csv")
+    csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
+    all_indices.append(csv_data.index.values)
+    # filter by common elements
+    csv_data = csv_data.loc[common_elements]
+    # num_keypoints x (x, y, likelihood) + ('train')
+    # train is always true for predictions_new in test mode
+    frame_ids = csv_data.index.to_numpy()
+    keypoints = csv_data.to_numpy()[...,:-1]
+    xy_keypoints = keypoints.reshape(keypoints.shape[0], -1, 3)[..., :-1]
+    all_keypoints.append(xy_keypoints)
+
+  all_keypoints = np.stack(all_keypoints,0)
+
+  # calculate variance
+  variance_xy = all_keypoints.var(0)
+  selected_indices = np.argsort(variance_xy.sum(-1).sum(-1))[:num_frames]
+
+  matched_rows =  csv_data.iloc[selected_indices]
+  return matched_rows
 
 
 def low_energy_random_sampling(energy_func, all_data,num_frames):
@@ -56,7 +99,7 @@ def initialize_iteration_folder(data_dir):
         os.makedirs(data_dir)
 
 
-def select_frames(active_iter_cfg,num_keypoints,seeds_list,prev_output_dir,tar):
+def select_frames(active_iter_cfg, data_cfg):
     """
     Step 2: select frames to label
     Implement the logic for selecting frames based on the specified method:
@@ -64,25 +107,36 @@ def select_frames(active_iter_cfg,num_keypoints,seeds_list,prev_output_dir,tar):
     :return:
       : selected_indices_file: csv file with selected frames from active loop.
     """
-    #TODO(may not want to overwrite file)
+    #TODO():may not want to overwrite file
     method = active_iter_cfg.method
     num_frames = active_iter_cfg.num_frames
     output_dir = active_iter_cfg.iteration_folder
-    #prev_output_dir=active_iter_cfg.output_prev_run #parent dir for prediction csv
+    prev_output_dirs = active_iter_cfg.output_prev_run #list of directories of previous runs
     
     # We need to know the index of our selected data (list)
     if method == 'random':
       # select random frames from eval data in prev run.
-      all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0,1,2], index_col=0)
-      selected_indices = low_energy_random_sampling(energy_function,all_data , num_frames)#np.unique(random.sample(range(len(all_data)), num_frames))  # Get index from either places
+      all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0, 1, 2], index_col=0)
+      selected_indices = np.unique(random.sample(range(len(all_data)), num_frames))  # Get index from either places
       selected_frames = all_data.iloc[selected_indices]
-      matched_rows=all_data.loc[selected_frames.index]
+      matched_rows = all_data.loc[selected_frames.index]
       selected_indices_file = f'iteration_{method}_indices.csv'
       selected_indices_file = os.path.join(output_dir, selected_indices_file)
-    # Save the selected frames to a CSV file
+      # Save the selected frames to a CSV file
       matched_rows.to_csv(selected_indices_file)
-
-    elif method == 'uncertainity sampling':
+    elif method == 'random_energy':
+        # TODO
+        # select random frames from eval data in prev run.
+        all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0,1,2], index_col=0)
+        selected_indices = low_energy_random_sampling(energy_function,all_data , num_frames)#np.unique(random.sample(range(len(all_data)), num_frames))  # Get index from either places
+        selected_frames = all_data.iloc[selected_indices]
+        matched_rows=all_data.loc[selected_frames.index]
+        selected_indices_file = f'iteration_{method}_indices.csv'
+        selected_indices_file = os.path.join(output_dir, selected_indices_file)
+      # Save the selected frames to a CSV file
+        matched_rows.to_csv(selected_indices_file)
+    elif method == 'uncertainty_sampling':
+      # TODO:
       all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0,1,2], index_col=0)
 
       all_data['sum'] = all_data.iloc[:, [3, 6]].sum(axis=1)
@@ -97,12 +151,12 @@ def select_frames(active_iter_cfg,num_keypoints,seeds_list,prev_output_dir,tar):
 
     # Save the selected frames to a CSV file
       selected_frames.to_csv(selected_indices_file)
-
     elif method == 'margin sampling':
+      # TODO:
       all_data_collect_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0,1,2],index_col=0)
-      folder_path=prev_output_dir
+      folder_path=prev_output_dirs[0]
       for file in os.listdir(folder_path):
-          file_path = os.path.join(prev_output_dir, file)
+          file_path = os.path.join(folder_path, file)
           if file_path.endswith("predictions_new.csv"):
             all_data=pd.read_csv(file_path, header=[0,1,2],index_col=0)
 
@@ -135,53 +189,11 @@ def select_frames(active_iter_cfg,num_keypoints,seeds_list,prev_output_dir,tar):
       matched_rows.to_csv(selected_indices_file)
 
     elif method == 'Ensembling':
-      
-      all_data_collect_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0,1,2],index_col=0) #prediction_new.csv
-
-      folder_path = prev_output_dir
-      pd_file={}
-      finger={}
-      num_finger_coord=num_keypoints*2
-      for i in range(num_finger_coord):
-        finger[str(i)]=pd.DataFrame()
-      seed=0
-      
-      while seed<len(seeds_list):
-        for file in os.listdir(folder_path):
-              file_path = os.path.join(folder_path, file)
-              if file_path.endswith("predictions_new_seed"+str(seed)+".csv"): #change#########
-                pd_file[str(seed)]=pd.read_csv(file_path, header=[0,1,2], index_col=0)#file_path
-                seed+=1
-
-      print(pd_file[str(0)].shape)
-      print(num_finger_coord)
-      column_num=list()
-      for s in range(pd_file[str(0)].shape[0]):
-        if s%3 !=2:
-          column_num.append(s)
-      for i in range(len(seeds_list)):
-        for finger_num in range(num_finger_coord):
-          finger[str(finger_num)]=pd.concat([finger[str(finger_num)],pd_file[str(i)].iloc[:,[column_num[finger_num]]]],axis=1)
-
-      for i in range(8):
-        finger[str(i)]=finger[str(i)].var(axis=1)
-
-      combined_df = pd.concat([finger[str(i)] for i in range(8)], axis=1)
-      combined_df=combined_df.sum(axis=1)
-      file_new=os.path.dirname(file_path)
-      file_path = os.path.join(file_new, "predictions_new_seed"+str(0)+".csv")
-      var_df=pd.read_csv(file_path, header=[0,1,2], index_col=0)
-      #var_df=pd.read_csv(file_path, header=[0,1,2], index_col=0)
-      #var_df = var_df.reindex(combined_df.index)
-      var_df["var"]=pd.DataFrame(combined_df)
-      selected_frames = var_df.nlargest(num_frames, "var")
-      selected_frames=selected_frames.drop("var", axis=1)
-      matched_rows=all_data_collect_data.loc[selected_frames.index]
+      matched_rows = calculate_ensemble_frames(prev_output_dirs, num_frames)
       selected_indices_file = f'iteration_{method}_indices.csv'
       selected_indices_file = os.path.join(output_dir, selected_indices_file)
     # Save the selected frames to a CSV file
       matched_rows.to_csv(selected_indices_file)
-
     else:
       NotImplementedError(f'{method} is not implemented yet.')
 
@@ -190,25 +202,29 @@ def select_frames(active_iter_cfg,num_keypoints,seeds_list,prev_output_dir,tar):
 
 def merge_collected_data(active_iter_cfg, selected_frames_file):
     """
-    # Step 3: Merge new CollectedData.csv with the original CollectedData.csv
-    # merge Collected_data.csv to include iteration_random_indices.csv
-    # remove iteration_random_indices.csv from  {CollectedData}_new.csv
+    # Step 3: Merge new CollectedData.csv with the original CollectedData.csv:
+
+    # merge Collected_data.csv to include iteration_{}_indices.csv
+    # remove iteration_{}_indices.csv from  {CollectedData}_new.csv
 
     :param active_iter_cfg:
     :return:
     """
 
+    # read train frames
     train_data_file = os.path.join(active_iter_cfg.train_data_file_prev_run)
     train_data = pd.read_csv(train_data_file, header=[0,1,2], index_col=0)
 
-    act_test_data_file=os.path.join(active_iter_cfg.train_data_file_prev_run).replace(".csv","_active_test.csv") ### New Add
+    # read active test frames:
+    act_test_data_file=train_data_file.replace(".csv","_active_test.csv") ### New Add
     act_test_data = pd.read_csv(act_test_data_file, header=[0,1,2], index_col=0)
-    act_test_data.to_csv(active_iter_cfg.act_test_data_file) ### New Add cp active_test csv to new iteration dir.
+    act_test_data.to_csv(active_iter_cfg.act_test_data_file)
     
     # read selected frames
     selected_frames_df = pd.read_csv(selected_frames_file, header=[0,1,2], index_col=0)
 
     # concat train data and selected frames and merge
+    # TODO: check relative to the data path.
     new_train_data = pd.concat([train_data, selected_frames_df])
     new_train_data.to_csv(active_iter_cfg.train_data_file)
 
@@ -245,22 +261,23 @@ def active_loop_step(active_loop_cfg):
 
     # read params for current active loop iteration
     iteration_number = active_loop_cfg.active_loop.current_iteration
-    iterations_folder = active_loop_cfg.active_loop.iterations_folder
+    iterations_folders = active_loop_cfg.active_loop.iterations_folders
 
     iteration_key = 'iteration_{}'.format(iteration_number)
     active_iter_cfg = active_loop_cfg[iteration_key]
-    iteration_folder = os.path.abspath(str(
-        Path(experiment_cfg.data.data_dir,
-             experiment_cfg.data.csv_file).parent.absolute() / iterations_folder / iteration_key)
-    )
 
-    # read train and eval files
+    dir_collected_csv = Path(experiment_cfg.data.data_dir, experiment_cfg.data.csv_file).parent.absolute()
+    iteration_folder = os.path.abspath(str(dir_collected_csv / active_loop_cfg.active_loop.iterations_folder / iteration_key))
+
+    # Read train and eval files
+
+    # might need to reconsider making these as lists
     train_data_file_prev_run = str(Path(experiment_cfg.data.data_dir,
                                         active_iter_cfg.csv_file_prev_run))
     eval_data_file_prev_run = train_data_file_prev_run.replace('.csv', '_new.csv')
-    act_test_data_file_prev_run=train_data_file_prev_run.replace('.csv', '_active_test.csv') ### New add
+    act_test_data_file_prev_run = train_data_file_prev_run.replace('.csv', '_active_test.csv') ### New add
 
-    # update params to config file
+    # update active loop params to config file
     active_iter_cfg.iteration_key = iteration_key
     active_iter_cfg.iteration_prefix = '{}_{}'.format(active_iter_cfg.method,
                                                       active_iter_cfg.num_frames)
@@ -269,6 +286,7 @@ def active_loop_step(active_loop_cfg):
     active_iter_cfg.eval_data_file_prev_run = eval_data_file_prev_run
     active_iter_cfg.act_test_data_file_prev_run = act_test_data_file_prev_run ### New add
 
+    # TODO:check if needs to be relative
     active_iter_cfg.train_data_file = os.path.join(
         active_iter_cfg.iteration_folder,
         '{}_{}'.format(active_iter_cfg.iteration_prefix,
@@ -282,19 +300,16 @@ def active_loop_step(active_loop_cfg):
     #  TODO(haotianxiansti):  add code for iter 0 (select frames when no labeles are present)
     initialize_iteration_folder(active_iter_cfg.iteration_folder)
 
-    num_keypoints=experiment_cfg.data.num_keypoints
-    seeds_list=active_iter_cfg.use_seeds
+
     iteration_key_next = 'iteration_{}'.format(iteration_number) # +1 is removed
-    active_iter_cfg_next = active_loop_cfg[iteration_key_next]
-    prev_output_dir=active_iter_cfg_next.output_prev_run
-    tar=active_loop_cfg.project
-    selected_frames_file = select_frames(active_iter_cfg,num_keypoints,seeds_list,prev_output_dir,tar)
+    selected_frames_file = select_frames(active_iter_cfg, experiment_cfg.data)
 
     # Now, we have in the directory:
     # created Collected_data_new_merged and Collected_data_merged.csv
     merge_collected_data(active_iter_cfg, selected_frames_file)
     # run algorithm with new config file
-    # make relative to data_dir
+    # TODO: check location of new csv for iteration relative to data_dir
+    # it should have CollectedData.csv and CollectedData_new.csv
     relpath = os.path.relpath(active_iter_cfg.train_data_file, experiment_cfg.data.data_dir)
     #print('rerun algorithm with new config file:\n{}'.format(relpath), flush=True)
 
@@ -315,11 +330,9 @@ def call_active_all(active_cfg):
     if active_cfg.active_loop.fast_dev_run == 1:
         exp_cfg.training.fast_dev_run = True
 
-    num_iterations = active_cfg.active_loop.end_iteration - active_cfg.active_loop.start_iteration + 1
     for current_iteration in range(active_cfg.active_loop.start_iteration,
                                    active_cfg.active_loop.end_iteration + 1):
 
-        
         print('\n\n Experiment iter {}'.format(current_iteration), flush=True)
 
         if current_iteration == 0:
@@ -328,15 +341,15 @@ def call_active_all(active_cfg):
 
         # step 2: train model using exp_cfg
         iteration_key_current = 'iteration_{}'.format(current_iteration)
-        train_output_dir = run_train(active_cfg[iteration_key_current],exp_cfg, current_iteration) #think here!!!
+        train_output_dirs = run_train(active_cfg[iteration_key_current], exp_cfg)
 
         # step 3: call active loop
-        if current_iteration + 1 >  active_cfg.active_loop.end_iteration:
-          break
-        iteration_key = 'iteration_{}'.format(current_iteration) #think here!!!#####
+
+        iteration_key = 'iteration_{}'.format(current_iteration)  # think here!!!#####
         active_cfg.active_loop.current_iteration = current_iteration
-        active_cfg[iteration_key].output_prev_run = train_output_dir #need to uncomment
-        active_cfg[iteration_key].csv_file_prev_run = exp_cfg.data.csv_file
+        active_cfg[iteration_key].output_prev_run = train_output_dirs  # need to uncomment
+        active_cfg[iteration_key].csv_file_prev_run = exp_cfg.data.csv_file  #?
+
         #print('\n\nActive loop config after iter {}'.format(current_iteration), active_cfg, flush=True)
         new_train_file = active_loop_step(active_cfg)
 
@@ -349,42 +362,36 @@ def call_active_all(active_cfg):
     return active_cfg
 
 
-def run_train(active_iter_cfg,cfg, current_iteration):
-    sys.path.append(os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts'))
-    import train_hydra
-
-    if active_iter_cfg.use_ensemble==True:
-
-      cwd = os.getcwd()
-      today_str = datetime.now().strftime("%y-%m-%d")
-      ctime_str = datetime.now().strftime("%H-%M-%S")
-      new_dir = f"./outputs/{today_str}/{ctime_str}_ensemble_iter_{str(current_iteration)}"
-      os.makedirs(new_dir, exist_ok=False)
-      os.chdir(new_dir)
-      cfg.training.use_ensemble=True
-      for seed in range(len(active_iter_cfg.use_seeds)):
-
-        cfg.training.rng_seed_model_pt=active_iter_cfg.use_seeds[seed]
-        train_output_dir = train_hydra.train(cfg)
-      os.chdir(cwd)
-      wandb.finish()
-
+def run_train(active_iter_cfg, cfg):
+    train_output_dirs = []
+    if active_iter_cfg.method == "Ensembling":
+      for seed in active_iter_cfg.use_seeds:
+        exp_cfg = copy.deepcopy(cfg)
+        exp_cfg.training.rng_seed_model_pt=active_iter_cfg.use_seeds[seed]
+        train_output_dir = make_run(exp_cfg)
+        train_output_dirs.append(train_output_dir)
     else:
+      exp_cfg = copy.deepcopy(cfg)
+      train_output_dir = make_run(exp_cfg)
+      train_output_dirs.append(train_output_dir)
 
-      cwd = os.getcwd()
-      today_str = datetime.now().strftime("%y-%m-%d")
-      ctime_str = datetime.now().strftime("%H-%M-%S")
-      new_dir = f"./outputs/{today_str}/{ctime_str}_iter_{str(current_iteration)}"
-      os.makedirs(new_dir, exist_ok=False)
-      os.chdir(new_dir)
-      cfg.training.rng_seed_model_pt=0
-      cfg.training.use_ensemble=False
-      train_output_dir = train_hydra.train(cfg)
-      os.chdir(cwd)
-      wandb.finish()
+    return train_output_dirs
 
-    return train_output_dir
+
+def make_run(cfg):
+  sys.path.append(os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts'))
+  import train_hydra
+  cwd = os.getcwd()
+  today_str = datetime.now().strftime("%y-%m-%d")
+  ctime_str = datetime.now().strftime("%H-%M-%S")
+  new_dir = f"./outputs/{today_str}/{ctime_str}" #_active_iter_{str(current_iteration)}"
+  os.makedirs(new_dir, exist_ok=False)
+  os.chdir(new_dir)
+  train_output_dir = train_hydra.train(cfg)
+  os.chdir(cwd)
+  wandb.finish()
+  return train_output_dir
 
 
 if __name__ == "__main__":
