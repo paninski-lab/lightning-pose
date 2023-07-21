@@ -267,7 +267,7 @@ def active_loop_step(active_loop_cfg):
     active_iter_cfg = active_loop_cfg[iteration_key]
 
     dir_collected_csv = Path(experiment_cfg.data.data_dir, experiment_cfg.data.csv_file).parent.absolute()
-    iteration_folder = os.path.abspath(str(dir_collected_csv / active_loop_cfg.active_loop.iterations_folder / iteration_key))
+    iteration_folder = os.path.abspath(str(dir_collected_csv / active_loop_cfg.active_loop.iterations_folders / iteration_key)) ####iterations_folder -> iteration_folders
 
     # Read train and eval files
 
