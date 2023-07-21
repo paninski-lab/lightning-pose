@@ -191,7 +191,7 @@ eval:
     dataset_to_create: "images"
   # str with an absolute path to a directory containing videos for prediction.
   # (it's not absolute just for the toy example)
-  test_videos_directory: "/data/libraries/lightning-pose/toy_datasets/data/ibl1/unlabeled_videos"
+  test_videos_directory: "/content/drive/MyDrive/ibl1 2/unlabeled_videos"
 
   # str with an absolute path to directory in which you want to save .csv with predictions
   saved_vid_preds_dir: "/data/libraries/lightning-pose/toy_datasets/data/ibl1"
