@@ -265,6 +265,261 @@ class PredictionHandler:
         return df
 
 
+def cal_qudra(heatmap: np.array) -> np.array:
+    rows, cols = heatmap.shape
+    row_split = rows // 2
+    col_split = cols // 2
+    quadrant_1 = heatmap[:row_split, :col_split]
+    quadrant_2 = heatmap[:row_split, col_split:]
+    quadrant_3 = heatmap[row_split:, :col_split]
+    quadrant_4 = heatmap[row_split:, col_split:]
+    maxlist=[quadrant_1.max(),quadrant_2.max(),quadrant_3.max(),quadrant_4.max()]
+    maxlist.sort()
+    margin=maxlist[-1]-maxlist[-2]
+
+    return margin
+
+class PredictionHandler_heatmap:
+    def __init__(
+        self,
+        cfg: DictConfig,
+        data_module: Optional[pl.LightningDataModule] = None,
+        video_file: Optional[str] = None,
+    ) -> None:
+        """
+
+        Args
+            cfg
+            data_module
+            video_file
+
+        """
+
+        # check args: data_module is optional under certain conditions
+        if data_module is None:
+            if video_file is None:
+                raise ValueError("must pass data_module to constructor if predicting on a dataset")
+            if cfg.data.get("keypoint_names", None) is None \
+                    and cfg.data.get("keypoints", None) is None:
+                raise ValueError(
+                    "must include `keypoint_names` or `keypoints` field in cfg.data if not "
+                    "passing data_module as an argument to PredictionHandler")
+
+        self.cfg = cfg
+        self.data_module = data_module
+        self.video_file = video_file
+        if video_file is not None:
+            assert os.path.isfile(video_file)
+
+    @property
+    def frame_count(self) -> int:
+        """Returns the number of frames in the video or the labeled dataset"""
+        if self.video_file is not None:
+            return count_frames(self.video_file)
+        else:
+            return len(self.data_module.dataset)
+
+    @property
+    def keypoint_names(self):
+        if self.cfg.data.get("keypoint_names", None) is not None:
+            return list(self.cfg.data.keypoint_names)
+        elif self.cfg.data.get("keypoints", None) is not None:
+            return list(self.cfg.data.keypoints)
+        else:
+            return self.data_module.dataset.keypoint_names
+
+    @property
+    def do_context(self):
+        if self.data_module:
+            return self.data_module.dataset.do_context
+        else:
+            return self.cfg.model.do_context
+
+    def unpack_preds(
+        self,
+        preds: List[
+            Tuple[
+                TensorType["batch", "two_times_num_keypoints"],
+                TensorType["batch", "num_keypoints"],
+                TensorType["batch", "heatmap"],
+            ]
+        ],
+    ) -> Tuple[
+        TensorType["num_frames", "two_times_num_keypoints"],
+        TensorType["num_frames", "num_keypoints"],
+        TensorType["num_frames", "heatmap"],
+    ]:
+        """unpack list of preds coming out from pl.trainer.predict, confs tuples into tensors.
+        It still returns unnecessary final rows, which should be discarded at the dataframe stage.
+        This works for the output of predict_loader, suitable for batch_size=1, sequence_length=16, step=16"""
+        # stack the predictions into rows.
+        # loop over the batches, and stack
+        stacked_preds = torch.vstack([pred[0] for pred in preds])
+        stacked_confs = torch.vstack([pred[1] for pred in preds])
+        stacked_heat = torch.vstack([pred[2] for pred in preds])
+
+        if self.video_file is not None:  # dealing with dali loaders
+
+            # DB: this used to be an else but I think it should apply to all dataloaders now
+            # first we chop off the last few rows that are not part of the video
+            # next:
+            # for baseline: chop extra empty frames from last sequence.
+            num_rows_to_discard = stacked_preds.shape[0] - self.frame_count
+            if num_rows_to_discard > 0:
+                stacked_preds = stacked_preds[:-num_rows_to_discard]
+                stacked_confs = stacked_confs[:-num_rows_to_discard]
+            # for context: missing first two frames, have to handle with the last two frames still
+
+            if self.do_context:
+                # fix shifts in the context model
+                stacked_preds = self.fix_context_preds_confs(stacked_preds)
+                if self.cfg.model.model_type == "heatmap_mhcrnn":
+                    stacked_confs = self.fix_context_preds_confs(
+                        stacked_confs, zero_pad_confidence=False
+                    )
+                else:
+                    stacked_confs = self.fix_context_preds_confs(
+                        stacked_confs, zero_pad_confidence=True
+                    )
+            # else:
+            # in this dataloader, the last sequence has a few extra frames.
+        return stacked_preds, stacked_confs, stacked_heat
+
+    def fix_context_preds_confs(
+        self, stacked_preds: TensorType, zero_pad_confidence: bool = False
+    ):
+        """
+        In the context model, ind=0 is associated with image[2], and ind=1 is associated with
+        image[3], so we need to shift the predictions and confidences by two and eliminate the
+        edges.
+        NOTE: confidences are not zero in the first and last two images, they are instead replicas
+        of images[-2] and images[-3]
+        """
+        # first pad the first two rows for which we have no valid preds.
+        preds_1 = torch.tile(stacked_preds[0], (2, 1))  # copying twice the prediction for image[2]
+        preds_2 = stacked_preds[0:-2]  # throw out the last two rows.
+        preds_combined = torch.vstack([preds_1, preds_2])
+        # repat the last one twice
+        if preds_combined.shape[0] == self.frame_count:
+            # i.e., after concat this has the length of the video.
+            # we don't have valid predictions for the last two elements, so we pad with element -3
+            preds_combined[-2:, :] = preds_combined[-3, :]
+        else:
+            # we don't have as many predictions as frames; pad with final entry which is valid.
+            n_pad = self.frame_count - preds_combined.shape[0]
+            preds_combined = torch.vstack([preds_combined, torch.tile(preds_combined[0], (n_pad, 1))])
+
+        if zero_pad_confidence:
+            # zeroing out those first and last two rows (after we've shifted everything above)
+            preds_combined[:2, :] = 0.0
+            preds_combined[-2:, :] = 0.0
+
+        return preds_combined
+
+    def make_pred_arr_undo_resize(
+        self,
+        keypoints_np: np.array,
+        confidence_np: np.array,
+        heat_np: np.array,
+    ) -> np.array:
+        """Resize keypoints and add confidences into one numpy array.
+
+        Args:
+            keypoints_np: shape (n_frames, n_keypoints * 2)
+            confidence_np: shape (n_frames, n_keypoints)
+
+        Returns:
+            np.ndarray: cols are (bp0_x, bp0_y, bp0_likelihood, bp1_x, bp1_y, ...)
+
+        """
+        assert keypoints_np.shape[0] == confidence_np.shape[0]  # num frames in the dataset
+        assert keypoints_np.shape[1] == (
+            confidence_np.shape[1] * 2
+        )  # we have two (x,y) coordinates and a single likelihood value
+
+        num_joints = confidence_np.shape[-1]  # model.num_keypoints
+        predictions = np.zeros((keypoints_np.shape[0], num_joints * 4))
+        predictions[:, 0] = np.arange(keypoints_np.shape[0])
+        # put x vals back in original pixel space
+        x_resize = self.cfg.data.image_resize_dims.width
+        x_og = self.cfg.data.image_orig_dims.width
+        predictions[:, 0::4] = keypoints_np[:, 0::2] / x_resize * x_og
+        # put y vals back in original pixel space
+        y_resize = self.cfg.data.image_resize_dims.height
+        y_og = self.cfg.data.image_orig_dims.height
+        predictions[:, 1::4] = keypoints_np[:, 1::2] / y_resize * y_og
+        predictions[:, 2::4] = confidence_np
+        heat_np_list={}
+        seg_num=4
+        for i in range(seg_num):
+          heat_np_list[str(i)]=list()
+        for n in range(heat_np.shape[0]):
+          for i in range(seg_num):
+            diff=cal_qudra(heat_np[n][i])
+            heat_np_list[str(i)].append(diff)
+        column_heatmap=list()
+        for s in range(confidence_np.shape[1] * 4):
+          if s%4 ==3:
+            column_heatmap.append(s)
+
+        for i in range(seg_num):
+          predictions[:, column_heatmap[i]]=np.array(heat_np_list[str(i)])
+
+        return predictions, column_heatmap
+
+    def make_dlc_pandas_index(self) -> pd.MultiIndex:
+        return make_dlc_pandas_index(cfg=self.cfg, keypoint_names=self.keypoint_names)
+
+    def make_dlc_pandas_index_heatmap(self) -> pd.MultiIndex:
+        return make_dlc_pandas_index_heatmap(cfg=self.cfg, keypoint_names=self.keypoint_names)
+
+    def add_split_indices_to_df(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add split indices to the dataframe."""
+        df["set"] = np.array(["unused"] * df.shape[0])
+
+        dataset_split_indices = {
+            "train": self.data_module.train_dataset.indices,
+            "validation": self.data_module.val_dataset.indices,
+            "test": self.data_module.test_dataset.indices,
+        }
+
+        for key, val in dataset_split_indices.items():
+            df.loc[val, ("set", "", "")] = np.repeat(key, len(val))
+        return df
+
+    def __call__(
+        self,
+        preds: List[
+            Tuple[
+                TensorType["batch", "two_times_num_keypoints"],
+                TensorType["batch", "num_keypoints"],
+                TensorType["batch", "heatmap"],
+            ]
+        ],
+    ) -> pd.DataFrame:
+        """
+        Call this function to get a pandas dataframe of the predictions for a single video.
+        Assuming you've already run trainer.predict(), and have a list of Tuple predictions.
+        Args:
+            preds: list of tuples of (predictions, confidences)
+            video_file: path to video file
+        Returns:
+            pd.DataFrame: index is (frame, bodypart, x, y, likelihood)
+        """
+        stacked_preds, stacked_confs, stacked_heat = self.unpack_preds(preds=preds)
+        pred_arr, column_heatmap = self.make_pred_arr_undo_resize(
+            stacked_preds.cpu().numpy(), stacked_confs.cpu().numpy(),stacked_heat.cpu().numpy()
+        )
+        pdindex = self.make_dlc_pandas_index_heatmap()
+        df = pd.DataFrame(pred_arr, columns=pdindex)
+        if self.video_file is None:
+            # specify which image is train/test/val/unused
+            df = self.add_split_indices_to_df(df)
+            df.index = self.data_module.dataset.image_names
+
+        return df, column_heatmap
+
+
 @typechecked
 def predict_dataset(
     cfg: DictConfig,
@@ -317,16 +572,24 @@ def predict_dataset(
         for batch_idx, batch in enumerate(data_module.full_labeled_dataloader()):
             pred = model.predict_step(batch, batch_idx, return_heatmaps=True)
             labeled_preds.append(pred)
+
+        pred_handler = PredictionHandler_heatmap(cfg=cfg, data_module=data_module, video_file=None)
+        labeled_preds_df, column_heatmap = pred_handler(preds=labeled_preds)
+        heatmap_margin_df = labeled_preds_df.iloc[:,column_heatmap]
+        preds_heatmap_file=preds_file.replace(".csv","_heatmap.csv")
+        heatmap_margin_df.to_csv(preds_heatmap_file)
+        labeled_preds_df.drop(labeled_preds_df.iloc[:,column_heatmap], axis=1, inplace=True)
+        labeled_preds_df.to_csv(preds_file)
+
     else:
         labeled_preds = trainer.predict(
         model=model,
         dataloaders=data_module.full_labeled_dataloader(),
         return_predictions=True,
     )
-
-    pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
-    labeled_preds_df = pred_handler(preds=labeled_preds)
-    labeled_preds_df.to_csv(preds_file)
+        pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
+        labeled_preds_df = pred_handler(preds=labeled_preds)
+        labeled_preds_df.to_csv(preds_file)
 
     # TODO:compute margin from heatmaps in labeled_preds
     # store margin in csv
@@ -567,6 +830,14 @@ def make_dlc_pandas_index(cfg: DictConfig, keypoint_names: List[str]) -> pd.Mult
     )
     return pdindex
 
+@typechecked
+def make_dlc_pandas_index_heatmap(cfg: DictConfig, keypoint_names: List[str]) -> pd.MultiIndex:
+    xyl_labels = ["x", "y", "likelihood","margin"]
+    pdindex = pd.MultiIndex.from_product(
+        [["%s_tracker" % cfg.model.model_type], keypoint_names, xyl_labels],
+        names=["scorer", "bodyparts", "coords"],
+    )
+    return pdindex
 
 # @typechecked
 def get_model_class(map_type: str, semi_supervised: bool) -> LightningModule:
