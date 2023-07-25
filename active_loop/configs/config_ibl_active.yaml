@@ -10,7 +10,7 @@ Comment: >
 project: "active_mirror_mouse"
 
 active_loop:
-  experiment_cfg: "/content/lightning-pose/scripts/configs/config_mirror-mouse for_Haotian.yaml"
+  experiment_cfg: "/content/lightning-pose/scripts/configs/config_ibl_for_Haotian_Device.yaml"
   iterations_folders: "iteration_active_loop/experiment0" #relative to data_dir
   fast_dev_run: 1
   start_iteration: 0
