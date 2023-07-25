@@ -190,7 +190,7 @@ def train(cfg: DictConfig):
                     cfg=cfg,
                     preds_file=prediction_csv_file,
                     data_module=data_module_pred,
-                    logger=logger,
+                    #logger=logger,
                 )
             except Exception as e:
                 print(f"Error predicting on video {video_file}:\n{e}")
@@ -247,6 +247,13 @@ def train(cfg: DictConfig):
         return hydra_output_directory
 
     csv_file_ood = os.path.join(cfg.data.data_dir, cfg.active_loop.csv_file)
+
+    '''
+    csv_file_ood = os.path.join(cfg.data.data_dir, cfg.data.csv_file).replace(
+        ".csv", "_active_test.csv"
+    )
+    '''
+
     if os.path.exists(csv_file_ood):
         cfg_ood = cfg.copy()
         cfg_ood.data.csv_file = csv_file_ood
@@ -276,7 +283,7 @@ def train(cfg: DictConfig):
         try:
             compute_metrics(
                 cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood,
-                logger=logger,
+                #logger=logger,
             )
         except Exception as e:
             print(f"Error computing metrics\n{e}")
