@@ -17,6 +17,7 @@ import copy
 import pandas as pd
 import os
 from lightning_pose.utils.io import get_keypoint_names
+import matplotlib.pyplot as plt
 #%%
 def find_common_elements(*lists):
   # Convert each list to sets and find the intersection of all sets
