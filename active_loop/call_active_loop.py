@@ -151,42 +151,27 @@ def select_frames(active_iter_cfg, data_cfg):
 
     # Save the selected frames to a CSV file
       selected_frames.to_csv(selected_indices_file)
+
     elif method == 'margin sampling':
       # TODO:
-      all_data_collect_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0,1,2],index_col=0)
-      folder_path=prev_output_dirs[0]
-      for file in os.listdir(folder_path):
-          file_path = os.path.join(folder_path, file)
-          if file_path.endswith("predictions_new.csv"):
-            all_data=pd.read_csv(file_path, header=[0,1,2],index_col=0)
-
-      all_data['sum'] = all_data.sum(axis=1)
-
-    # Select the top 10 rows with the smallest sum
-      selected_frames = all_data.nsmallest(num_frames, 'sum')
-
-      #all_data=all_data.drop('sum', axis=1)
-
+      all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0, 1, 2], index_col=0)
+      csv_file = os.path.join(prev_output_dirs[0], "predictions_new_heatmap.csv")
+      margin = pd.read_csv(csv_file, header=[0, 1, 2], index_col=0)
+      margin['sum'] = margin.sum(axis=1)
+      margin['sum'].plot(kind='hist', bins=20)
+      plt.title('Histogram of Margin Sampling')
+      plt.xlabel("Sum of Margin Sampling")
+      plt.ylabel('Number of Frames')
+      plt_path=os.path.join(output_dir, "Histogram of Margin Sampling")
+      plt.savefig(plt_path)
+      plt.show()
+      selected_frames = margin.nsmallest(num_frames, 'sum')
       selected_frames = selected_frames.drop('sum', axis=1)
-
-      #selected_frames.set_index(('scorer', 'bodyparts', 'coords'), inplace=True)
-
-      #all_data_collect_data.set_index(('scorer', 'bodyparts', 'coords'), inplace=True)
-
-      matched_rows=all_data_collect_data.loc[selected_frames.index]
-
-      '''
-      all_data_collect_data=all_data_collect_data.reset_index()
-      matched_rows=matched_rows.reset_index()
-
-      matched_rows.to_csv("test_match.csv")
-      '''
+      matched_rows=all_data.loc[selected_frames.index]
       selected_indices_file = f'iteration_{method}_indices.csv'
-
       selected_indices_file = os.path.join(output_dir, selected_indices_file)
-
-    # Save the selected frames to a CSV file
       matched_rows.to_csv(selected_indices_file)
+
 
     elif method == 'Ensembling':
       matched_rows = calculate_ensemble_frames(prev_output_dirs, num_frames)
@@ -194,6 +179,28 @@ def select_frames(active_iter_cfg, data_cfg):
       selected_indices_file = os.path.join(output_dir, selected_indices_file)
     # Save the selected frames to a CSV file
       matched_rows.to_csv(selected_indices_file)
+      
+    elif method == "Single PCAS":
+      all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0, 1, 2], index_col=0)
+      csv_file = os.path.join(prev_output_dirs[0], "predictions_new_pca_singleview_error.csv")
+      single_pca = pd.read_csv(csv_file, header=[0, 1, 2], index_col=0)
+      single_pca['sum'] = single_pca.iloc[:,[0,1]].sum(axis=1)
+      single_pca['sum'].plot(kind='hist', bins=20)
+      plt.title('Histogram of Single PCAS')
+      plt.xlabel("Sum of Single PCAS")
+      plt.ylabel('Number of Frames')
+      plt_path=os.path.join(output_dir, "Histogram of Single PCAS")
+      plt.savefig(plt_path)
+      plt.show()
+      selected_frames = single_pca.nlargest(num_frames, 'sum')
+      selected_frames = selected_frames.drop('sum', axis=1)
+      matched_rows=all_data.loc[selected_frames.index]
+      selected_indices_file = f'iteration_{method}_indices.csv'
+      selected_indices_file = os.path.join(output_dir, selected_indices_file)
+
+    # Save the selected frames to a CSV file
+      matched_rows.to_csv(selected_indices_file)
+
     else:
       NotImplementedError(f'{method} is not implemented yet.')
 
