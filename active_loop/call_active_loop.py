@@ -18,6 +18,7 @@ import pandas as pd
 import os
 from lightning_pose.utils.io import get_keypoint_names
 import matplotlib.pyplot as plt
+
 #%%
 def find_common_elements(*lists):
   # Convert each list to sets and find the intersection of all sets
@@ -175,7 +176,9 @@ def select_frames(active_iter_cfg, data_cfg):
 
 
     elif method == 'Ensembling':
+      all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0, 1, 2], index_col=0)
       matched_rows = calculate_ensemble_frames(prev_output_dirs, num_frames)
+      matched_rows=all_data.loc[matched_rows.index]
       selected_indices_file = f'iteration_{method}_indices.csv'
       selected_indices_file = os.path.join(output_dir, selected_indices_file)
     # Save the selected frames to a CSV file
