@@ -517,7 +517,7 @@ class PredictionHandler_heatmap:
             df = self.add_split_indices_to_df(df)
             df.index = self.data_module.dataset.image_names
 
-        return df, column_heatmap
+        return df, column_heatmap, stacked_heat.cpu().numpy()
 
 
 @typechecked
@@ -574,9 +574,11 @@ def predict_dataset(
             labeled_preds.append(pred)
 
         pred_handler = PredictionHandler_heatmap(cfg=cfg, data_module=data_module, video_file=None)
-        labeled_preds_df, column_heatmap = pred_handler(preds=labeled_preds)
+        labeled_preds_df, column_heatmap, heatmap_np = pred_handler(preds=labeled_preds)
         heatmap_margin_df = labeled_preds_df.iloc[:,column_heatmap]
         preds_heatmap_file=preds_file.replace(".csv","_heatmap.csv")
+        heatmap_np_file=preds_file.replace(".csv","_heatmap.npy")
+        np.save(heatmap_np_file,heatmap_np)
         heatmap_margin_df.to_csv(preds_heatmap_file)
         labeled_preds_df.drop(labeled_preds_df.iloc[:,column_heatmap], axis=1, inplace=True)
         labeled_preds_df.to_csv(preds_file)
