@@ -28,6 +28,8 @@ def find_common_elements(*lists):
 def calculate_ensemble_frames(prev_output_dirs, num_frames, header_rows=[0,1,2]):
   all_keypoints = []
   all_indices = []
+  all_np=list()
+  all_var=list()
   # Find common elements across all csv files
   for run_idx, folder_path in enumerate(prev_output_dirs):
     csv_file = os.path.join(folder_path, "predictions_new.csv")
@@ -42,21 +44,92 @@ def calculate_ensemble_frames(prev_output_dirs, num_frames, header_rows=[0,1,2])
     all_indices.append(csv_data.index.values)
     # filter by common elements
     csv_data = csv_data.loc[common_elements]
+    all_np.append(csv_data.iloc[:,:-1].to_numpy())
     # num_keypoints x (x, y, likelihood) + ('train')
     # train is always true for predictions_new in test mode
     frame_ids = csv_data.index.to_numpy()
     keypoints = csv_data.to_numpy()[...,:-1]
+    print(keypoints.shape)
+
     xy_keypoints = keypoints.reshape(keypoints.shape[0], -1, 3)[..., :-1]
+    var=keypoints.reshape(keypoints.shape[0], -1, 3)[..., -1:]
+    all_var.append(var)
+    print(xy_keypoints.shape)
     all_keypoints.append(xy_keypoints)
-
+  csv_data_mean=csv_data
+  csv_data_var=csv_data
   all_keypoints = np.stack(all_keypoints,0)
-
+  all_var=np.stack(all_var,0)
+  all_np=np.stack(all_np,0)
+  all_np=all_np.mean(axis=0)
+  csv_data_mean.iloc[:,:-1]=all_np
   # calculate variance
   variance_xy = all_keypoints.var(0)
+  var_likely=all_var.var(0)
+  print(variance_xy.shape)
+  print(var_likely.shape)
+  var_total=np.concatenate((variance_xy,var_likely),-1)
+  print(var_total.shape)
+  var_total=var_total.reshape(-1,12)
+  csv_data_var.iloc[:,:-1]=var_total
   selected_indices = np.argsort(variance_xy.sum(-1).sum(-1))[:num_frames]
 
   matched_rows =  csv_data.iloc[selected_indices]
+
   return matched_rows
+
+def calculate_ensemble_frames_for_active_test(prev_output_dirs, num_frames, header_rows=[0,1,2]):
+  all_keypoints = []
+  all_indices = []
+  all_np=list()
+  all_var=list()
+  # Find common elements across all csv files
+  for run_idx, folder_path in enumerate(prev_output_dirs):
+    csv_file = os.path.join(folder_path, "predictions_active_test.csv")
+    csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
+    all_indices.append(csv_data.index.values)
+  common_elements = np.asarray(find_common_elements(*all_indices))
+
+  # read xy keypoints from each csv file
+  for run_idx, folder_path in enumerate(prev_output_dirs):
+    csv_file = os.path.join(folder_path, "predictions_active_test.csv")
+    csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
+    all_indices.append(csv_data.index.values)
+    # filter by common elements
+    csv_data = csv_data.loc[common_elements]
+    all_np.append(csv_data.iloc[:,:-1].to_numpy())
+    # num_keypoints x (x, y, likelihood) + ('train')
+    # train is always true for predictions_new in test mode
+    frame_ids = csv_data.index.to_numpy()
+    keypoints = csv_data.to_numpy()[...,:-1]
+    print(keypoints.shape)
+
+    xy_keypoints = keypoints.reshape(keypoints.shape[0], -1, 3)[..., :-1]
+    var=keypoints.reshape(keypoints.shape[0], -1, 3)[..., -1:]
+    all_var.append(var)
+    print(xy_keypoints.shape)
+    all_keypoints.append(xy_keypoints)
+  csv_data_mean=csv_data
+  csv_data_var=csv_data
+  all_keypoints = np.stack(all_keypoints,0)
+  all_var=np.stack(all_var,0)
+  all_np=np.stack(all_np,0)
+  all_np=all_np.mean(axis=0)
+  csv_data_mean.iloc[:,:-1]=all_np
+  # calculate variance
+  variance_xy = all_keypoints.var(0)
+  var_likely=all_var.var(0)
+  print(variance_xy.shape)
+  print(var_likely.shape)
+  var_total=np.concatenate((variance_xy,var_likely),-1)
+  print(var_total.shape)
+  var_total=var_total.reshape(-1,12)
+  csv_data_var.iloc[:,:-1]=var_total
+  selected_indices = np.argsort(variance_xy.sum(-1).sum(-1))[:num_frames]
+
+  matched_rows =  csv_data.iloc[selected_indices]
+
+  return csv_data_mean, csv_data_var
 
 
 def low_energy_random_sampling(energy_func, all_data,num_frames):
@@ -126,6 +199,7 @@ def select_frames(active_iter_cfg, data_cfg):
       selected_indices_file = os.path.join(output_dir, selected_indices_file)
       # Save the selected frames to a CSV file
       matched_rows.to_csv(selected_indices_file)
+
     elif method == 'random_energy':
         # TODO
         # select random frames from eval data in prev run.
@@ -137,6 +211,7 @@ def select_frames(active_iter_cfg, data_cfg):
         selected_indices_file = os.path.join(output_dir, selected_indices_file)
       # Save the selected frames to a CSV file
         matched_rows.to_csv(selected_indices_file)
+
     elif method == 'uncertainty_sampling':
       # TODO:
       all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0,1,2], index_col=0)
@@ -158,9 +233,12 @@ def select_frames(active_iter_cfg, data_cfg):
       # TODO:
       all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0, 1, 2], index_col=0)
       csv_file = os.path.join(prev_output_dirs[0], "predictions_new_heatmap.csv")
+      csv_active_test_file = os.path.join(prev_output_dirs[0], "predictions_active_test_heatmap.csv")
       margin = pd.read_csv(csv_file, header=[0, 1, 2], index_col=0)
       margin['sum'] = margin.sum(axis=1)
-      margin['sum'].plot(kind='hist', bins=20)
+      active_test_margin = pd.read_csv(csv_active_test_file, header=[0, 1, 2], index_col=0)
+      active_test_margin['sum'] = active_test_margin.sum(axis=1)
+      active_test_margin['sum'].plot(kind='hist', bins=20)
       plt.title('Histogram of Margin Sampling')
       plt.xlabel("Sum of Margin Sampling")
       plt.ylabel('Number of Frames')
@@ -178,7 +256,22 @@ def select_frames(active_iter_cfg, data_cfg):
     elif method == 'Ensembling':
       all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0, 1, 2], index_col=0)
       matched_rows = calculate_ensemble_frames(prev_output_dirs, num_frames)
+      csv_data_mean, csv_data_var = calculate_ensemble_frames_for_active_test(prev_output_dirs, num_frames)
       matched_rows=all_data.loc[matched_rows.index]
+      csv_mean_file = os.path.join(prev_output_dirs[-1], "predictions_active_test.csv")
+      csv_data_mean.to_csv(csv_mean_file)
+      csv_var_file = os.path.join(prev_output_dirs[-1], "predictions_var_active_test.csv")
+      csv_data_var.drop(csv_data_var.columns[-1], axis=1, inplace=True)
+      csv_data_var.drop(csv_data_var.columns[2::3], axis=1, inplace=True)
+      csv_data_var.to_csv(csv_var_file)
+      csv_data_var['sum'] = csv_data_var.sum(axis=1)
+      csv_data_var['sum'].plot(kind='hist', bins=20)
+      plt.title('Histogram of Ensembling')
+      plt.xlabel("Ensembling")
+      plt.ylabel('Number of Frames')
+      plt_path=os.path.join(output_dir, "Histogram of Ensembling")
+      plt.savefig(plt_path)
+      plt.show()
       selected_indices_file = f'iteration_{method}_indices.csv'
       selected_indices_file = os.path.join(output_dir, selected_indices_file)
     # Save the selected frames to a CSV file
