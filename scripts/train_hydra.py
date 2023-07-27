@@ -11,7 +11,7 @@ from lightning_pose.utils.io import (
     return_absolute_data_paths,
     return_absolute_path,
 )
-from lightning_pose.utils.predictions import predict_dataset,cosine_similarity
+from lightning_pose.utils.predictions import predict_dataset, equal_variance
 from lightning_pose.utils.scripts import (
     export_predictions_and_labeled_video,
     get_data_module,
@@ -239,6 +239,14 @@ def train(cfg: DictConfig):
         except Exception as e:
           print(f"Error computing metrics\n{e}")
 
+        '''  
+
+        EqualVariance=True
+        equal_variance(EqualVariance, cfg, preds_file_ood, csv_file_ood, get_imgaug_transform
+        , get_dataset, data_dir, get_data_module, video_dir, hydra_output_directory, trainer, model, best_ckpt)
+
+        '''
+
     # ----------------------------------------------------------------------------------
     # predict on active loop test frames
     # ----------------------------------------------------------------------------------
@@ -288,6 +296,14 @@ def train(cfg: DictConfig):
             )
         except Exception as e:
             print(f"Error computing metrics\n{e}")
+
+
+        '''
+
+        equal_variance(EqualVariance, cfg, preds_file_ood, csv_file_ood, get_imgaug_transform
+        , get_dataset, data_dir, get_data_module, video_dir, hydra_output_directory, trainer, model, best_ckpt)
+
+        '''
 
     return hydra_output_directory
 
