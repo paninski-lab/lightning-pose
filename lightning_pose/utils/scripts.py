@@ -181,7 +181,7 @@ def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
         print("Rotate images clockwise by multiples of 90 degrees.")
 
         data_transform.append(
-        iaa.Rot90(1)
+        iaa.Rot90(1) #Clockwise Rotation 90°
         )
 
     else:
