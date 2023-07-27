@@ -176,6 +176,14 @@ def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
                 "width": cfg.data.image_resize_dims.width}
             ))
 
+    elif kind=="RR":
+      
+        print("Rotate images clockwise by multiples of 90 degrees.")
+
+        data_transform.append(
+        iaa.Rot90(1)
+        )
+
     else:
         raise NotImplementedError(
             "must choose imgaug kind from 'default', 'dlc', 'dlc-light'"
