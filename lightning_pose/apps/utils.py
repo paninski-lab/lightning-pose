@@ -26,9 +26,9 @@ def update_labeled_file_list(model_preds_folders: list, use_ood: bool = False):
         ret_files = []
         for file in model_preds:
             if 'predictions' in file:
-                if 'new' not in file and not use_ood:
+                if 'new' not in file and not use_ood: 
                     ret_files.append(Path(file))
-                elif 'new' in file and use_ood:
+                elif 'new' in file and use_ood: # elif 'predictions_active_test' in file and "heatmap" not in file and "equalvariance" not in file and use_ood:
                     ret_files.append(Path(file))
                 else:
                     pass
