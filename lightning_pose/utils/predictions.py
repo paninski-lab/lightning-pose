@@ -313,7 +313,7 @@ def equal_variance(EqualVariance: bool, cfg: DictConfig, preds_file_ood, csv_fil
         data_module_ood.setup()
         pretty_print_str("Equal Variance Calculating Rotating...")
         # compute and save frame-wise predictions
-        preds_file_ood = os.path.join(hydra_output_directory, "predictions_new_rot90.csv")
+        preds_file_ood = preds_file_ood.replace(".csv","_rot90.csv")#os.path.join(hydra_output_directory, "predictions_new_rot90.csv")
         _, heatmaprot=predict_dataset(
               cfg=cfg_eql_rot,
               trainer=trainer,
@@ -344,7 +344,7 @@ def equal_variance(EqualVariance: bool, cfg: DictConfig, preds_file_ood, csv_fil
         data_module_ood.setup()
         pretty_print_str("Equal Variance Calculating...")
         # compute and save frame-wise predictions
-        preds_file_ood = os.path.join(hydra_output_directory, "predictions_new_no_rot.csv")
+        preds_file_ood = preds_file_ood.replace("_rot90.csv","_no_rot.csv")#os.path.join(hydra_output_directory, "predictions_new_no_rot.csv")
         _, heatmap=predict_dataset(
               cfg=cfg_eql,
               trainer=trainer,
