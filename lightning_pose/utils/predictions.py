@@ -291,6 +291,80 @@ def cosine_similarity(A, B) -> np.array:
 
     return np.array(cosine_similarities).squeeze()
 
+def equal_variance(EqualVariance: bool, cfg: DictConfig, preds_file_ood, csv_file_ood, get_imgaug_transform
+    , get_dataset, data_dir, get_data_module, video_dir, hydra_output_directory, trainer, model, best_ckpt):
+
+   if EqualVariance:
+
+        pretty_print_str("Start EqualVariance Calculation Starting...")
+        equalvariance=pd.read_csv(preds_file_ood,header=[0,1,2], index_col=0)
+        cfg_eql_rot = cfg.copy()
+        cfg_eql_rot.data.csv_file = csv_file_ood
+        cfg_eql_rot.training.imgaug = "RR"
+        cfg_eql_rot.training.train_prob = 1
+        cfg_eql_rot.training.val_prob = 0
+        cfg_eql_rot.training.train_frames = 1
+        # build dataset/datamodule
+        imgaug_transform_ood = get_imgaug_transform(cfg=cfg_eql_rot)
+        dataset_ood = get_dataset(
+            cfg=cfg_eql_rot, data_dir=data_dir, imgaug_transform=imgaug_transform_ood
+        )
+        data_module_ood = get_data_module(cfg=cfg_eql_rot, dataset=dataset_ood, video_dir=video_dir)
+        data_module_ood.setup()
+        pretty_print_str("Equal Variance Calculating Rotating...")
+        # compute and save frame-wise predictions
+        preds_file_ood = os.path.join(hydra_output_directory, "predictions_new_rot90.csv")
+        _, heatmaprot=predict_dataset(
+              cfg=cfg_eql_rot,
+              trainer=trainer,
+              model=model,
+              data_module=data_module_ood,
+              ckpt_file=best_ckpt,
+              preds_file=preds_file_ood,
+              manual_step=True,
+             #typecheck="None" only for margin sampling
+          )
+        
+        
+
+        pretty_print_str("Start No Rotating Processing...")
+
+        cfg_eql = cfg.copy()
+        cfg_eql.data.csv_file = csv_file_ood
+        cfg_eql.training.imgaug = "default"
+        cfg_eql.training.train_prob = 1
+        cfg_eql.training.val_prob = 0
+        cfg_eql.training.train_frames = 1
+        # build dataset/datamodule
+        imgaug_transform_ood = get_imgaug_transform(cfg=cfg_eql)
+        dataset_ood = get_dataset(
+            cfg=cfg_eql, data_dir=data_dir, imgaug_transform=imgaug_transform_ood
+        )
+        data_module_ood = get_data_module(cfg=cfg_eql, dataset=dataset_ood, video_dir=video_dir)
+        data_module_ood.setup()
+        pretty_print_str("Equal Variance Calculating...")
+        # compute and save frame-wise predictions
+        preds_file_ood = os.path.join(hydra_output_directory, "predictions_new_no_rot.csv")
+        _, heatmap=predict_dataset(
+              cfg=cfg_eql,
+              trainer=trainer,
+              model=model,
+              data_module=data_module_ood,
+              ckpt_file=best_ckpt,
+              preds_file=preds_file_ood,
+              manual_step=True,
+             #typecheck="None" only for margin sampling
+          )
+
+
+        
+        
+        res=cosine_similarity(heatmap, heatmaprot)
+        equalvariance['Equalvariance']=res
+        equalvariance = equalvariance.iloc[:,-1]
+        preds_file_ood_equalvariance = preds_file_ood.replace("_no_rot.csv","_equalvariance.csv")
+        equalvariance.to_csv(preds_file_ood_equalvariance)
+        pretty_print_str("EqualVariance Calculation Finished...")
 
 def cal_qudra(heatmap: np.array) -> np.array:
     rows, cols = heatmap.shape
