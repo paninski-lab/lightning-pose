@@ -298,6 +298,29 @@ def select_frames(active_iter_cfg, data_cfg):
     # Save the selected frames to a CSV file
       matched_rows.to_csv(selected_indices_file)
 
+    elif method == 'Equal Variance':
+      # TODO:
+      all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0, 1, 2], index_col=0)
+      csv_file = os.path.join(prev_output_dirs[0], "predictions_new_equalvariance.csv")
+      csv_active_test_file = os.path.join(prev_output_dirs[0], "predictions_active_test_equalvariance.csv")
+      margin = pd.read_csv(csv_file, header=[0, 1, 2], index_col=0)
+      margin['sum'] = margin.sum(axis=1)
+      active_test_margin = pd.read_csv(csv_active_test_file, header=[0, 1, 2], index_col=0)
+      active_test_margin['sum'] = active_test_margin.sum(axis=1)
+      active_test_margin['sum'].plot(kind='hist', bins=20)
+      plt.title('Histogram of Cosine Similarity')
+      plt.xlabel("Sum of Cosine Similarity")
+      plt.ylabel('Number of Frames')
+      plt_path=os.path.join(output_dir, "Histogram of Cosine Similarity")
+      plt.savefig(plt_path)
+      plt.show()
+      selected_frames = margin.nsmallest(num_frames, 'sum')
+      selected_frames = selected_frames.drop('sum', axis=1)
+      matched_rows=all_data.loc[selected_frames.index]
+      selected_indices_file = f'iteration_{method}_indices.csv'
+      selected_indices_file = os.path.join(output_dir, selected_indices_file)
+      matched_rows.to_csv(selected_indices_file)
+
     else:
       NotImplementedError(f'{method} is not implemented yet.')
 
