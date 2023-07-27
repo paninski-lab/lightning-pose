@@ -235,7 +235,7 @@ def select_frames(active_iter_cfg, data_cfg):
       plt.savefig(plt_path)
       plt.show()
 
-      selected_frames = margin.nlargest(num_frames, "Uncertainity")
+      selected_frames = margin.nsmallest(num_frames, "Uncertainity")
       selected_frames = selected_frames.drop("Uncertainity", axis=1)
       matched_rows=all_data.loc[selected_frames.index]
       selected_indices_file = f'iteration_{method}_indices.csv'
