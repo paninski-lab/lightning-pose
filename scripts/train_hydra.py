@@ -11,7 +11,7 @@ from lightning_pose.utils.io import (
     return_absolute_data_paths,
     return_absolute_path,
 )
-from lightning_pose.utils.predictions import predict_dataset
+from lightning_pose.utils.predictions import predict_dataset,cosine_similarity
 from lightning_pose.utils.scripts import (
     export_predictions_and_labeled_video,
     get_data_module,
