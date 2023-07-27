@@ -264,6 +264,33 @@ class PredictionHandler:
 
         return df
 
+def cosine_similarity(A, B) -> np.array:
+    """
+    Two numpy heatmap to calculate Cosine Similarity
+
+    Args：
+    A: numpy array (m, n, n)
+    B: numpy array (m, n, n)
+
+    Return:
+    cosine_similarities: numpy array (m)
+    """
+
+  
+    cosine_similarities = []
+
+    for i in range(A.shape[0]):
+      
+        A_flat = A[i].flatten()
+        B_flat = np.rot90(B[i]).flatten()
+        dot_product = np.dot(A_flat, B_flat)
+        norm_A = np.linalg.norm(A_flat)
+        norm_B = np.linalg.norm(B_flat)
+        cosine_similarity = dot_product / (norm_A * norm_B)
+        cosine_similarities.append(cosine_similarity)
+
+    return np.array(cosine_similarities).squeeze()
+
 
 def cal_qudra(heatmap: np.array) -> np.array:
     rows, cols = heatmap.shape
@@ -536,7 +563,7 @@ def predict_dataset(
         ]
     ] = None,
     manual_step: bool = False,
-) -> pd.DataFrame:
+) -> Union[pd.DataFrame, Tuple[pd.DataFrame, np.ndarray]]:
     """Save predicted keypoints for a labeled dataset.
 
     Args:
@@ -582,6 +609,8 @@ def predict_dataset(
         heatmap_margin_df.to_csv(preds_heatmap_file)
         labeled_preds_df.drop(labeled_preds_df.iloc[:,column_heatmap], axis=1, inplace=True)
         labeled_preds_df.to_csv(preds_file)
+
+        return labeled_preds_df, heatmap_np.sum(1)
 
     else:
         labeled_preds = trainer.predict(
