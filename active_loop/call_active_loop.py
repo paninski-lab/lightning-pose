@@ -70,7 +70,7 @@ def calculate_ensemble_frames(prev_output_dirs, num_frames, header_rows=[0,1,2])
   print(var_likely.shape)
   var_total=np.concatenate((variance_xy,var_likely),-1)
   print(var_total.shape)
-  var_total=var_total.reshape(-1,12)
+  var_total=var_total.reshape(-1,12) #### might cause some issue
   csv_data_var.iloc[:,:-1]=var_total
   selected_indices = np.argsort(variance_xy.sum(-1).sum(-1))[:num_frames]
 
@@ -123,7 +123,7 @@ def calculate_ensemble_frames_for_active_test(prev_output_dirs, num_frames, head
   print(var_likely.shape)
   var_total=np.concatenate((variance_xy,var_likely),-1)
   print(var_total.shape)
-  var_total=var_total.reshape(-1,12)
+  var_total=var_total.reshape(-1,12) #### might cause some issue
   csv_data_var.iloc[:,:-1]=var_total
   selected_indices = np.argsort(variance_xy.sum(-1).sum(-1))[:num_frames]
 
