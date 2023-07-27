@@ -213,21 +213,34 @@ def select_frames(active_iter_cfg, data_cfg):
         matched_rows.to_csv(selected_indices_file)
 
     elif method == 'uncertainty_sampling':
-      # TODO:
-      all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0,1,2], index_col=0)
+     # TODO:
+      all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0, 1, 2], index_col=0)
+      csv_file = os.path.join(prev_output_dirs[0], "predictions_new.csv")
+      csv_active_test_file = os.path.join(prev_output_dirs[0], "predictions_active_test.csv")
+      margin = pd.read_csv(csv_file, header=[0, 1, 2], index_col=0)
+      margin_numpy = margin.to_numpy()[...,:-1]
+      uncertainty = margin_numpy.reshape(margin_numpy.shape[0], -1, 3)[..., -1]
+      margin["Uncertainity"] = uncertainty.sum(-1).astype(float)
 
-      all_data['sum'] = all_data.iloc[:, [3, 6]].sum(axis=1)
+      active_test_margin = pd.read_csv(csv_active_test_file, header=[0, 1, 2], index_col=0)
+      active_test_margin_numpy = active_test_margin.to_numpy()[...,:-1]
+      uncertainty = active_test_margin_numpy.reshape(active_test_margin_numpy.shape[0], -1, 3)[..., -1]
+      active_test_margin["Uncertainity"] = uncertainty.sum(-1).astype(float)
 
-    # Select the top 10 rows with the smallest sum
-      selected_frames = all_data.nsmallest(num_frames, 'sum')
+      active_test_margin["Uncertainity"].plot(kind='hist', bins=20)
+      plt.title('Histogram of Uncertainity Sampling')
+      plt.xlabel("Sum of Uncertainity Sampling")
+      plt.ylabel('Number of Frames')
+      plt_path=os.path.join(output_dir, "Histogram of Uncertainity Sampling")
+      plt.savefig(plt_path)
+      plt.show()
 
-      selected_frames = selected_frames.drop('sum', axis=1)
-
+      selected_frames = margin.nlargest(num_frames, "Uncertainity")
+      selected_frames = selected_frames.drop("Uncertainity", axis=1)
+      matched_rows=all_data.loc[selected_frames.index]
       selected_indices_file = f'iteration_{method}_indices.csv'
       selected_indices_file = os.path.join(output_dir, selected_indices_file)
-
-    # Save the selected frames to a CSV file
-      selected_frames.to_csv(selected_indices_file)
+      matched_rows.to_csv(selected_indices_file)
 
     elif method == 'margin sampling':
       # TODO:
