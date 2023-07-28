@@ -8,9 +8,9 @@ data:
     height: 128
     width: 128
   # ABSOLUTE path to data directory
-  data_dir: "/data/libraries/lightning-pose/data/ibl1/labeled-data"
+  data_dir: ${oc.env:LIGHTPOSE_DIR}/data/ibl1/labeled-data
   # ABSOLUTE path to unlabeled videos' directory
-  video_dir: "/data/libraries/lightning-pose/data/ibl1/unlabeled_videos"
+  video_dir: ${oc.env:LIGHTPOSE_DIR}/data/ibl1/unlabeled_videos
   # location of labels; for ex script, this should be relative to `data_dir`
   csv_file: "../CollectedData.csv"
   # header rows to strip in label csv file
@@ -190,17 +190,17 @@ eval:
     dataset_to_create: "images"
   # str with an absolute path to a directory containing videos for prediction.
   # (it's not absolute just for the toy example)
-  test_videos_directory: "/data/libraries/lightning-pose/data/ibl1/unlabeled_videos"
+  test_videos_directory: ${oc.env:LIGHTPOSE_DIR}/data/ibl1/unlabeled_videos
 
   # str with an absolute path to directory in which you want to save .csv with predictions
-  saved_vid_preds_dir: "/data/libraries/lightning-pose/data/ibl1"
+  saved_vid_preds_dir: ${oc.env:LIGHTPOSE_DIR}/data/ibl1
   # create labeled video from each video in test_videos_directory
   create_labeled_video: false
   # confidence threshold for plotting a vid
   confidence_thresh_for_vid: 0.05
   # str with absolute path to the video file you want plotted with keypoints
   video_file_to_plot:
-    [" " ] #"/data/libraries/lightning-pose/data/ibl1/unlabeled_videos/ibl1.mp4"]
+    [" " ]
   # a list of strings, each points to a .csv file with predictions of a given model to the same video. will be combined with video_file_to_plot to make a visualization
   pred_csv_files_to_plot:
     [""]

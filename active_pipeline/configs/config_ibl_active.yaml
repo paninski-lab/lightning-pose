@@ -11,8 +11,8 @@ Comment: >
 
 project: "ibl_toy"
 
-active_loop:
-  experiment_cfg: "/data/libraries/lightning-pose/active_loop/configs/config_ibl_experiment.yaml"
+active_pipeline:
+  experiment_cfg: ${oc.env:LIGHTPOSE_DIR}/active_pipeline/configs/config_ibl_experiment.yaml
   iterations_folders: "iteration_active_loop/experiment0" # relative to data_dir
   start_iteration: 1
   end_iteration: 2
@@ -29,7 +29,7 @@ iteration_0:
   iteration_folder: null
 
 iteration_1:
-  output_prev_run: [""] # example: ["/data/libraries/lightning-pose/outputs/2023-07-05/11-24-03",]
+  output_prev_run: [""]
   csv_file_prev_run: [""]
   method: "random"
   num_frames: 10

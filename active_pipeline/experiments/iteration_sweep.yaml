@@ -1,0 +1,29 @@
+name: active_loop_sweep
+program: /data/libraries/lightning-pose/scripts/train_hydra.py
+method: grid
+project: lightning-pose-wandb-integration
+entity: ekellbuch
+
+metric:
+  name: val_supervised_loss
+  goal: minimize
+parameters:
+  wandb.params.project:
+    value: $project
+  wandb.params.entity:
+    value: $entity
+  training.train_frames:
+    value: 10
+  training.rng_seed_model_pt:
+    values: [0, 1, 2, 3, 4]
+
+
+command:
+  - ${env}
+  - python
+  - ${program}
+  - "--config-path"
+  - "/data/libraries/lightning-pose/etc/ensembles/configs"
+  - "--config-name"
+  - "config_ibl1.yaml"
+  - ${args_no_hyphens}

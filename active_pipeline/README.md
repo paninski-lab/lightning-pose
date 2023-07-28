@@ -5,6 +5,9 @@ This config file is in addition to the config file for the experiment `configs/c
 
 Before running an experiment, add the following parameters to your experiment config, as in `configs/config_ibl_experiment.yaml`:
 
+```
+export LIGHTPOSE_DIR="{path_to_lightpose}/lightning-pose"
+```
 - To track metrics for the active learning pipeline, we use [wandb](https://wandb.ai/).
 ```
 # Additional flags for wandb.
@@ -40,6 +43,11 @@ If there are no errors: run the full pipeline using
 python active_loop/call_active_loop.py "{full_path_to_lp}/active_loop/configs/config_ibl_active.yaml"
 ```
 
+
+# TODO:
+- [ ] make code run with datasets without active_test data.
+- [ ] update test function: it runs full evaluation pipeline, but it should only use a subset of the test set.
+- [ ] separate plotting code.
 
 
 # Pipeline
