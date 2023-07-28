@@ -1,5 +1,49 @@
 # Active Learning pipeline
 
+The config file `configs/config_ibl_active.yaml` has the configuration details to run an active learning pipeline.
+This config file is in addition to the config file for the experiment `configs/config_ibl_experiment.yaml`.
+
+Before running an experiment, add the following parameters to your experiment config, as in `configs/config_ibl_experiment.yaml`:
+
+- To track metrics for the active learning pipeline, we use [wandb](https://wandb.ai/).
+```
+# Additional flags for wandb.
+wandb:
+  logger: True
+  params:
+    project:
+    entity:
+    tags:
+```
+- If there is a second dataset that you want to use for testing the active pipeline
+```
+# Additional flags for active learning pipeline
+active_loop:
+  # location of active loop labels; for ex script, this should be relative to `data_dir`
+  csv_file: "../CollectedData_active_test.csv"
+```
+
+
+Then in your active pipeline config `active_loop/configs/config_ibl_active.yaml`, add your experiment config:
+```
+active_loop:
+  experiment_cfg: "{full_path_to_lp}/active_loop/configs/config_ibl_active.yaml"
+```
+
+One you have done this step you can run the test code to make sure everything is working:
+```
+python tests/active_loop/test_call_active.py
+```
+
+If there are no errors: run the full pipeline using
+```
+python active_loop/call_active_loop.py "{full_path_to_lp}/active_loop/configs/config_ibl_active.yaml"
+```
+
+
+
+# Pipeline
+
 Codebase:
 - [x] Define active loop config, example in `configs/config_ibl_active.yaml`
 - [x] Make `iterations` folder which is set in the config file.

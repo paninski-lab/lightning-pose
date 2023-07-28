@@ -213,14 +213,16 @@ callbacks:
     final_val: 1.0
     freeze_until_epoch: 0
 
-# New active learning flags:
+
+# Additional flags for wandb.
 wandb:
   logger: True
   params:
-    project:
-    entity:
+    project: "active_loop" # you wandb project name.
+    entity: "ekellbuch" # your wandb username.
     tags:
 
+# Additional flags for active learning
 active_loop:
 # location of active loop labels; for ex script, this should be relative to `data_dir`
   csv_file: "../CollectedData_active_test.csv"

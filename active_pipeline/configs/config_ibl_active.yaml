@@ -1,5 +1,7 @@
 Comment: >
-  # Example
+  The active loop parameters has the full experiment configs.
+  Iteration_x shows the config for iteration number x.
+
   iteration_x:
     output_prev_run:  [""] # where the outputs of the last iteration are saved
     csv_file_prev_run: [""] # where the csv file of the last iteration is saved
@@ -7,17 +9,17 @@ Comment: >
     num_frames: 10  # where the new frames are located
     iteration_folder: null
 
-project: "active_mirror_mouse"
+project: "ibl_toy"
 
 active_loop:
-  experiment_cfg: "/content/lightning-pose/scripts/configs/config_ibl_for_Haotian_Device.yaml"
-  iterations_folders: "iteration_active_loop/experiment0" #relative to data_dir
-  fast_dev_run: 1
-  start_iteration: 0
+  experiment_cfg: "/data/libraries/lightning-pose/active_loop/configs/config_ibl_experiment.yaml"
+  iterations_folders: "iteration_active_loop/experiment0" # relative to data_dir
+  start_iteration: 1
   end_iteration: 2
   current_iteration: null
+  experiment_kwargs: null
 
-
+# select frames not yet available
 iteration_0:
   output_prev_run: [""]
   csv_file_prev_run: [""]
@@ -40,6 +42,7 @@ iteration_2:
   num_frames: 10
   use_seeds: [0,1]
   iteration_folder: null
+
 
 
 
