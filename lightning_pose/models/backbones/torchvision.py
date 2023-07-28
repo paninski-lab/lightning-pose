@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from typing import Tuple
 
 import torch
 import torchvision.models as tvmodels

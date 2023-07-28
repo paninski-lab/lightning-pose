@@ -1,6 +1,6 @@
 """Models that produce heatmaps of keypoints from images."""
 
-from typing import Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import torch
 from kornia.filters import filter2d
@@ -9,6 +9,7 @@ from kornia.geometry.transform.pyramid import _get_pyramid_gaussian_kernel
 from omegaconf import DictConfig
 from torch import nn
 from torchtyping import TensorType
+from typeguard import typechecked
 from typing_extensions import Literal
 
 from lightning_pose.data.utils import (
@@ -349,6 +350,7 @@ class HeatmapTracker(BaseSupervisedTracker):
             return predicted_keypoints, confidence
 
 
+@typechecked
 class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
     """Model produces heatmaps of keypoints from labeled/unlabeled images."""
 
@@ -411,7 +413,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         # self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
         self.total_unsupervised_importance = torch.tensor(1.0)
 
-    def get_loss_inputs_unlabeled(self, batch: UnlabeledBatchDict) -> dict:
+    def get_loss_inputs_unlabeled(self, batch: UnlabeledBatchDict) -> Dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
         predicted_heatmaps = self.forward(batch["frames"])

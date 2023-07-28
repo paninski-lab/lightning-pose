@@ -1,6 +1,6 @@
 """Models that produce heatmaps of keypoints from images."""
 
-from typing import Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import torch
 from kornia.geometry.subpix import spatial_softmax2d
@@ -259,7 +259,7 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
         # self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
         self.total_unsupervised_importance = torch.tensor(1.0)
 
-    def get_loss_inputs_unlabeled(self, batch: UnlabeledBatchDict) -> dict:
+    def get_loss_inputs_unlabeled(self, batch: UnlabeledBatchDict) -> Dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
         pred_heatmaps_crnn, pred_heatmaps_sf = self.forward(batch["frames"])

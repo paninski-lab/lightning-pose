@@ -1,6 +1,6 @@
 """Models that produce (x, y) coordinates of keypoints from images."""
 
-from typing import Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import torch
 from omegaconf import DictConfig
@@ -204,7 +204,7 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         self.total_unsupervised_importance = torch.tensor(1.0)
         # self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
 
-    def get_loss_inputs_unlabeled(self, batch: UnlabeledBatchDict) -> dict:
+    def get_loss_inputs_unlabeled(self, batch: UnlabeledBatchDict) -> Dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         predicted_keypoints = self.forward(batch["frames"])
         # undo augmentation if needed

@@ -1,7 +1,7 @@
 """Helper functions to build pipeline components from config dictionary."""
 
 import os
-from typing import Dict, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import imgaug.augmenters as iaa
 import lightning.pytorch as pl
