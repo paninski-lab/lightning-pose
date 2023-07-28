@@ -6,7 +6,7 @@ ALLOWED_BACKBONES = Literal[
     "resnet50",
     "resnet101",
     "resnet152",
-    "resnet50_contrastive",
+    "resnet50_contrastive",  # needs extra install: pip install -e .[extra_models]
     "resnet50_animal_apose",
     "resnet50_animal_ap10k",
     "resnet50_human_jhmdb",
@@ -15,6 +15,6 @@ ALLOWED_BACKBONES = Literal[
     "efficientnet_b0",
     "efficientnet_b1",
     "efficientnet_b2",
-    "vit_h_sam",
-    "vit_b_sam",
+    # "vit_h_sam",
+    # "vit_b_sam",
 ]

@@ -4,7 +4,7 @@ import subprocess
 
 from setuptools import find_packages, setup
 
-VERSION = "0.0.3"
+VERSION = "0.0.4"
 
 # add the README.md file to the long_description
 with open("README.md", "r") as fh:
@@ -43,45 +43,57 @@ else:
 print(f"Found CUDA version: {cuda_version}, using DALI: {dali}")
 
 
+# basic requirements
 install_requires = [
-    "black==23.3.0",
-    "fiftyone==0.20.1",
-    "h5py==3.8.0",
-    "hydra-core==1.3.2",
-    "imgaug==0.4.0",
-    "kaleido==0.2.1",
-    "kornia==0.6.12",
-    "matplotlib==3.7.1",
-    "moviepy==1.0.3",
-    "opencv-python==4.7.0.72",
-    "pandas==2.0.1",
-    "pillow==9.5.0",
-    "pytest==7.3.1",
+    "fiftyone",
+    "h5py",
+    "hydra-core",
+    "imgaug",
+    "kaleido",  # export plotly figures as static images
+    "kornia",
     "lightning",
+    "matplotlib",
+    "moviepy",
+    "opencv-python",
+    "pandas>=2.0.0",
+    "pillow",
+    "plotly",
+    "pytest",
+    "scikit-image",
+    "scikit-learn",
+    "seaborn",
+    "streamlit",
+    "tensorboard",
+    "torchtyping",
+    "torchvision",
+    "typeguard",
+    "typing",
     dali,
-    "tensorboard==2.13.0",
-    "lightning-bolts==0.6.0.post1",
-    "seaborn==0.12.2",
-    "scikit-image==0.20.0",
-    "scikit-learn==1.2.2",
-    "streamlit==1.22.0",
-    "torchtyping==0.1.4",
-    "torchvision==0.15.2",
-    "typeguard==3.0.2",
-    "typing==3.7.4.3",
-    "botocore==1.27.59",
 ]
+
+# additional requirements
+extras_require = {
+    "dev": {
+        "black",
+        "flake8",
+        "isort",
+    },
+    "extra_models": {
+        "lightning-bolts",  # resnet-50 trained on imagenet using simclr
+    },
+}
 
 
 setup(
     name="lightning-pose",
     packages=find_packages(),
     version=VERSION,
-    description="Semi-supervised pose estimation using Lightning.",
+    description="Semi-supervised pose estimation using pytorch lightning",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Dan Biderman and Matt Whiteway",
-    install_requires=install_requires,  # load_requirements(PATH_ROOT),
+    install_requires=install_requires,
+    extras_require=extras_require,
     author_email="danbider@gmail.com",
     url="https://github.com/danbider/lightning-pose",
     keywords=["machine learning", "deep learning", "computer_vision"],

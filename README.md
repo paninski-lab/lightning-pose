@@ -57,11 +57,15 @@ cd <SOME_FOLDER>
 git clone https://github.com/danbider/lightning-pose.git
 ```
 
-Then move into the newly-created repository folder, and install dependencies:
+Then move into the newly-created repository folder:
 ```console
 cd lightning-pose
-pip install -e .
 ```
+and install dependencies using one of the lines below that suits your needs best:
+* `pip install -e . `: basic installation, covers most use-cases (note the period!)
+* `pip install -e .[dev] `: basic install + dev tools
+* `pip install -e .[extra_models] `: basic install + tools for loading resnet-50 simclr weights
+* `pip install -e .[dev,extra_models] `: install all available requirements
 
 This installation might take between 3-10 minutes, depending on your machine and internet connection.
 
