@@ -45,7 +45,9 @@ python active_loop/call_active_loop.py "{full_path_to_lp}/active_loop/configs/co
 
 
 # TODO:
-- [ ] make code run with datasets without active_test data.
+- [ ] add compatibility for offline evaluation
+    - [ ] iterations folder can be an absolute path so as to not overwrite any config,
+- [ ] add compatibility with datasets without active_test sets
 - [ ] update test function: it runs full evaluation pipeline, but it should only use a subset of the test set.
 - [ ] separate plotting code.
 
