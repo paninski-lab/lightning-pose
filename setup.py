@@ -59,7 +59,6 @@ install_requires = [
     "pillow",
     "plotly",
     "pytest",
-    "scikit-image",
     "scikit-learn",
     "seaborn",
     "streamlit",

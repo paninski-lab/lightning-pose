@@ -4,6 +4,7 @@ import os
 import time
 from typing import List, Optional, Tuple, Union
 
+import cv2
 import lightning.pytorch as pl
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,7 +12,6 @@ import pandas as pd
 import torch
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import LightningModule
-from skimage.draw import disk
 from torchtyping import TensorType
 from tqdm import tqdm
 from typeguard import typechecked
@@ -690,7 +690,7 @@ def create_labeled_video(
     xs_arr,
     ys_arr,
     mask_array=None,
-    dotsize=5,
+    dotsize=4,
     colormap="cool",
     fps=None,
     filename="movie.mp4",
@@ -719,14 +719,10 @@ def create_labeled_video(
     colors = make_cmap(n_keypoints, cmap=colormap)
 
     nx, ny = clip.size
-    duration = int(clip.duration - clip.start)
+    dur = int(clip.duration - clip.start)
     fps_og = clip.fps
 
-    print(
-        "Duration of video [s]: {}, recorded with {} fps!".format(
-            np.round(duration, 2), np.round(fps_og, 2)
-        )
-    )
+    print(f"Duration of video [s]: {np.round(dur, 2)}, recorded at {np.round(fps_og, 2)} fps!")
 
     # add marker to each frame t, where t is in sec
     def add_marker(get_frame, t):
@@ -742,8 +738,13 @@ def create_labeled_video(
             if mask_array[index, bpindex]:
                 xc = min(int(xs_arr[index, bpindex]), nx - 1)
                 yc = min(int(ys_arr[index, bpindex]), ny - 1)
-                rr, cc = disk(center=(yc, xc), radius=dotsize, shape=(ny, nx))
-                frame[rr, cc, :] = colors[bpindex]
+                frame = cv2.circle(
+                    frame,
+                    center=(xc, yc),
+                    radius=dotsize,
+                    color=colors[bpindex].tolist(),
+                    thickness=-1
+                )
         return frame
 
     clip_marked = clip.fl(add_marker)
