@@ -6,9 +6,18 @@ If you have found a bug or would like to request a minor change, please
 
 In order to contribute code to the repo, please follow the steps below.
 
-You will also need to install the following dev packages:
+Whenever you initially install the lightning pose repo, instead of
 ```bash
-pip install flake8 isort
+pip install -e .
+```
+run
+```bash
+pip install -e .[dev]
+```
+
+Alternatively, if you have already installed the repo, install the following dev packages:
+```bash
+pip install black flake8 isort
 ```
 
 ### Create a pull request

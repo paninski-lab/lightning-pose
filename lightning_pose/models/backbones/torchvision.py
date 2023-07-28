@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from typing import Tuple
 
 import torch
 import torchvision.models as tvmodels
@@ -28,8 +29,14 @@ def build_backbone(
 
     if backbone_arch == "resnet50_contrastive":
         # load resnet50 pretrained using SimCLR on imagenet
-        from pl_bolts.models.self_supervised import SimCLR
-
+        try:
+            from pl_bolts.models.self_supervised import SimCLR
+        except ImportError:
+            raise Exception(
+                "lightning-bolts package is not installed.\n"
+                "Run `pip install lightning-bolts` "
+                "in order to access 'resnet50_contrastive' backbone"
+            )
         ckpt_url = "https://pl-bolts-weights.s3.us-east-2.amazonaws.com/simclr/bolts_simclr_imagenet/simclr_imagenet.ckpt"  # noqa: E501
         simclr = SimCLR.load_from_checkpoint(ckpt_url, strict=False)
         base = simclr.encoder

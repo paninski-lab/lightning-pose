@@ -190,7 +190,7 @@ def get_videos_in_dir(video_dir: str, return_mp4_only: bool = True) -> List[str]
 
 
 @typechecked
-def check_video_paths(video_paths: Union[List[str], str]) -> list:
+def check_video_paths(video_paths: Union[List[str], str]) -> List[str]:
     # get input data
     if isinstance(video_paths, list):
         # presumably a list of files
@@ -203,8 +203,7 @@ def check_video_paths(video_paths: Union[List[str], str]) -> list:
         filenames = get_videos_in_dir(video_paths)
     else:
         raise ValueError(
-            "`video_paths_list` must be a list of files, a single file, "
-            + "or a directory name"
+            "`video_paths_list` must be a list of files, a single file, or a directory name"
         )
     for filename in filenames:
         assert filename.endswith(".mp4"), "video files must be mp4 format!"
