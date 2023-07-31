@@ -17,15 +17,13 @@ data:
   downsample_factor: 2
   # total number of body parts
   num_keypoints: 8
-  # base path for saving
-  # save_dir- "/media/mattw/behavior/results/pose-estimation"
   columns_for_singleview_pca: [0, 1, 2, 3, 4, 5, 6, 7]
 
 training:
   # select from one of several predefined image/video augmentation pipelines
   # default- resizing only
   # dlc- imgaug pipeline implemented in DLC 2.0 package
-  # dlc-light- curated subset of dlc augmentations with more conservative param settings
+  # dlc-top-down- dlc augmentations plus vertical and horizontal flips
   imgaug: dlc
   # batch size of labeled data during training
   train_batch_size: 8
