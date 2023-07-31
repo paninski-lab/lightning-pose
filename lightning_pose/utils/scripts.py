@@ -22,12 +22,12 @@ from lightning_pose.metrics import (
     pixel_error,
     temporal_norm,
 )
-from lightning_pose.models.heatmap_tracker import HeatmapTracker, SemiSupervisedHeatmapTracker
-from lightning_pose.models.heatmap_tracker_mhcrnn import (
+from lightning_pose.models import (
+    ALLOWED_MODELS,
+    HeatmapTracker,
+    SemiSupervisedHeatmapTracker,
     HeatmapTrackerMHCRNN,
     SemiSupervisedHeatmapTrackerMHCRNN,
-)
-from lightning_pose.models.regression_tracker import (
     RegressionTracker,
     SemiSupervisedRegressionTracker,
 )
@@ -657,16 +657,7 @@ def export_predictions_and_labeled_video(
     prediction_csv_file: str,
     ckpt_file: str,
     trainer: Optional[pl.Trainer] = None,
-    model: Optional[
-        Union[
-            RegressionTracker,
-            HeatmapTracker,
-            HeatmapTrackerMHCRNN,
-            SemiSupervisedRegressionTracker,
-            SemiSupervisedHeatmapTracker,
-            SemiSupervisedHeatmapTrackerMHCRNN,
-        ]
-    ] = None,
+    model: Optional[ALLOWED_MODELS] = None,
     data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
     labeled_mp4_file: Optional[str] = None,
     save_heatmaps: Optional[bool] = False,

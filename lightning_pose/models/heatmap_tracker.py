@@ -20,8 +20,11 @@ from lightning_pose.data.utils import (
 )
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
-from lightning_pose.models import ALLOWED_BACKBONES
-from lightning_pose.models.base import BaseSupervisedTracker, SemiSupervisedTrackerMixin
+from lightning_pose.models.base import (
+    BaseSupervisedTracker,
+    SemiSupervisedTrackerMixin,
+    ALLOWED_BACKBONES,
+)
 
 
 def upsample(

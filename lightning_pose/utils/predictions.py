@@ -2,7 +2,7 @@
 
 import os
 import time
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Type, Union
 
 import cv2
 import lightning.pytorch as pl
@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
+from moviepy.editor import VideoFileClip
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import LightningModule
 from torchtyping import TensorType
@@ -19,11 +20,7 @@ from typeguard import typechecked
 from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import count_frames
-from lightning_pose.models.heatmap_tracker import HeatmapTracker, SemiSupervisedHeatmapTracker
-from lightning_pose.models.regression_tracker import (
-    RegressionTracker,
-    SemiSupervisedRegressionTracker,
-)
+from lightning_pose.models import ALLOWED_MODELS
 from lightning_pose.utils import pretty_print_str
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -272,14 +269,7 @@ def predict_dataset(
     ckpt_file: str,
     preds_file: str,
     trainer: Optional[pl.Trainer] = None,
-    model: Optional[
-        Union[
-            RegressionTracker,
-            HeatmapTracker,
-            SemiSupervisedRegressionTracker,
-            SemiSupervisedHeatmapTracker,
-        ]
-    ] = None,
+    model: Optional[ALLOWED_MODELS] = None,
 ) -> pd.DataFrame:
     """Save predicted keypoints for a labeled dataset.
 
@@ -326,14 +316,7 @@ def predict_single_video(
     preds_file: str,
     data_module: Union[BaseDataModule, UnlabeledDataModule],
     trainer: Optional[pl.Trainer] = None,
-    model: Optional[
-        Union[
-            RegressionTracker,
-            HeatmapTracker,
-            SemiSupervisedRegressionTracker,
-            SemiSupervisedHeatmapTracker,
-        ]
-    ] = None,
+    model: Optional[ALLOWED_MODELS] = None,
     save_heatmaps: Optional[bool] = False,
 ) -> pd.DataFrame:
     """Make predictions for a single video, loading frame sequences using DALI.
@@ -445,7 +428,7 @@ def predict_single_video(
 @typechecked
 def _predict_frames(
     cfg: DictConfig,
-    model: LightningModule,
+    model: ALLOWED_MODELS,
     dataloader: Union[torch.utils.data.DataLoader, LitDaliWrapper],
     n_frames_: int,
     batch_size: int,
@@ -553,8 +536,8 @@ def make_dlc_pandas_index(cfg: DictConfig, keypoint_names: List[str]) -> pd.Mult
     return pdindex
 
 
-# @typechecked
-def get_model_class(map_type: str, semi_supervised: bool) -> LightningModule:
+@typechecked
+def get_model_class(map_type: str, semi_supervised: bool) -> Type[ALLOWED_MODELS]:
     """[summary]
 
     Args:
@@ -567,42 +550,38 @@ def get_model_class(map_type: str, semi_supervised: bool) -> LightningModule:
     """
     if not semi_supervised:
         if map_type == "regression":
-            from lightning_pose.models.regression_tracker import RegressionTracker as Model
+            from lightning_pose.models import RegressionTracker as Model
         elif map_type == "heatmap":
-            from lightning_pose.models.heatmap_tracker import HeatmapTracker as Model
+            from lightning_pose.models import HeatmapTracker as Model
         elif map_type == "heatmap_mhcrnn":
-            from lightning_pose.models.heatmap_tracker_mhcrnn import HeatmapTrackerMHCRNN as Model
+            from lightning_pose.models import HeatmapTrackerMHCRNN as Model
         else:
             raise NotImplementedError(
                 "%s is an invalid model_type for a fully supervised model" % map_type
             )
     else:
         if map_type == "regression":
-            from lightning_pose.models.regression_tracker import (
-                SemiSupervisedRegressionTracker as Model,
-            )
+            from lightning_pose.models import SemiSupervisedRegressionTracker as Model
         elif map_type == "heatmap":
-            from lightning_pose.models.heatmap_tracker import SemiSupervisedHeatmapTracker as Model
+            from lightning_pose.models import SemiSupervisedHeatmapTracker as Model
         elif map_type == "heatmap_mhcrnn":
-            from lightning_pose.models.heatmap_tracker_mhcrnn import (
-                SemiSupervisedHeatmapTrackerMHCRNN as Model,
-            )
+            from lightning_pose.models import SemiSupervisedHeatmapTrackerMHCRNN as Model
         else:
             raise NotImplementedError(
-                "%s is an invalid model_type for a semi-supervised model" % map_type
+                f"{map_type} is an invalid model_type for a semi-supervised model"
             )
 
     return Model
 
 
-# @typechecked
+@typechecked
 def load_model_from_checkpoint(
     cfg: DictConfig,
     ckpt_file: str,
     eval: bool = False,
     data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
     skip_data_module: bool = False,
-) -> LightningModule:
+) -> ALLOWED_MODELS:
     """Load Lightning Pose model from checkpoint file.
 
     Args:
@@ -686,15 +665,15 @@ def make_cmap(number_colors: int, cmap: str = "cool"):
 
 
 def create_labeled_video(
-    clip,
-    xs_arr,
-    ys_arr,
-    mask_array=None,
-    dotsize=4,
-    colormap="cool",
-    fps=None,
-    filename="movie.mp4",
-):
+    clip: VideoFileClip,
+    xs_arr: np.ndarray,
+    ys_arr: np.ndarray,
+    mask_array: Optional[np.ndarray] = None,
+    dotsize: int = 4,
+    colormap: str = "cool",
+    fps: Optional[float] = None,
+    filename: str = "movie.mp4",
+) -> None:
     """Helper function for creating annotated videos.
 
     Args
@@ -752,5 +731,3 @@ def create_labeled_video(
         filename, codec="libx264", fps=fps_og if fps is None else fps
     )
     clip_marked.close()
-
-    return

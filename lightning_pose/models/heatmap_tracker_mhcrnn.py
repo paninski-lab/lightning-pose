@@ -16,9 +16,8 @@ from lightning_pose.data.utils import (
     undo_affine_transform,
 )
 from lightning_pose.losses.factory import LossFactory
-from lightning_pose.models import ALLOWED_BACKBONES
-from lightning_pose.models.base import SemiSupervisedTrackerMixin
-from lightning_pose.models.heatmap_tracker import HeatmapTracker
+from lightning_pose.models import HeatmapTracker
+from lightning_pose.models.base import SemiSupervisedTrackerMixin, ALLOWED_BACKBONES
 
 
 class HeatmapTrackerMHCRNN(HeatmapTracker):

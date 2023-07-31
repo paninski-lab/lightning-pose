@@ -5,12 +5,14 @@ import torch
 import torchvision.models as tvmodels
 from typeguard import typechecked
 
-from lightning_pose.models import ALLOWED_BACKBONES
+from lightning_pose.models.base import ALLOWED_BACKBONES
 
 
 @typechecked
 def build_backbone(
-    backbone_arch: ALLOWED_BACKBONES, pretrained: bool = True, model_type: str = "heatmap",
+    backbone_arch: ALLOWED_BACKBONES,
+    pretrained: bool = True,
+    model_type: str = "heatmap",
     **kwargs,
 ) -> tuple:
     """Load backbone weights for resnets, efficientnets, and other models from torchvision.
