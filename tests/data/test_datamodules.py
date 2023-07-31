@@ -3,7 +3,6 @@
 import pytest
 import torch
 
-# from pytorch_lightning.trainer.supporters import CombinedLoader
 from lightning.pytorch.utilities import CombinedLoader
 
 
