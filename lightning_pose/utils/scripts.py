@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from moviepy.editor import VideoFileClip
 from omegaconf import DictConfig, OmegaConf
+import torch
 from typeguard import typechecked
 
 from lightning_pose.callbacks import AnnealWeight
@@ -453,6 +454,14 @@ def get_model(
                 "%s is an invalid cfg.model.model_type for a semi-supervised model"
                 % cfg.model.model_type
             )
+
+    # load weights from user-provided checkpoint path
+    if cfg.model.get("checkpoint", None):
+        ckpt = cfg.model.checkpoint
+        if not ckpt.endswith(".ckpt"):
+            import glob
+            ckpt = glob.glob(os.path.join(ckpt, "**", "*.ckpt"), recursive=True)[0]
+        model.load_state_dict(torch.load(ckpt)["state_dict"], strict=False)
 
     return model
 
