@@ -1,7 +1,7 @@
 from functools import partial
 
 import torch
-from lightning_pose.models.backbones.vit_encoder import ImageEncoderViT
+from lightning_pose.models.backbones.vit_encoder import ImageEncoderViT_FT
 from typeguard import typechecked
 
 
@@ -32,7 +32,7 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
         image_size = 1024
         finetune_image_size = image_size
         vit_patch_size = 16
-        base = ImageEncoderViT(
+        base = ImageEncoderViT_FT(
             depth=encoder_depth,
             embed_dim=encoder_embed_dim,
             img_size=image_size,
@@ -65,7 +65,7 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
         finetune_image_size = image_size
         image_size = 1024
         vit_patch_size = 16
-        base = ImageEncoderViT(
+        base = ImageEncoderViT_FT(
             depth=encoder_depth,
             embed_dim=encoder_embed_dim,
             img_size=image_size,
