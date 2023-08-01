@@ -155,7 +155,6 @@ eval:
     # whether to create a "videos" or "images" dataset, since the processes are the same
     dataset_to_create: "images"
   # str with an absolute path to a directory containing videos for prediction.
-  # (it's not absolute just for the toy example)
   test_videos_directory: "/datastores/fly/videos_new"
   # str with an absolute path to directory in which you want to save .csv with predictions
   saved_vid_preds_dir: "/home/jovyan"

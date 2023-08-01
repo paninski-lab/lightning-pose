@@ -74,7 +74,7 @@ training:
   # epochs over which to assess validation metrics for early stopping
   early_stop_patience: 3
   # epoch at which backbone network weights begin updating
-  unfreezing_epoch: 20 # was 20 in December runs; reverted.
+  unfreezing_epoch: 20
   # max training epochs; training may exit before due to early stopping
   min_epochs: 300
   max_epochs: 750
@@ -105,8 +105,8 @@ model:
   # resnet50_animalpose_apose | resnet50_animal_ap10k
   # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res
   # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
-  backbone: resnet50 # resnet50_animal_ap10k
-  # prediction mode - "heatmap" | "regression"
+  backbone: resnet50_animal_ap10k
+  # prediction mode - "heatmap" | "regression" | "heatmap_mhcrnn"
   model_type: "heatmap"
   # which heatmap loss to use
   # "mse" | "kl" | "js"
@@ -230,12 +230,11 @@ eval:
     # whether to create a "videos" or "images" dataset, since the processes are the same
     dataset_to_create: "images"
   # str with an absolute path to a directory containing videos for prediction.
-  # (it's not absolute just for the toy example)
-  test_videos_directory: "/home/zeus/content/lightning-pose/data/mirror-mouse/videos"
+  test_videos_directory: /home/zeus/content/lightning-pose/data/mirror-mouse/videos
   # str with an absolute path to directory in which you want to save .csv with predictions
-  saved_vid_preds_dir: "/home/zeus"
+  saved_vid_preds_dir: /home/zeus
   # confidence threshold for plotting a vid
-  confidence_thresh_for_vid: 0.05
+  confidence_thresh_for_vid: 0.90
   # str with absolute path to the video file you want plotted with keypoints
   video_file_to_plot: ""
   # a list of strings, each points to a .csv file with predictions of a given model to the same video. will be combined with video_file_to_plot to make a visualization

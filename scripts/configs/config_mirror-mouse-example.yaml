@@ -234,7 +234,6 @@ eval:
     dataset_to_create: images
   # str with an absolute path to a directory containing videos for prediction.
   # (it's not absolute just for the toy example)
-  # set to null to skip automatic video prediction from train_hydra.py script
   test_videos_directory: data/mirror-mouse-example/videos
   # str with an absolute path to directory in which you want to save .csv with predictions
   saved_vid_preds_dir: data/mirror-mouse-example
