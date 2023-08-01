@@ -1,6 +1,7 @@
 """Helper functions to build pipeline components from config dictionary."""
 
 import os
+from collections import OrderedDict
 from typing import Dict, List, Optional, Union
 
 import imgaug.augmenters as iaa
@@ -334,10 +335,21 @@ def get_model(
     # load weights from user-provided checkpoint path
     if cfg.model.get("checkpoint", None):
         ckpt = cfg.model.checkpoint
+        print(f"Loading weights from {ckpt}")
         if not ckpt.endswith(".ckpt"):
             import glob
             ckpt = glob.glob(os.path.join(ckpt, "**", "*.ckpt"), recursive=True)[0]
-        model.load_state_dict(torch.load(ckpt)["state_dict"], strict=False)
+        state_dict = torch.load(ckpt)["state_dict"]
+        # try loading all weights
+        try:
+            model.load_state_dict(state_dict, strict=False)
+        except RuntimeError:
+            # assume heads don't match; just load backbone weights
+            new_state_dict = OrderedDict()
+            for key, val in state_dict.items():
+                if "backbone" in key:
+                    new_state_dict[key] = val
+            model.load_state_dict(new_state_dict, strict=False)
 
     return model
 
