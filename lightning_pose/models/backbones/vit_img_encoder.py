@@ -12,9 +12,6 @@ try:
     from segment_anything.modeling import ImageEncoderViT
 except:
     raise NotImplementedError(
-                "segment-anything backbones are not supported in this branch."
-                "If you are running the code from a github installation, switch to the branch"
-                "features/vit."
                 "If you have pip installed lightning pose, there is no access to segment-anything"
                 "models due to dependency/installation issues. "
                 "For more information please contatct the package maintainers."
@@ -46,7 +43,8 @@ class ImageEncoderViT_FT(ImageEncoderViT):
     ) -> None:
         """
         Args:
-            img_size (int): Input image size.
+            img_size (int): Input image size of pretrained ViT backbone checkpoint.
+            finetune_img_size (int): Input image size for lightning-pose training.
             patch_size (int): Patch size.
             in_chans (int): Number of input image channels.
             embed_dim (int): Patch embedding dimension.

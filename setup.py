@@ -68,6 +68,7 @@ install_requires = [
     "typeguard",
     "typing",
     dali,
+    "segment_anything @ git+https://github.com/facebookresearch/segment-anything.git",
 ]
 
 # additional requirements
