@@ -25,7 +25,7 @@ def call_active_all(active_cfg):
     exp_cfg = OmegaConf.load(active_cfg.active_pipeline.experiment_cfg)
 
     # update config file parameters if needed
-    exp_cfg = OmegaConf.merge(exp_cfg, active_cfg.active_pipeline.experiment_kwargs)
+    #exp_cfg = OmegaConf.merge(exp_cfg, active_cfg.active_pipeline.experiment_kwargs)
 
     # Run active loop iterations
     for current_iteration in range(active_cfg.active_pipeline.start_iteration,
@@ -48,7 +48,12 @@ def call_active_all(active_cfg):
 
         # step 3: fill in active pipeline details and call active loop
         active_cfg.active_pipeline.current_iteration = current_iteration
-        active_cfg[iteration_key_current].output_prev_run = train_output_dirs
+        if active_cfg[iteration_key_current].output_prev_run != [""]:
+          active_cfg[iteration_key_current].output_prev_run = active_cfg[iteration_key_current].output_prev_run + train_output_dirs 
+        else:
+          active_cfg[iteration_key_current].output_prev_run = train_output_dirs
+        
+        #print("##### DIR is:", active_cfg[iteration_key_current].output_prev_run)
         active_cfg[iteration_key_current].csv_file_prev_run = exp_cfg.data.csv_file
 
         new_train_file = active_loop_step(active_cfg)
