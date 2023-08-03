@@ -214,7 +214,6 @@ losses:
 eval:
   # paths to the hydra config files in the output folder, OR absolute paths to such folders.
   hydra_paths: ["2021-12-15/04-11-43/"]
-  # TODO: decide which arg stays and which doesn't (create_labeled_video)
   # predict?
   predict_vids_after_training: true
   # save .mp4?
