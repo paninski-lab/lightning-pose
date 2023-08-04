@@ -1,5 +1,6 @@
 """Helper functions to build pipeline components from config dictionary."""
 
+import copy
 import os
 from collections import OrderedDict
 from typing import Dict, List, Optional, Union
@@ -552,7 +553,7 @@ def export_predictions_and_labeled_video(
     video_file: str,
     cfg: DictConfig,
     prediction_csv_file: str,
-    ckpt_file: str,
+    ckpt_file: Optional[str] = None,
     trainer: Optional[pl.Trainer] = None,
     model: Optional[ALLOWED_MODELS] = None,
     data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
@@ -561,11 +562,20 @@ def export_predictions_and_labeled_video(
 ) -> None:
     """Export predictions csv and a labeled video for a single video file."""
 
+    if ckpt_file is None and model is None:
+        raise ValueError("either 'ckpt_file' or 'model' must be passed")
+
+    # update video size in config
+    video_clip = VideoFileClip(video_file)
+    cfg_copy = copy.deepcopy(cfg)
+    cfg_copy.data.image_orig_dims.width = clip.w
+    cfg_copy.data.image_orig_dims.height = clip.h
+
     # compute predictions
     preds_df = predict_single_video(
         video_file=video_file,
         ckpt_file=ckpt_file,
-        cfg_file=cfg,
+        cfg_file=cfg_copy,
         preds_file=prediction_csv_file,
         trainer=trainer,
         model=model,
@@ -576,12 +586,11 @@ def export_predictions_and_labeled_video(
     # create labeled video
     if labeled_mp4_file is not None:
         os.makedirs(os.path.dirname(labeled_mp4_file), exist_ok=True)
-        video_clip = VideoFileClip(video_file)
         # transform df to numpy array
         keypoints_arr = np.reshape(preds_df.to_numpy(), [preds_df.shape[0], -1, 3])
         xs_arr = keypoints_arr[:, :, 0]
         ys_arr = keypoints_arr[:, :, 1]
-        mask_array = keypoints_arr[:, :, 2] > cfg.eval.confidence_thresh_for_vid
+        mask_array = keypoints_arr[:, :, 2] > cfg_copy.eval.confidence_thresh_for_vid
         # video generation
         create_labeled_video(
             clip=video_clip,
