@@ -50,11 +50,11 @@ def cfg_context() -> dict:
     cfg = yaml.load(open(config_file), Loader=yaml.FullLoader)
     cfg["model"]["do_context"] = True
     # make small batches so that we can run on a gpu with limited memory
-    cfg["training"]["train_batch_size"] = 4
-    cfg["training"]["val_batch_size"] = 4
-    cfg["training"]["test_batch_size"] = 4
+    cfg["training"]["train_batch_size"] = 2
+    cfg["training"]["val_batch_size"] = 2
+    cfg["training"]["test_batch_size"] = 2
     cfg["training"]["imgaug"] = "default"  # so pca tests don't break
-    cfg["dali"]["context"]["train"]["batch_size"] = 8
+    cfg["dali"]["context"]["train"]["batch_size"] = 6
     return OmegaConf.create(cfg)
 
 

@@ -57,7 +57,9 @@ def test_semisupervised_heatmap_mhcrnn_pcasingleview_vit(
      remove_logs,
  ):
      """Test the initialization and training of a semi-supervised heatmap mhcrnn model ViT backbone.
+
      NOTE: the toy dataset is not a proper context dataset
+
      """
 
      cfg_tmp = copy.deepcopy(cfg_context)
