@@ -68,6 +68,7 @@ install_requires = [
     "typeguard",
     "typing",
     dali,
+    # PyPI does not support direct dependencies, so we remove this line before uploading from PyPI
     "segment_anything @ git+https://github.com/facebookresearch/segment-anything.git",
 ]
 
