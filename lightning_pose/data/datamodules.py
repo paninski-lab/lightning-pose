@@ -157,13 +157,14 @@ class UnlabeledDataModule(BaseDataModule):
         test_probability: Optional[float] = None,
         train_frames: Optional[float] = None,
         torch_seed: int = 42,
-        imgaug: Literal["default", "dlc", "dlc-light"] = "default",
+        imgaug: Literal["default", "dlc", "dlc-top-down"] = "default",
     ) -> None:
         """Data module that contains labeled and unlabeled data loaders.
 
         Args:
             dataset: pytorch Dataset for labeled data
             video_paths_list: absolute paths of videos ("unlabeled" data)
+            dali_config: see `dali` entry of default config file for keys
             train_batch_size: number of samples of training batches
             val_batch_size: number of samples in validation batches
             test_batch_size: number of samples in test batches

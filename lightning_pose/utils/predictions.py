@@ -266,8 +266,8 @@ class PredictionHandler:
 def predict_dataset(
     cfg: DictConfig,
     data_module: BaseDataModule,
-    ckpt_file: str,
     preds_file: str,
+    ckpt_file: Optional[str] = None,
     trainer: Optional[pl.Trainer] = None,
     model: Optional[ALLOWED_MODELS] = None,
 ) -> pd.DataFrame:
@@ -276,11 +276,10 @@ def predict_dataset(
     Args:
         cfg: hydra config
         data_module: data module that contains dataloaders for train, val, test splits
-        ckpt_file: absolute path to the checkpoint of your trained model; requires .ckpt
-            suffix
         preds_file: absolute filename for the predictions .csv file
-        trainer
-        model
+        ckpt_file: absolute path to the checkpoint of your trained model; requires .ckpt suffix
+        trainer: pl.Trainer object
+        model: Lightning Module
 
     Returns:
         pd.DataFrame: pandas dataframe with predictions

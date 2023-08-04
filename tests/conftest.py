@@ -38,7 +38,13 @@ def cfg() -> dict:
     config_file = os.path.join(base_dir, "scripts", "configs", "config_mirror-mouse-example.yaml")
     cfg = yaml.load(open(config_file), Loader=yaml.FullLoader)
     cfg["model"]["do_context"] = False
+    # make small batches so that we can run on a gpu with limited memory
+    cfg["training"]["train_batch_size"] = 2
+    cfg["training"]["val_batch_size"] = 2
+    cfg["training"]["test_batch_size"] = 2
     cfg["training"]["imgaug"] = "default"  # so pca tests don't break
+    cfg["dali"]["base"]["train"]["sequence_length"] = 6
+    cfg["dali"]["base"]["predict"]["sequence_length"] = 16
     return OmegaConf.create(cfg)
 
 
@@ -55,6 +61,7 @@ def cfg_context() -> dict:
     cfg["training"]["test_batch_size"] = 2
     cfg["training"]["imgaug"] = "default"  # so pca tests don't break
     cfg["dali"]["context"]["train"]["batch_size"] = 6
+    cfg["dali"]["context"]["predict"]["sequence_length"] = 16
     return OmegaConf.create(cfg)
 
 
@@ -342,7 +349,7 @@ def video_dataloader(cfg, base_dataset, video_list) -> LitDaliWrapper:
 def trainer(cfg) -> pl.Trainer:
     """Create a basic pytorch lightning trainer for testing models."""
 
-    cfg.training.unfreezing_epoch = 10
+    cfg.training.unfreezing_epoch = 1
     callbacks = get_callbacks(
         cfg, early_stopping=False, lr_monitor=False, ckpt_model=True, backbone_unfreeze=True)
 

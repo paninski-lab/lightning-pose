@@ -42,7 +42,7 @@ training:
   # dlc-top-down- curated subset of dlc augmentations with more conservative param settings
   imgaug: dlc
   # batch size of labeled data during training
-  train_batch_size: 32
+  train_batch_size: 8
   # batch size of labeled data during validation
   val_batch_size: 48
   # batch size of labeled data during test

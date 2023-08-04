@@ -1,5 +1,7 @@
 """Test functionality of base model classes."""
 
+import gc
+
 import torch
 import torchvision
 import segment_anything
@@ -33,6 +35,7 @@ def test_backbones_resnet():
             )
         # remove model from gpu; then cache can be cleared
         del model
+        gc.collect()
         torch.cuda.empty_cache()  # remove tensors from gpu
 
 
@@ -45,6 +48,7 @@ def test_backbones_efficientnet():
         )
         # remove model from gpu; then cache can be cleared
         del model
+        gc.collect()
         torch.cuda.empty_cache()  # remove tensors from gpu
 
 
@@ -57,6 +61,7 @@ def test_backbones_vit():
         )
         # remove model from gpu; then cache can be cleared
         del model
+        gc.collect()
         torch.cuda.empty_cache()  # remove tensors from gpu
 
 
@@ -112,6 +117,7 @@ def test_representation_shapes_resnet():
             del representations
         del model
 
+    gc.collect()
     torch.cuda.empty_cache()  # remove tensors from gpu
 
 
@@ -161,6 +167,7 @@ def test_representation_shapes_efficientnet():
             del representations
         del model
 
+    gc.collect()
     torch.cuda.empty_cache()  # remove tensors from gpu
 
 
@@ -206,4 +213,5 @@ def test_representation_shapes_vit():
             del representations
             del model
 
+    gc.collect()
     torch.cuda.empty_cache()  # remove tensors from gpu
