@@ -82,7 +82,7 @@ def video_pipe(
     )
     if resize_dims:
         video = fn.resize(video, size=resize_dims)
-    if imgaug == "dlc" or imgaug == "dlc-light":
+    if imgaug == "dlc" or imgaug == "dlc-top-down":
         size = (resize_dims[0] / 2, resize_dims[1] / 2)
         center = size  # / 2
         # rotate + scale
