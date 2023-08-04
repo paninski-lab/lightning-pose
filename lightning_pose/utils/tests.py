@@ -1,7 +1,10 @@
+"""Helper function for unit-testing models."""
+
 import gc
 
 import torch
 
+from lightning_pose.utils.predictions import PredictionHandler
 from lightning_pose.utils.scripts import get_loss_factories, get_model
 
 
@@ -14,29 +17,35 @@ def run_model_test(cfg, data_module, video_dataloader, trainer, remove_logs_fn):
     # build model
     model = get_model(cfg=cfg, data_module=data_module, loss_factories=loss_factories)
 
-    print("====")
-    print("model: ", type(model))
-    print(type(model).__bases__)
-    print("backbone: ", type(model.backbone))
-    print("====")
-    # train model for a couple epochs
-    trainer.fit(model=model, datamodule=data_module)
+    try:
 
-    # predict on labeled frames
-    trainer.predict(
-        model=model,
-        dataloaders=data_module.full_labeled_dataloader(),
-        return_predictions=True,
-    )
+        print("====")
+        print("model: ", type(model))
+        print(type(model).__bases__)
+        print("backbone: ", type(model.backbone))
+        print("====")
+        # train model for a couple epochs
+        trainer.fit(model=model, datamodule=data_module)
 
-    # predict on unlabeled video
-    trainer.predict(model=model, dataloaders=video_dataloader, return_predictions=True)
+        # predict on labeled frames
+        labeled_preds = trainer.predict(
+            model=model,
+            dataloaders=data_module.full_labeled_dataloader(),
+            return_predictions=True,
+        )
+        pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
+        pred_handler(preds=labeled_preds)
 
-    # remove tensors from gpu
-    del loss_factories
-    del model
-    gc.collect()
-    torch.cuda.empty_cache()
+        # predict on unlabeled video
+        trainer.predict(model=model, dataloaders=video_dataloader, return_predictions=True)
 
-    # clean up logging
-    remove_logs_fn()
+    finally:
+
+        # remove tensors from gpu
+        del loss_factories
+        del model
+        gc.collect()
+        torch.cuda.empty_cache()
+
+        # clean up logging
+        remove_logs_fn()

@@ -119,7 +119,8 @@ def test_base_data_module_combined(cfg, base_data_module_combined):
 
     im_height = cfg.data.image_resize_dims.height
     im_width = cfg.data.image_resize_dims.width
-    train_size = base_data_module_combined.train_batch_size
+    train_size_labeled = base_data_module_combined.train_batch_size
+    train_size_unlabeled = base_data_module_combined.dali_config["context"]["train"]["batch_size"]
     num_targets = base_data_module_combined.dataset.num_targets
 
     loader = CombinedLoader(base_data_module_combined.train_dataloader())
@@ -128,9 +129,9 @@ def test_base_data_module_combined(cfg, base_data_module_combined):
     assert list(batch.keys())[1] == "unlabeled"
     assert list(batch["labeled"].keys()) == ["images", "keypoints", "idxs"]
     assert list(batch["unlabeled"].keys()) == ["frames", "transforms"]
-    assert batch["labeled"]["images"].shape == (train_size, 3, im_height, im_width)
-    assert batch["labeled"]["keypoints"].shape == (train_size, num_targets)
-    assert batch["unlabeled"]["frames"].shape == (train_size, 3, im_height, im_width)
+    assert batch["labeled"]["images"].shape == (train_size_labeled, 3, im_height, im_width)
+    assert batch["labeled"]["keypoints"].shape == (train_size_labeled, num_targets)
+    assert batch["unlabeled"]["frames"].shape == (train_size_unlabeled, 3, im_height, im_width)
 
     # cleanup
     del loader
@@ -144,7 +145,8 @@ def test_heatmap_data_module_combined(cfg, heatmap_data_module_combined):
     im_width = cfg.data.image_resize_dims.width
     im_height_ds = im_height / (2 ** cfg.data.downsample_factor)
     im_width_ds = im_width / (2 ** cfg.data.downsample_factor)
-    train_size = heatmap_data_module_combined.train_batch_size
+    train_size_labeled = heatmap_data_module_combined.train_batch_size
+    train_size_unlabel = heatmap_data_module_combined.dali_config["context"]["train"]["batch_size"]
     num_targets = heatmap_data_module_combined.dataset.num_targets
 
     loader = CombinedLoader(heatmap_data_module_combined.train_dataloader())
@@ -153,15 +155,15 @@ def test_heatmap_data_module_combined(cfg, heatmap_data_module_combined):
     assert list(batch.keys())[1] == "unlabeled"
     assert list(batch["labeled"].keys()) == ["images", "keypoints", "idxs", "heatmaps"]
     assert list(batch["unlabeled"].keys()) == ["frames", "transforms"]
-    assert batch["labeled"]["images"].shape == (train_size, 3, im_height, im_width)
-    assert batch["labeled"]["keypoints"].shape == (train_size, num_targets)
+    assert batch["labeled"]["images"].shape == (train_size_labeled, 3, im_height, im_width)
+    assert batch["labeled"]["keypoints"].shape == (train_size_labeled, num_targets)
     assert batch["labeled"]["heatmaps"].shape == (
-        train_size,
+        train_size_labeled,
         num_targets // 2,
         im_height_ds,
         im_width_ds,
     )
-    assert batch["unlabeled"]["frames"].shape == (train_size, 3, im_height, im_width)
+    assert batch["unlabeled"]["frames"].shape == (train_size_unlabel, 3, im_height, im_width)
 
     # cleanup
     del loader

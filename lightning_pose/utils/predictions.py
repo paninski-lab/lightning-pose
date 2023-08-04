@@ -1,5 +1,6 @@
 """Functions for predicting keypoints on labeled datasets and unlabeled videos."""
 
+import gc
 import os
 import time
 from typing import List, Optional, Tuple, Type, Union
@@ -266,8 +267,8 @@ class PredictionHandler:
 def predict_dataset(
     cfg: DictConfig,
     data_module: BaseDataModule,
-    ckpt_file: str,
     preds_file: str,
+    ckpt_file: Optional[str] = None,
     trainer: Optional[pl.Trainer] = None,
     model: Optional[ALLOWED_MODELS] = None,
 ) -> pd.DataFrame:
@@ -276,14 +277,13 @@ def predict_dataset(
     Args:
         cfg: hydra config
         data_module: data module that contains dataloaders for train, val, test splits
-        ckpt_file: absolute path to the checkpoint of your trained model; requires .ckpt
-            suffix
         preds_file: absolute filename for the predictions .csv file
-        trainer
-        model
+        ckpt_file: absolute path to the checkpoint of your trained model; requires .ckpt suffix
+        trainer: pl.Trainer object
+        model: Lightning Module
 
     Returns:
-        pd.DataFrame: pandas dataframe with predictions
+        pandas dataframe with predictions
 
     """
 
@@ -310,11 +310,11 @@ def predict_dataset(
 
 @typechecked
 def predict_single_video(
-    video_file: str,
-    ckpt_file: str,
     cfg_file: Union[str, DictConfig],
-    preds_file: str,
+    video_file: str,
     data_module: Union[BaseDataModule, UnlabeledDataModule],
+    preds_file: str,
+    ckpt_file: Optional[str] = None,
     trainer: Optional[pl.Trainer] = None,
     model: Optional[ALLOWED_MODELS] = None,
     save_heatmaps: Optional[bool] = False,
@@ -325,20 +325,18 @@ def predict_single_video(
     to _make_predictions().
 
     Args:
-        video_file (str): absolute path to a single video you want to get predictions
-            for, typically .mp4 file.
-        ckpt_file (str): absolute path to the checkpoint of your trained model. assumed
-            .ckpt format.
-        cfg_file (Union[str, DictConfig]): either a hydra config or a path pointing to
-            one, with all the model specs. needed for loading the model.
-        preds_file (str): absolute filename for the predictions .csv file
-        data_module:
-        trainer:
-        model:
-        save_heatmaps:
+        cfg_file: either a hydra config or a path pointing to one, with all the model specs.
+            needed for loading the model.
+        video_file: absolute path to a single video you want to get predictions for, .mp4 file.
+        data_module: contains keypoint names for prediction file
+        preds_file: absolute filename for the predictions .csv file
+        ckpt_file: absolute path to the checkpoint of your trained model; requires .ckpt suffix
+        trainer: pl.Trainer object
+        model: Lightning Module
+        save_heatmaps: export heatmaps as numpy array
 
     Returns:
-        pd.DataFrame: pandas dataframe with predictions
+        pandas dataframe with predictions
 
     """
 
@@ -390,7 +388,7 @@ def predict_single_video(
             cfg=cfg,
             model=model,
             dataloader=predict_loader,
-            n_frames_=pred_handler.frame_count,
+            n_frames=pred_handler.frame_count,
             batch_size=batch_size,
             return_heatmaps=True,
         )
@@ -420,6 +418,7 @@ def predict_single_video(
     if delete_trainer:
         del trainer
     del predict_loader
+    gc.collect()
     torch.cuda.empty_cache()
 
     return preds_df
@@ -430,35 +429,34 @@ def _predict_frames(
     cfg: DictConfig,
     model: ALLOWED_MODELS,
     dataloader: Union[torch.utils.data.DataLoader, LitDaliWrapper],
-    n_frames_: int,
+    n_frames: int,
     batch_size: int,
     return_heatmaps: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, Union[np.ndarray, None]]:
     """Predict all frames in a data loader without undoing the resize/reshape; can return heatmaps.
 
     Args:
-        cfg (DictConfig): hydra config.
-        model (LightningModule): a loaded model ready to be evaluated.
+        cfg: hydra config.
+        model: a loaded model ready to be evaluated.
         dataloader: dataloader ready to be iterated
-        n_frames_ (int): total number of frames in the dataset or video
-        batch_size (int): regular batch_size for images or sequence_length for videos
-        return_heatmaps (str, optional): [description]. Defaults to None.
+        n_frames: total number of frames in the dataset or video
+        batch_size: regular batch_size for images or sequence_length for videos
+        return_heatmaps: return heatmaps as a numpy array
 
     Returns:
-        Tuple[np.ndarray, np.ndarray, Union[np.ndarray, None]]: keypoints, confidences,
-            and potentially heatmaps.
+        keypoints, confidences, and potentially heatmaps.
 
     """
 
     if "heatmap" not in cfg.model.model_type:
         return_heatmaps = False
 
-    keypoints_np = np.zeros((n_frames_, model.num_keypoints * 2))
-    confidence_np = np.zeros((n_frames_, model.num_keypoints))
+    keypoints_np = np.zeros((n_frames, model.num_keypoints * 2))
+    confidence_np = np.zeros((n_frames, model.num_keypoints))
 
     if return_heatmaps:
         heatmaps_np = np.zeros((
-            n_frames_,
+            n_frames,
             model.num_keypoints,
             model.output_shape[0],  # // (2 ** model.downsample_factor),
             model.output_shape[1],  # // (2 ** model.downsample_factor)
@@ -468,7 +466,7 @@ def _predict_frames(
 
     t_beg = time.time()
     n_frames_counter = 0  # total frames processed
-    n_batches = int(np.ceil(n_frames_ / batch_size))
+    n_batches = int(np.ceil(n_frames / batch_size))
     n = -1
     with torch.inference_mode():
         for n, batch in enumerate(tqdm(dataloader, total=n_batches)):
@@ -504,9 +502,9 @@ def _predict_frames(
                 pred_heatmaps = None
 
             n_frames_curr = pred_keypoints.shape[0]
-            if n_frames_counter + n_frames_curr > n_frames_:
+            if n_frames_counter + n_frames_curr > n_frames:
                 # final sequence
-                final_batch_size = n_frames_ - n_frames_counter
+                final_batch_size = n_frames - n_frames_counter
                 keypoints_np[n_frames_counter:] = pred_keypoints[:final_batch_size]
                 confidence_np[n_frames_counter:] = confidence[:final_batch_size]
                 if return_heatmaps:
@@ -520,10 +518,11 @@ def _predict_frames(
 
             n_frames_counter += n_frames_curr
 
-        t_end = time.time()
-        pretty_print_str("inference speed: %1.2f fr/sec" % ((n * batch_size) / (t_end - t_beg)))
-        # for regression networks, confidence_np will be all zeros, heatmaps_np will be None
-        return keypoints_np, confidence_np, heatmaps_np
+    t_end = time.time()
+    pretty_print_str("inference speed: %1.2f fr/sec" % ((n * batch_size) / (t_end - t_beg)))
+
+    # for regression networks, confidence_np will be all zeros, heatmaps_np will be None
+    return keypoints_np, confidence_np, heatmaps_np
 
 
 @typechecked

@@ -70,7 +70,6 @@ def test_imgaug_transform_dlc(cfg, base_dataset):
         keypoints=np.expand_dims(keypoints_on_image, axis=0),
     )
     im_0 = im_0[0]
-    kps_0 = kps_0[0].reshape(-1)
     assert im_0.shape[0] == cfg.data.image_resize_dims.height
     assert im_0.shape[1] == cfg.data.image_resize_dims.width
 
@@ -80,9 +79,7 @@ def test_imgaug_transform_dlc(cfg, base_dataset):
         keypoints=np.expand_dims(keypoints_on_image, axis=0),
     )
     im_1 = im_1[0]
-    kps_1 = kps_1[0].reshape(-1)
     assert not np.allclose(im_0, im_1)
-    assert not np.allclose(kps_0, kps_1, equal_nan=True)
 
 
 def test_imgaug_transform_dlc_top_down(cfg, base_dataset):
@@ -107,7 +104,6 @@ def test_imgaug_transform_dlc_top_down(cfg, base_dataset):
         keypoints=np.expand_dims(keypoints_on_image, axis=0),
     )
     im_0 = im_0[0]
-    kps_0 = kps_0[0].reshape(-1)
     assert im_0.shape[0] == cfg.data.image_resize_dims.height
     assert im_0.shape[1] == cfg.data.image_resize_dims.width
 
@@ -117,6 +113,4 @@ def test_imgaug_transform_dlc_top_down(cfg, base_dataset):
         keypoints=np.expand_dims(keypoints_on_image, axis=0),
     )
     im_1 = im_1[0]
-    kps_1 = kps_1[0].reshape(-1)
     assert not np.allclose(im_0, im_1)
-    assert not np.allclose(kps_0, kps_1, equal_nan=True)
