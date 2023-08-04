@@ -349,13 +349,13 @@ def video_dataloader(cfg, base_dataset, video_list) -> LitDaliWrapper:
 def trainer(cfg) -> pl.Trainer:
     """Create a basic pytorch lightning trainer for testing models."""
 
-    cfg.training.unfreezing_epoch = 1
+    cfg.training.unfreezing_epoch = 10  # force no unfreezing to keep memory reqs of tests down
     callbacks = get_callbacks(
         cfg, early_stopping=False, lr_monitor=False, ckpt_model=True, backbone_unfreeze=True)
 
     trainer = pl.Trainer(
-        accelerator="gpu",  # TODO: control from outside
-        devices=1,  # TODO: control from outside
+        accelerator="gpu",
+        devices=1,
         max_epochs=2,
         min_epochs=2,
         check_val_every_n_epoch=1,
