@@ -10,9 +10,9 @@ data:
     height: 384
 
   # ABSOLUTE path to data directory
-  data_dir: /home/zeus/content/lightning-pose/data/fish_implant
+  data_dir: /home/zeus/content/data/fish_implant
   # ABSOLUTE path to unlabeled videos' directory
-  video_dir: /home/zeus/content/lightning-pose/data/fish_implant/videos
+  video_dir: /home/zeus/content/data/fish_implant/videos
   # location of labels; for example script, this should be relative to `data_dir`
   csv_file: master_multicam_labeledFrames.csv
   # downsample heatmaps - 2 | 3
@@ -309,7 +309,7 @@ eval:
     # whether to create a "videos" or "images" dataset, since the processes are the same
     dataset_to_create: images
   # str with an absolute path to a directory containing videos for prediction.
-  test_videos_directory: /home/zeus/content/lightning-pose/data/fish_implant/videos
+  test_videos_directory: /home/zeus/content/data/fish_implant/videos
   # str with an absolute path to directory in which you want to save .csv with predictions
   saved_vid_preds_dir: /home/zeus
   # confidence threshold for plotting a vid

@@ -8,9 +8,9 @@ data:
     height: 256
     width: 256
   # ABSOLUTE path to data directory
-  data_dir: /home/zeus/content/lightning-pose/data/crim13
+  data_dir: /home/zeus/content/data/crim13
   # ABSOLUTE path to unlabeled videos' directory
-  video_dir: /home/zeus/content/lightning-pose/data/crim13/videos
+  video_dir: /home/zeus/content/data/crim13/videos
   # location of labels; for example script, this should be relative to `data_dir`
   csv_file: CollectedData.csv
   # downsample heatmaps - 2 | 3
@@ -170,7 +170,7 @@ eval:
     dataset_to_create: "images"
   # str with an absolute path to a directory containing videos for prediction.
   # (it's not absolute just for the toy example)
-  test_videos_directory: /home/zeus/content/lightning-pose/data/crim13/videos
+  test_videos_directory: /home/zeus/content/data/crim13/videos
   # str with an absolute path to directory in which you want to save .csv with predictions
   saved_vid_preds_dir: null
   # create labeled video from each video in test_videos_directory

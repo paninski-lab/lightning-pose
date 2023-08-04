@@ -8,9 +8,9 @@ data:
     height: 256
     width: 256
   # ABSOLUTE path to data directory
-  data_dir: /home/zeus/content/lightning-pose/data/mirror-mouse
+  data_dir: /home/zeus/content/data/mirror-mouse
   # ABSOLUTE path to unlabeled videos' directory
-  video_dir: /home/zeus/content/lightning-pose/data/mirror-mouse/videos
+  video_dir: /home/zeus/content/data/mirror-mouse/videos
   # location of labels; for example script, this should be relative to `data_dir`
   csv_file: CollectedData.csv
   # downsample heatmaps - 2 | 3
@@ -230,7 +230,7 @@ eval:
     # whether to create a "videos" or "images" dataset, since the processes are the same
     dataset_to_create: images
   # str with an absolute path to a directory containing videos for prediction.
-  test_videos_directory: /home/zeus/content/lightning-pose/data/mirror-mouse/videos
+  test_videos_directory: /home/zeus/content/data/mirror-mouse/videos
   # str with an absolute path to directory in which you want to save .csv with predictions
   saved_vid_preds_dir: /home/zeus
   # confidence threshold for plotting a vid

@@ -9,7 +9,7 @@ data:
     height: 256
   # ABSOLUTE path to data directory. the below is just a toy example for running Getting Started scripts
   data_dir: data/mirror-mouse-example
-  # ABSOLUTE path to unlabeled videos' directory. the below is just a toy example for running Getting Started scripts (TODO: Matt, can have multiple vids)
+  # ABSOLUTE path to unlabeled videos' directory. the below is just a toy example for running Getting Started scripts
   video_dir: videos
   # location of labels; for example script, this should be relative to `data_dir`
   csv_file: CollectedData.csv
@@ -239,7 +239,7 @@ eval:
   # confidence threshold for plotting a vid
   confidence_thresh_for_vid: 0.9
   # str with absolute path to the video file you want plotted with keypoints
-  video_file_to_plot: /home/jovyan/lightning-pose/data/mirror-mouse-example/videos/test_vid.mp4
+  video_file_to_plot: /home/zeus/content/lightning-pose/data/mirror-mouse-example/videos/test_vid.mp4
   # a list of strings, each points to a .csv file with predictions of a given model to the same video. will be combined with video_file_to_plot to make a visualization
   pred_csv_files_to_plot:
     ["/home/jovyan/test_vid_heatmap_pca_multiview_5.0.csv"]
