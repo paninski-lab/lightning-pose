@@ -203,6 +203,34 @@ def select_common_frames(prev_output_dirs,predict_new_name, predict_active_name,
 
   return common_elements
 
+def subsample_frames_from_df(labels_df, train_frames, train_prob, rng_seed, vid_dir=None):
+
+    # find all possible videos
+    img_files = labels_df.index
+    vid_names = np.unique([c.split('/')[1] for c in img_files.to_numpy()])
+
+
+    # select some videos to sample frames from
+    n_total_frames = int(np.ceil(int(train_frames) * 1.0 / train_prob))
+
+    # grab frames from selected vids until we reach total number of desired frames
+    n_frames = 0
+    n_vids_to_select = 1
+    new_df = None
+    vids = None
+    while n_frames < int(n_total_frames):
+        if n_vids_to_select >= vid_names.shape[0]:
+            new_df = labels_df.copy()
+            vids = vid_names
+            break
+        np.random.seed(int(rng_seed))
+        vids = np.random.choice(vid_names, size=n_vids_to_select)
+        good_idxs = labels_df.index.str.contains('|'.join(vids))
+        new_df = labels_df[good_idxs]
+        n_frames = new_df.shape[0]
+        n_vids_to_select += 1
+
+    return new_df, vids
 
 def select_frames_calculate(active_iter_cfg, data_cfg, header_rows=[0,1,2]): #This now step 2
 
@@ -264,6 +292,8 @@ def select_frames_calculate(active_iter_cfg, data_cfg, header_rows=[0,1,2]): #Th
     selected_frames_list.append(selected_frames)
     matched_rows = all_data.loc[selected_frames.index]
 
+    
+
     if method != "Ensembling" and len(prev_output_dirs) > 1 :
       selected_indices_file_individual =  f'iteration_{method}_{folder_path[-8:]}_indices.csv'
       selected_indices_file_individual = os.path.join(output_dir, selected_indices_file_individual)
@@ -274,6 +304,9 @@ def select_frames_calculate(active_iter_cfg, data_cfg, header_rows=[0,1,2]): #Th
     selected_frame_total_df = pd.concat(selected_frames_list, axis=0)
     selected_frames = select_frames(active_iter_cfg, data_cfg, selected_frame_total_df, csv_active_test_data=None, active_test_data_flag=False)
     matched_rows = all_data.loc[selected_frames.index]
+
+  
+
 
   selected_indices_file = f'iteration_{method}_indices.csv'
   selected_indices_file = os.path.join(output_dir, selected_indices_file)
@@ -302,6 +335,12 @@ def select_frames(active_iter_cfg, data_cfg, csv_data, csv_active_test_data, act
 
     selected_indices = np.unique(random.sample(range(len(csv_data)), num_frames))  # Get index from either places
     selected_frames = csv_data.iloc[selected_indices]
+
+  if method == "random vid limit":
+
+    df, _ = subsample_frames_from_df(csv_data, 1, 0.1, 0, vid_dir=None)
+    selected_indices= df.index
+    selected_frames = csv_data.loc[selected_indices]
   
 
   elif method == 'random_energy':
