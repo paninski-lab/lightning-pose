@@ -13,34 +13,35 @@ project: "ibl_toy"
 
 active_pipeline:
   experiment_cfg: ${oc.env:LIGHTPOSE_DIR}/active_pipeline/configs/config_ibl_experiment.yaml
-  iterations_folders: "iteration_active_loop/experiment0" # relative to data_dir
+  iterations_folders: "{oc.env:LIGHTPOSE_DIR}/active_pipeline/results/iteration_active_loop/experiment0"
   start_iteration: 1
   end_iteration: 2
   current_iteration: null
   experiment_kwargs: null
+  active_test_set_path: null
 
 # select frames not yet available
 iteration_0:
-  output_prev_run: [""]
-  csv_file_prev_run: [""]
+  output_prev_run: []
+  csv_file_prev_run: []
   method: "random"
   num_frames: 10
-  use_seeds: [0,1]
+  use_seeds: [0]
   iteration_folder: null
 
 iteration_1:
-  output_prev_run: [""]
-  csv_file_prev_run: [""]
+  output_prev_run: []
+  csv_file_prev_run: []
   method: "random"
   num_frames: 10
-  use_seeds: [0,1]
+  use_seeds: [0]
   iteration_folder: null
 
 iteration_2:
   output_prev_run: []
   method: "random"
   num_frames: 10
-  use_seeds: [0,1]
+  use_seeds: [0]
   iteration_folder: null
 
 

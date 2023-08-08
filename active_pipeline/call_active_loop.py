@@ -21,47 +21,31 @@ def call_active_all(active_cfg):
     :param active_loop_config:
     :return: active_loop_config with experiments
     """
-    # Read experiment config file
     exp_cfg = OmegaConf.load(active_cfg.active_pipeline.experiment_cfg)
-
     # update config file parameters if needed
-    #exp_cfg = OmegaConf.merge(exp_cfg, active_cfg.active_pipeline.experiment_kwargs)
-
-    # Run active loop iterations
+    exp_cfg = OmegaConf.merge(exp_cfg, active_cfg.active_pipeline.experiment_kwargs)
     for current_iteration in range(active_cfg.active_pipeline.start_iteration,
                                    active_cfg.active_pipeline.end_iteration + 1):
 
         print('\n\n Experiment iter {}'.format(current_iteration), flush=True)
 
+        active_cfg.active_pipeline.current_iteration = current_iteration
         iteration_key_current = 'iteration_{}'.format(current_iteration)
 
-        if current_iteration == 0:
-            # step 1: select [frames to label is skipped in demo mode.
-            exp_cfg.model.model_name = 'iter_{}_{}'.format(current_iteration, 'baseline')
-        else:
-            exp_cfg.model.model_name = 'iter_{}_{}'.format(current_iteration,
-                                                           active_cfg[iteration_key_current].method)
-
-        # TODO*: if output run is present -- only calculate additional metrics
         # TODO: add option if _test does not exits
-        train_output_dirs = run_train(active_cfg[iteration_key_current], exp_cfg)
-
-        # step 3: fill in active pipeline details and call active loop
-        active_cfg.active_pipeline.current_iteration = current_iteration
-        if active_cfg[iteration_key_current].output_prev_run != [""]:
-          active_cfg[iteration_key_current].output_prev_run = active_cfg[iteration_key_current].output_prev_run + train_output_dirs 
-        else:
+        # TODO*: if output run is present -- only calculate additional metrics
+        if len(active_cfg[iteration_key_current].output_prev_run) == 0:
+          # if model is provided, train a model using the config file:
+          exp_cfg.model.model_name = 'iter_{}_{}'.format(current_iteration, active_cfg[iteration_key_current].method)
+          train_output_dirs = run_train(active_cfg[iteration_key_current], exp_cfg)
+          # step 3: fill in active pipeline details and call active loop
           active_cfg[iteration_key_current].output_prev_run = train_output_dirs
-        
-        #print("##### DIR is:", active_cfg[iteration_key_current].output_prev_run)
-        active_cfg[iteration_key_current].csv_file_prev_run = exp_cfg.data.csv_file
+          active_cfg[iteration_key_current].csv_file_prev_run = exp_cfg.data.csv_file
 
         new_train_file = active_loop_step(active_cfg)
-
         # step 4 : update the config for the next run:
         exp_cfg.data.csv_file = new_train_file
 
-    # write new active_cfg file
     return active_cfg
 
 

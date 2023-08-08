@@ -44,6 +44,7 @@ def create_cfg(eval_config_name) -> dict:
 
 
 class TestNaiveRun(parameterized.TestCase):
+  """
   @parameterized.named_parameters(
     ("base_toy_run", "toy_experiment"),
   )
@@ -81,7 +82,26 @@ class TestNaiveRun(parameterized.TestCase):
 
     new_active_cfg = call_active_all(cfg)
     self.assertEqual(type(new_active_cfg), DictConfig)
+  """
+  @parameterized.named_parameters(
+    ("base_active_run", "active_loop"),
+  )
+  def test_active_run(self, config_name):
+    # read config
+    cfg = create_cfg(config_name)
+    # add debugging config
+    OmegaConf.set_struct(cfg, True)
+    OmegaConf.update(cfg, "active_pipeline.experiment_kwargs.training.fast_dev_run", True, force_add=True)
+    OmegaConf.update(cfg, "active_pipeline.experiment_kwargs.wandb.logger", False, force_add=True)
+    cfg.active_pipeline.start_iteration = 1
+    cfg.active_pipeline.end_iteration = 1
+    cfg.iteration_0.use_seeds = [0]
+    cfg.iteration_1.use_seeds = [0]
+    cfg.iteration_1.output_prev_run = ["/data/libraries/lightning-pose/tests/active_pipeline/outputs/23-07-28/15-58-59",]
+    cfg.iteration_1.csv_file_prev_run = ["/data/libraries/lightning-pose/active_pipeline/configs/config_ibl_experiment.yaml"]
 
+    new_active_cfg = call_active_all(cfg)
+    self.assertEqual(type(new_active_cfg), DictConfig)
 
 if __name__ == "__main__":
   absltest.main()
