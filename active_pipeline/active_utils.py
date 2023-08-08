@@ -232,7 +232,7 @@ def subsample_frames_from_df(labels_df, train_frames, train_prob, rng_seed, vid_
 
     return new_df, vids
 
-def select_frames_calculate(active_iter_cfg, data_cfg, header_rows=[0,1,2]): #This now step 2
+def select_frames_calculate(active_iter_cfg, data_cfg, header_rows=[0,1,2]):
 
   all_indices = []
 
@@ -464,53 +464,34 @@ def initialize_iteration_folder(data_dir):
     os.makedirs(data_dir)
 
 
-def read_iteration_folder(iteration_folder):
-  """ Read the iteration folder
-  :param iteration_folder: where the iteration folder will be created.
-  """
-  if not os.path.exists(iteration_folder):
-    raise FileNotFoundError(f'{iteration_folder} does not exist.')
-
-
-  return iteration_cfg
-
 def active_loop_step(active_loop_cfg):
     """
     TODO(haotianxiansti) update comments
     TODO(haotianxiansti) clean up code
     # Step 6: Launch the next active_loop iteration
     """
+    # read yaml file
+    experiment_cfg = OmegaConf.load(active_loop_cfg.active_pipeline.experiment_cfg)
+    # update config file parameters if needed
+    experiment_cfg = OmegaConf.merge(experiment_cfg, active_loop_cfg.active_pipeline.experiment_kwargs)
 
     # read params for current active loop iteration
     iteration_number = active_loop_cfg.active_pipeline.current_iteration
-    iteration_folder = active_loop_cfg.active_pipeline.iterations_folders
+    iterations_folders = active_loop_cfg.active_pipeline.iterations_folders
 
     iteration_key = 'iteration_{}'.format(iteration_number)
     active_iter_cfg = active_loop_cfg[iteration_key]
 
-    # read parent experiment data config  for active loop iteration
-    experiment_cfg = OmegaConf.load(active_loop_cfg.active_pipeline.experiment_cfg)
-    experiment_cfg = OmegaConf.merge(experiment_cfg, active_loop_cfg.active_pipeline.experiment_kwargs)
-
-    dir_collected_csv = Path(experiment_cfg.data.data_dir, experiment_cfg.data.csv_file).parent.absolute()
+    dir_collected_csv = (Path(experiment_cfg.data.data_dir) / experiment_cfg.data.csv_file).parent.absolute().resolve()
     ####iterations_folder -> iteration_folders
+    iteration_folder = os.path.abspath(str(dir_collected_csv / active_loop_cfg.active_pipeline.iterations_folders / iteration_key))
 
     # Read train and eval files
-    import pdb; pdb.set_trace()
-    # TODO: this assumes there is only one run: update multiple runs
-    # might need to reconsider making these as lists
-    train_data_file_prev_runs = [str(Path(experiment_cfg.data.data_dir,
-                                          prev_run)) for prev_run in active_iter_cfg.data.csv_file_prev_run]
+    # TODO: replace to make list
+    train_data_file_prev_run = str(Path(experiment_cfg.data.data_dir, active_iter_cfg.csv_file_prev_run))
+    eval_data_file_prev_run = train_data_file_prev_run.replace('.csv', '_new.csv')
+    act_test_data_file_prev_run = train_data_file_prev_run.replace('.csv', '_active_test.csv') ### New add
 
-    eval_data_file_prev_runs = [prev_run.replace('.csv', '_new.csv') for prev_run in train_data_file_prev_runs]
-    act_test_data_file_prev_runs = [prev_run.replace('.csv', '_active_test.csv') for prev_run in train_data_file_prev_runs]
-
-    import pdb; pdb.set_trace()
-    for prev_train, prev_eval in zip(train_data_file_prev_runs, eval_data_file_prev_runs):
-      assert os.path.exists(prev_train)
-      assert os.path.exists(prev_eval)
-
-    # check that active test exit:
     # update active loop params to config file
     # add additional keys:
     OmegaConf.set_struct(active_iter_cfg, True)
@@ -519,14 +500,11 @@ def active_loop_step(active_loop_cfg):
       active_iter_cfg.iteration_prefix = '{}_{}'.format(active_iter_cfg.method,
                                                         active_iter_cfg.num_frames)
       active_iter_cfg.iteration_folder = iteration_folder
-      active_iter_cfg.train_data_file_prev_run = train_data_file_prev_runs
-      # this assumes that
-      active_iter_cfg.eval_data_file_prev_run = eval_data_file_prev_runs
-      # TODO: only add act_test_data_file_prev_runs do exists.
-      active_iter_cfg.act_test_data_file_prev_run = act_test_data_file_prev_runs  ### New add
+      active_iter_cfg.train_data_file_prev_run = train_data_file_prev_run
+      active_iter_cfg.eval_data_file_prev_run = eval_data_file_prev_run
+      active_iter_cfg.act_test_data_file_prev_run = act_test_data_file_prev_run ### New add
 
-      # TODO:check if needs to be relative:
-      """
+      # TODO:check if needs to be relative
       active_iter_cfg.train_data_file = os.path.join(
           active_iter_cfg.iteration_folder,
           '{}_{}'.format(active_iter_cfg.iteration_prefix,
@@ -534,12 +512,12 @@ def active_loop_step(active_loop_cfg):
       )
       active_iter_cfg.eval_data_file = active_iter_cfg.train_data_file.replace('.csv', '_new.csv')
       active_iter_cfg.act_test_data_file = active_iter_cfg.train_data_file.replace('.csv', '_active_test.csv') ### New add
-    """
+
     # Active Loop: Initialize the iteration folder
     #  TODO(haotianxiansti):  add code for iter 0 (select frames when no labeles are present)
     initialize_iteration_folder(active_iter_cfg.iteration_folder)
 
-    selected_frames_file = select_frames_calculate(active_iter_cfg, experiment_cfg.data, header_rows=[0,1,2])
+    selected_frames_file = select_frames_calculate(active_iter_cfg, experiment_cfg.data)
 
     # Now, we have the directory:
     # created Collected_data_new_merged and Collected_data_merged.csv
