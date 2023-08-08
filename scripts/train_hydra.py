@@ -190,7 +190,7 @@ def train(cfg: DictConfig):
                     cfg=cfg,
                     preds_file=prediction_csv_file,
                     data_module=data_module_pred,
-                    #logger=logger,
+                    logger=logger,
                 )
             except Exception as e:
                 print(f"Error predicting on video {video_file}:\n{e}")
@@ -234,8 +234,8 @@ def train(cfg: DictConfig):
         try:
           compute_metrics(
                   cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood,
-                  #logger=logger,
-              )
+                  logger=logger,
+          )
         except Exception as e:
           print(f"Error computing metrics\n{e}")
 
@@ -292,7 +292,7 @@ def train(cfg: DictConfig):
         try:
             compute_metrics(
                 cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood,
-                #logger=logger,
+                logger=logger,
             )
         except Exception as e:
             print(f"Error computing metrics\n{e}")
