@@ -13,7 +13,7 @@ project: "ibl_toy"
 
 active_pipeline:
   experiment_cfg: ${oc.env:LIGHTPOSE_DIR}/active_pipeline/configs/config_ibl_experiment.yaml
-  iterations_folders: "{oc.env:LIGHTPOSE_DIR}/active_pipeline/results/iteration_active_loop/experiment0"
+  iterations_folders: "iteration_active_loop/experiment0" # relative to data_dir
   start_iteration: 1
   end_iteration: 2
   current_iteration: null
