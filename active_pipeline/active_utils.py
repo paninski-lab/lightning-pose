@@ -145,7 +145,7 @@ def energy_function(x):
   return x ** 2
 
 
-def merge_collected_data(active_iter_cfg, selected_frames_file):
+def merge_collected_data(active_iter_cfg, selected_frames_file, active_test_data_flag):
   """
   # Step 3: Merge new CollectedData.csv with the original CollectedData.csv:
 
@@ -161,9 +161,10 @@ def merge_collected_data(active_iter_cfg, selected_frames_file):
   train_data = pd.read_csv(train_data_file, header=[0, 1, 2], index_col=0)
 
   # read active test frames:
-  act_test_data_file = train_data_file.replace(".csv", "_active_test.csv")  ### New Add
-  act_test_data = pd.read_csv(act_test_data_file, header=[0, 1, 2], index_col=0)
-  act_test_data.to_csv(active_iter_cfg.act_test_data_file)
+  if active_test_data_flag:
+    act_test_data_file = train_data_file.replace(".csv", "_active_test.csv")  ### New Add
+    act_test_data = pd.read_csv(act_test_data_file, header=[0, 1, 2], index_col=0)
+    act_test_data.to_csv(active_iter_cfg.act_test_data_file)
 
   # read selected frames
   selected_frames_df = pd.read_csv(selected_frames_file, header=[0, 1, 2], index_col=0)
@@ -217,6 +218,7 @@ def subsample_frames_from_df(labels_df, train_frames, train_prob, rng_seed, vid_
     n_frames = 0
     n_vids_to_select = 1
     new_df = None
+    new_df_list=list()
     vids = None
     while n_frames < int(n_total_frames):
         if n_vids_to_select >= vid_names.shape[0]:
@@ -225,10 +227,16 @@ def subsample_frames_from_df(labels_df, train_frames, train_prob, rng_seed, vid_
             break
         np.random.seed(int(rng_seed))
         vids = np.random.choice(vid_names, size=n_vids_to_select)
+        #print(vids)
         good_idxs = labels_df.index.str.contains('|'.join(vids))
         new_df = labels_df[good_idxs]
-        n_frames = new_df.shape[0]
+        selected_indices = np.unique(random.sample(range(len(new_df)), train_frames))
+        new_df=new_df.iloc[selected_indices]
+        #n_frames = new_df.shape[0]
+        n_frames += new_df.shape[0]
         n_vids_to_select += 1
+        new_df_list.append(new_df)
+    new_df=pd.concat(new_df_list)
 
     return new_df, vids
 
@@ -278,7 +286,7 @@ def select_frames_calculate(active_iter_cfg, data_cfg, header_rows=[0,1,2]):
     # filter by common elements
     csv_data = csv_data.loc[common_elements]
     csv_active_test_file=os.path.join(folder_path, predict_active_name)
-    if os.path.isfile(csv_active_test_file):
+    if os.path.isfile(csv_active_test_file) == True:
       csv_active_test_data=pd.read_csv(csv_active_test_file, header=header_rows, index_col=0)
       active_test_data_flag=True
 
@@ -313,7 +321,7 @@ def select_frames_calculate(active_iter_cfg, data_cfg, header_rows=[0,1,2]):
   matched_rows.to_csv(selected_indices_file)
 
 
-  return selected_indices_file
+  return selected_indices_file, active_test_data_flag
 
 def select_frames(active_iter_cfg, data_cfg, csv_data, csv_active_test_data, active_test_data_flag):
   """
@@ -517,11 +525,11 @@ def active_loop_step(active_loop_cfg):
     #  TODO(haotianxiansti):  add code for iter 0 (select frames when no labeles are present)
     initialize_iteration_folder(active_iter_cfg.iteration_folder)
 
-    selected_frames_file = select_frames_calculate(active_iter_cfg, experiment_cfg.data)
+    selected_frames_file, active_test_data_flag = select_frames_calculate(active_iter_cfg, experiment_cfg.data)
 
     # Now, we have the directory:
     # created Collected_data_new_merged and Collected_data_merged.csv
-    merge_collected_data(active_iter_cfg, selected_frames_file)
+    merge_collected_data(active_iter_cfg, selected_frames_file, active_test_data_flag)
     # run algorithm with new config file
     # TODO: check location of new csv for iteration relative to data_dir
     # it should have CollectedData.csv and CollectedData_new.csv
