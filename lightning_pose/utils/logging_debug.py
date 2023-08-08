@@ -1,10 +1,11 @@
 import os
 import numpy as np
 from typing import Any, Dict, Optional, Union
+import lightning.pytorch as pl
 
 
 def add_to_logger(logger, error_df, error_name, preds_file, index):
-  if logger is None:
+  if logger is None or (logger is not pl.loggers.WandbLogger):
     return
   preds_name = os.path.basename(preds_file).replace(".csv", "")
   with_set = True if 'set' in error_df.columns else False
