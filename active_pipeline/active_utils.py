@@ -232,6 +232,7 @@ def get_vids(labels_df, num_vids, rng_seed, used_vids):
     vids_list = list(np.random.choice(vid_names, size = num_vids)) # otherwise choose given amount of videos
     used_vids = used_vids + vids_list # add chose videos into used videos list
   used_vids = list(set(used_vids)) # turn list to set to delete repeated names and then turn back to list
+  
   return used_vids, vids_list
 
 
@@ -265,7 +266,7 @@ def subsample_frames_from_df(labels_df, num_vids ,train_frames, train_prob, rng_
 
     # if it is iteration 0, i.e. cchoose n videos at random; choose m random frames from each video to get n*m initial training frames
     if iter0_flag == True:
-      used_vids, vids_list = get_vids(df,num_vids, rng_seed, used_vids) # get used video names and selected frames
+      used_vids, vids_list = get_vids(labels_df,num_vids, rng_seed, used_vids) # get used video names and selected frames
       while n_frames < int(n_total_frames):
           for vids in vids_list:
 
@@ -277,7 +278,7 @@ def subsample_frames_from_df(labels_df, num_vids ,train_frames, train_prob, rng_
             new_df_list.append(new_df) # add all selected frames in one video
       
     else:
-         used_vids, vids_list = get_vids(df,num_vids, rng_seed, used_vids)
+         used_vids, vids_list = get_vids(labels_df,num_vids, rng_seed, used_vids)
          for vids in vids_list:
             good_idxs = labels_df.index.str.contains('|'.join(vids))
             new_df = labels_df[good_idxs] # all frames in this video are selected
