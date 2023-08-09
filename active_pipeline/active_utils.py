@@ -195,6 +195,8 @@ def Histogram_Plot(method, data, output_dir):
 
 def select_common_frames(prev_output_dirs,predict_new_name, predict_active_name, header_rows=[0,1,2]):
 
+
+
   all_indices = []
   for run_idx, folder_path in enumerate(prev_output_dirs):
     csv_file = os.path.join(folder_path, predict_new_name)
@@ -204,41 +206,85 @@ def select_common_frames(prev_output_dirs,predict_new_name, predict_active_name,
 
   return common_elements
 
-def subsample_frames_from_df(labels_df, train_frames, train_prob, rng_seed, vid_dir=None):
+def get_vids(labels_df, num_vids, rng_seed, used_vids):
 
-    # find all possible videos
-    img_files = labels_df.index
-    vid_names = np.unique([c.split('/')[1] for c in img_files.to_numpy()])
+  '''
+  args: 
+
+  labels_df: df CollectedData.csv
+  num_vids: int, number of videos used in this iteration 
+  rng_seed: int, rand seeds
+  used_vids: list, name of used videos
+
+  return:
+
+  used_list: list, updated name of used videos
+  vids_list: name of selected videos
+
+  '''
+  img_files = labels_df.index # get df's index
+  vid_names = list(np.unique([c.split('/')[1] for c in img_files.to_numpy()])) # find all video names (frame names is like: labeled-data/110308_A22_Block14_castBCma2_t/img00008002.png)
+  vid_names = [x for x in vid_names if x not in used_vids] # provide unused video to random select
+  if vid_names == list():
+    print('all vids are used')
+    vids_list = used_vids # if all videos are used, then all videos are used to sample
+  else:
+    vids_list = list(np.random.choice(vid_names, size = num_vids)) # otherwise choose given amount of videos
+    used_vids = used_vids + vids_list # add chose videos into used videos list
+  used_vids = list(set(used_vids)) # turn list to set to delete repeated names and then turn back to list
+  return used_vids, vids_list
 
 
+def subsample_frames_from_df(labels_df, num_vids ,train_frames, train_prob, rng_seed, used_vids=list(), iter0_flag=True):
+  
+    '''
+    args: 
+
+    labels_df: df CollectedData.csv
+    num_vids: int, number of videos used in this iteration 
+    train_frames: int, number of sampling frames from 1 video
+    train_prob: float, total_frames = train_frames / train_prob (i.e. 50 frames = 5/0.1)
+    rng_seed: int, rand seeds
+    used_vids: list, name of used videos (in iteration 0 used_vids list is empty)
+    iter0_flag: flag, a flag to check whether it is the itertaion 0 
+
+    return:
+
+    new_df: df, sll selected frames
+    used_vids: list, updated name of used videos
+
+    '''
+
+    
     # select some videos to sample frames from
-    n_total_frames = int(np.ceil(int(train_frames) * 1.0 / train_prob))
+    n_total_frames = int(np.ceil(int(train_frames) * 1.0 / train_prob)) # calculate total_frames = train_frames / train_prob (i.e. 50 frames = 5/0.1)
 
-    # grab frames from selected vids until we reach total number of desired frames
     n_frames = 0
-    n_vids_to_select = 1
-    new_df = None
-    new_df_list=list()
-    vids = None
-    while n_frames < int(n_total_frames):
-        if n_vids_to_select >= vid_names.shape[0]:
-            new_df = labels_df.copy()
-            vids = vid_names
-            break
-        np.random.seed(int(rng_seed))
-        vids = np.random.choice(vid_names, size=n_vids_to_select)
-        #print(vids)
-        good_idxs = labels_df.index.str.contains('|'.join(vids))
-        new_df = labels_df[good_idxs]
-        selected_indices = np.unique(random.sample(range(len(new_df)), train_frames))
-        new_df=new_df.iloc[selected_indices]
-        #n_frames = new_df.shape[0]
-        n_frames += new_df.shape[0]
-        n_vids_to_select += 1
-        new_df_list.append(new_df)
+    new_df_list=list() # list to collect all selected df
+    np.random.seed(int(rng_seed)) #set random seeds
+
+    # if it is iteration 0, i.e. cchoose n videos at random; choose m random frames from each video to get n*m initial training frames
+    if iter0_flag == True:
+      used_vids, vids_list = get_vids(df,num_vids, rng_seed, used_vids) # get used video names and selected frames
+      while n_frames < int(n_total_frames):
+          for vids in vids_list:
+
+            good_idxs = labels_df.index.str.contains('|'.join(vids)) # find all frames in this video and get their indexes
+            new_df = labels_df[good_idxs] 
+            selected_indices = np.unique(random.sample(range(len(new_df)), train_frames)) # random sample n frames
+            new_df = new_df.iloc[selected_indices] 
+            n_frames += new_df.shape[0] # record how many frames are selected 
+            new_df_list.append(new_df) # add all selected frames in one video
+      
+    else:
+         used_vids, vids_list = get_vids(df,num_vids, rng_seed, used_vids)
+         for vids in vids_list:
+            good_idxs = labels_df.index.str.contains('|'.join(vids))
+            new_df = labels_df[good_idxs] # all frames in this video are selected
+            new_df_list.append(new_df)
     new_df=pd.concat(new_df_list)
 
-    return new_df, vids
+    return new_df, used_vids
 
 def select_frames_calculate(active_iter_cfg, data_cfg, header_rows=[0,1,2]):
 
