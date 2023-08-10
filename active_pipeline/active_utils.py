@@ -162,7 +162,7 @@ def merge_collected_data(active_iter_cfg, selected_frames_file, active_test_data
 
   # read active test frames:
   if active_test_data_flag:
-    act_test_data_file = train_data_file.replace(".csv", "_active_test.csv")  ### New Add
+    act_test_data_file = train_data_file.replace(".csv", "_active_test.csv")  ### -----> New Add !!!! 09 Aug
     act_test_data = pd.read_csv(act_test_data_file, header=[0, 1, 2], index_col=0)
     act_test_data.to_csv(active_iter_cfg.act_test_data_file)
 
@@ -266,28 +266,38 @@ def subsample_frames_from_df(labels_df, num_vids ,train_frames, train_prob, rng_
 
     # if it is iteration 0, i.e. cchoose n videos at random; choose m random frames from each video to get n*m initial training frames
     if iter0_flag == True:
+<<<<<<< HEAD
+      used_vids, vids_list = get_vids(labels_df, num_vids, rng_seed, used_vids) # get used video names and selected frames
+=======
       used_vids, vids_list = get_vids(labels_df,num_vids, rng_seed, used_vids) # get used video names and selected frames
+>>>>>>> 5ef8f734078cb592d366984231676a1cca5924d5
       while n_frames < int(n_total_frames):
           for vids in vids_list:
 
             good_idxs = labels_df.index.str.contains('|'.join(vids)) # find all frames in this video and get their indexes
             new_df = labels_df[good_idxs] 
-            selected_indices = np.unique(random.sample(range(len(new_df)), train_frames)) # random sample n frames
+            selected_indices = np.unique(random.sample(range(len(new_df)), int(n_total_frames/num_vids))) # random sample n frames
             new_df = new_df.iloc[selected_indices] 
             n_frames += new_df.shape[0] # record how many frames are selected 
             new_df_list.append(new_df) # add all selected frames in one video
       
     else:
+<<<<<<< HEAD
+         used_vids, vids_list = get_vids(labels_df, num_vids, rng_seed, used_vids)
+=======
          used_vids, vids_list = get_vids(labels_df,num_vids, rng_seed, used_vids)
+>>>>>>> 5ef8f734078cb592d366984231676a1cca5924d5
          for vids in vids_list:
             good_idxs = labels_df.index.str.contains('|'.join(vids))
             new_df = labels_df[good_idxs] # all frames in this video are selected
             new_df_list.append(new_df)
     new_df=pd.concat(new_df_list)
 
+    print('The training set is: ', new_df.shape[0])
+
     return new_df, used_vids
 
-def select_frames_calculate(active_iter_cfg, data_cfg, header_rows=[0,1,2]):
+def select_frames_calculate(active_iter_cfg, data_cfg, used_vids, header_rows=[0,1,2]):
 
   all_indices = []
 
@@ -297,6 +307,7 @@ def select_frames_calculate(active_iter_cfg, data_cfg, header_rows=[0,1,2]):
   prev_output_dirs = active_iter_cfg.output_prev_run
   
   all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0, 1, 2], index_col=0)
+  new_df, used_vids = subsample_frames_from_df(all_data,5,10,0.1,0,used_vids,iter0_flag=False)
 
   if method == 'margin sampling':
 
@@ -312,8 +323,8 @@ def select_frames_calculate(active_iter_cfg, data_cfg, header_rows=[0,1,2]):
     predict_active_name = "predictions_active_test_equalvariance.csv"
 
   else:
-    predict_new_name = "predictions_new.csv" 
-    predict_active_name = "predictions_active_test.csv"
+    predict_new_name = "predictions_new.csv" #"predictions_new.csv" 
+    predict_active_name = "predictions_active_test.csv" #"predictions_active_test.csv"
 
   common_elements =select_common_frames(prev_output_dirs, 
     predict_new_name, predict_active_name, header_rows=[0,1,2])
@@ -519,7 +530,7 @@ def initialize_iteration_folder(data_dir):
     os.makedirs(data_dir)
 
 
-def active_loop_step(active_loop_cfg):
+def active_loop_step(active_loop_cfg, used_vids):
     """
     TODO(haotianxiansti) update comments
     TODO(haotianxiansti) clean up code
@@ -528,7 +539,7 @@ def active_loop_step(active_loop_cfg):
     # read yaml file
     experiment_cfg = OmegaConf.load(active_loop_cfg.active_pipeline.experiment_cfg)
     # update config file parameters if needed
-    experiment_cfg = OmegaConf.merge(experiment_cfg, active_loop_cfg.active_pipeline.experiment_kwargs)
+    #experiment_cfg = OmegaConf.merge(experiment_cfg, active_loop_cfg.active_pipeline.experiment_kwargs)
 
     # read params for current active loop iteration
     iteration_number = active_loop_cfg.active_pipeline.current_iteration
@@ -544,8 +555,8 @@ def active_loop_step(active_loop_cfg):
     # Read train and eval files
     # TODO: replace to make list
     train_data_file_prev_run = str(Path(experiment_cfg.data.data_dir, active_iter_cfg.csv_file_prev_run))
-    eval_data_file_prev_run = train_data_file_prev_run.replace('.csv', '_new.csv')
-    act_test_data_file_prev_run = train_data_file_prev_run.replace('.csv', '_active_test.csv') ### New add
+    eval_data_file_prev_run = train_data_file_prev_run.replace(".csv","_new.csv") #.replace('.csv', '_new.csv')
+    act_test_data_file_prev_run = train_data_file_prev_run.replace('.csv', '_active_test.csv') #.replace('.csv', '_active_test.csv') ### New add
 
     # update active loop params to config file
     # add additional keys:
@@ -565,14 +576,14 @@ def active_loop_step(active_loop_cfg):
           '{}_{}'.format(active_iter_cfg.iteration_prefix,
                          os.path.basename(train_data_file_prev_run))
       )
-      active_iter_cfg.eval_data_file = active_iter_cfg.train_data_file.replace('.csv', '_new.csv')
-      active_iter_cfg.act_test_data_file = active_iter_cfg.train_data_file.replace('.csv', '_active_test.csv') ### New add
+      active_iter_cfg.eval_data_file = active_iter_cfg.train_data_file.replace(".csv","_new.csv") #.replace('.csv', '_new.csv')
+      active_iter_cfg.act_test_data_file = active_iter_cfg.train_data_file.replace('.csv', '_active_test.csv') #.replace('.csv', '_active_test.csv') ### New add
 
     # Active Loop: Initialize the iteration folder
     #  TODO(haotianxiansti):  add code for iter 0 (select frames when no labeles are present)
     initialize_iteration_folder(active_iter_cfg.iteration_folder)
 
-    selected_frames_file, active_test_data_flag = select_frames_calculate(active_iter_cfg, experiment_cfg.data)
+    selected_frames_file, active_test_data_flag = select_frames_calculate(active_iter_cfg, experiment_cfg.data, used_vids)
 
     # Now, we have the directory:
     # created Collected_data_new_merged and Collected_data_merged.csv
