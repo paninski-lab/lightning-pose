@@ -10,9 +10,13 @@ import wandb
 import copy
 import os
 
+import numpy as np
+import pandas as pd
+
+
 BASE_DIR = Path(os.path.abspath(__file__)).resolve().parents[1]
 sys.path.append(os.path.join(str(BASE_DIR), 'active_pipeline'))
-from active_utils import active_loop_step
+from active_utils import active_loop_step, get_vids, subsample_frames_from_df
 #%%
 
 def call_active_all(active_cfg):
@@ -23,7 +27,7 @@ def call_active_all(active_cfg):
     """
     exp_cfg = OmegaConf.load(active_cfg.active_pipeline.experiment_cfg)
     # update config file parameters if needed
-    exp_cfg = OmegaConf.merge(exp_cfg, active_cfg.active_pipeline.experiment_kwargs)
+    #exp_cfg = OmegaConf.merge(exp_cfg, active_cfg.active_pipeline.experiment_kwargs)
     for current_iteration in range(active_cfg.active_pipeline.start_iteration,
                                    active_cfg.active_pipeline.end_iteration + 1):
 
@@ -34,6 +38,16 @@ def call_active_all(active_cfg):
 
         # TODO: add option if _test does not exits
         # TODO*: if output run is present -- only calculate additional metrics
+        if current_iteration == 0:
+          labeled_df = pd.read_csv(exp_cfg.data.csv_file,header = [0,1,2], index_col=0)
+          labeled_total_df=labeled_df
+          new_df, used_vids = subsample_frames_from_df(labeled_df,5,10,0.1,0)
+          ref_data_path = exp_cfg.data.csv_file.replace(".csv","_new.csv")
+          true_data_path = exp_cfg.data.csv_file.replace(".csv","_True.csv")
+          labeled_df.to_csv(ref_data_path)
+          labeled_df.to_csv(true_data_path)
+          new_df.to_csv(exp_cfg.data.csv_file)
+
         if len(active_cfg[iteration_key_current].output_prev_run) == 0:
           # if model is provided, train a model using the config file:
           exp_cfg.model.model_name = 'iter_{}_{}'.format(current_iteration, active_cfg[iteration_key_current].method)
@@ -42,7 +56,7 @@ def call_active_all(active_cfg):
           active_cfg[iteration_key_current].output_prev_run = train_output_dirs
           active_cfg[iteration_key_current].csv_file_prev_run = exp_cfg.data.csv_file
 
-        new_train_file = active_loop_step(active_cfg)
+        new_train_file = active_loop_step(active_cfg, used_vids)
         # step 4 : update the config for the next run:
         exp_cfg.data.csv_file = new_train_file
 
@@ -82,7 +96,7 @@ def make_run(cfg):
 def make_run_dir():
   today_str = datetime.now().strftime("%y-%m-%d")
   ctime_str = datetime.now().strftime("%H-%M-%S")
-  new_dir = f"./outputs/{today_str}/{ctime_str}"
+  new_dir = f"./Random/{today_str}/{ctime_str}"
   os.makedirs(new_dir, exist_ok=False)
   return new_dir
 
