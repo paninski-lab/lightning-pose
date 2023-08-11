@@ -266,11 +266,11 @@ def subsample_frames_from_df(labels_df, num_vids ,train_frames, train_prob, rng_
 
     # if it is iteration 0, i.e. cchoose n videos at random; choose m random frames from each video to get n*m initial training frames
     if iter0_flag == True:
-<<<<<<< HEAD
+#<<<<<<< HEAD
       used_vids, vids_list = get_vids(labels_df, num_vids, rng_seed, used_vids) # get used video names and selected frames
-=======
+#=======
       used_vids, vids_list = get_vids(labels_df,num_vids, rng_seed, used_vids) # get used video names and selected frames
->>>>>>> 5ef8f734078cb592d366984231676a1cca5924d5
+#>>>>>>> 5ef8f734078cb592d366984231676a1cca5924d5
       while n_frames < int(n_total_frames):
           for vids in vids_list:
 
@@ -282,11 +282,11 @@ def subsample_frames_from_df(labels_df, num_vids ,train_frames, train_prob, rng_
             new_df_list.append(new_df) # add all selected frames in one video
       
     else:
-<<<<<<< HEAD
+#<<<<<<< HEAD
          used_vids, vids_list = get_vids(labels_df, num_vids, rng_seed, used_vids)
-=======
+#=======
          used_vids, vids_list = get_vids(labels_df,num_vids, rng_seed, used_vids)
->>>>>>> 5ef8f734078cb592d366984231676a1cca5924d5
+#>>>>>>> 5ef8f734078cb592d366984231676a1cca5924d5
          for vids in vids_list:
             good_idxs = labels_df.index.str.contains('|'.join(vids))
             new_df = labels_df[good_idxs] # all frames in this video are selected
