@@ -17,6 +17,52 @@ data:
   downsample_factor: 2
   # total number of body parts
   num_keypoints: 45
+  keypoint_names:
+     - head_main
+     - chin_base_main
+     - chin1_4_main
+     - chin_half_main
+     - chin3_4_main
+     - chin_tip_main
+     - mid_main
+     - fork_main
+     - stripeA_main
+     - stripeP_main
+     - tail_neck_main
+     - dorsal_main
+     - anal_main
+     - caudal_d_main
+     - caudal_v_main
+     - head_top
+     - chin_base_top
+     - chin1_4_top
+     - chin_half_top
+     - chin3_4_top
+     - chin_tip_top
+     - mid_top
+     - fork_top
+     - stripeA_top
+     - stripeP_top
+     - tail_neck_top
+     - dorsal_top
+     - anal_top
+     - caudal_d_top
+     - caudal_v_top
+     - head_right
+     - chin_base_right
+     - chin1_4_right
+     - chin_half_right
+     - chin3_4_right
+     - chin_tip_right
+     - mid_right
+     - fork_right
+     - stripeA_right
+     - stripeP_right
+     - tail_neck_right
+     - dorsal_right
+     - anal_right
+     - caudal_d_right
+     - caudal_v_right
   # for mirrored setups with all keypoints defined in same csv file, define matching
   # columns for different keypoints (assumes x-y-x-y interleaving)
   # each list corresponds to a single view, so in the example below there are 2 views

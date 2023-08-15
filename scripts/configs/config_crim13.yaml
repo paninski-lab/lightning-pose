@@ -33,7 +33,7 @@ data:
     - white_mouse_left_rear_knee
     - white_mouse_base_of_tail
   mirrored_column_matches: null
-  columns_for_singleview_pca: [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13]
+  columns_for_singleview_pca: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
 
 training:
   # select from one of several predefined image/video augmentation pipelines
