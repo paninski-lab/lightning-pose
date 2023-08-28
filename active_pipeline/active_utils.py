@@ -269,7 +269,7 @@ def subsample_frames_from_df(labels_df, num_vids ,train_frames, train_prob, rng_
 #<<<<<<< HEAD
       used_vids, vids_list = get_vids(labels_df, num_vids, rng_seed, used_vids) # get used video names and selected frames
 #=======
-      used_vids, vids_list = get_vids(labels_df,num_vids, rng_seed, used_vids) # get used video names and selected frames
+      #used_vids, vids_list = get_vids(labels_df,num_vids, rng_seed, used_vids) # get used video names and selected frames
 #>>>>>>> 5ef8f734078cb592d366984231676a1cca5924d5
       while n_frames < int(n_total_frames):
           for vids in vids_list:
@@ -285,7 +285,7 @@ def subsample_frames_from_df(labels_df, num_vids ,train_frames, train_prob, rng_
 #<<<<<<< HEAD
          used_vids, vids_list = get_vids(labels_df, num_vids, rng_seed, used_vids)
 #=======
-         used_vids, vids_list = get_vids(labels_df,num_vids, rng_seed, used_vids)
+         #used_vids, vids_list = get_vids(labels_df,num_vids, rng_seed, used_vids)
 #>>>>>>> 5ef8f734078cb592d366984231676a1cca5924d5
          for vids in vids_list:
             good_idxs = labels_df.index.str.contains('|'.join(vids))
@@ -309,6 +309,8 @@ def select_frames_calculate(active_iter_cfg, data_cfg, used_vids, header_rows=[0
   all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0, 1, 2], index_col=0)
   new_df, used_vids = subsample_frames_from_df(all_data,5,10,0.1,0,used_vids,iter0_flag=False)
 
+  header_rows=[0,1,2]
+
   if method == 'margin sampling':
 
     predict_new_name = "predictions_new_heatmap.csv" 
@@ -317,6 +319,7 @@ def select_frames_calculate(active_iter_cfg, data_cfg, used_vids, header_rows=[0
   elif method == "Single PCAS":
     predict_new_name = "predictions_new_pca_singleview_error.csv"
     predict_active_name = "predictions_active_test_pca_singleview_error.csv"
+    header_rows=[0]
   
   elif method == 'Equal Variance':
     predict_new_name = "predictions_new_equalvariance.csv"
@@ -327,7 +330,7 @@ def select_frames_calculate(active_iter_cfg, data_cfg, used_vids, header_rows=[0
     predict_active_name = "predictions_active_test.csv" #"predictions_active_test.csv"
 
   common_elements =select_common_frames(prev_output_dirs, 
-    predict_new_name, predict_active_name, header_rows=[0,1,2])
+    predict_new_name, predict_active_name, header_rows)
 
   # read xy keypoints from each csv file
   if method == 'Ensembling':
@@ -343,6 +346,7 @@ def select_frames_calculate(active_iter_cfg, data_cfg, used_vids, header_rows=[0
     all_indices.append(csv_data.index.values)
     # filter by common elements
     csv_data = csv_data.loc[common_elements]
+    csv_data = csv_data.loc[new_df.index]
     csv_active_test_file=os.path.join(folder_path, predict_active_name)
     if os.path.isfile(csv_active_test_file) == True:
       csv_active_test_data=pd.read_csv(csv_active_test_file, header=header_rows, index_col=0)
