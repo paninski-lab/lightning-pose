@@ -46,8 +46,11 @@ def test_export_predictions_and_labeled_video(
         cfg, heatmap_data_module, video_list, remove_logs, tmpdir):
     """Test helper function that predicts videos then makes a labeled movie."""
 
-    from lightning_pose.utils.scripts import export_predictions_and_labeled_video
-    from lightning_pose.utils.scripts import get_loss_factories, get_model
+    from lightning_pose.utils.scripts import (
+        export_predictions_and_labeled_video,
+        get_loss_factories,
+        get_model,
+    )
 
     # make a basic heatmap tracker
     cfg_tmp = copy.deepcopy(cfg)

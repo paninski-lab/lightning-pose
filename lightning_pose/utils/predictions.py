@@ -13,7 +13,6 @@ import pandas as pd
 import torch
 from moviepy.editor import VideoFileClip
 from omegaconf import DictConfig, OmegaConf
-from pytorch_lightning import LightningModule
 from torchtyping import TensorType
 from tqdm import tqdm
 from typeguard import typechecked
@@ -194,10 +193,10 @@ class PredictionHandler:
             np.ndarray: cols are (bp0_x, bp0_y, bp0_likelihood, bp1_x, bp1_y, ...)
 
         """
-        assert keypoints_np.shape[0] == confidence_np.shape[0]  # num frames in the dataset
-        assert keypoints_np.shape[1] == (
-            confidence_np.shape[1] * 2
-        )  # we have two (x,y) coordinates and a single likelihood value
+        # check num frames in the dataset
+        assert keypoints_np.shape[0] == confidence_np.shape[0]
+        # check we have two (x,y) coordinates and a single likelihood value
+        assert keypoints_np.shape[1] == confidence_np.shape[1] * 2
 
         num_joints = confidence_np.shape[-1]  # model.num_keypoints
         predictions = np.zeros((keypoints_np.shape[0], num_joints * 3))
@@ -214,8 +213,10 @@ class PredictionHandler:
 
         return predictions
 
-    def make_dlc_pandas_index(self) -> pd.MultiIndex:
-        return make_dlc_pandas_index(cfg=self.cfg, keypoint_names=self.keypoint_names)
+    def make_dlc_pandas_index(self, keypoint_names: Optional[List] = None) -> pd.MultiIndex:
+        return make_dlc_pandas_index(
+            cfg=self.cfg, keypoint_names=keypoint_names or self.keypoint_names
+        )
 
     def add_split_indices_to_df(self, df: pd.DataFrame) -> pd.DataFrame:
         """Add split indices to the dataframe."""

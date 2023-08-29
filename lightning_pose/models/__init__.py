@@ -1,9 +1,6 @@
 from typing import Union
 
-from lightning_pose.models.heatmap_tracker import (
-    HeatmapTracker,
-    SemiSupervisedHeatmapTracker,
-)
+from lightning_pose.models.heatmap_tracker import HeatmapTracker, SemiSupervisedHeatmapTracker
 from lightning_pose.models.heatmap_tracker_mhcrnn import (
     HeatmapTrackerMHCRNN,
     SemiSupervisedHeatmapTrackerMHCRNN,

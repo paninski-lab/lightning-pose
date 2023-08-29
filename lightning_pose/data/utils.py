@@ -43,9 +43,7 @@ class BaseLabeledBatchDict(TypedDict):
 class HeatmapLabeledBatchDict(BaseLabeledBatchDict):
     """Batch type for heatmap labeled data."""
 
-    heatmaps: TensorType[
-        "batch", "num_keypoints", "heatmap_height", "heatmap_width", float
-    ]
+    heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width", float]
 
 
 class UnlabeledBatchDict(TypedDict):

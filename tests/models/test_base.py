@@ -2,9 +2,9 @@
 
 import gc
 
+import segment_anything
 import torch
 import torchvision
-import segment_anything
 
 from lightning_pose.models.base import BaseFeatureExtractor
 

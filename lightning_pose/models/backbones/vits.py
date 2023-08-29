@@ -1,8 +1,9 @@
 from functools import partial
 
 import torch
-from lightning_pose.models.backbones.vit_img_encoder import ImageEncoderViT_FT
 from typeguard import typechecked
+
+from lightning_pose.models.backbones.vit_img_encoder import ImageEncoderViT_FT
 
 
 @typechecked

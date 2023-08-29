@@ -21,9 +21,9 @@ from lightning_pose.data.utils import (
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.base import (
+    ALLOWED_BACKBONES,
     BaseSupervisedTracker,
     SemiSupervisedTrackerMixin,
-    ALLOWED_BACKBONES,
 )
 
 

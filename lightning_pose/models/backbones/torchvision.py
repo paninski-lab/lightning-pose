@@ -14,7 +14,7 @@ def build_backbone(
     pretrained: bool = True,
     model_type: str = "heatmap",
     **kwargs,
-) -> tuple:
+) -> Tuple:
     """Load backbone weights for resnets, efficientnets, and other models from torchvision.
 
     Args:

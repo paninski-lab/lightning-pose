@@ -9,9 +9,9 @@ import imgaug.augmenters as iaa
 import lightning.pytorch as pl
 import numpy as np
 import pandas as pd
+import torch
 from moviepy.editor import VideoFileClip
 from omegaconf import DictConfig, OmegaConf
-import torch
 from typeguard import typechecked
 
 from lightning_pose.callbacks import AnnealWeight
@@ -29,10 +29,10 @@ from lightning_pose.metrics import (
 from lightning_pose.models import (
     ALLOWED_MODELS,
     HeatmapTracker,
-    SemiSupervisedHeatmapTracker,
     HeatmapTrackerMHCRNN,
-    SemiSupervisedHeatmapTrackerMHCRNN,
     RegressionTracker,
+    SemiSupervisedHeatmapTracker,
+    SemiSupervisedHeatmapTrackerMHCRNN,
     SemiSupervisedRegressionTracker,
 )
 from lightning_pose.utils.io import (
@@ -362,7 +362,7 @@ def get_callbacks(
     lr_monitor=True,
     ckpt_model=True,
     backbone_unfreeze=True,
-) -> list:
+) -> List:
 
     callbacks = []
 

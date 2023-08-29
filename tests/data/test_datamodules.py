@@ -2,7 +2,6 @@
 
 import pytest
 import torch
-
 from lightning.pytorch.utilities import CombinedLoader
 
 

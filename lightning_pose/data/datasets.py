@@ -87,9 +87,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 csv_file = options[0]
 
         csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
-        self.keypoint_names = get_keypoint_names(
-            csv_file=csv_file, header_rows=header_rows
-        )
+        self.keypoint_names = get_keypoint_names(csv_file=csv_file, header_rows=header_rows)
         self.image_names = list(csv_data.index)
         self.keypoints = torch.tensor(csv_data.to_numpy(), dtype=torch.float32)
         # convert to x,y coordinates
@@ -330,9 +328,7 @@ class HeatmapDataset(BaseTrackingDataset):
 
         """
         example_dict: BaseLabeledExampleDict = super().__getitem__(idx)
-        if len(self.imgaug_transform) == 1 and isinstance(
-            self.imgaug_transform[0], iaa.Resize
-        ):
+        if len(self.imgaug_transform) == 1 and isinstance(self.imgaug_transform[0], iaa.Resize):
             # we have a deterministic resizing augmentation; use precomputed heatmaps
             example_dict["heatmaps"] = self.label_heatmaps[idx]
         else:

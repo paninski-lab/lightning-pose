@@ -17,7 +17,7 @@ from lightning_pose.data.utils import (
 )
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.models import HeatmapTracker
-from lightning_pose.models.base import SemiSupervisedTrackerMixin, ALLOWED_BACKBONES
+from lightning_pose.models.base import ALLOWED_BACKBONES, SemiSupervisedTrackerMixin
 
 
 class HeatmapTrackerMHCRNN(HeatmapTracker):
@@ -42,17 +42,14 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
             num_keypoints: number of body parts
             loss_factory: object to orchestrate loss computation
             backbone: ResNet or EfficientNet variant to be used
-            downsample_factor: make heatmap smaller than original frames to
-                save memory; subpixel operations are performed for increased
-                precision
+            downsample_factor: make heatmap smaller than original frames to save memory; subpixel
+                operations are performed for increased precision
             pretrained: True to load pretrained imagenet weights
-            output_shape: hard-coded image size to avoid dynamic shape
-                computations
+            output_shape: hard-coded image size to avoid dynamic shape computations
             torch_seed: make weight initialization reproducible
             lr_scheduler: how to schedule learning rate
-                multisteplr
             lr_scheduler_params: params for specific learning rate schedulers
-                multisteplr: milestones, gamma
+                - multisteplr: milestones, gamma
 
         """
 

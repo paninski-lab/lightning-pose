@@ -10,14 +10,15 @@ import torch.nn.functional as F
 
 try:
     from segment_anything.modeling import ImageEncoderViT
-except:
+except ImportError:
     raise NotImplementedError(
-                "If you have pip installed lightning pose, there is no access to segment-anything"
-                "models due to dependency/installation issues. "
-                "For more information please contatct the package maintainers."
-            )
+        "If you have pip installed lightning pose, there is no access to segment-anything"
+        "models due to dependency/installation issues. "
+        "For more information please contatct the package maintainers."
+    )
 
-from typing import Tuple, Type, List
+from typing import List, Tuple, Type
+
 
 # This class and its supporting functions below lightly adapted from the ViTDet backbone available at: https://github.com/facebookresearch/detectron2/blob/main/detectron2/modeling/backbone/vit.py # noqa
 class ImageEncoderViT_FT(ImageEncoderViT):
@@ -63,37 +64,40 @@ class ImageEncoderViT_FT(ImageEncoderViT):
         self.img_size = img_size
         self.finetune_img_size = finetune_img_size
         self.patch_size = patch_size
+        self.pos_embed = None  # build this later
 
         ImageEncoderViT.__init__(
             self,
-            img_size = img_size,
-            patch_size = patch_size,
-            in_chans = in_chans,
-            embed_dim = embed_dim,
-            depth = depth,
-            num_heads = num_heads,
-            mlp_ratio = mlp_ratio,
-            out_chans = out_chans,
-            qkv_bias = qkv_bias,
-            norm_layer = norm_layer,
-            act_layer = act_layer,
-            use_abs_pos = use_abs_pos,
-            use_rel_pos = use_rel_pos,
-            rel_pos_zero_init = rel_pos_zero_init,
-            window_size = window_size,
-            global_attn_indexes = global_attn_indexes
+            img_size=img_size,
+            patch_size=patch_size,
+            in_chans=in_chans,
+            embed_dim=embed_dim,
+            depth=depth,
+            num_heads=num_heads,
+            mlp_ratio=mlp_ratio,
+            out_chans=out_chans,
+            qkv_bias=qkv_bias,
+            norm_layer=norm_layer,
+            act_layer=act_layer,
+            use_abs_pos=use_abs_pos,
+            use_rel_pos=use_rel_pos,
+            rel_pos_zero_init=rel_pos_zero_init,
+            window_size=window_size,
+            global_attn_indexes=global_attn_indexes,
         )
-
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.patch_embed(x)
         if self.pos_embed is not None:
             if self.img_size != self.finetune_img_size:
                 self.pos_embed = resample_abs_pos_embed_nhwc(
-                    posemb=self.pos_embed, 
-                    new_size=(self.finetune_img_size//self.patch_size, self.finetune_img_size//self.patch_size),
-                    verbose=True)
-                
+                    posemb=self.pos_embed,
+                    new_size=[
+                        self.finetune_img_size // self.patch_size,
+                        self.finetune_img_size // self.patch_size
+                    ],
+                )
+
             x = x + self.pos_embed
 
         for blk in self.blocks:
@@ -105,17 +109,21 @@ class ImageEncoderViT_FT(ImageEncoderViT):
 
 
 def resample_abs_pos_embed_nhwc(
-        posemb,
-        new_size: List[int],
-        interpolation: str = 'bicubic',
-        antialias: bool = True,
-        verbose: bool = False,
+    posemb,
+    new_size: List[int],
+    interpolation: str = 'bicubic',
+    antialias: bool = True,
 ):
     if new_size[0] == posemb.shape[-3] and new_size[1] == posemb.shape[-2]:
         return posemb
 
     # do the interpolation
-    posemb = posemb.reshape(1, posemb.shape[-3], posemb.shape[-2], posemb.shape[-1]).permute(0, 3, 1, 2)
+    posemb = posemb.reshape(
+        1,
+        posemb.shape[-3],
+        posemb.shape[-2],
+        posemb.shape[-1]
+    ).permute(0, 3, 1, 2)
     posemb = F.interpolate(posemb, size=new_size, mode=interpolation, antialias=antialias)
     posemb = posemb.permute(0, 2, 3, 1)
 
