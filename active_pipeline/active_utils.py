@@ -311,7 +311,7 @@ def select_frames_calculate(active_iter_cfg, data_cfg, used_vids, header_rows=[0
 
   header_rows=[0,1,2]
 
-  selected_frames_path = os.path.join(os.path.dirname(data_cfg.csv_file),"/selected_5_vids_frames.csv") #data_cfg.data_dir
+  selected_frames_path = os.path.join(os.path.dirname(data_cfg.csv_file),"selected_5_vids_frames.csv") #data_cfg.data_dir
   if method == "random":
     new_df.to_csv(selected_frames_path)
 
