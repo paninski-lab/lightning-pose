@@ -106,15 +106,13 @@ model:
   # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res
   # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
   backbone: resnet50_animal_ap10k
-  # prediction mode - "heatmap" | "regression" | "heatmap_mhcrnn"
+  # prediction mode: regression | heatmap | heatmap_mhcrnn (context)
   model_type: heatmap
   # which heatmap loss to use
   # "mse" | "kl" | "js"
   heatmap_loss_type: mse
   # tt expt name
   model_name: rebuttal23a
-  # do context (5 frames)
-  do_context: false
 
 dali:
   general:

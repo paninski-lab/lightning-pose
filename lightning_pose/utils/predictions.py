@@ -94,7 +94,7 @@ class PredictionHandler:
         if self.data_module:
             return self.data_module.dataset.do_context
         else:
-            return self.cfg.model.do_context
+            return self.cfg.model.model_type == "heatmap_mhcrnn"
 
     def unpack_preds(
         self,
@@ -360,7 +360,7 @@ def predict_single_video(
     # set up
     # ----------------------------------------------------------------------------------
     # initialize
-    model_type = "context" if cfg.model.do_context else "base"
+    model_type = "context" if cfg.model.model_type == "heatmap_mhcrnn" else "base"
     cfg.training.imgaug = "default"
     vid_pred_class = PrepareDALI(
         train_stage="predict",
@@ -475,7 +475,7 @@ def _predict_frames(
             if cfg.model.model_type == "heatmap":
                 # push batch through model
                 pred_keypoints, confidence, pred_heatmaps = model.predict_step(
-                    batch=batch, batch_idx=n, return_heatmaps=return_heatmaps
+                    batch_dict=batch, batch_idx=n, return_heatmaps=return_heatmaps
                 )
                 # send to numpy
                 pred_keypoints = pred_keypoints.detach().cpu().numpy()
@@ -485,7 +485,7 @@ def _predict_frames(
             elif cfg.model.model_type == "heatmap_mhcrnn":
                 # push batch through model
                 pred_keypoints, confidence, pred_heatmaps = model.predict_step(
-                    batch=batch, batch_idx=n, return_heatmaps=return_heatmaps
+                    batch_dict=batch, batch_idx=n, return_heatmaps=return_heatmaps
                 )
                 # send to numpy
                 pred_keypoints = pred_keypoints.detach().cpu().numpy()
@@ -495,7 +495,7 @@ def _predict_frames(
             else:
                 # push batch through model
                 pred_keypoints, confidence = model.predict_step(
-                    batch=batch, batch_idx=n
+                    batch_dict=batch, batch_idx=n
                 )
                 # send to numpy
                 pred_keypoints = pred_keypoints.detach().cpu().numpy()

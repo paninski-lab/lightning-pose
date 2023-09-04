@@ -6,11 +6,11 @@ from lightning_pose.utils.tests import run_model_test
 
 
 def test_supervised_heatmap_mhcrnn(
-    cfg_context, heatmap_data_module_context, video_dataloader, trainer, remove_logs
+    cfg, heatmap_data_module_context, video_dataloader, trainer, remove_logs,
 ):
     """Test the initialization and training of a supervised heatmap mhcrnn model."""
 
-    cfg_tmp = copy.deepcopy(cfg_context)
+    cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.model_type = "heatmap_mhcrnn"
     cfg_tmp.model.losses_to_use = []
 
@@ -24,7 +24,7 @@ def test_supervised_heatmap_mhcrnn(
 
 
 def test_semisupervised_heatmap_mhcrnn_pcasingleview(
-    cfg_context,
+    cfg,
     heatmap_data_module_combined_context,
     video_dataloader,
     trainer,
@@ -36,7 +36,7 @@ def test_semisupervised_heatmap_mhcrnn_pcasingleview(
 
     """
 
-    cfg_tmp = copy.deepcopy(cfg_context)
+    cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.model_type = "heatmap_mhcrnn"
     cfg_tmp.model.losses_to_use = ["pca_singleview"]
 
@@ -50,7 +50,7 @@ def test_semisupervised_heatmap_mhcrnn_pcasingleview(
 
 
 def test_semisupervised_heatmap_mhcrnn_pcasingleview_vit(
-    cfg_context,
+    cfg,
     heatmap_data_module_combined_context,
     video_dataloader,
     trainer,
@@ -62,7 +62,7 @@ def test_semisupervised_heatmap_mhcrnn_pcasingleview_vit(
 
     """
 
-    cfg_tmp = copy.deepcopy(cfg_context)
+    cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.backbone = "vit_b_sam"
     cfg_tmp.model.model_type = "heatmap_mhcrnn"
     cfg_tmp.model.losses_to_use = ["pca_singleview"]

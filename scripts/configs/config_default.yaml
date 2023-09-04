@@ -88,15 +88,13 @@ model:
   # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
   # vit_b_sam | vit_h_sam
   backbone: resnet50_animal_ap10k
-  # prediction mode: regression | heatmap | heatmap_mhcrnn
+  # prediction mode: regression | heatmap | heatmap_mhcrnn (context)
   model_type: heatmap
   # which heatmap loss to use
   # mse | kl | js
   heatmap_loss_type: mse
   # directory name for model saving
   model_name: test
-  # do context (5 frames)
-  do_context: false
 
 dali:
   general:

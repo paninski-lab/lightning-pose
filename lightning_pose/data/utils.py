@@ -16,17 +16,17 @@ class BaseLabeledExampleDict(TypedDict):
     """Return type when calling __getitem__() on BaseTrackingDataset."""
 
     images: Union[
-        TensorType["RGB":3, "image_height", "image_width"],
-        TensorType["frames", "RGB":3, "image_height", "image_width"],
+        TensorType["RGB":3, "image_height", "image_width", float],
+        TensorType["frames", "RGB":3, "image_height", "image_width", float],
     ]
-    keypoints: TensorType["num_targets"]
+    keypoints: TensorType["num_targets", float]
     idxs: int
 
 
 class HeatmapLabeledExampleDict(BaseLabeledExampleDict):
     """Return type when calling __getitem__() on HeatmapTrackingDataset."""
 
-    heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width"]
+    heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width", float]
 
 
 class BaseLabeledBatchDict(TypedDict):
@@ -51,9 +51,7 @@ class UnlabeledBatchDict(TypedDict):
 
     frames: Union[
         TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
-        TensorType[
-            "seq_len", "context":5, "RGB":3, "image_height", "image_width", float
-        ],
+        TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float],
     ]
     transforms: Union[
         TensorType["seq_len", "h":2, "w":3, float],
@@ -374,6 +372,7 @@ def generate_heatmaps(
         width: width of reshaped image (pixels, e.g., 128, 256, 512...)
         output_shape: dimensions of downsampled heatmap, (height, width)
         sigma: control spread of gaussian
+        uniform_heatmaps: output uniform heatmaps if missing ground truth label, rather than skip
 
     Returns:
         batch of 2D heatmaps

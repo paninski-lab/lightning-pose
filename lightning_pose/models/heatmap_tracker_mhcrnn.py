@@ -1,6 +1,6 @@
 """Models that produce heatmaps of keypoints from images."""
 
-from typing import Dict, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
 from kornia.geometry.subpix import spatial_softmax2d
@@ -34,7 +34,7 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
-        **kwargs,
+        **kwargs: Any,
     ):
         """Initialize a DLC-like model with resnet backbone.
 
@@ -59,8 +59,10 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         # for reproducible weight initialization
         torch.manual_seed(torch_seed)
 
+        # for backwards compatibility
         if "do_context" in kwargs.keys():
             del kwargs["do_context"]
+
         super().__init__(
             num_keypoints=num_keypoints,
             loss_factory=loss_factory,
@@ -98,7 +100,6 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         representations = torch.permute(representations, (4, 0, 1, 2, 3))
         heatmaps_crnn = self.crnn(representations)
         heatmaps_sf = self.upsampling_layers_sf(representations[2])  # index 2 == middle frame
-
         return heatmaps_crnn, heatmaps_sf
 
     def forward(
@@ -113,7 +114,7 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
     ]:
         """Forward pass through the network."""
 
-        # we get one representation for each desired output.
+        # one representation and two heatmaps for each desired output (context, non-context)
         representations = self.get_representations(images)
         heatmaps_crnn, heatmaps_sf = self.heatmaps_from_representations(representations)
 
@@ -141,7 +142,7 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
 
     def predict_step(
         self,
-        batch: Union[HeatmapLabeledBatchDict, UnlabeledBatchDict],
+        batch_dict: Union[HeatmapLabeledBatchDict, UnlabeledBatchDict],
         batch_idx: int,
         return_heatmaps: Optional[bool] = False,
     ) -> Union[
@@ -155,12 +156,12 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         > predictions = trainer.predict(model, data_loader)
 
         """
-        if "images" in batch.keys():  # can't do isinstance(o, c) on TypedDicts
+        if "images" in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
             # labeled image dataloaders
-            images = batch["images"]
+            images = batch_dict["images"]
         else:
             # unlabeled dali video dataloaders
-            images = batch["frames"]
+            images = batch_dict["frames"]
 
         # images -> heatmaps
         pred_heatmaps_crnn, pred_heatmaps_sf = self.forward(images)
@@ -211,7 +212,7 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
-        **kwargs,
+        **kwargs: Any,
     ):
         """
 
@@ -255,27 +256,27 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
         # self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
         self.total_unsupervised_importance = torch.tensor(1.0)
 
-    def get_loss_inputs_unlabeled(self, batch: UnlabeledBatchDict) -> Dict:
-        """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
+    def get_loss_inputs_unlabeled(self, batch_dict: UnlabeledBatchDict) -> Dict:
+        """Return predicted heatmaps and their softmaxes (estimated keypoints)"""
         # images -> heatmaps
-        pred_heatmaps_crnn, pred_heatmaps_sf = self.forward(batch["frames"])
+        pred_heatmaps_crnn, pred_heatmaps_sf = self.forward(batch_dict["frames"])
         # heatmaps -> keypoints
         pred_keypoints_crnn, confidence_crnn = self.run_subpixelmaxima(pred_heatmaps_crnn)
         pred_keypoints_sf, confidence_sf = self.run_subpixelmaxima(pred_heatmaps_sf)
 
         # undo augmentation if needed
-        if batch["transforms"].shape[-1] == 3:
+        if batch_dict["transforms"].shape[-1] == 3:
             # reshape to (seq_len, n_keypoints, 2)
             pred_kps = torch.reshape(pred_keypoints_crnn, (pred_keypoints_crnn.shape[0], -1, 2))
             # undo
-            pred_kps = undo_affine_transform(pred_kps, batch["transforms"])
+            pred_kps = undo_affine_transform(pred_kps, batch_dict["transforms"])
             # reshape to (seq_len, n_keypoints * 2)
             pred_keypoints_crnn = torch.reshape(pred_kps, (pred_kps.shape[0], -1))
 
             # reshape to (seq_len, n_keypoints, 2)
             pred_kps = torch.reshape(pred_keypoints_sf, (pred_keypoints_sf.shape[0], -1, 2))
             # undo
-            pred_kps = undo_affine_transform(pred_kps, batch["transforms"])
+            pred_kps = undo_affine_transform(pred_kps, batch_dict["transforms"])
             # reshape to (seq_len, n_keypoints * 2)
             pred_keypoints_sf = torch.reshape(pred_kps, (pred_kps.shape[0], -1))
 

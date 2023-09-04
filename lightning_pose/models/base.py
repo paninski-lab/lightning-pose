@@ -1,6 +1,6 @@
 """Base class for backbone that acts as a feature extractor."""
 
-from typing import Dict, Literal, Optional, Union
+from typing import Any, Dict, Literal, Optional, Union
 
 import torch
 from lightning.pytorch import LightningModule
@@ -81,7 +81,7 @@ class BaseFeatureExtractor(LightningModule):
         do_context: bool = False,
         image_size: int = 256,
         model_type: Literal["heatmap", "regression"] = "heatmap",
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """A CNN model that takes in images and generates features.
 
@@ -94,12 +94,13 @@ class BaseFeatureExtractor(LightningModule):
             pretrained: True to load weights pretrained on imagenet (torchvision models only)
             lr_scheduler: how to schedule learning rate
             lr_scheduler_params: params for specific learning rate schedulers
-            image_size: height/width of frames
+            do_context: include temporal context when processing each frame
+            image_size: height/width of frames, for ViT models only
             model_type: type of model
 
         """
         super().__init__()
-        print("\n Initializing a {} instance.".format(self._get_name()))
+        print(f"\n Initializing a {self._get_name()} instance.")
 
         self.backbone_arch = backbone
 
@@ -137,12 +138,11 @@ class BaseFeatureExtractor(LightningModule):
 
         Args:
             images: a batch of images
-            do_context: whether or not to use extra frames of context
 
         Returns:
-            a representation of the images; features differ as a function of resnet
-            version. Representation height and width differ as a function of image
-            dimensions, and are not necessarily equal.
+            a representation of the images; features differ as a function of resnet version.
+            Representation height and width differ as a function of image dimensions, and are not
+            necessarily equal.
 
         """
         if self.do_context:
@@ -184,9 +184,7 @@ class BaseFeatureExtractor(LightningModule):
                 )
                 # get rid of first and last two frames
                 if tiled_representations.shape[0] < 5:
-                    raise RuntimeError(
-                        "Not enough valid frames to make a context representation."
-                    )
+                    raise RuntimeError("Not enough valid frames to make a context representation.")
                 outputs = tiled_representations[2:-2, :, :, :, :]
 
             # for both types of batches, we reshape in the same way
@@ -305,28 +303,28 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
 
     def training_step(
         self,
-        train_batch: Union[BaseLabeledBatchDict, HeatmapLabeledBatchDict],
+        batch_dict: Union[BaseLabeledBatchDict, HeatmapLabeledBatchDict],
         batch_idx: int,
     ) -> Dict[str, TensorType[(), float]]:
         """Base training step, a wrapper around the `evaluate_labeled` method."""
-        loss = self.evaluate_labeled(train_batch, "train")
+        loss = self.evaluate_labeled(batch_dict, "train")
         return {"loss": loss}
 
     def validation_step(
         self,
-        val_batch: Union[BaseLabeledBatchDict, HeatmapLabeledBatchDict],
+        batch_dict: Union[BaseLabeledBatchDict, HeatmapLabeledBatchDict],
         batch_idx: int,
     ) -> None:
         """Base validation step, a wrapper around the `evaluate_labeled` method."""
-        self.evaluate_labeled(val_batch, "val")
+        self.evaluate_labeled(batch_dict, "val")
 
     def test_step(
         self,
-        test_batch: Union[BaseLabeledBatchDict, HeatmapLabeledBatchDict],
+        batch_dict: Union[BaseLabeledBatchDict, HeatmapLabeledBatchDict],
         batch_idx: int,
     ) -> None:
         """Base test step, a wrapper around the `evaluate_labeled` method."""
-        self.evaluate_labeled(test_batch, "test")
+        self.evaluate_labeled(batch_dict, "test")
 
     def get_parameters(self):
 
@@ -338,7 +336,6 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
                 # {"params": self.backbone.parameters()},
                 # important this is the 0th element, for BackboneFinetuning callback
                 {"params": self.upsampling_layers.parameters()},
-                # {"params": self.unnormalized_weights},
             ]
         else:
             # standard adam optimizer
@@ -351,20 +348,20 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
 class SemiSupervisedTrackerMixin(object):
     """Mixin class providing training step function for semi-supervised models."""
 
-    def get_loss_inputs_unlabeled(self, batch: UnlabeledBatchDict) -> dict:
+    def get_loss_inputs_unlabeled(self, batch_dict: UnlabeledBatchDict) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         raise NotImplementedError
 
     def evaluate_unlabeled(
         self,
-        batch: UnlabeledBatchDict,
+        batch_dict: UnlabeledBatchDict,
         stage: Optional[Literal["train", "val", "test"]] = None,
         anneal_weight: Union[float, torch.Tensor] = 1.0,
     ) -> TensorType[(), float]:
         """Compute and log the losses on a batch of unlabeled data (frames only)."""
 
         # forward pass: collect predicted heatmaps and keypoints
-        data_dict = self.get_loss_inputs_unlabeled(batch=batch)
+        data_dict = self.get_loss_inputs_unlabeled(batch_dict=batch_dict)
 
         # compute loss on unlabeled data
         loss, log_list = self.loss_factory_unsup(
@@ -382,7 +379,7 @@ class SemiSupervisedTrackerMixin(object):
 
     def training_step(
         self,
-        train_batch: Union[SemiSupervisedBatchDict, SemiSupervisedHeatmapBatchDict],
+        batch_dict: Union[SemiSupervisedBatchDict, SemiSupervisedHeatmapBatchDict],
         batch_idx: int,
     ) -> Dict[str, TensorType[(), float]]:
         """Training step computes and logs both supervised and unsupervised losses."""
@@ -401,7 +398,7 @@ class SemiSupervisedTrackerMixin(object):
         # - keypoints
         # - heatmaps
         loss_super = self.evaluate_labeled(
-            batch_dict=train_batch["labeled"],
+            batch_dict=batch_dict["labeled"],
             stage="train",
         )
 
@@ -409,7 +406,7 @@ class SemiSupervisedTrackerMixin(object):
         # train_batch["unlabeled"] contains:
         # - images
         loss_unsuper = self.evaluate_unlabeled(
-            batch=train_batch["unlabeled"],
+            batch_dict=batch_dict["unlabeled"],
             stage="train",
             anneal_weight=self.total_unsupervised_importance,
         )
@@ -430,7 +427,6 @@ class SemiSupervisedTrackerMixin(object):
                 # {"params": self.backbone.parameters()},
                 # important this is the 0th element, for BackboneFinetuning callback
                 {"params": self.upsampling_layers.parameters()},
-                {"params": self.unnormalized_weights},
             ]
 
         else:

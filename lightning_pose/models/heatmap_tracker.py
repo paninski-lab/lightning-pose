@@ -1,6 +1,6 @@
 """Models that produce heatmaps of keypoints from images."""
 
-from typing import Dict, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
 from kornia.filters import filter2d
@@ -38,7 +38,7 @@ def upsample(
     _, _, height, width = inputs.shape
     # align_corners=False is important!! otherwise the offsets below don't hold
     inputs_up = nn.functional.interpolate(
-        inputs, size=(height * 2, width * 2), mode="bicubic", align_corners=False
+        inputs, size=(height * 2, width * 2), mode="bicubic", align_corners=False,
     )
     inputs_up = filter2d(inputs_up, kernel, border_type="constant")
     return inputs_up
@@ -58,8 +58,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
-        do_context: bool = False,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize a DLC-like model with resnet backbone.
 
@@ -70,14 +69,11 @@ class HeatmapTracker(BaseSupervisedTracker):
             downsample_factor: make heatmap smaller than original frames to save memory; subpixel
                 operations are performed for increased precision
             pretrained: True to load pretrained imagenet weights
-            output_shape: hard-coded image size to avoid dynamic shape
-                computations
+            output_shape: hard-coded image size to avoid dynamic shape computations
             torch_seed: make weight initialization reproducible
             lr_scheduler: how to schedule learning rate
-                multisteplr
             lr_scheduler_params: params for specific learning rate schedulers
                 multisteplr: milestones, gamma
-            do_context: use temporal context frames to improve predictions
 
         """
 
@@ -89,7 +85,6 @@ class HeatmapTracker(BaseSupervisedTracker):
             pretrained=pretrained,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
-            do_context=do_context,
             **kwargs,
         )
         self.num_keypoints = num_keypoints
@@ -103,14 +98,6 @@ class HeatmapTracker(BaseSupervisedTracker):
         # TODO: temp=1000 works for 64x64 heatmaps, need to generalize to other shapes
         self.temperature = torch.tensor(1000.0, device=self.device)  # soft argmax temp
         self.torch_seed = torch_seed
-        self.do_context = do_context
-
-        self.unnormalized_weights = nn.parameter.Parameter(
-            torch.Tensor([[0.2, 0.2, 0.2, 0.2, 0.2]]), requires_grad=False
-        )
-        self.representation_fc = lambda x: x @ torch.transpose(
-            nn.functional.softmax(self.unnormalized_weights, dim=1), 0, 1
-        )
 
         # use this to log auxiliary information: pixel_error on labeled data
         self.rmse_loss = RegressionRMSELoss()
@@ -265,42 +252,18 @@ class HeatmapTracker(BaseSupervisedTracker):
 
     def heatmaps_from_representations(
         self,
-        representations: Union[
-            TensorType["batch", "features", "rep_height", "rep_width"],
-            TensorType["batch", "features", "rep_height", "rep_width", "frames"],
-        ],
+        representations: TensorType["batch", "features", "rep_height", "rep_width"],
     ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
-        """Handle context frames then upsample to get final heatmaps."""
-
-        # handle context frames first
-        if self.do_context:
-            # push through a linear layer to get the final representation
-            # input shape (batch, features, rep_height, rep_width, frames)
-            representations: TensorType[
-                "batch", "features", "rep_height", "rep_width", "frames"
-            ] = self.representation_fc(representations)
-            # final squeeze
-            representations: TensorType[
-                "batch", "features", "rep_height", "rep_width"
-            ] = torch.squeeze(representations, 4)
-
-        # upsample representations to get heatmaps
+        """Upsample representations to get final heatmaps."""
         heatmaps = self.upsampling_layers(representations)
-
         return heatmaps
 
     def forward(
         self,
-        images: Union[
-            TensorType["batch", "channels":3, "image_height", "image_width"],
-            TensorType["batch", "frames", "channels":3, "image_height", "image_width"]
-        ],
+        images: TensorType["batch", "frames", "channels":3, "image_height", "image_width"],
     ) -> TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Forward pass through the network."""
         # we get one representation for each desired output.
-        # in the case of unsupervised sequences + context, we have outputs for all images but the
-        # first two and last two.
-        # this is all handled internally by get_representations()
         representations = self.get_representations(images)
         heatmaps = self.heatmaps_from_representations(representations)
         # softmax temp stays 1 here; to modify for model predictions, see constructor
@@ -322,7 +285,7 @@ class HeatmapTracker(BaseSupervisedTracker):
 
     def predict_step(
         self,
-        batch: Union[HeatmapLabeledBatchDict, UnlabeledBatchDict],
+        batch_dict: Union[HeatmapLabeledBatchDict, UnlabeledBatchDict],
         batch_idx: int,
         return_heatmaps: Optional[bool] = False,
     ) -> Union[
@@ -336,12 +299,12 @@ class HeatmapTracker(BaseSupervisedTracker):
         > predictions = trainer.predict(model, data_loader)
 
         """
-        if "images" in batch.keys():  # can't do isinstance(o, c) on TypedDicts
+        if "images" in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
             # labeled image dataloaders
-            images = batch["images"]
+            images = batch_dict["images"]
         else:
             # unlabeled dali video dataloaders
-            images = batch["frames"]
+            images = batch_dict["frames"]
         # images -> heatmaps
         predicted_heatmaps = self.forward(images)
         # heatmaps -> keypoints
@@ -369,8 +332,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
-        do_context: bool = False,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """
 
@@ -391,7 +353,6 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
                 multisteplr
             lr_scheduler_params: params for specific learning rate schedulers
                 multisteplr: milestones, gamma
-            do_context: use temporal context frames to improve predictions
 
         """
         super().__init__(
@@ -404,7 +365,6 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             torch_seed=torch_seed,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
-            do_context=do_context,
             **kwargs,
         )
         if loss_factory_unsupervised:
@@ -416,22 +376,22 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         # self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
         self.total_unsupervised_importance = torch.tensor(1.0)
 
-    def get_loss_inputs_unlabeled(self, batch: UnlabeledBatchDict) -> Dict:
+    def get_loss_inputs_unlabeled(self, batch_dict: UnlabeledBatchDict) -> Dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
-        predicted_heatmaps = self.forward(batch["frames"])
+        predicted_heatmaps = self.forward(batch_dict["frames"])
         # heatmaps -> keypoints
         predicted_keypoints_augmented, confidence = self.run_subpixelmaxima(predicted_heatmaps)
 
         # undo augmentation if needed
-        if batch["transforms"].shape[-1] == 3:
+        if batch_dict["transforms"].shape[-1] == 3:
             # reshape to (seq_len, n_keypoints, 2)
             pred_kps = torch.reshape(
                 predicted_keypoints_augmented,
                 (predicted_keypoints_augmented.shape[0], -1, 2)
             )
             # undo
-            pred_kps = undo_affine_transform(pred_kps, batch["transforms"])
+            pred_kps = undo_affine_transform(pred_kps, batch_dict["transforms"])
             # reshape to (seq_len, n_keypoints * 2)
             predicted_keypoints = torch.reshape(pred_kps, (pred_kps.shape[0], -1))
         else:
