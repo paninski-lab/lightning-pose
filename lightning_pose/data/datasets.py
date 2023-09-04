@@ -1,5 +1,10 @@
 """Dataset objects store images, labels, and functions for manipulation."""
 
+# TODO : remove the following
+import sys
+sys.path.append("/home/farzad/projects/lightning-pose")
+import matplotlib.pyplot as plt
+
 import os
 from typing import Callable, List, Literal, Optional
 
@@ -335,3 +340,156 @@ class HeatmapDataset(BaseTrackingDataset):
             # we have a random augmentation; need to recompute heatmaps
             example_dict["heatmaps"] = self.compute_heatmap(example_dict)
         return example_dict
+
+# class MultiviewHeatmapDataset(torch.utils.data.Dataset):
+class MultiviewHeatmapDataset(HeatmapDataset):    
+    """Heatmap dataset that contains the images and keypoints in 2D arrays."""
+
+    def __init__(
+        self,
+        root_directory: str,
+        csv_paths: List[str],
+        header_rows: Optional[List[int]] = [0, 1, 2],
+        downsample_factor: Literal[1, 2, 3] = 2,
+        uniform_heatmaps: bool = False,
+        imgaug_transform: Optional[Callable] = None
+    ) -> None:
+        """Initialize the Heatmap Dataset.
+
+        Args:
+            root_directory: path to data directory
+            csv_path: path to CSV (within root_directory). CSV file
+                should be in the form
+                (image_path, bodypart_1_x, bodypart_1_y, ..., bodypart_n_y)
+                Note: image_path is relative to the given root_directory
+            header_rows: which rows in the csv are header rows
+            imgaug_transform: imgaug transform pipeline to apply to images
+        """
+        self.root_directory = root_directory
+        self.csv_paths = csv_paths
+        self.header_rows = header_rows
+        self.imgaug_transform = imgaug_transform
+        self.num_views = len(csv_paths)
+        self.downsample_factor = downsample_factor
+        self.output_sigma = 1.25  # should be sigma/2 ^downsample factor
+        self.uniform_heatmaps = uniform_heatmaps
+
+        csv_data={}
+        self.image_names = {}
+        self.keypoints = {}
+        csv_row_sizes =  []
+        for csv_path in self.csv_paths:
+            if os.path.isfile(csv_path):
+                csv_file = csv_path
+            else:
+                csv_file = os.path.join(root_directory, csv_path)
+            if not os.path.exists(csv_file):
+                # step 2: assume csv_path is absolute
+                csv_file = csv_path
+                if not os.path.exists(csv_file):
+                    # step 3: assume dlc directory structure
+                    import glob
+
+                    glob_path = os.path.join(
+                        root_directory,
+                        "training-data",
+                        "iteration-0",
+                        "*",  # wildcard handles proj-specific dlc naming conventions
+                        csv_path,
+                    )
+                    options = glob.glob(glob_path)
+                    if not options or not os.path.exists(options[0]):
+                        raise FileNotFoundError("Could not find csv file!")
+                    csv_file = options[0]
+            view = csv_path.split("/")[-1].split(".")[0]
+            csv_data[view] = pd.read_csv(csv_file, header=header_rows, index_col=0)
+            self.keypoint_names = get_keypoint_names(csv_file=csv_file, header_rows=header_rows)
+            self.image_names[view] = list(csv_data[view].index)
+            self.keypoints[view] = torch.tensor(csv_data[view].to_numpy().astype(np.float32), dtype=torch.float32)
+            # self.keypoints[view] = csv_data[view].to_numpy()
+            # convert to x,y coordinates
+            self.keypoints[view] = self.keypoints[view].reshape(self.keypoints[view].shape[0], -1, 2)
+            csv_row_sizes.append(len(self.image_names[view]))
+        self.data_lenght = len(self.image_names[view])
+        
+        if len(set(csv_row_sizes)) != 1:
+            raise LookupError("number of rows in the CSV files do not match!")        
+
+        # send image to tensor and normalize
+        pytorch_transform_list = [
+            transforms.ToTensor(),
+            transforms.Normalize(mean=_IMAGENET_MEAN, std=_IMAGENET_STD),
+        ]
+        self.pytorch_transform = transforms.Compose(pytorch_transform_list)
+
+        # keypoints has been already transformed above
+        self.num_targets = self.keypoints[view].shape[1] * 2 * len(self.keypoints)  # the keypoint names * x and y * number of views (cameras)
+        self.num_keypoints = self.keypoints[view].shape[1]*self.num_views
+        self.height_ = 0
+        self.width_ = 0
+
+    @property
+    def height(self) -> int:
+        # assume resizing transformation is the last imgaug one
+        return self.height_ 
+    
+    @property
+    def width(self) -> int:
+        # assume resizing transformation is the last imgaug one
+        return self.width_
+
+    def __len__(self) -> int:
+        return self.data_lenght
+
+    def __getitem__(self, idx: int) -> BaseLabeledExampleDict:
+        images = []
+        keypoints_on_images = []
+        for view_num, (view, img_name) in enumerate(self.image_names.items()):
+            # read image from file and apply transformations (if any)
+            file_name = os.path.join(self.root_directory, img_name[idx])
+            # if 1 color channel, change to 3.
+            images.append(Image.open(file_name).convert("RGB"))
+            keypoints_on_images.append(self.keypoints[view][idx])
+            width, height = images[-1].size
+            keypoints_on_images[-1][:, 1] = keypoints_on_images[-1][:, 1] + view_num * height # TODO: book keeping
+        keypoints_on_image = torch.cat(keypoints_on_images, 0)
+        image = np.concatenate(images, axis=0)
+        # print(image.shape)
+        self.height_, self.width_ = image.shape[0], image.shape[1]
+        # plt.imshow(image)
+        # plt.plot(keypoints_on_image[:, 0], keypoints_on_image[:, 1], 'b*')
+        # plt.savefig("img.png")
+        if self.imgaug_transform is not None:
+            transformed_images, transformed_keypoints = self.imgaug_transform(
+                images=np.expand_dims(image, axis=0),
+                keypoints=np.expand_dims(keypoints_on_image, axis=0),
+            )  # expands add batch dim for imgaug
+            # get rid of the batch dim
+            transformed_images = transformed_images[0]
+            transformed_keypoints = transformed_keypoints[0].reshape(-1)
+        else:
+            transformed_images = np.expand_dims(image, axis=0)
+            transformed_keypoints = np.expand_dims(keypoints_on_image, axis=0)
+            # print(transformed_images.shape, transformed_keypoints.shape)
+
+        transformed_images = self.pytorch_transform(image)
+
+        # assert transformed_keypoints.shape == (self.num_targets,)
+
+        example_dict = BaseLabeledExampleDict(
+                images=transformed_images,  # shape (3, img_height, img_width) or (5, 3, H, W)
+                # keypoints=torch.from_numpy(keypoints_on_image),  # shape (n_targets,)
+                keypoints=keypoints_on_image,  # shape (n_targets,)
+                idxs=idx,
+            )
+        
+            # we have a random augmentation; need to recompute heatmaps
+        example_dict["heatmaps"] = self.compute_heatmap(example_dict)
+        return example_dict
+        
+
+if __name__ == "__main__":
+    dataset = MultiviewHeatmapDataset(root_directory="/mnt/scratch2/farzad/7m/data", 
+                                      csv_paths=["1.csv", "2.csv", "3.csv", "4.csv", "5.csv", "6.csv"])
+    print("dataset length: ", len(dataset))
+    dataset[2]

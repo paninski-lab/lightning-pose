@@ -1,3 +1,5 @@
+multiview: True
+
 data:
   # dimensions of the raw training images. your computer will tell you WIDTH X HEIGHT
   image_orig_dims:
@@ -10,9 +12,22 @@ data:
   # ABSOLUTE path to data directory. the below is just a toy example for running Getting Started scripts
   data_dir: /mnt/scratch2/farzad/7m
   # ABSOLUTE path to unlabeled videos' directory. the below is just a toy example for running Getting Started scripts
-  video_dir: cam
+  video_dir: videos
   # location of labels; for example script, this should be relative to `data_dir`
-  csv_file: [df_img_s1_c1_samples_150.csv, ]
+  csv_file:
+     - 1.csv
+     - 2.csv
+     - 3.csv
+     - 4.csv
+     - 5.csv
+     - 6.csv
+  view_names: 
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
   # downsample heatmaps: 2 | 3
   downsample_factor: 2
   # total number of keypoints
@@ -56,7 +71,7 @@ training:
   # default: resizing only
   # dlc: imgaug pipeline implemented in DLC 2.0 package
   # dlc-top-down- dlc augmentations plus vertical and horizontal flips
-  imgaug: dlc
+  imgaug: default
   # batch size of labeled data during training
   train_batch_size: 16
   # batch size of labeled data during validation

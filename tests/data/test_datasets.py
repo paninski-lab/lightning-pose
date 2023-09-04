@@ -80,3 +80,8 @@ def test_heatmap_dataset_context(cfg, heatmap_dataset_context):
 def test_equal_return_sizes(base_dataset, heatmap_dataset):
     # can only assert the batches are the same if not using imgaug pipeline
     assert base_dataset[0]["images"].shape == heatmap_dataset[0]["images"].shape
+
+# def test_Multiview_Heatmap_Dataset():
+#         dataset = MultiviewHeatmapDataset(root_directory="/mnt/scratch2/farzad/7m/data", 
+#                                       csv_paths=["1.csv", "2.csv", "3.csv", "4.csv", "5.csv", "6.csv"])
+    

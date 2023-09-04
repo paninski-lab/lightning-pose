@@ -1,4 +1,4 @@
-import os, glob, sys
+import os, glob, sys, shutil
 
 import scipy as scp
 from scipy.io import loadmat
@@ -9,6 +9,8 @@ from tqdm import trange, tqdm
 from copy import deepcopy
 import numpy as np
 import cv2
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
 
 """    7M dataset to lightning-pose:
 Dataset posted on 2021-02-08, 21:00 authored by Jesse D. Marshall, Diego Aldarondo, William Wang, Bence P. Ölveczky, Timothy Dunn
@@ -77,13 +79,14 @@ def d7M(path = path_glob):
     print("converting 3D coordinates into 2d space planar camera!")
     # load all motion files so that it would run faster
     positions = trcking_cord_to_lightning_pose(lookup_table_motion_files)
+    # print(positions)
 
     df.to_excel(os.path.join(path, "df2.xlsx"))
     
     # print(camera_number)
     return positions, df, bodyparts
 
-def to_csv(positions, bodyparts, select_camera=[1, 2, 3, 4, 5, 6], select_subject=1, samples=500, path=path_glob):
+def to_csv(positions, bodyparts, select_camera=[1, 2, 3, 4, 5, 6], select_subject=1, select_day=1, samples=500, path=path_glob):
     bodyparts.sort()
     bodyparts_ = bodyparts * 2
     bodyparts_.sort()
@@ -98,56 +101,80 @@ def to_csv(positions, bodyparts, select_camera=[1, 2, 3, 4, 5, 6], select_subjec
             continue
         if subject == select_subject:
             for day, cameras in days.items():
-                for camera, data in cameras.items():
-                    camera = int(camera.replace("Camera", ""))
-                    for camera in select_camera:
-                        counter = 0
-                        data["frame"] = data["frame"].reshape(-1)
-                        pbar = tqdm(enumerate(data["frame"][sample_indx]))
-                        for _, frame in pbar:
-                            # if np.random.rand() < skip_prob:
-                            #     continue
-                            try:
-                                image_path_relative = os.path.join("labeled-data",f"{subject}_{day}_{camera}_{frame}.png")
-                                # image_path = os.path.join(path, image_path_relative)
-                                # if not os.path.exists(image_path):
-                                #     raise FileExistsError()
-                                row_buf = [image_path_relative]
-                                frame_indx = np.argwhere(data["frame"] == frame)[0]
-                                for body_part in bodyparts:
-                                    row_buf.append(data[body_part][frame_indx, 0])
-                                    row_buf.append(data[body_part][frame_indx, 1])
-                                df_imgs[camera].loc[counter] = row_buf
-                                counter += 1
-                            except FileExistsError:
-                                # print("Does not exist: ", image_path)
-                                continue
+                if select_day == day:                    
+                    for camera, data in cameras.items():
+                        camera = int(camera.replace("Camera", ""))
+                        if camera in select_camera:
+                            counter = 0
+                            data["frame"] = data["frame"].reshape(-1)
+                            pbar = tqdm(enumerate(data["frame"][sample_indx]))
+                            for _, frame in pbar:
+                                # if np.random.rand() < skip_prob:
+                                #     continue
+                                try:
+                                    img_name = f"{subject}_{day}_{camera}_{frame}.png"
+                                    # image_path_relative = os.path.join("labeled-data", img_name)
+                                    # image_path = os.path.join(path, image_path_relative)
+                                    # if not os.path.exists(image_path):
+                                    #     raise FileExistsError()
+                                    row_buf = [img_name]
+                                    frame_indx = np.argwhere(data["frame"] == frame)[0]
+                                    for body_part in bodyparts:
+                                        row_buf.append(data[body_part][frame_indx, 0][0])
+                                        row_buf.append(data[body_part][frame_indx, 1][0])
+                                    df_imgs[camera].loc[counter] = deepcopy(row_buf)
+                                    counter += 1
+                                except FileExistsError:
+                                    # print("Does not exist: ", image_path)
+                                    continue
+
     # for camera in select_camera:
     #     df_imgs[camera].to_csv(f"/home/farzad/projects/{camera}.csv")
 
+    # for camera in select_camera:
+    #     for indx, frame_name in enumerate(df_imgs[camera]["scorer"]):
+    #         frame_path_dst = os.path.join(path, "labeled-data", frame_name)
+    #         plt.imshow(mpimg.imread(frame_path_dst))
+    #         row_buf = df_imgs[camera].iloc[indx]
+    #         for i in range(20):
+    #             plt.plot(row_buf[2*i+1], row_buf[2*i+2], 'b*')
+    #         plt.savefig("img.png")
+    #         plt.close()
+    #         input()
+
+
     # remove duplicate files 
-    print("remove duplicate files..")
+
+    print("files exist? ..")
     existance_mtx = np.zeros((len(select_camera), len(df_imgs[select_camera[0]])))
     for camera_index, camera in enumerate(select_camera): 
-        print(camera)  
+        # print(camera)
         for frame_indx, image_path_relative in tqdm(enumerate(df_imgs[camera]["scorer"])):
-            # print(image_path_relative)
-            if not os.path.exists(os.path.join(path, image_path_relative)):
+            if not os.path.exists(os.path.join(path, os.path.join("labeled-data", image_path_relative))):
                 existance_mtx[camera_index, frame_indx] = 1
-
 
     # sample_indx = np.random.randint(low=0, high=len(df_imgs[select_camera[0]]), size=samples)
     print("saving ...")
     indices = np.argwhere(existance_mtx.sum(axis=0)==0).reshape(-1)
-    # print(existance_mtx)
-    # print(indices.shape)
+
+    data_folder = "data"
+    for camera in select_camera:
+        os.makedirs(os.path.join(path, data_folder, "labeled-data", str(camera)), exist_ok=True)    
     for camera in select_camera:
         # df_imgs[camera] = df_imgs[camera][sample_indx]
-        df_buf = df_imgs[camera].iloc[indices]
+        # df_buf = deepcopy(df_imgs[camera].iloc[indices])
+        for indx, frame_name in enumerate(df_imgs[camera].iloc[indices]["scorer"]):
+            frame_path = os.path.join(path, "labeled-data", frame_name)
+            frame_path_dst = os.path.join(path, f"{data_folder}/labeled-data/{camera}/{frame_name}")
+            shutil.copyfile(os.path.join(path, frame_path), frame_path_dst)
+
+        df_buf = deepcopy(df_imgs[camera].iloc[indices])
+        df_buf["scorer"] = f"labeled-data/{camera}/" + df_buf["scorer"]
         df_buf.iloc[0] = ["bodyparts", *bodyparts_]
         df_buf.iloc[1] = ["coords", *["x", "y"]*len(bodyparts)]
-        csv_path = os.path.join(path, f"csvs/df_img_s{select_subject}_c{camera}_samples_{samples}.csv")
+        csv_path = os.path.join(path, data_folder, f"{camera}.csv")
         print(csv_path)
+        df_buf.replace(to_replace='[nan]', value=np.nan, inplace=True)
         df_buf.to_csv(csv_path, index=False)
     return df_imgs
 
@@ -308,5 +335,5 @@ if __name__ == "__main__":
     # vid_gray_batch(df)
     # vid_gray("/mnt/scratch2/farzad/7m/videos/s1-d1-camera1-56000.mp4", "/mnt/scratch2/farzad/7m/cam", color="rgb")
     # extract_img_batch(df, output_directory="/mnt/scratch2/farzad/7m")    
-    df_imgs = to_csv(positions, bodyparts, select_camera=[1,2,3,4,5,6], select_subject=1, samples=150, path=path_glob)
+    df_imgs = to_csv(positions, bodyparts, select_camera=[1,2,3,4,5,6], select_subject=1, samples=200, path=path_glob)
 
