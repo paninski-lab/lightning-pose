@@ -26,9 +26,7 @@ class AnnealWeight(Callback):
         # pl_module.register_buffer(self.attr_name, torch.tensor(self.init_val))
         setattr(pl_module, self.attr_name, torch.tensor(self.init_val))
 
-    def on_train_epoch_start(
-        self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"
-    ) -> None:
+    def on_train_epoch_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
         if pl_module.current_epoch <= self.freeze_until_epoch:
             pass
         else:
