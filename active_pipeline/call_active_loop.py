@@ -47,6 +47,11 @@ def call_active_all(active_cfg):
           labeled_df.to_csv(ref_data_path)
           labeled_df.to_csv(true_data_path)
           new_df.to_csv(exp_cfg.data.csv_file)
+          first100_path = os.path.join(os.path.dirname(exp_cfg.data.csv_file),"/new_100.csv")
+          if active_cfg[iteration_key_current].method == "random":
+            new_df.to_csv(first100_path)
+          else:
+            new_df = pd.read_csv(first100_path, header = [0,1,2], index_col=0)
 
         if len(active_cfg[iteration_key_current].output_prev_run) == 0:
           # if model is provided, train a model using the config file:
