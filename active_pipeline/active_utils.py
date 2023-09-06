@@ -274,7 +274,7 @@ def subsample_frames_from_df(labels_df, num_vids ,train_frames, train_prob, rng_
       while n_frames < int(n_total_frames):
           for vids in vids_list:
 
-            good_idxs = labels_df.index.str.contains('|'.join(vids)) # find all frames in this video and get their indexes
+            good_idxs = labels_df.index.str.contains(vids) # find all frames in this video and get their indexes
             new_df = labels_df[good_idxs] 
             selected_indices = np.unique(random.sample(range(len(new_df)), int(n_total_frames/num_vids))) # random sample n frames
             new_df = new_df.iloc[selected_indices] 
@@ -288,7 +288,7 @@ def subsample_frames_from_df(labels_df, num_vids ,train_frames, train_prob, rng_
          #used_vids, vids_list = get_vids(labels_df,num_vids, rng_seed, used_vids)
 #>>>>>>> 5ef8f734078cb592d366984231676a1cca5924d5
          for vids in vids_list:
-            good_idxs = labels_df.index.str.contains('|'.join(vids))
+            good_idxs = labels_df.index.str.contains(vids)
             new_df = labels_df[good_idxs] # all frames in this video are selected
             new_df_list.append(new_df)
     new_df=pd.concat(new_df_list)
