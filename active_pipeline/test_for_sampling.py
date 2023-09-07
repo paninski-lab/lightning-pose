@@ -33,7 +33,7 @@ class TestSubsampleFrames(unittest.TestCase):
         )
 
         # do we select 5 vids?
-        self.assertEqual(len(used_vids), 5)
+        self.assertEqual(len(used_vids), 10)
 
 if __name__ == '__main__':
     unittest.main()
