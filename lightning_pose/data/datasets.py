@@ -65,7 +65,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         self.header_rows = header_rows
         self.imgaug_transform = imgaug_transform
         self.do_context = do_context
-
+        
         # load csv data
         # step 1
         if os.path.isfile(csv_path):
@@ -109,6 +109,8 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         self.num_targets = self.keypoints.shape[1] * 2
         self.num_keypoints = self.keypoints.shape[1]
 
+        self.data_lenght = len(self.image_names)
+
     @property
     def height(self) -> int:
         # assume resizing transformation is the last imgaug one
@@ -120,7 +122,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         return self.imgaug_transform[-1].get_parameters()[0][1].value
 
     def __len__(self) -> int:
-        return len(self.image_names)
+        return self.data_lenght
 
     def __getitem__(self, idx: int) -> BaseLabeledExampleDict:
         img_name = self.image_names[idx]
@@ -305,7 +307,6 @@ class HeatmapDataset(BaseTrackingDataset):
             sigma=self.output_sigma,
             uniform_heatmaps=self.uniform_heatmaps,
         )
-
         return y_heatmap[0]
 
     def compute_heatmaps(self):
@@ -317,9 +318,9 @@ class HeatmapDataset(BaseTrackingDataset):
 
         """
         label_heatmaps = torch.empty(
-            size=(len(self.image_names), self.num_keypoints, *self.output_shape)
+            size=(self.data_lenght, self.num_keypoints, *self.output_shape)
         )
-        for idx in range(len(self.image_names)):
+        for idx in range(self.data_lenght):
             example_dict: BaseLabeledExampleDict = super().__getitem__(idx)
             label_heatmaps[idx] = self.compute_heatmap(example_dict)
 
@@ -338,12 +339,12 @@ class HeatmapDataset(BaseTrackingDataset):
             example_dict["heatmaps"] = self.label_heatmaps[idx]
         else:
             # we have a random augmentation; need to recompute heatmaps
-            example_dict["heatmaps"] = self.compute_heatmap(example_dict)
+            example_dict["heatmaps"] = self.compute_heatmap(example_dict)   
         return example_dict
 
 # class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 class MultiviewHeatmapDataset(HeatmapDataset):    
-    """Heatmap dataset that contains the images and keypoints in 2D arrays."""
+    """Heatmap dataset that contains the images and keypoints in 2D arrays from all the cameras."""
 
     def __init__(
         self,
@@ -352,6 +353,7 @@ class MultiviewHeatmapDataset(HeatmapDataset):
         header_rows: Optional[List[int]] = [0, 1, 2],
         downsample_factor: Literal[1, 2, 3] = 2,
         uniform_heatmaps: bool = False,
+        do_context: bool = False,
         imgaug_transform: Optional[Callable] = None
     ) -> None:
         """Initialize the Heatmap Dataset.
@@ -364,6 +366,9 @@ class MultiviewHeatmapDataset(HeatmapDataset):
                 Note: image_path is relative to the given root_directory
             header_rows: which rows in the csv are header rows
             imgaug_transform: imgaug transform pipeline to apply to images
+            downsample_factor: factor by which to downsample original image dims to have a smaller
+                heatmap
+            do_context: include additional frames of context if possible
         """
         self.root_directory = root_directory
         self.csv_paths = csv_paths
@@ -373,11 +378,14 @@ class MultiviewHeatmapDataset(HeatmapDataset):
         self.downsample_factor = downsample_factor
         self.output_sigma = 1.25  # should be sigma/2 ^downsample factor
         self.uniform_heatmaps = uniform_heatmaps
+        self.do_context = do_context
 
         csv_data={}
         self.image_names = {}
-        self.keypoints = {}
+        self.keypoints = {}        
         csv_row_sizes =  []
+        self.keypoint_names = []
+        self.keypoint_names_view = []
         for csv_path in self.csv_paths:
             if os.path.isfile(csv_path):
                 csv_file = csv_path
@@ -403,13 +411,18 @@ class MultiviewHeatmapDataset(HeatmapDataset):
                     csv_file = options[0]
             view = csv_path.split("/")[-1].split(".")[0]
             csv_data[view] = pd.read_csv(csv_file, header=header_rows, index_col=0)
-            self.keypoint_names = get_keypoint_names(csv_file=csv_file, header_rows=header_rows)
+            self.keypoint_names.extend(get_keypoint_names(csv_file=csv_file, header_rows=header_rows))
+            # self.keypoint_names_view.extend([view]*len()) TODO: book keeping
+            # print(self.keypoint_names)
             self.image_names[view] = list(csv_data[view].index)
-            self.keypoints[view] = torch.tensor(csv_data[view].to_numpy().astype(np.float32), dtype=torch.float32)
+            csv_row_sizes.append(len(self.image_names[view]))
+
+            self.keypoints[view] = csv_data[view].to_numpy().astype(np.float32)
             # self.keypoints[view] = csv_data[view].to_numpy()
             # convert to x,y coordinates
-            self.keypoints[view] = self.keypoints[view].reshape(self.keypoints[view].shape[0], -1, 2)
-            csv_row_sizes.append(len(self.image_names[view]))
+                    
+        self.keypoints = torch.tensor(np.concatenate(list(self.keypoints.values()), axis=1), dtype=torch.float32)
+        self.keypoints = self.keypoints.reshape(self.keypoints.shape[0], -1, 2)
         self.data_lenght = len(self.image_names[view])
         
         if len(set(csv_row_sizes)) != 1:
@@ -422,43 +435,49 @@ class MultiviewHeatmapDataset(HeatmapDataset):
         ]
         self.pytorch_transform = transforms.Compose(pytorch_transform_list)
 
-        # keypoints has been already transformed above
-        self.num_targets = self.keypoints[view].shape[1] * 2 * len(self.keypoints)  # the keypoint names * x and y * number of views (cameras)
-        self.num_keypoints = self.keypoints[view].shape[1]*self.num_views
-        self.height_ = 0
-        self.width_ = 0
+        # # keypoints has been already transformed above
 
-    @property
-    def height(self) -> int:
-        # assume resizing transformation is the last imgaug one
-        return self.height_ 
+        # Compute heatmaps as preprocessing step
+        self.num_targets = torch.numel(self.keypoints[0])
+        self.num_keypoints = self.num_targets // 2
+        self.label_heatmaps = None  # populated by `self.compute_heatmaps()`
+        self.compute_heatmaps()
+
+    def compute_heatmaps(self):
+        """Compute initial 2D heatmaps for all labeled data.
+
+        original image dims e.g., (406, 396) ->
+        resized image dims e.g., (384, 384) ->
+        potentially downsampled heatmaps e.g., (96, 96)
+
+        """
+        print("Generating the heatmaps ...")
+        label_heatmaps = torch.empty(
+            size=(self.data_lenght, self.num_keypoints, *self.output_shape)
+        )
+        for idx in range(self.data_lenght):
+            example_dict: BaseLabeledExampleDict = self.get_example_dict(idx)
+            label_heatmaps[idx] = self.compute_heatmap(example_dict)
+
+        self.label_heatmaps = label_heatmaps
+
+    # def __len__(self) -> int:
+    #     return self.data_lenght
     
-    @property
-    def width(self) -> int:
-        # assume resizing transformation is the last imgaug one
-        return self.width_
-
-    def __len__(self) -> int:
-        return self.data_lenght
-
-    def __getitem__(self, idx: int) -> BaseLabeledExampleDict:
+    def get_example_dict(self, idx):
         images = []
-        keypoints_on_images = []
+        keypoints_on_image = self.keypoints[idx]
         for view_num, (view, img_name) in enumerate(self.image_names.items()):
             # read image from file and apply transformations (if any)
             file_name = os.path.join(self.root_directory, img_name[idx])
             # if 1 color channel, change to 3.
             images.append(Image.open(file_name).convert("RGB"))
-            keypoints_on_images.append(self.keypoints[view][idx])
+            # keypoints_on_images.append(self.keypoints[view][idx])
             width, height = images[-1].size
-            keypoints_on_images[-1][:, 1] = keypoints_on_images[-1][:, 1] + view_num * height # TODO: book keeping
-        keypoints_on_image = torch.cat(keypoints_on_images, 0)
+        #     keypoints_on_images[-1][:, 1] = keypoints_on_images[-1][:, 1] + view_num * height # TODO: book keeping
+        # keypoints_on_image = torch.cat(keypoints_on_images, 0)
         image = np.concatenate(images, axis=0)
-        # print(image.shape)
-        self.height_, self.width_ = image.shape[0], image.shape[1]
-        # plt.imshow(image)
-        # plt.plot(keypoints_on_image[:, 0], keypoints_on_image[:, 1], 'b*')
-        # plt.savefig("img.png")
+
         if self.imgaug_transform is not None:
             transformed_images, transformed_keypoints = self.imgaug_transform(
                 images=np.expand_dims(image, axis=0),
@@ -470,26 +489,35 @@ class MultiviewHeatmapDataset(HeatmapDataset):
         else:
             transformed_images = np.expand_dims(image, axis=0)
             transformed_keypoints = np.expand_dims(keypoints_on_image, axis=0)
-            # print(transformed_images.shape, transformed_keypoints.shape)
 
-        transformed_images = self.pytorch_transform(image)
+        transformed_images = self.pytorch_transform(transformed_images)
+               
+        # self.height_, self.width_ = transformed_images.shape[1], transformed_images.shape[2]        
 
         # assert transformed_keypoints.shape == (self.num_targets,)
 
-        example_dict = BaseLabeledExampleDict(
-                images=transformed_images,  # shape (3, img_height, img_width) or (5, 3, H, W)
-                # keypoints=torch.from_numpy(keypoints_on_image),  # shape (n_targets,)
-                keypoints=keypoints_on_image,  # shape (n_targets,)
-                idxs=idx,
-            )
-        
-            # we have a random augmentation; need to recompute heatmaps
-        example_dict["heatmaps"] = self.compute_heatmap(example_dict)
-        return example_dict
-        
+        assert transformed_keypoints.shape == (self.num_targets,)
 
-if __name__ == "__main__":
-    dataset = MultiviewHeatmapDataset(root_directory="/mnt/scratch2/farzad/7m/data", 
-                                      csv_paths=["1.csv", "2.csv", "3.csv", "4.csv", "5.csv", "6.csv"])
-    print("dataset length: ", len(dataset))
-    dataset[2]
+        return BaseLabeledExampleDict(
+            images=transformed_images,  # shape (3, img_height, img_width) or (5, 3, H, W)
+            keypoints=torch.from_numpy(transformed_keypoints),  # shape (n_targets,)
+            idxs=idx,
+        )           
+
+    def __getitem__(self, idx: int) -> BaseLabeledExampleDict:
+        
+        
+        # we have a random augmentation; need to recompute heatmaps
+        # example_dict["heatmaps"] = self.compute_heatmap(example_dict)
+    
+        example_dict = self.get_example_dict(idx)
+
+        if len(self.imgaug_transform) == 1 and isinstance(self.imgaug_transform[0], iaa.Resize):
+            # we have a deterministic resizing augmentation; use precomputed heatmaps
+            example_dict["heatmaps"] = self.label_heatmaps[idx]
+        else:
+            # we have a random augmentation; need to recompute heatmaps
+            example_dict["heatmaps"] = self.compute_heatmap(example_dict)
+        # print("images>", example_dict["images"].shape)
+        # print("heatmaps>", example_dict["heatmaps"].shape)
+        return example_dict
