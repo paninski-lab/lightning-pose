@@ -3,6 +3,7 @@ grid_artifacts/
 .vscode/
 outputs/
 multirun/
+tb_logs/
 preds/
 scripts/.ipynb_checkpoints
 #scripts/configs_*
