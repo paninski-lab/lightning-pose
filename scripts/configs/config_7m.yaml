@@ -1,5 +1,3 @@
-multiview: True
-
 data:
   # dimensions of the raw training images. your computer will tell you WIDTH X HEIGHT
   image_orig_dims:
@@ -10,7 +8,7 @@ data:
     width: 256
     height: 256
   # ABSOLUTE path to data directory. the below is just a toy example for running Getting Started scripts
-  data_dir: /mnt/scratch2/farzad/7m
+  data_dir: /mnt/scratch2/farzad/7m/data
   # ABSOLUTE path to unlabeled videos' directory. the below is just a toy example for running Getting Started scripts
   video_dir: videos
   # location of labels; for example script, this should be relative to `data_dir`
@@ -31,7 +29,7 @@ data:
   # downsample heatmaps: 2 | 3
   downsample_factor: 2
   # total number of keypoints
-  num_keypoints: 20
+  num_keypoints: 120
   # keypoint names
   keypoint_names:
     - ArmL
@@ -61,10 +59,10 @@ data:
   # keypoint 0 is from view 0 and matches up with keypoint 8 from view 2
   # columns that correspond to keypoints only labeled in a single view are omitted
   # this info is only used for the multiview pca loss
-  mirrored_column_matches:
-    - [0, 1, 2, 3, 4, 5, 6]
-    - [8, 9, 10, 11, 12, 13, 14]
-  columns_for_singleview_pca: [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14]
+  # mirrored_column_matches:
+  #   - [0, 1, 2, 3, 4, 5, 6]
+  #   - [8, 9, 10, 11, 12, 13, 14]
+  # columns_for_singleview_pca: [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14]
 
 training:
   # select from one of several predefined image/video augmentation pipelines
@@ -75,10 +73,10 @@ training:
   # batch size of labeled data during training
   train_batch_size: 16
   # batch size of labeled data during validation
-  val_batch_size: 16
+  val_batch_size: 8
   # batch size of labeled data during test
   # TODO: this is actually used interchangeably with sequence length in prediction. not amazing.
-  test_batch_size: 16
+  test_batch_size: 8
   # fraction of labeled data used for training
   train_prob: 0.8
   # fraction of labeled data used for validation (remaining used for test)
@@ -89,15 +87,15 @@ training:
   # number of gpus to train a single model
   num_gpus: 0
   # number of cpu workers for data loaders
-  num_workers: 4
+  num_workers: 16
   # epochs over which to assess validation metrics for early stopping
   early_stop_patience: 3
   # epoch at which backbone network weights begin updating
   unfreezing_epoch: 20
   # min training epochs; training cannot terminate before. compare to unfreezing_epoch, check_val_every_n_epoch, early_stop_patience
-  min_epochs: 300
+  min_epochs: 50
   # max training epochs; training may exit before due to early stopping
-  max_epochs: 500
+  max_epochs: 60
   # frequency to log training metrics (one step is one batch)
   log_every_n_steps: 1
   # frequency to log validation metrics
@@ -125,7 +123,7 @@ model:
   # - "unimodal_mse"
   # - "unimodal_kl"
   # - null: if null, assume a model is supervised.
-  losses_to_use: ["pca_singleview"]
+  losses_to_use: null
   # backbone network:
   # resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
   # resnet50_animalpose_apose | resnet50_animal_ap10k
@@ -133,7 +131,7 @@ model:
   # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
   backbone: resnet50
   # prediction mode: regression | heatmap | heatmap_mhcrnn
-  model_type: heatmap
+  model_type: MultiviewHeatmapDataset
   # which heatmap loss to use: mse | kl | js
   heatmap_loss_type: mse
   # directory name for model saving
@@ -258,10 +256,10 @@ eval:
   # confidence threshold for plotting a vid
   confidence_thresh_for_vid: 0.9
   # str with absolute path to the video file you want plotted with keypoints
-  video_file_to_plot: /home/zeus/content/lightning-pose/data/mirror-mouse-example/videos/test_vid.mp4
+  video_file_to_plot: /home/farzad/projects/7m_vid.mp4
   # a list of strings, each points to a .csv file with predictions of a given model to the same video. will be combined with video_file_to_plot to make a visualization
   pred_csv_files_to_plot:
-    ["/home/jovyan/test_vid_heatmap_pca_multiview_5.0.csv"]
+    ["/home/farzad/projects/test_vid_heatmap_pca_multiview_5.0.csv"]
 
 callbacks:
   anneal_weight:
