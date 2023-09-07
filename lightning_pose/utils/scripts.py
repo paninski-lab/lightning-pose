@@ -12,13 +12,12 @@ import pandas as pd
 import torch
 from moviepy.editor import VideoFileClip
 from omegaconf import DictConfig, OmegaConf
-from PIL import Image
 from typeguard import typechecked
 
 from lightning_pose.callbacks import AnnealWeight
 from lightning_pose.data.augmentations import imgaug_transform
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
-from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
+from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset, MultiviewHeatmapDataset
 from lightning_pose.data.utils import compute_num_train_frames, split_sizes_from_probabilities
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.metrics import (
@@ -66,13 +65,16 @@ def get_dataset(
     cfg: DictConfig, data_dir: str, imgaug_transform: iaa.Sequential
 ) -> Union[BaseTrackingDataset, HeatmapDataset]:
     """Create a dataset that contains labeled data."""
+    import os
+
+    from PIL import Image
 
     if cfg.model.model_type == "regression":
         dataset = BaseTrackingDataset(
             root_directory=data_dir,
             csv_path=cfg.data.csv_file,
             imgaug_transform=imgaug_transform,
-            do_context=False,  # no context for regression models
+            do_context=cfg.model.do_context,
         )
     elif cfg.model.model_type == "heatmap" or cfg.model.model_type == "heatmap_mhcrnn":
         dataset = HeatmapDataset(
@@ -80,21 +82,33 @@ def get_dataset(
             csv_path=cfg.data.csv_file,
             imgaug_transform=imgaug_transform,
             downsample_factor=cfg.data.downsample_factor,
-            do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
+            do_context=cfg.model.model_type == "heatmap_mhcrnn" or cfg.model.do_context,
             uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
         )
+    elif cfg.model.model_type == "MultiviewHeatmapDataset":
+        dataset = MultiviewHeatmapDataset(
+            root_directory=data_dir,
+            csv_paths=cfg.data.csv_file,
+            downsample_factor=cfg.data.downsample_factor,
+            imgaug_transform=imgaug_transform,
+            uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
+        )       
+        return dataset
     else:
-        raise NotImplementedError("%s is an invalid cfg.model.model_type" % cfg.model.model_type)
-
+        raise NotImplementedError(
+            "%s is an invalid cfg.model.model_type" % cfg.model.model_type
+        )
     image = Image.open(os.path.join(dataset.root_directory, dataset.image_names[0])).convert("RGB")
-    if image.size != (cfg.data.image_orig_dims.width, cfg.data.image_orig_dims.height):
+    if image.size != (
+        cfg.data.image_orig_dims.width,
+        cfg.data.image_orig_dims.height,
+    ):
         raise ValueError(
             f"image_orig_dims in data configuration file is "
             f"(width={cfg.data.image_orig_dims.width}, height={cfg.data.image_orig_dims.height}) "
             f"but your image size is (width={image.size[0]}, height={image.size[1]}). "
             f"Please update the data configuration file"
         )
-
     return dataset
 
 
@@ -157,7 +171,7 @@ def get_loss_factories(
 
     # collect all supervised losses in a dict; no extra params needed
     # set "log_weight = 0.0" so that weight = 1 and effective weight is (1 / 2)
-    if cfg.model.model_type == "heatmap" or cfg.model.model_type == "heatmap_mhcrnn":
+    if cfg.model.model_type == "heatmap" or cfg.model.model_type == "heatmap_mhcrnn" or cfg.model.model_type == "MultiviewHeatmapDataset":
         loss_name = "heatmap_" + cfg.model.heatmap_loss_type
         loss_params_dict["supervised"][loss_name] = {"log_weight": 0.0}
     else:
@@ -247,9 +261,10 @@ def get_model(
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
+                do_context=cfg.model.do_context,
                 image_size=image_h,  # only used by ViT
             )
-        elif cfg.model.model_type == "heatmap":
+        elif cfg.model.model_type == "heatmap" or cfg.model.model_type == "MultiviewHeatmapDataset":
             model = HeatmapTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -259,6 +274,7 @@ def get_model(
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
+                do_context=cfg.model.do_context,
                 image_size=image_h,  # only used by ViT
             )
         elif cfg.model.model_type == "heatmap_mhcrnn":
@@ -275,8 +291,8 @@ def get_model(
             )
         else:
             raise NotImplementedError(
-                f"{cfg.model.model_type} is an invalid cfg.model.model_type for a fully "
-                f"supervised model"
+                "%s is an invalid cfg.model.model_type for a fully supervised model"
+                % cfg.model.model_type
             )
 
     else:
@@ -289,6 +305,7 @@ def get_model(
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
+                do_context=cfg.model.do_context,
                 image_size=image_h,  # only used by ViT
             )
 
@@ -303,6 +320,7 @@ def get_model(
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
+                do_context=cfg.model.do_context,
                 image_size=image_h,  # only used by ViT
             )
         elif cfg.model.model_type == "heatmap_mhcrnn":
@@ -320,8 +338,8 @@ def get_model(
             )
         else:
             raise NotImplementedError(
-                f"{cfg.model.model_type} is an invalid cfg.model.model_type for a semi-supervised "
-                f"model"
+                "%s is an invalid cfg.model.model_type for a semi-supervised model"
+                % cfg.model.model_type
             )
 
     # load weights from user-provided checkpoint path
