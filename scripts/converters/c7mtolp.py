@@ -330,10 +330,17 @@ def vid_gray(input_path, output_path, color="gray"):
 if __name__ == "__main__":
     
     path_glob= "/mnt/scratch2/farzad/7m"
+    # first get all the tables for data processing
     positions, df, bodyparts = d7M()
     # print(df.head())
+
+    # run this forconvertin rgb videos to gray scale
     # vid_gray_batch(df)
     # vid_gray("/mnt/scratch2/farzad/7m/videos/s1-d1-camera1-56000.mp4", "/mnt/scratch2/farzad/7m/cam", color="rgb")
-    # extract_img_batch(df, output_directory="/mnt/scratch2/farzad/7m")    
+
+    # use this to extract all the images from the videos
+    extract_img_batch(df, output_directory="/mnt/scratch2/farzad/7m")    
+
+    # run this to sample the images and create the csv files (first extract all the images from the videos)
     df_imgs = to_csv(positions, bodyparts, select_camera=[1,2,3,4,5,6], select_subject=1, samples=200, path=path_glob)
 
