@@ -12,6 +12,7 @@ import pandas as pd
 import torch
 from moviepy.editor import VideoFileClip
 from omegaconf import DictConfig, OmegaConf
+from PIL import Image
 from typeguard import typechecked
 
 from lightning_pose.callbacks import AnnealWeight
@@ -65,16 +66,13 @@ def get_dataset(
     cfg: DictConfig, data_dir: str, imgaug_transform: iaa.Sequential
 ) -> Union[BaseTrackingDataset, HeatmapDataset]:
     """Create a dataset that contains labeled data."""
-    import os
-
-    from PIL import Image
 
     if cfg.model.model_type == "regression":
         dataset = BaseTrackingDataset(
             root_directory=data_dir,
             csv_path=cfg.data.csv_file,
             imgaug_transform=imgaug_transform,
-            do_context=cfg.model.do_context,
+            do_context=False,  # no context for regression models
         )
     elif cfg.model.model_type == "heatmap" or cfg.model.model_type == "heatmap_mhcrnn":
         dataset = HeatmapDataset(
@@ -82,24 +80,21 @@ def get_dataset(
             csv_path=cfg.data.csv_file,
             imgaug_transform=imgaug_transform,
             downsample_factor=cfg.data.downsample_factor,
-            do_context=cfg.model.model_type == "heatmap_mhcrnn" or cfg.model.do_context,
+            do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
             uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
         )
     else:
-        raise NotImplementedError(
-            "%s is an invalid cfg.model.model_type" % cfg.model.model_type
-        )
+        raise NotImplementedError("%s is an invalid cfg.model.model_type" % cfg.model.model_type)
+
     image = Image.open(os.path.join(dataset.root_directory, dataset.image_names[0])).convert("RGB")
-    if image.size != (
-        cfg.data.image_orig_dims.width,
-        cfg.data.image_orig_dims.height,
-    ):
+    if image.size != (cfg.data.image_orig_dims.width, cfg.data.image_orig_dims.height):
         raise ValueError(
             f"image_orig_dims in data configuration file is "
             f"(width={cfg.data.image_orig_dims.width}, height={cfg.data.image_orig_dims.height}) "
             f"but your image size is (width={image.size[0]}, height={image.size[1]}). "
             f"Please update the data configuration file"
         )
+
     return dataset
 
 
@@ -252,7 +247,6 @@ def get_model(
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
-                do_context=cfg.model.do_context,
                 image_size=image_h,  # only used by ViT
             )
         elif cfg.model.model_type == "heatmap":
@@ -265,7 +259,6 @@ def get_model(
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
-                do_context=cfg.model.do_context,
                 image_size=image_h,  # only used by ViT
             )
         elif cfg.model.model_type == "heatmap_mhcrnn":
@@ -282,8 +275,8 @@ def get_model(
             )
         else:
             raise NotImplementedError(
-                "%s is an invalid cfg.model.model_type for a fully supervised model"
-                % cfg.model.model_type
+                f"{cfg.model.model_type} is an invalid cfg.model.model_type for a fully "
+                f"supervised model"
             )
 
     else:
@@ -296,7 +289,6 @@ def get_model(
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
-                do_context=cfg.model.do_context,
                 image_size=image_h,  # only used by ViT
             )
 
@@ -311,7 +303,6 @@ def get_model(
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
-                do_context=cfg.model.do_context,
                 image_size=image_h,  # only used by ViT
             )
         elif cfg.model.model_type == "heatmap_mhcrnn":
@@ -329,8 +320,8 @@ def get_model(
             )
         else:
             raise NotImplementedError(
-                "%s is an invalid cfg.model.model_type for a semi-supervised model"
-                % cfg.model.model_type
+                f"{cfg.model.model_type} is an invalid cfg.model.model_type for a semi-supervised "
+                f"model"
             )
 
     # load weights from user-provided checkpoint path

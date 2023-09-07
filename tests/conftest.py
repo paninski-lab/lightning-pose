@@ -37,31 +37,13 @@ def cfg() -> dict:
     base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
     config_file = os.path.join(base_dir, "scripts", "configs", "config_mirror-mouse-example.yaml")
     cfg = yaml.load(open(config_file), Loader=yaml.FullLoader)
-    cfg["model"]["do_context"] = False
     # make small batches so that we can run on a gpu with limited memory
     cfg["training"]["train_batch_size"] = 2
-    cfg["training"]["val_batch_size"] = 2
-    cfg["training"]["test_batch_size"] = 2
+    cfg["training"]["val_batch_size"] = 4
+    cfg["training"]["test_batch_size"] = 4
     cfg["training"]["imgaug"] = "default"  # so pca tests don't break
     cfg["dali"]["base"]["train"]["sequence_length"] = 6
     cfg["dali"]["base"]["predict"]["sequence_length"] = 16
-    return OmegaConf.create(cfg)
-
-
-@pytest.fixture
-def cfg_context() -> dict:
-    """Load all toy data config file without hydra."""
-    base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
-    config_file = os.path.join(base_dir, "scripts", "configs", "config_mirror-mouse-example.yaml")
-    cfg = yaml.load(open(config_file), Loader=yaml.FullLoader)
-    cfg["model"]["do_context"] = True
-    # make small batches so that we can run on a gpu with limited memory
-    cfg["training"]["train_batch_size"] = 2
-    cfg["training"]["val_batch_size"] = 2
-    cfg["training"]["test_batch_size"] = 2
-    cfg["training"]["imgaug"] = "default"  # so pca tests don't break
-    cfg["dali"]["context"]["train"]["batch_size"] = 6
-    cfg["dali"]["context"]["predict"]["sequence_length"] = 16
     return OmegaConf.create(cfg)
 
 
@@ -77,25 +59,6 @@ def base_dataset(cfg, imgaug_transform) -> BaseTrackingDataset:
 
     # setup
     cfg_tmp = copy.deepcopy(cfg)
-    cfg_tmp.model.model_type = "regression"
-    base_dataset = get_dataset(
-        cfg_tmp, data_dir=TOY_DATA_ROOT_DIR, imgaug_transform=imgaug_transform
-    )
-
-    # return to tests
-    yield base_dataset
-
-    # cleanup after all tests have run (no more calls to yield)
-    del base_dataset
-    torch.cuda.empty_cache()
-
-
-@pytest.fixture
-def base_dataset_context(cfg_context, imgaug_transform) -> BaseTrackingDataset:
-    """Create a dataset for regression models from toy data."""
-
-    # setup
-    cfg_tmp = copy.deepcopy(cfg_context)
     cfg_tmp.model.model_type = "regression"
     base_dataset = get_dataset(
         cfg_tmp, data_dir=TOY_DATA_ROOT_DIR, imgaug_transform=imgaug_transform
@@ -129,12 +92,12 @@ def heatmap_dataset(cfg, imgaug_transform) -> HeatmapDataset:
 
 
 @pytest.fixture
-def heatmap_dataset_context(cfg_context, imgaug_transform) -> HeatmapDataset:
+def heatmap_dataset_context(cfg, imgaug_transform) -> HeatmapDataset:
     """Create a dataset for heatmap models from toy data."""
 
     # setup
-    cfg_tmp = copy.deepcopy(cfg_context)
-    cfg_tmp.model.model_type = "heatmap"
+    cfg_tmp = copy.deepcopy(cfg)
+    cfg_tmp.model.model_type = "heatmap_mhcrnn"
     heatmap_dataset = get_dataset(
         cfg_tmp, data_dir=TOY_DATA_ROOT_DIR, imgaug_transform=imgaug_transform
     )
@@ -169,27 +132,6 @@ def base_data_module(cfg, base_dataset) -> BaseDataModule:
 
 
 @pytest.fixture
-def base_data_module_context(cfg_context, base_dataset_context) -> BaseDataModule:
-    """Create a labeled data module for regression models."""
-
-    # setup
-    cfg_tmp = copy.deepcopy(cfg_context)
-    cfg_tmp.model.losses_to_use = []
-    # bump up training data so we can test pca_singleview loss
-    cfg_tmp.training.train_prob = 0.95
-    cfg_tmp.training.val_prob = 0.025
-    data_module = get_data_module(cfg_tmp, dataset=base_dataset_context, video_dir=None)
-    data_module.setup()
-
-    # return to tests
-    yield data_module
-
-    # cleanup after all tests have run (no more calls to yield)
-    del data_module
-    torch.cuda.empty_cache()
-
-
-@pytest.fixture
 def heatmap_data_module(cfg, heatmap_dataset) -> BaseDataModule:
     """Create a labeled data module for heatmap models."""
 
@@ -211,11 +153,11 @@ def heatmap_data_module(cfg, heatmap_dataset) -> BaseDataModule:
 
 
 @pytest.fixture
-def heatmap_data_module_context(cfg_context, heatmap_dataset_context) -> BaseDataModule:
+def heatmap_data_module_context(cfg, heatmap_dataset_context) -> BaseDataModule:
     """Create a labeled data module for heatmap models."""
 
     # setup
-    cfg_tmp = copy.deepcopy(cfg_context)
+    cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.losses_to_use = []
     # bump up training data so we can test pca_singleview loss
     cfg_tmp.training.train_prob = 0.95
@@ -254,30 +196,6 @@ def base_data_module_combined(cfg, base_dataset) -> UnlabeledDataModule:
 
 
 @pytest.fixture
-def base_data_module_combined_context(
-    cfg_context, base_dataset_context
-) -> UnlabeledDataModule:
-    """Create a combined data module for regression models."""
-
-    # setup
-    cfg_tmp = copy.deepcopy(cfg_context)
-    cfg_tmp.model.losses_to_use = ["temporal"]
-    data_module = get_data_module(
-        cfg_tmp,
-        dataset=base_dataset_context,
-        video_dir=os.path.join(TOY_DATA_ROOT_DIR, "videos"),
-    )
-    # data_module.setup()  # already done in UnlabeledDataModule constructor
-
-    # return to tests
-    yield data_module
-
-    # cleanup after all tests have run (no more calls to yield)
-    del data_module
-    torch.cuda.empty_cache()
-
-
-@pytest.fixture
 def heatmap_data_module_combined(cfg, heatmap_dataset) -> UnlabeledDataModule:
     """Create a combined data module for heatmap models."""
 
@@ -300,13 +218,11 @@ def heatmap_data_module_combined(cfg, heatmap_dataset) -> UnlabeledDataModule:
 
 
 @pytest.fixture
-def heatmap_data_module_combined_context(
-    cfg_context, heatmap_dataset_context
-) -> UnlabeledDataModule:
+def heatmap_data_module_combined_context(cfg, heatmap_dataset_context) -> UnlabeledDataModule:
     """Create a combined data module for heatmap models."""
 
     # setup
-    cfg_tmp = copy.deepcopy(cfg_context)
+    cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.losses_to_use = ["temporal"]  # trigger semi-supervised data module
     data_module = get_data_module(
         cfg_tmp,
