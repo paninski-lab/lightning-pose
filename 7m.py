@@ -52,7 +52,7 @@ dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transf
 # dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=None)
 
 # build datamodule; breaks up dataset into train/val/test
-data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
+data_module = get_data_module(cfg=cfg, dataset=dataset)
 
 # build loss factory which orchestrates different losses
 loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
@@ -94,7 +94,7 @@ now = datetime.now()
 # Format the date and time as a string in the desired format
 formatted_now = now.strftime("%Y-%m-%d/%H-%M-%S")
 
-output_directory = os.path.join(path+"/outputs", formatted_now)
+output_directory = os.path.join(path+"outputs", formatted_now)
 os.makedirs(output_directory)
 print(f"Created an output directory at: {output_directory}")
 
