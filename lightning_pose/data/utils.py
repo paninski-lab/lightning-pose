@@ -28,6 +28,14 @@ class HeatmapLabeledExampleDict(BaseLabeledExampleDict):
 
     heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width", float]
 
+class MultiviewHeatmapLabeledExampleDict(BaseLabeledExampleDict):
+    """Return type when calling __getitem__() on MultiviewHeatmapDataset."""
+
+    bbx: TensorType["bounding_box", float]
+    num_imgs: TensorType["bounding_box", int]
+    views: List[str]
+
+
 
 class BaseLabeledBatchDict(TypedDict):
     """Batch type for base labeled data."""

@@ -20,6 +20,7 @@ from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
 from lightning_pose.data.utils import (
     BaseLabeledExampleDict,
     HeatmapLabeledExampleDict,
+    MultiviewHeatmapLabeledExampleDict,
     generate_heatmaps,
 )
 from lightning_pose.utils.io import get_keypoint_names
@@ -466,8 +467,10 @@ class MultiviewHeatmapDataset(HeatmapDataset):
     
     def get_example_dict(self, idx):
         images = []
+        views= []
         keypoints_on_image = self.keypoints[idx]
         for view_num, (view, img_name) in enumerate(self.image_names.items()):
+            views.append(view)
             # read image from file and apply transformations (if any)
             file_name = os.path.join(self.root_directory, img_name[idx])
             # if 1 color channel, change to 3.
@@ -498,13 +501,15 @@ class MultiviewHeatmapDataset(HeatmapDataset):
 
         assert transformed_keypoints.shape == (self.num_targets,)
 
-        return BaseLabeledExampleDict(
+        return MultiviewHeatmapLabeledExampleDict(
             images=transformed_images,  # shape (3, img_height, img_width) or (5, 3, H, W)
             keypoints=torch.from_numpy(transformed_keypoints),  # shape (n_targets,)
+            num_imgs=self.num_views,
+            views = views,
             idxs=idx,
         )           
 
-    def __getitem__(self, idx: int) -> BaseLabeledExampleDict:
+    def __getitem__(self, idx: int) -> MultiviewHeatmapLabeledExampleDict:
         
         
         # we have a random augmentation; need to recompute heatmaps
