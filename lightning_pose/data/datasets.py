@@ -1,9 +1,6 @@
 """Dataset objects store images, labels, and functions for manipulation."""
 
-# TODO : remove the following
 import sys
-sys.path.append("/home/farzad/projects/lightning-pose")
-import matplotlib.pyplot as plt
 
 import os
 from typing import Callable, List, Literal, Optional
@@ -414,7 +411,6 @@ class MultiviewHeatmapDataset(HeatmapDataset):
             csv_data[view] = pd.read_csv(csv_file, header=header_rows, index_col=0)
             self.keypoint_names.extend(get_keypoint_names(csv_file=csv_file, header_rows=header_rows))
             # self.keypoint_names_view.extend([view]*len()) TODO: book keeping
-            # print(self.keypoint_names)
             self.image_names[view] = list(csv_data[view].index)
             csv_row_sizes.append(len(self.image_names[view]))
 
@@ -523,6 +519,4 @@ class MultiviewHeatmapDataset(HeatmapDataset):
         else:
             # we have a random augmentation; need to recompute heatmaps
             example_dict["heatmaps"] = self.compute_heatmap(example_dict)
-        # print("images>", example_dict["images"].shape)
-        # print("heatmaps>", example_dict["heatmaps"].shape)
         return example_dict
