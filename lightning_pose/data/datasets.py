@@ -426,6 +426,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
     @property
     def height(self) -> int:
+        # is this correct? should not it be: self.dataset[self.view_names[0]].height * self.num_views
         return self.dataset[self.view_names[0]].height
 
     @property
@@ -480,21 +481,24 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         return image, heatmaps, keypoints, concat_order
         
 
-    def __getitem__(self, idx: int) -> HeatmapLabeledExampleDict:
+    def __getitem__(self, idx: int) -> MultiviewHeatmapLabeledExampleDict:
         
         """Get an example from the dataset.
         Calls the heatmapdataset for each csv file to get Images and their heatmaps and then stacks them.
         """
         datadict = {}
         for view in self.view_names:
+            # << view type here is int
             datadict[view] = self.dataset[view][idx]
-            # print(self.dataset[view].output_shape)
 
         image, heatmaps, keypoints, concat_order = self.fusion(datadict)
 
-        return HeatmapLabeledExampleDict(
+        return MultiviewHeatmapLabeledExampleDict(
             images=image,  # shape (3, img_height, img_width) or (5, 3, H, W)
             keypoints=keypoints,  # shape (n_targets,)
             idxs=idx,
-            heatmaps=heatmaps
+            heatmaps=heatmaps,
+            # concat_order=concat_order, # List[int]
+            # view_names=self.view_names, # List[int]
+            # num_views=self.num_views # int
         )
