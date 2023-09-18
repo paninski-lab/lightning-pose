@@ -1,14 +1,14 @@
 data:
   # dimensions of training images
   image_orig_dims:
-    height: null
-    width: null
+    height: 2816
+    width: 1408
   # resize dimensions to streamline model creation
   image_resize_dims:
-    height: null
-    width: null
+    height: 384
+    width: 384
   # ABSOLUTE path to data directory
-  data_dir: null
+  data_dir: data/chickadee-example
   # ABSOLUTE path to unlabeled videos' directory
   video_dir: null
   # location of labels; this should be relative to `data_dir`
@@ -16,27 +16,51 @@ data:
   # downsample heatmaps - 2 | 3
   downsample_factor: 2
   # total number of keypoints
-  num_keypoints: null
+  num_keypoints: 18
   # keypoint names
-  keypoint_names: null
-  # indicator to use 2-stage dynamic crop algorithm
-  dynamic_crop: False
+  keypoint_names:
+    - beak_top
+    - beak_bot
+    - head_top
+    - head_back
+    - belly
+    - back
+    - tail_base
+    - tail_tip
+    - eye_left
+    - bib_left
+    - shoulder_left
+    - ankle_left
+    - foot_left
+    - eye_right
+    - bib_right
+    - shoulder_right
+    - ankle_right
+    - foot_right
+  # indicator to use 2-stage dynamic crop algorithm, False/True
+  dynamic_crop: True
   # max allowed number of instances, i.e. 1 for single-animal, >1 for multiple animal
   num_max_instances: 1
   # detector network params
   detector:
     # resampled image size for detector network
     image_resize_dims:
-      height: null
-      width: null
+      height: 512
+      width: 256
     # heatmap downsample factor for detector network
     downsample_factor: 2
     # list of lists for keypoints to average and detect
-    keypoints_for_crop: null
+    keypoints_for_crop:
+      - [0,1,8,13]
+      - [4,5,10,15]
+      - [7]
     # number of coarse keypoints to track, should match outer list length of keypoints_for_crop
-    num_keypoints: null
+    num_keypoints: 3
     # names of the coarse keypoints
-    keypoint_names: null
+    keypoint_names:
+      - head
+      - body
+      - tail
   # for mirrored setups with all keypoints defined in same csv file, define matching
   # columns for different keypoints (assumes x-y-x-y interleaving)
   # each list corresponds to a single view, so in the example below there are 2 views
@@ -52,7 +76,7 @@ training:
   # default- resizing only
   # dlc- imgaug pipeline implemented in DLC 2.0 package
   # dlc-top-down- dlc augmentations plus vertical and horizontal flips
-  imgaug: dlc
+  imgaug: dlc-top-down
   # batch size of labeled data during training
   train_batch_size: 16
   # batch size of labeled data during validation
