@@ -63,36 +63,38 @@ def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
 @typechecked
 def get_dataset(
     cfg: DictConfig, data_dir: str, imgaug_transform: iaa.Sequential
-) -> Union[BaseTrackingDataset, HeatmapDataset]:
+) -> Union[BaseTrackingDataset, HeatmapDataset, MultiviewHeatmapDataset]:
     """Create a dataset that contains labeled data."""
-    import os
-
-    from PIL import Image
 
     if cfg.model.model_type == "regression":
-        dataset = BaseTrackingDataset(
-            root_directory=data_dir,
-            csv_path=cfg.data.csv_file,
-            imgaug_transform=imgaug_transform,
-            do_context=cfg.model.do_context,
-        )
+        if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
+            raise NotImplementedError("Multi-view support only available for heatmap-based models")
+        else:
+            dataset = BaseTrackingDataset(
+                root_directory=data_dir,
+                csv_path=cfg.data.csv_file,
+                imgaug_transform=imgaug_transform,
+                do_context=cfg.model.do_context,
+            )
     elif cfg.model.model_type == "heatmap" or cfg.model.model_type == "heatmap_mhcrnn":
-        dataset = HeatmapDataset(
-            root_directory=data_dir,
-            csv_path=cfg.data.csv_file,
-            imgaug_transform=imgaug_transform,
-            downsample_factor=cfg.data.downsample_factor,
-            do_context=cfg.model.model_type == "heatmap_mhcrnn" or cfg.model.do_context,
-            uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
-        )
-    elif cfg.model.model_type == "MultiviewHeatmapDataset":
-        dataset = MultiviewHeatmapDataset(
-            root_directory=data_dir,
-            csv_paths=cfg.data.csv_file,
-            downsample_factor=cfg.data.downsample_factor,
-            imgaug_transform=imgaug_transform,
-            uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
-        )       
+        if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
+            dataset = MultiviewHeatmapDataset(
+                root_directory=data_dir,
+                csv_paths=cfg.data.csv_file,
+                view_names = cfg.data.view_names,
+                downsample_factor=cfg.data.downsample_factor,
+                imgaug_transform=imgaug_transform,
+                uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
+            ) 
+        else:
+            dataset = HeatmapDataset(
+                root_directory=data_dir,
+                csv_path=cfg.data.csv_file,
+                imgaug_transform=imgaug_transform,
+                downsample_factor=cfg.data.downsample_factor,
+                do_context=cfg.model.model_type == "heatmap_mhcrnn", # context only for mhcrnn
+                uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
+            )            
         return dataset
     else:
         raise NotImplementedError(
@@ -115,7 +117,7 @@ def get_dataset(
 @typechecked
 def get_data_module(
     cfg: DictConfig,
-    dataset: Union[BaseTrackingDataset, HeatmapDataset],
+    dataset: Union[BaseTrackingDataset, HeatmapDataset, MultiviewHeatmapDataset],
     video_dir: Optional[str] = None,
 ) -> Union[BaseDataModule, UnlabeledDataModule]:
     """Create a data module that splits a dataset into train/val/test iterators."""
@@ -264,7 +266,7 @@ def get_model(
                 do_context=cfg.model.do_context,
                 image_size=image_h,  # only used by ViT
             )
-        elif cfg.model.model_type == "heatmap" or cfg.model.model_type == "MultiviewHeatmapDataset":
+        elif cfg.model.model_type == "heatmap":
             model = HeatmapTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],

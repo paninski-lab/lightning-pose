@@ -98,13 +98,10 @@ def imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
         raise NotImplementedError("must choose imgaug kind from 'default', 'dlc', 'dlc-top-down'")
 
     # always apply resizing transform
-    try:
-        num_views=len(cfg.data.view_names)
-    except:
-        num_views = 1
+
     data_transform.append(
         iaa.Resize({
-            "height": cfg.data.image_resize_dims.height * num_views,
+            "height": cfg.data.image_resize_dims.height,
             "width": cfg.data.image_resize_dims.width}
         ))
 

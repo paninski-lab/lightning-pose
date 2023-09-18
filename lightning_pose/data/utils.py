@@ -28,13 +28,25 @@ class HeatmapLabeledExampleDict(BaseLabeledExampleDict):
 
     heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width", float]
 
-class MultiviewHeatmapLabeledExampleDict(BaseLabeledExampleDict):
+
+class MultiviewLabeledExampleDict(TypedDict):
+    """Return type when calling __getitem__() on BaseTrackingDataset."""    
+    images: Union[
+        TensorType["RGB":3, "image_height", "image_width", float],
+        TensorType["frames", "RGB":3, "image_height", "image_width", float],
+    ]
+    keypoints: TensorType["num_targets", float]
+    idxs: int
+
+
+class MultiviewHeatmapLabeledExampleDict(MultiviewLabeledExampleDict):
     """Return type when calling __getitem__() on MultiviewHeatmapDataset."""
 
-    bbx: TensorType["bounding_box", float]
+    heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width", float]
+    # bbx: TensorType["bounding_box", float]
     num_imgs: TensorType["bounding_box", int]
-    views: List[str]
-
+    concat_order: List[str]
+    view_names: List[str]
 
 
 class BaseLabeledBatchDict(TypedDict):
