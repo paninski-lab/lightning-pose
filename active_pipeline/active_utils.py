@@ -266,11 +266,9 @@ def subsample_frames_from_df(labels_df, num_vids ,train_frames, train_prob, rng_
 
     # if it is iteration 0, i.e. cchoose n videos at random; choose m random frames from each video to get n*m initial training frames
     if iter0_flag == True:
-#<<<<<<< HEAD
+
       used_vids, vids_list = get_vids(labels_df, num_vids, rng_seed, used_vids) # get used video names and selected frames
-#=======
-      #used_vids, vids_list = get_vids(labels_df,num_vids, rng_seed, used_vids) # get used video names and selected frames
-#>>>>>>> 5ef8f734078cb592d366984231676a1cca5924d5
+
       while n_frames < int(n_total_frames):
           for vids in vids_list:
 
@@ -282,11 +280,8 @@ def subsample_frames_from_df(labels_df, num_vids ,train_frames, train_prob, rng_
             new_df_list.append(new_df) # add all selected frames in one video
       
     else:
-#<<<<<<< HEAD
+
          used_vids, vids_list = get_vids(labels_df, num_vids, rng_seed, used_vids)
-#=======
-         #used_vids, vids_list = get_vids(labels_df,num_vids, rng_seed, used_vids)
-#>>>>>>> 5ef8f734078cb592d366984231676a1cca5924d5
          for vids in vids_list:
             good_idxs = labels_df.index.str.contains(vids)
             new_df = labels_df[good_idxs] # all frames in this video are selected
@@ -298,7 +293,9 @@ def subsample_frames_from_df(labels_df, num_vids ,train_frames, train_prob, rng_
     return new_df, used_vids
 
 def select_frames_calculate(active_iter_cfg, data_cfg, used_vids, header_rows=[0,1,2]):
-
+  '''
+  The is the function to switch to different evaluation csv filename according to differnet active learning method
+  '''
   all_indices = []
 
   method = active_iter_cfg.method
@@ -306,12 +303,19 @@ def select_frames_calculate(active_iter_cfg, data_cfg, used_vids, header_rows=[0
   output_dir = active_iter_cfg.iteration_folder
   prev_output_dirs = active_iter_cfg.output_prev_run
   
-  all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0, 1, 2], index_col=0)
+  #DataFrame for the whole collected_new data
+  all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0, 1, 2], index_col=0) 
+
+  #The function to get Dataframe of all frames in the selected 5 vids
+  #It returns a Dataframe and a list of used vids names 
   new_df, used_vids = subsample_frames_from_df(all_data,5,10,0.1,0,used_vids,iter0_flag=False)
 
   header_rows=[0,1,2]
 
+  # All methods with use all the frames in the same subgroup of Vids to select frames. So they will use the same csvfile to select frames. 
   selected_frames_path = os.path.join(os.path.dirname(data_cfg.csv_file),"selected_5_vids_frames.csv") #data_cfg.data_dir
+
+  # Choose different evaluation csvfile according to corresponding active learning method.
   if method == "random":
     new_df.to_csv(selected_frames_path)
 
@@ -326,6 +330,7 @@ def select_frames_calculate(active_iter_cfg, data_cfg, used_vids, header_rows=[0
   elif method == "Single PCAS":
     predict_new_name = "predictions_new_pca_singleview_error.csv"
     predict_active_name = "predictions_active_test_pca_singleview_error.csv"
+    # different evaluation file may have different number of headers 
     header_rows=[0]
   
   elif method == 'Equal Variance':
@@ -345,8 +350,11 @@ def select_frames_calculate(active_iter_cfg, data_cfg, used_vids, header_rows=[0
     all_np=list()
     all_var=list()
 
-  selected_frames_list=list()
+  # The list of all predicitions (i.e. It may come from different backbones.)
+  # We need to find all the common frames in differnet prediction csv files 
 
+  selected_frames_list=list()
+  # For loop to find common frames in differnt prediction csv files
   for run_idx, folder_path in enumerate(prev_output_dirs):
     csv_file = os.path.join(folder_path, predict_new_name)
     csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
@@ -594,11 +602,11 @@ def active_loop_step(active_loop_cfg, used_vids):
     #  TODO(haotianxiansti):  add code for iter 0 (select frames when no labeles are present)
     initialize_iteration_folder(active_iter_cfg.iteration_folder)
 
-    selected_frames_file, active_test_data_flag = select_frames_calculate(active_iter_cfg, experiment_cfg.data, used_vids)
+    selected_frames_file, active_test_data_flag = select_frames_calculate(active_iter_cfg, experiment_cfg.data, used_vids) #select frames and return the place newly selected frames and active-test flag
 
     # Now, we have the directory:
     # created Collected_data_new_merged and Collected_data_merged.csv
-    merge_collected_data(active_iter_cfg, selected_frames_file, active_test_data_flag)
+    merge_collected_data(active_iter_cfg, selected_frames_file, active_test_data_flag) #merge files and drop files
     # run algorithm with new config file
     # TODO: check location of new csv for iteration relative to data_dir
     # it should have CollectedData.csv and CollectedData_new.csv
