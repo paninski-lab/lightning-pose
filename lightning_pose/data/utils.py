@@ -21,6 +21,7 @@ class BaseLabeledExampleDict(TypedDict):
     ]
     keypoints: TensorType["num_targets", float]
     idxs: int
+    bbox: TensorType["xyhw":4, float]
 
 
 class HeatmapLabeledExampleDict(BaseLabeledExampleDict):
@@ -38,6 +39,7 @@ class BaseLabeledBatchDict(TypedDict):
     ]
     keypoints: TensorType["batch", "num_targets", float]
     idxs: TensorType["batch", int]
+    bbox: TensorType["batch", "xyhw":4, float]
 
 
 class HeatmapLabeledBatchDict(BaseLabeledBatchDict):

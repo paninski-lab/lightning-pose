@@ -200,11 +200,14 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             transformed_images = image_frames_tensor
 
         assert transformed_keypoints.shape == (self.num_targets,)
+        img_height = transformed_images.shape[1]
+        img_width = transformed_images.shape[2]
 
         return BaseLabeledExampleDict(
             images=transformed_images,  # shape (3, img_height, img_width) or (5, 3, H, W)
             keypoints=torch.from_numpy(transformed_keypoints),  # shape (n_targets,)
             idxs=idx,
+            bbox=[0,0,img_height,img_width] # x,y,h,w of bounding box
         )
 
 
