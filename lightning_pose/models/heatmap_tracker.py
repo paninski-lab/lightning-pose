@@ -269,27 +269,30 @@ class HeatmapTracker(BaseSupervisedTracker):
         # softmax temp stays 1 here; to modify for model predictions, see constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
 
+    def convert_bbox_coords(self, batch_dict: HeatmapLabeledBatchDict, predicted_keypoints: TensorType["batch", "num_targets"]
+                            ) -> TensorType["batch", "num_targets"]:
+        # reshape from (batch, nTargets) back to (batch, nKey, 2), in x,y order
+        predicted_keypoints = predicted_keypoints.reshape((-1, self.num_keypoints, 2))
+        # divide by image dims to get 0-1 normalized coordinates
+        predicted_keypoints[:, :, 0] /= batch_dict["images"].shape[-1]  # last dim is width "x"
+        predicted_keypoints[:, :, 1] /= batch_dict["images"].shape[-2]  # 2nd to last dim is height "y"
+        # multiply and add by bbox dims (x,y,h,w)
+        for i in range(predicted_keypoints.shape[0]):
+            predicted_keypoints[i, :, 0] *= batch_dict["bbox"][i, 3]  # scale x by box width
+            predicted_keypoints[i, :, 0] += batch_dict["bbox"][i, 0]  # add bbox x offset
+            predicted_keypoints[i, :, 1] *= batch_dict["bbox"][i, 2]  # scale y by box height
+            predicted_keypoints[i, :, 1] += batch_dict["bbox"][i, 1]  # add bbox y offset
+        # return new keypoints, reshaped to (batch, nTargets)
+        return predicted_keypoints.reshape((-1, self.num_targets))
+
     def get_loss_inputs_labeled(self, batch_dict: HeatmapLabeledBatchDict) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
         predicted_heatmaps = self.forward(batch_dict["images"])
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
-        # TODO: reshape data to get X and Y, incorrect below!
-        # convert predicted_keypoints from pixel to normalized coords
-        predicted_keypoints[:, :self.num_keypoints] /= batch_dict["images"].shape[-1]
-        predicted_keypoints[:, self.num_keypoints:] /= batch_dict["images"].shape[-2]
-        # convert from normalized coords to original image coords
-        for b in range(predicted_keypoints.shape[0]):
-            predicted_keypoints[b, :self.num_keypoints] *= batch_dict["bbox"][b, 3]
-            predicted_keypoints[b, :self.num_keypoints] += batch_dict["bbox"][b, 0]
-            predicted_keypoints[b, self.num_keypoints:] *= batch_dict["bbox"][b, 2]
-            predicted_keypoints[b, self.num_keypoints:] += batch_dict["bbox"][b, 1]
-
-        # predicted_keypoints[:, :self.num_keypoints] *= batch_dict["bbox"][:, 3]
-        # predicted_keypoints[:, :self.num_keypoints] += batch_dict["bbox"][:, 0]
-        # predicted_keypoints[:, self.num_keypoints:] *= batch_dict["bbox"][:, 2]
-        # predicted_keypoints[:, self.num_keypoints:] += batch_dict["bbox"][:, 1]
+        # bounding box coords -> original image coords
+        predicted_keypoints = self.convert_bbox_coords(batch_dict, predicted_keypoints)
         return {
             "heatmaps_targ": batch_dict["heatmaps"],
             "heatmaps_pred": predicted_heatmaps,
@@ -324,7 +327,10 @@ class HeatmapTracker(BaseSupervisedTracker):
         predicted_heatmaps = self.forward(images)
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
-        # predicted_keypoints, confidence = self.run_hard_argmax(predicted_heatmaps)
+        # bounding box coords -> original image coords
+        # TODO: extend this to unlabeled data
+        if "images" in batch_dict.keys():
+            predicted_keypoints = self.convert_bbox_coords(batch_dict, predicted_keypoints)
         if return_heatmaps:
             return predicted_keypoints, confidence, predicted_heatmaps
         else:
