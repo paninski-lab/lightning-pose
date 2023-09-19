@@ -269,13 +269,14 @@ class HeatmapTracker(BaseSupervisedTracker):
         # softmax temp stays 1 here; to modify for model predictions, see constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
 
-    def convert_bbox_coords(self, batch_dict: HeatmapLabeledBatchDict, predicted_keypoints: TensorType["batch", "num_targets"]
+    def convert_bbox_coords(self, batch_dict: HeatmapLabeledBatchDict,
+                            predicted_keypoints: TensorType["batch", "num_targets"]
                             ) -> TensorType["batch", "num_targets"]:
         # reshape from (batch, nTargets) back to (batch, nKey, 2), in x,y order
         predicted_keypoints = predicted_keypoints.reshape((-1, self.num_keypoints, 2))
         # divide by image dims to get 0-1 normalized coordinates
-        predicted_keypoints[:, :, 0] /= batch_dict["images"].shape[-1]  # last dim is width "x"
-        predicted_keypoints[:, :, 1] /= batch_dict["images"].shape[-2]  # 2nd to last dim is height "y"
+        predicted_keypoints[:, :, 0] /= batch_dict["images"].shape[-1]  # -1 dim is width "x"
+        predicted_keypoints[:, :, 1] /= batch_dict["images"].shape[-2]  # -2 dim is height "y"
         # multiply and add by bbox dims (x,y,h,w)
         for i in range(predicted_keypoints.shape[0]):
             predicted_keypoints[i, :, 0] *= batch_dict["bbox"][i, 3]  # scale x by box width
