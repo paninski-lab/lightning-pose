@@ -33,7 +33,7 @@ def test_train_loader_iter(base_data_module_combined):
         assert type(batch["unlabeled"]) is dict
         assert type(batch["unlabeled"]["frames"]) is torch.Tensor
         assert check_lists_equal(
-            list(batch["labeled"].keys()), ["images", "keypoints", "idxs"]
+            list(batch["labeled"].keys()), ["images", "keypoints", "idxs", "bbox"]
         )
     assert image_counter == dataset_length
 
