@@ -332,6 +332,8 @@ class HeatmapTracker(BaseSupervisedTracker):
         # TODO: extend this to unlabeled data
         if "images" in batch_dict.keys():
             predicted_keypoints = self.convert_bbox_coords(batch_dict, predicted_keypoints)
+        else:
+            print('TO DO: convert bbox coords for unlabeled frames')
         if return_heatmaps:
             return predicted_keypoints, confidence, predicted_heatmaps
         else:
