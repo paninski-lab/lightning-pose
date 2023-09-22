@@ -90,23 +90,6 @@ def heatmap_dataset(cfg, imgaug_transform) -> HeatmapDataset:
     del heatmap_dataset
     torch.cuda.empty_cache()
 
-# @pytest.fixture
-# def multiviewheatmap_dataset(cfg, imgaug_transform) -> HeatmapDataset:
-#     """Create a dataset for heatmap models from toy data."""
-
-#     # setup
-#     cfg_tmp = copy.deepcopy(cfg)
-#     cfg_tmp.model.model_type = "heatmap"
-#     heatmap_dataset = get_dataset(
-#         cfg_tmp, data_dir=TOY_DATA_ROOT_DIR, imgaug_transform=imgaug_transform
-#     )
-
-#     # return to tests
-#     yield heatmap_dataset
-
-#     # cleanup after all tests have run (no more calls to yield)
-#     del heatmap_dataset
-#     torch.cuda.empty_cache()
 
 @pytest.fixture
 def heatmap_dataset_context(cfg, imgaug_transform) -> HeatmapDataset:

@@ -17,7 +17,8 @@ from typeguard import typechecked
 from lightning_pose.callbacks import AnnealWeight
 from lightning_pose.data.augmentations import imgaug_transform
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
-from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset, MultiviewHeatmapDataset
+from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
+from lightning_pose.data.datasets import MultiviewHeatmapDataset
 from lightning_pose.data.utils import compute_num_train_frames, split_sizes_from_probabilities
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.metrics import (
@@ -81,20 +82,20 @@ def get_dataset(
             dataset = MultiviewHeatmapDataset(
                 root_directory=data_dir,
                 csv_paths=cfg.data.csv_file,
-                view_names = cfg.data.view_names,
+                view_names=cfg.data.view_names,
                 downsample_factor=cfg.data.downsample_factor,
                 imgaug_transform=imgaug_transform,
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
-            ) 
+            )
         else:
             dataset = HeatmapDataset(
                 root_directory=data_dir,
                 csv_path=cfg.data.csv_file,
                 imgaug_transform=imgaug_transform,
                 downsample_factor=cfg.data.downsample_factor,
-                do_context=cfg.model.model_type == "heatmap_mhcrnn", # context only for mhcrnn
+                do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
-            )            
+            )
         return dataset
     else:
         raise NotImplementedError(
@@ -173,7 +174,7 @@ def get_loss_factories(
 
     # collect all supervised losses in a dict; no extra params needed
     # set "log_weight = 0.0" so that weight = 1 and effective weight is (1 / 2)
-    if cfg.model.model_type == "heatmap" or cfg.model.model_type == "heatmap_mhcrnn" or cfg.model.model_type == "MultiviewHeatmapDataset":
+    if cfg.model.model_type == "heatmap" or cfg.model.model_type == "heatmap_mhcrnn":
         loss_name = "heatmap_" + cfg.model.heatmap_loss_type
         loss_params_dict["supervised"][loss_name] = {"log_weight": 0.0}
     else:

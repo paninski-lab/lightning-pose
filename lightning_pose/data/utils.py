@@ -30,7 +30,7 @@ class HeatmapLabeledExampleDict(BaseLabeledExampleDict):
 
 
 class MultiviewLabeledExampleDict(TypedDict):
-    """Return type when calling __getitem__() on BaseTrackingDataset."""    
+    """Return type when calling __getitem__() on BaseTrackingDataset."""
     images: Union[
         TensorType["RGB":3, "image_height", "image_width", float],
         TensorType["frames", "RGB":3, "image_height", "image_width", float],
