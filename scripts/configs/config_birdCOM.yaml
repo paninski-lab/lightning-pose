@@ -1,18 +1,18 @@
 data:
   # dimensions of training images
   image_orig_dims:
-    height: 2816
-    width: 1408
+    height: 1696
+    width: 2816
   # resize dimensions to streamline model creation
   image_resize_dims:
     height: 384
     width: 384
   # ABSOLUTE path to data directory
-  data_dir: data/chickadee-example
+  data_dir: data/Chickadee
   # ABSOLUTE path to unlabeled videos' directory
   video_dir: null
   # location of labels; this should be relative to `data_dir`
-  csv_file: CollectedData.csv
+  csv_file: All_Labels.csv
   # downsample heatmaps - 2 | 3
   downsample_factor: 2
   # total number of keypoints
@@ -45,8 +45,8 @@ data:
   detector:
     # resampled image size for detector network
     image_resize_dims:
-      height: 512
-      width: 256
+      height: 256
+      width: 512
     # heatmap downsample factor for detector network
     downsample_factor: 2
     # list of lists for keypoints to average and detect
@@ -55,9 +55,9 @@ data:
       - [4,5,10,15]
       - [7]
     # number of coarse keypoints to track, should match outer list length of keypoints_for_crop
-    num_keypoints: 3
+    num_keypoints_for_crop: 3
     # names of the coarse keypoints
-    keypoint_names:
+    keypoint_names_for_crop:
       - head
       - body
       - tail
@@ -93,13 +93,13 @@ training:
   # number of gpus to train a single model
   num_gpus: 1
   # number of cpu workers for data loaders
-  num_workers: 4
+  num_workers: 8
   # epochs over which to assess validation metrics for early stopping
   early_stop_patience: 3
   # epoch at which backbone network weights begin updating
   unfreezing_epoch: 20
   # max training epochs; training may exit before due to early stopping
-  min_epochs: 300
+  min_epochs: 100
   max_epochs: 750
   # frequency to log training metrics (one step is one batch)
   log_every_n_steps: 10
@@ -136,7 +136,15 @@ model:
   # mse | kl | js
   heatmap_loss_type: mse
   # directory name for model saving
-  model_name: test
+  model_name: chickadee_posture
+  # field to hold parameters for the detector network, when using dynamic-crop algorithm
+  detector:
+    # backbone to use for detector network (same options as model.backbone)
+    backbone: resnet50_animal_ap10k
+    # detector losses to use (same options as model.losses_to_use)
+    losses_to_use: []
+    # directory for detector model saving
+    model_name: chickadee_detector
 
 dali:
   general:
