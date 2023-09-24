@@ -3,7 +3,7 @@
 import copy
 import os
 from collections import OrderedDict
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple
 
 import imgaug.augmenters as iaa
 import lightning.pytorch as pl
@@ -590,3 +590,34 @@ def export_predictions_and_labeled_video(
             mask_array=mask_array,
             filename=labeled_mp4_file,
         )
+
+
+@typechecked
+def get_detector_model(cfg: DictConfig, data_dir: str, video_dir: Optional[str] = None
+                       ) -> Tuple[pl.LightningModule, BaseDataModule]:
+    """get a detector model from a dynamic pipeline"""
+    if not cfg.data.get('dynamic_crop', False):
+        raise ValueError(
+            "Implemented only for dynamic crop algorithm"
+        )
+
+    # make a config copy and overwrite values with detector values
+    detector_cfg = cfg.copy()
+    for key in detector_cfg.data.detector:
+        if key in detector_cfg.data:
+            detector_cfg.data[key] = detector_cfg.data.detector[key]
+    for key in detector_cfg.model.detector:
+        if key in detector_cfg.data:
+            detector_cfg.model[key] = detector_cfg.model.detector[key]
+
+    # detector model gets full images in, should use standard image resizing pipeline
+    detector_cfg.data.dynamic_crop = False
+
+    # run all steps to get detector model
+    imgaug_transform = get_imgaug_transform(cfg=detector_cfg)
+    dataset = get_dataset(cfg=detector_cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
+    data_module = get_data_module(cfg=detector_cfg, dataset=dataset, video_dir=video_dir)
+    loss_factories = get_loss_factories(cfg=detector_cfg, data_module=data_module)
+    model = get_model(cfg=detector_cfg, data_module=data_module, loss_factories=loss_factories)
+
+    return model, data_module
