@@ -1,6 +1,7 @@
 """Dataset objects store images, labels, and functions for manipulation."""
 
 import os
+from copy import deepcopy
 from typing import Callable, List, Literal, Optional
 
 import imgaug.augmenters as iaa

@@ -68,7 +68,7 @@ def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
 @typechecked
 def get_dataset(
     cfg: DictConfig, data_dir: str, imgaug_transform: iaa.Sequential
-) -> Union[BaseTrackingDataset, HeatmapDataset]:
+) -> Union[BaseTrackingDataset, HeatmapDataset, MultiviewHeatmapDataset]:
     """Create a dataset that contains labeled data."""
 
     if cfg.model.model_type == "regression":
