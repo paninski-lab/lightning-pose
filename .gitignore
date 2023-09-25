@@ -5,6 +5,8 @@ outputs/
 multirun/
 preds/
 scripts/.ipynb_checkpoints
+data/Chickadee
+tb_logs
 #scripts/configs_*
 
 # Byte-compiled / optimized / DLL files
