@@ -294,10 +294,11 @@ class HeatmapTracker(BaseSupervisedTracker):
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
         # bounding box coords -> original image coords
         predicted_keypoints = self.convert_bbox_coords(batch_dict, predicted_keypoints)
+        target_keypoints = self.convert_bbox_coords(batch_dict, batch_dict["keypoints"])
         return {
             "heatmaps_targ": batch_dict["heatmaps"],
             "heatmaps_pred": predicted_heatmaps,
-            "keypoints_targ": batch_dict["keypoints"],
+            "keypoints_targ": target_keypoints,
             "keypoints_pred": predicted_keypoints,
             "confidences": confidence,
         }
