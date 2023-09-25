@@ -1,8 +1,4 @@
 data:
-  # dimensions of training images
-  image_orig_dims:
-    height: 1696
-    width: 2816
   # resize dimensions to streamline model creation
   image_resize_dims:
     height: 384
@@ -55,9 +51,9 @@ data:
       - [4,5,10,15]
       - [7]
     # number of coarse keypoints to track, should match outer list length of keypoints_for_crop
-    num_keypoints_for_crop: 3
+    num_keypoints: 3
     # names of the coarse keypoints
-    keypoint_names_for_crop:
+    keypoint_names:
       - head
       - body
       - tail
@@ -95,11 +91,11 @@ training:
   # number of cpu workers for data loaders
   num_workers: 8
   # epochs over which to assess validation metrics for early stopping
-  early_stop_patience: 3
+  early_stop_patience: 10
   # epoch at which backbone network weights begin updating
-  unfreezing_epoch: 20
+  unfreezing_epoch: 10
   # max training epochs; training may exit before due to early stopping
-  min_epochs: 100
+  min_epochs: 50
   max_epochs: 750
   # frequency to log training metrics (one step is one batch)
   log_every_n_steps: 10
@@ -116,7 +112,7 @@ training:
   lr_scheduler: multisteplr
   lr_scheduler_params:
     multisteplr:
-      milestones: [150, 200, 250]
+      milestones: [40, 60, 80]
       gamma: 0.5
 
 model:
