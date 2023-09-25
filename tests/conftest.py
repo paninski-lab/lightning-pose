@@ -19,10 +19,9 @@ from omegaconf import OmegaConf
 
 from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
-from lightning_pose.data.datasets import (
+from lightning_pose.data.datasets import (  # MultiviewHeatmapDataset
     BaseTrackingDataset,
     HeatmapDataset,
-    # MultiviewHeatmapDataset
 )
 from lightning_pose.utils.io import get_videos_in_dir
 from lightning_pose.utils.scripts import (
