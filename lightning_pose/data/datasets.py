@@ -445,7 +445,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
     @property
     def height(self) -> int:
         # is this correct?
-        # should it be self.dataset[self.view_names[0]].height * self.num_views ?
+        # shouldn't it be self.dataset[self.view_names[0]].height * self.num_views ?
         return self.dataset[self.view_names[0]].height
 
     @property
@@ -521,4 +521,4 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             images=image,  # shape (3, img_height, img_width) or (5, 3, H, W)
             keypoints=keypoints,  # shape (n_targets,)
             idxs=idx,
-            heatmaps=heatmaps)            
+            heatmaps=heatmaps)

@@ -22,7 +22,7 @@ from lightning_pose.data.datasets import (
     BaseTrackingDataset,
     HeatmapDataset,
     MultiviewHeatmapDataset,
-)    
+)
 from lightning_pose.data.utils import compute_num_train_frames, split_sizes_from_probabilities
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.metrics import (
@@ -100,7 +100,8 @@ def get_dataset(
                 do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
             )
-            image = Image.open(os.path.join(dataset.root_directory, dataset.image_names[0])).convert("RGB")
+            image = Image.open(os.path.join(dataset.root_directory,
+                                            dataset.image_names[0])).convert("RGB")
             if image.size != (cfg.data.image_orig_dims.width, cfg.data.image_orig_dims.height):
                 raise ValueError(
                     f"image_orig_dims in data configuration file is "
@@ -117,7 +118,7 @@ def get_dataset(
 @typechecked
 def get_data_module(
     cfg: DictConfig,
-    dataset: Union[BaseTrackingDataset, HeatmapDataset],
+    dataset: Union[BaseTrackingDataset, HeatmapDataset, MultiviewHeatmapDataset],
     video_dir: Optional[str] = None,
 ) -> Union[BaseDataModule, UnlabeledDataModule]:
     """Create a data module that splits a dataset into train/val/test iterators."""

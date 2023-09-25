@@ -19,7 +19,11 @@ from omegaconf import OmegaConf
 
 from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
-from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
+from lightning_pose.data.datasets import (
+    BaseTrackingDataset,
+    HeatmapDataset,
+    # MultiviewHeatmapDataset
+)
 from lightning_pose.utils.io import get_videos_in_dir
 from lightning_pose.utils.scripts import (
     get_callbacks,
@@ -89,6 +93,25 @@ def heatmap_dataset(cfg, imgaug_transform) -> HeatmapDataset:
     # cleanup after all tests have run (no more calls to yield)
     del heatmap_dataset
     torch.cuda.empty_cache()
+
+
+# @pytest.fixture
+# def Multiview_heatmap_dataset(cfg, imgaug_transform) -> MultiviewHeatmapDataset:
+#     """Create a dataset for heatmap models from toy data."""
+
+#     # setup
+#     cfg_tmp = copy.deepcopy(cfg)
+#     cfg_tmp.model.model_type = "heatmap"
+#     heatmap_dataset = get_dataset(
+#         cfg_tmp, data_dir=TOY_DATA_ROOT_DIR, imgaug_transform=imgaug_transform
+#     )
+
+#     # return to tests
+#     yield heatmap_dataset
+
+#     # cleanup after all tests have run (no more calls to yield)
+#     del heatmap_dataset
+#     torch.cuda.empty_cache()
 
 
 @pytest.fixture
