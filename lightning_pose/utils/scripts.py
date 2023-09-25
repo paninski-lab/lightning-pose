@@ -607,7 +607,7 @@ def get_detector_model(cfg: DictConfig, data_dir: str, video_dir: Optional[str] 
         if key in detector_cfg.data:
             detector_cfg.data[key] = detector_cfg.data.detector[key]
     for key in detector_cfg.model.detector:
-        if key in detector_cfg.data:
+        if key in detector_cfg.model:
             detector_cfg.model[key] = detector_cfg.model.detector[key]
 
     # detector model gets full images in, should use standard image resizing pipeline
