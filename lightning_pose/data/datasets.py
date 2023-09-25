@@ -520,5 +520,4 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             images=image,  # shape (3, img_height, img_width) or (5, 3, H, W)
             keypoints=keypoints,  # shape (n_targets,)
             idxs=idx,
-            heatmaps=heatmaps
-            )
+            heatmaps=heatmaps)            

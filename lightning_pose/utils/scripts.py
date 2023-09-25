@@ -18,7 +18,11 @@ from typeguard import typechecked
 from lightning_pose.callbacks import AnnealWeight
 from lightning_pose.data.augmentations import imgaug_transform
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
-from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
+from lightning_pose.data.datasets import (
+    BaseTrackingDataset,
+    HeatmapDataset,
+    MultiviewHeatmapDataset,
+)    
 from lightning_pose.data.utils import compute_num_train_frames, split_sizes_from_probabilities
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.metrics import (
@@ -68,32 +72,44 @@ def get_dataset(
     """Create a dataset that contains labeled data."""
 
     if cfg.model.model_type == "regression":
-        dataset = BaseTrackingDataset(
-            root_directory=data_dir,
-            csv_path=cfg.data.csv_file,
-            imgaug_transform=imgaug_transform,
-            do_context=False,  # no context for regression models
-        )
+        if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
+            raise NotImplementedError("Multi-view support only available for heatmap-based models")
+        else:
+            dataset = BaseTrackingDataset(
+                root_directory=data_dir,
+                csv_path=cfg.data.csv_file,
+                imgaug_transform=imgaug_transform,
+                do_context=False,  # no context for regression models
+            )
     elif cfg.model.model_type == "heatmap" or cfg.model.model_type == "heatmap_mhcrnn":
-        dataset = HeatmapDataset(
-            root_directory=data_dir,
-            csv_path=cfg.data.csv_file,
-            imgaug_transform=imgaug_transform,
-            downsample_factor=cfg.data.downsample_factor,
-            do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
-            uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
-        )
+        if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
+            dataset = MultiviewHeatmapDataset(
+                root_directory=data_dir,
+                csv_paths=cfg.data.csv_file,
+                view_names=cfg.data.view_names,
+                downsample_factor=cfg.data.downsample_factor,
+                imgaug_transform=imgaug_transform,
+                uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
+            )
+        else:
+            dataset = HeatmapDataset(
+                root_directory=data_dir,
+                csv_path=cfg.data.csv_file,
+                imgaug_transform=imgaug_transform,
+                downsample_factor=cfg.data.downsample_factor,
+                do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
+                uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
+            )
+            image = Image.open(os.path.join(dataset.root_directory, dataset.image_names[0])).convert("RGB")
+            if image.size != (cfg.data.image_orig_dims.width, cfg.data.image_orig_dims.height):
+                raise ValueError(
+                    f"image_orig_dims in data configuration file is "
+                    f"(width={cfg.data.image_orig_dims.width}, height={cfg.data.image_orig_dims.height}) "
+                    f"but your image size is (width={image.size[0]}, height={image.size[1]}). "
+                    f"Please update the data configuration file"
+                )
     else:
         raise NotImplementedError("%s is an invalid cfg.model.model_type" % cfg.model.model_type)
-
-    image = Image.open(os.path.join(dataset.root_directory, dataset.image_names[0])).convert("RGB")
-    if image.size != (cfg.data.image_orig_dims.width, cfg.data.image_orig_dims.height):
-        raise ValueError(
-            f"image_orig_dims in data configuration file is "
-            f"(width={cfg.data.image_orig_dims.width}, height={cfg.data.image_orig_dims.height}) "
-            f"but your image size is (width={image.size[0]}, height={image.size[1]}). "
-            f"Please update the data configuration file"
-        )
 
     return dataset
 
