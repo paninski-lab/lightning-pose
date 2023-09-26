@@ -201,7 +201,7 @@ def train(cfg: DictConfig):
     # ----------------------------------------------------------------------------------
     # update config file to point to OOD data
     csv_file_ood = os.path.join(cfg.data.data_dir, cfg.data.csv_file).replace(
-        ".csv", "_new.csv"
+        ".csv", "_active_test.csv"
     )
     if os.path.exists(csv_file_ood):
         cfg_ood = cfg.copy()
@@ -219,7 +219,7 @@ def train(cfg: DictConfig):
         data_module_ood.setup()
         pretty_print_str("Predicting OOD images...")
         # compute and save frame-wise predictions
-        preds_file_ood = os.path.join(hydra_output_directory, "predictions_new.csv")
+        preds_file_ood = os.path.join(hydra_output_directory, "predictions_active_test.csv")
         predict_dataset(
               cfg=cfg_ood,
               trainer=trainer,
@@ -258,7 +258,7 @@ def train(cfg: DictConfig):
 
     '''
     csv_file_ood = os.path.join(cfg.data.data_dir, cfg.data.csv_file).replace(
-        ".csv", "_active_test.csv"
+        ".csv", "_new.csv"
     )
     '''
 
@@ -278,7 +278,7 @@ def train(cfg: DictConfig):
         data_module_ood.setup()
         pretty_print_str("Predicting on Active Loop Test images...")
         # compute and save frame-wise predictions
-        preds_file_ood = os.path.join(hydra_output_directory, "predictions_active_test.csv")
+        preds_file_ood = os.path.join(hydra_output_directory, "predictions_new.csv")
         predict_dataset(
             cfg=cfg_ood,
             trainer=trainer,
