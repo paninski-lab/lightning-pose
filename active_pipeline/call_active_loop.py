@@ -66,6 +66,7 @@ def call_active_all(active_cfg):
           else:
 
             new_df = pd.read_csv(first100_path, header = [0,1,2], index_col=0)
+            print("The Training Set is:", new_df.shape[0])
             used_vids, _ = get_vids(new_df, num_vids, random_seeds)
             labeled_df.drop(index = new_df.index, inplace=True)
             labeled_df.to_csv(ref_data_path)
