@@ -14,7 +14,7 @@ project: "ibl_toy"
 active_pipeline:
   experiment_cfg: ${oc.env:LIGHTPOSE_DIR}/active_pipeline/configs/config_ibl_experiment.yaml
   iterations_folders: "iteration_active_loop/experiment0" # relative to data_dir
-  start_iteration: 1
+  start_iteration: 0
   end_iteration: 2
   current_iteration: null
   experiment_kwargs: null
@@ -28,6 +28,9 @@ iteration_0:
   num_frames: 10
   use_seeds: [0]
   iteration_folder: null
+  num_vids: 5
+  train_frames: 1 #total_frames = train_frames / train_prob (i.e. 50 frames = 5/0.1)
+  train_prob: 0.1
 
 iteration_1:
   output_prev_run: []
@@ -36,6 +39,9 @@ iteration_1:
   num_frames: 10
   use_seeds: [0]
   iteration_folder: null
+  num_vids: 5
+  train_frames: 1 #total_frames = train_frames / train_prob (i.e. 50 frames = 5/0.1)
+  train_prob: 0.1
 
 iteration_2:
   output_prev_run: []
@@ -43,6 +49,9 @@ iteration_2:
   num_frames: 10
   use_seeds: [0]
   iteration_folder: null
+  num_vids: 5
+  train_frames: 1 #total_frames = train_frames / train_prob (i.e. 50 frames = 5/0.1)
+  train_prob: 0.1
 
 
 
