@@ -15,21 +15,21 @@ def calculate_ensemble_frames(prev_output_dirs, num_frames, header_rows=[0,1,2])
 
   # Find common elements across all csv files
   for run_idx, folder_path in enumerate(prev_output_dirs):
-    csv_file = os.path.join(folder_path, "predictions_new.csv")
+    csv_file = os.path.join(folder_path, "predictions_active_test.csv")
     csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
     all_indices.append(csv_data.index.values)
   common_elements = np.asarray(find_common_elements(*all_indices))
 
   # read xy keypoints from each csv file
   for run_idx, folder_path in enumerate(prev_output_dirs):
-    csv_file = os.path.join(folder_path, "predictions_new.csv")
+    csv_file = os.path.join(folder_path, "predictions_active_test.csv")
     csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
     all_indices.append(csv_data.index.values)
     # filter by common elements
     csv_data = csv_data.loc[common_elements]
     all_np.append(csv_data.iloc[:,:-1].to_numpy())
     # num_keypoints x (x, y, likelihood) + ('train')
-    # train is always true for predictions_new in test mode
+    # train is always true for predictions_active_test in test mode
     frame_ids = csv_data.index.to_numpy()
     keypoints = csv_data.to_numpy()[...,:-1]
     xy_keypoints = keypoints.reshape(keypoints.shape[0], -1, 3)[..., :-1]
@@ -62,28 +62,28 @@ def find_common_elements(*lists):
   return list(common_elements)
 
 
-def calculate_ensemble_frames_for_active_test(prev_output_dirs, num_frames, header_rows=[0,1,2]):
+def calculate_ensemble_frames_for_new(prev_output_dirs, num_frames, header_rows=[0,1,2]):
   all_keypoints = []
   all_indices = []
   all_np=list()
   all_var=list()
   # Find common elements across all csv files
   for run_idx, folder_path in enumerate(prev_output_dirs):
-    csv_file = os.path.join(folder_path, "predictions_active_test.csv")
+    csv_file = os.path.join(folder_path, "predictions_new.csv")
     csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
     all_indices.append(csv_data.index.values)
   common_elements = np.asarray(find_common_elements(*all_indices))
 
   # read xy keypoints from each csv file
   for run_idx, folder_path in enumerate(prev_output_dirs):
-    csv_file = os.path.join(folder_path, "predictions_active_test.csv")
+    csv_file = os.path.join(folder_path, "predictions_new.csv")
     csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
     all_indices.append(csv_data.index.values)
     # filter by common elements
     csv_data = csv_data.loc[common_elements]
     all_np.append(csv_data.iloc[:,:-1].to_numpy())
     # num_keypoints x (x, y, likelihood) + ('train')
-    # train is always true for predictions_new in test mode
+    # train is always true for predictions_active_test in test mode
     frame_ids = csv_data.index.to_numpy()
     keypoints = csv_data.to_numpy()[...,:-1]
 
@@ -150,7 +150,7 @@ def merge_collected_data(active_iter_cfg, selected_frames_file, active_test_data
   # Step 3: Merge new CollectedData.csv with the original CollectedData.csv:
 
   # merge Collected_data.csv to include iteration_{}_indices.csv
-  # remove iteration_{}_indices.csv from  {CollectedData}_new.csv
+  # remove iteration_{}_indices.csv from  {CollectedData}_active_test.csv
 
   :param active_iter_cfg:
   :return:
@@ -162,7 +162,7 @@ def merge_collected_data(active_iter_cfg, selected_frames_file, active_test_data
 
   # read active test frames:
   if active_test_data_flag:
-    act_test_data_file = train_data_file.replace(".csv", "_active_test.csv")  ### -----> New Add !!!! 09 Aug
+    act_test_data_file = train_data_file.replace(".csv", "_new.csv")  ### -----> New Add !!!! 09 Aug
     act_test_data = pd.read_csv(act_test_data_file, header=[0, 1, 2], index_col=0)
     act_test_data.to_csv(active_iter_cfg.act_test_data_file)
 
@@ -193,13 +193,13 @@ def Histogram_Plot(method, data, output_dir):
   plt.show()
   plt.cla()
 
-def select_common_frames(prev_output_dirs,predict_new_name, predict_active_name, header_rows=[0,1,2]):
+def select_common_frames(prev_output_dirs,predict_active_test_name, predict_active_name, header_rows=[0,1,2]):
 
 
 
   all_indices = []
   for run_idx, folder_path in enumerate(prev_output_dirs):
-    csv_file = os.path.join(folder_path, predict_new_name)
+    csv_file = os.path.join(folder_path, predict_active_test_name)
     csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
     all_indices.append(csv_data.index.values)
   common_elements = np.asarray(find_common_elements(*all_indices))
@@ -318,8 +318,13 @@ def select_frames_calculate(active_iter_cfg, data_cfg, used_vids, header_rows=[0
   num_frames = active_iter_cfg.num_frames
   output_dir = active_iter_cfg.iteration_folder
   prev_output_dirs = active_iter_cfg.output_prev_run
+
+  use_seeds = active_iter_cfg.use_seeds[0]
+  num_vids = active_iter_cfg.num_vids
+  train_frames = active_iter_cfg.train_frames #total_frames = train_frames / train_prob (i.e. 50 frames = 5/0.1)
+  train_prob = active_iter_cfg.train_prob
   
-  #DataFrame for the whole collected_new data
+  #DataFrame for the whole collected_active_test data
   all_data = pd.read_csv(active_iter_cfg.eval_data_file_prev_run, header=[0, 1, 2], index_col=0) 
 
   #The function to get Dataframe of all frames in the selected 5 vids
@@ -333,35 +338,35 @@ def select_frames_calculate(active_iter_cfg, data_cfg, used_vids, header_rows=[0
   print("###### The selected path:", selected_frames_path)
   # Choose different evaluation csvfile according to corresponding active learning method.
   if method == "random":
-    new_df, used_vids = subsample_frames_from_df(all_data, 5,10,0.1,0,used_vids,iter0_flag=False)
+    new_df, used_vids = subsample_frames_from_df(all_data, num_vids, train_frames, train_prob, use_seeds, used_vids, iter0_flag=False)
     new_df.to_csv(selected_frames_path)
 
   else:
     new_df = pd.read_csv(selected_frames_path, header=[0, 1, 2], index_col=0)
-    used_vids, _ = get_vids(new_df, 5, 0)
+    used_vids, _ = get_vids(new_df, num_vids, use_seeds)
     
 
   if method == 'margin sampling':
 
-    predict_new_name = "predictions_new_heatmap.csv" 
-    predict_active_name = "predictions_active_test_heatmap.csv"
+    predict_active_test_name = "predictions_active_test_heatmap.csv" 
+    predict_active_name = "predictions_new_heatmap.csv"
 
   elif method == "Single PCAS":
-    predict_new_name = "predictions_new_pca_singleview_error.csv"
-    predict_active_name = "predictions_active_test_pca_singleview_error.csv"
+    predict_active_test_name = "predictions_active_test_pca_singleview_error.csv"
+    predict_active_name = "predictions_new_pca_singleview_error.csv"
     # different evaluation file may have different number of headers 
     header_rows=[0]
   
   elif method == 'Equal Variance':
-    predict_new_name = "predictions_new_equalvariance.csv"
-    predict_active_name = "predictions_active_test_equalvariance.csv"
+    predict_active_test_name = "predictions_active_test_equalvariance.csv"
+    predict_active_name = "predictions_new_equalvariance.csv"
 
   else:
-    predict_new_name = "predictions_new.csv" #"predictions_new.csv" 
-    predict_active_name = "predictions_active_test.csv" #"predictions_active_test.csv"
+    predict_active_test_name = "predictions_active_test.csv" #"predictions_active_test.csv" 
+    predict_active_name = "predictions_new.csv" #"predictions_new.csv"
 
   common_elements =select_common_frames(prev_output_dirs, 
-    predict_new_name, predict_active_name, header_rows)
+    predict_active_test_name, predict_active_name, header_rows)
 
   # read xy keypoints from each csv file
   if method == 'Ensembling':
@@ -375,7 +380,7 @@ def select_frames_calculate(active_iter_cfg, data_cfg, used_vids, header_rows=[0
   selected_frames_list=list()
   # For loop to find common frames in differnt prediction csv files
   for run_idx, folder_path in enumerate(prev_output_dirs):
-    csv_file = os.path.join(folder_path, predict_new_name)
+    csv_file = os.path.join(folder_path, predict_active_test_name)
     csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
     all_indices.append(csv_data.index.values)
     # filter by common elements
@@ -385,18 +390,18 @@ def select_frames_calculate(active_iter_cfg, data_cfg, used_vids, header_rows=[0
     current_frames_list.append(csv_data.index.values)
     Global_Common_Elements = np.asarray(find_common_elements(*current_frames_list))
     csv_data = csv_data.loc[Global_Common_Elements]
-    csv_active_test_file=os.path.join(folder_path, predict_active_name)
-    if os.path.isfile(csv_active_test_file) == True:
-      csv_active_test_data=pd.read_csv(csv_active_test_file, header=header_rows, index_col=0)
+    csv_new_file=os.path.join(folder_path, predict_active_name)
+    if os.path.isfile(csv_new_file) == True:
+      csv_new_data=pd.read_csv(csv_new_file, header=header_rows, index_col=0)
       active_test_data_flag=True
 
     else:
-      csv_active_test_data=None
+      csv_new_data=None
       active_test_data_flag=False
 
     sep_flag=True
 
-    selected_frames = select_frames(active_iter_cfg, data_cfg, csv_data, csv_active_test_data, active_test_data_flag)
+    selected_frames = select_frames(active_iter_cfg, data_cfg, csv_data, csv_new_data, active_test_data_flag)
     selected_frames_list.append(selected_frames)
     matched_rows = all_data.loc[selected_frames.index]
 
@@ -410,7 +415,7 @@ def select_frames_calculate(active_iter_cfg, data_cfg, used_vids, header_rows=[0
   if method != "Ensembling" and len(prev_output_dirs) > 1 :
 
     selected_frame_total_df = pd.concat(selected_frames_list, axis=0)
-    selected_frames = select_frames(active_iter_cfg, data_cfg, selected_frame_total_df, csv_active_test_data=None, active_test_data_flag=False)
+    selected_frames = select_frames(active_iter_cfg, data_cfg, selected_frame_total_df, csv_new_data=None, active_test_data_flag=False)
     matched_rows = all_data.loc[selected_frames.index]
 
   
@@ -423,7 +428,7 @@ def select_frames_calculate(active_iter_cfg, data_cfg, used_vids, header_rows=[0
 
   return selected_indices_file, active_test_data_flag, used_vids
 
-def select_frames(active_iter_cfg, data_cfg, csv_data, csv_active_test_data, active_test_data_flag):
+def select_frames(active_iter_cfg, data_cfg, csv_data, csv_new_data, active_test_data_flag):
   """
   Step 2: select frames to label
   Implement the logic for selecting frames based on the specified method:
@@ -474,7 +479,7 @@ def select_frames(active_iter_cfg, data_cfg, csv_data, csv_active_test_data, act
     Histogram_Plot(method, margin["Uncertainity"], output_dir)
 
     if active_test_data_flag == True:
-      active_test_margin = csv_active_test_data #pd.read_csv(csv_active_test_file, header=[0, 1, 2], index_col=0)
+      active_test_margin = csv_new_data #pd.read_csv(csv_new_file, header=[0, 1, 2], index_col=0)
       active_test_margin_numpy = active_test_margin.to_numpy()[..., :-1]
       uncertainty = active_test_margin_numpy.reshape(active_test_margin_numpy.shape[0], -1, 3)[..., -1]
       active_test_margin["Uncertainity"] = uncertainty.sum(-1).astype(float)
@@ -491,7 +496,7 @@ def select_frames(active_iter_cfg, data_cfg, csv_data, csv_active_test_data, act
     Histogram_Plot(method, margin['sum'], output_dir)
 
     if active_test_data_flag == True:
-      active_test_margin = csv_active_test_data
+      active_test_margin = csv_new_data
       active_test_margin['sum'] = active_test_margin.sum(axis=1)
       Histogram_Plot(method, margin['sum'], output_dir)
 
@@ -503,10 +508,10 @@ def select_frames(active_iter_cfg, data_cfg, csv_data, csv_active_test_data, act
     matched_rows, csv_data_mean, csv_data_var = calculate_ensemble_frames(prev_output_dirs, num_frames)
 
     if active_test_data_flag == True:
-      _, csv_data_mean, csv_data_var = calculate_ensemble_frames_for_active_test(prev_output_dirs, num_frames)
-      csv_mean_file = os.path.join(prev_output_dirs[-1], "predictions_active_test.csv")
+      _, csv_data_mean, csv_data_var = calculate_ensemble_frames_for_new(prev_output_dirs, num_frames)
+      csv_mean_file = os.path.join(prev_output_dirs[-1], "predictions_new.csv")
       csv_data_mean.to_csv(csv_mean_file)
-      csv_var_file = os.path.join(prev_output_dirs[-1], "predictions_var_active_test.csv")
+      csv_var_file = os.path.join(prev_output_dirs[-1], "predictions_var_new.csv")
       csv_data_var.drop(csv_data_var.columns[-1], axis=1, inplace=True)
       csv_data_var.drop(csv_data_var.columns[2::3], axis=1, inplace=True)
       csv_data_var.to_csv(csv_var_file)
@@ -514,9 +519,9 @@ def select_frames(active_iter_cfg, data_cfg, csv_data, csv_active_test_data, act
       Histogram_Plot(method, csv_data_var['sum'], output_dir)
 
     else:
-      csv_mean_file = os.path.join(prev_output_dirs[-1], "predictions_new.csv")
+      csv_mean_file = os.path.join(prev_output_dirs[-1], "predictions_active_test.csv")
       csv_data_mean.to_csv(csv_mean_file)
-      csv_var_file = os.path.join(prev_output_dirs[-1], "predictions_var_new.csv")
+      csv_var_file = os.path.join(prev_output_dirs[-1], "predictions_var_active_test.csv")
       csv_data_var.drop(csv_data_var.columns[-1], axis=1, inplace=True)
       csv_data_var.drop(csv_data_var.columns[2::3], axis=1, inplace=True)
       csv_data_var.to_csv(csv_var_file)
@@ -537,9 +542,9 @@ def select_frames(active_iter_cfg, data_cfg, csv_data, csv_active_test_data, act
     single_pca['sum'] = single_pca.iloc[:, [0, 1]].sum(axis=1)
     Histogram_Plot(method, single_pca['sum'], output_dir)
     if active_test_data_flag == True:
-       single_pca_active_test = csv_active_test_data
-       single_pca_active_test['sum'] = single_pca_active_test.iloc[:, [0, 1]].sum(axis=1)
-       Histogram_Plot(method, single_pca_active_test['sum'], output_dir)
+       single_pca_new = csv_new_data
+       single_pca_new['sum'] = single_pca_new.iloc[:, [0, 1]].sum(axis=1)
+       Histogram_Plot(method, single_pca_new['sum'], output_dir)
     selected_frames = single_pca.nlargest(num_frames, 'sum')
     selected_frames = selected_frames.drop('sum', axis=1)
 
@@ -551,7 +556,7 @@ def select_frames(active_iter_cfg, data_cfg, csv_data, csv_active_test_data, act
     margin['sum'] = margin.sum(axis=1)
     Histogram_Plot(method, margin['sum'], output_dir)
     if active_test_data_flag == True:
-      active_test_margin = csv_active_test_data
+      active_test_margin = csv_new_data
       active_test_margin['sum'] = active_test_margin.sum(axis=1)
       Histogram_Plot(method, active_test_margin['sum'], output_dir)
     selected_frames = margin.nsmallest(num_frames, 'sum')
@@ -597,8 +602,8 @@ def active_loop_step(active_loop_cfg, used_vids):
     # Read train and eval files
     # TODO: replace to make list
     train_data_file_prev_run = str(Path(experiment_cfg.data.data_dir, active_iter_cfg.csv_file_prev_run))
-    eval_data_file_prev_run = train_data_file_prev_run.replace(".csv","_new.csv") #.replace('.csv', '_new.csv')
-    act_test_data_file_prev_run = train_data_file_prev_run.replace('.csv', '_active_test.csv') #.replace('.csv', '_active_test.csv') ### New add
+    eval_data_file_prev_run = train_data_file_prev_run.replace(".csv","_active_test.csv") #.replace('.csv', '_active_test.csv')
+    act_test_data_file_prev_run = train_data_file_prev_run.replace('.csv', '_new.csv') #.replace('.csv', '_new.csv') ### New add
 
     # update active loop params to config file
     # add additional keys:
@@ -618,8 +623,8 @@ def active_loop_step(active_loop_cfg, used_vids):
           '{}_{}'.format(active_iter_cfg.iteration_prefix,
                          os.path.basename(train_data_file_prev_run))
       )
-      active_iter_cfg.eval_data_file = active_iter_cfg.train_data_file.replace(".csv","_new.csv") #.replace('.csv', '_new.csv')
-      active_iter_cfg.act_test_data_file = active_iter_cfg.train_data_file.replace('.csv', '_active_test.csv') #.replace('.csv', '_active_test.csv') ### New add
+      active_iter_cfg.eval_data_file = active_iter_cfg.train_data_file.replace(".csv","_active_test.csv") #.replace('.csv', '_active_test.csv')
+      active_iter_cfg.act_test_data_file = active_iter_cfg.train_data_file.replace('.csv', '_new.csv') #.replace('.csv', '_new.csv') ### New add
 
     # Active Loop: Initialize the iteration folder
     #  TODO(haotianxiansti):  add code for iter 0 (select frames when no labeles are present)
@@ -628,11 +633,11 @@ def active_loop_step(active_loop_cfg, used_vids):
     selected_frames_file, active_test_data_flag, used_vids = select_frames_calculate(active_iter_cfg, experiment_cfg.data, used_vids) #select frames and return the place newly selected frames and active-test flag
 
     # Now, we have the directory:
-    # created Collected_data_new_merged and Collected_data_merged.csv
+    # created Collected_data_active_test_merged and Collected_data_merged.csv
     merge_collected_data(active_iter_cfg, selected_frames_file, active_test_data_flag) #merge files and drop files
     # run algorithm with new config file
     # TODO: check location of new csv for iteration relative to data_dir
-    # it should have CollectedData.csv and CollectedData_new.csv
+    # it should have CollectedData.csv and CollectedData_active_test.csv
     relpath = os.path.relpath(active_iter_cfg.train_data_file, experiment_cfg.data.data_dir)
 
     return relpath, used_vids
