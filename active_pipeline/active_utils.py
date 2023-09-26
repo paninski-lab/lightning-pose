@@ -343,6 +343,7 @@ def select_frames_calculate(active_iter_cfg, data_cfg, used_vids, header_rows=[0
 
   else:
     new_df = pd.read_csv(selected_frames_path, header=[0, 1, 2], index_col=0)
+    print("The Training Set is:", new_df.shape[0])
     used_vids, _ = get_vids(new_df, num_vids, use_seeds)
     
 
