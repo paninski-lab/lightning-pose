@@ -40,15 +40,24 @@ def call_active_all(active_cfg):
         # TODO*: if output run is present -- only calculate additional metrics
         if current_iteration == 0:
 
+          file_new_path = exp_cfg.data.csv_file.replace(".csv","_True.csv")
+          if os.path.exists(file_new_path):
+            new_df_file = pd.read_csv(file_new_path, header = [0,1,2], index_col=0)
+            new_df_file.to_csv(exp_cfg.data.csv_file)
           labeled_df = pd.read_csv(exp_cfg.data.csv_file,header = [0,1,2], index_col=0)
           first100_path = os.path.join(os.path.dirname(exp_cfg.data.csv_file),"new_100.csv")
-          ref_data_path = exp_cfg.data.csv_file.replace(".csv","_new.csv")
+          ref_data_path = exp_cfg.data.csv_file.replace(".csv","_active_test.csv")
           true_data_path = exp_cfg.data.csv_file.replace(".csv","_True.csv")
           labeled_df.to_csv(true_data_path)
 
+          random_seeds = active_cfg[iteration_key_current].use_seeds[0]
+          num_vids = active_cfg[iteration_key_current].num_vids
+          train_frames = active_cfg[iteration_key_current].train_frames
+          train_prob = active_cfg[iteration_key_current].train_prob
           if active_cfg[iteration_key_current].method == "random":
             
-            new_df, used_vids = subsample_frames_from_df(labeled_df,5,10,0.1,0)
+            
+            new_df, used_vids = subsample_frames_from_df(labeled_df, num_vids, train_frames, train_prob, random_seeds)
             labeled_df.drop(index = new_df.index, inplace=True)
             labeled_df.to_csv(ref_data_path)
             new_df.to_csv(exp_cfg.data.csv_file)     
@@ -57,7 +66,7 @@ def call_active_all(active_cfg):
           else:
 
             new_df = pd.read_csv(first100_path, header = [0,1,2], index_col=0)
-            used_vids, _ = get_vids(new_df, 5, 0)
+            used_vids, _ = get_vids(new_df, num_vids, random_seeds)
             labeled_df.drop(index = new_df.index, inplace=True)
             labeled_df.to_csv(ref_data_path)
             new_df.to_csv(exp_cfg.data.csv_file)
