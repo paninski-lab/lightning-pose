@@ -29,7 +29,7 @@ iteration_0:
   use_seeds: [0]
   iteration_folder: null
   num_vids: 5
-  train_frames: 1 #total_frames = train_frames / train_prob (i.e. 50 frames = 5/0.1)
+  train_frames: 1 #num_frames = train_frames / train_prob (i.e. 50 frames = 5/0.1)
   train_prob: 0.1
 
 iteration_1:
@@ -40,7 +40,7 @@ iteration_1:
   use_seeds: [0]
   iteration_folder: null
   num_vids: 5
-  train_frames: 1 #total_frames = train_frames / train_prob (i.e. 50 frames = 5/0.1)
+  train_frames: 1 #num_frames = train_frames / train_prob (i.e. 50 frames = 5/0.1)
   train_prob: 0.1
 
 iteration_2:
@@ -50,7 +50,7 @@ iteration_2:
   use_seeds: [0]
   iteration_folder: null
   num_vids: 5
-  train_frames: 1 #total_frames = train_frames / train_prob (i.e. 50 frames = 5/0.1)
+  train_frames: 1 #num_frames = train_frames / train_prob (i.e. 50 frames = 5/0.1)
   train_prob: 0.1
 
 
