@@ -551,16 +551,16 @@ class PredictionHandler_heatmap:
         predictions[:, 1::4] = keypoints_np[:, 1::2] / y_resize * y_og
         predictions[:, 2::4] = confidence_np
         heat_np_list={}
-        seg_num=4
+        seg_num = heat_np
         for i in range(seg_num):
           heat_np_list[str(i)]=list()
         for n in range(heat_np.shape[0]):
           for i in range(seg_num):
-            diff=cal_qudra(heat_np[n][i])
+            diff = np.var(heat_np[n][i]) #cal_qudra(heat_np[n][i])
             heat_np_list[str(i)].append(diff)
         column_heatmap=list()
         for s in range(confidence_np.shape[1] * 4):
-          if s%4 ==3:
+          if s%4 == 3:
             column_heatmap.append(s)
 
         for i in range(seg_num):
