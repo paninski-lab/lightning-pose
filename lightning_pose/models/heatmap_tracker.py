@@ -269,14 +269,18 @@ class HeatmapTracker(BaseSupervisedTracker):
         # softmax temp stays 1 here; to modify for model predictions, see constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
 
-    def convert_bbox_coords(self, batch_dict: HeatmapLabeledBatchDict,
+    def convert_bbox_coords(self, batch_dict: Union[HeatmapLabeledBatchDict, UnlabeledBatchDict],
                             predicted_keypoints: TensorType["batch", "num_targets"]
                             ) -> TensorType["batch", "num_targets"]:
         # reshape from (batch, nTargets) back to (batch, nKey, 2), in x,y order
         predicted_keypoints = predicted_keypoints.reshape((-1, self.num_keypoints, 2))
         # divide by image dims to get 0-1 normalized coordinates
-        predicted_keypoints[:, :, 0] /= batch_dict["images"].shape[-1]  # -1 dim is width "x"
-        predicted_keypoints[:, :, 1] /= batch_dict["images"].shape[-2]  # -2 dim is height "y"
+        if "images" in batch_dict.keys():
+            predicted_keypoints[:, :, 0] /= batch_dict["images"].shape[-1]  # -1 dim is width "x"
+            predicted_keypoints[:, :, 1] /= batch_dict["images"].shape[-2]  # -2 dim is height "y"
+        else: # we have unlabeled dict, 'frames' instead of 'images'
+            predicted_keypoints[:, :, 0] /= batch_dict["frames"].shape[-1]  # -1 dim is width "x"
+            predicted_keypoints[:, :, 1] /= batch_dict["frames"].shape[-2]  # -2 dim is height "y"
         # multiply and add by bbox dims (x,y,h,w)
         for i in range(predicted_keypoints.shape[0]):
             predicted_keypoints[i, :, 0] *= batch_dict["bbox"][i, 3]  # scale x by box width
@@ -330,11 +334,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
         # bounding box coords -> original image coords
-        # TODO: extend this to unlabeled data
-        if "images" in batch_dict.keys():
-            predicted_keypoints = self.convert_bbox_coords(batch_dict, predicted_keypoints)
-        else:
-            print('TO DO: convert bbox coords for unlabeled frames')
+        predicted_keypoints = self.convert_bbox_coords(batch_dict, predicted_keypoints)
         if return_heatmaps:
             return predicted_keypoints, confidence, predicted_heatmaps
         else:
@@ -421,6 +421,9 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             predicted_keypoints = torch.reshape(pred_kps, (pred_kps.shape[0], -1))
         else:
             predicted_keypoints = predicted_keypoints_augmented
+
+        # keypoints -> original image coords keypoints
+        predicted_keypoints = self.convert_bbox_coords(batch_dict, predicted_keypoints)
 
         return {
             "heatmaps_pred": predicted_heatmaps,  # if augmented, augmented heatmaps
