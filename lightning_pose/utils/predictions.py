@@ -202,13 +202,13 @@ class PredictionHandler:
         predictions = np.zeros((keypoints_np.shape[0], num_joints * 3))
         predictions[:, 0] = np.arange(keypoints_np.shape[0])
         # put x vals back in original pixel space
-        x_resize = self.cfg.data.image_resize_dims.width
-        x_og = self.cfg.data.image_orig_dims.width
-        predictions[:, 0::3] = keypoints_np[:, 0::2] / x_resize * x_og
+        # x_resize = self.cfg.data.image_resize_dims.width
+        # x_og = self.cfg.data.image_orig_dims.width
+        predictions[:, 0::3] = keypoints_np[:, 0::2] #/ x_resize * x_og
         # put y vals back in original pixel space
-        y_resize = self.cfg.data.image_resize_dims.height
-        y_og = self.cfg.data.image_orig_dims.height
-        predictions[:, 1::3] = keypoints_np[:, 1::2] / y_resize * y_og
+        # y_resize = self.cfg.data.image_resize_dims.height
+        # y_og = self.cfg.data.image_orig_dims.height
+        predictions[:, 1::3] = keypoints_np[:, 1::2] #/ y_resize * y_og
         predictions[:, 2::3] = confidence_np
 
         return predictions
