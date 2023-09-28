@@ -551,7 +551,7 @@ class PredictionHandler_heatmap:
         predictions[:, 1::4] = keypoints_np[:, 1::2] / y_resize * y_og
         predictions[:, 2::4] = confidence_np
         heat_np_list={}
-        seg_num = heat_np
+        seg_num = heat_np.shape[1]
         for i in range(seg_num):
           heat_np_list[str(i)]=list()
         for n in range(heat_np.shape[0]):
