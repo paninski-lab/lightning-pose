@@ -49,6 +49,47 @@ def cfg() -> dict:
     cfg["dali"]["base"]["predict"]["sequence_length"] = 16
     return OmegaConf.create(cfg)
 
+@pytest.fixture
+def cfg_multiview() -> dict:
+    """Load all toy data config file without hydra."""
+    base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
+    config_file = os.path.join(base_dir, "scripts", "configs", "config_mirror-mouse-example.yaml")
+    cfg = yaml.load(open(config_file), Loader=yaml.FullLoader)
+    # make small batches so that we can run on a gpu with limited memory
+    cfg["training"]["train_batch_size"] = 2
+    cfg["training"]["val_batch_size"] = 4
+    cfg["training"]["test_batch_size"] = 4
+    cfg["training"]["imgaug"] = "default"  # so pca tests don't break
+    cfg["dali"]["base"]["train"]["sequence_length"] = 6
+    cfg["dali"]["base"]["predict"]["sequence_length"] = 16
+    cfg["data"]["csv_file"] = ["bot.csv", "top.csv"]
+    cfg["data"]["view_names"] = ["bot", "bot"]
+    cfg["data"]["num_keypoints"] = {"bot": 9, "top": 8}
+    cfg["data"]["keypoint_names"] = {
+        "top": [
+            "paw1LH_top",
+            "paw2LF_top",
+            "paw3RF_top",
+            "paw4RH_top",
+            "tailBase_top",
+            "tailMid_top",
+            "nose_top",
+            "obs_top",
+        ],
+        "bot": [
+            "paw1LH_bot",
+            "paw2LF_bot",
+            "paw3RF_bot",
+            "paw4RH_bot",
+            "tailBase_bot",
+            "tailMid_bot",
+            "nose_bot",
+            "obsHigh_bot",
+            "obsLow_bot",
+        ]
+    }    
+    return OmegaConf.create(cfg)
+
 
 @pytest.fixture
 def imgaug_transform(cfg) -> iaa.Sequential:
