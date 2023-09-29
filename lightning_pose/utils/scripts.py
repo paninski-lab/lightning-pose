@@ -83,6 +83,7 @@ def get_dataset(
             )
     elif cfg.model.model_type == "heatmap" or cfg.model.model_type == "heatmap_mhcrnn":
         if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
+            UserWarning("No precautions regarding the size of the images were considered here, images will be resized accordingly to configs!")
             dataset = MultiviewHeatmapDataset(
                 root_directory=data_dir,
                 csv_paths=cfg.data.csv_file,

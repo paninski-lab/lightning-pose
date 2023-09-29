@@ -401,9 +401,10 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         self.view_names = view_names
 
         # check if all CSV files have the same number of columns
-        self.num_keypoints = set(list(self.num_keypoints.values()))
-        if len(self.num_keypoints) != 1:
-            raise ImportError("in the CSV files, number of bodyparts do not match!")
+        self.num_keypoints = sum(self.num_keypoints.values())
+        
+        # if len(self.num_keypoints) != 1:
+        #     raise ImportError("in the CSV files, number of bodyparts do not match!")
 
         # check if all CSV files have the same number of rows
         self.data_length = set(list(self.data_length.values()))
@@ -411,14 +412,14 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             raise ImportError("the CSV files do not match in row numbers!")
         self.data_length = self.data_length.pop()
 
-        self.num_keypoints_unique = self.num_keypoints.pop()
-        self.num_keypoints = self.num_keypoints_unique * self.num_views
+        # self.num_keypoints_unique = self.num_keypoints.pop()
+        # self.num_keypoints = self.num_keypoints_unique * self.num_views
         self.num_targets = self.num_keypoints * 2
 
         # check if all the data is in correct order
         self.check_data_images_names()
 
-    def check_data_images_names(self):
+    def check_data_images_names(self, delimiter:str="img"):
         """Data checking
         Each object in self.datasets will have the attribute image_names
         (i.e. self.datasets['top'].image_names) since each values is a
@@ -427,17 +428,17 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         each individual view we know these are properly matched.
         """
 
-        for i in range(self.num_keypoints_unique):
-            keypoint_name_buff = []
-            for _, keypoint_names in self.keypoint_names.items():
-                keypoint_name_buff.append(keypoint_names[i])
-            if len(set(keypoint_name_buff)) != 1:
-                raise ImportError("Discrepancy in keypoint names across CSV files!")
+        # for i in range(self.num_keypoints_unique):
+        #     keypoint_name_buff = []
+        #     for _, keypoint_names in self.keypoint_names.items():
+        #         keypoint_name_buff.append(keypoint_names[i])
+        #     if len(set(keypoint_name_buff)) != 1:
+        #         raise ImportError("Discrepancy in keypoint names across CSV files!")
 
         for idx in range(self.data_length):
             img_name_buff = []
             for view, heatmaps in self.dataset.items():
-                img_name_buff.append(heatmaps.image_names[idx].split("_")[-1])
+                img_name_buff.append(heatmaps.image_names[idx].split(delimiter)[-1])
                 if len(set(img_name_buff)) != 1:
                     raise ImportError(f"Discrepancy in images names across CSV \
                                       files! index:{idx}, image frame names:{img_name_buff}")
@@ -446,7 +447,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
     def height(self) -> int:
         # is this correct?
         # shouldn't it be self.dataset[self.view_names[0]].height * self.num_views ?
-        return self.dataset[self.view_names[0]].height
+        return self.dataset[self.view_names[0]].height * self.num_views
 
     @property
     def width(self) -> int:
@@ -487,8 +488,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             heatmap_buffer[:, view_num * heatmap_length:(view_num + 1) * heatmap_length
                            , :] = data["heatmaps"]
             heatmaps.append(deepcopy(heatmap_buffer))
-            data["keypoints"] = data["keypoints"].reshape(int(self.num_keypoints
-                                                              / self.num_views), 2)
+            data["keypoints"] = data["keypoints"].reshape(int(data["keypoints"].shape[0]/2), 2)
             data["keypoints"][:, 1] = data["keypoints"][:, 1] + view_num * data["images"].shape[1]
             keypoints.append(deepcopy(data["keypoints"]))
             images.append(data["images"])
