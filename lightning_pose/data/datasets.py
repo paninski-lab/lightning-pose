@@ -426,6 +426,11 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         HeatmapDataset. Include a check to make sure that the image names
         are the same across all views, so that when it loads element n from
         each individual view we know these are properly matched.
+
+        Args:
+
+            delimiter: for spliting the file name string to get the frame number and format.
+
         """
 
         # for i in range(self.num_keypoints_unique):
