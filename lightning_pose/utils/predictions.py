@@ -4,6 +4,7 @@ import gc
 import os
 import time
 from typing import List, Optional, Tuple, Type, Union
+from omegaconf import DictConfig, OmegaConf
 
 import cv2
 import lightning.pytorch as pl
@@ -83,6 +84,8 @@ class PredictionHandler:
     @property
     def keypoint_names(self):
         if self.cfg.data.get("keypoint_names", None) is not None:
+            if isinstance(self.cfg.data.get("keypoint_names"), DictConfig):
+                return dict(self.cfg.data.get("keypoint_names"))
             return list(self.cfg.data.keypoint_names)
         elif self.cfg.data.get("keypoints", None) is not None:
             return list(self.cfg.data.keypoints)
@@ -254,12 +257,28 @@ class PredictionHandler:
         pred_arr = self.make_pred_arr_undo_resize(
             stacked_preds.cpu().numpy(), stacked_confs.cpu().numpy()
         )
-        pdindex = self.make_dlc_pandas_index()
-        df = pd.DataFrame(pred_arr, columns=pdindex)
-        if self.video_file is None:
-            # specify which image is train/test/val/unused
-            df = self.add_split_indices_to_df(df)
-            df.index = self.data_module.dataset.image_names
+        if isinstance(self.keypoint_names, dict):
+            idx_beg = 0
+            idx_end = None
+            df = {}
+            for view_name, keypoint_names in self.keypoint_names.items():
+                keypoint_names = list(keypoint_names)
+                idx_end = idx_beg + len(keypoint_names)
+                idx_select = np.arange(3 * idx_beg, 3 * idx_end)  # check this
+                pdindex = self.make_dlc_pandas_index(keypoint_names)
+                df[view_name] = pd.DataFrame(pred_arr[:, idx_select], columns=pdindex)
+                if self.video_file is None:
+                # specify which image is train/test/val/unused
+                    df[view_name] = self.add_split_indices_to_df(df[view_name])
+                    df[view_name].index = self.data_module.dataset.dataset[view_name].image_names
+                idx_beg = idx_end
+        else:
+            pdindex = self.make_dlc_pandas_index()
+            df = pd.DataFrame(pred_arr, columns=pdindex)
+            if self.video_file is None:
+                # specify which image is train/test/val/unused
+                df = self.add_split_indices_to_df(df)
+                df.index = self.data_module.dataset.image_names
 
         return df
 
@@ -272,7 +291,7 @@ def predict_dataset(
     ckpt_file: Optional[str] = None,
     trainer: Optional[pl.Trainer] = None,
     model: Optional[ALLOWED_MODELS] = None,
-) -> pd.DataFrame:
+) -> Union[pd.DataFrame, dict]:
     """Save predicted keypoints for a labeled dataset.
 
     Args:
@@ -304,7 +323,12 @@ def predict_dataset(
 
     pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
     labeled_preds_df = pred_handler(preds=labeled_preds)
-    labeled_preds_df.to_csv(preds_file)
+    if isinstance(labeled_preds_df, dict):
+        for view_name, df in labeled_preds_df.items():
+            view_name = "_" + view_name + ".csv"
+            df.to_csv(preds_file.replace(".csv", view_name))
+    else:
+        labeled_preds_df.to_csv(preds_file)
 
     return labeled_preds_df
 
