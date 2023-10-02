@@ -220,6 +220,27 @@ def heatmap_data_module(cfg, heatmap_dataset) -> BaseDataModule:
 
 
 @pytest.fixture
+def Multiview_heatmap_data_module(cfg, MultiviewHeatmap_Dataset) -> BaseDataModule:
+    """Create a labeled data module for heatmap models."""
+
+    # setup
+    cfg_tmp = copy.deepcopy(cfg)
+    cfg_tmp.model.losses_to_use = []
+    # bump up training data so we can test pca_singleview loss
+    cfg_tmp.training.train_prob = 0.95
+    cfg_tmp.training.val_prob = 0.025
+    data_module = get_data_module(cfg_tmp, dataset=MultiviewHeatmap_Dataset, video_dir=None)
+    data_module.setup()
+
+    # return to tests
+    yield data_module
+
+    # cleanup after all tests have run (no more calls to yield)
+    del data_module
+    torch.cuda.empty_cache()
+
+
+@pytest.fixture
 def heatmap_data_module_context(cfg, heatmap_dataset_context) -> BaseDataModule:
     """Create a labeled data module for heatmap models."""
 
