@@ -270,14 +270,16 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
 
     def get_loss_inputs_labeled(
         self,
-        batch_dict: Union[BaseLabeledBatchDict, HeatmapLabeledBatchDict, MultiviewHeatmapLabeledExampleDict],
+        batch_dict: Union[BaseLabeledBatchDict, HeatmapLabeledBatchDict,
+                          MultiviewHeatmapLabeledExampleDict],
     ) -> dict:
         """Return predicted coordinates for a batch of data."""
         raise NotImplementedError
 
     def evaluate_labeled(
         self,
-        batch_dict: Union[BaseLabeledBatchDict, HeatmapLabeledBatchDict, MultiviewHeatmapLabeledExampleDict],
+        batch_dict: Union[BaseLabeledBatchDict, HeatmapLabeledBatchDict,
+                          MultiviewHeatmapLabeledExampleDict],
         stage: Optional[Literal["train", "val", "test"]] = None,
     ) -> TensorType[(), float]:
         """Compute and log the losses on a batch of labeled data."""
@@ -304,7 +306,8 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
 
     def training_step(
         self,
-        batch_dict: Union[BaseLabeledBatchDict, HeatmapLabeledBatchDict, MultiviewHeatmapLabeledExampleDict],
+        batch_dict: Union[BaseLabeledBatchDict, HeatmapLabeledBatchDict,
+                          MultiviewHeatmapLabeledExampleDict],
         batch_idx: int,
     ) -> Dict[str, TensorType[(), float]]:
         """Base training step, a wrapper around the `evaluate_labeled` method."""
@@ -313,7 +316,8 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
 
     def validation_step(
         self,
-        batch_dict: Union[BaseLabeledBatchDict, HeatmapLabeledBatchDict, MultiviewHeatmapLabeledExampleDict],
+        batch_dict: Union[BaseLabeledBatchDict, HeatmapLabeledBatchDict,
+                          MultiviewHeatmapLabeledExampleDict],
         batch_idx: int,
     ) -> None:
         """Base validation step, a wrapper around the `evaluate_labeled` method."""
@@ -321,7 +325,8 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
 
     def test_step(
         self,
-        batch_dict: Union[BaseLabeledBatchDict, HeatmapLabeledBatchDict, MultiviewHeatmapLabeledExampleDict],
+        batch_dict: Union[BaseLabeledBatchDict, HeatmapLabeledBatchDict,
+                          MultiviewHeatmapLabeledExampleDict],
         batch_idx: int,
     ) -> None:
         """Base test step, a wrapper around the `evaluate_labeled` method."""

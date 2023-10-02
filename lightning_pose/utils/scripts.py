@@ -83,7 +83,8 @@ def get_dataset(
             )
     elif cfg.model.model_type == "heatmap" or cfg.model.model_type == "heatmap_mhcrnn":
         if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
-            UserWarning("No precautions regarding the size of the images were considered here, images will be resized accordingly to configs!")
+            UserWarning("No precautions regarding the size of the images were considered here, \
+                        images will be resized accordingly to configs!")
             dataset = MultiviewHeatmapDataset(
                 root_directory=data_dir,
                 csv_paths=cfg.data.csv_file,
@@ -106,7 +107,8 @@ def get_dataset(
             if image.size != (cfg.data.image_orig_dims.width, cfg.data.image_orig_dims.height):
                 raise ValueError(
                     f"image_orig_dims in data configuration file is "
-                    f"(width={cfg.data.image_orig_dims.width}, height={cfg.data.image_orig_dims.height}) "
+                    f"(width={cfg.data.image_orig_dims.width}, \
+                        height={cfg.data.image_orig_dims.height}) "
                     f"but your image size is (width={image.size[0]}, height={image.size[1]}). "
                     f"Please update the data configuration file"
                 )

@@ -19,7 +19,8 @@ from omegaconf import OmegaConf
 
 from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
-from lightning_pose.data.datasets import (  # MultiviewHeatmapDataset
+from lightning_pose.data.datasets import (
+    MultiviewHeatmapDataset,
     BaseTrackingDataset,
     HeatmapDataset,
 )
@@ -32,6 +33,7 @@ from lightning_pose.utils.scripts import (
 )
 
 TOY_DATA_ROOT_DIR = "data/mirror-mouse-example"
+TOY_MDATA_ROOT_DIR = "data/mirror-mouse-example_split"
 
 
 @pytest.fixture
@@ -49,6 +51,7 @@ def cfg() -> dict:
     cfg["dali"]["base"]["predict"]["sequence_length"] = 16
     return OmegaConf.create(cfg)
 
+
 @pytest.fixture
 def cfg_multiview() -> dict:
     """Load all toy data config file without hydra."""
@@ -62,8 +65,9 @@ def cfg_multiview() -> dict:
     cfg["training"]["imgaug"] = "default"  # so pca tests don't break
     cfg["dali"]["base"]["train"]["sequence_length"] = 6
     cfg["dali"]["base"]["predict"]["sequence_length"] = 16
-    cfg["data"]["csv_file"] = ["bot.csv", "top.csv"]
-    cfg["data"]["view_names"] = ["bot", "bot"]
+    cfg["data"]["data_dir"] = "data/mirror-mouse-example_split"
+    cfg["data"]["csv_file"] = ["top.csv", "bot.csv"]
+    cfg["data"]["view_names"] = ["bot", "top"]
     cfg["data"]["num_keypoints"] = {"bot": 9, "top": 8}
     cfg["data"]["keypoint_names"] = {
         "top": [
@@ -87,7 +91,7 @@ def cfg_multiview() -> dict:
             "obsHigh_bot",
             "obsLow_bot",
         ]
-    }    
+    }
     return OmegaConf.create(cfg)
 
 
@@ -135,23 +139,23 @@ def heatmap_dataset(cfg, imgaug_transform) -> HeatmapDataset:
     torch.cuda.empty_cache()
 
 
-# @pytest.fixture
-# def Multiview_heatmap_dataset(cfg, imgaug_transform) -> MultiviewHeatmapDataset:
-#     """Create a dataset for heatmap models from toy data."""
+@pytest.fixture
+def MultiviewHeatmap_Dataset(cfg_multiview, imgaug_transform) -> MultiviewHeatmapDataset:
+    """Create a dataset for heatmap models from toy data."""
 
-#     # setup
-#     cfg_tmp = copy.deepcopy(cfg)
-#     cfg_tmp.model.model_type = "heatmap"
-#     heatmap_dataset = get_dataset(
-#         cfg_tmp, data_dir=TOY_DATA_ROOT_DIR, imgaug_transform=imgaug_transform
-#     )
+    # setup
+    cfg_tmp = copy.deepcopy(cfg_multiview)
+    cfg_tmp.model.model_type = "heatmap"
+    MultiviewHeatmap_Dataset = get_dataset(
+        cfg_tmp, data_dir=TOY_MDATA_ROOT_DIR, imgaug_transform=imgaug_transform
+    )
 
-#     # return to tests
-#     yield heatmap_dataset
+    # return to tests
+    yield MultiviewHeatmap_Dataset
 
-#     # cleanup after all tests have run (no more calls to yield)
-#     del heatmap_dataset
-#     torch.cuda.empty_cache()
+    # cleanup after all tests have run (no more calls to yield)
+    del MultiviewHeatmap_Dataset
+    torch.cuda.empty_cache()
 
 
 @pytest.fixture

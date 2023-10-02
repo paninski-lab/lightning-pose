@@ -402,7 +402,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         # check if all CSV files have the same number of columns
         self.num_keypoints = sum(self.num_keypoints.values())
-        
+
         # if len(self.num_keypoints) != 1:
         #     raise ImportError("in the CSV files, number of bodyparts do not match!")
 
@@ -419,7 +419,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         # check if all the data is in correct order
         self.check_data_images_names()
 
-    def check_data_images_names(self, delimiter:str="img"):
+    def check_data_images_names(self, delimiter: str = "img"):
         """Data checking
         Each object in self.datasets will have the attribute image_names
         (i.e. self.datasets['top'].image_names) since each values is a
@@ -432,13 +432,6 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             delimiter: for spliting the file name string to get the frame number and format.
 
         """
-
-        # for i in range(self.num_keypoints_unique):
-        #     keypoint_name_buff = []
-        #     for _, keypoint_names in self.keypoint_names.items():
-        #         keypoint_name_buff.append(keypoint_names[i])
-        #     if len(set(keypoint_name_buff)) != 1:
-        #         raise ImportError("Discrepancy in keypoint names across CSV files!")
 
         for idx in range(self.data_length):
             img_name_buff = []
@@ -493,7 +486,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             heatmap_buffer[:, view_num * heatmap_length:(view_num + 1) * heatmap_length
                            , :] = data["heatmaps"]
             heatmaps.append(deepcopy(heatmap_buffer))
-            data["keypoints"] = data["keypoints"].reshape(int(data["keypoints"].shape[0]/2), 2)
+            data["keypoints"] = data["keypoints"].reshape(int(data["keypoints"].shape[0] / 2), 2)
             data["keypoints"][:, 1] = data["keypoints"][:, 1] + view_num * data["images"].shape[1]
             keypoints.append(deepcopy(data["keypoints"]))
             images.append(data["images"])
