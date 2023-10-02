@@ -33,6 +33,10 @@ def train(cfg: DictConfig):
     print("Our Hydra config file:")
     pretty_print_cfg(cfg)
 
+    if cfg.model.model_type == "regression":
+        if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
+            raise NotImplementedError("Multi-view support only available for heatmap-based models")
+
     # path handling for toy data
     data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
 
