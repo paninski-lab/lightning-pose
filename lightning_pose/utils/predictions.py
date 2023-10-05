@@ -254,25 +254,38 @@ class PredictionHandler:
             pd.DataFrame: index is (frame, bodypart, x, y, likelihood)
         """
         stacked_preds, stacked_confs = self.unpack_preds(preds=preds)
-        pred_arr = self.make_pred_arr_undo_resize(
-            stacked_preds.cpu().numpy(), stacked_confs.cpu().numpy()
-        )
+        # print(stacked_preds.shape, stacked_confs.shape)
         if isinstance(self.keypoint_names, dict):
             idx_beg = 0
             idx_end = None
             df = {}
-            for view_name, keypoint_names in self.keypoint_names.items():
+            for view_num, (view_name, keypoint_names) in enumerate(self.keypoint_names.items()):
                 keypoint_names = list(keypoint_names)
-                idx_end = idx_beg + len(keypoint_names)
+                num_keypoints = len(keypoint_names)
+                idx_end = idx_beg + num_keypoints
+                # TODO : each image has its own size, without training set it will not work
+                y_orig = self.data_module.dataset.dataset[view_name].height * view_num
+                # print("indx> ", idx_beg, idx_end, y_orig)
+                # print(view_num, view_name, keypoint_names)
+                stacked_preds_single = stacked_preds[:, idx_beg*2:idx_beg*2+num_keypoints * 2]
+                stacked_preds_single[:, 1::2] = stacked_preds_single[:, 0::2] - y_orig
+                stacked_confs_single = stacked_confs[:, idx_beg:idx_end]
+                # print(stacked_preds_single.shape)
+                pred_arr = self.make_pred_arr_undo_resize(
+                    stacked_preds_single.cpu().numpy(), stacked_confs_single.cpu().numpy()
+                )
                 idx_select = np.arange(3 * idx_beg, 3 * idx_end)  # check this
                 pdindex = self.make_dlc_pandas_index(keypoint_names)
-                df[view_name] = pd.DataFrame(pred_arr[:, idx_select], columns=pdindex)
+                df[view_name] = pd.DataFrame(pred_arr, columns=pdindex)
                 if self.video_file is None:
                 # specify which image is train/test/val/unused
                     df[view_name] = self.add_split_indices_to_df(df[view_name])
                     df[view_name].index = self.data_module.dataset.dataset[view_name].image_names
                 idx_beg = idx_end
-        else:
+        else:            
+            pred_arr = self.make_pred_arr_undo_resize(
+                stacked_preds.cpu().numpy(), stacked_confs.cpu().numpy()
+            )
             pdindex = self.make_dlc_pandas_index()
             df = pd.DataFrame(pred_arr, columns=pdindex)
             if self.video_file is None:
@@ -327,6 +340,7 @@ def predict_dataset(
         for view_name, df in labeled_preds_df.items():
             view_name = "_" + view_name + ".csv"
             df.to_csv(preds_file.replace(".csv", view_name))
+            # print(preds_file.replace(".csv", view_name))
     else:
         labeled_preds_df.to_csv(preds_file)
 

@@ -107,6 +107,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         self.num_keypoints = self.keypoints.shape[1]
 
         self.data_length = len(self.image_names)
+        self.image_original_size = []
 
     @property
     def height(self) -> int:
@@ -130,6 +131,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             file_name = os.path.join(self.root_directory, img_name)
             # if 1 color channel, change to 3.
             image = Image.open(file_name).convert("RGB")
+            self.image_original_size.append(image.size)
             if self.imgaug_transform is not None:
                 transformed_images, transformed_keypoints = self.imgaug_transform(
                     images=np.expand_dims(image, axis=0),
@@ -506,16 +508,18 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         Images and their heatmaps and then stacks them.
         """
         datadict = {}
+        img_sizes = {}
         for view in self.view_names:
             # << view type here is int
             datadict[view] = self.dataset[view][idx]
-
+            img_sizes[view] = self.dataset[view].image_original_size[idx]
         image, heatmaps, keypoints, concat_order = self.fusion(datadict)
 
         return MultiviewHeatmapLabeledExampleDict(
-            # concat_order=concat_order, # List[int]
-            # view_names=self.view_names, # List[int]
-            # num_views=self.num_views # int
+            image_size=img_sizes,
+            concat_order=concat_order, # List[int]
+            view_names=self.view_names, # List[int]
+            num_views=self.num_views, # int
             images=image,  # shape (3, img_height, img_width) or (5, 3, H, W)
             keypoints=keypoints,  # shape (n_targets,)
             idxs=idx,

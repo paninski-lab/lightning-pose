@@ -44,8 +44,9 @@ class MultiviewHeatmapLabeledExampleDict(MultiviewLabeledExampleDict):
     heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width", float]
     # bbx: TensorType["bounding_box", float]
     num_views: int
-    concat_order: List[int]
+    concat_order: List[str]
     view_names: List[int]
+    image_size: dict # original image sizes
 
 
 class BaseLabeledBatchDict(TypedDict):
