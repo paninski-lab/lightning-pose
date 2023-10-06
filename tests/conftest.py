@@ -32,6 +32,11 @@ from lightning_pose.utils.scripts import (
     get_imgaug_transform,
 )
 
+import cv2
+import numpy as np
+import pandas as pd
+import subprocess
+
 TOY_DATA_ROOT_DIR = "data/mirror-mouse-example"
 TOY_MDATA_ROOT_DIR = "data/mirror-mouse-example_split"
 
@@ -95,6 +100,68 @@ def cfg_multiview() -> dict:
     return OmegaConf.create(cfg)
 
 
+def make_multiview_dataset() -> None:
+    # create multiview dataset
+    repo_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
+    base_dir = os.path.join(repo_dir, TOY_DATA_ROOT_DIR)
+    split_dir = os.path.join(repo_dir, TOY_MDATA_ROOT_DIR)
+    os.makedirs(split_dir, exist_ok=True)
+    y_split = 168  # empirically found for the example video
+    
+    # copy and split labeled data
+    src_dir_ld = os.path.join(base_dir, "labeled-data")
+
+    dst_dir_ld = os.path.join(split_dir, "labeled-data")
+    for view in ["top", "bot"]:
+        view_dir = os.path.join(dst_dir_ld, f"example_{view}")
+        os.makedirs(view_dir, exist_ok=True)
+
+    frames = os.listdir(src_dir_ld)
+    for frame in frames:
+        frame_file = os.path.join(src_dir_ld, frame)
+        img = cv2.cvtColor(cv2.imread(frame_file), cv2.COLOR_BGR2RGB)
+        # split views and save
+        save_file = os.path.join(dst_dir_ld, "example_top", frame)
+        cv2.imwrite(save_file, img[:y_split])
+        save_file = os.path.join(dst_dir_ld, "example_bot", frame)
+        cv2.imwrite(save_file, img[y_split:])   
+
+    # copy and split videos
+    src_dir_vids = os.path.join(base_dir, "videos")
+    dst_dir_vids = os.path.join(split_dir, "videos")
+    os.makedirs(dst_dir_vids, exist_ok=True)
+    videos = os.listdir(src_dir_vids)
+    for video in videos:
+        src_vid = os.path.join(src_dir_vids, video)
+        dst_vid_top = os.path.join(dst_dir_vids, video.replace(".mp4", "_top.mp4"))
+        dst_vid_bot = os.path.join(dst_dir_vids, video.replace(".mp4", "_bot.mp4"))
+        ffmpeg_cmd = f"ffmpeg -i {src_vid} -filter_complex '[0]crop=iw:{y_split}:0:0[top];[0]crop=iw:ih-{y_split}:0:{y_split}[bot]' -map '[top]' {dst_vid_top} -map '[bot]' {dst_vid_bot}"   
+        subprocess.run(ffmpeg_cmd, shell=True)
+
+    # copy and split CollectedData.csv
+    src_file = os.path.join(base_dir, "CollectedData.csv")
+    dst_file_top = os.path.join(split_dir, "top.csv")
+    dst_file_bot = os.path.join(split_dir, "bot.csv")
+
+    df_og = pd.read_csv(src_file, header=[0, 1, 2], index_col=0)
+    # just take top view columns
+    df_top = df_og.filter(regex="_top")
+    # just take bottom view columns
+    df_bot = df_og.filter(regex="_bot")
+    # subtract off split
+    df_bot.loc[:, df_bot.columns.get_level_values("coords") == "y"] -= y_split
+    # rename indices
+    index_top = [
+        "/".join([d.split("/")[0], "example_top", d.split("/")[1]]) for d in df_top.index]
+    df_top.index = index_top
+    index_bot = [
+        "/".join([d.split("/")[0], "example_bot", d.split("/")[1]]) for d in df_bot.index]
+    df_bot.index = index_bot
+    # save
+    df_top.to_csv(dst_file_top)
+    df_bot.to_csv(dst_file_bot)
+
+
 @pytest.fixture
 def imgaug_transform(cfg) -> iaa.Sequential:
     """Create basic resizing transform."""
@@ -142,7 +209,7 @@ def heatmap_dataset(cfg, imgaug_transform) -> HeatmapDataset:
 @pytest.fixture
 def MultiviewHeatmap_Dataset(cfg_multiview, imgaug_transform) -> MultiviewHeatmapDataset:
     """Create a dataset for heatmap models from toy data."""
-
+    make_multiview_dataset()
     # setup
     cfg_tmp = copy.deepcopy(cfg_multiview)
     cfg_tmp.model.model_type = "heatmap"
@@ -377,6 +444,8 @@ def remove_logs() -> Callable:
         base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
         logging_dir = os.path.join(base_dir, "lightning_logs")
         shutil.rmtree(logging_dir)
+        # Mview_dataset = os.path.join(base_dir, TOY_MDATA_ROOT_DIR)
+        # shutil.rmtree(Mview_dataset)
 
     return _remove_logs
 
