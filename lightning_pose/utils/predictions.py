@@ -727,7 +727,5 @@ def create_labeled_video(
         return frame
 
     clip_marked = clip.fl(add_marker)
-    clip_marked.write_videofile(
-        filename, codec="libx264", fps=fps_og if fps is None else fps
-    )
+    clip_marked.write_videofile(filename, codec="libx264", fps=fps or fps_og or 20.0)
     clip_marked.close()
