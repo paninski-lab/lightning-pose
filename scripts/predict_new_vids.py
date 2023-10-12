@@ -9,7 +9,6 @@ from moviepy.editor import VideoFileClip
 from omegaconf import DictConfig, OmegaConf
 from typeguard import typechecked
 
-from lightning_pose.utils import get_gpu_list_from_cfg
 from lightning_pose.utils.io import (
     check_if_semi_supervised,
     ckpt_path_from_base_path,
@@ -105,8 +104,7 @@ def predict_videos_in_dir(cfg: DictConfig):
     """
 
     # get pl trainer for prediction
-    gpus = get_gpu_list_from_cfg(cfg)
-    trainer = pl.Trainer(gpus=gpus)
+    trainer = pl.Trainer(accelerator="gpu", devices=1)
 
     # loop over models
     for i, hydra_relative_path in enumerate(cfg.eval.hydra_paths):
