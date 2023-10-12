@@ -26,7 +26,8 @@ def test_train_loader_iter(base_data_module_combined):
     image_counter = 0
     for i, batch in enumerate(combined_loader):
         print(i)
-
+        # batch is tuple as of lightning 2.0.9
+        batch = batch[0] if isinstance(batch, tuple) else batch
         image_counter += len(batch["labeled"]["keypoints"])
         assert type(batch) is dict
         assert type(batch["labeled"]) is dict
