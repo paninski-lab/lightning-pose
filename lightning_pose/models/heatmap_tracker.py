@@ -260,12 +260,17 @@ class HeatmapTracker(BaseSupervisedTracker):
 
     def forward(
         self,
-        images: TensorType["batch", "frames", "channels":3, "image_height", "image_width"],
+        images: Union[
+            TensorType["batch", "channels":3, "image_height", "image_width"],
+            TensorType["batch", "views", "channels":3, "image_height", "image_width"]
+        ],
     ) -> TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Forward pass through the network."""
         # we get one representation for each desired output.
         representations = self.get_representations(images)
         heatmaps = self.heatmaps_from_representations(representations)
+        # TODO if statement:
+            #  multiview: then stack v and k
         # softmax temp stays 1 here; to modify for model predictions, see constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
 

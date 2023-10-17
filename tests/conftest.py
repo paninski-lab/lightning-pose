@@ -105,7 +105,12 @@ def make_multiview_dataset() -> None:
     repo_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
     base_dir = os.path.join(repo_dir, TOY_DATA_ROOT_DIR)
     split_dir = os.path.join(repo_dir, TOY_MDATA_ROOT_DIR)
-    os.makedirs(split_dir, exist_ok=True)
+    
+    try:
+        os.makedirs(split_dir, exist_ok=False)
+    except FileExistsError:
+        pass
+
     y_split = 168  # empirically found for the example video
     
     # copy and split labeled data
@@ -444,8 +449,6 @@ def remove_logs() -> Callable:
         base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
         logging_dir = os.path.join(base_dir, "lightning_logs")
         shutil.rmtree(logging_dir)
-        # Mview_dataset = os.path.join(base_dir, TOY_MDATA_ROOT_DIR)
-        # shutil.rmtree(Mview_dataset)
 
     return _remove_logs
 

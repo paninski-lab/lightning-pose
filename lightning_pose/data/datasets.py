@@ -16,7 +16,7 @@ from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
 from lightning_pose.data.utils import (
     BaseLabeledExampleDict,
     HeatmapLabeledExampleDict,
-    MultiviewHeatmapLabeledExampleDict,
+    MultiviewHeatmapLabeledBatchDict,
     generate_heatmaps,
 )
 from lightning_pose.utils.io import get_keypoint_names
@@ -404,24 +404,13 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         # check if all CSV files have the same number of columns
         self.num_keypoints = sum(self.num_keypoints.values())
-
-        # if len(self.num_keypoints) != 1:
-        #     raise ImportError("in the CSV files, number of bodyparts do not match!")
-
-        # check if all CSV files have the same number of rows
-        self.data_length = set(list(self.data_length.values()))
-        if len(self.data_length) != 1:
-            raise ImportError("the CSV files do not match in row numbers!")
-        self.data_length = self.data_length.pop()
-
-        # self.num_keypoints_unique = self.num_keypoints.pop()
-        # self.num_keypoints = self.num_keypoints_unique * self.num_views
-        self.num_targets = self.num_keypoints * 2
-
-        # check if all the data is in correct order
+      
+        # check if all the data is in correct order, self.data_length changes here
         self.check_data_images_names()
 
-    def check_data_images_names(self, delimiter: str = "img"):
+        self.num_targets = self.num_keypoints * 2
+
+    def check_data_images_names(self, delimiter: str = "_"):
         """Data checking
         Each object in self.datasets will have the attribute image_names
         (i.e. self.datasets['top'].image_names) since each values is a
@@ -434,7 +423,17 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             delimiter: for spliting the file name string to get the frame number and format.
 
         """
+        # check if all CSV files have the same number of rows
+        if len(set(list(self.data_length.values()))) != 1:
+            raise ImportError("the CSV files do not match in row numbers!")
 
+        for key_num, keypoint in enumerate(self.keypoint_names[self.view_names[0]]):
+            for view, keypointComp in self.keypoint_names.items():
+                if keypoint != keypointComp[key_num]:
+                    raise ImportError(f"the keypoints are not in correct order! \
+                                      view: {self.view_names[0]} vs {view} | {keypoint} != {keypointComp}")
+
+        self.data_length = list(self.data_length.values())[0]
         for idx in range(self.data_length):
             img_name_buff = []
             for view, heatmaps in self.dataset.items():
@@ -446,8 +445,8 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
     @property
     def height(self) -> int:
         # is this correct?
-        # shouldn't it be self.dataset[self.view_names[0]].height * self.num_views ?
-        return self.dataset[self.view_names[0]].height * self.num_views
+        return self.dataset[self.view_names[0]].height
+        # return self.imgaug_transform[-1].get_parameters()[0][0].value
 
     @property
     def width(self) -> int:
@@ -468,10 +467,10 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
     def num_views(self) -> int:
         return len(self.view_names)
 
-    def fusion(self, datadict: dict, bbx: Optional[np.array] = np.array((0))):
+    def fusion(self, datadict: dict, bbox: Optional[np.array] = np.array((0))):
         """ Here all the view data will be merged into one image and multiple heatmaps.
             images and heatmaps will be concatenated vertically dim=1
-        args:
+        Args:
             heatmaps: this comes from HeatmapDataset.__getItems__(idx) for each view.
             bbx: the part of the image that needs to be cropped
         """
@@ -481,11 +480,11 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         concat_order = []
         for view_num, (view, data) in enumerate(datadict.items()):
             heatmap_key_num = data["heatmaps"].shape[0]
-            heatmap_length = data["heatmaps"].shape[1]
+            heatmap_height = data["heatmaps"].shape[1]
             heatmap_width = data["heatmaps"].shape[2]
             heatmap_buffer = torch.zeros(heatmap_key_num,
-                                         heatmap_length * self.num_views, heatmap_width)
-            heatmap_buffer[:, view_num * heatmap_length:(view_num + 1) * heatmap_length
+                                         heatmap_height * self.num_views, heatmap_width)
+            heatmap_buffer[:, view_num * heatmap_height:(view_num + 1) * heatmap_height
                            , :] = data["heatmaps"]
             heatmaps.append(deepcopy(heatmap_buffer))
             data["keypoints"] = data["keypoints"].reshape(int(data["keypoints"].shape[0] / 2), 2)
@@ -502,7 +501,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         return image, heatmaps, keypoints, concat_order
 
-    def __getitem__(self, idx: int) -> MultiviewHeatmapLabeledExampleDict:
+    def __getitem__(self, idx: int) -> MultiviewHeatmapLabeledBatchDict:
         """Get an example from the dataset.
         Calls the heatmapdataset for each csv file to get
         Images and their heatmaps and then stacks them.
@@ -513,14 +512,14 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             # << view type here is int
             datadict[view] = self.dataset[view][idx]
             img_sizes[view] = self.dataset[view].image_original_size[idx]
-        image, heatmaps, keypoints, concat_order = self.fusion(datadict)
+        images, heatmaps, keypoints, concat_order = self.fusion(datadict)
 
-        return MultiviewHeatmapLabeledExampleDict(
+        return MultiviewHeatmapLabeledBatchDict(
             image_size=img_sizes,
             concat_order=concat_order, # List[int]
             view_names=self.view_names, # List[int]
             num_views=self.num_views, # int
-            images=image,  # shape (3, img_height, img_width) or (5, 3, H, W)
+            images=images,  # shape (3, img_height, img_width) or (5, 3, H, W)
             keypoints=keypoints,  # shape (n_targets,)
             idxs=idx,
             heatmaps=heatmaps)
