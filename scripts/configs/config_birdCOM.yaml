@@ -82,7 +82,7 @@ model:
   # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res
   # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
   # vit_b_sam | vit_h_sam
-  backbone: resnet50_animal_ap10k
+  backbone: efficientnet_b2
   # prediction mode: regression | heatmap | heatmap_mhcrnn (context)
   model_type: heatmap
   # which heatmap loss to use
@@ -99,7 +99,7 @@ dali:
     train:
       sequence_length: 16
     predict:
-      sequence_length: 96
+      sequence_length: 64
 
   context:
     train:
