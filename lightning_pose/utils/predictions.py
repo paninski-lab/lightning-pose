@@ -201,8 +201,8 @@ class PredictionHandler:
         num_joints = confidence_np.shape[-1]  # model.num_keypoints
         predictions = np.zeros((keypoints_np.shape[0], num_joints * 3))
         predictions[:, 0] = np.arange(keypoints_np.shape[0])
-        predictions[:, 0::3] = keypoints_np[:, 0::2] #/ x_resize * x_og
-        predictions[:, 1::3] = keypoints_np[:, 1::2] #/ y_resize * y_og
+        predictions[:, 0::3] = keypoints_np[:, 0::2]
+        predictions[:, 1::3] = keypoints_np[:, 1::2]
         predictions[:, 2::3] = confidence_np
 
         return predictions

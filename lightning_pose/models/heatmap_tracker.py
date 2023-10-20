@@ -278,7 +278,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         if "images" in batch_dict.keys():
             predicted_keypoints[:, :, 0] /= batch_dict["images"].shape[-1]  # -1 dim is width "x"
             predicted_keypoints[:, :, 1] /= batch_dict["images"].shape[-2]  # -2 dim is height "y"
-        else: # we have unlabeled dict, 'frames' instead of 'images'
+        else:  # we have unlabeled dict, 'frames' instead of 'images'
             predicted_keypoints[:, :, 0] /= batch_dict["frames"].shape[-1]  # -1 dim is width "x"
             predicted_keypoints[:, :, 1] /= batch_dict["frames"].shape[-2]  # -2 dim is height "y"
         # multiply and add by bbox dims (x,y,h,w)

@@ -158,9 +158,9 @@ class LitDaliWrapper(DALIGenericIterator):
         # shape (1,) or (2, 3)
         transforms = batch[0]["transforms"][0]
         # get frame size, order is batch,seq_len,H,W,C
-        height = batch[0]["frame_size"][0,1]
-        width = batch[0]["frame_size"][0,2]
-        bbox = torch.tensor([0,0,height,width]).repeat((frames.shape[0],1))
+        height = batch[0]["frame_size"][0, 1]
+        width = batch[0]["frame_size"][0, 2]
+        bbox = torch.tensor([0, 0, height, width]).repeat((frames.shape[0], 1))
 
         return UnlabeledBatchDict(frames=frames, transforms=transforms, bbox=bbox)
 

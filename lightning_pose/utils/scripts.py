@@ -3,7 +3,7 @@
 import copy
 import os
 from collections import OrderedDict
-from typing import Dict, List, Optional, Union, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import imgaug.augmenters as iaa
 import lightning.pytorch as pl
@@ -12,7 +12,6 @@ import pandas as pd
 import torch
 from moviepy.editor import VideoFileClip
 from omegaconf import DictConfig, OmegaConf
-from PIL import Image
 from typeguard import typechecked
 
 from lightning_pose.callbacks import AnnealWeight

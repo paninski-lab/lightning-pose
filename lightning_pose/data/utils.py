@@ -23,6 +23,7 @@ class BaseLabeledExampleDict(TypedDict):
     idxs: int
     bbox: TensorType["xyhw":4, float]
 
+
 class DynamicLabeledExampleDict(BaseLabeledExampleDict):
     """Return type when calling __getitem__() on DynamicDataset."""
 
@@ -51,7 +52,7 @@ class BaseLabeledBatchDict(TypedDict):
 class DynamicLabeledBatchDict(BaseLabeledBatchDict):
     """Batch type for dynamic labeled data"""
 
-    keypoints: List[List[TensorType["num_targets", float]]] # list over batch then over instances
+    keypoints: List[List[TensorType["num_targets", float]]]  # list over batch then over instances
     bbox: List[List[TensorType["xyhw":4, float]]]
 
 

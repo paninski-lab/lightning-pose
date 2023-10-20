@@ -380,9 +380,9 @@ class DetectorDataset(BaseTrackingDataset):
         }))
 
         # average finescale keypoints together to get coarsescale keypoints
-        coarse_kpts = torch.zeros((self.keypoints.shape[0],len(keypoints_for_crop),2))
-        for i,k in enumerate(keypoints_for_crop):
-            coarse_kpts[:,i,:] = self.keypoints[:,k,:].mean(dim=1)
+        coarse_kpts = torch.zeros((self.keypoints.shape[0], len(keypoints_for_crop), 2))
+        for i, k in enumerate(keypoints_for_crop):
+            coarse_kpts[:, i, :] = self.keypoints[:, k, :].mean(dim=1)
         self.keypoints = coarse_kpts
 
         if self.height % 128 != 0 or self.height % 128 != 0:
@@ -476,7 +476,7 @@ class DetectorDataset(BaseTrackingDataset):
             images=transformed_images,  # shape (3, img_height, img_width)
             keypoints=torch.from_numpy(transformed_keypoints),  # shape (n_targets,)
             idxs=idx,
-            bbox=torch.tensor([0, 0, image.height, image.width]) # x,y,h,w of bounding box
+            bbox=torch.tensor([0, 0, image.height, image.width])  # x,y,h,w of bounding box
         )
         example_dict["heatmaps"] = self.compute_heatmap(example_dict)
         return example_dict
