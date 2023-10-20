@@ -261,9 +261,6 @@ class HeatmapDataset(BaseTrackingDataset):
         # Compute heatmaps as preprocessing step
         self.num_targets = torch.numel(self.keypoints[0])
         self.num_keypoints = self.num_targets // 2
-        self.label_heatmaps = None  # populated by `self.compute_heatmaps()`
-        print('Computing Heatmaps')
-        self.compute_heatmaps()
 
     @property
     def output_shape(self) -> tuple:
@@ -330,12 +327,7 @@ class HeatmapDataset(BaseTrackingDataset):
 
         """
         example_dict: BaseLabeledExampleDict = super().__getitem__(idx)
-        if len(self.imgaug_transform) == 1 and isinstance(self.imgaug_transform[0], iaa.Resize):
-            # we have a deterministic resizing augmentation; use precomputed heatmaps
-            example_dict["heatmaps"] = self.label_heatmaps[idx]
-        else:
-            # we have a random augmentation; need to recompute heatmaps
-            example_dict["heatmaps"] = self.compute_heatmap(example_dict)
+        example_dict["heatmaps"] = self.compute_heatmap(example_dict)
         return example_dict
 
 
