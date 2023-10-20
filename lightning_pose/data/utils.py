@@ -23,7 +23,6 @@ class BaseLabeledExampleDict(TypedDict):
     idxs: int
     bbox: TensorType["xyhw":4, float]
 
-
 class DynamicLabeledExampleDict(BaseLabeledExampleDict):
     """Return type when calling __getitem__() on DynamicDataset."""
 
@@ -76,6 +75,7 @@ class UnlabeledBatchDict(TypedDict):
         TensorType["null":1, float],
         torch.Tensor,
     ]
+    bbox: TensorType["seq_len", "xyhw":4, float]
     # transforms shapes
     # (seq_len, 2, 3): different transform for each sequence
     # (2, 3): same transform for all returned frames/keypoints
