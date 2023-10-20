@@ -285,7 +285,7 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
-                channels=len(cfg.data.csv_file)*3
+                channels=len(cfg.data.csv_file) * 3
             )
         elif cfg.model.model_type == "heatmap_mhcrnn":
             model = HeatmapTrackerMHCRNN(

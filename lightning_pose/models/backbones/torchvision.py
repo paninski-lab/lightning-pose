@@ -114,7 +114,8 @@ def build_backbone(
         base = getattr(tvmodels, backbone_arch)(weights=weights)
 
         if not pretrained and backbone_arch == "resnet50":
-            base.conv1 = torch.nn.Conv2d(channels, 64, kernel_size=7, stride=2, padding=3,bias=False)   
+            base.conv1 = torch.nn.Conv2d(channels, 64, kernel_size=7,
+                                         stride=2, padding=3, bias=False)
 
     # get truncated version of backbone; don't include final avg pool
     last_layer_ind = -3 if model_type == "heatmap" else -2

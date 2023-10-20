@@ -1,7 +1,6 @@
 """Dataset objects store images, labels, and functions for manipulation."""
 
 import os
-from copy import deepcopy
 from typing import Callable, List, Literal, Optional
 
 import imgaug.augmenters as iaa
@@ -404,7 +403,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         # check if all CSV files have the same number of columns
         self.num_keypoints = sum(self.num_keypoints.values())
-      
+
         # check if all the data is in correct order, self.data_length changes here
         self.check_data_images_names()
 
@@ -431,7 +430,8 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             for view, keypointComp in self.keypoint_names.items():
                 if keypoint != keypointComp[key_num]:
                     raise ImportError(f"the keypoints are not in correct order! \
-                                      view: {self.view_names[0]} vs {view} | {keypoint} != {keypointComp}")
+                                      view: {self.view_names[0]} vs {view} | \
+                                        {keypoint} != {keypointComp}")
 
         self.data_length = list(self.data_length.values())[0]
         for idx in range(self.data_length):
@@ -505,9 +505,9 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         return MultiviewHeatmapLabeledBatchDict(
             original_image_size=img_sizes,
-            concat_order=concat_order, # List[int]
-            view_names=self.view_names, # List[int]
-            num_views=self.num_views, # int
+            concat_order=concat_order,  # List[int]
+            view_names=self.view_names,  # List[int]
+            num_views=self.num_views,  # int
             images=images,  # shape (3, img_height, img_width) or (5, 3, H, W)
             keypoints=keypoints,  # shape (n_targets,)
             idxs=idx,

@@ -13,7 +13,6 @@ import numpy as np
 import pandas as pd
 import torch
 from moviepy.editor import VideoFileClip
-from omegaconf import DictConfig, OmegaConf
 from torchtyping import TensorType
 from tqdm import tqdm
 from typeguard import typechecked
@@ -262,7 +261,8 @@ class PredictionHandler:
             for view_num, view_name in enumerate(self.cfg.data.view_names):
                 num_keypoints = len(self.keypoint_names)
                 idx_end = idx_beg + num_keypoints
-                stacked_preds_single = stacked_preds[:, idx_beg*2:idx_beg*2+num_keypoints * 2]
+                stacked_preds_single = stacked_preds[:, idx_beg * 2:
+                                                     idx_beg * 2 + num_keypoints * 2]
                 stacked_confs_single = stacked_confs[:, idx_beg:idx_end]
                 pred_arr = self.make_pred_arr_undo_resize(
                     stacked_preds_single.cpu().numpy(), stacked_confs_single.cpu().numpy()
@@ -270,11 +270,11 @@ class PredictionHandler:
                 pdindex = self.make_dlc_pandas_index(self.keypoint_names)
                 df[view_name] = pd.DataFrame(pred_arr, columns=pdindex)
                 if self.video_file is None:
-                # specify which image is train/test/val/unused
+                    # specify which image is train/test/val/unused
                     df[view_name] = self.add_split_indices_to_df(df[view_name])
                     df[view_name].index = self.data_module.dataset.dataset[view_name].image_names
                 idx_beg = idx_end
-        else:            
+        else:
             pred_arr = self.make_pred_arr_undo_resize(
                 stacked_preds.cpu().numpy(), stacked_confs.cpu().numpy()
             )

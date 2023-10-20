@@ -72,7 +72,7 @@ def test_Multiview_heatmap_datamodule(cfg_multiview, Multiview_heatmap_data_modu
 
     # check batch properties
     batch = next(iter(Multiview_heatmap_data_module.train_dataloader()))
-    assert batch["images"].shape == (train_size, 3*num_view, im_height, im_width)
+    assert batch["images"].shape == (train_size, 3 * num_view, im_height, im_width)
     assert batch["keypoints"].shape == (train_size, num_targets)
     assert batch["heatmaps"].shape == (
         train_size,

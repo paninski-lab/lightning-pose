@@ -88,7 +88,7 @@ class HeatmapTracker(BaseSupervisedTracker):
             lr_scheduler_params=lr_scheduler_params,
             channels=channels,
             **kwargs,
-        )    
+        )
         self.num_keypoints = num_keypoints
         self.num_targets = num_keypoints * 2
         self.loss_factory = loss_factory
@@ -268,10 +268,6 @@ class HeatmapTracker(BaseSupervisedTracker):
         # we get one representation for each desired output.
         representations = self.get_representations(images)
         heatmaps = self.heatmaps_from_representations(representations)
-        # TODO if statement:
-            #  multiview: then stack v and k
-        # if len(heatmaps.shape)>2:
-        #     heatmaps = torch.cat(heatmaps, dim=(0, 1))
 
         # softmax temp stays 1 here; to modify for model predictions, see constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
