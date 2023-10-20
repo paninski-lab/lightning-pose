@@ -1,0 +1,265 @@
+data:
+  # resize dimensions to streamline model creation
+  image_resize_dims:
+    height: 384
+    width: 384
+  # ABSOLUTE path to data directory
+  data_dir: "/home/selmaan/Documents/GitHub/lightning-pose/data/Chickadee"
+  # ABSOLUTE path to unlabeled videos' directory
+  video_dir: "/home/selmaan/Documents/GitHub/lightning-pose/data/Chickadee/videos"
+  # location of labels; this should be relative to `data_dir`
+  csv_file: All_Labels.csv
+  # downsample heatmaps - 2 | 3
+  downsample_factor: 2
+  # total number of keypoints
+  num_keypoints: 18
+  # keypoint names
+  keypoint_names:
+    - beak_top
+    - beak_bot
+    - head_top
+    - head_back
+    - belly
+    - back
+    - tail_base
+    - tail_tip
+    - eye_left
+    - bib_left
+    - shoulder_left
+    - ankle_left
+    - foot_left
+    - eye_right
+    - bib_right
+    - shoulder_right
+    - ankle_right
+    - foot_right
+  # indicator to use 2-stage dynamic crop algorithm, False/True
+  dynamic_crop: True
+  # max allowed number of instances, i.e. 1 for single-animal, >1 for multiple animal
+  num_max_instances: 1
+  # detector network params
+  detector:
+    # resampled image size for detector network
+    image_resize_dims:
+      height: 256
+      width: 512
+    # heatmap downsample factor for detector network
+    downsample_factor: 2
+    # list of lists for keypoints to average and detect
+    keypoints_for_crop:
+      - [0,1,8,13]
+      - [4,5,10,15]
+      - [7]
+    # number of coarse keypoints to track, should match outer list length of keypoints_for_crop
+    num_keypoints: 3
+    # names of the coarse keypoints
+    keypoint_names:
+      - head
+      - body
+      - tail
+  # for mirrored setups with all keypoints defined in same csv file, define matching
+  # columns for different keypoints (assumes x-y-x-y interleaving)
+  # each list corresponds to a single view, so in the example below there are 2 views
+  # keypoint 0 is from view 0 and matches up with keypoint 8 from view 2
+  # columns that correspond to keypoints only labeled in a single view are omitted
+  # this info is only used for the multiview pca loss
+  mirrored_column_matches: null
+  # list of indices of keypoints used for pca singleview loss (use order of labels file)
+  columns_for_singleview_pca: null
+
+training:
+  # select from one of several predefined image/video augmentation pipelines
+  # default- resizing only
+  # dlc- imgaug pipeline implemented in DLC 2.0 package
+  # dlc-top-down- dlc augmentations plus vertical and horizontal flips
+  imgaug: dlc-top-down
+  # batch size of labeled data during training
+  train_batch_size: 12
+  # batch size of labeled data during validation
+  val_batch_size: 32
+  # batch size of labeled data during test
+  test_batch_size: 32
+  # fraction of labeled data used for training
+  train_prob: 0.8
+  # fraction of labeled data used for validation (remaining used for test)
+  val_prob: 0.1
+  # <=1 - fraction of total train frames (determined by `train_prob`) used for training
+  # >1 - number of total train frames used for training
+  train_frames: 1
+  # number of gpus to train a single model
+  num_gpus: 1
+  # number of cpu workers for data loaders
+  num_workers: 16
+  # epochs over which to assess validation metrics for early stopping
+  early_stop_patience: 10
+  # epoch at which backbone network weights begin updating
+  unfreezing_epoch: 10
+  # max training epochs; training may exit before due to early stopping
+  min_epochs: 50
+  max_epochs: 750
+  # frequency to log training metrics (one step is one batch)
+  log_every_n_steps: 10
+  # frequency to log validation metrics
+  check_val_every_n_epoch: 5
+  # select gpu for training
+  gpu_id: 0
+  # rng seed for labeled batches
+  rng_seed_data_pt: 0
+  # rng seed for weight initialization
+  rng_seed_model_pt: 0
+  # learning rate scheduler
+  # multisteplr | [todo - reducelronplateau]
+  lr_scheduler: multisteplr
+  lr_scheduler_params:
+    multisteplr:
+      milestones: [40, 60, 80]
+      gamma: 0.5
+
+model:
+  # list of unsupervised losses
+  # "pca_singleview" | "pca_multiview" | "temporal" | "unimodal_mse" | "unimodal_kl"
+  losses_to_use: ["pca_singleview","temporal"]
+  # backbone network:
+  # resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
+  # resnet50_animalpose_apose | resnet50_animal_ap10k
+  # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res
+  # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
+  # vit_b_sam | vit_h_sam
+  backbone: resnet50_animal_ap10k
+  # prediction mode: regression | heatmap | heatmap_mhcrnn (context)
+  model_type: heatmap
+  # which heatmap loss to use
+  # mse | kl | js
+  heatmap_loss_type: mse
+  # directory name for model saving
+  base_model: chickadee
+  model_name: ${model.base_model}_posture
+  # field to hold parameters for the detector network, when using dynamic-crop algorithm
+  detector:
+    # backbone to use for detector network (same options as model.backbone)
+    backbone: ${model.backbone}
+    # detector losses to use (same options as model.losses_to_use)
+    losses_to_use: ${model.losses_to_use}
+    # directory for detector model saving
+    model_name: ${model.base_model}_detector
+
+dali:
+  general:
+    seed: 123456
+
+  base:
+    train:
+      sequence_length: 32
+    predict:
+      sequence_length: 96
+
+  context:
+    train:
+      batch_size: 16
+    predict:
+      sequence_length: 96
+
+losses:
+  # loss = projection onto the discarded eigenvectors
+  pca_multiview:
+    # weight in front of PCA loss
+    log_weight: 5.0
+    # predictions whould lie within the low-d subspace spanned by these components
+    components_to_keep: 3
+    # percentile of reprojection errors on train data below which pca loss is zeroed out
+    empirical_epsilon_percentile: 1.00
+    # doing eff_epsilon = percentile(error, empirical_epsilon_percentile) * empirical_epsilon_multiplier
+    empirical_epsilon_multiplier: 1.0
+    # absolute error (in pixels) below which pca loss is zeroed out; if not null, this
+    # parameter takes precedence over `empirical_epsilon_percentile`
+    epsilon: null
+  # loss = projection onto the discarded eigenvectors
+  pca_singleview:
+    # weight in front of PCA loss
+    log_weight: 5.0
+    # predictions whould lie within the low-d subspace spanned by components that describe this fraction of variance
+    components_to_keep: 0.99
+    # percentile of reprojection errors on train data below which pca loss is zeroed out
+    empirical_epsilon_percentile: 1.00
+    # doing eff_epsilon = percentile(error, empirical_epsilon_percentile) * empirical_epsilon_multiplier
+    empirical_epsilon_multiplier: 1.0
+    # absolute error (in pixels) below which pca loss is zeroed out; if not null, this
+    # parameter takes precedence over `empirical_epsilon_percentile`
+    epsilon: null
+  # loss = norm of distance between successive timepoints
+  temporal:
+    # weight in front of temporal loss
+    log_weight: 5.0
+    # for epsilon insensitive rectification
+    # (in pixels; diffs below this are not penalized)
+    epsilon: 20.0
+    # nan removal value.
+    # (in prob; heatmaps with max prob values are removed)
+    prob_threshold: 0.05
+  # loss = mse between model heatmap and idealized gaussian heatmap centered on softargmax
+  unimodal_mse:
+    # weight in front of unimodal_mse loss
+    log_weight: 5.0
+    # we compute this loss only for heatmaps with confidence prob > prob_threshold
+    prob_threshold: 0.05
+  # loss = kl divergence between model heatmap and idealized gaussian heatmap centered on softargmax
+  unimodal_kl:
+    # weight in front of unimodal_mse loss
+    log_weight: 5.0
+    # we compute this loss only for heatmaps with confidence prob > prob_threshold
+    prob_threshold: 0.05
+  # loss = jensen-shannon divergence between model heatmap and idealized gaussian heatmap centered on softargmax
+  unimodal_js:
+    # weight in front of unimodal_js loss
+    log_weight: 5.0
+    # we compute this loss only for heatmaps with confidence prob > prob_threshold
+    prob_threshold: 0.05
+
+eval:
+  # paths to the hydra config files in the output folder, OR absolute paths to such folders.
+  hydra_paths: [" "]
+  # predict?
+  predict_vids_after_training: true
+  # save labeled .mp4?
+  save_vids_after_training: false
+  fiftyone:
+    # will be the name of the dataset (Mongo DB) created by FiftyOne. for video dataset, we will append dataset_name + "_video"
+    dataset_name: test
+    build_speed: slow # "slow"/"fast". "fast" drops keypoint name and confidence information for faster processing.
+    # if you want to manually provide a different model name to be displayed in FiftyOne
+    model_display_names: ["test_model"]
+    # whether to launch the app from the script (True), or from ipython (and have finer control over the outputs)
+    launch_app_from_script: false
+
+    remote: true # for LAI, must be False
+    address: 127.0.0.1 # ip to launch the app on.
+    port: 5151 # port to launch the app on.
+
+    # whether to create a "videos" or "images" dataset, since the processes are the same
+    dataset_to_create: images
+  # str with an absolute path to a directory containing videos for prediction.
+  # set to null to skip automatic video prediction from train_hydra.py script
+  test_videos_directory: null
+  # str with an absolute path to directory in which you want to save .csv with predictions
+  saved_vid_preds_dir: null
+  # confidence threshold for plotting a vid
+  confidence_thresh_for_vid: 0.90
+  # str with absolute path to the video file you want plotted with keypoints
+  video_file_to_plot: null
+  # a list of strings, each points to a .csv file with predictions of a given model to the same video. will be combined with video_file_to_plot to make a visualization
+  pred_csv_files_to_plot: [" "]
+
+callbacks:
+  anneal_weight:
+    attr_name: total_unsupervised_importance
+    init_val: 0.0
+    increase_factor: 0.01
+    final_val: 1.0
+    freeze_until_epoch: 0
+
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}
