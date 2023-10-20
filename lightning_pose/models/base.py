@@ -81,6 +81,7 @@ class BaseFeatureExtractor(LightningModule):
         lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
         do_context: bool = False,
         image_size: int = 256,
+        channels: int = 3,
         model_type: Literal["heatmap", "regression"] = "heatmap",
         **kwargs: Any,
     ) -> None:
@@ -113,6 +114,7 @@ class BaseFeatureExtractor(LightningModule):
         self.backbone, self.num_fc_input_features = build_backbone(
             backbone_arch=self.backbone_arch,
             pretrained=pretrained,
+            channels=channels,
             model_type=model_type,  # for torchvision only
             image_size=image_size,  # for ViTs only
         )

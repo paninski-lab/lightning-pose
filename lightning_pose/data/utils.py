@@ -46,7 +46,7 @@ class MultiviewHeatmapLabeledBatchDict(MultiviewLabeledBatchDict):
     num_views: int
     concat_order: List[str]
     view_names: List[int]
-    image_size: dict # original image sizes
+    original_image_size: dict # original image sizes
 
 
 class BaseLabeledBatchDict(TypedDict):

@@ -410,7 +410,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         self.num_targets = self.num_keypoints * 2
 
-    def check_data_images_names(self, delimiter: str = "_"):
+    def check_data_images_names(self, delimiter: str = "img"):
         """Data checking
         Each object in self.datasets will have the attribute image_names
         (i.e. self.datasets['top'].image_names) since each values is a
@@ -478,23 +478,15 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         keypoints = []
         images = []
         concat_order = []
-        for view_num, (view, data) in enumerate(datadict.items()):
-            heatmap_key_num = data["heatmaps"].shape[0]
-            heatmap_height = data["heatmaps"].shape[1]
-            heatmap_width = data["heatmaps"].shape[2]
-            heatmap_buffer = torch.zeros(heatmap_key_num,
-                                         heatmap_height * self.num_views, heatmap_width)
-            heatmap_buffer[:, view_num * heatmap_height:(view_num + 1) * heatmap_height
-                           , :] = data["heatmaps"]
-            heatmaps.append(deepcopy(heatmap_buffer))
+        for view, data in datadict.items():
+            heatmaps.append(data["heatmaps"])
             data["keypoints"] = data["keypoints"].reshape(int(data["keypoints"].shape[0] / 2), 2)
-            data["keypoints"][:, 1] = data["keypoints"][:, 1] + view_num * data["images"].shape[1]
-            keypoints.append(deepcopy(data["keypoints"]))
+            keypoints.append(data["keypoints"])
             images.append(data["images"])
             concat_order.append(view)
 
         heatmaps = torch.cat(heatmaps, dim=0)
-        image = torch.cat(images, dim=1)
+        image = torch.cat(images, dim=0)
         keypoints = torch.cat(keypoints, dim=0).reshape(-1)
 
         assert keypoints.shape == (self.num_targets,)
@@ -509,13 +501,12 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         datadict = {}
         img_sizes = {}
         for view in self.view_names:
-            # << view type here is int
             datadict[view] = self.dataset[view][idx]
             img_sizes[view] = self.dataset[view].image_original_size[idx]
         images, heatmaps, keypoints, concat_order = self.fusion(datadict)
 
         return MultiviewHeatmapLabeledBatchDict(
-            image_size=img_sizes,
+            original_image_size=img_sizes,
             concat_order=concat_order, # List[int]
             view_names=self.view_names, # List[int]
             num_views=self.num_views, # int

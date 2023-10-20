@@ -73,34 +73,22 @@ def cfg_multiview() -> dict:
     cfg["data"]["data_dir"] = "data/mirror-mouse-example_split"
     cfg["data"]["csv_file"] = ["top.csv", "bot.csv"]
     cfg["data"]["view_names"] = ["bot", "top"]
-    cfg["data"]["num_keypoints"] = {"bot": 9, "top": 8}
-    cfg["data"]["keypoint_names"] = {
-        "top": [
-            "paw1LH_top",
-            "paw2LF_top",
-            "paw3RF_top",
-            "paw4RH_top",
-            "tailBase_top",
-            "tailMid_top",
-            "nose_top",
-            "obs_top",
-        ],
-        "bot": [
-            "paw1LH_bot",
-            "paw2LF_bot",
-            "paw3RF_bot",
-            "paw4RH_bot",
-            "tailBase_bot",
-            "tailMid_bot",
-            "nose_bot",
-            "obsHigh_bot",
-            "obsLow_bot",
-        ]
-    }
+    cfg["data"]["num_keypoints"] = 14
+    cfg["data"]["keypoint_names"] = [
+            "paw1LH",
+            "paw2LF",
+            "paw3RF",
+            "paw4RH",
+            "tailBase",
+            "tailMid",
+            "nose"]
+    cfg["model"]["backbone_pretrained"] = False
+
     return OmegaConf.create(cfg)
 
 
 def make_multiview_dataset() -> None:
+
     # create multiview dataset
     repo_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
     base_dir = os.path.join(repo_dir, TOY_DATA_ROOT_DIR)
@@ -109,7 +97,8 @@ def make_multiview_dataset() -> None:
     try:
         os.makedirs(split_dir, exist_ok=False)
     except FileExistsError:
-        pass
+        print("Directory Exists! ", split_dir)
+        return None
 
     y_split = 168  # empirically found for the example video
     
@@ -125,11 +114,12 @@ def make_multiview_dataset() -> None:
     for frame in frames:
         frame_file = os.path.join(src_dir_ld, frame)
         img = cv2.cvtColor(cv2.imread(frame_file), cv2.COLOR_BGR2RGB)
+
         # split views and save
         save_file = os.path.join(dst_dir_ld, "example_top", frame)
         cv2.imwrite(save_file, img[:y_split])
         save_file = os.path.join(dst_dir_ld, "example_bot", frame)
-        cv2.imwrite(save_file, img[y_split:])   
+        cv2.imwrite(save_file, img[y_split:])
 
     # copy and split videos
     src_dir_vids = os.path.join(base_dir, "videos")
@@ -153,6 +143,8 @@ def make_multiview_dataset() -> None:
     df_top = df_og.filter(regex="_top")
     # just take bottom view columns
     df_bot = df_og.filter(regex="_bot")
+    for col in list(df_bot.columns):
+        df_bot.rename({col[1]: col[1].replace("_bot", "")})
     # subtract off split
     df_bot.loc[:, df_bot.columns.get_level_values("coords") == "y"] -= y_split
     # rename indices
@@ -163,6 +155,28 @@ def make_multiview_dataset() -> None:
         "/".join([d.split("/")[0], "example_bot", d.split("/")[1]]) for d in df_bot.index]
     df_bot.index = index_bot
     # save
+    
+    df_top.to_csv(dst_file_top)
+    df_bot.to_csv(dst_file_bot)
+
+    df_top = pd.read_csv(dst_file_top, header=[0], index_col=0)
+    df_bot = pd.read_csv(dst_file_bot, header=[0], index_col=0)
+
+    for col in df_top.columns:
+        if any(df_top[col] == "obs_top"):
+            df_top.drop(columns=[col], inplace=True)
+
+    for col in df_bot.columns:
+        if any(df_bot[col] == "obsHigh_bot"):
+            df_bot.drop(columns=[col], inplace=True)
+
+    for col in df_bot.columns:
+        if any(df_bot[col] == "obsLow_bot"):
+            df_bot.drop(columns=[col], inplace=True)
+
+    df_top.replace("_top", '', inplace=True, regex=True)
+    df_bot.replace("_bot", '', inplace=True, regex=True)
+
     df_top.to_csv(dst_file_top)
     df_bot.to_csv(dst_file_bot)
 

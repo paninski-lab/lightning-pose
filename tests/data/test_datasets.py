@@ -48,12 +48,12 @@ def test_Multiview_heatmap_dataset(cfg_multiview, MultiviewHeatmap_Dataset):
     num_views = MultiviewHeatmap_Dataset.num_views
 
     # check stored object properties
-    assert MultiviewHeatmap_Dataset.height == im_height * num_views
+    assert MultiviewHeatmap_Dataset.height == im_height
     assert MultiviewHeatmap_Dataset.width == im_width
 
     # check batch properties
     batch = MultiviewHeatmap_Dataset[0]
-    assert batch["images"].shape == (3, im_height * num_views, im_width)
+    assert batch["images"].shape == (3*len(cfg_multiview.data.csv_file), im_height, im_width)
     assert batch["keypoints"].shape == (num_targets,)
     assert batch["heatmaps"].shape[1:] == MultiviewHeatmap_Dataset.output_shape
     assert type(batch["images"]) is torch.Tensor

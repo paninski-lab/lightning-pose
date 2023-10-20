@@ -255,27 +255,19 @@ class PredictionHandler:
         """
         stacked_preds, stacked_confs = self.unpack_preds(preds=preds)
         # print(stacked_preds.shape, stacked_confs.shape)
-        if isinstance(self.keypoint_names, dict):
+        if self.cfg.data.get("view_names", None) and len(self.cfg.data.view_names) > 1:
             idx_beg = 0
             idx_end = None
             df = {}
-            for view_num, (view_name, keypoint_names) in enumerate(self.keypoint_names.items()):
-                keypoint_names = list(keypoint_names)
-                num_keypoints = len(keypoint_names)
+            for view_num, view_name in enumerate(self.cfg.data.view_names):
+                num_keypoints = len(self.keypoint_names)
                 idx_end = idx_beg + num_keypoints
-                # TODO : each image has its own size, without training set it will not work
-                y_orig = self.data_module.dataset.dataset[view_name].height * view_num
-                # print("indx> ", idx_beg, idx_end, y_orig)
-                # print(view_num, view_name, keypoint_names)
                 stacked_preds_single = stacked_preds[:, idx_beg*2:idx_beg*2+num_keypoints * 2]
-                stacked_preds_single[:, 1::2] = stacked_preds_single[:, 0::2] - y_orig
                 stacked_confs_single = stacked_confs[:, idx_beg:idx_end]
-                # print(stacked_preds_single.shape)
                 pred_arr = self.make_pred_arr_undo_resize(
                     stacked_preds_single.cpu().numpy(), stacked_confs_single.cpu().numpy()
                 )
-                idx_select = np.arange(3 * idx_beg, 3 * idx_end)  # check this
-                pdindex = self.make_dlc_pandas_index(keypoint_names)
+                pdindex = self.make_dlc_pandas_index(self.keypoint_names)
                 df[view_name] = pd.DataFrame(pred_arr, columns=pdindex)
                 if self.video_file is None:
                 # specify which image is train/test/val/unused

@@ -54,6 +54,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         backbone: ALLOWED_BACKBONES = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
+        channels: int = 3,
         output_shape: Optional[tuple] = None,  # change
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
@@ -85,8 +86,9 @@ class HeatmapTracker(BaseSupervisedTracker):
             pretrained=pretrained,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
+            channels=channels,
             **kwargs,
-        )
+        )    
         self.num_keypoints = num_keypoints
         self.num_targets = num_keypoints * 2
         self.loss_factory = loss_factory
@@ -260,10 +262,7 @@ class HeatmapTracker(BaseSupervisedTracker):
 
     def forward(
         self,
-        images: Union[
-            TensorType["batch", "channels":3, "image_height", "image_width"],
-            TensorType["batch", "views", "channels":3, "image_height", "image_width"]
-        ],
+        images: TensorType["batch", "channels":3, "image_height", "image_width"]
     ) -> TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Forward pass through the network."""
         # we get one representation for each desired output.
@@ -271,6 +270,9 @@ class HeatmapTracker(BaseSupervisedTracker):
         heatmaps = self.heatmaps_from_representations(representations)
         # TODO if statement:
             #  multiview: then stack v and k
+        # if len(heatmaps.shape)>2:
+        #     heatmaps = torch.cat(heatmaps, dim=(0, 1))
+
         # softmax temp stays 1 here; to modify for model predictions, see constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
 

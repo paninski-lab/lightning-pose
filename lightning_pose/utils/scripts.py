@@ -270,16 +270,22 @@ def get_model(
                 image_size=image_h,  # only used by ViT
             )
         elif cfg.model.model_type == "heatmap":
+            if cfg.model.get("backbone_pretrained", None):
+                backbone_pretrained = cfg.model.backbone_pretrained
+            else:
+                backbone_pretrained = True
             model = HeatmapTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
                 backbone=cfg.model.backbone,
+                pretrained=backbone_pretrained,
                 downsample_factor=cfg.data.downsample_factor,
                 output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
+                channels=len(cfg.data.csv_file)*3
             )
         elif cfg.model.model_type == "heatmap_mhcrnn":
             model = HeatmapTrackerMHCRNN(
