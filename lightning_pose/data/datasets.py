@@ -444,9 +444,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
     @property
     def height(self) -> int:
-        # is this correct?
-        return self.dataset[self.view_names[0]].height
-        # return self.imgaug_transform[-1].get_parameters()[0][0].value
+        return self.imgaug_transform[-1].get_parameters()[0][0].value
 
     @property
     def width(self) -> int:

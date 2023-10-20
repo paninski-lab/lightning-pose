@@ -330,9 +330,7 @@ def predict_dataset(
     labeled_preds_df = pred_handler(preds=labeled_preds)
     if isinstance(labeled_preds_df, dict):
         for view_name, df in labeled_preds_df.items():
-            view_name = "_" + view_name + ".csv"
-            df.to_csv(preds_file.replace(".csv", view_name))
-            # print(preds_file.replace(".csv", view_name))
+            df.to_csv(preds_file.replace(".csv", f"_{view_name}.csv"))
     else:
         labeled_preds_df.to_csv(preds_file)
 
