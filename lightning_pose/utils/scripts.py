@@ -559,8 +559,6 @@ def export_predictions_and_labeled_video(
     # update video size in config
     video_clip = VideoFileClip(video_file)
     cfg_copy = copy.deepcopy(cfg)
-    cfg_copy.data.image_orig_dims.width = video_clip.w
-    cfg_copy.data.image_orig_dims.height = video_clip.h
 
     # compute predictions
     preds_df = predict_single_video(
