@@ -184,10 +184,10 @@ class PrepareDALI(object):
         imgaug: Optional[str] = "default",
     ) -> None:
 
-        # make sure videos exist
+        # make sure `filenames` is a list of existing video files
         for vid in filenames:
-            if not os.path.exists(vid):
-                raise FileNotFoundError(f"{vid} does not exist!")
+            if not os.path.exists(vid) or not os.path.isfile(vid):
+                raise FileNotFoundError(f"{vid} is not a video file!")
 
         self.train_stage = train_stage
         self.model_type = model_type

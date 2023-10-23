@@ -129,12 +129,22 @@ def test_prepare_dali(cfg, video_list):
         )
     assert i == num_iters - 1
 
-    # test to make sure an error is thrown if one of the video files does not exist
+    # error is thrown if one of the video files does not exist
     with pytest.raises(FileNotFoundError):
         PrepareDALI(
             train_stage="predict",
             model_type="base",
             filenames=[filenames[0] + '_bad-id.mp4'],
+            dali_config=cfg.dali,
+            resize_dims=[256, 256],
+        )
+
+    # error is thrown if one of the video files is not a file
+    with pytest.raises(FileNotFoundError):
+        PrepareDALI(
+            train_stage="predict",
+            model_type="base",
+            filenames=[os.path.dirname(filenames[0])],
             dali_config=cfg.dali,
             resize_dims=[256, 256],
         )
