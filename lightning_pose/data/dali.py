@@ -1,5 +1,6 @@
 """Data pipelines based on efficient video reading by nvidia dali package."""
 
+import os
 from typing import Dict, List, Literal, Optional, Union
 
 import numpy as np
@@ -182,6 +183,12 @@ class PrepareDALI(object):
         dali_config: Union[dict, DictConfig] = None,
         imgaug: Optional[str] = "default",
     ) -> None:
+
+        # make sure videos exist
+        for vid in filenames:
+            if not os.path.exists(vid):
+                raise FileNotFoundError(f"{vid} does not exist!")
+
         self.train_stage = train_stage
         self.model_type = model_type
         self.resize_dims = resize_dims
