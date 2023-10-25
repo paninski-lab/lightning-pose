@@ -50,7 +50,7 @@ class HeatmapTracker(BaseSupervisedTracker):
     def __init__(
         self,
         num_keypoints: int,
-        num_targets: int,
+        num_targets: int=None,
         loss_factory: Optional[LossFactory] = None,
         backbone: ALLOWED_BACKBONES = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
@@ -89,7 +89,10 @@ class HeatmapTracker(BaseSupervisedTracker):
             **kwargs,
         )
         self.num_keypoints = num_keypoints
-        self.num_targets = num_targets
+        if num_targets is None:
+            self.num_targets = num_keypoints * 2
+        else:
+            self.num_targets = num_targets
         self.loss_factory = loss_factory
         # TODO: downsample_factor may be in mismatch between datamodule and model.
         self.downsample_factor = downsample_factor
