@@ -42,6 +42,29 @@ ALLOWED_BACKBONES = Literal[
 ]
 
 
+def convert_bbox_coords(batch_dict: Union[HeatmapLabeledBatchDict, UnlabeledBatchDict],
+                        predicted_keypoints: TensorType["batch", "num_targets"]
+                        ) -> TensorType["batch", "num_targets"]:
+    num_targets = predicted_keypoints.shape[1]
+    num_keypoints = num_targets / 2
+    # reshape from (batch, n_targets) back to (batch, n_key, 2), in x,y order
+    predicted_keypoints = predicted_keypoints.reshape((-1, num_keypoints, 2))
+    # divide by image dims to get 0-1 normalized coordinates
+    if "images" in batch_dict.keys():
+        predicted_keypoints[:, :, 0] /= batch_dict["images"].shape[-1]  # -1 dim is width "x"
+        predicted_keypoints[:, :, 1] /= batch_dict["images"].shape[-2]  # -2 dim is height "y"
+    else:  # we have unlabeled dict, 'frames' instead of 'images'
+        predicted_keypoints[:, :, 0] /= batch_dict["frames"].shape[-1]  # -1 dim is width "x"
+        predicted_keypoints[:, :, 1] /= batch_dict["frames"].shape[-2]  # -2 dim is height "y"
+    # multiply and add by bbox dims (x,y,h,w)
+    predicted_keypoints[:, :, 0] *= batch_dict["bbox"][:, 3].unsqueeze(1)  # scale x by box width
+    predicted_keypoints[:, :, 0] += batch_dict["bbox"][:, 0].unsqueeze(1)  # add bbox x offset
+    predicted_keypoints[:, :, 1] *= batch_dict["bbox"][:, 2].unsqueeze(1)  # scale y by box height
+    predicted_keypoints[:, :, 1] += batch_dict["bbox"][:, 1].unsqueeze(1)  # add bbox y offset
+    # return new keypoints, reshaped to (batch, n_targets)
+    return predicted_keypoints.reshape((-1, num_targets))
+
+
 def get_context_from_sequence(
     img_seq: Union[
         TensorType["seq_len", "RGB":3, "image_height", "image_width"],
