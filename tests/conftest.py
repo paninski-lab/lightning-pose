@@ -8,10 +8,13 @@ construction relies heavily on the utility functions provided in `utils/scripts.
 import copy
 import os
 import shutil
+import subprocess
 from typing import Callable, List
 
+import cv2
 import imgaug.augmenters as iaa
 import lightning.pytorch as pl
+import pandas as pd
 import pytest
 import torch
 import yaml
@@ -20,9 +23,9 @@ from omegaconf import OmegaConf
 from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import (
-    MultiviewHeatmapDataset,
     BaseTrackingDataset,
     HeatmapDataset,
+    MultiviewHeatmapDataset,
 )
 from lightning_pose.utils.io import get_videos_in_dir
 from lightning_pose.utils.scripts import (
@@ -31,10 +34,6 @@ from lightning_pose.utils.scripts import (
     get_dataset,
     get_imgaug_transform,
 )
-
-import cv2
-import pandas as pd
-import subprocess
 
 TOY_DATA_ROOT_DIR = "data/mirror-mouse-example"
 TOY_MDATA_ROOT_DIR = "data/mirror-mouse-example_split"

@@ -13,10 +13,10 @@ from typeguard import typechecked
 from lightning_pose.data.utils import (
     BaseLabeledBatchDict,
     HeatmapLabeledBatchDict,
+    MultiviewHeatmapLabeledBatchDict,
     SemiSupervisedBatchDict,
     SemiSupervisedHeatmapBatchDict,
     UnlabeledBatchDict,
-    MultiviewHeatmapLabeledBatchDict,
 )
 
 MULTISTEPLR_MILESTONES_DEFAULT = [100, 200, 300]

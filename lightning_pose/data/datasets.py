@@ -1,7 +1,7 @@
 """Dataset objects store images, labels, and functions for manipulation."""
 
 import os
-from typing import Callable, List, Literal, Optional, Any, Dict, Tuple, Union
+from typing import Callable, List, Literal, Optional, Tuple, Union
 
 import imgaug.augmenters as iaa
 import numpy as np
@@ -15,7 +15,7 @@ from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
 from lightning_pose.data.utils import (
     BaseLabeledExampleDict,
     HeatmapLabeledExampleDict,
-    MultiviewHeatmapLabeledBatchDict,
+    MultiviewHeatmapLabeledExampleDict,
     generate_heatmaps,
 )
 from lightning_pose.utils.io import get_keypoint_names
@@ -466,10 +466,10 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
     def fusion(self, datadict: dict, bbox: Optional[np.array] = np.array((0))) -> Tuple[
         Union[
-        TensorType["num_views", "RGB":3, "image_height", "image_width", float],
-        TensorType["num_views", "frames", "RGB":3, "image_height", "image_width", float]
+            TensorType["num_views", "RGB":3, "image_height", "image_width", float],
+            TensorType["num_views", "frames", "RGB":3, "image_height", "image_width", float]
         ],
-        TensorType["num_views", "heatmap_height", "heatmap_width",float],
+        TensorType["num_views", "heatmap_height", "heatmap_width", float],
         TensorType["keypoints"],
         List
     ]:
@@ -498,7 +498,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         return image, heatmaps, keypoints, concat_order
 
-    def __getitem__(self, idx: int) -> MultiviewHeatmapLabeledBatchDict:
+    def __getitem__(self, idx: int) -> MultiviewHeatmapLabeledExampleDict:
         """Get an example from the dataset.
         Calls the heatmapdataset for each csv file to get
         Images and their heatmaps and then stacks them.
@@ -510,7 +510,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             img_sizes[view] = self.dataset[view].image_original_size[idx]
         images, heatmaps, keypoints, concat_order = self.fusion(datadict)
 
-        return MultiviewHeatmapLabeledBatchDict(
+        return MultiviewHeatmapLabeledExampleDict(
             original_image_size=img_sizes,
             concat_order=concat_order,  # List[int]
             view_names=self.view_names,  # List[int]

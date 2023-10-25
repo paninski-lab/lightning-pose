@@ -270,6 +270,10 @@ class HeatmapTracker(BaseSupervisedTracker):
         """Forward pass through the network."""
         # we get one representation for each desired output.
         shape = images.shape
+
+        #  if len(shape) > 4 we assume we have multiple views and need
+        # to combine images across batch/views before passing to network,
+        # then we reshape
         if len(shape) > 4:
             images = images.reshape(-1, shape[-3], shape[-2], shape[-1])
             representations = self.get_representations(images)

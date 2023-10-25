@@ -4,7 +4,6 @@ import gc
 import os
 import time
 from typing import List, Optional, Tuple, Type, Union
-from omegaconf import DictConfig, OmegaConf
 
 import cv2
 import lightning.pytorch as pl
@@ -13,6 +12,7 @@ import numpy as np
 import pandas as pd
 import torch
 from moviepy.editor import VideoFileClip
+from omegaconf import DictConfig, OmegaConf
 from torchtyping import TensorType
 from tqdm import tqdm
 from typeguard import typechecked
