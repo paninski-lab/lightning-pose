@@ -83,6 +83,8 @@ class PredictionHandler:
     @property
     def keypoint_names(self):
         if self.cfg.data.get("keypoint_names", None) is not None:
+            if isinstance(self.cfg.data.get("keypoint_names"), DictConfig):
+                return dict(self.cfg.data.get("keypoint_names"))
             return list(self.cfg.data.keypoint_names)
         elif self.cfg.data.get("keypoints", None) is not None:
             return list(self.cfg.data.keypoints)
@@ -251,15 +253,37 @@ class PredictionHandler:
             pd.DataFrame: index is (frame, bodypart, x, y, likelihood)
         """
         stacked_preds, stacked_confs = self.unpack_preds(preds=preds)
-        pred_arr = self.make_pred_arr_undo_resize(
-            stacked_preds.cpu().numpy(), stacked_confs.cpu().numpy()
-        )
-        pdindex = self.make_dlc_pandas_index()
-        df = pd.DataFrame(pred_arr, columns=pdindex)
-        if self.video_file is None:
-            # specify which image is train/test/val/unused
-            df = self.add_split_indices_to_df(df)
-            df.index = self.data_module.dataset.image_names
+        # print(stacked_preds.shape, stacked_confs.shape)
+        if self.cfg.data.get("view_names", None) and len(self.cfg.data.view_names) > 1:
+            idx_beg = 0
+            idx_end = None
+            df = {}
+            for view_num, view_name in enumerate(self.cfg.data.view_names):
+                num_keypoints = len(self.keypoint_names)
+                idx_end = idx_beg + num_keypoints
+                stacked_preds_single = stacked_preds[:, idx_beg * 2:
+                                                     idx_beg * 2 + num_keypoints * 2]
+                stacked_confs_single = stacked_confs[:, idx_beg:idx_end]
+                pred_arr = self.make_pred_arr_undo_resize(
+                    stacked_preds_single.cpu().numpy(), stacked_confs_single.cpu().numpy()
+                )
+                pdindex = self.make_dlc_pandas_index(self.keypoint_names)
+                df[view_name] = pd.DataFrame(pred_arr, columns=pdindex)
+                if self.video_file is None:
+                    # specify which image is train/test/val/unused
+                    df[view_name] = self.add_split_indices_to_df(df[view_name])
+                    df[view_name].index = self.data_module.dataset.dataset[view_name].image_names
+                idx_beg = idx_end
+        else:
+            pred_arr = self.make_pred_arr_undo_resize(
+                stacked_preds.cpu().numpy(), stacked_confs.cpu().numpy()
+            )
+            pdindex = self.make_dlc_pandas_index()
+            df = pd.DataFrame(pred_arr, columns=pdindex)
+            if self.video_file is None:
+                # specify which image is train/test/val/unused
+                df = self.add_split_indices_to_df(df)
+                df.index = self.data_module.dataset.image_names
 
         return df
 
@@ -272,7 +296,7 @@ def predict_dataset(
     ckpt_file: Optional[str] = None,
     trainer: Optional[pl.Trainer] = None,
     model: Optional[ALLOWED_MODELS] = None,
-) -> pd.DataFrame:
+) -> Union[pd.DataFrame, dict]:
     """Save predicted keypoints for a labeled dataset.
 
     Args:
@@ -304,7 +328,11 @@ def predict_dataset(
 
     pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
     labeled_preds_df = pred_handler(preds=labeled_preds)
-    labeled_preds_df.to_csv(preds_file)
+    if isinstance(labeled_preds_df, dict):
+        for view_name, df in labeled_preds_df.items():
+            df.to_csv(preds_file.replace(".csv", f"_{view_name}.csv"))
+    else:
+        labeled_preds_df.to_csv(preds_file)
 
     return labeled_preds_df
 

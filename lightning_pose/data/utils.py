@@ -25,8 +25,39 @@ class BaseLabeledExampleDict(TypedDict):
 
 class HeatmapLabeledExampleDict(BaseLabeledExampleDict):
     """Return type when calling __getitem__() on HeatmapTrackingDataset."""
+    heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width", float]
+
+
+class MultiviewLabeledExampleDict(TypedDict):
+    """Return type when calling __getitem__() on BaseTrackingDataset."""
+    images: Union[
+        TensorType["num_views", "RGB":3, "image_height", "image_width", float],
+        TensorType["num_views", "frames", "RGB":3, "image_height", "image_width", float],
+    ]
+    keypoints: TensorType["num_targets", float]
+    idxs: int
+    num_views: int
+    concat_order: List[str]
+    view_names: List[int]
+    original_image_size: dict  # original image sizes
+
+
+class MultiviewHeatmapLabeledExampleDict(MultiviewLabeledExampleDict):
+    """Return type when calling __getitem__() on MultiviewHeatmapDataset."""
 
     heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width", float]
+    # bbx: TensorType["bounding_box", float]
+
+
+class MultiviewLabeledBatchDict(MultiviewLabeledExampleDict):
+    images: Union[
+        TensorType["batch", "num_views", "RGB":3, "image_height", "image_width", float],
+        TensorType["batch", "num_views", "frames", "RGB":3, "image_height", "image_width", float],
+    ]
+
+
+class MultiviewHeatmapLabeledBatchDict(MultiviewLabeledBatchDict):
+    heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width", float]
 
 
 class BaseLabeledBatchDict(TypedDict):
