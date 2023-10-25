@@ -50,11 +50,11 @@ class HeatmapTracker(BaseSupervisedTracker):
     def __init__(
         self,
         num_keypoints: int,
+        num_targets: int,
         loss_factory: Optional[LossFactory] = None,
         backbone: ALLOWED_BACKBONES = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
-        channels: int = 3,
         output_shape: Optional[tuple] = None,  # change
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
@@ -86,11 +86,10 @@ class HeatmapTracker(BaseSupervisedTracker):
             pretrained=pretrained,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
-            channels=channels,
             **kwargs,
         )
         self.num_keypoints = num_keypoints
-        self.num_targets = num_keypoints * 2
+        self.num_targets = num_targets
         self.loss_factory = loss_factory
         # TODO: downsample_factor may be in mismatch between datamodule and model.
         self.downsample_factor = downsample_factor
@@ -262,12 +261,20 @@ class HeatmapTracker(BaseSupervisedTracker):
 
     def forward(
         self,
-        images: TensorType["batch", "channels":3, "image_height", "image_width"]
+        images: Union[TensorType["batch", "channels":3, "image_height", "image_width"],
+                      TensorType["batch", "views", "channels":3, "image_height", "image_width"]]
     ) -> TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Forward pass through the network."""
         # we get one representation for each desired output.
-        representations = self.get_representations(images)
-        heatmaps = self.heatmaps_from_representations(representations)
+        shape=images.shape
+        if len(shape)>4:
+            images = images.reshape(-1, shape[-3], shape[-2], shape[-1])
+            representations = self.get_representations(images)
+            heatmaps=self.heatmaps_from_representations(representations)
+            heatmaps = heatmaps.reshape(shape[0], -1, heatmaps.shape[-2], heatmaps.shape[-1])
+        else:
+            representations = self.get_representations(images)
+            heatmaps = self.heatmaps_from_representations(representations)
 
         # softmax temp stays 1 here; to modify for model predictions, see constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))

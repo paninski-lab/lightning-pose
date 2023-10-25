@@ -374,7 +374,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 heatmap
             do_context: include additional frames of context if possible
         """
-        # print(">>>>>>> MultiView dataset was called ...")
+
         if len(view_names) != len(csv_paths):
             raise ValueError("number of names does not match with the number of files!")
 
@@ -480,7 +480,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             heatmaps.append(data["heatmaps"])
             data["keypoints"] = data["keypoints"].reshape(int(data["keypoints"].shape[0] / 2), 2)
             keypoints.append(data["keypoints"])
-            images.append(data["images"])
+            images.append(data["images"].unsqueeze(0))
             concat_order.append(view)
 
         heatmaps = torch.cat(heatmaps, dim=0)

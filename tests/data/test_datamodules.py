@@ -60,19 +60,19 @@ def test_heatmap_datamodule(cfg, heatmap_data_module):
     del batch
 
 
-def test_Multiview_heatmap_datamodule(cfg_multiview, Multiview_heatmap_data_module):
+def test_multiview_heatmap_datamodule(cfg_multiview, multiview_heatmap_data_module):
 
     im_height = cfg_multiview.data.image_resize_dims.height
     im_width = cfg_multiview.data.image_resize_dims.width
     im_height_ds = im_height / (2 ** cfg_multiview.data.downsample_factor)
     im_width_ds = im_width / (2 ** cfg_multiview.data.downsample_factor)
-    train_size = Multiview_heatmap_data_module.train_batch_size
-    num_targets = Multiview_heatmap_data_module.dataset.num_targets
-    num_view = Multiview_heatmap_data_module.dataset.num_views
+    train_size = multiview_heatmap_data_module.train_batch_size
+    num_targets = multiview_heatmap_data_module.dataset.num_targets
+    num_view = multiview_heatmap_data_module.dataset.num_views
 
     # check batch properties
-    batch = next(iter(Multiview_heatmap_data_module.train_dataloader()))
-    assert batch["images"].shape == (train_size, 3 * num_view, im_height, im_width)
+    batch = next(iter(multiview_heatmap_data_module.train_dataloader()))
+    assert batch["images"].shape == (train_size, num_view, 3, im_height, im_width)
     assert batch["keypoints"].shape == (train_size, num_targets)
     assert batch["heatmaps"].shape == (
         train_size,
@@ -80,7 +80,7 @@ def test_Multiview_heatmap_datamodule(cfg_multiview, Multiview_heatmap_data_modu
         im_height_ds,
         im_width_ds
     )
-    assert batch["heatmaps"].shape[2:] == Multiview_heatmap_data_module.dataset.output_shape
+    assert batch["heatmaps"].shape[2:] == multiview_heatmap_data_module.dataset.output_shape
 
     # cleanup
     del batch

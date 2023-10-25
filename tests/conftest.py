@@ -72,7 +72,7 @@ def cfg_multiview() -> dict:
     cfg["data"]["data_dir"] = "data/mirror-mouse-example_split"
     cfg["data"]["csv_file"] = ["top.csv", "bot.csv"]
     cfg["data"]["view_names"] = ["bot", "top"]
-    cfg["data"]["num_keypoints"] = 14
+    cfg["data"]["num_keypoints"] = 7
     cfg["data"]["keypoint_names"] = ["paw1LH", "paw2LF", "paw3RF",
                                      "paw4RH", "tailBase", "tailMid",
                                      "nose"]
@@ -300,7 +300,7 @@ def heatmap_data_module(cfg, heatmap_dataset) -> BaseDataModule:
 
 
 @pytest.fixture
-def Multiview_heatmap_data_module(cfg, MultiviewHeatmap_Dataset) -> BaseDataModule:
+def multiview_heatmap_data_module(cfg, MultiviewHeatmap_Dataset) -> BaseDataModule:
     """Create a labeled data module for heatmap models."""
 
     # setup
