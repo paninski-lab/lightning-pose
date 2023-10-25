@@ -50,7 +50,7 @@ class HeatmapTracker(BaseSupervisedTracker):
     def __init__(
         self,
         num_keypoints: int,
-        num_targets: int=None,
+        num_targets: int = None,
         loss_factory: Optional[LossFactory] = None,
         backbone: ALLOWED_BACKBONES = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
@@ -269,11 +269,11 @@ class HeatmapTracker(BaseSupervisedTracker):
     ) -> TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Forward pass through the network."""
         # we get one representation for each desired output.
-        shape=images.shape
-        if len(shape)>4:
+        shape = images.shape
+        if len(shape) > 4:
             images = images.reshape(-1, shape[-3], shape[-2], shape[-1])
             representations = self.get_representations(images)
-            heatmaps=self.heatmaps_from_representations(representations)
+            heatmaps = self.heatmaps_from_representations(representations)
             heatmaps = heatmaps.reshape(shape[0], -1, heatmaps.shape[-2], heatmaps.shape[-1])
         else:
             representations = self.get_representations(images)
