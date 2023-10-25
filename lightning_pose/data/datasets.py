@@ -1,7 +1,7 @@
 """Dataset objects store images, labels, and functions for manipulation."""
 
 import os
-from typing import Callable, List, Literal, Optional
+from typing import Callable, List, Literal, Optional, Any, Dict, Tuple, Union
 
 import imgaug.augmenters as iaa
 import numpy as np
@@ -342,7 +342,6 @@ class HeatmapDataset(BaseTrackingDataset):
         return example_dict
 
 
-# class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 class MultiviewHeatmapDataset(torch.utils.data.Dataset):
     """Heatmap dataset that contains the images and keypoints in 2D arrays from all the cameras."""
 
@@ -465,7 +464,15 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
     def num_views(self) -> int:
         return len(self.view_names)
 
-    def fusion(self, datadict: dict, bbox: Optional[np.array] = np.array((0))):
+    def fusion(self, datadict: dict, bbox: Optional[np.array] = np.array((0))) -> Tuple[
+        Union[
+        TensorType["num_views", "RGB":3, "image_height", "image_width", float],
+        TensorType["num_views", "frames", "RGB":3, "image_height", "image_width", float]
+        ],
+        TensorType["num_views", "heatmap_height", "heatmap_width",float],
+        TensorType["keypoints"],
+        List
+    ]:
         """ Here all the view data will be merged into one image and multiple heatmaps.
             images and heatmaps will be concatenated vertically dim=1
         Args:
