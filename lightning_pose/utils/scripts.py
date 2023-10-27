@@ -367,7 +367,7 @@ def get_callbacks(
     if lr_monitor:
         lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval="epoch")
         callbacks.append(lr_monitor)
-    if ckpt_model:
+    if ckpt_model and early_stopping:  # model auto-saved at end if not early stopping
         ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
             monitor="val_supervised_loss"
         )
