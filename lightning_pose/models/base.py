@@ -46,7 +46,7 @@ def convert_bbox_coords(batch_dict: Union[HeatmapLabeledBatchDict, UnlabeledBatc
                         predicted_keypoints: TensorType["batch", "num_targets"]
                         ) -> TensorType["batch", "num_targets"]:
     num_targets = predicted_keypoints.shape[1]
-    num_keypoints = num_targets / 2
+    num_keypoints = round(num_targets / 2)
     # reshape from (batch, n_targets) back to (batch, n_key, 2), in x,y order
     predicted_keypoints = predicted_keypoints.reshape((-1, num_keypoints, 2))
     # divide by image dims to get 0-1 normalized coordinates

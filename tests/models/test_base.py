@@ -6,7 +6,7 @@ import segment_anything
 import torch
 import torchvision
 
-from lightning_pose.models.base import BaseFeatureExtractor
+from lightning_pose.models.base import BaseFeatureExtractor, convert_bbox_coords
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -16,6 +16,36 @@ WIDTHS = [120, 246, 380]  # similar but not square
 RESNET_BACKBONES = ["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"]
 EFFICIENTNET_BACKBONES = ["efficientnet_b0", "efficientnet_b1", "efficientnet_b2"]
 VIT_BACKBONES = ["vit_b_sam"]  # "vit_h_sam" very large (2.6GB), takes too long to download/load
+
+
+def test_convert_bbox_coords(heatmap_data_module_combined):
+    # params
+    x_crop = 25
+    y_crop = 40
+
+    # get training batch
+    combined_loader = heatmap_data_module_combined.train_dataloader()
+    batch = next(iter(combined_loader))
+    batch_dict = batch['labeled']
+    orig_converted = convert_bbox_coords(batch_dict, batch_dict['keypoints'])
+    old_image_dims = [batch_dict['images'].size(-2), batch_dict['images'].size(-1)]
+    old_bbox = batch_dict["bbox"]
+    x_pix = x_crop * old_bbox[:, 3] / old_image_dims[1]
+    y_pix = y_crop * old_bbox[:, 2] / old_image_dims[0]
+
+    # create a new batch with smaller & cropped images
+    new_dict = batch_dict
+    new_dict['images'] = new_dict['images'][:, :, y_crop:-y_crop, x_crop:-x_crop]
+    new_dict['bbox'][:, 0] = new_dict['bbox'][:, 0] + x_pix
+    new_dict['bbox'][:, 1] = new_dict['bbox'][:, 1] + y_pix
+    new_dict['bbox'][:, 2] = new_dict['bbox'][:, 2] - 2 * y_pix
+    new_dict['bbox'][:, 3] = new_dict['bbox'][:, 3] - 2 * x_pix
+    new_dict['keypoints'][:, 0::2] += x_crop  # keypoints x,y shifted in image
+    new_dict['keypoints'][:, 1::2] += y_crop
+    new_converted = convert_bbox_coords(new_dict, new_dict['keypoints'])
+
+    # orig and new converted coordinates should be the same
+    assert torch.allclose(orig_converted, new_converted, equal_nan=True)
 
 
 def test_backbones_resnet():
