@@ -25,7 +25,7 @@ class TestSubsampleFrames(unittest.TestCase):
 
     def test_sample_videos(self):
 
-        labels_df = pd.read_csv("/content/drive/MyDrive/crim13/CollectedData_active_test.csv",header=[0,1,2],index_col=0) # here put active_learning pool
+        labels_df = pd.read_csv("../tests/CollectedData_dummyz.csv",header=[0,1,2],index_col=0) # here put active_learning pool
 
         num_vids = 5  # number of vids
         train_frames = 1  # number of frames = train_frames / train_prob
