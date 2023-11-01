@@ -60,7 +60,7 @@ class TestSubsampleFrames(unittest.TestCase):
        
         num_vids = 4 # in the dummyz csv we only have 4 vids
 
-        cfg = create_cfg("/content/lightning-pose/active_pipeline/configs/config_ibl_active.yaml")
+        cfg = create_cfg("configs/config_ibl_active.yaml")
         cfg.active_pipeline.start_iteration = 0
         cfg.active_pipeline.current_iteration = 0
         cfg.active_pipeline.end_iteration = 0
