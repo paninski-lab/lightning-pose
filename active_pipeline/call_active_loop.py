@@ -73,12 +73,23 @@ def call_active_all(active_cfg):
             new_df.to_csv(exp_cfg.data.csv_file)
 
         if len(active_cfg[iteration_key_current].output_prev_run) == 0:
-          # if model is provided, train a model using the config file:
-          exp_cfg.model.model_name = 'iter_{}_{}'.format(current_iteration, active_cfg[iteration_key_current].method)
-          train_output_dirs = run_train(active_cfg[iteration_key_current], exp_cfg)
-          # step 3: fill in active pipeline details and call active loop
-          active_cfg[iteration_key_current].output_prev_run = train_output_dirs
-          active_cfg[iteration_key_current].csv_file_prev_run = exp_cfg.data.csv_file
+            # if model is provided, train a model using the config file:
+            exp_cfg.model.model_name = 'iter_{}_{}'.format(current_iteration, active_cfg[iteration_key_current].method)
+            dir_file_name = exp_cfg.data.csv_file.replace(".csv", '_output_dir.txt')
+            if current_iteration == 0 and active_cfg[iteration_key_current].method == "random":
+                train_output_dirs = run_train(active_cfg[iteration_key_current], exp_cfg)
+                with open(dir_file_name, "w") as file:
+                    for i in train_output_dirs:
+                        file.write(i)
+            elif current_iteration == 0 and active_cfg[iteration_key_current].method != "random":
+                train_output_dirs = []
+                with open(dir_file_name, "r") as file:
+                    train_output_dirs.append(file.read())
+            # step 3: fill in active pipeline details and call active loop
+            else:
+                train_output_dirs = run_train(active_cfg[iteration_key_current], exp_cfg)
+            active_cfg[iteration_key_current].output_prev_run = train_output_dirs
+            active_cfg[iteration_key_current].csv_file_prev_run = exp_cfg.data.csv_file
 
         new_train_file, used_vids = active_loop_step(active_cfg, used_vids)
         # step 4 : update the config for the next run:
