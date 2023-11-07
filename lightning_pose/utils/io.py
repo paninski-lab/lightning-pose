@@ -30,13 +30,12 @@ def ckpt_path_from_base_path(
         str: path to model checkpoint
 
     """
-    # TODO: consider finding the most recent hydra path containing logging_dir_name
     import glob
 
     model_search_path = os.path.join(
         base_path,
-        logging_dir_name,  # TODO: may change when we switch from Tensorboard
-        model_name,  # get the name string of the model (determined pre-training)
+        logging_dir_name,        # may change when we switch from Tensorboard
+        model_name,              # get the name string of the model (determined pre-training)
         "version_%i" % version,  # always version_0 because ptl starts a version_0 dir
         "checkpoints",
         "*.ckpt",

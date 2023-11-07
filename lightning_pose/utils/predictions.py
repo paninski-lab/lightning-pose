@@ -342,6 +342,7 @@ def predict_single_video(
         model = load_model_from_checkpoint(
             cfg=cfg, ckpt_file=ckpt_file, eval=True, data_module=data_module
         )
+        ckpt_file = None  # weights are now loaded; set to None so trainer doesn't load also
         delete_model = True
     model.to("cuda")
 

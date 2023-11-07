@@ -196,11 +196,10 @@ class HeatmapTracker(BaseSupervisedTracker):
 
     def initialize_upsampling_layers(self) -> None:
         """Intialize the Conv2DTranspose upsampling layers."""
-        # TODO: test that running this method changes the weights and biases
         for index, layer in enumerate(self.upsampling_layers):
             if index > 0:  # we ignore the PixelShuffle
                 if isinstance(layer, nn.ConvTranspose2d):
-                    torch.nn.init.xavier_uniform_(layer.weight, gain=1.0)
+                    torch.nn.init.xavier_uniform_(layer.weight, gain=0.01)
                     torch.nn.init.zeros_(layer.bias)
                 elif isinstance(layer, nn.BatchNorm2d):
                     torch.nn.init.constant_(layer.weight, 1.0)

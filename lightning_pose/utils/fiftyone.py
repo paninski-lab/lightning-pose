@@ -148,7 +148,6 @@ class FiftyOneKeypointBase:
         return model_abs_paths
 
     def load_model_predictions(self) -> None:
-        # TODO: we have to specify the paths differently in the init method?
         # take the abs paths, and load the models into a dictionary
         self.model_preds_dict = {}
         self.preds_pandas_df_dict = {}
@@ -356,7 +355,6 @@ class FiftyOneKeypointVideoPlotter(FiftyOneKeypointBase):
         dataset = fo.Dataset(self.dataset_name, persistent=True)
         # adding _videos so as to not overwrite existing datasets with images.
         # NOTE: for now, one sample only in the dataset (one video)
-        # TODO: in the future, dataset could include multiple video samples
         video_sample = fo.Sample(filepath=self.video)
         first_model_name = list(pred_keypoints_dict.keys())[0]
         pretty_print_str(

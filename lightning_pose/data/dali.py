@@ -1,5 +1,6 @@
 """Data pipelines based on efficient video reading by nvidia dali package."""
 
+import os
 from typing import Dict, List, Literal, Optional, Union
 
 import numpy as np
@@ -175,9 +176,6 @@ class PrepareDALI(object):
 
     Big picture: this will initialize the pipes and dataloaders for both training and prediction.
 
-    TODO: make sure the order of args when you mix is valid.
-    TODO: consider changing LightningWrapper args from num_batches to num_iter
-
     """
 
     def __init__(
@@ -189,6 +187,12 @@ class PrepareDALI(object):
         dali_config: Union[dict, DictConfig] = None,
         imgaug: Optional[str] = "default",
     ) -> None:
+
+        # make sure `filenames` is a list of existing video files
+        for vid in filenames:
+            if not os.path.exists(vid) or not os.path.isfile(vid):
+                raise FileNotFoundError(f"{vid} is not a video file!")
+
         self.train_stage = train_stage
         self.model_type = model_type
         self.resize_dims = resize_dims

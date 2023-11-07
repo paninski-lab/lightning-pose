@@ -63,7 +63,7 @@ def train(cfg: DictConfig):
     logger = pl.loggers.TensorBoardLogger("tb_logs", name=cfg.model.model_name)
 
     # early stopping, learning rate monitoring, model checkpointing, backbone unfreezing
-    callbacks = get_callbacks(cfg)
+    callbacks = get_callbacks(cfg, early_stopping=False)
 
     # calculate number of batches for both labeled and unlabeled data per epoch
     limit_train_batches = calculate_train_batches(cfg, dataset)
