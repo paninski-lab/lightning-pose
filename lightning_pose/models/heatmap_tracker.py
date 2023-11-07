@@ -14,6 +14,7 @@ from typing_extensions import Literal
 
 from lightning_pose.data.utils import (
     HeatmapLabeledBatchDict,
+    MultiviewHeatmapLabeledBatchDict,
     UnlabeledBatchDict,
     evaluate_heatmaps_at_location,
     undo_affine_transform,
@@ -264,16 +265,17 @@ class HeatmapTracker(BaseSupervisedTracker):
 
     def forward(
         self,
-        images: Union[TensorType["batch", "channels":3, "image_height", "image_width"],
-                      TensorType["batch", "views", "channels":3, "image_height", "image_width"]]
+        images: Union[
+            TensorType["batch", "channels":3, "image_height", "image_width"],
+            TensorType["batch", "views", "channels":3, "image_height", "image_width"],
+        ]
     ) -> TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Forward pass through the network."""
         # we get one representation for each desired output.
         shape = images.shape
 
-        #  if len(shape) > 4 we assume we have multiple views and need
-        # to combine images across batch/views before passing to network,
-        # then we reshape
+        # if len(shape) > 4 we assume we have multiple views and need to combine images across
+        # batch/views before passing to network, then we reshape
         if len(shape) > 4:
             images = images.reshape(-1, shape[-3], shape[-2], shape[-1])
             representations = self.get_representations(images)
@@ -286,7 +288,13 @@ class HeatmapTracker(BaseSupervisedTracker):
         # softmax temp stays 1 here; to modify for model predictions, see constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
 
-    def get_loss_inputs_labeled(self, batch_dict: HeatmapLabeledBatchDict) -> dict:
+    def get_loss_inputs_labeled(
+        self,
+        batch_dict: Union[
+            HeatmapLabeledBatchDict,
+            MultiviewHeatmapLabeledBatchDict,
+        ],
+    ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
         predicted_heatmaps = self.forward(batch_dict["images"])
@@ -305,7 +313,11 @@ class HeatmapTracker(BaseSupervisedTracker):
 
     def predict_step(
         self,
-        batch_dict: Union[HeatmapLabeledBatchDict, UnlabeledBatchDict],
+        batch_dict: Union[
+            HeatmapLabeledBatchDict,
+            MultiviewHeatmapLabeledBatchDict,
+            UnlabeledBatchDict,
+        ],
         batch_idx: int,
         return_heatmaps: Optional[bool] = False,
     ) -> Union[

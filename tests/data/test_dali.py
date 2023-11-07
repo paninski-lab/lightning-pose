@@ -3,7 +3,6 @@
 import os
 
 import pytest
-import torch
 
 
 def test_video_pipe(video_list):

@@ -26,6 +26,8 @@ def test_convert_bbox_coords(heatmap_data_module_combined):
     # get training batch
     combined_loader = heatmap_data_module_combined.train_dataloader()
     batch = next(iter(combined_loader))
+    # batch is tuple as of lightning 2.0.9
+    batch = batch[0] if isinstance(batch, tuple) else batch
     batch_dict = batch['labeled']
     orig_converted = convert_bbox_coords(batch_dict, batch_dict['keypoints'])
     old_image_dims = [batch_dict['images'].size(-2), batch_dict['images'].size(-1)]

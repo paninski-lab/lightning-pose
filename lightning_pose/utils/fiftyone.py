@@ -109,10 +109,12 @@ class FiftyOneKeypointBase:
     def build_speed(self) -> str:
         return self.cfg.eval.fiftyone.build_speed
 
+    # TODO: update this, no longer have access to cfg.data.image_orig_dims
     @property
     def img_width(self) -> int:
         return self.cfg.data.image_orig_dims.width
 
+    # TODO: update this, no longer have access to cfg.data.image_orig_dims
     @property
     def img_height(self) -> int:
         return self.cfg.data.image_orig_dims.height

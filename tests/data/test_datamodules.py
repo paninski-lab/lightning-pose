@@ -2,7 +2,6 @@
 
 import pytest
 import torch
-from lightning.pytorch.utilities import CombinedLoader
 
 
 def test_base_datamodule(cfg, base_data_module):
@@ -148,10 +147,10 @@ def test_base_data_module_combined(cfg, base_data_module_combined):
     train_size_unlabeled = base_data_module_combined.dali_config["context"]["train"]["batch_size"]
     num_targets = base_data_module_combined.dataset.num_targets
 
-    loader = CombinedLoader(base_data_module_combined.train_dataloader())
+    loader = base_data_module_combined.train_dataloader()
     batch = next(iter(loader))
     # batch is tuple as of lightning 2.0.9
-    batch = batch[0][0] if isinstance(batch, tuple) else batch
+    batch = batch[0] if isinstance(batch, tuple) else batch
     assert list(batch.keys())[0] == "labeled"
     assert list(batch.keys())[1] == "unlabeled"
     assert list(batch["labeled"].keys()) == ["images", "keypoints", "idxs", "bbox"]
@@ -176,10 +175,10 @@ def test_heatmap_data_module_combined(cfg, heatmap_data_module_combined):
     train_size_unlabel = heatmap_data_module_combined.dali_config["context"]["train"]["batch_size"]
     num_targets = heatmap_data_module_combined.dataset.num_targets
 
-    loader = CombinedLoader(heatmap_data_module_combined.train_dataloader())
+    loader = heatmap_data_module_combined.train_dataloader()
     batch = next(iter(loader))
     # batch is tuple as of lightning 2.0.9
-    batch = batch[0][0] if isinstance(batch, tuple) else batch
+    batch = batch[0] if isinstance(batch, tuple) else batch
     assert list(batch.keys())[0] == "labeled"
     assert list(batch.keys())[1] == "unlabeled"
     assert list(batch["labeled"].keys()) == ["images", "keypoints", "idxs", "bbox", "heatmaps"]

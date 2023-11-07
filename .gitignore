@@ -1,14 +1,3 @@
-lightning_logs/
-grid_artifacts/
-.vscode/
-outputs/
-multirun/
-preds/
-scripts/.ipynb_checkpoints
-data/Chickadee
-tb_logs
-#scripts/configs_*
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -146,10 +135,19 @@ dmypy.json
 **/.DS_Store
 
 # specific stuff like csv predictions on test_vid.mp4
-toy_datasets/toymouseRunningData/unlabeled_videos/*.csv
-toy_datasets/toymouseRunningData/unlabeled_videos/test_vid_labeled.mp4
-toy_datasets/toymouseRunningData/unlabeled_videos/test_vid_*.mp4
-toy_datasets/toymouseRunningData/barObstacleScaling1/*.npy
+data/mirror-mouse-example/videos/*.csv
+data/mirror-mouse-example/videos/test_vid_*.mp4
 
-# split dataset that is computed on the fly
+# other datasets
 data/mirror-mouse-example_split/
+data/Chickadee
+
+# random other outputs that might end up in the repo
+lightning_logs/
+grid_artifacts/
+.vscode/
+outputs/
+multirun/
+preds/
+scripts/.ipynb_checkpoints
+tb_logs

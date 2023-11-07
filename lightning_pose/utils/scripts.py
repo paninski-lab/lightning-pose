@@ -101,16 +101,7 @@ def get_dataset(
                 do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
             )
-            image = Image.open(os.path.join(dataset.root_directory,
-                                            dataset.image_names[0])).convert("RGB")
-            if image.size != (cfg.data.image_orig_dims.width, cfg.data.image_orig_dims.height):
-                raise ValueError(
-                    f"image_orig_dims in data configuration file is "
-                    f"(width={cfg.data.image_orig_dims.width}, \
-                        height={cfg.data.image_orig_dims.height}) "
-                    f"but your image size is (width={image.size[0]}, height={image.size[1]}). "
-                    f"Please update the data configuration file"
-                )
+
     else:
         raise NotImplementedError("%s is an invalid cfg.model.model_type" % cfg.model.model_type)
 
@@ -128,9 +119,7 @@ def get_data_module(
     semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
     if not semi_supervised:
         if not (cfg.training.gpu_id, int):
-            raise NotImplementedError(
-                "Cannot currently fit fully supervised model on multiple gpus"
-            )
+            raise NotImplementedError("Cannot fit fully supervised model on multiple gpus")
         data_module = BaseDataModule(
             dataset=dataset,
             train_batch_size=cfg.training.train_batch_size,
@@ -144,9 +133,7 @@ def get_data_module(
         )
     else:
         if not (cfg.training.gpu_id, int):
-            raise NotImplementedError(
-                "Cannot currently fit semi-supervised model on multiple gpus"
-            )
+            raise NotImplementedError("Cannot fit semi-supervised model on multiple gpus")
         data_module = UnlabeledDataModule(
             dataset=dataset,
             video_paths_list=video_dir,
@@ -196,6 +183,10 @@ def get_loss_factories(
                         "HeatmapTracker. \nYou specified a RegressionTracker model."
                     )
                 # record original image dims (after initial resizing)
+                raise Exception(
+                    "need to update unimodal and/or temporal heatmap loss to not use "
+                    "cfg.data.image_resize_dims, which has been deprecated."
+                )
                 height_og = cfg.data.image_resize_dims.height
                 width_og = cfg.data.image_resize_dims.width
                 loss_params_dict["unsupervised"][loss_name][
@@ -257,19 +248,21 @@ def get_model(
         if image_h != image_w:
             raise RuntimeError("ViT model requires resized height and width to be equal")
 
+    backbone_pretrained = cfg.model.get("backbone_pretrained", True)
     if not semi_supervised:
         if cfg.model.model_type == "regression":
             model = RegressionTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
                 backbone=cfg.model.backbone,
+                pretrained=backbone_pretrained,
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
             )
         elif cfg.model.model_type == "heatmap":
-            backbone_pretrained = cfg.model.get("backbone_pretrained", True)
+
             model = HeatmapTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 num_targets=data_module.dataset.num_targets,
@@ -288,6 +281,7 @@ def get_model(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
                 backbone=cfg.model.backbone,
+                pretrained=backbone_pretrained,
                 downsample_factor=cfg.data.downsample_factor,
                 output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
@@ -308,6 +302,7 @@ def get_model(
                 loss_factory=loss_factories["supervised"],
                 loss_factory_unsupervised=loss_factories["unsupervised"],
                 backbone=cfg.model.backbone,
+                pretrained=backbone_pretrained,
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
@@ -320,6 +315,7 @@ def get_model(
                 loss_factory=loss_factories["supervised"],
                 loss_factory_unsupervised=loss_factories["unsupervised"],
                 backbone=cfg.model.backbone,
+                pretrained=backbone_pretrained,
                 downsample_factor=cfg.data.downsample_factor,
                 output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
@@ -333,6 +329,7 @@ def get_model(
                 loss_factory=loss_factories["supervised"],
                 loss_factory_unsupervised=loss_factories["unsupervised"],
                 backbone=cfg.model.backbone,
+                pretrained=backbone_pretrained,
                 downsample_factor=cfg.data.downsample_factor,
                 output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
@@ -342,9 +339,7 @@ def get_model(
             )
         else:
             raise NotImplementedError(
-                f"{cfg.model.model_type} is an invalid cfg.model.model_type for a semi-supervised "
-                f"model"
-            )
+                f"{cfg.model.model_type} invalid cfg.model.model_type for a semi-supervised model")
 
     # load weights from user-provided checkpoint path
     if cfg.model.get("checkpoint", None):
@@ -532,7 +527,7 @@ def compute_metrics(
         # re-fit pca on the labeled data to get params
         pca()
         # compute reprojection error
-        pcasv_error_per_keypoint = pca_singleview_reprojection_error(keypoints_pred, pca, cfg)
+        pcasv_error_per_keypoint = pca_singleview_reprojection_error(keypoints_pred, pca)
         pcasv_df = pd.DataFrame(pcasv_error_per_keypoint, index=index, columns=keypoint_names)
         # add train/val/test split
         if set is not None:
@@ -552,7 +547,7 @@ def compute_metrics(
         # re-fit pca on the labeled data to get params
         pca()
         # compute reprojection error
-        pcamv_error_per_keypoint = pca_multiview_reprojection_error(keypoints_pred, pca, cfg)
+        pcamv_error_per_keypoint = pca_multiview_reprojection_error(keypoints_pred, pca)
         pcamv_df = pd.DataFrame(pcamv_error_per_keypoint, index=index, columns=keypoint_names)
         # add train/val/test split
         if set is not None:

@@ -72,9 +72,9 @@ def cfg_multiview() -> dict:
     cfg["data"]["csv_file"] = ["top.csv", "bot.csv"]
     cfg["data"]["view_names"] = ["bot", "top"]
     cfg["data"]["num_keypoints"] = 7
-    cfg["data"]["keypoint_names"] = ["paw1LH", "paw2LF", "paw3RF",
-                                     "paw4RH", "tailBase", "tailMid",
-                                     "nose"]
+    cfg["data"]["keypoint_names"] = [
+        "paw1LH", "paw2LF", "paw3RF", "paw4RH", "tailBase", "tailMid", "nose",
+    ]
     cfg["model"]["backbone_pretrained"] = False
 
     return OmegaConf.create(cfg)
@@ -123,7 +123,7 @@ def make_multiview_dataset() -> None:
         src_vid = os.path.join(src_dir_vids, video)
         dst_vid_top = os.path.join(dst_dir_vids, video.replace(".mp4", "_top.mp4"))
         dst_vid_bot = os.path.join(dst_dir_vids, video.replace(".mp4", "_bot.mp4"))
-        ffmpeg_cmd = f"ffmpeg -i {src_vid} -filter_complex '[0]crop=iw:{y_split}:0:0[top];[0]crop=iw:ih-{y_split}:0:{y_split}[bot]' -map '[top]' {dst_vid_top} -map '[bot]' {dst_vid_bot}"
+        ffmpeg_cmd = f"ffmpeg -i {src_vid} -filter_complex '[0]crop=iw:{y_split}:0:0[top];[0]crop=iw:ih-{y_split}:0:{y_split}[bot]' -map '[top]' {dst_vid_top} -map '[bot]' {dst_vid_bot}"  # noqa: E501
         subprocess.run(ffmpeg_cmd, shell=True)
 
     # copy and split CollectedData.csv
@@ -167,8 +167,8 @@ def make_multiview_dataset() -> None:
         if any(df_bot[col] == "obsLow_bot"):
             df_bot.drop(columns=[col], inplace=True)
 
-    df_top.replace("_top", '', inplace=True, regex=True)
-    df_bot.replace("_bot", '', inplace=True, regex=True)
+    df_top.replace("_top", "", inplace=True, regex=True)
+    df_bot.replace("_bot", "", inplace=True, regex=True)
 
     df_top.to_csv(dst_file_top)
     df_bot.to_csv(dst_file_bot)

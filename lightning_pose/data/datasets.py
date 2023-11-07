@@ -63,29 +63,12 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         self.do_context = do_context
 
         # load csv data
-        # step 1
         if os.path.isfile(csv_path):
             csv_file = csv_path
         else:
             csv_file = os.path.join(root_directory, csv_path)
         if not os.path.exists(csv_file):
-            # step 2: assume csv_path is absolute
-            csv_file = csv_path
-            if not os.path.exists(csv_file):
-                # step 3: assume dlc directory structure
-                import glob
-
-                glob_path = os.path.join(
-                    root_directory,
-                    "training-data",
-                    "iteration-0",
-                    "*",  # wildcard handles proj-specific dlc naming conventions
-                    csv_path,
-                )
-                options = glob.glob(glob_path)
-                if not options or not os.path.exists(options[0]):
-                    raise FileNotFoundError("Could not find csv file!")
-                csv_file = options[0]
+            raise FileNotFoundError(f"Could not find csv file at {csv_file}!")
 
         csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
         self.keypoint_names = get_keypoint_names(csv_file=csv_file, header_rows=header_rows)
@@ -106,7 +89,6 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         self.num_keypoints = self.keypoints.shape[1]
 
         self.data_length = len(self.image_names)
-        self.image_original_size = []
 
     @property
     def height(self) -> int:
@@ -130,7 +112,6 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             file_name = os.path.join(self.root_directory, img_name)
             # if 1 color channel, change to 3.
             image = Image.open(file_name).convert("RGB")
-            self.image_original_size.append(image.size)
             if self.imgaug_transform is not None:
                 transformed_images, transformed_keypoints = self.imgaug_transform(
                     images=np.expand_dims(image, axis=0),
@@ -528,7 +509,6 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         self.keypoint_names = {}
         self.data_length = {}
         self.num_keypoints = {}
-        print("calculating heatmaps for MultiviewHeatmapDataset ...")
         for view, csv_path in zip(view_names, csv_paths):
             self.dataset[view] = HeatmapDataset(
                 root_directory=root_directory,
@@ -537,7 +517,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 imgaug_transform=imgaug_transform,
                 downsample_factor=downsample_factor,
                 do_context=do_context,
-                uniform_heatmaps=uniform_heatmaps
+                uniform_heatmaps=uniform_heatmaps,
             )
             self.keypoint_names[view] = self.dataset[view].keypoint_names
             self.data_length[view] = len(self.dataset[view])
@@ -609,39 +589,51 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
     def num_views(self) -> int:
         return len(self.view_names)
 
-    def fusion(self, datadict: dict, bbox: Optional[np.array] = np.array((0))) -> Tuple[
+    def fusion(self, datadict: dict) -> Tuple[
         Union[
             TensorType["num_views", "RGB":3, "image_height", "image_width", float],
             TensorType["num_views", "frames", "RGB":3, "image_height", "image_width", float]
         ],
-        TensorType["num_views", "heatmap_height", "heatmap_width", float],
         TensorType["keypoints"],
-        List
+        TensorType["num_views", "heatmap_height", "heatmap_width", float],
+        TensorType["num_views", "xyhw":4, float],
+        List,
     ]:
-        """ Here all the view data will be merged into one image and multiple heatmaps.
-            images and heatmaps will be concatenated vertically dim=1
+        """Merge images, heatmaps, keypoints, and bboxes across views.
+
         Args:
-            heatmaps: this comes from HeatmapDataset.__getItems__(idx) for each view.
-            bbx: the part of the image that needs to be cropped
+            datadict: this comes from HeatmapDataset.__getItems__(idx) for each view.
+
+        Returns:
+            tuple
+                - images
+                - keypoints
+                - heatmaps
+                - bboxes
+                - concat order
+
         """
-        heatmaps = []
-        keypoints = []
         images = []
+        keypoints = []
+        heatmaps = []
+        bboxes = []
         concat_order = []
         for view, data in datadict.items():
-            heatmaps.append(data["heatmaps"])
+            images.append(data["images"].unsqueeze(0))
             data["keypoints"] = data["keypoints"].reshape(int(data["keypoints"].shape[0] / 2), 2)
             keypoints.append(data["keypoints"])
-            images.append(data["images"].unsqueeze(0))
+            heatmaps.append(data["heatmaps"])
+            bboxes.append(data["bbox"])
             concat_order.append(view)
 
-        heatmaps = torch.cat(heatmaps, dim=0)
-        image = torch.cat(images, dim=0)
+        images = torch.cat(images, dim=0)
         keypoints = torch.cat(keypoints, dim=0).reshape(-1)
+        heatmaps = torch.cat(heatmaps, dim=0)
+        bboxes = torch.cat(bboxes, dim=0)
 
         assert keypoints.shape == (self.num_targets,)
 
-        return image, heatmaps, keypoints, concat_order
+        return images, keypoints, heatmaps, bboxes, concat_order
 
     def __getitem__(self, idx: int) -> MultiviewHeatmapLabeledExampleDict:
         """Get an example from the dataset.
@@ -649,18 +641,17 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         Images and their heatmaps and then stacks them.
         """
         datadict = {}
-        img_sizes = {}
         for view in self.view_names:
             datadict[view] = self.dataset[view][idx]
-            img_sizes[view] = self.dataset[view].image_original_size[idx]
-        images, heatmaps, keypoints, concat_order = self.fusion(datadict)
+        images, keypoints, heatmaps, bboxes, concat_order = self.fusion(datadict)
 
         return MultiviewHeatmapLabeledExampleDict(
-            original_image_size=img_sizes,
+            images=images,  # shape (3, H, W) or (5, 3, H, W)
+            keypoints=keypoints,  # shape (n_targets,)
+            heatmaps=heatmaps,
+            bbox=bboxes,
+            idxs=idx,
+            num_views=self.num_views,  # int
             concat_order=concat_order,  # List[int]
             view_names=self.view_names,  # List[int]
-            num_views=self.num_views,  # int
-            images=images,  # shape (3, img_height, img_width) or (5, 3, H, W)
-            keypoints=keypoints,  # shape (n_targets,)
-            idxs=idx,
-            heatmaps=heatmaps)
+        )
