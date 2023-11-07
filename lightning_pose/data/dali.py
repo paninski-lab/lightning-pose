@@ -63,6 +63,7 @@ def video_pipe(
     Returns:
         pipeline object to be fed to DALIGenericIterator
         data augmentation matrix (returned so that geometric transforms can be undone)
+        size of video frames, used for bbox
 
     """
     video = fn.readers.video(
@@ -80,6 +81,7 @@ def video_pipe(
         pad_last_batch=pad_last_batch,  # Important for context loaders
         file_list_include_preceding_frame=True,  # to get rid of dali warnings
     )
+    orig_size = fn.shapes(video)
     if resize_dims:
         video = fn.resize(video, size=resize_dims)
     if imgaug == "dlc" or imgaug == "dlc-top-down":
@@ -115,7 +117,7 @@ def video_pipe(
         mean=normalization_mean,
         std=normalization_std,
     )
-    return transform, matrix
+    return transform, matrix, orig_size
 
 
 class LitDaliWrapper(DALIGenericIterator):
@@ -155,8 +157,13 @@ class LitDaliWrapper(DALIGenericIterator):
         frames = batch[0]["frames"][0, :, :, :, :]
         # shape (1,) or (2, 3)
         transforms = batch[0]["transforms"][0]
+        # get frame size, order is seq_len,H,W,C
+        height = batch[0]["frame_size"][0, 1]
+        width = batch[0]["frame_size"][0, 2]
+        bbox = torch.tensor([0, 0, height, width],
+                            device=frames.device).repeat((frames.shape[0], 1))
 
-        return UnlabeledBatchDict(frames=frames, transforms=transforms)
+        return UnlabeledBatchDict(frames=frames, transforms=transforms, bbox=bbox)
 
     def __next__(self) -> UnlabeledBatchDict:
         batch = super().__next__()
@@ -340,7 +347,7 @@ class PrepareDALI(object):
             "num_iters": self.num_iters,
             "eval_mode": "train",
             "do_context": False,
-            "output_map": ["frames", "transforms"],
+            "output_map": ["frames", "transforms", "frame_size"],
             "last_batch_policy": LastBatchPolicy.PARTIAL,
             "auto_reset": True,
         }
@@ -348,7 +355,7 @@ class PrepareDALI(object):
             "num_iters": self.num_iters,
             "eval_mode": "predict",
             "do_context": False,
-            "output_map": ["frames", "transforms"],
+            "output_map": ["frames", "transforms", "frame_size"],
             "last_batch_policy": LastBatchPolicy.FILL,
             "last_batch_padded": False,
             "auto_reset": False,
@@ -360,7 +367,7 @@ class PrepareDALI(object):
             "num_iters": self.num_iters,
             "eval_mode": "train",
             "do_context": True,
-            "output_map": ["frames", "transforms"],
+            "output_map": ["frames", "transforms", "frame_size"],
             "last_batch_policy": LastBatchPolicy.PARTIAL,
             "auto_reset": True,
         }  # taken from datamodules.py. only difference is that we need to do context
@@ -368,7 +375,7 @@ class PrepareDALI(object):
             "num_iters": self.num_iters,
             "eval_mode": "predict",
             "do_context": True,
-            "output_map": ["frames", "transforms"],
+            "output_map": ["frames", "transforms", "frame_size"],
             "last_batch_policy": LastBatchPolicy.FILL,  # LastBatchPolicy.PARTIAL,
             "last_batch_padded": False,
             "auto_reset": False,

@@ -3,7 +3,7 @@
 import copy
 import os
 from collections import OrderedDict
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import imgaug.augmenters as iaa
 import lightning.pytorch as pl
@@ -12,7 +12,6 @@ import pandas as pd
 import torch
 from moviepy.editor import VideoFileClip
 from omegaconf import DictConfig, OmegaConf
-from PIL import Image
 from typeguard import typechecked
 
 from lightning_pose.callbacks import AnnealWeight
@@ -85,15 +84,6 @@ def get_dataset(
         )
     else:
         raise NotImplementedError("%s is an invalid cfg.model.model_type" % cfg.model.model_type)
-
-    image = Image.open(os.path.join(dataset.root_directory, dataset.image_names[0])).convert("RGB")
-    if image.size != (cfg.data.image_orig_dims.width, cfg.data.image_orig_dims.height):
-        raise ValueError(
-            f"image_orig_dims in data configuration file is "
-            f"(width={cfg.data.image_orig_dims.width}, height={cfg.data.image_orig_dims.height}) "
-            f"but your image size is (width={image.size[0]}, height={image.size[1]}). "
-            f"Please update the data configuration file"
-        )
 
     return dataset
 
@@ -205,7 +195,7 @@ def get_loss_factories(
             elif loss_name == "pca_singleview":
                 loss_params_dict["unsupervised"][loss_name][
                     "columns_for_singleview_pca"
-                ] = cfg.data.columns_for_singleview_pca
+                ] = cfg.data.get('columns_for_singleview_pca', None)
 
     # build supervised loss factory, which orchestrates all supervised losses
     loss_factory_sup = LossFactory(
@@ -559,8 +549,6 @@ def export_predictions_and_labeled_video(
     # update video size in config
     video_clip = VideoFileClip(video_file)
     cfg_copy = copy.deepcopy(cfg)
-    cfg_copy.data.image_orig_dims.width = video_clip.w
-    cfg_copy.data.image_orig_dims.height = video_clip.h
 
     # compute predictions
     preds_df = predict_single_video(
@@ -590,3 +578,34 @@ def export_predictions_and_labeled_video(
             mask_array=mask_array,
             filename=labeled_mp4_file,
         )
+
+
+@typechecked
+def get_detector_model(cfg: DictConfig, data_dir: str, video_dir: Optional[str] = None
+                       ) -> Tuple[pl.LightningModule, BaseDataModule]:
+    """get a detector model from a dynamic pipeline"""
+    if not cfg.data.get('dynamic_crop', False):
+        raise ValueError(
+            "Implemented only for dynamic crop algorithm"
+        )
+
+    # make a config copy and overwrite values with detector values
+    detector_cfg = cfg.copy()
+    for key in detector_cfg.data.detector:
+        if key in detector_cfg.data:
+            detector_cfg.data[key] = detector_cfg.data.detector[key]
+    for key in detector_cfg.model.detector:
+        if key in detector_cfg.model:
+            detector_cfg.model[key] = detector_cfg.model.detector[key]
+
+    # detector model gets full images in, should use standard image resizing pipeline
+    detector_cfg.data.dynamic_crop = False
+
+    # run all steps to get detector model
+    imgaug_transform = get_imgaug_transform(cfg=detector_cfg)
+    dataset = get_dataset(cfg=detector_cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
+    data_module = get_data_module(cfg=detector_cfg, dataset=dataset, video_dir=video_dir)
+    loss_factories = get_loss_factories(cfg=detector_cfg, data_module=data_module)
+    model = get_model(cfg=detector_cfg, data_module=data_module, loss_factories=loss_factories)
+
+    return model, data_module

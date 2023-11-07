@@ -1,58 +1,35 @@
 data:
-  # dimensions of training images
-  image_orig_dims:
-    height: null
-    width: null
   # resize dimensions to streamline model creation
   image_resize_dims:
-    height: null
-    width: null
+    height: 256
+    width: 512
   # ABSOLUTE path to data directory
-  data_dir: null
+  data_dir: "/home/selmaan/Documents/GitHub/lightning-pose/data/Chickadee"
   # ABSOLUTE path to unlabeled videos' directory
-  video_dir: null
+  video_dir: "/home/selmaan/Documents/GitHub/lightning-pose/data/Chickadee/videos"
   # location of labels; this should be relative to `data_dir`
-  csv_file: CollectedData.csv
+  csv_file: COM_Labels.csv
   # downsample heatmaps - 2 | 3
   downsample_factor: 2
   # total number of keypoints
-  num_keypoints: null
+  num_keypoints: 3
   # keypoint names
-  keypoint_names: null
-  # indicator to use 2-stage dynamic crop algorithm
+  keypoint_names:
+    - head
+    - body
+    - tail
+  # indicator to use 2-stage dynamic crop algorithm, False/True
   dynamic_crop: False
   # max allowed number of instances, i.e. 1 for single-animal, >1 for multiple animal
   num_max_instances: 1
   # detector network params
-  detector:
-    # resampled image size for detector network
-    image_resize_dims:
-      height: null
-      width: null
-    # heatmap downsample factor for detector network
-    downsample_factor: 2
-    # list of lists for keypoints to average and detect
-    keypoints_for_crop: null
-    # number of coarse keypoints to track, should match outer list length of keypoints_for_crop
-    num_keypoints: null
-    # names of the coarse keypoints
-    keypoint_names: null
-  # for mirrored setups with all keypoints defined in same csv file, define matching
-  # columns for different keypoints (assumes x-y-x-y interleaving)
-  # each list corresponds to a single view, so in the example below there are 2 views
-  # keypoint 0 is from view 0 and matches up with keypoint 8 from view 2
-  # columns that correspond to keypoints only labeled in a single view are omitted
-  # this info is only used for the multiview pca loss
-  mirrored_column_matches: null
-  # list of indices of keypoints used for pca singleview loss (use order of labels file)
-  columns_for_singleview_pca: null
 
 training:
   # select from one of several predefined image/video augmentation pipelines
   # default- resizing only
   # dlc- imgaug pipeline implemented in DLC 2.0 package
   # dlc-top-down- dlc augmentations plus vertical and horizontal flips
-  imgaug: dlc
+  imgaug: dlc-top-down
   # batch size of labeled data during training
   train_batch_size: 16
   # batch size of labeled data during validation
@@ -69,13 +46,13 @@ training:
   # number of gpus to train a single model
   num_gpus: 1
   # number of cpu workers for data loaders
-  num_workers: 4
+  num_workers: 16
   # epochs over which to assess validation metrics for early stopping
-  early_stop_patience: 3
+  early_stop_patience: 10
   # epoch at which backbone network weights begin updating
-  unfreezing_epoch: 20
+  unfreezing_epoch: 10
   # max training epochs; training may exit before due to early stopping
-  min_epochs: 300
+  min_epochs: 100
   max_epochs: 750
   # frequency to log training metrics (one step is one batch)
   log_every_n_steps: 10
@@ -92,27 +69,27 @@ training:
   lr_scheduler: multisteplr
   lr_scheduler_params:
     multisteplr:
-      milestones: [150, 200, 250]
+      milestones: [40, 70, 100]
       gamma: 0.5
 
 model:
   # list of unsupervised losses
   # "pca_singleview" | "pca_multiview" | "temporal" | "unimodal_mse" | "unimodal_kl"
-  losses_to_use: []
+  losses_to_use: ["temporal"]
   # backbone network:
   # resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
   # resnet50_animalpose_apose | resnet50_animal_ap10k
   # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res
   # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
   # vit_b_sam | vit_h_sam
-  backbone: resnet50_animal_ap10k
+  backbone: efficientnet_b2
   # prediction mode: regression | heatmap | heatmap_mhcrnn (context)
   model_type: heatmap
   # which heatmap loss to use
   # mse | kl | js
   heatmap_loss_type: mse
   # directory name for model saving
-  model_name: test
+  model_name: chickadee_com
 
 dali:
   general:
@@ -120,9 +97,9 @@ dali:
 
   base:
     train:
-      sequence_length: 32
+      sequence_length: 16
     predict:
-      sequence_length: 96
+      sequence_length: 64
 
   context:
     train:

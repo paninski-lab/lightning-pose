@@ -1,42 +1,62 @@
 data:
-  # dimensions of training images
-  image_orig_dims:
-    height: null
-    width: null
   # resize dimensions to streamline model creation
   image_resize_dims:
-    height: null
-    width: null
+    height: 384
+    width: 384
   # ABSOLUTE path to data directory
-  data_dir: null
+  data_dir: "/home/selmaan/Documents/GitHub/lightning-pose/data/Chickadee"
   # ABSOLUTE path to unlabeled videos' directory
-  video_dir: null
+  video_dir: "/home/selmaan/Documents/GitHub/lightning-pose/data/Chickadee/videos"
   # location of labels; this should be relative to `data_dir`
-  csv_file: CollectedData.csv
+  csv_file: All_Labels.csv
   # downsample heatmaps - 2 | 3
   downsample_factor: 2
   # total number of keypoints
-  num_keypoints: null
+  num_keypoints: 18
   # keypoint names
-  keypoint_names: null
-  # indicator to use 2-stage dynamic crop algorithm
-  dynamic_crop: False
+  keypoint_names:
+    - beak_top
+    - beak_bot
+    - head_top
+    - head_back
+    - belly
+    - back
+    - tail_base
+    - tail_tip
+    - eye_left
+    - bib_left
+    - shoulder_left
+    - ankle_left
+    - foot_left
+    - eye_right
+    - bib_right
+    - shoulder_right
+    - ankle_right
+    - foot_right
+  # indicator to use 2-stage dynamic crop algorithm, False/True
+  dynamic_crop: True
   # max allowed number of instances, i.e. 1 for single-animal, >1 for multiple animal
   num_max_instances: 1
   # detector network params
   detector:
     # resampled image size for detector network
     image_resize_dims:
-      height: null
-      width: null
+      height: 256
+      width: 512
     # heatmap downsample factor for detector network
     downsample_factor: 2
     # list of lists for keypoints to average and detect
-    keypoints_for_crop: null
+    keypoints_for_crop:
+      - [0,1,8,13]
+      - [4,5,10,15]
+      - [7]
     # number of coarse keypoints to track, should match outer list length of keypoints_for_crop
-    num_keypoints: null
+    num_keypoints: 3
     # names of the coarse keypoints
-    keypoint_names: null
+    keypoint_names:
+      - head
+      - body
+      - tail
   # for mirrored setups with all keypoints defined in same csv file, define matching
   # columns for different keypoints (assumes x-y-x-y interleaving)
   # each list corresponds to a single view, so in the example below there are 2 views
@@ -52,9 +72,9 @@ training:
   # default- resizing only
   # dlc- imgaug pipeline implemented in DLC 2.0 package
   # dlc-top-down- dlc augmentations plus vertical and horizontal flips
-  imgaug: dlc
+  imgaug: dlc-top-down
   # batch size of labeled data during training
-  train_batch_size: 16
+  train_batch_size: 12
   # batch size of labeled data during validation
   val_batch_size: 32
   # batch size of labeled data during test
@@ -69,13 +89,13 @@ training:
   # number of gpus to train a single model
   num_gpus: 1
   # number of cpu workers for data loaders
-  num_workers: 4
+  num_workers: 16
   # epochs over which to assess validation metrics for early stopping
-  early_stop_patience: 3
+  early_stop_patience: 10
   # epoch at which backbone network weights begin updating
-  unfreezing_epoch: 20
+  unfreezing_epoch: 10
   # max training epochs; training may exit before due to early stopping
-  min_epochs: 300
+  min_epochs: 50
   max_epochs: 750
   # frequency to log training metrics (one step is one batch)
   log_every_n_steps: 10
@@ -92,13 +112,13 @@ training:
   lr_scheduler: multisteplr
   lr_scheduler_params:
     multisteplr:
-      milestones: [150, 200, 250]
+      milestones: [40, 60, 80]
       gamma: 0.5
 
 model:
   # list of unsupervised losses
   # "pca_singleview" | "pca_multiview" | "temporal" | "unimodal_mse" | "unimodal_kl"
-  losses_to_use: []
+  losses_to_use: ["pca_singleview","temporal"]
   # backbone network:
   # resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
   # resnet50_animalpose_apose | resnet50_animal_ap10k
@@ -112,7 +132,16 @@ model:
   # mse | kl | js
   heatmap_loss_type: mse
   # directory name for model saving
-  model_name: test
+  base_model: chickadee
+  model_name: ${model.base_model}_posture
+  # field to hold parameters for the detector network, when using dynamic-crop algorithm
+  detector:
+    # backbone to use for detector network (same options as model.backbone)
+    backbone: ${model.backbone}
+    # detector losses to use (same options as model.losses_to_use)
+    losses_to_use: ${model.losses_to_use}
+    # directory for detector model saving
+    model_name: ${model.base_model}_detector
 
 dali:
   general:

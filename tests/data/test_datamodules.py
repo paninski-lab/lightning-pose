@@ -128,8 +128,8 @@ def test_base_data_module_combined(cfg, base_data_module_combined):
     batch = batch[0][0] if isinstance(batch, tuple) else batch
     assert list(batch.keys())[0] == "labeled"
     assert list(batch.keys())[1] == "unlabeled"
-    assert list(batch["labeled"].keys()) == ["images", "keypoints", "idxs"]
-    assert list(batch["unlabeled"].keys()) == ["frames", "transforms"]
+    assert list(batch["labeled"].keys()) == ["images", "keypoints", "idxs", "bbox"]
+    assert list(batch["unlabeled"].keys()) == ["frames", "transforms", "bbox"]
     assert batch["labeled"]["images"].shape == (train_size_labeled, 3, im_height, im_width)
     assert batch["labeled"]["keypoints"].shape == (train_size_labeled, num_targets)
     assert batch["unlabeled"]["frames"].shape == (train_size_unlabeled, 3, im_height, im_width)
@@ -156,8 +156,8 @@ def test_heatmap_data_module_combined(cfg, heatmap_data_module_combined):
     batch = batch[0][0] if isinstance(batch, tuple) else batch
     assert list(batch.keys())[0] == "labeled"
     assert list(batch.keys())[1] == "unlabeled"
-    assert list(batch["labeled"].keys()) == ["images", "keypoints", "idxs", "heatmaps"]
-    assert list(batch["unlabeled"].keys()) == ["frames", "transforms"]
+    assert list(batch["labeled"].keys()) == ["images", "keypoints", "idxs", "bbox", "heatmaps"]
+    assert list(batch["unlabeled"].keys()) == ["frames", "transforms", "bbox"]
     assert batch["labeled"]["images"].shape == (train_size_labeled, 3, im_height, im_width)
     assert batch["labeled"]["keypoints"].shape == (train_size_labeled, num_targets)
     assert batch["labeled"]["heatmaps"].shape == (

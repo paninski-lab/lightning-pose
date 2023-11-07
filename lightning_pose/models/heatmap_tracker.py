@@ -24,6 +24,7 @@ from lightning_pose.models.base import (
     ALLOWED_BACKBONES,
     BaseSupervisedTracker,
     SemiSupervisedTrackerMixin,
+    convert_bbox_coords,
 )
 
 
@@ -275,10 +276,13 @@ class HeatmapTracker(BaseSupervisedTracker):
         predicted_heatmaps = self.forward(batch_dict["images"])
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
+        # bounding box coords -> original image coords
+        predicted_keypoints = convert_bbox_coords(batch_dict, predicted_keypoints)
+        target_keypoints = convert_bbox_coords(batch_dict, batch_dict["keypoints"])
         return {
             "heatmaps_targ": batch_dict["heatmaps"],
             "heatmaps_pred": predicted_heatmaps,
-            "keypoints_targ": batch_dict["keypoints"],
+            "keypoints_targ": target_keypoints,
             "keypoints_pred": predicted_keypoints,
             "confidences": confidence,
         }
@@ -309,7 +313,8 @@ class HeatmapTracker(BaseSupervisedTracker):
         predicted_heatmaps = self.forward(images)
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.run_subpixelmaxima(predicted_heatmaps)
-        # predicted_keypoints, confidence = self.run_hard_argmax(predicted_heatmaps)
+        # bounding box coords -> original image coords
+        predicted_keypoints = convert_bbox_coords(batch_dict, predicted_keypoints)
         if return_heatmaps:
             return predicted_keypoints, confidence, predicted_heatmaps
         else:
@@ -396,6 +401,9 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             predicted_keypoints = torch.reshape(pred_kps, (pred_kps.shape[0], -1))
         else:
             predicted_keypoints = predicted_keypoints_augmented
+
+        # keypoints -> original image coords keypoints
+        predicted_keypoints = convert_bbox_coords(batch_dict, predicted_keypoints)
 
         return {
             "heatmaps_pred": predicted_heatmaps,  # if augmented, augmented heatmaps
