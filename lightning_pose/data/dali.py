@@ -169,9 +169,6 @@ class PrepareDALI(object):
 
     Big picture: this will initialize the pipes and dataloaders for both training and prediction.
 
-    TODO: make sure the order of args when you mix is valid.
-    TODO: consider changing LightningWrapper args from num_batches to num_iter
-
     """
 
     def __init__(

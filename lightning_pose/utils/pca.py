@@ -16,9 +16,6 @@ from lightning_pose.losses.helpers import EmpiricalEpsilon, convert_dict_values_
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# TODO: think about exporting out the data-getting procedure to its own class so that we
-# can support general arrays, like arrays with predictions.
-
 
 class KeypointPCA(object):
     """Class to collect data from a dataloader and compute PCA params."""
@@ -133,7 +130,6 @@ class KeypointPCA(object):
         self.pca_object.fit(X=self.data_arr)
 
     def _choose_n_components(self) -> None:
-        # TODO: should we return an integer and not override?
         if self.loss_type == "pca_multiview":
             # all views can be explained by 3 (x,y,z) coords
             # ignore self.components_to_keep_argument
@@ -174,7 +170,6 @@ class KeypointPCA(object):
         applying the transformation as it is in scikit learn.
         https://github.com/scikit-learn/scikit-learn/blob/37ac6788c/sklearn/decomposition/_base.py#L125
         """
-        # TODO: more type assertions
         # assert that datashape is valid
         if data_arr is None:
             data_arr = self.data_arr.to(self.device)
@@ -217,14 +212,12 @@ class KeypointPCA(object):
         # should we need a copy of it to undo the nan stuff?
 
         # save training data in self.data_arr
-        # TODO: consider putting in init
         self._get_data()
 
         # modify self.data_arr in the case of multiview pca, else keep the same
         self.data_arr = self._format_data(data_arr=self.data_arr)
 
         # remove those observations with more than one Nan.
-        # TODO: consider infilling somehow
         self._clean_any_nans()
 
         # check no nans, and that we have more observations than observation-dimensions

@@ -195,7 +195,6 @@ class HeatmapTracker(BaseSupervisedTracker):
 
     def initialize_upsampling_layers(self) -> None:
         """Intialize the Conv2DTranspose upsampling layers."""
-        # TODO: test that running this method changes the weights and biases
         for index, layer in enumerate(self.upsampling_layers):
             if index > 0:  # we ignore the PixelShuffle
                 if isinstance(layer, nn.ConvTranspose2d):
