@@ -37,7 +37,8 @@ def run_model_test(cfg, data_module, video_dataloader, trainer, remove_logs_fn):
         pred_handler(preds=labeled_preds)
 
         # predict on unlabeled video
-        trainer.predict(model=model, dataloaders=video_dataloader, return_predictions=True)
+        if video_dataloader is not None:
+            trainer.predict(model=model, dataloaders=video_dataloader, return_predictions=True)
 
     finally:
 

@@ -23,6 +23,24 @@ def test_supervised_heatmap(
     )
 
 
+def test_supervised_multiview_heatmap(
+    cfg_multiview, multiview_heatmap_data_module, trainer, remove_logs,
+):
+    """Test the initialization and training of a supervised heatmap model."""
+
+    cfg_tmp = copy.deepcopy(cfg_multiview)
+    cfg_tmp.model.model_type = "heatmap"
+    cfg_tmp.model.losses_to_use = []
+
+    run_model_test(
+        cfg=cfg_tmp,
+        data_module=multiview_heatmap_data_module,
+        video_dataloader=None,
+        trainer=trainer,
+        remove_logs_fn=remove_logs,
+    )
+
+
 def test_semisupervised_heatmap_temporal(
     cfg,
     heatmap_data_module_combined,
