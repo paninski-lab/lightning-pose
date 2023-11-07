@@ -16,53 +16,59 @@ data:
   # downsample heatmaps - 2 | 3
   downsample_factor: 2
   # total number of body parts
-  num_keypoints: 45
+  num_keypoints: 51
   keypoint_names:
-     - head_main
-     - chin_base_main
-     - chin1_4_main
-     - chin_half_main
-     - chin3_4_main
-     - chin_tip_main
-     - mid_main
-     - fork_main
-     - stripeA_main
-     - stripeP_main
-     - tail_neck_main
-     - dorsal_main
-     - anal_main
-     - caudal_d_main
-     - caudal_v_main
-     - head_top
-     - chin_base_top
-     - chin1_4_top
-     - chin_half_top
-     - chin3_4_top
-     - chin_tip_top
-     - mid_top
-     - fork_top
-     - stripeA_top
-     - stripeP_top
-     - tail_neck_top
-     - dorsal_top
-     - anal_top
-     - caudal_d_top
-     - caudal_v_top
-     - head_right
-     - chin_base_right
-     - chin1_4_right
-     - chin_half_right
-     - chin3_4_right
-     - chin_tip_right
-     - mid_right
-     - fork_right
-     - stripeA_right
-     - stripeP_right
-     - tail_neck_right
-     - dorsal_right
-     - anal_right
-     - caudal_d_right
-     - caudal_v_right
+    - chin_tip_main
+    - chin3_4_main
+    - chin_half_main
+    - chin1_4_main
+    - chin_base_main
+    - head_main
+    - mid_main
+    - tail_neck_main
+    - caudal_v_main
+    - caudal_d_main
+    - pectoral_L_base_main
+    - pectoral_L_main
+    - pectoral_R_base_main
+    - pectoral_R_main
+    - dorsal_main
+    - anal_main
+    - fork_main
+    - chin_tip_top
+    - chin3_4_top
+    - chin_half_top
+    - chin1_4_top
+    - chin_base_top
+    - head_top
+    - mid_top
+    - tail_neck_top
+    - caudal_v_top
+    - caudal_d_top
+    - pectoral_L_base_top
+    - pectoral_L_top
+    - pectoral_R_base_top
+    - pectoral_R_top
+    - dorsal_top
+    - anal_top
+    - fork_top
+    - chin_tip_right
+    - chin3_4_right
+    - chin_half_right
+    - chin1_4_right
+    - chin_base_right
+    - head_right
+    - mid_right
+    - tail_neck_right
+    - caudal_v_right
+    - caudal_d_right
+    - pectoral_L_base_right
+    - pectoral_L_right
+    - pectoral_R_base_right
+    - pectoral_R_right
+    - dorsal_right
+    - anal_right
+    - fork_right
   # for mirrored setups with all keypoints defined in same csv file, define matching
   # columns for different keypoints (assumes x-y-x-y interleaving)
   # each list corresponds to a single view, so in the example below there are 2 views
@@ -71,12 +77,12 @@ data:
   # TODO: what if a keypoint is labeled in more than 1 but not all views?
   # this info is only used for the multiview pca loss
   mirrored_column_matches:
-    - [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
-    - [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
-    - [30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44]
+    - [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    - [17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33]
+    - [34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
   # all labels in multiple views w/ <40 nans
   columns_for_singleview_pca:
-    [0, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 21, 23, 24, 25, 36, 38, 41]
+    [4, 5, 6, 7, 8, 9, 14, 15, 16, 22, 23, 24, 38, 39, 40, 41, 42, 43, 48, 50]
 
 training:
   # select from one of several predefined image/video augmentation pipelines
@@ -91,9 +97,9 @@ training:
   # batch size of labeled data during test
   test_batch_size: 48
   # fraction of labeled data used for training
-  train_prob: 0.8
+  train_prob: 0.95
   # fraction of labeled data used for validation (remaining used for test)
-  val_prob: 0.1
+  val_prob: 0.05
   # <=1 - fraction of total train frames (determined by `train_prob`) used for training
   # >1 - number of total train frames used for training
   train_frames: 1
@@ -106,8 +112,8 @@ training:
   # epoch at which backbone network weights begin updating
   unfreezing_epoch: 20
   # max training epochs; training may exit before due to early stopping
-  min_epochs: 300
-  max_epochs: 750
+  min_epochs: 500
+  max_epochs: 500
   # frequency to log training metrics (one step is one batch)
   log_every_n_steps: 10
   # frequency to log validation metrics
@@ -135,7 +141,7 @@ model:
   # resnet50_animalpose_apose | resnet50_animal_ap10k
   # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res
   # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
-  backbone: resnet50 # resnet50_animal_ap10k
+  backbone: resnet50  # DO NOT USE resnet50_animal_ap10k
   # prediction mode: regression | heatmap | heatmap_mhcrnn (context)
   model_type: heatmap
   # which heatmap loss to use
