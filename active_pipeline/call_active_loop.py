@@ -9,6 +9,7 @@ from datetime import datetime
 import wandb
 import copy
 import os
+import shutil
 
 import numpy as np
 import pandas as pd
@@ -82,9 +83,14 @@ def call_active_all(active_cfg):
                     for i in train_output_dirs:
                         file.write(i)
             elif current_iteration == 0 and active_cfg[iteration_key_current].method != "random":
-                train_output_dirs = []
+                new_dir = make_run_dir()
                 with open(dir_file_name, "r") as file:
                     train_output_dirs.append(file.read())
+
+                source_folder = train_output_dirs[0]
+                destination_folder = os.path.abspath(new_dir)
+                copy_search_file(source_folder, destination_folder)
+
             # step 3: fill in active pipeline details and call active loop
             else:
                 train_output_dirs = run_train(active_cfg[iteration_key_current], exp_cfg)
@@ -134,6 +140,15 @@ def make_run_dir():
   new_dir = f"./Outputs/{today_str}/{ctime_str}"
   os.makedirs(new_dir, exist_ok=False)
   return new_dir
+
+def copy_search_file(srcDir, desDir):
+    print(srcDir)
+    print(desDir)
+    ls = os.listdir(srcDir)
+    for line in ls:
+        filePath = os.path.join(srcDir, line)
+        if os.path.isfile(filePath):
+            shutil.copy(filePath, desDir)
 
 
 if __name__ == "__main__":
