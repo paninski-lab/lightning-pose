@@ -141,14 +141,24 @@ def make_run_dir():
   os.makedirs(new_dir, exist_ok=False)
   return new_dir
 
-def copy_search_file(srcDir, desDir):
-    print(srcDir)
-    print(desDir)
-    ls = os.listdir(srcDir)
-    for line in ls:
-        filePath = os.path.join(srcDir, line)
-        if os.path.isfile(filePath):
-            shutil.copy(filePath, desDir)
+
+def copy_directory_contents(src_dir, dst_dir):
+    # 确保目标目录存在，如果不存在就创建
+    if not os.path.exists(dst_dir):
+        os.makedirs(dst_dir)
+
+    # 遍历源目录中的所有文件和文件夹
+    for item in os.listdir(src_dir):
+        # 构建完整的文件/文件夹路径
+        s = os.path.join(src_dir, item)
+        d = os.path.join(dst_dir, item)
+        # 判断是文件还是文件夹
+        if os.path.isdir(s):
+            # 如果是文件夹，则递归复制
+            shutil.copytree(s, d, dirs_exist_ok=True)
+        else:
+            # 如果是文件，则复制文件
+            shutil.copy2(s, d)
 
 
 if __name__ == "__main__":
