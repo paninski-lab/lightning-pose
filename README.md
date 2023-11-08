@@ -21,7 +21,10 @@ Lightning Pose is primarily maintained by
 [Dan Biderman](https://dan-biderman.netlify.app) (Columbia University) 
 and 
 [Matt Whiteway](https://themattinthehatt.github.io/) (Columbia University). 
-Come chat with us in Discord.
+
+Lightning Pose is under active development and we welcome community contributions.
+Please get in touch with us on Discord if you're interested in contributing (see guidelines [here](docs/contributing.md)).
+ 
 
 ## Getting Started
 This package provides tools for training and evaluating models on already labeled data and 
