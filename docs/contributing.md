@@ -6,6 +6,13 @@ If you have found a bug or would like to request a minor change, please
 
 In order to contribute code to the repo, please follow the steps below.
 
+### Set up a development installation
+
+In order to make changes to Lightning Pose, you will need to [fork](https://guides.github.com/activities/forking/#fork) the
+[repo](https://github.com/danbider/lightning-pose).
+
+If you are not familiar with `git`, check out [this guide](https://guides.github.com/introduction/git-handbook/#basic-git).
+
 Whenever you initially install the lightning pose repo, instead of
 ```bash
 pip install -e .
@@ -14,18 +21,14 @@ run
 ```bash
 pip install -e .[dev]
 ```
-
-Alternatively, if you have already installed the repo, install the following dev packages:
-```bash
-pip install black flake8 isort
-```
+to install additional development tools.
 
 ### Create a pull request
-Please fork the Lightning Pose repo, make your changes, and then 
+After making changes in your fork, 
 [open a pull request](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork) 
 from your fork. Please read through the rest of this document before submitting the request.
 
-### Linting
+#### Linting
 Linters automatically find (and sometimes fix) formatting issues in the code. We use two, which
 are run from the command line in the Lightning Pose repo:
 
@@ -39,7 +42,7 @@ flake8 .
 isort .
 ```
 
-### Testing
+#### Testing
 We currently do not have a continuous integration (CI) setup for the Lightning Pose repo due to its
 reliance on GPUs (and the relative expense of CI services that provide GPU machines for testing).
 Therefore, it is imperative that you run the unit tests yourself and verify that all tests have
