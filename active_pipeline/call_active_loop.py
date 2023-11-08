@@ -84,12 +84,13 @@ def call_active_all(active_cfg):
                         file.write(i)
             elif current_iteration == 0 and active_cfg[iteration_key_current].method != "random":
                 new_dir = make_run_dir()
+                train_output_dirs = []
                 with open(dir_file_name, "r") as file:
                     train_output_dirs.append(file.read())
 
                 source_folder = train_output_dirs[0]
                 destination_folder = os.path.abspath(new_dir)
-                copy_search_file(source_folder, destination_folder)
+                copy_directory_contents(source_folder, destination_folder)
 
             # step 3: fill in active pipeline details and call active loop
             else:
