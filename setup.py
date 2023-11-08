@@ -66,6 +66,7 @@ install_requires = [
     "streamlit==1.22.0",
     "torchtyping==0.1.4",
     "torchvision==0.15.2",
+    "torchaudio==2.0.2",
     "typeguard==3.0.2",
     "typing==3.7.4.3",
     "botocore==1.27.59",
