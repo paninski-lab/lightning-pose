@@ -23,8 +23,7 @@ and
 [Matt Whiteway](https://themattinthehatt.github.io/) (Columbia University). 
 
 Lightning Pose is under active development and we welcome community contributions.
-Please get in touch with us on Discord if you're interested in contributing (see guidelines [here](docs/contributing.md)).
- 
+Whether you want to implement some of your own ideas or help out with our [development roadmap](docs/roadmap.md), please get in touch with us on Discord (see contributing guidelines [here](docs/contributing.md)). 
 
 ## Getting Started
 This package provides tools for training and evaluating models on already labeled data and 
