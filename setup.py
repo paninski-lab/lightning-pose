@@ -78,6 +78,9 @@ extras_require = {
         "black",
         "flake8",
         "isort",
+        "Sphinx",
+        "sphinx_rtd_theme",
+        "sphinx-automodapi",
     },
     "extra_models": {
         "lightning-bolts",  # resnet-50 trained on imagenet using simclr
