@@ -41,14 +41,25 @@ def call_active_all(active_cfg):
         # TODO*: if output run is present -- only calculate additional metrics
         if current_iteration == 0:
 
-          file_new_path = exp_cfg.data.csv_file.replace(".csv","_True.csv")
+          file_new_path = exp_cfg.data.csv_file.replace(".csv","_True.csv") # Set the Path for the Original Dataset
+
+          # This if part is to load the original dataset
           if os.path.exists(file_new_path):
             new_df_file = pd.read_csv(file_new_path, header = [0,1,2], index_col=0)
             new_df_file.to_csv(exp_cfg.data.csv_file)
+
+          # Load the Compeleted Original Dataset
           labeled_df = pd.read_csv(exp_cfg.data.csv_file,header = [0,1,2], index_col=0)
+
+          # Set the Path for the first common 100 frames
           first100_path = os.path.join(os.path.dirname(exp_cfg.data.csv_file),"new_100.csv")
+
+          # Set the Path for IND Dataset
           ref_data_path = exp_cfg.data.csv_file.replace(".csv","_active_test.csv")
+
+          # Set the Path for Compeleted Original Dataset
           true_data_path = exp_cfg.data.csv_file.replace(".csv","_True.csv")
+
           labeled_df.to_csv(true_data_path)
 
           random_seeds = active_cfg[iteration_key_current].use_seeds[0]
