@@ -60,12 +60,19 @@ def call_active_all(active_cfg):
           # Set the Path for Compeleted Original Dataset
           true_data_path = exp_cfg.data.csv_file.replace(".csv","_True.csv")
 
+          # Save the Compeleted Original Dataset to the folder (Because the Compeleted Original Dataset will be split into 100 frames dataset and the active_test dataset)
           labeled_df.to_csv(true_data_path)
 
+          # Set the random_seeds
           random_seeds = active_cfg[iteration_key_current].use_seeds[0]
+
+          # Set the number of videos per iteration used to sample frames
           num_vids = active_cfg[iteration_key_current].num_vids
+
           train_frames = active_cfg[iteration_key_current].train_frames
+
           train_prob = active_cfg[iteration_key_current].train_prob
+
           if active_cfg[iteration_key_current].method == "random":
             
             
@@ -154,6 +161,7 @@ def make_run_dir():
   return new_dir
 
 
+"""
 def copy_directory_contents(src_dir, dst_dir):
     # 确保目标目录存在，如果不存在就创建
     if not os.path.exists(dst_dir):
@@ -171,6 +179,27 @@ def copy_directory_contents(src_dir, dst_dir):
         else:
             # 如果是文件，则复制文件
             shutil.copy2(s, d)
+            
+"""
+
+def copy_directory_contents(src_dir, dst_dir):
+    # Ensure the destination directory exists, create it if it does not
+    if not os.path.exists(dst_dir):
+        os.makedirs(dst_dir)
+
+    # Iterate over all files and folders in the source directory
+    for item in os.listdir(src_dir):
+        # Build the full path for files/folders
+        s = os.path.join(src_dir, item)
+        d = os.path.join(dst_dir, item)
+        # Check if it is a directory or a file
+        if os.path.isdir(s):
+            # If it is a directory, recursively copy it
+            shutil.copytree(s, d, dirs_exist_ok=True)
+        else:
+            # If it is a file, copy the file
+            shutil.copy2(s, d)
+
 
 
 if __name__ == "__main__":
