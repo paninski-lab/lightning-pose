@@ -1,6 +1,6 @@
-###################
-Directory structure
-###################
+####################
+Organizing your data
+####################
 
 how frames, videos, and labels need to be organized for
 use by Lightning Pose.

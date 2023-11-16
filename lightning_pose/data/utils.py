@@ -255,8 +255,8 @@ def split_sizes_from_probabilities(
         total_number: total number of examples in dataset
         train_probability: fraction of examples used for training
         val_probability: fraction of examples used for validation
-        test_probability: fraction of examples used for test. Defaults to None.
-            Can be computed as the remaining examples.
+        test_probability: fraction of examples used for test. Defaults to None. Can be computed
+            as the remaining examples.
 
     Returns:
         [num training examples, num validation examples, num test examples]
@@ -329,7 +329,6 @@ def compute_num_train_frames(
             >1 - number of total train frames used for training
 
     Returns:
-    int
         total number of train frames
 
     """

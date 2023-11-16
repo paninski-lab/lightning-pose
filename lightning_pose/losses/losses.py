@@ -11,8 +11,8 @@ The general flow of each loss class is as follows:
 - input: predicted and ground truth data
 - step 0: remove ground truth samples containing nans if desired
 - step 1: compute loss for each batch element/keypoint/etc
-- step 2: epsilon-insensitivity: set loss to zero for any batch element/keypoint with
-          loss < epsilon
+- step 2: epsilon-insensitivity: set loss to zero for any batch element/keypoint with loss <
+  epsilon
 - step 3: reduce loss (usually mean)
 - step 4: log values to a dict
 - step 5: return weighted loss

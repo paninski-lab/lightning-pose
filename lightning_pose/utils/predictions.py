@@ -678,15 +678,15 @@ def create_labeled_video(
     """Helper function for creating annotated videos.
 
     Args
-        clip (moviepy.editor.VideoFileClip)
-        xs_arr (np.ndarray): shape T x n_joints
-        ys_arr (np.ndarray): shape T x n_joints
-        mask_array (np.ndarray, boolean): shape T x n_joints, same as df_x and df_y;
-            any timepoints/joints with a False entry will not be plotted
-        dotsize (int): size of marker dot on labeled video
-        colormap (str): matplotlib color map for markers
-        fps (float, optional): None to default to fps of original video
-        filename (str, optional): video file name
+        clip
+        xs_arr: shape T x n_joints
+        ys_arr: shape T x n_joints
+        mask_array: shape T x n_joints, same as df_x and df_y; any timepoints/joints with a False
+            entry will not be plotted
+        dotsize: size of marker dot on labeled video
+        colormap: matplotlib color map for markers
+        fps: None to default to fps of original video
+        filename: video file name
 
     """
 

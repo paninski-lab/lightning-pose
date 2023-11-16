@@ -5,36 +5,31 @@
 
 Welcome to Lightning Pose's documentation!
 ==========================================
-Lightning Pose models are implemented in Pytorch Lightning,
-supporting massively accelerated training on unlabeled videos using NVIDIA DALI.
-The whole process is orchestrated by Hydra.
-Models can be evaluated with TensorBoard, FiftyOne, and Streamlit.
+Lightning Pose is an open source deep-learning package for animal pose estimation
+(`preprint <https://www.biorxiv.org/content/10.1101/2023.04.28.538703v1>`_).
+The framework is based on Pytorch Lightning and supports accelerated training on unlabeled videos
+using NVIDIA DALI. Models can be evaluated with TensorBoard, FiftyOne, and Streamlit.
 
-Please see the `preprint <https://www.biorxiv.org/content/10.1101/2023.04.28.538703v1>`_
-for additional details.
+If you would like to try out Lightning Pose, we provide a Google Colab notebook that steps through
+the process of training and evaluating a model on an example dataset - no data labeling or
+software installation required!
+
+We also provide a browser-based GUI for labeling data, training and evaluating models, and running
+inference on new videos.
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
    source/installation
-   source/user_guide
-   source/developer_guide
+   source/user_guide/index
+   source/user_guide_advanced/index
+   source/developer_guide/index
+   source/faqs
 
 
-Lightning Pose API
-==================
-.. toctree::
-   :maxdepth: 1
-
-   modules/lightning_pose.data
-   modules/lightning_pose.losses
-   modules/lightning_pose.models
-   modules/lightning_pose.utils
-
-
-Indices and tables
-==================
+Developer API
+=============
 
 * :ref:`genindex`
 * :ref:`modindex`
