@@ -6,6 +6,9 @@ If you have found a bug or would like to request a minor change, please
 
 In order to contribute code to the repo, please follow the steps below.
 
+We strive to maintain a fun and inclusive environment for our users and contributors.
+See our [code of conduct](CODE_OF_CONDUCT.md) for more information.
+
 ### Set up a development installation
 
 In order to make changes to Lightning Pose, you will need to [fork](https://guides.github.com/activities/forking/#fork) the
