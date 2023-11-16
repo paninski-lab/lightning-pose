@@ -23,7 +23,7 @@ and
 [Matt Whiteway](https://themattinthehatt.github.io/) (Columbia University). 
 
 Lightning Pose is under active development and we welcome community contributions.
-Please get in touch with us on Discord if you're interested in contributing (see guidelines [here](docs/contributing.md)).
+Please get in touch with us on Discord if you're interested in contributing (see guidelines [here](CONTRIBUTING.md)).
  
 
 ## Getting Started
