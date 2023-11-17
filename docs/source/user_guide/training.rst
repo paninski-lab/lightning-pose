@@ -67,3 +67,44 @@ tensorboard --logdir outputs/YYYY-MM-DD/
 where you use the date in which you ran the model.
 Click on the provided link in the terminal, which will look something like `http://localhost:6006/`.
 Note that if you save the model at a different directory, just use that directory after `--logdir`.
+
+
+If you train a model using our script `lightning-pose/scripts/train_hydra.py`, a directory will be
+created with the following structure. The default is to save models in a directory called `outputs`
+inside the Lightning Pose directory; to change this, update the config fields `hydra.run.dir` and
+`hydra.sweep.dir` with absolute paths of your choosing.
+
+    /path/to/models/YYYY-MM-DD/HH-MM-SS/
+      ├── tb_logs/
+      ├── video_preds/
+      │   └── labeled_videos/
+      ├── config.yaml
+      ├── predictions.csv
+      ├── predictions_pca_multiview_error.csv
+      ├── predictions_pca_singleview_error.csv
+      └── predictions_pixel_error.csv
+
+* `tb_logs/`: model weights
+
+* `video_preds/`: predictions and metrics from videos.
+The config field `eval.test_videos_directory` points to a directory of videos;
+if `eval.predict_vids_after_training` is set to `true`, all videos in the indicated direcotry will
+be run through the model upon training completion and results stored here.
+
+* `video_preds/labeled_videos/`: labeled mp4s.
+The config field `eval.test_videos_directory` points to a directory of videos;
+if `eval.save_vids_after_training` is set to `true`, all videos in the indicated direcotry will
+be run through the model upon training completion and results stored here.
+
+* `predictions.csv`: predictions on labeled data
+
+* `predictions_pixel_error.csv`: Euclidean distance between the predictions in `predictions.csv`
+and the labeled keypoints (in `<YOUR_LABELED_FRAMES>.csv`) per keypoint and frame.
+
+We also compute all supervised losses, where applicable, and store them (per keypoint and frame) in
+the following csvs:
+* `predictions_pca_multiview_error.csv`: pca multiview reprojection error between predictions and
+labeled keypoints
+
+* `predictions_pca_singleview_error.csv`: pca singleview reprojection error between predictions and
+labeled keypoints

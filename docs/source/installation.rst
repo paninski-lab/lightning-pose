@@ -2,6 +2,9 @@
 Installation
 ############
 
+
+++++++++++++
+
 Lightning Pose can be installed as a Python package on Linux. Access to a GPU is required for the
 NVIDIA DALI dependency. You must have **CUDA 11.0-12.x** installed.
 If you have a Mac OS and would like to install Lightning Pose, please get in contact by
@@ -131,3 +134,15 @@ Run code inside a container (following `this tutorial <https://docs.docker.com/g
 For a g4dn.xlarge AWS EC2 instance adding the flag ``--shm-size=256m`` will provide the necessary
 memory to execute.
 The ``--gpus all`` flag is necessary to allow Docker to access the required drivers for NVIDIA DALI to work properly.
+
+
+Getting help
+------------
+
+If you encounter any issues during installation, first check out the
+`GitHub Issues <https://github.com/danbider/lightning-pose/issues>`_
+page to see if others have had the same problem.
+
+If you do not find a similar issue, please raise an issue or reach out on
+`Discord <https://discord.gg/tDUPdRj4BM>`_
+to get help from the community.

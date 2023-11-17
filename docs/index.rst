@@ -18,7 +18,7 @@ that steps through the process of training and evaluating a model on an example 
 We also provide a
 `browser-based GUI <https://github.com/Lightning-Universe/Pose-app>`_
 that supports the full life cycle of a pose estimation project, from data annotation to model
-training to diagnostics visualizations.
+training to diagnostic visualizations.
 
 .. toctree::
    :maxdepth: 2
