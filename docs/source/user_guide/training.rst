@@ -5,13 +5,13 @@ Training
 Lightning Pose provides several tools for training models:
 
 #. A set of high-level functions used for creating data loaders, models, trainers, etc. You can combine these to create your own custom training script. This is required if you used the :ref:`pip package <pip_package>` installation method.
-#. An example training script provided in the :ref:`conda from source <conda_from_source>` installation method. This shows how to combine the high-level functions for model training and evaluation.
+#. An example training script provided in the :ref:`conda from source <conda_from_source>` installation method. This demonstrates how to combine the high-level functions for model training and evaluation.
 
 .. note::
 
     The steps below assume the :ref:`conda from source <conda_from_source>` installation method.
-    If you did not use this installation method, see the example training script
-    `here <https://github.com/danbider/lightning-pose/blob/main/scripts/train_hydra.py>`_.
+    If you did not use this installation method, see the
+    `example training script <https://github.com/danbider/lightning-pose/blob/main/scripts/train_hydra.py>`_.
 
 
 Train with example data
