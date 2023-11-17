@@ -1,3 +1,5 @@
+.. _config_file:
+
 ######################
 The configuration file
 ######################
