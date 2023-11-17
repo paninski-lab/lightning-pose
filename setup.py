@@ -81,6 +81,7 @@ extras_require = {
         "Sphinx",
         "sphinx_rtd_theme",
         "sphinx-automodapi",
+        "sphinx-copybutton",
     },
     "extra_models": {
         "lightning-bolts",  # resnet-50 trained on imagenet using simclr

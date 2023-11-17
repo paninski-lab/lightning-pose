@@ -33,6 +33,7 @@ extensions = [
     'sphinx.ext.githubpages',  # allows integration with github
     'sphinx.ext.napoleon',  # parsing of different docstring styles
     'sphinx_automodapi.automodapi',
+    'sphinx_copybutton',  # add copy button to code blocks
 ]
 
 # mock imports; torch is too heavy

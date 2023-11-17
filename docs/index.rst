@@ -3,19 +3,22 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to Lightning Pose's documentation!
-==========================================
+.. image:: ../assets/images/LightningPose_horizontal_light.png
+
 Lightning Pose is an open source deep-learning package for animal pose estimation
 (`preprint <https://www.biorxiv.org/content/10.1101/2023.04.28.538703v1>`_).
 The framework is based on Pytorch Lightning and supports accelerated training on unlabeled videos
 using NVIDIA DALI. Models can be evaluated with TensorBoard, FiftyOne, and Streamlit.
 
-If you would like to try out Lightning Pose, we provide a Google Colab notebook that steps through
-the process of training and evaluating a model on an example dataset - no data labeling or
-software installation required!
+If you would like to try out Lightning Pose, we provide a
+`Google Colab notebook <https://colab.research.google.com/github/danbider/lightning-pose/blob/main/scripts/litpose_training_demo.ipynb>`_
+that steps through the process of training and evaluating a model on an example dataset
+- no data labeling or software installation required!
 
-We also provide a browser-based GUI for labeling data, training and evaluating models, and running
-inference on new videos.
+We also provide a
+`browser-based GUI <https://github.com/Lightning-Universe/Pose-app>`_
+that supports the full life cycle of a pose estimation project, from data annotation to model
+training to diagnostics visualizations.
 
 .. toctree::
    :maxdepth: 2
