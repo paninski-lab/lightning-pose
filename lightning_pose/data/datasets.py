@@ -480,7 +480,8 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         downsample_factor: Literal[1, 2, 3] = 2,
         uniform_heatmaps: bool = False,
         do_context: bool = False,
-        imgaug_transform: Optional[Callable] = None
+        imgaug_transform: Optional[Callable] = None,
+        delimiter: str = "img"
     ) -> None:
         """Initialize the MultiViewHeatmap Dataset.
 
@@ -502,6 +503,8 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         if len(view_names) != len(csv_paths):
             raise ValueError("number of names does not match with the number of files!")
+
+        self.delimiter = delimiter
 
         self.imgaug_transform = imgaug_transform
         self.downsample_factor = downsample_factor
@@ -533,7 +536,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         self.num_targets = self.num_keypoints * 2
 
-    def check_data_images_names(self, delimiter: str = "img"):
+    def check_data_images_names(self):
         """Data checking
         Each object in self.datasets will have the attribute image_names
         (i.e. self.datasets['top'].image_names) since each values is a
@@ -561,7 +564,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         for idx in range(self.data_length):
             img_name_buff = []
             for view, heatmaps in self.dataset.items():
-                img_name_buff.append(heatmaps.image_names[idx].split(delimiter)[-1])
+                img_name_buff.append(heatmaps.image_names[idx].split(self.delimiter)[-1])
                 if len(set(img_name_buff)) != 1:
                     raise ImportError(f"Discrepancy in images names across CSV \
                                       files! index:{idx}, image frame names:{img_name_buff}")
