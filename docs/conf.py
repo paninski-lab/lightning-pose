@@ -38,7 +38,9 @@ extensions = [
 ]
 
 # mock imports
-# autodoc_mock_imports = []
+autodoc_mock_imports = [
+    "fiftyone",
+]
 
 # for automodapi, avoids having methods and attrs of classes shown multiple times
 numpydoc_show_class_members = False

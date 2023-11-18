@@ -1,3 +1,5 @@
+# ReadTheDocs set up
+
 Welcome! This guide walks you through how to automatically generate documentation for this python project using the [sphinx](http://www.sphinx-doc.org/en/stable/index.html) package in python, and how to publish it on [Read the Docs](https://readthedocs.org/) so that users can easily access and search your documentation.
 
 1. [Install sphinx](#1-install-sphinx)
@@ -9,18 +11,18 @@ Welcome! This guide walks you through how to automatically generate documentatio
 
 General instructions [here](http://www.sphinx-doc.org/en/stable/tutorial.html).
 
-### Install Sphinx from the command line:
+Install Sphinx from the command line:
 
 ```
-$ pip install Sphinx
+pip install Sphinx
 ```
 
-### sphinx-quickstart
-
-Next we want to set up the source directory for the documentation. In the command line, `cd` to the root of the project documentation directory (something like `docs`) and enter:
+Next we want to set up the source directory for the documentation. 
+In the command line, `cd` to the root of the project documentation directory 
+(something like `docs`) and enter:
 
 ```
-$ sphinx-quickstart
+sphinx-quickstart
 ```
 
 You'll be prompted to enter a number of user options. For most you can just accept the defaults.
@@ -38,11 +40,14 @@ sys.path.insert(0, os.path.abspath('../'))
 ```
 
 ### Theme
-Change the theme to something nicer than the default. We chose `sphinx_rtd_theme`, which requires a pip install:
+Change the theme to something nicer than the default. 
+We chose `sphinx_rtd_theme`, which requires a pip install:
 
 ```
 pip install sphinx_rtd_theme
 ```
+
+Remember to add `sphix_rtd_theme` to `setup.py`.  
 
 Then in the `conf.py` file add:
 
@@ -64,7 +69,15 @@ extensions = [
     'sphinx.ext.viewcode', # links documentation to source code
     'sphinx.ext.githubpages', # allows integration with github
     'sphinx.ext.napoleon' # parsing of different docstring styles
+    'sphinx_automodapi.automodapi',
+    'sphinx_copybutton',  # add copy button to code blocks
 ] 
+```
+
+You'll need to install `automodapi` and `copybutton` and add them to your requirements:
+
+```
+pip install sphinx-automodapi sphinx-copybutton
 ```
 
 ### Include documentation for class constructors
@@ -80,20 +93,16 @@ def setup(app):
     app.connect('autodoc-skip-member', skip)
 ```
 
-### Get autodocs working
-In the command line, from the `docs` directory, run:
+### automatic API documentation
 
-```
-$ sphinx-apidoc -o modules/ ../lightning_pose/
-```
+In order to make the `sphinx-automodapi` work, you will need to create a `modules` directory; 
+see [here](https://sphinx-automodapi.readthedocs.io/en/latest/).
+and `lightning_pose/docs/modules` for examples.
 
-This populates the source directory with the lightning_pose modules.
+In the codebase, you will also need to add a list at the top of each module that lists the 
+functions and classes to be included in the docs, 
+otherwise imported functions will be documented as well:
 
-In order to make the `sphinx-automodapi` work, you will need to updates the files in the 
-`modules` directory; see [here](https://sphinx-automodapi.readthedocs.io/en/latest/).
-
-You will also need to add a list at the top of each module that lists the functions and classes
-to be included in the docs, otherwise imported functions will be documented as well:
 ```python
 __all__ = [
     "function_0",
