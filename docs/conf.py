@@ -39,7 +39,6 @@ extensions = [
 
 # mock imports
 autodoc_mock_imports = [
-    "fiftyone",
 ]
 
 # for automodapi, avoids having methods and attrs of classes shown multiple times

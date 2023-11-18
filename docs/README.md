@@ -74,7 +74,8 @@ extensions = [
 ] 
 ```
 
-You'll need to install `automodapi` and `copybutton` and add them to your requirements:
+You'll need to install `automodapi` and `copybutton` and add them to your requirements in 
+`setup.py`:
 
 ```
 pip install sphinx-automodapi sphinx-copybutton
@@ -93,7 +94,7 @@ def setup(app):
     app.connect('autodoc-skip-member', skip)
 ```
 
-### automatic API documentation
+### Automatic API documentation
 
 In order to make the `sphinx-automodapi` work, you will need to create a `modules` directory; 
 see [here](https://sphinx-automodapi.readthedocs.io/en/latest/).
@@ -115,32 +116,19 @@ __all__ = [
 In the `docs` directory, run:
 
 ```
-$ make html
+make html
 ```
 
 You'll then be able to find the documentation landing page at `docs/_build/html/index.html`
 
-### Include inherited attributes and methods in documentation
-This can help if you want users to be able to find all available attributes and methods, including those that are inherited, for python classes. Add `:inherited-members:` to each module in the `docs/modules/*.rst` files. For example, to show attributes and methods that the `lightning_pose.models` module inherits from its base classes, the `heatmap_trackers` module in the `docs/source/lightning_pose.models.rst` file should look like:
-
-```
-lightning_pose.models.heatmap_trackers module
----------------------------------------------
-
-.. automodule:: lightning_pose.models.heatmap_trackers
-   :members:
-   :undoc-members:
-   :show-inheritance:
-   :inherited-members:
-```
-
-**Note**: this may not be a good idea if you are mock-importing certain packages like `torch`; see below.
-
 ## 3. Add a new page
-Docstrings are useful for understanding how individual functions work, but do not help too much for a new user of the code. To facilitate learning how the code works we will want to create tutorial pages that demonstrate how to use certain features of the code.
+Docstrings are useful for understanding how individual functions work, but do not help too much 
+for a new user of the code. 
+To facilitate learning how the code works we will want to create tutorial pages that demonstrate 
+how to use certain features of the code.
 
-In the directory containing the `index.rst` file, add a new file called 
-`tutorial-example.rst`. This will look something like:
+In the directory containing the `index.rst` file, add a new file called `tutorial-example.rst`. 
+This will look something like:
 
 ```
 ################
@@ -163,9 +151,12 @@ Tell sphinx where this file is by adding `tutorial-example` to the `.. toctree::
 
 ## 4. Publish the documentation 
 
-General instructions [here](http://dont-be-afraid-to-commit.readthedocs.io/en/latest/documentation.html).
+General instructions 
+[here](http://dont-be-afraid-to-commit.readthedocs.io/en/latest/documentation.html).
 
-Now that we've built our documentation, we want to publish it on the web. Fortunately, Read the Docs (RTD) and GitHub make this super simple. The following steps are mostly copy-and-pasted from the general instructions above.
+Now that we've built our documentation, we want to publish it on the web. 
+Fortunately, ReadTheDocs (RTD) and GitHub make this super simple. 
+The following steps are mostly copy-and-pasted from the general instructions above.
 
 ### Exclude unwanted directories
 We do not want to commit the rendered files to github, just the source. To exclude these, add them to `.gitignore`:
@@ -201,17 +192,15 @@ python:
         - requirements: docs/requirements.txt
 ```
 
-The file in `docs/requirements.txt` includes some of the original packages such as `numpy` and `matplotlib` but not `torch`. However, if we do not have `torch` in the requirements file then there will be import errors server side. To get around this, RTD has included the ability to define mock import statements in the `config.py` file:
+The file in `docs/requirements.txt` includes some of the original packages such as `numpy` and 
+`matplotlib` but not `fiftyone`. 
+However, if we do not have `fiftyone` in the requirements file then there will be import errors 
+server side. 
+To get around this, RTD has included the ability to define mock import statements in the 
+`config.py` file:
 
 ```python
 autodoc_mock_imports = [
-    'torch',
+    'fiftyone',
 ]
-```
-
-Strangely, RTD uses old versions of `sphinx` as of the time of writing (Nov 2019). We can also include an updated version of `sphinx` in the new `docs/requirements.txt` file, along with the sphinx theme we have selected:
-
-```
-sphinx==2.2.1
-sphinx_rtd_theme==0.4.3
 ```
