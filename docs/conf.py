@@ -61,6 +61,7 @@ autodoc_mock_imports = [
     "torchvision",
     "typeguard",
     "typing",
+    "nvidia-dali-cuda110",
 ]
 
 # for automodapi, avoids having methods and attrs of classes shown multiple times
