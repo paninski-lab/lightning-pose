@@ -7,6 +7,7 @@ Preprint: [Lightning Pose: improved animal pose estimation via semi-supervised l
 
 [![Discord](https://img.shields.io/discord/1103381776895856720)](https://discord.gg/tDUPdRj4BM)
 ![GitHub](https://img.shields.io/github/license/danbider/lightning-pose)
+[![Documentation Status](https://readthedocs.org/projects/lightning-pose/badge/?version=latest)](https://lightning-pose.readthedocs.io/en/latest/?badge=latest)
 ![PyPI](https://img.shields.io/pypi/v/lightning-pose)
 
 ## Try our demo!

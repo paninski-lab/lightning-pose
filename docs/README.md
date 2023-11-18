@@ -4,8 +4,9 @@ Welcome! This guide walks you through how to automatically generate documentatio
 
 1. [Install sphinx](#1-install-sphinx)
 2. [Set up conf.py file](#2-set-up-confpy-file)
-3. [Add a new page](#3-add-a-new-page)
-4. [Publish the documentation](#4-publish-the-documentation)
+3. [Build the documentation](#3-build-the-documentation)
+4. [Add a new page](#4-add-a-new-page)
+5. [Publish the documentation](#5-publish-the-documentation)
 
 ## 1. Install sphinx
 
@@ -97,7 +98,7 @@ def setup(app):
 ### Automatic API documentation
 
 In order to make the `sphinx-automodapi` work, you will need to create a `modules` directory; 
-see [here](https://sphinx-automodapi.readthedocs.io/en/latest/).
+see [here](https://sphinx-automodapi.readthedocs.io/en/latest/)
 and `lightning_pose/docs/modules` for examples.
 
 In the codebase, you will also need to add a list at the top of each module that lists the 
@@ -112,16 +113,15 @@ __all__ = [
 ]
 ```
 
-### Build the documentation
+## 3. Build the documentation
 In the `docs` directory, run:
-
 ```
 make html
 ```
 
 You'll then be able to find the documentation landing page at `docs/_build/html/index.html`
 
-## 3. Add a new page
+## 4. Add a new page
 Docstrings are useful for understanding how individual functions work, but do not help too much 
 for a new user of the code. 
 To facilitate learning how the code works we will want to create tutorial pages that demonstrate 
@@ -139,7 +139,8 @@ Here's some content written in reStructured Text (.rst), a markup language
 commonly used for technical documentation
 ```
 
-Tell sphinx where this file is by adding `tutorial-example` to the `.. toctree::` section in the `index.rst` file, so that it looks something like this:
+Tell sphinx where this file is by adding `tutorial-example` to the `.. toctree::` section in the 
+`index.rst` file, so that it looks something like this:
 
 ```
 .. toctree::
@@ -149,7 +150,12 @@ Tell sphinx where this file is by adding `tutorial-example` to the `.. toctree::
    another-tutorial-example
 ```
 
-## 4. Publish the documentation 
+To see the updated html pages you need to rebuild the documentation:
+```
+make html
+```
+
+## 5. Publish the documentation 
 
 General instructions 
 [here](http://dont-be-afraid-to-commit.readthedocs.io/en/latest/documentation.html).
@@ -180,27 +186,3 @@ But wait! You can do better, if you really think it is necessary. On GitHub:
 3. enable `ReadTheDocs` under **Add Service** dropdown
 
 ...and now, every time you push documents to GitHub, RTD will be informed that you have new documents to be published. It's not magic, they say, but it's pretty close. Close enough for me.
-
-### **Edit**
-
-There are a couple of extra tricks that are required to get RTD working with this repository. First of all, pytorch is too large to include as a dependency; when an RTD server tries to build the environment it will return an out of memory error. The easiest way around this is to create a `.readthedocs.yml` file in your root directory ([documentation here](https://docs.readthedocs.io/en/stable/config-file/v2.html)). You can use this file to direct RTD to a new `requirements.txt` file:
-
-```
-python:
-    version: 3.7
-    install:
-        - requirements: docs/requirements.txt
-```
-
-The file in `docs/requirements.txt` includes some of the original packages such as `numpy` and 
-`matplotlib` but not `fiftyone`. 
-However, if we do not have `fiftyone` in the requirements file then there will be import errors 
-server side. 
-To get around this, RTD has included the ability to define mock import statements in the 
-`config.py` file:
-
-```python
-autodoc_mock_imports = [
-    'fiftyone',
-]
-```
