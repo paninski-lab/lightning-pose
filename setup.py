@@ -80,6 +80,7 @@ extras_require = {
         "isort",
         "Sphinx",
         "sphinx_rtd_theme",
+        "sphinx-rtd-dark-mode",
         "sphinx-automodapi",
         "sphinx-copybutton",
     },

@@ -34,6 +34,7 @@ extensions = [
     'sphinx.ext.githubpages',  # allows integration with github
     'sphinx_automodapi.automodapi',
     'sphinx_copybutton',  # add copy button to code blocks
+    'sphinx_rtd_dark_mode',
 ]
 
 # mock imports; torch is too heavy
@@ -80,6 +81,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # a list of builtin themes.
 html_theme = 'sphinx_rtd_theme'
 html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
+html_logo = "../assets/images/LightningPose_horizontal_light.png"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -87,6 +89,9 @@ html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 # html_static_path = ['_static']
 
 autosummary_generate = True
+
+# user starts in dark mode
+default_dark_mode = True
 
 
 # If you want to document __init__() functions for python classes
