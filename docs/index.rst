@@ -5,6 +5,9 @@
 
 .. image:: ../assets/images/LightningPose_horizontal_light.png
 
+Welcome to the Lightning Pose documentation
+===========================================
+
 Lightning Pose is an open source deep-learning package for animal pose estimation
 (`preprint <https://www.biorxiv.org/content/10.1101/2023.04.28.538703v1>`_).
 The framework is based on Pytorch Lightning and supports accelerated training on unlabeled videos
@@ -29,10 +32,10 @@ training to diagnostic visualizations.
    source/user_guide_advanced/index
    source/developer_guide/index
    source/faqs
+   source/api
 
-
-Developer API
-=============
+Indices and tables
+------------------
 
 * :ref:`genindex`
 * :ref:`modindex`

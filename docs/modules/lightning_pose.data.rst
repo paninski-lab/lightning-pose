@@ -1,53 +1,19 @@
-lightning\_pose.data package
-============================
+.. _lp_modules_data:
 
-Submodules
-----------
+lightning\_pose.data
+====================
 
-lightning\_pose.data.augmentations module
------------------------------------------
+.. automodapi:: lightning_pose.data.augmentations
+   :no-inheritance-diagram:
 
-.. automodule:: lightning_pose.data.augmentations
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. automodapi:: lightning_pose.data.dali
+   :no-inheritance-diagram:
 
-lightning\_pose.data.dali module
---------------------------------
+.. automodapi:: lightning_pose.data.datamodules
+   :no-inheritance-diagram:
 
-.. automodule:: lightning_pose.data.dali
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. automodapi:: lightning_pose.data.datasets
+   :no-inheritance-diagram:
 
-lightning\_pose.data.datamodules module
----------------------------------------
-
-.. automodule:: lightning_pose.data.datamodules
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-lightning\_pose.data.datasets module
-------------------------------------
-
-.. automodule:: lightning_pose.data.datasets
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-lightning\_pose.data.utils module
----------------------------------
-
-.. automodule:: lightning_pose.data.utils
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
-
-.. automodule:: lightning_pose.data
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. automodapi:: lightning_pose.data.utils
+   :no-inheritance-diagram:

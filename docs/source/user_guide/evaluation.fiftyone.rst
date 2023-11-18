@@ -4,7 +4,7 @@
 FiftyOne
 ########
 
-The `FiftyOne <https://voxel51.com/>`_ app visualizes the predictions of one or multiple
+The `FiftyOne app <https://voxel51.com/>`_ visualizes the predictions of one or multiple
 trained models, overlaid on labeled frames.
 
 Creating ``FiftyOne.Dataset`` for predictions

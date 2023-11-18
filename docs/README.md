@@ -61,7 +61,7 @@ extensions = [
 ```
 
 ### Include documentation for class constructors
-If you want to document `__init__()` functions for python classes, add the following functions to the end of the `conf.py` file (thanks to https://stackoverflow.com/a/5599712):
+If you want to document `__init__()` functions for python classes, add the following functions to the end of the `conf.py` file (thanks to [https://stackoverflow.com/a/5599712]()):
 
 ```python
 def skip(app, what, name, obj, skip, options):
@@ -80,7 +80,20 @@ In the command line, from the `docs` directory, run:
 $ sphinx-apidoc -o modules/ ../lightning_pose/
 ```
 
-This populates the source directory with the behavenet modules.
+This populates the source directory with the lightning_pose modules.
+
+In order to make the `sphinx-automodapi` work, you will need to updates the files in the 
+`modules` directory; see [here](https://sphinx-automodapi.readthedocs.io/en/latest/).
+
+You will also need to add a list at the top of each module that lists the functions and classes
+to be included in the docs, otherwise imported functions will be documented as well:
+```python
+__all__ = [
+    "function_0",
+    "function_1",
+    "Class0",
+]
+```
 
 ### Build the documentation
 In the `docs` directory, run:
@@ -96,7 +109,7 @@ This can help if you want users to be able to find all available attributes and 
 
 ```
 lightning_pose.models.heatmap_trackers module
---------------------------------
+---------------------------------------------
 
 .. automodule:: lightning_pose.models.heatmap_trackers
    :members:

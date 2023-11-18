@@ -9,6 +9,11 @@ from torchtyping import TensorType
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.losses.losses import get_loss_classes
 
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "LossFactory",
+]
+
 
 class LossFactory(pl.LightningModule):
     """Factory object that contains an object for each specified loss."""

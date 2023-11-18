@@ -2,9 +2,6 @@
 Installation
 ############
 
-
-++++++++++++
-
 Lightning Pose can be installed as a Python package on Linux. Access to a GPU is required for the
 NVIDIA DALI dependency. You must have **CUDA 11.0-12.x** installed.
 If you have a Mac OS and would like to install Lightning Pose, please get in contact by

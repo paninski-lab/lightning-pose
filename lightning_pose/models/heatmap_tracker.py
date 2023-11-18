@@ -26,6 +26,13 @@ from lightning_pose.models.base import (
     SemiSupervisedTrackerMixin,
 )
 
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "upsample",
+    "HeatmapTracker",
+    "SemiSupervisedHeatmapTracker",
+]
+
 
 def upsample(
     inputs: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],

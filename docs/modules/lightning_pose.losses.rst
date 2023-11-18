@@ -1,37 +1,13 @@
-lightning\_pose.losses package
-==============================
+.. _lp_modules_losses:
 
-Submodules
-----------
+lightning\_pose.losses
+======================
 
-lightning\_pose.losses.factory module
--------------------------------------
+.. automodapi:: lightning_pose.losses.factory
+   :no-inheritance-diagram:
 
-.. automodule:: lightning_pose.losses.factory
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. automodapi:: lightning_pose.losses.helpers
+   :no-inheritance-diagram:
 
-lightning\_pose.losses.helpers module
--------------------------------------
-
-.. automodule:: lightning_pose.losses.helpers
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-lightning\_pose.losses.losses module
-------------------------------------
-
-.. automodule:: lightning_pose.losses.losses
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
-
-.. automodule:: lightning_pose.losses
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. automodapi:: lightning_pose.losses.losses
+   :no-inheritance-diagram:

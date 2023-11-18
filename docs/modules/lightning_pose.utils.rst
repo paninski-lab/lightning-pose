@@ -1,61 +1,22 @@
-lightning\_pose.utils package
-=============================
+.. _lp_modules_utils:
 
-Submodules
-----------
+lightning\_pose.utils
+=====================
 
-lightning\_pose.utils.fiftyone module
--------------------------------------
+.. automodapi:: lightning_pose.utils.fiftyone
+   :no-inheritance-diagram:
 
-.. automodule:: lightning_pose.utils.fiftyone
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. automodapi:: lightning_pose.utils.io
+   :no-inheritance-diagram:
 
-lightning\_pose.utils.io module
--------------------------------
+.. automodapi:: lightning_pose.utils.pca
+   :no-inheritance-diagram:
 
-.. automodule:: lightning_pose.utils.io
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. automodapi:: lightning_pose.utils.predictions
+   :no-inheritance-diagram:
 
-lightning\_pose.utils.pca module
---------------------------------
+.. automodapi:: lightning_pose.utils.scripts
+   :no-inheritance-diagram:
 
-.. automodule:: lightning_pose.utils.pca
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-lightning\_pose.utils.predictions module
-----------------------------------------
-
-.. automodule:: lightning_pose.utils.predictions
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-lightning\_pose.utils.scripts module
-------------------------------------
-
-.. automodule:: lightning_pose.utils.scripts
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-lightning\_pose.utils.tests module
-----------------------------------
-
-.. automodule:: lightning_pose.utils.tests
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
-
-.. automodule:: lightning_pose.utils
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. automodapi:: lightning_pose.utils.tests
+   :no-inheritance-diagram:

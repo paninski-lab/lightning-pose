@@ -26,12 +26,12 @@ author = 'Dan Biderman, Matt Whiteway'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'sphinx.ext.autodoc', # allows automatic parsing of docstrings
+    'sphinx.ext.napoleon',  # parsing of different docstring styles
+    'sphinx.ext.autodoc',  # allows automatic parsing of docstrings
     'sphinx.ext.autosummary',  # Create neat summary tables for modules/classes/methods etc
     'sphinx.ext.mathjax',  # allows mathjax in documentation
     'sphinx.ext.viewcode',  # links documentation to source code
     'sphinx.ext.githubpages',  # allows integration with github
-    'sphinx.ext.napoleon',  # parsing of different docstring styles
     'sphinx_automodapi.automodapi',
     'sphinx_copybutton',  # add copy button to code blocks
 ]
@@ -62,7 +62,15 @@ autodoc_mock_imports = [
     "typing",
 ]
 
+# for automodapi, avoids having methods and attrs of classes shown multiple times
+numpydoc_show_class_members = False
+
+# Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
+
+# List of patterns, relative to source directory, that match files and
+# directories to ignore when looking for source files.
+# This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 # -- Options for HTML output -------------------------------------------------
@@ -76,7 +84,7 @@ html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+# html_static_path = ['_static']
 
 autosummary_generate = True
 

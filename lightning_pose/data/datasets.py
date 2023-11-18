@@ -19,6 +19,12 @@ from lightning_pose.data.utils import (
 )
 from lightning_pose.utils.io import get_keypoint_names
 
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "BaseTrackingDataset",
+    "HeatmapDataset",
+]
+
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
