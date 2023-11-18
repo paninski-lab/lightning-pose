@@ -15,6 +15,20 @@ There are two installation methods:
 
 Optionally, instructions are provided for :ref:`Docker users <docker_users>`.
 
+**Install ffmpeg**
+
+First, check to see if you have ``ffmpeg`` installed by typing the following in the terminal:
+
+.. code-block:: console
+
+    ffmpeg -version
+
+If not, install:
+
+.. code-block:: console
+
+    sudo apt install ffmpeg
+
 **Set up a conda environment**
 
 For both installation methods we recommend using

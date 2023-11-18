@@ -110,7 +110,7 @@ losses:
   pca_singleview:
     # weight in front of PCA loss
     log_weight: 5.0
-    # predictions whould lie within the low-d subspace spanned by components that describe this fraction of variance
+    # predictions should lie within the low-d subspace spanned by components that describe this fraction of variance
     components_to_keep: 0.99
     # percentile of reprojection errors on train data below which pca loss is zeroed out
     empirical_epsilon_percentile: 1.00

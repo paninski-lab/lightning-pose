@@ -3,7 +3,7 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-.. image:: ../assets/images/LightningPose_horizontal_light.png
+.. image:: images/LightningPose_horizontal_light.png
 
 Welcome to the Lightning Pose documentation
 ===========================================

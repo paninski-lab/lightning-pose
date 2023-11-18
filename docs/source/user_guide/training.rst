@@ -1,3 +1,5 @@
+.. _training:
+
 ########
 Training
 ########
@@ -77,7 +79,11 @@ this allows for larger batch sizes/fewer Out Of Memory errors on the GPU:
 
     python scripts/train_hydra.py --config-path=<PATH/TO/YOUR/CONFIGS/DIR> --config-name=<CONFIG_NAME.yaml> data.image_resize_dims.height=256 data.image_resize_dims.width=256
 
-See more documentation on the config file fields :ref:`here <config_file>`.
+See more documentation on the config file fields :ref:`here <config_file>`. A couple of fields that
+are specific to the provided training script, but important to consider:
+
+* ``eval.predict_vids_after_training``: if ``true``, automatically run inference after training on all videos located in the directory given by ``eval.test_videos_directory``; results are saved to ``eval.saved_vid_preds_dir``
+* ``eval.save_vids_after_training``: if ``true`` (as well as ``eval.predict_vids_after_training``) the keypoints predicted during the inference step will be overlaid on the videos and saved with inference outputs to ``eval.saved_vid_preds_dir``
 
 Tensorboard
 ===========
