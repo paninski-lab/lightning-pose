@@ -1,8 +1,9 @@
 Welcome! This guide walks you through how to automatically generate documentation for this python project using the [sphinx](http://www.sphinx-doc.org/en/stable/index.html) package in python, and how to publish it on [Read the Docs](https://readthedocs.org/) so that users can easily access and search your documentation.
 
-1. [Install sphinx](#1.-Install-sphinx)
-2. [Set up conf.py file](#2.-Set-up-conf.py-file)
-3. [Add a new page](#3.-Add-a-new-page)
+1. [Install sphinx](#1-install-sphinx)
+2. [Set up conf.py file](#2-set-up-confpy-file)
+3. [Add a new page](#3-add-a-new-page)
+4. [Publish the documentation](#4-publish-the-documentation)
 
 ## 1. Install sphinx
 
@@ -151,7 +152,10 @@ Tell sphinx where this file is by adding `tutorial-example` to the `.. toctree::
    another-tutorial-example
 ```
 
-## 4. PUBLISH THE DOCUMENTATION (general instructions [here](http://dont-be-afraid-to-commit.readthedocs.io/en/latest/documentation.html))
+## 4. Publish the documentation 
+
+General instructions [here](http://dont-be-afraid-to-commit.readthedocs.io/en/latest/documentation.html).
+
 Now that we've built our documentation, we want to publish it on the web. Fortunately, Read the Docs (RTD) and GitHub make this super simple. The following steps are mostly copy-and-pasted from the general instructions above.
 
 ### Exclude unwanted directories

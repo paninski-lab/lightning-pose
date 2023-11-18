@@ -4,6 +4,7 @@ sphinx-rtd-dark-mode
 sphinx-automodapi
 sphinx-copybutton
 fiftyone
+fiftyone-db-ubuntu2204
 h5py
 hydra-core
 imgaug
