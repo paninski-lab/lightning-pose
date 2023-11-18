@@ -46,10 +46,10 @@ As with training, you either directly edit your config file and run:
 
 .. code-block:: console
 
-    python scripts/predict_new_vids.py
+    python scripts/predict_new_vids.py --config-path=<PATH/TO/YOUR/CONFIGS/DIR> --config-name=<CONFIG_NAME.yaml>
 
 or override these arguments in the command line:
 
 .. code-block:: console
 
-    python scripts/predict_new_vids.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"] eval.test_videos_directory=/absolute/path/to/videos eval.saved_vid_preds_dir=/absolute/path/to/dir
+    python scripts/predict_new_vids.py --config-path=<PATH/TO/YOUR/CONFIGS/DIR> --config-name=<CONFIG_NAME.yaml> eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"] eval.test_videos_directory=/absolute/path/to/videos eval.saved_vid_preds_dir=/absolute/path/to/dir
