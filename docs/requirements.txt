@@ -26,3 +26,4 @@ torchvision
 typeguard
 typing
 nvidia-dali-cuda110
+segment_anything @ git+https://github.com/facebookresearch/segment-anything.git

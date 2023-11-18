@@ -1,6 +1,12 @@
 Welcome! This guide walks you through how to automatically generate documentation for this python project using the [sphinx](http://www.sphinx-doc.org/en/stable/index.html) package in python, and how to publish it on [Read the Docs](https://readthedocs.org/) so that users can easily access and search your documentation.
 
-## 1. INSTALL SPHINX (general instructions [here](http://www.sphinx-doc.org/en/stable/tutorial.html))
+1. [Install sphinx](#1.-Install-sphinx)
+2. [Set up conf.py file](#2.-Set-up-conf.py-file)
+3. [Add a new page](#3.-Add-a-new-page)
+
+## 1. Install sphinx
+
+General instructions [here](http://www.sphinx-doc.org/en/stable/tutorial.html).
 
 ### Install Sphinx from the command line:
 
@@ -18,7 +24,7 @@ $ sphinx-quickstart
 
 You'll be prompted to enter a number of user options. For most you can just accept the defaults.
 
-## 2. SET UP CONF.PY FILE
+## 2. Set up conf.py file
 Now that sphinx is installed, we want to configure it to automatically parse our meticulously maintained docstrings and generate html pages that display said information in a readable and searchable way. More details on the Google-style python docstrings used in this project can be found [here](http://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html).
 
 ### Set project path
@@ -120,7 +126,7 @@ lightning_pose.models.heatmap_trackers module
 
 **Note**: this may not be a good idea if you are mock-importing certain packages like `torch`; see below.
 
-## 3. ADD A NEW PAGE 
+## 3. Add a new page
 Docstrings are useful for understanding how individual functions work, but do not help too much for a new user of the code. To facilitate learning how the code works we will want to create tutorial pages that demonstrate how to use certain features of the code.
 
 In the directory containing the `index.rst` file, add a new file called 
@@ -186,12 +192,9 @@ The file in `docs/requirements.txt` includes some of the original packages such 
 
 ```python
 autodoc_mock_imports = [
-    'ssm',
     'torch',
 ]
 ```
-
-This mechanism also allows us to include `ssm` as a mock import and not worry about any complications with compiling C code on the RTD servers.
 
 Strangely, RTD uses old versions of `sphinx` as of the time of writing (Nov 2019). We can also include an updated version of `sphinx` in the new `docs/requirements.txt` file, along with the sphinx theme we have selected:
 

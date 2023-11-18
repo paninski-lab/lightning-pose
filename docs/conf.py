@@ -37,32 +37,8 @@ extensions = [
     'sphinx_rtd_dark_mode',
 ]
 
-# mock imports; torch is too heavy
-autodoc_mock_imports = [
-    "fiftyone",
-    "h5py",
-    "hydra-core",
-    "imgaug",
-    "kaleido",
-    "kornia",
-    "lightning",
-    "matplotlib",
-    "moviepy",
-    "opencv-python",
-    "pandas",
-    "pillow",
-    "plotly",
-    "pytest",
-    "scikit-learn",
-    "seaborn",
-    "streamlit",
-    "tensorboard",
-    "torchtyping",
-    "torchvision",
-    "typeguard",
-    "typing",
-    "nvidia-dali-cuda110",
-]
+# mock imports
+# autodoc_mock_imports = []
 
 # for automodapi, avoids having methods and attrs of classes shown multiple times
 numpydoc_show_class_members = False
