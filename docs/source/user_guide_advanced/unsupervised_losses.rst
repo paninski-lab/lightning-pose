@@ -216,12 +216,14 @@ subspace computed on labeled data.
 
 .. warning::
 
-    This loss will not work in the presence of large distortions, for example from fish-eye lenses
+    This loss will not work in the presence of large distortions, for example from fish-eye lenses.
 
 Selecting the keypoints for this loss depends on the data format; here we will assume all views
 are fused into a single frame at each time point, for both labeled data and videos.
 This can trivially be achieved, for example, when using a mirror to capture different angles with
-a single camera.
+a single camera
+(see the :ref:`Multiview: mirrored or fused frames <multiview_fused>` section for more details).
+
 During labeling each keypoint of the fused data is treated independently, with no explicit
 information on which keypoints correspond to the same body part
 (see the `example mirror-mouse data <https://github.com/danbider/lightning-pose/tree/main/data/mirror-mouse-example>`_).
@@ -233,35 +235,35 @@ The length of the list corresponds to the number of views.
 The length of each array should be the same; the nth element of each array should all correspond
 to the same body part.
 
-For example, let's say we have two views and four keypoints per view.
+For example, let's say we have two views (side and bottom) and four keypoints per view.
 The full list of keypoints (the order they appear in the labeled data file) is
 
-0. nose_top
-1. L_ear_top
-2. R_ear_top
-3. neck_top
-4. nose_side
-5. L_ear_side
-6. R_ear_side
-7. neck_side
+0. nose_side
+1. paw1_side
+2. paw2_side
+3. tailbase_side
+4. nose_bottom
+5. paw1_bottom
+6. paw2_bottom
+7. tailbase_bottom
 
-To include the nose and ears in the multiview consistency loss, the config file will look like
-
-.. code-block:: yaml
-
-    data:
-      mirrored_column_matches:
-        - [0, 1, 2]  # nose + ears in top view
-        - [4, 5, 6]  # nose + ears in side view
-
-If instead you want to include the nose and neck:
+To include the nose and paws in the multiview consistency loss, the config file will look like
 
 .. code-block:: yaml
 
     data:
       mirrored_column_matches:
-        - [0, 3]  # nose + neck in top view
-        - [4, 7]  # nose + neck in side view
+        - [0, 1, 2]  # nose + paws in side view
+        - [4, 5, 6]  # nose + paws in bottom view
+
+If instead you want to include the nose and tailbase:
+
+.. code-block:: yaml
+
+    data:
+      mirrored_column_matches:
+        - [0, 3]  # nose + tailbase in side view
+        - [4, 7]  # nose + tailbase in bottom view
 
 Below are the various hyperparameters and their descriptions.
 Besides the ``log_weight`` none of the provided values need to be tested for new datasets.

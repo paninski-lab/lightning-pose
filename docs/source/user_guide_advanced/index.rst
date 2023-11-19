@@ -13,3 +13,4 @@ For each feature, we point out necessary modifications and useful information re
    unsupervised_losses
    context_frames
    multiview_fused
+   multiview_separate
