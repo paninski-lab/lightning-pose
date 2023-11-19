@@ -441,29 +441,30 @@ def calculate_train_batches(
 
     return int(limit_train_batches)
 
+
 @typechecked
 def compute_metrics(
     cfg: DictConfig,
-    preds_file: Union[str, list[str]],
+    preds_file: str,
     data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
 ) -> None:
-    """Compute various metrics on predictions csv file."""
+    """Compute various metrics on predictions csv file, potentially for multiple views."""
     if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
-        for preds_file_iter, labels_file_iter in zip(sorted(preds_file), sorted(cfg["data"]["csv_file"])):
-            assert labels_file_iter in preds_file_iter
-            labels_file = return_absolute_path(
-                os.path.join(cfg["data"]["data_dir"], labels_file_iter))
-            compute_metrics_single(cfg=cfg,
-                                labels_file=labels_file,
-                                preds_file=preds_file_iter,
-                                data_module=data_module)
+        for view_name, csv_file in zip(cfg.data.view_names, cfg.data.csv_file):
+            labels_file = return_absolute_path(os.path.join(cfg.data.data_dir, csv_file))
+            preds_file = preds_file.replace(".csv", f"_{view_name}.csv")
+            compute_metrics_single(
+                cfg=cfg,
+                labels_file=labels_file,
+                preds_file=preds_file,
+                data_module=data_module,
+            )
     else:
-        labels_file = return_absolute_path(
-            os.path.join(cfg["data"]["data_dir"], cfg["data"]["csv_file"]))
-        compute_metrics_single(cfg=cfg,
-                               labels_file=labels_file,
-                               preds_file=preds_file,
-                               data_module=data_module)
+        labels_file = return_absolute_path(os.path.join(cfg.data.data_dir, cfg.data.csv_file))
+        compute_metrics_single(
+            cfg=cfg, labels_file=labels_file, preds_file=preds_file, data_module=data_module,
+        )
+
 
 @typechecked
 def compute_metrics_single(    
@@ -471,7 +472,9 @@ def compute_metrics_single(
     labels_file: str,
     preds_file: str,
     data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
-) -> None:    
+) -> None:
+    """Compute various metrics on a predictions csv file from a single view."""
+    
     # get keypoint names
     labels_df = pd.read_csv(labels_file, header=[0, 1, 2], index_col=0)
     keypoint_names = get_keypoint_names(
