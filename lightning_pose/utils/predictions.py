@@ -3,7 +3,7 @@
 import gc
 import os
 import time
-from typing import List, Optional, Tuple, Type, Union
+from typing import Dict, List, Optional, Tuple, Type, Union
 
 import cv2
 import lightning.pytorch as pl
@@ -236,7 +236,7 @@ class PredictionHandler:
                 TensorType["batch", "num_keypoints"],
             ]
         ],
-    ) -> pd.DataFrame:
+    ) -> Union[pd.DataFrame, Dict[str, pd.DataFrame]]:
         """
         Call this function to get a pandas dataframe of the predictions for a single video.
         Assuming you've already run trainer.predict(), and have a list of Tuple predictions.
@@ -290,7 +290,7 @@ def predict_dataset(
     ckpt_file: Optional[str] = None,
     trainer: Optional[pl.Trainer] = None,
     model: Optional[ALLOWED_MODELS] = None,
-) -> Union[pd.DataFrame, dict]:
+) -> Union[pd.DataFrame, Dict[str, pd.DataFrame]]:
     """Save predicted keypoints for a labeled dataset.
 
     Args:
@@ -302,7 +302,7 @@ def predict_dataset(
         model: Lightning Module
 
     Returns:
-        pandas dataframe with predictions
+        pandas dataframe with predictions or dict with dataframe of predictions for each view
 
     """
 
