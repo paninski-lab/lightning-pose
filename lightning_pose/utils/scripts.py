@@ -91,6 +91,7 @@ def get_dataset(
                 downsample_factor=cfg.data.downsample_factor,
                 imgaug_transform=imgaug_transform,
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
+                delimiter=cfg.data.get("image_delimiter", 'img')
             )
         else:
             dataset = HeatmapDataset(
@@ -440,24 +441,43 @@ def calculate_train_batches(
 
     return int(limit_train_batches)
 
-
 @typechecked
 def compute_metrics(
     cfg: DictConfig,
-    preds_file: str,
+    preds_file: Union[str, list[str]],
     data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
 ) -> None:
     """Compute various metrics on predictions csv file."""
+    if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
+        for preds_file_iter, labels_file_iter in zip(sorted(preds_file), sorted(cfg["data"]["csv_file"])):
+            assert labels_file_iter in preds_file_iter
+            labels_file = return_absolute_path(
+                os.path.join(cfg["data"]["data_dir"], labels_file_iter))
+            compute_metrics_single(cfg=cfg,
+                                labels_file=labels_file,
+                                preds_file=preds_file_iter,
+                                data_module=data_module)
+    else:
+        labels_file = return_absolute_path(
+            os.path.join(cfg["data"]["data_dir"], cfg["data"]["csv_file"]))
+        compute_metrics_single(cfg=cfg,
+                               labels_file=labels_file,
+                               preds_file=preds_file,
+                               data_module=data_module)
 
+@typechecked
+def compute_metrics_single(    
+    cfg: DictConfig,
+    labels_file: str,
+    preds_file: str,
+    data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
+) -> None:    
     # get keypoint names
-    labels_file = return_absolute_path(
-        os.path.join(cfg["data"]["data_dir"], cfg["data"]["csv_file"]))
     labels_df = pd.read_csv(labels_file, header=[0, 1, 2], index_col=0)
     keypoint_names = get_keypoint_names(
         cfg, csv_file=labels_file, header_rows=[0, 1, 2])
-
     # load predictions
-    pred_df = pd.read_csv(preds_file, header=[0, 1, 2], index_col=0)
+    pred_df = pd.read_csv(preds_file, header=[0, 1, 2], index_col=0)      
     if pred_df.keys()[-1][0] == "set":
         # these are predictions on labeled data
         # get rid of last column that contains info about train/val/test set
