@@ -4,7 +4,7 @@ import os
 
 import hydra
 import lightning.pytorch as pl
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
 
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
 from lightning_pose.utils.io import (
@@ -183,8 +183,16 @@ def train(cfg: DictConfig):
     # predict on OOD frames
     # ----------------------------------------------------------------------------------
     # update config file to point to OOD data
-    csv_file_ood = os.path.join(cfg.data.data_dir, cfg.data.csv_file).replace(".csv", "_new.csv")
-    if os.path.exists(csv_file_ood):
+    if isinstance(cfg.data.csv_file, list) or isinstance(cfg.data.csv_file, ListConfig):
+        csv_file_ood = []
+        for csv_file in cfg.data.csv_file:
+            csv_file_ood.append(
+                os.path.join(cfg.data.data_dir, csv_file).replace(".csv", "_new.csv"))
+    else:
+        csv_file_ood = os.path.join(
+            cfg.data.data_dir, cfg.data.csv_file).replace(".csv", "_new.csv")
+    if (isinstance(csv_file_ood, str) and os.path.exists(csv_file_ood)) \
+            or (isinstance(csv_file_ood, list) and os.path.exists(csv_file_ood[0])):
         cfg_ood = cfg.copy()
         cfg_ood.data.csv_file = csv_file_ood
         cfg_ood.training.imgaug = "default"

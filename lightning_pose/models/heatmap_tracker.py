@@ -150,7 +150,13 @@ class HeatmapTracker(BaseSupervisedTracker):
         elif self.downsample_factor == 3:
             preds -= 2.5
 
-        return preds.reshape(-1, self.num_targets), confidences
+        # NOTE: we cannot use
+        # `preds.reshape(-1, self.num_targets)`
+        # This works fine for the non-multiview case
+        # This works fine for multiview training
+        # This fails during multiview inference when we might have an arbitrary number of views
+        # that we are processing (self.num_targets is tied to the labeled data)
+        return preds.reshape(-1, heatmaps.shape[1] * 2), confidences
 
     def run_hard_argmax(
         self,

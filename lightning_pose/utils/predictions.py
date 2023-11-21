@@ -247,8 +247,10 @@ class PredictionHandler:
             pd.DataFrame: index is (frame, bodypart, x, y, likelihood)
         """
         stacked_preds, stacked_confs = self.unpack_preds(preds=preds)
-        # print(stacked_preds.shape, stacked_confs.shape)
-        if self.cfg.data.get("view_names", None) and len(self.cfg.data.view_names) > 1:
+        if self.cfg.data.get("view_names", None) and len(self.cfg.data.view_names) > 1 \
+                and self.video_file is None:
+            # NOTE: if self.video_file is not None assume we are processing one view at a time, and
+            # move to the `else` block below
             idx_beg = 0
             idx_end = None
             df = {}

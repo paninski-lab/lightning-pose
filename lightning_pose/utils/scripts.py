@@ -452,11 +452,11 @@ def compute_metrics(
     if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
         for view_name, csv_file in zip(cfg.data.view_names, cfg.data.csv_file):
             labels_file = return_absolute_path(os.path.join(cfg.data.data_dir, csv_file))
-            preds_file = preds_file.replace(".csv", f"_{view_name}.csv")
+            preds_file_ = preds_file.replace(".csv", f"_{view_name}.csv")
             compute_metrics_single(
                 cfg=cfg,
                 labels_file=labels_file,
-                preds_file=preds_file,
+                preds_file=preds_file_,
                 data_module=data_module,
             )
     else:

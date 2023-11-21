@@ -505,6 +505,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             raise ValueError("number of names does not match with the number of files!")
 
         self.delimiter = delimiter
+        self.do_context = do_context
 
         self.imgaug_transform = imgaug_transform
         self.downsample_factor = downsample_factor
