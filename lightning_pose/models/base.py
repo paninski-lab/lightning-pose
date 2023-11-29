@@ -44,13 +44,28 @@ ALLOWED_BACKBONES = Literal[
 ]
 
 
+def normalized_to_bbox(
+    keypoints: TensorType["batch", "num_keypoints", "xy":2],
+    bbox: TensorType["batch", "xyhw":4]
+) -> TensorType["batch", "num_keypoints", "xy":2]:
+    keypoints[:, :, 0] *= bbox[:, 3].unsqueeze(1)  # scale x by box width
+    keypoints[:, :, 0] += bbox[:, 0].unsqueeze(1)  # add bbox x offset
+    keypoints[:, :, 1] *= bbox[:, 2].unsqueeze(1)  # scale y by box height
+    keypoints[:, :, 1] += bbox[:, 1].unsqueeze(1)  # add bbox y offset
+    return keypoints
+
+
 def convert_bbox_coords(
-    batch_dict: Union[HeatmapLabeledBatchDict, UnlabeledBatchDict],
+    batch_dict: Union[
+        HeatmapLabeledBatchDict,
+        MultiviewHeatmapLabeledBatchDict,
+        UnlabeledBatchDict,
+    ],
     predicted_keypoints: TensorType["batch", "num_targets"],
 ) -> TensorType["batch", "num_targets"]:
     """Transform keypoints from bbox coordinates to absolute frame coordinates."""
     num_targets = predicted_keypoints.shape[1]
-    num_keypoints = round(num_targets / 2)
+    num_keypoints = num_targets // 2
     # reshape from (batch, n_targets) back to (batch, n_key, 2), in x,y order
     predicted_keypoints = predicted_keypoints.reshape((-1, num_keypoints, 2))
     # divide by image dims to get 0-1 normalized coordinates
@@ -61,11 +76,25 @@ def convert_bbox_coords(
         predicted_keypoints[:, :, 0] /= batch_dict["frames"].shape[-1]  # -1 dim is width "x"
         predicted_keypoints[:, :, 1] /= batch_dict["frames"].shape[-2]  # -2 dim is height "y"
     # multiply and add by bbox dims (x,y,h,w)
-    predicted_keypoints[:, :, 0] *= batch_dict["bbox"][:, 3].unsqueeze(1)  # scale x by box width
-    predicted_keypoints[:, :, 0] += batch_dict["bbox"][:, 0].unsqueeze(1)  # add bbox x offset
-    predicted_keypoints[:, :, 1] *= batch_dict["bbox"][:, 2].unsqueeze(1)  # scale y by box height
-    predicted_keypoints[:, :, 1] += batch_dict["bbox"][:, 1].unsqueeze(1)  # add bbox y offset
-    # return new keypoints, reshaped to (batch, n_targets)
+    if "num_views" in batch_dict.keys() and int(batch_dict["num_views"].max()) > 1:
+        unique = batch_dict["num_views"].unique()
+        if len(unique) != 1:
+            raise ValueError(
+                f"each batch element must contain the same number of views; "
+                f"found elements with {unique} views"
+            )
+        num_views = int(unique)
+        num_keypoints_per_view = num_keypoints // num_views
+        for v in range(num_views):
+            idx_beg = num_keypoints_per_view * v
+            idx_end = num_keypoints_per_view * (v + 1)
+            predicted_keypoints[:, idx_beg:idx_end, :] = normalized_to_bbox(
+                predicted_keypoints[:, idx_beg:idx_end, :],
+                batch_dict["bbox"][:, 4 * v:4 * (v + 1)],
+            )
+    else:
+        predicted_keypoints = normalized_to_bbox(predicted_keypoints, batch_dict["bbox"])
+    # return new keypoints, reshaped to (batch, num_targets)
     return predicted_keypoints.reshape((-1, num_targets))
 
 

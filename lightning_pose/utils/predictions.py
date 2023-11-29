@@ -41,6 +41,8 @@ def get_cfg_file(cfg_file: Union[str, DictConfig]):
 
 
 class PredictionHandler:
+    """Convert batches of model outputs into a prediction dataframe."""
+
     def __init__(
         self,
         cfg: DictConfig,
@@ -180,8 +182,8 @@ class PredictionHandler:
 
         return preds_combined
 
+    @staticmethod
     def make_pred_arr_undo_resize(
-        self,
         keypoints_np: np.array,
         confidence_np: np.array,
     ) -> np.array:
@@ -251,14 +253,13 @@ class PredictionHandler:
                 and self.video_file is None:
             # NOTE: if self.video_file is not None assume we are processing one view at a time, and
             # move to the `else` block below
+            num_keypoints = len(self.keypoint_names)
             idx_beg = 0
             idx_end = None
             df = {}
             for view_num, view_name in enumerate(self.cfg.data.view_names):
-                num_keypoints = len(self.keypoint_names)
                 idx_end = idx_beg + num_keypoints
-                stacked_preds_single = stacked_preds[:, idx_beg * 2:
-                                                     idx_beg * 2 + num_keypoints * 2]
+                stacked_preds_single = stacked_preds[:, idx_beg * 2:(idx_beg + num_keypoints) * 2]
                 stacked_confs_single = stacked_confs[:, idx_beg:idx_end]
                 pred_arr = self.make_pred_arr_undo_resize(
                     stacked_preds_single.cpu().numpy(), stacked_confs_single.cpu().numpy()
@@ -308,13 +309,17 @@ def predict_dataset(
 
     """
 
+    delete_model = False
     if model is None:
         model = load_model_from_checkpoint(
             cfg=cfg, ckpt_file=ckpt_file, eval=True, data_module=data_module,
         )
+        delete_model = True
 
+    delete_trainer = False
     if trainer is None:
         trainer = pl.Trainer(devices=1, accelerator="auto")
+        delete_trainer = True
 
     labeled_preds = trainer.predict(
         model=model,
@@ -329,6 +334,14 @@ def predict_dataset(
             df.to_csv(preds_file.replace(".csv", f"_{view_name}.csv"))
     else:
         labeled_preds_df.to_csv(preds_file)
+
+    # clear up memory
+    if delete_model:
+        del model
+    if delete_trainer:
+        del trainer
+    gc.collect()
+    torch.cuda.empty_cache()
 
     return labeled_preds_df
 
@@ -370,11 +383,9 @@ def predict_single_video(
     delete_model = False
     if model is None:
         model = load_model_from_checkpoint(
-            cfg=cfg, ckpt_file=ckpt_file, eval=True, data_module=data_module
+            cfg=cfg, ckpt_file=ckpt_file, eval=True, data_module=data_module,
         )
-        ckpt_file = None  # weights are now loaded; set to None so trainer doesn't load also
         delete_model = True
-    model.to("cuda")
 
     delete_trainer = False
     if trainer is None:
@@ -406,6 +417,7 @@ def predict_single_video(
 
     # use a different function for now to return heatmaps
     if save_heatmaps:
+        model.to("cuda")
         if predict_loader.do_context:
             batch_size = cfg.dali.context.predict.sequence_length
         else:
@@ -427,7 +439,6 @@ def predict_single_video(
     else:
         preds = trainer.predict(
             model=model,
-            ckpt_path=ckpt_file,
             dataloaders=predict_loader,
             return_predictions=True,
         )
