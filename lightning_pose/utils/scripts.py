@@ -44,18 +44,31 @@ from lightning_pose.utils.io import (
 from lightning_pose.utils.pca import KeypointPCA
 from lightning_pose.utils.predictions import create_labeled_video, predict_single_video
 
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "get_imgaug_transform",
+    "get_dataset",
+    "get_data_module",
+    "get_loss_factories",
+    "get_model",
+    "get_callbacks",
+    "calculate_train_batches",
+    "compute_metrics",
+    "export_predictions_and_labeled_video",
+]
+
 
 @typechecked
 def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
     """Create simple data transform pipeline that augments images.
 
     Args:
-        cfg: standard config file that carries around dataset info; relevant is the
-            parameter "cfg.training.imgaug" which can take on the following values:
-                default: resizing only
-                dlc: imgaug pipeline implemented in DLC 2.0 package
-                dlc-top-down: `dlc` pipeline plus random flipping along both horizontal and
-                    vertical axes
+        cfg: standard config file that carries around dataset info; relevant is the parameter
+            "cfg.training.imgaug" which can take on the following values:
+            - default: resizing only
+            - dlc: imgaug pipeline implemented in DLC 2.0 package
+            - dlc-top-down: `dlc` pipeline plus random flipping along both horizontal and vertical
+                axes
 
     """
     return imgaug_transform(cfg)

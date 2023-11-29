@@ -14,6 +14,13 @@ from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import DataExtractor, clean_any_nans
 from lightning_pose.losses.helpers import EmpiricalEpsilon, convert_dict_values_to_tensors
 
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "KeypointPCA",
+    "ComponentChooser",
+    "format_multiview_data_for_pca",
+]
+
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 

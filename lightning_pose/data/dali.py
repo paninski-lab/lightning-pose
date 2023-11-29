@@ -14,6 +14,13 @@ from omegaconf import DictConfig
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
 from lightning_pose.data.utils import UnlabeledBatchDict, count_frames
 
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "video_pipe",
+    "LitDaliWrapper",
+    "PrepareDALI",
+]
+
 _DALI_DEVICE = "gpu" if torch.cuda.is_available() else "cpu"
 
 

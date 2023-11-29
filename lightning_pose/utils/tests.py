@@ -7,6 +7,8 @@ import torch
 from lightning_pose.utils.predictions import PredictionHandler
 from lightning_pose.utils.scripts import get_loss_factories, get_model
 
+__all__ = []
+
 
 def run_model_test(cfg, data_module, video_dataloader, trainer, remove_logs_fn):
     """Helper function to simplify unit tests which run different models."""

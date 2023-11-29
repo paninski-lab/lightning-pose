@@ -1,9 +1,3 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -19,9 +13,17 @@ except ImportError:
 
 from typing import List, Tuple, Type
 
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "ImageEncoderViT",
+    "resample_abs_pos_embed_nhwc",
+]
 
-# This class and its supporting functions below lightly adapted from the ViTDet backbone available at: https://github.com/facebookresearch/detectron2/blob/main/detectron2/modeling/backbone/vit.py # noqa
+
+# This class and its supporting functions lightly adapted from the ViTDet backbone available at:
+# https://github.com/facebookresearch/detectron2/blob/main/detectron2/modeling/backbone/vit.py
 class ImageEncoderViT_FT(ImageEncoderViT):
+
     def __init__(
         self,
         img_size: int = 1024,
