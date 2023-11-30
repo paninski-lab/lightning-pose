@@ -469,20 +469,20 @@ def compute_metrics(
 
 
 @typechecked
-def compute_metrics_single(    
+def compute_metrics_single(
     cfg: DictConfig,
     labels_file: str,
     preds_file: str,
     data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
 ) -> None:
     """Compute various metrics on a predictions csv file from a single view."""
-    
+
     # get keypoint names
     labels_df = pd.read_csv(labels_file, header=[0, 1, 2], index_col=0)
     keypoint_names = get_keypoint_names(
         cfg, csv_file=labels_file, header_rows=[0, 1, 2])
     # load predictions
-    pred_df = pd.read_csv(preds_file, header=[0, 1, 2], index_col=0)      
+    pred_df = pd.read_csv(preds_file, header=[0, 1, 2], index_col=0)
     if pred_df.keys()[-1][0] == "set":
         # these are predictions on labeled data
         # get rid of last column that contains info about train/val/test set
