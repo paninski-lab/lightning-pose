@@ -7,11 +7,13 @@ NVIDIA DALI dependency. You must have **CUDA 11.0-12.x** installed.
 If you have a Mac OS and would like to install Lightning Pose, please get in contact by
 `raising an issue <https://github.com/danbider/lightning-pose/issues>`_.
 
-There are two installation methods:
+There are several installation methods:
 
 * :ref:`pip package <pip_package>` provides the basic Lightning Pose package. This option is intended for non-interactive environments, such as remote servers.
 
 * :ref:`conda from source <conda_from_source>` additionally provides example data, a boilerplate training script, and diagnostic visualization scripts. This option is the recommended one for new users, as it provides the full breadth of Lightning Pose capabilities.
+
+* :ref:`Lightning Studio <lightning_studio>` is a cloud-based environment that comes with Lightning Pose already installed. Requires creating a Lightning.ai account.
 
 Optionally, instructions are provided for :ref:`Docker users <docker_users>`.
 
@@ -114,6 +116,19 @@ Method 2: conda from source
        pytest
 
    This will take several minutes.
+
+.. _lightning_studio:
+
+Method 3: Lightning Studio
+==========================
+
+Follow
+`this link <https://lightning.ai/themattinthehatt/ai-recipes/lightning-pose-v1-0-1~01hgghkdmdpz60ttys95n61852>`_
+to the Lightning Pose Studio.
+When you click the **Use** button you will be taken to a Lightning Studio environment with access to a command line interface, VSCode IDE, Jupyter IDE, and more.
+The ``lightning-pose`` package and all dependencies are already installed.
+
+You will be required to create a Lightning account if you have not already signed up.
 
 .. _docker_users:
 
