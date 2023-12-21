@@ -123,7 +123,7 @@ Method 3: Lightning Studio
 ==========================
 
 Follow
-`this link <https://lightning.ai/themattinthehatt/ai-recipes/lightning-pose-v1-0-1~01hgghkdmdpz60ttys95n61852>`_
+`this link <https://lightning.ai/themattinthehatt/studios/lightning-pose?section=all>`_
 to the Lightning Pose Studio.
 When you click the **Use** button you will be taken to a Lightning Studio environment with access to a command line interface, VSCode IDE, Jupyter IDE, and more.
 The ``lightning-pose`` package and all dependencies are already installed.
