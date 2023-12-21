@@ -125,7 +125,7 @@ Method 3: Lightning Studio
 Follow
 `this link <https://lightning.ai/themattinthehatt/studios/lightning-pose?section=all>`_
 to the Lightning Pose Studio.
-When you click the **Use** button you will be taken to a Lightning Studio environment with access to a command line interface, VSCode IDE, Jupyter IDE, and more.
+When you click the **Get** button you will be taken to a Lightning Studio environment with access to a command line interface, VSCode IDE, Jupyter IDE, and more.
 The ``lightning-pose`` package and all dependencies are already installed.
 
 You will be required to create a Lightning account if you have not already signed up.
