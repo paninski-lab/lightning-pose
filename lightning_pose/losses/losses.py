@@ -11,8 +11,7 @@ The general flow of each loss class is as follows:
 - input: predicted and ground truth data
 - step 0: remove ground truth samples containing nans if desired
 - step 1: compute loss for each batch element/keypoint/etc
-- step 2: epsilon-insensitivity: set loss to zero for any batch element/keypoint with
-          loss < epsilon
+- step 2: epsilon-insensitivity: set loss to zero for any batch element with loss < epsilon
 - step 3: reduce loss (usually mean)
 - step 4: log values to a dict
 - step 5: return weighted loss
@@ -33,6 +32,22 @@ from typeguard import typechecked
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import generate_heatmaps
 from lightning_pose.utils.pca import KeypointPCA
+
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "Loss",
+    "HeatmapLoss",
+    "HeatmapMSELoss",
+    "HeatmapKLLoss",
+    "HeatmapJSLoss",
+    "PCALoss",
+    "TemporalLoss",
+    "TemporalHeatmapLoss",
+    "UnimodalLoss",
+    "RegressionMSELoss",
+    "RegressionRMSELoss",
+    "get_loss_classes",
+]
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -629,10 +644,11 @@ class UnimodalLoss(Loss):
         **kwargs,
     ) -> Tuple[TensorType[()], List[dict]]:
         """Compute unimodal loss.
+
         Args:
             keypoints_pred_augmented: these are in the augmented image space
-            heatmaps_pred: these are also in the augmented space, matching the
-                keypoints_pred_augmented
+            heatmaps_pred: also in the augmented space, matching the keypoints_pred_augmented
+
         """
 
         # turn keypoint predictions into unimodal heatmaps

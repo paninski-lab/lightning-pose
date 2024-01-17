@@ -23,6 +23,19 @@ from lightning_pose.data.utils import count_frames
 from lightning_pose.models import ALLOWED_MODELS
 from lightning_pose.utils import pretty_print_str
 
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "get_cfg_file",
+    "PredictionHandler",
+    "predict_dataset",
+    "predict_single_video",
+    "make_dlc_pandas_index",
+    "get_model_class",
+    "load_model_from_checkpoint",
+    "make_cmap",
+    "create_labeled_video",
+]
+
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -713,15 +726,14 @@ def create_labeled_video(
     """Helper function for creating annotated videos.
 
     Args
-        clip (moviepy.editor.VideoFileClip)
-        xs_arr (np.ndarray): shape T x n_joints
-        ys_arr (np.ndarray): shape T x n_joints
-        mask_array (np.ndarray, boolean): shape T x n_joints, same as df_x and df_y;
-            any timepoints/joints with a False entry will not be plotted
-        dotsize (int): size of marker dot on labeled video
-        colormap (str): matplotlib color map for markers
-        fps (float, optional): None to default to fps of original video
-        filename (str, optional): video file name
+        clip
+        xs_arr: shape T x n_joints
+        ys_arr: shape T x n_joints
+        mask_array: shape T x n_joints; timepoints/joints with a False entry will not be plotted
+        dotsize: size of marker dot on labeled video
+        colormap: matplotlib color map for markers
+        fps: None to default to fps of original video
+        filename: video file name
 
     """
 

@@ -4,7 +4,7 @@ import subprocess
 
 from setuptools import find_packages, setup
 
-VERSION = "0.0.4"
+VERSION = "1.0.1"
 
 # add the README.md file to the long_description
 with open("README.md", "r") as fh:
@@ -78,6 +78,11 @@ extras_require = {
         "black",
         "flake8",
         "isort",
+        "Sphinx",
+        "sphinx_rtd_theme",
+        "sphinx-rtd-dark-mode",
+        "sphinx-automodapi",
+        "sphinx-copybutton",
     },
     "extra_models": {
         "lightning-bolts",  # resnet-50 trained on imagenet using simclr
@@ -87,7 +92,7 @@ extras_require = {
 
 setup(
     name="lightning-pose",
-    packages=find_packages(exclude=("assets", "data", "docs", "scripts", "tests")),
+    packages=find_packages(exclude=("data", "docs", "scripts", "tests")),
     version=VERSION,
     description="Semi-supervised pose estimation using pytorch lightning",
     long_description=long_description,

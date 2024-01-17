@@ -20,6 +20,12 @@ from lightning_pose.data.utils import (
 )
 from lightning_pose.utils.io import get_keypoint_names
 
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "BaseTrackingDataset",
+    "HeatmapDataset",
+]
+
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -47,8 +53,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
         Args:
             root_directory: path to data directory
-            csv_path: path to CSV file (within root_directory). CSV file should
-                be in the form
+            csv_path: path to CSV file (within root_directory). CSV file should be in the form
                 (image_path, bodypart_1_x, bodypart_1_y, ..., bodypart_n_y)
                 Note: image_path is relative to the given root_directory
             header_rows: which rows in the csv are header rows

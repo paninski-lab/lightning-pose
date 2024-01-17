@@ -11,6 +11,20 @@ from typeguard import typechecked
 from lightning_pose.utils import pretty_print_str
 from lightning_pose.utils.io import return_absolute_data_paths, return_absolute_path
 
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "check_lists_equal",
+    "remove_string_w_substring_from_list",
+    "check_unique_tags",
+    "check_dataset",
+    "get_image_tags",
+    "FiftyOneKeypointBase",
+    "FiftyOneImagePlotter",
+    "FiftyOneKeypointVideoPlotter",
+    "dfConverter",
+    "FiftyOneFactory",
+]
+
 
 @typechecked
 def check_lists_equal(list_1: list, list_2: list) -> bool:

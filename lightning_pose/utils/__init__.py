@@ -1,6 +1,13 @@
 import torch
 from omegaconf import ListConfig
 
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "pretty_print_str",
+    "pretty_print_cfg",
+]
+
+
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 

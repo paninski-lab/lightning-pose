@@ -135,7 +135,7 @@ losses:
   pca_multiview:
     # weight in front of PCA loss
     log_weight: 5.0
-    # predictions whould lie within the low-d subspace spanned by these components
+    # predictions should lie within the low-d subspace spanned by these components
     components_to_keep: 3
     # percentile of reprojection errors on train data below which pca loss is zeroed out
     empirical_epsilon_percentile: 1.00
@@ -148,7 +148,7 @@ losses:
   pca_singleview:
     # weight in front of PCA loss
     log_weight: 5.0
-    # predictions whould lie within the low-d subspace spanned by components that describe this fraction of variance
+    # predictions should lie within the low-d subspace spanned by components that describe this fraction of variance
     components_to_keep: 0.99
     # percentile of reprojection errors on train data below which pca loss is zeroed out
     empirical_epsilon_percentile: 1.00
@@ -166,43 +166,6 @@ losses:
     epsilon: 20.0
     # nan removal value.
     # (in prob; heatmaps with max prob values are removed)
-    prob_threshold: 0.05
-  # loss = kl loss between heatmaps in successive timepoints
-  temporal_heatmap_kl:
-    # weight in front of temporal heatmap loss
-    log_weight: 7.0
-    # for epsilon insensitive rectification
-    # (in kl loss values; diffs below this are not penalized)
-    epsilon: 5.0
-    # nan removal threshold value.
-    # (in prob; heatmaps with confidences below this value are removed)
-    prob_threshold: 0.9
-  # loss = mse between heatmaps in successive timepoints
-  temporal_heatmap_mse:
-    # weight in front of temporal heatmap loss
-    log_weight: 5.0
-    # for epsilon insensitive rectification
-    # (in mse values; diffs below this are not penalized)
-    epsilon: 20.0
-    # nan removal threshold value.
-    # (in prob; heatmaps with confidences below this value are removed)
-  # loss = mse between unimodal heatmap and predicted heatmap
-  unimodal_mse:
-    # weight in front of unimodal loss
-    log_weight: 6.5
-    # ignore heatmaps with a max prob less than epsilon (so loss is not applied to occlusions)
-    prob_threshold: 0.05
-  # loss = kl loss between generated heatmap and ideal gaussian heatmap with same center as generated heatmap
-  unimodal_kl:
-    # weight in front of unimodal loss
-    log_weight: 6.5
-    # ignore heatmaps with a max prob less than epsilon (so loss is not applied to occlusions)
-    prob_threshold: 0.05
-  # same but jensen-shannon divergence
-  unimodal_js:
-    # weight in front of unimodal loss
-    log_weight: 6.5
-    # ignore heatmaps with a max prob less than epsilon (so loss is not applied to occlusions)
     prob_threshold: 0.05
 
 eval:

@@ -19,6 +19,13 @@ from lightning_pose.losses.factory import LossFactory
 from lightning_pose.models import HeatmapTracker
 from lightning_pose.models.base import ALLOWED_BACKBONES, SemiSupervisedTrackerMixin
 
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "HeatmapTrackerMHCRNN",
+    "SemiSupervisedHeatmapTrackerMHCRNN",
+    "UpsamplingCRNN",
+]
+
 
 class HeatmapTrackerMHCRNN(HeatmapTracker):
     """Multi-headed Convolutional RNN network that handles context frames."""

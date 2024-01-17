@@ -21,6 +21,12 @@ from lightning_pose.models.base import (
     SemiSupervisedTrackerMixin,
 )
 
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "RegressionTracker",
+    "SemiSupervisedRegressionTracker",
+]
+
 
 class RegressionTracker(BaseSupervisedTracker):
     """Base model that produces (x, y) predictions of keypoints from images."""

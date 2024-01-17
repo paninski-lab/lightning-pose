@@ -16,6 +16,12 @@ from lightning_pose.data.utils import (
 )
 from lightning_pose.utils.io import check_video_paths
 
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "BaseDataModule",
+    "UnlabeledDataModule",
+]
+
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 

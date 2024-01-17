@@ -18,3 +18,6 @@ ALLOWED_MODELS = Union[
     RegressionTracker,
     SemiSupervisedRegressionTracker
 ]
+
+# to ignore imports for sphix-autoapidoc
+__all__ = []

@@ -28,6 +28,13 @@ from lightning_pose.models.base import (
     convert_bbox_coords,
 )
 
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "upsample",
+    "HeatmapTracker",
+    "SemiSupervisedHeatmapTracker",
+]
+
 
 def upsample(
     inputs: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
