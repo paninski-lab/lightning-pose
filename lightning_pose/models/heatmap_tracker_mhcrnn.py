@@ -113,7 +113,8 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         self,
         images: Union[
             TensorType["batch", "channels":3, "image_height", "image_width"],
-            TensorType["batch", "frames", "channels":3, "image_height", "image_width"]
+            TensorType["batch", "frames", "channels":3, "image_height", "image_width"],
+            TensorType["batch", "view", "frames", "channels":3, "image_height", "image_width"]
         ],
     ) -> Tuple[
             TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"],
@@ -121,9 +122,22 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
     ]:
         """Forward pass through the network."""
 
-        # one representation and two heatmaps for each desired output (context, non-context)
-        representations = self.get_representations(images)
-        heatmaps_crnn, heatmaps_sf = self.heatmaps_from_representations(representations)
+        shape = images.shape
+
+        if len(shape) > 5:
+            # Stacking all the views (MultiView) as Batch
+            images = images.reshape(-1, shape[-4], shape[-3], shape[-2], shape[-1])
+            # one representation and two heatmaps for each desired output (context, non-context)
+            representations = self.get_representations(images)
+            heatmaps_crnn, heatmaps_sf = self.heatmaps_from_representations(representations)
+            # Reshaping the outputs to extract the view dimension
+            heatmaps_crnn = heatmaps_crnn.reshape(shape[0], -1,
+                                                  heatmaps_crnn.shape[-2], heatmaps_crnn.shape[-1])
+            heatmaps_sf = heatmaps_sf.reshape(shape[0], -1,
+                                                  heatmaps_sf.shape[-2], heatmaps_sf.shape[-1])
+        else:
+            representations = self.get_representations(images)
+            heatmaps_crnn, heatmaps_sf = self.heatmaps_from_representations(representations)
 
         # normalize heatmaps
         # softmax temp stays 1 here; to modify for model predictions, see constructor
@@ -131,6 +145,7 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         heatmaps_sf_norm = spatial_softmax2d(heatmaps_sf, temperature=torch.tensor([1.0]))
 
         return heatmaps_crnn_norm, heatmaps_sf_norm
+
 
     def get_loss_inputs_labeled(self, batch_dict: HeatmapLabeledBatchDict) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
