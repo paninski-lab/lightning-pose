@@ -652,7 +652,9 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         datadict = {}
         for view in self.view_names:
             datadict[view] = self.dataset[view][idx]
+
         images, keypoints, heatmaps, bboxes, concat_order = self.fusion(datadict)
+        # images normal:[view, RGB, H, W] context:[view, context, RGB, H, W]
 
         return MultiviewHeatmapLabeledExampleDict(
             images=images,  # shape (3, H, W) or (5, 3, H, W)

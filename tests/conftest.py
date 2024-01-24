@@ -264,7 +264,7 @@ def multiview_heatmap_dataset_context(cfg_multiview, imgaug_transform) -> Heatma
     cfg_tmp = copy.deepcopy(cfg_multiview)
     cfg_tmp.model.model_type = "heatmap_mhcrnn"
     heatmap_dataset = get_dataset(
-        cfg_tmp, data_dir=TOY_DATA_ROOT_DIR, imgaug_transform=imgaug_transform
+        cfg_tmp, data_dir=TOY_MDATA_ROOT_DIR, imgaug_transform=imgaug_transform
     )
 
     # return to tests

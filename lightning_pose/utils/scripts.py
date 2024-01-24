@@ -104,6 +104,7 @@ def get_dataset(
                 downsample_factor=cfg.data.downsample_factor,
                 imgaug_transform=imgaug_transform,
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
+                do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
                 delimiter=cfg.data.get("image_delimiter", 'img')
             )
         else:
@@ -464,7 +465,8 @@ def compute_metrics(
     """Compute various metrics on predictions csv file, potentially for multiple views."""
     if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
         preds_file = sorted(preds_file)
-        for view_name, csv_file, preds_file_ in zip(sorted(cfg.data.view_names), sorted(cfg.data.csv_file), preds_file):
+        for view_name, csv_file, preds_file_ in zip(sorted(cfg.data.view_names),
+                                                    sorted(cfg.data.csv_file), preds_file):
             assert view_name in preds_file_
             labels_file = return_absolute_path(os.path.join(cfg.data.data_dir, csv_file))
             # preds_file_ = preds_file.replace(".csv", f"_{view_name}.csv")
