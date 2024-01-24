@@ -257,6 +257,11 @@ def heatmap_dataset_context(cfg, imgaug_transform) -> HeatmapDataset:
 
 
 @pytest.fixture
+def multiview_heatmap_dataset_context():
+    
+
+
+@pytest.fixture
 def base_data_module(cfg, base_dataset) -> BaseDataModule:
     """Create a labeled data module for regression models."""
 
