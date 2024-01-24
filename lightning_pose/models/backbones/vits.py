@@ -5,6 +5,11 @@ from typeguard import typechecked
 
 from lightning_pose.models.backbones.vit_img_encoder import ImageEncoderViT_FT
 
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "build_backbone",
+]
+
 
 @typechecked
 def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):

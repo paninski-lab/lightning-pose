@@ -5,6 +5,12 @@ from typing import Dict, Literal, Union
 import numpy as np
 import torch
 
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "EmpiricalEpsilon",
+    "convert_dict_values_to_tensors",
+]
+
 
 class EmpiricalEpsilon:
     """Find percentile value of a given loss tensor."""

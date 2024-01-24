@@ -20,6 +20,14 @@ from lightning_pose.data.utils import (
     UnlabeledBatchDict,
 )
 
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "get_context_from_sequence",
+    "BaseFeatureExtractor",
+    "BaseSupervisedTracker",
+    "SemiSupervisedTrackerMixin",
+]
+
 MULTISTEPLR_MILESTONES_DEFAULT = [100, 200, 300]
 MULTISTEPLR_GAMMA_DEFAULT = 0.5
 

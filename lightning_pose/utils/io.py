@@ -7,6 +7,18 @@ import pandas as pd
 from omegaconf import DictConfig, ListConfig
 from typeguard import typechecked
 
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "ckpt_path_from_base_path",
+    "check_if_semi_supervised",
+    "load_label_csv_from_cfg",
+    "get_keypoint_names",
+    "return_absolute_path",
+    "return_absolute_data_paths",
+    "get_videos_in_dir",
+    "check_video_paths",
+]
+
 
 @typechecked
 def ckpt_path_from_base_path(

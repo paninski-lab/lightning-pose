@@ -6,6 +6,14 @@ from typeguard import typechecked
 
 from lightning_pose.utils.pca import KeypointPCA
 
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "pixel_error",
+    "temporal_norm",
+    "pca_singleview_reprojection_error",
+    "pca_multiview_reprojection_error",
+]
+
 
 @typechecked
 def pixel_error(keypoints_true: np.ndarray, keypoints_pred: np.ndarray) -> np.ndarray:
