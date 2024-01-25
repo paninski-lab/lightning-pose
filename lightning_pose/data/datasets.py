@@ -39,6 +39,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         header_rows: Optional[List[int]] = [0, 1, 2],
         imgaug_transform: Optional[Callable] = None,
         do_context: bool = False,
+        delimiter: str = "img"
     ) -> None:
         """Initialize a dataset for regression (rather than heatmap) models.
 
@@ -66,6 +67,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         self.header_rows = header_rows
         self.imgaug_transform = imgaug_transform
         self.do_context = do_context
+        self.delimiter = delimiter
 
         # load csv data
         if os.path.isfile(csv_path):
@@ -133,9 +135,14 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
         else:
             # get index of the image
-            idx_img = img_name.split("/")[-1].replace("img", "")
-            idx_img = int(idx_img.replace(".png", ""))
-
+            # idx_img = img_name.split("/")[-1].replace("img", "")
+            idx_img_basename = os.path.basename(img_name)
+            idx_img_basename_delimated = idx_img_basename.split(self.delimiter)[-1]
+            # image_format = idx_img.split('.')[-1]
+            idx_img_str = idx_img_basename_delimated.split('.')[0]
+            # figure out length of integer
+            idx_img = int(idx_img_str)
+            int_len = len(idx_img_str)
             # get the frames -> t-2, t-1, t, t+1, t + 2
             list_idx = [idx_img - 2, idx_img - 1, idx_img, idx_img + 1, idx_img + 2]
             list_img_names = []
@@ -144,12 +151,14 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 fr_num = max(0, fr_num)
                 # split name into pieces
                 img_pieces = img_name.split("/")
-                # figure out length of integer
-                int_len = len(img_pieces[-1].replace(".png", "").replace("img", ""))
                 # replace original frame number with context frame number
-                img_pieces[-1] = "img%s.png" % str(fr_num).zfill(int_len)
+                fr_num = str(fr_num)
+                if len(fr_num) > int_len:
+                    fr_num = fr_num.zfill(int_len+1)
+                else:
+                    fr_num = fr_num.zfill(int_len)
+                img_pieces[-1] = img_pieces[-1].replace(idx_img_str, fr_num)
                 list_img_names.append("/".join(img_pieces))
-
             # read the images from image list to create dataset
             images = []
             for name in list_img_names:
@@ -213,6 +222,7 @@ class HeatmapDataset(BaseTrackingDataset):
         downsample_factor: Literal[1, 2, 3] = 2,
         do_context: bool = False,
         uniform_heatmaps: bool = False,
+        delimiter: str = "img"
     ) -> None:
         """Initialize the Heatmap Dataset.
 
@@ -235,6 +245,7 @@ class HeatmapDataset(BaseTrackingDataset):
             header_rows=header_rows,
             imgaug_transform=imgaug_transform,
             do_context=do_context,
+            delimiter=delimiter
         )
 
         if self.height % 128 != 0 or self.height % 128 != 0:
@@ -527,6 +538,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 downsample_factor=downsample_factor,
                 do_context=do_context,
                 uniform_heatmaps=uniform_heatmaps,
+                delimiter=self.delimiter
             )
             self.keypoint_names[view] = self.dataset[view].keypoint_names
             self.data_length[view] = len(self.dataset[view])

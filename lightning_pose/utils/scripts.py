@@ -115,6 +115,7 @@ def get_dataset(
                 downsample_factor=cfg.data.downsample_factor,
                 do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
+                delimiter=cfg.data.get("image_delimiter", 'img')
             )
 
     else:
