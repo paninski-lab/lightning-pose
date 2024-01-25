@@ -154,7 +154,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 # replace original frame number with context frame number
                 fr_num = str(fr_num)
                 if len(fr_num) > int_len:
-                    fr_num = fr_num.zfill(int_len+1)
+                    fr_num = fr_num.zfill(int_len + 1)
                 else:
                     fr_num = fr_num.zfill(int_len)
                 img_pieces[-1] = img_pieces[-1].replace(idx_img_str, fr_num)

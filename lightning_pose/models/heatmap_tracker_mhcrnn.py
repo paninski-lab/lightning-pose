@@ -134,7 +134,7 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
             heatmaps_crnn = heatmaps_crnn.reshape(shape[0], -1,
                                                   heatmaps_crnn.shape[-2], heatmaps_crnn.shape[-1])
             heatmaps_sf = heatmaps_sf.reshape(shape[0], -1,
-                                                  heatmaps_sf.shape[-2], heatmaps_sf.shape[-1])
+                                              heatmaps_sf.shape[-2], heatmaps_sf.shape[-1])
         else:
             representations = self.get_representations(images)
             heatmaps_crnn, heatmaps_sf = self.heatmaps_from_representations(representations)
@@ -145,7 +145,6 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         heatmaps_sf_norm = spatial_softmax2d(heatmaps_sf, temperature=torch.tensor([1.0]))
 
         return heatmaps_crnn_norm, heatmaps_sf_norm
-
 
     def get_loss_inputs_labeled(self, batch_dict: HeatmapLabeledBatchDict) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
