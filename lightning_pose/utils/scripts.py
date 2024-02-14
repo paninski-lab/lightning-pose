@@ -460,7 +460,7 @@ def calculate_train_batches(
 @typechecked
 def compute_metrics(
     cfg: DictConfig,
-    preds_file: Union[str, list[str]],
+    preds_file: Union[str, List[str]],
     data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
 ) -> None:
     """Compute various metrics on predictions csv file, potentially for multiple views."""

@@ -226,7 +226,7 @@ def train(cfg: DictConfig):
         preds_files = [os.path.join(hydra_output_directory, path) for path in
                     os.listdir(hydra_output_directory) if path.startswith("predictions_new")]
         if len(preds_files)>1:
-            preds_file=preds_files
+            preds_file_ood=preds_files
         compute_metrics(cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood)
         # except Exception as e:
         #     print(f"Error computing metrics\n{e}")
