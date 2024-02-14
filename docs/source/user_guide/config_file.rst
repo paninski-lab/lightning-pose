@@ -21,6 +21,24 @@ The config file contains several sections:
 * ``losses``: hyperparameters for unsupervised losses
 * ``eval``: paths for video inference and fiftyone app
 
+Data parameters
+===============
+
+* ``data.imaged_orig_dims.height/width``: the current version of Lightning Pose requires all training images to be the same size. We are working on an updated version without this requirement. However, if you plan to use the PCA losses (Pose PCA or multiview PCA) then all training images **must** be the same size, otherwise the PCA subspace will erroneously contain variance related to image size.
+
+* ``data.image_resize_dims.height/width``: images are downsampled before being sent into the network. You must choose from the following set of values, though the height/width can be different: {64, 128, 256, 384, 512}. Some points to keep in mind when selecting these values: if the resized images are too small, you will lose resolution/details; if they are too large, the model takes longer to train and might not train as well.
+
+* ``data.data_dir/video_dir``: update these to reflect your local paths
+
+* ``data.num_keypoints``: how many keypoints exist in the labeled data
+
+* ``data.keypoint_names``: keypoint names should reflect the actual names/order in the csv file. This field is necessary if, for example, you are running inference on a machine that does not have the training data saved on it.
+
+* ``data.columns_for_singleview_pca``: see the :ref:`Pose plausibility documentation <unsup_loss_pcasv>`
+
+* ``data.mirrored_column_matches``: see the :ref:`Multiview consistency documentation <unsup_loss_pcamv>`
+
+
 Model/training parameters
 =========================
 

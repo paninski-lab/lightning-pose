@@ -186,7 +186,7 @@ If instead you want to include the ears and tailbase:
       columns_for_singleview_pca: [1, 2, 4]
 
 See
-`these config files <https://github.com/danbider/lightning-pose/tree/feature/docs/scripts/configs>`_
+`these config files <https://github.com/danbider/lightning-pose/tree/main/scripts/configs>`_
 for more examples.
 
 Below are the various hyperparameters and their descriptions.
@@ -203,9 +203,7 @@ Besides the ``log_weight`` none of the provided values need to be tested for new
 
 * ``log_weight``: weight of the loss in the final cost function
 * ``components_to_keep``: predictions should lie within the low-d subspace spanned by components that describe this fraction of variance
-* ``empirical_epsilon_percentile``: the reprojecton error on labeled training data is computed to arrive at a noise ceiling; reprojection errors from the video data are not penalized if they fall below this percentile of labeled data error (replaces ``epsilon``)
-* ``empirical_epsilon_multiplier``: this allows the user to increase the epsilon relative the the empirical epsilon error; with the multiplier the effective epsilon is `eff_epsilon = percentile(error, empirical_epsilon_percentile) * empirical_epsilon_multiplier`
-* ``epsilon``: absolute error (in pixels) below which pca loss is zeroed out; if not null, this parameter takes precedence over ``empirical_epsilon_percentile``
+* ``epsilon``: absolute error (in pixels) below which pca loss is zeroed out; if not null, this parameter is automatically computed from the labeled data
 
 .. _unsup_loss_pcamv:
 
@@ -279,6 +277,4 @@ Besides the ``log_weight`` none of the provided values need to be tested for new
 
 * ``log_weight``: weight of the loss in the final cost function
 * ``components_to_keep``: predictions should lie within the 3D subspace
-* ``empirical_epsilon_percentile``: the reprojecton error on labeled training data is computed to arrive at a noise ceiling; reprojection errors from the video data are not penalized if they fall below this percentile of labeled data error (replaces ``epsilon``)
-* ``empirical_epsilon_multiplier``: this allows the user to increase the epsilon relative the the empirical epsilon error; with the multiplier the effective epsilon is `eff_epsilon = percentile(error, empirical_epsilon_percentile) * empirical_epsilon_multiplier`
-* ``epsilon``: absolute error (in pixels) below which pca loss is zeroed out; if not null, this parameter takes precedence over ``empirical_epsilon_percentile``
+* ``epsilon``: absolute error (in pixels) below which pca loss is zeroed out; if not null, this parameter is automatically computed from the labeled data

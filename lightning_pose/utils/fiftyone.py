@@ -17,11 +17,8 @@ __all__ = [
     "remove_string_w_substring_from_list",
     "check_dataset",
     "get_image_tags",
-    "FiftyOneKeypointBase",
     "FiftyOneImagePlotter",
-    "FiftyOneKeypointVideoPlotter",
     "dfConverter",
-    "FiftyOneFactory",
 ]
 
 
