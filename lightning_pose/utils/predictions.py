@@ -326,8 +326,8 @@ def predict_dataset(
 def predict_single_video(
     cfg_file: Union[str, DictConfig],
     video_file: str,
-    data_module: Union[BaseDataModule, UnlabeledDataModule],
     preds_file: str,
+    data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
     ckpt_file: Optional[str] = None,
     trainer: Optional[pl.Trainer] = None,
     model: Optional[ALLOWED_MODELS] = None,
@@ -342,8 +342,8 @@ def predict_single_video(
         cfg_file: either a hydra config or a path pointing to one, with all the model specs.
             needed for loading the model.
         video_file: absolute path to a single video you want to get predictions for, .mp4 file.
-        data_module: contains keypoint names for prediction file
         preds_file: absolute filename for the predictions .csv file
+        data_module: contains keypoint names for prediction file
         ckpt_file: absolute path to the checkpoint of your trained model; requires .ckpt suffix
         trainer: pl.Trainer object
         model: Lightning Module
@@ -358,8 +358,10 @@ def predict_single_video(
 
     delete_model = False
     if model is None:
+        skip_data_module = True if data_module is None else False
         model = load_model_from_checkpoint(
-            cfg=cfg, ckpt_file=ckpt_file, eval=True, data_module=data_module
+            cfg=cfg, ckpt_file=ckpt_file, eval=True, data_module=data_module,
+            skip_data_module=skip_data_module,
         )
         ckpt_file = None  # weights are now loaded; set to None so trainer doesn't load also
         delete_model = True
