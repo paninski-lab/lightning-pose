@@ -119,12 +119,8 @@ losses:
     log_weight: 5.0
     # predictions should lie within the low-d subspace spanned by these components
     components_to_keep: 3
-    # percentile of reprojection errors on train data below which pca loss is zeroed out
-    empirical_epsilon_percentile: 1.00
-    # doing eff_epsilon = percentile(error, empirical_epsilon_percentile) * empirical_epsilon_multiplier
-    empirical_epsilon_multiplier: 1.0
-    # absolute error (in pixels) below which pca loss is zeroed out; if not null, this
-    # parameter takes precedence over `empirical_epsilon_percentile`
+    # absolute error (in pixels) below which pca loss is zeroed out; if null, an empirical
+    # epsilon is computed using the labeled data
     epsilon: null
   # loss = projection onto the discarded eigenvectors
   pca_singleview:
@@ -132,12 +128,8 @@ losses:
     log_weight: 5.0
     # predictions should lie within the low-d subspace spanned by components that describe this fraction of variance
     components_to_keep: 0.99
-    # percentile of reprojection errors on train data below which pca loss is zeroed out
-    empirical_epsilon_percentile: 1.00
-    # doing eff_epsilon = percentile(error, empirical_epsilon_percentile) * empirical_epsilon_multiplier
-    empirical_epsilon_multiplier: 1.0
-    # absolute error (in pixels) below which pca loss is zeroed out; if not null, this
-    # parameter takes precedence over `empirical_epsilon_percentile`
+    # absolute error (in pixels) below which pca loss is zeroed out; if null, an empirical
+    # epsilon is computed using the labeled data
     epsilon: null
   # loss = norm of distance between successive timepoints
   temporal:
