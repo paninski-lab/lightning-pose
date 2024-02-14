@@ -187,8 +187,6 @@ eval:
     address: 127.0.0.1 # ip to launch the app on.
     port: 5151 # port to launch the app on.
 
-    # whether to create a "videos" or "images" dataset, since the processes are the same
-    dataset_to_create: images
   # str with an absolute path to a directory containing videos for prediction.
   test_videos_directory: /home/zeus/content/data/mirror-mouse/videos
   # str with an absolute path to directory in which you want to save .csv with predictions

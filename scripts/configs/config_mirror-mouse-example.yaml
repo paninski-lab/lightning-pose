@@ -208,8 +208,6 @@ eval:
     remote: true # for LAI, must be False
     address: 127.0.0.1 # ip to launch the app on.
     port: 5151 # port to launch the app on.
-    # whether to create a "videos" or "images" dataset, since the processes are the same
-    dataset_to_create: images
   # str with an absolute path to a directory containing videos for prediction.
   # (it's not absolute just for the toy example)
   test_videos_directory: data/mirror-mouse-example/videos

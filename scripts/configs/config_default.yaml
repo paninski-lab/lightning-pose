@@ -169,8 +169,6 @@ eval:
     address: 127.0.0.1 # ip to launch the app on.
     port: 5151 # port to launch the app on.
 
-    # whether to create a "videos" or "images" dataset, since the processes are the same
-    dataset_to_create: images
   # str with an absolute path to a directory containing videos for prediction.
   # set to null to skip automatic video prediction from train_hydra.py script
   test_videos_directory: null
