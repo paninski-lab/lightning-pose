@@ -120,10 +120,6 @@ class FiftyOneKeypointBase:
         self.pred_csv_files = []  # override in subclasses
 
     @property
-    def build_speed(self) -> str:
-        return self.cfg.eval.fiftyone.build_speed
-
-    @property
     def img_width(self) -> int:
         return self.cfg.data.image_orig_dims.width
 
@@ -175,7 +171,7 @@ class FiftyOneKeypointBase:
             self.preds_pandas_df_dict[model_name] = temp_df
 
     # @typechecked
-    def _slow_single_frame_build(
+    def build_single_frame_keypoints(
         self,
         data_dict: Dict[str, Dict[str, np.array]],
         frame_idx: int,
@@ -197,43 +193,6 @@ class FiftyOneKeypointBase:
                 )
             )
         return keypoints_list
-
-    # @typechecked
-    def _fast_single_frame_build(
-        self,
-        data_dict: Dict[str, Dict[str, np.array]],
-        frame_idx: int,
-    ) -> List[fo.Keypoint]:
-        # output: the positions of all keypoints in a single frame for a single model
-        keypoint = [
-            fo.Keypoint(
-                points=[
-                    (
-                        data_dict[kp_name]["coords"][frame_idx, 0] / self.img_width,
-                        data_dict[kp_name]["coords"][frame_idx, 1] / self.img_height,
-                    )
-                    for kp_name in self.keypoints_to_plot
-                ],
-                confidence=[
-                    data_dict[kp_name]["likelihood"][frame_idx]
-                    for kp_name in self.keypoints_to_plot]
-            )
-        ]
-        return keypoint
-
-    # have two options here, "fast" and "slow"
-    # @typechecked
-    def build_single_frame_keypoints(
-        self, data_dict: Dict[str, Dict[str, np.array]], frame_idx: int
-    ) -> List[fo.Keypoint]:
-        if self.build_speed == "fast":
-            return self._fast_single_frame_build(
-                data_dict=data_dict, frame_idx=frame_idx
-            )
-        else:  # slow
-            return self._slow_single_frame_build(
-                data_dict=data_dict, frame_idx=frame_idx
-            )
 
     # @typechecked
     def get_keypoints_per_image(
