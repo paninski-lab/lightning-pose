@@ -1,8 +1,9 @@
 """Test the FiftyOne module."""
 
 import os
-import pandas as pd
 import shutil
+
+import pandas as pd
 
 
 def test_fiftyone_image_plotter(cfg, tmpdir):

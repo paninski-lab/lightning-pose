@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List, Literal, Optional, Union
+from typing import Dict, List, Optional
 
 import fiftyone as fo
 import numpy as np
