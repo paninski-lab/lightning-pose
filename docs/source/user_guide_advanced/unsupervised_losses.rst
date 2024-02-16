@@ -12,9 +12,9 @@ and brief descriptions of some of the available losses.
 #. :ref:`Data requirements <unsup_data>`
 #. :ref:`The configuration file <unsup_config>`
 #. :ref:`Loss options <unsup_loss_options>`
-    * :ref:`Temporal continuity <unsup_loss_temporal>`
-    * :ref:`Pose plausibility <unsup_loss_pcasv>`
-    * :ref:`Multiview consistency <unsup_loss_pcamv>`
+    * :ref:`Temporal difference <unsup_loss_temporal>`
+    * :ref:`Pose PCA <unsup_loss_pcasv>`
+    * :ref:`Multiview PCA <unsup_loss_pcamv>`
 
 .. _unsup_data:
 
@@ -124,7 +124,7 @@ values indicate stronger penalties.
 
 .. _unsup_loss_temporal:
 
-Temporal continuity
+Temporal difference
 -------------------
 This loss penalizes the difference in predictions between successive timepoints for each keypoint
 independently.
@@ -142,7 +142,7 @@ independently.
 
 .. _unsup_loss_pcasv:
 
-Pose plausibility
+Pose PCA
 -----------------
 This loss penalizes deviations away from a low-dimensional subspace of plausible poses computed on
 labeled data.
@@ -207,7 +207,7 @@ Besides the ``log_weight`` none of the provided values need to be tested for new
 
 .. _unsup_loss_pcamv:
 
-Multiview consistency
+Multiview PCA
 ---------------------
 This loss penalizes deviations of predictions across all available views away from a 3-dimensional
 subspace computed on labeled data.

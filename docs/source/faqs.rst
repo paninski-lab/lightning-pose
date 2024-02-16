@@ -27,12 +27,13 @@ section.
 
 .. _faq_nan_heatmaps:
 
-**Q: Why does the network produces high confidence values for keypoints even when they are occluded?**
+**Q: Why does the network produce high confidence values for keypoints even when they are occluded?**
 
-In certain cases this may be desirable behavior, such as brief occlusions behind another body part.
-However, there may be instances, such as when tracking a tongue, that a low confidence value is
-desired when the keypoint is hidden from view (for example, so that a lick detector can be
-constructed from the tongue confidence values).
+Generally, when a keypoint is briefly occluded and its location can be resolved by the network, we are fine with
+high confidence values (this will happen, for example, when using temporal context frames).
+However, there may be scenarios where the goal is to explicitly track whether a keypoint is visible or hidden using
+confidence values (e.g., quantifying whether a tongue is in or out of the mouth).
+In this case, if the confidence values are too high during occlusions, try the suggestions below.
 
 First, note that including a keypoint in the unsupervised losses - especially the PCA losses -
 will generally increase confidence values even during occlusions (by design).
