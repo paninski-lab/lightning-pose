@@ -122,6 +122,15 @@ losses across multiple datasets, but we encourage users to test out several valu
 data for best effect. The inverse of this weight is actually used for the final weight, so smaller
 values indicate stronger penalties.
 
+We are particularly interested in preventing, and having the network learn from, severe violations
+of the different losses.
+Therefore, we enforce our losses only when they exceed a tolerance threshold :math:`\epsilon`,
+rendering them :math:`\epsilon`-insensitive:
+
+.. math::
+
+    \mathscr{L}(\epsilon) = \textrm{max}(0, \mathscr{L} - \epsilon).
+
 .. _unsup_loss_temporal:
 
 Temporal difference
@@ -133,12 +142,13 @@ independently.
 
       temporal:
         log_weight: 5.0
-        epsilon: 20.0
         prob_threshold: 0.05
+        epsilon: 20.0
+
 
 * ``log_weight``: weight of the loss in the final cost function
-* ``epsilon``: in pixels; temporal differences below this threshold are not penalized, which keeps natural movements from being penalized. The value of epsilon will depend on the size of the video frames, framerate (how much does the animal move from one frame to the next), the size of the animal in the frame, etc.
 * ``prob_threshold``: predictions with a probability below this threshold are not included in the loss. This is desirable if, for example, a keypoint is occluded and the prediction has low probability.
+* ``epsilon``: in pixels; temporal differences below this threshold are not penalized, which keeps natural movements from being penalized. The value of epsilon will depend on the size of the video frames, framerate (how much does the animal move from one frame to the next), the size of the animal in the frame, etc.
 
 .. _unsup_loss_pcasv:
 
@@ -197,13 +207,11 @@ Besides the ``log_weight`` none of the provided values need to be tested for new
       pca_singleview:
         log_weight: 5.0
         components_to_keep: 0.99
-        empirical_epsilon_percentile: 1.00
-        empirical_epsilon_multiplier: 1.0
         epsilon: null
 
 * ``log_weight``: weight of the loss in the final cost function
 * ``components_to_keep``: predictions should lie within the low-d subspace spanned by components that describe this fraction of variance
-* ``epsilon``: absolute error (in pixels) below which pca loss is zeroed out; if not null, this parameter is automatically computed from the labeled data
+* ``epsilon``: if not null, this parameter is automatically computed from the labeled data
 
 .. _unsup_loss_pcamv:
 
@@ -271,10 +279,8 @@ Besides the ``log_weight`` none of the provided values need to be tested for new
       pca_multiview:
         log_weight: 5.0
         components_to_keep: 3
-        empirical_epsilon_percentile: 1.00
-        empirical_epsilon_multiplier: 1.0
         epsilon: null
 
 * ``log_weight``: weight of the loss in the final cost function
-* ``components_to_keep``: predictions should lie within the 3D subspace
-* ``epsilon``: absolute error (in pixels) below which pca loss is zeroed out; if not null, this parameter is automatically computed from the labeled data
+* ``components_to_keep``: should be set to 3 so that predictions lie within a 3D subspace
+* ``epsilon``: if not null, this parameter is automatically computed from the labeled data
