@@ -136,10 +136,10 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
             representations = self.get_representations(images)
             heatmaps_crnn, heatmaps_sf = self.heatmaps_from_representations(representations)
             # Reshaping the outputs to extract the view dimension
-            heatmaps_crnn = heatmaps_crnn.reshape(shape[0], -1,
-                                                  heatmaps_crnn.shape[-2], heatmaps_crnn.shape[-1])
-            heatmaps_sf = heatmaps_sf.reshape(shape[0], -1,
-                                              heatmaps_sf.shape[-2], heatmaps_sf.shape[-1])
+            heatmaps_crnn = heatmaps_crnn.reshape(
+                shape[0], -1, heatmaps_crnn.shape[-2], heatmaps_crnn.shape[-1])
+            heatmaps_sf = heatmaps_sf.reshape(
+                shape[0], -1, heatmaps_sf.shape[-2], heatmaps_sf.shape[-1])
         else:
             representations = self.get_representations(images)
             heatmaps_crnn, heatmaps_sf = self.heatmaps_from_representations(representations)
