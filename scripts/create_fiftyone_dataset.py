@@ -5,24 +5,15 @@ import hydra
 from omegaconf import DictConfig
 
 from lightning_pose.utils import pretty_print_str
-from lightning_pose.utils.fiftyone import (
-    FiftyOneFactory,
-    FiftyOneImagePlotter,
-    FiftyOneKeypointVideoPlotter,
-    check_dataset,
-)
+from lightning_pose.utils.fiftyone import FiftyOneImagePlotter, check_dataset
 
 
 @hydra.main(config_path="configs", config_name="config_mirror-mouse-example")
 def build_fo_dataset(cfg: DictConfig) -> None:
-    pretty_print_str(
-        "Launching a job that creates %s FiftyOne.Dataset"
-        % cfg.eval.fiftyone.dataset_to_create
-    )
-    FiftyOneClass = FiftyOneFactory(
-        dataset_to_create=cfg.eval.fiftyone.dataset_to_create
-    )()
-    fo_plotting_instance = FiftyOneClass(cfg=cfg)  # initializes everything
+
+    pretty_print_str("Launching a job that creates FiftyOne.Dataset")
+
+    fo_plotting_instance = FiftyOneImagePlotter(cfg=cfg)  # initializes everything
     dataset = fo_plotting_instance.create_dataset()  # internally loops over models
     check_dataset(dataset)  # create metadata and print if there are problems
     fo_plotting_instance.dataset_info_print()  # print the name of the dataset

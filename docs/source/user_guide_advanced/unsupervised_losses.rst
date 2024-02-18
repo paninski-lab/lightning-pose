@@ -12,9 +12,9 @@ and brief descriptions of some of the available losses.
 #. :ref:`Data requirements <unsup_data>`
 #. :ref:`The configuration file <unsup_config>`
 #. :ref:`Loss options <unsup_loss_options>`
-    * :ref:`Temporal continuity <unsup_loss_temporal>`
-    * :ref:`Pose plausibility <unsup_loss_pcasv>`
-    * :ref:`Multiview consistency <unsup_loss_pcamv>`
+    * :ref:`Temporal difference <unsup_loss_temporal>`
+    * :ref:`Pose PCA <unsup_loss_pcasv>`
+    * :ref:`Multiview PCA <unsup_loss_pcamv>`
 
 .. _unsup_data:
 
@@ -122,9 +122,18 @@ losses across multiple datasets, but we encourage users to test out several valu
 data for best effect. The inverse of this weight is actually used for the final weight, so smaller
 values indicate stronger penalties.
 
+We are particularly interested in preventing, and having the network learn from, severe violations
+of the different losses.
+Therefore, we enforce our losses only when they exceed a tolerance threshold :math:`\epsilon`,
+rendering them :math:`\epsilon`-insensitive:
+
+.. math::
+
+    \mathscr{L}(\epsilon) = \textrm{max}(0, \mathscr{L} - \epsilon).
+
 .. _unsup_loss_temporal:
 
-Temporal continuity
+Temporal difference
 -------------------
 This loss penalizes the difference in predictions between successive timepoints for each keypoint
 independently.
@@ -133,16 +142,17 @@ independently.
 
       temporal:
         log_weight: 5.0
-        epsilon: 20.0
         prob_threshold: 0.05
+        epsilon: 20.0
+
 
 * ``log_weight``: weight of the loss in the final cost function
-* ``epsilon``: in pixels; temporal differences below this threshold are not penalized, which keeps natural movements from being penalized. The value of epsilon will depend on the size of the video frames, framerate (how much does the animal move from one frame to the next), the size of the animal in the frame, etc.
 * ``prob_threshold``: predictions with a probability below this threshold are not included in the loss. This is desirable if, for example, a keypoint is occluded and the prediction has low probability.
+* ``epsilon``: in pixels; temporal differences below this threshold are not penalized, which keeps natural movements from being penalized. The value of epsilon will depend on the size of the video frames, framerate (how much does the animal move from one frame to the next), the size of the animal in the frame, etc.
 
 .. _unsup_loss_pcasv:
 
-Pose plausibility
+Pose PCA
 -----------------
 This loss penalizes deviations away from a low-dimensional subspace of plausible poses computed on
 labeled data.
@@ -186,7 +196,7 @@ If instead you want to include the ears and tailbase:
       columns_for_singleview_pca: [1, 2, 4]
 
 See
-`these config files <https://github.com/danbider/lightning-pose/tree/feature/docs/scripts/configs>`_
+`these config files <https://github.com/danbider/lightning-pose/tree/main/scripts/configs>`_
 for more examples.
 
 Below are the various hyperparameters and their descriptions.
@@ -197,19 +207,15 @@ Besides the ``log_weight`` none of the provided values need to be tested for new
       pca_singleview:
         log_weight: 5.0
         components_to_keep: 0.99
-        empirical_epsilon_percentile: 1.00
-        empirical_epsilon_multiplier: 1.0
         epsilon: null
 
 * ``log_weight``: weight of the loss in the final cost function
 * ``components_to_keep``: predictions should lie within the low-d subspace spanned by components that describe this fraction of variance
-* ``empirical_epsilon_percentile``: the reprojecton error on labeled training data is computed to arrive at a noise ceiling; reprojection errors from the video data are not penalized if they fall below this percentile of labeled data error (replaces ``epsilon``)
-* ``empirical_epsilon_multiplier``: this allows the user to increase the epsilon relative the the empirical epsilon error; with the multiplier the effective epsilon is `eff_epsilon = percentile(error, empirical_epsilon_percentile) * empirical_epsilon_multiplier`
-* ``epsilon``: absolute error (in pixels) below which pca loss is zeroed out; if not null, this parameter takes precedence over ``empirical_epsilon_percentile``
+* ``epsilon``: if not null, this parameter is automatically computed from the labeled data
 
 .. _unsup_loss_pcamv:
 
-Multiview consistency
+Multiview PCA
 ---------------------
 This loss penalizes deviations of predictions across all available views away from a 3-dimensional
 subspace computed on labeled data.
@@ -273,12 +279,8 @@ Besides the ``log_weight`` none of the provided values need to be tested for new
       pca_multiview:
         log_weight: 5.0
         components_to_keep: 3
-        empirical_epsilon_percentile: 1.00
-        empirical_epsilon_multiplier: 1.0
         epsilon: null
 
 * ``log_weight``: weight of the loss in the final cost function
-* ``components_to_keep``: predictions should lie within the 3D subspace
-* ``empirical_epsilon_percentile``: the reprojecton error on labeled training data is computed to arrive at a noise ceiling; reprojection errors from the video data are not penalized if they fall below this percentile of labeled data error (replaces ``epsilon``)
-* ``empirical_epsilon_multiplier``: this allows the user to increase the epsilon relative the the empirical epsilon error; with the multiplier the effective epsilon is `eff_epsilon = percentile(error, empirical_epsilon_percentile) * empirical_epsilon_multiplier`
-* ``epsilon``: absolute error (in pixels) below which pca loss is zeroed out; if not null, this parameter takes precedence over ``empirical_epsilon_percentile``
+* ``components_to_keep``: should be set to 3 so that predictions lie within a 3D subspace
+* ``epsilon``: if not null, this parameter is automatically computed from the labeled data
