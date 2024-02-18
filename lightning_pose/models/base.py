@@ -56,10 +56,18 @@ def normalized_to_bbox(
     keypoints: TensorType["batch", "num_keypoints", "xy":2],
     bbox: TensorType["batch", "xyhw":4]
 ) -> TensorType["batch", "num_keypoints", "xy":2]:
-    keypoints[:, :, 0] *= bbox[:, 3].unsqueeze(1)  # scale x by box width
-    keypoints[:, :, 0] += bbox[:, 0].unsqueeze(1)  # add bbox x offset
-    keypoints[:, :, 1] *= bbox[:, 2].unsqueeze(1)  # scale y by box height
-    keypoints[:, :, 1] += bbox[:, 1].unsqueeze(1)  # add bbox y offset
+    if keypoints.shape[0] == bbox.shape[0]:
+        # normal batch
+        keypoints[:, :, 0] *= bbox[:, 3].unsqueeze(1)  # scale x by box width
+        keypoints[:, :, 0] += bbox[:, 0].unsqueeze(1)  # add bbox x offset
+        keypoints[:, :, 1] *= bbox[:, 2].unsqueeze(1)  # scale y by box height
+        keypoints[:, :, 1] += bbox[:, 1].unsqueeze(1)  # add bbox y offset
+    else:
+        # context batch; we don't have predictions for first/last two frames
+        keypoints[:, :, 0] *= bbox[2:-2, 3].unsqueeze(1)  # scale x by box width
+        keypoints[:, :, 0] += bbox[2:-2, 0].unsqueeze(1)  # add bbox x offset
+        keypoints[:, :, 1] *= bbox[2:-2, 2].unsqueeze(1)  # scale y by box height
+        keypoints[:, :, 1] += bbox[2:-2, 1].unsqueeze(1)  # add bbox y offset
     return keypoints
 
 
