@@ -112,12 +112,8 @@ losses:
     log_weight: 5.0
     # predictions should lie within the low-d subspace spanned by components that describe this fraction of variance
     components_to_keep: 0.99
-    # percentile of reprojection errors on train data below which pca loss is zeroed out
-    empirical_epsilon_percentile: 1.00
-    # doing eff_epsilon = percentile(error, empirical_epsilon_percentile) * empirical_epsilon_multiplier
-    empirical_epsilon_multiplier: 1.0
-    # absolute error (in pixels) below which pca loss is zeroed out; if not null, this
-    # parameter takes precedence over `empirical_epsilon_percentile`
+    # absolute error (in pixels) below which pca loss is zeroed out; if null, an empirical
+    # epsilon is computed using the labeled data
     epsilon: null
   # loss = norm of distance between successive timepoints
   temporal:
@@ -140,7 +136,6 @@ eval:
   fiftyone:
     # will be the name of the dataset (Mongo DB) created by FiftyOne. for video dataset, we will append dataset_name + "_video"
     dataset_name: ibl-paw
-    build_speed: slow # "slow"/"fast". "fast" drops keypoint name and confidence information for faster processing.
     # if you want to manually provide a different model name to be displayed in FiftyOne
     model_display_names: ["test_model"]
     # whether to launch the app from the script (True), or from ipython (and have finer control over the outputs)
@@ -150,8 +145,6 @@ eval:
     address: 127.0.0.1 # ip to launch the app on.
     port: 5151 # port to launch the app on.
 
-    # whether to create a "videos" or "images" dataset, since the processes are the same
-    dataset_to_create: images
   # str with an absolute path to a directory containing videos for prediction.
   test_videos_directory: /home/zeus/content/data/ibl-paw/videos_new
   # str with an absolute path to directory in which you want to save .csv with predictions

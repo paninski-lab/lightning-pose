@@ -5,11 +5,8 @@ import pytest
 import torch
 from lightning.pytorch.utilities import CombinedLoader
 
+from lightning_pose.utils.fiftyone import check_lists_equal
 from lightning_pose.utils.pca import KeypointPCA
-
-
-def check_lists_equal(list_1, list_2):
-    return len(list_1) == len(list_2) and sorted(list_1) == sorted(list_2)
 
 
 def test_train_loader_iter(base_data_module_combined):

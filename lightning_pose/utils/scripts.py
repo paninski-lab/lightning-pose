@@ -562,7 +562,8 @@ def compute_metrics_single(
             loss_type="pca_singleview",
             data_module=data_module,
             components_to_keep=cfg.losses.pca_singleview.components_to_keep,
-            empirical_epsilon_percentile=cfg.losses.pca_singleview.empirical_epsilon_percentile,
+            empirical_epsilon_percentile=cfg.losses.pca_singleview.get(
+                "empirical_epsilon_percentile", 1.0),
             columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
         )
         # re-fit pca on the labeled data to get params
@@ -582,7 +583,8 @@ def compute_metrics_single(
             loss_type="pca_multiview",
             data_module=data_module,
             components_to_keep=cfg.losses.pca_singleview.components_to_keep,
-            empirical_epsilon_percentile=cfg.losses.pca_singleview.empirical_epsilon_percentile,
+            empirical_epsilon_percentile=cfg.losses.pca_singleview.get(
+                "empirical_epsilon_percentile", 1.0),
             mirrored_column_matches=cfg.data.mirrored_column_matches,
         )
         # re-fit pca on the labeled data to get params
