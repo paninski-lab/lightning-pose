@@ -112,7 +112,7 @@ def video_pipe(
     else:
         # choose arbitrary scalar (rather than a matrix) so that downstream operations know there
         # is no geometric transforms to undo
-        matrix = -1
+        matrix = np.array([-1])
     # video pixel range is [0, 255]; transform it to [0, 1].
     # happens naturally in the torchvision transform to tensor.
     video = video / 255.0
