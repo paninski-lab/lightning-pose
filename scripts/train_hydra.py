@@ -126,6 +126,10 @@ def train(cfg: DictConfig):
     )
     # compute and save various metrics
     try:
+        preds_files = [os.path.join(hydra_output_directory, path) for path in 
+                       os.listdir(hydra_output_directory) if path.endswith(".csv")]
+        if len(preds_files)>1:
+            preds_file=preds_files
         compute_metrics(cfg=cfg, preds_file=preds_file, data_module=data_module_pred)
     except Exception as e:
         print(f"Error computing metrics\n{e}")
@@ -218,10 +222,14 @@ def train(cfg: DictConfig):
             preds_file=preds_file_ood,
         )
         # compute and save various metrics
-        try:
-            compute_metrics(cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood)
-        except Exception as e:
-            print(f"Error computing metrics\n{e}")
+        # try:
+        preds_files = [os.path.join(hydra_output_directory, path) for path in
+                    os.listdir(hydra_output_directory) if path.startswith("predictions_new")]
+        if len(preds_files)>1:
+            preds_file_ood=preds_files
+        compute_metrics(cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood)
+        # except Exception as e:
+        #     print(f"Error computing metrics\n{e}")
 
 
 if __name__ == "__main__":

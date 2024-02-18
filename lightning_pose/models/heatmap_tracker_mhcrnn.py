@@ -12,12 +12,17 @@ from typing_extensions import Literal
 
 from lightning_pose.data.utils import (
     HeatmapLabeledBatchDict,
+    MultiviewHeatmapLabeledBatchDict,
     UnlabeledBatchDict,
     undo_affine_transform,
 )
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.models import HeatmapTracker
-from lightning_pose.models.base import ALLOWED_BACKBONES, SemiSupervisedTrackerMixin
+from lightning_pose.models.base import (
+    ALLOWED_BACKBONES,
+    SemiSupervisedTrackerMixin,
+    convert_bbox_coords,
+)
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -113,7 +118,8 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         self,
         images: Union[
             TensorType["batch", "channels":3, "image_height", "image_width"],
-            TensorType["batch", "frames", "channels":3, "image_height", "image_width"]
+            TensorType["batch", "frames", "channels":3, "image_height", "image_width"],
+            TensorType["batch", "view", "frames", "channels":3, "image_height", "image_width"]
         ],
     ) -> Tuple[
             TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"],
@@ -121,9 +127,22 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
     ]:
         """Forward pass through the network."""
 
-        # one representation and two heatmaps for each desired output (context, non-context)
-        representations = self.get_representations(images)
-        heatmaps_crnn, heatmaps_sf = self.heatmaps_from_representations(representations)
+        shape = images.shape
+
+        if len(shape) > 5:
+            # Stacking all the views (MultiView) as Batch
+            images = images.reshape(-1, shape[-4], shape[-3], shape[-2], shape[-1])
+            # one representation and two heatmaps for each desired output (context, non-context)
+            representations = self.get_representations(images)
+            heatmaps_crnn, heatmaps_sf = self.heatmaps_from_representations(representations)
+            # Reshaping the outputs to extract the view dimension
+            heatmaps_crnn = heatmaps_crnn.reshape(shape[0], -1,
+                                                  heatmaps_crnn.shape[-2], heatmaps_crnn.shape[-1])
+            heatmaps_sf = heatmaps_sf.reshape(shape[0], -1,
+                                              heatmaps_sf.shape[-2], heatmaps_sf.shape[-1])
+        else:
+            representations = self.get_representations(images)
+            heatmaps_crnn, heatmaps_sf = self.heatmaps_from_representations(representations)
 
         # normalize heatmaps
         # softmax temp stays 1 here; to modify for model predictions, see constructor
@@ -132,7 +151,13 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
 
         return heatmaps_crnn_norm, heatmaps_sf_norm
 
-    def get_loss_inputs_labeled(self, batch_dict: HeatmapLabeledBatchDict) -> dict:
+    def get_loss_inputs_labeled(
+        self,
+        batch_dict: Union[
+            HeatmapLabeledBatchDict,
+            MultiviewHeatmapLabeledBatchDict,
+        ],
+    ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
         pred_heatmaps_crnn, pred_heatmaps_sf = self.forward(batch_dict["images"])
@@ -149,7 +174,11 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
 
     def predict_step(
         self,
-        batch_dict: Union[HeatmapLabeledBatchDict, UnlabeledBatchDict],
+        batch_dict: Union[
+            HeatmapLabeledBatchDict,
+            MultiviewHeatmapLabeledBatchDict,
+            UnlabeledBatchDict,
+        ],
         batch_idx: int,
         return_heatmaps: Optional[bool] = False,
     ) -> Union[
@@ -184,6 +213,8 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         pred_keypoints_sf[crnn_conf_gt] = pred_keypoints_crnn[crnn_conf_gt]
         pred_keypoints_sf = pred_keypoints_sf.reshape(pred_keypoints_sf.shape[0], -1)
         confidence_sf[crnn_conf_gt] = confidence_crnn[crnn_conf_gt]
+        # bounding box coords -> original image coords
+        pred_keypoints_sf = convert_bbox_coords(batch_dict, pred_keypoints_sf)
 
         if return_heatmaps:
             pred_heatmaps_sf[crnn_conf_gt] = pred_heatmaps_crnn[crnn_conf_gt]

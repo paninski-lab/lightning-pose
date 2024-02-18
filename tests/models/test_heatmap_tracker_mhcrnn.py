@@ -24,6 +24,30 @@ def test_supervised_heatmap_mhcrnn(
     )
 
 
+def test_supervised_multiview_heatmap_context(
+    cfg_multiview,
+    multiview_heatmap_data_module_context,
+    video_dataloader,
+    video_list,
+    trainer,
+    remove_logs,
+):
+    """Test the initialization and training of a supervised heatmap model."""
+
+    cfg_tmp = copy.deepcopy(cfg_multiview)
+    cfg_tmp.model.model_type = "heatmap_mhcrnn"
+    cfg_tmp.model.losses_to_use = []
+
+    run_model_test(
+        cfg=cfg_tmp,
+        data_module=multiview_heatmap_data_module_context,
+        video_dataloader=video_dataloader,
+        video_list=video_list,
+        trainer=trainer,
+        remove_logs_fn=remove_logs,
+    )
+
+
 def test_semisupervised_heatmap_mhcrnn_pcasingleview(
     cfg,
     heatmap_data_module_combined_context,

@@ -257,6 +257,25 @@ def heatmap_dataset_context(cfg, imgaug_transform) -> HeatmapDataset:
 
 
 @pytest.fixture
+def multiview_heatmap_dataset_context(cfg_multiview, imgaug_transform) -> HeatmapDataset:
+    """Create a dataset for heatmap models from toy data."""
+
+    # setup
+    cfg_tmp = copy.deepcopy(cfg_multiview)
+    cfg_tmp.model.model_type = "heatmap_mhcrnn"
+    heatmap_dataset = get_dataset(
+        cfg_tmp, data_dir=TOY_MDATA_ROOT_DIR, imgaug_transform=imgaug_transform
+    )
+
+    # return to tests
+    yield heatmap_dataset
+
+    # cleanup after all tests have run (no more calls to yield)
+    del heatmap_dataset
+    torch.cuda.empty_cache()
+
+
+@pytest.fixture
 def base_data_module(cfg, base_dataset) -> BaseDataModule:
     """Create a labeled data module for regression models."""
 
@@ -309,6 +328,29 @@ def multiview_heatmap_data_module(cfg_multiview, multiview_heatmap_dataset) -> B
     cfg_tmp.training.train_prob = 0.95
     cfg_tmp.training.val_prob = 0.025
     data_module = get_data_module(cfg_tmp, dataset=multiview_heatmap_dataset, video_dir=None)
+    data_module.setup()
+
+    # return to tests
+    yield data_module
+
+    # cleanup after all tests have run (no more calls to yield)
+    del data_module
+    torch.cuda.empty_cache()
+
+
+@pytest.fixture
+def multiview_heatmap_data_module_context(cfg_multiview,
+                                          multiview_heatmap_dataset_context) -> BaseDataModule:
+    """Create a labeled data module for heatmap models."""
+
+    # setup
+    cfg_tmp = copy.deepcopy(cfg_multiview)
+    cfg_tmp.model.losses_to_use = []
+    # bump up training data so we can test pca_singleview loss
+    cfg_tmp.training.train_prob = 0.95
+    cfg_tmp.training.val_prob = 0.025
+    data_module = get_data_module(cfg_tmp,
+                                  dataset=multiview_heatmap_dataset_context, video_dir=None)
     data_module.setup()
 
     # return to tests

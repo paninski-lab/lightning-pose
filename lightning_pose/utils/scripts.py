@@ -104,6 +104,7 @@ def get_dataset(
                 downsample_factor=cfg.data.downsample_factor,
                 imgaug_transform=imgaug_transform,
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
+                do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
                 delimiter=cfg.data.get("image_delimiter", 'img')
             )
         else:
@@ -114,6 +115,7 @@ def get_dataset(
                 downsample_factor=cfg.data.downsample_factor,
                 do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
+                delimiter=cfg.data.get("image_delimiter", 'img')
             )
 
     else:
@@ -458,14 +460,17 @@ def calculate_train_batches(
 @typechecked
 def compute_metrics(
     cfg: DictConfig,
-    preds_file: str,
+    preds_file: Union[str, List[str]],
     data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
 ) -> None:
     """Compute various metrics on predictions csv file, potentially for multiple views."""
     if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
-        for view_name, csv_file in zip(cfg.data.view_names, cfg.data.csv_file):
+        preds_file = sorted(preds_file)
+        for view_name, csv_file, preds_file_ in zip(sorted(cfg.data.view_names),
+                                                    sorted(cfg.data.csv_file), preds_file):
+            assert view_name in preds_file_
             labels_file = return_absolute_path(os.path.join(cfg.data.data_dir, csv_file))
-            preds_file_ = preds_file.replace(".csv", f"_{view_name}.csv")
+            # preds_file_ = preds_file.replace(".csv", f"_{view_name}.csv")
             compute_metrics_single(
                 cfg=cfg,
                 labels_file=labels_file,
