@@ -4,6 +4,7 @@ FAQs
 
 * :ref:`Can I import a pose estimation project in another format? <faq_can_i_import>`
 * :ref:`What if I encounter a CUDA out of memory error? <faq_oom>`
+* :ref:`Why does the network produce high confidence values for keypoints even when they are occluded? <faq_nan_heatmaps>`
 
 .. _faq_can_i_import:
 
