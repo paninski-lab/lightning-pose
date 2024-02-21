@@ -1,8 +1,4 @@
 data:
-  # dimensions of training images
-  image_orig_dims:
-    height: 384
-    width: 512
   # resize dimensions to streamline model creation
   image_resize_dims:
     height: 256

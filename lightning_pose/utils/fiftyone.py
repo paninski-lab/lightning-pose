@@ -5,6 +5,7 @@ import fiftyone as fo
 import numpy as np
 import pandas as pd
 from omegaconf import DictConfig
+from PIL import Image
 from tqdm import tqdm
 from typeguard import typechecked
 
@@ -76,10 +77,17 @@ class FiftyOneImagePlotter:
         # hard-code this for now
         self.df_header_rows: List[int] = [1, 2]
         # ground_truth_df is not necessary but useful for keypoint names
-        self.ground_truth_df: pd.DataFrame = pd.read_csv(
-            os.path.join(self.data_dir, self.cfg.data.csv_file),
-            header=self.df_header_rows,
-        )
+        if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
+            df_tmp = []
+            csv_files = [os.path.join(self.data_dir, f) for f in self.cfg.data.csv_file]
+            for csv_file in csv_files:
+                df_tmp.append(pd.read_csv(csv_file, header=self.df_header_rows))
+            self.ground_truth_df = pd.concat(df_tmp)
+        else:
+            self.ground_truth_df: pd.DataFrame = pd.read_csv(
+                os.path.join(self.data_dir, self.cfg.data.csv_file),
+                header=self.df_header_rows,
+            )
         if self.keypoints_to_plot is None:
             # plot all keypoints that appear in the ground-truth dataframe
             self.keypoints_to_plot: List[str] = list(self.ground_truth_df.columns.levels[0])
@@ -98,38 +106,33 @@ class FiftyOneImagePlotter:
             df=self.ground_truth_df, keypoint_names=self.keypoints_to_plot
         )()
 
-        model_abs_paths = self.get_model_abs_paths()
-        self.pred_csv_files = [
-            os.path.join(model_dir, csv_filename) for model_dir in model_abs_paths
-        ]
-
-    @property
-    def image_paths(self) -> List[str]:
-        """extract absolute paths for all the images in the ground truth csv file
-
-        Returns:
-            List[str]: absolute paths per image, checked before returning.
-        """
+        # get list of image paths
         relative_list = list(self.ground_truth_df.iloc[:, 0])
-        absolute_list = [
-            os.path.join(self.data_dir, im_path) for im_path in relative_list
-        ]
+        self.image_paths = [os.path.join(self.data_dir, im_path) for im_path in relative_list]
         # assert that the images are indeed files
-        for im in absolute_list:
+        for im in self.image_paths:
             if not os.path.isfile(im):
                 raise FileNotFoundError(im)
 
-        return absolute_list
+        # collect predicted csv files; this will be a list of lists. The length of the first list
+        # corresponds to the number of models, the length of the sublists corresponds to the number
+        # of views
+        model_abs_paths = self.get_model_abs_paths()
+        if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
+            self.pred_csv_files = []
+            for model_dir in model_abs_paths:
+                csv_list = [
+                    os.path.join(model_dir, csv_filename.replace(".csv", f"_{v}.csv"))
+                    for v in cfg.data.view_names
+                ]
+                self.pred_csv_files.append(csv_list)
+        else:
+            self.pred_csv_files = [
+                [os.path.join(model_dir, csv_filename)] for model_dir in model_abs_paths
+            ]
 
-    # TODO: update this, no longer have access to cfg.data.image_orig_dims
-    @property
-    def img_width(self) -> int:
-        return self.cfg.data.image_orig_dims.width
-
-    # TODO: update this, no longer have access to cfg.data.image_orig_dims
-    @property
-    def img_height(self) -> int:
-        return self.cfg.data.image_orig_dims.height
+        # populate this variable after model predictions have been loaded
+        self.data_tags = None
 
     @property
     def num_keypoints(self) -> int:
@@ -143,6 +146,11 @@ class FiftyOneImagePlotter:
                 "model_%i" % i for i in range(len(self.pred_csv_files))
             ]
         return model_display_names
+
+    def img_height_width(self, idx) -> int:
+        img_path = self.image_paths[idx]
+        image = Image.open(img_path)
+        return image.height, image.width
 
     def dataset_info_print(self) -> str:
         # run after creating the dataset
@@ -170,10 +178,13 @@ class FiftyOneImagePlotter:
         # take the abs paths, and load the models into a dictionary
         self.model_preds_dict = {}
         self.preds_pandas_df_dict = {}
-        for model_name, pred_csv_file in zip(self.model_names, self.pred_csv_files):
+        for model_name, pred_csv_file_list in zip(self.model_names, self.pred_csv_files):
             # assuming that each path of saved logs has a predictions.csv file in it
             # always assume [1, 2] since our code generated the predictions
-            temp_df = pd.read_csv(pred_csv_file, header=[1, 2])
+            temp_df = []
+            for pred_csv_file in pred_csv_file_list:
+                temp_df.append(pd.read_csv(pred_csv_file, header=[1, 2]))
+            temp_df = pd.concat(temp_df)
             self.model_preds_dict[model_name] = dfConverter(temp_df, self.keypoints_to_plot)()
             self.preds_pandas_df_dict[model_name] = temp_df
 
@@ -181,6 +192,8 @@ class FiftyOneImagePlotter:
         self,
         data_dict: Dict[str, Dict[str, np.array]],
         frame_idx: int,
+        height: int,
+        width: int,
     ) -> List[fo.Keypoint]:
         # output: the positions of all keypoints in a single frame for a single model
         keypoints_list = []
@@ -190,8 +203,8 @@ class FiftyOneImagePlotter:
                 fo.Keypoint(
                     points=[
                         [
-                            data_dict[kp_name]["coords"][frame_idx, 0] / self.img_width,
-                            data_dict[kp_name]["coords"][frame_idx, 1] / self.img_height,
+                            data_dict[kp_name]["coords"][frame_idx, 0] / width,
+                            data_dict[kp_name]["coords"][frame_idx, 1] / height,
                         ]
                     ],
                     confidence=[data_dict[kp_name]["likelihood"][frame_idx]],
@@ -207,8 +220,9 @@ class FiftyOneImagePlotter:
         dataset_length = data_dict[self.keypoints_to_plot[0]]["coords"].shape[0]
         keypoints_list = []
         for img_idx in tqdm(range(dataset_length)):
+            img_height, img_width = self.img_height_width(img_idx)
             single_frame_keypoints_list = self.build_single_frame_keypoints(
-                data_dict=data_dict, frame_idx=img_idx
+                data_dict=data_dict, frame_idx=img_idx, height=img_height, width=img_width,
             )
             keypoints_list.append(fo.Keypoints(keypoints=single_frame_keypoints_list))
         return keypoints_list
@@ -228,7 +242,7 @@ class FiftyOneImagePlotter:
         self.load_model_predictions()
         # assumes that train,test,val split is identical for all the different models
         # may be different with ensembling
-        self.data_tags = get_image_tags(self.preds_pandas_df_dict[self.model_names[0]])
+        self.data_tags = get_image_tags(self.preds_pandas_df_dict[self.model_names[0]]).values
         # build the ground-truth keypoints per image
         gt_keypoints_list = self.get_gt_keypoints_list()
         # do the same for each model's predictions (lists are stored in a dict)
