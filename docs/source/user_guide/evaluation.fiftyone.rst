@@ -20,17 +20,13 @@ Run the following command from inside the ``lightning-pose`` directory
     python scripts/create_fiftyone_dataset.py \
     --config-path=<PATH/TO/YOUR/CONFIGS/DIR> \
     --config-name=<CONFIG_NAME.yaml> \
-    eval.fiftyone.dataset_to_create="images" \
     eval.fiftyone.dataset_name=<YOUR_DATASET_NAME> \
-    eval.fiftyone.build_speed="slow" \
     eval.hydra_paths=["</ABSOLUTE/PATH/TO/HYDRA/DIR/1>", "</ABSOLUTE/PATH/TO/HYDRA/DIR/1>"] \
     eval.fiftyone.model_display_names=["<NAME_FOR_MODEL_1>","<NAME_FOR_MODEL_2>"] \
     eval.fiftyone.launch_app_from_script=true
 
 * ``config-path/config-name``: these are used the same as the training and inference scripts
-* ``eval.fiftyone.dataset_to_create``: should always be "images"
 * ``eval.fiftyone.dataset_name``: unique name of ``FiftyOne.Dataset`` object
-* ``eval.fiftyone.build_speed``: should always be "slow"
 * ``eval.hydra_paths``: list of *absolute* paths to directories of the trained models you want to use for prediction. Each directory should contain a ``predictions.csv`` file.
 
   You can also use the relative form
