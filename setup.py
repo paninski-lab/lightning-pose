@@ -4,7 +4,7 @@ import subprocess
 
 from setuptools import find_packages, setup
 
-VERSION = "1.0.1"
+VERSION = "1.1.0"
 
 # add the README.md file to the long_description
 with open("README.md", "r") as fh:
