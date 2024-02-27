@@ -24,10 +24,9 @@ The config file contains several sections:
 Data parameters
 ===============
 
-* ``data.imaged_orig_dims.height/width``: the current version of Lightning Pose requires all training images to be the same size. We are working on an updated version without this requirement. However, if you plan to use the PCA losses (Pose PCA or multiview PCA) then all training images **must** be the same size, otherwise the PCA subspace will erroneously contain variance related to image size.
+* ``data.image_orig_dims.height/width``: the current version of Lightning Pose requires all training images to be the same size. We are working on an updated version without this requirement. However, if you plan to use the PCA losses (Pose PCA or multiview PCA) then all training images **must** be the same size, otherwise the PCA subspace will erroneously contain variance related to image size.
 
-* ``data.image_resize_dims.height/width``: images (and videos) will be resized to the specified height and width before being processed by the network. Supported values are {64, 128, 256, 384, 512}. The height and width need not be identical. Some points to keep in mind when selecting
-these values: if the resized images are too small, you will lose resolution/details; if they are too large, the model takes longer to train and might not train as well.
+* ``data.image_resize_dims.height/width``: images (and videos) will be resized to the specified height and width before being processed by the network. Supported values are {64, 128, 256, 384, 512}. The height and width need not be identical. Some points to keep in mind when selecting these values: if the resized images are too small, you will lose resolution/details; if they are too large, the model takes longer to train and might not train as well.
 
 * ``data.data_dir/video_dir``: update these to reflect your local paths
 
@@ -48,10 +47,13 @@ Below is a list of some commonly modified arguments related to model architectur
 * ``training.train_batch_size``: batch size for labeled data
 * ``training.min_epochs`` / ``training.max_epochs``: length of training
 * ``model.model_type``:
+
     * regression: model directly outputs an (x, y) prediction for each keypoint; not recommended
     * heatmap: model outputs a 2D heatmap for each keypoint
     * heatmap_mhcrnn: the "multi-head convolutional RNN", this model takes a temporal window of frames as input, and outputs two heatmaps: one "context-aware" and one "static". The prediction with the highest confidence is automatically chosen.
+
 * ``model.losses_to_use``: defines the unsupervised losses. An empty list indicates a fully supervised model. Each element of the list corresponds to an unsupervised loss. For example, ``model.losses_to_use=[pca_multiview,temporal]`` will fit both a pca_multiview loss and a temporal loss. Options include:
+
     * pca_multiview: penalize inconsistencies between multiple camera views
     * pca_singleview: penalize implausible body configurations
     * temporal: penalize large temporal jumps
