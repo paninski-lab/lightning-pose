@@ -1,5 +1,5 @@
 """Test the FiftyOne module."""
-
+from datetime import datetime
 import os
 import shutil
 
@@ -13,7 +13,8 @@ def test_fiftyone_image_plotter(cfg, tmpdir):
     # copy ground truth labels to a "predictions" file
     data_dir_abs = os.path.abspath(cfg.data.data_dir)
     gt_file = os.path.join(data_dir_abs, cfg.data.csv_file)
-    model_dir = os.path.join(tmpdir, "date", "time")
+    model_name = datetime.today().strftime("%Y-%m-%d/%H-%M-%S_PYTEST")
+    model_dir = os.path.join(tmpdir, model_name)
     os.makedirs(model_dir, exist_ok=True)
     pred_file = os.path.join(model_dir, "predictions.csv")
     shutil.copyfile(gt_file, pred_file)
@@ -29,7 +30,7 @@ def test_fiftyone_image_plotter(cfg, tmpdir):
     cfg_new.data.data_dir = data_dir_abs
     cfg_new.eval.model_display_names = ["test_model"]
     cfg_new.eval.hydra_paths = [model_dir]
-    cfg_new.eval.fiftyone.dataset_name = str(tmpdir)  # get unique dataset name
+    cfg_new.eval.fiftyone.dataset_name = str(model_dir)  # get unique dataset name
 
     # make fiftyone dataset and check
     plotter = FiftyOneImagePlotter(cfg=cfg_new)
