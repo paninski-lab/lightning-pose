@@ -1,7 +1,7 @@
 """Test the FiftyOne module."""
-from datetime import datetime
 import os
 import shutil
+from datetime import datetime
 
 import pandas as pd
 
