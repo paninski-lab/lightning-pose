@@ -669,7 +669,7 @@ def load_model_from_checkpoint(
                 )
             )
         # load weights
-        state_dict = torch.load(ckpt_file)
+        state_dict = torch.load(ckpt_file)["state_dict"]
         # put weights into model
         model.load_state_dict(state_dict, strict=False)
     else:
