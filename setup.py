@@ -5,7 +5,7 @@ import subprocess
 
 from setuptools import find_packages, setup
 
-VERSION = "1.2.1"
+VERSION = "1.2.2"
 
 # add the README.md file to the long_description
 with open("README.md", "r") as fh:
@@ -92,9 +92,9 @@ extras_require = {
 
 # collect all data and script files
 data_files = []
-for root, dirs, files in os.walk("lightning_pose/data"):
+for root, dirs, files in os.walk("data"):
     data_files.extend([os.path.join(root, f) for f in files])
-for root, dirs, files in os.walk("lightning_pose/scripts"):
+for root, dirs, files in os.walk("scripts"):
     data_files.extend([os.path.join(root, f) for f in files])
 
 
@@ -111,6 +111,6 @@ setup(
     author_email="danbider@gmail.com",
     url="https://github.com/danbider/lightning-pose",
     keywords=["machine learning", "deep learning", "computer_vision"],
-    package_data={"lightning_pose": data_files},
+    package_data={"": data_files},
     include_package_data=True,
 )
