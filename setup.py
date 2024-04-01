@@ -89,6 +89,13 @@ extras_require = {
     },
 }
 
+# collect all data and script files
+data_files = []
+for root, dirs, files in os.walk("lightning_pose/data"):
+    data_files.extend([join(root, f) for f in files])
+for root, dirs, files in os.walk("lightning_pose/scripts"):
+    data_files.extend([join(root, f) for f in files])
+
 
 setup(
     name="lightning-pose",
@@ -103,4 +110,6 @@ setup(
     author_email="danbider@gmail.com",
     url="https://github.com/danbider/lightning-pose",
     keywords=["machine learning", "deep learning", "computer_vision"],
+    package_data={"lightning_pose": data_files},
+    include_package_data=True,
 )
