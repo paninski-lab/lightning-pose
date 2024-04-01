@@ -1,10 +1,11 @@
 
 import re
+import os
 import subprocess
 
 from setuptools import find_packages, setup
 
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 
 # add the README.md file to the long_description
 with open("README.md", "r") as fh:
@@ -69,7 +70,7 @@ install_requires = [
     "typing",
     dali,
     # PyPI does not support direct dependencies, so we remove this line before uploading from PyPI
-    "segment_anything @ git+https://github.com/facebookresearch/segment-anything.git",
+    # "segment_anything @ git+https://github.com/facebookresearch/segment-anything.git",
 ]
 
 # additional requirements
@@ -92,9 +93,9 @@ extras_require = {
 # collect all data and script files
 data_files = []
 for root, dirs, files in os.walk("lightning_pose/data"):
-    data_files.extend([join(root, f) for f in files])
+    data_files.extend([os.path.join(root, f) for f in files])
 for root, dirs, files in os.walk("lightning_pose/scripts"):
-    data_files.extend([join(root, f) for f in files])
+    data_files.extend([os.path.join(root, f) for f in files])
 
 
 setup(
