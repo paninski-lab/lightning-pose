@@ -1,5 +1,6 @@
 """Functions for predicting keypoints on labeled datasets and unlabeled videos."""
 
+import datetime
 import gc
 import os
 import time
@@ -709,6 +710,7 @@ def make_cmap(number_colors: int, cmap: str = "cool"):
     return colors
 
 
+@typechecked
 def create_labeled_video(
     clip: VideoFileClip,
     xs_arr: np.ndarray,
@@ -718,6 +720,7 @@ def create_labeled_video(
     colormap: str = "cool",
     fps: Optional[float] = None,
     filename: str = "movie.mp4",
+    start_time: float = 0.0,
 ) -> None:
     """Helper function for creating annotated videos.
 
@@ -730,6 +733,7 @@ def create_labeled_video(
         colormap: matplotlib color map for markers
         fps: None to default to fps of original video
         filename: video file name
+        start_time: time (in seconds) of video start
 
     """
 
@@ -738,38 +742,103 @@ def create_labeled_video(
 
     n_frames, n_keypoints = xs_arr.shape
 
-    # Set colormap for each color
+    # set colormap for each color
     colors = make_cmap(n_keypoints, cmap=colormap)
 
+    # extract info from clip
     nx, ny = clip.size
     dur = int(clip.duration - clip.start)
     fps_og = clip.fps
 
+    # upsample clip if low resolution; need to do this for dots and text to look nice
+    if nx <= 100 or ny <= 100:
+        upsample_factor = 2.5
+    elif nx <= 192 or ny <= 192:
+        upsample_factor = 2
+    else:
+        upsample_factor = 1
+
+    if upsample_factor > 1:
+        clip = clip.resize((upsample_factor * nx, upsample_factor * ny))
+        nx, ny = clip.size
+
     print(f"Duration of video [s]: {np.round(dur, 2)}, recorded at {np.round(fps_og, 2)} fps!")
 
+    def seconds_to_hms(seconds):
+        # Convert seconds to a timedelta object
+        td = datetime.timedelta(seconds=seconds)
+
+        # Extract hours, minutes, and seconds from the timedelta object
+        hours = td // datetime.timedelta(hours=1)
+        minutes = (td // datetime.timedelta(minutes=1)) % 60
+        seconds = td % datetime.timedelta(minutes=1)
+
+        # Format the hours, minutes, and seconds into a string
+        hms_str = f"{hours:02}:{minutes:02}:{seconds.seconds:02}"
+
+        return hms_str
+
     # add marker to each frame t, where t is in sec
-    def add_marker(get_frame, t):
+    def add_marker_and_timestamps(get_frame, t):
         image = get_frame(t * 1.0)
         # frame [ny x ny x 3]
         frame = image.copy()
         # convert from sec to indices
         index = int(np.round(t * 1.0 * fps_og))
+        # ----------------
+        # markers
+        # ----------------
         for bpindex in range(n_keypoints):
             if index >= n_frames:
                 print("Skipped frame {}, marker {}".format(index, bpindex))
                 continue
             if mask_array[index, bpindex]:
-                xc = min(int(xs_arr[index, bpindex]), nx - 1)
-                yc = min(int(ys_arr[index, bpindex]), ny - 1)
+                xc = min(int(upsample_factor * xs_arr[index, bpindex]), nx - 1)
+                yc = min(int(upsample_factor * ys_arr[index, bpindex]), ny - 1)
                 frame = cv2.circle(
                     frame,
                     center=(xc, yc),
                     radius=dotsize,
                     color=colors[bpindex].tolist(),
-                    thickness=-1
+                    thickness=-1,
                 )
+        # ----------------
+        # timestamps
+        # ----------------
+        seconds_from_start = t + start_time
+        time_from_start = seconds_to_hms(seconds_from_start)
+        idx_from_start = int(np.round(seconds_from_start * 1.0 * fps_og))
+        text = f"t={time_from_start}, frame={idx_from_start}"
+        # define text info
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.5
+        font_thickness = 1
+        # calculate the size of the text
+        text_size = cv2.getTextSize(text, font, font_scale, font_thickness)[0]
+        # calculate the position of the text in the lower-left corner
+        offset = 6
+        text_x = offset  # offset from the left
+        text_y = frame.shape[0] - offset  # offset from the bottom
+        # make black rectangle with a small padding of offset / 2 pixels
+        cv2.rectangle(
+            frame,
+            (text_x - int(offset / 2), text_y + int(offset / 2)),
+            (text_x + text_size[0] + int(offset / 2), text_y - text_size[1] - int(offset / 2)),
+            (0, 0, 0),  # rectangle color
+            cv2.FILLED,
+        )
+        cv2.putText(
+            frame,
+            text,
+            (text_x, text_y),
+            font,
+            font_scale,
+            (255, 255, 255),  # font color
+            font_thickness,
+            lineType=cv2.LINE_AA,
+        )
         return frame
 
-    clip_marked = clip.fl(add_marker)
+    clip_marked = clip.fl(add_marker_and_timestamps)
     clip_marked.write_videofile(filename, codec="libx264", fps=fps or fps_og or 20.0)
     clip_marked.close()
