@@ -33,6 +33,7 @@ extensions = [
     'sphinx.ext.githubpages',  # allows integration with github
     'sphinx_automodapi.automodapi',
     'sphinx_copybutton',  # add copy button to code blocks
+    'sphinx_design',  # dropdowns
     'sphinx_rtd_dark_mode',
 ]
 

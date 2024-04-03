@@ -84,6 +84,7 @@ extras_require = {
         "sphinx-rtd-dark-mode",
         "sphinx-automodapi",
         "sphinx-copybutton",
+        "sphinx-design",
     },
     "extra_models": {
         "lightning-bolts",  # resnet-50 trained on imagenet using simclr
