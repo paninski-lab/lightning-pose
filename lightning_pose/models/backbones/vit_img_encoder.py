@@ -91,7 +91,7 @@ class ImageEncoderViT_FT(ImageEncoderViT):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.patch_embed(x)
         if self.pos_embed is not None:
-            if self.img_size != self.finetune_img_size:
+            if x.shape != self.pos_embed.shape:
                 self.pos_embed = resample_abs_pos_embed_nhwc(
                     posemb=self.pos_embed,
                     new_size=[

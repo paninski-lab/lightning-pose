@@ -56,9 +56,9 @@ training:
   # batch size of labeled data during test
   test_batch_size: 32
   # fraction of labeled data used for training
-  train_prob: 0.8
+  train_prob: 0.95
   # fraction of labeled data used for validation (remaining used for test)
-  val_prob: 0.1
+  val_prob: 0.05
   # <=1 - fraction of total train frames (determined by `train_prob`) used for training
   # >1 - number of total train frames used for training
   train_frames: 1

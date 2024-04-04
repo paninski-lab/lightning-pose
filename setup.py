@@ -1,10 +1,11 @@
 
 import re
+import os
 import subprocess
 
 from setuptools import find_packages, setup
 
-VERSION = "1.0.1"
+VERSION = "1.2.3"
 
 # add the README.md file to the long_description
 with open("README.md", "r") as fh:
@@ -83,16 +84,16 @@ extras_require = {
         "sphinx-rtd-dark-mode",
         "sphinx-automodapi",
         "sphinx-copybutton",
+        "sphinx-design",
     },
     "extra_models": {
         "lightning-bolts",  # resnet-50 trained on imagenet using simclr
     },
 }
 
-
 setup(
     name="lightning-pose",
-    packages=find_packages(exclude=("data", "docs", "scripts", "tests")),
+    packages=find_packages() + ["mirror_mouse_example"],  # include data for wheel packaging
     version=VERSION,
     description="Semi-supervised pose estimation using pytorch lightning",
     long_description=long_description,
@@ -103,4 +104,9 @@ setup(
     author_email="danbider@gmail.com",
     url="https://github.com/danbider/lightning-pose",
     keywords=["machine learning", "deep learning", "computer_vision"],
+    package_dir={
+        "lightning_pose": "lightning_pose",
+        "mirror_mouse_example": "data/mirror-mouse-example",  # remap 'data/mirror-mouse-example'
+    },
+    include_package_data=True,  # required to get the non-.py data files in the wheel
 )
