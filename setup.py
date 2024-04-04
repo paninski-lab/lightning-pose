@@ -5,7 +5,7 @@ import subprocess
 
 from setuptools import find_packages, setup
 
-VERSION = "1.2.2"
+VERSION = "1.2.3"
 
 # add the README.md file to the long_description
 with open("README.md", "r") as fh:
@@ -70,7 +70,7 @@ install_requires = [
     "typing",
     dali,
     # PyPI does not support direct dependencies, so we remove this line before uploading from PyPI
-    # "segment_anything @ git+https://github.com/facebookresearch/segment-anything.git",
+    "segment_anything @ git+https://github.com/facebookresearch/segment-anything.git",
 ]
 
 # additional requirements
@@ -91,17 +91,9 @@ extras_require = {
     },
 }
 
-# collect all data and script files
-data_files = []
-for root, dirs, files in os.walk("data"):
-    data_files.extend([os.path.join(root, f) for f in files])
-for root, dirs, files in os.walk("scripts"):
-    data_files.extend([os.path.join(root, f) for f in files])
-
-
 setup(
     name="lightning-pose",
-    packages=find_packages(exclude=("data", "docs", "scripts", "tests")),
+    packages=find_packages() + ["mirror_mouse_example"],  # include data for wheel packaging
     version=VERSION,
     description="Semi-supervised pose estimation using pytorch lightning",
     long_description=long_description,
@@ -112,6 +104,9 @@ setup(
     author_email="danbider@gmail.com",
     url="https://github.com/danbider/lightning-pose",
     keywords=["machine learning", "deep learning", "computer_vision"],
-    package_data={"": data_files},
-    include_package_data=True,
+    package_dir={
+        "lightning_pose": "lightning_pose",
+        "mirror_mouse_example": "data/mirror-mouse-example",  # remap 'data/mirror-mouse-example'
+    },
+    include_package_data=True,  # required to get the non-.py data files in the wheel
 )
