@@ -18,6 +18,7 @@ from lightning_pose.utils.io import (
 )
 from lightning_pose.utils.predictions import load_model_from_checkpoint
 from lightning_pose.utils.scripts import (
+    compute_metrics,
     export_predictions_and_labeled_video,
     get_data_module,
     get_dataset,
@@ -74,12 +75,13 @@ class VideoPredPathHandler:
         assert os.path.isdir(self.save_preds_dir)
 
     def build_pred_file_basename(self, extra_str="") -> str:
-        return "%s_%s%s%s.csv" % (
-            self.video_basename,
-            self.model_cfg.model.model_type,
-            self.loss_str,
-            extra_str,
-        )
+        # return "%s_%s%s%s.csv" % (
+        #     self.video_basename,
+        #     self.model_cfg.model.model_type,
+        #     self.loss_str,
+        #     extra_str,
+        # )
+        return f"{self.video_basename}.csv"
 
     def __call__(self, extra_str="") -> str:
         pred_file_basename = self.build_pred_file_basename(extra_str=extra_str)
@@ -115,8 +117,13 @@ def predict_videos_in_dir(cfg: DictConfig):
         # absolute_cfg_path will be the path of the trained model we're using for predictions
         absolute_cfg_path = return_absolute_path(hydra_relative_path, n_dirs_back=2)
 
+        # debug
+        print(f"\n\n{absolute_cfg_path = }\n\n")
+
         # load model
-        model_cfg = OmegaConf.load(os.path.join(absolute_cfg_path, ".hydra/config.yaml"))
+        model_cfg = OmegaConf.load(
+            os.path.join(absolute_cfg_path, ".hydra/config.yaml")
+        )
         ckpt_file = ckpt_path_from_base_path(
             base_path=absolute_cfg_path, model_name=model_cfg.model.model_name
         )
@@ -127,7 +134,9 @@ def predict_videos_in_dir(cfg: DictConfig):
         print("getting imgaug transform...")
         imgaug_transform = get_imgaug_transform(cfg=cfg)
         print("getting dataset...")
-        dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
+        dataset = get_dataset(
+            cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform
+        )
         print("getting data module...")
         data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
 
@@ -136,10 +145,14 @@ def predict_videos_in_dir(cfg: DictConfig):
             # save to where the videos are. may get an exception
             save_preds_dir = cfg.eval.test_videos_directory
         else:
-            save_preds_dir = return_absolute_path(cfg.eval.saved_vid_preds_dir, n_dirs_back=3)
+            save_preds_dir = return_absolute_path(
+                cfg.eval.saved_vid_preds_dir, n_dirs_back=3
+            )
 
         # loop over videos in a provided directory
-        video_files = get_videos_in_dir(return_absolute_path(cfg.eval.test_videos_directory))
+        video_files = get_videos_in_dir(
+            return_absolute_path(cfg.eval.test_videos_directory)
+        )
 
         for video_file in video_files:
 
@@ -155,6 +168,9 @@ def predict_videos_in_dir(cfg: DictConfig):
             else:
                 labeled_mp4_file = None
 
+            # debug
+            print(f"\n\n{prediction_csv_file = }\n\n")
+
             export_predictions_and_labeled_video(
                 video_file=video_file,
                 cfg=cfg,
@@ -164,7 +180,21 @@ def predict_videos_in_dir(cfg: DictConfig):
                 trainer=trainer,
                 model=model,
                 data_module=data_module,
+                save_heatmaps=cfg.eval.get(
+                    "predict_vids_after_training_save_heatmaps", False
+                ),
             )
+
+            # compute and save various metrics
+            try:
+                compute_metrics(
+                    cfg=cfg,
+                    preds_file=prediction_csv_file,
+                    data_module=data_module,
+                )
+            except Exception as e:
+                print(f"Error predicting on video {video_file}:\n{e}")
+                continue
 
 
 if __name__ == "__main__":
