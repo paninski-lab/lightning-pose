@@ -95,6 +95,8 @@ model:
   heatmap_loss_type: mse
   # directory name for model saving
   model_name: test
+  # load model from checkpoint
+  checkpoint: null
 
 dali:
   general:
