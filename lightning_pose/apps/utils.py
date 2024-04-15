@@ -16,7 +16,7 @@ pcasv_error_key = "pca singleview"
 
 
 @st.cache_resource
-def update_labeled_file_list(model_preds_folders: list, use_ood: bool = False):
+def update_labeled_file_list(model_preds_folders: List[str], use_ood: bool = False) -> List[list]:
     per_model_preds = []
     for model_pred_folder in model_preds_folders:
         # pull labeled results from each model folder
@@ -40,15 +40,19 @@ def update_labeled_file_list(model_preds_folders: list, use_ood: bool = False):
 
 
 @st.cache_resource
-def update_vid_metric_files_list(video: str, model_preds_folders: list):
+def update_vid_metric_files_list(
+    video: str,
+    model_preds_folders: List[str],
+    video_subdir: str = "video_preds",
+) -> List[list]:
     per_vid_preds = []
     for model_preds_folder in model_preds_folders:
         # pull each prediction file associated with a particular video
         # wrap in Path so that it looks like an UploadedFile object
         model_preds = [
             f
-            for f in os.listdir(os.path.join(model_preds_folder, "video_preds"))
-            if os.path.isfile(os.path.join(model_preds_folder, "video_preds", f))
+            for f in os.listdir(os.path.join(model_preds_folder, video_subdir))
+            if os.path.isfile(os.path.join(model_preds_folder, video_subdir, f))
         ]
         ret_files = []
         for file in model_preds:
@@ -59,7 +63,7 @@ def update_vid_metric_files_list(video: str, model_preds_folders: list):
 
 
 @st.cache_resource
-def get_all_videos(model_preds_folders: list):
+def get_all_videos(model_preds_folders: List[str], video_subdir: str = "video_preds") -> list:
     # find each video that is predicted on by the models
     # wrap in Path so that it looks like an UploadedFile object
     # returned by streamlit's file_uploader
@@ -67,8 +71,8 @@ def get_all_videos(model_preds_folders: list):
     for model_preds_folder in model_preds_folders:
         model_preds = [
             f
-            for f in os.listdir(os.path.join(model_preds_folder, "video_preds"))
-            if os.path.isfile(os.path.join(model_preds_folder, "video_preds", f))
+            for f in os.listdir(os.path.join(model_preds_folder, video_subdir))
+            if os.path.isfile(os.path.join(model_preds_folder, video_subdir, f))
         ]
         for file in model_preds:
             if "temporal" in file:
@@ -97,7 +101,7 @@ def concat_dfs(dframes: Dict[str, pd.DataFrame]) -> Tuple[pd.DataFrame, List[str
 
 
 @st.cache_data
-def get_df_box(df_orig, keypoint_names, model_names):
+def get_df_box(df_orig: pd.DataFrame, keypoint_names: list, model_names: list) -> pd.DataFrame:
     df_boxes = []
     for keypoint in keypoint_names:
         for model_curr in model_names:
@@ -112,7 +116,13 @@ def get_df_box(df_orig, keypoint_names, model_names):
 
 
 @st.cache_data
-def get_df_scatter(df_0, df_1, data_type, model_names, keypoint_names):
+def get_df_scatter(
+    df_0: pd.DataFrame,
+    df_1: pd.DataFrame,
+    data_type: str,
+    model_names: list,
+    keypoint_names: list
+) -> pd.DataFrame:
     df_scatters = []
     for keypoint in keypoint_names:
         df_scatters.append(
@@ -219,7 +229,7 @@ def compute_confidence(
 
 # ------------ utils related to model finding in dir ---------
 # write a function that finds all model folders in the model_dir
-def get_model_folders(model_dir):
+def get_model_folders(model_dir: str) -> List[str]:
     # strip trailing slash if present
     if model_dir[-1] == os.sep:
         model_dir = model_dir[:-1]
@@ -232,7 +242,7 @@ def get_model_folders(model_dir):
 
 
 # just to get the last two levels of the path
-def get_model_folders_vis(model_folders):
+def get_model_folders_vis(model_folders: List[str]) -> List[str]:
     fs = []
     for f in model_folders:
         fs.append(f.split("/")[-2:])
