@@ -4,7 +4,7 @@ import os
 
 import hydra
 import lightning.pytorch as pl
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf, open_dict
 
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
 from lightning_pose.utils.io import (
@@ -29,6 +29,11 @@ from lightning_pose.utils.scripts import (
 @hydra.main(config_path="configs", config_name="config_mirror-mouse-example")
 def train(cfg: DictConfig):
     """Main fitting function, accessed from command line."""
+
+    # record lightning-pose version
+    from lightning_pose import __version__ as lightning_pose_version
+    with open_dict(cfg):
+        cfg.model.lightning_pose_version = lightning_pose_version
 
     print("Our Hydra config file:")
     pretty_print_cfg(cfg)
@@ -96,6 +101,10 @@ def train(cfg: DictConfig):
     # check if best_ckpt is a file
     if not os.path.isfile(best_ckpt):
         raise FileNotFoundError("Cannot find checkpoint. Have you trained for too few epochs?")
+    # save config file
+    cfg_file_local = os.path.join(hydra_output_directory, "config.yaml")
+    with open(cfg_file_local, "w") as fp:
+        OmegaConf.save(config=cfg, f=fp.name)
 
     # make unaugmented data_loader if necessary
     if cfg.training.imgaug != "default":

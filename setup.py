@@ -1,15 +1,25 @@
 
 import re
 import os
+from pathlib import Path
 import subprocess
 
 from setuptools import find_packages, setup
 
-VERSION = "1.2.3"
 
-# add the README.md file to the long_description
-with open("README.md", "r") as fh:
-    long_description = fh.read()
+def read(rel_path):
+    here = Path(__file__).parent.absolute()
+    with open(here.joinpath(rel_path), "r") as fp:
+        return fp.read()
+
+
+def get_version(rel_path):
+    for line in read(rel_path).splitlines():
+        if line.startswith("__version__"):
+            delim = '"' if '"' in line else "'"
+            return line.split(delim)[1]
+    else:
+        raise RuntimeError("Unable to find version string.")
 
 
 def get_cuda_version():
@@ -28,7 +38,6 @@ def get_cuda_version():
 
 cuda_version = get_cuda_version()
 
-
 if cuda_version is not None:
     if 11.0 <= cuda_version < 12.0:
         dali = "nvidia-dali-cuda110"
@@ -43,6 +52,10 @@ else:
 
 print(f"Found CUDA version: {cuda_version}, using DALI: {dali}")
 
+
+# add the README.md file to the long_description
+with open("README.md", "r") as fh:
+    long_description = fh.read()
 
 # basic requirements
 install_requires = [
@@ -94,7 +107,7 @@ extras_require = {
 setup(
     name="lightning-pose",
     packages=find_packages() + ["mirror_mouse_example"],  # include data for wheel packaging
-    version=VERSION,
+    version=get_version(Path("lightning_pose").joinpath("__init__.py")),
     description="Semi-supervised pose estimation using pytorch lightning",
     long_description=long_description,
     long_description_content_type="text/markdown",
