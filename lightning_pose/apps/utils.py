@@ -147,7 +147,7 @@ def get_full_name(keypoint: str, coordinate: str, model: str) -> str:
 # ----------------------------------------------
 @st.cache_data
 def build_precomputed_metrics_df(
-    dframes: Dict[str, pd.DataFrame], keypoint_names: List[str], **kwargs
+    dframes: Dict[str, pd.DataFrame], keypoint_names: List[str], **kwargs,
 ) -> dict:
     concat_dfs = defaultdict(list)
     for model_name, df_dict in dframes.items():
@@ -179,7 +179,7 @@ def build_precomputed_metrics_df(
 
 @st.cache_data
 def get_precomputed_error(
-    df: pd.DataFrame, keypoint_names: List[str], model_name: str
+    df: pd.DataFrame, keypoint_names: List[str], model_name: str,
 ) -> pd.DataFrame:
     # collect results
     df_ = df
@@ -192,17 +192,17 @@ def get_precomputed_error(
 
 @st.cache_data
 def compute_confidence(
-    df: pd.DataFrame, keypoint_names: List[str], model_name: str, **kwargs
+    df: pd.DataFrame, keypoint_names: List[str], model_name: str, **kwargs,
 ) -> pd.DataFrame:
+
     if df.shape[1] % 3 == 1:
-        # get rid of "set" column if present
-        tmp = df.iloc[:, :-1].to_numpy().reshape(df.shape[0], -1, 3)
+        # collect "set" column if present
         set = df.iloc[:, -1].to_numpy()
     else:
-        tmp = df.to_numpy().reshape(df.shape[0], -1, 3)
         set = None
 
-    results = tmp[:, :, 2]
+    mask = df.columns.get_level_values("coords").isin(["likelihood"])
+    results = df.loc[:, mask].to_numpy()
 
     # collect results
     df_ = pd.DataFrame(columns=keypoint_names)
