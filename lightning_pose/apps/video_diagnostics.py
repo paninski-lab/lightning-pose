@@ -218,7 +218,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--model_dir", type=str, default=[])
-    parser.add_argumnet("--video_subdir", type=str, default="video_preds")
+    parser.add_argument("--video_subdir", type=str, default="video_preds")
     parser.add_argument("--make_dir", action="store_true", default=False)
 
     run()
