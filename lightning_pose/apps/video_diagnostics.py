@@ -97,9 +97,7 @@ def run():
                     dframe = pd.read_csv(model_pred_file_path, index_col=None)
                     dframes_metrics[model_name][str(model_pred_file)] = dframe
                 else:
-                    dframe = pd.read_csv(
-                        model_pred_file_path, header=[1, 2], index_col=0
-                    )
+                    dframe = pd.read_csv(model_pred_file_path, header=[1, 2], index_col=0)
                     dframes_traces[model_name] = dframe
                     dframes_metrics[model_name]["confidence"] = dframe
                 # data_types = dframe.iloc[:, -1].unique()

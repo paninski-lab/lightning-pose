@@ -49,10 +49,11 @@ def update_vid_metric_files_list(
     for model_preds_folder in model_preds_folders:
         # pull each prediction file associated with a particular video
         # wrap in Path so that it looks like an UploadedFile object
+        video_dir = os.path.join(model_preds_folder, video_subdir)
+        if not os.path.isdir(video_dir):
+            continue
         model_preds = [
-            f
-            for f in os.listdir(os.path.join(model_preds_folder, video_subdir))
-            if os.path.isfile(os.path.join(model_preds_folder, video_subdir, f))
+            f for f in os.listdir(video_dir) if os.path.isfile(os.path.join(video_dir, f))
         ]
         ret_files = []
         for file in model_preds:
@@ -69,10 +70,11 @@ def get_all_videos(model_preds_folders: List[str], video_subdir: str = "video_pr
     # returned by streamlit's file_uploader
     ret_videos = set()
     for model_preds_folder in model_preds_folders:
+        video_dir = os.path.join(model_preds_folder, video_subdir)
+        if not os.path.isdir(video_dir):
+            continue
         model_preds = [
-            f
-            for f in os.listdir(os.path.join(model_preds_folder, video_subdir))
-            if os.path.isfile(os.path.join(model_preds_folder, video_subdir, f))
+            f for f in os.listdir(video_dir) if os.path.isfile(os.path.join(video_dir, f))
         ]
         for file in model_preds:
             if "temporal" in file:
