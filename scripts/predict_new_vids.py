@@ -49,38 +49,11 @@ class VideoPredPathHandler:
     def video_basename(self) -> str:
         return os.path.basename(self.video_file).split(".")[0]
 
-    @property
-    def loss_str(self) -> str:
-        semi_supervised = check_if_semi_supervised(self.model_cfg.model.losses_to_use)
-        loss_names = []
-        loss_weights = []
-        loss_str = ""
-        if semi_supervised:  # add the loss names and weights
-            loss_str = ""
-            if len(self.model_cfg.model.losses_to_use) > 0:
-                loss_names = list(self.model_cfg.model.losses_to_use)
-                for loss in loss_names:
-                    loss_weights.append(self.model_cfg.losses[loss]["log_weight"])
-
-                loss_str = ""
-                for loss, weight in zip(loss_names, loss_weights):
-                    loss_str += "_" + loss + "_" + str(weight)
-
-            else:  # fully supervised, return empty string
-                loss_str = ""
-        return loss_str
-
     def check_input_paths(self) -> None:
         assert os.path.isfile(self.video_file)
         assert os.path.isdir(self.save_preds_dir)
 
     def build_pred_file_basename(self, extra_str="") -> str:
-        # return "%s_%s%s%s.csv" % (
-        #     self.video_basename,
-        #     self.model_cfg.model.model_type,
-        #     self.loss_str,
-        #     extra_str,
-        # )
         return f"{self.video_basename}.csv"
 
     def __call__(self, extra_str="") -> str:
@@ -117,13 +90,8 @@ def predict_videos_in_dir(cfg: DictConfig):
         # absolute_cfg_path will be the path of the trained model we're using for predictions
         absolute_cfg_path = return_absolute_path(hydra_relative_path, n_dirs_back=2)
 
-        # debug
-        print(f"\n\n{absolute_cfg_path = }\n\n")
-
         # load model
-        model_cfg = OmegaConf.load(
-            os.path.join(absolute_cfg_path, ".hydra/config.yaml")
-        )
+        model_cfg = OmegaConf.load(os.path.join(absolute_cfg_path, ".hydra/config.yaml"))
         ckpt_file = ckpt_path_from_base_path(
             base_path=absolute_cfg_path, model_name=model_cfg.model.model_name
         )
@@ -134,9 +102,7 @@ def predict_videos_in_dir(cfg: DictConfig):
         print("getting imgaug transform...")
         imgaug_transform = get_imgaug_transform(cfg=cfg)
         print("getting dataset...")
-        dataset = get_dataset(
-            cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform
-        )
+        dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
         print("getting data module...")
         data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
 
@@ -145,14 +111,10 @@ def predict_videos_in_dir(cfg: DictConfig):
             # save to where the videos are. may get an exception
             save_preds_dir = cfg.eval.test_videos_directory
         else:
-            save_preds_dir = return_absolute_path(
-                cfg.eval.saved_vid_preds_dir, n_dirs_back=3
-            )
+            save_preds_dir = return_absolute_path(cfg.eval.saved_vid_preds_dir, n_dirs_back=3)
 
         # loop over videos in a provided directory
-        video_files = get_videos_in_dir(
-            return_absolute_path(cfg.eval.test_videos_directory)
-        )
+        video_files = get_videos_in_dir(return_absolute_path(cfg.eval.test_videos_directory))
 
         for video_file in video_files:
 
@@ -180,9 +142,7 @@ def predict_videos_in_dir(cfg: DictConfig):
                 trainer=trainer,
                 model=model,
                 data_module=data_module,
-                save_heatmaps=cfg.eval.get(
-                    "predict_vids_after_training_save_heatmaps", False
-                ),
+                save_heatmaps=cfg.eval.get("predict_vids_after_training_save_heatmaps", False),
             )
 
             # compute and save various metrics
