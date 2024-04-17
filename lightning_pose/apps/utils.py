@@ -53,7 +53,8 @@ def update_vid_metric_files_list(
         if not os.path.isdir(video_dir):
             continue
         model_preds = [
-            f for f in os.listdir(video_dir) if os.path.isfile(os.path.join(video_dir, f))
+            f for f in os.listdir(video_dir) if
+            (os.path.isfile(os.path.join(video_dir, f)) and f.endswith(".csv"))
         ]
         ret_files = []
         for file in model_preds:
@@ -74,7 +75,8 @@ def get_all_videos(model_preds_folders: List[str], video_subdir: str = "video_pr
         if not os.path.isdir(video_dir):
             continue
         model_preds = [
-            f for f in os.listdir(video_dir) if os.path.isfile(os.path.join(video_dir, f))
+            f for f in os.listdir(video_dir) if
+            (os.path.isfile(os.path.join(video_dir, f)) and f.endswith(".csv"))
         ]
         for file in model_preds:
             if "temporal" in file:

@@ -57,7 +57,7 @@ def run():
     selected_models_vis = st.sidebar.multiselect("Select models", model_folders_vis, default=None)
 
     # append this to full path
-    selected_models = ["/" + os.path.join(args.model_dir, f) for f in selected_models_vis]
+    selected_models = [os.path.join(args.model_dir, f) for f in selected_models_vis]
 
     # ----- selecting videos to analyze -----
     all_videos_: list = get_all_videos(selected_models, video_subdir=args.video_subdir)
@@ -85,7 +85,7 @@ def run():
 
             for model_pred_file in model_pred_files:
                 model_pred_file_path = os.path.join(
-                    model_folder, "video_preds", model_pred_file
+                    model_folder, args.video_subdir, model_pred_file
                 )
                 if not isinstance(model_pred_file, Path):
                     model_pred_file.seek(0)  # reset buffer after reading
