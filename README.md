@@ -6,7 +6,6 @@
 ![PyPI](https://img.shields.io/pypi/v/lightning-pose)
 
 Pose estimation models implemented in **Pytorch Lightning**, supporting massively accelerated training on _unlabeled_ videos using **NVIDIA DALI**. 
-The whole process is orchestrated by **Hydra**. 
 Models can be evaluated with **TensorBoard**, **FiftyOne**, and **Streamlit**.
 
 Preprint: [Lightning Pose: improved animal pose estimation via semi-supervised learning, Bayesian ensembling, and cloud-native open-source tools](https://www.biorxiv.org/content/10.1101/2023.04.28.538703v1)
@@ -26,6 +25,11 @@ _already labeled data_ and unlabeled video clips.
 We also offer a [browser-based application](https://github.com/Lightning-Universe/Pose-app) that 
 supports the full life cycle of a pose estimation project, from data annotation to model training 
 to diagnostic visualizations.
+
+The Lightning Pose team also actively develops the 
+[Ensemble Kalman Smoother (EKS)](https://github.com/paninski-lab/eks), 
+a simple and performant post-processor that works with any pose estimation package including 
+Lightning Pose, DeepLabCut, and SLEAP.
 
 ## Community
 
