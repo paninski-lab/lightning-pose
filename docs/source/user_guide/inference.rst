@@ -53,3 +53,8 @@ or override these arguments in the command line:
 .. code-block:: console
 
     python scripts/predict_new_vids.py --config-path=<PATH/TO/YOUR/CONFIGS/DIR> --config-name=<CONFIG_NAME.yaml> eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"] eval.test_videos_directory=/absolute/path/to/videos eval.saved_vid_preds_dir=/absolute/path/to/dir
+
+.. note::
+
+  Videos *must* be mp4 files that use the h.264 codec; see more information in the
+  :ref:`FAQs<faq_video_formats>`.

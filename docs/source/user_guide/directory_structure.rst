@@ -21,11 +21,21 @@ Lightning Pose assumes the following project directory structure, as in the exam
       ├── <VIDEO_DIR>/
       └── <YOUR_LABELED_FRAMES>.csv
 
-* ``<YOUR_LABELED_FRAMES>.csv``: a table with keypoint labels (rows: frames; columns: keypoints). Note that this file can take any name, and needs to be specified in the config file under ``data.csv_file``.
+* ``<YOUR_LABELED_FRAMES>.csv``: a table with keypoint labels (rows: frames; columns: keypoints).
+  Note that this file can take any name, and needs to be specified in the config file under
+  ``data.csv_file``.
 
-* ``<LABELED_DATA_DIR>/``: contains images that correspond to the labels, and can include subdirectories. The directory name, any subdirectory names, and image names are all flexible, as long as they are consistent with the first column of `<YOUR_LABELED_FRAMES>.csv`.
+* ``<LABELED_DATA_DIR>/``: contains images that correspond to the labels, and can include
+  subdirectories.
+  The directory name, any subdirectory names, and image names are all flexible, as long as they are
+  consistent with the first column of `<YOUR_LABELED_FRAMES>.csv`.
 
-* ``<VIDEO_DIR>/``: when training semi-supervised models, the videos in this directory will be used for computing the unsupervised losses. This directory can take any name, and needs to be specified in the config file under ``data.video_dir``.
+* ``<VIDEO_DIR>/``: when training semi-supervised models, the videos in this directory will be used
+  for computing the unsupervised losses.
+  This directory can take any name, and needs to be specified in the config file under
+  ``data.video_dir``.
+  Notes that videos *must* be mp4 files that use the h.264 codec; see more information in the
+  :ref:`FAQs<faq_video_formats>`.
 
 Converting DLC projects to Lightning Pose format
 ================================================
