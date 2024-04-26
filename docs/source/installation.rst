@@ -2,7 +2,7 @@
 Installation
 ############
 
-Lightning Pose can be installed as a Python package on Linux. Access to a GPU is required for the
+Lightning Pose can be installed as a Python package on Linux or Windows (using WSL, see below). Access to a GPU is required for the
 NVIDIA DALI dependency. You must have **CUDA 11.0-12.x** installed.
 If you have a Mac OS and would like to install Lightning Pose, please get in contact by
 `raising an issue <https://github.com/danbider/lightning-pose/issues>`_.
@@ -16,6 +16,8 @@ There are several installation methods:
 * :ref:`Lightning Studio <lightning_studio>` is a cloud-based environment that comes with Lightning Pose already installed. Requires creating a Lightning.ai account.
 
 Optionally, instructions are provided for :ref:`Docker users <docker_users>`.
+
+If you are a **Windows user**, please read `Windows Installation with WSL`_ first. 
 
 **Install ffmpeg**
 
@@ -160,6 +162,85 @@ Run code inside a container (following `this tutorial <https://docs.docker.com/g
 For a g4dn.xlarge AWS EC2 instance adding the flag ``--shm-size=256m`` will provide the necessary
 memory to execute.
 The ``--gpus all`` flag is necessary to allow Docker to access the required drivers for NVIDIA DALI to work properly.
+
+
+
+Windows Installation with WSL
+==============================
+
+* Windows Subsystem for Linux (WSL) is a Windows feature that enables users to run native Linux applications, containers, and command-line tools directly on Windows 10<. 
+* WSL support for GPU allows for these applications to benefit from GPU accelerated computing which is vital for the training of machine learning models like lightning-pose.
+
+*******************************
+Preparing for WSL installation
+*******************************
+
+1. Before installing WSL, ensure you have an appropriate NVIDIA driver for GPU support. This is the only driver you need to install. If you already utilise an NVIDIA GPU within your Windows system then you do not need to install an additional driver; WSL will automatically detect your existing installation. **do NOT install any Linux display driver within WSL.**
+
+`For further details on NVIDIA driver support and installation see here. <https://docs.nvidia.com/cuda/wsl-user-guide/index.html>`_  
+
+*******************************
+Installing WSL
+*******************************
+
+This installation is for WSL2. for the latest on WSL updates, see `here. <https://learn.microsoft.com/en-us/windows/wsl/about>`_
+
+2. Within a Windows PowerShell terminal (with admin privileges) run: 
+
+.. code-block:: console
+
+    wsl.exe --install
+
+3. Ensure you have the latest WSL kernel by running: 
+
+.. code-block:: console
+
+    wsl.exe --update
+
+4. Restart your computer. This is necessary for WSL Ubunta to take full effect. 
+
+5. Within the Windows terminal, open a Ubuntu terminal. A console will open and you will be asked to wait for files to de-compress and be stored on your machine. All future launches should take less than a second. 
+
+6. Once installed, within the Ubuntu terminal, you will be prompted to create a user account and password for your newly installed Linux distribution. *Note: when typing your password it will be invisible but it will be there!*
+
+**For more information on WSL see:**
+`Nvidia guidelines <https://docs.nvidia.com/cuda/wsl-user-guide/index.html>`_ , `WSL installation guide by Microsoft <https://learn.microsoft.com/en-us/windows/wsl/install>`_ , `Useful video tutorial <https://youtu.be/_fntjriRe48?si=vie0HJEjzjMucwmq>`_
+
+*******************************
+Optimising your WSL setup
+*******************************
+
+7. It is recommended that you follow the `Best practices for setting up a WSL development environment <https://learn.microsoft.com/en-us/windows/wsl/setup/environment>`_.
+
+8. Specifically, we advise setting up Windows terminal, Visual Studio code, and management with Git. 
+
+*********************************
+Setting up Lightning-pose in WSL
+*********************************
+
+9. Activate WSL within a Windows PowerShell terminal by running:
+
+.. code-block:: console
+
+    wsl
+
+10. `Install ffmpeg`_.
+
+11. follow the steps in `Method 2: conda from source`_.
+
+
+
+12. Remain inside your Lightning Pose environment and install the following packages:
+
+.. code-block:: console
+
+    sudo apt install python-is-python3 
+    sudo apt install libgl1-mesa-glx
+    sudo apt install ffmpeg
+
+*that's it!* - Lightning Pose should now function within WSL. 
+
+
 
 
 Getting help
