@@ -19,6 +19,8 @@ Optionally, instructions are provided for :ref:`Docker users <docker_users>`.
 
 If you are a **Windows user**, please first read :ref:`Windows Installation with WSL <windows_users>`.
 
+.. _install_ffmpeg:
+
 **Install ffmpeg**
 
 First, check to see if you have ``ffmpeg`` installed by typing the following in the terminal:
@@ -225,11 +227,9 @@ Setting up Lightning-pose in WSL
 
     wsl
 
-10. `Install ffmpeg`_.
+10. :ref:`Install ffmpeg<install_ffmpeg>`
 
 11. follow the steps in `Method 2: conda from source`_.
-
-
 
 12. Remain inside your Lightning Pose environment and install the following packages:
 
@@ -237,11 +237,8 @@ Setting up Lightning-pose in WSL
 
     sudo apt install python-is-python3 
     sudo apt install libgl1-mesa-glx
-    sudo apt install ffmpeg
 
 *that's it!* - Lightning Pose should now function within WSL. 
-
-
 
 
 Getting help
