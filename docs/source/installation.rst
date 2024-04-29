@@ -17,7 +17,7 @@ There are several installation methods:
 
 Optionally, instructions are provided for :ref:`Docker users <docker_users>`.
 
-If you are a **Windows user**, please read `Windows Installation with WSL`_ first. 
+If you are a **Windows user**, please first read :ref:`Windows Installation with WSL <windows_users>`.
 
 **Install ffmpeg**
 
@@ -164,9 +164,10 @@ memory to execute.
 The ``--gpus all`` flag is necessary to allow Docker to access the required drivers for NVIDIA DALI to work properly.
 
 
+.. _windows_users:
 
 Windows Installation with WSL
-==============================
+===============================
 
 * Windows Subsystem for Linux (WSL) is a Windows feature that enables users to run native Linux applications, containers, and command-line tools directly on Windows 10<. 
 * WSL support for GPU allows for these applications to benefit from GPU accelerated computing which is vital for the training of machine learning models like lightning-pose.
@@ -197,7 +198,7 @@ This installation is for WSL2. for the latest on WSL updates, see `here. <https:
 
     wsl.exe --update
 
-4. Restart your computer. This is necessary for WSL Ubunta to take full effect. 
+4. Restart your computer. This is necessary for WSL Ubuntu to take full effect. 
 
 5. Within the Windows terminal, open a Ubuntu terminal. A console will open and you will be asked to wait for files to de-compress and be stored on your machine. All future launches should take less than a second. 
 
