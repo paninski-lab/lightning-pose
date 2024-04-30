@@ -380,10 +380,14 @@ def get_callbacks(
     if lr_monitor:
         lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval="epoch")
         callbacks.append(lr_monitor)
-    if ckpt_model and early_stopping:  # model auto-saved at end if not early stopping
-        ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
-            monitor="val_supervised_loss"
-        )
+    if ckpt_model:
+        if early_stopping:
+            ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
+                monitor="val_supervised_loss"
+            )
+        else:
+            # we might not have validation data, make sure we ckpt only on last epoch
+            ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(monitor=None)
         callbacks.append(ckpt_callback)
     if backbone_unfreeze:
         transfer_unfreeze_callback = pl.callbacks.BackboneFinetuning(
@@ -463,8 +467,10 @@ def compute_metrics(
         set = pred_df.iloc[:, -1].to_numpy()
     else:
         # these are predictions on video data
+        # could be eks outputs, which contain x, y, likelihood, and z-score headings
         is_video = True
-        tmp = pred_df.to_numpy().reshape(pred_df.shape[0], -1, 3)
+        xyl_mask = pred_df.columns.get_level_values("coords").isin(["x", "y", "likelihood"])
+        tmp = pred_df.loc[:, xyl_mask].to_numpy().reshape(pred_df.shape[0], -1, 3)
         index = pred_df.index
         set = None
 
@@ -479,12 +485,14 @@ def compute_metrics(
     # for either labeled and unlabeled data, if a pca loss is specified in config, we compute the
     # associated metric
     if (
-        cfg.data.get("columns_for_singleview_pca", None) is not None
+        data_module is not None
+        and cfg.data.get("columns_for_singleview_pca", None) is not None
         and len(cfg.data.columns_for_singleview_pca) != 0
     ):
         metrics_to_compute += ["pca_singleview"]
     if (
-        cfg.data.get("mirrored_column_matches", None) is not None
+        data_module is not None
+        and cfg.data.get("mirrored_column_matches", None) is not None
         and len(cfg.data.mirrored_column_matches) != 0
     ):
         metrics_to_compute += ["pca_multiview"]
