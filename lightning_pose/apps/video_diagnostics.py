@@ -49,7 +49,7 @@ def run():
     st.sidebar.header("Data Settings")
 
     # ----- selecting which models to use -----
-    model_folders = get_model_folders(args.model_dir)
+    model_folders = get_model_folders(args.model_dir, require_predictions=False)
 
     # get the last two levels of each path to be presented to user
     model_folders_vis = get_model_folders_vis(model_folders)

@@ -92,13 +92,14 @@ def get_all_videos(model_preds_folders: List[str], video_subdir: str = "video_pr
 def concat_dfs(dframes: Dict[str, pd.DataFrame]) -> Tuple[pd.DataFrame, List[str]]:
     counter = 0
     for model_name, dframe in dframes.items():
+        mask = dframe.columns.get_level_values("coords").isin(["x", "y", "likelihood"])
         if counter == 0:
-            df_concat = dframe.copy()
+            df_concat = dframe.loc[:, mask]
             # base_colnames = list(df_concat.columns.levels[0])  # <-- sorts names, bad!
             base_colnames = list([c[0] for c in df_concat.columns[1::3]])
             df_concat = strip_cols_append_name(df_concat, model_name)
         else:
-            df = strip_cols_append_name(dframe.copy(), model_name)
+            df = strip_cols_append_name(dframe.loc[:, mask], model_name)
             df_concat = pd.concat([df_concat, df], axis=1)
         counter += 1
     return df_concat, base_colnames
@@ -233,7 +234,7 @@ def compute_confidence(
 
 # ------------ utils related to model finding in dir ---------
 # write a function that finds all model folders in the model_dir
-def get_model_folders(model_dir: str) -> List[str]:
+def get_model_folders(model_dir: str, require_predictions: bool = True) -> List[str]:
     # strip trailing slash if present
     if model_dir[-1] == os.sep:
         model_dir = model_dir[:-1]
@@ -241,7 +242,12 @@ def get_model_folders(model_dir: str) -> List[str]:
     # find all directories two levels deep
     for root, dirs, files in os.walk(model_dir):
         if root.count(os.sep) - model_dir.count(os.sep) == 2:
-            model_folders.append(root)
+            # only include directory if it has predictions.csv file (model training finished)
+            if require_predictions:
+                if "predictions.csv" in os.listdir(root):
+                    model_folders.append(root)
+            else:
+                model_folders.append(root)
     return model_folders
 
 
