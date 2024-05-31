@@ -2,11 +2,14 @@
 
 import copy
 
-from lightning_pose.utils.tests import run_model_test
-
 
 def test_supervised_heatmap(
-    cfg, heatmap_data_module, video_dataloader, trainer, remove_logs,
+    cfg,
+    heatmap_data_module,
+    video_dataloader,
+    trainer,
+    remove_logs,
+    run_model_test,
 ):
     """Test the initialization and training of a supervised heatmap model."""
 
@@ -29,6 +32,7 @@ def test_semisupervised_heatmap_temporal(
     video_dataloader,
     trainer,
     remove_logs,
+    run_model_test,
 ):
     """Test the initialization and training of a semi-supervised heatmap model."""
 
