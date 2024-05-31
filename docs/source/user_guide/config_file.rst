@@ -88,7 +88,7 @@ Below is a list of some commonly modified arguments related to model architectur
     * pca_singleview: penalize implausible body configurations
     * temporal: penalize large temporal jumps
 
-* ``model.checkpoint``: to continue training from an existing checkpoint, update this parameter
+* ``model.checkpoint``: to initialize weights from an existing checkpoint, update this parameter
   to the absolute path of a pytorch .ckpt file
 
 See the :ref:`Unsupervised losses <unsupervised_losses>` section for more details on the various
