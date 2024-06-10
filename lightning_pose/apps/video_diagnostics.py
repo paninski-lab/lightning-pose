@@ -65,13 +65,19 @@ def run():
     # choose from the different videos that were predicted
     video_to_plot = st.sidebar.selectbox("Select a video:", [*all_videos_], key="video")
 
-    prediction_files = update_vid_metric_files_list(
-        video=video_to_plot, model_preds_folders=selected_models, video_subdir=args.video_subdir,
-    )
-
-    model_names = copy.copy(selected_models_vis)
+    if video_to_plot:
+        prediction_files = update_vid_metric_files_list(
+            video=video_to_plot,
+            model_preds_folders=selected_models,
+            video_subdir=args.video_subdir,
+        )
+    else:
+        prediction_files = []
 
     if len(prediction_files) > 0:  # otherwise don't try to proceed
+
+        model_names = copy.copy(selected_models_vis)
+
         # ---------------------------------------------------
         # load data
         # ---------------------------------------------------
