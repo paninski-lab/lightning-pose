@@ -1,11 +1,13 @@
 import argparse
-import os
-import json
-import h5py
-import pandas as pd
-import numpy as np
-from PIL import Image
 import io
+import json
+import os
+
+import h5py
+import numpy as np
+import pandas as pd
+from PIL import Image
+
 
 # Functions to convert SLEAP 
 def extract_frames_from_pkg_slp(file_path, base_output_dir):
