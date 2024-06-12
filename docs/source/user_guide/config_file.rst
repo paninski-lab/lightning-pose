@@ -91,6 +91,24 @@ Below is a list of some commonly modified arguments related to model architectur
 * ``model.checkpoint``: to initialize weights from an existing checkpoint, update this parameter
   to the absolute path of a pytorch .ckpt file
 
+* ``model.backbone``: a variety of pretrained backbones are available:
+
+    * resnet50_animal_ap10k (recommended): ResNet-50 pretrained on the AP-10k dataset (Yu et al 2021, AP-10k: A Benchmark for Animal Pose Estimation in the Wild)
+    * resnet18: ResNet-18 pretrained on ImageNet
+    * resnet34: ResNet-34 pretrained on ImageNet
+    * resnet50: ResNet-50 pretrained on ImageNet
+    * resnet101: ResNet-101 pretrained on ImageNet
+    * resnet152: ResNet-152 pretrained on ImageNet
+    * resnet50_contrastive: ResNet-50 pretrained on ImageNet using SimCLR
+    * resnet50_animal_apose: ResNet-50 pretrained on an animal pose dataset (Cao et al 2019, Cross-Domain Adaptation for Animal Pose Estimation)
+    * resnet50_human_jhmdb: ResNet-50 pretrained on JHMDB dataset (Jhuang et al 2013, Towards Understanding Action Recognition)
+    * resnet50_human_res_rle: ResNet-50 pretrained on MPii dataset (Andriluka et al 2014, 2D Human Pose Estimation: New Benchmark and State of the Art Analysis)
+    * efficientnet_b0: EfficientNet-B0 pretrained on ImageNet
+    * efficientnet_b1: EfficientNet-B1 pretrained on ImageNet
+    * efficientnet_b2: EfficientNet-B2 pretrained on ImageNet
+    * vit_b_sam: Segment Anything Model (Vision Transformer Base)
+    * vit_h_sam: Segment Anything Model (Vision Transformer Huge)
+
 See the :ref:`Unsupervised losses <unsupervised_losses>` section for more details on the various
 losses and their associated hyperparameters.
 
