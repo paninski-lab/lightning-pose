@@ -5,7 +5,7 @@ Usage:
 $ python slp2lp.py --slp_file /path/to/<project>.pkg.slp --lp_dir /path/to/lp/dir
 
 Arguments:
---slp_file    Path to the SLEAP project file (.pkg.slp)
+--pkg.slp_file    Path to the SLEAP project file (.pkg.slp)
 --lp_dir      Path to the output LP project directory
 
 Example:
