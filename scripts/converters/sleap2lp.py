@@ -23,7 +23,7 @@ import pandas as pd
 from PIL import Image
 
 
-# Functions to convert SLEAP 
+# Functions to convert SLEAP
 def extract_frames_from_pkg_slp(file_path, base_output_dir):
     with h5py.File(file_path, 'r') as hdf_file:
         # Identify video names
@@ -161,6 +161,7 @@ def extract_labels_from_pkg_slp(file_path):
 
         return final_df
 
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--slp_dir", type=str)
 parser.add_argument("--lp_dir", type=str)
@@ -176,7 +177,7 @@ if not os.path.exists(slp_dir):
 
 # Check paths are not the same
 if slp_dir == lp_dir:
-    raise NameError(f"slp_dir and lp_dir cannot be the same")
+    raise NameError("slp_dir and lp_dir cannot be the same")
 
 # Extract and save labeled data from SLEAP project
 extract_frames_from_pkg_slp(slp_dir, lp_dir)
