@@ -59,6 +59,9 @@ training:
   # max training epochs; training may exit before due to early stopping
   min_epochs: 300
   max_epochs: 300
+  # save model weights every n epochs; must be divisible by check_val_every_n_epoch below
+  # if null, only best weights will be saved after training
+  ckpt_every_n_epochs: null
   # frequency to log training metrics (one step is one batch)
   log_every_n_steps: 10
   # frequency to log validation metrics

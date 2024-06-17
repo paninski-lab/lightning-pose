@@ -365,6 +365,7 @@ def get_callbacks(
     early_stopping=True,
     lr_monitor=True,
     ckpt_model=True,
+    ckpt_every_n_epochs=None,
     backbone_unfreeze=True,
 ) -> List:
 
@@ -383,11 +384,17 @@ def get_callbacks(
     if ckpt_model:
         if early_stopping:
             ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
-                monitor="val_supervised_loss"
+                monitor="val_supervised_loss",
+                mode="min",
             )
         else:
-            # we might not have validation data, make sure we ckpt only on last epoch
-            ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(monitor=None)
+            # if ckpt_every_n_epochs is None, save after every validation step, but overwrite
+            # if ckpt_every_n_epochs is not None, save separate checkpoint files
+            ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
+                monitor=None,
+                every_n_epochs=ckpt_every_n_epochs,
+                save_top_k=1 if ckpt_every_n_epochs is None else -1,
+            )
         callbacks.append(ckpt_callback)
     if backbone_unfreeze:
         transfer_unfreeze_callback = pl.callbacks.BackboneFinetuning(
