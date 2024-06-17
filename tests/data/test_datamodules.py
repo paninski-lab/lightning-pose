@@ -122,10 +122,10 @@ def test_base_data_module_combined(cfg, base_data_module_combined):
     train_size_unlabeled = base_data_module_combined.dali_config["context"]["train"]["batch_size"]
     num_targets = base_data_module_combined.dataset.num_targets
 
+    # test outputs for single batch
     loader = CombinedLoader(base_data_module_combined.train_dataloader())
     batch = next(iter(loader))
-    # batch is tuple as of lightning 2.0.9
-    batch = batch[0][0] if isinstance(batch, tuple) else batch
+    batch = batch[0][0] if isinstance(batch, tuple) else batch  # batch tuple in lightning >=2.0.9
     assert list(batch.keys())[0] == "labeled"
     assert list(batch.keys())[1] == "unlabeled"
     assert list(batch["labeled"].keys()) == ["images", "keypoints", "idxs"]
@@ -137,6 +137,22 @@ def test_base_data_module_combined(cfg, base_data_module_combined):
     # cleanup
     del loader
     del batch
+
+    # test iterating through combined data loader
+    dataset_length = len(base_data_module_combined.train_dataset)
+    loader = CombinedLoader(
+        base_data_module_combined.train_dataloader().iterables, mode="min_size",
+    )
+    image_counter = 0
+    for batch in loader:
+        batch = batch[0] if isinstance(batch, tuple) else batch
+        image_counter += len(batch["labeled"]["keypoints"])
+    assert image_counter == dataset_length
+
+    # cleanup
+    del loader
+    del batch
+
     torch.cuda.empty_cache()  # remove tensors from gpu
 
 

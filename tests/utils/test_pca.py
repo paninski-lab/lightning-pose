@@ -3,40 +3,82 @@
 import numpy as np
 import pytest
 import torch
-from lightning.pytorch.utilities import CombinedLoader
 
 from lightning_pose.utils.fiftyone import check_lists_equal
 from lightning_pose.utils.pca import KeypointPCA
 
 
-def test_train_loader_iter(base_data_module_combined):
+def test_pca_keypoint_class_singleview(cfg, base_data_module_combined):
 
-    # TODO: this is just messing around with dataloaders
-    # good educationally, not great as a test. keep somehow.
-    dataset_length = len(base_data_module_combined.train_dataset)
+    num_train_ims = int(
+        len(base_data_module_combined.dataset)
+        * base_data_module_combined.train_probability
+    )
+    num_keypoints = base_data_module_combined.dataset.num_keypoints
+    num_keypoints_for_pca = len(cfg.data.columns_for_singleview_pca)
 
-    combined_loader = base_data_module_combined.train_dataloader()
-    # the default mode of CombinedLoader changes in Lightning 2.0
-    # we manually take the iterbles inside the combined_loader, and make a new class that cycles
-    # only over the labeled dataloader
-    combined_loader = CombinedLoader(combined_loader.iterables, mode="min_size")
-    image_counter = 0
-    for i, batch in enumerate(combined_loader):
-        print(i)
-        # batch is tuple as of lightning 2.0.9
-        batch = batch[0] if isinstance(batch, tuple) else batch
-        image_counter += len(batch["labeled"]["keypoints"])
-        assert type(batch) is dict
-        assert type(batch["labeled"]) is dict
-        assert type(batch["unlabeled"]) is dict
-        assert type(batch["unlabeled"]["frames"]) is torch.Tensor
-        assert check_lists_equal(
-            list(batch["labeled"].keys()), ["images", "keypoints", "idxs"]
-        )
-    assert image_counter == dataset_length
+    # initialize an instance
+    kp_pca = KeypointPCA(
+        loss_type="pca_singleview",
+        data_module=base_data_module_combined,
+        components_to_keep=0.99,
+        empirical_epsilon_percentile=1.00,
+        columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
+    )
+
+    kp_pca._get_data()
+    assert kp_pca.data_arr.shape == (num_train_ims, 2 * num_keypoints)
+
+    # we know that there are nan keypoints in this toy dataset, assert that
+    nan_count_pre_cleanup = torch.sum(torch.isnan(kp_pca.data_arr))
+    assert nan_count_pre_cleanup > 0
+
+    kp_pca.data_arr = kp_pca._format_data(data_arr=kp_pca.data_arr)
+    assert kp_pca.data_arr.shape == (
+        num_train_ims,
+        2 * num_keypoints_for_pca,  # 2 coords per keypoint
+    )
+
+    # now clean nans
+    kp_pca._clean_any_nans()
+    # we've eliminated some rows
+    assert kp_pca.data_arr.shape[0] < (num_keypoints_for_pca * num_train_ims)
+
+    # no nans allowed at this stage
+    nan_count = torch.sum(torch.isnan(kp_pca.data_arr))
+    assert nan_count == 0
+
+    # check that we have enough observations
+    kp_pca._check_data()  # raises ValueErrors if fails
+
+    # fit the pca model
+    kp_pca._fit_pca()
+
+    kp_pca._choose_n_components()
+
+    kp_pca.pca_prints()
+
+    kp_pca._set_parameter_dict()
+
+    check_lists_equal(
+        list(kp_pca.parameters.keys()),
+        ["mean", "kept_eigenvectors", "discarded_eigenvectors", "epsilon"],
+    )
+
+    # assert that the results of running the .__call__() method are the same as
+    # separately running each of the subparts
+    kp_pca_2 = KeypointPCA(
+        loss_type="pca_singleview",
+        data_module=base_data_module_combined,
+        components_to_keep=0.99,
+        empirical_epsilon_percentile=1.0,
+        columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
+    )
+    kp_pca_2()
+    assert (kp_pca_2.data_arr == kp_pca.data_arr).all()
 
 
-def test_pca_keypoint_class(cfg, base_data_module_combined):
+def test_pca_keypoint_class_multiview(cfg, base_data_module_combined):
 
     num_train_ims = (
         len(base_data_module_combined.dataset)
@@ -57,17 +99,6 @@ def test_pca_keypoint_class(cfg, base_data_module_combined):
     kp_pca._get_data()
     assert kp_pca.data_arr.shape == (num_train_ims, 2 * num_keypoints)
 
-    # from lightning_pose.utils.pca import get_train_data_for_pca
-
-    # old_data = get_train_data_for_pca(data_module=base_data_module_combined)
-    # print(kp_pca.data_arr)
-    # print(old_data)
-    # flat_old = old_data.flatten()
-    # flat_new = kp_pca.data_arr.flatten()
-
-    # assert torch.allclose(
-    #     flat_old[~torch.isnan(flat_old)], flat_new[~torch.isnan(flat_old)]
-    # )
     # we know that there are nan keypoints in this toy dataset, assert that
     nan_count_pre_cleanup = torch.sum(torch.isnan(kp_pca.data_arr))
     assert nan_count_pre_cleanup > 0
@@ -91,7 +122,7 @@ def test_pca_keypoint_class(cfg, base_data_module_combined):
     nan_count = torch.sum(torch.isnan(kp_pca.data_arr))
     assert nan_count == 0
 
-    # check that we have enough ovservations
+    # check that we have enough observations
     kp_pca._check_data()  # raises ValueErrors if fails
 
     # fit the pca model
@@ -156,6 +187,7 @@ def test_format_multiview_data_for_pca():
 
 
 def test_singleview_format_and_loss(cfg, base_data_module_combined):
+
     # generate fake data
     n_batches = 12
     n_keypoints = 17
