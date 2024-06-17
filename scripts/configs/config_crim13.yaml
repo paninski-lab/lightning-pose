@@ -162,16 +162,8 @@ eval:
   # str with an absolute path to a directory containing videos for prediction.
   # (it's not absolute just for the toy example)
   test_videos_directory: /home/zeus/content/data/crim13/videos
-  # str with an absolute path to directory in which you want to save .csv with predictions
-  saved_vid_preds_dir: null
-  # create labeled video from each video in test_videos_directory
-  create_labeled_video: true
   # confidence threshold for plotting a vid
   confidence_thresh_for_vid: 0.90
-  # str with absolute path to the video file you want plotted with keypoints
-  video_file_to_plot: null
-  # a list of strings, each points to a .csv file with predictions of a given model to the same video. will be combined with video_file_to_plot to make a visualization
-  pred_csv_files_to_plot: [" "]
 
 callbacks:
   anneal_weight:

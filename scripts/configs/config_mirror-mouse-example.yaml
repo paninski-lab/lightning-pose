@@ -203,15 +203,8 @@ eval:
   # str with an absolute path to a directory containing videos for prediction.
   # (it's not absolute just for the toy example)
   test_videos_directory: data/mirror-mouse-example/videos
-  # str with an absolute path to directory in which you want to save .csv with predictions
-  saved_vid_preds_dir: data/mirror-mouse-example
   # confidence threshold for plotting a vid
   confidence_thresh_for_vid: 0.9
-  # str with absolute path to the video file you want plotted with keypoints
-  video_file_to_plot: /home/zeus/content/lightning-pose/data/mirror-mouse-example/videos/test_vid.mp4
-  # a list of strings, each points to a .csv file with predictions of a given model to the same video. will be combined with video_file_to_plot to make a visualization
-  pred_csv_files_to_plot:
-    ["/home/jovyan/test_vid_heatmap_pca_multiview_5.0.csv"]
 
 callbacks:
   anneal_weight:

@@ -82,8 +82,8 @@ this allows for larger batch sizes/fewer Out Of Memory errors on the GPU:
 See more documentation on the config file fields :ref:`here <config_file>`. A couple of fields that
 are specific to the provided training script, but important to consider:
 
-* ``eval.predict_vids_after_training``: if ``true``, automatically run inference after training on all videos located in the directory given by ``eval.test_videos_directory``; results are saved to ``eval.saved_vid_preds_dir``
-* ``eval.save_vids_after_training``: if ``true`` (as well as ``eval.predict_vids_after_training``) the keypoints predicted during the inference step will be overlaid on the videos and saved with inference outputs to ``eval.saved_vid_preds_dir``
+* ``eval.predict_vids_after_training``: if ``true``, automatically run inference after training on all videos located in the directory given by ``eval.test_videos_directory``; results are saved to the model directory
+* ``eval.save_vids_after_training``: if ``true`` (as well as ``eval.predict_vids_after_training``) the keypoints predicted during the inference step will be overlaid on the videos and saved with inference outputs to the model directory
 
 Tensorboard
 ===========
