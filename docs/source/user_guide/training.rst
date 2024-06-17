@@ -105,6 +105,48 @@ Click on the provided link in the terminal, which will look something like
 Note that if you save the model at a different directory, just use that directory after
 ``--logdir``.
 
+.. note::
+
+    If you don't see all your models in tensorboard,
+    hit the refresh button on the top right corner of the screen,
+    and the other models should appear.
+
+Metrics are plotted as a function of step/batch. Validation metrics are typically recorded less
+frequently than train metrics.
+The frequency of these checks are controlled by ``cfg.training.log_every_n_steps`` (training)
+and ``cfg.training.check_val_every_n_epoch`` (validation).
+
+**Available metrics**
+
+The following are the important metrics for all model types
+(supervised, context, semi-supervised, etc.):
+
+* ``train_supervised_loss``: this is the same as ``train_heatmap_mse_loss_weighted``, which is the
+  mean square error (MSE) between the true and predicted heatmaps on labeled training data
+* ``train_supervised_rmse``: the root mean square error (RMSE) between the true and predicted
+  (x, y) coordinates on labeled training data; scale is in pixels
+* ``val_supervised_loss``: this is the same as ``val_heatmap_mse_loss_weighted``, which is the
+  MSE between the true and predicted heatmaps on labeled validation data
+* ``val_supervised_rmse``: the RMSE between the true and predicted (x, y) coordinates on labeled
+  validation data; scale is in pixels
+
+The following are important metrics for the semi-supervised models:
+
+* ``train_pca_multiview_loss_weighted``: the ``train_pca_multiview_loss`` (in pixels), which
+  measures multiview consistency, multplied by the loss weight set in the configuration file.
+  This metric is only computed on batches of unlabeled training data.
+* ``train_pca_singleview_loss_weighted``: the ``train_pca_singleview_loss`` (in pixels), which
+  measures pose plausibility, multplied by the loss weight set in the configuration file.
+  This metric is only computed on batches of unlabeled training data.
+* ``train_temporal_loss_weighted``: the ``train_temporal_loss`` (in pixels), which
+  measures temporal smoothness, multplied by the loss weight set in the configuration file.
+  This metric is only computed on batches of unlabeled training data.
+* ``total_unsupervised_importance``: a weight on all *weighted* unsupervised losses that linearly
+  increases from 0 to 1 over 100 epochs
+* ``total_loss``: weighted supervised loss (``train_heatmap_mse_loss_weighted``) plus
+  ``total_unsupervised_importance`` times the sum of all applicable weighted unsupervised losses
+
+
 .. _model_directory_structure:
 
 Model directory structure
