@@ -103,11 +103,11 @@ Below is a list of some commonly modified arguments related to model architectur
     * resnet50_animal_apose: ResNet-50 pretrained on an animal pose dataset (Cao et al 2019, Cross-Domain Adaptation for Animal Pose Estimation)
     * resnet50_human_jhmdb: ResNet-50 pretrained on JHMDB dataset (Jhuang et al 2013, Towards Understanding Action Recognition)
     * resnet50_human_res_rle: ResNet-50 pretrained on MPii dataset (Andriluka et al 2014, 2D Human Pose Estimation: New Benchmark and State of the Art Analysis)
+    * resnet50_human_hand: ResNet-50 pretrained on OneHand10k dataset (Wang et al 2018, Mask-pose Cascaded CNN for 2d Hand Pose Estimation from Single Color Image)
     * efficientnet_b0: EfficientNet-B0 pretrained on ImageNet
     * efficientnet_b1: EfficientNet-B1 pretrained on ImageNet
     * efficientnet_b2: EfficientNet-B2 pretrained on ImageNet
     * vit_b_sam: Segment Anything Model (Vision Transformer Base)
-    * vit_h_sam: Segment Anything Model (Vision Transformer Huge)
 
 See the :ref:`Unsupervised losses <unsupervised_losses>` section for more details on the various
 losses and their associated hyperparameters.

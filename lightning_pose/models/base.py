@@ -42,6 +42,7 @@ ALLOWED_BACKBONES = Literal[
     "resnet50_human_jhmdb",
     "resnet50_human_res_rle",
     "resnet50_human_top_res",
+    "resnet50_human_hand",
     "efficientnet_b0",
     "efficientnet_b1",
     "efficientnet_b2",

@@ -86,8 +86,8 @@ model:
   losses_to_use: []
   # backbone network:
   # resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
-  # resnet50_animalpose_apose | resnet50_animal_ap10k
-  # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res
+  # resnet50_animal_apose | resnet50_animal_ap10k
+  # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res | resnet50_human_hand
   # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
   # vit_b_sam | vit_h_sam
   backbone: resnet50_animal_ap10k
