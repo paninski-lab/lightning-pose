@@ -32,6 +32,7 @@ scale_options = ["linear", "log"]
 
 
 def run():
+
     args = parser.parse_args()
 
     st.title("Video Diagnostics")
@@ -48,33 +49,35 @@ def run():
     st.sidebar.header("Data Settings")
 
     # ----- selecting which models to use -----
-    model_folders = get_model_folders(args.model_dir)
+    model_folders = get_model_folders(args.model_dir, require_predictions=False)
 
     # get the last two levels of each path to be presented to user
     model_folders_vis = get_model_folders_vis(model_folders)
 
-    selected_models_vis = st.sidebar.multiselect(
-        "Select models", model_folders_vis, default=None
-    )
+    selected_models_vis = st.sidebar.multiselect("Select models", model_folders_vis, default=None)
 
     # append this to full path
-    selected_models = [
-        "/" + os.path.join(args.model_dir, f) for f in selected_models_vis
-    ]
+    selected_models = [os.path.join(args.model_dir, f) for f in selected_models_vis]
 
     # ----- selecting videos to analyze -----
-    all_videos_: list = get_all_videos(selected_models)
+    all_videos_: list = get_all_videos(selected_models, video_subdir=args.video_subdir)
 
     # choose from the different videos that were predicted
     video_to_plot = st.sidebar.selectbox("Select a video:", [*all_videos_], key="video")
 
-    prediction_files = update_vid_metric_files_list(
-        video=video_to_plot, model_preds_folders=selected_models
-    )
-
-    model_names = copy.copy(selected_models_vis)
+    if video_to_plot:
+        prediction_files = update_vid_metric_files_list(
+            video=video_to_plot,
+            model_preds_folders=selected_models,
+            video_subdir=args.video_subdir,
+        )
+    else:
+        prediction_files = []
 
     if len(prediction_files) > 0:  # otherwise don't try to proceed
+
+        model_names = copy.copy(selected_models_vis)
+
         # ---------------------------------------------------
         # load data
         # ---------------------------------------------------
@@ -88,7 +91,7 @@ def run():
 
             for model_pred_file in model_pred_files:
                 model_pred_file_path = os.path.join(
-                    model_folder, "video_preds", model_pred_file
+                    model_folder, args.video_subdir, model_pred_file
                 )
                 if not isinstance(model_pred_file, Path):
                     model_pred_file.seek(0)  # reset buffer after reading
@@ -100,9 +103,7 @@ def run():
                     dframe = pd.read_csv(model_pred_file_path, index_col=None)
                     dframes_metrics[model_name][str(model_pred_file)] = dframe
                 else:
-                    dframe = pd.read_csv(
-                        model_pred_file_path, header=[1, 2], index_col=0
-                    )
+                    dframe = pd.read_csv(model_pred_file_path, header=[1, 2], index_col=0)
                     dframes_traces[model_name] = dframe
                     dframes_metrics[model_name]["confidence"] = dframe
                 # data_types = dframe.iloc[:, -1].unique()
@@ -221,6 +222,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--model_dir", type=str, default=[])
+    parser.add_argument("--video_subdir", type=str, default="video_preds")
     parser.add_argument("--make_dir", action="store_true", default=False)
 
     run()

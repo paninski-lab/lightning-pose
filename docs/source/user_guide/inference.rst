@@ -41,8 +41,9 @@ In order to use this script more generally, you need to update several config fi
 
 #. ``eval.hydra_paths``: path to models to use for prediction
 #. ``eval.test_videos_directory``: path to a `directory` containing videos to run inference on
-#. ``eval.saved_vid_preds_dir``: optional path specifying where to save prediction csv files. If ``null``, the predictions will be saved in ``eval.test_videos_directory``.
-#. ``eval.save_vids_after_training``: if ``true``, the script will also save a copy of the full video with model predictions overlaid. The labeled video is saved in ``eval.saved_vid_preds_dir``.
+#. ``eval.save_vids_after_training``: if ``true``, the script will also save a copy of the full video with model predictions overlaid.
+
+The results will be stored in the model directory.
 
 As with training, you either directly edit your config file and run:
 
@@ -54,4 +55,9 @@ or override these arguments in the command line:
 
 .. code-block:: console
 
-    python scripts/predict_new_vids.py --config-path=<PATH/TO/YOUR/CONFIGS/DIR> --config-name=<CONFIG_NAME.yaml> eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"] eval.test_videos_directory=/absolute/path/to/videos eval.saved_vid_preds_dir=/absolute/path/to/dir
+    python scripts/predict_new_vids.py --config-path=<PATH/TO/YOUR/CONFIGS/DIR> --config-name=<CONFIG_NAME.yaml> eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"] eval.test_videos_directory=/absolute/path/to/videos
+
+.. note::
+
+  Videos *must* be mp4 files that use the h.264 codec; see more information in the
+  :ref:`FAQs<faq_video_formats>`.

@@ -9,8 +9,8 @@
 - [ ] compute non-temporal unsupervised losses on labeled data
 
 ## Multi-view support for non-mirrored setups
-- [ ] implement supervised datasets/dataloaders that work with multiple views
-- [ ] context frames for multi-view
+- [x] implement supervised datasets/dataloaders that work with multiple views ([#115](https://github.com/danbider/lightning-pose/pull/115))
+- [x] context frames for multi-view ([#126](https://github.com/danbider/lightning-pose/pull/126))
 - [ ] unsupervised losses for multi-view
 
 ## Single-view dynamic crop (small animals in large frames)

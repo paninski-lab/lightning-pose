@@ -2,11 +2,14 @@
 
 import copy
 
-from lightning_pose.utils.tests import run_model_test
-
 
 def test_supervised_heatmap_mhcrnn(
-    cfg, heatmap_data_module_context, video_dataloader, video_list, trainer, remove_logs,
+    cfg,
+    heatmap_data_module_context,
+    video_dataloader,
+    trainer,
+    remove_logs,
+    run_model_test,
 ):
     """Test the initialization and training of a supervised heatmap mhcrnn model."""
 
@@ -55,6 +58,7 @@ def test_semisupervised_heatmap_mhcrnn_pcasingleview(
     video_list,
     trainer,
     remove_logs,
+    run_model_test,
 ):
     """Test the initialization and training of a semi-supervised heatmap mhcrnn model.
 
@@ -83,6 +87,7 @@ def test_semisupervised_heatmap_mhcrnn_pcasingleview_vit(
     video_list,
     trainer,
     remove_logs,
+    run_model_test,
 ):
     """Test the initialization and training of a semi-supervised heatmap mhcrnn model ViT backbone.
 

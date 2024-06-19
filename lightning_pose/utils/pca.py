@@ -31,7 +31,7 @@ class KeypointPCA(object):
         self,
         loss_type: Literal["pca_singleview", "pca_multiview"],
         data_module: Union[UnlabeledDataModule, BaseDataModule],
-        components_to_keep: Optional[Union[int, float]] = 0.95,
+        components_to_keep: Optional[Union[int, float]] = 0.99,
         empirical_epsilon_percentile: float = 90.0,
         mirrored_column_matches: Optional[Union[ListConfig, List]] = None,
         columns_for_singleview_pca: Optional[Union[ListConfig, List]] = None,

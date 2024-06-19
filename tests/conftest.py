@@ -6,6 +6,7 @@ construction relies heavily on the utility functions provided in `utils/scripts.
 """
 
 import copy
+import gc
 import os
 import shutil
 import subprocess
@@ -28,15 +29,28 @@ from lightning_pose.data.datasets import (
     MultiviewHeatmapDataset,
 )
 from lightning_pose.utils.io import get_videos_in_dir
+from lightning_pose.utils.predictions import PredictionHandler
 from lightning_pose.utils.scripts import (
     get_callbacks,
     get_data_module,
     get_dataset,
     get_imgaug_transform,
+    get_loss_factories,
+    get_model,
 )
 
 TOY_DATA_ROOT_DIR = "data/mirror-mouse-example"
 TOY_MDATA_ROOT_DIR = "data/mirror-mouse-example_split"
+
+
+@pytest.fixture
+def video_list() -> List[str]:
+    return get_videos_in_dir(os.path.join(TOY_DATA_ROOT_DIR, "videos"))
+
+
+@pytest.fixture
+def toy_data_dir() -> str:
+    return TOY_DATA_ROOT_DIR
 
 
 @pytest.fixture
@@ -503,10 +517,48 @@ def remove_logs() -> Callable:
 
 
 @pytest.fixture
-def video_list() -> List[str]:
-    return get_videos_in_dir(os.path.join(TOY_DATA_ROOT_DIR, "videos"))
+def run_model_test() -> Callable:
 
+    def _run_model_test(cfg, data_module, video_dataloader, trainer, remove_logs_fn):
+        """Helper function to simplify unit tests which run different models."""
 
-@pytest.fixture
-def toy_data_dir() -> str:
-    return TOY_DATA_ROOT_DIR
+        # build loss factory which orchestrates different losses
+        loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
+
+        # build model
+        model = get_model(cfg=cfg, data_module=data_module, loss_factories=loss_factories)
+
+        try:
+
+            print("====")
+            print("model: ", type(model))
+            print(type(model).__bases__)
+            print("backbone: ", type(model.backbone))
+            print("====")
+            # train model for a couple epochs
+            trainer.fit(model=model, datamodule=data_module)
+
+            # predict on labeled frames
+            labeled_preds = trainer.predict(
+                model=model,
+                dataloaders=data_module.full_labeled_dataloader(),
+                return_predictions=True,
+            )
+            pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
+            pred_handler(preds=labeled_preds)
+
+            # predict on unlabeled video
+            trainer.predict(model=model, dataloaders=video_dataloader, return_predictions=True)
+
+        finally:
+
+            # remove tensors from gpu
+            del loss_factories
+            del model
+            gc.collect()
+            torch.cuda.empty_cache()
+
+            # clean up logging
+            remove_logs_fn()
+
+    return _run_model_test

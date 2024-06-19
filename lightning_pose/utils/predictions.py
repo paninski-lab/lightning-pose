@@ -850,10 +850,10 @@ def create_labeled_video(
         font_thickness = 1
         # calculate the size of the text
         text_size = cv2.getTextSize(text, font, font_scale, font_thickness)[0]
-        # calculate the position of the text in the lower-left corner
+        # calculate the position of the text in the upper-left corner
         offset = 6
         text_x = offset  # offset from the left
-        text_y = frame.shape[0] - offset  # offset from the bottom
+        text_y = text_size[1] + offset  # offset from the bottom
         # make black rectangle with a small padding of offset / 2 pixels
         cv2.rectangle(
             frame,

@@ -17,6 +17,3 @@ lightning\_pose.utils
 
 .. automodapi:: lightning_pose.utils.scripts
    :no-inheritance-diagram:
-
-.. automodapi:: lightning_pose.utils.tests
-   :no-inheritance-diagram:

@@ -73,6 +73,9 @@ training:
   # max training epochs; training may exit before due to early stopping
   min_epochs: 300
   max_epochs: 300
+  # save model weights every n epochs; must be divisible by check_val_every_n_epoch below
+  # if null, only best weights will be saved after training
+  ckpt_every_n_epochs: null
   # frequency to log training metrics (one step is one batch)
   log_every_n_steps: 10
   # frequency to log validation metrics
@@ -97,8 +100,8 @@ model:
   losses_to_use: []
   # backbone network:
   # resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
-  # resnet50_animalpose_apose | resnet50_animal_ap10k
-  # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res
+  # resnet50_animal_apose | resnet50_animal_ap10k
+  # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res | resnet50_human_hand
   # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
   # vit_b_sam | vit_h_sam
   backbone: resnet50_animal_ap10k
@@ -109,6 +112,8 @@ model:
   heatmap_loss_type: mse
   # directory name for model saving
   model_name: test
+  # load model from checkpoint
+  checkpoint: null
 
 dali:
   general:
@@ -158,10 +163,11 @@ losses:
 
 eval:
   # paths to the hydra config files in the output folder, OR absolute paths to such folders.
+  # used in scripts/predict_new_vids.py and scripts/create_fiftyone_dataset.py
   hydra_paths: [" "]
-  # predict?
+  # predict? used in scripts/train_hydra.py
   predict_vids_after_training: true
-  # save labeled .mp4?
+  # save labeled .mp4? used in scripts/train_hydra.py and scripts/predict_new_vids.py
   save_vids_after_training: false
   fiftyone:
     # will be the name of the dataset (Mongo DB) created by FiftyOne. for video dataset, we will append dataset_name + "_video"
@@ -177,15 +183,10 @@ eval:
 
   # str with an absolute path to a directory containing videos for prediction.
   # set to null to skip automatic video prediction from train_hydra.py script
+  # used in scripts/train_hydra.py and scripts/predict_new_vids.py
   test_videos_directory: null
-  # str with an absolute path to directory in which you want to save .csv with predictions
-  saved_vid_preds_dir: null
   # confidence threshold for plotting a vid
   confidence_thresh_for_vid: 0.90
-  # str with absolute path to the video file you want plotted with keypoints
-  video_file_to_plot: null
-  # a list of strings, each points to a .csv file with predictions of a given model to the same video. will be combined with video_file_to_plot to make a visualization
-  pred_csv_files_to_plot: [" "]
 
 callbacks:
   anneal_weight:

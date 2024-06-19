@@ -51,7 +51,7 @@ def run():
 
     # add a multiselect that shows existing model folders, and allows the user to de-select models
     # assume we have args.model_dir and we search two levels down for model folders
-    model_folders = get_model_folders(args.model_dir)
+    model_folders = get_model_folders(args.model_dir, require_predictions=True)
 
     # get the last two levels of each path to be presented to user
     model_folders_vis = get_model_folders_vis(model_folders)

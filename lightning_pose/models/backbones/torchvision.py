@@ -74,6 +74,8 @@ def build_backbone(
             ckpt_url = "https://download.openmmlab.com/mmpose/top_down/deeppose/deeppose_res50_mpii_256x256_rle-5f92a619_20220504.pth"  # noqa: E501
         elif backbone_type == "top_res":
             ckpt_url = "https://download.openmmlab.com/mmpose/top_down/resnet/res50_mpii_256x256-418ffc88_20200812.pth"  # noqa: E501
+        elif backbone_type == "hand":
+            ckpt_url = "https://download.openmmlab.com/mmpose/hand/resnet/res50_onehand10k_256x256-739c8639_20210330.pth"  # noqa: E501
 
         state_dict = torch.hub.load_state_dict_from_url(ckpt_url)["state_dict"]
         new_state_dict = OrderedDict()

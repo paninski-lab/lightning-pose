@@ -150,6 +150,14 @@ independently.
 * ``prob_threshold``: predictions with a probability below this threshold are not included in the loss. This is desirable if, for example, a keypoint is occluded and the prediction has low probability.
 * ``epsilon``: in pixels; temporal differences below this threshold are not penalized, which keeps natural movements from being penalized. The value of epsilon will depend on the size of the video frames, framerate (how much does the animal move from one frame to the next), the size of the animal in the frame, etc.
 
+The temporal difference between consecutive frames is a dynamic quantity - when an animal moves
+quickly, the temporal differences are large; when an animal moves slowly, they are small.
+Furthermore, some keypoints might move a lot while others not at all.
+For these reasons, this loss is most effective when epsilon is rather large - for example,
+the longest distance any keypoint could travel throughout the video recordings.
+In this case the temporal loss is less about ensuring smooth trajectories, and more about making
+sure there aren't implausibly large jumps from one frame to the next.
+
 .. _unsup_loss_pcasv:
 
 Pose PCA

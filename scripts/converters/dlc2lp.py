@@ -24,7 +24,9 @@ if dlc_dir == lp_dir:
     raise NameError(f"dlc_dir and lp_dir cannot be the same")
 
 # find all labeled data in DLC project
-dirs = os.listdir(os.path.join(dlc_dir, "labeled-data"))
+dirs = [f for f in os.listdir(os.path.join(dlc_dir, "labeled-data")) if not f.startswith('.') if not f.endswith('_labeled')]
+
+
 dirs.sort()
 dfs = []
 for d in dirs:

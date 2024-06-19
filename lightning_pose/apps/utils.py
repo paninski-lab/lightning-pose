@@ -16,7 +16,7 @@ pcasv_error_key = "pca singleview"
 
 
 @st.cache_resource
-def update_labeled_file_list(model_preds_folders: list, use_ood: bool = False):
+def update_labeled_file_list(model_preds_folders: List[str], use_ood: bool = False) -> List[list]:
     per_model_preds = []
     for model_pred_folder in model_preds_folders:
         # pull labeled results from each model folder
@@ -40,15 +40,21 @@ def update_labeled_file_list(model_preds_folders: list, use_ood: bool = False):
 
 
 @st.cache_resource
-def update_vid_metric_files_list(video: str, model_preds_folders: list):
+def update_vid_metric_files_list(
+    video: str,
+    model_preds_folders: List[str],
+    video_subdir: str = "video_preds",
+) -> List[list]:
     per_vid_preds = []
     for model_preds_folder in model_preds_folders:
         # pull each prediction file associated with a particular video
         # wrap in Path so that it looks like an UploadedFile object
+        video_dir = os.path.join(model_preds_folder, video_subdir)
+        if not os.path.isdir(video_dir):
+            continue
         model_preds = [
-            f
-            for f in os.listdir(os.path.join(model_preds_folder, "video_preds"))
-            if os.path.isfile(os.path.join(model_preds_folder, "video_preds", f))
+            f for f in os.listdir(video_dir) if
+            (os.path.isfile(os.path.join(video_dir, f)) and f.endswith(".csv"))
         ]
         ret_files = []
         for file in model_preds:
@@ -59,16 +65,18 @@ def update_vid_metric_files_list(video: str, model_preds_folders: list):
 
 
 @st.cache_resource
-def get_all_videos(model_preds_folders: list):
+def get_all_videos(model_preds_folders: List[str], video_subdir: str = "video_preds") -> list:
     # find each video that is predicted on by the models
     # wrap in Path so that it looks like an UploadedFile object
     # returned by streamlit's file_uploader
     ret_videos = set()
     for model_preds_folder in model_preds_folders:
+        video_dir = os.path.join(model_preds_folder, video_subdir)
+        if not os.path.isdir(video_dir):
+            continue
         model_preds = [
-            f
-            for f in os.listdir(os.path.join(model_preds_folder, "video_preds"))
-            if os.path.isfile(os.path.join(model_preds_folder, "video_preds", f))
+            f for f in os.listdir(video_dir) if
+            (os.path.isfile(os.path.join(video_dir, f)) and f.endswith(".csv"))
         ]
         for file in model_preds:
             if "temporal" in file:
@@ -84,20 +92,21 @@ def get_all_videos(model_preds_folders: list):
 def concat_dfs(dframes: Dict[str, pd.DataFrame]) -> Tuple[pd.DataFrame, List[str]]:
     counter = 0
     for model_name, dframe in dframes.items():
+        mask = dframe.columns.get_level_values("coords").isin(["x", "y", "likelihood"])
         if counter == 0:
-            df_concat = dframe.copy()
+            df_concat = dframe.loc[:, mask]
             # base_colnames = list(df_concat.columns.levels[0])  # <-- sorts names, bad!
             base_colnames = list([c[0] for c in df_concat.columns[1::3]])
             df_concat = strip_cols_append_name(df_concat, model_name)
         else:
-            df = strip_cols_append_name(dframe.copy(), model_name)
+            df = strip_cols_append_name(dframe.loc[:, mask], model_name)
             df_concat = pd.concat([df_concat, df], axis=1)
         counter += 1
     return df_concat, base_colnames
 
 
 @st.cache_data
-def get_df_box(df_orig, keypoint_names, model_names):
+def get_df_box(df_orig: pd.DataFrame, keypoint_names: list, model_names: list) -> pd.DataFrame:
     df_boxes = []
     for keypoint in keypoint_names:
         for model_curr in model_names:
@@ -112,7 +121,13 @@ def get_df_box(df_orig, keypoint_names, model_names):
 
 
 @st.cache_data
-def get_df_scatter(df_0, df_1, data_type, model_names, keypoint_names):
+def get_df_scatter(
+    df_0: pd.DataFrame,
+    df_1: pd.DataFrame,
+    data_type: str,
+    model_names: list,
+    keypoint_names: list
+) -> pd.DataFrame:
     df_scatters = []
     for keypoint in keypoint_names:
         df_scatters.append(
@@ -147,7 +162,7 @@ def get_full_name(keypoint: str, coordinate: str, model: str) -> str:
 # ----------------------------------------------
 @st.cache_data
 def build_precomputed_metrics_df(
-    dframes: Dict[str, pd.DataFrame], keypoint_names: List[str], **kwargs
+    dframes: Dict[str, pd.DataFrame], keypoint_names: List[str], **kwargs,
 ) -> dict:
     concat_dfs = defaultdict(list)
     for model_name, df_dict in dframes.items():
@@ -179,7 +194,7 @@ def build_precomputed_metrics_df(
 
 @st.cache_data
 def get_precomputed_error(
-    df: pd.DataFrame, keypoint_names: List[str], model_name: str
+    df: pd.DataFrame, keypoint_names: List[str], model_name: str,
 ) -> pd.DataFrame:
     # collect results
     df_ = df
@@ -191,17 +206,17 @@ def get_precomputed_error(
 
 @st.cache_data
 def compute_confidence(
-    df: pd.DataFrame, keypoint_names: List[str], model_name: str, **kwargs
+    df: pd.DataFrame, keypoint_names: List[str], model_name: str, **kwargs,
 ) -> pd.DataFrame:
+
     if df.shape[1] % 3 == 1:
-        # get rid of "set" column if present
-        tmp = df.iloc[:, :-1].to_numpy().reshape(df.shape[0], -1, 3)
+        # collect "set" column if present
         set = df.iloc[:, -1].to_numpy()
     else:
-        tmp = df.to_numpy().reshape(df.shape[0], -1, 3)
         set = None
 
-    results = tmp[:, :, 2]
+    mask = df.columns.get_level_values("coords").isin(["likelihood"])
+    results = df.loc[:, mask].to_numpy()
 
     # collect results
     df_ = pd.DataFrame(columns=keypoint_names)
@@ -218,7 +233,7 @@ def compute_confidence(
 
 # ------------ utils related to model finding in dir ---------
 # write a function that finds all model folders in the model_dir
-def get_model_folders(model_dir):
+def get_model_folders(model_dir: str, require_predictions: bool = True) -> List[str]:
     # strip trailing slash if present
     if model_dir[-1] == os.sep:
         model_dir = model_dir[:-1]
@@ -226,12 +241,17 @@ def get_model_folders(model_dir):
     # find all directories two levels deep
     for root, dirs, files in os.walk(model_dir):
         if root.count(os.sep) - model_dir.count(os.sep) == 2:
-            model_folders.append(root)
+            # only include directory if it has predictions.csv file (model training finished)
+            if require_predictions:
+                if "predictions.csv" in os.listdir(root):
+                    model_folders.append(root)
+            else:
+                model_folders.append(root)
     return model_folders
 
 
 # just to get the last two levels of the path
-def get_model_folders_vis(model_folders):
+def get_model_folders_vis(model_folders: List[str]) -> List[str]:
     fs = []
     for f in model_folders:
         fs.append(f.split("/")[-2:])

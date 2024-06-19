@@ -403,12 +403,14 @@ def test_undo_affine_transform():
     keypoints = torch.normal(mean=torch.zeros((seq_len, n_keypoints, 2)))
 
     # test single transform
+    torch.manual_seed(0)
     transform_mat = torch.normal(mean=torch.zeros((2, 3)))
     keypoints_aug = torch.matmul(keypoints, transform_mat[:, :2].T) + transform_mat[:, -1]
     keypoints_noaug = undo_affine_transform(keypoints_aug, transform_mat)
     assert torch.allclose(keypoints, keypoints_noaug, atol=1e-4)
 
     # test individual transforms
+    torch.manual_seed(0)
     transform_mat = torch.normal(mean=torch.zeros((seq_len, 2, 3)))
     keypoints_aug = torch.bmm(
         keypoints, transform_mat[:, :, :2].transpose(2, 1)

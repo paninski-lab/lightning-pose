@@ -71,18 +71,12 @@ training:
 
 model:
   # list of unsupervised losses
-  # "pca_singleview" | "pca_multiview" | "temporal" | "unimodal_mse" | ""
   losses_to_use: []
-  # backbone network:
-  # resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
-  # resnet50_animalpose_apose | resnet50_animal_ap10k
-  # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res
-  # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
+  # backbone network
   backbone: resnet50_animal_ap10k
   # prediction mode: regression | heatmap | heatmap_mhcrnn (context)
   model_type: heatmap
   # which heatmap loss to use
-  # "mse" | "kl" | "js"
   heatmap_loss_type: mse
   # tt expt name
   model_name: rebuttal23a
@@ -145,14 +139,8 @@ eval:
 
   # str with an absolute path to a directory containing videos for prediction.
   test_videos_directory: /home/zeus/content/data/ibl-pupil/videos_new
-  # str with an absolute path to directory in which you want to save .csv with predictions
-  saved_vid_preds_dir: /home/zeus
   # confidence threshold for plotting a vid
   confidence_thresh_for_vid: 0.9
-  # str with absolute path to the video file you want plotted with keypoints
-  video_file_to_plot: null
-  # a list of strings, each points to a .csv file with predictions of a given model to the same video. will be combined with video_file_to_plot to make a visualization
-  pred_csv_files_to_plot: [" "]
 
 callbacks:
   anneal_weight:
