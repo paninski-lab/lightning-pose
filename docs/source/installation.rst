@@ -43,7 +43,7 @@ to create a new environment in which this package and its dependencies will be i
 
 .. code-block:: console
 
-    conda create --name <YOUR_ENVIRONMENT_NAME> python=3.8
+    conda create --name <YOUR_ENVIRONMENT_NAME> python=3.10
 
 Activate the new environment:
 
