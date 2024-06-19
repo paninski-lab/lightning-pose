@@ -2,6 +2,7 @@
 
 import pytest
 import torch
+from lightning.pytorch.utilities import CombinedLoader
 
 
 def test_base_datamodule(cfg, base_data_module):
@@ -85,8 +86,10 @@ def test_multiview_heatmap_datamodule(cfg_multiview, multiview_heatmap_data_modu
     del batch
 
 
-def test_multiview_heatmap_datamodule_context(cfg_multiview,
-                                              multiview_heatmap_data_module_context):
+def test_multiview_heatmap_datamodule_context(
+    cfg_multiview,
+    multiview_heatmap_data_module_context,
+):
     im_height = cfg_multiview.data.image_resize_dims.height
     im_width = cfg_multiview.data.image_resize_dims.width
     im_height_ds = im_height / (2 ** cfg_multiview.data.downsample_factor)
@@ -175,9 +178,10 @@ def test_base_data_module_combined(cfg, base_data_module_combined):
     num_targets = base_data_module_combined.dataset.num_targets
 
     # test outputs for single batch
-    loader = CombinedLoader(base_data_module_combined.train_dataloader())
+    loader = base_data_module_combined.train_dataloader()
     batch = next(iter(loader))
-    batch = batch[0][0] if isinstance(batch, tuple) else batch  # batch tuple in lightning >=2.0.9
+    # batch tuple in lightning >=2.0.9
+    batch = batch[0] if isinstance(batch, tuple) else batch
     assert list(batch.keys())[0] == "labeled"
     assert list(batch.keys())[1] == "unlabeled"
     assert list(batch["labeled"].keys()) == ["images", "keypoints", "idxs", "bbox"]

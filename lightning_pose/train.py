@@ -3,7 +3,7 @@
 import os
 
 import lightning.pytorch as pl
-from omegaconf import DictConfig, OmegaConf, open_dict
+from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 from typeguard import typechecked
 
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
@@ -141,6 +141,13 @@ def train(cfg: DictConfig) -> None:
     )
     # compute and save various metrics
     try:
+        # take care of multiview case, where multiple csv files have been saved
+        preds_files = [
+            os.path.join(hydra_output_directory, path) for path in
+            os.listdir(hydra_output_directory) if path.endswith(".csv")
+        ]
+        if len(preds_files) > 1:
+            preds_file = preds_files
         compute_metrics(cfg=cfg, preds_file=preds_file, data_module=data_module_pred)
     except Exception as e:
         print(f"Error computing metrics\n{e}")
@@ -153,13 +160,10 @@ def train(cfg: DictConfig) -> None:
         if cfg.eval.test_videos_directory is None:
             filenames = []
         else:
-            filenames = check_video_paths(
-                return_absolute_path(cfg.eval.test_videos_directory)
-            )
+            filenames = check_video_paths(return_absolute_path(cfg.eval.test_videos_directory))
             vidstr = "video" if (len(filenames) == 1) else "videos"
             pretty_print_str(
-                f"Found {len(filenames)} {vidstr} to predict on "
-                f"(in cfg.eval.test_videos_directory)"
+                f"Found {len(filenames)} {vidstr} to predict (in cfg.eval.test_videos_directory)"
             )
 
         for video_file in filenames:
@@ -172,9 +176,7 @@ def train(cfg: DictConfig) -> None:
             # get save name labeled video csv
             if cfg.eval.save_vids_after_training:
                 labeled_vid_dir = os.path.join(video_pred_dir, "labeled_videos")
-                labeled_mp4_file = os.path.join(
-                    labeled_vid_dir, video_pred_name + "_labeled.mp4"
-                )
+                labeled_mp4_file = os.path.join(labeled_vid_dir, video_pred_name + "_labeled.mp4")
             else:
                 labeled_mp4_file = None
             # predict on video
@@ -187,29 +189,34 @@ def train(cfg: DictConfig) -> None:
                 trainer=trainer,
                 model=model,
                 data_module=data_module_pred,
-                save_heatmaps=cfg.eval.get(
-                    "predict_vids_after_training_save_heatmaps", False
-                ),
+                save_heatmaps=cfg.eval.get("predict_vids_after_training_save_heatmaps", False),
             )
             # compute and save various metrics
-            try:
-                compute_metrics(
-                    cfg=cfg,
-                    preds_file=prediction_csv_file,
-                    data_module=data_module_pred,
-                )
-            except Exception as e:
-                print(f"Error predicting on video {video_file}:\n{e}")
-                continue
+            # try:
+            compute_metrics(
+                cfg=cfg,
+                preds_file=prediction_csv_file,
+                data_module=data_module_pred,
+            )
+            # except Exception as e:
+            #     print(f"Error predicting on video {video_file}:\n{e}")
+            #     continue
 
     # ----------------------------------------------------------------------------------
     # predict on OOD frames
     # ----------------------------------------------------------------------------------
     # update config file to point to OOD data
-    csv_file_ood = os.path.join(cfg.data.data_dir, cfg.data.csv_file).replace(
-        ".csv", "_new.csv"
-    )
-    if os.path.exists(csv_file_ood):
+    if isinstance(cfg.data.csv_file, list) or isinstance(cfg.data.csv_file, ListConfig):
+        csv_file_ood = []
+        for csv_file in cfg.data.csv_file:
+            csv_file_ood.append(
+                os.path.join(cfg.data.data_dir, csv_file).replace(".csv", "_new.csv"))
+    else:
+        csv_file_ood = os.path.join(
+            cfg.data.data_dir, cfg.data.csv_file).replace(".csv", "_new.csv")
+
+    if (isinstance(csv_file_ood, str) and os.path.exists(csv_file_ood)) \
+            or (isinstance(csv_file_ood, list) and os.path.exists(csv_file_ood[0])):
         cfg_ood = cfg.copy()
         cfg_ood.data.csv_file = csv_file_ood
         cfg_ood.training.imgaug = "default"
@@ -236,8 +243,13 @@ def train(cfg: DictConfig) -> None:
         )
         # compute and save various metrics
         try:
-            compute_metrics(
-                cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood
-            )
+            # take care of multiview case, where multiple csv files have been saved
+            preds_files = [
+                os.path.join(hydra_output_directory, path) for path in
+                os.listdir(hydra_output_directory) if path.startswith("predictions_new")
+            ]
+            if len(preds_files) > 1:
+                preds_file_ood = preds_files
+            compute_metrics(cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood)
         except Exception as e:
             print(f"Error computing metrics\n{e}")

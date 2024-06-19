@@ -20,7 +20,6 @@ def test_supervised_regression(
         cfg=cfg_tmp,
         data_module=base_data_module,
         video_dataloader=video_dataloader,
-        video_list=video_list,
         trainer=trainer,
         remove_logs_fn=remove_logs,
     )
@@ -30,7 +29,6 @@ def test_semisupervised_regression_temporal_pcasingleview(
     cfg,
     base_data_module_combined,
     video_dataloader,
-    video_list,
     trainer,
     remove_logs,
     run_model_test,
@@ -44,7 +42,6 @@ def test_semisupervised_regression_temporal_pcasingleview(
         cfg=cfg_tmp,
         data_module=base_data_module_combined,
         video_dataloader=video_dataloader,
-        video_list=video_list,
         trainer=trainer,
         remove_logs_fn=remove_logs,
     )

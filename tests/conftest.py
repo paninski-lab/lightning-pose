@@ -89,6 +89,8 @@ def cfg_multiview() -> dict:
     cfg["data"]["keypoint_names"] = [
         "paw1LH", "paw2LF", "paw3RF", "paw4RH", "tailBase", "tailMid", "nose",
     ]
+    cfg["data"]["columns_for_singleview_pca"] = [0, 1, 2, 3, 4, 5, 6]
+    cfg["data"]["mirrored_column_matches"] = None
     cfg["model"]["backbone_pretrained"] = False
 
     return OmegaConf.create(cfg)
@@ -353,8 +355,10 @@ def multiview_heatmap_data_module(cfg_multiview, multiview_heatmap_dataset) -> B
 
 
 @pytest.fixture
-def multiview_heatmap_data_module_context(cfg_multiview,
-                                          multiview_heatmap_dataset_context) -> BaseDataModule:
+def multiview_heatmap_data_module_context(
+    cfg_multiview,
+    multiview_heatmap_dataset_context,
+) -> BaseDataModule:
     """Create a labeled data module for heatmap models."""
 
     # setup

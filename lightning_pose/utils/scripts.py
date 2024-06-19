@@ -78,7 +78,9 @@ def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
 
 @typechecked
 def get_dataset(
-    cfg: DictConfig, data_dir: str, imgaug_transform: iaa.Sequential
+    cfg: DictConfig,
+    data_dir: str,
+    imgaug_transform: iaa.Sequential,
 ) -> Union[BaseTrackingDataset, HeatmapDataset, MultiviewHeatmapDataset]:
     """Create a dataset that contains labeled data."""
 
@@ -168,7 +170,8 @@ def get_data_module(
 
 @typechecked
 def get_loss_factories(
-    cfg: DictConfig, data_module: Union[BaseDataModule, UnlabeledDataModule]
+    cfg: DictConfig,
+    data_module: Union[BaseDataModule, UnlabeledDataModule],
 ) -> dict:
     """Create loss factory that orchestrates different losses during training."""
 
@@ -435,7 +438,7 @@ def get_callbacks(
 @typechecked
 def calculate_train_batches(
     cfg: DictConfig,
-    dataset: Optional[Union[BaseTrackingDataset, HeatmapDataset]] = None
+    dataset: Optional[Union[BaseTrackingDataset, HeatmapDataset, MultiviewHeatmapDataset]] = None,
 ) -> int:
     """
     For semi-supervised models, this tells us how many batches to take from each dataloader
@@ -474,10 +477,17 @@ def compute_metrics(
     data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
 ) -> None:
     """Compute various metrics on predictions csv file, potentially for multiple views."""
-    if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
+    if (
+        cfg.data.get("view_names", None)
+        and len(cfg.data.view_names) > 1
+        and isinstance(preds_file, list)
+    ):
         preds_file = sorted(preds_file)
-        for view_name, csv_file, preds_file_ in zip(sorted(cfg.data.view_names),
-                                                    sorted(cfg.data.csv_file), preds_file):
+        for view_name, csv_file, preds_file_ in zip(
+                sorted(cfg.data.view_names),
+                sorted(cfg.data.csv_file),
+                preds_file
+        ):
             assert view_name in preds_file_
             labels_file = return_absolute_path(os.path.join(cfg.data.data_dir, csv_file))
             # preds_file_ = preds_file.replace(".csv", f"_{view_name}.csv")
@@ -488,7 +498,14 @@ def compute_metrics(
                 data_module=data_module,
             )
     else:
-        labels_file = return_absolute_path(os.path.join(cfg.data.data_dir, cfg.data.csv_file))
+        if isinstance(cfg.data.csv_file, str):
+            labels_file = return_absolute_path(
+                os.path.join(cfg.data.data_dir, cfg.data.csv_file)
+            )
+        else:
+            labels_file = return_absolute_path(
+                os.path.join(cfg.data.data_dir, cfg.data.csv_file[0])
+            )
         compute_metrics_single(
             cfg=cfg, labels_file=labels_file, preds_file=preds_file, data_module=data_module,
         )
@@ -662,9 +679,13 @@ def export_predictions_and_labeled_video(
 
 
 @typechecked
-def get_detector_model(cfg: DictConfig, data_dir: str, video_dir: Optional[str] = None
-                       ) -> Tuple[pl.LightningModule, BaseDataModule]:
+def get_detector_model(
+    cfg: DictConfig,
+    data_dir: str,
+    video_dir: Optional[str] = None,
+) -> Tuple[pl.LightningModule, BaseDataModule]:
     """get a detector model from a dynamic pipeline"""
+
     if not cfg.data.get('dynamic_crop', False):
         raise ValueError(
             "Implemented only for dynamic crop algorithm"
