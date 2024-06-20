@@ -169,6 +169,9 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             for name in list_img_names:
                 # read image from file and apply transformations (if any)
                 file_name = os.path.join(self.root_directory, name)
+                if not os.path.exists(file_name):
+                    # revert to center frame
+                    file_name = os.path.join(self.root_directory, list_img_names[2])
                 # if 1 color channel, change to 3.
                 image = Image.open(file_name).convert("RGB")
                 images.append(np.asarray(image))
