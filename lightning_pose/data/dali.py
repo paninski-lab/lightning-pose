@@ -41,6 +41,7 @@ def video_pipe(
     step: int = 1,
     pad_last_batch: bool = False,
     imgaug: str = "default",
+    skip_vfr_check=True  
     # arguments consumed by decorator:
     # batch_size,
     # num_threads,
