@@ -41,7 +41,7 @@ def video_pipe(
     step: int = 1,
     pad_last_batch: bool = False,
     imgaug: str = "default",
-    skip_vfr_check=True  
+    skip_vfr_check: bool = True,
     # arguments consumed by decorator:
     # batch_size,
     # num_threads,
@@ -66,8 +66,9 @@ def video_pipe(
         device: "cpu" | "gpu"
         name: pipeline name, used to string together DataNode elements
         step: number of frames to advance on each read
-        pad_last_batch
-        imgaug
+        pad_last_batch:
+        imgaug: string identifying which imgaug pipeline to use; "default", "dlc", "dlc-top-down"
+        skip_vfr_check: don't check for variable frame rates, can throw errors with small diffs
 
     Returns:
         pipeline object to be fed to DALIGenericIterator
