@@ -8,8 +8,8 @@
 Welcome to the Lightning Pose documentation
 ===========================================
 
-Lightning Pose is an open source deep-learning package for animal pose estimation
-(`preprint <https://www.biorxiv.org/content/10.1101/2023.04.28.538703v1>`_).
+Lightning Pose is an open source deep learning package for animal pose estimation
+(`Biderman, Whiteway et al. 2024, Nature Methods <https://rdcu.be/dLP3z>`_).
 The framework is based on Pytorch Lightning and supports accelerated training on unlabeled videos
 using NVIDIA DALI. Models can be evaluated with TensorBoard, FiftyOne, and Streamlit.
 

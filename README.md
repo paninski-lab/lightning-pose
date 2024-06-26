@@ -8,9 +8,9 @@
 Pose estimation models implemented in **Pytorch Lightning**, supporting massively accelerated training on _unlabeled_ videos using **NVIDIA DALI**. 
 Models can be evaluated with **TensorBoard**, **FiftyOne**, and **Streamlit**.
 
-Preprint: [Lightning Pose: improved animal pose estimation via semi-supervised learning, Bayesian ensembling, and cloud-native open-source tools](https://www.biorxiv.org/content/10.1101/2023.04.28.538703v1)
+As of June 2024, Lightning Pose is now [published in Nature Methods](https://rdcu.be/dLP3z)!
 
-## Try our demo!
+## Try our demo
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/danbider/lightning-pose/blob/main/scripts/litpose_training_demo.ipynb)
 
