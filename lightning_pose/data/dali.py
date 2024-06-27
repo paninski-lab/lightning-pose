@@ -89,6 +89,7 @@ def video_pipe(
         dtype=types.DALIDataType.FLOAT,
         pad_last_batch=pad_last_batch,  # Important for context loaders
         file_list_include_preceding_frame=True,  # to get rid of dali warnings
+        skip_vfr_check = skip_vfr_check
     )
     if resize_dims:
         video = fn.resize(video, size=resize_dims)
