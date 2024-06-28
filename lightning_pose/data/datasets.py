@@ -3,7 +3,6 @@
 import os
 from typing import Callable, List, Literal, Optional
 
-import imgaug.augmenters as iaa
 import numpy as np
 import pandas as pd
 import torch
@@ -264,12 +263,8 @@ class HeatmapDataset(BaseTrackingDataset):
         self.downsample_factor = downsample_factor
         self.output_sigma = 1.25  # should be sigma/2 ^downsample factor
         self.uniform_heatmaps = uniform_heatmaps
-
-        # Compute heatmaps as preprocessing step
         self.num_targets = torch.numel(self.keypoints[0])
         self.num_keypoints = self.num_targets // 2
-        self.label_heatmaps = None  # populated by `self.compute_heatmaps()`
-        self.compute_heatmaps()
 
     @property
     def output_shape(self) -> tuple:
@@ -312,7 +307,7 @@ class HeatmapDataset(BaseTrackingDataset):
         return y_heatmap[0]
 
     def compute_heatmaps(self):
-        """Compute initial 2D heatmaps for all labeled data.
+        """Compute initial 2D heatmaps for all labeled data. Note this will apply augmentations.
 
         original image dims e.g., (406, 396) ->
         resized image dims e.g., (384, 384) ->
@@ -326,20 +321,12 @@ class HeatmapDataset(BaseTrackingDataset):
             example_dict: BaseLabeledExampleDict = super().__getitem__(idx)
             label_heatmaps[idx] = self.compute_heatmap(example_dict)
 
-        self.label_heatmaps = label_heatmaps
+        return label_heatmaps
 
     def __getitem__(self, idx: int) -> HeatmapLabeledExampleDict:
-        """Get an example from the dataset.
-
-        Calls the base dataset to get an image and a label, then additionally
-        returns the corresponding heatmap.
-
-        """
+        """Get an example from the dataset."""
+        # call base dataset to get an image and labels
         example_dict: BaseLabeledExampleDict = super().__getitem__(idx)
-        if len(self.imgaug_transform) == 1 and isinstance(self.imgaug_transform[0], iaa.Resize):
-            # we have a deterministic resizing augmentation; use precomputed heatmaps
-            example_dict["heatmaps"] = self.label_heatmaps[idx]
-        else:
-            # we have a random augmentation; need to recompute heatmaps
-            example_dict["heatmaps"] = self.compute_heatmap(example_dict)
+        # compute the corresponding heatmaps
+        example_dict["heatmaps"] = self.compute_heatmap(example_dict)
         return example_dict

@@ -1,12 +1,14 @@
 """Data modules split a dataset into train, val, and test modules."""
 
+import copy
 from typing import List, Literal, Optional, Union
 
+import imgaug.augmenters as iaa
 import lightning.pytorch as pl
 import torch
 from lightning.pytorch.utilities import CombinedLoader
 from omegaconf import DictConfig
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, Subset, random_split
 
 from lightning_pose.data.dali import PrepareDALI
 from lightning_pose.data.utils import (
@@ -75,13 +77,10 @@ class BaseDataModule(pl.LightningDataModule):
         self.test_dataset = None  # populated by self.setup()
         self.torch_seed = torch_seed
 
-    def setup(self, stage: Optional[str] = None):  # stage arg needed for ptl
+    def setup(self, stage: Optional[str] = None) -> None:  # stage arg needed for ptl
+
         datalen = self.dataset.__len__()
-        print(
-            "Number of labeled images in the full dataset (train+val+test): {}".format(
-                datalen
-            )
-        )
+        print(f"Number of labeled images in the full dataset (train+val+test): {datalen}")
 
         # split data based on provided probabilities
         data_splits_list = split_sizes_from_probabilities(
@@ -91,17 +90,36 @@ class BaseDataModule(pl.LightningDataModule):
             test_probability=self.test_probability,
         )
 
-        self.train_dataset, self.val_dataset, self.test_dataset = random_split(
-            self.dataset,
-            data_splits_list,
-            generator=torch.Generator().manual_seed(self.torch_seed),
-        )
+        if len(self.dataset.imgaug_transform) == 1:
+            # no augmentations in the pipeline; subsets can share same underlying dataset
+            self.train_dataset, self.val_dataset, self.test_dataset = random_split(
+                self.dataset,
+                data_splits_list,
+                generator=torch.Generator().manual_seed(self.torch_seed),
+            )
+        else:
+            # augmentations in the pipeline; we want validation and test datasets that only resize
+            # we can't simply change the imgaug pipeline in the datasets after they've been split
+            # because the subsets actually point to the same underlying dataset, so we create
+            # separate datasets here
+            train_idxs, val_idxs, test_idxs = random_split(
+                range(len(self.dataset)),
+                data_splits_list,
+                generator=torch.Generator().manual_seed(self.torch_seed),
+            )
+
+            self.train_dataset = Subset(copy.deepcopy(self.dataset), indices=list(train_idxs))
+            self.val_dataset = Subset(copy.deepcopy(self.dataset), indices=list(val_idxs))
+            self.test_dataset = Subset(copy.deepcopy(self.dataset), indices=list(test_idxs))
+
+            # only use the final resize transform for the validation and test datasets
+            resize_transform = iaa.Sequential([self.dataset.imgaug_transform[-1]])
+            self.val_dataset.dataset.imgaug_transform = resize_transform
+            self.test_dataset.dataset.imgaug_transform = resize_transform
 
         # further subsample training data if desired
         if self.train_frames is not None:
-            n_frames = compute_num_train_frames(
-                len(self.train_dataset), self.train_frames
-            )
+            n_frames = compute_num_train_frames(len(self.train_dataset), self.train_frames)
 
             if n_frames < len(self.train_dataset):
                 # split the data a second time to reflect further subsampling from
@@ -109,9 +127,10 @@ class BaseDataModule(pl.LightningDataModule):
                 self.train_dataset.indices = self.train_dataset.indices[:n_frames]
 
         print(
-            "Size of -- train set: {}, val set: {}, test set: {}".format(
-                len(self.train_dataset), len(self.val_dataset), len(self.test_dataset)
-            )
+            f"Dataset splits -- "
+            f"train: {len(self.train_dataset)}, "
+            f"val: {len(self.val_dataset)}, "
+            f"test: {len(self.test_dataset)}"
         )
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
@@ -210,7 +229,7 @@ class UnlabeledDataModule(BaseDataModule):
         super().setup()
         self.setup_unlabeled()
 
-    def setup_unlabeled(self):
+    def setup_unlabeled(self) -> None:
         """Sets up the unlabeled data loader."""
         dali_prep = PrepareDALI(
             train_stage="train",
@@ -223,7 +242,7 @@ class UnlabeledDataModule(BaseDataModule):
 
         self.unlabeled_dataloader = dali_prep()
 
-    def train_dataloader(self) -> SemiSupervisedDataLoaderDict:
+    def train_dataloader(self) -> CombinedLoader:
         loader = SemiSupervisedDataLoaderDict(
             labeled=DataLoader(
                 self.train_dataset,
