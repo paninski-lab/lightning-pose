@@ -22,16 +22,12 @@ def test_pca_keypoint_class_singleview(cfg, base_data_module_combined):
         loss_type="pca_singleview",
         data_module=base_data_module_combined,
         components_to_keep=0.99,
-        empirical_epsilon_percentile=1.00,
+        empirical_epsilon_percentile=1.0,
         columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
     )
 
     kp_pca._get_data()
     assert kp_pca.data_arr.shape == (num_train_ims, 2 * num_keypoints)
-
-    # we know that there are nan keypoints in this toy dataset, assert that
-    nan_count_pre_cleanup = torch.sum(torch.isnan(kp_pca.data_arr))
-    assert nan_count_pre_cleanup > 0
 
     kp_pca.data_arr = kp_pca._format_data(data_arr=kp_pca.data_arr)
     assert kp_pca.data_arr.shape == (
@@ -39,25 +35,13 @@ def test_pca_keypoint_class_singleview(cfg, base_data_module_combined):
         2 * num_keypoints_for_pca,  # 2 coords per keypoint
     )
 
-    # now clean nans
-    kp_pca._clean_any_nans()
-    # we've eliminated some rows
-    assert kp_pca.data_arr.shape[0] < (num_keypoints_for_pca * num_train_ims)
-
-    # no nans allowed at this stage
-    nan_count = torch.sum(torch.isnan(kp_pca.data_arr))
-    assert nan_count == 0
-
     # check that we have enough observations
     kp_pca._check_data()  # raises ValueErrors if fails
 
     # fit the pca model
     kp_pca._fit_pca()
-
     kp_pca._choose_n_components()
-
     kp_pca.pca_prints()
-
     kp_pca._set_parameter_dict()
 
     check_lists_equal(
@@ -75,7 +59,36 @@ def test_pca_keypoint_class_singleview(cfg, base_data_module_combined):
         columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
     )
     kp_pca_2()
-    assert (kp_pca_2.data_arr == kp_pca.data_arr).all()
+    assert torch.allclose(kp_pca_2.data_arr, kp_pca.data_arr, equal_nan=True)
+
+    # --------------------------------------
+    # test reprojection error computation
+    # --------------------------------------
+
+    # generate fake data
+    n_batches = 12
+    n_keypoints = 17
+    pred_keypoints = torch.rand(
+        size=(n_batches, n_keypoints * 2),
+        device="cpu",
+    )
+    # initialize an instance
+    singleview_pca = KeypointPCA(
+        loss_type="pca_singleview",
+        data_module=base_data_module_combined,
+        components_to_keep=6,
+        empirical_epsilon_percentile=1.0,
+        columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
+    )
+    singleview_pca()  # fit it to have all the parameters
+
+    # push pred_keypoints through the reformatter
+    data_arr = singleview_pca._format_data(data_arr=pred_keypoints)
+    # num selected keypoints in the cfg is 14, so we should have 14 * 2 columns
+    assert data_arr.shape == (n_batches, 14 * 2)
+
+    err = singleview_pca.compute_reprojection_error(data_arr=data_arr)
+    assert err.shape == (n_batches, 14)
 
 
 def test_pca_keypoint_class_multiview(cfg, base_data_module_combined):
@@ -99,28 +112,11 @@ def test_pca_keypoint_class_multiview(cfg, base_data_module_combined):
     kp_pca._get_data()
     assert kp_pca.data_arr.shape == (num_train_ims, 2 * num_keypoints)
 
-    # we know that there are nan keypoints in this toy dataset, assert that
-    nan_count_pre_cleanup = torch.sum(torch.isnan(kp_pca.data_arr))
-    assert nan_count_pre_cleanup > 0
-
     kp_pca.data_arr = kp_pca._format_data(data_arr=kp_pca.data_arr)
     assert kp_pca.data_arr.shape == (
         num_keypoints_both_views * num_train_ims,
         4,  # 4 coords per keypoint (2 views)
     )
-
-    # again, it should still contain nans
-    nan_count_pre_cleanup = torch.sum(torch.isnan(kp_pca.data_arr))
-    assert nan_count_pre_cleanup > 0
-
-    # now clean nans
-    kp_pca._clean_any_nans()
-    # we've eliminated some rows
-    assert kp_pca.data_arr.shape[0] < (num_keypoints_both_views * num_train_ims)
-
-    # no nans allowed at this stage
-    nan_count = torch.sum(torch.isnan(kp_pca.data_arr))
-    assert nan_count == 0
 
     # check that we have enough observations
     kp_pca._check_data()  # raises ValueErrors if fails
@@ -152,66 +148,123 @@ def test_pca_keypoint_class_multiview(cfg, base_data_module_combined):
         mirrored_column_matches=cfg.data.mirrored_column_matches,
     )
     kp_pca_2()
-    assert (kp_pca_2.data_arr == kp_pca.data_arr).all()
+    assert torch.allclose(kp_pca_2.data_arr, kp_pca.data_arr, equal_nan=True)
 
 
-def test_format_multiview_data_for_pca():
+def test_nan_pca():
 
-    from lightning_pose.utils.pca import format_multiview_data_for_pca
+    from sklearn.datasets import load_diabetes
+    from sklearn.decomposition import PCA
 
-    n_batches = 12
-    n_keypoints = 20
-    keypoints = torch.rand(
-        size=(n_batches, n_keypoints, 2),
-        device="cpu",
+    from lightning_pose.utils.pca import NaNPCA
+
+    # load non-nan example data
+    diabetes = load_diabetes()
+    data_for_pca = diabetes.data
+
+    # no nan-handling needed here
+    assert np.sum(np.isnan(data_for_pca)) == 0
+    # just to illustrate the dimensions of the data
+    assert data_for_pca.shape == (442, 10)
+
+    # ------------------------------------------------------
+    # TEST 1: standard PCA vs our custom PCA with no NaNs
+    # ------------------------------------------------------
+
+    # fit standard pca
+    pca_skl = PCA(svd_solver="full")
+    pca_skl.fit(data_for_pca)
+
+    # fit our custom NaN-handling PCA
+    pca_cust = NaNPCA()
+    pca_cust.fit(data_for_pca)
+
+    # check outputs are the same
+    assert pca_skl.noise_variance_ == pca_cust.noise_variance_
+    assert pca_skl.n_samples_ == pca_cust.n_samples_
+    assert pca_skl.n_components_ == pca_cust.n_components_
+    assert np.allclose(pca_skl.components_, pca_cust.components_, rtol=1e-10)
+    assert np.allclose(pca_skl.explained_variance_, pca_cust.explained_variance_, rtol=1e-10)
+    assert np.allclose(
+        pca_skl.explained_variance_ratio_, pca_cust.explained_variance_ratio_, rtol=1e-10)
+    assert np.allclose(pca_skl.singular_values_, pca_cust.singular_values_, rtol=1e-10)
+
+    # ------------------------------------------------------
+    # TEST 2: standard PCA vs custom PCA with a single NaN
+    # ------------------------------------------------------
+
+    # set a single value to NaN
+    data_for_pca_nans1 = np.copy(data_for_pca)
+    data_for_pca_nans1[0, 0] = np.nan
+
+    # fit our custom NaN-handling PCA
+    pca_cust_nan1 = NaNPCA()
+    pca_cust_nan1.fit(data_for_pca_nans1)
+
+    # check deterministic attributes are the same
+    assert pca_cust.noise_variance_ == pca_cust_nan1.noise_variance_
+    assert pca_cust.n_samples_ == pca_cust_nan1.n_samples_
+    assert pca_cust.n_components_ == pca_cust_nan1.n_components_
+
+    # check outputs are close, but not the same
+    # for components, we don't consider values close to zero, as these can change sign easily
+    mask = np.abs(pca_cust.components_) > 0.05
+    assert not np.allclose(
+        pca_cust.components_[mask], pca_cust_nan1.components_[mask], rtol=1e-10)
+    assert np.allclose(
+        pca_cust.components_[mask], pca_cust_nan1.components_[mask], rtol=1e-1)
+    assert not np.allclose(
+        pca_cust.explained_variance_, pca_cust_nan1.explained_variance_, rtol=1e-10)
+    assert np.allclose(
+        pca_cust.explained_variance_, pca_cust_nan1.explained_variance_, rtol=1e-2)
+    assert not np.allclose(
+        pca_cust.explained_variance_ratio_, pca_cust_nan1.explained_variance_ratio_, rtol=1e-10)
+    assert np.allclose(
+        pca_cust.explained_variance_ratio_, pca_cust_nan1.explained_variance_ratio_, rtol=1e-2)
+    assert not np.allclose(
+        pca_cust.singular_values_, pca_cust_nan1.singular_values_, rtol=1e-10)
+    assert np.allclose(
+        pca_cust.singular_values_, pca_cust_nan1.singular_values_, rtol=1e-2)
+
+    # ------------------------------------------------------
+    # TEST 3: custom PCA with single vs many NaNs
+    # ------------------------------------------------------
+    # set many values to NaN
+    data_for_pca_nans2 = np.copy(data_for_pca)
+    rows = [0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1, 0]
+    cols = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    for r, c in zip(rows, cols):
+        data_for_pca_nans2[c, r] = np.nan
+
+    # fit our custom NaN-handling PCA
+    pca_cust_nan2 = NaNPCA()
+    pca_cust_nan2.fit(data_for_pca_nans2)
+
+    # check outputs are close, but not the same
+    # for components, we don't consider values close to zero, as these can change sign easily
+    mask = np.abs(pca_cust.components_) > 0.05
+    assert not np.allclose(
+        pca_cust_nan1.components_[mask], pca_cust_nan2.components_[mask], rtol=1e-10)
+    assert np.allclose(
+        pca_cust_nan1.components_[mask], pca_cust_nan2.components_[mask], rtol=1e0)
+    # just look at the 'd' dims with highest variance
+    d = 7
+    assert not np.allclose(
+        pca_cust_nan1.explained_variance_[:d], pca_cust_nan2.explained_variance_[:d], rtol=1e-10)
+    assert np.allclose(
+        pca_cust_nan1.explained_variance_[:d], pca_cust_nan2.explained_variance_[:d], rtol=1e-2)
+    assert not np.allclose(
+        pca_cust_nan1.explained_variance_ratio_[:d], pca_cust_nan2.explained_variance_ratio_[:d],
+        rtol=1e-10,
     )
-
-    # basic two-view functionality
-    column_matches = [[0, 1, 2, 3], [4, 5, 6, 7]]
-    arr = format_multiview_data_for_pca(keypoints, column_matches)
-    assert arr.shape == torch.Size(
-        [n_batches * len(column_matches[0]), 2 * len(column_matches)]
+    assert np.allclose(
+        pca_cust_nan1.explained_variance_ratio_[:d], pca_cust_nan2.explained_variance_ratio_[:d],
+        rtol=1e-2,
     )
-
-    # basic error checking
-    column_matches = [[0, 1, 2, 3], [4, 5, 6]]
-    with pytest.raises(AssertionError):
-        format_multiview_data_for_pca(keypoints, column_matches)
-
-    # basic three-view functionality
-    column_matches = [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]]
-    arr = format_multiview_data_for_pca(keypoints, column_matches)
-    assert arr.shape == torch.Size(
-        [n_batches * len(column_matches[0]), 2 * len(column_matches)]
-    )
-
-
-def test_singleview_format_and_loss(cfg, base_data_module_combined):
-
-    # generate fake data
-    n_batches = 12
-    n_keypoints = 17
-    pred_keypoints = torch.rand(
-        size=(n_batches, n_keypoints * 2),
-        device="cpu",
-    )
-    # initialize an instance
-    singleview_pca = KeypointPCA(
-        loss_type="pca_singleview",
-        data_module=base_data_module_combined,
-        components_to_keep=6,
-        empirical_epsilon_percentile=1.0,
-        columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
-    )
-    singleview_pca()  # fit it to have all the parameters
-
-    # push pred_keypoints through the reformatter
-    data_arr = singleview_pca._format_data(data_arr=pred_keypoints)
-    # num selected keypoints in the cfg is 14, so we should have 14 * 2 columns
-    assert data_arr.shape == (n_batches, 14 * 2)
-
-    err = singleview_pca.compute_reprojection_error(data_arr=data_arr)
-    assert err.shape == (n_batches, 14)
+    assert not np.allclose(
+        pca_cust_nan1.singular_values_[:d], pca_cust_nan2.singular_values_[:d], rtol=1e-10)
+    assert np.allclose(
+        pca_cust_nan1.singular_values_[:d], pca_cust_nan2.singular_values_[:d], rtol=1e-2)
 
 
 def test_component_chooser():
@@ -262,3 +315,34 @@ def test_component_chooser():
 
     # less explained variance -> less components kept
     assert ComponentChooser(pca, 0.20)() < ComponentChooser(pca, 0.90)()
+
+
+def test_format_multiview_data_for_pca():
+
+    from lightning_pose.utils.pca import format_multiview_data_for_pca
+
+    n_batches = 12
+    n_keypoints = 20
+    keypoints = torch.rand(
+        size=(n_batches, n_keypoints, 2),
+        device="cpu",
+    )
+
+    # basic two-view functionality
+    column_matches = [[0, 1, 2, 3], [4, 5, 6, 7]]
+    arr = format_multiview_data_for_pca(keypoints, column_matches)
+    assert arr.shape == torch.Size(
+        [n_batches * len(column_matches[0]), 2 * len(column_matches)]
+    )
+
+    # basic error checking
+    column_matches = [[0, 1, 2, 3], [4, 5, 6]]
+    with pytest.raises(AssertionError):
+        format_multiview_data_for_pca(keypoints, column_matches)
+
+    # basic three-view functionality
+    column_matches = [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]]
+    arr = format_multiview_data_for_pca(keypoints, column_matches)
+    assert arr.shape == torch.Size(
+        [n_batches * len(column_matches[0]), 2 * len(column_matches)]
+    )
