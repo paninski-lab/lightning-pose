@@ -17,8 +17,8 @@ def test_base_dataset(cfg, base_dataset):
     batch = base_dataset[0]
     assert batch["images"].shape == (3, im_height, im_width)
     assert batch["keypoints"].shape == (num_targets,)
-    assert type(batch["images"]) == torch.Tensor
-    assert type(batch["keypoints"]) == torch.Tensor
+    assert isinstance(batch["images"], torch.Tensor)
+    assert isinstance(batch["keypoints"], torch.Tensor)
 
 
 def test_heatmap_dataset(cfg, heatmap_dataset):
@@ -36,8 +36,8 @@ def test_heatmap_dataset(cfg, heatmap_dataset):
     assert batch["images"].shape == (3, im_height, im_width)
     assert batch["keypoints"].shape == (num_targets,)
     assert batch["heatmaps"].shape[1:] == heatmap_dataset.output_shape
-    assert type(batch["images"]) == torch.Tensor
-    assert type(batch["keypoints"]) == torch.Tensor
+    assert isinstance(batch["images"], torch.Tensor)
+    assert isinstance(batch["keypoints"], torch.Tensor)
 
 
 def test_heatmap_dataset_context(cfg, heatmap_dataset_context):
@@ -55,8 +55,8 @@ def test_heatmap_dataset_context(cfg, heatmap_dataset_context):
     assert batch["images"].shape == (5, 3, im_height, im_width)
     assert batch["keypoints"].shape == (num_targets,)
     assert batch["heatmaps"].shape[1:] == heatmap_dataset_context.output_shape
-    assert type(batch["images"]) == torch.Tensor
-    assert type(batch["keypoints"]) == torch.Tensor
+    assert isinstance(batch["images"], torch.Tensor)
+    assert isinstance(batch["keypoints"], torch.Tensor)
 
 
 def test_equal_return_sizes(base_dataset, heatmap_dataset):
