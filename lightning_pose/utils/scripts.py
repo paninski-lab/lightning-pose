@@ -465,19 +465,18 @@ def compute_metrics(
 
     # load predictions
     pred_df = pd.read_csv(preds_file, header=[0, 1, 2], index_col=0)
+    xyl_mask = pred_df.columns.get_level_values("coords").isin(["x", "y", "likelihood"])
+    tmp = pred_df.loc[:, xyl_mask].to_numpy().reshape(pred_df.shape[0], -1, 3)
+
     if pred_df.keys()[-1][0] == "set":
         # these are predictions on labeled data
         # get rid of last column that contains info about train/val/test set
         is_video = False
-        tmp = pred_df.iloc[:, :-1].to_numpy().reshape(pred_df.shape[0], -1, 3)
         index = labels_df.index
         set = pred_df.iloc[:, -1].to_numpy()
     else:
         # these are predictions on video data
-        # could be eks outputs, which contain x, y, likelihood, and z-score headings
         is_video = True
-        xyl_mask = pred_df.columns.get_level_values("coords").isin(["x", "y", "likelihood"])
-        tmp = pred_df.loc[:, xyl_mask].to_numpy().reshape(pred_df.shape[0], -1, 3)
         index = pred_df.index
         set = None
 
