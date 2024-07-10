@@ -43,12 +43,6 @@ class BaseLabeledExampleDict(TypedDict):
     idxs: int
 
 
-class DynamicLabeledExampleDict(BaseLabeledExampleDict):
-    """Return type when calling __getitem__() on DynamicDataset."""
-    keypoints: List[TensorType["num_targets", float]]
-    bbox: List[TensorType["xyhw":4, float]]
-
-
 class HeatmapLabeledExampleDict(BaseLabeledExampleDict):
     """Return type when calling __getitem__() on HeatmapTrackingDataset."""
     heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width", float]
@@ -82,12 +76,6 @@ class BaseLabeledBatchDict(TypedDict):
     keypoints: TensorType["batch", "num_targets", float]
     bbox: TensorType["batch", "xyhw":4, float]
     idxs: TensorType["batch", int]
-
-
-class DynamicLabeledBatchDict(BaseLabeledBatchDict):
-    """Batch type for dynamic labeled data."""
-    keypoints: List[List[TensorType["num_targets", float]]]  # list over batch then over instances
-    bbox: List[List[TensorType["xyhw":4, float]]]
 
 
 class HeatmapLabeledBatchDict(BaseLabeledBatchDict):
