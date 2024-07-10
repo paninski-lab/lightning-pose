@@ -96,8 +96,10 @@ def get_dataset(
             )
     elif cfg.model.model_type == "heatmap" or cfg.model.model_type == "heatmap_mhcrnn":
         if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
-            UserWarning("No precautions regarding the size of the images were considered here, \
-                        images will be resized accordingly to configs!")
+            UserWarning(
+                "No precautions regarding the size of the images were considered here, "
+                "images will be resized accordingly to configs!"
+            )
             dataset = MultiviewHeatmapDataset(
                 root_directory=data_dir,
                 csv_paths=cfg.data.csv_file,
@@ -154,6 +156,7 @@ def get_data_module(
         data_module = UnlabeledDataModule(
             dataset=dataset,
             video_paths_list=video_dir,
+            view_names=cfg.data.get("view_names", None),
             train_batch_size=cfg.training.train_batch_size,
             val_batch_size=cfg.training.val_batch_size,
             test_batch_size=cfg.training.test_batch_size,

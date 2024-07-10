@@ -36,6 +36,8 @@ Lightning Pose assumes the following project directory structure:
 
 * ``<LABELED_DATA_DIR>/``: Each view must have a dedicated folder that contains images that correspond to the labels. The same frames from all the views must have the same names; for example, the images corresponding to time point 39 must be named "<LABELED_DATA_DIR>/view0/img000039.png" and "<LABELED_DATA_DIR>/view1/img000039.png". The directory name, any subdirectory names, and image names are all flexible, as long as they are consistent with the first column of `<view_name>.csv` files.
 
+* ``<VIDEO_DIR>/``: This is a single directory of videos, which must following the naming convention ``<vid_name>_<view_name>.csv``. So for example if you have a session named "2024_run1" and the view names "top" and "side", there should be two videos, named ``2024_run1_top.mp4`` and ``2024_run1_side.mp4``.
+
 * ``<view_name>.csv``: For each view (camera) there should be a table with keypoint labels (rows: frames; columns: keypoints). Note that these files can take any name, and need to be listed in the config file under the ``data.csv_file`` section. Each csv file must contain the same set of keypoints, and each must have the same number of rows (corresponding to specific points in time).
 
 * ``<VIDEO_DIR>/``: contains all the videos from any/all views that you would like to be predicted after model training completes.
