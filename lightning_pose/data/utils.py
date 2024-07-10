@@ -339,17 +339,19 @@ def split_sizes_from_probabilities(
     elif test_probability is None:
         test_probability = 1.0 - train_probability - val_probability
 
-    assert (
-        test_probability + train_probability + val_probability == 1.0
-    )  # probabilities should add to one
+    # probabilities should add to one
+    assert test_probability + train_probability + val_probability == 1.0
+
+    # compute numbers from probabilities
     train_number = int(np.floor(train_probability * total_number))
     val_number = int(np.floor(val_probability * total_number))
-    test_number = (
-        total_number - train_number - val_number
-    )  # if we lose extra examples by flooring, send these to test_number
-    assert (
-        train_number + test_number + val_number == total_number
-    )  # assert that we're using all datapoints
+
+    # if we lose extra examples by flooring, send these to test_number
+    test_number = total_number - train_number - val_number
+
+    # assert that we're using all datapoints
+    assert train_number + test_number + val_number == total_number
+
     return [train_number, val_number, test_number]
 
 

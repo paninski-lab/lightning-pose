@@ -3,7 +3,6 @@
 import os
 from typing import Callable, List, Literal, Optional, Tuple, Union
 
-import imgaug.augmenters as iaa
 import numpy as np
 import pandas as pd
 import torch
@@ -164,6 +163,9 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             for name in list_img_names:
                 # read image from file and apply transformations (if any)
                 file_name = os.path.join(self.root_directory, name)
+                if not os.path.exists(file_name):
+                    # revert to center frame
+                    file_name = os.path.join(self.root_directory, list_img_names[2])
                 # if 1 color channel, change to 3.
                 image = Image.open(file_name).convert("RGB")
                 images.append(np.asarray(image))
@@ -259,8 +261,6 @@ class HeatmapDataset(BaseTrackingDataset):
         self.downsample_factor = downsample_factor
         self.output_sigma = 1.25  # should be sigma/2 ^downsample factor
         self.uniform_heatmaps = uniform_heatmaps
-
-        # Compute heatmaps as preprocessing step
         self.num_targets = torch.numel(self.keypoints[0])
         self.num_keypoints = self.num_targets // 2
 
@@ -305,7 +305,7 @@ class HeatmapDataset(BaseTrackingDataset):
         return y_heatmap[0]
 
     def compute_heatmaps(self):
-        """Compute initial 2D heatmaps for all labeled data.
+        """Compute initial 2D heatmaps for all labeled data. Note this will apply augmentations.
 
         original image dims e.g., (406, 396) ->
         resized image dims e.g., (384, 384) ->
@@ -319,167 +319,13 @@ class HeatmapDataset(BaseTrackingDataset):
             example_dict: BaseLabeledExampleDict = super().__getitem__(idx)
             label_heatmaps[idx] = self.compute_heatmap(example_dict)
 
-        self.label_heatmaps = label_heatmaps
+        return label_heatmaps
 
     def __getitem__(self, idx: int) -> HeatmapLabeledExampleDict:
-        """Get an example from the dataset.
-
-        Calls the base dataset to get an image and a label, then additionally
-        returns the corresponding heatmap.
-
-        """
+        """Get an example from the dataset."""
+        # call base dataset to get an image and labels
         example_dict: BaseLabeledExampleDict = super().__getitem__(idx)
-        example_dict["heatmaps"] = self.compute_heatmap(example_dict)
-        return example_dict
-
-
-class DetectorDataset(BaseTrackingDataset):
-    """Heatmap dataset that contains the images and keypoints in 2D arrays."""
-
-    def __init__(
-        self,
-        root_directory: str,
-        csv_path: str,
-        resized_dims: Tuple,
-        keypoints_for_crop: List,
-        header_rows: Optional[List[int]] = [0, 1, 2],
-        imgaug_transform: Optional[Callable] = None,
-        downsample_factor: Literal[1, 2, 3] = 2,
-        do_context: bool = False,
-        uniform_heatmaps: bool = False,
-    ) -> None:
-        """Initialize the Heatmap Dataset.
-
-        Args:
-            root_directory: path to data directory
-            csv_path: path to CSV or h5 file  (within root_directory). CSV file
-                should be in the form
-                (image_path, bodypart_1_x, bodypart_1_y, ..., bodypart_n_y)
-                Note: image_path is relative to the given root_directory
-            header_rows: which rows in the csv are header rows
-            imgaug_transform: imgaug transform pipeline to apply to images
-            downsample_factor: factor by which to downsample original image dims to have a smaller
-                heatmap
-            do_context: include additional frames of context if possible
-
-        """
-        super().__init__(
-            root_directory=root_directory,
-            csv_path=csv_path,
-            header_rows=header_rows,
-            imgaug_transform=imgaug_transform,
-            do_context=do_context,
-        )
-        self.resized_dims = resized_dims
-        self.downsample_factor = downsample_factor
-        self.output_sigma = 1.25  # should be sigma/2 ^downsample factor
-        self.uniform_heatmaps = uniform_heatmaps
-        self.keypoints_for_crop = keypoints_for_crop
-
-        # add a resize operation to end of image augmentation pipeline
-        self.imgaug_transform.append(iaa.Resize({
-            "height": self.height, "width": self.width
-        }))
-
-        # average finescale keypoints together to get coarsescale keypoints
-        coarse_kpts = torch.zeros((self.keypoints.shape[0], len(keypoints_for_crop), 2))
-        for i, k in enumerate(keypoints_for_crop):
-            coarse_kpts[:, i, :] = self.keypoints[:, k, :].mean(dim=1)
-        self.keypoints = coarse_kpts
-
-        if self.height % 128 != 0 or self.height % 128 != 0:
-            print(
-                "image dimensions (after transformation) must be repeatably "
-                + "divisible by 2!"
-            )
-            print("current image dimensions after transformation are:")
-            exit()
-
-        # Compute heatmaps as preprocessing step
-        self.num_targets = torch.numel(self.keypoints[0])
-        self.num_keypoints = self.num_targets // 2
-        # self.label_heatmaps = None  # populated by `self.compute_heatmaps()`
-        # print('Computing Heatmaps')
-        # self.compute_heatmaps()
-
-    @property
-    def height(self) -> int:
-        # assume resizing transformation is the last imgaug one
-        return self.resized_dims[1]
-
-    @property
-    def width(self) -> int:
-        # assume resizing transformation is the last imgaug one
-        return self.resized_dims[0]
-
-    @property
-    def output_shape(self) -> tuple:
-        return (
-            self.height // 2**self.downsample_factor,
-            self.width // 2**self.downsample_factor,
-        )
-
-    def compute_heatmap(
-            self, example_dict: BaseLabeledExampleDict
-    ) -> TensorType["num_keypoints", "heatmap_height", "heatmap_width"]:
-        """Compute 2D heatmaps from arbitrary (x, y) coordinates."""
-
-        # reshape
-        keypoints = example_dict["keypoints"].reshape(self.num_keypoints, 2)
-
-        # introduce new nans where data augmentation has moved the keypoint out of the original
-        # frame
-        new_nans = torch.logical_or(
-            torch.lt(keypoints[:, 0], torch.tensor(0)),
-            torch.lt(keypoints[:, 1], torch.tensor(0)),
-        )
-        new_nans = torch.logical_or(
-            new_nans, torch.ge(keypoints[:, 0], torch.tensor(self.width))
-        )
-        new_nans = torch.logical_or(
-            new_nans, torch.ge(keypoints[:, 1], torch.tensor(self.height))
-        )
-        keypoints[new_nans, :] = torch.nan
-
-        y_heatmap = generate_heatmaps(
-            keypoints=keypoints.unsqueeze(0),  # add batch dim
-            height=self.height,
-            width=self.width,
-            output_shape=self.output_shape,
-            sigma=self.output_sigma,
-            uniform_heatmaps=self.uniform_heatmaps,
-        )
-
-        return y_heatmap[0]
-
-    def __getitem__(self, idx: int) -> HeatmapLabeledExampleDict:
-        img_name = self.image_names[idx]
-        keypoints_on_image = self.keypoints[idx]
-
-        # read image from file and apply transformations (if any)
-        file_name = os.path.join(self.root_directory, img_name)
-        # if 1 color channel, change to 3.
-        image = Image.open(file_name).convert("RGB")
-        if self.imgaug_transform is not None:
-            transformed_images, transformed_keypoints = self.imgaug_transform(
-                images=np.expand_dims(image, axis=0),
-                keypoints=np.expand_dims(keypoints_on_image, axis=0),
-            )  # expands add batch dim for imgaug
-            # get rid of the batch dim
-            transformed_images = transformed_images[0]
-            transformed_keypoints = transformed_keypoints[0].reshape(-1)
-        else:
-            transformed_images = np.expand_dims(image, axis=0)
-            transformed_keypoints = np.expand_dims(keypoints_on_image, axis=0)
-
-        transformed_images = self.pytorch_transform(transformed_images)
-        assert transformed_keypoints.shape == (self.num_targets,)
-        example_dict = BaseLabeledExampleDict(
-            images=transformed_images,  # shape (3, img_height, img_width)
-            keypoints=torch.from_numpy(transformed_keypoints),  # shape (n_targets,)
-            idxs=idx,
-            bbox=torch.tensor([0, 0, image.height, image.width])  # x,y,h,w of bounding box
-        )
+        # compute the corresponding heatmaps
         example_dict["heatmaps"] = self.compute_heatmap(example_dict)
         return example_dict
 

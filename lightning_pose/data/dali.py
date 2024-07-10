@@ -41,6 +41,7 @@ def video_pipe(
     step: int = 1,
     pad_last_batch: bool = False,
     imgaug: str = "default",
+    skip_vfr_check: bool = True,
     # arguments consumed by decorator:
     # batch_size,
     # num_threads,
@@ -49,24 +50,22 @@ def video_pipe(
     """Generic video reader pipeline that loads videos, resizes, augments, and normalizes.
 
     Args:
-        filenames: list of absolute paths of video files to feed through
-            pipeline
+        filenames: list of absolute paths of video files to feed through pipeline
         resize_dims: [height, width] to resize raw frames
-        random_shuffle: True to grab random batches of frames from videos;
-            False to sequential read
+        random_shuffle: True to grab random batches of frames from videos; False to sequential read
         seed: random seed when `random_shuffle` is True
         sequence_length: number of frames to load per sequence
-        pad_sequences: allows creation of incomplete sequences if there is an
-            insufficient number of frames at the very end of the video
+        pad_sequences: allows creation of incomplete sequences if there is an insufficient number
+            of frames at the very end of the video
         initial_fill: size of the buffer that is used for random shuffling
         normalization_mean: mean values in (0, 1) to subtract from each channel
-        normalization_std: standard deviation values to subtract from each
-            channel
+        normalization_std: standard deviation values to subtract from each channel
         device: "cpu" | "gpu"
         name: pipeline name, used to string together DataNode elements
         step: number of frames to advance on each read
-        pad_last_batch
-        imgaug
+        pad_last_batch:
+        imgaug: string identifying which imgaug pipeline to use; "default", "dlc", "dlc-top-down"
+        skip_vfr_check: don't check for variable frame rates, can throw errors with small diffs
 
     Returns:
         pipeline object to be fed to DALIGenericIterator
@@ -88,6 +87,7 @@ def video_pipe(
         dtype=types.DALIDataType.FLOAT,
         pad_last_batch=pad_last_batch,  # Important for context loaders
         file_list_include_preceding_frame=True,  # to get rid of dali warnings
+        skip_vfr_check=skip_vfr_check,
     )
     orig_size = fn.shapes(video)
     if resize_dims:
