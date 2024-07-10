@@ -360,7 +360,8 @@ def get_model(
             )
         else:
             raise NotImplementedError(
-                f"{cfg.model.model_type} invalid cfg.model.model_type for a semi-supervised model")
+                f"{cfg.model.model_type} invalid cfg.model.model_type for a semi-supervised model"
+            )
 
     # load weights from user-provided checkpoint path
     if cfg.model.get("checkpoint", None):

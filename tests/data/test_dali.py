@@ -2,6 +2,7 @@
 
 import os
 
+import numpy as np
 import pytest
 
 
@@ -15,7 +16,10 @@ def test_video_pipe(video_list):
     im_width = 256
     n_iter = 3
 
-    pipe = video_pipe(
+    # ---------------------
+    # test 1: single view
+    # ---------------------
+    pipe1 = video_pipe(
         filenames=video_list,
         resize_dims=[im_height, im_width],
         sequence_length=seq_len,
@@ -23,14 +27,44 @@ def test_video_pipe(video_list):
         device_id=0,
         num_threads=2,
     )
-    pipe.build()
+    pipe1.build()
     for _ in range(n_iter):
-        pipe_out = pipe.run()
+        pipe_out = pipe1.run()
+        assert len(pipe_out) == 3  # frames, transforms, orig_frame_size
         sequences_out = pipe_out[0].as_cpu().as_array()
         assert sequences_out.shape == (batch_size, seq_len, 3, im_height, im_width)
 
     # remove data from gpu; then cache can be cleared
-    del pipe
+    del pipe1
+
+    # ---------------------
+    # test 2: multiview
+    # ---------------------
+    pipe2 = video_pipe(
+        filenames=[video_list, video_list],
+        resize_dims=[im_height, im_width],
+        sequence_length=seq_len,
+        batch_size=batch_size,
+        device_id=0,
+        num_threads=2,
+    )
+    pipe2.build()
+    for _ in range(n_iter):
+        pipe_out = pipe2.run()
+        assert len(pipe_out) == 2 * 3  # num_views * (frames, transforms, orig_frame_size)
+        # test sizes of frames from view 0
+        sequences_out_0 = pipe_out[0].as_cpu().as_array()
+        assert sequences_out_0.shape == (batch_size, seq_len, 3, im_height, im_width)
+        # test sizes of frames from view 1
+        sequences_out_1 = pipe_out[1].as_cpu().as_array()
+        assert sequences_out_1.shape == (batch_size, seq_len, 3, im_height, im_width)
+        # make sure frames match (the different "views" correspond to the same video here)
+        assert np.allclose(sequences_out_0[0, 0, 0], sequences_out_1[0, 0, 0])
+        # make sure frames from different indices don't match
+        assert not np.allclose(sequences_out_0[0, 0, 0], sequences_out_0[0, seq_len - 1, 0])
+
+    # remove data from gpu; then cache can be cleared
+    del pipe2
 
 
 def test_prepare_dali(cfg, video_list):

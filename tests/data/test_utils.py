@@ -89,13 +89,23 @@ def test_count_frames(video_list):
 
     from lightning_pose.data.utils import count_frames
 
+    # make sure value is correct in the single view case
     num_frames = 0
     for video_file in video_list:
         cap = cv2.VideoCapture(video_file)
         num_frames += int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         cap.release()
-    num_frames_ = count_frames(video_list)
-    assert num_frames == num_frames_
+    num_frames_1 = count_frames(video_list)
+    assert num_frames == num_frames_1
+
+    # with multiview we have a list of lists, make sure we only count frames from one view
+    video_list_2 = [
+        [video_list[0]],  # view 0
+        [video_list[0]],  # view 1
+        [video_list[0]],  # view 2
+    ]
+    num_frames_2 = count_frames(video_list_2)
+    assert num_frames == num_frames_2
 
 
 def test_compute_num_train_frames():

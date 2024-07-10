@@ -73,59 +73,78 @@ def video_pipe(
         size of video frames, used for bbox
 
     """
-    video = fn.readers.video(
-        device=device,
-        filenames=filenames,
-        random_shuffle=random_shuffle,
-        seed=seed,
-        sequence_length=sequence_length,
-        step=step,
-        pad_sequences=pad_sequences,
-        initial_fill=initial_fill,
-        normalized=False,
-        name=name,
-        dtype=types.DALIDataType.FLOAT,
-        pad_last_batch=pad_last_batch,  # Important for context loaders
-        file_list_include_preceding_frame=True,  # to get rid of dali warnings
-        skip_vfr_check=skip_vfr_check,
-    )
-    orig_size = fn.shapes(video)
-    if resize_dims:
-        video = fn.resize(video, size=resize_dims)
-    if imgaug == "dlc" or imgaug == "dlc-top-down":
-        size = (resize_dims[0] / 2, resize_dims[1] / 2)
-        center = size  # / 2
-        # rotate + scale
-        angle = fn.random.uniform(range=(-10, 10))
-        matrix = fn.transforms.rotation(angle=angle, center=center)
-        scale = fn.random.uniform(range=(0.8, 1.2), shape=2)
-        matrix = fn.transforms.scale(matrix, scale=scale, center=center)
-        video = fn.warp_affine(video, matrix=matrix, fill_value=0, inverse_map=False)
-        # brightness contrast:
-        contrast = fn.random.uniform(range=(0.75, 1.25))
-        brightness = fn.random.uniform(range=(0.75, 1.25))
-        video = fn.brightness_contrast(video, brightness=brightness, contrast=contrast)
-        # # shot noise
-        factor = fn.random.uniform(range=(0.0, 10.0))
-        video = fn.noise.shot(video, factor=factor)
-        # jpeg compression
-        # quality = fn.random.uniform(range=(50, 100), dtype=types.INT32)
-        # video = fn.jpeg_compression_distortion(video, quality=quality)
-    else:
-        # choose arbitrary scalar (rather than a matrix) so that downstream operations know there
-        # is no geometric transforms to undo
-        matrix = np.array([-1])
-    # video pixel range is [0, 255]; transform it to [0, 1].
-    # happens naturally in the torchvision transform to tensor.
-    video = video / 255.0
-    # permute dimensions and normalize to imagenet statistics
-    transform = fn.crop_mirror_normalize(
-        video,
-        output_layout="FCHW",
-        mean=normalization_mean,
-        std=normalization_std,
-    )
-    return transform, matrix, orig_size
+    # turn all inputs into a list of list of strings to be most general
+    # first list: over views (might only be one)
+    # second list: over videos/sessions
+    if isinstance(filenames, list) and isinstance(filenames[0], str):
+        filenames = [filenames]
+    elif isinstance(filenames, str):
+        filenames = [[filenames]]
+
+    assert isinstance(filenames, list) and isinstance(filenames[0], list)
+
+    # loop over views (can be only one)
+    frames_list = []
+    transform_list = []
+    orig_size_list = []
+    for f, filename_list in enumerate(filenames):
+        video = fn.readers.video(
+            device=device,
+            filenames=filename_list,
+            random_shuffle=random_shuffle,
+            seed=seed,
+            sequence_length=sequence_length,
+            step=step,
+            pad_sequences=pad_sequences,
+            initial_fill=initial_fill,
+            normalized=False,
+            name=f"{name}_{f}",
+            dtype=types.DALIDataType.FLOAT,
+            pad_last_batch=pad_last_batch,  # Important for context loaders
+            file_list_include_preceding_frame=True,  # to get rid of dali warnings
+            skip_vfr_check=skip_vfr_check,
+        )
+        orig_size = fn.shapes(video)
+        if resize_dims:
+            video = fn.resize(video, size=resize_dims)
+        if imgaug == "dlc" or imgaug == "dlc-top-down":
+            size = (resize_dims[0] / 2, resize_dims[1] / 2)
+            center = size  # / 2
+            # rotate + scale
+            angle = fn.random.uniform(range=(-10, 10))
+            transform = fn.transforms.rotation(angle=angle, center=center)
+            scale = fn.random.uniform(range=(0.8, 1.2), shape=2)
+            transform = fn.transforms.scale(transform, scale=scale, center=center)
+            video = fn.warp_affine(video, matrix=transform, fill_value=0, inverse_map=False)
+            # brightness contrast:
+            contrast = fn.random.uniform(range=(0.75, 1.25))
+            brightness = fn.random.uniform(range=(0.75, 1.25))
+            video = fn.brightness_contrast(video, brightness=brightness, contrast=contrast)
+            # # shot noise
+            factor = fn.random.uniform(range=(0.0, 10.0))
+            video = fn.noise.shot(video, factor=factor)
+            # jpeg compression
+            # quality = fn.random.uniform(range=(50, 100), dtype=types.INT32)
+            # video = fn.jpeg_compression_distortion(video, quality=quality)
+        else:
+            # choose arbitrary scalar (rather than a matrix) so that downstream operations know
+            # there is no geometric transforms to undo
+            transform = np.array([-1])
+        # video pixel range is [0, 255]; transform it to [0, 1].
+        # happens naturally in the torchvision transform to tensor.
+        video = video / 255.0
+        # permute dimensions and normalize to imagenet statistics
+        frames = fn.crop_mirror_normalize(
+            video,
+            output_layout="FCHW",
+            mean=normalization_mean,
+            std=normalization_std,
+        )
+        frames_list.append(frames)
+        transform_list.append(transform)
+        orig_size_list.append(orig_size)
+
+    return (*frames_list, *transform_list, *orig_size_list)
 
 
 class LitDaliWrapper(DALIGenericIterator):
@@ -161,17 +180,23 @@ class LitDaliWrapper(DALIGenericIterator):
     @staticmethod
     def _dali_output_to_tensors(batch: list) -> UnlabeledBatchDict:
         # always batch_size=1
-        # shape (sequence_length, 3, H, W)
-        frames = batch[0]["frames"][0, :, :, :, :]
-        # shape (1,) or (2, 3)
-        transforms = batch[0]["transforms"][0]
-        # get frame size, order is seq_len,H,W,C
-        height = batch[0]["frame_size"][0, 1]
-        width = batch[0]["frame_size"][0, 2]
-        bbox = torch.tensor([0, 0, height, width], device=frames.device).repeat(
-            (frames.shape[0], 1))
 
-        return UnlabeledBatchDict(frames=frames, transforms=transforms, bbox=bbox)
+        if len(batch[0].keys()) == 3:  # single view pipeline
+
+            # shape (sequence_length, 3, H, W)
+            frames = batch[0]["frames"][0, :, :, :, :]
+            # shape (1,) or (2, 3)
+            transforms = batch[0]["transforms"][0]
+            # get frame size, order is seq_len,H,W,C
+            height = batch[0]["frame_size"][0, 1]
+            width = batch[0]["frame_size"][0, 2]
+            bbox = torch.tensor([0, 0, height, width], device=frames.device).repeat(
+                (frames.shape[0], 1))
+
+            return UnlabeledBatchDict(frames=frames, transforms=transforms, bbox=bbox)
+
+        else:
+            raise NotImplementedError
 
     def __next__(self) -> UnlabeledBatchDict:
         batch = super().__next__()
@@ -189,7 +214,7 @@ class PrepareDALI(object):
         self,
         train_stage: Literal["predict", "train"],
         model_type: Literal["base", "context"],
-        filenames: List[str],
+        filenames: Union[List[str], List[List[str]]],
         resize_dims: List[int],
         dali_config: Union[dict, DictConfig] = None,
         imgaug: Optional[str] = "default",
@@ -207,6 +232,12 @@ class PrepareDALI(object):
         self.filenames = filenames
         self.frame_count = count_frames(self.filenames)
         self._pipe_dict: dict = self._setup_pipe_dict(self.filenames, imgaug)
+
+        # determine if we have a multiview pipeline
+        if isinstance(self.filenames, list) and isinstance(self.filenames[0], list):
+            self.multiview = True
+        else:
+            self.multiview = False
 
     @property
     def num_iters(self) -> int:
@@ -348,12 +379,21 @@ class PrepareDALI(object):
         dict_args["predict"] = {"context": {}, "base": {}}
         dict_args["train"] = {"context": {}, "base": {}}
 
+        if self.multiview:
+            # video pipeline returns a big tuple: frame, transforms, and frame size for each view
+            output_map = \
+                [f"frames_{i}" for i in range(len(self.filenames))] \
+                + [f"transforms_{i}" for i in range(len(self.filenames))] \
+                + [f"frame_size_{i}" for i in range(len(self.filenames))]
+        else:
+            output_map = ["frames", "transforms", "frame_size"]
+
         # base models (single-frame)
         dict_args["train"]["base"] = {
             "num_iters": self.num_iters,
             "eval_mode": "train",
             "do_context": False,
-            "output_map": ["frames", "transforms", "frame_size"],
+            "output_map": output_map,
             "last_batch_policy": LastBatchPolicy.PARTIAL,
             "auto_reset": True,
         }
@@ -361,11 +401,12 @@ class PrepareDALI(object):
             "num_iters": self.num_iters,
             "eval_mode": "predict",
             "do_context": False,
-            "output_map": ["frames", "transforms", "frame_size"],
+            "output_map": output_map,
             "last_batch_policy": LastBatchPolicy.FILL,
             "last_batch_padded": False,
             "auto_reset": False,
-            "reader_name": "reader",
+            # if we have multiple readers, if we select only 1 here there's an error
+            "reader_name": "reader_0" if not self.multiview else None,
         }
 
         # 5-frame context models
@@ -373,7 +414,7 @@ class PrepareDALI(object):
             "num_iters": self.num_iters,
             "eval_mode": "train",
             "do_context": True,
-            "output_map": ["frames", "transforms", "frame_size"],
+            "output_map": output_map,
             "last_batch_policy": LastBatchPolicy.PARTIAL,
             "auto_reset": True,
         }  # taken from datamodules.py. only difference is that we need to do context
@@ -381,11 +422,12 @@ class PrepareDALI(object):
             "num_iters": self.num_iters,
             "eval_mode": "predict",
             "do_context": True,
-            "output_map": ["frames", "transforms", "frame_size"],
+            "output_map": output_map,
             "last_batch_policy": LastBatchPolicy.FILL,  # LastBatchPolicy.PARTIAL,
             "last_batch_padded": False,
             "auto_reset": False,
-            "reader_name": "reader",
+            # if we have multiple readers, if we select only 1 here there's an error
+            "reader_name": "reader_0" if not self.multiview else None,
         }
 
         return dict_args

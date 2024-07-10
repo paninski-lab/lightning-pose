@@ -14,9 +14,14 @@ from typeguard import typechecked
 __all__ = [
     "BaseLabeledExampleDict",
     "HeatmapLabeledExampleDict",
+    "MultiviewLabeledExampleDict",
+    "MultiviewHeatmapLabeledExampleDict",
     "BaseLabeledBatchDict",
     "HeatmapLabeledBatchDict",
+    "MultiviewLabeledBatchDict",
+    "MultiviewHeatmapLabeledBatchDict",
     "UnlabeledBatchDict",
+    "MultiviewUnlabeledBatchDict",
     "SemiSupervisedBatchDict",
     "SemiSupervisedHeatmapBatchDict",
     "SemiSupervisedDataLoaderDict",
@@ -124,18 +129,39 @@ class UnlabeledBatchDict(TypedDict):
     # torch.Tensor: necessary, getting error about torch.AnnotatedAlias that I don't understand
 
 
+class MultiviewUnlabeledBatchDict(TypedDict):
+    """Batch type for unlabeled data."""
+
+    frames: Union[
+        TensorType["seq_len", "num_views", "RGB":3, "image_height", "image_width", float],
+        TensorType[
+            "seq_len", "num_views", "context":5, "RGB":3, "image_height", "image_width", float
+        ],
+    ]
+    transforms: List[
+        Union[
+            TensorType["seq_len", "h":2, "w":3, float],
+            TensorType["h":2, "w":3, float],
+            TensorType["seq_len", "null":1, float],
+            TensorType["null":1, float],
+            torch.Tensor,
+        ]
+    ]
+    bbox: TensorType["seq_len", "num_views", "xyhw":4, float]
+
+
 class SemiSupervisedBatchDict(TypedDict):
     """Batch type for base labeled+unlabeled data."""
 
-    labeled: BaseLabeledBatchDict
+    labeled: Union[BaseLabeledBatchDict, MultiviewLabeledBatchDict]
     unlabeled: UnlabeledBatchDict
 
 
 class SemiSupervisedHeatmapBatchDict(TypedDict):
     """Batch type for heatmap labeled+unlabeled data."""
 
-    labeled: HeatmapLabeledBatchDict
-    unlabeled: UnlabeledBatchDict
+    labeled: Union[HeatmapLabeledBatchDict, MultiviewHeatmapLabeledBatchDict]
+    unlabeled: Union[UnlabeledBatchDict, MultiviewUnlabeledBatchDict]
 
 
 class SemiSupervisedDataLoaderDict(TypedDict):
@@ -357,13 +383,16 @@ def clean_any_nans(data: torch.Tensor, dim: int) -> torch.Tensor:
 
 
 @typechecked
-def count_frames(video_list: Union[List[str], str]) -> int:
+def count_frames(video_list: Union[List[str], str, List[List[str]]]) -> int:
     """Simple function to count the number of frames in a video or a list of videos."""
 
     import cv2
 
     if isinstance(video_list, str):
         video_list = [video_list]
+    elif isinstance(video_list, list) and isinstance(video_list[0], list):
+        # in the multiview case, just count frames from one view
+        video_list = video_list[0]
     num_frames = 0
     for video_file in video_list:
         cap = cv2.VideoCapture(video_file)
