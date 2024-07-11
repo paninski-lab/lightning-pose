@@ -230,9 +230,21 @@ def get_loss_factories(
                         "uniform_heatmaps"
                     ] = cfg.training.get("uniform_heatmaps_for_nan_keypoints", False)
             elif loss_name == "pca_multiview":
-                loss_params_dict["unsupervised"][loss_name][
-                    "mirrored_column_matches"
-                ] = cfg.data.mirrored_column_matches
+                if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
+                    # assume user has provided a set of columns that are present in each view
+                    num_keypoints = cfg.data.num_keypoints
+                    num_views = len(cfg.data.view_names)
+                    loss_params_dict["unsupervised"][loss_name][
+                        "mirrored_column_matches"
+                    ] = [
+                        (v * num_keypoints + np.array(cfg.data.mirrored_column_matches)).tolist()
+                        for v in range(num_views)
+                    ]
+                else:
+                    # user must provide all matching columns
+                    loss_params_dict["unsupervised"][loss_name][
+                        "mirrored_column_matches"
+                    ] = cfg.data.mirrored_column_matches
             elif loss_name == "pca_singleview":
                 loss_params_dict["unsupervised"][loss_name][
                     "columns_for_singleview_pca"

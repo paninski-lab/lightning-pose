@@ -66,10 +66,25 @@ Again, assume that we are working with the two-view dataset used as an example a
       view_names:
         - view0
         - view1
+      mirrored_column_matches: [see bullet below]
+      columns_for_singleview_pca: [see bullet below]
 
 
 * ``csv_file``: list of csv filenames for each view
 * ``view_names``: list view names
+* ``mirrored_column_matches``: if you would like to use the Multiview PCA loss, you must ensure the
+  following:
+  (1) the same set of keypoints are labeled across all views (though there can be missing data)
+  (2) this config field should be a list of the indices corresponding to a *single view* which are
+      included in the loss for all views;
+      for example if you have 10 keypoints, and you want to include the zeroth, first, and fifth in
+      the Multiview PCA loss, this field should look like ``mirrored_column_matches: [0, 1, 5]``.
+  (3) as in the non-multiview case, you must specify you want to use this loss
+      :ref:`elsewhere in the config file <unsup_config>`.
+* ``columns_for_singleview_pca``: similar to ``mirrored_column_matches``, if you want to use the
+  Pose PCA loss this field must correspond to a list of indices that will be used for each view,
+  and you will need to properly indicate :ref:`elsewhere in the config file <unsup_config>` that
+  you want to use this loss.
 
 Training and inference
 ======================

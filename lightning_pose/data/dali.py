@@ -12,7 +12,7 @@ from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
 from omegaconf import DictConfig
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
-from lightning_pose.data.utils import UnlabeledBatchDict, count_frames
+from lightning_pose.data.utils import MultiviewUnlabeledBatchDict, UnlabeledBatchDict, count_frames
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -178,7 +178,10 @@ class LitDaliWrapper(DALIGenericIterator):
         return self.num_iters
 
     @staticmethod
-    def _dali_output_to_tensors(batch: list) -> UnlabeledBatchDict:
+    def _dali_output_to_tensors(
+        batch: list
+    ) -> Union[UnlabeledBatchDict, MultiviewUnlabeledBatchDict]:
+
         # always batch_size=1
 
         if len(batch[0].keys()) == 3:  # single view pipeline
@@ -195,10 +198,19 @@ class LitDaliWrapper(DALIGenericIterator):
 
             return UnlabeledBatchDict(frames=frames, transforms=transforms, bbox=bbox)
 
-        else:
-            raise NotImplementedError
+        else:  # multiview pipeline
 
-    def __next__(self) -> UnlabeledBatchDict:
+            frames = torch.stack(
+                [batch[0][key][0, :, :, :, :] for key in batch[0].keys() if
+                 "transforms" not in key and "frame_size" not in key],
+                dim=1,
+            )
+            transforms = [batch[0][key] for key in batch[0].keys() if "transforms" in key]
+            bbox = [batch[0][key] for key in batch[0].keys() if "frame_size" in key]
+
+            return MultiviewUnlabeledBatchDict(frames=frames, transforms=transforms, bbox=bbox)
+
+    def __next__(self) -> Union[UnlabeledBatchDict, MultiviewUnlabeledBatchDict]:
         batch = super().__next__()
         return self._dali_output_to_tensors(batch=batch)
 
@@ -220,10 +232,19 @@ class PrepareDALI(object):
         imgaug: Optional[str] = "default",
     ) -> None:
 
+        # determine if we have a multiview pipeline
+        if isinstance(filenames, list) and isinstance(filenames[0], list):
+            self.multiview = True
+        else:
+            self.multiview = False
+
         # make sure `filenames` is a list of existing video files
-        for vid in filenames:
-            if not os.path.exists(vid) or not os.path.isfile(vid):
-                raise FileNotFoundError(f"{vid} is not a video file!")
+        if isinstance(filenames, list) and isinstance(filenames[0], str):
+            filenames = [filenames]
+        for view_list in filenames:
+            for vid in view_list:
+                if not os.path.exists(vid) or not os.path.isfile(vid):
+                    raise FileNotFoundError(f"{vid} is not a video file!")
 
         self.train_stage = train_stage
         self.model_type = model_type
@@ -232,12 +253,6 @@ class PrepareDALI(object):
         self.filenames = filenames
         self.frame_count = count_frames(self.filenames)
         self._pipe_dict: dict = self._setup_pipe_dict(self.filenames, imgaug)
-
-        # determine if we have a multiview pipeline
-        if isinstance(self.filenames, list) and isinstance(self.filenames[0], list):
-            self.multiview = True
-        else:
-            self.multiview = False
 
     @property
     def num_iters(self) -> int:
@@ -277,11 +292,17 @@ class PrepareDALI(object):
             else:
                 raise NotImplementedError
 
-    def _setup_pipe_dict(self, filenames: List[str], imgaug: str) -> Dict[str, dict]:
-        """all of the pipe() args in one place"""
-        dict_args = {}
-        dict_args["predict"] = {"context": {}, "base": {}}
-        dict_args["train"] = {"context": {}, "base": {}}
+    def _setup_pipe_dict(
+        self,
+        filenames: Union[List[str], List[List[str]]],
+        imgaug: str,
+    ) -> Dict[str, dict]:
+        """All of the pipeline args in one place."""
+
+        dict_args = {
+            "predict": {"context": {}, "base": {}},
+            "train": {"context": {}, "base": {}},
+        }
         gen_cfg = self.dali_config["general"]
 
         # base (vanilla single-frame model), train pipe args
