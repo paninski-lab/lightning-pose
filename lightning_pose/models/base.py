@@ -15,6 +15,7 @@ from lightning_pose.data.utils import (
     HeatmapLabeledBatchDict,
     MultiviewHeatmapLabeledBatchDict,
     MultiviewLabeledBatchDict,
+    MultiviewUnlabeledBatchDict,
     SemiSupervisedBatchDict,
     SemiSupervisedHeatmapBatchDict,
     UnlabeledBatchDict,
@@ -76,6 +77,7 @@ def convert_bbox_coords(
     batch_dict: Union[
         HeatmapLabeledBatchDict,
         MultiviewHeatmapLabeledBatchDict,
+        MultiviewUnlabeledBatchDict,
         UnlabeledBatchDict,
     ],
     predicted_keypoints: TensorType["batch", "num_targets"],
@@ -452,7 +454,7 @@ class SemiSupervisedTrackerMixin(object):
 
     def evaluate_unlabeled(
         self,
-        batch_dict: UnlabeledBatchDict,
+        batch_dict: Union[UnlabeledBatchDict, MultiviewUnlabeledBatchDict],
         stage: Optional[Literal["train", "val", "test"]] = None,
         anneal_weight: Union[float, torch.Tensor] = 1.0,
     ) -> TensorType[(), float]:

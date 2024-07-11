@@ -23,6 +23,7 @@ from lightning_pose.utils.io import get_keypoint_names
 __all__ = [
     "BaseTrackingDataset",
     "HeatmapDataset",
+    "MultiviewHeatmapDataset",
 ]
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -463,7 +464,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         ],
         TensorType["keypoints"],
         TensorType["num_views", "heatmap_height", "heatmap_width", float],
-        TensorType["num_views", "xyhw":4, float],
+        TensorType["num_views * xyhw", float],
         List,
     ]:
         """Merge images, heatmaps, keypoints, and bboxes across views.
@@ -521,6 +522,6 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             bbox=bboxes,
             idxs=idx,
             num_views=self.num_views,  # int
-            concat_order=concat_order,  # List[int]
-            view_names=self.view_names,  # List[int]
+            concat_order=concat_order,  # List[str]
+            view_names=self.view_names,  # List[str]
         )

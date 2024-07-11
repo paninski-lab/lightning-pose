@@ -244,3 +244,57 @@ def test_heatmap_data_module_combined(cfg, heatmap_data_module_combined):
     del loader
     del batch
     torch.cuda.empty_cache()  # remove tensors from gpu
+
+
+def test_multiview_heatmap_data_module_combined(
+    cfg_multiview,
+    multiview_heatmap_data_module_combined,
+):
+
+    im_height = cfg_multiview.data.image_resize_dims.height
+    im_width = cfg_multiview.data.image_resize_dims.width
+    im_height_ds = im_height / (2 ** cfg_multiview.data.downsample_factor)
+    im_width_ds = im_width / (2 ** cfg_multiview.data.downsample_factor)
+    train_size_labeled = multiview_heatmap_data_module_combined.train_batch_size
+    train_size_unlabeled = \
+        multiview_heatmap_data_module_combined.dali_config["base"]["train"]["sequence_length"]
+    num_targets = multiview_heatmap_data_module_combined.dataset.num_targets
+    num_views = len(cfg_multiview.data.view_names)
+
+    loader = multiview_heatmap_data_module_combined.train_dataloader()
+    batch = next(iter(loader))
+    # batch is tuple as of lightning 2.0.9
+    batch = batch[0] if isinstance(batch, tuple) else batch
+
+    # check batch contains the expected components
+    assert list(batch.keys())[0] == "labeled"
+    assert list(batch.keys())[1] == "unlabeled"
+    assert list(batch["labeled"].keys()) == [
+        "images", "keypoints", "heatmaps", "bbox", "idxs", "num_views", "concat_order",
+        "view_names",
+    ]
+    assert list(batch["unlabeled"].keys()) == ["frames", "transforms", "bbox"]
+
+    # check labeled batch shapes
+    assert batch["labeled"]["images"].shape == (
+        train_size_labeled, num_views, 3, im_height, im_width,
+    )
+    assert batch["labeled"]["keypoints"].shape == (train_size_labeled, num_targets)
+    assert batch["labeled"]["heatmaps"].shape == (
+        train_size_labeled,
+        num_targets // 2,
+        im_height_ds,
+        im_width_ds,
+    )
+
+    # check unlabled batch shapes
+    assert batch["unlabeled"]["frames"].shape == (
+        train_size_unlabeled, num_views, 3, im_height, im_width,
+    )
+    assert batch["unlabeled"]["transforms"].shape == (num_views, 1, 1)
+    assert batch["unlabeled"]["bbox"].shape == (train_size_unlabeled, num_views * 4)
+
+    # cleanup
+    del loader
+    del batch
+    torch.cuda.empty_cache()  # remove tensors from gpu

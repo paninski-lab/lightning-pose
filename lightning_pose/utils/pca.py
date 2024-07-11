@@ -13,6 +13,7 @@ from sklearn.utils.extmath import stable_cumsum, svd_flip
 from torchtyping import TensorType
 from typeguard import typechecked
 
+from lightning_pose.data.datasets import MultiviewHeatmapDataset
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import DataExtractor
 from lightning_pose.losses.helpers import EmpiricalEpsilon, convert_dict_values_to_tensors
@@ -44,6 +45,20 @@ class KeypointPCA(object):
         self.data_module = data_module
         self.components_to_keep = components_to_keep
         self.empirical_epsilon_percentile = empirical_epsilon_percentile
+        # check if this is a mirrored or true multiview dataset
+        # the former will be a list of lists, the latter a list of ints
+        if mirrored_column_matches is not None and isinstance(mirrored_column_matches[0], int):
+            if not isinstance(data_module.dataset, MultiviewHeatmapDataset):
+                raise ValueError(
+                    "cfg.data.mirrored_column_matches must contain a list of indices for each "
+                    "mirrored view"
+                )
+            num_views = len(data_module.dataset.view_names)
+            num_keypoints = data_module.dataset.num_keypoints / num_views  # keypoints per view
+            mirrored_column_matches = [
+                (v * num_keypoints + np.array(mirrored_column_matches, dtype=int)).tolist()
+                for v in range(num_views)
+            ]
         self.mirrored_column_matches = mirrored_column_matches
         self.columns_for_singleview_pca = columns_for_singleview_pca
         self.pca_object = None
@@ -522,6 +537,10 @@ def format_multiview_data_for_pca(
     """
     n_views = len(mirrored_column_matches)
     n_keypoints = len(mirrored_column_matches[0])  # only the ones used for all views
+    print(data_arr.shape)
+    print(n_views)
+    print(n_keypoints)
+    print(mirrored_column_matches)
     data_arr_views = []
     # separate views and reformat
     for view in range(n_views):

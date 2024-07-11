@@ -103,7 +103,7 @@ def get_dataset(
             dataset = MultiviewHeatmapDataset(
                 root_directory=data_dir,
                 csv_paths=cfg.data.csv_file,
-                view_names=cfg.data.view_names,
+                view_names=list(cfg.data.view_names),
                 downsample_factor=cfg.data.downsample_factor,
                 imgaug_transform=imgaug_transform,
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
@@ -153,10 +153,12 @@ def get_data_module(
     else:
         if not (cfg.training.gpu_id, int):
             raise NotImplementedError("Cannot fit semi-supervised model on multiple gpus")
+        view_names = cfg.data.get("view_names", None)
+        view_names = list(view_names) if view_names is not None else None
         data_module = UnlabeledDataModule(
             dataset=dataset,
             video_paths_list=video_dir,
-            view_names=cfg.data.get("view_names", None),
+            view_names=view_names,
             train_batch_size=cfg.training.train_batch_size,
             val_batch_size=cfg.training.val_batch_size,
             test_batch_size=cfg.training.test_batch_size,
@@ -237,7 +239,8 @@ def get_loss_factories(
                     loss_params_dict["unsupervised"][loss_name][
                         "mirrored_column_matches"
                     ] = [
-                        (v * num_keypoints + np.array(cfg.data.mirrored_column_matches)).tolist()
+                        (v * num_keypoints
+                         + np.array(cfg.data.mirrored_column_matches, dtype=int)).tolist()
                         for v in range(num_views)
                     ]
                 else:
@@ -577,6 +580,7 @@ def compute_metrics_single(
         data_module is not None
         and cfg.data.get("mirrored_column_matches", None) is not None
         and len(cfg.data.mirrored_column_matches) != 0
+        and not isinstance(data_module.dataset, MultiviewHeatmapDataset)  # mirrored-only for now
     ):
         metrics_to_compute += ["pca_multiview"]
 

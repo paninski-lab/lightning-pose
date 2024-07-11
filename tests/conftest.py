@@ -90,7 +90,7 @@ def cfg_multiview() -> dict:
         "paw1LH", "paw2LF", "paw3RF", "paw4RH", "tailBase", "tailMid", "nose",
     ]
     cfg["data"]["columns_for_singleview_pca"] = [0, 1, 2, 3, 4, 5, 6]
-    cfg["data"]["mirrored_column_matches"] = None
+    cfg["data"]["mirrored_column_matches"] = [0, 1, 2, 3, 4, 5, 6]
     cfg["model"]["backbone_pretrained"] = False
 
     return OmegaConf.create(cfg)
@@ -355,6 +355,27 @@ def multiview_heatmap_data_module(cfg_multiview, multiview_heatmap_dataset) -> B
 
 
 @pytest.fixture
+def heatmap_data_module_context(cfg, heatmap_dataset_context) -> BaseDataModule:
+    """Create a labeled data module for heatmap models."""
+
+    # setup
+    cfg_tmp = copy.deepcopy(cfg)
+    cfg_tmp.model.losses_to_use = []
+    # bump up training data so we can test pca_singleview loss
+    cfg_tmp.training.train_prob = 0.95
+    cfg_tmp.training.val_prob = 0.025
+    data_module = get_data_module(cfg_tmp, dataset=heatmap_dataset_context, video_dir=None)
+    data_module.setup()
+
+    # return to tests
+    yield data_module
+
+    # cleanup after all tests have run (no more calls to yield)
+    del data_module
+    torch.cuda.empty_cache()
+
+
+@pytest.fixture
 def multiview_heatmap_data_module_context(
     cfg_multiview,
     multiview_heatmap_dataset_context,
@@ -369,27 +390,6 @@ def multiview_heatmap_data_module_context(
     cfg_tmp.training.val_prob = 0.025
     data_module = get_data_module(cfg_tmp,
                                   dataset=multiview_heatmap_dataset_context, video_dir=None)
-    data_module.setup()
-
-    # return to tests
-    yield data_module
-
-    # cleanup after all tests have run (no more calls to yield)
-    del data_module
-    torch.cuda.empty_cache()
-
-
-@pytest.fixture
-def heatmap_data_module_context(cfg, heatmap_dataset_context) -> BaseDataModule:
-    """Create a labeled data module for heatmap models."""
-
-    # setup
-    cfg_tmp = copy.deepcopy(cfg)
-    cfg_tmp.model.losses_to_use = []
-    # bump up training data so we can test pca_singleview loss
-    cfg_tmp.training.train_prob = 0.95
-    cfg_tmp.training.val_prob = 0.025
-    data_module = get_data_module(cfg_tmp, dataset=heatmap_dataset_context, video_dir=None)
     data_module.setup()
 
     # return to tests
@@ -433,6 +433,31 @@ def heatmap_data_module_combined(cfg, heatmap_dataset) -> UnlabeledDataModule:
         cfg_tmp,
         dataset=heatmap_dataset,
         video_dir=os.path.join(TOY_DATA_ROOT_DIR, "videos"),
+    )
+    # data_module.setup()  # already done in UnlabeledDataModule constructor
+
+    # return to tests
+    yield data_module
+
+    # cleanup after all tests have run (no more calls to yield)
+    del data_module
+    torch.cuda.empty_cache()
+
+
+@pytest.fixture
+def multiview_heatmap_data_module_combined(
+    cfg_multiview,
+    multiview_heatmap_dataset
+) -> UnlabeledDataModule:
+    """Create a combined data module for multiview heatmap models."""
+
+    # setup
+    cfg_tmp = copy.deepcopy(cfg_multiview)
+    cfg_tmp.model.losses_to_use = ["pca_multiview"]  # trigger semi-supervised data module
+    data_module = get_data_module(
+        cfg_tmp,
+        dataset=multiview_heatmap_dataset,
+        video_dir=os.path.join(cfg_multiview.data.data_dir, "videos"),
     )
     # data_module.setup()  # already done in UnlabeledDataModule constructor
 
@@ -505,6 +530,7 @@ def trainer(cfg) -> pl.Trainer:
         log_every_n_steps=1,
         callbacks=callbacks,
         limit_train_batches=2,
+        num_sanity_val_steps=0,
     )
 
     return trainer
@@ -552,7 +578,8 @@ def run_model_test() -> Callable:
             pred_handler(preds=labeled_preds)
 
             # predict on unlabeled video
-            trainer.predict(model=model, dataloaders=video_dataloader, return_predictions=True)
+            if video_dataloader is not None:
+                trainer.predict(model=model, dataloaders=video_dataloader, return_predictions=True)
 
         finally:
 

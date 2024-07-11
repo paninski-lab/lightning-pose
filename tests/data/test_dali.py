@@ -191,10 +191,8 @@ def test_prepare_dali_multiview(cfg_multiview, video_list):
         # just check a single batch
         batch = loader.__next__()
         assert batch["frames"].shape == frame_shape
-        assert isinstance(batch["transforms"], list)
-        assert len(batch["transforms"]) == num_views
-        assert isinstance(batch["bbox"], list)
-        assert len(batch["bbox"]) == num_views
+        assert batch["transforms"].shape == (num_views, 1, 1)
+        assert batch["bbox"].shape == (batch_size, num_views * 4)  # num_views * xyhw
 
     # -----------------------
     # context model
@@ -225,7 +223,5 @@ def test_prepare_dali_multiview(cfg_multiview, video_list):
         # just check a single batch
         batch = loader.__next__()
         assert batch["frames"].shape == frame_shape
-        assert isinstance(batch["transforms"], list)
-        assert len(batch["transforms"]) == num_views
-        assert isinstance(batch["bbox"], list)
-        assert len(batch["bbox"]) == num_views
+        assert batch["transforms"].shape == (num_views, 1, 1)
+        assert batch["bbox"].shape == (batch_size, num_views * 4)  # num_views * xyhw

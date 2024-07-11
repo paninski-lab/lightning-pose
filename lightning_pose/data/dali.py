@@ -200,13 +200,30 @@ class LitDaliWrapper(DALIGenericIterator):
 
         else:  # multiview pipeline
 
+            # final shape: ("seq_len", "num_views", "RGB":3, "image_height", "image_width")
             frames = torch.stack(
                 [batch[0][key][0, :, :, :, :] for key in batch[0].keys() if
                  "transforms" not in key and "frame_size" not in key],
                 dim=1,
             )
-            transforms = [batch[0][key] for key in batch[0].keys() if "transforms" in key]
-            bbox = [batch[0][key] for key in batch[0].keys() if "frame_size" in key]
+
+            # final shape: ("num_views", "h":2, "w":3)
+            transforms = torch.stack(
+                [batch[0][key] for key in batch[0].keys() if "transforms" in key],
+                dim=0,
+            )
+
+            # final shape: ("seq_len", "num_views * xyhw")
+            bbox = torch.cat([
+                torch.tensor([
+                        0,
+                        0,
+                        batch[0][key][0, 1],
+                        batch[0][key][0, 2],
+                    ],
+                    device=frames.device
+                ) for key in batch[0].keys() if "frame_size" in key
+            ], dim=0).repeat(frames.shape[0], 1)
 
             return MultiviewUnlabeledBatchDict(frames=frames, transforms=transforms, bbox=bbox)
 

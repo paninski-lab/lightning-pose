@@ -64,7 +64,7 @@ class MultiviewLabeledExampleDict(TypedDict):
     idxs: int
     num_views: int
     concat_order: List[str]
-    view_names: List[int]
+    view_names: List[str]
 
 
 class MultiviewHeatmapLabeledExampleDict(MultiviewLabeledExampleDict):
@@ -94,12 +94,12 @@ class MultiviewLabeledBatchDict(TypedDict):
         TensorType["batch", "num_views", "RGB":3, "image_height", "image_width", float],
         TensorType["batch", "num_views", "frames", "RGB":3, "image_height", "image_width", float],
     ]
-    keypoints: TensorType["batch", "num_views", "num_targets", float]
-    bbox: TensorType["batch", "num_views", "xyhw":4, float]
+    keypoints: TensorType["batch", "num_targets", float]
+    bbox: TensorType["batch", "num_views * xyhw", float]
     idxs: TensorType["batch", int]
     num_views: TensorType["batch", int]
-    concat_order: List[List[str]]
-    view_names: List[List[int]]
+    concat_order: List  # [Tuple[str]]
+    view_names: List  # [Tuple[str]]
 
 
 class MultiviewHeatmapLabeledBatchDict(MultiviewLabeledBatchDict):
@@ -130,7 +130,7 @@ class UnlabeledBatchDict(TypedDict):
 
 
 class MultiviewUnlabeledBatchDict(TypedDict):
-    """Batch type for unlabeled data."""
+    """Batch type for multiview unlabeled data."""
 
     frames: Union[
         TensorType["seq_len", "num_views", "RGB":3, "image_height", "image_width", float],
@@ -138,23 +138,19 @@ class MultiviewUnlabeledBatchDict(TypedDict):
             "seq_len", "num_views", "context":5, "RGB":3, "image_height", "image_width", float
         ],
     ]
-    transforms: List[
-        Union[
-            TensorType["seq_len", "h":2, "w":3, float],
-            TensorType["h":2, "w":3, float],
-            TensorType["seq_len", "null":1, float],
-            TensorType["null":1, float],
-            torch.Tensor,
-        ]
+    transforms: Union[
+        TensorType["num_views", "h":2, "w":3, float],
+        TensorType["num_views", "null":1, "null":1, float],
+        torch.Tensor,
     ]
-    bbox: TensorType["seq_len", "num_views", "xyhw":4, float]
+    bbox: TensorType["seq_len", "num_views * xyhw", float]
 
 
 class SemiSupervisedBatchDict(TypedDict):
     """Batch type for base labeled+unlabeled data."""
 
     labeled: Union[BaseLabeledBatchDict, MultiviewLabeledBatchDict]
-    unlabeled: UnlabeledBatchDict
+    unlabeled: Union[UnlabeledBatchDict, MultiviewUnlabeledBatchDict]
 
 
 class SemiSupervisedHeatmapBatchDict(TypedDict):
@@ -192,7 +188,11 @@ class DataExtractor(object):
                 self.data_module = data_module
             else:
                 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
-                from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
+                from lightning_pose.data.datasets import (
+                    BaseTrackingDataset,
+                    HeatmapDataset,
+                    MultiviewHeatmapDataset,
+                )
 
                 # make new augmentation pipeline that just resizes
                 if not isinstance(imgaug_curr[-1], iaa.Resize):
@@ -201,6 +201,7 @@ class DataExtractor(object):
                 # keep the resizing aug
                 imgaug_new = iaa.Sequential([imgaug_curr[-1]])
 
+                # TODO: is there a cleaner way to do this?
                 # rebuild dataset with new aug pipeline
                 dataset_old = data_module.dataset
                 if isinstance(data_module.dataset, HeatmapDataset):
@@ -215,6 +216,14 @@ class DataExtractor(object):
                     dataset_new = BaseTrackingDataset(
                         root_directory=dataset_old.root_directory,
                         csv_path=dataset_old.csv_path,
+                        imgaug_transform=imgaug_new,
+                        do_context=dataset_old.do_context,
+                    )
+                elif isinstance(dataset_old, MultiviewHeatmapDataset):
+                    dataset_new = MultiviewHeatmapDataset(
+                        root_directory=dataset_old.root_directory,
+                        csv_paths=dataset_old.csv_paths,
+                        view_names=dataset_old.view_names,
                         imgaug_transform=imgaug_new,
                         do_context=dataset_old.do_context,
                     )
