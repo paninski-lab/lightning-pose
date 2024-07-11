@@ -196,7 +196,9 @@ class LitDaliWrapper(DALIGenericIterator):
             bbox = torch.tensor([0, 0, height, width], device=frames.device).repeat(
                 (frames.shape[0], 1))
 
-            return UnlabeledBatchDict(frames=frames, transforms=transforms, bbox=bbox)
+            return UnlabeledBatchDict(
+                frames=frames, transforms=transforms, bbox=bbox, is_multiview=False,
+            )
 
         else:  # multiview pipeline
 
@@ -225,7 +227,9 @@ class LitDaliWrapper(DALIGenericIterator):
                 ) for key in batch[0].keys() if "frame_size" in key
             ], dim=0).repeat(frames.shape[0], 1)
 
-            return MultiviewUnlabeledBatchDict(frames=frames, transforms=transforms, bbox=bbox)
+            return MultiviewUnlabeledBatchDict(
+                frames=frames, transforms=transforms, bbox=bbox, is_multiview=True,
+            )
 
     def __next__(self) -> Union[UnlabeledBatchDict, MultiviewUnlabeledBatchDict]:
         batch = super().__next__()

@@ -367,8 +367,10 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         if len(view_names) != len(csv_paths):
             raise ValueError("number of names does not match with the number of files!")
 
-        self.delimiter = delimiter
+        self.root_directory = root_directory
+        self.csv_paths = csv_paths
         self.do_context = do_context
+        self.delimiter = delimiter
 
         self.imgaug_transform = imgaug_transform
         self.downsample_factor = downsample_factor

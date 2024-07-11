@@ -445,10 +445,10 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
                 (predicted_keypoints_augmented.shape[0], -1, 2)
             )
             # undo
-            if isinstance(batch_dict, UnlabeledBatchDict):
+            if not batch_dict.is_multiview:
                 # single affine transform for the whole batch
                 pred_kps = undo_affine_transform(pred_kps, batch_dict["transforms"])
-            elif isinstance(batch_dict, MultiviewUnlabeledBatchDict):
+            else:
                 # each view has its own affine transform that we need to undo
                 num_views = batch_dict["transforms"].shape[0]
                 kps_per_view = int(pred_kps.shape[1] / num_views)

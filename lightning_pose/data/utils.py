@@ -120,13 +120,15 @@ class UnlabeledBatchDict(TypedDict):
         TensorType["null":1, float],
         torch.Tensor,
     ]
-    bbox: TensorType["seq_len", "xyhw":4, float]
     # transforms shapes
     # (seq_len, 2, 3): different transform for each sequence
     # (2, 3): same transform for all returned frames/keypoints
     # (seq_len, 1): no transforms
     # (1,): no transforms
     # torch.Tensor: necessary, getting error about torch.AnnotatedAlias that I don't understand
+
+    bbox: TensorType["seq_len", "xyhw":4, float]
+    is_multiview: bool = False  # helps with downstream logic since isinstance fails on TypedDicts
 
 
 class MultiviewUnlabeledBatchDict(TypedDict):
@@ -144,6 +146,7 @@ class MultiviewUnlabeledBatchDict(TypedDict):
         torch.Tensor,
     ]
     bbox: TensorType["seq_len", "num_views * xyhw", float]
+    is_multiview: bool = True  # helps with downstream logic since isinstance fails on TypedDicts
 
 
 class SemiSupervisedBatchDict(TypedDict):
