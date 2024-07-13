@@ -23,6 +23,8 @@ from lightning_pose.data.utils import (
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
+    "normalized_to_bbox",
+    "convert_bbox_coords",
     "get_context_from_sequence",
     "BaseFeatureExtractor",
     "BaseSupervisedTracker",
@@ -198,10 +200,13 @@ class BaseFeatureExtractor(LightningModule):
     def get_representations(
         self,
         images: Union[
-            TensorType["batch", "RGB":3, "image_height", "image_width"],
-            TensorType["batch", "frames", "RGB":3, "image_height", "image_width"],
-            TensorType["sequence_length", "RGB":3, "image_height", "image_width"],
+            TensorType["batch", "channels":3, "image_height", "image_width"],
+            TensorType["batch", "frames", "channels":3, "image_height", "image_width"],
+            TensorType["seq_len", "channels":3, "image_height", "image_width"],
+            TensorType["batch", "views", "frames", "channels":3, "image_height", "image_width"],
+            TensorType["seq_len", "view", "frames", "channels":3, "image_height", "image_width"],
         ],
+        is_multiview: bool = False,
     ) -> Union[
         TensorType["new_batch", "features", "rep_height", "rep_width"],
         TensorType["new_batch", "features", "rep_height", "rep_width", "frames"],
@@ -211,8 +216,26 @@ class BaseFeatureExtractor(LightningModule):
         Wrapper around the backbone's feature_extractor() method for typechecking purposes.
         See tests/models/test_base.py for example shapes.
 
+        Batch options
+        -------------
+        - TensorType["batch", "channels":3, "image_height", "image_width"]
+          single view, labeled batch
+
+        - TensorType["batch", "frames", "channels":3, "image_height", "image_width"]
+          single view, labeled context batch
+
+        - TensorType["seq_len", "channels":3, "image_height", "image_width"]
+          single view, unlabeled batch from DALI
+
+        - TensorType["batch", "views", "frames", "channels":3, "image_height", "image_width"]
+          multivew, labeled context batch
+
+        - TensorType["seq_len", "views", "channels":3, "image_height", "image_width"]
+          multiview, unlabeled batch from DALI
+
         Args:
             images: a batch of images
+            is_multiview: flag to distinguish batches of the same size
 
         Returns:
             a representation of the images; features differ as a function of resnet version.
@@ -221,13 +244,25 @@ class BaseFeatureExtractor(LightningModule):
 
         """
         if self.do_context:
-            if len(images.shape) == 5:
-                # non-consecutive sequences, used for batches of labeled data during training
+            if (len(images.shape) == 5 and not is_multiview) or len(images.shape) == 6:
+                # len = 5
+                # incoming batch: singleview labeled batch
+                # incoming shape: (batch, frames, channels, height, width)
+                #
+                # len = 6
+                # incoming batch: multiview labeled batch
+                # incoming shape: (batch, num_views, frames, channels, height, width)
+
+                if len(images.shape) == 6:
+                    # stacking all the views in batch dimension
+                    shape = images.shape
+                    images = images.reshape(-1, shape[-4], shape[-3], shape[-2], shape[-1])
+
                 batch, frames, channels, image_height, image_width = images.shape
                 frames_batch_shape = batch * frames
-                images_batch_frames: TensorType[
-                    "batch*frames", "channels":3, "image_height", "image_width"
-                ] = images.reshape(frames_batch_shape, channels, image_height, image_width)
+                images_batch_frames = images.reshape(
+                    frames_batch_shape, channels, image_height, image_width,
+                )
                 outputs: TensorType[
                     "batch*frames", "features", "rep_height", "rep_width"
                 ] = self.backbone(images_batch_frames)
@@ -240,6 +275,42 @@ class BaseFeatureExtractor(LightningModule):
                     outputs.shape[2],
                     outputs.shape[3],
                 )
+            elif len(images.shape) == 5 and is_multiview:
+                # incoming batch: multiview unlabeled batch
+                # incoming shape: (seq, num_views, channels, height, width)
+
+                batch, num_views, channels, image_height, image_width = images.shape
+                batch_views_shape = batch * num_views
+                images_batch_views = images.reshape(
+                    batch_views_shape, channels, image_height, image_width,
+                )
+                outputs: TensorType[
+                    "batch*views", "features", "rep_height", "rep_width"
+                ] = self.backbone(images_batch_views)
+                outputs: TensorType[
+                    "batch", "views", "features", "rep_height", "rep_width"
+                ] = outputs.reshape(
+                    batch,
+                    num_views,
+                    outputs.shape[1],
+                    outputs.shape[2],
+                    outputs.shape[3],
+                )
+                # stack views across feature dimension
+                outputs: TensorType[
+                    "batch", "views * features", "rep_height", "rep_width"
+                ] = outputs.reshape(batch, -1, outputs.shape[-2], outputs.shape[-1])
+
+                # we need to tile the representations to make it into
+                # (num_valid_frames, features, rep_height, rep_width, num_context_frames)
+                tiled_representations = get_context_from_sequence(
+                    img_seq=outputs, context_length=5,
+                )
+                # get rid of first and last two frames
+                if tiled_representations.shape[0] < 5:
+                    raise RuntimeError("Not enough valid frames to make a context representation.")
+                outputs = tiled_representations[2:-2, :, :, :, :]
+
             elif len(images.shape) == 4:
                 # we have a single sequence of frames from DALI (not a batch of sequences)
                 # valid frame := a frame that has two frames before it and two frames after it
@@ -249,13 +320,13 @@ class BaseFeatureExtractor(LightningModule):
                 # the output will be one representation per valid frame
                 sequence_length, channels, image_height, image_width = images.shape
                 representations: TensorType[
-                    "sequence_length", "channels":3, "rep_height", "rep_width"
+                    "sequence_length", "features", "rep_height", "rep_width"
                 ] = self.backbone(images)
                 # we need to tile the representations to make it into
                 # (num_valid_frames, features, rep_height, rep_width, num_context_frames)
                 # TODO: context frames should be configurable
                 tiled_representations = get_context_from_sequence(
-                    img_seq=representations, context_length=5
+                    img_seq=representations, context_length=5,
                 )
                 # get rid of first and last two frames
                 if tiled_representations.shape[0] < 5:
@@ -268,6 +339,8 @@ class BaseFeatureExtractor(LightningModule):
                 "batch", "features", "rep_height", "rep_width", "frames"
             ] = torch.permute(outputs, (0, 2, 3, 4, 1))
         else:
+            # incoming batch: singleview labeled/unlabeled, multiview labeled/unlabeled reshaped
+            # incoming shape: (batch, channels, height, width)
             representations = self.backbone(images)
 
         return representations

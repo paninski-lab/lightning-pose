@@ -492,6 +492,31 @@ def heatmap_data_module_combined_context(cfg, heatmap_dataset_context) -> Unlabe
 
 
 @pytest.fixture
+def multiview_heatmap_data_module_combined_context(
+    cfg_multiview,
+    multiview_heatmap_dataset_context,
+) -> UnlabeledDataModule:
+    """Create a combined data module for heatmap models."""
+
+    # setup
+    cfg_tmp = copy.deepcopy(cfg_multiview)
+    cfg_tmp.model.losses_to_use = ["pca_multiview"]  # trigger semi-supervised data module
+    data_module = get_data_module(
+        cfg_tmp,
+        dataset=multiview_heatmap_dataset_context,
+        video_dir=os.path.join(cfg_multiview.data.data_dir, "videos"),
+    )
+    # data_module.setup()  # already done in UnlabeledDataModule constructor
+
+    # return to tests
+    yield data_module
+
+    # cleanup after all tests have run (no more calls to yield)
+    del data_module
+    torch.cuda.empty_cache()
+
+
+@pytest.fixture
 def video_dataloader(cfg, base_dataset, video_list) -> LitDaliWrapper:
     """Create a prediction dataloader for a new video."""
 

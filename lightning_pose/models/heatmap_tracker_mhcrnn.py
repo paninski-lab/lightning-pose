@@ -14,6 +14,7 @@ from lightning_pose.data.utils import (
     HeatmapLabeledBatchDict,
     MultiviewHeatmapLabeledBatchDict,
     UnlabeledBatchDict,
+    MultiviewUnlabeledBatchDict,
     undo_affine_transform,
 )
 from lightning_pose.losses.factory import LossFactory
@@ -117,32 +118,58 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
     def forward(
         self,
         images: Union[
-            TensorType["batch", "channels":3, "image_height", "image_width"],
             TensorType["batch", "frames", "channels":3, "image_height", "image_width"],
-            TensorType["batch", "view", "frames", "channels":3, "image_height", "image_width"]
+            TensorType["batch", "channels":3, "image_height", "image_width"],
+            TensorType["batch", "view", "frames", "channels":3, "image_height", "image_width"],
+            TensorType["batch", "view", "channels":3, "image_height", "image_width"],
         ],
+        is_multiview: bool = False,
     ) -> Tuple[
             TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"],
             TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"],
     ]:
-        """Forward pass through the network."""
+        """Forward pass through the network.
+
+        Batch options
+        -------------
+        - TensorType["batch", "frames", "channels":3, "image_height", "image_width"]
+          single view, labeled context batch
+
+        - TensorType["batch", "channels":3, "image_height", "image_width"]
+          single view, unlabeled batch from DALI
+
+        - TensorType["batch", "view", "frames", "channels":3, "image_height", "image_width"]
+          multivew, labeled context batch
+
+        - TensorType["batch", "view", "channels":3, "image_height", "image_width"]
+          multiview, unlabeled batch from DALI
+
+        """
 
         shape = images.shape
+        num_frames = shape[0]
 
-        if len(shape) > 5:
-            # Stacking all the views (MultiView) as Batch
-            images = images.reshape(-1, shape[-4], shape[-3], shape[-2], shape[-1])
-            # one representation and two heatmaps for each desired output (context, non-context)
-            representations = self.get_representations(images)
-            heatmaps_crnn, heatmaps_sf = self.heatmaps_from_representations(representations)
-            # Reshaping the outputs to extract the view dimension
+        # get one representation for each frame
+        representations = self.get_representations(images, is_multiview=is_multiview)
+        # representations shape is (batch, features, height, width, frames)
+
+        if len(shape) == 5 and is_multiview:
+            # put view info back in batch so we can properly extract heatmaps
+            shape_r = representations.shape
+            num_frames -= 4  # we lose the first/last 2 frames of unlabeled batch due to context
+            representations = representations.reshape(
+                num_frames * shape[1],  -1, shape_r[-3], shape_r[-2], shape_r[-1],
+            )
+
+        # get two heatmaps for each representation (context, non-context)
+        heatmaps_crnn, heatmaps_sf = self.heatmaps_from_representations(representations)
+
+        if len(shape) == 6 or len(shape) == 5:
+            # reshape the outputs to extract the view dimension
             heatmaps_crnn = heatmaps_crnn.reshape(
-                shape[0], -1, heatmaps_crnn.shape[-2], heatmaps_crnn.shape[-1])
+                num_frames, -1, heatmaps_crnn.shape[-2], heatmaps_crnn.shape[-1])
             heatmaps_sf = heatmaps_sf.reshape(
-                shape[0], -1, heatmaps_sf.shape[-2], heatmaps_sf.shape[-1])
-        else:
-            representations = self.get_representations(images)
-            heatmaps_crnn, heatmaps_sf = self.heatmaps_from_representations(representations)
+                num_frames, -1, heatmaps_sf.shape[-2], heatmaps_sf.shape[-1])
 
         # normalize heatmaps
         # softmax temp stays 1 here; to modify for model predictions, see constructor
@@ -294,29 +321,58 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
         # self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
         self.total_unsupervised_importance = torch.tensor(1.0)
 
-    def get_loss_inputs_unlabeled(self, batch_dict: UnlabeledBatchDict) -> Dict:
+    def get_loss_inputs_unlabeled(
+        self,
+        batch_dict: Union[
+            UnlabeledBatchDict,
+            MultiviewUnlabeledBatchDict,
+        ]
+    ) -> Dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)"""
         # images -> heatmaps
-        pred_heatmaps_crnn, pred_heatmaps_sf = self.forward(batch_dict["frames"])
+        pred_heatmaps_crnn, pred_heatmaps_sf = self.forward(
+            batch_dict["frames"], is_multiview=batch_dict["is_multiview"],
+        )
         # heatmaps -> keypoints
         pred_keypoints_crnn, confidence_crnn = self.run_subpixelmaxima(pred_heatmaps_crnn)
         pred_keypoints_sf, confidence_sf = self.run_subpixelmaxima(pred_heatmaps_sf)
 
         # undo augmentation if needed
         if batch_dict["transforms"].shape[-1] == 3:
-            # reshape to (seq_len, n_keypoints, 2)
-            pred_kps = torch.reshape(pred_keypoints_crnn, (pred_keypoints_crnn.shape[0], -1, 2))
-            # undo
-            pred_kps = undo_affine_transform(pred_kps, batch_dict["transforms"])
-            # reshape to (seq_len, n_keypoints * 2)
-            pred_keypoints_crnn = torch.reshape(pred_kps, (pred_kps.shape[0], -1))
 
-            # reshape to (seq_len, n_keypoints, 2)
-            pred_kps = torch.reshape(pred_keypoints_sf, (pred_keypoints_sf.shape[0], -1, 2))
-            # undo
-            pred_kps = undo_affine_transform(pred_kps, batch_dict["transforms"])
+            # reshape each output to (seq_len, n_keypoints, 2)
+            pred_kps_c = torch.reshape(pred_keypoints_crnn, (pred_keypoints_crnn.shape[0], -1, 2))
+            pred_kps_s = torch.reshape(pred_keypoints_sf, (pred_keypoints_sf.shape[0], -1, 2))
+
+            # undo augmentations
+            if not batch_dict["is_multiview"]:
+                pred_kps_c = undo_affine_transform(pred_kps_c, batch_dict["transforms"])
+                pred_kps_s = undo_affine_transform(pred_kps_s, batch_dict["transforms"])
+            else:
+                # each view has its own affine transform that we need to undo
+                num_views = batch_dict["transforms"].shape[0]
+                kps_per_view = int(pred_kps.shape[1] / num_views)
+                for v in range(num_views):
+                    idx_beg = v * kps_per_view
+                    idx_end = (v + 1) * kps_per_view
+                    # undo context
+                    pred_kps_c[:, idx_beg:idx_end] = undo_affine_transform(
+                        pred_kps_c[:, idx_beg:idx_end],
+                        batch_dict["transforms"][v]
+                    )
+                    # undo single-frame
+                    pred_kps_s[:, idx_beg:idx_end] = undo_affine_transform(
+                        pred_kps_s[:, idx_beg:idx_end],
+                        batch_dict["transforms"][v]
+                    )
+
             # reshape to (seq_len, n_keypoints * 2)
-            pred_keypoints_sf = torch.reshape(pred_kps, (pred_kps.shape[0], -1))
+            pred_keypoints_crnn = torch.reshape(pred_kps_c, (pred_kps.shape[0], -1))
+            pred_keypoints_sf = torch.reshape(pred_kps_s, (pred_kps.shape[0], -1))
+
+        # keypoints -> original image coords keypoints
+        pred_keypoints_crnn = convert_bbox_coords(batch_dict, pred_keypoints_crnn)
+        pred_keypoints_sf = convert_bbox_coords(batch_dict, pred_keypoints_sf)
 
         return {
             "heatmaps_pred": torch.cat([pred_heatmaps_crnn, pred_heatmaps_sf], dim=0),

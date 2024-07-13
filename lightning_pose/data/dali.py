@@ -419,9 +419,10 @@ class PrepareDALI(object):
         this in the "output_map" arg
 
         """
-        dict_args = {}
-        dict_args["predict"] = {"context": {}, "base": {}}
-        dict_args["train"] = {"context": {}, "base": {}}
+        dict_args = {
+            "predict": {"context": {}, "base": {}},
+            "train": {"context": {}, "base": {}},
+        }
 
         if self.multiview:
             # video pipeline returns a big tuple: frame, transforms, and frame size for each view

@@ -109,10 +109,7 @@ class MultiviewHeatmapLabeledBatchDict(MultiviewLabeledBatchDict):
 
 class UnlabeledBatchDict(TypedDict):
     """Batch type for unlabeled data."""
-    frames: Union[
-        TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
-        TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float],
-    ]
+    frames: TensorType["seq_len", "RGB":3, "image_height", "image_width", float]
     transforms: Union[
         TensorType["seq_len", "h":2, "w":3, float],
         TensorType["h":2, "w":3, float],
@@ -133,13 +130,7 @@ class UnlabeledBatchDict(TypedDict):
 
 class MultiviewUnlabeledBatchDict(TypedDict):
     """Batch type for multiview unlabeled data."""
-
-    frames: Union[
-        TensorType["seq_len", "num_views", "RGB":3, "image_height", "image_width", float],
-        TensorType[
-            "seq_len", "num_views", "context":5, "RGB":3, "image_height", "image_width", float
-        ],
-    ]
+    frames: TensorType["seq_len", "num_views", "RGB":3, "image_height", "image_width", float]
     transforms: Union[
         TensorType["num_views", "h":2, "w":3, float],
         TensorType["num_views", "null":1, "null":1, float],
