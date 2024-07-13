@@ -251,6 +251,7 @@ class PrepareDALI(object):
         resize_dims: List[int],
         dali_config: Union[dict, DictConfig] = None,
         imgaug: Optional[str] = "default",
+        num_threads: int = 1,
     ) -> None:
 
         # determine if we have a multiview pipeline
@@ -269,9 +270,10 @@ class PrepareDALI(object):
 
         self.train_stage = train_stage
         self.model_type = model_type
+        self.filenames = filenames
         self.resize_dims = resize_dims
         self.dali_config = dali_config
-        self.filenames = filenames
+        self.num_threads = num_threads
         self.frame_count = count_frames(self.filenames)
         self._pipe_dict: dict = self._setup_pipe_dict(self.filenames, imgaug)
 
@@ -335,7 +337,7 @@ class PrepareDALI(object):
             "step": base_train_cfg["sequence_length"],
             "batch_size": 1,
             "seed": gen_cfg["seed"],
-            "num_threads": 1,
+            "num_threads": self.num_threads,
             "device_id": 0,
             "random_shuffle": True,
             "device": "gpu",
@@ -351,7 +353,7 @@ class PrepareDALI(object):
             "step": base_pred_cfg["sequence_length"],
             "batch_size": 1,
             "seed": gen_cfg["seed"],
-            "num_threads": 1,
+            "num_threads": self.num_threads,
             "device_id": 0,
             "random_shuffle": False,
             "device": "gpu",
@@ -368,7 +370,7 @@ class PrepareDALI(object):
             "sequence_length": context_pred_cfg["sequence_length"],
             "step": context_pred_cfg["sequence_length"] - 4,
             "batch_size": 1,
-            "num_threads": 1,
+            "num_threads": self.num_threads,
             "device_id": 0,
             "random_shuffle": False,
             "device": "gpu",
@@ -391,7 +393,7 @@ class PrepareDALI(object):
             "step": context_train_cfg["batch_size"],
             "batch_size": 1,
             "seed": gen_cfg["seed"],
-            "num_threads": 1,
+            "num_threads": self.num_threads,
             "device_id": 0,
             "random_shuffle": True,
             "device": "gpu",

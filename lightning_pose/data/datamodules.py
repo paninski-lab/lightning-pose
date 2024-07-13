@@ -241,6 +241,7 @@ class UnlabeledDataModule(BaseDataModule):
             resize_dims=[self.dataset.height, self.dataset.width],
             dali_config=self.dali_config,
             imgaug=self.imgaug,
+            num_threads=self.num_workers_for_unlabeled,
         )
 
         self.unlabeled_dataloader = dali_prep()
