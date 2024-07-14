@@ -15,32 +15,37 @@ keypoints for each video
 
 .. note::
 
-    As of January 2024, the non-mirrored multiview feature of Lightning Pose does not support
-    context frames or unsupervised losses.
+    As of July 2024, the non-mirrored multiview feature of Lightning Pose now supports context
+    frames and some unsupervised losses.
+    The Multiview PCA loss operates across all views, while the temporal loss operates on single
+    views.
+    The Pose PCA loss is not yet implemented for the multiview case.
 
 Organizing your data
 ====================
 
-As an example, let’s assume a dataset has two camera views, which we’ll call “view0” and “view1”.
+As an example, let’s assume a dataset has two camera views from a given session ("session0"),
+which we’ll call “view0” and “view1”.
 Lightning Pose assumes the following project directory structure:
 
 .. code-block::
 
     /path/to/project/
       ├── <LABELED_DATA_DIR>/
-      │   ├── view0/
-      │   └── view1/
+      │   ├── session0_view0/
+      │   └── session0_view1/
       ├── <VIDEO_DIR>/
+      │   ├── session0_view0.mp4
+      │   └── session0_view1.mp4
       ├── view0.csv
       └── view1.csv
 
-* ``<LABELED_DATA_DIR>/``: Each view must have a dedicated folder that contains images that correspond to the labels. The same frames from all the views must have the same names; for example, the images corresponding to time point 39 must be named "<LABELED_DATA_DIR>/view0/img000039.png" and "<LABELED_DATA_DIR>/view1/img000039.png". The directory name, any subdirectory names, and image names are all flexible, as long as they are consistent with the first column of `<view_name>.csv` files.
+* ``<LABELED_DATA_DIR>/``: The directory name, any subdirectory names, and image names are all flexible, as long as they are consistent with the first column of `<view_name>.csv` files (see below). As an example, each session/view pair can have its own subdirectory, which contains images that correspond to the labels. The same frames from all the views must have the same names; for example, the images corresponding to time point 39 should be named "<LABELED_DATA_DIR>/session0_view0/img000039.png" and "<LABELED_DATA_DIR>/session0_view1/img000039.png".
 
-* ``<VIDEO_DIR>/``: This is a single directory of videos, which must following the naming convention ``<vid_name>_<view_name>.csv``. So for example if you have a session named "2024_run1" and the view names "top" and "side", there should be two videos, named ``2024_run1_top.mp4`` and ``2024_run1_side.mp4``.
+* ``<VIDEO_DIR>/``: This is a single directory of videos, which **must** following the naming convention ``<session_name>_<view_name>.csv``. So in our example there should be two videos, named ``session0_view0.mp4`` and ``session0_view1.mp4``.
 
 * ``<view_name>.csv``: For each view (camera) there should be a table with keypoint labels (rows: frames; columns: keypoints). Note that these files can take any name, and need to be listed in the config file under the ``data.csv_file`` section. Each csv file must contain the same set of keypoints, and each must have the same number of rows (corresponding to specific points in time).
 
-* ``<VIDEO_DIR>/``: contains all the videos from any/all views that you would like to be predicted after model training completes.
 
 The configuration file
 ======================
@@ -74,13 +79,14 @@ Again, assume that we are working with the two-view dataset used as an example a
 * ``view_names``: list view names
 * ``mirrored_column_matches``: if you would like to use the Multiview PCA loss, you must ensure the
   following:
-  (1) the same set of keypoints are labeled across all views (though there can be missing data)
+  (1) the same set of keypoints are labeled across all views (though there can be missing data);
   (2) this config field should be a list of the indices corresponding to a *single view* which are
-      included in the loss for all views;
-      for example if you have 10 keypoints, and you want to include the zeroth, first, and fifth in
-      the Multiview PCA loss, this field should look like ``mirrored_column_matches: [0, 1, 5]``.
+  included in the loss for all views;
+  for example if you have 10 keypoints in each view, and you want to include the zeroth, first, and
+  fifth in the Multiview PCA loss, this field should look like
+  ``mirrored_column_matches: [0, 1, 5]``;
   (3) as in the non-multiview case, you must specify you want to use this loss
-      :ref:`elsewhere in the config file <unsup_config>`.
+  :ref:`elsewhere in the config file <unsup_config>`.
 * ``columns_for_singleview_pca``: similar to ``mirrored_column_matches``, if you want to use the
   Pose PCA loss this field must correspond to a list of indices that will be used for each view,
   and you will need to properly indicate :ref:`elsewhere in the config file <unsup_config>` that

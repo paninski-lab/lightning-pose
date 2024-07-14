@@ -10,9 +10,6 @@ FiftyOneImagePlotter
 
    .. autosummary::
 
-      ~FiftyOneImagePlotter.image_paths
-      ~FiftyOneImagePlotter.img_height
-      ~FiftyOneImagePlotter.img_width
       ~FiftyOneImagePlotter.model_names
       ~FiftyOneImagePlotter.num_keypoints
 
@@ -27,13 +24,11 @@ FiftyOneImagePlotter
       ~FiftyOneImagePlotter.get_keypoints_per_image
       ~FiftyOneImagePlotter.get_model_abs_paths
       ~FiftyOneImagePlotter.get_pred_keypoints_dict
+      ~FiftyOneImagePlotter.img_height_width
       ~FiftyOneImagePlotter.load_model_predictions
 
    .. rubric:: Attributes Documentation
 
-   .. autoattribute:: image_paths
-   .. autoattribute:: img_height
-   .. autoattribute:: img_width
    .. autoattribute:: model_names
    .. autoattribute:: num_keypoints
 
@@ -46,4 +41,5 @@ FiftyOneImagePlotter
    .. automethod:: get_keypoints_per_image
    .. automethod:: get_model_abs_paths
    .. automethod:: get_pred_keypoints_dict
+   .. automethod:: img_height_width
    .. automethod:: load_model_predictions

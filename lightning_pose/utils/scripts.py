@@ -249,9 +249,14 @@ def get_loss_factories(
                         "mirrored_column_matches"
                     ] = cfg.data.mirrored_column_matches
             elif loss_name == "pca_singleview":
-                loss_params_dict["unsupervised"][loss_name][
-                    "columns_for_singleview_pca"
-                ] = cfg.data.get('columns_for_singleview_pca', None)
+                if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
+                    raise NotImplementedError(
+                        "The Pose PCA loss is currently not implemented for multiview data."
+                    )
+                else:
+                    loss_params_dict["unsupervised"][loss_name][
+                        "columns_for_singleview_pca"
+                    ] = cfg.data.get('columns_for_singleview_pca', None)
 
     # build supervised loss factory, which orchestrates all supervised losses
     loss_factory_sup = LossFactory(
@@ -574,6 +579,7 @@ def compute_metrics_single(
         data_module is not None
         and cfg.data.get("columns_for_singleview_pca", None) is not None
         and len(cfg.data.columns_for_singleview_pca) != 0
+        and not isinstance(data_module.dataset, MultiviewHeatmapDataset)  # mirrored-only for now
     ):
         metrics_to_compute += ["pca_singleview"]
     if (
