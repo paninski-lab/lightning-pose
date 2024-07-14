@@ -299,7 +299,7 @@ def test_multiview_heatmap_data_module_combined(
     assert batch["unlabeled"]["frames"].shape == (
         train_size_unlabeled, num_views, 3, im_height, im_width,
     )
-    assert batch["unlabeled"]["transforms"].shape == (num_views, 1, 1)
+    assert batch["unlabeled"]["transforms"].shape == (num_views, 1, 2, 3)
     assert batch["unlabeled"]["bbox"].shape == (train_size_unlabeled, num_views * 4)
 
     # cleanup
@@ -387,7 +387,7 @@ def test_multiview_heatmap_data_module_combined_context(
     assert batch["unlabeled"]["frames"].shape == (
         train_size_unlabeled, num_views, 3, im_height, im_width,
     )
-    assert batch["unlabeled"]["transforms"].shape == (num_views, 1, 1)
+    assert batch["unlabeled"]["transforms"].shape == (num_views, 1, 2, 3)
     assert batch["unlabeled"]["bbox"].shape == (train_size_unlabeled, num_views * 4)
 
     # cleanup

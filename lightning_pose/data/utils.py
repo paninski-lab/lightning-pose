@@ -33,6 +33,7 @@ __all__ = [
     "generate_heatmaps",
     "evaluate_heatmaps_at_location",
     "undo_affine_transform",
+    "undo_affine_transform_batch",
 ]
 
 
@@ -221,7 +222,8 @@ class DataExtractor(object):
                         imgaug_transform=imgaug_new,
                         do_context=dataset_old.do_context,
                     )
-
+                else:
+                    raise NotImplementedError
                 # rebuild data_module with new dataset
                 if isinstance(data_module, UnlabeledDataModule):
                     data_module_new = UnlabeledDataModule(
@@ -237,6 +239,7 @@ class DataExtractor(object):
                         dali_config=data_module.dali_config,
                         torch_seed=data_module.torch_seed,
                     )
+                    # data_module_new.setup() happens internally
                 elif isinstance(data_module, BaseDataModule):
                     data_module_new = BaseDataModule(
                         dataset=dataset_new,
@@ -249,7 +252,10 @@ class DataExtractor(object):
                         train_frames=data_module.train_frames,
                         torch_seed=data_module.torch_seed,
                     )
-                    # data_module_new.setup()
+                    # split datasets
+                    data_module_new.setup()
+                else:
+                    raise NotImplementedError
 
                 self.data_module = data_module_new
 
@@ -552,6 +558,8 @@ def undo_affine_transform(
     keypoints: TensorType["seq_len", "num_keypoints", 2],
     transform: Union[TensorType["seq_len", 2, 3], TensorType[2, 3]],
 ) -> TensorType["seq_len", "num_keypoints", 2]:
+    """Undo an affine transform given a tensor of keypoints and the tranform matrix."""
+
     # add 1s to get keypoints in projective geometry coords
     ones = torch.ones(
         (keypoints.shape[0], keypoints.shape[1], 1),
@@ -596,3 +604,49 @@ def undo_affine_transform(
     kps_noaug = torch.bmm(kps_aff, mat_inv_torch)
 
     return kps_noaug
+
+
+def undo_affine_transform_batch(
+    keypoints_augmented: TensorType["seq_len", "num_keypoints x 2"],
+    transforms: Union[
+        TensorType["seq_len", "h":2, "w":3],
+        TensorType["h":2, "w":3],
+        TensorType["seq_len", "null":1],
+        TensorType["null":1],
+        TensorType["num_views", "h":2, "w":3],
+        TensorType["num_views", "null":1, "null":1],
+    ],
+    is_multiview: bool = False,
+) -> TensorType["seq_len", "num_keypoints x 2"]:
+    """Potentially undo an affine transform given a tensor of keypoints and the tranform matrix."""
+
+    # undo augmentation if needed
+    if transforms.shape[-1] == 3:
+        # initial shape is (seq_len, n_keypoints * 2)
+        # reshape to (seq_len, n_keypoints, 2)
+        pred_kps = torch.reshape(
+            keypoints_augmented,
+            (keypoints_augmented.shape[0], -1, 2)
+        )
+        # undo
+        if not is_multiview:
+            # single affine transform for the whole batch
+            pred_kps = undo_affine_transform(pred_kps, transforms)
+        else:
+            # each view has its own affine transform that we need to undo
+            num_views = transforms.shape[0]
+            kps_per_view = int(pred_kps.shape[1] / num_views)
+            for v in range(num_views):
+                idx_beg = v * kps_per_view
+                idx_end = (v + 1) * kps_per_view
+                # undo
+                pred_kps[:, idx_beg:idx_end] = undo_affine_transform(
+                    pred_kps[:, idx_beg:idx_end],
+                    transforms[v]
+                )
+        # reshape to (seq_len, n_keypoints * 2)
+        keypoints_unaugmented = torch.reshape(pred_kps, (pred_kps.shape[0], -1))
+    else:
+        keypoints_unaugmented = keypoints_augmented
+
+    return keypoints_unaugmented

@@ -15,7 +15,7 @@ from lightning_pose.data.utils import (
     MultiviewHeatmapLabeledBatchDict,
     UnlabeledBatchDict,
     MultiviewUnlabeledBatchDict,
-    undo_affine_transform,
+    undo_affine_transform_batch,
 )
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.models import HeatmapTracker
@@ -329,46 +329,27 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
         ]
     ) -> Dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)"""
+
         # images -> heatmaps
         pred_heatmaps_crnn, pred_heatmaps_sf = self.forward(
             batch_dict["frames"], is_multiview=batch_dict["is_multiview"],
         )
+
         # heatmaps -> keypoints
         pred_keypoints_crnn, confidence_crnn = self.run_subpixelmaxima(pred_heatmaps_crnn)
         pred_keypoints_sf, confidence_sf = self.run_subpixelmaxima(pred_heatmaps_sf)
 
-        # undo augmentation if needed
-        if batch_dict["transforms"].shape[-1] == 3:
-
-            # reshape each output to (seq_len, n_keypoints, 2)
-            pred_kps_c = torch.reshape(pred_keypoints_crnn, (pred_keypoints_crnn.shape[0], -1, 2))
-            pred_kps_s = torch.reshape(pred_keypoints_sf, (pred_keypoints_sf.shape[0], -1, 2))
-
-            # undo augmentations
-            if not batch_dict["is_multiview"]:
-                pred_kps_c = undo_affine_transform(pred_kps_c, batch_dict["transforms"])
-                pred_kps_s = undo_affine_transform(pred_kps_s, batch_dict["transforms"])
-            else:
-                # each view has its own affine transform that we need to undo
-                num_views = batch_dict["transforms"].shape[0]
-                kps_per_view = int(pred_kps.shape[1] / num_views)
-                for v in range(num_views):
-                    idx_beg = v * kps_per_view
-                    idx_end = (v + 1) * kps_per_view
-                    # undo context
-                    pred_kps_c[:, idx_beg:idx_end] = undo_affine_transform(
-                        pred_kps_c[:, idx_beg:idx_end],
-                        batch_dict["transforms"][v]
-                    )
-                    # undo single-frame
-                    pred_kps_s[:, idx_beg:idx_end] = undo_affine_transform(
-                        pred_kps_s[:, idx_beg:idx_end],
-                        batch_dict["transforms"][v]
-                    )
-
-            # reshape to (seq_len, n_keypoints * 2)
-            pred_keypoints_crnn = torch.reshape(pred_kps_c, (pred_kps.shape[0], -1))
-            pred_keypoints_sf = torch.reshape(pred_kps_s, (pred_kps.shape[0], -1))
+        # undo augmentations if needed
+        pred_keypoints_crnn = undo_affine_transform_batch(
+            keypoints_augmented=pred_keypoints_crnn,
+            transforms=batch_dict["transforms"],
+            is_multiview=batch_dict["is_multiview"],
+        )
+        pred_keypoints_sf = undo_affine_transform_batch(
+            keypoints_augmented=pred_keypoints_sf,
+            transforms=batch_dict["transforms"],
+            is_multiview=batch_dict["is_multiview"],
+        )
 
         # keypoints -> original image coords keypoints
         pred_keypoints_crnn = convert_bbox_coords(batch_dict, pred_keypoints_crnn)

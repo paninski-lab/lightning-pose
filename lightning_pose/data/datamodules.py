@@ -224,8 +224,8 @@ class UnlabeledDataModule(BaseDataModule):
         )
         self.video_paths_list = video_paths_list
         self.filenames = check_video_paths(self.video_paths_list, view_names=view_names)
-        self.num_workers_for_unlabeled = num_workers // 2
-        self.num_workers_for_labeled = num_workers // 2
+        self.num_workers_for_unlabeled = 1  # WARNING!! do not increase above 1, weird behavior
+        self.num_workers_for_labeled = num_workers
         self.dali_config = dali_config
         self.unlabeled_dataloader = None  # initialized in setup_unlabeled
         self.imgaug = imgaug

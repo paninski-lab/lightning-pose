@@ -63,7 +63,7 @@ def cfg() -> dict:
     cfg["training"]["train_batch_size"] = 2
     cfg["training"]["val_batch_size"] = 4
     cfg["training"]["test_batch_size"] = 4
-    cfg["training"]["imgaug"] = "default"  # so pca tests don't break
+    cfg["training"]["imgaug"] = "dlc"
     cfg["dali"]["base"]["train"]["sequence_length"] = 6
     cfg["dali"]["base"]["predict"]["sequence_length"] = 16
     return OmegaConf.create(cfg)
@@ -79,7 +79,7 @@ def cfg_multiview() -> dict:
     cfg["training"]["train_batch_size"] = 2
     cfg["training"]["val_batch_size"] = 4
     cfg["training"]["test_batch_size"] = 4
-    cfg["training"]["imgaug"] = "default"  # so pca tests don't break
+    cfg["training"]["imgaug"] = "dlc"
     cfg["dali"]["base"]["train"]["sequence_length"] = 6
     cfg["dali"]["base"]["predict"]["sequence_length"] = 16
     cfg["data"]["data_dir"] = "data/mirror-mouse-example_split"
