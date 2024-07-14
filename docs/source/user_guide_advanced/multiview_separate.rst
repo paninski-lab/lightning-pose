@@ -87,10 +87,7 @@ Again, assume that we are working with the two-view dataset used as an example a
   ``mirrored_column_matches: [0, 1, 5]``;
   (3) as in the non-multiview case, you must specify you want to use this loss
   :ref:`elsewhere in the config file <unsup_config>`.
-* ``columns_for_singleview_pca``: similar to ``mirrored_column_matches``, if you want to use the
-  Pose PCA loss this field must correspond to a list of indices that will be used for each view,
-  and you will need to properly indicate :ref:`elsewhere in the config file <unsup_config>` that
-  you want to use this loss.
+* ``columns_for_singleview_pca``: NOT YET IMPLEMENTED
 
 Training and inference
 ======================
