@@ -11,7 +11,7 @@
 ## Multi-view support for non-mirrored setups
 - [x] implement supervised datasets/dataloaders that work with multiple views ([#115](https://github.com/danbider/lightning-pose/pull/115))
 - [x] context frames for multi-view ([#126](https://github.com/danbider/lightning-pose/pull/126))
-- [ ] unsupervised losses for multi-view
+- [x] unsupervised losses for multi-view ([#186](https://github.com/danbider/lightning-pose/pull/186))
 
 ## Single-view dynamic crop (small animals in large frames)
 - [ ] implement dynamic cropping pipeline with detector model and pose estimator
