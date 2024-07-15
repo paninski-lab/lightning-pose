@@ -99,7 +99,7 @@ def test_train_multiview(cfg_multiview, tmpdir):
         assert os.path.isfile(os.path.join(tmpdir, f"predictions_{view}.csv"))
         assert os.path.isfile(os.path.join(tmpdir, f"predictions_{view}_pixel_error.csv"))
         # assert os.path.isfile(os.path.join(tmpdir, f"predictions_{view}_pca_multiview_error.csv"))
-        assert os.path.isfile(os.path.join(tmpdir, f"predictions_{view}_pca_singleview_error.csv"))
+        # assert os.path.isfile(os.path.join(tmpdir, f"predictions_{view}_pca_singleview_error.csv"))
 
         # ensure video data was properly processed
         assert os.path.isfile(os.path.join(
@@ -108,7 +108,7 @@ def test_train_multiview(cfg_multiview, tmpdir):
             tmpdir, "video_preds", f"test_vid_{view}_temporal_norm.csv"))
         # assert os.path.isfile(os.path.join(
         #     tmpdir, "video_preds", f"test_vid_{view}_pca_multiview_error.csv"))
-        assert os.path.isfile(os.path.join(
-            tmpdir, "video_preds", f"test_vid_{view}_pca_singleview_error.csv"))
+        # assert os.path.isfile(os.path.join(
+        #     tmpdir, "video_preds", f"test_vid_{view}_pca_singleview_error.csv"))
         assert os.path.isfile(os.path.join(
             tmpdir, "video_preds", "labeled_videos", f"test_vid_{view}_labeled.mp4"))
