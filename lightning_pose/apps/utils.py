@@ -233,8 +233,12 @@ def compute_confidence(
 
 
 # ------------ utils related to model finding in dir ---------
-# write a function that finds all model folders in the model_dir
-def get_model_folders(model_dir: str, require_predictions: bool = True) -> List[str]:
+def get_model_folders(
+    model_dir: str,
+    require_predictions: bool = True,
+    require_tb_logs: bool = False,
+) -> List[str]:
+    """Find all model folders in a higher-level directory, conditional on directory contents."""
     # strip trailing slash if present
     if model_dir[-1] == os.sep:
         model_dir = model_dir[:-1]
@@ -243,8 +247,13 @@ def get_model_folders(model_dir: str, require_predictions: bool = True) -> List[
     for root, dirs, files in os.walk(model_dir):
         if root.count(os.sep) - model_dir.count(os.sep) == 2:
             # only include directory if it has predictions.csv file (model training finished)
-            if require_predictions:
-                if "predictions.csv" in os.listdir(root):
+            if require_predictions or require_tb_logs:
+                append = True
+                if require_predictions and ("predictions.csv" not in os.listdir(root)):
+                    append &= False
+                if require_tb_logs and ("tb_logs" not in os.listdir(root)):
+                    append &= False
+                if append:
                     model_folders.append(root)
             else:
                 model_folders.append(root)

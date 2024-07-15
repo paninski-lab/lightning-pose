@@ -50,7 +50,11 @@ def run():
 
     # add a multiselect that shows existing model folders, and allows the user to de-select models
     # assume we have args.model_dir and we search two levels down for model folders
-    model_folders = get_model_folders(args.model_dir, require_predictions=True)
+    model_folders = get_model_folders(
+        args.model_dir,
+        require_predictions=True,
+        require_tb_logs=args.require_tb_logs,
+    )
 
     # get the last two levels of each path to be presented to user
     model_folders_vis = get_model_folders_vis(model_folders)
@@ -268,8 +272,29 @@ def run():
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_dir', type=str, default=[])
-    parser.add_argument('--make_dir', action='store_true', default=False)
-    parser.add_argument('--use_ood', action='store_true', default=False)
+    parser.add_argument(
+        "--model_dir",
+        type=str,
+        default=[],
+        help="absolute path to directory that contains model subdirectories",
+    )
+    parser.add_argument(
+        "--make_dir",
+        action="store_true",
+        default=False,
+        help="create model_dir if it does not exist (i.e. no models have been trained yet"
+    )
+    parser.add_argument(
+        "--use_ood",
+        action="store_true",
+        default=False,
+        help="use predictions_new.csv instead of predictions.csv",
+    )
+    parser.add_argument(
+        "--require_tb_logs",
+        action="store_true",
+        default=False,
+        help="require model directory to contain the subdirectoy tb_logs, skip otherwise",
+    )
 
     run()
