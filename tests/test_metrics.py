@@ -73,7 +73,7 @@ def test_pca_singleview_reprojection_error(cfg, base_data_module):
     n_samples = 20
     n_keypoints = base_data_module.dataset.num_keypoints
     keypoint_data = np.random.randn(n_samples, n_keypoints, 2)
-    error_per_keypoint = pca_singleview_reprojection_error(keypoint_data, kp_pca, cfg)
+    error_per_keypoint = pca_singleview_reprojection_error(keypoint_data, kp_pca)
     assert error_per_keypoint.shape == (n_samples, n_keypoints)
     assert np.all(error_per_keypoint[:, pca_cols] >= 0.0)
     assert np.all(np.isnan(error_per_keypoint[:, ~pca_cols]))
@@ -100,7 +100,7 @@ def test_pca_multiview_reprojection_error(cfg, base_data_module):
     n_samples = 20
     n_keypoints = base_data_module.dataset.num_keypoints
     keypoint_data = np.random.randn(n_samples, n_keypoints, 2)
-    error_per_keypoint = pca_multiview_reprojection_error(keypoint_data, kp_pca, cfg)
+    error_per_keypoint = pca_multiview_reprojection_error(keypoint_data, kp_pca)
     assert error_per_keypoint.shape == (n_samples, n_keypoints)
     assert np.all(error_per_keypoint[:, pca_cols] >= 0.0)
     assert np.all(np.isnan(error_per_keypoint[:, ~pca_cols]))

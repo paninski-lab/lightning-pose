@@ -1,8 +1,4 @@
 data:
-  # dimensions of the raw training images. your computer will tell you WIDTH X HEIGHT
-  image_orig_dims:
-    width: 396
-    height: 406
   # resize dimensions: we do this internally to accelerate training. make sure its a multiple of 128.
   image_resize_dims:
     width: 256

@@ -133,7 +133,7 @@ def get_df_scatter(
         df_scatters.append(
             pd.DataFrame(
                 {
-                    "img_file": df_0.img_file[df_0.set == data_type],
+                    "img_file": df_0.index[df_0.set == data_type],
                     "keypoint": keypoint,
                     model_names[0]: df_0[keypoint][df_0.set == data_type],
                     model_names[1]: df_1[keypoint][df_1.set == data_type],
@@ -200,7 +200,6 @@ def get_precomputed_error(
     df_ = df
     df_["model_name"] = model_name
     df_["mean"] = df_[keypoint_names[:-1]].mean(axis=1)
-    df_.rename(columns={df.columns[0]: "img_file"}, inplace=True)
 
     return df_
 
@@ -227,7 +226,7 @@ def compute_confidence(
     df_["mean"] = df_[keypoint_names[:-1]].mean(axis=1)
     if set is not None:
         df_["set"] = set
-        df_["img_file"] = df.index
+        df_.index = df.index
 
     return df_
 

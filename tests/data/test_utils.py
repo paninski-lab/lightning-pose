@@ -11,10 +11,13 @@ from lightning_pose.data.utils import generate_heatmaps
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def test_data_extractor(base_data_module_combined):
-    # TODO: expand
+def test_data_extractor(base_data_module_combined, multiview_heatmap_data_module_combined):
+
     from lightning_pose.data.utils import DataExtractor
 
+    # ---------------------------
+    # supervised single view
+    # ---------------------------
     num_frames = (
         len(base_data_module_combined.dataset)
         * base_data_module_combined.train_probability
@@ -22,13 +25,24 @@ def test_data_extractor(base_data_module_combined):
     keypoint_tensor, _ = DataExtractor(
         data_module=base_data_module_combined, cond="train"
     )()
-    assert keypoint_tensor.shape == (num_frames, 34)  # 72 = 0.8 * 90 images
+    assert keypoint_tensor.shape == (num_frames, 34)  # 72 = 0.8 * 90 images, 17 * 2 coordinates
 
     keypoint_tensor, images_tensor = DataExtractor(
         data_module=base_data_module_combined, cond="train", extract_images=True
     )()
-
     assert images_tensor.shape == (num_frames, 3, 256, 256)
+
+    # ---------------------------
+    # supervised multiview
+    # ---------------------------
+    num_frames = (
+        len(multiview_heatmap_data_module_combined.dataset)
+        * multiview_heatmap_data_module_combined.train_probability
+    )
+    keypoint_tensor, _ = DataExtractor(
+        data_module=multiview_heatmap_data_module_combined, cond="train"
+    )()
+    assert keypoint_tensor.shape == (num_frames, 28)  # 72 = 0.8 * 90 images, 7 * 2 * 2 coords
 
 
 def test_split_sizes_from_probabilities():
@@ -89,13 +103,23 @@ def test_count_frames(video_list):
 
     from lightning_pose.data.utils import count_frames
 
+    # make sure value is correct in the single view case
     num_frames = 0
     for video_file in video_list:
         cap = cv2.VideoCapture(video_file)
         num_frames += int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         cap.release()
-    num_frames_ = count_frames(video_list)
-    assert num_frames == num_frames_
+    num_frames_1 = count_frames(video_list)
+    assert num_frames == num_frames_1
+
+    # with multiview we have a list of lists, make sure we only count frames from one view
+    video_list_2 = [
+        [video_list[0]],  # view 0
+        [video_list[0]],  # view 1
+        [video_list[0]],  # view 2
+    ]
+    num_frames_2 = count_frames(video_list_2)
+    assert num_frames == num_frames_2
 
 
 def test_compute_num_train_frames():
@@ -416,6 +440,135 @@ def test_undo_affine_transform():
         keypoints, transform_mat[:, :, :2].transpose(2, 1)
     ) + transform_mat[:, :, -1].unsqueeze(1)
     keypoints_noaug = undo_affine_transform(keypoints_aug, transform_mat)
+    assert torch.allclose(keypoints, keypoints_noaug, atol=1e-4)
+
+
+def test_undo_affine_transform_batch():
+
+    from lightning_pose.data.utils import undo_affine_transform_batch
+
+    seq_len = 5
+    n_keypoints = 6
+
+    # test single transform, single view
+    torch.manual_seed(0)
+    keypoints = torch.normal(mean=torch.zeros((seq_len, n_keypoints, 2)))
+    transform_mat = torch.normal(mean=torch.zeros((2, 3)))
+    keypoints_aug = torch.matmul(keypoints, transform_mat[:, :2].T) + transform_mat[:, -1]
+    keypoints_aug = keypoints_aug.reshape((keypoints.shape[0], -1))
+    keypoints_noaug = undo_affine_transform_batch(
+        keypoints_augmented=keypoints_aug,
+        transforms=transform_mat,
+        is_multiview=False,
+    )
+    assert torch.allclose(keypoints.reshape(keypoints_noaug.shape), keypoints_noaug, atol=1e-4)
+
+    # test individual transforms, single view
+    torch.manual_seed(1)
+    keypoints = torch.normal(mean=torch.zeros((seq_len, n_keypoints, 2)))
+    transform_mat = torch.normal(mean=torch.zeros((seq_len, 2, 3)))
+    keypoints_aug = torch.bmm(
+        keypoints, transform_mat[:, :, :2].transpose(2, 1)
+    ) + transform_mat[:, :, -1].unsqueeze(1)
+    keypoints_noaug = undo_affine_transform_batch(
+        keypoints_augmented=keypoints_aug.reshape((keypoints.shape[0], -1)),
+        transforms=transform_mat,
+        is_multiview=False,
+    )
+    assert torch.allclose(keypoints.reshape(keypoints_noaug.shape), keypoints_noaug, atol=1e-4)
+
+    # test single transform, multi-view
+    n_views = 3
+    torch.manual_seed(2)
+    keypoints = torch.normal(mean=torch.zeros((seq_len, n_keypoints * n_views, 2)))
+    transform_mat = torch.normal(mean=torch.zeros((2, 3)))
+    transform_mat_views = transform_mat.repeat(n_views, 1, 1)
+    keypoints_aug = torch.matmul(keypoints, transform_mat[:, :2].T) + transform_mat[:, -1]
+    keypoints_aug = keypoints_aug.reshape((keypoints.shape[0], -1))
+    keypoints_noaug = undo_affine_transform_batch(
+        keypoints_augmented=keypoints_aug,
+        transforms=transform_mat_views,
+        is_multiview=True,
+    )
+    assert torch.allclose(keypoints.reshape(keypoints_noaug.shape), keypoints_noaug, atol=1e-4)
+
+    # test different transforms, multi-view
+    n_views = 3
+    keypoints = []
+    transforms = []
+    keypoints_aug = []
+    for v, view in enumerate(range(n_views)):
+        torch.manual_seed(v)
+        # create keypoints/transforms for this view
+        keypoints_v = torch.normal(mean=torch.zeros((seq_len, n_keypoints, 2)))
+        transform_mat_v = torch.normal(mean=torch.zeros((2, 3)))
+        keypoints_aug_v = torch.matmul(
+            keypoints_v, transform_mat_v[:, :2].T
+        ) + transform_mat_v[:, -1]
+        # append to other views
+        keypoints.append(keypoints_v.reshape((keypoints_v.shape[0], -1)))
+        transforms.append(transform_mat_v)
+        keypoints_aug.append(keypoints_aug_v.reshape((keypoints_v.shape[0], -1)))
+    # concat across views
+    keypoints = torch.concat(keypoints, dim=-1)
+    keypoints_aug = torch.concat(keypoints_aug, dim=-1)
+    transforms = torch.stack(transforms, dim=0)
+    # test
+    keypoints_noaug = undo_affine_transform_batch(
+        keypoints_augmented=keypoints_aug,
+        transforms=transforms,
+        is_multiview=True,
+    )
+    assert torch.allclose(keypoints, keypoints_noaug, atol=1e-4)
+
+    # repeat, but with different ordering of reshaping
+    keypoints = []
+    transforms = []
+    keypoints_aug = []
+    for v, view in enumerate(range(n_views)):
+        torch.manual_seed(v)
+        # create keypoints/transforms for this view
+        keypoints_v = torch.normal(mean=torch.zeros((seq_len, n_keypoints, 2)))
+        transform_mat_v = torch.normal(mean=torch.zeros((2, 3)))
+        keypoints_aug_v = torch.matmul(
+            keypoints_v, transform_mat_v[:, :2].T
+        ) + transform_mat_v[:, -1]
+        # append to other views
+        keypoints.append(keypoints_v)
+        transforms.append(transform_mat_v)
+        keypoints_aug.append(keypoints_aug_v)
+    # concat across views
+    keypoints = torch.concat(keypoints, dim=1)
+    keypoints_aug = torch.concat(keypoints_aug, dim=1)
+    transforms = torch.stack(transforms, dim=0)
+    # test
+    keypoints_noaug = undo_affine_transform_batch(
+        keypoints_augmented=keypoints_aug.reshape((keypoints_aug.shape[0], -1)),
+        transforms=transforms,
+        is_multiview=True,
+    )
+    assert torch.allclose(keypoints.reshape(keypoints_noaug.shape), keypoints_noaug, atol=1e-4)
+
+    # test no transform, single view
+    torch.manual_seed(0)
+    keypoints = torch.normal(mean=torch.zeros((seq_len, n_keypoints * 2)))
+    transform_mat = torch.normal(mean=torch.zeros((seq_len, 1)))
+    keypoints_noaug = undo_affine_transform_batch(
+        keypoints_augmented=keypoints,
+        transforms=transform_mat,
+        is_multiview=False,
+    )
+    assert torch.allclose(keypoints, keypoints_noaug, atol=1e-4)
+
+    # test no transform, multiview
+    torch.manual_seed(0)
+    keypoints = torch.normal(mean=torch.zeros((seq_len, n_keypoints * 2)))
+    transform_mat = torch.normal(mean=torch.zeros((seq_len, 1)))
+    keypoints_noaug = undo_affine_transform_batch(
+        keypoints_augmented=keypoints,
+        transforms=transform_mat,
+        is_multiview=True,
+    )
     assert torch.allclose(keypoints, keypoints_noaug, atol=1e-4)
 
 

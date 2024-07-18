@@ -91,7 +91,12 @@ def test_pca_keypoint_class_singleview(cfg, base_data_module_combined):
     assert err.shape == (n_batches, 14)
 
 
-def test_pca_keypoint_class_multiview(cfg, base_data_module_combined):
+def test_pca_keypoint_class_multiview(
+    cfg,
+    base_data_module_combined,
+    cfg_multiview,
+    multiview_heatmap_data_module_combined,
+):
 
     num_train_ims = (
         len(base_data_module_combined.dataset)
@@ -149,6 +154,16 @@ def test_pca_keypoint_class_multiview(cfg, base_data_module_combined):
     )
     kp_pca_2()
     assert torch.allclose(kp_pca_2.data_arr, kp_pca.data_arr, equal_nan=True)
+
+    # make sure we don't get errors when using a true multiview dataset
+    kp_pca_3 = KeypointPCA(
+        loss_type="pca_multiview",
+        data_module=multiview_heatmap_data_module_combined,
+        components_to_keep=3,
+        empirical_epsilon_percentile=0.3,
+        mirrored_column_matches=cfg_multiview.data.mirrored_column_matches,
+    )
+    kp_pca_3()
 
 
 def test_nan_pca():

@@ -59,9 +59,7 @@ def ckpt_path_from_base_path(
 
 
 @typechecked
-def check_if_semi_supervised(
-    losses_to_use: Union[ListConfig, list, None] = None
-) -> bool:
+def check_if_semi_supervised(losses_to_use: Union[ListConfig, list, None] = None) -> bool:
     """Use config file to determine if model is semi-supervised.
 
     Take the entry of the hydra cfg that specifies losses_to_use. If it contains
@@ -79,9 +77,7 @@ def check_if_semi_supervised(
         semi_supervised = False
     elif len(losses_to_use) == 0:  # empty list
         semi_supervised = False
-    elif (
-        len(losses_to_use) == 1 and losses_to_use[0] == ""
-    ):  # list with an empty string
+    elif len(losses_to_use) == 1 and losses_to_use[0] == "":  # list with an empty string
         semi_supervised = False
     else:
         semi_supervised = True
@@ -181,27 +177,60 @@ def return_absolute_data_paths(data_cfg: DictConfig, n_dirs_back: int = 3) -> Tu
 
 
 @typechecked
-def get_videos_in_dir(video_dir: str, return_mp4_only: bool = True) -> List[str]:
-    # gather videos to process
-    # TODO: check if you're give a path to a single video?
+def get_videos_in_dir(
+    video_dir: str,
+    view_names: Optional[List[str]] = None,
+    return_mp4_only: bool = True
+) -> Union[List[str], List[List[str]]]:
+    """Gather videos to process from a single directory."""
     assert os.path.isdir(video_dir)
     # get all video files in directory, from allowed formats
     allowed_formats = (".mp4", ".avi", ".mov")
     if return_mp4_only:
         allowed_formats = ".mp4"
-    video_files = [
-        os.path.join(video_dir, f)
-        for f in os.listdir(video_dir)
-        if f.endswith(allowed_formats)
-    ]
+    if view_names:
+        # make a list of lists, where the outer list is over views, each inner list is over videos/
+        # sessions
+        all_video_files = sorted(os.listdir(video_dir))
+        video_files = [
+            [
+                os.path.join(video_dir, f) for f in all_video_files if
+                (f.endswith(allowed_formats) and f.split(".")[-2].endswith(view))
+            ]
+            for view in view_names
+        ]
+        # check to make sure we have the same set of videos for each view
+        # naming convention is <vid_name>_<view_name[0]>, <vid_name>_<view_name[1]>, etc.
+        vid_names = [
+            [vid_name.split(f'_{view_names[v]}')[0] for vid_name in video_files_]
+            for v, video_files_ in enumerate(video_files)
+        ]
+        for vids_view in vid_names:
+            if set(vids_view) != set(vid_names[0]):
+                raise RuntimeError(
+                    "Mismatched video names across views! "
+                    "Please check your videos are in the format "
+                    "<vid_name>_<view_name[0]>, <vid_name>_<view_name[1]>, etc., "
+                    "where the `view_name` variable is defined in the config file."
+                )
+    else:
+        video_files = [
+            os.path.join(video_dir, f)
+            for f in os.listdir(video_dir)
+            if f.endswith(allowed_formats)
+        ]
 
     if len(video_files) == 0:
         raise IOError("Did not find any valid video files in %s" % video_dir)
+
     return video_files
 
 
 @typechecked
-def check_video_paths(video_paths: Union[List[str], str]) -> List[str]:
+def check_video_paths(
+    video_paths: Union[List[str], str],
+    view_names: Optional[List[str]] = None,
+) -> Union[List[str], List[List[str]]]:
     # get input data
     if isinstance(video_paths, list):
         # presumably a list of files
@@ -211,12 +240,15 @@ def check_video_paths(video_paths: Union[List[str], str]) -> List[str]:
         filenames = [video_paths]
     elif isinstance(video_paths, str) and os.path.isdir(video_paths):
         # directory of videos
-        filenames = get_videos_in_dir(video_paths)
+        filenames = get_videos_in_dir(video_paths, view_names=view_names)
     else:
         raise ValueError(
             "`video_paths_list` must be a list of files, a single file, or a directory name"
         )
     for filename in filenames:
-        assert filename.endswith(".mp4"), "video files must be mp4 format!"
+        if isinstance(filename, str):
+            filename = [filename]
+        for f in filename:
+            assert f.endswith(".mp4"), "video files must be mp4 format!"
 
     return filenames

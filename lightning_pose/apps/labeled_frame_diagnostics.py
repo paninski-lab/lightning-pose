@@ -35,6 +35,7 @@ st.set_page_config(layout="wide")
 
 
 def run():
+
     args = parser.parse_args()
 
     st.title("Labeled Frame Diagnostics")
@@ -88,7 +89,7 @@ def run():
                 if 'pca' in str(model_pred_file) \
                         or 'temporal' in str(model_pred_file) \
                         or 'pixel' in str(model_pred_file):
-                    dframe = pd.read_csv(model_pred_file_path, index_col=None)
+                    dframe = pd.read_csv(model_pred_file_path, index_col=0)
                     dframes_metrics[model_name][str(model_pred_file)] = dframe
                 else:
                     dframe = pd.read_csv(model_pred_file_path, header=[1, 2], index_col=0)
@@ -130,7 +131,8 @@ def run():
         with col0:
             # choose from individual keypoints, their mean, or all at once
             keypoint_to_plot = st.selectbox(
-                "Keypoint:", ["mean", "ALL", *keypoint_names], key="keypoint"
+                # "Keypoint:", ["mean", "ALL", *keypoint_names], key="keypoint"
+                "Keypoint:", ["mean", *keypoint_names], key="keypoint",
             )
 
         with col1:
@@ -147,7 +149,7 @@ def run():
         sup_col00, sup_col01 = st.columns(2, gap="large")
 
         # ---------------------------------------------------
-        # plot metrics for all modelsz
+        # plot metrics for all models
         # ---------------------------------------------------
 
         with sup_col00:
@@ -252,11 +254,19 @@ def run():
                 )
 
             else:
-
+                model_0_df = df_tmp0[keypoint_to_plot][df_tmp0.set == data_type]
+                model_1_df = df_tmp1[keypoint_to_plot][df_tmp1.set == data_type]
+                img_file = df_tmp0.index[df_tmp0.set == data_type]
+                if model_1_df.shape[0] == 0:
+                    # user has not selected a second model; plot first model vs index number
+                    model_1_df = pd.Series(
+                        np.arange(model_0_df.shape[0]),
+                        index=model_0_df.index,
+                    )
                 df_scatter = pd.DataFrame({
-                    model_0: df_tmp0[keypoint_to_plot][df_tmp0.set == data_type],
-                    model_1: df_tmp1[keypoint_to_plot][df_tmp1.set == data_type],
-                    "img_file": df_tmp0.img_file[df_tmp0.set == data_type]
+                    model_0: model_0_df,
+                    model_1: model_1_df,
+                    "img_file": img_file,
                 })
                 fig_scatter = make_plotly_scatterplot(
                     model_0=model_0, model_1=model_1, df=df_scatter,

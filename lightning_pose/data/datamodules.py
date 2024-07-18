@@ -173,6 +173,7 @@ class UnlabeledDataModule(BaseDataModule):
         dataset: torch.utils.data.Dataset,
         video_paths_list: Union[List[str], str],
         dali_config: Union[dict, DictConfig],
+        view_names: Optional[List[str]] = None,
         train_batch_size: int = 16,
         val_batch_size: int = 16,
         test_batch_size: int = 1,
@@ -189,6 +190,8 @@ class UnlabeledDataModule(BaseDataModule):
         Args:
             dataset: pytorch Dataset for labeled data
             video_paths_list: absolute paths of videos ("unlabeled" data)
+            view_names: if fitting a non-mirrored multiview model, pass view names in order to
+                correctly organize the video paths
             dali_config: see `dali` entry of default config file for keys
             train_batch_size: number of samples of training batches
             val_batch_size: number of samples in validation batches
@@ -220,9 +223,9 @@ class UnlabeledDataModule(BaseDataModule):
             torch_seed=torch_seed,
         )
         self.video_paths_list = video_paths_list
-        self.filenames = check_video_paths(self.video_paths_list)
-        self.num_workers_for_unlabeled = num_workers // 2
-        self.num_workers_for_labeled = num_workers // 2
+        self.filenames = check_video_paths(self.video_paths_list, view_names=view_names)
+        self.num_workers_for_unlabeled = 1  # WARNING!! do not increase above 1, weird behavior
+        self.num_workers_for_labeled = num_workers
         self.dali_config = dali_config
         self.unlabeled_dataloader = None  # initialized in setup_unlabeled
         self.imgaug = imgaug
@@ -238,6 +241,7 @@ class UnlabeledDataModule(BaseDataModule):
             resize_dims=[self.dataset.height, self.dataset.width],
             dali_config=self.dali_config,
             imgaug=self.imgaug,
+            num_threads=self.num_workers_for_unlabeled,
         )
 
         self.unlabeled_dataloader = dali_prep()

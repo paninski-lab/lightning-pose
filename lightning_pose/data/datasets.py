@@ -1,7 +1,7 @@
 """Dataset objects store images, labels, and functions for manipulation."""
 
 import os
-from typing import Callable, List, Literal, Optional
+from typing import Callable, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -14,6 +14,7 @@ from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
 from lightning_pose.data.utils import (
     BaseLabeledExampleDict,
     HeatmapLabeledExampleDict,
+    MultiviewHeatmapLabeledExampleDict,
     generate_heatmaps,
 )
 from lightning_pose.utils.io import get_keypoint_names
@@ -22,6 +23,7 @@ from lightning_pose.utils.io import get_keypoint_names
 __all__ = [
     "BaseTrackingDataset",
     "HeatmapDataset",
+    "MultiviewHeatmapDataset",
 ]
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -37,6 +39,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         header_rows: Optional[List[int]] = [0, 1, 2],
         imgaug_transform: Optional[Callable] = None,
         do_context: bool = False,
+        delimiter: str = "img"
     ) -> None:
         """Initialize a dataset for regression (rather than heatmap) models.
 
@@ -64,31 +67,15 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         self.header_rows = header_rows
         self.imgaug_transform = imgaug_transform
         self.do_context = do_context
+        self.delimiter = delimiter
 
         # load csv data
-        # step 1
         if os.path.isfile(csv_path):
             csv_file = csv_path
         else:
             csv_file = os.path.join(root_directory, csv_path)
         if not os.path.exists(csv_file):
-            # step 2: assume csv_path is absolute
-            csv_file = csv_path
-            if not os.path.exists(csv_file):
-                # step 3: assume dlc directory structure
-                import glob
-
-                glob_path = os.path.join(
-                    root_directory,
-                    "training-data",
-                    "iteration-0",
-                    "*",  # wildcard handles proj-specific dlc naming conventions
-                    csv_path,
-                )
-                options = glob.glob(glob_path)
-                if not options or not os.path.exists(options[0]):
-                    raise FileNotFoundError("Could not find csv file!")
-                csv_file = options[0]
+            raise FileNotFoundError(f"Could not find csv file at {csv_file}!")
 
         csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
         self.keypoint_names = get_keypoint_names(csv_file=csv_file, header_rows=header_rows)
@@ -108,6 +95,8 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         self.num_targets = self.keypoints.shape[1] * 2
         self.num_keypoints = self.keypoints.shape[1]
 
+        self.data_length = len(self.image_names)
+
     @property
     def height(self) -> int:
         # assume resizing transformation is the last imgaug one
@@ -119,7 +108,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         return self.imgaug_transform[-1].get_parameters()[0][1].value
 
     def __len__(self) -> int:
-        return len(self.image_names)
+        return self.data_length
 
     def __getitem__(self, idx: int) -> BaseLabeledExampleDict:
         img_name = self.image_names[idx]
@@ -146,9 +135,14 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
         else:
             # get index of the image
-            idx_img = img_name.split("/")[-1].replace("img", "")
-            idx_img = int(idx_img.replace(".png", ""))
-
+            # idx_img = img_name.split("/")[-1].replace("img", "")
+            idx_img_basename = os.path.basename(img_name)
+            idx_img_basename_delimated = idx_img_basename.split(self.delimiter)[-1]
+            # image_format = idx_img.split('.')[-1]
+            idx_img_str = idx_img_basename_delimated.split('.')[0]
+            # figure out length of integer
+            idx_img = int(idx_img_str)
+            int_len = len(idx_img_str)
             # get the frames -> t-2, t-1, t, t+1, t + 2
             list_idx = [idx_img - 2, idx_img - 1, idx_img, idx_img + 1, idx_img + 2]
             list_img_names = []
@@ -157,12 +151,14 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 fr_num = max(0, fr_num)
                 # split name into pieces
                 img_pieces = img_name.split("/")
-                # figure out length of integer
-                int_len = len(img_pieces[-1].replace(".png", "").replace("img", ""))
                 # replace original frame number with context frame number
-                img_pieces[-1] = "img%s.png" % str(fr_num).zfill(int_len)
+                fr_num = str(fr_num)
+                if len(fr_num) > int_len:
+                    fr_num = fr_num.zfill(int_len + 1)
+                else:
+                    fr_num = fr_num.zfill(int_len)
+                img_pieces[-1] = img_pieces[-1].replace(idx_img_str, fr_num)
                 list_img_names.append("/".join(img_pieces))
-
             # read the images from image list to create dataset
             images = []
             for name in list_img_names:
@@ -212,6 +208,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             images=transformed_images,  # shape (3, img_height, img_width) or (5, 3, H, W)
             keypoints=torch.from_numpy(transformed_keypoints),  # shape (n_targets,)
             idxs=idx,
+            bbox=torch.tensor([0, 0, image.height, image.width])  # x,y,h,w of bounding box
         )
 
 
@@ -228,6 +225,7 @@ class HeatmapDataset(BaseTrackingDataset):
         downsample_factor: Literal[1, 2, 3] = 2,
         do_context: bool = False,
         uniform_heatmaps: bool = False,
+        delimiter: str = "img"
     ) -> None:
         """Initialize the Heatmap Dataset.
 
@@ -250,6 +248,7 @@ class HeatmapDataset(BaseTrackingDataset):
             header_rows=header_rows,
             imgaug_transform=imgaug_transform,
             do_context=do_context,
+            delimiter=delimiter
         )
 
         if self.height % 128 != 0 or self.height % 128 != 0:
@@ -330,3 +329,201 @@ class HeatmapDataset(BaseTrackingDataset):
         # compute the corresponding heatmaps
         example_dict["heatmaps"] = self.compute_heatmap(example_dict)
         return example_dict
+
+
+class MultiviewHeatmapDataset(torch.utils.data.Dataset):
+    """Heatmap dataset that contains the images and keypoints in 2D arrays from all the cameras."""
+
+    def __init__(
+        self,
+        root_directory: str,
+        csv_paths: List[str],
+        view_names: List[str],
+        header_rows: Optional[List[int]] = [0, 1, 2],
+        downsample_factor: Literal[1, 2, 3] = 2,
+        uniform_heatmaps: bool = False,
+        do_context: bool = False,
+        imgaug_transform: Optional[Callable] = None,
+        delimiter: str = "img"
+    ) -> None:
+        """Initialize the MultiViewHeatmap Dataset.
+
+        Args:
+            root_directory: path to data directory
+            csv_paths: paths to CSV files (within root_directory). CSV files
+                should be in this form
+                (image_path, bodypart_1_x, bodypart_1_y, ..., bodypart_n_y)
+                these should match in all CSV files
+                Note: image_path is relative to the given root_directory
+                we suggest that these CSV files start with the view numbers
+            view_names: a list of integers with the view numbers
+            header_rows: which rows in the csv are header rows
+            imgaug_transform: imgaug transform pipeline to apply to images
+            downsample_factor: factor by which to downsample original image dims to have a smaller
+                heatmap
+            do_context: include additional frames of context if possible
+        """
+
+        if len(view_names) != len(csv_paths):
+            raise ValueError("number of names does not match with the number of files!")
+
+        self.root_directory = root_directory
+        self.csv_paths = csv_paths
+        self.do_context = do_context
+        self.delimiter = delimiter
+
+        self.imgaug_transform = imgaug_transform
+        self.downsample_factor = downsample_factor
+        self.dataset = {}
+        self.keypoint_names = {}
+        self.data_length = {}
+        self.num_keypoints = {}
+        for view, csv_path in zip(view_names, csv_paths):
+            self.dataset[view] = HeatmapDataset(
+                root_directory=root_directory,
+                csv_path=csv_path,
+                header_rows=header_rows,
+                imgaug_transform=imgaug_transform,
+                downsample_factor=downsample_factor,
+                do_context=do_context,
+                uniform_heatmaps=uniform_heatmaps,
+                delimiter=self.delimiter
+            )
+            self.keypoint_names[view] = self.dataset[view].keypoint_names
+            self.data_length[view] = len(self.dataset[view])
+            self.num_keypoints[view] = self.dataset[view].num_keypoints
+
+        self.view_names = view_names
+
+        # check if all CSV files have the same number of columns
+        self.num_keypoints = sum(self.num_keypoints.values())
+
+        # check if all the data is in correct order, self.data_length changes here
+        self.check_data_images_names()
+
+        self.num_targets = self.num_keypoints * 2
+
+    def check_data_images_names(self):
+        """Data checking
+        Each object in self.datasets will have the attribute image_names
+        (i.e. self.datasets['top'].image_names) since each values is a
+        HeatmapDataset. Include a check to make sure that the image names
+        are the same across all views, so that when it loads element n from
+        each individual view we know these are properly matched.
+
+        Args:
+
+            delimiter: for spliting the file name string to get the frame number and format.
+
+        """
+        # check if all CSV files have the same number of rows
+        if len(set(list(self.data_length.values()))) != 1:
+            raise ImportError("the CSV files do not match in row numbers!")
+
+        for key_num, keypoint in enumerate(self.keypoint_names[self.view_names[0]]):
+            for view, keypointComp in self.keypoint_names.items():
+                if keypoint != keypointComp[key_num]:
+                    raise ImportError(f"the keypoints are not in correct order! \
+                                      view: {self.view_names[0]} vs {view} | \
+                                        {keypoint} != {keypointComp}")
+
+        self.data_length = list(self.data_length.values())[0]
+        for idx in range(self.data_length):
+            img_name_buff = []
+            for view, heatmaps in self.dataset.items():
+                img_name_buff.append(heatmaps.image_names[idx].split(self.delimiter)[-1])
+                if len(set(img_name_buff)) != 1:
+                    raise ImportError(f"Discrepancy in images names across CSV \
+                                      files! index:{idx}, image frame names:{img_name_buff}")
+
+    @property
+    def height(self) -> int:
+        return self.imgaug_transform[-1].get_parameters()[0][0].value
+
+    @property
+    def width(self) -> int:
+        # assume resizing transformation is the last imgaug one
+        return self.imgaug_transform[-1].get_parameters()[0][1].value
+
+    def __len__(self) -> int:
+        return self.data_length
+
+    @property
+    def output_shape(self) -> tuple:
+        return (
+            self.height // 2**self.downsample_factor,
+            self.width // 2**self.downsample_factor,
+        )
+
+    @property
+    def num_views(self) -> int:
+        return len(self.view_names)
+
+    def fusion(self, datadict: dict) -> Tuple[
+        Union[
+            TensorType["num_views", "RGB":3, "image_height", "image_width", float],
+            TensorType["num_views", "frames", "RGB":3, "image_height", "image_width", float]
+        ],
+        TensorType["keypoints"],
+        TensorType["num_views", "heatmap_height", "heatmap_width", float],
+        TensorType["num_views * xyhw", float],
+        List,
+    ]:
+        """Merge images, heatmaps, keypoints, and bboxes across views.
+
+        Args:
+            datadict: this comes from HeatmapDataset.__getItems__(idx) for each view.
+
+        Returns:
+            tuple
+                - images
+                - keypoints
+                - heatmaps
+                - bboxes
+                - concat order
+
+        """
+        images = []
+        keypoints = []
+        heatmaps = []
+        bboxes = []
+        concat_order = []
+        for view, data in datadict.items():
+            images.append(data["images"].unsqueeze(0))
+            data["keypoints"] = data["keypoints"].reshape(int(data["keypoints"].shape[0] / 2), 2)
+            keypoints.append(data["keypoints"])
+            heatmaps.append(data["heatmaps"])
+            bboxes.append(data["bbox"])
+            concat_order.append(view)
+
+        images = torch.cat(images, dim=0)
+        keypoints = torch.cat(keypoints, dim=0).reshape(-1)
+        heatmaps = torch.cat(heatmaps, dim=0)
+        bboxes = torch.cat(bboxes, dim=0)
+
+        assert keypoints.shape == (self.num_targets,)
+
+        return images, keypoints, heatmaps, bboxes, concat_order
+
+    def __getitem__(self, idx: int) -> MultiviewHeatmapLabeledExampleDict:
+        """Get an example from the dataset.
+        Calls the heatmapdataset for each csv file to get
+        Images and their heatmaps and then stacks them.
+        """
+        datadict = {}
+        for view in self.view_names:
+            datadict[view] = self.dataset[view][idx]
+
+        images, keypoints, heatmaps, bboxes, concat_order = self.fusion(datadict)
+        # images normal:[view, RGB, H, W] context:[view, context, RGB, H, W]
+
+        return MultiviewHeatmapLabeledExampleDict(
+            images=images,  # shape (3, H, W) or (5, 3, H, W)
+            keypoints=keypoints,  # shape (n_targets,)
+            heatmaps=heatmaps,
+            bbox=bboxes,
+            idxs=idx,
+            num_views=self.num_views,  # int
+            concat_order=concat_order,  # List[str]
+            view_names=self.view_names,  # List[str]
+        )

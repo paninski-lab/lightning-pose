@@ -14,9 +14,14 @@ from typeguard import typechecked
 __all__ = [
     "BaseLabeledExampleDict",
     "HeatmapLabeledExampleDict",
+    "MultiviewLabeledExampleDict",
+    "MultiviewHeatmapLabeledExampleDict",
     "BaseLabeledBatchDict",
     "HeatmapLabeledBatchDict",
+    "MultiviewLabeledBatchDict",
+    "MultiviewHeatmapLabeledBatchDict",
     "UnlabeledBatchDict",
+    "MultiviewUnlabeledBatchDict",
     "SemiSupervisedBatchDict",
     "SemiSupervisedHeatmapBatchDict",
     "SemiSupervisedDataLoaderDict",
@@ -28,51 +33,84 @@ __all__ = [
     "generate_heatmaps",
     "evaluate_heatmaps_at_location",
     "undo_affine_transform",
+    "undo_affine_transform_batch",
 ]
 
 
 # below are a bunch of classes that streamline data typechecking
 class BaseLabeledExampleDict(TypedDict):
     """Return type when calling __getitem__() on BaseTrackingDataset."""
-
     images: Union[
         TensorType["RGB":3, "image_height", "image_width", float],
         TensorType["frames", "RGB":3, "image_height", "image_width", float],
     ]
     keypoints: TensorType["num_targets", float]
+    bbox: TensorType["xyhw":4, float]
     idxs: int
 
 
 class HeatmapLabeledExampleDict(BaseLabeledExampleDict):
     """Return type when calling __getitem__() on HeatmapTrackingDataset."""
+    heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width", float]
 
+
+class MultiviewLabeledExampleDict(TypedDict):
+    """Return type when calling __getitem__() on MultiviewDataset."""
+    images: Union[
+        TensorType["num_views", "RGB":3, "image_height", "image_width", float],
+        TensorType["num_views", "frames", "RGB":3, "image_height", "image_width", float],
+    ]
+    keypoints: TensorType["num_targets", float]
+    bbox: TensorType["num_views", "xyhw":4, float]
+    idxs: int
+    num_views: int
+    concat_order: List[str]
+    view_names: List[str]
+
+
+class MultiviewHeatmapLabeledExampleDict(MultiviewLabeledExampleDict):
+    """Return type when calling __getitem__() on MultiviewHeatmapDataset."""
     heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width", float]
 
 
 class BaseLabeledBatchDict(TypedDict):
     """Batch type for base labeled data."""
-
     images: Union[
         TensorType["batch", "RGB":3, "image_height", "image_width", float],
         TensorType["batch", "frames", "RGB":3, "image_height", "image_width", float],
     ]
     keypoints: TensorType["batch", "num_targets", float]
+    bbox: TensorType["batch", "xyhw":4, float]
     idxs: TensorType["batch", int]
 
 
 class HeatmapLabeledBatchDict(BaseLabeledBatchDict):
     """Batch type for heatmap labeled data."""
+    heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width", float]
 
+
+class MultiviewLabeledBatchDict(TypedDict):
+    """Batch type for multiview labeled data."""
+    images: Union[
+        TensorType["batch", "num_views", "RGB":3, "image_height", "image_width", float],
+        TensorType["batch", "num_views", "frames", "RGB":3, "image_height", "image_width", float],
+    ]
+    keypoints: TensorType["batch", "num_targets", float]
+    bbox: TensorType["batch", "num_views * xyhw", float]
+    idxs: TensorType["batch", int]
+    num_views: TensorType["batch", int]
+    concat_order: List  # [Tuple[str]]
+    view_names: List  # [Tuple[str]]
+
+
+class MultiviewHeatmapLabeledBatchDict(MultiviewLabeledBatchDict):
+    """Batch type for multiview heatmap labeled data."""
     heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width", float]
 
 
 class UnlabeledBatchDict(TypedDict):
     """Batch type for unlabeled data."""
-
-    frames: Union[
-        TensorType["seq_len", "RGB":3, "image_height", "image_width", float],
-        TensorType["seq_len", "context":5, "RGB":3, "image_height", "image_width", float],
-    ]
+    frames: TensorType["seq_len", "RGB":3, "image_height", "image_width", float]
     transforms: Union[
         TensorType["seq_len", "h":2, "w":3, float],
         TensorType["h":2, "w":3, float],
@@ -87,19 +125,34 @@ class UnlabeledBatchDict(TypedDict):
     # (1,): no transforms
     # torch.Tensor: necessary, getting error about torch.AnnotatedAlias that I don't understand
 
+    bbox: TensorType["seq_len", "xyhw":4, float]
+    is_multiview: bool = False  # helps with downstream logic since isinstance fails on TypedDicts
+
+
+class MultiviewUnlabeledBatchDict(TypedDict):
+    """Batch type for multiview unlabeled data."""
+    frames: TensorType["seq_len", "num_views", "RGB":3, "image_height", "image_width", float]
+    transforms: Union[
+        TensorType["num_views", "h":2, "w":3, float],
+        TensorType["num_views", "null":1, "null":1, float],
+        torch.Tensor,
+    ]
+    bbox: TensorType["seq_len", "num_views * xyhw", float]
+    is_multiview: bool = True  # helps with downstream logic since isinstance fails on TypedDicts
+
 
 class SemiSupervisedBatchDict(TypedDict):
     """Batch type for base labeled+unlabeled data."""
 
-    labeled: BaseLabeledBatchDict
-    unlabeled: UnlabeledBatchDict
+    labeled: Union[BaseLabeledBatchDict, MultiviewLabeledBatchDict]
+    unlabeled: Union[UnlabeledBatchDict, MultiviewUnlabeledBatchDict]
 
 
 class SemiSupervisedHeatmapBatchDict(TypedDict):
     """Batch type for heatmap labeled+unlabeled data."""
 
-    labeled: HeatmapLabeledBatchDict
-    unlabeled: UnlabeledBatchDict
+    labeled: Union[HeatmapLabeledBatchDict, MultiviewHeatmapLabeledBatchDict]
+    unlabeled: Union[UnlabeledBatchDict, MultiviewUnlabeledBatchDict]
 
 
 class SemiSupervisedDataLoaderDict(TypedDict):
@@ -130,7 +183,11 @@ class DataExtractor(object):
                 self.data_module = data_module
             else:
                 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
-                from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
+                from lightning_pose.data.datasets import (
+                    BaseTrackingDataset,
+                    HeatmapDataset,
+                    MultiviewHeatmapDataset,
+                )
 
                 # make new augmentation pipeline that just resizes
                 if not isinstance(imgaug_curr[-1], iaa.Resize):
@@ -139,6 +196,7 @@ class DataExtractor(object):
                 # keep the resizing aug
                 imgaug_new = iaa.Sequential([imgaug_curr[-1]])
 
+                # TODO: is there a cleaner way to do this?
                 # rebuild dataset with new aug pipeline
                 dataset_old = data_module.dataset
                 if isinstance(data_module.dataset, HeatmapDataset):
@@ -156,7 +214,16 @@ class DataExtractor(object):
                         imgaug_transform=imgaug_new,
                         do_context=dataset_old.do_context,
                     )
-
+                elif isinstance(dataset_old, MultiviewHeatmapDataset):
+                    dataset_new = MultiviewHeatmapDataset(
+                        root_directory=dataset_old.root_directory,
+                        csv_paths=dataset_old.csv_paths,
+                        view_names=dataset_old.view_names,
+                        imgaug_transform=imgaug_new,
+                        do_context=dataset_old.do_context,
+                    )
+                else:
+                    raise NotImplementedError
                 # rebuild data_module with new dataset
                 if isinstance(data_module, UnlabeledDataModule):
                     data_module_new = UnlabeledDataModule(
@@ -172,6 +239,7 @@ class DataExtractor(object):
                         dali_config=data_module.dali_config,
                         torch_seed=data_module.torch_seed,
                     )
+                    # data_module_new.setup() happens internally
                 elif isinstance(data_module, BaseDataModule):
                     data_module_new = BaseDataModule(
                         dataset=dataset_new,
@@ -184,7 +252,10 @@ class DataExtractor(object):
                         train_frames=data_module.train_frames,
                         torch_seed=data_module.torch_seed,
                     )
-                    # data_module_new.setup()
+                    # split datasets
+                    data_module_new.setup()
+                else:
+                    raise NotImplementedError
 
                 self.data_module = data_module_new
 
@@ -321,13 +392,16 @@ def clean_any_nans(data: torch.Tensor, dim: int) -> torch.Tensor:
 
 
 @typechecked
-def count_frames(video_list: Union[List[str], str]) -> int:
+def count_frames(video_list: Union[List[str], str, List[List[str]]]) -> int:
     """Simple function to count the number of frames in a video or a list of videos."""
 
     import cv2
 
     if isinstance(video_list, str):
         video_list = [video_list]
+    elif isinstance(video_list, list) and isinstance(video_list[0], list):
+        # in the multiview case, just count frames from one view
+        video_list = video_list[0]
     num_frames = 0
     for video_file in video_list:
         cap = cv2.VideoCapture(video_file)
@@ -484,6 +558,8 @@ def undo_affine_transform(
     keypoints: TensorType["seq_len", "num_keypoints", 2],
     transform: Union[TensorType["seq_len", 2, 3], TensorType[2, 3]],
 ) -> TensorType["seq_len", "num_keypoints", 2]:
+    """Undo an affine transform given a tensor of keypoints and the tranform matrix."""
+
     # add 1s to get keypoints in projective geometry coords
     ones = torch.ones(
         (keypoints.shape[0], keypoints.shape[1], 1),
@@ -528,3 +604,49 @@ def undo_affine_transform(
     kps_noaug = torch.bmm(kps_aff, mat_inv_torch)
 
     return kps_noaug
+
+
+def undo_affine_transform_batch(
+    keypoints_augmented: TensorType["seq_len", "num_keypoints x 2"],
+    transforms: Union[
+        TensorType["seq_len", "h":2, "w":3],
+        TensorType["h":2, "w":3],
+        TensorType["seq_len", "null":1],
+        TensorType["null":1],
+        TensorType["num_views", "h":2, "w":3],
+        TensorType["num_views", "null":1, "null":1],
+    ],
+    is_multiview: bool = False,
+) -> TensorType["seq_len", "num_keypoints x 2"]:
+    """Potentially undo an affine transform given a tensor of keypoints and the tranform matrix."""
+
+    # undo augmentation if needed
+    if transforms.shape[-1] == 3:
+        # initial shape is (seq_len, n_keypoints * 2)
+        # reshape to (seq_len, n_keypoints, 2)
+        pred_kps = torch.reshape(
+            keypoints_augmented,
+            (keypoints_augmented.shape[0], -1, 2)
+        )
+        # undo
+        if not is_multiview:
+            # single affine transform for the whole batch
+            pred_kps = undo_affine_transform(pred_kps, transforms)
+        else:
+            # each view has its own affine transform that we need to undo
+            num_views = transforms.shape[0]
+            kps_per_view = int(pred_kps.shape[1] / num_views)
+            for v in range(num_views):
+                idx_beg = v * kps_per_view
+                idx_end = (v + 1) * kps_per_view
+                # undo
+                pred_kps[:, idx_beg:idx_end] = undo_affine_transform(
+                    pred_kps[:, idx_beg:idx_end],
+                    transforms[v]
+                )
+        # reshape to (seq_len, n_keypoints * 2)
+        keypoints_unaugmented = torch.reshape(pred_kps, (pred_kps.shape[0], -1))
+    else:
+        keypoints_unaugmented = keypoints_augmented
+
+    return keypoints_unaugmented
