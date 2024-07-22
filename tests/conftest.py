@@ -298,9 +298,6 @@ def base_data_module(cfg, base_dataset) -> BaseDataModule:
     # setup
     cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.losses_to_use = []
-    # bump up training data so we can test pca_singleview loss
-    cfg_tmp.training.train_prob = 0.95
-    cfg_tmp.training.val_prob = 0.025
     data_module = get_data_module(cfg_tmp, dataset=base_dataset, video_dir=None)
     data_module.setup()
 
@@ -319,9 +316,6 @@ def heatmap_data_module(cfg, heatmap_dataset) -> BaseDataModule:
     # setup
     cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.losses_to_use = []
-    # bump up training data so we can test pca_singleview loss
-    cfg_tmp.training.train_prob = 0.95
-    cfg_tmp.training.val_prob = 0.025
     data_module = get_data_module(cfg_tmp, dataset=heatmap_dataset, video_dir=None)
     data_module.setup()
 
@@ -340,9 +334,6 @@ def multiview_heatmap_data_module(cfg_multiview, multiview_heatmap_dataset) -> B
     # setup
     cfg_tmp = copy.deepcopy(cfg_multiview)
     cfg_tmp.model.losses_to_use = []
-    # bump up training data so we can test pca_singleview loss
-    cfg_tmp.training.train_prob = 0.95
-    cfg_tmp.training.val_prob = 0.025
     data_module = get_data_module(cfg_tmp, dataset=multiview_heatmap_dataset, video_dir=None)
     data_module.setup()
 
@@ -361,9 +352,6 @@ def heatmap_data_module_context(cfg, heatmap_dataset_context) -> BaseDataModule:
     # setup
     cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.losses_to_use = []
-    # bump up training data so we can test pca_singleview loss
-    cfg_tmp.training.train_prob = 0.95
-    cfg_tmp.training.val_prob = 0.025
     data_module = get_data_module(cfg_tmp, dataset=heatmap_dataset_context, video_dir=None)
     data_module.setup()
 
@@ -385,11 +373,9 @@ def multiview_heatmap_data_module_context(
     # setup
     cfg_tmp = copy.deepcopy(cfg_multiview)
     cfg_tmp.model.losses_to_use = []
-    # bump up training data so we can test pca_singleview loss
-    cfg_tmp.training.train_prob = 0.95
-    cfg_tmp.training.val_prob = 0.025
-    data_module = get_data_module(cfg_tmp,
-                                  dataset=multiview_heatmap_dataset_context, video_dir=None)
+    data_module = get_data_module(
+        cfg_tmp, dataset=multiview_heatmap_dataset_context, video_dir=None,
+    )
     data_module.setup()
 
     # return to tests
@@ -543,8 +529,7 @@ def trainer(cfg) -> pl.Trainer:
     """Create a basic pytorch lightning trainer for testing models."""
 
     cfg.training.unfreezing_epoch = 10  # force no unfreezing to keep memory reqs of tests down
-    callbacks = get_callbacks(
-        cfg, early_stopping=False, lr_monitor=False, ckpt_model=True, backbone_unfreeze=True)
+    callbacks = get_callbacks(cfg, early_stopping=False, lr_monitor=False, backbone_unfreeze=True)
 
     trainer = pl.Trainer(
         accelerator="gpu",
