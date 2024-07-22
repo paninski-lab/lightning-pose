@@ -86,7 +86,10 @@ def train(cfg: DictConfig) -> None:
         devices=1,  # TODO: control from outside
         max_epochs=cfg.training.max_epochs,
         min_epochs=cfg.training.min_epochs,
-        check_val_every_n_epoch=cfg.training.check_val_every_n_epoch,
+        check_val_every_n_epoch=min(
+            cfg.training.check_val_every_n_epoch,
+            cfg.training.max_epochs,  # for debugging or otherwise training for a short time
+        ),
         log_every_n_steps=cfg.training.log_every_n_steps,
         callbacks=callbacks,
         logger=logger,
