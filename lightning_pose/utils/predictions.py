@@ -392,7 +392,7 @@ def predict_single_video(
 
     """
 
-    cfg = get_cfg_file(cfg_file=cfg_file)
+    cfg = get_cfg_file(cfg_file=cfg_file).copy()  # copy because we update imgaug field below
 
     delete_model = False
     if model is None:
