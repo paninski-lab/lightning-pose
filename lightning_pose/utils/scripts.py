@@ -432,6 +432,8 @@ def get_callbacks(
             ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
                 monitor="val_supervised_loss",
                 mode="min",
+                every_n_epochs=ckpt_every_n_epochs,
+                save_top_k=1 if ckpt_every_n_epochs is None else -1,
             )
         else:
             # if ckpt_every_n_epochs is None, save after every validation step, but overwrite
