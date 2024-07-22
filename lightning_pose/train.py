@@ -72,7 +72,8 @@ def train(cfg: DictConfig) -> None:
     # early stopping, learning rate monitoring, model checkpointing, backbone unfreezing
     callbacks = get_callbacks(
         cfg,
-        early_stopping=False,
+        early_stopping=cfg.training.get("early_stopping", False),
+        lr_monitor=True,
         ckpt_every_n_epochs=cfg.training.get("ckpt_every_n_epochs", None)
     )
 
@@ -101,9 +102,10 @@ def train(cfg: DictConfig) -> None:
     # Post-training analysis
     # ----------------------------------------------------------------------------------
     hydra_output_directory = os.getcwd()
-    print("Hydra output directory: {}".format(hydra_output_directory))
+    print(f"Hydra output directory: {hydra_output_directory}")
     # get best ckpt
     best_ckpt = os.path.abspath(trainer.checkpoint_callback.best_model_path)
+    print(f"Best checkpoint: {os.path.basename(best_ckpt)}")
     # check if best_ckpt is a file
     if not os.path.isfile(best_ckpt):
         raise FileNotFoundError("Cannot find checkpoint. Have you trained for too few epochs?")

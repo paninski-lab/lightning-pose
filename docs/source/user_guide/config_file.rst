@@ -112,6 +112,16 @@ Below is a list of some commonly modified arguments related to model architectur
 See the :ref:`Unsupervised losses <unsupervised_losses>` section for more details on the various
 losses and their associated hyperparameters.
 
+A note on model checkpointing: by default the "best" model will be saved out according to the
+validation loss.
+If you would like to additionally save out checkpoints after a specified number of epochs, set the
+field ``training.ckpt_every_n_epochs``.
+The file size for a single ResNet-50 network is approximately 275 MB.
+
+You may also utilize early stopping, in which model training exits early if the validation loss
+does not improve after a certain number of epochs, by setting ``training.early_stopping`` to true.
+Model checkpointing is still handled as described above.
+
 
 Video loading parameters
 ========================

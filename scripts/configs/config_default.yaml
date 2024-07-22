@@ -66,20 +66,23 @@ training:
   num_gpus: 1
   # number of cpu workers for data loaders
   num_workers: 4
-  # epochs over which to assess validation metrics for early stopping
-  early_stop_patience: 3
   # epoch at which backbone network weights begin updating
   unfreezing_epoch: 20
   # max training epochs; training may exit before due to early stopping
   min_epochs: 300
   max_epochs: 300
-  # save model weights every n epochs; must be divisible by check_val_every_n_epoch below
+  # frequency to log training metrics for tensorboard (one step is one batch)
+  log_every_n_steps: 10
+  # frequency to log validation metrics for tensorboard
+  check_val_every_n_epoch: 5
+  # save model weights every n epochs; must be divisible by check_val_every_n_epoch above
   # if null, only best weights will be saved after training
   ckpt_every_n_epochs: null
-  # frequency to log training metrics (one step is one batch)
-  log_every_n_steps: 10
-  # frequency to log validation metrics
-  check_val_every_n_epoch: 5
+  # perform early stopping; if this is false, the default is to train for the max number of epochs
+  # and save out the best model according to validation loss
+  early_stopping: false
+  # epochs over which to assess validation metrics for early stopping
+  early_stop_patience: 3
   # select gpu for training
   gpu_id: 0
   # rng seed for labeled batches

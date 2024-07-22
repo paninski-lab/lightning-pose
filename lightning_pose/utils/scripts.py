@@ -408,9 +408,8 @@ def get_model(
 @typechecked
 def get_callbacks(
     cfg: DictConfig,
-    early_stopping=True,
+    early_stopping=False,
     lr_monitor=True,
-    ckpt_model=True,
     ckpt_every_n_epochs=None,
     backbone_unfreeze=True,
 ) -> List:
@@ -424,26 +423,28 @@ def get_callbacks(
             mode="min",
         )
         callbacks.append(early_stopping)
+
     if lr_monitor:
         lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval="epoch")
         callbacks.append(lr_monitor)
-    if ckpt_model:
-        if early_stopping:
-            ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
-                monitor="val_supervised_loss",
-                mode="min",
-                every_n_epochs=ckpt_every_n_epochs,
-                save_top_k=1 if ckpt_every_n_epochs is None else -1,
-            )
-        else:
-            # if ckpt_every_n_epochs is None, save after every validation step, but overwrite
-            # if ckpt_every_n_epochs is not None, save separate checkpoint files
-            ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
-                monitor=None,
-                every_n_epochs=ckpt_every_n_epochs,
-                save_top_k=1 if ckpt_every_n_epochs is None else -1,
-            )
+
+    # always save out best model
+    ckpt_best_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
+        monitor="val_supervised_loss",
+        mode="min",
+        filename="{epoch}-{step}-best",
+    )
+    callbacks.append(ckpt_best_callback)
+
+    if ckpt_every_n_epochs:
+        # if ckpt_every_n_epochs is not None, save separate checkpoint files
+        ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
+            monitor=None,
+            every_n_epochs=ckpt_every_n_epochs,
+            save_top_k=-1,
+        )
         callbacks.append(ckpt_callback)
+
     if backbone_unfreeze:
         transfer_unfreeze_callback = pl.callbacks.BackboneFinetuning(
             unfreeze_backbone_at_epoch=cfg.training.unfreezing_epoch,
@@ -453,6 +454,7 @@ def get_callbacks(
             train_bn=True,
         )
         callbacks.append(transfer_unfreeze_callback)
+
     # we just need this callback for unsupervised models
     if (cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None):
         anneal_weight_callback = AnnealWeight(**cfg.callbacks.anneal_weight)
