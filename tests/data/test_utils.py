@@ -78,6 +78,23 @@ def test_split_sizes_from_probabilities():
     out = split_sizes_from_probabilities(101, train_probability=0.7)
     assert out[0] == 70 and out[1] == 15 and out[2] == 16
 
+    # make sure we have at least one example in the validation set
+    total_number = 10
+    train_prob = 0.95
+    val_prob = 0.05
+    out = split_sizes_from_probabilities(
+        total_number, train_probability=train_prob, val_probability=val_prob
+    )
+    assert sum(out) == total_number
+    assert out[0] == 9
+    assert out[1] == 1
+    assert out[2] == 0
+
+    # make sure an error is raised if there are not enough labeled frames
+    total_number = 1
+    with pytest.raises(ValueError):
+        split_sizes_from_probabilities(total_number, train_probability=train_prob)
+
 
 def test_clean_any_nans():
 

@@ -369,8 +369,21 @@ def split_sizes_from_probabilities(
     train_number = int(np.floor(train_probability * total_number))
     val_number = int(np.floor(val_probability * total_number))
 
-    # if we lose extra examples by flooring, send these to test_number
-    test_number = total_number - train_number - val_number
+    # if we lose extra examples by flooring, send these to train_number or test_number, depending
+    leftover = total_number - train_number - val_number
+    if leftover < 5:
+        # very few samples, let's bulk up train
+        train_number += leftover
+        test_number = 0
+    else:
+        test_number = leftover
+
+    # make sure that we have at least one validation sample
+    if val_number == 0:
+        train_number -= 1
+        val_number += 1
+        if train_number < 1:
+            raise ValueError("Must have at least two labeled frames, one train and one validation")
 
     # assert that we're using all datapoints
     assert train_number + test_number + val_number == total_number
