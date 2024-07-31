@@ -190,9 +190,13 @@ class LitDaliWrapper(DALIGenericIterator):
             frames = batch[0]["frames"][0, :, :, :, :]
             # shape (1,) or (2, 3)
             transforms = batch[0]["transforms"][0]
-            # get frame size, order is seq_len,H,W,C
-            height = batch[0]["frame_size"][0, 1]
-            width = batch[0]["frame_size"][0, 2]
+            # get frame size
+            if batch[0]["frame_size"][0, -1] == 3:  # order is seq_len,H,W,C
+                height = batch[0]["frame_size"][0, 1]
+                width = batch[0]["frame_size"][0, 2]
+            else:  # order is seq_len,C,H,W
+                height = batch[0]["frame_size"][0, 2]
+                width = batch[0]["frame_size"][0, 3]
             bbox = torch.tensor([0, 0, height, width], device=frames.device).repeat(
                 (frames.shape[0], 1))
 
