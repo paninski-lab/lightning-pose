@@ -1,8 +1,11 @@
 """Example model training function."""
 
 import os
+import random
 
 import lightning.pytorch as pl
+import numpy as np
+import torch
 from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 from typeguard import typechecked
 
@@ -31,6 +34,15 @@ __all__ = ["train"]
 
 @typechecked
 def train(cfg: DictConfig) -> None:
+
+    # reset all seeds
+    seed = 0
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
 
     # record lightning-pose version
     from lightning_pose import __version__ as lightning_pose_version
