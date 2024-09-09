@@ -161,27 +161,27 @@ def extract_labels_from_pkg_slp(file_path):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--slp_dir", type=str)
+parser.add_argument("--slp_file", type=str)
 parser.add_argument("--lp_dir", type=str)
 args = parser.parse_args()
-slp_dir = args.slp_dir
+slp_file = args.slp_file
 lp_dir = args.lp_dir
 
-print(f"Converting SLEAP project located at {slp_dir} to LP project located at {lp_dir}")
+print(f"Converting SLEAP project located at {slp_file} to LP project located at {lp_dir}")
 
 # Check provided SLEAP path exists
-if not os.path.exists(slp_dir):
-    raise NotADirectoryError(f"did not find the directory {slp_dir}")
+if not os.path.exists(slp_file):
+    raise FileNotFoundError(f"did not find the file {slp_file}")
 
 # Check paths are not the same
-if slp_dir == lp_dir:
-    raise NameError("slp_dir and lp_dir cannot be the same")
+if slp_file == lp_dir:
+    raise NameError("slp_file and lp_dir cannot be the same")
 
 # Extract and save labeled data from SLEAP project
-extract_frames_from_pkg_slp(slp_dir, lp_dir)
+extract_frames_from_pkg_slp(slp_file, lp_dir)
 
 # Extract labels and create the required DataFrame
-df_all = extract_labels_from_pkg_slp(slp_dir)
+df_all = extract_labels_from_pkg_slp(slp_file)
 
 # Save concatenated labels
 df_all.to_csv(os.path.join(lp_dir, "CollectedData.csv"))
