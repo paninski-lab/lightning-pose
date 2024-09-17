@@ -15,24 +15,6 @@ data:
   num_keypoints: null
   # keypoint names
   keypoint_names: null
-  # indicator to use 2-stage dynamic crop algorithm
-  dynamic_crop: False
-  # max allowed number of instances, i.e. 1 for single-animal, >1 for multiple animal
-  num_max_instances: 1
-  # detector network params
-  detector:
-    # resampled image size for detector network
-    image_resize_dims:
-      height: null
-      width: null
-    # heatmap downsample factor for detector network
-    downsample_factor: 2
-    # list of lists for keypoints to average and detect
-    keypoints_for_crop: null
-    # number of coarse keypoints to track, should match outer list length of keypoints_for_crop
-    num_keypoints: null
-    # names of the coarse keypoints
-    keypoint_names: null
   # for mirrored setups with all keypoints defined in same csv file, define matching
   # columns for different keypoints (assumes x-y-x-y interleaving)
   # each list corresponds to a single view, so in the example below there are 2 views
