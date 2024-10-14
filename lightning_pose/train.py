@@ -80,6 +80,11 @@ def train(cfg: DictConfig) -> None:
 
     # logger
     logger = pl.loggers.TensorBoardLogger("tb_logs", name=cfg.model.model_name)
+    # Log hydra config to tensorboard as helpful metadata.
+    for key, value in cfg.items():
+        logger.experiment.add_text(
+            "hydra_config_%s" % key, "```\n%s```" % OmegaConf.to_yaml(value)
+        )
 
     # early stopping, learning rate monitoring, model checkpointing, backbone unfreezing
     callbacks = get_callbacks(
