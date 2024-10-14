@@ -251,12 +251,12 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
 
     def get_parameters(self):
         params = [
-            # don't uncomment line below
-            # the BackboneFinetuning callback should add backbone to the params.
-            # {"params": self.backbone.parameters()},
-            # important this is the 0th element, for BackboneFinetuning callback
-            {"params": self.upsampling_layers_rnn.parameters()},
-            {"params": self.upsampling_layers_sf.parameters()},
+            {"params": self.backbone.parameters(), "name": "backbone", "lr": 0.0},
+            {
+                "params": self.upsampling_layers_rnn.parameters(),
+                "name": "upsampling_rnn",
+            },
+            {"params": self.upsampling_layers_sf.parameters(), "name": "upsampling_sf"},
         ]
         return params
 
@@ -360,17 +360,6 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
             "keypoints_pred": torch.cat([pred_keypoints_crnn, pred_keypoints_sf], dim=0),
             "confidences": torch.cat([confidence_crnn, confidence_sf], dim=0),
         }
-
-    def get_parameters(self):
-        params = [
-            # don't uncomment line below
-            # the BackboneFinetuning callback should add backbone to the params.
-            # {"params": self.backbone.parameters()},
-            # important this is the 0th element, for BackboneFinetuning callback
-            {"params": self.upsampling_layers_rnn.parameters()},
-            {"params": self.upsampling_layers_sf.parameters()},
-        ]
-        return params
 
 
 class UpsamplingCRNN(torch.nn.Module):

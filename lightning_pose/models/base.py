@@ -370,11 +370,7 @@ class BaseFeatureExtractor(LightningModule):
         """
         return self.get_representations(images)
 
-    def get_parameters(self):
-        return filter(lambda p: p.requires_grad, self.parameters())
-
     def get_scheduler(self, optimizer):
-
         # define a scheduler that reduces the base learning rate
         if self.lr_scheduler == "multisteplr" or self.lr_scheduler == "multistep_lr":
 
@@ -392,6 +388,17 @@ class BaseFeatureExtractor(LightningModule):
             raise NotImplementedError("'%s' is an invalid LR scheduler" % self.lr_scheduler)
 
         return scheduler
+
+    def get_parameters(self):
+        if getattr(self, "upsampling_layers", None) is not None:
+            params = [
+                {"params": self.backbone.parameters(), "lr": 0, "name": "backbone"},
+                {"params": self.upsampling_layers.parameters(), "name": "upsampling"},
+            ]
+        else:
+            params = filter(lambda p: p.requires_grad, self.parameters())
+
+        return params
 
     def configure_optimizers(self) -> dict:
         """Select optimizer, lr scheduler, and metric for monitoring."""
@@ -499,23 +506,6 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         """Base test step, a wrapper around the `evaluate_labeled` method."""
         self.evaluate_labeled(batch_dict, "test")
 
-    def get_parameters(self):
-
-        if getattr(self, "upsampling_layers", None) is not None:
-            # single optimizer with single learning rate
-            params = [
-                # don't uncomment line below;
-                # the BackboneFinetuning callback should add backbone to the params
-                # {"params": self.backbone.parameters()},
-                # important this is the 0th element, for BackboneFinetuning callback
-                {"params": self.upsampling_layers.parameters()},
-            ]
-        else:
-            # standard adam optimizer
-            params = filter(lambda p: p.requires_grad, self.parameters())
-
-        return params
-
 
 @typechecked
 class SemiSupervisedTrackerMixin(object):
@@ -589,39 +579,3 @@ class SemiSupervisedTrackerMixin(object):
         self.log("total_loss", total_loss, prog_bar=True)
 
         return {"loss": total_loss}
-
-    def get_parameters(self):
-
-        if getattr(self, "upsampling_layers", None) is not None:
-            # if we're here this is a heatmap model
-            params = [
-                # don't uncomment line below;
-                # the BackboneFinetuning callback should add backbone to the params
-                # {"params": self.backbone.parameters()},
-                # important this is the 0th element, for BackboneFinetuning callback
-                {"params": self.upsampling_layers.parameters()},
-            ]
-
-        else:
-            # standard adam optimizer for regression model
-            params = filter(lambda p: p.requires_grad, self.parameters())
-
-        return params
-
-    # # single optimizer with different learning rates
-    # def configure_optimizers(self):
-    #     params_net = [
-    #         # {"params": self.backbone.parameters()},
-    #         #  don't uncomment above line; the BackboneFinetuning callback should add
-    #         # backbone to the params.
-    #         {
-    #             "params": self.upsampling_layers.parameters()
-    #         },  # important that this is the 0th element, for BackboneFineTuning
-    #     ]
-    #     optimizer = Adam(params_net, lr=1e-3)
-    #     scheduler = MultiStepLR(optimizer, milestones=[100, 200, 300], gamma=0.5)
-    #
-    #     optimizers = [optimizer]
-    #     lr_schedulers = [scheduler]
-    #
-    #     return optimizers, lr_schedulers
