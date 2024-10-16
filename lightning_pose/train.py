@@ -8,6 +8,8 @@ import numpy as np
 import torch
 from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 from typeguard import typechecked
+import warnings
+import sys
 
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
 from lightning_pose.utils.io import (
@@ -98,9 +100,18 @@ def train(cfg: DictConfig) -> None:
     limit_train_batches = calculate_train_batches(cfg, dataset)
 
     # set up trainer
-    trainer = pl.Trainer(  # TODO: be careful with devices when scaling to multiple gpus
-        accelerator="gpu",  # TODO: control from outside
-        devices=1,  # TODO: control from outside
+
+    # Old configs may have num_gpus: 0. We will remove support in a future release.
+    if cfg.training.num_gpus == 0:
+        warnings.warn(
+            "Config contains unsupported value num_gpus: 0. "
+            "Update num_gpus to 1 in your config."
+        )
+    cfg.training.num_gpus = max(cfg.training.num_gpus, 1)
+
+    trainer = pl.Trainer(
+        accelerator="gpu",
+        devices=cfg.training.num_gpus,
         max_epochs=cfg.training.max_epochs,
         min_epochs=cfg.training.min_epochs,
         check_val_every_n_epoch=min(
@@ -113,10 +124,16 @@ def train(cfg: DictConfig) -> None:
         limit_train_batches=limit_train_batches,
         accumulate_grad_batches=cfg.training.get("accumulate_grad_batches", 1),
         profiler=cfg.training.get("profiler", None),
+        sync_batchnorm=True,
     )
 
     # train model!
     trainer.fit(model=model, datamodule=data_module)
+
+    # When devices > 0, lightning creates a process per device.
+    # Kill processes other than the main process, otherwise they all go forward.
+    if not trainer.is_global_zero:
+        sys.exit(0)
 
     # ----------------------------------------------------------------------------------
     # Post-training analysis
@@ -150,6 +167,8 @@ def train(cfg: DictConfig) -> None:
     # ----------------------------------------------------------------------------------
     # predict on all labeled frames (train/val/test)
     # ----------------------------------------------------------------------------------
+    # Rebuild trainer with devices=1 for prediction. Training flags not needed.
+    trainer = pl.Trainer(accelerator="gpu", devices=1)
     pretty_print_str("Predicting train/val/test images...")
     # compute and save frame-wise predictions
     preds_file = os.path.join(hydra_output_directory, "predictions.csv")

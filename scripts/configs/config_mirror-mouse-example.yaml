@@ -64,7 +64,7 @@ training:
   # >1: number of total train frames used for training
   train_frames: 1
   # number of gpus to train a single model
-  num_gpus: 0
+  num_gpus: 1
   # number of cpu workers for data loaders
   num_workers: 4
   # epochs over which to assess validation metrics for early stopping
@@ -79,8 +79,6 @@ training:
   log_every_n_steps: 1
   # frequency to log validation metrics
   check_val_every_n_epoch: 10
-  # select gpu for training
-  gpu_id: 0
   # rng seed for labeled batches
   rng_seed_data_pt: 42
   # rng seed for weight initialization

@@ -7,18 +7,26 @@ tested) in conftest.py
 
 import copy
 import gc
-import os
-
 import lightning.pytorch as pl
+from omegaconf import OmegaConf
+from omegaconf.errors import ValidationError
+import os
 import pytest
 import torch
+from unittest.mock import Mock
+
+from lightning_pose.data.datasets import BaseTrackingDataset
+from lightning_pose.utils.scripts import (
+    calculate_train_batches,
+    export_predictions_and_labeled_video,
+    get_data_module,
+    get_loss_factories,
+    get_model,
+)
 
 
 def test_calculate_train_batches(cfg, base_dataset):
     """Test the computation of train batches, which is a function of labeled and unlabeled info."""
-
-    from lightning_pose.utils.scripts import calculate_train_batches
-
     cfg_tmp = copy.deepcopy(cfg)
 
     # return value if set in config
@@ -45,13 +53,6 @@ def test_calculate_train_batches(cfg, base_dataset):
 def test_export_predictions_and_labeled_video(
         cfg, heatmap_data_module, video_list, remove_logs, tmpdir):
     """Test helper function that predicts videos then makes a labeled movie."""
-
-    from lightning_pose.utils.scripts import (
-        export_predictions_and_labeled_video,
-        get_loss_factories,
-        get_model,
-    )
-
     # make a basic heatmap tracker
     cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.model_type = "heatmap"
@@ -158,3 +159,72 @@ def test_export_predictions_and_labeled_video(
 
     # clean up logging
     remove_logs()
+
+
+def _supervised_multi_gpu_cfg(cfg):
+    return OmegaConf.merge(
+        cfg,
+        OmegaConf.create(
+            {
+                "model": {
+                    "losses_to_use": [],
+                },
+                "training": {
+                    "num_gpus": 2,
+                    "train_batch_size": 4,
+                    "val_batch_size": 16,
+                    "test_batch_size": 16,
+                },
+            }
+        ),
+    )
+
+
+def test_get_data_module_num_gpus_0(cfg):
+    cfg = _supervised_multi_gpu_cfg(cfg)
+    # when num_gpus is set to 0, i.e. from a deprecated config
+    cfg.training.num_gpus = 0
+    data_module = get_data_module(cfg, Mock(spec=BaseTrackingDataset))
+
+    # assert num_gpus gets modified to 1
+    assert cfg.training.num_gpus == 1
+    # the rest of the behavior follows correctly
+    assert data_module.train_batch_size == cfg.training.train_batch_size
+    assert data_module.val_batch_size == cfg.training.val_batch_size
+    assert data_module.test_batch_size == cfg.training.test_batch_size
+
+
+def test_get_data_module_multi_gpu_batch_size_adjustment(cfg):
+    cfg = _supervised_multi_gpu_cfg(cfg)
+    data_module = get_data_module(cfg, Mock(spec=BaseTrackingDataset))
+    # train, val batch sizes should be divided by num_gpus
+    assert data_module.train_batch_size == cfg.training.train_batch_size / 2
+    assert data_module.val_batch_size == cfg.training.val_batch_size / 2
+    assert data_module.test_batch_size == cfg.training.test_batch_size
+
+
+def test_get_data_module_train_batch_size_not_divisible_by_num_gpus(cfg):
+    cfg = _supervised_multi_gpu_cfg(cfg)
+
+    # When test_batch_size is indivisible by 2
+    cfg.training.train_batch_size += 1
+    with pytest.raises(ValidationError):
+        get_data_module(cfg, Mock(spec=BaseTrackingDataset))
+
+
+def test_get_data_module_val_batch_size_not_divisible_by_num_gpus(cfg):
+    cfg = _supervised_multi_gpu_cfg(cfg)
+
+    # When test_batch_size is indivisible by 2
+    cfg.training.val_batch_size += 1
+    with pytest.raises(ValidationError):
+        get_data_module(cfg, Mock(spec=BaseTrackingDataset))
+
+
+def test_get_data_module_multi_gpu_unsupervised_unsupported(cfg):
+    # when the model has unsupervised losses and num_gpus > 1
+    cfg = _supervised_multi_gpu_cfg(cfg)
+    cfg.model.losses_to_use = ["pca_singleview"]
+
+    with pytest.raises(ValidationError):
+        get_data_module(cfg, Mock(spec=BaseTrackingDataset))

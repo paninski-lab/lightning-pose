@@ -2,7 +2,7 @@
 
 import os
 from collections import OrderedDict
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Union
 
 import imgaug.augmenters as iaa
 import lightning.pytorch as pl
@@ -11,7 +11,9 @@ import pandas as pd
 import torch
 from moviepy.editor import VideoFileClip
 from omegaconf import DictConfig, OmegaConf
+from omegaconf.errors import ValidationError
 from typeguard import typechecked
+import warnings
 
 from lightning_pose.callbacks import AnnealWeight, UnfreezeBackbone
 from lightning_pose.data.augmentations import imgaug_transform
@@ -135,14 +137,37 @@ def get_data_module(
 ) -> Union[BaseDataModule, UnlabeledDataModule]:
     """Create a data module that splits a dataset into train/val/test iterators."""
 
+    # Old configs may have num_gpus: 0. We will remove support in a future release.
+    if cfg.training.num_gpus == 0:
+        warnings.warn(
+            "Config contains unsupported value num_gpus: 0. "
+            "Update num_gpus to 1 in your config."
+        )
+    cfg.training.num_gpus = max(cfg.training.num_gpus, 1)
+
     semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
     if not semi_supervised:
-        if not (cfg.training.gpu_id, int):
-            raise NotImplementedError("Cannot fit fully supervised model on multiple gpus")
+        # Divide config batch_size by num_gpus to maintain the same effective batch
+        # size in a multi-gpu setting.
+        if cfg.training.train_batch_size % cfg.training.num_gpus != 0:
+            raise ValidationError(
+                f"train_batch_size should be a multiple of num_gpus. "
+                "train_batch_size={cfg.training.train_batch_size}, "
+                "num_gpus={cfg.training.num_gpus}"
+            )
+        if cfg.training.val_batch_size % cfg.training.num_gpus != 0:
+            raise ValidationError(
+                f"val_batch_size should be a multiple of num_gpus. "
+                "val_batch_size={cfg.training.val_batch_size}, "
+                "num_gpus={cfg.training.num_gpus}"
+            )
+        train_batch_size = int(cfg.training.train_batch_size / cfg.training.num_gpus)
+        val_batch_size = int(cfg.training.val_batch_size / cfg.training.num_gpus)
+
         data_module = BaseDataModule(
             dataset=dataset,
-            train_batch_size=cfg.training.train_batch_size,
-            val_batch_size=cfg.training.val_batch_size,
+            train_batch_size=train_batch_size,
+            val_batch_size=val_batch_size,
             test_batch_size=cfg.training.test_batch_size,
             num_workers=cfg.training.num_workers,
             train_probability=cfg.training.train_prob,
@@ -152,11 +177,14 @@ def get_data_module(
         )
     else:
         if cfg.model.model_type == "heatmap_mhcrnn" and cfg.dali.context.train.batch_size < 5:
-            raise ValueError(
+            raise ValidationError(
                 "cfg.dali.context.train.batch_size must be >=5 for semi-supervised context models"
             )
-        if not (cfg.training.gpu_id, int):
-            raise NotImplementedError("Cannot fit semi-supervised model on multiple gpus")
+        if cfg.training.num_gpus > 1:
+            raise ValidationError(
+                "Detected num_gpus > 1 and losses != null. "
+                "Multi-gpu not yet supported for unsupervised losses."
+            )
         view_names = cfg.data.get("view_names", None)
         view_names = list(view_names) if view_names is not None else None
         data_module = UnlabeledDataModule(
@@ -500,6 +528,10 @@ def calculate_train_batches(
         num_train_frames = compute_num_train_frames(
             data_splits_list[0], cfg.training.get("train_frames", None)
         )
+        # For multi-GPU, the computation is unchanged.
+        #   num_train_frames is divided by num_gpus to get num_train_frames per gpu
+        #   train_batch_size is also divided by num_gpus to get the mini-batch size
+        #   so num_gpus cancels out of the numerator and denominator.
         num_labeled_batches = int(np.ceil(num_train_frames / cfg.training.train_batch_size))
         limit_train_batches = np.max([num_labeled_batches, 10])  # 10 is minimum
     else:

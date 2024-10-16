@@ -65,8 +65,6 @@ training:
   early_stopping: false
   # epochs over which to assess validation metrics for early stopping
   early_stop_patience: 3
-  # select gpu for training
-  gpu_id: 0
   # rng seed for labeled batches
   rng_seed_data_pt: 0
   # rng seed for weight initialization
