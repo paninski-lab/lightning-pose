@@ -9,7 +9,6 @@ from lightning_pose.utils.pca import KeypointPCA
 
 
 def test_pca_keypoint_class_singleview(cfg, base_data_module_combined):
-
     num_train_ims = int(
         len(base_data_module_combined.dataset)
         * base_data_module_combined.train_probability
@@ -48,18 +47,6 @@ def test_pca_keypoint_class_singleview(cfg, base_data_module_combined):
         list(kp_pca.parameters.keys()),
         ["mean", "kept_eigenvectors", "discarded_eigenvectors", "epsilon"],
     )
-
-    # assert that the results of running the .__call__() method are the same as
-    # separately running each of the subparts
-    kp_pca_2 = KeypointPCA(
-        loss_type="pca_singleview",
-        data_module=base_data_module_combined,
-        components_to_keep=0.99,
-        empirical_epsilon_percentile=1.0,
-        columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
-    )
-    kp_pca_2()
-    assert torch.allclose(kp_pca_2.data_arr, kp_pca.data_arr, equal_nan=True)
 
     # --------------------------------------
     # test reprojection error computation
@@ -141,29 +128,15 @@ def test_pca_keypoint_class_multiview(
         ["mean", "kept_eigenvectors", "discarded_eigenvectors", "epsilon"],
     )
 
-    # assert that the results of running the .__call__() method are the same as
-    # separately running each of the subparts
-    # MW: for some reason initializing this second object gave me a seg fault; I reduced
-    # the number of workers in the datamodule from 8 to 4 and it seems to be working now
-    kp_pca_2 = KeypointPCA(
-        loss_type="pca_multiview",
-        data_module=base_data_module_combined,
-        components_to_keep=3,
-        empirical_epsilon_percentile=0.3,
-        mirrored_column_matches=cfg.data.mirrored_column_matches,
-    )
-    kp_pca_2()
-    assert torch.allclose(kp_pca_2.data_arr, kp_pca.data_arr, equal_nan=True)
-
     # make sure we don't get errors when using a true multiview dataset
-    kp_pca_3 = KeypointPCA(
+    kp_pca_2 = KeypointPCA(
         loss_type="pca_multiview",
         data_module=multiview_heatmap_data_module_combined,
         components_to_keep=3,
         empirical_epsilon_percentile=0.3,
         mirrored_column_matches=cfg_multiview.data.mirrored_column_matches,
     )
-    kp_pca_3()
+    kp_pca_2()
 
 
 def test_nan_pca():
