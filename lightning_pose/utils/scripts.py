@@ -13,7 +13,7 @@ from moviepy.editor import VideoFileClip
 from omegaconf import DictConfig, OmegaConf
 from typeguard import typechecked
 
-from lightning_pose.callbacks import AnnealWeight
+from lightning_pose.callbacks import AnnealWeight, UnfreezeBackbone
 from lightning_pose.data.augmentations import imgaug_transform
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import (
@@ -286,8 +286,13 @@ def get_model(
 ) -> pl.LightningModule:
     """Create model: regression or heatmap based, supervised or semi-supervised."""
 
-    lr_scheduler = cfg.training["lr_scheduler"]
-    lr_scheduler_params = cfg.training["lr_scheduler_params"][lr_scheduler]
+    lr_scheduler = cfg.training.lr_scheduler
+
+    lr_scheduler_params = OmegaConf.to_object(
+        cfg.training.lr_scheduler_params[lr_scheduler]
+    )
+    lr_scheduler_params["unfreeze_backbone_at_epoch"] = cfg.training.unfreezing_epoch
+
     semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
     image_h = cfg.data.image_resize_dims.height
     image_w = cfg.data.image_resize_dims.width
@@ -430,7 +435,12 @@ def get_callbacks(
         )
         callbacks.append(early_stopping)
 
+    if backbone_unfreeze:
+        unfreeze_backbone_callback = UnfreezeBackbone(cfg.training.unfreezing_epoch)
+        callbacks.append(unfreeze_backbone_callback)
+
     if lr_monitor:
+        # this callback should be added after UnfreezeBackbone in order to log its learning rate
         lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval="epoch")
         callbacks.append(lr_monitor)
 
@@ -450,16 +460,6 @@ def get_callbacks(
             save_top_k=-1,
         )
         callbacks.append(ckpt_callback)
-
-    if backbone_unfreeze:
-        transfer_unfreeze_callback = pl.callbacks.BackboneFinetuning(
-            unfreeze_backbone_at_epoch=cfg.training.unfreezing_epoch,
-            lambda_func=lambda epoch: 1.5,
-            backbone_initial_ratio_lr=0.1,
-            should_align=True,
-            train_bn=True,
-        )
-        callbacks.append(transfer_unfreeze_callback)
 
     # we just need this callback for unsupervised models
     if (cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None):
