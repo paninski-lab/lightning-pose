@@ -139,6 +139,8 @@ class BaseDataModule(pl.LightningDataModule):
             batch_size=self.train_batch_size,
             num_workers=self.num_workers,
             persistent_workers=True if self.num_workers > 0 else False,
+            shuffle=True,
+            generator=torch.Generator().manual_seed(self.torch_seed),
         )
 
     def val_dataloader(self) -> torch.utils.data.DataLoader:
@@ -161,7 +163,6 @@ class BaseDataModule(pl.LightningDataModule):
             self.dataset,
             batch_size=self.val_batch_size,
             num_workers=self.num_workers,
-            shuffle=False,
         )
 
 
@@ -225,10 +226,11 @@ class UnlabeledDataModule(BaseDataModule):
         self.video_paths_list = video_paths_list
         self.filenames = check_video_paths(self.video_paths_list, view_names=view_names)
         self.num_workers_for_unlabeled = 1  # WARNING!! do not increase above 1, weird behavior
-        self.num_workers_for_labeled = num_workers
         self.dali_config = dali_config
         self.unlabeled_dataloader = None  # initialized in setup_unlabeled
         self.imgaug = imgaug
+        # TODO: Should these belong in a setup method that called by lightning,
+        # rather than __init__? BaseDataModule already follows that pattern.
         super().setup()
         self.setup_unlabeled()
 
@@ -248,12 +250,7 @@ class UnlabeledDataModule(BaseDataModule):
 
     def train_dataloader(self) -> CombinedLoader:
         loader = SemiSupervisedDataLoaderDict(
-            labeled=DataLoader(
-                self.train_dataset,
-                batch_size=self.train_batch_size,
-                num_workers=self.num_workers_for_labeled,
-                persistent_workers=True,
-            ),
+            labeled=super().train_dataloader(),
             unlabeled=self.unlabeled_dataloader,
         )
         return CombinedLoader(loader, mode="max_size_cycle")

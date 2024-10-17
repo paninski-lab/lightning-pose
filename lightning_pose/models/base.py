@@ -456,13 +456,20 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         loss_rmse, _ = self.rmse_loss(stage=stage, **data_dict)
 
         if stage:
+            # logging with sync_dist=True will average the metric across GPUs in 
+            # multi-GPU training. Performance overhead was found negligible.
+
             # log overall supervised loss
-            self.log(f"{stage}_supervised_loss", loss, prog_bar=True)
+            self.log(f"{stage}_supervised_loss", loss, prog_bar=True, sync_dist=True)
             # log supervised pixel_error
-            self.log(f"{stage}_supervised_rmse", loss_rmse)
+            self.log(f"{stage}_supervised_rmse", loss_rmse, sync_dist=True)
             # log individual supervised losses
             for log_dict in log_list:
-                self.log(**log_dict)
+                self.log(
+                    log_dict['name'],
+                    log_dict['value'].to(self.device),
+                    prog_bar=log_dict.get('prog_bar', False),
+                    sync_dist=True)
 
         return loss
 

@@ -1,8 +1,9 @@
 """Test datamodule functionality."""
 
 import pytest
-import torch
 from lightning.pytorch.utilities import CombinedLoader
+import torch
+from torch.utils.data import RandomSampler
 
 
 def test_base_datamodule(cfg, base_data_module):
@@ -15,17 +16,23 @@ def test_base_datamodule(cfg, base_data_module):
     num_targets = base_data_module.dataset.num_targets
 
     # check batch properties
-    batch = next(iter(base_data_module.train_dataloader()))
+    train_dataloader = base_data_module.train_dataloader()
+    assert isinstance(train_dataloader.sampler, RandomSampler) # shuffle=True
+    batch = next(iter(train_dataloader))
     assert batch["images"].shape == (train_size, 3, im_height, im_width)
     assert batch["keypoints"].shape == (train_size, num_targets)
 
-    batch = next(iter(base_data_module.val_dataloader()))
+    val_dataloader = base_data_module.val_dataloader()
+    batch = next(iter(val_dataloader))
+    assert not isinstance(val_dataloader.sampler, RandomSampler) # shuffle=False
     assert batch["images"].shape[1:] == (3, im_height, im_width)
     assert batch["keypoints"].shape[1:] == (num_targets,)
     assert batch["images"].shape[0] == batch["keypoints"].shape[0]
     assert batch["images"].shape[0] <= val_size
 
-    batch = next(iter(base_data_module.test_dataloader()))
+    test_dataloader = base_data_module.test_dataloader()
+    batch = next(iter(test_dataloader))
+    assert not isinstance(test_dataloader.sampler, RandomSampler) # shuffle=False
     assert batch["images"].shape[1:] == (3, im_height, im_width)
     assert batch["keypoints"].shape[1:] == (num_targets,)
     assert batch["images"].shape[0] == batch["keypoints"].shape[0]
@@ -193,6 +200,8 @@ def test_base_data_module_combined(cfg, base_data_module_combined):
 
     # test outputs for single batch
     loader = base_data_module_combined.train_dataloader()
+    assert isinstance(loader.sampler["labeled"], RandomSampler) # shuffle=True
+
     batch = next(iter(loader))
     # batch tuple in lightning >=2.0.9
     batch = batch[0] if isinstance(batch, tuple) else batch
