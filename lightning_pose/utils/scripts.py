@@ -151,6 +151,10 @@ def get_data_module(
             torch_seed=cfg.training.rng_seed_data_pt,
         )
     else:
+        if cfg.model.model_type == "heatmap_mhcrnn" and cfg.dali.context.train.batch_size < 5:
+            raise ValueError(
+                "cfg.dali.context.train.batch_size must be >=5 for semi-supervised context models"
+            )
         if not (cfg.training.gpu_id, int):
             raise NotImplementedError("Cannot fit semi-supervised model on multiple gpus")
         view_names = cfg.data.get("view_names", None)
