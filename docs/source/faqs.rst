@@ -65,12 +65,22 @@ FAQs
 
 .. dropdown:: What if I encounter a CUDA out of memory error?
 
-    We recommend a GPU with at least 8GB of memory.
-    Note that both semi-supervised and context models will increase memory usage
-    (with semi-supervised context models needing the most memory).
-    If you encounter this error, reduce batch sizes during training or inference.
-    You can find the relevant parameters to adjust in :ref:`The configuration file <config_file>`
-    section.
+    Model training can be GPU-memory-intensive, particularly when using unsupervised losses, the
+    Temporal Context Network model, multi-view datasets, or high-resolution images. For this reason
+    we recommend using a GPU with a minimum of 8GB of memory, but preferrably 16GB.
+    
+    Some users using a combination of the memory-intensive features above may still run into issues. 
+    There are a few techniques available to reduce the memory consumption:
+    
+    * Reduce ``train_batch_size``. Memory usage is directly proportional to batch size.
+    * Enable multi-GPU training (only supported for supervised training) using ``num_gpus``.
+    * Reduce image resolution using ``image_resize_dims``.
+    * Enable gradient accumulation using ``accumulate_grad_batches``. This parameter is not included
+      in the config by default and should be added manually to the ``training`` section.
+    
+    Each technique above has trade-offs. The right choice will be dependent on your individual situation.
+
+    See :ref:`The configuration file <config_file>` section for more information about the above parameters.
 
 .. dropdown:: Why does the network produce high confidence values for keypoints even when they are occluded?
 
