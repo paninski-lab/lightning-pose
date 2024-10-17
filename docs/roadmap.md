@@ -1,7 +1,8 @@
 # Lightning Pose development roadmap
 
 ## General enhancements
-- [ ] multi-GPU training for supervised models
+- [x] multi-GPU training for supervised models ([#206](https://github.com/paninski-lab/lightning-pose/pull/206))
+- [ ] multi-GPU training for unsupervised models
 - [ ] introduce jaxtyping (see [here](https://github.com/google/jaxtyping/issues/70))
 
 ## Losses and backbones
