@@ -180,6 +180,12 @@ def _supervised_multi_gpu_cfg(cfg):
     )
 
 
+def _unsupervised_multi_gpu_cfg(cfg):
+    cfg = _supervised_multi_gpu_cfg(cfg)
+    cfg.model.losses_to_use = ["temporal"]  # trigger unsupervised datamodule
+    return cfg
+
+
 def test_get_data_module_num_gpus_0(cfg):
     cfg = _supervised_multi_gpu_cfg(cfg)
     # when num_gpus is set to 0, i.e. from a deprecated config
@@ -194,13 +200,44 @@ def test_get_data_module_num_gpus_0(cfg):
     assert data_module.test_batch_size == cfg.training.test_batch_size
 
 
-def test_get_data_module_multi_gpu_batch_size_adjustment(cfg):
+def test_get_data_module_multi_gpu_batch_size_adjustment_supervised(cfg):
     cfg = _supervised_multi_gpu_cfg(cfg)
     data_module = get_data_module(cfg, Mock(spec=BaseTrackingDataset))
     # train, val batch sizes should be divided by num_gpus
     assert data_module.train_batch_size == cfg.training.train_batch_size / 2
     assert data_module.val_batch_size == cfg.training.val_batch_size / 2
     assert data_module.test_batch_size == cfg.training.test_batch_size
+
+
+def test_get_data_module_multi_gpu_batch_size_adjustment_unsupervised(
+    cfg, heatmap_dataset, toy_data_dir
+):
+    cfg = _unsupervised_multi_gpu_cfg(cfg)
+    data_module = get_data_module(
+        cfg, heatmap_dataset, os.path.join(toy_data_dir, "videos")
+    )
+    # train, val batch sizes should be divided by num_gpus
+    assert data_module.train_batch_size == cfg.training.train_batch_size / 2
+    assert data_module.val_batch_size == cfg.training.val_batch_size / 2
+    assert data_module.test_batch_size == cfg.training.test_batch_size
+
+    # sequence length should be divided by num_gups
+    assert (
+        data_module.dali_config.base.train.sequence_length
+        == cfg.dali.base.train.sequence_length / 2
+    )
+    assert (
+        data_module.dali_config.base.train.sequence_length
+        == cfg.dali.base.train.sequence_length / 2
+    )
+    assert (
+        data_module.dali_config.context.train.batch_size
+        == cfg.dali.context.train.batch_size / 2
+    )
+    assert (
+        data_module.dali_config.context.train.batch_size
+        == cfg.dali.context.train.batch_size / 2
+    )
 
 
 def test_get_data_module_train_batch_size_not_divisible_by_num_gpus(cfg):
@@ -212,19 +249,28 @@ def test_get_data_module_train_batch_size_not_divisible_by_num_gpus(cfg):
         get_data_module(cfg, Mock(spec=BaseTrackingDataset))
 
 
+def test_get_data_module_base_sequence_length_not_divisible_by_num_gpus(cfg):
+    cfg = _unsupervised_multi_gpu_cfg(cfg)
+
+    # When sequence_length is indivisible by 2
+    cfg.dali.base.train.sequence_length += 1
+    with pytest.raises(ValidationError):
+        get_data_module(cfg, Mock(spec=BaseTrackingDataset))
+
+
+def test_get_data_module_context_batch_size_not_divisible_by_num_gpus(cfg):
+    cfg = _unsupervised_multi_gpu_cfg(cfg)
+
+    # When sequence_length is indivisible by 2
+    cfg.dali.context.train.batch_size += 1
+    with pytest.raises(ValidationError):
+        get_data_module(cfg, Mock(spec=BaseTrackingDataset))
+
+
 def test_get_data_module_val_batch_size_not_divisible_by_num_gpus(cfg):
     cfg = _supervised_multi_gpu_cfg(cfg)
 
     # When test_batch_size is indivisible by 2
     cfg.training.val_batch_size += 1
-    with pytest.raises(ValidationError):
-        get_data_module(cfg, Mock(spec=BaseTrackingDataset))
-
-
-def test_get_data_module_multi_gpu_unsupervised_unsupported(cfg):
-    # when the model has unsupervised losses and num_gpus > 1
-    cfg = _supervised_multi_gpu_cfg(cfg)
-    cfg.model.losses_to_use = ["pca_singleview"]
-
     with pytest.raises(ValidationError):
         get_data_module(cfg, Mock(spec=BaseTrackingDataset))

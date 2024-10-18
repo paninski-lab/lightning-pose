@@ -58,14 +58,14 @@ def cfg() -> dict:
     """Load all toy data config file without hydra."""
     base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
     config_file = os.path.join(base_dir, "scripts", "configs", "config_mirror-mouse-example.yaml")
-    cfg = yaml.load(open(config_file), Loader=yaml.FullLoader)
+    cfg = OmegaConf.load(config_file)
     # make small batches so that we can run on a gpu with limited memory
-    cfg["training"]["train_batch_size"] = 2
-    cfg["training"]["val_batch_size"] = 4
-    cfg["training"]["test_batch_size"] = 4
-    cfg["training"]["imgaug"] = "dlc"
-    cfg["dali"]["base"]["train"]["sequence_length"] = 6
-    cfg["dali"]["base"]["predict"]["sequence_length"] = 16
+    cfg.training.train_batch_size = 2
+    cfg.training.val_batch_size = 4
+    cfg.training.test_batch_size = 4
+    cfg.training.imgaug = "dlc"
+    cfg.dali.base.train.sequence_length = 6
+    cfg.dali.base.predict.sequence_length = 16
     return OmegaConf.create(cfg)
 
 
@@ -74,24 +74,24 @@ def cfg_multiview() -> dict:
     """Load all toy data config file without hydra."""
     base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
     config_file = os.path.join(base_dir, "scripts", "configs", "config_mirror-mouse-example.yaml")
-    cfg = yaml.load(open(config_file), Loader=yaml.FullLoader)
+    cfg = OmegaConf.load(config_file)
     # make small batches so that we can run on a gpu with limited memory
-    cfg["training"]["train_batch_size"] = 2
-    cfg["training"]["val_batch_size"] = 4
-    cfg["training"]["test_batch_size"] = 4
-    cfg["training"]["imgaug"] = "dlc"
-    cfg["dali"]["base"]["train"]["sequence_length"] = 6
-    cfg["dali"]["base"]["predict"]["sequence_length"] = 16
-    cfg["data"]["data_dir"] = "data/mirror-mouse-example_split"
-    cfg["data"]["csv_file"] = ["top.csv", "bot.csv"]
-    cfg["data"]["view_names"] = ["bot", "top"]
-    cfg["data"]["num_keypoints"] = 7
-    cfg["data"]["keypoint_names"] = [
+    cfg.training.train_batch_size = 2
+    cfg.training.val_batch_size = 4
+    cfg.training.test_batch_size = 4
+    cfg.training.imgaug = "dlc"
+    cfg.dali.base.train.sequence_length = 6
+    cfg.dali.base.predict.sequence_length = 16
+    cfg.data.data_dir = "data/mirror-mouse-example_split"
+    cfg.data.csv_file = ["top.csv", "bot.csv"]
+    cfg.data.view_names = ["bot", "top"]
+    cfg.data.num_keypoints = 7
+    cfg.data.keypoint_names = [
         "paw1LH", "paw2LF", "paw3RF", "paw4RH", "tailBase", "tailMid", "nose",
     ]
-    cfg["data"]["columns_for_singleview_pca"] = [0, 1, 2, 3, 4, 5, 6]
-    cfg["data"]["mirrored_column_matches"] = [0, 1, 2, 3, 4, 5, 6]
-    cfg["model"]["backbone_pretrained"] = False
+    cfg.data.columns_for_singleview_pca = [0, 1, 2, 3, 4, 5, 6]
+    cfg.data.mirrored_column_matches = [0, 1, 2, 3, 4, 5, 6]
+    cfg.model.backbone_pretrained = False
 
     return OmegaConf.create(cfg)
 

@@ -52,6 +52,8 @@ __all__ = [
 
 _DEFAULT_TORCH_DEVICE = "cpu"
 if torch.cuda.is_available():
+    # When running with multiple GPUs, the LOCAL_RANK variable correctly
+    # contains the DDP Local Rank, which is also the cuda device index.
     _DEFAULT_TORCH_DEVICE = f"cuda:{int(os.environ.get('LOCAL_RANK', '0'))}"
 
 

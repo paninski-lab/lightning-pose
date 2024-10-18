@@ -21,8 +21,6 @@ __all__ = [
     "PrepareDALI",
 ]
 
-_DALI_DEVICE = "gpu" if torch.cuda.is_available() else "cpu"
-
 
 # cannot typecheck due to way pipeline_def decorator consumes additional args
 @pipeline_def
@@ -30,13 +28,11 @@ def video_pipe(
     filenames: Union[List[str], str],
     resize_dims: Optional[List[int]] = None,
     random_shuffle: bool = False,
-    seed: int = 123456,
     sequence_length: int = 16,
     pad_sequences: bool = True,
     initial_fill: int = 16,
     normalization_mean: List[float] = _IMAGENET_MEAN,
     normalization_std: List[float] = _IMAGENET_STD,
-    device: str = _DALI_DEVICE,
     name: str = "reader",
     step: int = 1,
     pad_last_batch: bool = False,
@@ -60,7 +56,6 @@ def video_pipe(
         initial_fill: size of the buffer that is used for random shuffling
         normalization_mean: mean values in (0, 1) to subtract from each channel
         normalization_std: standard deviation values to subtract from each channel
-        device: "cpu" | "gpu"
         name: pipeline name, used to string together DataNode elements
         step: number of frames to advance on each read
         pad_last_batch:
@@ -89,10 +84,9 @@ def video_pipe(
     orig_size_list = []
     for f, filename_list in enumerate(filenames):
         video = fn.readers.video(
-            device=device,
+            device="gpu",
             filenames=filename_list,
             random_shuffle=random_shuffle,
-            seed=seed,
             sequence_length=sequence_length,
             step=step,
             pad_sequences=pad_sequences,
@@ -325,6 +319,9 @@ class PrepareDALI(object):
         imgaug: str,
     ) -> Dict[str, dict]:
         """All of the pipeline args in one place."""
+        # When running with multiple GPUs, the LOCAL_RANK variable correctly
+        # contains the DDP Local Rank, which is also the cuda device index.
+        device_id = int(os.environ.get("LOCAL_RANK", "0"))
 
         dict_args = {
             "predict": {"context": {}, "base": {}},
@@ -340,11 +337,11 @@ class PrepareDALI(object):
             "sequence_length": base_train_cfg["sequence_length"],
             "step": base_train_cfg["sequence_length"],
             "batch_size": 1,
-            "seed": gen_cfg["seed"],
+            # Multi-GPU strategy is to have each GPU randomize differently.
+            "seed": gen_cfg["seed"] + device_id,
             "num_threads": self.num_threads,
-            "device_id": 0,
+            "device_id": device_id,
             "random_shuffle": True,
-            "device": "gpu",
             "imgaug": imgaug,
         }
 
@@ -356,11 +353,11 @@ class PrepareDALI(object):
             "sequence_length": base_pred_cfg["sequence_length"],
             "step": base_pred_cfg["sequence_length"],
             "batch_size": 1,
-            "seed": gen_cfg["seed"],
+            # Multi-GPU strategy is to have each GPU randomize differently.
+            "seed": gen_cfg["seed"] + device_id,
             "num_threads": self.num_threads,
-            "device_id": 0,
+            "device_id": device_id,
             "random_shuffle": False,
-            "device": "gpu",
             "name": "reader",
             "pad_sequences": True,
             "imgaug": "default",  # no imgaug when predicting
@@ -375,11 +372,10 @@ class PrepareDALI(object):
             "step": context_pred_cfg["sequence_length"] - 4,
             "batch_size": 1,
             "num_threads": self.num_threads,
-            "device_id": 0,
-            "random_shuffle": False,
-            "device": "gpu",
+            "device_id": device_id,
             "name": "reader",
-            "seed": gen_cfg["seed"],
+            # Multi-GPU strategy is to have each GPU randomize differently.
+            "seed": gen_cfg["seed"] + device_id,
             "pad_sequences": True,
             # "pad_last_batch": True,
             "imgaug": "default",  # no imgaug when predicting
@@ -396,11 +392,11 @@ class PrepareDALI(object):
             "sequence_length": context_train_cfg["batch_size"],
             "step": context_train_cfg["batch_size"],
             "batch_size": 1,
-            "seed": gen_cfg["seed"],
+            # Multi-GPU strategy is to have each GPU randomize differently.
+            "seed": gen_cfg["seed"] + device_id,
             "num_threads": self.num_threads,
-            "device_id": 0,
+            "device_id": device_id,
             "random_shuffle": True,
-            "device": "gpu",
             "imgaug": imgaug,
         }
         # our floor above should prevent us from getting to the very final batch.
