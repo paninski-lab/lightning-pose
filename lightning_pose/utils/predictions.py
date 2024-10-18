@@ -37,8 +37,6 @@ __all__ = [
     "create_labeled_video",
 ]
 
-_TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
 
 @typechecked
 def get_cfg_file(cfg_file: Union[str, DictConfig]):

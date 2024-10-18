@@ -422,6 +422,19 @@ class BaseFeatureExtractor(LightningModule):
 class BaseSupervisedTracker(BaseFeatureExtractor):
     """Base class for supervised trackers."""
 
+    def setup(self, stage):
+        # Setup LossFactory in the `LightningModule.setup` hook because self.device
+        # is available at this point. This used to be done in the LossFactory
+        # constructor, but we needed to pass the correct device to PCALoss in order to
+        # make Multi-GPU to work.
+
+        # LossFactory.device is automatically initialized by LightningModule since it's
+        # an object attribute of self (a LightningModule).
+        assert self.device == self.loss_factory.device
+        self.loss_factory.initialize_loss_instances()
+        if hasattr(self, 'loss_factory_unsup'):
+            self.loss_factory_unsup.initialize_loss_instances()
+
     def get_loss_inputs_labeled(
         self,
         batch_dict: Union[

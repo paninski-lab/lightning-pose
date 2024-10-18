@@ -8,8 +8,6 @@ from kornia.geometry.subpix import spatial_expectation2d, spatial_softmax2d
 
 from lightning_pose.data.utils import generate_heatmaps
 
-_TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
 
 def test_data_extractor(base_data_module_combined, multiview_heatmap_data_module_combined):
 
@@ -189,16 +187,12 @@ def test_generate_heatmaps(cfg, heatmap_dataset):
     )
 
     # find soft argmax and confidence of ground truth heatmap
-    softmaxes_gt = spatial_softmax2d(
-        heatmap_gt.to(_TORCH_DEVICE), temperature=torch.tensor(100).to(_TORCH_DEVICE)
-    )
+    softmaxes_gt = spatial_softmax2d(heatmap_gt, temperature=torch.tensor(100))
     preds_gt = spatial_expectation2d(softmaxes_gt, normalized_coordinates=False)
     confidences_gt = torch.amax(softmaxes_gt, dim=(2, 3))
 
     # find soft argmax and confidence of generated heatmap
-    softmaxes_torch = spatial_softmax2d(
-        heatmap_torch.to(_TORCH_DEVICE), temperature=torch.tensor(100).to(_TORCH_DEVICE)
-    )
+    softmaxes_torch = spatial_softmax2d(heatmap_torch, temperature=torch.tensor(100))
     preds_torch = spatial_expectation2d(softmaxes_torch, normalized_coordinates=False)
     confidences_torch = torch.amax(softmaxes_torch, dim=(2, 3))
 
@@ -246,15 +240,13 @@ def test_generate_uniform_heatmaps(cfg, toy_data_dir):
     )
 
     # find soft argmax and confidence of ground truth heatmap
-    softmaxes_gt = spatial_softmax2d(
-        heatmap_gt.to(_TORCH_DEVICE), temperature=torch.tensor(100).to(_TORCH_DEVICE)
-    )
+    softmaxes_gt = spatial_softmax2d(heatmap_gt, temperature=torch.tensor(100))
     preds_gt = spatial_expectation2d(softmaxes_gt, normalized_coordinates=False)
     confidences_gt = torch.amax(softmaxes_gt, dim=(2, 3))
 
     # find soft argmax and confidence of generated heatmap
     softmaxes_torch = spatial_softmax2d(
-        heatmap_uniform_torch.to(_TORCH_DEVICE), temperature=torch.tensor(100).to(_TORCH_DEVICE)
+        heatmap_uniform_torch, temperature=torch.tensor(100)
     )
     preds_torch = spatial_expectation2d(softmaxes_torch, normalized_coordinates=False)
     confidences_torch = torch.amax(softmaxes_torch, dim=(2, 3))
@@ -302,16 +294,12 @@ def test_generate_heatmaps_weird_shape(cfg, toy_data_dir):
     )
 
     # find soft argmax and confidence of ground truth heatmap
-    softmaxes_gt = spatial_softmax2d(
-        heatmap_gt.to(_TORCH_DEVICE), temperature=torch.tensor(100).to(_TORCH_DEVICE)
-    )
+    softmaxes_gt = spatial_softmax2d(heatmap_gt, temperature=torch.tensor(100))
     preds_gt = spatial_expectation2d(softmaxes_gt, normalized_coordinates=False)
     confidences_gt = torch.amax(softmaxes_gt, dim=(2, 3))
 
     # find soft argmax and confidence of generated heatmap
-    softmaxes_torch = spatial_softmax2d(
-        heatmap_torch.to(_TORCH_DEVICE), temperature=torch.tensor(100).to(_TORCH_DEVICE)
-    )
+    softmaxes_torch = spatial_softmax2d(heatmap_torch, temperature=torch.tensor(100))
     preds_torch = spatial_expectation2d(softmaxes_torch, normalized_coordinates=False)
     confidences_torch = torch.amax(softmaxes_torch, dim=(2, 3))
 

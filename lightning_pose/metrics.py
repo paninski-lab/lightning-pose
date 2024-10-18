@@ -48,7 +48,7 @@ def temporal_norm(keypoints_pred: Union[np.ndarray, torch.Tensor]) -> np.ndarray
     t_loss = TemporalLoss()
 
     if not isinstance(keypoints_pred, torch.Tensor):
-        keypoints_pred = torch.tensor(keypoints_pred, device=t_loss.device, dtype=torch.float32)
+        keypoints_pred = torch.tensor(keypoints_pred, dtype=torch.float32)
 
     # (samples, n_keypoints, 2) -> (samples, n_keypoints * 2)
     if len(keypoints_pred.shape) != 2:

@@ -28,15 +28,14 @@ class LossFactory(pl.LightningModule):
         self.losses_params_dict = losses_params_dict
         self.data_module = data_module
 
-        # initialize loss classes
-        self._initialize_loss_instances()
-
-    def _initialize_loss_instances(self):
+    def initialize_loss_instances(self):
         self.loss_instance_dict = {}
         loss_classes_dict = get_loss_classes()
         for loss, params in self.losses_params_dict.items():
             self.loss_instance_dict[loss] = loss_classes_dict[loss](
-                data_module=self.data_module, **params
+                data_module=self.data_module,
+                device=self.device,
+                **params
             )
 
     def __call__(
@@ -45,7 +44,10 @@ class LossFactory(pl.LightningModule):
         anneal_weight: Union[float, torch.Tensor] = 1.0,
         **kwargs
     ) -> Tuple[TensorType[()], List[dict]]:
-
+        assert hasattr(self, "loss_instance_dict"), (
+            "LossFactory not yet initialized. "
+            "Call LossFactory#initialize_loss_instances prior to invoking."
+        )
         # loop over losses, compute, sum, log
         # don't log if stage is None
         tot_loss = 0.0
