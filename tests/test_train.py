@@ -2,7 +2,7 @@ import copy
 import os
 
 
-def test_train(cfg, tmpdir):
+def test_train(cfg, tmp_path):
 
     from lightning_pose.train import train
 
@@ -29,33 +29,29 @@ def test_train(cfg, tmpdir):
     cfg_tmp.eval.predict_vids_after_training = True
     cfg_tmp.eval.save_vids_after_training = True
 
-    # change directory to save outputs elsewhere
-    os.chdir(tmpdir)
-
-    # train model
-    train(cfg_tmp)
-
-    # change directory back
-    os.chdir(pwd)
+    # temporarily change working directory to temp output directory
+    with tmp_path:
+        # train model
+        train(cfg_tmp)
 
     # ensure labeled data was properly processed
-    assert os.path.isfile(os.path.join(tmpdir, "config.yaml"))
-    assert os.path.isfile(os.path.join(tmpdir, "predictions.csv"))
-    assert os.path.isfile(os.path.join(tmpdir, "predictions_pca_multiview_error.csv"))
-    assert os.path.isfile(os.path.join(tmpdir, "predictions_pca_singleview_error.csv"))
-    assert os.path.isfile(os.path.join(tmpdir, "predictions_pixel_error.csv"))
+    assert (tmp_path / "config.yaml").is_file
+    assert (tmp_path / "predictions.csv").is_file
+    assert (tmp_path / "predictions_pca_multiview_error.csv").is_file
+    assert (tmp_path / "predictions_pca_singleview_error.csv").is_file
+    assert (tmp_path / "predictions_pixel_error.csv").is_file
 
     # ensure video data was properly processed
-    assert os.path.isfile(os.path.join(tmpdir, "video_preds", "test_vid.csv"))
-    assert os.path.isfile(os.path.join(tmpdir, "video_preds", "test_vid_pca_multiview_error.csv"))
-    assert os.path.isfile(os.path.join(tmpdir, "video_preds", "test_vid_pca_singleview_error.csv"))
-    assert os.path.isfile(os.path.join(tmpdir, "video_preds", "test_vid_temporal_norm.csv"))
-    assert os.path.isfile(os.path.join(
-        tmpdir, "video_preds", "labeled_videos", "test_vid_labeled.mp4",
-    ))
+    assert (tmp_path / "video_preds" / "test_vid.csv").is_file
+    assert (tmp_path / "video_preds" / "test_vid_pca_multiview_error.csv").is_file
+    assert (tmp_path / "video_preds" / "test_vid_pca_singleview_error.csv").is_file
+    assert (tmp_path / "video_preds" / "test_vid_temporal_norm.csv").is_file
+    assert (
+        tmp_path / "video_preds" / "labeled_videos" / "test_vid_labeled.mp4"
+    ).is_file
 
 
-def test_train_multiview(cfg_multiview, tmpdir):
+def test_train_multiview(cfg_multiview, tmp_path):
 
     from lightning_pose.train import train
 
@@ -82,33 +78,26 @@ def test_train_multiview(cfg_multiview, tmpdir):
     cfg_tmp.eval.predict_vids_after_training = True
     cfg_tmp.eval.save_vids_after_training = True
 
-    # change directory to save outputs elsewhere
-    os.chdir(tmpdir)
+    # temporarily change working directory to temp output directory
+    with tmp_path:
+        # train model
+        train(cfg_tmp)
 
-    # train model
-    train(cfg_tmp)
-
-    # change directory back
-    os.chdir(pwd)
-
-    assert os.path.isfile(os.path.join(tmpdir, "config.yaml"))
+    assert (tmp_path / "config.yaml").is_file
 
     for view in ["top", "bot"]:
 
         # ensure labeled data was properly processed
-        assert os.path.isfile(os.path.join(tmpdir, f"predictions_{view}.csv"))
-        assert os.path.isfile(os.path.join(tmpdir, f"predictions_{view}_pixel_error.csv"))
-        # assert os.path.isfile(os.path.join(tmpdir, f"predictions_{view}_pca_multiview_error.csv"))
-        # assert os.path.isfile(os.path.join(tmpdir, f"predictions_{view}_pca_singleview_error.csv"))
+        assert (tmp_path / f"predictions_{view}.csv").is_file
+        assert (tmp_path / f"predictions_{view}_pixel_error.csv").is_file
+        # assert (tmp_path / f"predictions_{view}_pca_multiview_error.csv").is_file
+        # assert (tmp_path / f"predictions_{view}_pca_singleview_error.csv").is_file
 
         # ensure video data was properly processed
-        assert os.path.isfile(os.path.join(
-            tmpdir, "video_preds", f"test_vid_{view}.csv"))
-        assert os.path.isfile(os.path.join(
-            tmpdir, "video_preds", f"test_vid_{view}_temporal_norm.csv"))
-        # assert os.path.isfile(os.path.join(
-        #     tmpdir, "video_preds", f"test_vid_{view}_pca_multiview_error.csv"))
-        # assert os.path.isfile(os.path.join(
-        #     tmpdir, "video_preds", f"test_vid_{view}_pca_singleview_error.csv"))
-        assert os.path.isfile(os.path.join(
-            tmpdir, "video_preds", "labeled_videos", f"test_vid_{view}_labeled.mp4"))
+        assert (tmp_path / "video_preds" / f"test_vid_{view}.csv").is_file
+        assert (tmp_path / "video_preds" / f"test_vid_{view}_temporal_norm.csv").is_file
+        # assert (tmp_path / "video_preds", f"test_vid_{view}_pca_multiview_error.csv").is_file
+        # assert (tmp_path / "video_preds", f"test_vid_{view}_pca_singleview_error.csv").is_file
+        assert (
+            tmp_path / "video_preds" / "labeled_videos" / f"test_vid_{view}_labeled.mp4"
+        ).is_file

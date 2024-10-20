@@ -28,6 +28,7 @@ from omegaconf import ListConfig
 from torch.nn import functional as F
 from torchtyping import TensorType
 from typeguard import typechecked
+import os
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import generate_heatmaps
@@ -49,11 +50,13 @@ __all__ = [
     "get_loss_classes",
 ]
 
-_TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+_DEFAULT_TORCH_DEVICE = "cpu"
+if torch.cuda.is_available():
+    _DEFAULT_TORCH_DEVICE = f"cuda:{int(os.environ.get('LOCAL_RANK', '0'))}"
 
 
 # @typechecked
-class Loss(pl.LightningModule):
+class Loss:
     """Parent class for all losses."""
 
     def __init__(
@@ -75,8 +78,8 @@ class Loss(pl.LightningModule):
         super().__init__()
         self.data_module = data_module
         # epsilon can either by a float or a list of floats
-        self.epsilon = torch.tensor(epsilon, dtype=torch.float, device=self.device)
-        self.log_weight = torch.tensor(log_weight, dtype=torch.float, device=self.device)
+        self.epsilon = torch.tensor(epsilon, dtype=torch.float)
+        self.log_weight = torch.tensor(log_weight, dtype=torch.float)
         self.loss_name = "base"
 
         self.reduce_methods_dict = {"mean": torch.mean, "sum": torch.sum}
@@ -178,7 +181,6 @@ class HeatmapLoss(Loss):
         elementwise_loss = self.compute_loss(
             targets=clean_targets, predictions=clean_predictions
         )
-        # epsilon_insensitive_loss = self.rectify_epsilon(loss=elementwise_loss)
         scalar_loss = self.reduce_loss(elementwise_loss, method="mean")
         logs = self.log_loss(loss=scalar_loss, stage=stage)
 
@@ -279,10 +281,11 @@ class PCALoss(Loss):
         columns_for_singleview_pca: Optional[Union[ListConfig, List]] = None,
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
         log_weight: float = 0.0,
-        device: str = _TORCH_DEVICE,
+        device: Union[Literal["cuda", "cpu"], torch.device] = _DEFAULT_TORCH_DEVICE,
         **kwargs,
     ) -> None:
         super().__init__(data_module=data_module, log_weight=log_weight)
+        self.device = device
         self.loss_name = loss_name
 
         if loss_name == "pca_multiview":
@@ -337,6 +340,10 @@ class PCALoss(Loss):
         self,
         predictions: TensorType["num_samples", "sample_dim"],
     ) -> TensorType["num_samples", -1]:
+        assert predictions.device == torch.device(self.device), (
+            predictions.device,
+            torch.device(self.device),
+        )
         # compute either reprojection error or projection onto discarded evecs.
         # they will vary in the last dim, hence -1.
         return self.pca.compute_reprojection_error(data_arr=predictions)
@@ -347,7 +354,10 @@ class PCALoss(Loss):
         stage: Optional[Literal["train", "val", "test"]] = None,
         **kwargs,
     ) -> Tuple[TensorType[()], List[dict]]:
-
+        assert keypoints_pred.device == torch.device(self.device), (
+            keypoints_pred.device,
+            torch.device(self.device),
+        )
         keypoints_pred = self.pca._format_data(data_arr=keypoints_pred)
         elementwise_loss = self.compute_loss(predictions=keypoints_pred)
         epsilon_insensitive_loss = self.rectify_epsilon(loss=elementwise_loss)
@@ -374,7 +384,7 @@ class TemporalLoss(Loss):
     ) -> None:
         super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
         self.loss_name = "temporal"
-        self.prob_threshold = torch.tensor(prob_threshold, dtype=torch.float, device=self.device)
+        self.prob_threshold = torch.tensor(prob_threshold, dtype=torch.float)
 
     def rectify_epsilon(
         self, loss: TensorType["batch_minus_one", "num_keypoints"]
@@ -398,8 +408,10 @@ class TemporalLoss(Loss):
         idxs_ignore = confidences < self.prob_threshold
         # ignore the loss values in the diff where one of the heatmaps is 'nan'
         union_idxs_ignore = torch.zeros(
-            (confidences.shape[0] - 1, confidences.shape[1]), dtype=torch.bool
-        ).to(_TORCH_DEVICE)
+            (confidences.shape[0] - 1, confidences.shape[1]),
+            dtype=torch.bool,
+            device=loss.device,
+        )
         for i in range(confidences.shape[0] - 1):
             union_idxs_ignore[i] = torch.logical_or(idxs_ignore[i], idxs_ignore[i + 1])
 
@@ -472,9 +484,7 @@ class TemporalHeatmapLoss(Loss):
         else:
             raise NotImplementedError
 
-        self.prob_threshold = torch.tensor(
-            prob_threshold, dtype=torch.float, device=self.device
-        )
+        self.prob_threshold = torch.tensor(prob_threshold, dtype=torch.float)
 
     def rectify_epsilon(
         self, loss: TensorType["batch_minus_one", "num_valid_keypoints"]
@@ -499,7 +509,7 @@ class TemporalHeatmapLoss(Loss):
         # ignore the loss values in the diff where one of the heatmaps is 'nan'
         union_idxs_ignore = torch.zeros(
             (confidences.shape[0] - 1, confidences.shape[1]), dtype=torch.bool
-        ).to(_TORCH_DEVICE)
+        ).to(loss.device)
         for i in range(confidences.shape[0] - 1):
             union_idxs_ignore[i] = torch.logical_or(idxs_ignore[i], idxs_ignore[i + 1])
 
@@ -512,8 +522,8 @@ class TemporalHeatmapLoss(Loss):
     ) -> TensorType["batch_minus_one", "num_valid_keypoints"]:
         # compute the differences between matching heatmaps for each keypoint
 
-        diffs = torch.zeros((predictions.shape[0] - 1, predictions.shape[1])).to(
-            _TORCH_DEVICE
+        diffs = torch.zeros(
+            (predictions.shape[0] - 1, predictions.shape[1]), device=predictions.device
         )
 
         for i in range(diffs.shape[0]):
@@ -576,9 +586,7 @@ class UnimodalLoss(Loss):
         self.downsampled_image_width = downsampled_image_width
         self.uniform_heatmaps = uniform_heatmaps
 
-        self.prob_threshold = torch.tensor(
-            prob_threshold, dtype=torch.float, device=self.device
-        )
+        self.prob_threshold = torch.tensor(prob_threshold, dtype=torch.float)
 
         if self.loss_name == "unimodal_mse":
             self.loss = None

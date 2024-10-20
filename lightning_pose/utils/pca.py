@@ -25,8 +25,6 @@ __all__ = [
     "format_multiview_data_for_pca",
 ]
 
-_TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
 
 class KeypointPCA(object):
     """Class to collect data from a dataloader and compute PCA params."""
