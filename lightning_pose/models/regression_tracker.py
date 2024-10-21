@@ -183,7 +183,7 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
             **kwargs,
         )
         self.loss_factory_unsup = loss_factory_unsupervised
-        loss_names = loss_factory_unsupervised.losses_params_dict.keys()
+        loss_names = loss_factory_unsupervised.loss_instance_dict.keys()
         if "unimodal_mse" in loss_names or "unimodal_wasserstein" in loss_names:
             raise ValueError("cannot use unimodal loss in regression tracker")
 

@@ -373,6 +373,7 @@ class PrepareDALI(object):
             "batch_size": 1,
             "num_threads": self.num_threads,
             "device_id": device_id,
+            "random_shuffle": False,
             "name": "reader",
             # Multi-GPU strategy is to have each GPU randomize differently.
             "seed": gen_cfg["seed"] + device_id,

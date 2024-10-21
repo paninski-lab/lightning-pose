@@ -24,8 +24,6 @@ __all__ = [
     "UnlabeledDataModule",
 ]
 
-_TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
 
 class BaseDataModule(pl.LightningDataModule):
     """Splits a labeled dataset into train, val, and test data loaders."""

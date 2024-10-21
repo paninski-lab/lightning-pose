@@ -205,8 +205,14 @@ def test_get_data_module_multi_gpu_batch_size_adjustment_supervised(cfg):
     cfg = _supervised_multi_gpu_cfg(cfg)
     data_module = get_data_module(cfg, Mock(spec=BaseTrackingDataset))
     # train, val batch sizes should be divided by num_gpus
-    assert data_module.train_batch_size == cfg.training.train_batch_size / 2
-    assert data_module.val_batch_size == cfg.training.val_batch_size / 2
+    assert (
+        data_module.train_batch_size
+        == cfg.training.train_batch_size / cfg.training.num_gpus
+    )
+    assert (
+        data_module.val_batch_size
+        == cfg.training.val_batch_size / cfg.training.num_gpus
+    )
     assert data_module.test_batch_size == cfg.training.test_batch_size
 
 
@@ -218,26 +224,32 @@ def test_get_data_module_multi_gpu_batch_size_adjustment_unsupervised(
         cfg, heatmap_dataset, os.path.join(toy_data_dir, "videos")
     )
     # train, val batch sizes should be divided by num_gpus
-    assert data_module.train_batch_size == cfg.training.train_batch_size / 2
-    assert data_module.val_batch_size == cfg.training.val_batch_size / 2
+    assert (
+        data_module.train_batch_size
+        == cfg.training.train_batch_size / cfg.training.num_gpus
+    )
+    assert (
+        data_module.val_batch_size
+        == cfg.training.val_batch_size / cfg.training.num_gpus
+    )
     assert data_module.test_batch_size == cfg.training.test_batch_size
 
     # sequence length should be divided by num_gups
     assert (
         data_module.dali_config.base.train.sequence_length
-        == cfg.dali.base.train.sequence_length / 2
+        == cfg.dali.base.train.sequence_length / cfg.training.num_gpus
     )
     assert (
         data_module.dali_config.base.train.sequence_length
-        == cfg.dali.base.train.sequence_length / 2
+        == cfg.dali.base.train.sequence_length / cfg.training.num_gpus
     )
     assert (
         data_module.dali_config.context.train.batch_size
-        == cfg.dali.context.train.batch_size / 2
+        == cfg.dali.context.train.batch_size / cfg.training.num_gpus
     )
     assert (
         data_module.dali_config.context.train.batch_size
-        == cfg.dali.context.train.batch_size / 2
+        == cfg.dali.context.train.batch_size / cfg.training.num_gpus
     )
 
 
