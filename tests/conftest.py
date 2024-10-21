@@ -66,7 +66,7 @@ def cfg() -> dict:
     cfg.training.imgaug = "dlc"
     cfg.dali.base.train.sequence_length = 6
     cfg.dali.base.predict.sequence_length = 16
-    return OmegaConf.create(cfg)
+    return cfg
 
 
 @pytest.fixture
@@ -93,7 +93,7 @@ def cfg_multiview() -> dict:
     cfg.data.mirrored_column_matches = [0, 1, 2, 3, 4, 5, 6]
     cfg.model.backbone_pretrained = False
 
-    return OmegaConf.create(cfg)
+    return cfg
 
 
 def make_multiview_dataset() -> None:
