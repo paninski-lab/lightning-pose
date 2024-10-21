@@ -7,13 +7,14 @@ tested) in conftest.py
 
 import copy
 import gc
-import lightning.pytorch as pl
-from omegaconf import OmegaConf
-from omegaconf.errors import ValidationError
 import os
+from unittest.mock import Mock
+
+import lightning.pytorch as pl
 import pytest
 import torch
-from unittest.mock import Mock
+from omegaconf import OmegaConf
+from omegaconf.errors import ValidationError
 
 from lightning_pose.data.datasets import BaseTrackingDataset
 from lightning_pose.utils.scripts import (

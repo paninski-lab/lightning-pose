@@ -15,8 +15,8 @@ from typing_extensions import Literal
 from lightning_pose.data.utils import (
     HeatmapLabeledBatchDict,
     MultiviewHeatmapLabeledBatchDict,
-    UnlabeledBatchDict,
     MultiviewUnlabeledBatchDict,
+    UnlabeledBatchDict,
     evaluate_heatmaps_at_location,
     undo_affine_transform_batch,
 )

@@ -1,8 +1,8 @@
 """Test datamodule functionality."""
 
 import pytest
-from lightning.pytorch.utilities import CombinedLoader
 import torch
+from lightning.pytorch.utilities import CombinedLoader
 from torch.utils.data import RandomSampler
 
 

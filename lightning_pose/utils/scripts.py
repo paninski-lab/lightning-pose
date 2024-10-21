@@ -1,6 +1,7 @@
 """Helper functions to build pipeline components from config dictionary."""
 
 import os
+import warnings
 from collections import OrderedDict
 from typing import Dict, List, Optional, Union
 
@@ -13,7 +14,6 @@ from moviepy.editor import VideoFileClip
 from omegaconf import DictConfig, OmegaConf
 from omegaconf.errors import ValidationError
 from typeguard import typechecked
-import warnings
 
 from lightning_pose.callbacks import AnnealWeight, UnfreezeBackbone
 from lightning_pose.data.augmentations import imgaug_transform

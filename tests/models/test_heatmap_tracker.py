@@ -1,6 +1,7 @@
 """Test the initialization and training of heatmap models."""
 
 import copy
+
 import pytest
 import torch
 

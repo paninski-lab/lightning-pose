@@ -1,6 +1,7 @@
 """Test the initialization and training of context heatmap multi-head crnn models."""
 
 import copy
+
 import pytest
 import torch
 

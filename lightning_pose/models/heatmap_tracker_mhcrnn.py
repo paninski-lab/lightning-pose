@@ -13,8 +13,8 @@ from typing_extensions import Literal
 from lightning_pose.data.utils import (
     HeatmapLabeledBatchDict,
     MultiviewHeatmapLabeledBatchDict,
-    UnlabeledBatchDict,
     MultiviewUnlabeledBatchDict,
+    UnlabeledBatchDict,
     undo_affine_transform_batch,
 )
 from lightning_pose.losses.factory import LossFactory

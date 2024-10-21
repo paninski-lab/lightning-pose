@@ -18,6 +18,7 @@ The general flow of each loss class is as follows:
 
 """
 
+import os
 import warnings
 from typing import Dict, List, Literal, Optional, Tuple, Type, Union
 
@@ -28,7 +29,6 @@ from omegaconf import ListConfig
 from torch.nn import functional as F
 from torchtyping import TensorType
 from typeguard import typechecked
-import os
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import generate_heatmaps

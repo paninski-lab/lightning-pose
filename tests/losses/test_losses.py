@@ -1,14 +1,12 @@
 """Test loss classes."""
 
-from kornia.geometry.subpix import spatial_softmax2d
 import numpy as np
 import pytest
 import torch
-
+from kornia.geometry.subpix import spatial_softmax2d
 
 from lightning_pose.data.utils import generate_heatmaps
 from lightning_pose.losses.losses import (
-    get_loss_classes,
     HeatmapJSLoss,
     HeatmapKLLoss,
     HeatmapMSELoss,
@@ -18,6 +16,7 @@ from lightning_pose.losses.losses import (
     RegressionRMSELoss,
     TemporalLoss,
     UnimodalLoss,
+    get_loss_classes,
 )
 from lightning_pose.utils.pca import format_multiview_data_for_pca
 
