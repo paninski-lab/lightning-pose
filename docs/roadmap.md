@@ -2,7 +2,7 @@
 
 ## General enhancements
 - [x] multi-GPU training for supervised models ([#206](https://github.com/paninski-lab/lightning-pose/pull/206))
-- [ ] multi-GPU training for unsupervised models
+- [x] multi-GPU training for unsupervised models ([#207](https://github.com/paninski-lab/lightning-pose/pull/207))
 - [ ] introduce jaxtyping (see [here](https://github.com/google/jaxtyping/issues/70))
 
 ## Losses and backbones

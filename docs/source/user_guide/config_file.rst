@@ -70,9 +70,8 @@ Below is a list of some commonly modified arguments related to model architectur
   Therefore, 300 epochs, at 40 batches per epoch, is equal to 300*40=12k total batches
   (or iterations).
 
-* ``training.num_gpus``: enables multi-GPU training, only supported for supervised losses
-  (``losses_to_use: []``) . ``train_batch_size`` and ``val_batch_size`` must be divisible by
-  ``num_gpus`` as each batch will be divided amongst the GPUs.
+* ``training.num_gpus``: enables multi-GPU training. Batch sizes (and dali sequence lengths for 
+  unsupervised) must be divisible by ``num_gpus`` as each batch will be divided amongst the GPUs.
 
 * ``training.accumulate_grad_batches``: (experimental) number of batches to accumulate gradients
   for before updating weights. Simulates larger batch sizes with memory-constrained GPUs. This
