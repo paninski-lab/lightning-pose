@@ -144,23 +144,13 @@ def get_data_module(
             "Update num_gpus to 1 in your config."
         )
     cfg.training.num_gpus = max(cfg.training.num_gpus, 1)
+
     # Divide config batch_size by num_gpus to maintain the same effective batch
     # size in a multi-gpu setting.
-    if cfg.training.train_batch_size % cfg.training.num_gpus != 0:
-        raise ValidationError(
-            f"train_batch_size should be a multiple of num_gpus. "
-            "train_batch_size={cfg.training.train_batch_size}, "
-            "num_gpus={cfg.training.num_gpus}"
-        )
-    if cfg.training.val_batch_size % cfg.training.num_gpus != 0:
-        raise ValidationError(
-            f"val_batch_size should be a multiple of num_gpus. "
-            "val_batch_size={cfg.training.val_batch_size}, "
-            "num_gpus={cfg.training.num_gpus}"
-        )
-
-    train_batch_size = int(cfg.training.train_batch_size / cfg.training.num_gpus)
-    val_batch_size = int(cfg.training.val_batch_size / cfg.training.num_gpus)
+    train_batch_size = int(
+        np.ceil(cfg.training.train_batch_size / cfg.training.num_gpus)
+    )
+    val_batch_size = int(np.ceil(cfg.training.val_batch_size / cfg.training.num_gpus))
 
     semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
     if not semi_supervised:        
@@ -176,23 +166,13 @@ def get_data_module(
             torch_seed=cfg.training.rng_seed_data_pt,
         )
     else:
-        if cfg.dali.base.train.sequence_length % cfg.training.num_gpus != 0:
-            raise ValidationError(
-                f"dali.base.train.sequence_length should be a multiple of num_gpus. "
-                "sequence_length={cfg.dali.base.train.sequence_length}, "
-                "num_gpus={cfg.training.num_gpus}"
-            )
-        if cfg.dali.context.train.batch_size % cfg.training.num_gpus != 0:
-            raise ValidationError(
-                f"dali.context.train.batch_size should be a multiple of num_gpus. "
-                "batch_size={cfg.dali.context.train.batch_size}, "
-                "num_gpus={cfg.training.num_gpus}"
-            )
+        # Divide config batch_size by num_gpus to maintain the same effective batch
+        # size in a multi-gpu setting.
         base_sequence_length = int(
-            cfg.dali.base.train.sequence_length / cfg.training.num_gpus
+            np.ceil(cfg.dali.base.train.sequence_length / cfg.training.num_gpus)
         )
         context_batch_size = int(
-            cfg.dali.context.train.batch_size / cfg.training.num_gpus
+            np.ceil(cfg.dali.context.train.batch_size / cfg.training.num_gpus)
         )
 
         if cfg.model.model_type == "heatmap_mhcrnn" and context_batch_size < 5:

@@ -11,6 +11,7 @@ import os
 from unittest.mock import Mock
 
 import lightning.pytorch as pl
+import numpy as np
 import pytest
 import torch
 from omegaconf import OmegaConf
@@ -240,50 +241,42 @@ def test_get_data_module_multi_gpu_batch_size_adjustment_unsupervised(
         == cfg.dali.base.train.sequence_length / cfg.training.num_gpus
     )
     assert (
-        data_module.dali_config.base.train.sequence_length
-        == cfg.dali.base.train.sequence_length / cfg.training.num_gpus
-    )
-    assert (
-        data_module.dali_config.context.train.batch_size
-        == cfg.dali.context.train.batch_size / cfg.training.num_gpus
-    )
-    assert (
         data_module.dali_config.context.train.batch_size
         == cfg.dali.context.train.batch_size / cfg.training.num_gpus
     )
 
 
-def test_get_data_module_train_batch_size_not_divisible_by_num_gpus(cfg):
-    cfg = _supervised_multi_gpu_cfg(cfg)
+def test_get_data_module_multi_gpu_batch_size_adjustment_ceiling(
+    cfg, heatmap_dataset, toy_data_dir
+):
+    cfg = _unsupervised_multi_gpu_cfg(cfg)
+    data_module = get_data_module(
+        cfg, heatmap_dataset, os.path.join(toy_data_dir, "videos")
+    )
 
-    # When test_batch_size is indivisible by 2
+    # When batch_size is indivisible by 2
     cfg.training.train_batch_size += 1
-    with pytest.raises(ValidationError):
-        get_data_module(cfg, Mock(spec=BaseTrackingDataset))
-
-
-def test_get_data_module_base_sequence_length_not_divisible_by_num_gpus(cfg):
-    cfg = _unsupervised_multi_gpu_cfg(cfg)
-
-    # When sequence_length is indivisible by 2
-    cfg.dali.base.train.sequence_length += 1
-    with pytest.raises(ValidationError):
-        get_data_module(cfg, Mock(spec=BaseTrackingDataset))
-
-
-def test_get_data_module_context_batch_size_not_divisible_by_num_gpus(cfg):
-    cfg = _unsupervised_multi_gpu_cfg(cfg)
-
-    # When sequence_length is indivisible by 2
-    cfg.dali.context.train.batch_size += 1
-    with pytest.raises(ValidationError):
-        get_data_module(cfg, Mock(spec=BaseTrackingDataset))
-
-
-def test_get_data_module_val_batch_size_not_divisible_by_num_gpus(cfg):
-    cfg = _supervised_multi_gpu_cfg(cfg)
-
-    # When test_batch_size is indivisible by 2
     cfg.training.val_batch_size += 1
-    with pytest.raises(ValidationError):
-        get_data_module(cfg, Mock(spec=BaseTrackingDataset))
+    cfg.dali.base.train.sequence_length += 1
+    cfg.dali.context.train.batch_size += 1
+
+    data_module = get_data_module(
+        cfg, heatmap_dataset, os.path.join(toy_data_dir, "videos")
+    )
+
+    # batch size should be the ceiling of batch_size divided by num_gups
+    assert data_module.train_batch_size == int(
+        np.ceil(cfg.training.train_batch_size / cfg.training.num_gpus)
+    )
+    assert data_module.val_batch_size == int(
+        np.ceil(cfg.training.val_batch_size / cfg.training.num_gpus)
+    )
+    assert data_module.test_batch_size == cfg.training.test_batch_size
+
+    # sequence length should be divided by num_gups
+    assert data_module.dali_config.base.train.sequence_length == int(
+        np.ceil(cfg.dali.base.train.sequence_length / cfg.training.num_gpus)
+    )
+    assert data_module.dali_config.context.train.batch_size == int(
+        np.ceil(cfg.dali.context.train.batch_size / cfg.training.num_gpus)
+    )
