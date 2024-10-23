@@ -171,8 +171,13 @@ def get_data_module(
         base_sequence_length = int(
             np.ceil(cfg.dali.base.train.sequence_length / cfg.training.num_gpus)
         )
+        # Maintain effective context batch size in num_gpus adjustment,
+        # otherwise the effective context batch size will be too small due to the 
+        # 2 context frames on each side of center.
+        _effective_context_batch_size = max(cfg.dali.context.train.batch_size - 4, 0)
+        # Each GPU should get the effective batch size / num_gpus, + 4 for context frames.
         context_batch_size = int(
-            np.ceil(cfg.dali.context.train.batch_size / cfg.training.num_gpus)
+            np.ceil(_effective_context_batch_size / cfg.training.num_gpus + 4)
         )
 
         if cfg.model.model_type == "heatmap_mhcrnn" and context_batch_size < 5:

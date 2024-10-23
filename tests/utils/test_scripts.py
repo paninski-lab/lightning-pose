@@ -240,10 +240,8 @@ def test_get_data_module_multi_gpu_batch_size_adjustment_unsupervised(
         data_module.dali_config.base.train.sequence_length
         == cfg.dali.base.train.sequence_length / cfg.training.num_gpus
     )
-    assert (
-        data_module.dali_config.context.train.batch_size
-        == cfg.dali.context.train.batch_size / cfg.training.num_gpus
-    )
+
+    # context batch size is more nuance, tested separately
 
 
 def test_get_data_module_multi_gpu_batch_size_adjustment_ceiling(
@@ -277,6 +275,50 @@ def test_get_data_module_multi_gpu_batch_size_adjustment_ceiling(
     assert data_module.dali_config.base.train.sequence_length == int(
         np.ceil(cfg.dali.base.train.sequence_length / cfg.training.num_gpus)
     )
-    assert data_module.dali_config.context.train.batch_size == int(
-        np.ceil(cfg.dali.context.train.batch_size / cfg.training.num_gpus)
+
+    # context batch size is more nuance, tested separately
+
+
+def test_get_data_module_multi_gpu_context_batch_size_adjustment(
+    cfg, heatmap_dataset, toy_data_dir
+):
+    cfg = _unsupervised_multi_gpu_cfg(cfg)
+    cfg.model.model_type = "heatmap_mhcrnn"
+    data_module = get_data_module(
+        cfg, heatmap_dataset, os.path.join(toy_data_dir, "videos")
     )
+
+    # batch size of 6 -> effective 2 -> per-gpu effective 1 -> per-gpu 5
+    cfg.dali.context.train.batch_size = 6
+    data_module = get_data_module(
+        cfg, heatmap_dataset, os.path.join(toy_data_dir, "videos")
+    )
+    assert data_module.dali_config.context.train.batch_size == 5
+
+    # batch size of 5 -> effective 1 -> per-gpu effective 1 -> per-gpu 5
+    cfg.dali.context.train.batch_size = 5
+    data_module = get_data_module(
+        cfg, heatmap_dataset, os.path.join(toy_data_dir, "videos")
+    )
+    assert data_module.dali_config.context.train.batch_size == 5
+
+    # batch size of 28 -> effective 24 -> per-gpu effective 12 -> per-gpu 16
+    cfg.dali.context.train.batch_size = 28
+    data_module = get_data_module(
+        cfg, heatmap_dataset, os.path.join(toy_data_dir, "videos")
+    )
+    assert data_module.dali_config.context.train.batch_size == 16
+
+    # batch size of 27 -> effective 23 -> per-gpu effective 12 -> per-gpu 16
+    cfg.dali.context.train.batch_size = 27
+    data_module = get_data_module(
+        cfg, heatmap_dataset, os.path.join(toy_data_dir, "videos")
+    )
+    assert data_module.dali_config.context.train.batch_size == 16
+
+    # batch size of 4 -> effective 0 -> should throw an error.
+    cfg.dali.context.train.batch_size = 4
+    with pytest.raises(ValidationError):
+        data_module = get_data_module(
+            cfg, heatmap_dataset, os.path.join(toy_data_dir, "videos")
+        )
