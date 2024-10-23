@@ -1,0 +1,20 @@
+name: Run tests
+on:
+  # Allow manually running from Github UI or API.
+  workflow_dispatch:
+  # to re-run status checks, mark as draft then ready_for_review.
+  pull_request:
+    types: [ready_for_review]
+jobs:
+  pytest-ubuntu-22.04:
+    # Ships with python 3.10. Using it saves time installing it.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+#         pip install -e ".[dev]"
+          pip install fiftyone-db-ubuntu2204
+#     - name: Test with pytest
+#       run: |
+#         pytest
