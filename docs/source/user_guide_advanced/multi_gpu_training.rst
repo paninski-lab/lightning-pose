@@ -27,23 +27,26 @@ Calculate of per-GPU batch size
 Given the above, you need not worry about how lightning-pose calculates per-GPU batch size,
 but it is documented here for transparency.
 
-For the regular ``heatmap`` model, the per-GPU batch size will be:
+In general the per-GPU batch size will be:
 
 .. code-block:: python
 
     ceil(batch_size / num_gpus)
 
-For the context ``heatmap_mhcrnn`` model, the per-GPU batch size will be: 
+The exception to this is the unlabeled per-GPU batch size for context models (``heatmap_mhcrnn``):
 
 .. code-block:: python
 
     ceil((batch_size - 4) / num_gpus) + 4
 
-The calculation for ``heatmap_mhcrnn`` maintains the same effective batch size by accounting for
-the 2 context frames that are loaded with each training frame. For example, if you specify a batch
-size of 16, then your effective batch size was 16 - 4 = 12. To maintain 12 with 2 GPUs, 
-each GPU will load 6 frames + 4 context frames, for a per-GPU batch size of 10. This is larger than
-simply dividing the original batch size of 16 across 2 GPUs.
+The adjusted calculation for the unlabeled batch size for context models maintains the same
+single-GPU effective batch size by accounting for the 4 context frames that are loaded with each
+training frame.
+For example, if you specified `dali.context.train.batch_size=16`, then your effective batch size
+was 16 - 4 = 12.
+To maintain 12 with 2 GPUs, each GPU will load 6 frames + 4 context frames, for a per-GPU batch
+size of 10.
+This is larger than simply dividing the original batch size of 16 across 2 GPUs.
 
 .. _execution_model:
 
