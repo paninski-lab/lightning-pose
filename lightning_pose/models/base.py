@@ -177,7 +177,8 @@ class BaseFeatureExtractor(LightningModule):
 
         """
         super().__init__()
-        print(f"\n Initializing a {self._get_name()} instance.")
+        if self.local_rank == 0:
+            print(f"\n Initializing a {self._get_name()} instance.")
 
         self.backbone_arch = backbone
 
@@ -543,7 +544,11 @@ class SemiSupervisedTrackerMixin(object):
         if stage:
             # log individual unsupervised losses
             for log_dict in log_list:
-                self.log(**log_dict)
+                self.log(
+                    log_dict['name'],
+                    log_dict['value'].to(self.device),
+                    prog_bar=log_dict.get('prog_bar', False),
+                    sync_dist=True)
 
         return loss
 
@@ -560,6 +565,7 @@ class SemiSupervisedTrackerMixin(object):
             "total_unsupervised_importance",
             self.total_unsupervised_importance,
             prog_bar=True,
+            # don't need to sync_dist because this is always the same across processes.
         )
 
         # computes and logs supervised losses
@@ -583,6 +589,6 @@ class SemiSupervisedTrackerMixin(object):
 
         # log total loss
         total_loss = loss_super + loss_unsuper
-        self.log("total_loss", total_loss, prog_bar=True)
+        self.log("total_loss", total_loss, prog_bar=True, sync_dist=True)
 
         return {"loss": total_loss}

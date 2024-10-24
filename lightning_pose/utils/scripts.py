@@ -1,6 +1,7 @@
 """Helper functions to build pipeline components from config dictionary."""
 
 import os
+import warnings
 from collections import OrderedDict
 from typing import Dict, List, Optional, Union
 
@@ -13,7 +14,6 @@ from moviepy.editor import VideoFileClip
 from omegaconf import DictConfig, OmegaConf
 from omegaconf.errors import ValidationError
 from typeguard import typechecked
-import warnings
 
 from lightning_pose.callbacks import AnnealWeight, UnfreezeBackbone
 from lightning_pose.data.augmentations import imgaug_transform
@@ -145,25 +145,15 @@ def get_data_module(
         )
     cfg.training.num_gpus = max(cfg.training.num_gpus, 1)
 
-    semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
-    if not semi_supervised:
-        # Divide config batch_size by num_gpus to maintain the same effective batch
-        # size in a multi-gpu setting.
-        if cfg.training.train_batch_size % cfg.training.num_gpus != 0:
-            raise ValidationError(
-                f"train_batch_size should be a multiple of num_gpus. "
-                "train_batch_size={cfg.training.train_batch_size}, "
-                "num_gpus={cfg.training.num_gpus}"
-            )
-        if cfg.training.val_batch_size % cfg.training.num_gpus != 0:
-            raise ValidationError(
-                f"val_batch_size should be a multiple of num_gpus. "
-                "val_batch_size={cfg.training.val_batch_size}, "
-                "num_gpus={cfg.training.num_gpus}"
-            )
-        train_batch_size = int(cfg.training.train_batch_size / cfg.training.num_gpus)
-        val_batch_size = int(cfg.training.val_batch_size / cfg.training.num_gpus)
+    # Divide config batch_size by num_gpus to maintain the same effective batch
+    # size in a multi-gpu setting.
+    train_batch_size = int(
+        np.ceil(cfg.training.train_batch_size / cfg.training.num_gpus)
+    )
+    val_batch_size = int(np.ceil(cfg.training.val_batch_size / cfg.training.num_gpus))
 
+    semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
+    if not semi_supervised:        
         data_module = BaseDataModule(
             dataset=dataset,
             train_batch_size=train_batch_size,
@@ -176,29 +166,49 @@ def get_data_module(
             torch_seed=cfg.training.rng_seed_data_pt,
         )
     else:
-        if cfg.model.model_type == "heatmap_mhcrnn" and cfg.dali.context.train.batch_size < 5:
+        # Divide config batch_size by num_gpus to maintain the same effective batch
+        # size in a multi-gpu setting.
+        base_sequence_length = int(
+            np.ceil(cfg.dali.base.train.sequence_length / cfg.training.num_gpus)
+        )
+        # Maintain effective context batch size in num_gpus adjustment,
+        # otherwise the effective context batch size will be too small due to the 
+        # 2 context frames on each side of center.
+        _effective_context_batch_size = max(cfg.dali.context.train.batch_size - 4, 0)
+        # Each GPU should get the effective batch size / num_gpus, + 4 for context frames.
+        context_batch_size = int(
+            np.ceil(_effective_context_batch_size / cfg.training.num_gpus + 4)
+        )
+
+        if cfg.model.model_type == "heatmap_mhcrnn" and context_batch_size < 5:
             raise ValidationError(
-                "cfg.dali.context.train.batch_size must be >=5 for semi-supervised context models"
+                f"dali.context.train.batch_size must be >= 5 * num_gpus for "
+                "semi-supervised context models. "
+                "Found {cfg.dali.context.train.batch_size}"
             )
-        if cfg.training.num_gpus > 1:
-            raise ValidationError(
-                "Detected num_gpus > 1 and losses != null. "
-                "Multi-gpu not yet supported for unsupervised losses."
-            )
+
+        dali_config = OmegaConf.merge(
+            cfg.dali,
+            {
+                "base": {"train": {"sequence_length": base_sequence_length}},
+                "context": {"train": {"batch_size": context_batch_size}},
+            },
+        )
+
         view_names = cfg.data.get("view_names", None)
         view_names = list(view_names) if view_names is not None else None
         data_module = UnlabeledDataModule(
             dataset=dataset,
             video_paths_list=video_dir,
             view_names=view_names,
-            train_batch_size=cfg.training.train_batch_size,
-            val_batch_size=cfg.training.val_batch_size,
+            train_batch_size=train_batch_size,
+            val_batch_size=val_batch_size,
             test_batch_size=cfg.training.test_batch_size,
             num_workers=cfg.training.num_workers,
             train_probability=cfg.training.train_prob,
             val_probability=cfg.training.val_prob,
             train_frames=cfg.training.train_frames,
-            dali_config=cfg.dali,
+            dali_config=dali_config,
             torch_seed=cfg.training.rng_seed_data_pt,
             imgaug=cfg.training.get("imgaug", "default"),
         )

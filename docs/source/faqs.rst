@@ -73,7 +73,7 @@ FAQs
     There are a few techniques available to reduce the memory consumption:
     
     * Reduce ``train_batch_size``. Memory usage is directly proportional to batch size.
-    * Enable multi-GPU training (only supported for supervised training) using ``num_gpus``.
+    * Enable :ref:`multi-GPU training <multi_gpu_training>` using ``num_gpus``.
     * Reduce image resolution using ``image_resize_dims``.
     * Enable gradient accumulation using ``accumulate_grad_batches``. This parameter is not included
       in the config by default and should be added manually to the ``training`` section.

@@ -15,8 +15,8 @@ from typing_extensions import Literal
 from lightning_pose.data.utils import (
     HeatmapLabeledBatchDict,
     MultiviewHeatmapLabeledBatchDict,
-    UnlabeledBatchDict,
     MultiviewUnlabeledBatchDict,
+    UnlabeledBatchDict,
     evaluate_heatmaps_at_location,
     undo_affine_transform_batch,
 )
@@ -414,10 +414,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             lr_scheduler_params=lr_scheduler_params,
             **kwargs,
         )
-        if loss_factory_unsupervised:
-            self.loss_factory_unsup = loss_factory_unsupervised.to(self.device)
-        else:
-            self.loss_factory_unsup = None
+        self.loss_factory_unsup = loss_factory_unsupervised
 
         # this attribute will be modified by AnnealWeight callback during training
         # self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))

@@ -26,8 +26,6 @@ __all__ = [
     "MultiviewHeatmapDataset",
 ]
 
-_TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
 
 class BaseTrackingDataset(torch.utils.data.Dataset):
     """Base dataset that contains images and keypoints as (x, y) pairs."""

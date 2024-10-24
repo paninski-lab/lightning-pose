@@ -14,3 +14,4 @@ For each feature, we point out necessary modifications and useful information re
    context_frames
    multiview_fused
    multiview_separate
+   multi_gpu_training

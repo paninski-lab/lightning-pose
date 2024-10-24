@@ -13,8 +13,8 @@ from sklearn.utils.extmath import stable_cumsum, svd_flip
 from torchtyping import TensorType
 from typeguard import typechecked
 
-from lightning_pose.data.datasets import MultiviewHeatmapDataset
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
+from lightning_pose.data.datasets import MultiviewHeatmapDataset
 from lightning_pose.data.utils import DataExtractor
 from lightning_pose.losses.helpers import EmpiricalEpsilon, convert_dict_values_to_tensors
 
@@ -24,8 +24,6 @@ __all__ = [
     "ComponentChooser",
     "format_multiview_data_for_pca",
 ]
-
-_TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 class KeypointPCA(object):

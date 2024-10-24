@@ -8,8 +8,13 @@ import segment_anything
 import torch
 import torchvision
 
-from lightning_pose.models.base import BaseFeatureExtractor, convert_bbox_coords
+from lightning_pose.models.base import (
+    BaseFeatureExtractor,
+    convert_bbox_coords,
+    normalized_to_bbox,
+)
 
+# TODO: cleanup
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 BATCH_SIZE = 2
@@ -17,13 +22,12 @@ HEIGHTS = [128, 256, 384]  # standard numbers, not going to bigger images due to
 WIDTHS = [120, 246, 380]  # similar but not square
 RESNET_BACKBONES = ["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"]
 EFFICIENTNET_BACKBONES = ["efficientnet_b0", "efficientnet_b1", "efficientnet_b2"]
-VIT_BACKBONES = ["vit_b_sam"]  # "vit_h_sam" very large (2.6GB), takes too long to download/load
+VIT_BACKBONES = [
+    "vit_b_sam"
+]  # "vit_h_sam" very large (2.6GB), takes too long to download/load
 
 
 def test_normalized_to_bbox():
-
-    from lightning_pose.models.base import normalized_to_bbox
-
     # test when keypoints and bboxes are same size
     keypoints = torch.tensor([
         [[0.0, 0.0]],  # xy for 1 keypoint

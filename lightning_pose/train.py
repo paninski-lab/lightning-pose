@@ -2,14 +2,14 @@
 
 import os
 import random
+import sys
+import warnings
 
 import lightning.pytorch as pl
 import numpy as np
 import torch
 from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 from typeguard import typechecked
-import warnings
-import sys
 
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
 from lightning_pose.utils.io import (

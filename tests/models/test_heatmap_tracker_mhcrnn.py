@@ -34,7 +34,7 @@ def test_supervised_multiview_heatmap_mhcrnn(
     remove_logs,
     run_model_test,
 ):
-    """Test the initialization and training of a supervised heatmap model."""
+    """Test the initialization and training of a supervised heatmap mhcrnn model."""
 
     cfg_tmp = copy.deepcopy(cfg_multiview)
     cfg_tmp.model.model_type = "heatmap_mhcrnn"

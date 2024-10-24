@@ -3,7 +3,21 @@
 import numpy as np
 import pytest
 import torch
+from kornia.geometry.subpix import spatial_softmax2d
 
+from lightning_pose.data.utils import generate_heatmaps
+from lightning_pose.losses.losses import (
+    HeatmapJSLoss,
+    HeatmapKLLoss,
+    HeatmapMSELoss,
+    Loss,
+    PCALoss,
+    RegressionMSELoss,
+    RegressionRMSELoss,
+    TemporalLoss,
+    UnimodalLoss,
+    get_loss_classes,
+)
 from lightning_pose.utils.pca import format_multiview_data_for_pca
 
 stage = "train"
@@ -11,9 +25,6 @@ device = "cpu"
 
 
 def test_heatmap_mse_loss():
-
-    from lightning_pose.losses.losses import HeatmapMSELoss
-
     heatmap_mse_loss = HeatmapMSELoss()
 
     # when predictions equal targets, should return zero
@@ -44,10 +55,6 @@ def test_heatmap_mse_loss():
 
 
 def test_heatmap_kl_loss():
-
-    from lightning_pose.data.utils import generate_heatmaps
-    from lightning_pose.losses.losses import HeatmapKLLoss
-
     heatmap_loss = HeatmapKLLoss()
 
     m = 100  # max pixel
@@ -78,10 +85,6 @@ def test_heatmap_kl_loss():
 
 
 def test_heatmap_js_loss():
-
-    from lightning_pose.data.utils import generate_heatmaps
-    from lightning_pose.losses.losses import HeatmapJSLoss
-
     heatmap_loss = HeatmapJSLoss()
 
     m = 100  # max pixel
@@ -111,10 +114,9 @@ def test_heatmap_js_loss():
     assert loss2 > loss
 
 
-def test_pca_singleview_loss(cfg, base_data_module):
-
-    from lightning_pose.losses.losses import PCALoss
-
+# Tests should pass whether device is cpu or cuda.
+@pytest.mark.parametrize("device", ['cpu', f'cuda:{torch.cuda.current_device()}'])
+def test_pca_singleview_loss(cfg, base_data_module, device):
     pca_loss = PCALoss(
         loss_name="pca_singleview",
         components_to_keep=2,
@@ -126,7 +128,7 @@ def test_pca_singleview_loss(cfg, base_data_module):
     # ----------------------------
     # test pca loss on toy dataset
     # ----------------------------
-    keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets)
+    keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets, device=device)
     loss, logs = pca_loss(keypoints_pred, stage=stage)
     assert loss.shape == torch.Size([])
     assert loss > 0.0
@@ -136,10 +138,9 @@ def test_pca_singleview_loss(cfg, base_data_module):
     assert logs[1]["value"] == pca_loss.weight
 
 
-def test_pca_multiview_loss(cfg, base_data_module):
-
-    from lightning_pose.losses.losses import PCALoss
-
+# Tests should pass whether device is cpu or cuda.
+@pytest.mark.parametrize("device", ['cpu', f'cuda:{torch.cuda.current_device()}'])
+def test_pca_multiview_loss(cfg, base_data_module, device):
     # raise exception when mirrored_column_matches arg is not provided
     with pytest.raises(ValueError):
         PCALoss(loss_name="pca_multiview", data_module=base_data_module)
@@ -155,7 +156,7 @@ def test_pca_multiview_loss(cfg, base_data_module):
     # ----------------------------
     # test pca loss on toy dataset
     # ----------------------------
-    keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets)
+    keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets, device=device)
     # shape = (batch_size, num_keypoints * 2)
     # this all happens in PCALoss.__call__() but keeping it since we want to look at pre reduction
     # loss
@@ -175,7 +176,7 @@ def test_pca_multiview_loss(cfg, base_data_module):
     )
 
     # draw some numbers again, and reshape within the class
-    keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets)
+    keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets, device=device)
 
     loss, logs = pca_loss(keypoints_pred, stage=stage)
 
@@ -224,13 +225,10 @@ def test_pca_multiview_loss(cfg, base_data_module):
 
 
 def test_temporal_loss():
-
-    from lightning_pose.losses.losses import TemporalLoss
-
     temporal_loss = TemporalLoss(epsilon=0.0)
 
     # make sure zero is returned for constant predictions (along dim 0)
-    predicted_keypoints = torch.ones(size=(12, 32), device=device)
+    predicted_keypoints = torch.ones(size=(12, 32))
     predicted_keypoints[:, 1] = 2
     predicted_keypoints[:, 2] = 4
     predicted_keypoints[:, 3] = 8
@@ -243,14 +241,14 @@ def test_temporal_loss():
     assert logs[1]["value"] == temporal_loss.weight
 
     # make sure non-negative scalar is returned
-    predicted_keypoints = torch.rand(size=(12, 32), device=device)
+    predicted_keypoints = torch.rand(size=(12, 32))
     loss, logs = temporal_loss(predicted_keypoints, stage=stage)
     assert loss.shape == torch.Size([])
     assert loss > 0.0
 
     # check against actual norm
     predicted_keypoints = torch.Tensor(
-        [[0.0, 0.0], [np.sqrt(2.0), np.sqrt(2.0)]], device=device
+        [[0.0, 0.0], [np.sqrt(2.0), np.sqrt(2.0)]]
     )
     loss, logs = temporal_loss(predicted_keypoints, stage=stage)
     assert loss.item() - 2 < 1e-6
@@ -259,7 +257,7 @@ def test_temporal_loss():
     s2 = np.sqrt(2.0)
     s3 = np.sqrt(3.0)
     predicted_keypoints = torch.Tensor(
-        [[0.0, 0.0], [s2, s2], [s3 + s2, s3 + s2]], device=device
+        [[0.0, 0.0], [s2, s2], [s3 + s2, s3 + s2]]
     )
     # [s2, s2] -> 2
     # [s3, s3] -> sqrt(6)
@@ -273,8 +271,6 @@ def test_temporal_loss():
 
 
 def test_temporal_loss_multi_epsilon_rectification():
-    from lightning_pose.losses.losses import TemporalLoss
-
     batch_size = 6
     temporal_loss = TemporalLoss(epsilon=[0.1, 0.0, 0.5])
     # define a fake batch of loss values
@@ -310,9 +306,6 @@ def test_temporal_loss_multi_epsilon_rectification():
 
 
 def test_unimodal_mse_loss():
-
-    from lightning_pose.losses.losses import UnimodalLoss
-
     img_size = 48
     img_size_ds = 32
     batch_size = 12
@@ -323,7 +316,7 @@ def test_unimodal_mse_loss():
         size=(batch_size, 2 * num_keypoints),
         device=device,
     )
-    confidences = torch.rand(size=(batch_size, num_keypoints), device=device)
+    confidences = torch.rand(size=(batch_size, num_keypoints))
 
     heatmaps_pred = torch.ones(
         size=(batch_size, num_keypoints, img_size_ds, img_size_ds),
@@ -351,11 +344,6 @@ def test_unimodal_mse_loss():
 
 
 def test_unimodal_kl_loss():
-
-    from kornia.geometry.subpix import spatial_softmax2d
-
-    from lightning_pose.losses.losses import UnimodalLoss
-
     img_size = 48
     img_size_ds = 32
     batch_size = 12
@@ -366,7 +354,7 @@ def test_unimodal_kl_loss():
         size=(batch_size, 2 * num_keypoints),
         device=device,
     )
-    confidences = torch.rand(size=(batch_size, num_keypoints), device=device)
+    confidences = torch.rand(size=(batch_size, num_keypoints))
 
     heatmaps_pred = spatial_softmax2d(
         torch.randn(
@@ -396,11 +384,6 @@ def test_unimodal_kl_loss():
 
 
 def test_unimodal_js_loss():
-
-    from kornia.geometry.subpix import spatial_softmax2d
-
-    from lightning_pose.losses.losses import UnimodalLoss
-
     img_size = 48
     img_size_ds = 32
     batch_size = 12
@@ -411,7 +394,7 @@ def test_unimodal_js_loss():
         size=(batch_size, 2 * num_keypoints),
         device=device,
     )
-    confidences = torch.rand(size=(batch_size, num_keypoints), device=device)
+    confidences = torch.rand(size=(batch_size, num_keypoints))
 
     heatmaps_pred = spatial_softmax2d(
         torch.randn(
@@ -441,14 +424,11 @@ def test_unimodal_js_loss():
 
 
 def test_regression_mse_loss():
-
-    from lightning_pose.losses.losses import RegressionMSELoss
-
     mse_loss = RegressionMSELoss()
 
     # when predictions equal targets, should return zero
-    true_keypoints = torch.ones(size=(12, 32), device=device)
-    predicted_keypoints = torch.ones(size=(12, 32), device=device)
+    true_keypoints = torch.ones(size=(12, 32))
+    predicted_keypoints = torch.ones(size=(12, 32))
     loss, logs = mse_loss(true_keypoints, predicted_keypoints, stage=stage)
     assert loss.shape == torch.Size([])
     assert loss == 0.0
@@ -458,23 +438,20 @@ def test_regression_mse_loss():
     assert logs[1]["value"] == mse_loss.weight
 
     # when predictions do not equal targets, should return positive value
-    true_keypoints = torch.rand(size=(12, 32), device=device)
-    predicted_keypoints = torch.rand(size=(12, 32), device=device)
+    true_keypoints = torch.rand(size=(12, 32))
+    predicted_keypoints = torch.rand(size=(12, 32))
     loss, logs = mse_loss(true_keypoints, predicted_keypoints, stage=stage)
     assert loss.shape == torch.Size([])
     assert loss > 0.0
 
 
 def test_regression_rmse_loss():
-
-    from lightning_pose.losses.losses import RegressionMSELoss, RegressionRMSELoss
-
     mse_loss = RegressionMSELoss(log_weight=np.log(0.5))  # set log_weight so weight=1
     rmse_loss = RegressionRMSELoss(log_weight=np.log(0.5))  # set log_weight so weight=1
 
     # when predictions equal targets, should return zero
-    true_keypoints = torch.ones(size=(12, 32), device=device)
-    predicted_keypoints = torch.ones(size=(12, 32), device=device)
+    true_keypoints = torch.ones(size=(12, 32))
+    predicted_keypoints = torch.ones(size=(12, 32))
     loss, logs = rmse_loss(true_keypoints, predicted_keypoints, stage=stage)
     assert loss.shape == torch.Size([])
     assert loss == 0.0
@@ -486,8 +463,8 @@ def test_regression_rmse_loss():
     # compute exact rmse from mse
     n = 4
     batch_size = 3
-    labels = 2 * torch.ones((batch_size, n), device=device)
-    preds = torch.zeros((batch_size, n), device=device)
+    labels = 2 * torch.ones((batch_size, n))
+    preds = torch.zeros((batch_size, n))
     true_rmse = 2.0
     mse, _ = mse_loss(labels, preds, stage=stage)
     rmse, _ = rmse_loss(labels, preds, stage=stage)
@@ -496,9 +473,6 @@ def test_regression_rmse_loss():
 
 
 def test_get_loss_classes():
-
-    from lightning_pose.losses.losses import Loss, get_loss_classes
-
     loss_classes = get_loss_classes()
     for loss_name, loss_class in loss_classes.items():
         assert issubclass(loss_class, Loss)

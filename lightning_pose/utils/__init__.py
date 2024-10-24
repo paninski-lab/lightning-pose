@@ -8,9 +8,6 @@ __all__ = [
 ]
 
 
-_TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
-
 def pretty_print_str(string: str, symbol: str = "-") -> None:
     str_length = len(string)
     print(symbol * str_length)
