@@ -70,6 +70,20 @@ def imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
             apply_prob_0,
             iaa.CoarseDropout(p=prct, size_percent=size_prct, per_channel=per_channel)
         ))
+        # coarse salt and pepper
+        # bright reflections can often confuse the model into thinking they are paws
+        # (which can also just be bright blobs) - so include some additional transforms that put
+        # bright blobs (and dark blobs) into the image
+        prct = 0.01  # probability of changing a pixel to salt/pepper noise
+        size_prct = (0.05, 0.1)  # drop pix on a low-res version of img that's `size_prct` of og
+        data_transform.append(iaa.Sometimes(
+            apply_prob_0,
+            iaa.CoarseSalt(p=prct, size_percent=size_prct),  # bigger chunks than coarse dropout
+        ))
+        data_transform.append(iaa.Sometimes(
+            apply_prob_0,
+            iaa.CoarsePepper(p=prct, size_percent=size_prct),
+        ))
         # elastic transform
         alpha = (0, 10)  # controls strength of displacement
         sigma = 5  # cotnrols smoothness of displacement
