@@ -736,7 +736,7 @@ def load_model_from_checkpoint(
 
 
 @typechecked
-def make_cmap(number_colors: int, cmap: str = "cool"):
+def make_cmap(number_colors: int, cmap: str):
     color_class = plt.cm.ScalarMappable(cmap=cmap)
     C = color_class.to_rgba(np.linspace(0, 1, number_colors))
     colors = (C[:, :3] * 255).astype(np.uint8)
@@ -750,7 +750,7 @@ def create_labeled_video(
     ys_arr: np.ndarray,
     mask_array: Optional[np.ndarray] = None,
     dotsize: int = 4,
-    colormap: str = "cool",
+    colormap: Optional[str] = "cool",
     fps: Optional[float] = None,
     filename: str = "movie.mp4",
     start_time: float = 0.0,

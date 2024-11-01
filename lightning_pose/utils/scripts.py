@@ -756,4 +756,5 @@ def export_predictions_and_labeled_video(
             ys_arr=ys_arr,
             mask_array=mask_array,
             filename=labeled_mp4_file,
+            colormap=cfg.eval.colormap
         )
