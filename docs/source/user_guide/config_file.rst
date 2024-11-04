@@ -8,7 +8,7 @@ Users interact with Lighting Pose through a single configuration file. This file
 directories, defines the type of models to fit, and specifies a wide range of hyperparameters.
 
 A template file can be found
-`here <https://github.com/danbider/lightning-pose/blob/main/scripts/configs/config_default.yaml>`_.
+`here <https://github.com/paninski-lab/lightning-pose/blob/main/scripts/configs/config_default.yaml>`_.
 When training a model on a new dataset, you must copy/paste this template onto your local machine
 and update the arguments to match your data.
 
@@ -24,14 +24,10 @@ The config file contains several sections:
 Data parameters
 ===============
 
-* ``data.image_orig_dims.height/width``: the current version of Lightning Pose requires all
-  training images to be the same size.
-  We are working on an updated version without this requirement.
-  However, if you plan to use the PCA losses (Pose PCA or multiview PCA) then all training images
-  **must** be the same size, otherwise the PCA subspace will erroneously contain variance related
-  to image size.
+All of these parameters except ``downsample_factor`` are dataset-specific and will need to be
+provided.
 
-* ``data.image_resize_dims.height/width``: images (and videos) will be resized to the specified
+* ``data.image_resize_dims.height/width`` (int): images (and videos) will be resized to the specified
   height and width before being processed by the network.
   Supported values are {64, 128, 256, 384, 512}.
   The height and width need not be identical.
@@ -39,26 +35,32 @@ Data parameters
   if the resized images are too small, you will lose resolution/details;
   if they are too large, the model takes longer to train and might not train as well.
 
-* ``data.data_dir/video_dir``: update these to reflect your local paths
+* ``data.data_dir/video_dir`` (str): update these to reflect your (absolute) local paths
 
-* ``data.num_keypoints``: the number of body parts.
+* ``data.csv_file`` (str): location of labels csv file; this should be relative to ``data_dir``
+
+* ``data.downsample_factor`` (int, default: 2): factor by which to downsample the heatmaps relative to ``image_resize_dims``
+
+* ``data.num_keypoints`` (int): the number of body parts.
   If using a mirrored setup, this should be the number of body parts summed across all views.
   If using a multiview setup, this number should indicate the number of keyponts per view
   (must be the same across all views).
 
-* ``data.keypoint_names``: keypoint names should reflect the actual names/order in the csv file.
+* ``data.keypoint_names`` (list): keypoint names should reflect the actual names/order in the csv file.
   This field is necessary if, for example, you are running inference on a machine that does not
   have the training data saved on it.
 
-* ``data.columns_for_singleview_pca``: see the :ref:`Pose PCA documentation <unsup_loss_pcasv>`
+* ``data.mirrored_column_matches`` (list): see the :ref:`Multiview PCA documentation <unsup_loss_pcamv>`
 
-* ``data.mirrored_column_matches``: see the :ref:`Multiview PCA documentation <unsup_loss_pcamv>`
+* ``data.columns_for_singleview_pca`` (list): see the :ref:`Pose PCA documentation <unsup_loss_pcasv>`
 
 
-Model/training parameters
-=========================
+Training parameters
+===================
 
-Below is a list of some commonly modified arguments related to model architecture/training.
+The following parameters relate to model training.
+Reasonable defaults are provided, though parameters like the batch sizes may need modification
+depending on the size of the data and the available compute resources.
 
 * ``training.train_batch_size``: batch size for labeled data
 

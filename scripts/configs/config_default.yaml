@@ -76,6 +76,9 @@ training:
     multisteplr:
       milestones: [150, 200, 250]
       gamma: 0.5
+  # how to treat missing hand labels; false to drop, true to force uniform heatmaps
+  # true will lead to better confidence values
+  uniform_heatmaps_for_nan_keypoints: true
 
 model:
   # list of unsupervised losses
