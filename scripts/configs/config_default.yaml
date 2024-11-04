@@ -168,6 +168,10 @@ eval:
   # set to null to skip automatic video prediction from train_hydra.py script
   # used in scripts/train_hydra.py and scripts/predict_new_vids.py
   test_videos_directory: null
+  # matplotlib sequential or diverging colormap name for prediction visualization
+  # sequential options: viridis, plasma, magma, inferno, cool, etc.
+  # diverging options: RdBu, coolwarm, Spectral, etc.
+  colormap: "cool"
   # confidence threshold for plotting a vid
   confidence_thresh_for_vid: 0.90
 
