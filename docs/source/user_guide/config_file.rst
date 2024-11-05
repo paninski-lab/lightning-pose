@@ -145,8 +145,14 @@ See the :ref:`FAQs <faq_oom>` for more information on memory management.
   rate; gamma: factor by which to multiply learning rate at each milestone
 
 * ``training.uniform_heatmaps_for_nan_keypoints`` (*bool, default: true*): how to treat missing
-  hand labels; false to drop, true to force uniform heatmaps. True will lead to better confidence
-  values, while false allows for incompletely labeled data.
+  hand labels.
+  Setting this to true will encourage the model to output uniform heatmaps for keypoints that do
+  not have ground truth labels; this will generally lead to low-confidence predictions when a
+  keypoint is occluded.
+  Setting this to false will drop missing keypoints from the loss computation rather than
+  encouraging uniform heatmaps. This generally leads to high confidence predictions even when a
+  keypoint is occulded. Using false may be preferrable if occulsions are brief in time and you want
+  the network to guess where the keypoint should be (rather than signaling uncertainty).
 
 * ``training.accumulate_grad_batches`` (*int, default: 1*): (experimental) number of batches to
   accumulate gradients for before updating weights. Simulates larger batch sizes with
