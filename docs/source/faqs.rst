@@ -63,6 +63,8 @@ FAQs
     Note that you can also run the ``ffmpeg`` command directly from the command line.
 
 
+.. _faq_oom:
+
 .. dropdown:: What if I encounter a CUDA out of memory error?
 
     Model training can be GPU-memory-intensive, particularly when using unsupervised losses, the
@@ -81,6 +83,7 @@ FAQs
     Each technique above has trade-offs. The right choice will be dependent on your individual situation.
 
     See :ref:`The configuration file <config_file>` section for more information about the above parameters.
+
 
 .. dropdown:: Why does the network produce high confidence values for keypoints even when they are occluded?
 
