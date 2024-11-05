@@ -151,7 +151,7 @@ See the :ref:`FAQs <faq_oom>` for more information on memory management.
   keypoint is occluded.
   Setting this to false will drop missing keypoints from the loss computation rather than
   encouraging uniform heatmaps. This generally leads to high confidence predictions even when a
-  keypoint is occulded. Using false may be preferrable if occulsions are brief in time and you want
+  keypoint is occluded. Using false may be preferrable if occulsions are brief in time and you want
   the network to guess where the keypoint should be (rather than signaling uncertainty).
 
 * ``training.accumulate_grad_batches`` (*int, default: 1*): (experimental) number of batches to
