@@ -27,9 +27,9 @@ data:
 
 training:
   # select from one of several predefined image/video augmentation pipelines
-  # default- resizing only
-  # dlc- imgaug pipeline implemented in DLC 2.0 package
-  # dlc-top-down- dlc augmentations plus vertical and horizontal flips
+  # default: resizing only
+  # dlc: imgaug pipeline implemented in DLC 2.0 package
+  # dlc-top-down: dlc augmentations plus vertical and horizontal flips
   imgaug: dlc
   # batch size of labeled data during training
   train_batch_size: 16
@@ -76,6 +76,9 @@ training:
     multisteplr:
       milestones: [150, 200, 250]
       gamma: 0.5
+  # how to treat missing hand labels; false to drop, true to force uniform heatmaps
+  # true will lead to better confidence values
+  uniform_heatmaps_for_nan_keypoints: true
 
 model:
   # list of unsupervised losses
@@ -145,35 +148,35 @@ losses:
     prob_threshold: 0.05
 
 eval:
-  # paths to the hydra config files in the output folder, OR absolute paths to such folders.
-  # used in scripts/predict_new_vids.py and scripts/create_fiftyone_dataset.py
-  hydra_paths: [" "]
   # predict? used in scripts/train_hydra.py
   predict_vids_after_training: true
-  # save labeled .mp4? used in scripts/train_hydra.py and scripts/predict_new_vids.py
-  save_vids_after_training: false
-  fiftyone:
-    # will be the name of the dataset (Mongo DB) created by FiftyOne. for video dataset, we will append dataset_name + "_video"
-    dataset_name: test
-    # if you want to manually provide a different model name to be displayed in FiftyOne
-    model_display_names: ["test_model"]
-    # whether to launch the app from the script (True), or from ipython (and have finer control over the outputs)
-    launch_app_from_script: false
-
-    remote: true # for LAI, must be False
-    address: 127.0.0.1 # ip to launch the app on.
-    port: 5151 # port to launch the app on.
-
   # str with an absolute path to a directory containing videos for prediction.
   # set to null to skip automatic video prediction from train_hydra.py script
   # used in scripts/train_hydra.py and scripts/predict_new_vids.py
   test_videos_directory: null
+  # save labeled .mp4? used in scripts/train_hydra.py and scripts/predict_new_vids.py
+  save_vids_after_training: false
   # matplotlib sequential or diverging colormap name for prediction visualization
   # sequential options: viridis, plasma, magma, inferno, cool, etc.
   # diverging options: RdBu, coolwarm, Spectral, etc.
   colormap: "cool"
   # confidence threshold for plotting a vid
   confidence_thresh_for_vid: 0.90
+
+  # paths to the hydra config files in the output folder, OR absolute paths to such folders.
+  # used in scripts/predict_new_vids.py and scripts/create_fiftyone_dataset.py
+  hydra_paths: [" "]
+
+  fiftyone:
+    # will be the name of the dataset (Mongo DB) created by FiftyOne
+    dataset_name: test
+    # if you want to manually provide a different model name to be displayed in FiftyOne
+    model_display_names: ["test_model"]
+    # whether to launch the app from the script (True), or from ipython (and have finer control over the outputs)
+    launch_app_from_script: false
+    remote: true # for LAI, must be False
+    address: 127.0.0.1 # ip to launch the app on.
+    port: 5151 # port to launch the app on.
 
 callbacks:
   anneal_weight:
