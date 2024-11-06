@@ -6,15 +6,15 @@ on:
   pull_request:
     types: [ready_for_review]
 jobs:
-  pytest-ubuntu-22.04:
+  pytest-ubuntu:
     # Ships with python 3.10. Using it saves time installing it.
-    runs-on: ubuntu-22.04
+    runs-on: linux-gpu
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
         run: |
-#         pip install -e ".[dev]"
+          pip install -e ".[dev]"
           pip install fiftyone-db-ubuntu2204
-#     - name: Test with pytest
-#       run: |
-#         pytest
+      - name: Test with pytest
+        run: |
+          pytest
