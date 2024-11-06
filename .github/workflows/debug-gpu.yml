@@ -1,0 +1,10 @@
+name: Run tests
+on: [push]
+jobs:
+  pytest-ubuntu:
+    # Ships with python 3.10. Using it saves time installing it.
+    runs-on: linux-gpu
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
