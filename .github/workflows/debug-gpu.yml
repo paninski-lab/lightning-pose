@@ -1,5 +1,4 @@
 name: Run tests
-
 on: [push]
 jobs:
   pytest-ubuntu:
