@@ -38,6 +38,7 @@ class KeypointPCA(object):
         mirrored_column_matches: Optional[Union[ListConfig, List]] = None,
         columns_for_singleview_pca: Optional[Union[ListConfig, List]] = None,
         device: Union[Literal["cuda", "cpu"], torch.device] = "cpu",
+        centering_method: Optional[Literal["mean", "median"]] = None,
     ) -> None:
         self.loss_type = loss_type
         self.data_module = data_module
@@ -61,6 +62,7 @@ class KeypointPCA(object):
         self.columns_for_singleview_pca = columns_for_singleview_pca
         self.pca_object = None
         self.device = device
+        self.centering_method = centering_method
 
     def _get_data(self) -> None:
         self.data_arr, _ = DataExtractor(
@@ -88,14 +90,27 @@ class KeypointPCA(object):
         TensorType["num_original_samples", "num_original_dims"],
     ]:
         # original shape = (batch, 2 * num_keypoints)
+        # reshape to (batch, num_keypoints, 2) to easily select columns
+        ## [1,2,3,4]
+        ## [[1,2]],[3,4]]
+        data_arr = data_arr.reshape(data_arr.shape[0], data_arr.shape[1] // 2, 2)
         # optionally choose a subset of the keypoints for the singleview pca
         if self.columns_for_singleview_pca is not None:
-            # reshape to (batch, num_keypoints, 2) to easily select columns
-            data_arr = data_arr.reshape(data_arr.shape[0], data_arr.shape[1] // 2, 2)
-            # select columns
             data_arr = data_arr[:, np.array(self.columns_for_singleview_pca), :]
-            # reshape back to (batch, num_selected_keypoints * 2)
-            data_arr = data_arr.reshape(data_arr.shape[0], data_arr.shape[1] * 2)
+
+        if self.centering_method is not None:
+            if self.centering_method == "mean":
+                center = data_arr.mean(dim=1, keepdim=True)
+            elif self.centering_method == "median":
+                # When there are an even # of keypoints, Tensor.quantile averages
+                # while Tensor.median is non-deterministic.
+                center = data_arr.quantile(dim=1, q=0.5, keepdim=True)
+            else:
+                raise NotImplementedError(f"centering_method: {self.centering_method}")
+            data_arr = data_arr - center
+
+        # reshape back to (batch, num_selected_keypoints * 2)
+        data_arr = data_arr.reshape(data_arr.shape[0], data_arr.shape[1] * 2)
         return data_arr
 
     def _format_data(

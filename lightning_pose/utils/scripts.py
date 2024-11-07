@@ -677,6 +677,7 @@ def compute_metrics_single(
             empirical_epsilon_percentile=cfg.losses.pca_singleview.get(
                 "empirical_epsilon_percentile", 1.0),
             columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
+            centering_method=cfg.losses.pca_singleview.get("centering_method", None),
         )
         # re-fit pca on the labeled data to get params
         pca()

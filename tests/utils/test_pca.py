@@ -78,6 +78,76 @@ def test_pca_keypoint_class_singleview(cfg, base_data_module_combined):
     assert err.shape == (n_batches, 14)
 
 
+def test_pca_keypoint_class_median_centering(cfg, base_data_module_combined):
+    # initialize an instance
+    kp_pca = KeypointPCA(
+        loss_type="pca_singleview",
+        data_module=base_data_module_combined,
+        components_to_keep=0.99,
+        empirical_epsilon_percentile=1.0,
+        columns_for_singleview_pca=[0, 1, 2],
+        centering_method="median",
+    )
+
+    fmt_data_arr = kp_pca._format_data(
+        data_arr=torch.tensor(
+            [
+                [0, 1, 1, 2, 2, 3],  # Median of 1,2
+                [2, -100, 3, 4, 4, 100],  # Median of 3,4
+                [12, -90, 13, 14, 14, 110],  # 2nd vec translated by +(10,10)
+            ],
+            dtype=torch.float32,
+        )
+    )
+
+    assert torch.equal(
+        fmt_data_arr,
+        torch.tensor(
+            [
+                [-1, -1, 0, 0, 1, 1],
+                [-1, -104, 0, 0, 1, 96],
+                [-1, -104, 0, 0, 1, 96],
+            ],
+            dtype=torch.float32,
+        ),
+    )
+
+
+def test_pca_keypoint_class_mean_centering(cfg, base_data_module_combined):
+    # initialize an instance
+    kp_pca = KeypointPCA(
+        loss_type="pca_singleview",
+        data_module=base_data_module_combined,
+        components_to_keep=0.99,
+        empirical_epsilon_percentile=1.0,
+        columns_for_singleview_pca=[0, 1, 2],
+        centering_method="mean",
+    )
+
+    fmt_data_arr = kp_pca._format_data(
+        data_arr=torch.tensor(
+            [
+                [0, 1, 1, 2, 2, 3],  # Mean of 1,2
+                [2, -100, 3, 6, 4, 100],  # Mean of 3, 2
+                [12, -90, 13, 16, 14, 110],  # 2nd vec translated by +(10,10)
+            ],
+            dtype=torch.float32,
+        )
+    )
+
+    assert torch.equal(
+        fmt_data_arr,
+        torch.tensor(
+            [
+                [-1, -1, 0, 0, 1, 1],
+                [-1, -102, 0, 4, 1, 98],
+                [-1, -102, 0, 4, 1, 98],
+            ],
+            dtype=torch.float32,
+        ),
+    )
+
+
 def test_pca_keypoint_class_multiview(
     cfg,
     base_data_module_combined,

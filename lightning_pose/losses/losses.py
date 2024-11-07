@@ -284,6 +284,7 @@ class PCALoss(Loss):
         data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
         log_weight: float = 0.0,
         device: Union[Literal["cuda", "cpu"], torch.device] = _DEFAULT_TORCH_DEVICE,
+        centering_method: Optional[Literal["mean", "median"]] = None,
         **kwargs,
     ) -> None:
         super().__init__(data_module=data_module, log_weight=log_weight)
@@ -310,6 +311,7 @@ class PCALoss(Loss):
             mirrored_column_matches=mirrored_column_matches,
             columns_for_singleview_pca=columns_for_singleview_pca,
             device=device,
+            centering_method=centering_method,
         )
         # compute all the parameters needed for the loss
         self.pca()
