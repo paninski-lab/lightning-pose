@@ -493,7 +493,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         )
 
 
-def _get_context_img_paths(center_img_path):
+def _get_context_img_paths(center_img_path: Path) -> list[Path]:
     """Given the path to a center image frame, return paths of 5 context frames
     (n-2, n-1, n, n+1, n+2).
 
