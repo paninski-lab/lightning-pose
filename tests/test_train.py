@@ -25,8 +25,6 @@ def _test_cfg(cfg):
     pwd = os.getcwd()
     # copy config and update paths
     cfg_tmp = copy.deepcopy(cfg)
-    cfg_tmp.data.data_dir = os.path.join(pwd, cfg_tmp.data.data_dir)
-    cfg_tmp.data.video_dir = os.path.join(cfg_tmp.data.data_dir, "videos")
     cfg_tmp.eval.test_videos_directory = cfg_tmp.data.video_dir
 
     # don't train for long
