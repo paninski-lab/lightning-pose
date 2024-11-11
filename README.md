@@ -4,6 +4,8 @@
 ![GitHub](https://img.shields.io/github/license/danbider/lightning-pose)
 [![Documentation Status](https://readthedocs.org/projects/lightning-pose/badge/?version=latest)](https://lightning-pose.readthedocs.io/en/latest/?badge=latest)
 ![PyPI](https://img.shields.io/pypi/v/lightning-pose)
+![PyPI Downloads](https://static.pepy.tech/badge/lightning-pose/week)
+
 
 Pose estimation models implemented in **Pytorch Lightning**, supporting massively accelerated training on _unlabeled_ videos using **NVIDIA DALI**. 
 Models can be evaluated with **TensorBoard**, **FiftyOne**, and **Streamlit**.
