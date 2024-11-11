@@ -1,6 +1,8 @@
 """Dataset objects store images, labels, and functions for manipulation."""
 
 import os
+import re
+from pathlib import Path
 from typing import Callable, List, Literal, Optional, Tuple, Union
 
 import numpy as np
@@ -37,7 +39,6 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         header_rows: Optional[List[int]] = [0, 1, 2],
         imgaug_transform: Optional[Callable] = None,
         do_context: bool = False,
-        delimiter: str = "img"
     ) -> None:
         """Initialize a dataset for regression (rather than heatmap) models.
 
@@ -60,12 +61,11 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             do_context: include additional frames of context if possible.
 
         """
-        self.root_directory = root_directory
+        self.root_directory = Path(root_directory)
         self.csv_path = csv_path
         self.header_rows = header_rows
         self.imgaug_transform = imgaug_transform
         self.do_context = do_context
-        self.delimiter = delimiter
 
         # load csv data
         if os.path.isfile(csv_path):
@@ -111,12 +111,11 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx: int) -> BaseLabeledExampleDict:
         img_name = self.image_names[idx]
         keypoints_on_image = self.keypoints[idx]
-
+        img_path = self.root_directory / img_name
         if not self.do_context:
             # read image from file and apply transformations (if any)
-            file_name = os.path.join(self.root_directory, img_name)
             # if 1 color channel, change to 3.
-            image = Image.open(file_name).convert("RGB")
+            image = Image.open(img_path).convert("RGB")
             if self.imgaug_transform is not None:
                 transformed_images, transformed_keypoints = self.imgaug_transform(
                     images=np.expand_dims(image, axis=0),
@@ -132,41 +131,16 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             transformed_images = self.pytorch_transform(transformed_images)
 
         else:
-            # get index of the image
-            # idx_img = img_name.split("/")[-1].replace("img", "")
-            idx_img_basename = os.path.basename(img_name)
-            idx_img_basename_delimated = idx_img_basename.split(self.delimiter)[-1]
-            # image_format = idx_img.split('.')[-1]
-            idx_img_str = idx_img_basename_delimated.split('.')[0]
-            # figure out length of integer
-            idx_img = int(idx_img_str)
-            int_len = len(idx_img_str)
-            # get the frames -> t-2, t-1, t, t+1, t + 2
-            list_idx = [idx_img - 2, idx_img - 1, idx_img, idx_img + 1, idx_img + 2]
-            list_img_names = []
-            for fr_num in list_idx:
-                # replace frame number with 0 if we're at the beginning of the video
-                fr_num = max(0, fr_num)
-                # split name into pieces
-                img_pieces = img_name.split("/")
-                # replace original frame number with context frame number
-                fr_num = str(fr_num)
-                if len(fr_num) > int_len:
-                    fr_num = fr_num.zfill(int_len + 1)
-                else:
-                    fr_num = fr_num.zfill(int_len)
-                img_pieces[-1] = img_pieces[-1].replace(idx_img_str, fr_num)
-                list_img_names.append("/".join(img_pieces))
+            context_img_paths = _get_context_img_paths(img_path)
             # read the images from image list to create dataset
             images = []
-            for name in list_img_names:
+            for path in context_img_paths:
                 # read image from file and apply transformations (if any)
-                file_name = os.path.join(self.root_directory, name)
-                if not os.path.exists(file_name):
+                if not path.exists():
                     # revert to center frame
-                    file_name = os.path.join(self.root_directory, list_img_names[2])
+                    path = context_img_paths[2]
                 # if 1 color channel, change to 3.
-                image = Image.open(file_name).convert("RGB")
+                image = Image.open(path).convert("RGB")
                 images.append(np.asarray(image))
 
             # apply data aug pipeline
@@ -223,7 +197,6 @@ class HeatmapDataset(BaseTrackingDataset):
         downsample_factor: Literal[1, 2, 3] = 2,
         do_context: bool = False,
         uniform_heatmaps: bool = False,
-        delimiter: str = "img"
     ) -> None:
         """Initialize the Heatmap Dataset.
 
@@ -246,7 +219,6 @@ class HeatmapDataset(BaseTrackingDataset):
             header_rows=header_rows,
             imgaug_transform=imgaug_transform,
             do_context=do_context,
-            delimiter=delimiter
         )
 
         if self.height % 128 != 0 or self.height % 128 != 0:
@@ -342,7 +314,6 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         uniform_heatmaps: bool = False,
         do_context: bool = False,
         imgaug_transform: Optional[Callable] = None,
-        delimiter: str = "img"
     ) -> None:
         """Initialize the MultiViewHeatmap Dataset.
 
@@ -368,7 +339,6 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         self.root_directory = root_directory
         self.csv_paths = csv_paths
         self.do_context = do_context
-        self.delimiter = delimiter
 
         self.imgaug_transform = imgaug_transform
         self.downsample_factor = downsample_factor
@@ -385,7 +355,6 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 downsample_factor=downsample_factor,
                 do_context=do_context,
                 uniform_heatmaps=uniform_heatmaps,
-                delimiter=self.delimiter
             )
             self.keypoint_names[view] = self.dataset[view].keypoint_names
             self.data_length[view] = len(self.dataset[view])
@@ -408,11 +377,6 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         HeatmapDataset. Include a check to make sure that the image names
         are the same across all views, so that when it loads element n from
         each individual view we know these are properly matched.
-
-        Args:
-
-            delimiter: for spliting the file name string to get the frame number and format.
-
         """
         # check if all CSV files have the same number of rows
         if len(set(list(self.data_length.values()))) != 1:
@@ -427,12 +391,14 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         self.data_length = list(self.data_length.values())[0]
         for idx in range(self.data_length):
-            img_name_buff = []
+            img_file_names = set()
             for view, heatmaps in self.dataset.items():
-                img_name_buff.append(heatmaps.image_names[idx].split(self.delimiter)[-1])
-                if len(set(img_name_buff)) != 1:
-                    raise ImportError(f"Discrepancy in images names across CSV \
-                                      files! index:{idx}, image frame names:{img_name_buff}")
+                img_file_names.add(Path(heatmaps.image_names[idx]).name)
+                if len(img_file_names) > 1:
+                    raise ImportError(
+                        f"Discrepancy in image file names across CSV files! "
+                        "index:{idx}, image file names:{img_file_names}"
+                    )
 
     @property
     def height(self) -> int:
@@ -525,3 +491,35 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             concat_order=concat_order,  # List[str]
             view_names=self.view_names,  # List[str]
         )
+
+
+def _get_context_img_paths(center_img_path: Path) -> list[Path]:
+    """Given the path to a center image frame, return paths of 5 context frames
+    (n-2, n-1, n, n+1, n+2).
+
+    Negative indices are floored at 0.
+    """
+    match = re.search(r"(\d+)", center_img_path.stem)
+    assert (
+        match is not None
+    ), f"No frame index in filename, can't get context frames: {center_img_path.name}"
+
+    center_index_string = match.group()
+    center_index = int(center_index_string)
+
+    context_img_paths = []
+    for index in range(
+        center_index - 2, center_index + 3
+    ):  # End at n+3 exclusive, n+2 inclusive.
+        # Negative indices are floored at 0.
+        index = max(index, 0)
+
+        # Add leading zeros to match center_index_string length.
+        index_string = str(index).zfill(len(center_index_string))
+
+        stem = center_img_path.stem.replace(center_index_string, index_string)
+        path = center_img_path.with_stem(stem)
+
+        context_img_paths.append(path)
+
+    return context_img_paths
