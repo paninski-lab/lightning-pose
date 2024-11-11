@@ -3,10 +3,12 @@ data:
   image_resize_dims:
     width: 256
     height: 256
-  # ABSOLUTE path to data directory. the below is just a toy example for running Getting Started scripts
-  data_dir: data/mirror-mouse-example
-  # ABSOLUTE path to unlabeled videos' directory. the below is just a toy example for running Getting Started scripts
-  video_dir: videos
+  # ABSOLUTE path to data directory.
+  #   Demo data resides in the git repo. LP_ROOT_PATH resolves to the absolute
+  #   path of the lightning-pose git repo.
+  data_dir: ${LP_ROOT_PATH:}/data/mirror-mouse-example
+  # ABSOLUTE path to unlabeled videos' directory.
+  video_dir: ${data.data_dir}/videos
   # location of labels; for example script, this should be relative to `data_dir`
   csv_file: CollectedData.csv
   # downsample heatmaps: 2 | 3
@@ -191,8 +193,7 @@ eval:
     address: 127.0.0.1 # ip to launch the app on.
     port: 5151 # port to launch the app on.
   # str with an absolute path to a directory containing videos for prediction.
-  # (it's not absolute just for the toy example)
-  test_videos_directory: data/mirror-mouse-example/videos
+  test_videos_directory: ${data.video_dir}
   # confidence threshold for plotting a vid
   confidence_thresh_for_vid: 0.9
 

@@ -25,8 +25,6 @@ def _test_cfg(cfg):
     pwd = os.getcwd()
     # copy config and update paths
     cfg_tmp = copy.deepcopy(cfg)
-    cfg_tmp.data.data_dir = os.path.join(pwd, cfg_tmp.data.data_dir)
-    cfg_tmp.data.video_dir = os.path.join(cfg_tmp.data.data_dir, "videos")
     cfg_tmp.eval.test_videos_directory = cfg_tmp.data.video_dir
 
     # don't train for long
@@ -104,7 +102,7 @@ def test_train_multiview(cfg_multiview, tmp_path):
 # https://github.com/Lightning-AI/pytorch-lightning/issues/4397#issuecomment-722743582
 # Our multi-GPU tests currently just ensure the train script finishes with status code 0.
 def _execute_multi_gpu_test(cfg, tmp_path, pytestconfig):
-    # set output directory to {tmp_path}/output. Hydra will chdir to here.
+    # set output directory to {tmp_path}/output.
     cfg = OmegaConf.merge(
         cfg, OmegaConf.create({"hydra": {"run": {"dir": tmp_path / "output"}}})
     )
@@ -116,12 +114,10 @@ def _execute_multi_gpu_test(cfg, tmp_path, pytestconfig):
     process = subprocess.run(
         [
             "python",
-            os.path.join("scripts", "train_hydra.py"),
+            pytestconfig.rootpath / "scripts" / "train_hydra.py",
             f"--config-path={tmp_path}",
             f"--config-name=config",
         ],
-        # We need to run this from the lightning-pose package root.
-        cwd=pytestconfig.rootpath,
     )
     assert process.returncode == 0
 

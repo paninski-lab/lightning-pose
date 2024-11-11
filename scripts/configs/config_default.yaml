@@ -4,9 +4,9 @@ data:
     height: null
     width: null
   # ABSOLUTE path to data directory
-  data_dir: null
+  data_dir: /replace/with/your/path
   # ABSOLUTE path to unlabeled videos' directory
-  video_dir: null
+  video_dir: /replace/with/your/path
   # location of labels; this should be relative to `data_dir`
   csv_file: CollectedData.csv
   # downsample heatmaps - 2 | 3
@@ -151,9 +151,7 @@ eval:
   # predict? used in scripts/train_hydra.py
   predict_vids_after_training: true
   # str with an absolute path to a directory containing videos for prediction.
-  # set to null to skip automatic video prediction from train_hydra.py script
-  # used in scripts/train_hydra.py and scripts/predict_new_vids.py
-  test_videos_directory: null
+  test_videos_directory: ${data.video_dir}
   # save labeled .mp4? used in scripts/train_hydra.py and scripts/predict_new_vids.py
   save_vids_after_training: false
   # matplotlib sequential or diverging colormap name for prediction visualization

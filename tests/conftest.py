@@ -83,7 +83,7 @@ def cfg_multiview() -> dict:
     cfg.training.imgaug = "dlc"
     cfg.dali.base.train.sequence_length = 6
     cfg.dali.base.predict.sequence_length = 16
-    cfg.data.data_dir = "data/mirror-mouse-example_split"
+    cfg.data.data_dir = "${LP_ROOT_PATH:}/data/mirror-mouse-example_split"
     cfg.data.csv_file = ["top.csv", "bot.csv"]
     cfg.data.view_names = ["bot", "top"]
     cfg.data.num_keypoints = 7
