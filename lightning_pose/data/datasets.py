@@ -1,5 +1,7 @@
 """Dataset objects store images, labels, and functions for manipulation."""
 
+from __future__ import annotations  # python 3.8 compatibility for sphinx
+
 import os
 import re
 from pathlib import Path
