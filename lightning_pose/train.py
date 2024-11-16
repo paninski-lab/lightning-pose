@@ -1,5 +1,5 @@
 """Example model training function."""
-
+import copy
 import os
 import random
 import shutil
@@ -19,7 +19,7 @@ from lightning_pose.utils.io import (
     return_absolute_data_paths,
     return_absolute_path,
 )
-from lightning_pose.utils.predictions import predict_dataset
+from lightning_pose.utils.predictions import load_model_from_checkpoint, predict_dataset
 from lightning_pose.utils.scripts import (
     calculate_train_batches,
     compute_metrics,
@@ -176,7 +176,7 @@ def train(cfg: DictConfig) -> None:
 
     # make unaugmented data_loader if necessary
     if cfg.training.imgaug != "default":
-        cfg_pred = cfg.copy()
+        cfg_pred = copy.deepcopy(cfg)
         cfg_pred.training.imgaug = "default"
         imgaug_transform_pred = get_imgaug_transform(cfg=cfg_pred)
         dataset_pred = get_dataset(
@@ -186,6 +186,13 @@ def train(cfg: DictConfig) -> None:
         data_module_pred.setup()
     else:
         data_module_pred = data_module
+
+    model = load_model_from_checkpoint(
+        cfg=cfg,
+        ckpt_file=best_ckpt,
+        eval=True,
+        data_module=data_module_pred,
+    )
 
     # ----------------------------------------------------------------------------------
     # predict on all labeled frames (train/val/test)
@@ -200,7 +207,6 @@ def train(cfg: DictConfig) -> None:
         trainer=trainer,
         model=model,
         data_module=data_module_pred,
-        ckpt_file=best_ckpt,
         preds_file=preds_file,
     )
     # compute and save various metrics
@@ -244,7 +250,6 @@ def train(cfg: DictConfig) -> None:
             export_predictions_and_labeled_video(
                 video_file=video_file,
                 cfg=cfg,
-                ckpt_file=best_ckpt,
                 prediction_csv_file=prediction_csv_file,
                 labeled_mp4_file=labeled_mp4_file,
                 trainer=trainer,
@@ -299,7 +304,6 @@ def train(cfg: DictConfig) -> None:
             trainer=trainer,
             model=model,
             data_module=data_module_ood,
-            ckpt_file=best_ckpt,
             preds_file=preds_file_ood,
         )
         # compute and save various metrics
