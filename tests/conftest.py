@@ -97,8 +97,7 @@ def cfg_multiview() -> dict:
     return cfg
 
 
-def make_multiview_dataset() -> None:
-
+def create_multiview_dataset_if_not_exists() -> None:
     # create multiview dataset
     repo_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
     base_dir = os.path.join(repo_dir, TOY_DATA_ROOT_DIR)
@@ -238,7 +237,6 @@ def heatmap_dataset(cfg, imgaug_transform) -> HeatmapDataset:
 @pytest.fixture
 def multiview_heatmap_dataset(cfg_multiview, imgaug_transform) -> MultiviewHeatmapDataset:
     """Create a dataset for heatmap models from toy data."""
-    make_multiview_dataset()
     # setup
     cfg_tmp = copy.deepcopy(cfg_multiview)
     cfg_tmp.model.model_type = "heatmap"
@@ -604,3 +602,6 @@ def run_model_test() -> Callable:
             remove_logs_fn()
 
     return _run_model_test
+
+
+create_multiview_dataset_if_not_exists()
