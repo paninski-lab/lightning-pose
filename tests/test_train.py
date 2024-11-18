@@ -54,6 +54,7 @@ def test_train_singleview(cfg, tmp_path):
 
     # ensure labeled data was properly processed
     assert (tmp_path / "config.yaml").is_file()
+    assert (tmp_path / "CollectedData.csv").is_file()
     assert (tmp_path / "predictions.csv").is_file()
     assert (tmp_path / "predictions_pca_multiview_error.csv").is_file()
     assert (tmp_path / "predictions_pca_singleview_error.csv").is_file()
@@ -80,6 +81,8 @@ def test_train_multiview(cfg_multiview, tmp_path):
         train(cfg)
 
     assert (tmp_path / "config.yaml").is_file()
+    assert (tmp_path / "top.csv").is_file()
+    assert (tmp_path / "bot.csv").is_file()
 
     for view in ["top", "bot"]:
         # ensure labeled data was properly processed
