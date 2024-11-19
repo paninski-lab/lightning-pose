@@ -44,7 +44,7 @@ def _test_cfg(cfg):
     return cfg_tmp
 
 
-def test_train(cfg, tmp_path):
+def test_train_singleview(cfg, tmp_path):
     cfg = _test_cfg(cfg)
 
     # temporarily change working directory to temp output directory
@@ -53,20 +53,21 @@ def test_train(cfg, tmp_path):
         train(cfg)
 
     # ensure labeled data was properly processed
-    assert (tmp_path / "config.yaml").is_file
-    assert (tmp_path / "predictions.csv").is_file
-    assert (tmp_path / "predictions_pca_multiview_error.csv").is_file
-    assert (tmp_path / "predictions_pca_singleview_error.csv").is_file
-    assert (tmp_path / "predictions_pixel_error.csv").is_file
+    assert (tmp_path / "config.yaml").is_file()
+    assert (tmp_path / "CollectedData.csv").is_file()
+    assert (tmp_path / "predictions.csv").is_file()
+    assert (tmp_path / "predictions_pca_multiview_error.csv").is_file()
+    assert (tmp_path / "predictions_pca_singleview_error.csv").is_file()
+    assert (tmp_path / "predictions_pixel_error.csv").is_file()
 
     # ensure video data was properly processed
-    assert (tmp_path / "video_preds" / "test_vid.csv").is_file
-    assert (tmp_path / "video_preds" / "test_vid_pca_multiview_error.csv").is_file
-    assert (tmp_path / "video_preds" / "test_vid_pca_singleview_error.csv").is_file
-    assert (tmp_path / "video_preds" / "test_vid_temporal_norm.csv").is_file
+    assert (tmp_path / "video_preds" / "test_vid.csv").is_file()
+    assert (tmp_path / "video_preds" / "test_vid_pca_multiview_error.csv").is_file()
+    assert (tmp_path / "video_preds" / "test_vid_pca_singleview_error.csv").is_file()
+    assert (tmp_path / "video_preds" / "test_vid_temporal_norm.csv").is_file()
     assert (
         tmp_path / "video_preds" / "labeled_videos" / "test_vid_labeled.mp4"
-    ).is_file
+    ).is_file()
 
 
 def test_train_multiview(cfg_multiview, tmp_path):
@@ -79,23 +80,27 @@ def test_train_multiview(cfg_multiview, tmp_path):
         # train model
         train(cfg)
 
-    assert (tmp_path / "config.yaml").is_file
+    assert (tmp_path / "config.yaml").is_file()
+    assert (tmp_path / "top.csv").is_file()
+    assert (tmp_path / "bot.csv").is_file()
 
     for view in ["top", "bot"]:
         # ensure labeled data was properly processed
-        assert (tmp_path / f"predictions_{view}.csv").is_file
-        assert (tmp_path / f"predictions_{view}_pixel_error.csv").is_file
-        # assert (tmp_path / f"predictions_{view}_pca_multiview_error.csv").is_file
-        # assert (tmp_path / f"predictions_{view}_pca_singleview_error.csv").is_file
+        assert (tmp_path / f"predictions_{view}.csv").is_file()
+        assert (tmp_path / f"predictions_{view}_pixel_error.csv").is_file()
+        # assert (tmp_path / f"predictions_{view}_pca_multiview_error.csv").is_file()
+        # assert (tmp_path / f"predictions_{view}_pca_singleview_error.csv").is_file()
 
         # ensure video data was properly processed
-        assert (tmp_path / "video_preds" / f"test_vid_{view}.csv").is_file
-        assert (tmp_path / "video_preds" / f"test_vid_{view}_temporal_norm.csv").is_file
-        # assert (tmp_path / "video_preds", f"test_vid_{view}_pca_multiview_error.csv").is_file
-        # assert (tmp_path / "video_preds", f"test_vid_{view}_pca_singleview_error.csv").is_file
+        assert (tmp_path / "video_preds" / f"test_vid_{view}.csv").is_file()
+        assert (
+            tmp_path / "video_preds" / f"test_vid_{view}_temporal_norm.csv"
+        ).is_file()
+        # assert (tmp_path / "video_preds", f"test_vid_{view}_pca_multiview_error.csv").is_file()
+        # assert (tmp_path / "video_preds", f"test_vid_{view}_pca_singleview_error.csv").is_file()
         assert (
             tmp_path / "video_preds" / "labeled_videos" / f"test_vid_{view}_labeled.mp4"
-        ).is_file
+        ).is_file()
 
 
 # Multi-GPU tests must be run as their own scripts due to DDP.
