@@ -5,10 +5,15 @@ import gc
 import os
 
 import lightning.pytorch as pl
+import pytest
 import torch
 
+from lightning_pose.utils.predictions import (
+    export_predictions_and_labeled_video,
+    predict_dataset,
+    predict_single_video,
+)
 from lightning_pose.utils.scripts import get_loss_factories, get_model
-from lightning_pose.utils.predictions import predict_dataset, predict_single_video, export_predictions_and_labeled_video
 
 
 def test_predict_dataset(cfg, heatmap_data_module, remove_logs, tmpdir):
