@@ -11,6 +11,8 @@ from typeguard import typechecked
 
 from lightning_pose.utils.io import get_context_img_paths
 
+__all__ = ["generate_cropped_labeled_frames", "generate_cropped_video"]
+
 
 @typechecked
 def _calculate_bbox_size(

@@ -19,6 +19,7 @@ __all__ = [
     "return_absolute_data_paths",
     "get_videos_in_dir",
     "check_video_paths",
+    "get_context_img_paths",
 ]
 
 

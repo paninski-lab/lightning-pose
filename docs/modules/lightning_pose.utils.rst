@@ -3,6 +3,9 @@
 lightning\_pose.utils
 =====================
 
+.. automodapi:: lightning_pose.utils.cropzoom
+   :no-inheritance-diagram:
+
 .. automodapi:: lightning_pose.utils.fiftyone
    :no-inheritance-diagram:
 
