@@ -5,7 +5,7 @@ import subprocess
 
 import pytest
 import torch
-from omegaconf import OmegaConf
+from omegaconf import OmegaConf, open_dict
 
 from lightning_pose.train import train
 
@@ -68,6 +68,28 @@ def test_train_singleview(cfg, tmp_path):
     assert (
         tmp_path / "video_preds" / "labeled_videos" / "test_vid_labeled.mp4"
     ).is_file()
+
+
+def test_train_singleview_detector_outputs(cfg, tmp_path):
+    cfg = _test_cfg(cfg)
+    with open_dict(cfg):
+        cfg.detector = OmegaConf.create(
+            {"crop_ratio": 1.5, "anchor_keypoints": ["nose_top", "tailMid_bot"]}
+        )
+
+    # temporarily change working directory to temp output directory
+    with chdir(tmp_path):
+        # train model
+        train(cfg)
+
+    # ensure cropped images were properly processed
+    assert (tmp_path / "cropped_images" / "labeled-data" / "img00.png").is_file()
+    assert (tmp_path / "cropped_images" / "labeled-data" / "img92.png").is_file()
+    assert (tmp_path / "cropped_images" / "bbox.csv").is_file()
+
+    # ensure cropped videos were properly processed
+    assert (tmp_path / "cropped_videos" / "test_vid.mp4").is_file()
+    assert (tmp_path / "cropped_videos" / "test_vid_bbox.csv").is_file()
 
 
 def test_train_multiview(cfg_multiview, tmp_path):

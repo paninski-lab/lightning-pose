@@ -10,7 +10,6 @@ import lightning.pytorch as pl
 import numpy as np
 import pandas as pd
 import torch
-from moviepy.editor import VideoFileClip
 from omegaconf import DictConfig, OmegaConf
 from omegaconf.errors import ValidationError
 from typeguard import typechecked
@@ -46,7 +45,6 @@ from lightning_pose.utils.io import (
     return_absolute_path,
 )
 from lightning_pose.utils.pca import KeypointPCA
-from lightning_pose.utils.predictions import create_labeled_video, predict_single_video
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -58,7 +56,6 @@ __all__ = [
     "get_callbacks",
     "calculate_train_batches",
     "compute_metrics",
-    "export_predictions_and_labeled_video",
 ]
 
 
@@ -489,6 +486,7 @@ def get_callbacks(
         monitor="val_supervised_loss",
         mode="min",
         filename="{epoch}-{step}-best",
+        enable_version_counter=False,
     )
     callbacks.append(ckpt_best_callback)
 
@@ -498,6 +496,7 @@ def get_callbacks(
             monitor=None,
             every_n_epochs=ckpt_every_n_epochs,
             save_top_k=-1,
+            enable_version_counter=False,
         )
         callbacks.append(ckpt_callback)
 
@@ -708,52 +707,3 @@ def compute_metrics_single(
             pcamv_df["set"] = set
         save_file = preds_file.replace(".csv", "_pca_multiview_error.csv")
         pcamv_df.to_csv(save_file)
-
-
-@typechecked
-def export_predictions_and_labeled_video(
-    video_file: str,
-    cfg: DictConfig,
-    prediction_csv_file: str,
-    ckpt_file: Optional[str] = None,
-    trainer: Optional[pl.Trainer] = None,
-    model: Optional[ALLOWED_MODELS] = None,
-    data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
-    labeled_mp4_file: Optional[str] = None,
-    save_heatmaps: Optional[bool] = False,
-) -> None:
-    """Export predictions csv and a labeled video for a single video file."""
-
-    if ckpt_file is None and model is None:
-        raise ValueError("either 'ckpt_file' or 'model' must be passed")
-
-    # compute predictions
-    preds_df = predict_single_video(
-        video_file=video_file,
-        ckpt_file=ckpt_file,
-        cfg_file=cfg,
-        preds_file=prediction_csv_file,
-        trainer=trainer,
-        model=model,
-        data_module=data_module,
-        save_heatmaps=save_heatmaps,
-    )
-
-    # create labeled video
-    if labeled_mp4_file is not None:
-        os.makedirs(os.path.dirname(labeled_mp4_file), exist_ok=True)
-        # transform df to numpy array
-        keypoints_arr = np.reshape(preds_df.to_numpy(), [preds_df.shape[0], -1, 3])
-        xs_arr = keypoints_arr[:, :, 0]
-        ys_arr = keypoints_arr[:, :, 1]
-        mask_array = keypoints_arr[:, :, 2] > cfg.eval.confidence_thresh_for_vid
-        # video generation
-        video_clip = VideoFileClip(video_file)
-        create_labeled_video(
-            clip=video_clip,
-            xs_arr=xs_arr,
-            ys_arr=ys_arr,
-            mask_array=mask_array,
-            filename=labeled_mp4_file,
-            colormap=cfg.eval.get("colormap", "cool")
-        )
