@@ -1,6 +1,9 @@
 """Path handling functions."""
+from __future__ import annotations  # python 3.8 compatibility for sphinx
 
 import os
+import re
+from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
 import pandas as pd
@@ -11,7 +14,6 @@ from typeguard import typechecked
 __all__ = [
     "ckpt_path_from_base_path",
     "check_if_semi_supervised",
-    "load_label_csv_from_cfg",
     "get_keypoint_names",
     "return_absolute_path",
     "return_absolute_data_paths",
@@ -25,7 +27,6 @@ def ckpt_path_from_base_path(
     base_path: str,
     model_name: str,
     logging_dir_name: str = "tb_logs/",
-    version: int = 0,
 ) -> str:
     """Given a path to a hydra output with trained model, extract the model .ckpt file.
 
@@ -48,7 +49,7 @@ def ckpt_path_from_base_path(
         base_path,
         logging_dir_name,        # may change when we switch from Tensorboard
         model_name,              # get the name string of the model (determined pre-training)
-        "version_%i" % version,  # always version_0 because ptl starts a version_0 dir
+        "version_0",             # always version_0 because enable_version_counter=False
         "checkpoints",
         "*.ckpt",
     )
@@ -82,22 +83,6 @@ def check_if_semi_supervised(losses_to_use: Union[ListConfig, list, None] = None
     else:
         semi_supervised = True
     return semi_supervised
-
-
-@typechecked
-def load_label_csv_from_cfg(cfg: Union[DictConfig, dict]) -> pd.DataFrame:
-    """Helper function for easy loading.
-
-    Args:
-        cfg: DictConfig
-
-    Returns:
-        pd.DataFrame
-    """
-
-    csv_file = os.path.join(cfg["data"]["data_dir"], cfg["data"]["csv_file"])
-    labels_df = pd.read_csv(csv_file, header=[0, 1, 2], index_col=0)
-    return labels_df
 
 
 @typechecked
@@ -252,3 +237,36 @@ def check_video_paths(
             assert f.endswith(".mp4"), "video files must be mp4 format!"
 
     return filenames
+
+
+@typechecked
+def get_context_img_paths(center_img_path: Path) -> list[Path]:
+    """Given the path to a center image frame, return paths of 5 context frames
+    (n-2, n-1, n, n+1, n+2).
+
+    Negative indices are floored at 0.
+    """
+    match = re.search(r"(\d+)", center_img_path.stem)
+    assert (
+        match is not None
+    ), f"No frame index in filename, can't get context frames: {center_img_path.name}"
+
+    center_index_string = match.group()
+    center_index = int(center_index_string)
+
+    context_img_paths = []
+    for index in range(
+        center_index - 2, center_index + 3
+    ):  # End at n+3 exclusive, n+2 inclusive.
+        # Negative indices are floored at 0.
+        index = max(index, 0)
+
+        # Add leading zeros to match center_index_string length.
+        index_string = str(index).zfill(len(center_index_string))
+
+        stem = center_img_path.stem.replace(center_index_string, index_string)
+        path = center_img_path.with_stem(stem)
+
+        context_img_paths.append(path)
+
+    return context_img_paths

@@ -1,10 +1,6 @@
 """Test basic dataset functionality."""
 
-from pathlib import Path
-
 import torch
-
-from lightning_pose.data.datasets import _get_context_img_paths
 
 
 def test_base_dataset(cfg, base_dataset):
@@ -110,30 +106,3 @@ def test_multiview_heatmap_dataset_context(
 def test_equal_return_sizes(base_dataset, heatmap_dataset):
     # can only assert the batches are the same if not using imgaug pipeline
     assert base_dataset[0]["images"].shape == heatmap_dataset[0]["images"].shape
-
-
-def test_get_context_img_paths():
-    assert _get_context_img_paths(Path("a/b/c/img_2.png")) == [
-        Path("a/b/c/img_0.png"),
-        Path("a/b/c/img_1.png"),
-        Path("a/b/c/img_2.png"),
-        Path("a/b/c/img_3.png"),
-        Path("a/b/c/img_4.png"),
-    ]
-
-    assert _get_context_img_paths(Path("a/b/c/img_0200.png")) == [
-        Path("a/b/c/img_0198.png"),
-        Path("a/b/c/img_0199.png"),
-        Path("a/b/c/img_0200.png"),
-        Path("a/b/c/img_0201.png"),
-        Path("a/b/c/img_0202.png"),
-    ]
-
-    # Test negative indices floored to 0.
-    assert _get_context_img_paths(Path("a/b/c/img_1.png")) == [
-        Path("a/b/c/img_0.png"),
-        Path("a/b/c/img_0.png"),
-        Path("a/b/c/img_1.png"),
-        Path("a/b/c/img_2.png"),
-        Path("a/b/c/img_3.png"),
-    ]
