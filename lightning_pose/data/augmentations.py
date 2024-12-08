@@ -36,15 +36,16 @@ def imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
         # resizing happens below
         print("using default image augmentation pipeline (resizing only)")
 
-    elif kind == "dlc" or kind == "dlc-top-down":
+    elif kind in ["dlc", "dlc-lr", "dlc-top-down"]:
 
         print(f"using {kind} image augmentation pipeline")
 
-        # flip around horizontal/vertical axes first
-        if kind == "dlc-top-down":
-            # vertical axis
+        # flip horizontally/vertically
+        if kind in ["dlc-lr", "dlc-top-down"]:
+            # horizontal flip
             data_transform.append(iaa.Fliplr(p=0.5))
-            # horizontal axis
+        if kind == "dlc-top-down":
+            # vertical flip
             data_transform.append(iaa.Flipud(p=0.5))
 
         apply_prob_0 = 0.5
