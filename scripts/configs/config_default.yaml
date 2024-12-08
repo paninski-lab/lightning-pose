@@ -29,6 +29,7 @@ training:
   # select from one of several predefined image/video augmentation pipelines
   # default: resizing only
   # dlc: imgaug pipeline implemented in DLC 2.0 package
+  # dlc-lr: dlc augmenation plus horizontal flips
   # dlc-top-down: dlc augmentations plus vertical and horizontal flips
   imgaug: dlc
   # batch size of labeled data during training
