@@ -4,6 +4,7 @@ import io
 import shutil
 import zipfile
 from pathlib import Path
+from typing import Union
 
 import pandas as pd
 import requests
@@ -13,7 +14,7 @@ from lightning_pose.utils.cropzoom import generate_cropped_labeled_frames, gener
 
 
 # TODO: Move to utils.
-def compare_directories(dir1: Path, dir2: Path) -> int | dict:
+def compare_directories(dir1: Path, dir2: Path) -> Union[int, dict]:
     """
     Compares files in two directories recursively.
 
