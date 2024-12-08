@@ -1,6 +1,5 @@
-from collections.abc import Collection
 from pathlib import Path
-from typing import Optional
+from typing import Collection, Optional
 
 import numpy as np
 import pandas as pd
