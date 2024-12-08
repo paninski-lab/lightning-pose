@@ -151,3 +151,4 @@ multirun/
 preds/
 scripts/.ipynb_checkpoints
 tb_logs
+tests/utils/test_cropzoom_data/

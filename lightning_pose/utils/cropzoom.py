@@ -1,6 +1,5 @@
-from collections.abc import Collection
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -49,7 +48,7 @@ def _calculate_bbox_size(
 
 @typechecked
 def _compute_bbox_df(
-    pred_df: pd.DataFrame, anchor_keypoints: Collection[str], crop_ratio: float = 1.0
+    pred_df: pd.DataFrame, anchor_keypoints: List[str], crop_ratio: float = 1.0
 ) -> pd.DataFrame:
     # Get x,y columns for anchor_keypoints (or all keypoints if anchor_keypoints is empty)
     coord_mask = pred_df.columns.get_level_values("coords").isin(["x", "y"])
@@ -175,7 +174,7 @@ def generate_cropped_labeled_frames(
 
     # compute and save bbox_df
     bbox_df = _compute_bbox_df(
-        pred_df, detector_cfg.anchor_keypoints, crop_ratio=detector_cfg.crop_ratio
+        pred_df, list(detector_cfg.anchor_keypoints), crop_ratio=detector_cfg.crop_ratio
     )
 
     bbox_csv_path = output_directory / "cropped_images" / "bbox.csv"
@@ -200,7 +199,7 @@ def generate_cropped_video(
 
     # Save cropping bboxes
     bbox_df = _compute_bbox_df(
-        pred_df, detector_cfg.anchor_keypoints, crop_ratio=detector_cfg.crop_ratio
+        pred_df, list(detector_cfg.anchor_keypoints), crop_ratio=detector_cfg.crop_ratio
     )
     output_bbox_path = (
         detector_model_dir / "cropped_videos" / (video_path.stem + "_bbox.csv")
