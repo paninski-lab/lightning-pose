@@ -329,7 +329,7 @@ def predict_dataset(
 
     delete_trainer = False
     if trainer is None:
-        trainer = pl.Trainer(devices=1, accelerator="auto")
+        trainer = pl.Trainer(devices=1, accelerator="auto", logger=False)
         delete_trainer = True
 
     labeled_preds = trainer.predict(
@@ -402,7 +402,7 @@ def predict_single_video(
 
     delete_trainer = False
     if trainer is None:
-        trainer = pl.Trainer(accelerator="gpu", devices=1)
+        trainer = pl.Trainer(accelerator="gpu", devices=1, logger=False)
         delete_trainer = True
 
     # ----------------------------------------------------------------------------------
