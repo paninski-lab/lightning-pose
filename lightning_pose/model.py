@@ -156,6 +156,13 @@ class Model:
             cfg_overrides = {"train_prob": 1, "val_prob": 0, "train_frames": 1}
 
         cfg_pred = OmegaConf.merge(self.cfg, cfg_overrides)
+        # HACK: For true multi-view model, trick predict_dataset and compute_metrics
+        # into thinking this is a single-view model.
+        if self.config.is_multi_view():
+            del cfg_pred.data.view_names
+            # HACK: If we don't delete mirrored_column_matches, downstream
+            # interprets this as a mirrored multiview model, and compute_metrics fails.
+            del cfg_pred.data.mirrored_column_matches
 
         data_module_pred = _build_datamodule_pred(cfg_pred)
 
@@ -167,22 +174,11 @@ class Model:
         )
 
         if compute_metrics:
-            # For multiview, Compute metrics requires preds_file be a list in order of sorted view_names.
-            compute_metrics_on_preds_file = preds_file
-            if self.config.is_multi_view():
-                compute_metrics_on_preds_file = []
-                for view_name in sorted(self.config.cfg.data.view_names):
-                    multiview_preds_file_path = preds_file_path.with_name(
-                        preds_file_path.stem + f"_{view_name}.csv"
-                    )
-                    compute_metrics_on_preds_file.append(str(multiview_preds_file_path))
-
-            import os
-
-            print(os.getcwd())
+            # HACK: True multi-view model treated as single-view model, so preds_file is
+            # a string, not a list per-view. This means we can't yet compute pca_multiview.
             compute_metrics_fn(
                 cfg=cfg_pred,
-                preds_file=compute_metrics_on_preds_file,
+                preds_file=preds_file,
                 data_module=data_module_pred,
             )
 
