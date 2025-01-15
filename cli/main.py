@@ -155,11 +155,7 @@ def _predict(args: argparse.Namespace):
     # Delay this import because it's slow.
     from lightning_pose.model import Model
 
-    model_dir = Path(args.model_dir)
-    if not model_dir.is_dir():
-        raise FileNotFoundError(f"Model directory not found: {model_dir.absolute()}")
-
-    model = Model.from_dir(model_dir)
+    model = Model.from_dir(args.model_dir)
     input_paths = [Path(p) for p in args.input_path]
 
     for p in input_paths:
