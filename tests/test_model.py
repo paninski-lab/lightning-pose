@@ -91,7 +91,9 @@ def test_predict_on_video_file_multiview(tmp_path, request, toy_mdata_dir):
     model = _setup_test_model(tmp_path, request, multiview=True)
 
     # Test prediction on a test video.
-    model.predict_on_video_file(Path(toy_mdata_dir) / "videos" / "test_vid_top.mp4", generate_labeled_video=True)
+    model.predict_on_video_file(
+        Path(toy_mdata_dir) / "videos" / "test_vid_top.mp4", generate_labeled_video=True
+    )
     assert (model.video_preds_dir() / "test_vid_top.csv").is_file()
     assert (model.video_preds_dir() / "test_vid_top_temporal_norm.csv").is_file()
     assert (model.labeled_videos_dir() / "test_vid_top_labeled.mp4").is_file()
