@@ -22,6 +22,7 @@ import torch
 import yaml
 from omegaconf import OmegaConf
 
+import lightning_pose as lp
 from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import (
@@ -40,7 +41,7 @@ from lightning_pose.utils.scripts import (
     get_model,
 )
 
-TOY_DATA_ROOT_DIR = "data/mirror-mouse-example"
+TOY_DATA_ROOT_DIR = str(lp.LP_ROOT_PATH / "data" / "mirror-mouse-example")
 TOY_MDATA_ROOT_DIR = "data/mirror-mouse-example_split"
 
 
