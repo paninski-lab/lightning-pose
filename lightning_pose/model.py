@@ -47,7 +47,7 @@ class Model:
         self.config = config
 
     @property
-    def cfg(self):
+    def cfg(self) -> DictConfig:
         return self.config.cfg
 
     def _load(self):
@@ -62,13 +62,13 @@ class Model:
                 skip_data_module=True,
             )
 
-    def image_preds_dir(self):
+    def image_preds_dir(self) -> Path:
         return self.model_dir / "image_preds"
 
-    def video_preds_dir(self):
+    def video_preds_dir(self) -> Path:
         return self.model_dir / "video_preds"
 
-    def labeled_videos_dir(self):
+    def labeled_videos_dir(self) -> Path:
         return self.model_dir / "video_preds" / "labeled_videos"
 
     class PredictionResult(TypedDict):
