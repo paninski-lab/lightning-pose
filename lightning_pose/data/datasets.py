@@ -2,7 +2,6 @@
 
 
 import os
-import re
 from pathlib import Path
 from typing import Callable, List, Literal, Optional, Tuple, Union
 
@@ -20,6 +19,7 @@ from lightning_pose.data.utils import (
     MultiviewHeatmapLabeledExampleDict,
     generate_heatmaps,
 )
+from lightning_pose.utils import io as io_utils
 from lightning_pose.utils.io import get_context_img_paths, get_keypoint_names
 
 # to ignore imports for sphix-autoapidoc
@@ -77,6 +77,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             raise FileNotFoundError(f"Could not find csv file at {csv_file}!")
 
         csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
+        csv_data = io_utils.fix_empty_first_row(csv_data)
         self.keypoint_names = get_keypoint_names(csv_file=csv_file, header_rows=header_rows)
         self.image_names = list(csv_data.index)
         self.keypoints = torch.tensor(csv_data.to_numpy(), dtype=torch.float32)
@@ -492,4 +493,3 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             concat_order=concat_order,  # List[str]
             view_names=self.view_names,  # List[str]
         )
-

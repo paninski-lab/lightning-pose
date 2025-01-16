@@ -39,6 +39,7 @@ from lightning_pose.models import (
     SemiSupervisedHeatmapTrackerMHCRNN,
     SemiSupervisedRegressionTracker,
 )
+from lightning_pose.utils import io as io_utils
 from lightning_pose.utils.io import (
     check_if_semi_supervised,
     get_keypoint_names,
@@ -599,6 +600,7 @@ def compute_metrics_single(
 
     # get keypoint names
     labels_df = pd.read_csv(labels_file, header=[0, 1, 2], index_col=0)
+    labels_df = io_utils.fix_empty_first_row(labels_df)
     keypoint_names = get_keypoint_names(
         cfg, csv_file=labels_file, header_rows=[0, 1, 2])
     # load predictions

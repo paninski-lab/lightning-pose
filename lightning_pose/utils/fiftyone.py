@@ -9,6 +9,7 @@ from PIL import Image
 from tqdm import tqdm
 from typeguard import typechecked
 
+from lightning_pose.utils import io as io_utils
 from lightning_pose.utils import pretty_print_str
 from lightning_pose.utils.io import return_absolute_data_paths, return_absolute_path
 
@@ -81,13 +82,16 @@ class FiftyOneImagePlotter:
             df_tmp = []
             csv_files = [os.path.join(self.data_dir, f) for f in self.cfg.data.csv_file]
             for csv_file in csv_files:
-                df_tmp.append(pd.read_csv(csv_file, header=self.df_header_rows))
+                csv_data = pd.read_csv(csv_file, header=self.df_header_rows)
+                csv_data = io_utils.fix_empty_first_row(csv_data)
+                df_tmp.append(csv_data)
             self.ground_truth_df = pd.concat(df_tmp)
         else:
             self.ground_truth_df: pd.DataFrame = pd.read_csv(
                 os.path.join(self.data_dir, self.cfg.data.csv_file),
                 header=self.df_header_rows,
             )
+            self.ground_truth_df = io_utils.fix_empty_first_row(self.ground_truth_df)
         if self.keypoints_to_plot is None:
             # plot all keypoints that appear in the ground-truth dataframe
             self.keypoints_to_plot: List[str] = list(self.ground_truth_df.columns.levels[0])
