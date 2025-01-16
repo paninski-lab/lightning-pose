@@ -180,7 +180,7 @@ def _train(cfg: DictConfig) -> Model:
 
     # save config file
     dest_config_file = Path(hydra_output_directory) / "config.yaml"
-    OmegaConf.save(config=cfg, f=dest_config_file, resolve=True)
+    OmegaConf.save(config=cfg, f=dest_config_file, resolve=False)
 
     # save labeled data file(s)
     if isinstance(cfg.data.csv_file, str):
