@@ -42,7 +42,7 @@ from lightning_pose.utils.scripts import (
 )
 
 TOY_DATA_ROOT_DIR = str(lp.LP_ROOT_PATH / "data" / "mirror-mouse-example")
-TOY_MDATA_ROOT_DIR = "data/mirror-mouse-example_split"
+TOY_MDATA_ROOT_DIR = str(lp.LP_ROOT_PATH / "data" / "mirror-mouse-example_split")
 
 
 @pytest.fixture
@@ -54,12 +54,14 @@ def video_list() -> List[str]:
 def toy_data_dir() -> str:
     return TOY_DATA_ROOT_DIR
 
+@pytest.fixture
+def toy_mdata_dir() -> str:
+    return TOY_MDATA_ROOT_DIR
 
 @pytest.fixture
 def cfg() -> dict:
     """Load all toy data config file without hydra."""
-    base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
-    config_file = os.path.join(base_dir, "scripts", "configs", "config_mirror-mouse-example.yaml")
+    config_file = lp.LP_ROOT_PATH / "scripts" / "configs" / "config_mirror-mouse-example.yaml"
     cfg = OmegaConf.load(config_file)
     # make small batches so that we can run on a gpu with limited memory
     cfg.training.train_batch_size = 2
@@ -74,8 +76,7 @@ def cfg() -> dict:
 @pytest.fixture
 def cfg_multiview() -> dict:
     """Load all toy data config file without hydra."""
-    base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
-    config_file = os.path.join(base_dir, "scripts", "configs", "config_mirror-mouse-example.yaml")
+    config_file = lp.LP_ROOT_PATH / "scripts" / "configs" / "config_mirror-mouse-example.yaml"
     cfg = OmegaConf.load(config_file)
     # make small batches so that we can run on a gpu with limited memory
     cfg.training.train_batch_size = 2
@@ -100,9 +101,8 @@ def cfg_multiview() -> dict:
 
 def create_multiview_dataset_if_not_exists() -> None:
     # create multiview dataset
-    repo_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
-    base_dir = os.path.join(repo_dir, TOY_DATA_ROOT_DIR)
-    split_dir = os.path.join(repo_dir, TOY_MDATA_ROOT_DIR)
+    base_dir = TOY_DATA_ROOT_DIR
+    split_dir = TOY_MDATA_ROOT_DIR
 
     try:
         os.makedirs(split_dir, exist_ok=False)
