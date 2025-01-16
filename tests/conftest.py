@@ -10,7 +10,6 @@ import gc
 import os
 import shutil
 import subprocess
-import sys
 from typing import Callable, List
 
 import cv2
@@ -19,7 +18,6 @@ import lightning.pytorch as pl
 import pandas as pd
 import pytest
 import torch
-import yaml
 from omegaconf import OmegaConf
 
 import lightning_pose as lp
