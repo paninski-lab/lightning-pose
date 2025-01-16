@@ -7,7 +7,8 @@ import requests
 
 def fetch_test_data_if_needed(dir: Path, dataset_name: str) -> None:
     datasets_url_dict = {
-        "test_cropzoom_data": "https://figshare.com/ndownloader/files/51015435"
+        "test_cropzoom_data": "https://figshare.com/ndownloader/files/51015435",
+        "test_model_mirror_mouse": "https://figshare.com/ndownloader/files/51726884",
     }
     # check if data exists
     dataset_dir = dir / dataset_name
@@ -25,13 +26,17 @@ def fetch_test_data_if_needed(dir: Path, dataset_name: str) -> None:
         with zipfile.ZipFile(io.BytesIO(r.raw.read())) as z:
             # Extract assuming there is only one directory in the zip file.
             file_list = z.namelist()
-            top_level_file_list = [name for name in file_list if name.count("/") <= 1]
+            top_level_file_list = [
+                name
+                for name in file_list
+                if name.count("/") == 0 or (name.count("/") == 1 and name.endswith("/"))
+            ]
             if (
                 len(top_level_file_list) > 1
                 or top_level_file_list[0] != f"{dataset_name}/"
             ):
                 raise ValueError(
-                    f"Zip file must have only one dir called {dataset_dir}\n"
+                    f"Zip file must have only one dir called {dataset_name}\n"
                     f"Instead found {file_list}."
                 )
             else:

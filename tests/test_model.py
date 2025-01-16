@@ -10,9 +10,9 @@ def _setup_test_model(tmp_path, request):
     # Get the trained model for testing.
     fetch_test_data_if_needed(request.path.parent, "test_model_mirror_mouse")
     # Copy to tmpdir because prediction will create output artifacts in model_dir.
-    tmp_model_dir = tmp_path / "test_model_mirror_mouse" / "1.6.0"
+    tmp_model_dir = tmp_path / "test_model_mirror_mouse"
     shutil.copytree(
-        request.path.parent / "test_model_mirror_mouse", tmp_model_dir.parent
+        request.path.parent / "test_model_mirror_mouse", tmp_model_dir
     )
 
     # Set up a model object.
