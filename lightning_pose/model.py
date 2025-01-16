@@ -43,7 +43,7 @@ class Model:
         return Model(model_dir, config)
 
     def __init__(self, model_dir: str | Path, config: ModelConfig):
-        self.model_dir = Path(model_dir)
+        self.model_dir = Path(model_dir).absolute()
         self.config = config
 
     @property
