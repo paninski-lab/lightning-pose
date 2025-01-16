@@ -27,7 +27,9 @@ def fix_empty_first_row(df: pd.DataFrame) -> pd.DataFrame:
         )
         fixed_df = pd.concat([prepend_df, df])
         assert fixed_df.index.name is None
-        return
+        return fixed_df
+
+    return df
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
