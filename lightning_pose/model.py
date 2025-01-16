@@ -155,9 +155,10 @@ class Model:
 
         # Avoid annotating set=train/val/test for CSV file other than the training CSV file.
         if not add_train_val_test_set:
-            cfg_overrides = {"train_prob": 1, "val_prob": 0, "train_frames": 1}
+            cfg_overrides.update({"train_prob": 1, "val_prob": 0, "train_frames": 1})
 
         cfg_pred = OmegaConf.merge(self.cfg, cfg_overrides)
+
         # HACK: For true multi-view model, trick predict_dataset and compute_metrics
         # into thinking this is a single-view model.
         if self.config.is_multi_view():
