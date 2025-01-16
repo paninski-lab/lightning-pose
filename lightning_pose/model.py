@@ -32,6 +32,10 @@ class Model:
     config: ModelConfig
     model: Optional[ALLOWED_MODELS] = None
 
+    # Just a constant we can use as a default value for kwargs,
+    # to differentiate between user omitting a kwarg, vs explicitly passing None.
+    UNSPECIFIED = "unspecified"
+
     @staticmethod
     def from_dir(model_dir: str | Path):
         model_dir = Path(model_dir)
@@ -66,8 +70,6 @@ class Model:
 
     def labeled_videos_dir(self):
         return self.model_dir / "video_preds" / "labeled_videos"
-
-    UNSPECIFIED = "unspecified"
 
     class PredictionResult(TypedDict):
         predictions: pd.DataFrame

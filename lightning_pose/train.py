@@ -36,7 +36,6 @@ def train(cfg: DictConfig) -> None:
     # Comment out the above, and uncomment the below to skip
     # training and go straight to post-training analysis:
     # import os
-    # from lightning_pose.model import Model
     # model = Model.from_dir(os.getcwd())
 
     _evaluate_on_training_dataset(model)
@@ -257,7 +256,5 @@ def _train(cfg: DictConfig) -> Model:
     # Kill processes other than the main process, otherwise they all go forward.
     if not trainer.is_global_zero:
         sys.exit(0)
-
-    from lightning_pose.model import Model
 
     return Model.from_dir(hydra_output_directory)
