@@ -152,3 +152,5 @@ preds/
 scripts/.ipynb_checkpoints
 tb_logs
 tests/utils/test_cropzoom_data/
+tests/test_model_mirror_mouse/
+tests/test_model_mirror_mouse_separate/

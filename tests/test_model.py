@@ -27,6 +27,12 @@ def _setup_test_model(tmp_path, request):
         model.labeled_videos_dir() == tmp_model_dir / "video_preds" / "labeled_videos"
     )
 
+    # Confirm predictions don't exist yet. If they do, our tests will pass even
+    # if model prediction did nothing.
+    assert not model.image_preds_dir().exists()
+    assert not model.video_preds_dir().exists()
+    assert not model.labeled_videos_dir().exists()
+
     return model
 
 
