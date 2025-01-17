@@ -3,33 +3,9 @@ import glob
 import os
 import shutil
 
-import numpy as np
 import pandas as pd
 
-
-def fix_empty_first_row(df: pd.DataFrame) -> pd.DataFrame:
-    """Fixes a problem with `pd.read_csv` where if the first row is all NaN
-    it gets dropped.
-
-    Pandas uses the first row after a multiline header for the df.index.name.
-    It would look just like a data row where all values are NaN. Pandas has no
-    way to distinguish between an index name row, and a NaN data row.
-
-    Pandas gh issue: https://github.com/pandas-dev/pandas/issues/21995
-
-    Our fix detects if there's an index name, and if so it adds a NaN data row
-    with index=df.index.name.
-    """
-    if df.index.name is not None:
-        new_row = {col: np.nan for col in df.columns}
-        prepend_df = pd.DataFrame(
-            new_row, index=[df.index.name], columns=df.columns, dtype="float64"
-        )
-        fixed_df = pd.concat([prepend_df, df])
-        assert fixed_df.index.name is None
-        return fixed_df
-
-    return df
+from lightning_pose.utils import io as io_utils
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -60,7 +36,7 @@ if __name__ == "__main__":
         try:
             csv_file = glob.glob(os.path.join(dlc_dir, "labeled-data", d, "CollectedData*.csv"))[0]
             df_tmp = pd.read_csv(csv_file, header=[0, 1, 2], index_col=0)
-            df_tmp = fix_empty_first_row(df_tmp)
+            df_tmp = io_utils.fix_empty_first_row(df_tmp)
             if len(df_tmp.index.unique()) != df_tmp.shape[0]:
                 # new DLC labeling scheme that splits video/image in different cells
                 vids = df_tmp.loc[
