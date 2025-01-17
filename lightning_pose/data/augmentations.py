@@ -125,7 +125,7 @@ def imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
         ))
 
     else:
-        raise NotImplementedError("must choose imgaug kind from 'default', 'dlc', 'dlc-top-down', 'dlc-scale', 'dlc-top-down-scale'")
+        raise NotImplementedError("must choose imgaug kind from 'default', 'dlc','dlc-lr', 'dlc-top-down', 'dlc-scale', 'dlc-top-down-scale'")
 
     # do not resize when using dynamic crop pipeline
     if not cfg.data.get('dynamic_crop', False):
