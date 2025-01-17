@@ -1,6 +1,5 @@
 """Dataset objects store images, labels, and functions for manipulation."""
 
-from __future__ import annotations  # python 3.8 compatibility for sphinx
 
 import os
 import re
@@ -21,7 +20,7 @@ from lightning_pose.data.utils import (
     MultiviewHeatmapLabeledExampleDict,
     generate_heatmaps,
 )
-from lightning_pose.utils.io import get_keypoint_names
+from lightning_pose.utils.io import get_context_img_paths, get_keypoint_names
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -133,7 +132,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             transformed_images = self.pytorch_transform(transformed_images)
 
         else:
-            context_img_paths = _get_context_img_paths(img_path)
+            context_img_paths = get_context_img_paths(img_path)
             # read the images from image list to create dataset
             images = []
             for path in context_img_paths:
@@ -494,34 +493,3 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             view_names=self.view_names,  # List[str]
         )
 
-
-def _get_context_img_paths(center_img_path: Path) -> list[Path]:
-    """Given the path to a center image frame, return paths of 5 context frames
-    (n-2, n-1, n, n+1, n+2).
-
-    Negative indices are floored at 0.
-    """
-    match = re.search(r"(\d+)", center_img_path.stem)
-    assert (
-        match is not None
-    ), f"No frame index in filename, can't get context frames: {center_img_path.name}"
-
-    center_index_string = match.group()
-    center_index = int(center_index_string)
-
-    context_img_paths = []
-    for index in range(
-        center_index - 2, center_index + 3
-    ):  # End at n+3 exclusive, n+2 inclusive.
-        # Negative indices are floored at 0.
-        index = max(index, 0)
-
-        # Add leading zeros to match center_index_string length.
-        index_string = str(index).zfill(len(center_index_string))
-
-        stem = center_img_path.stem.replace(center_index_string, index_string)
-        path = center_img_path.with_stem(stem)
-
-        context_img_paths.append(path)
-
-    return context_img_paths

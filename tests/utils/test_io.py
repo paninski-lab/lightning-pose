@@ -2,14 +2,19 @@
 
 import os
 import shutil
+from pathlib import Path
 
 import pytest
 
+from lightning_pose.utils.io import (
+    check_if_semi_supervised,
+    check_video_paths,
+    get_context_img_paths,
+    get_videos_in_dir,
+)
+
 
 def test_check_if_semisupervised():
-
-    from lightning_pose.utils.io import check_if_semi_supervised
-
     flag = check_if_semi_supervised(losses_to_use=None)
     assert not flag
 
@@ -27,9 +32,6 @@ def test_check_if_semisupervised():
 
 
 def test_get_videos_in_dir(toy_data_dir, tmpdir):
-
-    from lightning_pose.utils.io import get_videos_in_dir
-
     videos_dir = os.path.join(toy_data_dir, "videos")
 
     # --------------------
@@ -90,9 +92,6 @@ def test_get_videos_in_dir(toy_data_dir, tmpdir):
 
 
 def test_check_video_paths(toy_data_dir, tmpdir):
-
-    from lightning_pose.utils.io import check_video_paths
-
     videos_dir = os.path.join(toy_data_dir, "videos")
 
     # --------------------
@@ -136,3 +135,30 @@ def test_check_video_paths(toy_data_dir, tmpdir):
     for v_list in video_list_5:
         assert isinstance(v_list, list)
         assert len(v_list) == 1
+
+
+def test_get_context_img_paths():
+    assert get_context_img_paths(Path("a/b/c/img_2.png")) == [
+        Path("a/b/c/img_0.png"),
+        Path("a/b/c/img_1.png"),
+        Path("a/b/c/img_2.png"),
+        Path("a/b/c/img_3.png"),
+        Path("a/b/c/img_4.png"),
+    ]
+
+    assert get_context_img_paths(Path("a/b/c/img_0200.png")) == [
+        Path("a/b/c/img_0198.png"),
+        Path("a/b/c/img_0199.png"),
+        Path("a/b/c/img_0200.png"),
+        Path("a/b/c/img_0201.png"),
+        Path("a/b/c/img_0202.png"),
+    ]
+
+    # Test negative indices floored to 0.
+    assert get_context_img_paths(Path("a/b/c/img_1.png")) == [
+        Path("a/b/c/img_0.png"),
+        Path("a/b/c/img_0.png"),
+        Path("a/b/c/img_1.png"),
+        Path("a/b/c/img_2.png"),
+        Path("a/b/c/img_3.png"),
+    ]

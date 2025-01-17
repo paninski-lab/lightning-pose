@@ -11,9 +11,7 @@ SemiSupervisedHeatmapTrackerMHCRNN
    .. autosummary::
 
       ~SemiSupervisedHeatmapTrackerMHCRNN.get_loss_inputs_unlabeled
-      ~SemiSupervisedHeatmapTrackerMHCRNN.get_parameters
 
    .. rubric:: Methods Documentation
 
    .. automethod:: get_loss_inputs_unlabeled
-   .. automethod:: get_parameters

@@ -74,6 +74,7 @@ See the :ref:`FAQs <faq_oom>` for more information on memory management.
 
   * default: resizing only
   * dlc: imgaug pipeline implmented in DLC 2.0 package
+  * dlc-lr: dlc augmentations plus horizontal flips
   * dlc-top-down: dlc augmentations plus additional vertical and horizontal flips
 
 * ``training.train_batch_size`` (*int, default: 16*): batch size for labeled data during training

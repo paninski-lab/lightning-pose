@@ -26,20 +26,19 @@ from lightning_pose.utils import pretty_print_str
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
-    "get_cfg_file",
     "PredictionHandler",
     "predict_dataset",
     "predict_single_video",
     "make_dlc_pandas_index",
     "get_model_class",
     "load_model_from_checkpoint",
-    "make_cmap",
     "create_labeled_video",
+    "export_predictions_and_labeled_video",
 ]
 
 
 @typechecked
-def get_cfg_file(cfg_file: Union[str, DictConfig]):
+def _get_cfg_file(cfg_file: Union[str, DictConfig]):
     """Load yaml configuration files."""
     if isinstance(cfg_file, str):
         # load configuration file
@@ -330,7 +329,7 @@ def predict_dataset(
 
     delete_trainer = False
     if trainer is None:
-        trainer = pl.Trainer(devices=1, accelerator="auto")
+        trainer = pl.Trainer(devices=1, accelerator="auto", logger=False)
         delete_trainer = True
 
     labeled_preds = trainer.predict(
@@ -390,7 +389,7 @@ def predict_single_video(
 
     """
 
-    cfg = get_cfg_file(cfg_file=cfg_file).copy()  # copy because we update imgaug field below
+    cfg = _get_cfg_file(cfg_file=cfg_file).copy()  # copy because we update imgaug field below
 
     delete_model = False
     if model is None:
@@ -403,7 +402,7 @@ def predict_single_video(
 
     delete_trainer = False
     if trainer is None:
-        trainer = pl.Trainer(accelerator="gpu", devices=1)
+        trainer = pl.Trainer(accelerator="gpu", devices=1, logger=False)
         delete_trainer = True
 
     # ----------------------------------------------------------------------------------
@@ -736,7 +735,7 @@ def load_model_from_checkpoint(
 
 
 @typechecked
-def make_cmap(number_colors: int, cmap: str):
+def _make_cmap(number_colors: int, cmap: str):
     color_class = plt.cm.ScalarMappable(cmap=cmap)
     C = color_class.to_rgba(np.linspace(0, 1, number_colors))
     colors = (C[:, :3] * 255).astype(np.uint8)
@@ -752,11 +751,10 @@ def create_labeled_video(
     dotsize: int = 4,
     colormap: Optional[str] = "cool",
     fps: Optional[float] = None,
-    filename: str = "movie.mp4",
+    output_video_path: str = "movie.mp4",
     start_time: float = 0.0,
 ) -> None:
     """Helper function for creating annotated videos.
-
     Args
         clip
         xs_arr: shape T x n_joints
@@ -765,9 +763,8 @@ def create_labeled_video(
         dotsize: size of marker dot on labeled video
         colormap: matplotlib color map for markers
         fps: None to default to fps of original video
-        filename: video file name
+        output_video_path: video file name
         start_time: time (in seconds) of video start
-
     """
 
     if mask_array is None:
@@ -776,7 +773,7 @@ def create_labeled_video(
     n_frames, n_keypoints = xs_arr.shape
 
     # set colormap for each color
-    colors = make_cmap(n_keypoints, cmap=colormap)
+    colors = _make_cmap(n_keypoints, cmap=colormap)
 
     # extract info from clip
     nx, ny = clip.size
@@ -813,34 +810,34 @@ def create_labeled_video(
 
     # add marker to each frame t, where t is in sec
     def add_marker_and_timestamps(get_frame, t):
-        image = get_frame(t * 1.0)
+        image = get_frame(t)
         # frame [ny x ny x 3]
         frame = image.copy()
         # convert from sec to indices
-        index = int(np.round(t * 1.0 * fps_og))
+        index = int(np.round(t * fps_og))
         # ----------------
         # markers
         # ----------------
-        for bpindex in range(n_keypoints):
-            if index >= n_frames:
-                print("Skipped frame {}, marker {}".format(index, bpindex))
-                continue
-            if mask_array[index, bpindex]:
-                xc = min(int(upsample_factor * xs_arr[index, bpindex]), nx - 1)
-                yc = min(int(upsample_factor * ys_arr[index, bpindex]), ny - 1)
-                frame = cv2.circle(
-                    frame,
-                    center=(xc, yc),
-                    radius=dotsize,
-                    color=colors[bpindex].tolist(),
-                    thickness=-1,
-                )
+        if index >= n_frames:
+            print(f"add_marker_and_timestamps: Skipped frame {index}")
+        else:
+            for bpindex in range(n_keypoints):
+                if mask_array[index, bpindex]:
+                    xc = min(int(upsample_factor * xs_arr[index, bpindex]), nx - 1)
+                    yc = min(int(upsample_factor * ys_arr[index, bpindex]), ny - 1)
+                    frame = cv2.circle(
+                        frame,
+                        center=(xc, yc),
+                        radius=dotsize,
+                        color=colors[bpindex].tolist(),
+                        thickness=-1,
+                    )
         # ----------------
         # timestamps
         # ----------------
         seconds_from_start = t + start_time
         time_from_start = seconds_to_hms(seconds_from_start)
-        idx_from_start = int(np.round(seconds_from_start * 1.0 * fps_og))
+        idx_from_start = int(np.round(seconds_from_start * fps_og))
         text = f"t={time_from_start}, frame={idx_from_start}"
         # define text info
         font = cv2.FONT_HERSHEY_SIMPLEX
@@ -873,5 +870,56 @@ def create_labeled_video(
         return frame
 
     clip_marked = clip.fl(add_marker_and_timestamps)
-    clip_marked.write_videofile(filename, codec="libx264", fps=fps or fps_og or 20.0)
+    clip_marked.write_videofile(
+        output_video_path, codec="libx264", fps=fps or fps_og or 20.0
+    )
     clip_marked.close()
+
+
+@typechecked
+def export_predictions_and_labeled_video(
+    video_file: str,
+    cfg: DictConfig,
+    prediction_csv_file: str,
+    ckpt_file: Optional[str] = None,
+    trainer: Optional[pl.Trainer] = None,
+    model: Optional[ALLOWED_MODELS] = None,
+    data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
+    labeled_mp4_file: Optional[str] = None,
+    save_heatmaps: Optional[bool] = False,
+) -> None:
+    """Export predictions csv and a labeled video for a single video file."""
+
+    if ckpt_file is None and model is None:
+        raise ValueError("either 'ckpt_file' or 'model' must be passed")
+
+    # compute predictions
+    preds_df = predict_single_video(
+        video_file=video_file,
+        ckpt_file=ckpt_file,
+        cfg_file=cfg,
+        preds_file=prediction_csv_file,
+        trainer=trainer,
+        model=model,
+        data_module=data_module,
+        save_heatmaps=save_heatmaps,
+    )
+
+    # create labeled video
+    if labeled_mp4_file is not None:
+        os.makedirs(os.path.dirname(labeled_mp4_file), exist_ok=True)
+        # transform df to numpy array
+        keypoints_arr = np.reshape(preds_df.to_numpy(), [preds_df.shape[0], -1, 3])
+        xs_arr = keypoints_arr[:, :, 0]
+        ys_arr = keypoints_arr[:, :, 1]
+        mask_array = keypoints_arr[:, :, 2] > cfg.eval.confidence_thresh_for_vid
+        # video generation
+        video_clip = VideoFileClip(video_file)
+        create_labeled_video(
+            clip=video_clip,
+            xs_arr=xs_arr,
+            ys_arr=ys_arr,
+            mask_array=mask_array,
+            output_video_path=labeled_mp4_file,
+            colormap=cfg.eval.get("colormap", "cool")
+        )

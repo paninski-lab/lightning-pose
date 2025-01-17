@@ -14,16 +14,21 @@ from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 from typeguard import typechecked
 
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
+from lightning_pose.utils.cropzoom import generate_cropped_labeled_frames, generate_cropped_video
 from lightning_pose.utils.io import (
     check_video_paths,
+    ckpt_path_from_base_path,
     return_absolute_data_paths,
     return_absolute_path,
 )
-from lightning_pose.utils.predictions import load_model_from_checkpoint, predict_dataset
+from lightning_pose.utils.predictions import (
+    export_predictions_and_labeled_video,
+    load_model_from_checkpoint,
+    predict_dataset,
+)
 from lightning_pose.utils.scripts import (
     calculate_train_batches,
     compute_metrics,
-    export_predictions_and_labeled_video,
     get_callbacks,
     get_data_module,
     get_dataset,
@@ -168,7 +173,9 @@ def train(cfg: DictConfig) -> None:
     # Post-training analysis
     # ----------------------------------------------------------------------------------
     # get best ckpt
-    best_ckpt = os.path.abspath(trainer.checkpoint_callback.best_model_path)
+    best_ckpt = ckpt_path_from_base_path(
+            base_path=hydra_output_directory, model_name=cfg.model.model_name
+        )
     print(f"Best checkpoint: {os.path.basename(best_ckpt)}")
     # check if best_ckpt is a file
     if not os.path.isfile(best_ckpt):
@@ -219,10 +226,20 @@ def train(cfg: DictConfig) -> None:
         preds_file = multiview_pred_files
     compute_metrics(cfg=cfg, preds_file=preds_file, data_module=data_module_pred)
 
+    is_detector = (
+        cfg.get("detector") is not None and cfg.detector.get("crop_ratio") is not None
+    )
+    if is_detector:
+        generate_cropped_labeled_frames(
+            root_directory=Path(data_dir),
+            output_directory=Path(hydra_output_directory),
+            detector_cfg=cfg.detector,
+        )
+
     # ----------------------------------------------------------------------------------
     # predict folder of videos
     # ----------------------------------------------------------------------------------
-    if cfg.eval.predict_vids_after_training:
+    if cfg.eval.predict_vids_after_training or is_detector:
         pretty_print_str("Predicting videos...")
         if cfg.eval.test_videos_directory is None:
             filenames = []
@@ -235,6 +252,7 @@ def train(cfg: DictConfig) -> None:
 
         for video_file in filenames:
             assert os.path.isfile(video_file)
+
             pretty_print_str(f"Predicting video: {video_file}...")
             # get save name for prediction csv file
             video_pred_dir = os.path.join(hydra_output_directory, "video_preds")
@@ -255,18 +273,23 @@ def train(cfg: DictConfig) -> None:
                 trainer=trainer,
                 model=model,
                 data_module=data_module_pred,
-                save_heatmaps=cfg.eval.get("predict_vids_after_training_save_heatmaps", False),
+                save_heatmaps=cfg.eval.get(
+                    "predict_vids_after_training_save_heatmaps", False
+                ),
             )
-            # compute and save various metrics
-            # try:
+
             compute_metrics(
                 cfg=cfg,
                 preds_file=prediction_csv_file,
                 data_module=data_module_pred,
             )
-            # except Exception as e:
-            #     print(f"Error predicting on video {video_file}:\n{e}")
-            #     continue
+
+            if is_detector:
+                generate_cropped_video(
+                    video_path=Path(video_file),
+                    detector_model_dir=Path(hydra_output_directory),
+                    detector_cfg=cfg.detector,
+                )
 
     # ----------------------------------------------------------------------------------
     # predict on OOD frames
