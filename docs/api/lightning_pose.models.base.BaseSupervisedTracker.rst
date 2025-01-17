@@ -12,7 +12,6 @@ BaseSupervisedTracker
 
       ~BaseSupervisedTracker.evaluate_labeled
       ~BaseSupervisedTracker.get_loss_inputs_labeled
-      ~BaseSupervisedTracker.get_parameters
       ~BaseSupervisedTracker.test_step
       ~BaseSupervisedTracker.training_step
       ~BaseSupervisedTracker.validation_step
@@ -21,7 +20,6 @@ BaseSupervisedTracker
 
    .. automethod:: evaluate_labeled
    .. automethod:: get_loss_inputs_labeled
-   .. automethod:: get_parameters
    .. automethod:: test_step
    .. automethod:: training_step
    .. automethod:: validation_step

@@ -65,7 +65,7 @@ install_requires = [
     "kornia",
     "lightning",
     "matplotlib",
-    "moviepy",
+    "moviepy<2.0.0", # update is to be tested
     "numpy<2.0.0",  # several bugs related to numpy updates as of 2024/07/05
     "opencv-python-headless",
     "pandas>=2.0.0",
