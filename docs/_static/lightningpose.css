@@ -1,0 +1,14 @@
+html.writer-html4[data-theme="dark"] .rst-content dl:not(.docutils) .descclassname,
+html.writer-html4 .rst-content dl:not(.docutils) .descname,
+html.writer-html4 .rst-content dl:not(.docutils) .sig-name,
+html.writer-html5 .rst-content dl[class]:not(.option-list):not(.field-list):not(.footnote):not(.citation):not(.glossary):not(.simple) .descclassname,html.writer-html5 .rst-content dl[class]:not(.option-list):not(.field-list):not(.footnote):not(.citation):not(.glossary):not(.simple) .descname,
+html.writer-html5 .rst-content dl[class]:not(.option-list):not(.field-list):not(.footnote):not(.citation):not(.glossary):not(.simple) .sig-name {
+    color: rgb(0, 125, 206);
+}
+
+
+html[data-theme="dark"].writer-html4 .rst-content dl:not(.docutils) dl:not(.field-list) > dt, html[data-theme="dark"].writer-html5 .rst-content dl[class]:not(.option-list):not(.field-list):not(.footnote):not( .glossary ):not(.simple) dl:not(.field-list) > dt {
+    background-color: #0f0f0f !important;
+    color: #959595 !important;
+    border-color: #2b2b2b !important;
+}
