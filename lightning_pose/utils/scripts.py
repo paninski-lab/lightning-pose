@@ -3,6 +3,7 @@
 import os
 import warnings
 from collections import OrderedDict
+from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 import imgaug.augmenters as iaa
@@ -549,21 +550,29 @@ def compute_metrics(
     preds_file: Union[str, List[str]],
     data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
 ) -> None:
-    """Compute various metrics on predictions csv file, potentially for multiple views."""
+    """Compute various metrics on predictions csv file, potentially for multiple views.
+    Saves metrics to files next to predictions file, in the convention of:
+        {prediction_file_stem}_{metric_name}.csv
+
+    Args:
+        cfg: the config used to determine whether single or multiview and which metrics
+            to compute
+        preds_file: Path to model predictions used to compute metrics.
+            For multiview, a list of paths.
+
+        """
     if (
         cfg.data.get("view_names", None)
         and len(cfg.data.view_names) > 1
         and isinstance(preds_file, list)
     ):
-        preds_file = sorted(preds_file)
         for view_name, csv_file, preds_file_ in zip(
                 sorted(cfg.data.view_names),
                 sorted(cfg.data.csv_file),
-                preds_file
+                sorted(preds_file)
         ):
             assert view_name in preds_file_
             labels_file = io_utils.return_absolute_path(os.path.join(cfg.data.data_dir, csv_file))
-            # preds_file_ = preds_file.replace(".csv", f"_{view_name}.csv")
             compute_metrics_single(
                 cfg=cfg,
                 labels_file=labels_file,
@@ -640,6 +649,7 @@ def compute_metrics_single(
     ):
         metrics_to_compute += ["pca_multiview"]
 
+    preds_file_path = Path(preds_file)
     # compute metrics; csv files will be saved to the same directory the prdictions are stored in
     if "pixel_error" in metrics_to_compute:
         keypoints_true = labels_df.to_numpy().reshape(labels_df.shape[0], -1, 2)
@@ -648,7 +658,7 @@ def compute_metrics_single(
         # add train/val/test split
         if set is not None:
             error_df["set"] = set
-        save_file = preds_file.replace(".csv", "_pixel_error.csv")
+        save_file = preds_file_path.with_name(preds_file_path.stem + "_pixel_error.csv")
         error_df.to_csv(save_file)
 
     if "temporal" in metrics_to_compute:
@@ -659,7 +669,7 @@ def compute_metrics_single(
         # add train/val/test split
         if set is not None:
             temporal_norm_df["set"] = set
-        save_file = preds_file.replace(".csv", "_temporal_norm.csv")
+        save_file = preds_file_path.with_name(preds_file_path.stem + "_temporal_norm.csv")
         temporal_norm_df.to_csv(save_file)
 
     if "pca_singleview" in metrics_to_compute:
@@ -681,7 +691,7 @@ def compute_metrics_single(
         # add train/val/test split
         if set is not None:
             pcasv_df["set"] = set
-        save_file = preds_file.replace(".csv", "_pca_singleview_error.csv")
+        save_file = preds_file_path.with_name(preds_file_path.stem + "_pca_singleview_error.csv")
         pcasv_df.to_csv(save_file)
 
     if "pca_multiview" in metrics_to_compute:
@@ -702,5 +712,5 @@ def compute_metrics_single(
         # add train/val/test split
         if set is not None:
             pcamv_df["set"] = set
-        save_file = preds_file.replace(".csv", "_pca_multiview_error.csv")
+        save_file = preds_file_path.with_name(preds_file_path.stem + "_pca_multiview_error.csv")
         pcamv_df.to_csv(save_file)

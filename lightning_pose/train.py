@@ -1,5 +1,5 @@
 """Example model training function."""
-import copy
+
 import os
 import random
 import shutil
@@ -13,22 +13,11 @@ import torch
 from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 from typeguard import typechecked
 
+from lightning_pose.model import Model
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
-from lightning_pose.utils.cropzoom import generate_cropped_labeled_frames, generate_cropped_video
-from lightning_pose.utils.io import (
-    check_video_paths,
-    ckpt_path_from_base_path,
-    return_absolute_data_paths,
-    return_absolute_path,
-)
-from lightning_pose.utils.predictions import (
-    export_predictions_and_labeled_video,
-    load_model_from_checkpoint,
-    predict_dataset,
-)
+from lightning_pose.utils.io import return_absolute_data_paths
 from lightning_pose.utils.scripts import (
     calculate_train_batches,
-    compute_metrics,
     get_callbacks,
     get_data_module,
     get_dataset,
@@ -37,13 +26,111 @@ from lightning_pose.utils.scripts import (
     get_model,
 )
 
-# to ignore imports for sphix-autoapidoc
+# to ignore imports for sphinx-autoapidoc
 __all__ = ["train"]
 
 
 @typechecked
 def train(cfg: DictConfig) -> None:
+    model = _train(cfg)
+    # Comment out the above, and uncomment the below to skip
+    # training and go straight to post-training analysis:
+    # import os
+    # model = Model.from_dir(os.getcwd())
 
+    _evaluate_on_training_dataset(model)
+    _evaluate_on_ood_dataset(model)
+    _predict_test_videos(model)
+
+
+def _absolute_csv_file(csv_file, data_dir):
+    csv_file = Path(csv_file)
+    if not csv_file.is_absolute():
+        return Path(data_dir) / csv_file
+    return csv_file
+
+
+def _evaluate_on_training_dataset(model: Model):
+    pretty_print_str("Predicting train/val/test images...")
+
+    if model.config.is_single_view():
+        csv_file = _absolute_csv_file(
+            model.config.cfg.data.csv_file, model.config.cfg.data.data_dir
+        )
+        csv_files = [csv_file]
+        output_filename_stems = ["predictions"]
+    else:
+        csv_files = []
+        output_filename_stems = []
+        for csv_file, view_name in zip(
+            model.config.cfg.data.csv_file, model.config.cfg.data.view_names
+        ):
+            csv_files.append(
+                _absolute_csv_file(csv_file, model.config.cfg.data.data_dir)
+            )
+            output_filename_stems.append(f"predictions_{view_name}")
+
+    for csv_file, output_filename_stem in zip(csv_files, output_filename_stems):
+        model.predict_on_label_csv_internal(
+            csv_file=csv_file,
+            data_dir=model.config.cfg.data.data_dir,
+            # TODO annotate with train/val/test split metadata.
+            compute_metrics=True,
+            generate_labeled_images=False,
+            output_dir=model.model_dir,
+            output_filename_stem=output_filename_stem,
+            add_train_val_test_set=True,
+        )
+
+
+def _evaluate_on_ood_dataset(model: Model):
+    if model.config.is_single_view():
+        csv_file = _absolute_csv_file(
+            model.config.cfg.data.csv_file, model.config.cfg.data.data_dir
+        )
+        ood_csv_file = csv_file.with_stem(csv_file.stem + "_new")
+        ood_csv_files = [ood_csv_file]
+        output_filename_stems = ["predictions_new"]
+    else:
+        ood_csv_files = []
+        output_filename_stems = []
+        for csv_file, view_name in zip(
+            model.config.cfg.data.csv_file, model.config.cfg.data.view_names
+        ):
+            csv_file = _absolute_csv_file(csv_file, model.config.cfg.data.data_dir)
+            ood_csv_file = csv_file.with_stem(csv_file.stem + "_new")
+            ood_csv_files.append(ood_csv_file)
+            output_filename_stems.append(f"predictions_new_{view_name}")
+
+    if ood_csv_files[0].is_file():
+        pretty_print_str("Predicting OOD images...")
+
+        for ood_csv_file, output_filename_stem in zip(
+            ood_csv_files, output_filename_stems
+        ):
+            model.predict_on_label_csv_internal(
+                csv_file=ood_csv_file,
+                data_dir=model.config.cfg.data.data_dir,
+                compute_metrics=True,
+                generate_labeled_images=False,
+                output_dir=model.model_dir,
+                output_filename_stem=output_filename_stem,
+            )
+
+
+def _predict_test_videos(model: Model):
+    if model.config.cfg.eval.predict_vids_after_training:
+        pretty_print_str(f"Predicting videos in cfg.eval.test_videos_directory...")
+        for video_file in model.config.test_video_files():
+            pretty_print_str(f"Predicting video: {video_file}...")
+
+            model.predict_on_video_file(
+                Path(video_file),
+                generate_labeled_video=model.config.cfg.eval.save_vids_after_training,
+            )
+
+
+def _train(cfg: DictConfig) -> Model:
     # reset all seeds
     seed = 0
     os.environ["PYTHONHASHSEED"] = str(seed)
@@ -55,6 +142,7 @@ def train(cfg: DictConfig) -> None:
 
     # record lightning-pose version
     from lightning_pose import __version__ as lightning_pose_version
+
     with open_dict(cfg):
         cfg.model.lightning_pose_version = lightning_pose_version
 
@@ -92,7 +180,7 @@ def train(cfg: DictConfig) -> None:
 
     # save config file
     dest_config_file = Path(hydra_output_directory) / "config.yaml"
-    OmegaConf.save(config=cfg, f=dest_config_file, resolve=True)
+    OmegaConf.save(config=cfg, f=dest_config_file, resolve=False)
 
     # save labeled data file(s)
     if isinstance(cfg.data.csv_file, str):
@@ -127,7 +215,7 @@ def train(cfg: DictConfig) -> None:
         cfg,
         early_stopping=cfg.training.get("early_stopping", False),
         lr_monitor=True,
-        ckpt_every_n_epochs=cfg.training.get("ckpt_every_n_epochs", None)
+        ckpt_every_n_epochs=cfg.training.get("ckpt_every_n_epochs", None),
     )
 
     # calculate number of batches for both labeled and unlabeled data per epoch
@@ -169,175 +257,4 @@ def train(cfg: DictConfig) -> None:
     if not trainer.is_global_zero:
         sys.exit(0)
 
-    # ----------------------------------------------------------------------------------
-    # Post-training analysis
-    # ----------------------------------------------------------------------------------
-    # get best ckpt
-    best_ckpt = ckpt_path_from_base_path(
-            base_path=hydra_output_directory, model_name=cfg.model.model_name
-        )
-    print(f"Best checkpoint: {os.path.basename(best_ckpt)}")
-    # check if best_ckpt is a file
-    if not os.path.isfile(best_ckpt):
-        raise FileNotFoundError("Cannot find checkpoint. Have you trained for too few epochs?")
-
-    # make unaugmented data_loader if necessary
-    if cfg.training.imgaug != "default":
-        cfg_pred = copy.deepcopy(cfg)
-        cfg_pred.training.imgaug = "default"
-        imgaug_transform_pred = get_imgaug_transform(cfg=cfg_pred)
-        dataset_pred = get_dataset(
-            cfg=cfg_pred, data_dir=data_dir, imgaug_transform=imgaug_transform_pred
-        )
-        data_module_pred = get_data_module(cfg=cfg_pred, dataset=dataset_pred, video_dir=video_dir)
-        data_module_pred.setup()
-    else:
-        data_module_pred = data_module
-
-    model = load_model_from_checkpoint(
-        cfg=cfg,
-        ckpt_file=best_ckpt,
-        eval=True,
-        data_module=data_module_pred,
-    )
-
-    # ----------------------------------------------------------------------------------
-    # predict on all labeled frames (train/val/test)
-    # ----------------------------------------------------------------------------------
-    # Rebuild trainer with devices=1 for prediction. Training flags not needed.
-    trainer = pl.Trainer(accelerator="gpu", devices=1)
-    pretty_print_str("Predicting train/val/test images...")
-    # compute and save frame-wise predictions
-    preds_file = os.path.join(hydra_output_directory, "predictions.csv")
-    predict_dataset(
-        cfg=cfg,
-        trainer=trainer,
-        model=model,
-        data_module=data_module_pred,
-        preds_file=preds_file,
-    )
-    # compute and save various metrics
-    # for multiview, predict_dataset outputs one pred file per view.
-    multiview_pred_files = [
-        str(Path(hydra_output_directory) / p)
-        for p in Path(hydra_output_directory).glob("predictions_*.csv")
-    ]
-    if len(multiview_pred_files) > 0:
-        preds_file = multiview_pred_files
-    compute_metrics(cfg=cfg, preds_file=preds_file, data_module=data_module_pred)
-
-    is_detector = (
-        cfg.get("detector") is not None and cfg.detector.get("crop_ratio") is not None
-    )
-    if is_detector:
-        generate_cropped_labeled_frames(
-            root_directory=Path(data_dir),
-            output_directory=Path(hydra_output_directory),
-            detector_cfg=cfg.detector,
-        )
-
-    # ----------------------------------------------------------------------------------
-    # predict folder of videos
-    # ----------------------------------------------------------------------------------
-    if cfg.eval.predict_vids_after_training or is_detector:
-        pretty_print_str("Predicting videos...")
-        if cfg.eval.test_videos_directory is None:
-            filenames = []
-        else:
-            filenames = check_video_paths(return_absolute_path(cfg.eval.test_videos_directory))
-            vidstr = "video" if (len(filenames) == 1) else "videos"
-            pretty_print_str(
-                f"Found {len(filenames)} {vidstr} to predict (in cfg.eval.test_videos_directory)"
-            )
-
-        for video_file in filenames:
-            assert os.path.isfile(video_file)
-
-            pretty_print_str(f"Predicting video: {video_file}...")
-            # get save name for prediction csv file
-            video_pred_dir = os.path.join(hydra_output_directory, "video_preds")
-            video_pred_name = os.path.splitext(os.path.basename(video_file))[0]
-            prediction_csv_file = os.path.join(video_pred_dir, video_pred_name + ".csv")
-            # get save name labeled video csv
-            if cfg.eval.save_vids_after_training:
-                labeled_vid_dir = os.path.join(video_pred_dir, "labeled_videos")
-                labeled_mp4_file = os.path.join(labeled_vid_dir, video_pred_name + "_labeled.mp4")
-            else:
-                labeled_mp4_file = None
-            # predict on video
-            export_predictions_and_labeled_video(
-                video_file=video_file,
-                cfg=cfg,
-                prediction_csv_file=prediction_csv_file,
-                labeled_mp4_file=labeled_mp4_file,
-                trainer=trainer,
-                model=model,
-                data_module=data_module_pred,
-                save_heatmaps=cfg.eval.get(
-                    "predict_vids_after_training_save_heatmaps", False
-                ),
-            )
-
-            compute_metrics(
-                cfg=cfg,
-                preds_file=prediction_csv_file,
-                data_module=data_module_pred,
-            )
-
-            if is_detector:
-                generate_cropped_video(
-                    video_path=Path(video_file),
-                    detector_model_dir=Path(hydra_output_directory),
-                    detector_cfg=cfg.detector,
-                )
-
-    # ----------------------------------------------------------------------------------
-    # predict on OOD frames
-    # ----------------------------------------------------------------------------------
-    # update config file to point to OOD data
-    if isinstance(cfg.data.csv_file, list) or isinstance(cfg.data.csv_file, ListConfig):
-        csv_file_ood = []
-        for csv_file in cfg.data.csv_file:
-            csv_file_ood.append(
-                os.path.join(cfg.data.data_dir, csv_file).replace(".csv", "_new.csv"))
-    else:
-        csv_file_ood = os.path.join(
-            cfg.data.data_dir, cfg.data.csv_file).replace(".csv", "_new.csv")
-
-    if (isinstance(csv_file_ood, str) and os.path.exists(csv_file_ood)) \
-            or (isinstance(csv_file_ood, list) and os.path.exists(csv_file_ood[0])):
-        cfg_ood = cfg.copy()
-        cfg_ood.data.csv_file = csv_file_ood
-        cfg_ood.training.imgaug = "default"
-        cfg_ood.training.train_prob = 1
-        cfg_ood.training.val_prob = 0
-        cfg_ood.training.train_frames = 1
-        # build dataset/datamodule
-        imgaug_transform_ood = get_imgaug_transform(cfg=cfg_ood)
-        dataset_ood = get_dataset(
-            cfg=cfg_ood, data_dir=data_dir, imgaug_transform=imgaug_transform_ood
-        )
-        data_module_ood = get_data_module(cfg=cfg_ood, dataset=dataset_ood, video_dir=video_dir)
-        data_module_ood.setup()
-        pretty_print_str("Predicting OOD images...")
-        # compute and save frame-wise predictions
-        preds_file_ood = os.path.join(hydra_output_directory, "predictions_new.csv")
-        predict_dataset(
-            cfg=cfg_ood,
-            trainer=trainer,
-            model=model,
-            data_module=data_module_ood,
-            preds_file=preds_file_ood,
-        )
-        # compute and save various metrics
-        try:
-            # take care of multiview case, where multiple csv files have been saved
-            preds_files = [
-                os.path.join(hydra_output_directory, path) for path in
-                os.listdir(hydra_output_directory) if path.startswith("predictions_new")
-            ]
-            if len(preds_files) > 1:
-                preds_file_ood = preds_files
-            compute_metrics(cfg=cfg_ood, preds_file=preds_file_ood, data_module=data_module_ood)
-        except Exception as e:
-            print(f"Error computing metrics\n{e}")
+    return Model.from_dir(hydra_output_directory)

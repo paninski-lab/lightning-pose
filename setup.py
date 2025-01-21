@@ -105,7 +105,7 @@ extras_require = {
 
 setup(
     name="lightning-pose",
-    packages=find_packages() + ["mirror_mouse_example"],  # include data for wheel packaging
+    packages=find_packages(),
     version=get_version(Path("lightning_pose").joinpath("__init__.py")),
     description="Semi-supervised pose estimation using pytorch lightning",
     long_description=long_description,
@@ -116,9 +116,10 @@ setup(
     author_email="danbider@gmail.com",
     url="https://github.com/danbider/lightning-pose",
     keywords=["machine learning", "deep learning", "computer_vision"],
-    package_dir={
-        "lightning_pose": "lightning_pose",
-        "mirror_mouse_example": "data/mirror-mouse-example",  # remap 'data/mirror-mouse-example'
+    entry_points={
+        'console_scripts': [
+            'litpose = cli.main:main',
+        ],
     },
     include_package_data=True,  # required to get the non-.py data files in the wheel
 )
