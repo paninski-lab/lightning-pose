@@ -39,11 +39,7 @@ from lightning_pose.models import (
     SemiSupervisedHeatmapTrackerMHCRNN,
     SemiSupervisedRegressionTracker,
 )
-from lightning_pose.utils.io import (
-    check_if_semi_supervised,
-    get_keypoint_names,
-    return_absolute_path,
-)
+from lightning_pose.utils import io as io_utils
 from lightning_pose.utils.pca import KeypointPCA
 
 # to ignore imports for sphix-autoapidoc
@@ -147,7 +143,7 @@ def get_data_module(
     )
     val_batch_size = int(np.ceil(cfg.training.val_batch_size / cfg.training.num_gpus))
 
-    semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
+    semi_supervised = io_utils.check_if_semi_supervised(cfg.model.losses_to_use)
     if not semi_supervised:        
         data_module = BaseDataModule(
             dataset=dataset,
@@ -330,7 +326,7 @@ def get_model(
     )
     lr_scheduler_params["unfreeze_backbone_at_epoch"] = cfg.training.unfreezing_epoch
 
-    semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
+    semi_supervised = io_utils.check_if_semi_supervised(cfg.model.losses_to_use)
     image_h = cfg.data.image_resize_dims.height
     image_w = cfg.data.image_resize_dims.width
     if "vit" in cfg.model.backbone:
@@ -566,7 +562,7 @@ def compute_metrics(
                 preds_file
         ):
             assert view_name in preds_file_
-            labels_file = return_absolute_path(os.path.join(cfg.data.data_dir, csv_file))
+            labels_file = io_utils.return_absolute_path(os.path.join(cfg.data.data_dir, csv_file))
             # preds_file_ = preds_file.replace(".csv", f"_{view_name}.csv")
             compute_metrics_single(
                 cfg=cfg,
@@ -576,11 +572,11 @@ def compute_metrics(
             )
     else:
         if isinstance(cfg.data.csv_file, str):
-            labels_file = return_absolute_path(
+            labels_file = io_utils.return_absolute_path(
                 os.path.join(cfg.data.data_dir, cfg.data.csv_file)
             )
         else:
-            labels_file = return_absolute_path(
+            labels_file = io_utils.return_absolute_path(
                 os.path.join(cfg.data.data_dir, cfg.data.csv_file[0])
             )
         compute_metrics_single(
@@ -599,7 +595,8 @@ def compute_metrics_single(
 
     # get keypoint names
     labels_df = pd.read_csv(labels_file, header=[0, 1, 2], index_col=0)
-    keypoint_names = get_keypoint_names(
+    labels_df = io_utils.fix_empty_first_row(labels_df)
+    keypoint_names = io_utils.get_keypoint_names(
         cfg, csv_file=labels_file, header_rows=[0, 1, 2])
     # load predictions
     pred_df = pd.read_csv(preds_file, header=[0, 1, 2], index_col=0)
