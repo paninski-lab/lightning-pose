@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
+import numpy as np
 import pandas as pd
 from omegaconf import DictConfig, ListConfig
 from typeguard import typechecked
@@ -99,7 +100,9 @@ def get_keypoint_names(
             else:
                 # assume dlc format
                 header_rows = [0, 1, 2]
-        csv_data = pd.read_csv(csv_file, header=header_rows)
+        # We're just reading to parse the column structure, so let's only
+        # read a few rows (nrows=...). Unsure if this includes header rows.
+        csv_data = pd.read_csv(csv_file, header=header_rows, nrows=5)
         # collect marker names from multiindex header
         if header_rows == [1, 2] or header_rows == [0, 1]:
             # self.keypoint_names = csv_data.columns.levels[0]
@@ -271,3 +274,27 @@ def get_context_img_paths(center_img_path: Path) -> list[Path]:
         context_img_paths.append(path)
 
     return context_img_paths
+
+def fix_empty_first_row(df: pd.DataFrame) -> pd.DataFrame:
+    """Fixes a problem with `pd.read_csv` where if the first row is all NaN
+    it gets dropped.
+
+    Pandas uses the first row after a multiline header for the df.index.name.
+    It would look just like a data row where all values are NaN. Pandas has no
+    way to distinguish between an index name row, and a NaN data row.
+
+    Pandas gh issue: https://github.com/pandas-dev/pandas/issues/21995
+
+    Our fix detects if there's an index name, and if so it adds a NaN data row
+    with index=df.index.name.
+    """
+    if df.index.name is not None:
+        new_row = {col: np.nan for col in df.columns}
+        prepend_df = pd.DataFrame(
+            new_row, index=[df.index.name], columns=df.columns, dtype="float64"
+        )
+        fixed_df = pd.concat([prepend_df, df])
+        assert fixed_df.index.name is None
+        return fixed_df
+
+    return df

@@ -2,10 +2,13 @@
 
 import os
 import shutil
+import textwrap
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
+from lightning_pose.utils import io as io_utils
 from lightning_pose.utils.io import (
     check_if_semi_supervised,
     check_video_paths,
@@ -162,3 +165,31 @@ def test_get_context_img_paths():
         Path("a/b/c/img_2.png"),
         Path("a/b/c/img_3.png"),
     ]
+
+
+def test_fix_empty_first_row(tmp_path):
+    # Set up a df that we're trying to fix
+    test_csv = textwrap.dedent(
+        """
+        scorer,test,test,test,test
+        bodyparts,bp_1,bp_1,bp_2,bp_2
+        coords,x,y,x,y
+        labeled-data/test1.png,,,,
+        labeled-data/test2.png,,,,
+        labeled-data/test3.png,1.0,2.0,3.0,4.0
+        """
+    )
+    test_csv_path = tmp_path / "test.csv"
+    test_csv_path.write_text(test_csv)
+
+    df = pd.read_csv(test_csv_path, header=[0, 1, 2], index_col=0)
+    # Confirm this df has the problem.
+    assert len(df) == 2
+    assert df.index.name == "labeled-data/test1.png"
+    assert df.index[0] == "labeled-data/test2.png"
+
+    # Test the fix
+    fixed_df = io_utils.fix_empty_first_row(df)
+    assert len(fixed_df) == 3
+    assert fixed_df.index.name is None
+    assert fixed_df.index[0] == "labeled-data/test1.png"
