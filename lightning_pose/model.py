@@ -229,9 +229,9 @@ class Model:
             model=self.model,
         )
 
-        # FIXME: This is only used for computing PCA metrics.
-        data_module = _build_datamodule_pred(self.cfg)
         if compute_metrics:
+            # FIXME: This is only used for computing PCA metrics.
+            data_module = _build_datamodule_pred(self.cfg)
             compute_metrics_fn(self.cfg, str(prediction_csv_file), data_module)
 
         return self.PredictionResult(predictions=df)
