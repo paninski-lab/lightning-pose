@@ -11,7 +11,6 @@ from typeguard import typechecked
 
 from lightning_pose.utils import io as io_utils
 from lightning_pose.utils import pretty_print_str
-from lightning_pose.utils.io import return_absolute_data_paths, return_absolute_path
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -73,7 +72,7 @@ class FiftyOneImagePlotter:
         self.cfg = cfg
         self.keypoints_to_plot = keypoints_to_plot
         self.dataset_name = self.cfg.eval.fiftyone.dataset_name
-        self.data_dir, self.video_dir = return_absolute_data_paths(
+        self.data_dir, self.video_dir = io_utils.return_absolute_data_paths(
             cfg.data, cfg.eval.fiftyone.get("n_dirs_back", 3))
         # hard-code this for now
         self.df_header_rows: List[int] = [1, 2]
@@ -166,7 +165,8 @@ class FiftyOneImagePlotter:
     def get_model_abs_paths(self) -> List[str]:
         model_maybe_relative_paths = self.cfg.eval.hydra_paths
         model_abs_paths = [
-            return_absolute_path(m, n_dirs_back=2) for m in model_maybe_relative_paths
+            io_utils.return_absolute_path(m, n_dirs_back=2)
+            for m in model_maybe_relative_paths
         ]
         # assert that the model folders exist
         for mod_path in model_abs_paths:

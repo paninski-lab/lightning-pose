@@ -20,7 +20,6 @@ from lightning_pose.data.utils import (
     generate_heatmaps,
 )
 from lightning_pose.utils import io as io_utils
-from lightning_pose.utils.io import get_context_img_paths, get_keypoint_names
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -78,7 +77,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
         csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
         csv_data = io_utils.fix_empty_first_row(csv_data)
-        self.keypoint_names = get_keypoint_names(csv_file=csv_file, header_rows=header_rows)
+        self.keypoint_names = io_utils.get_keypoint_names(csv_file=csv_file, header_rows=header_rows)
         self.image_names = list(csv_data.index)
         self.keypoints = torch.tensor(csv_data.to_numpy(), dtype=torch.float32)
         # convert to x,y coordinates
@@ -133,7 +132,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             transformed_images = self.pytorch_transform(transformed_images)
 
         else:
-            context_img_paths = get_context_img_paths(img_path)
+            context_img_paths = io_utils.get_context_img_paths(img_path)
             # read the images from image list to create dataset
             images = []
             for path in context_img_paths:
