@@ -12,7 +12,7 @@ kaleido
 kornia
 lightning
 matplotlib
-moviepy
+moviepy<2.0.0
 opencv-python
 pandas
 pillow
