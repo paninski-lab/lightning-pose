@@ -32,6 +32,7 @@ extensions = [
     'sphinx.ext.viewcode',  # links documentation to source code
     'sphinx.ext.githubpages',  # allows integration with github
     'sphinx_automodapi.automodapi',
+    'sphinx.ext.autodoc',
     'sphinx_copybutton',  # add copy button to code blocks
     'sphinx_design',  # dropdowns
     'sphinx_rtd_dark_mode',
