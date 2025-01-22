@@ -4,7 +4,7 @@ import datetime
 import gc
 import os
 import time
-from typing import List, Tuple
+from typing import List, Tuple, Type
 
 import cv2
 import lightning.pytorch as pl
@@ -577,7 +577,7 @@ def make_dlc_pandas_index(cfg: DictConfig, keypoint_names: list[str]) -> pd.Mult
 
 
 @typechecked
-def get_model_class(map_type: str, semi_supervised: bool) -> ALLOWED_MODELS:
+def get_model_class(map_type: str, semi_supervised: bool) -> Type[ALLOWED_MODELS]:
     """[summary]
 
     Args:
