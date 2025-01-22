@@ -4,60 +4,93 @@
 Inference
 #########
 
-Once you have trained a model you'll likely want to run inference on new videos.
+Since version 1.7.0, installing lightning-pose also installs ``litpose``,
+a command-line tool built on top of the :ref:`lightning_pose_api`.
+The command ``litpose predict`` is used to run model inference on new data.
 
-Similar to training, there are several tools for running inference:
+Inference on new videos
+=======================
 
-#. A set of high-level functions used for processing videos and creating labeled clips. You can combine these to create your own custom inference script. This is required if you used the :ref:`pip package <pip_package>` installation method.
-#. An example inference script provided in the :ref:`conda from source <conda_from_source>` installation method. This demonstrates how to combine the high-level functions.
+The model_dir argument is the path to the model outputted by ``litpose train``.
 
-.. note::
+To predict on one or more video files:
 
-    The steps below assume the :ref:`conda from source <conda_from_source>` installation method.
-    If you did not use this installation method, see the
-    `example inference script <https://github.com/danbider/lightning-pose/blob/main/scripts/predict_new_vids.py>`_.
-    You can also see how video inference is handled in the
-    `example train script <https://github.com/danbider/lightning-pose/blob/main/scripts/train_hydra.py>`_.
+.. code-block:: shell
 
-Inference with example data
-===========================
+    litpose predict <model_dir> <video_file1> <video_file2> ...
 
-To run inference with a model trained on the example dataset, run the following command from
-inside the ``lightning-pose`` directory
-(make sure you have activated your conda environment):
+To predict on a folder of video files:
 
-.. code-block:: console
+.. code-block:: shell
 
-    python scripts/predict_new_vids.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"]
+    litpose predict <model_dir> <video_files_dir>
 
-This overwrites the config field ``eval.hydra_paths``, which is a list that contains the relative
-paths of the model folders you want to run inference with
-(you will need to replace "YYYY-MM-DD/HH-MM-SS/" with the timestamp of your own model).
+The ``litpose predict`` command saves frame-by-frame predictions and confidences as a CSV file,
+unsupervised losses in CSV file per loss type. By default it also generates videos annotated with 
+predictions, a feature which can be disabled using the ``--skip_viz`` flag.
 
-Inference with your data
-========================
+For the full list of options:
 
-In order to use this script more generally, you need to update several config fields:
+.. code-block:: shell
 
-#. ``eval.hydra_paths``: path to models to use for prediction
-#. ``eval.test_videos_directory``: path to a `directory` containing videos to run inference on
-#. ``eval.save_vids_after_training``: if ``true``, the script will also save a copy of the full video with model predictions overlaid.
-
-The results will be stored in the model directory.
-
-As with training, you either directly edit your config file and run:
-
-.. code-block:: console
-
-    python scripts/predict_new_vids.py --config-path=<PATH/TO/YOUR/CONFIGS/DIR> --config-name=<CONFIG_NAME.yaml>
-
-or override these arguments in the command line:
-
-.. code-block:: console
-
-    python scripts/predict_new_vids.py --config-path=<PATH/TO/YOUR/CONFIGS/DIR> --config-name=<CONFIG_NAME.yaml> eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"] eval.test_videos_directory=/absolute/path/to/videos
+    litpose predict --help
 
 .. note::
 
   Videos *must* be mp4 files that use the h.264 codec; see more information in the
   :ref:`FAQs<faq_video_formats>`.
+
+
+Inference on new images
+=======================
+
+Lightning pose also supports inference on images, as well 
+as computing pixel error against new labeled images. This is useful
+for evaluating a model on out-of-distribution data to see how well the
+model generalizes.
+
+Currently it's required to create a CSV file similar to
+the one used for training labeled frames. Once you have a CSV file,
+run: 
+
+.. code-block:: shell
+
+    litpose predict <model_dir> <csv_file>
+
+Output location
+===============
+
+Video predictions are saved to:
+
+.. code-block::
+
+    <model_dir>/
+    └── video_preds/
+        ├── <video_filename>.csv              (predictions)
+        ├── <video_filename>_<metric>.csv     (losses)
+        └── labeled_videos/
+            └── <video_filename>_labeled.mp4
+
+Image predictions are saved to:
+
+.. code-block::
+
+    <model_dir>/
+    └── image_preds/
+        └── <image_dirname | csv_filename | timestamp>/
+            ├── predictions.csv
+            ├── predictions_<metric>.csv      (losses)
+            └── <image_filename>_labeled.png
+
+Inference on sample dataset
+===========================
+
+The lightning pose repo includes a sample dataset (see :ref:`training-on-sample-dataset`).
+The sample video file is located in the git repo at ``data/mirror-mouse-example/videos``.
+Thus, to run inference on a model trained on the sample dataset,
+run from the ``lightning-pose`` directory
+(make sure you have activated your conda environment):
+
+.. code-block:: shell
+
+    litpose predict <model_dir> data/mirror-mouse-example/videos

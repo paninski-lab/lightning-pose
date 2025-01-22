@@ -57,8 +57,8 @@ Execution model
     The implementation spawns ``num_gpus - 1`` processes of the same command originally executed,
     repeating all of the command's execution per process.
     Thus it is advised to only run multi-GPU training in a dedicated training script
-    (``scripts/train_hydra.py``). If you use lightning-pose as part of a custom script and don't
-    want your entire script to run once per GPU, your script should run ``scripts/train_hydra.py``
+    (``litpose train``). If you use lightning-pose as part of a custom script and don't
+    want your entire script to run once per GPU, your script should run ``litpose train``
     rather than directly calling the ``train`` method.
 
 Tensorboard metric calculation
@@ -75,4 +75,4 @@ GPUs. For example, if you want to train on only the first two GPUs on your machi
 
 .. code-block:: bash
 
-    CUDA_VISIBLE_DEVICES=0,1 python scripts/train_hydra.py
+    CUDA_VISIBLE_DEVICES=0,1 litpose train config.yaml

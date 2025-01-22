@@ -95,7 +95,8 @@ See the :ref:`FAQs <faq_oom>` for more information on memory management.
   If the value is a float between 0 and 1 then it is interpreted as the fraction of total train frames.
   If the value is an integer greater than 1 then it is interpreted as the number of total train frames.
 
-.. _config_num_gpus:
+    .. _config_num_gpus:
+
 * ``training.num_gpus`` (*int, default: 1*): the number of GPUs for
   :ref:`multi-GPU training <multi_gpu_training>`
 
@@ -245,15 +246,14 @@ Evaluation
 
 The following parameters are used for general evaluation.
 
-* ``eval.predict_vids_after_training`` (*bool, default: true*): if true, after training (when using
-  scripts/train_hydra.py) run inference with the best model on all videos located in
-  ``eval.test_videos_directory`` (see below)
+* ``eval.predict_vids_after_training`` (*bool, default: true*): if true, after training run
+  inference on all videos located in ``eval.test_videos_directory`` (see below)
 
 * ``eval.test_videos_directory`` (*str, default: null*): absolute path to a video directory
-  containing videos for prediction; used in scripts/train_hydra.py and scripts/predict_new_vids.py
+  containing videos for post-training prediction.
 
 * ``eval.save_vids_after_training`` (*bool, default: false*): save out an mp4 file with predictions
-  overlaid after running inference; used in scripts/train_hydra.py and scripts/predict_new_vids.py
+  overlaid after running post-training prediction.
 
 * ``eval.colormap`` (*str, default: cool*): colormap options for labeled videos; options include
   sequential colormaps (viridis, plasma, magma, inferno, cool, etc) and diverging colormaps (RdBu,
@@ -262,11 +262,10 @@ The following parameters are used for general evaluation.
 * ``eval.confidence_thresh_for_vid`` (*float, default: 0.9*): predictions with confidence below this
   value will not be plotted in the labeled videos
 
-* ``eval.hydra_paths`` (*list, default: []*): absolute paths to hydra output folders for use with
-  scripts/predict_new_vids.py (see :ref:`inference <inference>` docs) and
-  scripts/create_fiftyone_dataset.py (see :ref:`FiftyOne <fiftyone>` docs)
-
 * ``eval.fiftyone.dataset_name`` (*str, default: test*): name of the FiftyOne dataset
 
 * ``eval.fiftyone.model_display_names`` (*list, default: [test_model]*): shorthand name for each of
   the models specified in ``hydra_paths``
+
+* ``eval.hydra_paths`` (*list, default: []*): absolute paths to model directories, only for use with
+  scripts/create_fiftyone_dataset.py (see :ref:`FiftyOne <fiftyone>` docs).

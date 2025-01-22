@@ -182,10 +182,6 @@ The field ``model.model_type`` is used to specify your model - the current suppo
 "regression", "heatmap", and "heatmap_mhcrnn".
 Add your new model name to this list.
 
-The basic training script can be found at ``scripts/train_hydra.py``.
-You do not need to update anything in this script to accommodate your new model, but this script
-uses several helper functions that we will update next.
-
 Step 2: update ``get_dataset``
 ------------------------------
 The first helper function you need to update is
@@ -217,8 +213,8 @@ Finally, there is helper function :meth:`~lightning_pose.utils.predictions.get_m
 is used to seamlessly load model parameters from checkpoint files.
 Again, there are various ``if/else`` statements where your model should be incorporated.
 
-Step 6: optional and miscellaneous additons
--------------------------------------------
+Step 6: optional and miscellaneous additions
+--------------------------------------------
 
 If you find yourself needing to write a new DALI dataloader to support your model training, you might also need to update the :class:`~lightning_pose.utils.predictions.PredictionHandler` class.
 

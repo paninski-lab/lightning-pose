@@ -31,7 +31,11 @@ __all__ = ["train"]
 
 
 @typechecked
-def train(cfg: DictConfig) -> None:
+def train(cfg: DictConfig) -> Model:
+    """
+    Trains a model using the configuration `cfg`. Saves model to current
+    working directory (callers should `chdir` to the desired `model_dir` prior to calling).
+    """
     model = _train(cfg)
     # Comment out the above, and uncomment the below to skip
     # training and go straight to post-training analysis:
@@ -41,6 +45,8 @@ def train(cfg: DictConfig) -> None:
     _evaluate_on_training_dataset(model)
     _evaluate_on_ood_dataset(model)
     _predict_test_videos(model)
+
+    return model
 
 
 def _absolute_csv_file(csv_file, data_dir):
