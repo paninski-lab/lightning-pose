@@ -55,6 +55,9 @@ print(f"Found CUDA version: {cuda_version}, using DALI: {dali}")
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
+
+python_requires=">=3.10"
+
 # basic requirements
 install_requires = [
     "fiftyone",
