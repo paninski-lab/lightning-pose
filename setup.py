@@ -55,9 +55,6 @@ print(f"Found CUDA version: {cuda_version}, using DALI: {dali}")
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
-
-python_requires=">=3.10"
-
 # basic requirements
 install_requires = [
     "fiftyone",
@@ -108,6 +105,7 @@ extras_require = {
 
 setup(
     name="lightning-pose",
+    python_requires=">=3.10",
     packages=find_packages(),
     version=get_version(Path("lightning_pose").joinpath("__init__.py")),
     description="Semi-supervised pose estimation using pytorch lightning",
