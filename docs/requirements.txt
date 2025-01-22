@@ -13,6 +13,7 @@ kornia
 lightning
 matplotlib
 moviepy<2.0.0
+numpy<2.0.0
 opencv-python
 pandas
 pillow
