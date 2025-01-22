@@ -54,14 +54,14 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 html_theme = 'sphinx_rtd_theme'
-html_theme_options = {"logo": {"text": "Lightning Pose Docs - Home"}}
 html_logo = "images/LightningPose_logo_light.png"
 html_favicon = "images/favicon.ico"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-# html_static_path = ['_static']
+html_static_path = ['_static']
+html_css_files = ['lightningpose.css']
 
 autosummary_generate = True
 
@@ -70,12 +70,7 @@ default_dark_mode = True
 
 
 # If you want to document __init__() functions for python classes
-# https://stackoverflow.com/a/5599712
-def skip(app, what, name, obj, skip, options):
-    if name == "__init__":
-        return False
-    return skip
-
-
-def setup(app):
-    app.connect("autodoc-skip-member", skip)
+# https://stackoverflow.com/a/61732050/1925967
+autodoc_default_options = {
+    'special-members': '__init__',
+}

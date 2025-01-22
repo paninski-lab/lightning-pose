@@ -198,7 +198,7 @@ from the ``data`` field) you can add those key-value pairs to the constructor in
 
 Step 4: update ``compute_metrics`` (optional)
 ---------------------------------------------
-The base training script ``scripts/train_hydra.py`` will automatically compute a set of metrics on
+Lightning pose will automatically compute a set of metrics on
 all labeled data and unlabeled videos upon training completion.
 To add your new metric to this operation, you must update
 :meth:`~lightning_pose.utils.scripts.compute_metrics`.

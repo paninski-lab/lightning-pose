@@ -29,7 +29,14 @@ __all__ = ["Model"]
 
 class Model:
     model_dir: Path
+    """Directory the model is stored in."""
+    
     config: ModelConfig
+    """The model configuration stored as a `ModelConfig` object.
+    `ModelConfig` wraps the `omegaconf.DictConfig` and provides util functions
+    over it.
+    """
+
     model: Optional[ALLOWED_MODELS] = None
 
     # Just a constant we can use as a default value for kwargs,
@@ -38,6 +45,7 @@ class Model:
 
     @staticmethod
     def from_dir(model_dir: str | Path):
+        """Create a `Model` instance for a model stored at `model_dir`."""
         model_dir = Path(model_dir)
         config = ModelConfig.from_yaml_file(model_dir / "config.yaml")
         return Model(model_dir, config)
@@ -48,6 +56,7 @@ class Model:
 
     @property
     def cfg(self) -> DictConfig:
+        """The model configuration as an `omegaconf.DictConfig`."""
         return self.config.cfg
 
     def _load(self):
@@ -95,8 +104,7 @@ class Model:
             output_dir (str | Path, optional): The directory to save outputs to.
                 Defaults to `{model_dir}/image_preds/{csv_file_name}`. If set to None, outputs are not saved.
         Returns:
-            PredictionResult: A PredictionResult object containing the predictions
-                and metrics.
+            PredictionResult: A PredictionResult object containing the predictions and metrics.
         """
         return self.predict_on_label_csv_internal(
             csv_file=csv_file,
@@ -196,6 +204,18 @@ class Model:
         compute_metrics: bool = True,
         generate_labeled_video: bool = False,
     ) -> PredictionResult:
+        """Predicts on a video file and computes unsupervised loss metrics if applicable.
+
+        Args:
+            video_file (str | Path): Path to the video file.
+            compute_metrics (bool, optional): Whether to compute pixel error and loss metrics on
+                predictions.
+            generate_labeled_video (bool, optional): Whether to save a labeled video. Defaults to False.
+            output_dir (str | Path, optional): The directory to save outputs to.
+                Defaults to `{model_dir}/image_preds/{csv_file_name}`. If set to None, outputs are not saved.
+        Returns:
+            PredictionResult: A PredictionResult object containing the predictions and metrics.
+        """
         self._load()
         video_file = Path(video_file)
 

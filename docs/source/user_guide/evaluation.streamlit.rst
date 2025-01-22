@@ -13,13 +13,10 @@ Run the following command from inside the ``lightning-pose/lightning_pose/apps``
 
 .. code-block:: console
 
-    streamlit run labeled_frame_diagnostics.py -- --model_dir <ABOLUTE_PATH_TO_HYDRA_OUTPUTS_DIRECTORY>
+    streamlit run labeled_frame_diagnostics.py -- --model_dir <ABSOLUTE_PATH_TO_OUTPUT_DIRECTORY>
 
-The only argument needed is ``--model_dir``, which tells the app where to find models and their predictions. ``<ABOLUTE_PATH_TO_HYDRA_OUTPUTS_DIRECTORY>`` should contain hydra subfolders of the type ``YYYY-MM-DD/HH-MM-SS``.
-
-.. note:
-
-    The lightning-pose output folder for a single model is typically ``/path/to/lightning-pose/outputs/YYYY-MM-DD/HH-MM-SS``, where the last folder contains prediction csv files.
+The only argument needed is ``--model_dir``, which tells the app where to find model directories.
+It should contain model directories of the type ``YYYY-MM-DD/HH-MM-SS``.
 
 The app shows:
 
