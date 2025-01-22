@@ -4,7 +4,6 @@ import os
 import warnings
 from collections import OrderedDict
 from pathlib import Path
-from typing import Dict, List, Optional, Union
 
 import imgaug.augmenters as iaa
 import lightning.pytorch as pl
@@ -32,7 +31,6 @@ from lightning_pose.metrics import (
     temporal_norm,
 )
 from lightning_pose.models import (
-    ALLOWED_MODELS,
     HeatmapTracker,
     HeatmapTrackerMHCRNN,
     RegressionTracker,
@@ -77,7 +75,7 @@ def get_dataset(
     cfg: DictConfig,
     data_dir: str,
     imgaug_transform: iaa.Sequential,
-) -> Union[BaseTrackingDataset, HeatmapDataset, MultiviewHeatmapDataset]:
+) -> BaseTrackingDataset | HeatmapDataset | MultiviewHeatmapDataset:
     """Create a dataset that contains labeled data."""
 
     if cfg.model.model_type == "regression":
@@ -124,9 +122,9 @@ def get_dataset(
 @typechecked
 def get_data_module(
     cfg: DictConfig,
-    dataset: Union[BaseTrackingDataset, HeatmapDataset, MultiviewHeatmapDataset],
-    video_dir: Optional[str] = None,
-) -> Union[BaseDataModule, UnlabeledDataModule]:
+    dataset: BaseTrackingDataset | HeatmapDataset | MultiviewHeatmapDataset,
+    video_dir: str | None = None,
+) -> BaseDataModule | UnlabeledDataModule:
     """Create a data module that splits a dataset into train/val/test iterators."""
 
     # Old configs may have num_gpus: 0. We will remove support in a future release.
@@ -210,7 +208,7 @@ def get_data_module(
 @typechecked
 def get_loss_factories(
     cfg: DictConfig,
-    data_module: Union[BaseDataModule, UnlabeledDataModule],
+    data_module: BaseDataModule | UnlabeledDataModule,
 ) -> dict:
     """Create loss factory that orchestrates different losses during training."""
 
@@ -315,8 +313,8 @@ def get_loss_factories(
 @typechecked
 def get_model(
     cfg: DictConfig,
-    data_module: Union[BaseDataModule, UnlabeledDataModule],
-    loss_factories: Dict[str, LossFactory],
+    data_module: BaseDataModule | UnlabeledDataModule,
+    loss_factories: dict[str, LossFactory],
 ) -> pl.LightningModule:
     """Create model: regression or heatmap based, supervised or semi-supervised."""
 
@@ -457,7 +455,7 @@ def get_callbacks(
     lr_monitor=True,
     ckpt_every_n_epochs=None,
     backbone_unfreeze=True,
-) -> List:
+) -> list:
 
     callbacks = []
 
@@ -508,7 +506,7 @@ def get_callbacks(
 @typechecked
 def calculate_train_batches(
     cfg: DictConfig,
-    dataset: Optional[Union[BaseTrackingDataset, HeatmapDataset, MultiviewHeatmapDataset]] = None,
+    dataset: BaseTrackingDataset | HeatmapDataset | MultiviewHeatmapDataset | None = None,
 ) -> int:
     """
     For semi-supervised models, this tells us how many batches to take from each dataloader
@@ -547,8 +545,8 @@ def calculate_train_batches(
 @typechecked
 def compute_metrics(
     cfg: DictConfig,
-    preds_file: Union[str, List[str]],
-    data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
+    preds_file: str | list[str],
+    data_module: BaseDataModule | UnlabeledDataModule | None = None,
 ) -> None:
     """Compute various metrics on predictions csv file, potentially for multiple views.
     Saves metrics to files next to predictions file, in the convention of:
@@ -598,7 +596,7 @@ def compute_metrics_single(
     cfg: DictConfig,
     labels_file: str,
     preds_file: str,
-    data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
+    data_module: BaseDataModule | UnlabeledDataModule | None = None,
 ) -> None:
     """Compute various metrics on a predictions csv file from a single view."""
 

@@ -1,7 +1,7 @@
 """Data modules split a dataset into train, val, and test modules."""
 
 import copy
-from typing import List, Literal, Optional, Union
+from typing import Literal
 
 import imgaug.augmenters as iaa
 import lightning.pytorch as pl
@@ -36,9 +36,9 @@ class BaseDataModule(pl.LightningDataModule):
         test_batch_size: int = 1,
         num_workers: int = 8,
         train_probability: float = 0.8,
-        val_probability: Optional[float] = None,
-        test_probability: Optional[float] = None,
-        train_frames: Optional[Union[float, int]] = None,
+        val_probability: float | None = None,
+        test_probability: float | None = None,
+        train_frames: float | int | None = None,
         torch_seed: int = 42,
     ) -> None:
         """Data module splits a dataset into train, val, and test data loaders.
@@ -75,7 +75,7 @@ class BaseDataModule(pl.LightningDataModule):
         self.test_dataset = None  # populated by self.setup()
         self.torch_seed = torch_seed
 
-    def setup(self, stage: Optional[str] = None) -> None:  # stage arg needed for ptl
+    def setup(self, stage: str | None = None) -> None:  # stage arg needed for ptl
 
         datalen = self.dataset.__len__()
         print(f"Number of labeled images in the full dataset (train+val+test): {datalen}")
@@ -170,17 +170,17 @@ class UnlabeledDataModule(BaseDataModule):
     def __init__(
         self,
         dataset: torch.utils.data.Dataset,
-        video_paths_list: Union[List[str], str],
-        dali_config: Union[dict, DictConfig],
-        view_names: Optional[List[str]] = None,
+        video_paths_list: list[str] | str,
+        dali_config: dict | DictConfig,
+        view_names: list[str] | None = None,
         train_batch_size: int = 16,
         val_batch_size: int = 16,
         test_batch_size: int = 1,
         num_workers: int = 8,
         train_probability: float = 0.8,
-        val_probability: Optional[float] = None,
-        test_probability: Optional[float] = None,
-        train_frames: Optional[float] = None,
+        val_probability: float | None = None,
+        test_probability: float | None = None,
+        train_frames: float | None = None,
         torch_seed: int = 42,
         imgaug: Literal["default", "dlc", "dlc-top-down"] = "default",
     ) -> None:

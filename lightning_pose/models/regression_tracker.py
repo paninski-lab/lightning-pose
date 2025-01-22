@@ -1,6 +1,6 @@
 """Models that produce (x, y) coordinates of keypoints from images."""
 
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Tuple
 
 import torch
 from omegaconf import DictConfig
@@ -34,12 +34,12 @@ class RegressionTracker(BaseSupervisedTracker):
     def __init__(
         self,
         num_keypoints: int,
-        loss_factory: Optional[LossFactory] = None,
+        loss_factory: LossFactory | None = None,
         backbone: ALLOWED_BACKBONES = "resnet50",
         pretrained: bool = True,
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
-        lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
+        lr_scheduler_params: DictConfig | dict | None = None,
         **kwargs: Any,
     ) -> None:
         """Base model that produces (x, y) coordinates of keypoints from images.
@@ -115,7 +115,7 @@ class RegressionTracker(BaseSupervisedTracker):
 
     def predict_step(
         self,
-        batch_dict: Union[BaseLabeledBatchDict, UnlabeledBatchDict],
+        batch_dict: BaseLabeledBatchDict | UnlabeledBatchDict,
         batch_idx: int,
         **kwargs: Any,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -146,13 +146,13 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
     def __init__(
         self,
         num_keypoints: int,
-        loss_factory: Optional[LossFactory] = None,
-        loss_factory_unsupervised: Optional[LossFactory] = None,
+        loss_factory: LossFactory | None = None,
+        loss_factory_unsupervised: LossFactory | None = None,
         backbone: ALLOWED_BACKBONES = "resnet50",
         pretrained: bool = True,
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
-        lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
+        lr_scheduler_params: DictConfig | dict | None = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -191,7 +191,7 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         self.total_unsupervised_importance = torch.tensor(1.0)
         # self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
 
-    def get_loss_inputs_unlabeled(self, batch_dict: UnlabeledBatchDict) -> Dict:
+    def get_loss_inputs_unlabeled(self, batch_dict: UnlabeledBatchDict) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         predicted_keypoints = self.forward(batch_dict["frames"])
         # undo augmentation if needed

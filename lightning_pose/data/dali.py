@@ -1,7 +1,7 @@
 """Data pipelines based on efficient video reading by nvidia dali package."""
 
 import os
-from typing import Dict, List, Literal, Optional, Union
+from typing import List, Literal
 
 import numpy as np
 import nvidia.dali.fn as fn
@@ -25,14 +25,14 @@ __all__ = [
 # cannot typecheck due to way pipeline_def decorator consumes additional args
 @pipeline_def
 def video_pipe(
-    filenames: Union[List[str], str],
-    resize_dims: Optional[List[int]] = None,
+    filenames: list[str] | str,
+    resize_dims: list[int] | None = None,
     random_shuffle: bool = False,
     sequence_length: int = 16,
     pad_sequences: bool = True,
     initial_fill: int = 16,
-    normalization_mean: List[float] = _IMAGENET_MEAN,
-    normalization_std: List[float] = _IMAGENET_STD,
+    normalization_mean: list[float] = _IMAGENET_MEAN,
+    normalization_std: list[float] = _IMAGENET_STD,
     name: str = "reader",
     step: int = 1,
     pad_last_batch: bool = False,
@@ -174,7 +174,7 @@ class LitDaliWrapper(DALIGenericIterator):
     @staticmethod
     def _dali_output_to_tensors(
         batch: list
-    ) -> Union[UnlabeledBatchDict, MultiviewUnlabeledBatchDict]:
+    ) -> UnlabeledBatchDict | MultiviewUnlabeledBatchDict:
 
         # always batch_size=1
 
@@ -229,7 +229,7 @@ class LitDaliWrapper(DALIGenericIterator):
                 frames=frames, transforms=transforms, bbox=bbox, is_multiview=True,
             )
 
-    def __next__(self) -> Union[UnlabeledBatchDict, MultiviewUnlabeledBatchDict]:
+    def __next__(self) -> UnlabeledBatchDict | MultiviewUnlabeledBatchDict:
         batch = super().__next__()
         return self._dali_output_to_tensors(batch=batch)
 
@@ -245,10 +245,10 @@ class PrepareDALI(object):
         self,
         train_stage: Literal["predict", "train"],
         model_type: Literal["base", "context"],
-        filenames: Union[List[str], List[List[str]]],
-        resize_dims: List[int],
-        dali_config: Union[dict, DictConfig] = None,
-        imgaug: Optional[str] = "default",
+        filenames: list[str] | list[List[str]],
+        resize_dims: list[int],
+        dali_config: dict | DictConfig = None,
+        imgaug: str | None = "default",
         num_threads: int = 1,
     ) -> None:
 
@@ -315,9 +315,9 @@ class PrepareDALI(object):
 
     def _setup_pipe_dict(
         self,
-        filenames: Union[List[str], List[List[str]]],
+        filenames: list[str] | list[List[str]],
         imgaug: str,
-    ) -> Dict[str, dict]:
+    ) -> dict[str, dict]:
         """All of the pipeline args in one place."""
         # When running with multiple GPUs, the LOCAL_RANK variable correctly
         # contains the DDP Local Rank, which is also the cuda device index.

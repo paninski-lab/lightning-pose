@@ -1,5 +1,3 @@
-from typing import Union
-
 import numpy as np
 import torch
 from typeguard import typechecked
@@ -32,7 +30,7 @@ def pixel_error(keypoints_true: np.ndarray, keypoints_pred: np.ndarray) -> np.nd
 
 
 @typechecked
-def temporal_norm(keypoints_pred: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
+def temporal_norm(keypoints_pred: np.ndarray | torch.Tensor) -> np.ndarray:
     """Norm of difference between keypoints on successive time bins.
 
     Args:
@@ -64,7 +62,7 @@ def temporal_norm(keypoints_pred: Union[np.ndarray, torch.Tensor]) -> np.ndarray
 
 @typechecked
 def pca_singleview_reprojection_error(
-    keypoints_pred: Union[np.ndarray, torch.Tensor],
+    keypoints_pred: np.ndarray | torch.Tensor,
     pca: KeypointPCA,
 ) -> np.ndarray:
     """PCA reprojection error.
@@ -107,7 +105,7 @@ def pca_singleview_reprojection_error(
 
 @typechecked
 def pca_multiview_reprojection_error(
-    keypoints_pred: Union[np.ndarray, torch.Tensor],
+    keypoints_pred: np.ndarray | torch.Tensor,
     pca: KeypointPCA,
 ) -> np.ndarray:
     """PCA reprojection error.

@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -48,7 +47,7 @@ def _calculate_bbox_size(
 
 @typechecked
 def _compute_bbox_df(
-    pred_df: pd.DataFrame, anchor_keypoints: List[str], crop_ratio: float = 1.0
+    pred_df: pd.DataFrame, anchor_keypoints: list[str], crop_ratio: float = 1.0
 ) -> pd.DataFrame:
     # Get x,y columns for anchor_keypoints (or all keypoints if anchor_keypoints is empty)
     coord_mask = pred_df.columns.get_level_values("coords").isin(["x", "y"])
@@ -165,7 +164,7 @@ def generate_cropped_labeled_frames(
     root_directory: Path,
     output_directory: Path,
     detector_cfg: DictConfig,
-    preds_file: Optional[Path] = None,
+    preds_file: Path | None = None,
 ) -> None:
     # Use predictions rather than CollectedData.csv because collected data can sometimes have NaNs.
     preds_file = preds_file or output_directory / "predictions.csv"

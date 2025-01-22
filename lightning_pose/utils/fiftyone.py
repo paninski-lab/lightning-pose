@@ -1,5 +1,4 @@
 import os
-from typing import Dict, List, Optional
 
 import fiftyone as fo
 import numpy as np
@@ -29,7 +28,7 @@ def check_lists_equal(list_1: list, list_2: list) -> bool:
 
 
 @typechecked
-def remove_string_w_substring_from_list(strings: List[str], substring: str) -> List[str]:
+def remove_string_w_substring_from_list(strings: list[str], substring: str) -> list[str]:
     for s in strings:
         if substring in s:
             strings.remove(s)
@@ -65,7 +64,7 @@ class FiftyOneImagePlotter:
     def __init__(
         self,
         cfg: DictConfig,
-        keypoints_to_plot: Optional[List[str]] = None,
+        keypoints_to_plot: list[str] | None = None,
         csv_filename: str = "predictions.csv",
     ) -> None:
 
@@ -75,7 +74,7 @@ class FiftyOneImagePlotter:
         self.data_dir, self.video_dir = io_utils.return_absolute_data_paths(
             cfg.data, cfg.eval.fiftyone.get("n_dirs_back", 3))
         # hard-code this for now
-        self.df_header_rows: List[int] = [1, 2]
+        self.df_header_rows: list[int] = [1, 2]
         # ground_truth_df is not necessary but useful for keypoint names
         if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
             df_tmp = []
@@ -93,7 +92,7 @@ class FiftyOneImagePlotter:
             self.ground_truth_df = io_utils.fix_empty_first_row(self.ground_truth_df)
         if self.keypoints_to_plot is None:
             # plot all keypoints that appear in the ground-truth dataframe
-            self.keypoints_to_plot: List[str] = list(self.ground_truth_df.columns.levels[0])
+            self.keypoints_to_plot: list[str] = list(self.ground_truth_df.columns.levels[0])
             # remove "bodyparts"
             if "bodyparts" in self.keypoints_to_plot:
                 self.keypoints_to_plot.remove("bodyparts")
@@ -105,7 +104,7 @@ class FiftyOneImagePlotter:
             # make sure that bodyparts and unnamed arguments aren't there:
 
         # for faster fiftyone access, convert gt data to dict of dicts
-        self.gt_data_dict: Dict[str, Dict[str, np.array]] = dfConverter(
+        self.gt_data_dict: dict[str, dict[str, np.array]] = dfConverter(
             df=self.ground_truth_df, keypoint_names=self.keypoints_to_plot
         )()
 
@@ -142,7 +141,7 @@ class FiftyOneImagePlotter:
         return self.cfg.data.num_keypoints
 
     @property
-    def model_names(self) -> List[str]:
+    def model_names(self) -> list[str]:
         model_display_names = self.cfg.eval.fiftyone.model_display_names
         if model_display_names is None:  # model_0, model_1, ...
             model_display_names = [
@@ -162,7 +161,7 @@ class FiftyOneImagePlotter:
             % (self.dataset_name, self.dataset_name)
         )
 
-    def get_model_abs_paths(self) -> List[str]:
+    def get_model_abs_paths(self) -> list[str]:
         model_maybe_relative_paths = self.cfg.eval.hydra_paths
         model_abs_paths = [
             io_utils.return_absolute_path(m, n_dirs_back=2)
@@ -173,7 +172,7 @@ class FiftyOneImagePlotter:
             assert os.path.isdir(mod_path)
         return model_abs_paths
 
-    def get_gt_keypoints_list(self) -> List[fo.Keypoints]:
+    def get_gt_keypoints_list(self) -> list[fo.Keypoints]:
         # for each frame, extract ground-truth keypoint information
         print("Collecting ground-truth keypoints...")
         return self.get_keypoints_per_image(self.gt_data_dict)
@@ -194,11 +193,11 @@ class FiftyOneImagePlotter:
 
     def build_single_frame_keypoints(
         self,
-        data_dict: Dict[str, Dict[str, np.array]],
+        data_dict: dict[str, dict[str, np.array]],
         frame_idx: int,
         height: int,
         width: int,
-    ) -> List[fo.Keypoint]:
+    ) -> list[fo.Keypoint]:
         # output: the positions of all keypoints in a single frame for a single model
         keypoints_list = []
         for kp_name in self.keypoints_to_plot:  # loop over names
@@ -218,8 +217,8 @@ class FiftyOneImagePlotter:
         return keypoints_list
 
     def get_keypoints_per_image(
-        self, data_dict: Dict[str, Dict[str, np.array]]
-    ) -> List[fo.Keypoints]:
+        self, data_dict: dict[str, dict[str, np.array]]
+    ) -> list[fo.Keypoints]:
         """iterates over the rows of the dataframe and gathers keypoints in fiftyone format"""
         dataset_length = data_dict[self.keypoints_to_plot[0]]["coords"].shape[0]
         keypoints_list = []
@@ -231,7 +230,7 @@ class FiftyOneImagePlotter:
             keypoints_list.append(fo.Keypoints(keypoints=single_frame_keypoints_list))
         return keypoints_list
 
-    def get_pred_keypoints_dict(self) -> Dict[str, List[fo.Keypoints]]:
+    def get_pred_keypoints_dict(self) -> dict[str, list[fo.Keypoints]]:
         pred_keypoints_dict = {}
         # loop over the dictionary with predictions per model
         for model_name, model_dict in self.model_preds_dict.items():
@@ -273,11 +272,11 @@ class FiftyOneImagePlotter:
 # @typechecked
 class dfConverter:
 
-    def __init__(self, df: pd.DataFrame, keypoint_names: List[str]) -> None:
+    def __init__(self, df: pd.DataFrame, keypoint_names: list[str]) -> None:
         self.df = df
         self.keypoint_names = keypoint_names
 
-    def dict_per_bp(self, keypoint_name: str) -> Dict[str, np.array]:
+    def dict_per_bp(self, keypoint_name: str) -> dict[str, np.array]:
         bp_df = self.df[keypoint_name]
         coords = bp_df[["x", "y"]].to_numpy()
         if "likelihood" in bp_df:
@@ -287,7 +286,7 @@ class dfConverter:
 
         return {"coords": coords, "likelihood": likelihood}
 
-    def __call__(self) -> Dict[str, Dict[str, np.array]]:
+    def __call__(self) -> dict[str, dict[str, np.array]]:
         full_dict = {}
         for kp_name in self.keypoint_names:
             full_dict[kp_name] = self.dict_per_bp(kp_name)

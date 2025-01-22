@@ -4,7 +4,7 @@ import datetime
 import gc
 import os
 import time
-from typing import Dict, List, Optional, Tuple, Type, Union
+from typing import List, Tuple
 
 import cv2
 import lightning.pytorch as pl
@@ -38,7 +38,7 @@ __all__ = [
 
 
 @typechecked
-def _get_cfg_file(cfg_file: Union[str, DictConfig]):
+def _get_cfg_file(cfg_file: str | DictConfig):
     """Load yaml configuration files."""
     if isinstance(cfg_file, str):
         # load configuration file
@@ -57,8 +57,8 @@ class PredictionHandler:
     def __init__(
         self,
         cfg: DictConfig,
-        data_module: Optional[pl.LightningDataModule] = None,
-        video_file: Optional[str] = None,
+        data_module: pl.LightningDataModule | None = None,
+        video_file: str | None = None,
     ) -> None:
         """
 
@@ -213,7 +213,7 @@ class PredictionHandler:
 
         return predictions
 
-    def make_dlc_pandas_index(self, keypoint_names: Optional[List] = None) -> pd.MultiIndex:
+    def make_dlc_pandas_index(self, keypoint_names: List | None = None) -> pd.MultiIndex:
         return make_dlc_pandas_index(
             cfg=self.cfg, keypoint_names=keypoint_names or self.keypoint_names
         )
@@ -240,7 +240,7 @@ class PredictionHandler:
                 TensorType["batch", "num_keypoints"],
             ]
         ],
-    ) -> Union[pd.DataFrame, Dict[str, pd.DataFrame]]:
+    ) -> pd.DataFrame | dict[str, pd.DataFrame]:
         """
         Call this function to get a pandas dataframe of the predictions for a single video.
         Assuming you've already run trainer.predict(), and have a list of Tuple predictions.
@@ -292,10 +292,10 @@ def predict_dataset(
     cfg: DictConfig,
     data_module: BaseDataModule,
     preds_file: str,
-    ckpt_file: Optional[str] = None,
-    trainer: Optional[pl.Trainer] = None,
-    model: Optional[ALLOWED_MODELS] = None,
-) -> Union[pd.DataFrame, Dict[str, pd.DataFrame]]:
+    ckpt_file: str | None = None,
+    trainer: pl.Trainer | None = None,
+    model: ALLOWED_MODELS | None = None,
+) -> pd.DataFrame | dict[str, pd.DataFrame]:
     """Save predicted keypoints for a labeled dataset.
 
     Args:
@@ -350,14 +350,14 @@ def predict_dataset(
 
 @typechecked
 def predict_single_video(
-    cfg_file: Union[str, DictConfig],
+    cfg_file: str | DictConfig,
     video_file: str,
     preds_file: str,
-    data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
-    ckpt_file: Optional[str] = None,
-    trainer: Optional[pl.Trainer] = None,
-    model: Optional[ALLOWED_MODELS] = None,
-    save_heatmaps: Optional[bool] = False,
+    data_module: BaseDataModule | UnlabeledDataModule | None = None,
+    ckpt_file: str | None = None,
+    trainer: pl.Trainer | None = None,
+    model: ALLOWED_MODELS | None = None,
+    save_heatmaps: bool | None = False,
 ) -> pd.DataFrame:
     """Make predictions for a single video, loading frame sequences using DALI.
 
@@ -469,11 +469,11 @@ def predict_single_video(
 def _predict_frames(
     cfg: DictConfig,
     model: ALLOWED_MODELS,
-    dataloader: Union[torch.utils.data.DataLoader, LitDaliWrapper],
+    dataloader: torch.utils.data.DataLoader | LitDaliWrapper,
     n_frames: int,
     batch_size: int,
     return_heatmaps: bool = False,
-) -> Tuple[np.ndarray, np.ndarray, Union[np.ndarray, None]]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray | None]:
     """Predict all frames in a data loader without undoing the resize/reshape; can return heatmaps.
 
     Args:
@@ -567,7 +567,7 @@ def _predict_frames(
 
 
 @typechecked
-def make_dlc_pandas_index(cfg: DictConfig, keypoint_names: List[str]) -> pd.MultiIndex:
+def make_dlc_pandas_index(cfg: DictConfig, keypoint_names: list[str]) -> pd.MultiIndex:
     xyl_labels = ["x", "y", "likelihood"]
     pdindex = pd.MultiIndex.from_product(
         [["%s_tracker" % cfg.model.model_type], keypoint_names, xyl_labels],
@@ -577,7 +577,7 @@ def make_dlc_pandas_index(cfg: DictConfig, keypoint_names: List[str]) -> pd.Mult
 
 
 @typechecked
-def get_model_class(map_type: str, semi_supervised: bool) -> Type[ALLOWED_MODELS]:
+def get_model_class(map_type: str, semi_supervised: bool) -> ALLOWED_MODELS:
     """[summary]
 
     Args:
@@ -619,7 +619,7 @@ def load_model_from_checkpoint(
     cfg: DictConfig,
     ckpt_file: str,
     eval: bool = False,
-    data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
+    data_module: BaseDataModule | UnlabeledDataModule | None = None,
     skip_data_module: bool = False,
 ) -> ALLOWED_MODELS:
     """Load Lightning Pose model from checkpoint file.
@@ -738,10 +738,10 @@ def create_labeled_video(
     clip: VideoFileClip,
     xs_arr: np.ndarray,
     ys_arr: np.ndarray,
-    mask_array: Optional[np.ndarray] = None,
+    mask_array: np.ndarray | None = None,
     dotsize: int = 4,
-    colormap: Optional[str] = "cool",
-    fps: Optional[float] = None,
+    colormap: str | None = "cool",
+    fps: float | None = None,
     output_video_path: str = "movie.mp4",
     start_time: float = 0.0,
 ) -> None:
@@ -872,12 +872,12 @@ def export_predictions_and_labeled_video(
     video_file: str,
     cfg: DictConfig,
     prediction_csv_file: str,
-    ckpt_file: Optional[str] = None,
-    trainer: Optional[pl.Trainer] = None,
-    model: Optional[ALLOWED_MODELS] = None,
-    data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
-    labeled_mp4_file: Optional[str] = None,
-    save_heatmaps: Optional[bool] = False,
+    ckpt_file: str | None = None,
+    trainer: pl.Trainer | None = None,
+    model: ALLOWED_MODELS | None = None,
+    data_module: BaseDataModule | UnlabeledDataModule | None = None,
+    labeled_mp4_file: str | None = None,
+    save_heatmaps: bool | None = False,
 ) -> pd.DataFrame:
     """Export predictions csv and a labeled video for a single video file."""
 

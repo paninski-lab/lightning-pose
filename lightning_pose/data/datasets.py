@@ -3,7 +3,7 @@
 
 import os
 from pathlib import Path
-from typing import Callable, List, Literal, Optional, Tuple, Union
+from typing import Callable, List, Literal, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -36,8 +36,8 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         self,
         root_directory: str,
         csv_path: str,
-        header_rows: Optional[List[int]] = [0, 1, 2],
-        imgaug_transform: Optional[Callable] = None,
+        header_rows: list[int] | None = [0, 1, 2],
+        imgaug_transform: Callable | None = None,
         do_context: bool = False,
     ) -> None:
         """Initialize a dataset for regression (rather than heatmap) models.
@@ -193,8 +193,8 @@ class HeatmapDataset(BaseTrackingDataset):
         self,
         root_directory: str,
         csv_path: str,
-        header_rows: Optional[List[int]] = [0, 1, 2],
-        imgaug_transform: Optional[Callable] = None,
+        header_rows: list[int] | None = [0, 1, 2],
+        imgaug_transform: Callable | None = None,
         downsample_factor: Literal[1, 2, 3] = 2,
         do_context: bool = False,
         uniform_heatmaps: bool = False,
@@ -308,13 +308,13 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         root_directory: str,
-        csv_paths: List[str],
-        view_names: List[str],
-        header_rows: Optional[List[int]] = [0, 1, 2],
+        csv_paths: list[str],
+        view_names: list[str],
+        header_rows: list[int] | None = [0, 1, 2],
         downsample_factor: Literal[1, 2, 3] = 2,
         uniform_heatmaps: bool = False,
         do_context: bool = False,
-        imgaug_transform: Optional[Callable] = None,
+        imgaug_transform: Callable | None = None,
     ) -> None:
         """Initialize the MultiViewHeatmap Dataset.
 
@@ -489,6 +489,6 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             bbox=bboxes,
             idxs=idx,
             num_views=self.num_views,  # int
-            concat_order=concat_order,  # List[str]
-            view_names=self.view_names,  # List[str]
+            concat_order=concat_order,  # list[str]
+            view_names=self.view_names,  # list[str]
         )

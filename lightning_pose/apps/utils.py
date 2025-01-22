@@ -3,7 +3,7 @@
 import os
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Tuple
 
 import pandas as pd
 import streamlit as st
@@ -16,7 +16,7 @@ pcasv_error_key = "pca singleview"
 
 
 @st.cache_resource
-def update_labeled_file_list(model_preds_folders: List[str], use_ood: bool = False) -> List[list]:
+def update_labeled_file_list(model_preds_folders: list[str], use_ood: bool = False) -> list[list]:
     per_model_preds = []
     for model_pred_folder in model_preds_folders:
         # pull labeled results from each model folder
@@ -42,9 +42,9 @@ def update_labeled_file_list(model_preds_folders: List[str], use_ood: bool = Fal
 @st.cache_resource
 def update_vid_metric_files_list(
     video: str,
-    model_preds_folders: List[str],
+    model_preds_folders: list[str],
     video_subdir: str = "video_preds",
-) -> List[list]:
+) -> list[list]:
     per_vid_preds = []
     for model_preds_folder in model_preds_folders:
         # pull each prediction file associated with a particular video
@@ -65,7 +65,7 @@ def update_vid_metric_files_list(
 
 
 @st.cache_resource
-def get_all_videos(model_preds_folders: List[str], video_subdir: str = "video_preds") -> list:
+def get_all_videos(model_preds_folders: list[str], video_subdir: str = "video_preds") -> list:
     # find each video that is predicted on by the models
     # wrap in Path so that it looks like an UploadedFile object
     # returned by streamlit's file_uploader
@@ -89,7 +89,7 @@ def get_all_videos(model_preds_folders: List[str], video_subdir: str = "video_pr
 
 
 @st.cache_data
-def concat_dfs(dframes: Dict[str, pd.DataFrame]) -> Tuple[pd.DataFrame, List[str]]:
+def concat_dfs(dframes: dict[str, pd.DataFrame]) -> Tuple[pd.DataFrame, list[str]]:
     counter = 0
     for model_name, dframe in dframes.items():
         mask = dframe.columns.get_level_values("coords").isin(["x", "y", "likelihood"])
@@ -143,7 +143,7 @@ def get_df_scatter(
     return pd.concat(df_scatters)
 
 
-def get_col_names(keypoint: str, coordinate: str, models: List[str]) -> List[str]:
+def get_col_names(keypoint: str, coordinate: str, models: list[str]) -> list[str]:
     return [get_full_name(keypoint, coordinate, model) for model in models]
 
 
@@ -162,7 +162,7 @@ def get_full_name(keypoint: str, coordinate: str, model: str) -> str:
 # ----------------------------------------------
 @st.cache_data
 def build_precomputed_metrics_df(
-    dframes: Dict[str, pd.DataFrame], keypoint_names: List[str], **kwargs,
+    dframes: dict[str, pd.DataFrame], keypoint_names: list[str], **kwargs,
 ) -> dict:
     concat_dfs = defaultdict(list)
     for model_name, df_dict in dframes.items():
@@ -194,7 +194,7 @@ def build_precomputed_metrics_df(
 
 @st.cache_data
 def get_precomputed_error(
-    df: pd.DataFrame, keypoint_names: List[str], model_name: str,
+    df: pd.DataFrame, keypoint_names: list[str], model_name: str,
 ) -> pd.DataFrame:
     # collect results
     df_ = df
@@ -206,7 +206,7 @@ def get_precomputed_error(
 
 @st.cache_data
 def compute_confidence(
-    df: pd.DataFrame, keypoint_names: List[str], model_name: str, **kwargs,
+    df: pd.DataFrame, keypoint_names: list[str], model_name: str, **kwargs,
 ) -> pd.DataFrame:
 
     if df.shape[1] % 3 == 1:
@@ -236,7 +236,7 @@ def get_model_folders(
     model_dir: str,
     require_predictions: bool = True,
     require_tb_logs: bool = False,
-) -> List[str]:
+) -> list[str]:
     """Find all model folders in a higher-level directory, conditional on directory contents."""
     # strip trailing slash if present
     if model_dir[-1] == os.sep:
@@ -260,7 +260,7 @@ def get_model_folders(
 
 
 # just to get the last two levels of the path
-def get_model_folders_vis(model_folders: List[str]) -> List[str]:
+def get_model_folders_vis(model_folders: list[str]) -> list[str]:
     fs = []
     for f in model_folders:
         fs.append(f.split("/")[-2:])

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
-from typing import Optional, TypedDict
+from typing import TypedDict
 
 import pandas as pd
 from omegaconf import DictConfig, OmegaConf
@@ -18,11 +18,7 @@ from lightning_pose.utils.predictions import (
 
 # Import as different name to avoid naming conflict with the kwarg `compute_metrics`.
 from lightning_pose.utils.scripts import compute_metrics as compute_metrics_fn
-from lightning_pose.utils.scripts import (
-    get_data_module,
-    get_dataset,
-    get_imgaug_transform,
-)
+from lightning_pose.utils.scripts import get_data_module, get_dataset, get_imgaug_transform
 
 __all__ = ["Model"]
 
@@ -30,7 +26,7 @@ __all__ = ["Model"]
 class Model:
     model_dir: Path
     config: ModelConfig
-    model: Optional[ALLOWED_MODELS] = None
+    model: ALLOWED_MODELS | None = None
 
     # Just a constant we can use as a default value for kwargs,
     # to differentiate between user omitting a kwarg, vs explicitly passing None.
@@ -78,10 +74,10 @@ class Model:
     def predict_on_label_csv(
         self,
         csv_file: str | Path,
-        data_dir: Optional[str | Path] = None,
+        data_dir: str | Path | None = None,
         compute_metrics: bool = True,
         generate_labeled_images: bool = False,
-        output_dir: Optional[str | Path] = UNSPECIFIED,
+        output_dir: str | Path | None = UNSPECIFIED,
     ) -> PredictionResult:
         """Predicts on a labeled dataset and computes error/loss metrics if applicable.
 
@@ -111,10 +107,10 @@ class Model:
     def predict_on_label_csv_internal(
         self,
         csv_file: str | Path,
-        data_dir: Optional[str | Path] = None,
+        data_dir: str | Path | None = None,
         compute_metrics: bool = True,
         generate_labeled_images: bool = False,
-        output_dir: Optional[str | Path] = UNSPECIFIED,
+        output_dir: str | Path | None = UNSPECIFIED,
         output_filename_stem: str = "predictions",
         add_train_val_test_set: bool = False,
     ) -> PredictionResult:
@@ -192,7 +188,7 @@ class Model:
     def predict_on_video_file(
         self,
         video_file: str | Path,
-        output_dir: Optional[str | Path] = UNSPECIFIED,
+        output_dir: str | Path | None = UNSPECIFIED,
         compute_metrics: bool = True,
         generate_labeled_video: bool = False,
     ) -> PredictionResult:

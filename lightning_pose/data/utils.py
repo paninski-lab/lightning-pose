@@ -1,6 +1,6 @@
 """Dataset/data module utilities."""
 
-from typing import Any, List, Literal, Optional, Tuple, TypedDict, Union
+from typing import Any, List, Literal, Tuple, TypedDict, Union
 
 import imgaug.augmenters as iaa
 import lightning.pytorch as pl
@@ -64,8 +64,8 @@ class MultiviewLabeledExampleDict(TypedDict):
     bbox: TensorType["num_views", "xyhw":4, float]
     idxs: int
     num_views: int
-    concat_order: List[str]
-    view_names: List[str]
+    concat_order: list[str]
+    view_names: list[str]
 
 
 class MultiviewHeatmapLabeledExampleDict(MultiviewLabeledExampleDict):
@@ -144,15 +144,15 @@ class MultiviewUnlabeledBatchDict(TypedDict):
 class SemiSupervisedBatchDict(TypedDict):
     """Batch type for base labeled+unlabeled data."""
 
-    labeled: Union[BaseLabeledBatchDict, MultiviewLabeledBatchDict]
-    unlabeled: Union[UnlabeledBatchDict, MultiviewUnlabeledBatchDict]
+    labeled: BaseLabeledBatchDict | MultiviewLabeledBatchDict
+    unlabeled: UnlabeledBatchDict | MultiviewUnlabeledBatchDict
 
 
 class SemiSupervisedHeatmapBatchDict(TypedDict):
     """Batch type for heatmap labeled+unlabeled data."""
 
-    labeled: Union[HeatmapLabeledBatchDict, MultiviewHeatmapLabeledBatchDict]
-    unlabeled: Union[UnlabeledBatchDict, MultiviewUnlabeledBatchDict]
+    labeled: HeatmapLabeledBatchDict | MultiviewHeatmapLabeledBatchDict
+    unlabeled: UnlabeledBatchDict | MultiviewUnlabeledBatchDict
 
 
 class SemiSupervisedDataLoaderDict(TypedDict):
@@ -269,7 +269,7 @@ class DataExtractor(object):
 
     def get_loader(
         self,
-    ) -> Union[torch.utils.data.DataLoader, SemiSupervisedDataLoaderDict]:
+    ) -> torch.utils.data.DataLoader | SemiSupervisedDataLoaderDict:
         if self.cond == "train":
             return self.data_module.train_dataloader()
         if self.cond == "val":
@@ -279,7 +279,7 @@ class DataExtractor(object):
 
     @staticmethod
     def verify_labeled_loader(
-        loader: Union[torch.utils.data.DataLoader, SemiSupervisedDataLoaderDict]
+        loader: torch.utils.data.DataLoader | SemiSupervisedDataLoaderDict
     ) -> torch.utils.data.DataLoader:
         if isinstance(loader, torch.utils.data.DataLoader):
             labeled_loader = loader
@@ -337,9 +337,9 @@ class DataExtractor(object):
 def split_sizes_from_probabilities(
     total_number: int,
     train_probability: float,
-    val_probability: Optional[float] = None,
-    test_probability: Optional[float] = None,
-) -> List[int]:
+    val_probability: float | None = None,
+    test_probability: float | None = None,
+) -> list[int]:
     """Returns the number of examples for train, val and test given split probs.
 
     Args:
@@ -405,7 +405,7 @@ def clean_any_nans(data: torch.Tensor, dim: int) -> torch.Tensor:
 
 
 @typechecked
-def count_frames(video_list: Union[List[str], str, List[List[str]]]) -> int:
+def count_frames(video_list: list[str] | str | list[List[str]]) -> int:
     """Simple function to count the number of frames in a video or a list of videos."""
 
     import cv2
@@ -427,7 +427,7 @@ def count_frames(video_list: Union[List[str], str, List[List[str]]]) -> int:
 @typechecked
 def compute_num_train_frames(
     len_train_dataset: int,
-    train_frames: Optional[Union[int, float]] = None,
+    train_frames: int | float | None = None,
 ) -> int:
     """Quickly compute number of training frames for a given dataset.
 
@@ -469,7 +469,7 @@ def generate_heatmaps(
     height: int,
     width: int,
     output_shape: Tuple[int, int],
-    sigma: Union[float, int] = 1.25,
+    sigma: float | int = 1.25,
     uniform_heatmaps: bool = False,
 ) -> TensorType["batch", "num_keypoints", "height", "width"]:
     """Generate 2D Gaussian heatmaps from mean and sigma.
@@ -526,7 +526,7 @@ def generate_heatmaps(
 def evaluate_heatmaps_at_location(
     heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
     locs: TensorType["batch", "num_keypoints", 2],
-    sigma: Union[float, int] = 1.25,  # sigma used for generating heatmaps
+    sigma: float | int = 1.25,  # sigma used for generating heatmaps
     num_stds: int = 2,  # num standard deviations of pixels to compute confidence
 ) -> TensorType["batch", "num_keypoints"]:
     """Evaluate 4D heatmaps using a 3D location tensor (last dim is x, y coords). Since
@@ -569,7 +569,7 @@ def evaluate_heatmaps_at_location(
 # @typechecked
 def undo_affine_transform(
     keypoints: TensorType["seq_len", "num_keypoints", 2],
-    transform: Union[TensorType["seq_len", 2, 3], TensorType[2, 3]],
+    transform: TensorType["seq_len", 2, 3] | TensorType[2, 3],
 ) -> TensorType["seq_len", "num_keypoints", 2]:
     """Undo an affine transform given a tensor of keypoints and the tranform matrix."""
 
