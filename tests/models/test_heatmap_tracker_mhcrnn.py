@@ -8,7 +8,6 @@ def test_supervised_heatmap_mhcrnn(
     heatmap_data_module_context,
     video_dataloader,
     trainer,
-    remove_logs,
     run_model_test,
 ):
     """Test the initialization and training of a supervised heatmap mhcrnn model."""
@@ -22,7 +21,6 @@ def test_supervised_heatmap_mhcrnn(
         data_module=heatmap_data_module_context,
         video_dataloader=video_dataloader,
         trainer=trainer,
-        remove_logs_fn=remove_logs,
     )
 
 
@@ -31,7 +29,6 @@ def test_supervised_multiview_heatmap_mhcrnn(
     multiview_heatmap_data_module_context,
     video_dataloader,
     trainer,
-    remove_logs,
     run_model_test,
 ):
     """Test the initialization and training of a supervised heatmap mhcrnn model."""
@@ -45,7 +42,6 @@ def test_supervised_multiview_heatmap_mhcrnn(
         data_module=multiview_heatmap_data_module_context,
         video_dataloader=video_dataloader,
         trainer=trainer,
-        remove_logs_fn=remove_logs,
     )
 
 
@@ -54,7 +50,6 @@ def test_semisupervised_heatmap_mhcrnn_pcasingleview(
     heatmap_data_module_combined_context,
     video_dataloader,
     trainer,
-    remove_logs,
     run_model_test,
 ):
     """Test the initialization and training of a semi-supervised heatmap mhcrnn model.
@@ -72,7 +67,6 @@ def test_semisupervised_heatmap_mhcrnn_pcasingleview(
         data_module=heatmap_data_module_combined_context,
         video_dataloader=video_dataloader,
         trainer=trainer,
-        remove_logs_fn=remove_logs,
     )
 
 
@@ -81,7 +75,6 @@ def test_semisupervised_heatmap_mhcrnn_pcasingleview_vit(
     heatmap_data_module_combined_context,
     video_dataloader,
     trainer,
-    remove_logs,
     run_model_test,
 ):
     """Test the initialization and training of a semi-supervised heatmap mhcrnn model ViT backbone.
@@ -100,7 +93,6 @@ def test_semisupervised_heatmap_mhcrnn_pcasingleview_vit(
         data_module=heatmap_data_module_combined_context,
         video_dataloader=video_dataloader,
         trainer=trainer,
-        remove_logs_fn=remove_logs,
     )
 
 
@@ -109,7 +101,6 @@ def test_semisupervised_multiview_heatmap_mhcrnn_multiview(
     multiview_heatmap_data_module_combined_context,
     video_dataloader,
     trainer,
-    remove_logs,
     run_model_test,
 ):
     """Test the initialization and training of a semi-supervised multiview heatmap model."""
@@ -123,5 +114,4 @@ def test_semisupervised_multiview_heatmap_mhcrnn_multiview(
         data_module=multiview_heatmap_data_module_combined_context,
         video_dataloader=video_dataloader,
         trainer=trainer,
-        remove_logs_fn=remove_logs,
     )

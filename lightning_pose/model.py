@@ -17,7 +17,7 @@ from lightning_pose.utils.predictions import (
 )
 
 # Import as different name to avoid naming conflict with the kwarg `compute_metrics`.
-from lightning_pose.utils.scripts import compute_metrics as compute_metrics_fn
+from lightning_pose.utils.scripts import compute_metrics_single
 from lightning_pose.utils.scripts import (
     get_data_module,
     get_dataset,
@@ -44,10 +44,21 @@ class Model:
     UNSPECIFIED = "unspecified"
 
     @staticmethod
-    def from_dir(model_dir: str | Path):
+    def from_dir(model_dir: str | Path, hydra_overrides: list[str] = None):
         """Create a `Model` instance for a model stored at `model_dir`."""
-        model_dir = Path(model_dir)
-        config = ModelConfig.from_yaml_file(model_dir / "config.yaml")
+        model_dir = Path(model_dir).absolute()
+
+        if hydra_overrides is not None:
+            import hydra
+
+            with hydra.initialize_config_dir(
+                version_base="1.1", config_dir=str(model_dir)
+            ):
+                cfg = hydra.compose(config_name="config", overrides=hydra_overrides)
+                config = ModelConfig(cfg)
+        else:
+            config = ModelConfig.from_yaml_file(model_dir / "config.yaml")
+
         return Model(model_dir, config)
 
     def __init__(self, model_dir: str | Path, config: ModelConfig):
@@ -80,6 +91,21 @@ class Model:
     def labeled_videos_dir(self) -> Path:
         return self.model_dir / "video_preds" / "labeled_videos"
 
+    def cropped_data_dir(self):
+        return self.model_dir / "cropped_images"
+
+    def cropped_videos_dir(self):
+        return self.model_dir / "cropped_videos"
+
+    def cropped_csv_file_path(self, csv_file_path: str | Path):
+        csv_file_path = Path(csv_file_path)
+        return (
+            self.model_dir
+            / "image_preds"
+            / csv_file_path.name
+            / ("cropped_" + csv_file_path.name)
+        )
+
     class PredictionResult(TypedDict):
         predictions: pd.DataFrame
         metrics: pd.DataFrame
@@ -91,6 +117,7 @@ class Model:
         compute_metrics: bool = True,
         generate_labeled_images: bool = False,
         output_dir: str | Path | None = UNSPECIFIED,
+        add_train_val_test_set: bool = False,
     ) -> PredictionResult:
         """Predicts on a labeled dataset and computes error/loss metrics if applicable.
 
@@ -103,40 +130,11 @@ class Model:
             generate_labeled_images (bool, optional): Whether to save labeled images. Defaults to False.
             output_dir (str | Path, optional): The directory to save outputs to.
                 Defaults to `{model_dir}/image_preds/{csv_file_name}`. If set to None, outputs are not saved.
+            add_train_val_test_set (bool): When predicting on training dataset, set to true to add the `set`
+                column to the prediction output.
         Returns:
             PredictionResult: A PredictionResult object containing the predictions and metrics.
         """
-        return self.predict_on_label_csv_internal(
-            csv_file=csv_file,
-            data_dir=data_dir,
-            compute_metrics=compute_metrics,
-            generate_labeled_images=generate_labeled_images,
-            output_dir=output_dir,
-            output_filename_stem="predictions",
-            add_train_val_test_set=False,
-        )
-
-    def predict_on_label_csv_internal(
-        self,
-        csv_file: str | Path,
-        data_dir: str | Path | None = None,
-        compute_metrics: bool = True,
-        generate_labeled_images: bool = False,
-        output_dir: str | Path | None = UNSPECIFIED,
-        output_filename_stem: str = "predictions",
-        add_train_val_test_set: bool = False,
-    ) -> PredictionResult:
-        """
-        See predict_on_label_csv for the rest of the arguments. The following are the
-        arguments specific to the internal function.
-        Args:
-            output_filename_stem (str): The stem of the output filename. Defaults to 'predictions'.
-                Used to generate predictions_new for OOD, and predictions_{view_name} for multi-view, in the
-                model_dir.
-            add_train_val_test_set (bool): When predicting on training dataset, set to true to add the `set`
-                column to the prediction output.
-        """
-
         self._load()
         # Convert this to absolute, because if relative, downstream will
         # assume incorrectly assume its relative to the data_dir.
@@ -180,7 +178,7 @@ class Model:
 
         data_module_pred = _build_datamodule_pred(cfg_pred)
 
-        preds_file_path = output_dir / (output_filename_stem + ".csv")
+        preds_file_path = output_dir / "predictions.csv"
         preds_file = str(preds_file_path)
 
         df = predict_dataset(
@@ -188,15 +186,12 @@ class Model:
         )
 
         if compute_metrics:
-            # HACK: True multi-view model treated as single-view model, so preds_file is
-            # a string, not a list per-view. This means we can't yet compute pca_multiview.
-            compute_metrics_fn(
+            compute_metrics_single(
                 cfg=cfg_pred,
+                labels_file=str(csv_file),
                 preds_file=preds_file,
                 data_module=data_module_pred,
             )
-
-        # TODO: Generate detector outputs.
 
         return self.PredictionResult(predictions=df)
 
@@ -254,9 +249,14 @@ class Model:
         )
 
         if compute_metrics:
-            # FIXME: This is only used for computing PCA metrics.
+            # FIXME: Data module is only used for computing PCA metrics.
             data_module = _build_datamodule_pred(self.cfg)
-            compute_metrics_fn(self.cfg, str(prediction_csv_file), data_module)
+            compute_metrics_single(
+                cfg=self.cfg,
+                labels_file=None,
+                preds_file=str(prediction_csv_file),
+                data_module=data_module,
+            )
 
         return self.PredictionResult(predictions=df)
 

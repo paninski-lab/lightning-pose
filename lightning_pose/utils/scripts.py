@@ -452,6 +452,7 @@ def get_model(
 def get_callbacks(
     cfg: DictConfig,
     early_stopping=False,
+    checkpointing=True,
     lr_monitor=True,
     ckpt_every_n_epochs=None,
     backbone_unfreeze=True,
@@ -481,13 +482,14 @@ def get_callbacks(
         callbacks.append(lr_monitor)
 
     # always save out best model
-    ckpt_best_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
-        monitor="val_supervised_loss",
-        mode="min",
-        filename="{epoch}-{step}-best",
-        enable_version_counter=False,
-    )
-    callbacks.append(ckpt_best_callback)
+    if checkpointing:
+        ckpt_best_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
+            monitor="val_supervised_loss",
+            mode="min",
+            filename="{epoch}-{step}-best",
+            enable_version_counter=False,
+        )
+        callbacks.append(ckpt_best_callback)
 
     if ckpt_every_n_epochs:
         # if ckpt_every_n_epochs is not None, save separate checkpoint files
@@ -574,32 +576,27 @@ def compute_metrics(
 @typechecked
 def compute_metrics_single(
     cfg: DictConfig,
-    labels_file: str,
+    labels_file: str | None,
     preds_file: str,
     data_module: BaseDataModule | UnlabeledDataModule | None = None,
 ) -> None:
     """Compute various metrics on a predictions csv file from a single view."""
-
-    # get keypoint names
-    labels_df = pd.read_csv(labels_file, header=[0, 1, 2], index_col=0)
-    labels_df = io_utils.fix_empty_first_row(labels_df)
-    keypoint_names = io_utils.get_keypoint_names(
-        cfg, csv_file=labels_file, header_rows=[0, 1, 2])
     # load predictions
     pred_df = pd.read_csv(preds_file, header=[0, 1, 2], index_col=0)
+    keypoint_names = io_utils.get_keypoint_names(
+        cfg, csv_file=preds_file, header_rows=[0, 1, 2])
     xyl_mask = pred_df.columns.get_level_values("coords").isin(["x", "y", "likelihood"])
     tmp = pred_df.loc[:, xyl_mask].to_numpy().reshape(pred_df.shape[0], -1, 3)
 
+    index = pred_df.index
     if pred_df.keys()[-1][0] == "set":
         # these are predictions on labeled data
         # get rid of last column that contains info about train/val/test set
         is_video = False
-        index = labels_df.index
         set = pred_df.iloc[:, -1].to_numpy()
     else:
         # these are predictions on video data
         is_video = True
-        index = pred_df.index
         set = None
 
     keypoints_pred = tmp[:, :, :2]  # shape (samples, n_keypoints, 2)
@@ -609,9 +606,11 @@ def compute_metrics_single(
     if is_video:
         metrics_to_compute = ["temporal"]
     else:  # labeled data
+        assert labels_file is not None
         metrics_to_compute = ["pixel_error"]
     # for either labeled and unlabeled data, if a pca loss is specified in config, we compute the
     # associated metric
+
     if (
         data_module is not None
         and cfg.data.get("columns_for_singleview_pca", None) is not None
@@ -630,6 +629,11 @@ def compute_metrics_single(
     preds_file_path = Path(preds_file)
     # compute metrics; csv files will be saved to the same directory the prdictions are stored in
     if "pixel_error" in metrics_to_compute:
+        # Read labeled data
+        labels_df = pd.read_csv(labels_file, header=[0, 1, 2], index_col=0)
+        labels_df = io_utils.fix_empty_first_row(labels_df)
+        assert labels_df.index.equals(index)
+
         keypoints_true = labels_df.to_numpy().reshape(labels_df.shape[0], -1, 2)
         error_per_keypoint = pixel_error(keypoints_true, keypoints_pred)
         error_df = pd.DataFrame(error_per_keypoint, index=index, columns=keypoint_names)

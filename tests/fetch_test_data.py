@@ -7,7 +7,7 @@ import requests
 
 def fetch_test_data_if_needed(dir: Path, dataset_name: str) -> None:
     datasets_url_dict = {
-        "test_cropzoom_data": "https://figshare.com/ndownloader/files/51015435",
+        "test_cropzoom_data": "https://figshare.com/ndownloader/files/52544084",
         "test_model_mirror_mouse": "https://figshare.com/ndownloader/files/51726884",
         "test_model_mirror_mouse_multiview": "https://figshare.com/ndownloader/files/51727520",
     }

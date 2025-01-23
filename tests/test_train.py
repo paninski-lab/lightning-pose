@@ -73,24 +73,52 @@ def test_train_singleview(cfg, tmp_path):
 @pytest.mark.skip(reason="Not yet implemented in Model class.")
 def test_train_singleview_detector_outputs(cfg, tmp_path):
     cfg = _test_cfg(cfg)
+    cfg.eval.predict_vids_after_training = False
     with open_dict(cfg):
         cfg.detector = OmegaConf.create(
             {"crop_ratio": 1.5, "anchor_keypoints": ["nose_top", "tailMid_bot"]}
         )
 
     # temporarily change working directory to temp output directory
-    with chdir(tmp_path):
+    detector_model_dir = tmp_path / "detector_model"
+    detector_model_dir.mkdir()
+
+    with chdir(detector_model_dir):
         # train model
-        train(cfg)
+        detector_model = train(cfg)
 
     # ensure cropped images were properly processed
-    assert (tmp_path / "cropped_images" / "labeled-data" / "img00.png").is_file()
-    assert (tmp_path / "cropped_images" / "labeled-data" / "img92.png").is_file()
-    assert (tmp_path / "cropped_images" / "bbox.csv").is_file()
+    assert (
+        detector_model_dir / "cropped_images" / "labeled-data" / "img00.png"
+    ).is_file()
+    assert (
+        detector_model_dir / "cropped_images" / "labeled-data" / "img92.png"
+    ).is_file()
+    image_pred_dir = detector_model_dir / "image_preds" / "CollectedData.csv"
+    assert (image_pred_dir / "bbox.csv").is_file()
+    assert (image_pred_dir / "predictions.csv").is_file()
+    assert (image_pred_dir / "predictions_pca_multiview_error.csv").is_file()
+    assert (image_pred_dir / "predictions_pca_singleview_error.csv").is_file()
+    assert (image_pred_dir / "predictions_pixel_error.csv").is_file()
+    assert (image_pred_dir / "cropped_CollectedData.csv").is_file()
 
     # ensure cropped videos were properly processed
-    assert (tmp_path / "cropped_videos" / "test_vid.mp4").is_file()
-    assert (tmp_path / "cropped_videos" / "test_vid_bbox.csv").is_file()
+    # assert (detector_model_dir / "cropped_videos" / "test_vid.mp4").is_file()
+    # assert (detector_model_dir / "cropped_videos" / "test_vid_bbox.csv").is_file()
+
+    del cfg.detector
+    pose_model_dir = tmp_path / "pose_model"
+    pose_model_dir.mkdir()
+    with chdir(pose_model_dir):
+        # train model
+        train(cfg, detector_model)
+
+    # ensure labeled data was properly processed
+    assert (pose_model_dir / "config.yaml").is_file()
+    assert (pose_model_dir / "cropped_CollectedData.csv").is_file()
+    image_pred_dir = pose_model_dir / "image_preds" / "cropped_CollectedData.csv"
+    assert (image_pred_dir / "predictions.csv").is_file()
+    assert (image_pred_dir / "predictions_pixel_error.csv").is_file()
 
 
 def test_train_multiview(cfg_multiview, tmp_path):
