@@ -11,7 +11,7 @@ except ImportError:
         "For more information please contatct the package maintainers."
     )
 
-from typing import List, Tuple, Type
+from typing import Tuple, Type
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -112,7 +112,7 @@ class ImageEncoderViT_FT(ImageEncoderViT):
 
 def resample_abs_pos_embed_nhwc(
     posemb,
-    new_size: List[int],
+    new_size: list[int],
     interpolation: str = 'bicubic',
     antialias: bool = True,
 ):

@@ -10,7 +10,7 @@ import gc
 import os
 import shutil
 import subprocess
-from typing import Callable, List
+from typing import Callable
 
 import cv2
 import imgaug.augmenters as iaa
@@ -44,7 +44,7 @@ TOY_MDATA_ROOT_DIR = str(lp.LP_ROOT_PATH / "data" / "mirror-mouse-example_split"
 
 
 @pytest.fixture
-def video_list() -> List[str]:
+def video_list() -> list[str]:
     return get_videos_in_dir(os.path.join(TOY_DATA_ROOT_DIR, "videos"))
 
 

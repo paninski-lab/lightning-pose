@@ -1,6 +1,7 @@
-__version__ = "1.6.1"
+__version__ = "1.7.0"
 
 from pathlib import Path
+
 from omegaconf import OmegaConf
 
 LP_ROOT_PATH = (Path(__file__).parent.parent).absolute()

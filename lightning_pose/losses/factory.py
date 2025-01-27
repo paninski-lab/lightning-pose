@@ -1,6 +1,6 @@
 """High-level loss class that orchestrates the individual losses."""
 
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Literal, Tuple
 
 import lightning.pytorch as pl
 import torch
@@ -20,8 +20,8 @@ class LossFactory(pl.LightningModule):
 
     def __init__(
         self,
-        losses_params_dict: Dict[str, dict],
-        data_module: Union[BaseDataModule, UnlabeledDataModule],
+        losses_params_dict: dict[str, dict],
+        data_module: BaseDataModule | UnlabeledDataModule,
     ) -> None:
 
         super().__init__()
@@ -41,10 +41,10 @@ class LossFactory(pl.LightningModule):
 
     def __call__(
         self,
-        stage: Optional[Literal["train", "val", "test"]] = None,
-        anneal_weight: Union[float, torch.Tensor] = 1.0,
+        stage: Literal["train", "val", "test"] | None = None,
+        anneal_weight: float | torch.Tensor = 1.0,
         **kwargs
-    ) -> Tuple[TensorType[()], List[dict]]:
+    ) -> Tuple[TensorType[()], list[dict]]:
 
         # loop over losses, compute, sum, log
         # don't log if stage is None

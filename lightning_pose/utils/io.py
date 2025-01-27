@@ -4,7 +4,7 @@ from __future__ import annotations  # python 3.8 compatibility for sphinx
 import os
 import re
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import Tuple
 
 import numpy as np
 import pandas as pd
@@ -62,14 +62,14 @@ def ckpt_path_from_base_path(
 
 
 @typechecked
-def check_if_semi_supervised(losses_to_use: Union[ListConfig, list, None] = None) -> bool:
+def check_if_semi_supervised(losses_to_use: ListConfig | list | None = None) -> bool:
     """Use config file to determine if model is semi-supervised.
 
     Take the entry of the hydra cfg that specifies losses_to_use. If it contains
     meaningful entries, infer that we want a semi_supervised model.
 
     Args:
-        losses_to_use (Union[ListConfig, list, None], optional): the cfg entry
+        losses_to_use (ListConfig, list | None, optional): the cfg entry
             specifying semisupervised losses to use. Defaults to None.
 
     Returns:
@@ -89,10 +89,10 @@ def check_if_semi_supervised(losses_to_use: Union[ListConfig, list, None] = None
 
 @typechecked
 def get_keypoint_names(
-    cfg: Optional[DictConfig] = None,
-    csv_file: Optional[str] = None,
-    header_rows: Optional[list] = [0, 1, 2],
-) -> List[str]:
+    cfg: DictConfig | None = None,
+    csv_file: str | None = None,
+    header_rows: list | None = [0, 1, 2],
+) -> list[str]:
     if os.path.exists(csv_file):
         if header_rows is None:
             if "header_rows" in cfg.data:
@@ -168,9 +168,9 @@ def return_absolute_data_paths(data_cfg: DictConfig, n_dirs_back: int = 3) -> Tu
 @typechecked
 def get_videos_in_dir(
     video_dir: str,
-    view_names: Optional[List[str]] = None,
+    view_names: list[str] | None = None,
     return_mp4_only: bool = True
-) -> Union[List[str], List[List[str]]]:
+) -> list[str] | list[list[str]]:
     """Gather videos to process from a single directory."""
     assert os.path.isdir(video_dir)
     # get all video files in directory, from allowed formats
@@ -217,9 +217,9 @@ def get_videos_in_dir(
 
 @typechecked
 def check_video_paths(
-    video_paths: Union[List[str], str],
-    view_names: Optional[List[str]] = None,
-) -> Union[List[str], List[List[str]]]:
+    video_paths: list[str] | str,
+    view_names: list[str] | None = None,
+) -> list[str] | list[list[str]]:
     # get input data
     if isinstance(video_paths, list):
         # presumably a list of files

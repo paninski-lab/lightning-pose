@@ -1,6 +1,6 @@
 """Base class for backbone that acts as a feature extractor."""
 
-from typing import Any, Dict, Literal, Optional, Union
+from typing import Any, Literal, Union
 
 import torch
 from lightning.pytorch import LightningModule
@@ -76,12 +76,12 @@ def normalized_to_bbox(
 
 
 def convert_bbox_coords(
-    batch_dict: Union[
-        HeatmapLabeledBatchDict,
-        MultiviewHeatmapLabeledBatchDict,
-        MultiviewUnlabeledBatchDict,
-        UnlabeledBatchDict,
-    ],
+    batch_dict: (
+        HeatmapLabeledBatchDict
+        | MultiviewHeatmapLabeledBatchDict
+        | MultiviewUnlabeledBatchDict
+        | UnlabeledBatchDict
+    ),
     predicted_keypoints: TensorType["batch", "num_targets"],
 ) -> TensorType["batch", "num_targets"]:
     """Transform keypoints from bbox coordinates to absolute frame coordinates."""
@@ -154,7 +154,7 @@ class BaseFeatureExtractor(LightningModule):
         backbone: ALLOWED_BACKBONES = "resnet50",
         pretrained: bool = True,
         lr_scheduler: str = "multisteplr",
-        lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
+        lr_scheduler_params: DictConfig | dict | None = None,
         do_context: bool = False,
         image_size: int = 256,
         model_type: Literal["heatmap", "regression"] = "heatmap",
@@ -200,18 +200,22 @@ class BaseFeatureExtractor(LightningModule):
 
     def get_representations(
         self,
-        images: Union[
-            TensorType["batch", "channels":3, "image_height", "image_width"],
-            TensorType["batch", "frames", "channels":3, "image_height", "image_width"],
-            TensorType["seq_len", "channels":3, "image_height", "image_width"],
-            TensorType["batch", "views", "frames", "channels":3, "image_height", "image_width"],
-            TensorType["seq_len", "view", "frames", "channels":3, "image_height", "image_width"],
-        ],
+        images: (
+            TensorType["batch", "channels":3, "image_height", "image_width"]
+            | TensorType["batch", "frames", "channels":3, "image_height", "image_width"]
+            | TensorType["seq_len", "channels":3, "image_height", "image_width"]
+            | TensorType[
+                "batch", "views", "frames", "channels":3, "image_height", "image_width"
+            ]
+            | TensorType[
+                "seq_len", "view", "frames", "channels":3, "image_height", "image_width"
+            ]
+        ),
         is_multiview: bool = False,
-    ) -> Union[
-        TensorType["new_batch", "features", "rep_height", "rep_width"],
-        TensorType["new_batch", "features", "rep_height", "rep_width", "frames"],
-    ]:
+    ) -> (
+        TensorType["new_batch", "features", "rep_height", "rep_width"]
+        | TensorType["new_batch", "features", "rep_height", "rep_width", "frames"]
+    ):
         """Forward pass from images to feature maps.
 
         Wrapper around the backbone's feature_extractor() method for typechecking purposes.
@@ -443,7 +447,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
             MultiviewLabeledBatchDict,
             MultiviewHeatmapLabeledBatchDict,
         ],
-        stage: Optional[Literal["train", "val", "test"]] = None,
+        stage: Literal["train", "val", "test"] | None = None,
     ) -> TensorType[(), float]:
         """Compute and log the losses on a batch of labeled data."""
 
@@ -483,7 +487,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
             MultiviewHeatmapLabeledBatchDict,
         ],
         batch_idx: int,
-    ) -> Dict[str, TensorType[(), float]]:
+    ) -> dict[str, TensorType[(), float]]:
         """Base training step, a wrapper around the `evaluate_labeled` method."""
         loss = self.evaluate_labeled(batch_dict, "train")
         return {"loss": loss}
@@ -525,9 +529,9 @@ class SemiSupervisedTrackerMixin(object):
 
     def evaluate_unlabeled(
         self,
-        batch_dict: Union[UnlabeledBatchDict, MultiviewUnlabeledBatchDict],
-        stage: Optional[Literal["train", "val", "test"]] = None,
-        anneal_weight: Union[float, torch.Tensor] = 1.0,
+        batch_dict: UnlabeledBatchDict | MultiviewUnlabeledBatchDict,
+        stage: Literal["train", "val", "test"] | None = None,
+        anneal_weight: float | torch.Tensor = 1.0,
     ) -> TensorType[(), float]:
         """Compute and log the losses on a batch of unlabeled data (frames only)."""
 
@@ -554,9 +558,9 @@ class SemiSupervisedTrackerMixin(object):
 
     def training_step(
         self,
-        batch_dict: Union[SemiSupervisedBatchDict, SemiSupervisedHeatmapBatchDict],
+        batch_dict: SemiSupervisedBatchDict | SemiSupervisedHeatmapBatchDict,
         batch_idx: int,
-    ) -> Dict[str, TensorType[(), float]]:
+    ) -> dict[str, TensorType[(), float]]:
         """Training step computes and logs both supervised and unsupervised losses."""
 
         # on each epoch, self.total_unsupervised_importance is modified by the

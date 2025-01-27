@@ -1,9 +1,10 @@
 """Helper functions for losses."""
 
-from typing import Dict, Literal, Union
+from typing import Literal
 
 import numpy as np
 import torch
+from torchtyping import TensorType
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -18,7 +19,7 @@ class EmpiricalEpsilon:
     def __init__(self, percentile: float) -> None:
         self.percentile = percentile
 
-    def __call__(self, loss: Union[torch.Tensor, np.array]) -> float:
+    def __call__(self, loss: TensorType | np.ndarray) -> float:
         """Compute the percentile of some loss, to use an for epsilon-insensitive loss.
 
         Args:
@@ -37,9 +38,9 @@ class EmpiricalEpsilon:
 
 # @typechecked
 def convert_dict_values_to_tensors(
-    param_dict: Dict[str, Union[np.array, float]],
-    device: Union[Literal["cpu", "cuda"], torch.device],
-) -> Dict[str, torch.Tensor]:
+    param_dict: dict[str, np.ndarray | float],
+    device: Literal["cpu", "cuda"] | torch.device,
+) -> dict[str, torch.Tensor]:
     # TODO: currently supporting just floats
     for key, val in param_dict.items():
         param_dict[key] = torch.tensor(val, dtype=torch.float, device=device)

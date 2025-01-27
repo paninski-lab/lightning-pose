@@ -1,6 +1,6 @@
 """Models that produce heatmaps of keypoints from images."""
 
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Tuple
 
 import torch
 from kornia.filters import filter2d
@@ -61,14 +61,14 @@ class HeatmapTracker(BaseSupervisedTracker):
         self,
         num_keypoints: int,
         num_targets: int = None,
-        loss_factory: Optional[LossFactory] = None,
+        loss_factory: LossFactory | None = None,
         backbone: ALLOWED_BACKBONES = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
-        output_shape: Optional[tuple] = None,  # change
+        output_shape: tuple | None = None,  # change
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
-        lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
+        lr_scheduler_params: DictConfig | dict | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize a DLC-like model with resnet backbone.
@@ -279,11 +279,13 @@ class HeatmapTracker(BaseSupervisedTracker):
 
     def forward(
         self,
-        images: Union[
-            TensorType["batch", "channels":3, "image_height", "image_width"],
-            TensorType["batch", "views", "channels":3, "image_height", "image_width"],
-        ]
-    ) -> TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"]:
+        images: (
+            TensorType["batch", "channels":3, "image_height", "image_width"]
+            | TensorType["batch", "views", "channels":3, "image_height", "image_width"]
+        ),
+    ) -> TensorType[
+        "num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"
+    ]:
         """Forward pass through the network."""
         # we get one representation for each desired output.
         shape = images.shape
@@ -304,10 +306,7 @@ class HeatmapTracker(BaseSupervisedTracker):
 
     def get_loss_inputs_labeled(
         self,
-        batch_dict: Union[
-            HeatmapLabeledBatchDict,
-            MultiviewHeatmapLabeledBatchDict,
-        ],
+        batch_dict: HeatmapLabeledBatchDict | MultiviewHeatmapLabeledBatchDict
     ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
@@ -327,17 +326,17 @@ class HeatmapTracker(BaseSupervisedTracker):
 
     def predict_step(
         self,
-        batch_dict: Union[
-            HeatmapLabeledBatchDict,
-            MultiviewHeatmapLabeledBatchDict,
-            UnlabeledBatchDict,
-        ],
+        batch_dict: (
+            HeatmapLabeledBatchDict
+            | MultiviewHeatmapLabeledBatchDict
+            | UnlabeledBatchDict
+        ),
         batch_idx: int,
-        return_heatmaps: Optional[bool] = False,
-    ) -> Union[
-        Tuple[torch.Tensor, torch.Tensor],
-        Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
-    ]:
+        return_heatmaps: bool | None = False,
+    ) -> (
+        Tuple[torch.Tensor, torch.Tensor]
+        | Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+    ):
         """Predict heatmaps and keypoints for a batch of video frames.
 
         Assuming a DALI video loader is passed in
@@ -370,15 +369,15 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
     def __init__(
         self,
         num_keypoints: int,
-        loss_factory: Optional[LossFactory] = None,
-        loss_factory_unsupervised: Optional[LossFactory] = None,
+        loss_factory: LossFactory | None = None,
+        loss_factory_unsupervised: LossFactory | None = None,
         backbone: ALLOWED_BACKBONES = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
-        output_shape: Optional[tuple] = None,
+        output_shape: tuple | None = None,
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
-        lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
+        lr_scheduler_params: DictConfig | dict | None = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -422,11 +421,8 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
 
     def get_loss_inputs_unlabeled(
         self,
-        batch_dict: Union[
-            UnlabeledBatchDict,
-            MultiviewUnlabeledBatchDict,
-        ],
-    ) -> Dict:
+        batch_dict: UnlabeledBatchDict | MultiviewUnlabeledBatchDict,
+    ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
         predicted_heatmaps = self.forward(batch_dict["frames"])

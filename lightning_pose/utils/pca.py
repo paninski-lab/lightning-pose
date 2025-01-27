@@ -1,7 +1,7 @@
 """PCA class to assist with computing PCA losses."""
 
 import warnings
-from typing import List, Literal, Optional, Union
+from typing import Literal
 
 import numpy as np
 import torch
@@ -32,13 +32,13 @@ class KeypointPCA(object):
     def __init__(
         self,
         loss_type: Literal["pca_singleview", "pca_multiview"],
-        data_module: Union[UnlabeledDataModule, BaseDataModule],
-        components_to_keep: Optional[Union[int, float]] = 0.99,
+        data_module: UnlabeledDataModule | BaseDataModule,
+        components_to_keep: int | float | None = 0.99,
         empirical_epsilon_percentile: float = 90.0,
-        mirrored_column_matches: Optional[Union[ListConfig, List]] = None,
-        columns_for_singleview_pca: Optional[Union[ListConfig, List]] = None,
-        device: Union[Literal["cuda", "cpu"], torch.device] = "cpu",
-        centering_method: Optional[Literal["mean", "median"]] = None,
+        mirrored_column_matches: ListConfig | list | None = None,
+        columns_for_singleview_pca: ListConfig | list | None = None,
+        device: Literal["cuda", "cpu"] | torch.device = "cpu",
+        centering_method: Literal["mean", "median"] | None = None,
     ) -> None:
         self.loss_type = loss_type
         self.data_module = data_module
@@ -85,10 +85,10 @@ class KeypointPCA(object):
 
     def _singleview_format(
         self, data_arr: TensorType["num_original_samples", "num_original_dims"]
-    ) -> Union[
-        TensorType["num_original_samples", "num_selected_dims"],
-        TensorType["num_original_samples", "num_original_dims"],
-    ]:
+    ) -> (
+        TensorType["num_original_samples", "num_selected_dims"]
+        | TensorType["num_original_samples", "num_original_dims"]
+    ):
         # original shape = (batch, 2 * num_keypoints)
         # reshape to (batch, num_keypoints, 2) to easily select columns
         ## [1,2,3,4]
@@ -184,7 +184,7 @@ class KeypointPCA(object):
         )(loss=self.compute_reprojection_error())
 
     def reproject(
-        self, data_arr: Optional[TensorType["num_samples", "sample_dim"]] = None
+        self, data_arr: TensorType["num_samples", "sample_dim"] | None = None
     ) -> TensorType["num_samples", "sample_dim"]:
         """Reproject a data array using the fixed pca parameters.
 
@@ -214,7 +214,7 @@ class KeypointPCA(object):
         return reprojection
 
     def compute_reprojection_error(
-        self, data_arr: Optional[TensorType["num_samples", "sample_dim"]] = None
+        self, data_arr: TensorType["num_samples", "sample_dim"] | None = None
     ) -> TensorType["num_samples", "sample_dim_over_two"]:
         """returns error per 2D keypoint"""
         if data_arr is None:
@@ -251,7 +251,7 @@ class NaNPCA(PCA):
 
     def __init__(
         self,
-        n_components: Optional[int] = None,
+        n_components: int | None = None,
         *,
         copy: bool = True,
         whiten: bool = False,
@@ -260,7 +260,7 @@ class NaNPCA(PCA):
         iterated_power: str = "auto",
         n_oversamples: int = 10,
         power_iteration_normalizer: str = "auto",
-        random_state: Optional[int] = None,
+        random_state: int | None = None,
     ) -> None:
 
         # force solver to be "covariance_eigh"
@@ -462,7 +462,7 @@ class ComponentChooser:
     def __init__(
         self,
         fitted_pca_object: PCA,
-        components_to_keep: Optional[Union[int, float]],
+        components_to_keep: int | float | None,
     ) -> None:
         self.fitted_pca_object = fitted_pca_object
         # can be either a float indicating proportion of explained variance, or an
@@ -534,7 +534,7 @@ def pca_prints(pca: PCA, condition: str, components_to_keep: int) -> None:
 # @typechecked
 def format_multiview_data_for_pca(
     data_arr: TensorType["batch", "num_keypoints", "2"],
-    mirrored_column_matches: Union[ListConfig, list],
+    mirrored_column_matches: ListConfig | list,
 ) -> TensorType["batch_times_num_selected_keypoints", "two_times_num_views"]:
     """Reformat multiview data so each observation is a single body part across views.
 

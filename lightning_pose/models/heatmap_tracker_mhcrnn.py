@@ -1,6 +1,6 @@
 """Models that produce heatmaps of keypoints from images."""
 
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Tuple, Union
 
 import torch
 from kornia.geometry.subpix import spatial_softmax2d
@@ -39,14 +39,14 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
     def __init__(
         self,
         num_keypoints: int,
-        loss_factory: Optional[LossFactory] = None,
+        loss_factory: LossFactory | None = None,
         backbone: ALLOWED_BACKBONES = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
-        output_shape: Optional[tuple] = None,  # change
+        output_shape: tuple | None = None,  # change
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
-        lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
+        lr_scheduler_params: DictConfig | dict | None = None,
         **kwargs: Any,
     ):
         """Initialize a DLC-like model with resnet backbone.
@@ -207,7 +207,7 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
             UnlabeledBatchDict,
         ],
         batch_idx: int,
-        return_heatmaps: Optional[bool] = False,
+        return_heatmaps: bool | None = False,
     ) -> Union[
         Tuple[torch.Tensor, torch.Tensor],
         Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
@@ -268,15 +268,15 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
     def __init__(
         self,
         num_keypoints: int,
-        loss_factory: Optional[LossFactory] = None,
-        loss_factory_unsupervised: Optional[LossFactory] = None,
+        loss_factory: LossFactory | None = None,
+        loss_factory_unsupervised: LossFactory | None = None,
         backbone: ALLOWED_BACKBONES = "resnet50",
         downsample_factor: Literal[2, 3] = 2,
         pretrained: bool = True,
-        output_shape: Optional[tuple] = None,
+        output_shape: tuple | None = None,
         torch_seed: int = 123,
         lr_scheduler: str = "multisteplr",
-        lr_scheduler_params: Optional[Union[DictConfig, dict]] = None,
+        lr_scheduler_params: DictConfig | dict | None = None,
         **kwargs: Any,
     ):
         """
@@ -324,7 +324,7 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
             UnlabeledBatchDict,
             MultiviewUnlabeledBatchDict,
         ]
-    ) -> Dict:
+    ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)"""
 
         # images -> heatmaps

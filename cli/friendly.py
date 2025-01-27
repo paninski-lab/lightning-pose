@@ -1,7 +1,6 @@
 import argparse
 import shutil
 import sys
-from typing import List
 
 
 class ArgumentParser(argparse.ArgumentParser):
@@ -39,14 +38,14 @@ class ArgumentSubParser(ArgumentParser):
 class _HelpFormatter(argparse.HelpFormatter):
     """Modifications on help text formatting for easier readability."""
 
-    def _split_lines(self, text: str, width: int) -> List[str]:
+    def _split_lines(self, text: str, width: int) -> list[str]:
         """Modified to preserve newlines and long words."""
         # First split into paragraphs, then wrap each separately:
         # https://docs.python.org/3/library/textwrap.html#textwrap.TextWrapper.replace_whitespace
         paragraphs = text.splitlines()
         import textwrap
 
-        lines: List[str] = []
+        lines: list[str] = []
         for p in paragraphs:
             p_lines = textwrap.wrap(
                 p, width, break_long_words=False, break_on_hyphens=False

@@ -105,6 +105,7 @@ extras_require = {
 
 setup(
     name="lightning-pose",
+    python_requires=">=3.10",
     packages=find_packages(),
     version=get_version(Path("lightning_pose").joinpath("__init__.py")),
     description="Semi-supervised pose estimation using pytorch lightning",
