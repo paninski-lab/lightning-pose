@@ -469,7 +469,7 @@ def generate_heatmaps(
     height: int,
     width: int,
     output_shape: Tuple[int, int],
-    sigma: float | int = 1.25,
+    sigma: float = 1.25,
     uniform_heatmaps: bool = False,
 ) -> TensorType["batch", "num_keypoints", "height", "width"]:
     """Generate 2D Gaussian heatmaps from mean and sigma.
@@ -526,7 +526,7 @@ def generate_heatmaps(
 def evaluate_heatmaps_at_location(
     heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
     locs: TensorType["batch", "num_keypoints", 2],
-    sigma: float | int = 1.25,  # sigma used for generating heatmaps
+    sigma: float = 1.25,  # sigma used for generating heatmaps
     num_stds: int = 2,  # num standard deviations of pixels to compute confidence
 ) -> TensorType["batch", "num_keypoints"]:
     """Evaluate 4D heatmaps using a 3D location tensor (last dim is x, y coords). Since
