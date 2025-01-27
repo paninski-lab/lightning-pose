@@ -76,12 +76,12 @@ def normalized_to_bbox(
 
 
 def convert_bbox_coords(
-    batch_dict: Union[
-        HeatmapLabeledBatchDict,
-        MultiviewHeatmapLabeledBatchDict,
-        MultiviewUnlabeledBatchDict,
-        UnlabeledBatchDict,
-    ],
+    batch_dict: (
+        HeatmapLabeledBatchDict
+        | MultiviewHeatmapLabeledBatchDict
+        | MultiviewUnlabeledBatchDict
+        | UnlabeledBatchDict
+    ),
     predicted_keypoints: TensorType["batch", "num_targets"],
 ) -> TensorType["batch", "num_targets"]:
     """Transform keypoints from bbox coordinates to absolute frame coordinates."""
@@ -200,18 +200,22 @@ class BaseFeatureExtractor(LightningModule):
 
     def get_representations(
         self,
-        images: Union[
-            TensorType["batch", "channels":3, "image_height", "image_width"],
-            TensorType["batch", "frames", "channels":3, "image_height", "image_width"],
-            TensorType["seq_len", "channels":3, "image_height", "image_width"],
-            TensorType["batch", "views", "frames", "channels":3, "image_height", "image_width"],
-            TensorType["seq_len", "view", "frames", "channels":3, "image_height", "image_width"],
-        ],
+        images: (
+            TensorType["batch", "channels":3, "image_height", "image_width"]
+            | TensorType["batch", "frames", "channels":3, "image_height", "image_width"]
+            | TensorType["seq_len", "channels":3, "image_height", "image_width"]
+            | TensorType[
+                "batch", "views", "frames", "channels":3, "image_height", "image_width"
+            ]
+            | TensorType[
+                "seq_len", "view", "frames", "channels":3, "image_height", "image_width"
+            ]
+        ),
         is_multiview: bool = False,
-    ) -> Union[
-        TensorType["new_batch", "features", "rep_height", "rep_width"],
-        TensorType["new_batch", "features", "rep_height", "rep_width", "frames"],
-    ]:
+    ) -> (
+        TensorType["new_batch", "features", "rep_height", "rep_width"]
+        | TensorType["new_batch", "features", "rep_height", "rep_width", "frames"]
+    ):
         """Forward pass from images to feature maps.
 
         Wrapper around the backbone's feature_extractor() method for typechecking purposes.

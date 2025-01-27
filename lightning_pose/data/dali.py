@@ -1,7 +1,7 @@
 """Data pipelines based on efficient video reading by nvidia dali package."""
 
 import os
-from typing import List, Literal
+from typing import Literal
 
 import numpy as np
 import nvidia.dali.fn as fn
@@ -245,7 +245,7 @@ class PrepareDALI(object):
         self,
         train_stage: Literal["predict", "train"],
         model_type: Literal["base", "context"],
-        filenames: list[str] | list[List[str]],
+        filenames: list[str] | list[list[str]],
         resize_dims: list[int],
         dali_config: dict | DictConfig = None,
         imgaug: str | None = "default",
@@ -315,7 +315,7 @@ class PrepareDALI(object):
 
     def _setup_pipe_dict(
         self,
-        filenames: list[str] | list[List[str]],
+        filenames: list[str] | list[list[str]],
         imgaug: str,
     ) -> dict[str, dict]:
         """All of the pipeline args in one place."""

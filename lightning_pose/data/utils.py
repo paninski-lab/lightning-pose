@@ -1,6 +1,6 @@
 """Dataset/data module utilities."""
 
-from typing import Any, List, Literal, Tuple, TypedDict, Union
+from typing import Any, Literal, Tuple, TypedDict, Union
 
 import imgaug.augmenters as iaa
 import lightning.pytorch as pl
@@ -99,8 +99,8 @@ class MultiviewLabeledBatchDict(TypedDict):
     bbox: TensorType["batch", "num_views * xyhw", float]
     idxs: TensorType["batch", int]
     num_views: TensorType["batch", int]
-    concat_order: List  # [Tuple[str]]
-    view_names: List  # [Tuple[str]]
+    concat_order: list  # [Tuple[str]]
+    view_names: list  # [Tuple[str]]
 
 
 class MultiviewHeatmapLabeledBatchDict(MultiviewLabeledBatchDict):
@@ -405,7 +405,7 @@ def clean_any_nans(data: torch.Tensor, dim: int) -> torch.Tensor:
 
 
 @typechecked
-def count_frames(video_list: list[str] | str | list[List[str]]) -> int:
+def count_frames(video_list: list[str] | str | list[list[str]]) -> int:
     """Simple function to count the number of frames in a video or a list of videos."""
 
     import cv2

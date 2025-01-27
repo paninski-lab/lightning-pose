@@ -3,7 +3,7 @@
 
 import os
 from pathlib import Path
-from typing import Callable, List, Literal, Tuple, Union
+from typing import Callable, List, Literal, Tuple
 
 import numpy as np
 import pandas as pd
@@ -424,10 +424,12 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
     def num_views(self) -> int:
         return len(self.view_names)
 
-    def fusion(self, datadict: dict) -> Tuple[
-        Union[
-            TensorType["num_views", "RGB":3, "image_height", "image_width", float],
-            TensorType["num_views", "frames", "RGB":3, "image_height", "image_width", float]
+    def fusion(
+        self, datadict: dict
+    ) -> Tuple[
+        TensorType["num_views", "RGB":3, "image_height", "image_width", float]
+        | TensorType[
+            "num_views", "frames", "RGB":3, "image_height", "image_width", float
         ],
         TensorType["keypoints"],
         TensorType["num_views", "heatmap_height", "heatmap_width", float],

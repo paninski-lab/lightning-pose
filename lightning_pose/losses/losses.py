@@ -20,7 +20,7 @@ The general flow of each loss class is as follows:
 
 import os
 import warnings
-from typing import List, Literal, Tuple, Type
+from typing import Literal, Tuple, Type
 
 import torch
 from kornia.losses import js_div_loss_2d, kl_div_loss_2d
@@ -278,8 +278,8 @@ class PCALoss(Loss):
         empirical_epsilon_percentile: float = 0.99,
         epsilon: float | None = None,
         empirical_epsilon_multiplier: float = 1.0,
-        mirrored_column_matches: ListConfig | List | None = None,
-        columns_for_singleview_pca: ListConfig | List | None = None,
+        mirrored_column_matches: ListConfig | list | None = None,
+        columns_for_singleview_pca: ListConfig | list | None = None,
         data_module: BaseDataModule | UnlabeledDataModule | None = None,
         log_weight: float = 0.0,
         device: Literal["cuda", "cpu"] | torch.device = _DEFAULT_TORCH_DEVICE,

@@ -4,7 +4,7 @@ import datetime
 import gc
 import os
 import time
-from typing import List, Tuple, Type
+from typing import Tuple, Type
 
 import cv2
 import lightning.pytorch as pl
@@ -104,7 +104,7 @@ class PredictionHandler:
 
     def unpack_preds(
         self,
-        preds: List[
+        preds: list[
             Tuple[
                 TensorType["batch", "two_times_num_keypoints"],
                 TensorType["batch", "num_keypoints"],
@@ -213,7 +213,7 @@ class PredictionHandler:
 
         return predictions
 
-    def make_dlc_pandas_index(self, keypoint_names: List | None = None) -> pd.MultiIndex:
+    def make_dlc_pandas_index(self, keypoint_names: list | None = None) -> pd.MultiIndex:
         return make_dlc_pandas_index(
             cfg=self.cfg, keypoint_names=keypoint_names or self.keypoint_names
         )
@@ -234,7 +234,7 @@ class PredictionHandler:
 
     def __call__(
         self,
-        preds: List[
+        preds: list[
             Tuple[
                 TensorType["batch", "two_times_num_keypoints"],
                 TensorType["batch", "num_keypoints"],

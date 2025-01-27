@@ -1,7 +1,7 @@
 """PCA class to assist with computing PCA losses."""
 
 import warnings
-from typing import List, Literal, Union
+from typing import Literal
 
 import numpy as np
 import torch
@@ -35,8 +35,8 @@ class KeypointPCA(object):
         data_module: UnlabeledDataModule | BaseDataModule,
         components_to_keep: int | float | None = 0.99,
         empirical_epsilon_percentile: float = 90.0,
-        mirrored_column_matches: ListConfig | List | None = None,
-        columns_for_singleview_pca: ListConfig | List | None = None,
+        mirrored_column_matches: ListConfig | list | None = None,
+        columns_for_singleview_pca: ListConfig | list | None = None,
         device: Literal["cuda", "cpu"] | torch.device = "cpu",
         centering_method: Literal["mean", "median"] | None = None,
     ) -> None:
@@ -85,10 +85,10 @@ class KeypointPCA(object):
 
     def _singleview_format(
         self, data_arr: TensorType["num_original_samples", "num_original_dims"]
-    ) -> Union[
-        TensorType["num_original_samples", "num_selected_dims"],
-        TensorType["num_original_samples", "num_original_dims"],
-    ]:
+    ) -> (
+        TensorType["num_original_samples", "num_selected_dims"]
+        | TensorType["num_original_samples", "num_original_dims"]
+    ):
         # original shape = (batch, 2 * num_keypoints)
         # reshape to (batch, num_keypoints, 2) to easily select columns
         ## [1,2,3,4]
