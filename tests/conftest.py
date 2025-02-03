@@ -10,6 +10,7 @@ import gc
 import os
 import shutil
 import subprocess
+from pathlib import Path
 from typing import Callable
 
 import cv2
@@ -84,7 +85,8 @@ def cfg_multiview() -> dict:
     cfg.dali.base.train.sequence_length = 6
     cfg.dali.base.predict.sequence_length = 16
     cfg.data.data_dir = "${LP_ROOT_PATH:}/data/mirror-mouse-example_split"
-    cfg.data.csv_file = ["top.csv", "bot.csv"]
+    # unrelated to multiview: add some test coverage for CSV file as absolute path.
+    cfg.data.csv_file = ["${data.data_dir}/top.csv", "${data.data_dir}/bot.csv"]
     cfg.data.view_names = ["bot", "top"]
     cfg.data.num_keypoints = 7
     cfg.data.keypoint_names = [
