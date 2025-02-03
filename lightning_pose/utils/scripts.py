@@ -570,7 +570,10 @@ def compute_metrics(
                 sorted(preds_file)
         ):
             assert view_name in preds_file_
-            labels_file = io_utils.return_absolute_path(os.path.join(cfg.data.data_dir, csv_file))
+            labels_file = Path(csv_file)
+            if not labels_file.is_absolute():
+                labels_file = Path(cfg.data.data_dir) / labels_file
+            labels_file = io_utils.return_absolute_path(str(labels_file))
             compute_metrics_single(
                 cfg=cfg,
                 labels_file=labels_file,

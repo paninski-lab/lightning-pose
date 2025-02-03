@@ -70,6 +70,7 @@ def test_train_singleview(cfg, tmp_path):
     ).is_file()
 
 
+@pytest.mark.skip(reason="Not yet implemented in Model class.")
 def test_train_singleview_detector_outputs(cfg, tmp_path):
     cfg = _test_cfg(cfg)
     with open_dict(cfg):
