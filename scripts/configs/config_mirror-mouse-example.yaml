@@ -10,6 +10,7 @@ data:
   # ABSOLUTE path to unlabeled videos' directory.
   video_dir: ${data.data_dir}/videos
   # location of labels; for example script, this should be relative to `data_dir`
+  # or an absolute path.
   csv_file: CollectedData.csv
   # downsample heatmaps: 2 | 3
   downsample_factor: 2

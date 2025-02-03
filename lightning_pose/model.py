@@ -93,7 +93,7 @@ class Model:
         Args:
             csv_file (str | Path): Path to the CSV file of images, keypoint locations.
             data_dir (str | Path, optional): Root path for relative paths in the CSV file. Defaults to the
-                parent directory of the CSV file.
+                data_dir originally used when training.
             compute_metrics (bool, optional): Whether to compute pixel error and loss metrics on
                 predictions.
             generate_labeled_images (bool, optional): Whether to save labeled images. Defaults to False.
@@ -134,9 +134,11 @@ class Model:
         """
 
         self._load()
-        csv_file = Path(csv_file)
+        # Convert this to absolute, because if relative, downstream will
+        # assume incorrectly assume its relative to the data_dir.
+        csv_file = Path(csv_file).absolute()
         if data_dir is None:
-            data_dir = csv_file.parent
+            data_dir = self.config.cfg.data.data_dir
 
         if output_dir == self.__class__.UNSPECIFIED:
             output_dir = self.image_preds_dir() / csv_file.name
