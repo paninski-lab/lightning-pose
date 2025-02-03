@@ -138,7 +138,7 @@ class Model:
         # assume incorrectly assume its relative to the data_dir.
         csv_file = Path(csv_file).absolute()
         if data_dir is None:
-            data_dir = self.config.cfg.data_dir
+            data_dir = self.config.cfg.data.data_dir
 
         if output_dir == self.__class__.UNSPECIFIED:
             output_dir = self.image_preds_dir() / csv_file.name
