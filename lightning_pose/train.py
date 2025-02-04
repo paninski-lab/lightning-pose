@@ -182,7 +182,10 @@ def _train(cfg: DictConfig) -> Model:
     steps_per_epoch = calculate_train_batches(cfg, dataset)
 
     # Convert milestone_steps to milestones if applicable (before `get_model`).
-    if cfg.has_node("training.lr_scheduler_params.multisteplr.milestone_steps"):
+    if (
+        "multisteplr" in cfg.training.lr_scheduler_params
+        and "milestone_steps" in cfg.training.lr_scheduler_params.multisteplr
+    ):
         milestone_steps = cfg.training.lr_scheduler_params.multisteplr.milestone_steps
         milestones = [math.ceil(s / steps_per_epoch) for s in milestone_steps]
         cfg.training.lr_scheduler_params.multisteplr.milestones = milestones
@@ -255,7 +258,6 @@ def _train(cfg: DictConfig) -> Model:
     else:
         min_epochs = cfg.training.min_epochs
         max_epochs = cfg.training.max_epochs
-
 
     # Initialize to Trainer defaults. Note max_steps defaults to -1.
 

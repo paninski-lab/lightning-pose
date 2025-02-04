@@ -49,9 +49,9 @@ class ModelConfig:
             assert "check_val_every_n_epoch" not in self.cfg.training
             assert "unfreezing_step" in self.cfg.training
             assert "unfreezing_epoch" not in self.cfg.training
-            if self.cfg.training.has_node("lr_scheduler_params.multisteplr"):
-                assert self.cfg.training.has_node("lr_scheduler_params.multisteplr.milestone_steps")
-                assert not self.cfg.training.has_node("lr_scheduler_params.multisteplr.milestones")
+            if "multisteplr" in self.cfg.training.lr_scheduler_params:
+                assert "milestone_steps" in self.cfg.training.lr_scheduler_params.multisteplr
+                assert "milestones" not in self.cfg.training.lr_scheduler_params.multisteplr
 
         else:
             assert "min_steps" not in self.cfg.training
@@ -61,6 +61,6 @@ class ModelConfig:
             assert "check_val_every_n_epoch" in self.cfg.training
             assert "unfreezing_step" not in self.cfg.training
             assert "unfreezing_epoch" in self.cfg.training
-            if self.cfg.training.has_node("lr_scheduler_params.multisteplr"):
-                assert not self.cfg.training.has_node("lr_scheduler_params.multisteplr.milestone_steps")
-                assert self.cfg.training.has_node("lr_scheduler_params.multisteplr.milestones")
+            if "multisteplr" in self.cfg.training.lr_scheduler_params:
+                assert "milestone_steps" not in self.cfg.training.lr_scheduler_params.multisteplr
+                assert "milestones" in self.cfg.training.lr_scheduler_params.multisteplr
