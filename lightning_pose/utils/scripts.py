@@ -468,7 +468,11 @@ def get_callbacks(
         callbacks.append(early_stopping)
 
     if backbone_unfreeze:
-        unfreeze_backbone_callback = UnfreezeBackbone(cfg.training.unfreezing_epoch)
+        unfreeze_step = cfg.training.get("unfreezing_step")
+        unfreeze_epoch = cfg.training.get("unfreezing_epoch")
+        unfreeze_backbone_callback = UnfreezeBackbone(
+            unfreeze_step=unfreeze_step, unfreeze_epoch=unfreeze_epoch
+        )
         callbacks.append(unfreeze_backbone_callback)
 
     if lr_monitor:

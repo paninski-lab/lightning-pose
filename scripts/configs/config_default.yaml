@@ -49,13 +49,17 @@ training:
   # number of gpus to train a single model
   num_gpus: 1
   # epoch at which backbone network weights begin updating
+  # For counting in steps, replace `unfreezing_epoch` with `unfreezing_step`.
   unfreezing_epoch: 20
   # max training epochs; training may exit before due to early stopping
+  # For counting in steps, replace `min_epochs` with `min_steps`,
+  # and `max_epochs` with `max_steps`.
   min_epochs: 300
   max_epochs: 300
   # frequency to log training metrics for tensorboard (one step is one batch)
   log_every_n_steps: 10
   # frequency to log validation metrics for tensorboard
+  # For counting in steps, replace `check_val_every_n_epoch` with `val_check_interval`
   check_val_every_n_epoch: 5
   # save model weights every n epochs; must be divisible by check_val_every_n_epoch above
   # if null, only best weights will be saved after training
@@ -74,6 +78,9 @@ training:
   lr_scheduler: multisteplr
   lr_scheduler_params:
     multisteplr:
+      # Epochs at which to reduce learning rate by `gamma`.
+      # For counting in steps, replace `milestones` with `milestone_steps`
+      # caveat with `milestone_steps`: if not aligned with an epoch, it will round up to the next epoch.
       milestones: [150, 200, 250]
       gamma: 0.5
   # how to treat missing hand labels; false to drop, true to force uniform heatmaps

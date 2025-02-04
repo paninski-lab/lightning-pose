@@ -1,6 +1,7 @@
 """Example model training function."""
 
 import os
+import math
 import random
 import shutil
 import sys
@@ -14,6 +15,7 @@ from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 from typeguard import typechecked
 
 from lightning_pose.model import Model
+from lightning_pose.model_config import ModelConfig
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
 from lightning_pose.utils.io import return_absolute_data_paths
 from lightning_pose.utils.scripts import (
@@ -155,6 +157,8 @@ def _train(cfg: DictConfig) -> Model:
     print("Our Hydra config file:")
     pretty_print_cfg(cfg)
 
+    ModelConfig(cfg).validate()
+
     # path handling for toy data
     data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
 
@@ -173,6 +177,15 @@ def _train(cfg: DictConfig) -> Model:
 
     # build loss factory which orchestrates different losses
     loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
+
+    # calculate number of batches for both labeled and unlabeled data per epoch
+    steps_per_epoch = calculate_train_batches(cfg, dataset)
+
+    # Convert milestone_steps to milestones if applicable (before `get_model`).
+    if cfg.has_node("training.lr_scheduler_params.multisteplr.milestone_steps"):
+        milestone_steps = cfg.training.lr_scheduler_params.multisteplr.milestone_steps
+        milestones = [math.ceil(s / steps_per_epoch) for s in milestone_steps]
+        cfg.training.lr_scheduler_params.multisteplr.milestones = milestones
 
     # model
     model = get_model(cfg=cfg, data_module=data_module, loss_factories=loss_factories)
@@ -224,9 +237,6 @@ def _train(cfg: DictConfig) -> Model:
         ckpt_every_n_epochs=cfg.training.get("ckpt_every_n_epochs", None),
     )
 
-    # calculate number of batches for both labeled and unlabeled data per epoch
-    limit_train_batches = calculate_train_batches(cfg, dataset)
-
     # set up trainer
 
     # Old configs may have num_gpus: 0. We will remove support in a future release.
@@ -237,19 +247,35 @@ def _train(cfg: DictConfig) -> Model:
         )
     cfg.training.num_gpus = max(cfg.training.num_gpus, 1)
 
+    # Initialize to Trainer defaults. Note max_steps defaults to -1.
+    min_steps, max_steps, min_epochs, max_epochs = (None, -1, None, None)
+    if "min_steps" in cfg.training:
+        min_steps = cfg.training.min_steps
+        max_steps = cfg.training.max_steps
+    else:
+        min_epochs = cfg.training.min_epochs
+        max_epochs = cfg.training.max_epochs
+
+
+    # Initialize to Trainer defaults. Note max_steps defaults to -1.
+
+    # Unlike min_epoch/min_step, both of these are valid to specify.
+    check_val_every_n_epoch = cfg.training.get("check_val_every_n_epoch", 1) # 1 is default for Trainer.
+    val_check_interval = cfg.training.get("val_check_interval")
+
     trainer = pl.Trainer(
         accelerator="gpu",
         devices=cfg.training.num_gpus,
-        max_epochs=cfg.training.max_epochs,
-        min_epochs=cfg.training.min_epochs,
-        check_val_every_n_epoch=min(
-            cfg.training.check_val_every_n_epoch,
-            cfg.training.max_epochs,  # for debugging or otherwise training for a short time
-        ),
+        max_epochs=max_epochs,
+        min_epochs=min_epochs,
+        max_steps=max_steps,
+        min_steps=min_steps,
+        check_val_every_n_epoch=check_val_every_n_epoch,
+        val_check_interval=val_check_interval,
         log_every_n_steps=cfg.training.log_every_n_steps,
         callbacks=callbacks,
         logger=logger,
-        limit_train_batches=limit_train_batches,
+        limit_train_batches=steps_per_epoch,
         accumulate_grad_batches=cfg.training.get("accumulate_grad_batches", 1),
         profiler=cfg.training.get("profiler", None),
         sync_batchnorm=True,
