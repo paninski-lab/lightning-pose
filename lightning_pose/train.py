@@ -108,7 +108,7 @@ def _evaluate_on_ood_dataset(model: Model):
             csv_file = _absolute_csv_file(csv_file, model.config.cfg.data.data_dir)
             ood_csv_file = csv_file.with_stem(csv_file.stem + "_new")
             ood_csv_files.append(ood_csv_file)
-            output_filename_stems.append(f"predictions_new_{view_name}")
+            output_filename_stems.append(f"predictions_{view_name}_new")
 
     if ood_csv_files[0].is_file():
         pretty_print_str("Predicting OOD images...")

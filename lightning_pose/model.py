@@ -18,7 +18,11 @@ from lightning_pose.utils.predictions import (
 
 # Import as different name to avoid naming conflict with the kwarg `compute_metrics`.
 from lightning_pose.utils.scripts import compute_metrics as compute_metrics_fn
-from lightning_pose.utils.scripts import get_data_module, get_dataset, get_imgaug_transform
+from lightning_pose.utils.scripts import (
+    get_data_module,
+    get_dataset,
+    get_imgaug_transform,
+)
 
 __all__ = ["Model"]
 
@@ -26,7 +30,7 @@ __all__ = ["Model"]
 class Model:
     model_dir: Path
     """Directory the model is stored in."""
-    
+
     config: ModelConfig
     """The model configuration stored as a `ModelConfig` object.
     `ModelConfig` wraps the `omegaconf.DictConfig` and provides util functions
@@ -146,6 +150,7 @@ class Model:
         elif output_dir is None:
             raise NotImplementedError("Currently we must save predictions")
 
+        output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         if generate_labeled_images:
@@ -223,6 +228,7 @@ class Model:
         elif output_dir is None:
             raise NotImplementedError("Currently we must save predictions")
 
+        output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         prediction_csv_file = output_dir / f"{video_file.stem}.csv"

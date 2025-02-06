@@ -323,7 +323,6 @@ def get_model(
     lr_scheduler_params = OmegaConf.to_object(
         cfg.training.lr_scheduler_params[lr_scheduler]
     )
-    lr_scheduler_params["unfreeze_backbone_at_epoch"] = cfg.training.unfreezing_epoch
 
     semi_supervised = io_utils.check_if_semi_supervised(cfg.model.losses_to_use)
     image_h = cfg.data.image_resize_dims.height
