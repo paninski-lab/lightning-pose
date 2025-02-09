@@ -1,7 +1,8 @@
 """Example model training function."""
 
-import os
+import contextlib
 import math
+import os
 import random
 import shutil
 import sys
@@ -32,21 +33,38 @@ from lightning_pose.utils.scripts import (
 __all__ = ["train"]
 
 
+# TODO: Replace with contextlib.chdir in python 3.11.
+@contextlib.contextmanager
+def chdir(dir: str | Path):
+    pwd = os.getcwd()
+    os.chdir(dir)
+    try:
+        yield
+    finally:
+        os.chdir(pwd)
+
+
 @typechecked
-def train(cfg: DictConfig) -> Model:
+def train(
+    cfg: DictConfig, model_dir: str | Path | None = None, skip_evaluation=False
+) -> Model:
     """
-    Trains a model using the configuration `cfg`. Saves model to current
-    working directory (callers should `chdir` to the desired `model_dir` prior to calling).
+    Trains a model using the configuration `cfg`. Saves model to `model_dir`
+    (defaults to cwd if unspecified).
     """
-    model = _train(cfg)
+    # Default to cwd for backwards compatibility. Future: make model_dir required.
+    model_dir = Path(model_dir or os.getcwd())
+    model_dir.mkdir(parents=True, exist_ok=True)
+    with chdir(model_dir):
+        model = _train(cfg)
     # Comment out the above, and uncomment the below to skip
     # training and go straight to post-training analysis:
-    # import os
     # model = Model.from_dir(os.getcwd())
 
-    _evaluate_on_training_dataset(model)
-    _evaluate_on_ood_dataset(model)
-    _predict_test_videos(model)
+    if not skip_evaluation:
+        _evaluate_on_training_dataset(model)
+        _evaluate_on_ood_dataset(model)
+        _predict_test_videos(model)
 
     return model
 

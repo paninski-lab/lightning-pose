@@ -538,7 +538,13 @@ def calculate_train_batches(
         #   train_batch_size is also divided by num_gpus to get the mini-batch size
         #   so num_gpus cancels out of the numerator and denominator.
         num_labeled_batches = int(np.ceil(num_train_frames / cfg.training.train_batch_size))
-        limit_train_batches = np.max([num_labeled_batches, 10])  # 10 is minimum
+
+        # We used to have this logic but testing revealed it's not actually working
+        # Expected: trainer will run at least 10 steps per epoch.
+        # Observed: trainer can run less than 10 steps per epoch even though this returns 10.
+        # TODO: Discuss with matt.
+        # limit_train_batches = np.max([num_labeled_batches, 10])  # 10 is minimum
+        limit_train_batches = num_labeled_batches
     else:
         limit_train_batches = cfg.training.limit_train_batches
 
@@ -677,26 +683,34 @@ def compute_metrics_single(
         temporal_norm_df.to_csv(save_file)
 
     if "pca_singleview" in metrics_to_compute:
-        # build pca object
-        pca = KeypointPCA(
-            loss_type="pca_singleview",
-            data_module=data_module,
-            components_to_keep=cfg.losses.pca_singleview.components_to_keep,
-            empirical_epsilon_percentile=cfg.losses.pca_singleview.get(
-                "empirical_epsilon_percentile", 1.0),
-            columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
-            centering_method=cfg.losses.pca_singleview.get("centering_method", None),
-        )
-        # re-fit pca on the labeled data to get params
-        pca()
-        # compute reprojection error
-        pcasv_error_per_keypoint = pca_singleview_reprojection_error(keypoints_pred, pca)
-        pcasv_df = pd.DataFrame(pcasv_error_per_keypoint, index=index, columns=keypoint_names)
-        # add train/val/test split
-        if set is not None:
-            pcasv_df["set"] = set
-        save_file = preds_file_path.with_name(preds_file_path.stem + "_pca_singleview_error.csv")
-        pcasv_df.to_csv(save_file)
+        try:
+            # build pca object
+            pca = KeypointPCA(
+                loss_type="pca_singleview",
+                data_module=data_module,
+                components_to_keep=cfg.losses.pca_singleview.components_to_keep,
+                empirical_epsilon_percentile=cfg.losses.pca_singleview.get(
+                    "empirical_epsilon_percentile", 1.0),
+                columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
+                centering_method=cfg.losses.pca_singleview.get("centering_method", None),
+            )
+            # re-fit pca on the labeled data to get params
+            pca()
+            # compute reprojection error
+            pcasv_error_per_keypoint = pca_singleview_reprojection_error(keypoints_pred, pca)
+            pcasv_df = pd.DataFrame(pcasv_error_per_keypoint, index=index, columns=keypoint_names)
+            # add train/val/test split
+            if set is not None:
+                pcasv_df["set"] = set
+            save_file = preds_file_path.with_name(preds_file_path.stem + "_pca_singleview_error.csv")
+            pcasv_df.to_csv(save_file)
+        except ValueError as e:
+            # PCA will fail if not enough train frames.
+            # skip pca metric in this case.
+            # re-raise if this is not the PCA error this try is intended to swallow
+            if not "cannot fit PCA" in str(e):
+                raise e
+
 
     if "pca_multiview" in metrics_to_compute:
         # build pca object

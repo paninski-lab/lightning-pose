@@ -36,7 +36,6 @@ class ModelConfig:
         )
         return [Path(f) for f in files]
 
-
     def validate(self):
         self._validate_steps_vs_epochs()
 
@@ -46,21 +45,28 @@ class ModelConfig:
             assert "max_steps" in self.cfg.training
             assert "min_epochs" not in self.cfg.training
             assert "max_epochs" not in self.cfg.training
-            assert "check_val_every_n_epoch" not in self.cfg.training
             assert "unfreezing_step" in self.cfg.training
             assert "unfreezing_epoch" not in self.cfg.training
             if "multisteplr" in self.cfg.training.lr_scheduler_params:
-                assert "milestone_steps" in self.cfg.training.lr_scheduler_params.multisteplr
-                assert "milestones" not in self.cfg.training.lr_scheduler_params.multisteplr
+                assert (
+                    "milestone_steps"
+                    in self.cfg.training.lr_scheduler_params.multisteplr
+                )
+                assert (
+                    "milestones"
+                    not in self.cfg.training.lr_scheduler_params.multisteplr
+                )
 
         else:
             assert "min_steps" not in self.cfg.training
             assert "max_steps" not in self.cfg.training
             assert "min_epochs" in self.cfg.training
             assert "max_epochs" in self.cfg.training
-            assert "check_val_every_n_epoch" in self.cfg.training
             assert "unfreezing_step" not in self.cfg.training
             assert "unfreezing_epoch" in self.cfg.training
             if "multisteplr" in self.cfg.training.lr_scheduler_params:
-                assert "milestone_steps" not in self.cfg.training.lr_scheduler_params.multisteplr
+                assert (
+                    "milestone_steps"
+                    not in self.cfg.training.lr_scheduler_params.multisteplr
+                )
                 assert "milestones" in self.cfg.training.lr_scheduler_params.multisteplr
