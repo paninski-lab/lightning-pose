@@ -100,7 +100,7 @@ See the :ref:`FAQs <faq_oom>` for more information on memory management.
 * ``training.num_gpus`` (*int, default: 1*): the number of GPUs for
   :ref:`multi-GPU training <multi_gpu_training>`
 
-* ``training.num_workers`` (*int, default: 4*): number of cpu workers for data loaders
+* ``training.num_workers`` (*int, default: num_cpus*): number of cpu workers for data loaders
 
 * ``training.unfreezing_epoch`` (*int, default: 20*): epoch at which backbone network weights begin
   updating. A value >0 allows the smaller number of parameters in the heatmap head to adjust to

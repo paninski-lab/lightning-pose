@@ -48,8 +48,6 @@ training:
   train_frames: 1
   # number of gpus to train a single model
   num_gpus: 1
-  # number of cpu workers for data loaders
-  num_workers: 4
   # epoch at which backbone network weights begin updating
   unfreezing_epoch: 20
   # max training epochs; training may exit before due to early stopping
