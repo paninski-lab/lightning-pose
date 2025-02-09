@@ -66,12 +66,15 @@ class BaseDataModule(pl.LightningDataModule):
         self.train_batch_size = train_batch_size
         self.val_batch_size = val_batch_size
         self.test_batch_size = test_batch_size
-        slurm_cpus = os.getenv("SLURM_CPUS_PER_TASK")
-        if slurm_cpus:
-            self.num_workers = int(slurm_cpus)
+        if num_workers is not None:
+            self.num_workers = num_workers
         else:
-            # Fallback to os.cpu_count()
-            self.num_workers = os.cpu_count()
+            slurm_cpus = os.getenv("SLURM_CPUS_PER_TASK")
+            if slurm_cpus:
+                self.num_workers = int(slurm_cpus)
+            else:
+                # Fallback to os.cpu_count()
+                self.num_workers = os.cpu_count()
         self.train_probability = train_probability
         self.val_probability = val_probability
         self.test_probability = test_probability
