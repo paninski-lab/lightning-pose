@@ -1,6 +1,7 @@
 """Data modules split a dataset into train, val, and test modules."""
 
 import copy
+import os
 from typing import Literal
 
 import imgaug.augmenters as iaa
@@ -34,7 +35,7 @@ class BaseDataModule(pl.LightningDataModule):
         train_batch_size: int = 16,
         val_batch_size: int = 16,
         test_batch_size: int = 1,
-        num_workers: int = 8,
+        num_workers: int | None = None,
         train_probability: float = 0.8,
         val_probability: float | None = None,
         test_probability: float | None = None,
@@ -65,7 +66,12 @@ class BaseDataModule(pl.LightningDataModule):
         self.train_batch_size = train_batch_size
         self.val_batch_size = val_batch_size
         self.test_batch_size = test_batch_size
-        self.num_workers = num_workers
+        slurm_cpus = os.getenv("SLURM_CPUS_PER_TASK")
+        if slurm_cpus:
+            self.num_workers = int(slurm_cpus)
+        else:
+            # Fallback to os.cpu_count()
+            self.num_workers = os.cpu_count()
         self.train_probability = train_probability
         self.val_probability = val_probability
         self.test_probability = test_probability
@@ -176,7 +182,7 @@ class UnlabeledDataModule(BaseDataModule):
         train_batch_size: int = 16,
         val_batch_size: int = 16,
         test_batch_size: int = 1,
-        num_workers: int = 8,
+        num_workers: int | None = None,
         train_probability: float = 0.8,
         val_probability: float | None = None,
         test_probability: float | None = None,
