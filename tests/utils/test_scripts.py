@@ -104,8 +104,6 @@ def test_get_data_module_num_gpus_0(cfg, mocker):
     mock_data_module_init = mocker.patch.object(BaseDataModule, '__init__', return_value=None)
     get_data_module(cfg, Mock(spec=BaseTrackingDataset))
 
-    get_data_module(cfg, Mock(spec=BaseTrackingDataset))
-
     # assert num_gpus gets modified to 1
     assert cfg.training.num_gpus == 1
     # the rest of the behavior follows correctly
