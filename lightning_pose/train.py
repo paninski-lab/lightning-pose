@@ -20,7 +20,7 @@ from lightning_pose.model_config import ModelConfig
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
 from lightning_pose.utils.io import return_absolute_data_paths
 from lightning_pose.utils.scripts import (
-    calculate_train_batches,
+    calculate_steps_per_epoch,
     get_callbacks,
     get_data_module,
     get_dataset,
@@ -196,8 +196,7 @@ def _train(cfg: DictConfig) -> Model:
     # build loss factory which orchestrates different losses
     loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
 
-    # calculate number of batches for both labeled and unlabeled data per epoch
-    steps_per_epoch = calculate_train_batches(cfg, dataset)
+    steps_per_epoch = calculate_steps_per_epoch(data_module)
 
     # Convert milestone_steps to milestones if applicable (before `get_model`).
     if (
@@ -295,7 +294,8 @@ def _train(cfg: DictConfig) -> Model:
         log_every_n_steps=cfg.training.log_every_n_steps,
         callbacks=callbacks,
         logger=logger,
-        limit_train_batches=steps_per_epoch,
+        # To understand why we set this, see 'max_size_cycle' in UnlabeledDataModule.
+        limit_train_batches=cfg.training.get("limit_train_batches") or steps_per_epoch,
         accumulate_grad_batches=cfg.training.get("accumulate_grad_batches", 1),
         profiler=cfg.training.get("profiler", None),
         sync_batchnorm=True,

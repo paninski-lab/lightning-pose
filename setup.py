@@ -92,6 +92,7 @@ extras_require = {
         "black",
         "flake8",
         "isort",
+        "pytest-mocker",
         "Sphinx",
         "sphinx_rtd_theme",
         "sphinx-rtd-dark-mode",

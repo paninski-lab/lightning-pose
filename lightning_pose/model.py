@@ -273,6 +273,5 @@ def _build_datamodule_pred(cfg: DictConfig):
     data_module_pred = get_data_module(
         cfg=cfg_pred, dataset=dataset_pred, video_dir=cfg_pred.data.video_dir
     )
-    data_module_pred.setup()
 
     return data_module_pred

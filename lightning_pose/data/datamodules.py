@@ -83,8 +83,10 @@ class BaseDataModule(pl.LightningDataModule):
         self.val_dataset = None  # populated by self.setup()
         self.test_dataset = None  # populated by self.setup()
         self.torch_seed = torch_seed
+        self._setup()
 
-    def setup(self, stage: str | None = None) -> None:  # stage arg needed for ptl
+
+    def _setup(self) -> None:
 
         datalen = self.dataset.__len__()
         print(f"Number of labeled images in the full dataset (train+val+test): {datalen}")
@@ -236,9 +238,6 @@ class UnlabeledDataModule(BaseDataModule):
         self.dali_config = dali_config
         self.unlabeled_dataloader = None  # initialized in setup_unlabeled
         self.imgaug = imgaug
-        # TODO: Should these belong in a setup method that called by lightning,
-        # rather than __init__? BaseDataModule already follows that pattern.
-        super().setup()
         self.setup_unlabeled()
 
     def setup_unlabeled(self) -> None:
@@ -260,4 +259,10 @@ class UnlabeledDataModule(BaseDataModule):
             labeled=super().train_dataloader(),
             unlabeled=self.unlabeled_dataloader,
         )
+        # CombinedLoader set to 'max_size_cycle' mode: It will cycle through
+        # labeled data till unlabeled is exhausted. What we really wanted to do is
+        # cycle until at least 10 steps (in case labeled data is fewer than 10 steps worth)
+        # and then stop. This was empirically better than stopping once labeled data was exhausted.
+        # lightning_pose.train._train() method uses limit_train_batches to stop cycling
+        # after 10 steps.
         return CombinedLoader(loader, mode="max_size_cycle")

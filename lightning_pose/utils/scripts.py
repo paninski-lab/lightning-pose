@@ -1,5 +1,6 @@
 """Helper functions to build pipeline components from config dictionary."""
 
+import math
 import os
 import warnings
 from collections import OrderedDict
@@ -49,7 +50,7 @@ __all__ = [
     "get_loss_factories",
     "get_model",
     "get_callbacks",
-    "calculate_train_batches",
+    "calculate_steps_per_epoch",
     "compute_metrics",
 ]
 
@@ -506,49 +507,19 @@ def get_callbacks(
     return callbacks
 
 
-@typechecked
-def calculate_train_batches(
-    cfg: DictConfig,
-    dataset: BaseTrackingDataset | HeatmapDataset | MultiviewHeatmapDataset | None = None,
-) -> int:
-    """
-    For semi-supervised models, this tells us how many batches to take from each dataloader
-    (labeled and unlabeled) during a given epoch.
-    The default set here is to exhaust all batches from the labeled data loader, often leaving
-    many video frames untouched.
-    But the unlabeled data loader will be randomly reset for the next epoch.
-    We also enforce a minimum value of 10 so that models with a small number of labeled frames will
-    cycle through the dataset multiple times per epoch, which we have found to be useful
-    empirically.
+def calculate_steps_per_epoch(data_module: BaseDataModule):
+    train_dataset_length = len(data_module.train_dataset)
+    num_labeled_batches = math.ceil(train_dataset_length / data_module.train_batch_size)
 
-    """
-    if cfg.training.get("limit_train_batches", None) is None:
-        # NOTE: small bit of redundant code from datamodule
-        datalen = dataset.__len__()
-        data_splits_list = split_sizes_from_probabilities(
-            datalen,
-            train_probability=cfg.training.train_prob,
-            val_probability=cfg.training.val_prob,
-        )
-        num_train_frames = compute_num_train_frames(
-            data_splits_list[0], cfg.training.get("train_frames", None)
-        )
-        # For multi-GPU, the computation is unchanged.
-        #   num_train_frames is divided by num_gpus to get num_train_frames per gpu
-        #   train_batch_size is also divided by num_gpus to get the mini-batch size
-        #   so num_gpus cancels out of the numerator and denominator.
-        num_labeled_batches = int(np.ceil(num_train_frames / cfg.training.train_batch_size))
+    is_unsupervised = isinstance(data_module, UnlabeledDataModule)
 
-        # We used to have this logic but testing revealed it's not actually working
-        # Expected: trainer will run at least 10 steps per epoch.
-        # Observed: trainer can run less than 10 steps per epoch even though this returns 10.
-        # TODO: Discuss with matt.
-        # limit_train_batches = np.max([num_labeled_batches, 10])  # 10 is minimum
-        limit_train_batches = num_labeled_batches
-    else:
-        limit_train_batches = cfg.training.limit_train_batches
-
-    return int(limit_train_batches)
+    # Unsupervised: CombinedLoader is in 'max_size_cycle' mode. It will cycle through
+    # labeled data till unlabeled is exhausted. What we really wanted to do is
+    # cycle until at least 10 steps (in case labeled data is fewer than 10 steps worth)
+    # and then stop. This was empirically better than stopping once labeled data was exhausted.
+    if is_unsupervised:
+        num_labeled_batches = max(10, num_labeled_batches)
+    return num_labeled_batches
 
 
 @typechecked

@@ -145,7 +145,6 @@ def test_subsampling_of_training_frames(base_dataset):
     # test subsampling of training frames
     train_frames = 10  # integer
     heatmap_module = BaseDataModule(base_dataset, train_frames=train_frames)
-    heatmap_module.setup()
     train_dataloader = heatmap_module.train_dataloader()
     assert len(train_dataloader.dataset) == train_frames
 
@@ -154,7 +153,6 @@ def test_subsampling_of_training_frames(base_dataset):
     heatmap_module = BaseDataModule(
         base_dataset, train_frames=train_frames, train_probability=train_probability
     )
-    heatmap_module.setup()
     train_dataloader = heatmap_module.train_dataloader()
     assert len(train_dataloader.dataset) == int(train_probability * len_dataset)
 
@@ -163,7 +161,6 @@ def test_subsampling_of_training_frames(base_dataset):
     heatmap_module = BaseDataModule(
         base_dataset, train_frames=train_frames, train_probability=train_probability
     )
-    heatmap_module.setup()
     train_dataloader = heatmap_module.train_dataloader()
     assert len(train_dataloader.dataset) == int(
         train_frames * train_probability * len_dataset
@@ -174,15 +171,13 @@ def test_subsampling_of_training_frames(base_dataset):
     heatmap_module = BaseDataModule(
         base_dataset, train_frames=train_frames, train_probability=train_probability
     )
-    heatmap_module.setup()
     train_dataloader = heatmap_module.train_dataloader()
     assert len(train_dataloader.dataset) == int(train_probability * len_dataset)
 
     # raise exception when not a path
     with pytest.raises(ValueError):
         train_frames = -1
-        heatmap_module = BaseDataModule(base_dataset, train_frames=train_frames)
-        heatmap_module.setup()
+        BaseDataModule(base_dataset, train_frames=train_frames)
 
     # cleanup
     del heatmap_module
