@@ -76,7 +76,6 @@ install_requires = [
     "seaborn",
     "streamlit",
     "tensorboard<3.0.0",
-    "tbparse<1.0.0",
     "torchtyping",
     "torchvision",
     "typeguard",
@@ -99,6 +98,7 @@ extras_require = {
         "sphinx-automodapi",
         "sphinx-copybutton",
         "sphinx-design",
+        "tbparse<1.0.0",
     },
     "extra_models": {
         "lightning-bolts",  # resnet-50 trained on imagenet using simclr
