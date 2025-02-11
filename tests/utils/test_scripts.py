@@ -15,36 +15,61 @@ import pytest
 from omegaconf import OmegaConf
 from omegaconf.errors import ValidationError
 
+from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import BaseTrackingDataset
 from lightning_pose.utils.scripts import (
-    calculate_train_batches,
+    calculate_steps_per_epoch,
     get_data_module,
 )
 
 
-def test_calculate_train_batches(cfg, base_dataset):
-    """Test the computation of train batches, which is a function of labeled and unlabeled info."""
+def test_calculate_steps_per_epoch_supervised(cfg, base_dataset):
+    """Test the computation of steps per epoch."""
     cfg_tmp = copy.deepcopy(cfg)
 
-    # return value if set in config
-    for n in [2, 12, 22]:
-        cfg_tmp.training.limit_train_batches = n
-        n_batches = calculate_train_batches(cfg_tmp, base_dataset)
-        assert n_batches == n
+    cfg_tmp.model.losses_to_use = []
 
-    # None with small number of train frames - return minimum of 10
+    # Small number of train frames
+    cfg_tmp.training.train_frames = 3
+    cfg_tmp.training.train_batch_size = 2
+    base_data_module = get_data_module(cfg_tmp, dataset=base_dataset, video_dir=None)
+
+    n_batches = calculate_steps_per_epoch(base_data_module)
+    assert n_batches == 2
+
+    # Large number of frames
     cfg_tmp.training.limit_train_batches = None
-    cfg_tmp.training.train_frames = 2
-    n_batches = calculate_train_batches(cfg_tmp, base_dataset)
+    cfg_tmp.training.train_frames = 49
+    cfg_tmp.training.train_batch_size = 2
+    base_data_module = get_data_module(cfg_tmp, dataset=base_dataset, video_dir=None)
+
+    n_batches = calculate_steps_per_epoch(base_data_module)
+    assert n_batches == 25  # ceil (49 / 2)
+
+
+def test_calculate_steps_per_epoch_unsupervised(cfg, base_dataset, toy_data_dir):
+    """Test the computation of steps per epoch."""
+    video_dir = os.path.join(toy_data_dir, "videos")
+    cfg_tmp = copy.deepcopy(cfg)
+
+    # Small number of train frames - return minimum of 10
+    cfg_tmp.training.train_frames = 3
+    cfg_tmp.training.train_batch_size = 2
+    base_data_module_combined = get_data_module(
+        cfg_tmp, dataset=base_dataset, video_dir=video_dir
+    )
+    n_batches = calculate_steps_per_epoch(base_data_module_combined)
     assert n_batches == 10
 
-    # None with large number of frames
-    n = 50
+    # Large number of frames
     cfg_tmp.training.limit_train_batches = None
-    cfg_tmp.training.train_frames = n
-    cfg_tmp.training.train_batch_size = 1
-    n_batches = calculate_train_batches(cfg_tmp, base_dataset)
-    assert n_batches == n
+    cfg_tmp.training.train_frames = 49
+    cfg_tmp.training.train_batch_size = 2
+    base_data_module_combined = get_data_module(
+        cfg_tmp, dataset=base_dataset, video_dir=video_dir
+    )
+    n_batches = calculate_steps_per_epoch(base_data_module_combined)
+    assert n_batches == 25 # ceil (49 / 2)
 
 
 def _supervised_multi_gpu_cfg(cfg):
@@ -72,59 +97,46 @@ def _unsupervised_multi_gpu_cfg(cfg):
     return cfg
 
 
-def test_get_data_module_num_gpus_0(cfg):
+def test_get_data_module_num_gpus_0(cfg, mocker):
     cfg = _supervised_multi_gpu_cfg(cfg)
     # when num_gpus is set to 0, i.e. from a deprecated config
     cfg.training.num_gpus = 0
-    data_module = get_data_module(cfg, Mock(spec=BaseTrackingDataset))
+    mock_data_module_init = mocker.patch.object(BaseDataModule, '__init__', return_value=None)
+    get_data_module(cfg, Mock(spec=BaseTrackingDataset))
 
     # assert num_gpus gets modified to 1
     assert cfg.training.num_gpus == 1
     # the rest of the behavior follows correctly
-    assert data_module.train_batch_size == cfg.training.train_batch_size
-    assert data_module.val_batch_size == cfg.training.val_batch_size
-    assert data_module.test_batch_size == cfg.training.test_batch_size
+    assert mock_data_module_init.call_args.kwargs["train_batch_size"] == cfg.training.train_batch_size
+    assert mock_data_module_init.call_args.kwargs["val_batch_size"] == cfg.training.val_batch_size
+    assert mock_data_module_init.call_args.kwargs["test_batch_size"] == cfg.training.test_batch_size
 
 
-def test_get_data_module_multi_gpu_batch_size_adjustment_supervised(cfg):
+def test_get_data_module_multi_gpu_batch_size_adjustment_supervised(cfg, mocker):
     cfg = _supervised_multi_gpu_cfg(cfg)
-    data_module = get_data_module(cfg, Mock(spec=BaseTrackingDataset))
+    mock_data_module_init = mocker.patch.object(BaseDataModule, '__init__', return_value=None)
+    get_data_module(cfg, Mock(spec=BaseTrackingDataset))
     # train, val batch sizes should be divided by num_gpus
-    assert (
-        data_module.train_batch_size
-        == cfg.training.train_batch_size / cfg.training.num_gpus
-    )
-    assert (
-        data_module.val_batch_size
-        == cfg.training.val_batch_size / cfg.training.num_gpus
-    )
-    assert data_module.test_batch_size == cfg.training.test_batch_size
+    assert mock_data_module_init.call_args.kwargs["train_batch_size"] == cfg.training.train_batch_size / cfg.training.num_gpus
+    assert mock_data_module_init.call_args.kwargs["val_batch_size"] == cfg.training.val_batch_size / cfg.training.num_gpus
+    assert mock_data_module_init.call_args.kwargs["test_batch_size"] == cfg.training.test_batch_size
 
 
 def test_get_data_module_multi_gpu_batch_size_adjustment_unsupervised(
-    cfg, heatmap_dataset, toy_data_dir
+    cfg, heatmap_dataset, toy_data_dir, mocker
 ):
     cfg = _unsupervised_multi_gpu_cfg(cfg)
-    data_module = get_data_module(
+    mock_data_module_init = mocker.patch.object(UnlabeledDataModule, '__init__', return_value=None)
+    get_data_module(
         cfg, heatmap_dataset, os.path.join(toy_data_dir, "videos")
     )
     # train, val batch sizes should be divided by num_gpus
-    assert (
-        data_module.train_batch_size
-        == cfg.training.train_batch_size / cfg.training.num_gpus
-    )
-    assert (
-        data_module.val_batch_size
-        == cfg.training.val_batch_size / cfg.training.num_gpus
-    )
-    assert data_module.test_batch_size == cfg.training.test_batch_size
+    assert mock_data_module_init.call_args.kwargs["train_batch_size"] == cfg.training.train_batch_size / cfg.training.num_gpus
+    assert mock_data_module_init.call_args.kwargs["val_batch_size"] == cfg.training.val_batch_size / cfg.training.num_gpus
+    assert mock_data_module_init.call_args.kwargs["test_batch_size"] == cfg.training.test_batch_size
 
     # sequence length should be divided by num_gups
-    assert (
-        data_module.dali_config.base.train.sequence_length
-        == cfg.dali.base.train.sequence_length / cfg.training.num_gpus
-    )
-
+    assert mock_data_module_init.call_args.kwargs["dali_config"].base.train.sequence_length == cfg.dali.base.train.sequence_length / cfg.training.num_gpus
     # context batch size is more nuance, tested separately
 
 

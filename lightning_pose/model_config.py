@@ -35,3 +35,38 @@ class ModelConfig:
             return_absolute_path(self.cfg.eval.test_videos_directory)
         )
         return [Path(f) for f in files]
+
+    def validate(self):
+        self._validate_steps_vs_epochs()
+
+    def _validate_steps_vs_epochs(self):
+        if "min_steps" in self.cfg.training or "max_steps" in self.cfg.training:
+            assert "min_steps" in self.cfg.training
+            assert "max_steps" in self.cfg.training
+            assert "min_epochs" not in self.cfg.training
+            assert "max_epochs" not in self.cfg.training
+            assert "unfreezing_step" in self.cfg.training
+            assert "unfreezing_epoch" not in self.cfg.training
+            if "multisteplr" in self.cfg.training.lr_scheduler_params:
+                assert (
+                    "milestone_steps"
+                    in self.cfg.training.lr_scheduler_params.multisteplr
+                )
+                assert (
+                    "milestones"
+                    not in self.cfg.training.lr_scheduler_params.multisteplr
+                )
+
+        else:
+            assert "min_steps" not in self.cfg.training
+            assert "max_steps" not in self.cfg.training
+            assert "min_epochs" in self.cfg.training
+            assert "max_epochs" in self.cfg.training
+            assert "unfreezing_step" not in self.cfg.training
+            assert "unfreezing_epoch" in self.cfg.training
+            if "multisteplr" in self.cfg.training.lr_scheduler_params:
+                assert (
+                    "milestone_steps"
+                    not in self.cfg.training.lr_scheduler_params.multisteplr
+                )
+                assert "milestones" in self.cfg.training.lr_scheduler_params.multisteplr

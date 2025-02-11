@@ -83,8 +83,10 @@ class BaseDataModule(pl.LightningDataModule):
         self.val_dataset = None  # populated by self.setup()
         self.test_dataset = None  # populated by self.setup()
         self.torch_seed = torch_seed
+        self._setup()
 
-    def setup(self, stage: str | None = None) -> None:  # stage arg needed for ptl
+
+    def _setup(self) -> None:
 
         datalen = self.dataset.__len__()
         print(f"Number of labeled images in the full dataset (train+val+test): {datalen}")
@@ -236,9 +238,6 @@ class UnlabeledDataModule(BaseDataModule):
         self.dali_config = dali_config
         self.unlabeled_dataloader = None  # initialized in setup_unlabeled
         self.imgaug = imgaug
-        # TODO: Should these belong in a setup method that called by lightning,
-        # rather than __init__? BaseDataModule already follows that pattern.
-        super().setup()
         self.setup_unlabeled()
 
     def setup_unlabeled(self) -> None:
@@ -260,4 +259,13 @@ class UnlabeledDataModule(BaseDataModule):
             labeled=super().train_dataloader(),
             unlabeled=self.unlabeled_dataloader,
         )
+        # CombinedLoader mode="max_size_cycle" works in concert with
+        # `trainer.limit_train_batches`. Assuming unlabeled data is plentiful,
+        # it will cycle through labeled data until limit_train_batches.
+        # We set limit_train_batches such that it exhausts all labeled data
+        # in an epoch, or it cycles for a minimum of 10 batches.
+        #
+        # The reason to have a minimum number of batches is so that when labeled data is
+        # scarce, the model sees more unlabeled data per epoch instead of just stopping
+        # (empirically better).
         return CombinedLoader(loader, mode="max_size_cycle")

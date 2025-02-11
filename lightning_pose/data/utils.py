@@ -252,8 +252,6 @@ class DataExtractor(object):
                         train_frames=data_module.train_frames,
                         torch_seed=data_module.torch_seed,
                     )
-                    # split datasets
-                    data_module_new.setup()
                 else:
                     raise NotImplementedError
 

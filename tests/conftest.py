@@ -299,7 +299,6 @@ def base_data_module(cfg, base_dataset) -> BaseDataModule:
     cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.losses_to_use = []
     data_module = get_data_module(cfg_tmp, dataset=base_dataset, video_dir=None)
-    data_module.setup()
 
     # return to tests
     yield data_module
@@ -317,7 +316,6 @@ def heatmap_data_module(cfg, heatmap_dataset) -> BaseDataModule:
     cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.losses_to_use = []
     data_module = get_data_module(cfg_tmp, dataset=heatmap_dataset, video_dir=None)
-    data_module.setup()
 
     # return to tests
     yield data_module
@@ -335,7 +333,6 @@ def multiview_heatmap_data_module(cfg_multiview, multiview_heatmap_dataset) -> B
     cfg_tmp = copy.deepcopy(cfg_multiview)
     cfg_tmp.model.losses_to_use = []
     data_module = get_data_module(cfg_tmp, dataset=multiview_heatmap_dataset, video_dir=None)
-    data_module.setup()
 
     # return to tests
     yield data_module
@@ -353,7 +350,6 @@ def heatmap_data_module_context(cfg, heatmap_dataset_context) -> BaseDataModule:
     cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.losses_to_use = []
     data_module = get_data_module(cfg_tmp, dataset=heatmap_dataset_context, video_dir=None)
-    data_module.setup()
 
     # return to tests
     yield data_module
@@ -376,7 +372,6 @@ def multiview_heatmap_data_module_context(
     data_module = get_data_module(
         cfg_tmp, dataset=multiview_heatmap_dataset_context, video_dir=None,
     )
-    data_module.setup()
 
     # return to tests
     yield data_module
@@ -398,7 +393,6 @@ def base_data_module_combined(cfg, base_dataset) -> UnlabeledDataModule:
         dataset=base_dataset,
         video_dir=os.path.join(TOY_DATA_ROOT_DIR, "videos"),
     )
-    # data_module.setup()  # already done in UnlabeledDataModule constructor
 
     # return to tests
     yield data_module
@@ -420,7 +414,6 @@ def heatmap_data_module_combined(cfg, heatmap_dataset) -> UnlabeledDataModule:
         dataset=heatmap_dataset,
         video_dir=os.path.join(TOY_DATA_ROOT_DIR, "videos"),
     )
-    # data_module.setup()  # already done in UnlabeledDataModule constructor
 
     # return to tests
     yield data_module
@@ -445,7 +438,6 @@ def multiview_heatmap_data_module_combined(
         dataset=multiview_heatmap_dataset,
         video_dir=os.path.join(cfg_multiview.data.data_dir, "videos"),
     )
-    # data_module.setup()  # already done in UnlabeledDataModule constructor
 
     # return to tests
     yield data_module

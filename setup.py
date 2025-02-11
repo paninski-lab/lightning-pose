@@ -75,7 +75,7 @@ install_requires = [
     "scikit-learn>=1.5.0",
     "seaborn",
     "streamlit",
-    "tensorboard",
+    "tensorboard<3.0.0",
     "torchtyping",
     "torchvision",
     "typeguard",
@@ -91,12 +91,14 @@ extras_require = {
         "black",
         "flake8",
         "isort",
+        "pytest-mocker",
         "Sphinx",
         "sphinx_rtd_theme",
         "sphinx-rtd-dark-mode",
         "sphinx-automodapi",
         "sphinx-copybutton",
         "sphinx-design",
+        "tbparse<1.0.0",
     },
     "extra_models": {
         "lightning-bolts",  # resnet-50 trained on imagenet using simclr

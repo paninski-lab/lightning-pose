@@ -1,5 +1,6 @@
 """Helper functions to build pipeline components from config dictionary."""
 
+import math
 import os
 import warnings
 from collections import OrderedDict
@@ -49,7 +50,7 @@ __all__ = [
     "get_loss_factories",
     "get_model",
     "get_callbacks",
-    "calculate_train_batches",
+    "calculate_steps_per_epoch",
     "compute_metrics",
 ]
 
@@ -323,7 +324,6 @@ def get_model(
     lr_scheduler_params = OmegaConf.to_object(
         cfg.training.lr_scheduler_params[lr_scheduler]
     )
-    lr_scheduler_params["unfreeze_backbone_at_epoch"] = cfg.training.unfreezing_epoch
 
     semi_supervised = io_utils.check_if_semi_supervised(cfg.model.losses_to_use)
     image_h = cfg.data.image_resize_dims.height
@@ -468,7 +468,11 @@ def get_callbacks(
         callbacks.append(early_stopping)
 
     if backbone_unfreeze:
-        unfreeze_backbone_callback = UnfreezeBackbone(cfg.training.unfreezing_epoch)
+        unfreeze_step = cfg.training.get("unfreezing_step")
+        unfreeze_epoch = cfg.training.get("unfreezing_epoch")
+        unfreeze_backbone_callback = UnfreezeBackbone(
+            unfreeze_step=unfreeze_step, unfreeze_epoch=unfreeze_epoch
+        )
         callbacks.append(unfreeze_backbone_callback)
 
     if lr_monitor:
@@ -503,43 +507,16 @@ def get_callbacks(
     return callbacks
 
 
-@typechecked
-def calculate_train_batches(
-    cfg: DictConfig,
-    dataset: BaseTrackingDataset | HeatmapDataset | MultiviewHeatmapDataset | None = None,
-) -> int:
-    """
-    For semi-supervised models, this tells us how many batches to take from each dataloader
-    (labeled and unlabeled) during a given epoch.
-    The default set here is to exhaust all batches from the labeled data loader, often leaving
-    many video frames untouched.
-    But the unlabeled data loader will be randomly reset for the next epoch.
-    We also enforce a minimum value of 10 so that models with a small number of labeled frames will
-    cycle through the dataset multiple times per epoch, which we have found to be useful
-    empirically.
+def calculate_steps_per_epoch(data_module: BaseDataModule):
+    train_dataset_length = len(data_module.train_dataset)
+    steps_per_epoch = math.ceil(train_dataset_length / data_module.train_batch_size)
 
-    """
-    if cfg.training.get("limit_train_batches", None) is None:
-        # NOTE: small bit of redundant code from datamodule
-        datalen = dataset.__len__()
-        data_splits_list = split_sizes_from_probabilities(
-            datalen,
-            train_probability=cfg.training.train_prob,
-            val_probability=cfg.training.val_prob,
-        )
-        num_train_frames = compute_num_train_frames(
-            data_splits_list[0], cfg.training.get("train_frames", None)
-        )
-        # For multi-GPU, the computation is unchanged.
-        #   num_train_frames is divided by num_gpus to get num_train_frames per gpu
-        #   train_batch_size is also divided by num_gpus to get the mini-batch size
-        #   so num_gpus cancels out of the numerator and denominator.
-        num_labeled_batches = int(np.ceil(num_train_frames / cfg.training.train_batch_size))
-        limit_train_batches = np.max([num_labeled_batches, 10])  # 10 is minimum
-    else:
-        limit_train_batches = cfg.training.limit_train_batches
+    is_unsupervised = isinstance(data_module, UnlabeledDataModule)
 
-    return int(limit_train_batches)
+    # To understand why we do this, see 'max_size_cycle' in UnlabeledDataModule.
+    if is_unsupervised:
+        steps_per_epoch = max(10, steps_per_epoch)
+    return steps_per_epoch
 
 
 @typechecked
@@ -674,26 +651,34 @@ def compute_metrics_single(
         temporal_norm_df.to_csv(save_file)
 
     if "pca_singleview" in metrics_to_compute:
-        # build pca object
-        pca = KeypointPCA(
-            loss_type="pca_singleview",
-            data_module=data_module,
-            components_to_keep=cfg.losses.pca_singleview.components_to_keep,
-            empirical_epsilon_percentile=cfg.losses.pca_singleview.get(
-                "empirical_epsilon_percentile", 1.0),
-            columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
-            centering_method=cfg.losses.pca_singleview.get("centering_method", None),
-        )
-        # re-fit pca on the labeled data to get params
-        pca()
-        # compute reprojection error
-        pcasv_error_per_keypoint = pca_singleview_reprojection_error(keypoints_pred, pca)
-        pcasv_df = pd.DataFrame(pcasv_error_per_keypoint, index=index, columns=keypoint_names)
-        # add train/val/test split
-        if set is not None:
-            pcasv_df["set"] = set
-        save_file = preds_file_path.with_name(preds_file_path.stem + "_pca_singleview_error.csv")
-        pcasv_df.to_csv(save_file)
+        try:
+            # build pca object
+            pca = KeypointPCA(
+                loss_type="pca_singleview",
+                data_module=data_module,
+                components_to_keep=cfg.losses.pca_singleview.components_to_keep,
+                empirical_epsilon_percentile=cfg.losses.pca_singleview.get(
+                    "empirical_epsilon_percentile", 1.0),
+                columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
+                centering_method=cfg.losses.pca_singleview.get("centering_method", None),
+            )
+            # re-fit pca on the labeled data to get params
+            pca()
+            # compute reprojection error
+            pcasv_error_per_keypoint = pca_singleview_reprojection_error(keypoints_pred, pca)
+            pcasv_df = pd.DataFrame(pcasv_error_per_keypoint, index=index, columns=keypoint_names)
+            # add train/val/test split
+            if set is not None:
+                pcasv_df["set"] = set
+            save_file = preds_file_path.with_name(preds_file_path.stem + "_pca_singleview_error.csv")
+            pcasv_df.to_csv(save_file)
+        except ValueError as e:
+            # PCA will fail if not enough train frames.
+            # skip pca metric in this case.
+            # re-raise if this is not the PCA error this try is intended to swallow
+            if not "cannot fit PCA" in str(e):
+                raise e
+
 
     if "pca_multiview" in metrics_to_compute:
         # build pca object

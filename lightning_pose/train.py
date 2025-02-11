@@ -1,5 +1,7 @@
 """Example model training function."""
 
+import contextlib
+import math
 import os
 import random
 import shutil
@@ -14,10 +16,11 @@ from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 from typeguard import typechecked
 
 from lightning_pose.model import Model
+from lightning_pose.model_config import ModelConfig
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
 from lightning_pose.utils.io import return_absolute_data_paths
 from lightning_pose.utils.scripts import (
-    calculate_train_batches,
+    calculate_steps_per_epoch,
     get_callbacks,
     get_data_module,
     get_dataset,
@@ -30,21 +33,38 @@ from lightning_pose.utils.scripts import (
 __all__ = ["train"]
 
 
+# TODO: Replace with contextlib.chdir in python 3.11.
+@contextlib.contextmanager
+def chdir(dir: str | Path):
+    pwd = os.getcwd()
+    os.chdir(dir)
+    try:
+        yield
+    finally:
+        os.chdir(pwd)
+
+
 @typechecked
-def train(cfg: DictConfig) -> Model:
+def train(
+    cfg: DictConfig, model_dir: str | Path | None = None, skip_evaluation=False
+) -> Model:
     """
-    Trains a model using the configuration `cfg`. Saves model to current
-    working directory (callers should `chdir` to the desired `model_dir` prior to calling).
+    Trains a model using the configuration `cfg`. Saves model to `model_dir`
+    (defaults to cwd if unspecified).
     """
-    model = _train(cfg)
+    # Default to cwd for backwards compatibility. Future: make model_dir required.
+    model_dir = Path(model_dir or os.getcwd())
+    model_dir.mkdir(parents=True, exist_ok=True)
+    with chdir(model_dir):
+        model = _train(cfg)
     # Comment out the above, and uncomment the below to skip
     # training and go straight to post-training analysis:
-    # import os
     # model = Model.from_dir(os.getcwd())
 
-    _evaluate_on_training_dataset(model)
-    _evaluate_on_ood_dataset(model)
-    _predict_test_videos(model)
+    if not skip_evaluation:
+        _evaluate_on_training_dataset(model)
+        _evaluate_on_ood_dataset(model)
+        _predict_test_videos(model)
 
     return model
 
@@ -106,7 +126,7 @@ def _evaluate_on_ood_dataset(model: Model):
             csv_file = _absolute_csv_file(csv_file, model.config.cfg.data.data_dir)
             ood_csv_file = csv_file.with_stem(csv_file.stem + "_new")
             ood_csv_files.append(ood_csv_file)
-            output_filename_stems.append(f"predictions_new_{view_name}")
+            output_filename_stems.append(f"predictions_{view_name}_new")
 
     if ood_csv_files[0].is_file():
         pretty_print_str("Predicting OOD images...")
@@ -155,6 +175,8 @@ def _train(cfg: DictConfig) -> Model:
     print("Our Hydra config file:")
     pretty_print_cfg(cfg)
 
+    ModelConfig(cfg).validate()
+
     # path handling for toy data
     data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
 
@@ -173,6 +195,17 @@ def _train(cfg: DictConfig) -> Model:
 
     # build loss factory which orchestrates different losses
     loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
+
+    steps_per_epoch = calculate_steps_per_epoch(data_module)
+
+    # Convert milestone_steps to milestones if applicable (before `get_model`).
+    if (
+        "multisteplr" in cfg.training.lr_scheduler_params
+        and "milestone_steps" in cfg.training.lr_scheduler_params.multisteplr
+    ):
+        milestone_steps = cfg.training.lr_scheduler_params.multisteplr.milestone_steps
+        milestones = [math.ceil(s / steps_per_epoch) for s in milestone_steps]
+        cfg.training.lr_scheduler_params.multisteplr.milestones = milestones
 
     # model
     model = get_model(cfg=cfg, data_module=data_module, loss_factories=loss_factories)
@@ -224,9 +257,6 @@ def _train(cfg: DictConfig) -> Model:
         ckpt_every_n_epochs=cfg.training.get("ckpt_every_n_epochs", None),
     )
 
-    # calculate number of batches for both labeled and unlabeled data per epoch
-    limit_train_batches = calculate_train_batches(cfg, dataset)
-
     # set up trainer
 
     # Old configs may have num_gpus: 0. We will remove support in a future release.
@@ -237,19 +267,35 @@ def _train(cfg: DictConfig) -> Model:
         )
     cfg.training.num_gpus = max(cfg.training.num_gpus, 1)
 
+    # Initialize to Trainer defaults. Note max_steps defaults to -1.
+    min_steps, max_steps, min_epochs, max_epochs = (None, -1, None, None)
+    if "min_steps" in cfg.training:
+        min_steps = cfg.training.min_steps
+        max_steps = cfg.training.max_steps
+    else:
+        min_epochs = cfg.training.min_epochs
+        max_epochs = cfg.training.max_epochs
+
+    # Initialize to Trainer defaults. Note max_steps defaults to -1.
+
+    # Unlike min_epoch/min_step, both of these are valid to specify.
+    check_val_every_n_epoch = cfg.training.get("check_val_every_n_epoch", 1) # 1 is default for Trainer.
+    val_check_interval = cfg.training.get("val_check_interval")
+
     trainer = pl.Trainer(
         accelerator="gpu",
         devices=cfg.training.num_gpus,
-        max_epochs=cfg.training.max_epochs,
-        min_epochs=cfg.training.min_epochs,
-        check_val_every_n_epoch=min(
-            cfg.training.check_val_every_n_epoch,
-            cfg.training.max_epochs,  # for debugging or otherwise training for a short time
-        ),
+        max_epochs=max_epochs,
+        min_epochs=min_epochs,
+        max_steps=max_steps,
+        min_steps=min_steps,
+        check_val_every_n_epoch=check_val_every_n_epoch,
+        val_check_interval=val_check_interval,
         log_every_n_steps=cfg.training.log_every_n_steps,
         callbacks=callbacks,
         logger=logger,
-        limit_train_batches=limit_train_batches,
+        # To understand why we set this, see 'max_size_cycle' in UnlabeledDataModule.
+        limit_train_batches=cfg.training.get("limit_train_batches") or steps_per_epoch,
         accumulate_grad_batches=cfg.training.get("accumulate_grad_batches", 1),
         profiler=cfg.training.get("profiler", None),
         sync_batchnorm=True,
