@@ -259,10 +259,13 @@ class UnlabeledDataModule(BaseDataModule):
             labeled=super().train_dataloader(),
             unlabeled=self.unlabeled_dataloader,
         )
-        # CombinedLoader set to 'max_size_cycle' mode: It will cycle through
-        # labeled data till unlabeled is exhausted. What we really wanted to do is
-        # cycle until at least 10 steps (in case labeled data is fewer than 10 steps worth)
-        # and then stop. This was empirically better than stopping once labeled data was exhausted.
-        # lightning_pose.train._train() method uses limit_train_batches to stop cycling
-        # after 10 steps.
+        # CombinedLoader mode="max_size_cycle" works in concert with
+        # `trainer.limit_train_batches`. Assuming unlabeled data is plentiful,
+        # it will cycle through labeled data until limit_train_batches.
+        # We set limit_train_batches such that it exhausts all labeled data
+        # in an epoch, or it cycles for a minimum of 10 batches.
+        #
+        # The reason to have a minimum number of batches is so that when labeled data is
+        # scarce, the model sees more unlabeled data per epoch instead of just stopping
+        # (empirically better).
         return CombinedLoader(loader, mode="max_size_cycle")

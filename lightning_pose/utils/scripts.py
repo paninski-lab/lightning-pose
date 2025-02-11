@@ -509,17 +509,14 @@ def get_callbacks(
 
 def calculate_steps_per_epoch(data_module: BaseDataModule):
     train_dataset_length = len(data_module.train_dataset)
-    num_labeled_batches = math.ceil(train_dataset_length / data_module.train_batch_size)
+    steps_per_epoch = math.ceil(train_dataset_length / data_module.train_batch_size)
 
     is_unsupervised = isinstance(data_module, UnlabeledDataModule)
 
-    # Unsupervised: CombinedLoader is in 'max_size_cycle' mode. It will cycle through
-    # labeled data till unlabeled is exhausted. What we really wanted to do is
-    # cycle until at least 10 steps (in case labeled data is fewer than 10 steps worth)
-    # and then stop. This was empirically better than stopping once labeled data was exhausted.
+    # To understand why we do this, see 'max_size_cycle' in UnlabeledDataModule.
     if is_unsupervised:
-        num_labeled_batches = max(10, num_labeled_batches)
-    return num_labeled_batches
+        steps_per_epoch = max(10, steps_per_epoch)
+    return steps_per_epoch
 
 
 @typechecked
