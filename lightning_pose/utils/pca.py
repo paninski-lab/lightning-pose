@@ -454,6 +454,55 @@ class NaNPCA(PCA):
 
         return U, S, Vt, X, x_is_centered, xp
 
+    def transform(self, X):
+        """Apply dimensionality reduction to X including missing data (Nans).
+
+        X is projected on the first principal components previously extracted
+        from a training set.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            New data, where `n_samples` is the number of samples
+            and `n_features` is the number of features.
+
+        Returns
+        -------
+        X_new : array-like of shape (n_samples, n_components)
+            Projection of X in the first principal components, where `n_samples`
+            is the number of samples and `n_components` is the number of the components.
+        """
+
+        # check_is_fitted(self)
+        is_valid = ~np.isnan(X)
+
+        # X = self._validate_data(X, dtype=[np.float64, np.float32], reset=False)
+
+        if self.mean_ is not None:
+            X = X - self.mean_
+
+        X_ = X.copy()
+        X_[~is_valid] = 0
+
+        X_transformed = np.zeros((X_.shape[0], self.n_components_))
+        W = self.components_.T
+        for i in range(X_.shape[0]):
+            if is_valid[i].sum() == 0:
+                X_transformed[i] = 0
+            else:
+                try:
+                    cov_mat = np.diag(1.0 * is_valid[i])
+                    B = np.linalg.inv(W.T @ cov_mat @ W)
+                    z_hat = B @ W.T @ cov_mat @ X_[i]  # compute posterior mean
+                    X_transformed[i] = z_hat
+                except:
+                    X_transformed[i] = 0
+
+        if self.whiten:
+            X_transformed /= np.sqrt(self.explained_variance_)
+
+        return X_transformed
+
 
 @typechecked
 class ComponentChooser:

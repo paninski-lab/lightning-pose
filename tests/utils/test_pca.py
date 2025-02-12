@@ -247,6 +247,11 @@ def test_nan_pca():
         pca_skl.explained_variance_ratio_, pca_cust.explained_variance_ratio_, rtol=1e-10)
     assert np.allclose(pca_skl.singular_values_, pca_cust.singular_values_, rtol=1e-10)
 
+    # test transform method
+    xhat_skl = pca_skl.transform(data_for_pca)
+    xhat_cust = pca_cust.transform(data_for_pca)
+    assert np.allclose(xhat_skl, xhat_cust, rtol=1e-10)
+
     # ------------------------------------------------------
     # TEST 2: standard PCA vs custom PCA with a single NaN
     # ------------------------------------------------------
@@ -284,15 +289,20 @@ def test_nan_pca():
     assert np.allclose(
         pca_cust.singular_values_, pca_cust_nan1.singular_values_, rtol=1e-2)
 
+    # test transform method
+    xhat_cust_nan1 = pca_cust_nan1.transform(data_for_pca_nans1)
+    # only check on unmodified rows
+    assert np.allclose(xhat_cust[1:], xhat_cust_nan1[1:], atol=1e-2)
+
     # ------------------------------------------------------
     # TEST 3: custom PCA with single vs many NaNs
     # ------------------------------------------------------
     # set many values to NaN
     data_for_pca_nans2 = np.copy(data_for_pca)
-    rows = [0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1, 0]
-    cols = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    rows = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    cols = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 8, 7, 6]
     for r, c in zip(rows, cols):
-        data_for_pca_nans2[c, r] = np.nan
+        data_for_pca_nans2[r, c] = np.nan
 
     # fit our custom NaN-handling PCA
     pca_cust_nan2 = NaNPCA()
@@ -323,6 +333,28 @@ def test_nan_pca():
         pca_cust_nan1.singular_values_[:d], pca_cust_nan2.singular_values_[:d], rtol=1e-10)
     assert np.allclose(
         pca_cust_nan1.singular_values_[:d], pca_cust_nan2.singular_values_[:d], rtol=1e-2)
+
+    # test transform method
+    xhat_cust_nan2 = pca_cust_nan2.transform(data_for_pca_nans2)
+    # only check on unmodified rows
+    assert np.allclose(xhat_cust[rows[-1] + 1:], xhat_cust_nan2[rows[-1] + 1:], atol=1e-2)
+
+    # ------------------------------------------------------
+    # TEST 4: set whole row to NaN
+    # ------------------------------------------------------
+    data_for_pca_nans3 = np.copy(data_for_pca)
+    data_for_pca_nans3[0, :] = np.nan
+
+    # fit our custom NaN-handling PCA
+    pca_cust_nan3 = NaNPCA()
+    pca_cust_nan3.fit(data_for_pca_nans3)
+
+    # test transform method
+    xhat_cust_nan3 = pca_cust_nan3.transform(data_for_pca_nans3)
+    # only check on unmodified rows
+    assert np.allclose(xhat_cust[1:], xhat_cust_nan3[1:], atol=1e-2)
+    # test all-nan row was set to zeros
+    assert np.all(xhat_cust_nan3[0, :] == 0)
 
 
 def test_component_chooser():
