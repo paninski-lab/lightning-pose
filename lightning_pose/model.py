@@ -16,9 +16,8 @@ from lightning_pose.utils.predictions import (
     predict_dataset,
 )
 
-# Import as different name to avoid naming conflict with the kwarg `compute_metrics`.
-from lightning_pose.utils.scripts import compute_metrics as compute_metrics_fn
 from lightning_pose.utils.scripts import (
+    compute_metrics_single,
     get_data_module,
     get_dataset,
     get_imgaug_transform,
@@ -157,6 +156,8 @@ class Model:
             raise NotImplementedError()
 
         # Point predict_dataset to the csv_file and data_dir.
+        # HACK: For true multi-view model, trick predict_dataset and compute_metrics
+        # into thinking this is a single-view model.
         cfg_overrides = {
             "data": {
                 "data_dir": str(data_dir),
@@ -188,15 +189,12 @@ class Model:
         )
 
         if compute_metrics:
-            # HACK: True multi-view model treated as single-view model, so preds_file is
-            # a string, not a list per-view. This means we can't yet compute pca_multiview.
-            compute_metrics_fn(
+            compute_metrics_single(
                 cfg=cfg_pred,
+                labels_file=str(csv_file),
                 preds_file=preds_file,
                 data_module=data_module_pred,
             )
-
-        # TODO: Generate detector outputs.
 
         return self.PredictionResult(predictions=df)
 
@@ -254,9 +252,14 @@ class Model:
         )
 
         if compute_metrics:
-            # FIXME: This is only used for computing PCA metrics.
+            # FIXME: Data module is only used for computing PCA metrics.
             data_module = _build_datamodule_pred(self.cfg)
-            compute_metrics_fn(self.cfg, str(prediction_csv_file), data_module)
+            compute_metrics_single(
+                cfg=self.cfg,
+                labels_file=None,
+                preds_file=str(prediction_csv_file),
+                data_module=data_module,
+            )
 
         return self.PredictionResult(predictions=df)
 
