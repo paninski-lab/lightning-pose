@@ -16,7 +16,7 @@ from lightning_pose.utils.predictions import (
 from lightning_pose.utils.scripts import get_loss_factories, get_model
 
 
-def test_predict_dataset(cfg, heatmap_data_module, remove_logs, tmpdir):
+def test_predict_dataset(cfg, heatmap_data_module, tmpdir):
     """Test the prediction of a dataset after model training.
 
     NOTE: this only tests a heatmap tracker
@@ -45,6 +45,7 @@ def test_predict_dataset(cfg, heatmap_data_module, remove_logs, tmpdir):
         check_val_every_n_epoch=1,
         log_every_n_steps=1,
         callbacks=[ckpt_callback],
+        logger=False,
         limit_train_batches=2,
     )
     trainer.fit(model=model, datamodule=heatmap_data_module)
@@ -83,11 +84,8 @@ def test_predict_dataset(cfg, heatmap_data_module, remove_logs, tmpdir):
     gc.collect()
     torch.cuda.empty_cache()
 
-    # clean up logging
-    remove_logs()
 
-
-def test_predict_single_video(cfg, heatmap_data_module, video_list, remove_logs, tmpdir):
+def test_predict_single_video(cfg, heatmap_data_module, video_list, tmpdir):
     """Test the prediction of a video after model training.
 
     NOTE: this only tests a heatmap tracker
@@ -116,6 +114,7 @@ def test_predict_single_video(cfg, heatmap_data_module, video_list, remove_logs,
         check_val_every_n_epoch=1,
         log_every_n_steps=1,
         callbacks=[ckpt_callback],
+        logger=False,
         limit_train_batches=2,
     )
     trainer.fit(model=model, datamodule=heatmap_data_module)
@@ -171,12 +170,10 @@ def test_predict_single_video(cfg, heatmap_data_module, video_list, remove_logs,
     gc.collect()
     torch.cuda.empty_cache()
 
-    # clean up logging
-    remove_logs()
-
 
 def test_export_predictions_and_labeled_video(
-        cfg, heatmap_data_module, video_list, remove_logs, tmpdir):
+    cfg, heatmap_data_module, video_list, tmpdir
+):
     """Test helper function that predicts videos then makes a labeled movie."""
     # make a basic heatmap tracker
     cfg_tmp = copy.deepcopy(cfg)
@@ -201,6 +198,7 @@ def test_export_predictions_and_labeled_video(
         check_val_every_n_epoch=1,
         log_every_n_steps=1,
         callbacks=[ckpt_callback],
+        logger=False,
         limit_train_batches=2,
     )
     trainer.fit(model=model, datamodule=heatmap_data_module)
@@ -281,6 +279,3 @@ def test_export_predictions_and_labeled_video(
     del model
     gc.collect()
     torch.cuda.empty_cache()
-
-    # clean up logging
-    remove_logs()

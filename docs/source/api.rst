@@ -67,7 +67,7 @@ API Reference:
 
 .. autoclass:: lightning_pose.model.Model
     :members:
-    :exclude-members: __init__, PredictionResult, predict_on_label_csv_internal
+    :exclude-members: __init__, PredictionResult, from_dir2
 
 
 Lightning Pose Internal API
