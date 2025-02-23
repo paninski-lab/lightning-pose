@@ -1,20 +1,15 @@
-name: Run tests
+name: SSH and Execute Build Script
+
 on:
-  # Allow manually running from Github UI or API.
-  workflow_dispatch:
-  # to re-run status checks, mark as draft then ready_for_review.
   pull_request:
-    types: [ready_for_review]
+    types: [opened, synchronize, reopened]
+
 jobs:
-  pytest-ubuntu:
-    # Ships with python 3.10. Using it saves time installing it.
-    runs-on: linux-gpu
+  build:
+    runs-on: self-hosted
+    if: contains(fromJson('["ksikka", "themattinthehatt"]'), github.event.pull_request.user.login)
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
+      - name: Execute build script via SSH
         run: |
-          pip install -e ".[dev]"
-          pip install fiftyone-db-ubuntu2204
-      - name: Test with pytest
-        run: |
-          pytest
+          ssh axon 'sh buildbot/build_srun.sh ${{ github.event.pull_request.number }}'
