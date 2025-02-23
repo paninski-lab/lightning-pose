@@ -1,3 +1,4 @@
+# See documentation in scripts/buildbot/README
 name: SSH and Execute Build Script
 
 on:
@@ -7,7 +8,6 @@ on:
 jobs:
   build:
     runs-on: self-hosted
-    if: contains(fromJson('["ksikka", "themattinthehatt"]'), github.event.pull_request.user.login)
 
     steps:
       - name: Execute build script via SSH
