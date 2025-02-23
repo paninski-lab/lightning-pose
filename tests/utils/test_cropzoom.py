@@ -109,7 +109,7 @@ def test_generate_cropped_labeled_frames(tmp_path, request):
     assert comparison == 24
 
 
-@pytest.mark.skip(reason="Failing on axon, TODO FIXME.")
+#@pytest.mark.skip(reason="Failing on axon, TODO FIXME.")
 def test_generate_cropped_video(tmp_path, request):
     # Fetch a dataset and a fully trained model's predictions on it.
     fetch_test_data_if_needed(request.path.parent, "test_cropzoom_data")
