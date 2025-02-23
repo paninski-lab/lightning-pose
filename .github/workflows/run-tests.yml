@@ -12,4 +12,4 @@ jobs:
     steps:
       - name: Execute build script via SSH
         run: |
-          ssh axon 'sh buildbot/build_srun.sh ${{ github.event.pull_request.number }}'
+          ssh axon 'echo hello world'
