@@ -33,7 +33,7 @@ jobs:
           # axon-remote.rc.zi.columbia.edu:55 SSH-2.0-OpenSSH_7.4
           # axon-remote.rc.zi.columbia.edu:55 SSH-2.0-OpenSSH_7.4" >> ~/.ssh/known_hosts
           # -- END
-	  chmod 600 ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
       - name: Execute build script via SSH
         run: |
           ssh -p 55 ks3582@axon-remote.rc.zi.columbia.edu 'sh buildbot/build_srun.sh ${{ github.event.pull_request.number }}'
