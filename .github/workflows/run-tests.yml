@@ -2,7 +2,7 @@
 name: SSH and Execute Build Script
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened]
 
 # To cancel a currently running workflow from the same PR, branch or tag when a new workflow is triggered
