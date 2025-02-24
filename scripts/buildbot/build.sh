@@ -1,4 +1,12 @@
 #! /bin/bash
+# Setup a SIGINT handler. Not sure why, but this is necessary for SIGINT (Ctrl-C) to cancel this script.
+handle_sigint() {
+    echo "Caught SIGINT (Ctrl+C). Exiting..."
+    exit 130  # Exit with a specific code (128 + signal number)
+}
+# Trap the SIGINT signal and call the handle_sigint function
+trap handle_sigint SIGINT
+
 set -e
 
 USER=paninski-lab
