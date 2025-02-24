@@ -273,6 +273,7 @@ class HeatmapTracker(BaseSupervisedTracker):
     def heatmaps_from_representations(
         self,
         representations: TensorType["batch", "features", "rep_height", "rep_width"],
+        **kwargs,
     ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Upsample representations to get final heatmaps."""
         heatmaps = self.upsampling_layers(representations)

@@ -260,25 +260,28 @@ class HeatmapTrackerMultiview(HeatmapTracker):
         if batch_dict["keypoints_3d"].shape[-1] == 3:
             num_views = batch_dict["images"].shape[1]
             num_keypoints = pred_keypoints_sv.shape[1] // 2 // num_views
-            pred_keypoints_3d_sv = project_camera_pairs_to_3d(
-                points=pred_keypoints_sv.reshape((-1, num_views, num_keypoints, 2)),
-                intrinsics=batch_dict["intrinsic_matrix"],
-                extrinsics=batch_dict["extrinsic_matrix"],
-                dist=batch_dict["distortions"],
-            )
+            # pred_keypoints_3d_sv = project_camera_pairs_to_3d(
+            #     points=pred_keypoints_sv.reshape((-1, num_views, num_keypoints, 2)),
+            #     intrinsics=batch_dict["intrinsic_matrix"],
+            #     extrinsics=batch_dict["extrinsic_matrix"],
+            #     dist=batch_dict["distortions"],
+            # )
             pred_keypoints_3d_mv = project_camera_pairs_to_3d(
                 points=pred_keypoints_mv.reshape((-1, num_views, num_keypoints, 2)),
                 intrinsics=batch_dict["intrinsic_matrix"],
                 extrinsics=batch_dict["extrinsic_matrix"],
                 dist=batch_dict["distortions"],
             )
-            keypoints_pred_3d = torch.cat([pred_keypoints_3d_sv, pred_keypoints_3d_mv])
-            keypoints_targ_3d = torch.cat([batch_dict["keypoints_3d"], batch_dict["keypoints_3d"]])
-
+            # keypoints_pred_3d = torch.cat([pred_keypoints_3d_sv, pred_keypoints_3d_mv])
+            # keypoints_targ_3d = torch.cat([batch_dict["keypoints_3d"], batch_dict["keypoints_3d"]])
+            #
             keypoints_mask_3d_ = get_valid_projection_masks(
                 target_keypoints.reshape((-1, num_views, num_keypoints, 2))
             )
-            keypoints_mask_3d = torch.cat([keypoints_mask_3d_, keypoints_mask_3d_])
+            # keypoints_mask_3d = torch.cat([keypoints_mask_3d_, keypoints_mask_3d_])
+            keypoints_pred_3d = pred_keypoints_3d_mv
+            keypoints_targ_3d = batch_dict["keypoints_3d"]
+            keypoints_mask_3d = keypoints_mask_3d_
         else:
             keypoints_pred_3d = None
             keypoints_targ_3d = None
@@ -290,6 +293,11 @@ class HeatmapTrackerMultiview(HeatmapTracker):
             "keypoints_targ": torch.cat([target_keypoints, target_keypoints], dim=0),
             "keypoints_pred": torch.cat([pred_keypoints_sv, pred_keypoints_mv], dim=0),
             "confidences": torch.cat([confidence_sv, confidence_mv], dim=0),
+            # "heatmaps_targ": batch_dict["heatmaps"],
+            # "heatmaps_pred": pred_heatmaps_mv,
+            # "keypoints_targ": target_keypoints,
+            # "keypoints_pred": pred_keypoints_mv,
+            # "confidences": confidence_mv,
             "keypoints_targ_3d": keypoints_targ_3d,  # shape (2*batch, num_keypoints, 3)
             "keypoints_pred_3d": keypoints_pred_3d,  # shape (2*batch, cam_pairs, num_keypoints, 3)
             "keypoints_mask_3d": keypoints_mask_3d,  # shape (2*batch, cam_pairs, num_keypoints)
@@ -376,12 +384,21 @@ class ResidualBlock(nn.Module):
         self.relu = nn.ReLU()
         self.conv2 = nn.Conv2d(
             in_channels=intermediate_channels,
+            out_channels=intermediate_channels,
+            kernel_size=3,
+            stride=1,
+            padding="same",
+        )
+        self.bn2 = nn.BatchNorm2d(intermediate_channels)
+        self.conv3 = nn.Conv2d(
+            in_channels=intermediate_channels,
             out_channels=out_channels,
             kernel_size=3,
             stride=1,
             padding="same",
         )
-        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.bn3 = nn.BatchNorm2d(out_channels)
+
         self.final_relu = final_relu
 
         self.initialize_layers()
@@ -400,6 +417,12 @@ class ResidualBlock(nn.Module):
         torch.nn.init.constant_(self.bn2.weight, 1.0)
         torch.nn.init.constant_(self.bn2.bias, 0.0)
 
+        torch.nn.init.xavier_uniform_(self.conv3.weight, gain=0.01)
+        torch.nn.init.zeros_(self.conv3.bias)
+
+        torch.nn.init.constant_(self.bn3.weight, 1.0)
+        torch.nn.init.constant_(self.bn3.bias, 0.0)
+
     def forward(self, x: Tensor) -> Tensor:
         # first layer
         out = self.conv1(x)
@@ -408,6 +431,10 @@ class ResidualBlock(nn.Module):
         # second layer
         out = self.conv2(out)
         out = self.bn2(out)
+        out = self.relu(out)
+        # third layer
+        out = self.conv3(out)
+        out = self.bn3(out)
         # residual connection
         out += x
         if self.final_relu:
