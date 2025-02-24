@@ -12,6 +12,8 @@ from omegaconf import OmegaConf
 
 # Don't import anything from torch or lightning_pose until needed.
 # These imports are slow and delay CLI help text outputs.
+# if TYPE_CHECKING allows use of imports for type annotations, without
+# actually invoking the import at runtime.
 if TYPE_CHECKING:
     from lightning_pose.model import Model
 
