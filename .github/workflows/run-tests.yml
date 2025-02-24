@@ -2,7 +2,7 @@
 name: SSH and Execute Build Script
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened]
 
 # To cancel a currently running workflow from the same PR, branch or tag when a new workflow is triggered
@@ -13,9 +13,28 @@ concurrency:
 
 jobs:
   build:
-    runs-on: self-hosted
-
+    runs-on: ubuntu-latest
     steps:
+      - name: Add SSH key to agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.KS3582_AXON_SSH_PRIVATE_KEY }}
+
+      - name: Add known hosts
+        run: |
+          mkdir -p ~/.ssh
+          # -- BEGIN big multi-line echo
+          echo "# axon-remote.rc.zi.columbia.edu:55 SSH-2.0-OpenSSH_7.4
+          |1|+3hOuN58f3OYR0UVNxIb6YovXXg=|LOg1/T6aXAXueBDZF7F0Q40bR4c= ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDaoi2DWv276tObogy4KildpB6ZpA+ptOE1NtgzJE7HkmRnYBevVdlXB9D5lEY2p9fFo9QnZr0U1sbGzLk+40M+dj9WX02bj1LIwiKepISLcsDLlh2TNB63p5ym6S+6hcKShr4tXVwLjsGLZB5kn+TUt2LTLwwV8WX32MlfiVnBfhkGACnkC/ukmgkpyBaOg4ckXlYwh6GCJqf+gdC6dRwW96Fv0uGsw8PkI+TfW/cP5bDXEpAhXUcvmWwy2weOKlbH+7ycTxcsti3CAtCIpJXSyBoqDkj5TFzyU/+B4tzpNi1coMa9mEeCavw8365I6nL/xqJoXVVH+5xrWLYuniQb
+          # axon-remote.rc.zi.columbia.edu:55 SSH-2.0-OpenSSH_7.4
+          |1|3RdQExkv97FXtG6GKAeTJkFis4U=|pWXmI16aPGaD61VMXmiwpFoWQ0I= ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBLoRVsK/NaUijc048vVXUtH0wyQ2+K3J8ZCco28gmXPZF0OvmI4YqhcCRV6gV2jvvnTWXJUiF3bYPGmrd/r/MUQ=
+          # axon-remote.rc.zi.columbia.edu:55 SSH-2.0-OpenSSH_7.4
+          |1|v7FZfZPNLXSqe5wQAPZOx91XxuE=|iFXOp8qxb7NQAM6D8ijlh43vkis= ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGoEKs+uPmYc6thM8egx24kg6kZ2lYFOJZ9h+2WbDsY6
+          # axon-remote.rc.zi.columbia.edu:55 SSH-2.0-OpenSSH_7.4
+          # axon-remote.rc.zi.columbia.edu:55 SSH-2.0-OpenSSH_7.4" >> ~/.ssh/known_hosts
+          # -- END
+          chmod 600 ~/.ssh/known_hosts
       - name: Execute build script via SSH
         run: |
-          ssh axon 'sh buildbot/build_srun.sh ${{ github.event.pull_request.number }}'
+          ssh -p 55 ks3582@axon-remote.rc.zi.columbia.edu 'sh buildbot/build_srun.sh ${{ github.event.pull_request.number }}'
+
