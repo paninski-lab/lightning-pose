@@ -45,8 +45,26 @@ class Model:
     @staticmethod
     def from_dir(model_dir: str | Path):
         """Create a `Model` instance for a model stored at `model_dir`."""
-        model_dir = Path(model_dir)
-        config = ModelConfig.from_yaml_file(model_dir / "config.yaml")
+        return Model.from_dir2(model_dir)
+
+    @staticmethod
+    def from_dir2(model_dir: str | Path, hydra_overrides: list[str] = None):
+        """Internal version of from_dir that supports hydra_overrides. Not sure whether to
+        promote this to public API yet."""
+
+        model_dir = Path(model_dir).absolute()
+
+        if hydra_overrides is not None:
+            import hydra
+
+            with hydra.initialize_config_dir(
+                version_base="1.1", config_dir=str(model_dir)
+            ):
+                cfg = hydra.compose(config_name="config", overrides=hydra_overrides)
+                config = ModelConfig(cfg)
+        else:
+            config = ModelConfig.from_yaml_file(model_dir / "config.yaml")
+
         return Model(model_dir, config)
 
     def __init__(self, model_dir: str | Path, config: ModelConfig):
@@ -79,6 +97,21 @@ class Model:
     def labeled_videos_dir(self) -> Path:
         return self.model_dir / "video_preds" / "labeled_videos"
 
+    def cropped_data_dir(self):
+        return self.model_dir / "cropped_images"
+
+    def cropped_videos_dir(self):
+        return self.model_dir / "cropped_videos"
+
+    def cropped_csv_file_path(self, csv_file_path: str | Path):
+        csv_file_path = Path(csv_file_path)
+        return (
+            self.model_dir
+            / "image_preds"
+            / csv_file_path.name
+            / ("cropped_" + csv_file_path.name)
+        )
+
     class PredictionResult(TypedDict):
         predictions: pd.DataFrame
         metrics: pd.DataFrame
@@ -90,6 +123,7 @@ class Model:
         compute_metrics: bool = True,
         generate_labeled_images: bool = False,
         output_dir: str | Path | None = UNSPECIFIED,
+        add_train_val_test_set: bool = False,
     ) -> PredictionResult:
         """Predicts on a labeled dataset and computes error/loss metrics if applicable.
 
@@ -102,40 +136,11 @@ class Model:
             generate_labeled_images (bool, optional): Whether to save labeled images. Defaults to False.
             output_dir (str | Path, optional): The directory to save outputs to.
                 Defaults to `{model_dir}/image_preds/{csv_file_name}`. If set to None, outputs are not saved.
+            add_train_val_test_set (bool): When predicting on training dataset, set to true to add the `set`
+                column to the prediction output.
         Returns:
             PredictionResult: A PredictionResult object containing the predictions and metrics.
         """
-        return self.predict_on_label_csv_internal(
-            csv_file=csv_file,
-            data_dir=data_dir,
-            compute_metrics=compute_metrics,
-            generate_labeled_images=generate_labeled_images,
-            output_dir=output_dir,
-            output_filename_stem="predictions",
-            add_train_val_test_set=False,
-        )
-
-    def predict_on_label_csv_internal(
-        self,
-        csv_file: str | Path,
-        data_dir: str | Path | None = None,
-        compute_metrics: bool = True,
-        generate_labeled_images: bool = False,
-        output_dir: str | Path | None = UNSPECIFIED,
-        output_filename_stem: str = "predictions",
-        add_train_val_test_set: bool = False,
-    ) -> PredictionResult:
-        """
-        See predict_on_label_csv for the rest of the arguments. The following are the
-        arguments specific to the internal function.
-        Args:
-            output_filename_stem (str): The stem of the output filename. Defaults to 'predictions'.
-                Used to generate predictions_new for OOD, and predictions_{view_name} for multi-view, in the
-                model_dir.
-            add_train_val_test_set (bool): When predicting on training dataset, set to true to add the `set`
-                column to the prediction output.
-        """
-
         self._load()
         # Convert this to absolute, because if relative, downstream will
         # assume incorrectly assume its relative to the data_dir.
@@ -181,7 +186,7 @@ class Model:
 
         data_module_pred = _build_datamodule_pred(cfg_pred)
 
-        preds_file_path = output_dir / (output_filename_stem + ".csv")
+        preds_file_path = output_dir / "predictions.csv"
         preds_file = str(preds_file_path)
 
         df = predict_dataset(

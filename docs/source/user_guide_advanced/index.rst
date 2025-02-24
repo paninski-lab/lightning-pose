@@ -15,3 +15,4 @@ For each feature, we point out necessary modifications and useful information re
    multiview_fused
    multiview_separate
    multi_gpu_training
+   cropzoom_pipeline

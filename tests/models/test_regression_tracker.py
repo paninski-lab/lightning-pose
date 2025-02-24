@@ -8,7 +8,6 @@ def test_supervised_regression(
     base_data_module,
     video_dataloader,
     trainer,
-    remove_logs,
     run_model_test,
 ):
     """Test the initialization and training of a supervised regression model."""
@@ -21,7 +20,6 @@ def test_supervised_regression(
         data_module=base_data_module,
         video_dataloader=video_dataloader,
         trainer=trainer,
-        remove_logs_fn=remove_logs,
     )
 
 
@@ -30,7 +28,6 @@ def test_semisupervised_regression_temporal_pcasingleview(
     base_data_module_combined,
     video_dataloader,
     trainer,
-    remove_logs,
     run_model_test,
 ):
     """Test the initialization and training of a semi-supervised regression model."""
@@ -43,5 +40,4 @@ def test_semisupervised_regression_temporal_pcasingleview(
         data_module=base_data_module_combined,
         video_dataloader=video_dataloader,
         trainer=trainer,
-        remove_logs_fn=remove_logs,
     )

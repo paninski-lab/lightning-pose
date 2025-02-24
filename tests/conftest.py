@@ -521,7 +521,7 @@ def trainer(cfg) -> pl.Trainer:
     """Create a basic pytorch lightning trainer for testing models."""
 
     cfg.training.unfreezing_epoch = 1 # exercise unfreezing
-    callbacks = get_callbacks(cfg, early_stopping=False, lr_monitor=False, backbone_unfreeze=True)
+    callbacks = get_callbacks(cfg, early_stopping=False, lr_monitor=False, backbone_unfreeze=True, checkpointing=False)
 
     trainer = pl.Trainer(
         accelerator="gpu",
@@ -531,27 +531,19 @@ def trainer(cfg) -> pl.Trainer:
         check_val_every_n_epoch=1,
         log_every_n_steps=1,
         callbacks=callbacks,
+        enable_checkpointing = False,
         limit_train_batches=2,
         num_sanity_val_steps=0,
+        logger=False,
     )
 
     return trainer
 
 
 @pytest.fixture
-def remove_logs() -> Callable:
-    def _remove_logs():
-        base_dir = os.path.dirname(os.path.dirname(os.path.join(__file__)))
-        logging_dir = os.path.join(base_dir, "lightning_logs")
-        shutil.rmtree(logging_dir)
+def run_model_test(tmp_path) -> Callable:
 
-    return _remove_logs
-
-
-@pytest.fixture
-def run_model_test() -> Callable:
-
-    def _run_model_test(cfg, data_module, video_dataloader, trainer, remove_logs_fn):
+    def _run_model_test(cfg, data_module, video_dataloader, trainer):
         """Helper function to simplify unit tests which run different models."""
 
         # build loss factory which orchestrates different losses
@@ -561,7 +553,6 @@ def run_model_test() -> Callable:
         model = get_model(cfg=cfg, data_module=data_module, loss_factories=loss_factories)
 
         try:
-
             print("====")
             print("model: ", type(model))
             print(type(model).__bases__)
@@ -591,8 +582,6 @@ def run_model_test() -> Callable:
             gc.collect()
             torch.cuda.empty_cache()
 
-            # clean up logging
-            remove_logs_fn()
 
     return _run_model_test
 

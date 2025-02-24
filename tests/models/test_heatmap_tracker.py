@@ -8,7 +8,6 @@ def test_supervised_heatmap(
     heatmap_data_module,
     video_dataloader,
     trainer,
-    remove_logs,
     run_model_test,
 ):
     """Test the initialization and training of a supervised heatmap model."""
@@ -22,7 +21,6 @@ def test_supervised_heatmap(
         data_module=heatmap_data_module,
         video_dataloader=video_dataloader,
         trainer=trainer,
-        remove_logs_fn=remove_logs,
     )
 
 
@@ -31,7 +29,6 @@ def test_supervised_multiview_heatmap(
     multiview_heatmap_data_module,
     video_dataloader,
     trainer,
-    remove_logs,
     run_model_test,
 ):
     """Test the initialization and training of a supervised heatmap model."""
@@ -45,7 +42,6 @@ def test_supervised_multiview_heatmap(
         data_module=multiview_heatmap_data_module,
         video_dataloader=video_dataloader,
         trainer=trainer,
-        remove_logs_fn=remove_logs,
     )
 
 
@@ -54,7 +50,6 @@ def test_semisupervised_heatmap_temporal_pcasingleview(
     heatmap_data_module_combined,
     video_dataloader,
     trainer,
-    remove_logs,
     run_model_test,
 ):
     """Test the initialization and training of a semi-supervised heatmap model."""
@@ -68,7 +63,6 @@ def test_semisupervised_heatmap_temporal_pcasingleview(
         data_module=heatmap_data_module_combined,
         video_dataloader=video_dataloader,
         trainer=trainer,
-        remove_logs_fn=remove_logs,
     )
 
 
@@ -77,7 +71,6 @@ def test_semisupervised_multiview_heatmap_multiview(
     multiview_heatmap_data_module_combined,
     video_dataloader,
     trainer,
-    remove_logs,
     run_model_test,
 ):
     """Test the initialization and training of a semi-supervised multiview heatmap model."""
@@ -91,5 +84,4 @@ def test_semisupervised_multiview_heatmap_multiview(
         data_module=multiview_heatmap_data_module_combined,
         video_dataloader=video_dataloader,
         trainer=trainer,
-        remove_logs_fn=remove_logs,
     )

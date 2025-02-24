@@ -88,7 +88,13 @@ def test_generate_cropped_labeled_frames(tmp_path, request):
         {"crop_ratio": 1.5, "anchor_keypoints": ["A_head", "D_tailtip"]}
     )
     generate_cropped_labeled_frames(
-        root_directory, tmp_model_directory, detector_cfg=detector_cfg
+        input_data_dir=root_directory,
+        input_csv_file=root_directory / "CollectedData.csv",
+        input_preds_file=tmp_model_directory / "predictions.csv",
+        detector_cfg=detector_cfg,
+        output_data_dir=tmp_model_directory / "cropped_images",
+        output_bbox_file=tmp_model_directory / "cropped_images" / "bbox.csv",
+        output_csv_file=tmp_model_directory / "cropped_images" / "cropped_labels.csv",
     )
 
     # Assert cropzoom output matches expected output.
@@ -99,8 +105,8 @@ def test_generate_cropped_labeled_frames(tmp_path, request):
         / "expected_model_output"
         / "cropped_images",
     )
-    # Successfully compared 23 objects.
-    assert comparison == 23
+    # Successfully compared 24 objects.
+    assert comparison == 24
 
 
 @pytest.mark.skip(reason="Failing on axon, TODO FIXME.")
@@ -124,7 +130,15 @@ def test_generate_cropped_video(tmp_path, request):
     )
     for video_path in video_directory.iterdir():
         generate_cropped_video(
-            video_path, tmp_model_directory, detector_cfg=detector_cfg
+            input_video_file=video_path,
+            input_preds_file=tmp_model_directory
+            / "video_preds"
+            / (video_path.stem + ".csv"),
+            detector_cfg=detector_cfg,
+            output_bbox_file=tmp_model_directory
+            / "cropped_videos"
+            / (video_path.stem + "_bbox.csv"),
+            output_file=tmp_model_directory / "cropped_videos" / video_path.name,
         )
 
     # Assert cropzoom output matches expected output.

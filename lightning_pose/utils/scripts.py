@@ -452,6 +452,7 @@ def get_model(
 def get_callbacks(
     cfg: DictConfig,
     early_stopping=False,
+    checkpointing=True,
     lr_monitor=True,
     ckpt_every_n_epochs=None,
     backbone_unfreeze=True,
@@ -481,13 +482,14 @@ def get_callbacks(
         callbacks.append(lr_monitor)
 
     # always save out best model
-    ckpt_best_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
-        monitor="val_supervised_loss",
-        mode="min",
-        filename="{epoch}-{step}-best",
-        enable_version_counter=False,
-    )
-    callbacks.append(ckpt_best_callback)
+    if checkpointing:
+        ckpt_best_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
+            monitor="val_supervised_loss",
+            mode="min",
+            filename="{epoch}-{step}-best",
+            enable_version_counter=False,
+        )
+        callbacks.append(ckpt_best_callback)
 
     if ckpt_every_n_epochs:
         # if ckpt_every_n_epochs is not None, save separate checkpoint files
