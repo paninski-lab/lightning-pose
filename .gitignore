@@ -143,12 +143,14 @@ data/mirror-mouse-example_split/
 data/Chickadee
 
 # random other outputs that might end up in the repo
+lightning_logs/
 grid_artifacts/
 .vscode/
 outputs/
 multirun/
 preds/
 scripts/.ipynb_checkpoints
+tb_logs
 tests/utils/test_cropzoom_data/
 tests/test_model_mirror_mouse/
 tests/test_model_mirror_mouse_multiview/
