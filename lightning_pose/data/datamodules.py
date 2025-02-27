@@ -114,7 +114,12 @@ class BaseDataModule(pl.LightningDataModule):
             if self.dataset.imgaug_transform[-1].__str__().find("Resize") == 0:
                 final_transform = iaa.Sequential([self.dataset.imgaug_transform[-1]])
             else:
-                final_transform = iaa.Sequential([])
+                # if we're here it's because the dataset is a MultiviewHeatmapDataset that doesn't
+                # resize by default in the pipeline; we enforce resizing here on val/test batches
+                import imgaug.augmenters as iaa
+                height = self.dataset.height
+                width = self.dataset.width
+                final_transform = iaa.Sequential([iaa.Resize({"height": height, "width": width})])
 
             self.val_dataset.dataset.imgaug_transform = final_transform
             if hasattr(self.val_dataset.dataset, "dataset"):

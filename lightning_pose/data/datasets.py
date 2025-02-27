@@ -875,12 +875,12 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         if (
             self.cam_params_file_to_camgroup
             and self.imgaug_transform.__str__().find("Resize") == -1
-            and len(self.imgaug_transform) > 0
         ):
             # only apply 3d transforms if
             # - camera calibration information is available
-            # - imgaug does not contain a resize operation, which indicates "default" pipeline
-            # - imgaug has len > 0, otherwise it is a val/test batch
+            # - imgaug does not contain a resize operation, which indicates
+            #   * val/test batch
+            #   * any kind of batch from "default" pipeline
 
             # select proper camera calibration parameters for this data point
             camgroup = self.cam_params_file_to_camgroup[self.cam_params_df.iloc[idx].file]
