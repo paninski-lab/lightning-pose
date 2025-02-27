@@ -35,10 +35,10 @@ from kornia.geometry.epipolar import triangulate_points
 
 
 def project_camera_pairs_to_3d(
-    points: TensorType["batch", "num_views", "num_keypoints", 2],
-    intrinsics: TensorType["batch", "num_views", 3, 3],
-    extrinsics: TensorType["batch", "num_views", 3, 4],
-    dist: TensorType["batch", "num_views", "num_params"],
+        points: TensorType["batch", "num_views", "num_keypoints", 2],
+        intrinsics: TensorType["batch", "num_views", 3, 3],
+        extrinsics: TensorType["batch", "num_views", 3, 4],
+        dist: TensorType["batch", "num_views", "num_params"],
 ) -> TensorType["batch", "cam_pair", "num_keypoints", 3]:
     """Project 2D keypoints from each pair of cameras into 3D world space."""
 
@@ -53,13 +53,47 @@ def project_camera_pairs_to_3d(
 
     p3d = []
     for j1, j2 in itertools.combinations(range(num_views), 2):
-        tri = triangulate_points(
-            P1=extrinsics[:, j1],
-            P2=extrinsics[:, j2],
-            points1=points[:, j1, ...],
-            points2=points[:, j2, ...],
+        points1 = points[:, j1, ...]
+        points2 = points[:, j2, ...]
+
+        # Create a mask for valid keypoints
+        # A keypoint is valid if it's not NaN in BOTH views
+        valid_mask = ~(
+                torch.isnan(points1).any(dim=-1) |
+                torch.isnan(points2).any(dim=-1)
         )
+
+        # Prepare points for triangulation
+        tri = torch.full(
+            (num_batch, num_keypoints, 3),
+            float('nan'),
+            device=points.device,
+            dtype=points.dtype,
+        )
+
+        # Triangulate only valid points
+        for batch_idx in range(num_batch):
+            # Get valid keypoint indices for this batch
+            batch_valid_indices = torch.where(valid_mask[batch_idx])[0]
+
+            if len(batch_valid_indices) > 0:
+                # Extract valid points for this batch
+                batch_points1 = points1[batch_idx][valid_mask[batch_idx]]
+                batch_points2 = points2[batch_idx][valid_mask[batch_idx]]
+
+                # Triangulate valid points
+                batch_tri = triangulate_points(
+                    P1=extrinsics[batch_idx, j1],
+                    P2=extrinsics[batch_idx, j2],
+                    points1=batch_points1,
+                    points2=batch_points2,
+                )
+
+                # Place triangulated points back in the full tensor
+                tri[batch_idx, valid_mask[batch_idx]] = batch_tri
+
         p3d.append(tri)
+
     return torch.stack(p3d, dim=1)
 
 
