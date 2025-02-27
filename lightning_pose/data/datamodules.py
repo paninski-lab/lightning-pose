@@ -111,9 +111,21 @@ class BaseDataModule(pl.LightningDataModule):
             self.test_dataset = Subset(copy.deepcopy(self.dataset), indices=list(test_idxs))
 
             # only use the final resize transform for the validation and test datasets
-            resize_transform = iaa.Sequential([self.dataset.imgaug_transform[-1]])
-            self.val_dataset.dataset.imgaug_transform = resize_transform
-            self.test_dataset.dataset.imgaug_transform = resize_transform
+            if self.dataset.imgaug_transform[-1].__str__().find("Resize") == 0:
+                resize_transform = iaa.Sequential([self.dataset.imgaug_transform[-1]])
+                self.val_dataset.dataset.imgaug_transform = resize_transform
+                self.test_dataset.dataset.imgaug_transform = resize_transform
+            else:
+                self.val_dataset.dataset.imgaug_transform = iaa.Sequential([])
+                if hasattr(self.val_dataset.dataset, "dataset"):
+                    print("validatation: updating children datasets with empty imgaug pipeline")
+                    for view_name, dset in self.val_dataset.dataset.dataset.items():
+                        dset.imgaug_transform = iaa.Sequential([])
+                self.test_dataset.dataset.imgaug_transform = iaa.Sequential([])
+                if hasattr(self.test_dataset.dataset, "dataset"):
+                    print("test: updating children datasets with empty imgaug pipeline")
+                    for view_name, dset in self.test_dataset.dataset.dataset.items():
+                        dset.imgaug_transform = iaa.Sequential([])
 
         # further subsample training data if desired
         if self.train_frames is not None:
