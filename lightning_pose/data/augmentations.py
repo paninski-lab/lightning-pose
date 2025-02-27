@@ -42,7 +42,7 @@ def imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
         # resizing happens below
         print("using default image augmentation pipeline (resizing only)")
 
-    elif kind in ["dlc", "dlc-lr", "dlc-top-down", "dlc-mv", "3d-mv"]:
+    elif kind in ["dlc", "dlc-lr", "dlc-top-down", "3d-mv"]:
 
         print(f"using {kind} image augmentation pipeline")
 
@@ -118,19 +118,21 @@ def imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
             0.1,
             iaa.Emboss(alpha=alpha, strength=strength)
         ))
-        # # crop
-        # if kind.find("-mv") == -1:
-        #     crop_by = 0.15  # number of pix to crop on each side of img given as a fraction
-        #     data_transform.append(iaa.Sometimes(
-        #         0.4,
-        #         iaa.CropAndPad(percent=(-crop_by, crop_by), keep_size=False)
-        #     ))
+        # crop
+        if kind.find("-mv") == -1:
+            crop_by = 0.15  # number of pix to crop on each side of img given as a fraction
+            data_transform.append(iaa.Sometimes(
+                0.4,
+                iaa.CropAndPad(percent=(-crop_by, crop_by), keep_size=False)
+            ))
 
     else:
-        raise NotImplementedError("must choose imgaug kind from 'default', 'dlc', 'dlc-top-down'")
+        raise NotImplementedError(
+            "must choose imgaug kind from 'default', 'dlc', 'dlc-lr', 'dlc-top-down', '3d-mv'"
+        )
 
-    # do not resize when using dynamic crop pipeline or 3d augmentations
-    if (not cfg.data.get('dynamic_crop', False)) and (not kind == "3d-mv"):
+    # do not resize when using 3d augmentations
+    if not kind == "3d-mv":
         data_transform.append(
             iaa.Resize({
                 "height": cfg.data.image_resize_dims.height,
