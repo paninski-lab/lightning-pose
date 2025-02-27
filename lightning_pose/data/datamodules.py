@@ -123,12 +123,12 @@ class BaseDataModule(pl.LightningDataModule):
 
             self.val_dataset.dataset.imgaug_transform = final_transform
             if hasattr(self.val_dataset.dataset, "dataset"):
-                print(f"val: updating children datasets imgaug pipeline: {final_transform}")
+                print(f"val: updating children datasets with resize imgaug pipeline")
                 for view_name, dset in self.val_dataset.dataset.dataset.items():
                     dset.imgaug_transform = final_transform
             self.test_dataset.dataset.imgaug_transform = final_transform
             if hasattr(self.test_dataset.dataset, "dataset"):
-                print(f"test: updating children datasets with imgaug pipeline: {final_transform}")
+                print(f"test: updating children datasets with resize imgaug pipeline")
                 for view_name, dset in self.test_dataset.dataset.dataset.items():
                     dset.imgaug_transform = final_transform
 

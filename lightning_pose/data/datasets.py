@@ -544,7 +544,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
     def _scale_translate_keypoints(
         keypoints: np.ndarray,
         scale_params: tuple = (0.8, 1.2),
-        shift_param: float = 0.5,
+        shift_param: float = 0.25,
     ) -> np.ndarray:
         """Apply scale and shift transforms to 3D keypoints.
 
@@ -580,31 +580,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         # Get current camera parameters
         R = cam_copy.get_extrinsics_mat()[:3, :3].copy()
         t = cam_copy.get_extrinsics_mat()[:3, 3].copy()
-        intrinsic = cam_copy.get_camera_matrix().copy()
 
-        # Create a rotation matrix for the image plane (2D rotation)
-        # This rotation happens in the image coordinate system
-        R_2d = np.array([
-            [np.cos(angle_rad), -np.sin(angle_rad)],
-            [np.sin(angle_rad), np.cos(angle_rad)]
-        ])
-
-        # Get the principal point
-        cx, cy = intrinsic[0, 2], intrinsic[1, 2]
-
-        # Create a new intrinsic matrix with the principal point rotated
-        # This is a hack, but might work better than rotating the extrinsics
-        fx, fy = intrinsic[0, 0], intrinsic[1, 1]
-        new_intrinsic = np.eye(3)
-        new_intrinsic[0, 0] = fx
-        new_intrinsic[1, 1] = fy
-        new_intrinsic[0, 2] = cx
-        new_intrinsic[1, 2] = cy
-
-        # Set the parameters
-        cam_copy.set_camera_matrix(new_intrinsic)
-
-        # Create a 3D rotation matrix - use a different approach
         # Rotate around the world Z-axis instead of camera Z-axis
         R_world_z = np.array([
             [np.cos(angle_rad), -np.sin(angle_rad), 0],
@@ -613,8 +589,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         ])
 
         # Apply the rotation to the existing camera rotation matrix
-        # Try both multiplication orders
-        R_new = R @ R_world_z  # Post-multiply
+        R_new = R_world_z @ R  # Post-multiply
 
         # Update extrinsics
         cam_copy.set_translation(t)
@@ -702,7 +677,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 continue
 
             # Estimate the affine transformation matrix with non-uniform scaling
-            M, _ = cv2.estimateAffine2D(orig_pts, new_pts)
+            M, _ = cv2.estimateAffinePartial2D(orig_pts, new_pts)
 
             # Convert to tensor
             M_tensor = torch.tensor(M, dtype=torch.float32, device=device)
@@ -781,8 +756,8 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         # transform images to match keypoint augmentations
         images_aug = self._transform_images(
             images=images,
-            keypoints_orig=keypoints_2d,
-            keypoints_aug=keypoints_2d_aug,
+            keypoints_orig=keypoints_2d.copy(),
+            keypoints_aug=keypoints_2d_aug.copy(),
         )
         images_aug_resize = self._resize_images(images_aug)
 
