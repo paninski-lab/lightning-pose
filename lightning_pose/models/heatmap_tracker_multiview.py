@@ -291,35 +291,35 @@ class HeatmapTrackerMultiview(HeatmapTracker):
         pred_keypoints_sv = convert_bbox_coords(batch_dict, pred_keypoints_sv)
         pred_keypoints_mv = convert_bbox_coords(batch_dict, pred_keypoints_mv)
         # project predictions from pairs of views into 3d if calibration data available
-        if batch_dict["keypoints_3d"].shape[-1] == 3:
-            num_views = batch_dict["images"].shape[1]
-            num_keypoints = pred_keypoints_sv.shape[1] // 2 // num_views
-            # pred_keypoints_3d_sv = project_camera_pairs_to_3d(
-            #     points=pred_keypoints_sv.reshape((-1, num_views, num_keypoints, 2)),
-            #     intrinsics=batch_dict["intrinsic_matrix"],
-            #     extrinsics=batch_dict["extrinsic_matrix"],
-            #     dist=batch_dict["distortions"],
-            # )
-            pred_keypoints_3d_mv = project_camera_pairs_to_3d(
-                points=pred_keypoints_mv.reshape((-1, num_views, num_keypoints, 2)),
-                intrinsics=batch_dict["intrinsic_matrix"],
-                extrinsics=batch_dict["extrinsic_matrix"],
-                dist=batch_dict["distortions"],
-            )
-            # keypoints_pred_3d = torch.cat([pred_keypoints_3d_sv, pred_keypoints_3d_mv])
-            # keypoints_targ_3d = torch.cat([batch_dict["keypoints_3d"], batch_dict["keypoints_3d"]])
-            #
-            keypoints_mask_3d_ = get_valid_projection_masks(
-                target_keypoints.reshape((-1, num_views, num_keypoints, 2))
-            )
-            # keypoints_mask_3d = torch.cat([keypoints_mask_3d_, keypoints_mask_3d_])
-            keypoints_pred_3d = pred_keypoints_3d_mv
-            keypoints_targ_3d = batch_dict["keypoints_3d"]
-            keypoints_mask_3d = keypoints_mask_3d_
-        else:
-            keypoints_pred_3d = None
-            keypoints_targ_3d = None
-            keypoints_mask_3d = None
+        # if batch_dict["keypoints_3d"].shape[-1] == 3:
+        #     num_views = batch_dict["images"].shape[1]
+        #     num_keypoints = pred_keypoints_sv.shape[1] // 2 // num_views
+        #     # pred_keypoints_3d_sv = project_camera_pairs_to_3d(
+        #     #     points=pred_keypoints_sv.reshape((-1, num_views, num_keypoints, 2)),
+        #     #     intrinsics=batch_dict["intrinsic_matrix"],
+        #     #     extrinsics=batch_dict["extrinsic_matrix"],
+        #     #     dist=batch_dict["distortions"],
+        #     # )
+        #     pred_keypoints_3d_mv = project_camera_pairs_to_3d(
+        #         points=pred_keypoints_mv.reshape((-1, num_views, num_keypoints, 2)),
+        #         intrinsics=batch_dict["intrinsic_matrix"],
+        #         extrinsics=batch_dict["extrinsic_matrix"],
+        #         dist=batch_dict["distortions"],
+        #     )
+        #     # keypoints_pred_3d = torch.cat([pred_keypoints_3d_sv, pred_keypoints_3d_mv])
+        #     # keypoints_targ_3d = torch.cat([batch_dict["keypoints_3d"], batch_dict["keypoints_3d"]])
+        #     #
+        #     keypoints_mask_3d_ = get_valid_projection_masks(
+        #         target_keypoints.reshape((-1, num_views, num_keypoints, 2))
+        #     )
+        #     # keypoints_mask_3d = torch.cat([keypoints_mask_3d_, keypoints_mask_3d_])
+        #     keypoints_pred_3d = pred_keypoints_3d_mv
+        #     keypoints_targ_3d = batch_dict["keypoints_3d"]
+        #     keypoints_mask_3d = keypoints_mask_3d_
+        # else:
+        #     keypoints_pred_3d = None
+        #     keypoints_targ_3d = None
+        #     keypoints_mask_3d = None
 
         return {
             "heatmaps_targ": torch.cat([batch_dict["heatmaps"], batch_dict["heatmaps"]], dim=0),
@@ -332,9 +332,9 @@ class HeatmapTrackerMultiview(HeatmapTracker):
             # "keypoints_targ": target_keypoints,
             # "keypoints_pred": pred_keypoints_mv,
             # "confidences": confidence_mv,
-            "keypoints_targ_3d": keypoints_targ_3d,  # shape (2*batch, num_keypoints, 3)
-            "keypoints_pred_3d": keypoints_pred_3d,  # shape (2*batch, cam_pairs, num_keypoints, 3)
-            "keypoints_mask_3d": keypoints_mask_3d,  # shape (2*batch, cam_pairs, num_keypoints)
+            # "keypoints_targ_3d": keypoints_targ_3d,  # shape (2*batch, num_keypoints, 3)
+            # "keypoints_pred_3d": keypoints_pred_3d,  # shape (2*batch, cam_pairs, num_keypoints, 3)
+            # "keypoints_mask_3d": keypoints_mask_3d,  # shape (2*batch, cam_pairs, num_keypoints)
         }
 
     def predict_step(
