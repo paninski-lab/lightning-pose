@@ -127,7 +127,6 @@ def test_predict_single_video(cfg, heatmap_data_module, video_list, tmpdir):
         preds_file=str(tmpdir.join("test1.csv")),
         trainer=trainer,
         model=model,
-        save_heatmaps=False,
     )
 
     # test 2: no trainer
@@ -138,7 +137,6 @@ def test_predict_single_video(cfg, heatmap_data_module, video_list, tmpdir):
         preds_file=str(tmpdir.join("test2.csv")),
         trainer=None,
         model=model,
-        save_heatmaps=False,
     )
 
     # test 3: no trainer, no model
@@ -150,7 +148,6 @@ def test_predict_single_video(cfg, heatmap_data_module, video_list, tmpdir):
         ckpt_file=ckpt_callback.best_model_path,
         trainer=None,
         model=None,
-        save_heatmaps=False,
     )
 
     # test 4: all available inputs, return heatmaps
@@ -161,7 +158,6 @@ def test_predict_single_video(cfg, heatmap_data_module, video_list, tmpdir):
         preds_file=str(tmpdir.join("test4.csv")),
         trainer=trainer,
         model=model,
-        save_heatmaps=True,
     )
 
     # remove tensors from gpu
@@ -216,7 +212,6 @@ def test_export_predictions_and_labeled_video(
         model=model,
         data_module=heatmap_data_module,
         labeled_mp4_file=mp4_file,
-        save_heatmaps=False,
     )
     assert os.path.exists(csv_file)
     assert os.path.exists(mp4_file)
@@ -235,32 +230,12 @@ def test_export_predictions_and_labeled_video(
         model=model,
         data_module=heatmap_data_module,
         labeled_mp4_file=mp4_file,
-        save_heatmaps=False,
     )
     assert os.path.exists(csv_file)
     assert os.path.exists(mp4_file)
     assert not os.path.exists(npy_file)
 
-    # test 3: no trainer, no model, save heatmaps
-    csv_file = str(tmpdir.join("test3.csv"))
-    mp4_file = str(tmpdir.join("test3.mp4"))
-    npy_file = csv_file.replace(".csv", "_heatmaps.npy")
-    export_predictions_and_labeled_video(
-        video_file=video_list[0],
-        cfg=cfg_tmp,
-        prediction_csv_file=csv_file,
-        ckpt_file=ckpt_callback.best_model_path,
-        trainer=None,
-        model=None,
-        data_module=heatmap_data_module,
-        labeled_mp4_file=mp4_file,
-        save_heatmaps=True,
-    )
-    assert os.path.exists(csv_file)
-    assert os.path.exists(mp4_file)
-    assert os.path.exists(npy_file)
-
-    # test 4: raise proper error
+    # test 3: raise proper error
     with pytest.raises(ValueError):
         export_predictions_and_labeled_video(
             video_file=video_list[0],
@@ -271,7 +246,6 @@ def test_export_predictions_and_labeled_video(
             model=None,
             data_module=heatmap_data_module,
             labeled_mp4_file=str(tmpdir.join("test3.mp4")),
-            save_heatmaps=False,
         )
 
     # remove tensors from gpu

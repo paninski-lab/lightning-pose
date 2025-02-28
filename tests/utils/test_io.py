@@ -12,6 +12,7 @@ from lightning_pose.utils import io as io_utils
 from lightning_pose.utils.io import (
     check_if_semi_supervised,
     check_video_paths,
+    collect_video_files_by_view,
     get_context_img_paths,
     get_videos_in_dir,
 )
@@ -140,6 +141,45 @@ def test_check_video_paths(toy_data_dir, tmpdir):
         assert len(v_list) == 1
 
 
+def test_collect_video_files_by_view():
+    # Simple case: files are in reverse order of the views.
+    view_to_file = collect_video_files_by_view(
+        [Path("a/simple_top.mp4"), Path("a/simple_bot.mp4")], ["bot", "top"]
+    )
+    assert view_to_file == {
+        "bot": Path("a/simple_bot.mp4"),
+        "top": Path("a/simple_top.mp4"),
+    }
+
+    # We just match based on view matching, we don't care about differences in the rest of the string.
+    # TBD whether this is the desired behavior.
+    view_to_file = collect_video_files_by_view(
+        [Path("a/complex_top_2.mp4"), Path("a/simple_bot.mp4")], ["bot", "top"]
+    )
+    assert view_to_file == {
+        "bot": Path("a/simple_bot.mp4"),
+        "top": Path("a/complex_top_2.mp4"),
+    }
+
+    # We check the filename stem, not the entire path.
+    view_to_file = collect_video_files_by_view(
+        [Path("a/a.mp4"), Path("a/b.mp4")], ["b", "a"]
+    )
+    assert view_to_file == {
+        "b": Path("a/b.mp4"),
+        "a": Path("a/a.mp4"),
+    }
+
+    # View name must be separated by a delimiter.
+    view_to_file = collect_video_files_by_view(
+        [Path("a/aview_a.mp4"), Path("a/aview_b.mp4")], ["b", "a"]
+    )
+    assert view_to_file == {
+        "b": Path("a/aview_b.mp4"),
+        "a": Path("a/aview_a.mp4"),
+    }
+
+
 def test_get_context_img_paths():
     assert get_context_img_paths(Path("a/b/c/img_2.png")) == [
         Path("a/b/c/img_0.png"),
@@ -165,6 +205,27 @@ def test_get_context_img_paths():
         Path("a/b/c/img_2.png"),
         Path("a/b/c/img_3.png"),
     ]
+
+    # Too many files.
+    with pytest.raises(AssertionError):
+        collect_video_files_by_view(
+            [Path("foo.mp4"), Path("bar.mp4"), Path("baz.mp4")], ["foo", "bar"]
+        )
+
+    # Not enough files.
+    with pytest.raises(AssertionError):
+        collect_video_files_by_view(
+            [Path("foo.mp4")], ["foo", "bar"])
+
+    # two files for foo.
+    with pytest.raises(ValueError):
+        collect_video_files_by_view(
+            [Path("foo1.mp4"), Path("foo2.mp4")], ["foo", "bar"])
+
+    # file for bar not found.
+    with pytest.raises(ValueError):
+        collect_video_files_by_view(
+            [Path("foo.mp4"), Path("baz.mp4")], ["foo", "bar"])
 
 
 def test_fix_empty_first_row(tmp_path):

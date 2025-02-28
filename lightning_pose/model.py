@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import re
 from pathlib import Path
 from typing import TypedDict
 
@@ -9,11 +10,15 @@ from omegaconf import DictConfig, OmegaConf
 
 from lightning_pose.model_config import ModelConfig
 from lightning_pose.models import ALLOWED_MODELS
-from lightning_pose.utils.io import ckpt_path_from_base_path
+from lightning_pose.utils import io as io_utils
+from lightning_pose.utils.predictions import (
+    generate_labeled_video as generate_labeled_video_fn,
+)
 from lightning_pose.utils.predictions import (
     export_predictions_and_labeled_video,
     load_model_from_checkpoint,
     predict_dataset,
+    predict_video,
 )
 from lightning_pose.utils.scripts import (
     compute_metrics_single,
@@ -77,7 +82,7 @@ class Model:
 
     def _load(self):
         if self.model is None:
-            ckpt_file = ckpt_path_from_base_path(
+            ckpt_file = io_utils.ckpt_path_from_base_path(
                 base_path=str(self.model_dir), model_name=self.cfg.model.model_name
             )
             self.model = load_model_from_checkpoint(
@@ -113,6 +118,10 @@ class Model:
 
     class PredictionResult(TypedDict):
         predictions: pd.DataFrame
+        metrics: pd.DataFrame
+
+    class MultiPredictionResult(TypedDict):
+        predictions: dict[str, pd.DataFrame]
         metrics: pd.DataFrame
 
     def predict_on_label_csv(
@@ -235,25 +244,22 @@ class Model:
 
         prediction_csv_file = output_dir / f"{video_file.stem}.csv"
 
-        labeled_mp4_file = None
+        df = predict_video(
+            video_file=str(video_file),
+            model=self,
+            output_pred_file=str(prediction_csv_file),
+        )
         if generate_labeled_video:
             labeled_mp4_file = str(
                 self.labeled_videos_dir() / f"{video_file.stem}_labeled.mp4"
             )
-
-        if self.config.cfg.eval.get("predict_vids_after_training_save_heatmaps", False):
-            raise NotImplementedError(
-                "Implement this after cleaning up _predict_frames: "
-                "Set a flag on the model to return heatmaps. "
-                "Use trainer.predict instead of side-stepping it."
+            generate_labeled_video_fn(
+                video_file=str(video_file),
+                preds_df=df,
+                output_mp4_file=labeled_mp4_file,
+                confidence_thresh_for_vid=self.cfg.eval.confidence_thresh_for_vid,
+                colormap=self.cfg.eval.get("colormap", "cool"),
             )
-        df = export_predictions_and_labeled_video(
-            video_file=str(video_file),
-            cfg=self.config.cfg,
-            prediction_csv_file=str(prediction_csv_file),
-            labeled_mp4_file=labeled_mp4_file,
-            model=self.model,
-        )
 
         if compute_metrics:
             # FIXME: Data module is only used for computing PCA metrics.
@@ -266,6 +272,84 @@ class Model:
             )
 
         return self.PredictionResult(predictions=df)
+
+    def predict_on_video_file_multiview(
+        self,
+        video_file_per_view: list[str] | list[Path],
+        output_dir: str | Path | None = UNSPECIFIED,
+        compute_metrics: bool = True,
+        generate_labeled_video: bool = False,
+    ) -> MultiPredictionResult:
+        """Version of `predict_on_video_file` that gives models access to multiple camera views of each frame.
+
+        Arguments:
+            video_file_per_view (list[str] | list[Path]): A list of video files each from a different view of the
+                same session. Number of video files must match the `view_names` in the config file. Order of the list
+                does not matter: video files are intelligently matched to views by their filename using
+                `utils.io.collect_video_files_by_view`.
+
+        See `predict_on_video_file` docstring for other arguments."""
+        assert self.config.is_multi_view()
+        self._load()
+
+        view_names = self.config.cfg.data.view_names
+        assert len(video_file_per_view) == len(
+            view_names
+        ), f"{len(video_file_per_view)} != {len(view_names)}"
+
+        video_file_per_view: list[Path] = [Path(f) for f in video_file_per_view]
+
+        if output_dir == self.__class__.UNSPECIFIED:
+            output_dir = self.video_preds_dir()
+
+        elif output_dir is None:
+            raise NotImplementedError("Currently we must save predictions")
+
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Arranges video_file_per_view to be in the same order as cfg.data.view_names.
+        _view_to_video_file: dict[str, Path] = io_utils.collect_video_files_by_view(
+            video_file_per_view, view_names
+        )
+        video_file_per_view: list[Path] = [
+            _view_to_video_file[view_name] for view_name in view_names
+        ]
+
+        prediction_csv_file_list = [
+            str(output_dir / f"{video_file.stem}.csv")
+            for video_file in video_file_per_view
+        ]
+
+        df_list = predict_video(
+            video_file=list(map(str, video_file_per_view)),
+            model=self,
+            output_pred_file=prediction_csv_file_list,
+        )
+        if generate_labeled_video:
+            for video_file, preds_df in zip(video_file_per_view, df_list):
+                labeled_mp4_file = str(
+                    self.labeled_videos_dir() / f"{video_file.stem}_labeled.mp4"
+                )
+                generate_labeled_video_fn(
+                    video_file=str(video_file),
+                    preds_df=preds_df,
+                    output_mp4_file=labeled_mp4_file,
+                    confidence_thresh_for_vid=self.cfg.eval.confidence_thresh_for_vid,
+                    colormap=self.cfg.eval.get("colormap", "cool"),
+                )
+
+        data_module = _build_datamodule_pred(self.cfg)
+        if compute_metrics:
+            for preds_file in prediction_csv_file_list:
+                compute_metrics_single(
+                    cfg=self.cfg,
+                    labels_file=None,
+                    preds_file=preds_file,
+                    data_module=data_module,
+                )
+
+        return self.MultiPredictionResult(predictions=df_list)
 
 
 def _build_datamodule_pred(cfg: DictConfig):

@@ -1,10 +1,13 @@
 """Functions for predicting keypoints on labeled datasets and unlabeled videos."""
+from __future__ import annotations
 
 import datetime
 import gc
 import os
 import time
-from typing import Tuple, Type
+import warnings
+from pathlib import Path
+from typing import TYPE_CHECKING, Tuple, Type
 
 import cv2
 import lightning.pytorch as pl
@@ -23,6 +26,9 @@ from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import count_frames
 from lightning_pose.models import ALLOWED_MODELS
 from lightning_pose.utils import pretty_print_str
+
+if TYPE_CHECKING:
+    from lightning_pose.model import Model
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -64,24 +70,19 @@ class PredictionHandler:
 
         Args
             cfg
-            data_module
-            video_file
-
+            data_module: Only required for prediction of CSV files.
+            video_file: For prediction on video, path to the video file.
+                Used to get frame_count.
         """
+        if data_module is None and video_file is None:
+            raise ValueError("must pass either data_module or video_file")
 
-        # check args: data_module is optional under certain conditions
-        if data_module is None:
-            if video_file is None:
-                raise ValueError("must pass data_module to constructor if predicting on a dataset")
         if cfg.data.get("keypoint_names", None) is None:
-            raise ValueError(
-                "must include `keypoint_names` field in cfg.data")
+            raise ValueError("must include `keypoint_names` field in cfg.data")
 
         self.cfg = cfg
         self.data_module = data_module
         self.video_file = video_file
-        if video_file is not None:
-            assert os.path.isfile(video_file)
 
     @property
     def frame_count(self) -> int:
@@ -240,39 +241,45 @@ class PredictionHandler:
                 TensorType["batch", "num_keypoints"],
             ]
         ],
+        is_multiview_video: bool=False,
     ) -> pd.DataFrame | dict[str, pd.DataFrame]:
         """
         Call this function to get a pandas dataframe of the predictions for a single video.
         Assuming you've already run trainer.predict(), and have a list of Tuple predictions.
         Args:
             preds: list of tuples of (predictions, confidences)
-            video_file: path to video file
+            is_multiview_video: specify True when you are using multiview video prediction dataloader,
+                i.e. for heatmap_multiview.
         Returns:
             pd.DataFrame: index is (frame, bodypart, x, y, likelihood)
         """
         stacked_preds, stacked_confs = self.unpack_preds(preds=preds)
-        if self.cfg.data.get("view_names", None) and len(self.cfg.data.view_names) > 1 \
-                and self.video_file is None:
+        if (
+            self.cfg.data.get("view_names", None)
+            and len(self.cfg.data.view_names) > 1
+            and (self.video_file is None or is_multiview_video)
+        ):
             # NOTE: if self.video_file is not None assume we are processing one view at a time, and
-            # move to the `else` block below
+            # move to the `else` block below.
+            # UPDATE: No longer true, added is_multiview_video mode.
             num_keypoints = len(self.keypoint_names)
-            idx_beg = 0
-            idx_end = None
-            df = {}
-            for view_num, view_name in enumerate(self.cfg.data.view_names):
+            view_to_df = {}
+            for view_idx, view_name in enumerate(self.cfg.data.view_names):
+                idx_beg = view_idx * num_keypoints
                 idx_end = idx_beg + num_keypoints
-                stacked_preds_single = stacked_preds[:, idx_beg * 2:(idx_beg + num_keypoints) * 2]
+                stacked_preds_single = stacked_preds[:, idx_beg * 2:idx_end * 2]
                 stacked_confs_single = stacked_confs[:, idx_beg:idx_end]
                 pred_arr = self.make_pred_arr_undo_resize(
                     stacked_preds_single.cpu().numpy(), stacked_confs_single.cpu().numpy()
                 )
                 pdindex = self.make_dlc_pandas_index(self.keypoint_names)
-                df[view_name] = pd.DataFrame(pred_arr, columns=pdindex)
+                df = pd.DataFrame(pred_arr, columns=pdindex)
+                view_to_df[view_name] = df
                 if self.video_file is None:
                     # specify which image is train/test/val/unused
-                    df[view_name] = self.add_split_indices_to_df(df[view_name])
-                    df[view_name].index = self.data_module.dataset.dataset[view_name].image_names
-                idx_beg = idx_end
+                    df = self.add_split_indices_to_df(df)
+                    df.index = self.data_module.dataset.dataset[view_name].image_names
+            retval = view_to_df
         else:
             pred_arr = self.make_pred_arr_undo_resize(
                 stacked_preds.cpu().numpy(), stacked_confs.cpu().numpy()
@@ -283,8 +290,9 @@ class PredictionHandler:
                 # specify which image is train/test/val/unused
                 df = self.add_split_indices_to_df(df)
                 df.index = self.data_module.dataset.image_names
+            retval = df
 
-        return df
+        return retval
 
 
 @typechecked
@@ -357,9 +365,10 @@ def predict_single_video(
     ckpt_file: str | None = None,
     trainer: pl.Trainer | None = None,
     model: ALLOWED_MODELS | None = None,
-    save_heatmaps: bool | None = False,
 ) -> pd.DataFrame:
-    """Make predictions for a single video, loading frame sequences using DALI.
+    """This function is deprecated. Use `predict_video` instead.
+
+    Make predictions for a single video, loading frame sequences using DALI.
 
     This function initializes a DALI pipeline, prepares a dataloader, and passes it on
     to _make_predictions().
@@ -373,12 +382,15 @@ def predict_single_video(
         ckpt_file: absolute path to the checkpoint of your trained model; requires .ckpt suffix
         trainer: pl.Trainer object
         model: Lightning Module
-        save_heatmaps: export heatmaps as numpy array
 
     Returns:
         pandas dataframe with predictions
 
     """
+    warnings.warn(
+        "predict_single_video is deprecated. Use `predict_video` instead.",
+        DeprecationWarning,
+    )
 
     cfg = _get_cfg_file(cfg_file=cfg_file).copy()  # copy because we update imgaug field below
 
@@ -407,7 +419,10 @@ def predict_single_video(
         model_type=model_type,
         dali_config=cfg.dali,
         filenames=[video_file],
-        resize_dims=[cfg.data.image_resize_dims.height, cfg.data.image_resize_dims.width]
+        resize_dims=[
+            cfg.data.image_resize_dims.height,
+            cfg.data.image_resize_dims.width,
+        ],
     )
     # get loader
     predict_loader = vid_pred_class()
@@ -418,34 +433,11 @@ def predict_single_video(
     # ----------------------------------------------------------------------------------
     # compute predictions
     # ----------------------------------------------------------------------------------
-
-    # use a different function for now to return heatmaps
-    if save_heatmaps:
-        model.to("cuda")
-        if predict_loader.do_context:
-            batch_size = cfg.dali.context.predict.sequence_length
-        else:
-            batch_size = cfg.dali.base.predict.sequence_length
-        keypoints, confidences, heatmaps = _predict_frames(
-            cfg=cfg,
-            model=model,
-            dataloader=predict_loader,
-            n_frames=pred_handler.frame_count,
-            batch_size=batch_size,
-            return_heatmaps=True,
-        )
-        preds = [(torch.tensor(keypoints), torch.tensor(confidences))]
-        if heatmaps is not None:
-            heatmaps_file = preds_file.replace(".csv", "_heatmaps.npy")
-            os.makedirs(os.path.dirname(heatmaps_file), exist_ok=True)
-            np.save(heatmaps_file, heatmaps)
-
-    else:
-        preds = trainer.predict(
-            model=model,
-            dataloaders=predict_loader,
-            return_predictions=True,
-        )
+    preds = trainer.predict(
+        model=model,
+        dataloaders=predict_loader,
+        return_predictions=True,
+    )
 
     # call this instance on a single vid's preds
     preds_df = pred_handler(preds=preds)
@@ -463,107 +455,6 @@ def predict_single_video(
     torch.cuda.empty_cache()
 
     return preds_df
-
-
-@typechecked
-def _predict_frames(
-    cfg: DictConfig,
-    model: ALLOWED_MODELS,
-    dataloader: torch.utils.data.DataLoader | LitDaliWrapper,
-    n_frames: int,
-    batch_size: int,
-    return_heatmaps: bool = False,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray | None]:
-    """Predict all frames in a data loader without undoing the resize/reshape; can return heatmaps.
-
-    Args:
-        cfg: hydra config.
-        model: a loaded model ready to be evaluated.
-        dataloader: dataloader ready to be iterated
-        n_frames: total number of frames in the dataset or video
-        batch_size: regular batch_size for images or sequence_length for videos
-        return_heatmaps: return heatmaps as a numpy array
-
-    Returns:
-        keypoints, confidences, and potentially heatmaps.
-
-    """
-
-    if "heatmap" not in cfg.model.model_type:
-        return_heatmaps = False
-
-    keypoints_np = np.zeros((n_frames, model.num_keypoints * 2))
-    confidence_np = np.zeros((n_frames, model.num_keypoints))
-
-    if return_heatmaps:
-        heatmaps_np = np.zeros((
-            n_frames,
-            model.num_keypoints,
-            model.output_shape[0],  # // (2 ** model.downsample_factor),
-            model.output_shape[1],  # // (2 ** model.downsample_factor)
-        ))
-    else:
-        heatmaps_np = None
-
-    t_beg = time.time()
-    n_frames_counter = 0  # total frames processed
-    n_batches = int(np.ceil(n_frames / batch_size))
-    n = -1
-    with torch.inference_mode():
-        for n, batch in enumerate(tqdm(dataloader, total=n_batches)):
-
-            if cfg.model.model_type == "heatmap":
-                # push batch through model
-                pred_keypoints, confidence, pred_heatmaps = model.predict_step(
-                    batch_dict=batch, batch_idx=n, return_heatmaps=return_heatmaps
-                )
-                # send to numpy
-                pred_keypoints = pred_keypoints.detach().cpu().numpy()
-                confidence = confidence.detach().cpu().numpy()
-                pred_heatmaps = pred_heatmaps.detach().cpu().numpy()
-
-            elif cfg.model.model_type == "heatmap_mhcrnn":
-                # push batch through model
-                pred_keypoints, confidence, pred_heatmaps = model.predict_step(
-                    batch_dict=batch, batch_idx=n, return_heatmaps=return_heatmaps
-                )
-                # send to numpy
-                pred_keypoints = pred_keypoints.detach().cpu().numpy()
-                confidence = confidence.detach().cpu().numpy()
-                pred_heatmaps = pred_heatmaps.detach().cpu().numpy()
-
-            else:
-                # push batch through model
-                pred_keypoints, confidence = model.predict_step(
-                    batch_dict=batch, batch_idx=n
-                )
-                # send to numpy
-                pred_keypoints = pred_keypoints.detach().cpu().numpy()
-                confidence = confidence.detach().cpu().numpy()
-                pred_heatmaps = None
-
-            n_frames_curr = pred_keypoints.shape[0]
-            if n_frames_counter + n_frames_curr > n_frames:
-                # final sequence
-                final_batch_size = n_frames - n_frames_counter
-                keypoints_np[n_frames_counter:] = pred_keypoints[:final_batch_size]
-                confidence_np[n_frames_counter:] = confidence[:final_batch_size]
-                if return_heatmaps:
-                    heatmaps_np[n_frames_counter:] = pred_heatmaps[:final_batch_size]
-                n_frames_curr = final_batch_size
-            else:  # at every sequence except the final
-                keypoints_np[n_frames_counter:n_frames_counter + n_frames_curr] = pred_keypoints
-                confidence_np[n_frames_counter:n_frames_counter + n_frames_curr] = confidence
-                if return_heatmaps:
-                    heatmaps_np[n_frames_counter:n_frames_counter + n_frames_curr] = pred_heatmaps
-
-            n_frames_counter += n_frames_curr
-
-    t_end = time.time()
-    pretty_print_str("inference speed: %1.2f fr/sec" % ((n * batch_size) / (t_end - t_beg)))
-
-    # for regression networks, confidence_np will be all zeros, heatmaps_np will be None
-    return keypoints_np, confidence_np, heatmaps_np
 
 
 @typechecked
@@ -877,10 +768,15 @@ def export_predictions_and_labeled_video(
     model: ALLOWED_MODELS | None = None,
     data_module: BaseDataModule | UnlabeledDataModule | None = None,
     labeled_mp4_file: str | None = None,
-    save_heatmaps: bool | None = False,
 ) -> pd.DataFrame:
-    """Export predictions csv and a labeled video for a single video file."""
+    """Deprecated, use `predict_video` and `generate_labeled_video`.
 
+    Export predictions csv and a labeled video for a single video file."""
+    warnings.warn(
+        "export_predictions_and_labeled_video is deprecated. "
+        "Use `predict_video` and `generate_labeled_video` instead.",
+        DeprecationWarning,
+    )
     if ckpt_file is None and model is None:
         raise ValueError("either 'ckpt_file' or 'model' must be passed")
 
@@ -893,25 +789,134 @@ def export_predictions_and_labeled_video(
         trainer=trainer,
         model=model,
         data_module=data_module,
-        save_heatmaps=save_heatmaps,
     )
 
     # create labeled video
     if labeled_mp4_file is not None:
-        os.makedirs(os.path.dirname(labeled_mp4_file), exist_ok=True)
-        # transform df to numpy array
-        keypoints_arr = np.reshape(preds_df.to_numpy(), [preds_df.shape[0], -1, 3])
-        xs_arr = keypoints_arr[:, :, 0]
-        ys_arr = keypoints_arr[:, :, 1]
-        mask_array = keypoints_arr[:, :, 2] > cfg.eval.confidence_thresh_for_vid
-        # video generation
-        video_clip = VideoFileClip(video_file)
-        create_labeled_video(
-            clip=video_clip,
-            xs_arr=xs_arr,
-            ys_arr=ys_arr,
-            mask_array=mask_array,
-            output_video_path=labeled_mp4_file,
+        generate_labeled_video(
+            video_file=video_file,
+            preds_df=preds_df,
+            output_mp4_file=labeled_mp4_file,
+            confidence_thresh_for_vid=cfg.eval.confidence_thresh_for_vid,
             colormap=cfg.eval.get("colormap", "cool")
         )
+    return preds_df
+
+
+def generate_labeled_video(
+    video_file: str,
+    preds_df: pd.DataFrame,
+    output_mp4_file: str,
+    confidence_thresh_for_vid: float,
+    colormap: str,
+):
+    os.makedirs(os.path.dirname(output_mp4_file), exist_ok=True)
+    # transform df to numpy array
+    keypoints_arr = np.reshape(preds_df.to_numpy(), [preds_df.shape[0], -1, 3])
+    xs_arr = keypoints_arr[:, :, 0]
+    ys_arr = keypoints_arr[:, :, 1]
+    mask_array = keypoints_arr[:, :, 2] > confidence_thresh_for_vid
+    # video generation
+    video_clip = VideoFileClip(video_file)
+    create_labeled_video(
+        clip=video_clip,
+        xs_arr=xs_arr,
+        ys_arr=ys_arr,
+        mask_array=mask_array,
+        output_video_path=output_mp4_file,
+        colormap=colormap,
+    )
+
+
+def predict_video(
+    video_file: str | list[str],
+    model: Model,
+    output_pred_file: str | list[str] | None = None,
+    dali_settings: DictConfig | None = None,
+) -> pd.DataFrame | list[pd.DataFrame]:
+    """
+    Args:
+        video_file: Predict on a video, or for true multiview models, a list of videos
+            (order: 1-1 correspondence with cfg.data.view_names).
+        model: The model to predict with.
+        output_pred_file: (optional) File to save predictions in. For multiview, a list of files (1-1 correspondance
+            to cfg.data.view_names).
+        dali_settings: (optional) Overrides the config dali_settings.
+    """
+
+    is_multiview = not isinstance(video_file, str)
+
+    if is_multiview:
+        # Validate output_pred_file is a list
+        if output_pred_file is not None and not isinstance(output_pred_file, list):
+            raise ValueError(
+                "for multiview prediction, 'output_pred_file' should be a list corresponding to view_names"
+            )
+
+        # Sanity check 1-1 correspondence of video_file to cfg.data.view_names
+        # (Important since PredictionHandler relies on the correspondence to organize the outputted dict).
+        for single_video_file, view_name in zip(
+            video_file, model.config.cfg.data.view_names
+        ):
+            assert (
+                view_name in Path(single_video_file).stem
+            ), "expected video_file to correspond 1-1 with cfg.data.view_name"
+
+    trainer = pl.Trainer(accelerator="gpu", devices=1, logger=False)
+    model_type = (
+        "context" if model.config.cfg.model.model_type == "heatmap_mhcrnn" else "base"
+    )
+
+    filenames = [video_file] if not is_multiview else [[f] for f in video_file]
+    vid_pred_class = PrepareDALI(
+        train_stage="predict",
+        model_type=model_type,
+        dali_config=dali_settings or model.config.cfg.dali,
+        # Important: This will be a list of lists for multiview.
+        # This will trigger dali to return multiview batches to predict_step.
+        filenames=filenames,
+        resize_dims=[
+            model.config.cfg.data.image_resize_dims.height,
+            model.config.cfg.data.image_resize_dims.width,
+        ],
+    )
+    # get loader
+    predict_loader = vid_pred_class()
+
+    # initialize prediction handler class
+    pred_handler = PredictionHandler(
+        cfg=model.config.cfg,
+        video_file=video_file[0] if is_multiview else video_file,
+    )
+
+    # compute predictions
+    preds = trainer.predict(
+        model=model.model,
+        dataloaders=predict_loader,
+        return_predictions=True,
+    )
+
+    preds_df = pred_handler(preds=preds, is_multiview_video=is_multiview)
+
+    # Convert to a 1-1 correspondence list similar to video_files, for multiview.
+    if isinstance(preds_df, dict):
+        preds_df = [preds_df[view_name] for view_name in model.config.cfg.data.view_names]
+
+    if output_pred_file is not None:
+        # save the predictions to a csv; create directory if it doesn't exist
+
+        if is_multiview:
+            for df, output_file in zip(preds_df, output_pred_file):
+                os.makedirs(os.path.dirname(output_file), exist_ok=True)
+                df.to_csv(output_file)
+        else:
+            preds_df.to_csv(output_pred_file)
+
+    # clear up memory
+    del model
+    del trainer
+    del predict_loader
+    gc.collect()
+    torch.cuda.empty_cache()
+
     return preds_df

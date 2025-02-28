@@ -87,7 +87,7 @@ def test_predict_on_video_file_singleview(tmp_path, request, toy_data_dir):
     assert (model.labeled_videos_dir() / "test_vid_labeled.mp4").is_file()
 
 
-def test_predict_on_video_file_multiview(tmp_path, request, toy_mdata_dir):
+def test_predict_on_video_file_method_multiview_model(tmp_path, request, toy_mdata_dir):
     model = _setup_test_model(tmp_path, request, multiview=True)
 
     # Test prediction on a test video.
@@ -97,3 +97,22 @@ def test_predict_on_video_file_multiview(tmp_path, request, toy_mdata_dir):
     assert (model.video_preds_dir() / "test_vid_top.csv").is_file()
     assert (model.video_preds_dir() / "test_vid_top_temporal_norm.csv").is_file()
     assert (model.labeled_videos_dir() / "test_vid_top_labeled.mp4").is_file()
+
+
+def test_predict_on_video_file_multiview(tmp_path, request, toy_mdata_dir):
+    model = _setup_test_model(tmp_path, request, multiview=True)
+
+    # Test prediction on a test video.
+    model.predict_on_video_file_multiview(
+        [
+            Path(toy_mdata_dir) / "videos" / "test_vid_top.mp4",
+            Path(toy_mdata_dir) / "videos" / "test_vid_bot.mp4",
+        ],
+        generate_labeled_video=True,
+    )
+    assert (model.video_preds_dir() / "test_vid_top.csv").is_file()
+    assert (model.video_preds_dir() / "test_vid_top.csv").is_file()
+    assert (model.video_preds_dir() / "test_vid_top_temporal_norm.csv").is_file()
+    assert (model.video_preds_dir() / "test_vid_bot_temporal_norm.csv").is_file()
+    assert (model.labeled_videos_dir() / "test_vid_top_labeled.mp4").is_file()
+    assert (model.labeled_videos_dir() / "test_vid_bot_labeled.mp4").is_file()

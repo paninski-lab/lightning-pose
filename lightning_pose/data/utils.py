@@ -1,5 +1,5 @@
 """Dataset/data module utilities."""
-
+import os
 from typing import Any, Literal, Tuple, Union
 
 import imgaug.augmenters as iaa
@@ -272,21 +272,17 @@ def clean_any_nans(data: torch.Tensor, dim: int) -> torch.Tensor:
 
 
 @typechecked
-def count_frames(video_list: list[str] | str | list[list[str]]) -> int:
-    """Simple function to count the number of frames in a video or a list of videos."""
+def count_frames(video_file: str) -> int:
+    """
+    Simple function to count the number of frames in a video.
+    """
+    assert os.path.isfile(video_file)
 
     import cv2
 
-    if isinstance(video_list, str):
-        video_list = [video_list]
-    elif isinstance(video_list, list) and isinstance(video_list[0], list):
-        # in the multiview case, just count frames from one view
-        video_list = video_list[0]
-    num_frames = 0
-    for video_file in video_list:
-        cap = cv2.VideoCapture(video_file)
-        num_frames += int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        cap.release()
+    cap = cv2.VideoCapture(video_file)
+    num_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
 
     return num_frames
 

@@ -273,7 +273,7 @@ class PrepareDALI(object):
         self.resize_dims = resize_dims
         self.dali_config = dali_config
         self.num_threads = num_threads
-        self.frame_count = count_frames(self.filenames)
+        self.frame_count = sum(map(count_frames, filenames[0]))
         self._pipe_dict: dict = self._setup_pipe_dict(self.filenames, imgaug)
 
     @property

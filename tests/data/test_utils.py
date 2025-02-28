@@ -114,27 +114,11 @@ def test_clean_any_nans():
 
 
 def test_count_frames(video_list):
-    import cv2
-
     from lightning_pose.data.utils import count_frames
 
-    # make sure value is correct in the single view case
-    num_frames = 0
-    for video_file in video_list:
-        cap = cv2.VideoCapture(video_file)
-        num_frames += int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        cap.release()
-    num_frames_1 = count_frames(video_list)
-    assert num_frames == num_frames_1
+    num_frames = count_frames(video_list[0])
 
-    # with multiview we have a list of lists, make sure we only count frames from one view
-    video_list_2 = [
-        [video_list[0]],  # view 0
-        [video_list[0]],  # view 1
-        [video_list[0]],  # view 2
-    ]
-    num_frames_2 = count_frames(video_list_2)
-    assert num_frames == num_frames_2
+    assert num_frames == 994
 
 
 def test_compute_num_train_frames():
