@@ -328,7 +328,7 @@ class PrepareDALI(object):
             "predict": {"context": {}, "base": {}},
             "train": {"context": {}, "base": {}},
         }
-        gen_cfg = self.dali_config.get("general", {"seed", 123456})
+        gen_cfg = self.dali_config.get("general", {"seed": 123456})
 
         # base (vanilla single-frame model), train pipe args
         base_train_cfg = self.dali_config["base"]["train"]
