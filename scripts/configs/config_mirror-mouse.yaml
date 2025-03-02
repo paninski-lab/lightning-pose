@@ -99,8 +99,6 @@ model:
   model_name: rebuttal23a
 
 dali:
-  general:
-    seed: 123456
   base:
     train:
       sequence_length: 32 # 4 # step = sequence_length by default. done internally

@@ -107,9 +107,6 @@ model:
   checkpoint: null
 
 dali:
-  general:
-    seed: 123456
-
   base:
     train:
       sequence_length: 32
