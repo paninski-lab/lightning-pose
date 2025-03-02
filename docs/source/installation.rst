@@ -139,16 +139,16 @@ You will be required to create a Lightning account if you have not already signe
 Docker users
 ============
 
-Use the appropriate Dockerfiles in the root directory to build a Docker image:
+Use the appropriate Dockerfiles in the `docker` directory to build a Docker image:
 
 .. code-block:: console
 
-    docker build -f Dockerfile.cuda11 -t my-image:cuda11 .
+    docker build -f docker/Dockerfile.cuda11 -t my-image:cuda11 .
 
 
 .. code-block:: console
 
-    docker build -f Dockerfile.cuda12 -t my-image:cuda12 .
+    docker build -f docker/Dockerfile.cuda12 -t my-image:cuda12 .
 
 Run code inside a container (following `this tutorial <https://docs.docker.com/get-started/>`_):
 

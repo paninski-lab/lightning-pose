@@ -53,9 +53,11 @@ def video_list() -> list[str]:
 def toy_data_dir() -> str:
     return TOY_DATA_ROOT_DIR
 
+
 @pytest.fixture
 def toy_mdata_dir() -> str:
     return TOY_MDATA_ROOT_DIR
+
 
 @pytest.fixture
 def cfg() -> dict:
@@ -69,6 +71,7 @@ def cfg() -> dict:
     cfg.training.imgaug = "dlc"
     cfg.dali.base.train.sequence_length = 6
     cfg.dali.base.predict.sequence_length = 16
+    cfg.data.downsample_factor = 2
     return cfg
 
 
@@ -94,6 +97,7 @@ def cfg_multiview() -> dict:
     ]
     cfg.data.columns_for_singleview_pca = [0, 1, 2, 3, 4, 5, 6]
     cfg.data.mirrored_column_matches = [0, 1, 2, 3, 4, 5, 6]
+    cfg.data.downsample_factor = 2
     cfg.model.backbone_pretrained = False
 
     return cfg
