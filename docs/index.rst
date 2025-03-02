@@ -14,7 +14,7 @@ The framework is based on Pytorch Lightning and supports accelerated training on
 using NVIDIA DALI. Models can be evaluated with TensorBoard, FiftyOne, and Streamlit.
 
 If you would like to try out Lightning Pose, we provide a
-`Google Colab notebook <https://colab.research.google.com/github/danbider/lightning-pose/blob/main/scripts/litpose_training_demo.ipynb>`_
+`Google Colab notebook <https://colab.research.google.com/github/paninski-lab/lightning-pose/blob/main/scripts/litpose_training_demo.ipynb>`_
 that steps through the process of training and evaluating a model on an example dataset
 - no data labeling or software installation required!
 

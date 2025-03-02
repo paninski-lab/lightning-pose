@@ -204,7 +204,7 @@ If instead you want to include the ears and tailbase:
       columns_for_singleview_pca: [1, 2, 4]
 
 See
-`these config files <https://github.com/danbider/lightning-pose/tree/main/scripts/configs>`_
+`these config files <https://github.com/paninski-lab/lightning-pose/tree/main/scripts/configs>`_
 for more examples.
 
 Below are the various hyperparameters and their descriptions.
@@ -240,7 +240,7 @@ a single camera
 
 During labeling each keypoint of the fused data is treated independently, with no explicit
 information on which keypoints correspond to the same body part
-(see the `example mirror-mouse data <https://github.com/danbider/lightning-pose/tree/main/data/mirror-mouse-example>`_).
+(see the `example mirror-mouse data <https://github.com/paninski-lab/lightning-pose/tree/main/data/mirror-mouse-example>`_).
 We need to record this information for the multiview loss.
 
 Select the keypoints used for this loss with the config field ``data.mirrored_column_matches``,

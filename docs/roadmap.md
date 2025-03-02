@@ -6,17 +6,17 @@
 - [ ] introduce jaxtyping (see [here](https://github.com/google/jaxtyping/issues/70))
 
 ## Losses and backbones
-- [x] incorporate transformer backbones ([#84](https://github.com/danbider/lightning-pose/pull/84), [#106](https://github.com/danbider/lightning-pose/pull/106))
+- [x] incorporate transformer backbones ([#84](https://github.com/paninski-lab/lightning-pose/pull/84), [#106](https://github.com/paninski-lab/lightning-pose/pull/106))
 - [ ] compute non-temporal unsupervised losses on labeled data
 
 ## Multi-view support for non-mirrored setups
-- [x] implement supervised datasets/dataloaders that work with multiple views ([#115](https://github.com/danbider/lightning-pose/pull/115))
-- [x] context frames for multi-view ([#126](https://github.com/danbider/lightning-pose/pull/126))
-- [x] unsupervised losses for multi-view ([#187](https://github.com/danbider/lightning-pose/pull/187))
+- [x] implement supervised datasets/dataloaders that work with multiple views ([#115](https://github.com/paninski-lab/lightning-pose/pull/115))
+- [x] context frames for multi-view ([#126](https://github.com/paninski-lab/lightning-pose/pull/126))
+- [x] unsupervised losses for multi-view ([#187](https://github.com/paninski-lab/lightning-pose/pull/187))
 
 ## Single-view dynamic crop (small animals in large frames)
-- [ ] implement dynamic cropping pipeline with detector model and pose estimator
-- [ ] context frames for dynamic crop
+- [x] implement dynamic cropping pipeline with detector model and pose estimator ([#250](https://github.com/paninski-lab/lightning-pose/pull/250))
+- [x] context frames for dynamic crop ([#250](https://github.com/paninski-lab/lightning-pose/pull/250))
 - [ ] unsupervised losses for dynamic crop
 
 ## Multi-view dynamic crop

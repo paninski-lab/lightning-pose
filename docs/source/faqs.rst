@@ -6,7 +6,7 @@ FAQs
 
     We currently support conversion from DLC projects into Lightning Pose projects
     (if you would like support for another format, please
-    `open an issue <https://github.com/danbider/lightning-pose/issues>`_).
+    `open an issue <https://github.com/paninski-lab/lightning-pose/issues>`_).
     You can find more details in the :ref:`Organizing your data <directory_structure>` section.
 
 .. _faq_video_formats:

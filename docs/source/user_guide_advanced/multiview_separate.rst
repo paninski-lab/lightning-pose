@@ -55,7 +55,7 @@ This file points to data directories, defines the type of models to fit, and spe
 of hyperparameters.
 
 A template file can be found
-`here <https://github.com/danbider/lightning-pose/blob/main/scripts/configs/config_default.yaml>`_.
+`here <https://github.com/paninski-lab/lightning-pose/blob/main/scripts/configs/config_default.yaml>`_.
 When training a model on a new dataset, you must copy/paste this template onto your local machine
 and update the arguments to match your data.
 
