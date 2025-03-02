@@ -17,7 +17,7 @@
 ## Single-view dynamic crop (small animals in large frames)
 - [x] implement dynamic cropping pipeline with detector model and pose estimator ([#250](https://github.com/paninski-lab/lightning-pose/pull/250))
 - [x] context frames for dynamic crop ([#250](https://github.com/paninski-lab/lightning-pose/pull/250))
-- [ ] unsupervised losses for dynamic crop
+- [x] unsupervised losses for dynamic crop ([#250](https://github.com/paninski-lab/lightning-pose/pull/250))
 
 ## Multi-view dynamic crop
 - [ ] perform view-specific dynamic cropping, re-assemble views after pose estimation stage

@@ -12,5 +12,4 @@ warnings.warn(
         import lightning_pose.apps.fiftyone
     """,
     DeprecationWarning,
-    stacklevel=2,
 )
