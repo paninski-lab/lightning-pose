@@ -346,14 +346,13 @@ def get_model(
                 image_size=image_h,  # only used by ViT
             )
         elif cfg.model.model_type == "heatmap":
-
             model = HeatmapTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 num_targets=data_module.dataset.num_targets,
                 loss_factory=loss_factories["supervised"],
                 backbone=cfg.model.backbone,
                 pretrained=backbone_pretrained,
-                downsample_factor=cfg.data.downsample_factor,
+                downsample_factor=cfg.data.get("downsample_factor", 2),
                 output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
@@ -366,7 +365,7 @@ def get_model(
                 loss_factory=loss_factories["supervised"],
                 backbone=cfg.model.backbone,
                 pretrained=backbone_pretrained,
-                downsample_factor=cfg.data.downsample_factor,
+                downsample_factor=cfg.data.get("downsample_factor", 2),
                 output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
@@ -400,7 +399,7 @@ def get_model(
                 loss_factory_unsupervised=loss_factories["unsupervised"],
                 backbone=cfg.model.backbone,
                 pretrained=backbone_pretrained,
-                downsample_factor=cfg.data.downsample_factor,
+                downsample_factor=cfg.data.get("downsample_factor", 2),
                 output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
@@ -414,7 +413,7 @@ def get_model(
                 loss_factory_unsupervised=loss_factories["unsupervised"],
                 backbone=cfg.model.backbone,
                 pretrained=backbone_pretrained,
-                downsample_factor=cfg.data.downsample_factor,
+                downsample_factor=cfg.data.get("downsample_factor", 2),
                 output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
@@ -675,7 +674,6 @@ def compute_metrics_single(
             # re-raise if this is not the PCA error this try is intended to swallow
             if not "cannot fit PCA" in str(e):
                 raise e
-
 
     if "pca_multiview" in metrics_to_compute:
         # build pca object

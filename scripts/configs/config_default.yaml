@@ -10,8 +10,6 @@ data:
   # location of labels; this should be relative to `data_dir`
   # or an absolute path.
   csv_file: CollectedData.csv
-  # downsample heatmaps - 2 | 3
-  downsample_factor: 2
   # total number of keypoints
   num_keypoints: null
   # keypoint names

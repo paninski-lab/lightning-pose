@@ -16,8 +16,6 @@ data:
   view_names:
     - top
     - bot
-  # downsample heatmaps: 2 | 3
-  downsample_factor: 2
   # total number of keypoints
   num_keypoints: 7
   # keypoint names

@@ -9,8 +9,6 @@ data:
   video_dir: /home/zeus/content/data/crim13/videos
   # location of labels; for example script, this should be relative to `data_dir`
   csv_file: CollectedData.csv
-  # downsample heatmaps - 2 | 3
-  downsample_factor: 2
   # total number of body parts
   num_keypoints: 14
   keypoint_names:

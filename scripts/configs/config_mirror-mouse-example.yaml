@@ -12,8 +12,6 @@ data:
   # location of labels; for example script, this should be relative to `data_dir`
   # or an absolute path.
   csv_file: CollectedData.csv
-  # downsample heatmaps: 2 | 3
-  downsample_factor: 2
   # total number of keypoints
   num_keypoints: 17
   # keypoint names

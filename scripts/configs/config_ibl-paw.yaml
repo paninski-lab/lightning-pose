@@ -9,8 +9,6 @@ data:
   video_dir: /home/zeus/content/data/ibl-paw/videos
   # location of labels; for ex script, this should be relative to `data_dir`
   csv_file: CollectedData.csv
-  # downsample heatmaps - 2 | 3
-  downsample_factor: 2
   # total number of keypoints
   num_keypoints: 2
   # keypoint names
