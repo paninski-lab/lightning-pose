@@ -10,7 +10,7 @@ from torch.optim.lr_scheduler import MultiStepLR
 from torchtyping import TensorType
 from typeguard import typechecked
 
-from lightning_pose.data.utils import (
+from lightning_pose.data.datatypes import (
     BaseLabeledBatchDict,
     HeatmapLabeledBatchDict,
     MultiviewHeatmapLabeledBatchDict,

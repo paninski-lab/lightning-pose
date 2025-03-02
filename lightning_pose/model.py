@@ -15,7 +15,6 @@ from lightning_pose.utils.predictions import (
     load_model_from_checkpoint,
     predict_dataset,
 )
-
 from lightning_pose.utils.scripts import (
     compute_metrics_single,
     get_data_module,

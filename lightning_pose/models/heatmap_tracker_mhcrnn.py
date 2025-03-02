@@ -10,13 +10,13 @@ from torchtyping import TensorType
 from typeguard import typechecked
 from typing_extensions import Literal
 
-from lightning_pose.data.utils import (
+from lightning_pose.data.datatypes import (
     HeatmapLabeledBatchDict,
     MultiviewHeatmapLabeledBatchDict,
     MultiviewUnlabeledBatchDict,
     UnlabeledBatchDict,
-    undo_affine_transform_batch,
 )
+from lightning_pose.data.utils import undo_affine_transform_batch
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.models import HeatmapTracker
 from lightning_pose.models.base import (

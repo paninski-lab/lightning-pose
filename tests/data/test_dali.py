@@ -154,7 +154,7 @@ def test_prepare_dali_single_view(cfg, video_list):
 def test_prepare_dali_multiview(cfg_multiview, video_list):
 
     from lightning_pose.data.dali import PrepareDALI
-    from lightning_pose.data.utils import MultiviewUnlabeledBatchDict
+    from lightning_pose.data.datatypes import MultiviewUnlabeledBatchDict
 
     im_height = 256
     im_width = 256
