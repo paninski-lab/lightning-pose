@@ -166,6 +166,12 @@ def _execute_multi_gpu_test(cfg, tmp_path, pytestconfig):
     # Saves config in {tmp_dir}/config.yaml so train_hydra can read from it.
     OmegaConf.save(cfg, tmp_path / "config.yaml")
 
+    # Add git repo directory to PYTHONPATH.
+    env = dict(os.environ)
+    assert "PYTHONPATH" not in env
+    # If PYTHONPATH exists in env, we'd need to append the following path using ":" as a delimiter
+    env["PYTHONPATH"] = pytestconfig.rootpath
+
     # Run train_hydra script.
     process = subprocess.run(
         [
@@ -174,6 +180,7 @@ def _execute_multi_gpu_test(cfg, tmp_path, pytestconfig):
             f"--config-path={tmp_path}",
             f"--config-name=config",
         ],
+        env=env,
     )
     assert process.returncode == 0
 
