@@ -16,19 +16,20 @@ def imgaug_transform(params_dict: dict | DictConfig) -> iaa.Sequential:
 
     Args:
         params_dict: each key must be the name of a transform importable from imgaug.augmenters,
-            e.g. "Affine", "Fliplr", etc. The value must be a dictionary with two keys: "p" is the
-            probability of applying the transform (using imgaug.augmenters.Sometimes) and
-            "kwargs" is a dictionary of keyword args sent to that specific augmentation.
+            e.g. "Affine", "Fliplr", etc. The value must be a dict with several optional keys:
+            - "p" (float): probability of applying transform (using imgaug.augmenters.Sometimes)
+            - "args" (list): arguments for transform
+            - "kwargs" (dict): keyword args for the transformation
 
     Examples:
 
-    1. Create a pipeline with
+        Create a pipeline with
         - Affine transformation applied 50% of the time with rotation uniformly sampled from
           (-25, 25) degrees
         - MotionBlur transformation that is applied 25% of the time with a kernel size of 5 pixels
           and blur direction uniformly sampled from (-90, 90) degrees
 
-        >>> params_dict{
+        >>> params_dict = {
         >>>    'Affine': {'p': 0.5, 'kwargs': {'rotate': (-25, 25)}},
         >>>    'MotionBlur': {'p': 0.25, 'kwargs': {'k': 5, 'angle': (-90, 90)}},
         >>> }
