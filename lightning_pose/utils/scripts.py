@@ -68,7 +68,98 @@ def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
                 axes
 
     """
-    return imgaug_transform(cfg)
+    params = cfg.training.get("imgaug", "default")
+    if isinstance(params, str):
+        params_dict = {}
+        if params in ["default", "none"]:
+            pass  # no augmentations
+        elif params in ["dlc", "dlc-lr", "dlc-top-down"]:
+
+            # flip horizontally
+            if params in ["dlc-lr", "dlc-top-down"]:
+                params_dict["Fliplr"] = {"p": 1.0, "kwargs": {"p": 0.5}}
+
+            # flip vertically
+            if params in ["dlc-top-down"]:
+                params_dict["Flipud"] = {"p": 1.0, "kwargs": {"p": 0.5}}
+
+            # rotate
+            rotation = 25  # rotation uniformly sampled from (-rotation, +rotation)
+            params_dict["Affine"] = {"p": 0.4, "kwargs": {"rotate": (-rotation, rotation)}}
+
+            # motion blur
+            k = 5  # kernel size of blur
+            angle = 90  # blur direction uniformly sampled from (-angle, +angle)
+            params_dict["MotionBlur"] = {"p": 0.5, "kwargs": {"k": k, "angle": (-angle, angle)}}
+
+            # coarse dropout
+            prct = 0.02  # drop `prct` of all pixels by converting them to black pixels
+            size_prct = 0.3  # drop pix on a low-res version of img that's `size_prct` of og
+            per_channel = 0.5  # per_channel transformations on `per_channel` frac of images
+            params_dict["CoarseDropout"] = {
+                "p": 0.5,
+                "kwargs": {"p": prct, "size_percent": size_prct, "per_channel": per_channel},
+            }
+
+            # coarse salt and pepper
+            # bright reflections can often confuse the model into thinking they are paws
+            # (which can also just be bright blobs) - so include some additional transforms that
+            # put bright blobs (and dark blobs) into the image
+            # bigger chunks than coarse dropout
+            prct = 0.01  # probability of changing a pixel to salt/pepper noise
+            size_prct = (0.05, 0.1)  # drop pix on low-res version of img that's `size_prct` of og
+            params_dict["CoarseSalt"] = {
+                "p": 0.5,
+                "kwargs": {"p": prct, "size_percent": size_prct},
+            }
+            params_dict["CoarsePepper"] = {
+                "p": 0.5,
+                "kwargs": {"p": prct, "size_percent": size_prct},
+            }
+
+            # elastic transform
+            alpha = (0, 10)  # controls strength of displacement
+            sigma = 5  # cotnrols smoothness of displacement
+            params_dict["ElasticTransformation"] = {
+                "p": 0.5,
+                "kwargs": {"alpha": alpha, "sigma": sigma},
+            }
+
+            # hist eq
+            params_dict["AllChannelsHistogramEqualization"] = {"p": 0.1, "kwargs": {}}
+
+            # clahe (contrast limited adaptive histogram equalization) -
+            # hist eq over image patches
+            params_dict["AllChannelsCLAHE"] = {"p": 0.1, "kwargs": {}}
+
+            # emboss
+            alpha = (0, 0.5)  # overlay embossed image on original with alpha in this range
+            strength = (0.5, 1.5)  # strength of embossing lies in this range
+            params_dict["Emboss"] = {"p": 0.1, "kwargs": {"alpha": alpha, "strength": strength}}
+
+            # crop
+            crop_by = 0.15  # number of pix to crop on each side of img given as a fraction
+            params_dict["CropAndPad"] = {
+                "p": 0.4,
+                "kwargs": {"percent": (-crop_by, crop_by), "keep_size": False},
+            }
+        else:
+            raise NotImplementedError(
+                f"cfg.training.imgaug string {params} must be in "
+                "['none', 'default', 'dlc', 'dlc-lr', 'dlc-top-down']"
+            )
+    elif isinstance(params, dict) or isinstance(params, DictConfig):
+        if isinstance(params, DictConfig):
+            # recursively convert Dict/ListConfigs to dicts/lists
+            params_dict = OmegaConf.to_object(params)
+        else:
+            params_dict = params.copy()
+        for transform, val in params_dict.items():
+            assert getattr(iaa, transform), f"{transform} is not a valid imgaug transform"
+    else:
+        raise TypeError(f"params is of type {type(params)}, must be str, dict, or DictConfig")
+
+    return imgaug_transform(params_dict)
 
 
 @typechecked
