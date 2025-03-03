@@ -388,7 +388,14 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         self.image_resize_width = image_resize_width
         self.do_context = do_context
 
+        # do this here so resizing doesn't get added multiple times when iterating over views
+        if resize:
+            imgaug_transform.add(iaa.Resize({
+                "height": image_resize_height,
+                "width": image_resize_width,
+            }))
         self.imgaug_transform = imgaug_transform
+
         self.downsample_factor = downsample_factor
         self.dataset = {}
         self.keypoint_names = {}
@@ -404,7 +411,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 imgaug_transform=imgaug_transform,
                 downsample_factor=downsample_factor,
                 do_context=do_context,
-                resize=resize,
+                resize=False,
                 uniform_heatmaps=uniform_heatmaps,
             )
             self.keypoint_names[view] = self.dataset[view].keypoint_names

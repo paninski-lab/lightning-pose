@@ -1,5 +1,6 @@
 """Test datamodule functionality."""
 
+import numpy as np
 import pytest
 import torch
 from lightning.pytorch.utilities import CombinedLoader
@@ -15,31 +16,49 @@ def test_base_datamodule(cfg, base_data_module):
     test_size = base_data_module.test_batch_size
     num_targets = base_data_module.dataset.num_targets
 
-    # check batch properties
+    # check train batch properties
     train_dataloader = base_data_module.train_dataloader()
-    assert isinstance(train_dataloader.sampler, RandomSampler) # shuffle=True
+    assert isinstance(train_dataloader.sampler, RandomSampler)
     batch = next(iter(train_dataloader))
     assert batch["images"].shape == (train_size, 3, im_height, im_width)
     assert batch["keypoints"].shape == (train_size, num_targets)
+    # check imgaug pipeline makes no-repeatable data
+    b1 = base_data_module.train_dataset[0]
+    b2 = base_data_module.train_dataset[0]
+    assert not np.allclose(b1["images"], b2["images"])
+    assert not np.allclose(b1["keypoints"], b2["keypoints"], equal_nan=True)
 
+    # check val batch properties
     val_dataloader = base_data_module.val_dataloader()
     batch = next(iter(val_dataloader))
-    assert not isinstance(val_dataloader.sampler, RandomSampler) # shuffle=False
+    assert not isinstance(val_dataloader.sampler, RandomSampler)
     assert batch["images"].shape[1:] == (3, im_height, im_width)
     assert batch["keypoints"].shape[1:] == (num_targets,)
     assert batch["images"].shape[0] == batch["keypoints"].shape[0]
     assert batch["images"].shape[0] <= val_size
+    # check imgaug pipeline makes repeatable data
+    b1 = base_data_module.val_dataset[0]
+    b2 = base_data_module.val_dataset[0]
+    assert np.allclose(b1["images"], b2["images"])
+    assert np.allclose(b1["keypoints"], b2["keypoints"], equal_nan=True)
 
     test_dataloader = base_data_module.test_dataloader()
     batch = next(iter(test_dataloader))
-    assert not isinstance(test_dataloader.sampler, RandomSampler) # shuffle=False
+    assert not isinstance(test_dataloader.sampler, RandomSampler)
     assert batch["images"].shape[1:] == (3, im_height, im_width)
     assert batch["keypoints"].shape[1:] == (num_targets,)
     assert batch["images"].shape[0] == batch["keypoints"].shape[0]
     assert batch["images"].shape[0] <= test_size
+    # check imgaug pipeline makes repeatable data
+    b1 = base_data_module.test_dataset[0]
+    b2 = base_data_module.test_dataset[0]
+    assert np.allclose(b1["images"], b2["images"])
+    assert np.allclose(b1["keypoints"], b2["keypoints"], equal_nan=True)
 
     # cleanup
     del batch
+    del b1
+    del b2
 
 
 def test_heatmap_datamodule(cfg, heatmap_data_module):
@@ -71,10 +90,12 @@ def test_multiview_heatmap_datamodule(cfg_multiview, multiview_heatmap_data_modu
     im_height_ds = im_height / (2 ** cfg_multiview.data.get("downsample_factor", 2))
     im_width_ds = im_width / (2 ** cfg_multiview.data.get("downsample_factor", 2))
     train_size = multiview_heatmap_data_module.train_batch_size
+    val_size = multiview_heatmap_data_module.val_batch_size
+    test_size = multiview_heatmap_data_module.test_batch_size
     num_targets = multiview_heatmap_data_module.dataset.num_targets
     num_view = multiview_heatmap_data_module.dataset.num_views
 
-    # check batch properties
+    # check train batch properties
     batch = next(iter(multiview_heatmap_data_module.train_dataloader()))
     assert batch["images"].shape == (train_size, num_view, 3, im_height, im_width)
     assert batch["keypoints"].shape == (train_size, num_targets)
@@ -82,9 +103,45 @@ def test_multiview_heatmap_datamodule(cfg_multiview, multiview_heatmap_data_modu
         train_size, int(num_targets / 2), im_height_ds, im_width_ds,
     )
     assert batch["heatmaps"].shape[2:] == multiview_heatmap_data_module.dataset.output_shape
+    # check imgaug pipeline makes no-repeatable data
+    b1 = multiview_heatmap_data_module.train_dataset[0]
+    b2 = multiview_heatmap_data_module.train_dataset[0]
+    assert not np.allclose(b1["images"], b2["images"])
+    assert not np.allclose(b1["keypoints"], b2["keypoints"], equal_nan=True)
+
+    # check val batch properties
+    val_dataloader = multiview_heatmap_data_module.val_dataloader()
+    batch = next(iter(val_dataloader))
+    assert batch["images"].shape == (val_size, num_view, 3, im_height, im_width)
+    assert batch["keypoints"].shape == (val_size, num_targets)
+    assert batch["heatmaps"].shape == (
+        val_size, int(num_targets / 2), im_height_ds, im_width_ds,
+    )
+    assert batch["heatmaps"].shape[2:] == multiview_heatmap_data_module.dataset.output_shape
+    # check imgaug pipeline makes repeatable data
+    b1 = multiview_heatmap_data_module.val_dataset[0]
+    b2 = multiview_heatmap_data_module.val_dataset[0]
+    assert np.allclose(b1["images"], b2["images"])
+    assert np.allclose(b1["keypoints"], b2["keypoints"], equal_nan=True)
+
+    test_dataloader = multiview_heatmap_data_module.test_dataloader()
+    batch = next(iter(test_dataloader))
+    assert batch["images"].shape == (test_size, num_view, 3, im_height, im_width)
+    assert batch["keypoints"].shape == (test_size, num_targets)
+    assert batch["heatmaps"].shape == (
+        test_size, int(num_targets / 2), im_height_ds, im_width_ds,
+    )
+    assert batch["heatmaps"].shape[2:] == multiview_heatmap_data_module.dataset.output_shape
+    # check imgaug pipeline makes repeatable data
+    b1 = multiview_heatmap_data_module.test_dataset[0]
+    b2 = multiview_heatmap_data_module.test_dataset[0]
+    assert np.allclose(b1["images"], b2["images"])
+    assert np.allclose(b1["keypoints"], b2["keypoints"], equal_nan=True)
 
     # cleanup
     del batch
+    del b1
+    del b2
 
 
 def test_heatmap_datamodule_context(cfg, heatmap_data_module_context):
