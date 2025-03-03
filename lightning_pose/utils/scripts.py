@@ -86,6 +86,8 @@ def get_dataset(
             dataset = BaseTrackingDataset(
                 root_directory=data_dir,
                 csv_path=cfg.data.csv_file,
+                image_resize_height=cfg.data.image_resize_dims.height,
+                image_resize_width=cfg.data.image_resize_dims.width,
                 imgaug_transform=imgaug_transform,
                 do_context=False,  # no context for regression models
             )
@@ -98,6 +100,8 @@ def get_dataset(
             dataset = MultiviewHeatmapDataset(
                 root_directory=data_dir,
                 csv_paths=cfg.data.csv_file,
+                image_resize_height=cfg.data.image_resize_dims.height,
+                image_resize_width=cfg.data.image_resize_dims.width,
                 view_names=list(cfg.data.view_names),
                 downsample_factor=cfg.data.get("downsample_factor", 2),
                 imgaug_transform=imgaug_transform,
@@ -108,6 +112,8 @@ def get_dataset(
             dataset = HeatmapDataset(
                 root_directory=data_dir,
                 csv_path=cfg.data.csv_file,
+                image_resize_height=cfg.data.image_resize_dims.height,
+                image_resize_width=cfg.data.image_resize_dims.width,
                 imgaug_transform=imgaug_transform,
                 downsample_factor=cfg.data.get("downsample_factor", 2),
                 do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
