@@ -669,7 +669,7 @@ def load_model_from_checkpoint(
     )
     # initialize a model instance, with weights loaded from .ckpt file
     if cfg.model.backbone == "vit_b_sam":
-        # see https://github.com/danbider/lightning-pose/issues/134 for explanation of this block
+        # see https://github.com/paninski-lab/lightning-pose/issues/134 for explanation of this block
         from lightning_pose.utils.scripts import get_model
 
         # load model first

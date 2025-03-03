@@ -5,7 +5,7 @@ Installation
 Lightning Pose can be installed as a Python package on Linux or Windows (using WSL, see below). Access to a GPU is required for the
 NVIDIA DALI dependency. You must have **CUDA 11.0-12.x** installed.
 If you have a Mac OS and would like to install Lightning Pose, please get in contact by
-`raising an issue <https://github.com/danbider/lightning-pose/issues>`_.
+`raising an issue <https://github.com/paninski-lab/lightning-pose/issues>`_.
 
 There are several installation methods:
 
@@ -90,7 +90,7 @@ Method 2: conda from source
    .. code-block:: console
 
        cd <SOME_FOLDER>
-       git clone https://github.com/danbider/lightning-pose.git
+       git clone https://github.com/paninski-lab/lightning-pose.git
 
 #. Then move into the newly-created repository folder:
 
@@ -139,16 +139,16 @@ You will be required to create a Lightning account if you have not already signe
 Docker users
 ============
 
-Use the appropriate Dockerfiles in the root directory to build a Docker image:
+Use the appropriate Dockerfiles in the `docker` directory to build a Docker image:
 
 .. code-block:: console
 
-    docker build -f Dockerfile.cuda11 -t my-image:cuda11 .
+    docker build -f docker/Dockerfile.cuda11 -t my-image:cuda11 .
 
 
 .. code-block:: console
 
-    docker build -f Dockerfile.cuda12 -t my-image:cuda12 .
+    docker build -f docker/Dockerfile.cuda12 -t my-image:cuda12 .
 
 Run code inside a container (following `this tutorial <https://docs.docker.com/get-started/>`_):
 
@@ -245,7 +245,7 @@ Getting help
 ------------
 
 If you encounter any issues during installation, first check out the
-`GitHub Issues <https://github.com/danbider/lightning-pose/issues>`_
+`GitHub Issues <https://github.com/paninski-lab/lightning-pose/issues>`_
 page to see if others have had the same problem.
 
 If you do not find a similar issue, please raise an issue or reach out on

@@ -17,10 +17,7 @@ from omegaconf.errors import ValidationError
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import BaseTrackingDataset
-from lightning_pose.utils.scripts import (
-    calculate_steps_per_epoch,
-    get_data_module,
-)
+from lightning_pose.utils.scripts import calculate_steps_per_epoch, get_data_module
 
 
 def test_calculate_steps_per_epoch_supervised(cfg, base_dataset):

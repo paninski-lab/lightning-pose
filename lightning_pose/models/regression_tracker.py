@@ -8,11 +8,8 @@ from torch import nn
 from torchtyping import TensorType
 from typeguard import typechecked
 
-from lightning_pose.data.utils import (
-    BaseLabeledBatchDict,
-    UnlabeledBatchDict,
-    undo_affine_transform,
-)
+from lightning_pose.data.datatypes import BaseLabeledBatchDict, UnlabeledBatchDict
+from lightning_pose.data.utils import undo_affine_transform
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.base import (

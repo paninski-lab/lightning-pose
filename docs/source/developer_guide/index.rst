@@ -6,7 +6,7 @@ This developer guide describes the steps required for adding a new loss or model
 Lightning Pose package.
 
 Please also see the
-`contributor guidelines <https://github.com/danbider/lightning-pose/blob/main/CONTRIBUTING.md>`_
+`contributor guidelines <https://github.com/paninski-lab/lightning-pose/blob/main/CONTRIBUTING.md>`_
 for information about setting up a development environment and submitting pull requests.
 
 .. toctree::

@@ -12,7 +12,8 @@ from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
 from omegaconf import DictConfig
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
-from lightning_pose.data.utils import MultiviewUnlabeledBatchDict, UnlabeledBatchDict, count_frames
+from lightning_pose.data.datatypes import MultiviewUnlabeledBatchDict, UnlabeledBatchDict
+from lightning_pose.data.utils import count_frames
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -327,7 +328,7 @@ class PrepareDALI(object):
             "predict": {"context": {}, "base": {}},
             "train": {"context": {}, "base": {}},
         }
-        gen_cfg = self.dali_config["general"]
+        gen_cfg = self.dali_config.get("general", {"seed": 123456})
 
         # base (vanilla single-frame model), train pipe args
         base_train_cfg = self.dali_config["base"]["train"]

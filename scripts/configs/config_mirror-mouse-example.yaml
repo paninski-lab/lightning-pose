@@ -12,8 +12,6 @@ data:
   # location of labels; for example script, this should be relative to `data_dir`
   # or an absolute path.
   csv_file: CollectedData.csv
-  # downsample heatmaps: 2 | 3
-  downsample_factor: 2
   # total number of keypoints
   num_keypoints: 17
   # keypoint names
@@ -112,8 +110,6 @@ model:
   model_name: my_base_toy_model
 
 dali:
-  general:
-    seed: 123456
   base:
     train:
       sequence_length: 16 # step = sequence_length by default. done internally
@@ -150,26 +146,7 @@ losses:
     log_weight: 5.0
     # for epsilon insensitive rectification (in pixels; diffs below this are not penalized)
     # either a float or a list of floats, one for each keypoint according to the order in the csv columns
-    epsilon:
-      [
-        12.9,
-        11.3,
-        10.5,
-        12.0,
-        5.0,
-        7.3,
-        0.7,
-        61.8,
-        11.2,
-        9.9,
-        9.7,
-        10.1,
-        4.8,
-        4.9,
-        1.0,
-        19.2,
-        6.8,
-      ]
+    epsilon: 20
     # nan removal value.
     # (in prob; heatmaps with max prob values are removed)
     prob_threshold: 0.05

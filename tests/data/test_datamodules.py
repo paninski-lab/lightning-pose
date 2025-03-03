@@ -46,8 +46,8 @@ def test_heatmap_datamodule(cfg, heatmap_data_module):
 
     im_height = cfg.data.image_resize_dims.height
     im_width = cfg.data.image_resize_dims.width
-    im_height_ds = im_height / (2 ** cfg.data.downsample_factor)
-    im_width_ds = im_width / (2 ** cfg.data.downsample_factor)
+    im_height_ds = im_height / (2 ** cfg.data.get("downsample_factor", 2))
+    im_width_ds = im_width / (2 ** cfg.data.get("downsample_factor", 2))
     train_size = heatmap_data_module.train_batch_size
     num_targets = heatmap_data_module.dataset.num_targets
 
@@ -68,8 +68,8 @@ def test_multiview_heatmap_datamodule(cfg_multiview, multiview_heatmap_data_modu
 
     im_height = cfg_multiview.data.image_resize_dims.height
     im_width = cfg_multiview.data.image_resize_dims.width
-    im_height_ds = im_height / (2 ** cfg_multiview.data.downsample_factor)
-    im_width_ds = im_width / (2 ** cfg_multiview.data.downsample_factor)
+    im_height_ds = im_height / (2 ** cfg_multiview.data.get("downsample_factor", 2))
+    im_width_ds = im_width / (2 ** cfg_multiview.data.get("downsample_factor", 2))
     train_size = multiview_heatmap_data_module.train_batch_size
     num_targets = multiview_heatmap_data_module.dataset.num_targets
     num_view = multiview_heatmap_data_module.dataset.num_views
@@ -91,8 +91,8 @@ def test_heatmap_datamodule_context(cfg, heatmap_data_module_context):
 
     im_height = cfg.data.image_resize_dims.height
     im_width = cfg.data.image_resize_dims.width
-    im_height_ds = im_height / (2 ** cfg.data.downsample_factor)
-    im_width_ds = im_width / (2 ** cfg.data.downsample_factor)
+    im_height_ds = im_height / (2 ** cfg.data.get("downsample_factor", 2))
+    im_width_ds = im_width / (2 ** cfg.data.get("downsample_factor", 2))
     train_size = heatmap_data_module_context.train_batch_size
     num_targets = heatmap_data_module_context.dataset.num_targets
     num_context = 5
@@ -116,8 +116,8 @@ def test_multiview_heatmap_datamodule_context(
 ):
     im_height = cfg_multiview.data.image_resize_dims.height
     im_width = cfg_multiview.data.image_resize_dims.width
-    im_height_ds = im_height / (2 ** cfg_multiview.data.downsample_factor)
-    im_width_ds = im_width / (2 ** cfg_multiview.data.downsample_factor)
+    im_height_ds = im_height / (2 ** cfg_multiview.data.get("downsample_factor", 2))
+    im_width_ds = im_width / (2 ** cfg_multiview.data.get("downsample_factor", 2))
     train_size = multiview_heatmap_data_module_context.train_batch_size
     num_targets = multiview_heatmap_data_module_context.dataset.num_targets
     num_view = multiview_heatmap_data_module_context.dataset.num_views
@@ -234,8 +234,8 @@ def test_heatmap_data_module_combined(cfg, heatmap_data_module_combined):
 
     im_height = cfg.data.image_resize_dims.height
     im_width = cfg.data.image_resize_dims.width
-    im_height_ds = im_height / (2 ** cfg.data.downsample_factor)
-    im_width_ds = im_width / (2 ** cfg.data.downsample_factor)
+    im_height_ds = im_height / (2 ** cfg.data.get("downsample_factor", 2))
+    im_width_ds = im_width / (2 ** cfg.data.get("downsample_factor", 2))
     train_size_labeled = heatmap_data_module_combined.train_batch_size
     train_size_unlabel = heatmap_data_module_combined.dali_config["context"]["train"]["batch_size"]
     num_targets = heatmap_data_module_combined.dataset.num_targets
@@ -268,8 +268,8 @@ def test_multiview_heatmap_data_module_combined(
 
     im_height = cfg_multiview.data.image_resize_dims.height
     im_width = cfg_multiview.data.image_resize_dims.width
-    im_height_ds = im_height / (2 ** cfg_multiview.data.downsample_factor)
-    im_width_ds = im_width / (2 ** cfg_multiview.data.downsample_factor)
+    im_height_ds = im_height / (2 ** cfg_multiview.data.get("downsample_factor", 2))
+    im_width_ds = im_width / (2 ** cfg_multiview.data.get("downsample_factor", 2))
     train_size_labeled = multiview_heatmap_data_module_combined.train_batch_size
     train_size_unlabeled = \
         multiview_heatmap_data_module_combined.dali_config["base"]["train"]["sequence_length"]
@@ -316,8 +316,8 @@ def test_heatmap_data_module_combined_context(cfg, heatmap_data_module_combined_
 
     im_height = cfg.data.image_resize_dims.height
     im_width = cfg.data.image_resize_dims.width
-    im_height_ds = im_height / (2 ** cfg.data.downsample_factor)
-    im_width_ds = im_width / (2 ** cfg.data.downsample_factor)
+    im_height_ds = im_height / (2 ** cfg.data.get("downsample_factor", 2))
+    im_width_ds = im_width / (2 ** cfg.data.get("downsample_factor", 2))
     train_size_labeled = heatmap_data_module_combined_context.train_batch_size
     train_size_unlabel = \
         heatmap_data_module_combined_context.dali_config["context"]["train"]["batch_size"]
@@ -354,8 +354,8 @@ def test_multiview_heatmap_data_module_combined_context(
 
     im_height = cfg_multiview.data.image_resize_dims.height
     im_width = cfg_multiview.data.image_resize_dims.width
-    im_height_ds = im_height / (2 ** cfg_multiview.data.downsample_factor)
-    im_width_ds = im_width / (2 ** cfg_multiview.data.downsample_factor)
+    im_height_ds = im_height / (2 ** cfg_multiview.data.get("downsample_factor", 2))
+    im_width_ds = im_width / (2 ** cfg_multiview.data.get("downsample_factor", 2))
     train_size_labeled = multiview_heatmap_data_module_combined_context.train_batch_size
     train_size_unlabeled = multiview_heatmap_data_module_combined_context.dali_config[
         "base"

@@ -53,9 +53,11 @@ def video_list() -> list[str]:
 def toy_data_dir() -> str:
     return TOY_DATA_ROOT_DIR
 
+
 @pytest.fixture
 def toy_mdata_dir() -> str:
     return TOY_MDATA_ROOT_DIR
+
 
 @pytest.fixture
 def cfg() -> dict:
@@ -95,7 +97,6 @@ def cfg_multiview() -> dict:
     cfg.data.columns_for_singleview_pca = [0, 1, 2, 3, 4, 5, 6]
     cfg.data.mirrored_column_matches = [0, 1, 2, 3, 4, 5, 6]
     cfg.model.backbone_pretrained = False
-
     return cfg
 
 

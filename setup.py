@@ -117,7 +117,7 @@ setup(
     install_requires=install_requires,
     extras_require=extras_require,
     author_email="danbider@gmail.com",
-    url="https://github.com/danbider/lightning-pose",
+    url="https://github.com/paninski-lab/lightning-pose",
     keywords=["machine learning", "deep learning", "computer_vision"],
     entry_points={
         'console_scripts': [

@@ -5,6 +5,7 @@ from lightning.pytorch.callbacks import Callback
 # to ignore imports for sphix-autoapidoc
 __all__ = [
     "AnnealWeight",
+    "UnfreezeBackbone",
 ]
 
 

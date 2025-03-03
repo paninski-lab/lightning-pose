@@ -2,7 +2,7 @@
 
 We welcome community contributions to the Lightning Pose repo! 
 If you have found a bug or would like to request a minor change, please 
-[open an issue](https://github.com/danbider/lightning-pose/issues).
+[open an issue](https://github.com/paninski-lab/lightning-pose/issues).
 
 In order to contribute code to the repo, please follow the steps below.
 
@@ -12,7 +12,7 @@ See our [code of conduct](CODE_OF_CONDUCT.md) for more information.
 ### Set up a development installation
 
 In order to make changes to Lightning Pose, you will need to [fork](https://guides.github.com/activities/forking/#fork) the
-[repo](https://github.com/danbider/lightning-pose).
+[repo](https://github.com/paninski-lab/lightning-pose).
 
 If you are not familiar with `git`, check out [this guide](https://guides.github.com/introduction/git-handbook/#basic-git).
 

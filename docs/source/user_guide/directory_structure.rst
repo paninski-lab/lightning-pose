@@ -12,7 +12,7 @@ Data directory structure
 ========================
 
 Lightning Pose assumes the following project directory structure, as in the example dataset
-`here <https://github.com/danbider/lightning-pose/tree/main/data/mirror-mouse-example>`_.
+`here <https://github.com/paninski-lab/lightning-pose/tree/main/data/mirror-mouse-example>`_.
 
 .. code-block::
 
@@ -59,4 +59,4 @@ Converting other projects to Lightning Pose format
 ==================================================
 Coming soon. If you have labeled data from other pose estimation packages (like SLEAP or DPK) and
 would like to try out Lightning Pose, please
-`raise an issue <https://github.com/danbider/lightning-pose/issues>`_.
+`raise an issue <https://github.com/paninski-lab/lightning-pose/issues>`_.

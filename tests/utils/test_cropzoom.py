@@ -7,10 +7,7 @@ from typing import Union
 import pytest
 from omegaconf import OmegaConf
 
-from lightning_pose.utils.cropzoom import (
-    generate_cropped_labeled_frames,
-    generate_cropped_video,
-)
+from lightning_pose.utils.cropzoom import generate_cropped_labeled_frames, generate_cropped_video
 
 from ..fetch_test_data import fetch_test_data_if_needed
 

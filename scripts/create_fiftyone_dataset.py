@@ -4,8 +4,8 @@ import fiftyone as fo
 import hydra
 from omegaconf import DictConfig
 
+from lightning_pose.apps.fiftyone import FiftyOneImagePlotter, check_dataset
 from lightning_pose.utils import pretty_print_str
-from lightning_pose.utils.fiftyone import FiftyOneImagePlotter, check_dataset
 
 
 @hydra.main(config_path="configs", config_name="config_mirror-mouse-example")

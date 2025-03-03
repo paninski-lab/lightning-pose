@@ -99,7 +99,7 @@ def get_dataset(
                 root_directory=data_dir,
                 csv_paths=cfg.data.csv_file,
                 view_names=list(cfg.data.view_names),
-                downsample_factor=cfg.data.downsample_factor,
+                downsample_factor=cfg.data.get("downsample_factor", 2),
                 imgaug_transform=imgaug_transform,
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
                 do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
@@ -109,7 +109,7 @@ def get_dataset(
                 root_directory=data_dir,
                 csv_path=cfg.data.csv_file,
                 imgaug_transform=imgaug_transform,
-                downsample_factor=cfg.data.downsample_factor,
+                downsample_factor=cfg.data.get("downsample_factor", 2),
                 do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
             )
@@ -252,8 +252,8 @@ def get_loss_factories(
                     "original_image_width"
                 ] = width_og
                 # record downsampled image dims
-                height_ds = int(height_og // (2 ** cfg.data.downsample_factor))
-                width_ds = int(width_og // (2 ** cfg.data.downsample_factor))
+                height_ds = int(height_og // (2 ** cfg.data.get("downsample_factor", 2)))
+                width_ds = int(width_og // (2 ** cfg.data.get("downsample_factor", 2)))
                 loss_params_dict["unsupervised"][loss_name][
                     "downsampled_image_height"
                 ] = height_ds
@@ -346,14 +346,13 @@ def get_model(
                 image_size=image_h,  # only used by ViT
             )
         elif cfg.model.model_type == "heatmap":
-
             model = HeatmapTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 num_targets=data_module.dataset.num_targets,
                 loss_factory=loss_factories["supervised"],
                 backbone=cfg.model.backbone,
                 pretrained=backbone_pretrained,
-                downsample_factor=cfg.data.downsample_factor,
+                downsample_factor=cfg.data.get("downsample_factor", 2),
                 output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
@@ -366,7 +365,7 @@ def get_model(
                 loss_factory=loss_factories["supervised"],
                 backbone=cfg.model.backbone,
                 pretrained=backbone_pretrained,
-                downsample_factor=cfg.data.downsample_factor,
+                downsample_factor=cfg.data.get("downsample_factor", 2),
                 output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
@@ -400,7 +399,7 @@ def get_model(
                 loss_factory_unsupervised=loss_factories["unsupervised"],
                 backbone=cfg.model.backbone,
                 pretrained=backbone_pretrained,
-                downsample_factor=cfg.data.downsample_factor,
+                downsample_factor=cfg.data.get("downsample_factor", 2),
                 output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
@@ -414,7 +413,7 @@ def get_model(
                 loss_factory_unsupervised=loss_factories["unsupervised"],
                 backbone=cfg.model.backbone,
                 pretrained=backbone_pretrained,
-                downsample_factor=cfg.data.downsample_factor,
+                downsample_factor=cfg.data.get("downsample_factor", 2),
                 output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
                 lr_scheduler=lr_scheduler,
@@ -675,7 +674,6 @@ def compute_metrics_single(
             # re-raise if this is not the PCA error this try is intended to swallow
             if not "cannot fit PCA" in str(e):
                 raise e
-
 
     if "pca_multiview" in metrics_to_compute:
         # build pca object

@@ -16,8 +16,6 @@ data:
   view_names:
     - top
     - bot
-  # downsample heatmaps: 2 | 3
-  downsample_factor: 2
   # total number of keypoints
   num_keypoints: 7
   # keypoint names
@@ -105,8 +103,6 @@ model:
   model_name: my_base_toy_model
 
 dali:
-  general:
-    seed: 123456
   base:
     train:
       sequence_length: 16 # step = sequence_length by default. done internally

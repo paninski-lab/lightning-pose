@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import torch
 
-from lightning_pose.utils.fiftyone import check_lists_equal
+from lightning_pose.apps.fiftyone import check_lists_equal
 from lightning_pose.utils.pca import KeypointPCA
 
 

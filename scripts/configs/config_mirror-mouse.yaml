@@ -9,8 +9,6 @@ data:
   video_dir: /home/zeus/content/data/mirror-mouse/videos
   # location of labels; for example script, this should be relative to `data_dir`
   csv_file: CollectedData.csv
-  # downsample heatmaps - 2 | 3
-  downsample_factor: 2
   # total number of keypoints
   num_keypoints: 17
   # keypoint names
@@ -101,8 +99,6 @@ model:
   model_name: rebuttal23a
 
 dali:
-  general:
-    seed: 123456
   base:
     train:
       sequence_length: 32 # 4 # step = sequence_length by default. done internally
