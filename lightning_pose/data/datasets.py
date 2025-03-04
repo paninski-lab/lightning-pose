@@ -235,7 +235,7 @@ class HeatmapDataset(BaseTrackingDataset):
             do_context: include additional frames of context if possible
             resize: True to add final resizing augmentation before sending data to network. This
                 can be set to False if inheritors of this class need to implement more
-                sohpisticated augmentations before resizing (e.g. 3d augmentations). Note that when
+                sophisticated augmentations before resizing (e.g. 3d augmentations). Note that when
                 this is False, it is up to the child class to perform this resizing on both images
                 and keypoints before returning a batch of data.
             uniform_heatmaps: True to force the model to output uniform heatmaps for missing data;
