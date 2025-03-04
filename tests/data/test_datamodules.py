@@ -2,7 +2,6 @@
 
 import numpy as np
 import pytest
-import torch
 from lightning.pytorch.utilities import CombinedLoader
 from torch.utils.data import RandomSampler
 
@@ -55,11 +54,6 @@ def test_base_datamodule(cfg, base_data_module):
     assert np.allclose(b1["images"], b2["images"])
     assert np.allclose(b1["keypoints"], b2["keypoints"], equal_nan=True)
 
-    # cleanup
-    del batch
-    del b1
-    del b2
-
 
 def test_heatmap_datamodule(cfg, heatmap_data_module):
 
@@ -78,9 +72,6 @@ def test_heatmap_datamodule(cfg, heatmap_data_module):
         train_size, num_targets // 2, im_height_ds, im_width_ds,
     )
     assert batch["heatmaps"].shape[2:] == heatmap_data_module.dataset.output_shape
-
-    # cleanup
-    del batch
 
 
 def test_multiview_heatmap_datamodule(cfg_multiview, multiview_heatmap_data_module):
@@ -138,11 +129,6 @@ def test_multiview_heatmap_datamodule(cfg_multiview, multiview_heatmap_data_modu
     assert np.allclose(b1["images"], b2["images"])
     assert np.allclose(b1["keypoints"], b2["keypoints"], equal_nan=True)
 
-    # cleanup
-    del batch
-    del b1
-    del b2
-
 
 def test_heatmap_datamodule_context(cfg, heatmap_data_module_context):
 
@@ -162,9 +148,6 @@ def test_heatmap_datamodule_context(cfg, heatmap_data_module_context):
         train_size, num_targets // 2, im_height_ds, im_width_ds,
     )
     assert batch["heatmaps"].shape[2:] == heatmap_data_module_context.dataset.output_shape
-
-    # cleanup
-    del batch
 
 
 def test_multiview_heatmap_datamodule_context(
@@ -188,9 +171,6 @@ def test_multiview_heatmap_datamodule_context(
     )
     assert batch["heatmaps"].shape[2:] == \
         multiview_heatmap_data_module_context.dataset.output_shape
-
-    # cleanup
-    del batch
 
 
 def test_subsampling_of_training_frames(base_dataset):
@@ -236,11 +216,6 @@ def test_subsampling_of_training_frames(base_dataset):
         train_frames = -1
         BaseDataModule(base_dataset, train_frames=train_frames)
 
-    # cleanup
-    del heatmap_module
-    del train_dataloader
-    torch.cuda.empty_cache()
-
 
 def test_base_data_module_combined(cfg, base_data_module_combined):
 
@@ -280,12 +255,6 @@ def test_base_data_module_combined(cfg, base_data_module_combined):
         image_counter += len(batch["labeled"]["keypoints"])
     assert image_counter == dataset_length
 
-    # cleanup
-    del loader
-    del batch
-
-    torch.cuda.empty_cache()  # remove tensors from gpu
-
 
 def test_heatmap_data_module_combined(cfg, heatmap_data_module_combined):
 
@@ -311,11 +280,6 @@ def test_heatmap_data_module_combined(cfg, heatmap_data_module_combined):
         train_size_labeled, num_targets // 2, im_height_ds, im_width_ds,
     )
     assert batch["unlabeled"]["frames"].shape == (train_size_unlabel, 3, im_height, im_width)
-
-    # cleanup
-    del loader
-    del batch
-    torch.cuda.empty_cache()  # remove tensors from gpu
 
 
 def test_multiview_heatmap_data_module_combined(
@@ -363,11 +327,6 @@ def test_multiview_heatmap_data_module_combined(
     assert batch["unlabeled"]["transforms"].shape == (num_views, 1, 2, 3)
     assert batch["unlabeled"]["bbox"].shape == (train_size_unlabeled, num_views * 4)
 
-    # cleanup
-    del loader
-    del batch
-    torch.cuda.empty_cache()  # remove tensors from gpu
-
 
 def test_heatmap_data_module_combined_context(cfg, heatmap_data_module_combined_context):
 
@@ -397,11 +356,6 @@ def test_heatmap_data_module_combined_context(cfg, heatmap_data_module_combined_
         train_size_labeled, num_targets // 2, im_height_ds, im_width_ds,
     )
     assert batch["unlabeled"]["frames"].shape == (train_size_unlabel, 3, im_height, im_width)
-
-    # cleanup
-    del loader
-    del batch
-    torch.cuda.empty_cache()  # remove tensors from gpu
 
 
 def test_multiview_heatmap_data_module_combined_context(
@@ -450,8 +404,3 @@ def test_multiview_heatmap_data_module_combined_context(
     )
     assert batch["unlabeled"]["transforms"].shape == (num_views, 1, 2, 3)
     assert batch["unlabeled"]["bbox"].shape == (train_size_unlabeled, num_views * 4)
-
-    # cleanup
-    del loader
-    del batch
-    torch.cuda.empty_cache()  # remove tensors from gpu
