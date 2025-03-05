@@ -1,14 +1,12 @@
 """Classes to streamline data typechecking."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypedDict, Union
+from typing import TypedDict, Union
 
-if TYPE_CHECKING:
-    import pandas as pd
-    import torch
-    from nvidia.dali.plugin.pytorch import DALIGenericIterator
-    from torchtyping import TensorType
-
+import pandas as pd
+import torch
+from nvidia.dali.plugin.pytorch import DALIGenericIterator
+from torchtyping import TensorType
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
