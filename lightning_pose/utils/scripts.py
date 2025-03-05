@@ -661,7 +661,7 @@ def compute_metrics_single(
 
         save_file = preds_file_path.with_name(preds_file_path.stem + "_pixel_error.csv")
         error_df.to_csv(save_file)
-        result.error_df = error_df
+        result.pixel_error_df = error_df
 
     if "temporal" in metrics_to_compute:
         temporal_norm_per_keypoint = temporal_norm(keypoints_pred)

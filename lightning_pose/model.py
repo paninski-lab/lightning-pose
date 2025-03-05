@@ -272,7 +272,7 @@ class Model:
         else:
             metrics = None
 
-        return self.PredictionResult(predictions=df, metrics=metrics)
+        return PredictionResult(predictions=df, metrics=metrics)
 
     def predict_on_video_file_multiview(
         self,

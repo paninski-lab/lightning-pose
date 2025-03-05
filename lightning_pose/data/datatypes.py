@@ -1,6 +1,7 @@
 """Classes to streamline data typechecking."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TypedDict, Union
 
 import pandas as pd
@@ -26,21 +27,24 @@ __all__ = [
 ]
 
 
-class PredictionResult(TypedDict):
+@dataclass
+class PredictionResult:
     predictions: pd.DataFrame
-    metrics: ComputeMetricsSingleResult | None
+    metrics: ComputeMetricsSingleResult | None = None
 
 
-class MultiviewPredictionResult(TypedDict):
+@dataclass
+class MultiviewPredictionResult:
     predictions: dict[str, pd.DataFrame]
-    metrics: dict[str, ComputeMetricsSingleResult] | None
+    metrics: dict[str, ComputeMetricsSingleResult] | None = None
 
 
-class ComputeMetricsSingleResult(TypedDict):
-    pixel_error_df: pd.DataFrame
-    temporal_norm_df: pd.DataFrame
-    pca_sv_df: pd.DataFrame
-    pca_mv_df: pd.DataFrame
+@dataclass
+class ComputeMetricsSingleResult:
+    pixel_error_df: pd.DataFrame | None = None
+    temporal_norm_df: pd.DataFrame | None = None
+    pca_sv_df: pd.DataFrame | None = None
+    pca_mv_df: pd.DataFrame | None = None
 
 
 class BaseLabeledExampleDict(TypedDict):
