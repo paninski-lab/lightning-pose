@@ -8,6 +8,11 @@ from typing import TypedDict
 import pandas as pd
 from omegaconf import DictConfig, OmegaConf
 
+from lightning_pose.data.datatypes import (
+    ComputeMetricsSingleResult,
+    PredictionResult,
+    MultiviewPredictionResult,
+)
 from lightning_pose.model_config import ModelConfig
 from lightning_pose.models import ALLOWED_MODELS
 from lightning_pose.utils import io as io_utils
@@ -116,14 +121,6 @@ class Model:
             / ("cropped_" + csv_file_path.name)
         )
 
-    class PredictionResult(TypedDict):
-        predictions: pd.DataFrame
-        metrics: pd.DataFrame
-
-    class MultiPredictionResult(TypedDict):
-        predictions: dict[str, pd.DataFrame]
-        metrics: pd.DataFrame
-
     def predict_on_label_csv(
         self,
         csv_file: str | Path,
@@ -202,14 +199,16 @@ class Model:
         )
 
         if compute_metrics:
-            compute_metrics_single(
+            metrics = compute_metrics_single(
                 cfg=cfg_pred,
                 labels_file=str(csv_file),
                 preds_file=preds_file,
                 data_module=data_module_pred,
             )
+        else:
+            metrics = None
 
-        return self.PredictionResult(predictions=df)
+        return PredictionResult(predictions=df, metrics=metrics)
 
     def predict_on_video_file(
         self,
@@ -244,7 +243,7 @@ class Model:
 
         prediction_csv_file = output_dir / f"{video_file.stem}.csv"
 
-        df = predict_video(
+        df: pd.DataFrame = predict_video(
             video_file=str(video_file),
             model=self,
             output_pred_file=str(prediction_csv_file),
@@ -264,14 +263,16 @@ class Model:
         if compute_metrics:
             # FIXME: Data module is only used for computing PCA metrics.
             data_module = _build_datamodule_pred(self.cfg)
-            compute_metrics_single(
+            metrics = compute_metrics_single(
                 cfg=self.cfg,
                 labels_file=None,
                 preds_file=str(prediction_csv_file),
                 data_module=data_module,
             )
+        else:
+            metrics = None
 
-        return self.PredictionResult(predictions=df)
+        return self.PredictionResult(predictions=df, metrics=metrics)
 
     def predict_on_video_file_multiview(
         self,
@@ -279,7 +280,7 @@ class Model:
         output_dir: str | Path | None = UNSPECIFIED,
         compute_metrics: bool = True,
         generate_labeled_video: bool = False,
-    ) -> MultiPredictionResult:
+    ) -> MultiviewPredictionResult:
         """Version of `predict_on_video_file` that gives models access to multiple camera views of each frame.
 
         Arguments:
@@ -321,7 +322,7 @@ class Model:
             for video_file in video_file_per_view
         ]
 
-        df_list = predict_video(
+        df_list: list[pd.DataFrame] = predict_video(
             video_file=list(map(str, video_file_per_view)),
             model=self,
             output_pred_file=prediction_csv_file_list,
@@ -341,15 +342,20 @@ class Model:
 
         data_module = _build_datamodule_pred(self.cfg)
         if compute_metrics:
-            for preds_file in prediction_csv_file_list:
-                compute_metrics_single(
+            metrics = {}
+            for view_name, preds_file in zip(view_names, prediction_csv_file_list):
+                metrics[view_name] = compute_metrics_single(
                     cfg=self.cfg,
                     labels_file=None,
                     preds_file=preds_file,
                     data_module=data_module,
                 )
+        else:
+            metrics = None
 
-        return self.MultiPredictionResult(predictions=df_list)
+        df_dict = {view_name: df for df in zip(view_names, df_list)}
+
+        return MultiviewPredictionResult(predictions=df_dict, metrics=metrics)
 
 
 def _build_datamodule_pred(cfg: DictConfig):

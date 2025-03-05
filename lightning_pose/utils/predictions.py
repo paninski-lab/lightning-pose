@@ -832,7 +832,6 @@ def predict_video(
     video_file: str | list[str],
     model: Model,
     output_pred_file: str | list[str] | None = None,
-    dali_settings: DictConfig | None = None,
 ) -> pd.DataFrame | list[pd.DataFrame]:
     """
     Args:
@@ -841,7 +840,6 @@ def predict_video(
         model: The model to predict with.
         output_pred_file: (optional) File to save predictions in. For multiview, a list of files (1-1 correspondance
             to cfg.data.view_names).
-        dali_settings: (optional) Overrides the config dali_settings.
     """
 
     is_multiview = not isinstance(video_file, str)
@@ -871,7 +869,7 @@ def predict_video(
     vid_pred_class = PrepareDALI(
         train_stage="predict",
         model_type=model_type,
-        dali_config=dali_settings or model.config.cfg.dali,
+        dali_config=model.config.cfg.dali,
         # Important: This will be a list of lists for multiview.
         # This will trigger dali to return multiview batches to predict_step.
         filenames=filenames,
@@ -900,7 +898,9 @@ def predict_video(
 
     # Convert to a 1-1 correspondence list similar to video_files, for multiview.
     if isinstance(preds_df, dict):
-        preds_df = [preds_df[view_name] for view_name in model.config.cfg.data.view_names]
+        preds_df = [
+            preds_df[view_name] for view_name in model.config.cfg.data.view_names
+        ]
 
     if output_pred_file is not None:
         # save the predictions to a csv; create directory if it doesn't exist

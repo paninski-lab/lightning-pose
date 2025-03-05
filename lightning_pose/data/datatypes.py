@@ -1,10 +1,14 @@
 """Classes to streamline data typechecking."""
+from __future__ import annotations
 
-from typing import TypedDict, Union
+from typing import TYPE_CHECKING, TypedDict, Union
 
-import torch
-from nvidia.dali.plugin.pytorch import DALIGenericIterator
-from torchtyping import TensorType
+if TYPE_CHECKING:
+    import pandas as pd
+    import torch
+    from nvidia.dali.plugin.pytorch import DALIGenericIterator
+    from torchtyping import TensorType
+
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -22,6 +26,23 @@ __all__ = [
     "SemiSupervisedHeatmapBatchDict",
     "SemiSupervisedDataLoaderDict",
 ]
+
+
+class PredictionResult(TypedDict):
+    predictions: pd.DataFrame
+    metrics: ComputeMetricsSingleResult | None
+
+
+class MultiviewPredictionResult(TypedDict):
+    predictions: dict[str, pd.DataFrame]
+    metrics: dict[str, ComputeMetricsSingleResult] | None
+
+
+class ComputeMetricsSingleResult(TypedDict):
+    pixel_error_df: pd.DataFrame
+    temporal_norm_df: pd.DataFrame
+    pca_sv_df: pd.DataFrame
+    pca_mv_df: pd.DataFrame
 
 
 class BaseLabeledExampleDict(TypedDict):
