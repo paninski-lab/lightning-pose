@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from typing import Callable, List, Literal, Tuple
 
+import imgaug.augmenters as iaa
 import numpy as np
 import pandas as pd
 import torch
@@ -36,9 +37,12 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         self,
         root_directory: str,
         csv_path: str,
+        image_resize_height: int,
+        image_resize_width: int,
         header_rows: list[int] | None = [0, 1, 2],
         imgaug_transform: Callable | None = None,
         do_context: bool = False,
+        resize: bool = True,
     ) -> None:
         """Initialize a dataset for regression (rather than heatmap) models.
 
@@ -56,16 +60,30 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             csv_path: path to CSV file (within root_directory). CSV file should be in the form
                 (image_path, bodypart_1_x, bodypart_1_y, ..., bodypart_n_y)
                 Note: image_path is relative to the given root_directory
+            resize_height: height to resize images before sending to network
+            resize_width: height to resize images before sending to network
             header_rows: which rows in the csv are header rows
             imgaug_transform: imgaug transform pipeline to apply to images
             do_context: include additional frames of context if possible.
+            resize: True to add final resizing augmentation before sending data to network. This
+                can be set to False if inheritors of this class need to implement more
+                sophisticated augmentations before resizing (e.g. 3d augmentations). Note that when
+                this is False, it is up to the child class to perform this resizing on both images
+                and keypoints before returning a batch of data.
 
         """
         self.root_directory = Path(root_directory)
+        self.image_resize_height = image_resize_height
+        self.image_resize_width = image_resize_width
         self.csv_path = csv_path
         self.header_rows = header_rows
-        self.imgaug_transform = imgaug_transform
         self.do_context = do_context
+        if resize:
+            imgaug_transform.add(iaa.Resize({
+                "height": image_resize_height,
+                "width": image_resize_width,
+            }))
+        self.imgaug_transform = imgaug_transform
 
         # load csv data
         if os.path.isfile(csv_path):
@@ -98,13 +116,11 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
     @property
     def height(self) -> int:
-        # assume resizing transformation is the last imgaug one
-        return self.imgaug_transform[-1].get_parameters()[0][0].value
+        return self.image_resize_height
 
     @property
     def width(self) -> int:
-        # assume resizing transformation is the last imgaug one
-        return self.imgaug_transform[-1].get_parameters()[0][1].value
+        return self.image_resize_width
 
     def __len__(self) -> int:
         return self.data_length
@@ -193,10 +209,13 @@ class HeatmapDataset(BaseTrackingDataset):
         self,
         root_directory: str,
         csv_path: str,
+        image_resize_height: int,
+        image_resize_width: int,
         header_rows: list[int] | None = [0, 1, 2],
         imgaug_transform: Callable | None = None,
         downsample_factor: Literal[1, 2, 3] = 2,
         do_context: bool = False,
+        resize: bool = True,
         uniform_heatmaps: bool = False,
     ) -> None:
         """Initialize the Heatmap Dataset.
@@ -207,19 +226,31 @@ class HeatmapDataset(BaseTrackingDataset):
                 should be in the form
                 (image_path, bodypart_1_x, bodypart_1_y, ..., bodypart_n_y)
                 Note: image_path is relative to the given root_directory
+            image_resize_height: height to resize images before sending to network
+            image_resize_width: height to resize images before sending to network
             header_rows: which rows in the csv are header rows
             imgaug_transform: imgaug transform pipeline to apply to images
             downsample_factor: factor by which to downsample original image dims to have a smaller
                 heatmap
             do_context: include additional frames of context if possible
+            resize: True to add final resizing augmentation before sending data to network. This
+                can be set to False if inheritors of this class need to implement more
+                sophisticated augmentations before resizing (e.g. 3d augmentations). Note that when
+                this is False, it is up to the child class to perform this resizing on both images
+                and keypoints before returning a batch of data.
+            uniform_heatmaps: True to force the model to output uniform heatmaps for missing data;
+                False will output all-zero heatmaps
 
         """
         super().__init__(
             root_directory=root_directory,
             csv_path=csv_path,
+            image_resize_height=image_resize_height,
+            image_resize_width=image_resize_width,
             header_rows=header_rows,
             imgaug_transform=imgaug_transform,
             do_context=do_context,
+            resize=resize,
         )
 
         if self.height % 128 != 0 or self.height % 128 != 0:
@@ -310,11 +341,14 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         root_directory: str,
         csv_paths: list[str],
         view_names: list[str],
+        image_resize_height: int,
+        image_resize_width: int,
         header_rows: list[int] | None = [0, 1, 2],
-        downsample_factor: Literal[1, 2, 3] = 2,
-        uniform_heatmaps: bool = False,
-        do_context: bool = False,
         imgaug_transform: Callable | None = None,
+        downsample_factor: Literal[1, 2, 3] = 2,
+        do_context: bool = False,
+        resize: bool = True,
+        uniform_heatmaps: bool = False,
     ) -> None:
         """Initialize the MultiViewHeatmap Dataset.
 
@@ -327,11 +361,21 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 Note: image_path is relative to the given root_directory
                 we suggest that these CSV files start with the view numbers
             view_names: a list of integers with the view numbers
+            image_resize_height: height to resize images before sending to network
+            image_resize_width: height to resize images before sending to network
             header_rows: which rows in the csv are header rows
             imgaug_transform: imgaug transform pipeline to apply to images
             downsample_factor: factor by which to downsample original image dims to have a smaller
                 heatmap
             do_context: include additional frames of context if possible
+            resize: True to add final resizing augmentation before sending data to network. This
+                can be set to False if inheritors of this class need to implement more
+                sophisticated augmentations before resizing (e.g. 3d augmentations). Note that when
+                this is False, it is up to the child class to perform this resizing on both images
+                and keypoints before returning a batch of data.
+            uniform_heatmaps: True to force the model to output uniform heatmaps for missing data;
+                False will output all-zero heatmaps
+
         """
 
         if len(view_names) != len(csv_paths):
@@ -339,9 +383,19 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         self.root_directory = root_directory
         self.csv_paths = csv_paths
+        self.view_names = view_names
+        self.image_resize_height = image_resize_height
+        self.image_resize_width = image_resize_width
         self.do_context = do_context
 
+        # do this here so resizing doesn't get added multiple times when iterating over views
+        if resize:
+            imgaug_transform.add(iaa.Resize({
+                "height": image_resize_height,
+                "width": image_resize_width,
+            }))
         self.imgaug_transform = imgaug_transform
+
         self.downsample_factor = downsample_factor
         self.dataset = {}
         self.keypoint_names = {}
@@ -351,17 +405,18 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             self.dataset[view] = HeatmapDataset(
                 root_directory=root_directory,
                 csv_path=csv_path,
+                image_resize_height=image_resize_height,
+                image_resize_width=image_resize_width,
                 header_rows=header_rows,
                 imgaug_transform=imgaug_transform,
                 downsample_factor=downsample_factor,
                 do_context=do_context,
+                resize=False,
                 uniform_heatmaps=uniform_heatmaps,
             )
             self.keypoint_names[view] = self.dataset[view].keypoint_names
             self.data_length[view] = len(self.dataset[view])
             self.num_keypoints[view] = self.dataset[view].num_keypoints
-
-        self.view_names = view_names
 
         # check if all CSV files have the same number of columns
         self.num_keypoints = sum(self.num_keypoints.values())
@@ -403,12 +458,11 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
     @property
     def height(self) -> int:
-        return self.imgaug_transform[-1].get_parameters()[0][0].value
+        return self.image_resize_height
 
     @property
     def width(self) -> int:
-        # assume resizing transformation is the last imgaug one
-        return self.imgaug_transform[-1].get_parameters()[0][1].value
+        return self.image_resize_width
 
     def __len__(self) -> int:
         return self.data_length

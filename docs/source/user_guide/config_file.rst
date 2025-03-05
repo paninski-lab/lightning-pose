@@ -77,6 +77,9 @@ See the :ref:`FAQs <faq_oom>` for more information on memory management.
   * dlc-lr: dlc augmentations plus horizontal flips
   * dlc-top-down: dlc augmentations plus additional vertical and horizontal flips
 
+  You can also define custom augmentation pipelines following
+  :ref:`these instructions <custom_imgaug_pipeline>`.
+
 * ``training.train_batch_size`` (*int, default: 16*): batch size for labeled data during training
 
 * ``training.val_batch_size`` (*int, default: 32*): batch size for labeled data during validation

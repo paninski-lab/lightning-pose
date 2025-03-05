@@ -82,7 +82,6 @@ class BaseDataModule(pl.LightningDataModule):
         self.torch_seed = torch_seed
         self._setup()
 
-
     def _setup(self) -> None:
 
         datalen = self.dataset.__len__()
@@ -120,8 +119,20 @@ class BaseDataModule(pl.LightningDataModule):
 
             # only use the final resize transform for the validation and test datasets
             resize_transform = iaa.Sequential([self.dataset.imgaug_transform[-1]])
+
             self.val_dataset.dataset.imgaug_transform = resize_transform
+            if hasattr(self.val_dataset.dataset, "dataset"):
+                # this will get triggered for multiview datasets
+                print(f"val: updating children datasets with resize imgaug pipeline")
+                for view_name, dset in self.val_dataset.dataset.dataset.items():
+                    dset.imgaug_transform = resize_transform
+
             self.test_dataset.dataset.imgaug_transform = resize_transform
+            if hasattr(self.test_dataset.dataset, "dataset"):
+                # this will get triggered for multiview datasets
+                print(f"test: updating children datasets with resize imgaug pipeline")
+                for view_name, dset in self.test_dataset.dataset.dataset.items():
+                    dset.imgaug_transform = resize_transform
 
         # further subsample training data if desired
         if self.train_frames is not None:

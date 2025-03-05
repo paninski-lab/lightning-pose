@@ -14,10 +14,15 @@ import numpy as np
 import pytest
 from omegaconf import OmegaConf
 from omegaconf.errors import ValidationError
+from PIL import Image
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import BaseTrackingDataset
-from lightning_pose.utils.scripts import calculate_steps_per_epoch, get_data_module
+from lightning_pose.utils.scripts import (
+    calculate_steps_per_epoch,
+    get_data_module,
+    get_imgaug_transform,
+)
 
 
 def test_calculate_steps_per_epoch_supervised(cfg, base_dataset):
@@ -67,6 +72,153 @@ def test_calculate_steps_per_epoch_unsupervised(cfg, base_dataset, toy_data_dir)
     )
     n_batches = calculate_steps_per_epoch(base_data_module_combined)
     assert n_batches == 25 # ceil (49 / 2)
+
+
+def test_get_imgaug_transform_default(cfg, base_dataset):
+
+    cfg_tmp = copy.deepcopy(cfg)
+
+    idx = 0
+    img_name = base_dataset.image_names[idx]
+    keypoints_on_image = base_dataset.keypoints[idx]
+    file_name = os.path.join(base_dataset.root_directory, img_name)
+    image = Image.open(file_name).convert("RGB")
+
+    # default pipeline: resize only
+    cfg_tmp.training.imgaug = "default"
+    pipe = get_imgaug_transform(cfg_tmp)
+    im_0, kps_0 = pipe(
+        images=np.expand_dims(image, axis=0),
+        keypoints=np.expand_dims(keypoints_on_image, axis=0),
+    )
+    im_0 = im_0[0]
+    kps_0 = kps_0[0].reshape(-1)
+    assert im_0.shape[0] == image.size[1]  # PIL.Image.size is (width, height)
+    assert im_0.shape[1] == image.size[0]
+
+    # default pipeline: should be repeatable
+    im_1, kps_1 = pipe(
+        images=np.expand_dims(image, axis=0),
+        keypoints=np.expand_dims(keypoints_on_image, axis=0),
+    )
+    im_1 = im_1[0]
+    kps_1 = kps_1[0].reshape(-1)
+    assert np.allclose(im_0, im_1)
+    assert np.allclose(kps_0, kps_1, equal_nan=True)
+
+    # invalid pipeline: ensure error is raised
+    cfg_tmp.training.imgaug = "null"
+    with pytest.raises(NotImplementedError):
+        get_imgaug_transform(cfg_tmp)
+
+
+def test_get_imgaug_transform_dlc(cfg):
+
+    cfg_tmp = copy.deepcopy(cfg)
+
+    # dlc pipeline: should not contain flips or resizing
+    cfg_tmp.training.imgaug = "dlc"
+    pipe = get_imgaug_transform(cfg_tmp)
+    assert pipe.__str__().find("Resize") == -1
+    assert pipe.__str__().find("Fliplr") == -1
+    assert pipe.__str__().find("Flipud") == -1
+    assert pipe.__str__().find("Affine") != -1
+    assert pipe.__str__().find("MotionBlur") != -1
+    assert pipe.__str__().find("CoarseDropout") != -1
+    assert pipe.__str__().find("CoarseSalt") != -1
+    assert pipe.__str__().find("CoarsePepper") != -1
+    assert pipe.__str__().find("ElasticTransformation") != -1
+    assert pipe.__str__().find("AllChannelsHistogramEqualization") != -1
+    assert pipe.__str__().find("AllChannelsCLAHE") != -1
+    assert pipe.__str__().find("Emboss") != -1
+    assert pipe.__str__().find("CropAndPad") != -1
+
+
+def test_get_imgaug_transform_dlc_lr(cfg):
+
+    cfg_tmp = copy.deepcopy(cfg)
+
+    # dlc-lr pipeline: should not contain vertical flips or resizing
+    cfg_tmp.training.imgaug = "dlc-lr"
+    pipe = get_imgaug_transform(cfg_tmp)
+    assert pipe.__str__().find("Resize") == -1
+    assert pipe.__str__().find("Fliplr") != -1
+    assert pipe.__str__().find("Flipud") == -1
+    assert pipe.__str__().find("Affine") != -1
+    assert pipe.__str__().find("MotionBlur") != -1
+    assert pipe.__str__().find("CoarseDropout") != -1
+    assert pipe.__str__().find("CoarseSalt") != -1
+    assert pipe.__str__().find("CoarsePepper") != -1
+    assert pipe.__str__().find("ElasticTransformation") != -1
+    assert pipe.__str__().find("AllChannelsHistogramEqualization") != -1
+    assert pipe.__str__().find("AllChannelsCLAHE") != -1
+    assert pipe.__str__().find("Emboss") != -1
+    assert pipe.__str__().find("CropAndPad") != -1
+
+
+def test_get_imgaug_transform_dlc_top_down(cfg):
+
+    cfg_tmp = copy.deepcopy(cfg)
+
+    # dlc pipeline: should contain vertical and horizontal flips, no resizing
+    cfg_tmp.training.imgaug = "dlc-top-down"
+    pipe = get_imgaug_transform(cfg_tmp)
+    assert pipe.__str__().find("Resize") == -1
+    assert pipe.__str__().find("Fliplr") != -1
+    assert pipe.__str__().find("Flipud") != -1
+    assert pipe.__str__().find("Affine") != -1
+    assert pipe.__str__().find("MotionBlur") != -1
+    assert pipe.__str__().find("CoarseDropout") != -1
+    assert pipe.__str__().find("CoarseSalt") != -1
+    assert pipe.__str__().find("CoarsePepper") != -1
+    assert pipe.__str__().find("ElasticTransformation") != -1
+    assert pipe.__str__().find("AllChannelsHistogramEqualization") != -1
+    assert pipe.__str__().find("AllChannelsCLAHE") != -1
+    assert pipe.__str__().find("Emboss") != -1
+    assert pipe.__str__().find("CropAndPad") != -1
+
+
+def test_get_imgaug_transform_custom(cfg):
+
+    cfg_tmp = copy.deepcopy(cfg)
+
+    # custom pipeline: should contain Jigsaw and MultiplyAndAddToBrightness, no ShearX
+    cfg_tmp.training.imgaug = {
+        "ShearX": {"p": 0.0, "kwargs": {"shear": (-30, 30)}},
+        "Jigsaw": {"p": 0.5, "kwargs": {"nb_rows": (3, 10), "nb_cols": (5, 8)}},
+        "MultiplyAndAddToBrightness": {"p": 1.0, "kwargs": {"mul": (0.5, 1.5), "add": (-5, 5)}},
+    }
+    pipe = get_imgaug_transform(cfg_tmp)
+    assert pipe.__str__().find("ShearX") == -1
+    assert pipe.__str__().find("Jigsaw") != -1
+    assert pipe.__str__().find("MultiplyAndAddToBrightness") != -1
+
+    # make sure lists are turned into tuples
+    cfg_tmp.training.imgaug = {
+        "Affine": {"p": 1.0, "kwargs": {"rotate": [-30, 30]}},
+    }
+    pipe = get_imgaug_transform(cfg_tmp)
+    assert pipe.__str__().find("Uniform") != -1  # uniform rotation in (-30, 30)
+    assert pipe.__str__().find("Choice") == -1  # categorical rotation from [-30, 30]
+
+    # allow args
+    cfg_tmp.training.imgaug = {
+        "Resize": {"p": 1.0, "args": ({"height": 256, "width": 256},), "kwargs": {}},
+    }
+    pipe = get_imgaug_transform(cfg_tmp)
+    assert pipe.__str__().find("Resize") != -1
+
+    # allow no p, args, kwargs
+    cfg_tmp.training.imgaug = {"FastSnowyLandscape": {}}
+    pipe = get_imgaug_transform(cfg_tmp)
+    assert pipe.__str__().find("FastSnowyLandscape") != -1
+
+    # raise appropriate error if incorrect augmentation is specified
+    cfg_tmp.training.imgaug = {
+        "ResizeD": {"p": 1.0, "args": ({"height": 256, "width": 256},), "kwargs": {}},
+    }
+    with pytest.raises(AttributeError):
+        get_imgaug_transform(cfg_tmp)
 
 
 def _supervised_multi_gpu_cfg(cfg):

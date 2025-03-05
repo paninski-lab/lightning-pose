@@ -16,7 +16,7 @@ from omegaconf.errors import ValidationError
 from typeguard import typechecked
 
 from lightning_pose.callbacks import AnnealWeight, UnfreezeBackbone
-from lightning_pose.data.augmentations import imgaug_transform
+from lightning_pose.data.augmentations import imgaug_transform, expand_imgaug_str_to_dict
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import (
     BaseTrackingDataset,
@@ -68,7 +68,25 @@ def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
                 axes
 
     """
-    return imgaug_transform(cfg)
+    params = cfg.training.get("imgaug", "default")
+    if isinstance(params, str):
+        params_dict = expand_imgaug_str_to_dict(params)
+    elif isinstance(params, dict) or isinstance(params, DictConfig):
+        if isinstance(params, DictConfig):
+            # recursively convert Dict/ListConfigs to dicts/lists
+            params_dict = OmegaConf.to_object(params)
+        else:
+            params_dict = params.copy()
+        for transform, val in params_dict.items():
+            assert getattr(
+                iaa, transform
+            ), f"{transform} is not a valid imgaug transform"
+    else:
+        raise TypeError(
+            f"params is of type {type(params)}, must be str, dict, or DictConfig"
+        )
+
+    return imgaug_transform(params_dict)
 
 
 @typechecked
@@ -86,6 +104,8 @@ def get_dataset(
             dataset = BaseTrackingDataset(
                 root_directory=data_dir,
                 csv_path=cfg.data.csv_file,
+                image_resize_height=cfg.data.image_resize_dims.height,
+                image_resize_width=cfg.data.image_resize_dims.width,
                 imgaug_transform=imgaug_transform,
                 do_context=False,  # no context for regression models
             )
@@ -98,6 +118,8 @@ def get_dataset(
             dataset = MultiviewHeatmapDataset(
                 root_directory=data_dir,
                 csv_paths=cfg.data.csv_file,
+                image_resize_height=cfg.data.image_resize_dims.height,
+                image_resize_width=cfg.data.image_resize_dims.width,
                 view_names=list(cfg.data.view_names),
                 downsample_factor=cfg.data.get("downsample_factor", 2),
                 imgaug_transform=imgaug_transform,
@@ -108,6 +130,8 @@ def get_dataset(
             dataset = HeatmapDataset(
                 root_directory=data_dir,
                 csv_path=cfg.data.csv_file,
+                image_resize_height=cfg.data.image_resize_dims.height,
+                image_resize_width=cfg.data.image_resize_dims.width,
                 imgaug_transform=imgaug_transform,
                 downsample_factor=cfg.data.get("downsample_factor", 2),
                 do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn

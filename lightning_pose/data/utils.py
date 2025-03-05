@@ -66,6 +66,8 @@ class DataExtractor(object):
                     dataset_new = HeatmapDataset(
                         root_directory=dataset_old.root_directory,
                         csv_path=dataset_old.csv_path,
+                        image_resize_height=dataset_old.image_resize_height,
+                        image_resize_width=dataset_old.image_resize_width,
                         imgaug_transform=imgaug_new,
                         downsample_factor=dataset_old.downsample_factor,
                         do_context=dataset_old.do_context,
@@ -74,6 +76,8 @@ class DataExtractor(object):
                     dataset_new = BaseTrackingDataset(
                         root_directory=dataset_old.root_directory,
                         csv_path=dataset_old.csv_path,
+                        image_resize_height=dataset_old.image_resize_height,
+                        image_resize_width=dataset_old.image_resize_width,
                         imgaug_transform=imgaug_new,
                         do_context=dataset_old.do_context,
                     )
@@ -82,6 +86,8 @@ class DataExtractor(object):
                         root_directory=dataset_old.root_directory,
                         csv_paths=dataset_old.csv_paths,
                         view_names=dataset_old.view_names,
+                        image_resize_height=dataset_old.image_resize_height,
+                        image_resize_width=dataset_old.image_resize_width,
                         imgaug_transform=imgaug_new,
                         do_context=dataset_old.do_context,
                     )

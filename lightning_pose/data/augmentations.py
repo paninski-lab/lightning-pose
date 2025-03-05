@@ -1,7 +1,9 @@
 """Functions to build augmentation pipeline."""
 
+from typing import Any
+
 import imgaug.augmenters as iaa
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
 from typeguard import typechecked
 
 # to ignore imports for sphix-autoapidoc
@@ -11,121 +13,169 @@ __all__ = [
 
 
 @typechecked
-def imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
-    """Create simple data transform pipeline that augments images.
+def imgaug_transform(params_dict: dict | DictConfig) -> iaa.Sequential:
+    """Create simple and flexible data transform pipeline that augments images and keypoints.
 
     Args:
-        cfg: standard config file that carries around dataset info; relevant is the parameter
-            "cfg.training.imgaug" which can take on the following values:
-            - default: resizing only
-            - dlc: imgaug pipeline implemented in DLC 2.0 package
-            - dlc-top-down: `dlc` pipeline plus random flipping along both horizontal and vertical
-              axes
+        params_dict: each key must be the name of a transform importable from imgaug.augmenters,
+            e.g. "Affine", "Fliplr", etc. The value must be a dict with several optional keys:
+            - "p" (float): probability of applying transform (using imgaug.augmenters.Sometimes)
+            - "args" (list): arguments for transform
+            - "kwargs" (dict): keyword args for the transformation
+
+    Examples:
+
+        Create a pipeline with
+        - Affine transformation applied 50% of the time with rotation uniformly sampled from
+          (-25, 25) degrees
+        - MotionBlur transformation that is applied 25% of the time with a kernel size of 5 pixels
+          and blur direction uniformly sampled from (-90, 90) degrees
+
+        >>> params_dict = {
+        >>>    'Affine': {'p': 0.5, 'kwargs': {'rotate': (-25, 25)}},
+        >>>    'MotionBlur': {'p': 0.25, 'kwargs': {'k': 5, 'angle': (-90, 90)}},
+        >>> }
+
+        In a config file, this will look like:
+        >>> training:
+        >>>   imgaug:
+        >>>     Affine:
+        >>>       p: 0.5
+        >>>       kwargs:
+        >>>         rotate: [-10, 10]
+        >>>     MotionBlur:
+        >>>       p: 0.25
+        >>>       kwargs:
+        >>>         k: 5
+        >>>         angle: [-90, 90]
 
     Returns:
         imgaug pipeline
 
     """
 
-    kind = cfg.training.get("imgaug", "default")
-
     data_transform = []
 
-    if kind == "default":
+    for transform_str, args in params_dict.items():
 
-        # resizing happens below
-        print("using default image augmentation pipeline (resizing only)")
+        transform = getattr(iaa, transform_str)
+        apply_prob = args.get("p", 0.5)
+        transform_args = args.get("args", ())
+        transform_kwargs = args.get("kwargs", {})
 
-    elif kind in ["dlc", "dlc-lr", "dlc-top-down"]:
+        # make sure any lists are converted to tuples; DictConfig cannot load tuples from yaml
+        # files, but no iaa args are lists
+        for kw, arg in transform_kwargs.items():
+            if isinstance(arg, list) or isinstance(arg, ListConfig):
+                transform_kwargs[kw] = tuple(arg)
 
-        print(f"using {kind} image augmentation pipeline")
+        # add transform to pipeline
+        if apply_prob == 0.0:
+            pass
+        elif apply_prob < 1.0:
+            data_transform.append(
+                iaa.Sometimes(
+                    apply_prob,
+                    transform(*transform_args, **transform_kwargs),
+                )
+            )
+        else:
+            data_transform.append(transform(*transform_args, **transform_kwargs))
 
-        # flip horizontally/vertically
-        if kind in ["dlc-lr", "dlc-top-down"]:
-            # horizontal flip
-            data_transform.append(iaa.Fliplr(p=0.5))
-        if kind == "dlc-top-down":
-            # vertical flip
-            data_transform.append(iaa.Flipud(p=0.5))
+    return iaa.Sequential(data_transform)
 
-        apply_prob_0 = 0.5
+
+def expand_imgaug_str_to_dict(params: str) -> dict[str, Any]:
+    params_dict = {}
+    if params in ["default", "none"]:
+        pass  # no augmentations
+    elif params in ["dlc", "dlc-lr", "dlc-top-down"]:
+
+        # flip horizontally
+        if params in ["dlc-lr", "dlc-top-down"]:
+            params_dict["Fliplr"] = {"p": 1.0, "kwargs": {"p": 0.5}}
+
+        # flip vertically
+        if params in ["dlc-top-down"]:
+            params_dict["Flipud"] = {"p": 1.0, "kwargs": {"p": 0.5}}
 
         # rotate
         rotation = 25  # rotation uniformly sampled from (-rotation, +rotation)
-        data_transform.append(iaa.Sometimes(
-            0.4,
-            iaa.Affine(rotate=(-rotation, rotation))
-        ))
+        params_dict["Affine"] = {"p": 0.4, "kwargs": {"rotate": (-rotation, rotation)}}
+
         # motion blur
         k = 5  # kernel size of blur
         angle = 90  # blur direction uniformly sampled from (-angle, +angle)
-        data_transform.append(iaa.Sometimes(
-            apply_prob_0,
-            iaa.MotionBlur(k=k, angle=(-angle, angle))
-        ))
+        params_dict["MotionBlur"] = {
+            "p": 0.5,
+            "kwargs": {"k": k, "angle": (-angle, angle)},
+        }
+
         # coarse dropout
         prct = 0.02  # drop `prct` of all pixels by converting them to black pixels
         size_prct = 0.3  # drop pix on a low-res version of img that's `size_prct` of og
         per_channel = 0.5  # per_channel transformations on `per_channel` frac of images
-        data_transform.append(iaa.Sometimes(
-            apply_prob_0,
-            iaa.CoarseDropout(p=prct, size_percent=size_prct, per_channel=per_channel)
-        ))
+        params_dict["CoarseDropout"] = {
+            "p": 0.5,
+            "kwargs": {
+                "p": prct,
+                "size_percent": size_prct,
+                "per_channel": per_channel,
+            },
+        }
+
         # coarse salt and pepper
         # bright reflections can often confuse the model into thinking they are paws
-        # (which can also just be bright blobs) - so include some additional transforms that put
-        # bright blobs (and dark blobs) into the image
+        # (which can also just be bright blobs) - so include some additional transforms that
+        # put bright blobs (and dark blobs) into the image
+        # bigger chunks than coarse dropout
         prct = 0.01  # probability of changing a pixel to salt/pepper noise
-        size_prct = (0.05, 0.1)  # drop pix on a low-res version of img that's `size_prct` of og
-        data_transform.append(iaa.Sometimes(
-            apply_prob_0,
-            iaa.CoarseSalt(p=prct, size_percent=size_prct),  # bigger chunks than coarse dropout
-        ))
-        data_transform.append(iaa.Sometimes(
-            apply_prob_0,
-            iaa.CoarsePepper(p=prct, size_percent=size_prct),
-        ))
+        size_prct = (
+            0.05,
+            0.1,
+        )  # drop pix on low-res version of img that's `size_prct` of og
+        params_dict["CoarseSalt"] = {
+            "p": 0.5,
+            "kwargs": {"p": prct, "size_percent": size_prct},
+        }
+        params_dict["CoarsePepper"] = {
+            "p": 0.5,
+            "kwargs": {"p": prct, "size_percent": size_prct},
+        }
+
         # elastic transform
         alpha = (0, 10)  # controls strength of displacement
         sigma = 5  # cotnrols smoothness of displacement
-        data_transform.append(iaa.Sometimes(
-            apply_prob_0,
-            iaa.ElasticTransformation(alpha=alpha, sigma=sigma)
-        ))
+        params_dict["ElasticTransformation"] = {
+            "p": 0.5,
+            "kwargs": {"alpha": alpha, "sigma": sigma},
+        }
+
         # hist eq
-        data_transform.append(iaa.Sometimes(
-            0.1,
-            iaa.AllChannelsHistogramEqualization()
-        ))
+        params_dict["AllChannelsHistogramEqualization"] = {"p": 0.1, "kwargs": {}}
+
         # clahe (contrast limited adaptive histogram equalization) -
         # hist eq over image patches
-        data_transform.append(iaa.Sometimes(
-            0.1,
-            iaa.AllChannelsCLAHE()
-        ))
+        params_dict["AllChannelsCLAHE"] = {"p": 0.1, "kwargs": {}}
+
         # emboss
         alpha = (0, 0.5)  # overlay embossed image on original with alpha in this range
         strength = (0.5, 1.5)  # strength of embossing lies in this range
-        data_transform.append(iaa.Sometimes(
-            0.1,
-            iaa.Emboss(alpha=alpha, strength=strength)
-        ))
+        params_dict["Emboss"] = {
+            "p": 0.1,
+            "kwargs": {"alpha": alpha, "strength": strength},
+        }
+
         # crop
         crop_by = 0.15  # number of pix to crop on each side of img given as a fraction
-        data_transform.append(iaa.Sometimes(
-            0.4,
-            iaa.CropAndPad(percent=(-crop_by, crop_by), keep_size=False)
-        ))
-
+        params_dict["CropAndPad"] = {
+            "p": 0.4,
+            "kwargs": {"percent": (-crop_by, crop_by), "keep_size": False},
+        }
     else:
-        raise NotImplementedError("must choose imgaug kind from 'default', 'dlc', 'dlc-top-down'")
+        raise NotImplementedError(
+            f"cfg.training.imgaug string {params} must be in "
+            "['none', 'default', 'dlc', 'dlc-lr', 'dlc-top-down']"
+        )
 
-    # do not resize when using dynamic crop pipeline
-    if not cfg.data.get('dynamic_crop', False):
-        data_transform.append(
-            iaa.Resize({
-                "height": cfg.data.image_resize_dims.height,
-                "width": cfg.data.image_resize_dims.width}
-            ))
-
-    return iaa.Sequential(data_transform)
+    return params_dict
