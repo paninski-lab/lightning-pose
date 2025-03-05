@@ -63,11 +63,15 @@ or:
 
     model.predict_on_label_csv("path/to/csv_file.csv")
 
-API Reference:
+API Reference
+=============
 
 .. autoclass:: lightning_pose.model.Model
     :members:
     :exclude-members: __init__, from_dir2
+
+Return types
+------------
 
 .. autoclass:: lightning_pose.data.datatypes.PredictionResult
     :members:
