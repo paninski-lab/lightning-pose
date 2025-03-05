@@ -67,7 +67,19 @@ API Reference:
 
 .. autoclass:: lightning_pose.model.Model
     :members:
-    :exclude-members: __init__, PredictionResult, from_dir2
+    :exclude-members: __init__, from_dir2
+
+.. autoclass:: lightning_pose.data.datatypes.PredictionResult
+    :members:
+    :undoc-members:
+
+.. autoclass:: lightning_pose.data.datatypes.MultiviewPredictionResult
+    :members:
+    :undoc-members:
+
+.. autoclass:: lightning_pose.data.datatypes.ComputeMetricsSingleResult
+    :members:
+    :undoc-members:
 
 
 Lightning Pose Internal API
