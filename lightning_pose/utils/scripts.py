@@ -23,6 +23,7 @@ from lightning_pose.data.datasets import (
     HeatmapDataset,
     MultiviewHeatmapDataset,
 )
+from lightning_pose.data.datatypes import ComputeMetricsSingleResult
 from lightning_pose.data.utils import compute_num_train_frames, split_sizes_from_probabilities
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.metrics import (
@@ -595,7 +596,7 @@ def compute_metrics_single(
     labels_file: str | None,
     preds_file: str,
     data_module: BaseDataModule | UnlabeledDataModule | None = None,
-) -> None:
+) -> ComputeMetricsSingleResult:
     """Compute various metrics on a predictions csv file from a single view."""
     # load predictions
     pred_df = pd.read_csv(preds_file, header=[0, 1, 2], index_col=0)
@@ -642,6 +643,7 @@ def compute_metrics_single(
     ):
         metrics_to_compute += ["pca_multiview"]
 
+    result = ComputeMetricsSingleResult()
     preds_file_path = Path(preds_file)
     # compute metrics; csv files will be saved to the same directory the prdictions are stored in
     if "pixel_error" in metrics_to_compute:
@@ -656,8 +658,10 @@ def compute_metrics_single(
         # add train/val/test split
         if set is not None:
             error_df["set"] = set
+
         save_file = preds_file_path.with_name(preds_file_path.stem + "_pixel_error.csv")
         error_df.to_csv(save_file)
+        result.pixel_error_df = error_df
 
     if "temporal" in metrics_to_compute:
         temporal_norm_per_keypoint = temporal_norm(keypoints_pred)
@@ -669,6 +673,7 @@ def compute_metrics_single(
             temporal_norm_df["set"] = set
         save_file = preds_file_path.with_name(preds_file_path.stem + "_temporal_norm.csv")
         temporal_norm_df.to_csv(save_file)
+        result.temporal_norm_df = temporal_norm_df
 
     if "pca_singleview" in metrics_to_compute:
         try:
@@ -692,6 +697,8 @@ def compute_metrics_single(
                 pcasv_df["set"] = set
             save_file = preds_file_path.with_name(preds_file_path.stem + "_pca_singleview_error.csv")
             pcasv_df.to_csv(save_file)
+            result.pca_sv_df = pcasv_df
+
         except ValueError as e:
             # PCA will fail if not enough train frames.
             # skip pca metric in this case.
@@ -719,3 +726,6 @@ def compute_metrics_single(
             pcamv_df["set"] = set
         save_file = preds_file_path.with_name(preds_file_path.stem + "_pca_multiview_error.csv")
         pcamv_df.to_csv(save_file)
+        result.pca_mv_df = pcamv_df
+
+    return result

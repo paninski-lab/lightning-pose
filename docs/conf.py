@@ -74,3 +74,6 @@ default_dark_mode = True
 autodoc_default_options = {
     'special-members': '__init__',
 }
+
+# Declutters class signature by moving constructor to separate method.
+autodoc_class_signature = 'separated'

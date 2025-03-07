@@ -243,6 +243,28 @@ def check_video_paths(
     return filenames
 
 
+def collect_video_files_by_view(video_files: list[Path], view_names: list[str]) -> dict[str, Path]:
+    """Given a list of video files, matches them to views based on their filenames.
+
+    Filenames must contain their corresponding view's name, separated by the rest of the filename by
+    some non-alphanumeric delimiter. For example, mouse_top_3.mp4 is allowed, but mousetop3.mp4 is not allowed."""
+    assert len(video_files) == len(view_names), f"{len(video_files)} != {len(view_names)}"
+    video_files_by_view: dict[str, Path] = {}
+    for view_name in view_names:
+        # Search all the video_files for a match.
+        for video_file in video_files:
+            if re.search(rf"(?<!0-9a-zA-Z){re.escape(view_name)}(?![0-9a-zA-Z])", video_file.stem):
+                if view_name not in video_files_by_view:
+                    video_files_by_view[view_name] = video_file
+                else:
+                    raise ValueError(f"File matches multiple views: {video_file}")
+        # After the search if nothing was added to dict, there is a problem.
+        if view_name not in video_files_by_view:
+            raise ValueError(f"File not found for view: {view_name}")
+
+    return video_files_by_view
+
+
 @typechecked
 def get_context_img_paths(center_img_path: Path) -> list[Path]:
     """Given the path to a center image frame, return paths of 5 context frames
