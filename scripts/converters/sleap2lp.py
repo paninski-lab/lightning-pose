@@ -121,41 +121,23 @@ def extract_labels_from_pkg_slp(file_path):
                     metadata_dict = json.loads(metadata_json)
                     nodes = metadata_dict['nodes']
                     instance_names = [node['name'] for node in nodes]
-
                     keypoints = [f'{name}' for name in instance_names]
-                    columns = [
-                        'frame'
-                    ] + [
-                        f'{kp}_x' for kp in keypoints
-                    ] + [
-                        f'{kp}_y' for kp in keypoints
-                    ]
-                    scorer_row = ['scorer'] + ['lightning_tracker'] * (len(columns) - 1)
-                    bodyparts_row = ['bodyparts'] + [f'{kp}' for kp in keypoints for _ in (0, 1)]
-                    coords_row = ['coords'] + ['x', 'y'] * len(keypoints)
-
-                    labels_df = pd.DataFrame(data, columns=columns)
-                    video_base_name = os.path.basename(video_filename).split('.')[0]
-                    labels_df['frame'] = labels_df['frame'].apply(
-                        lambda x: (
-                            f"labeled-data/{video_base_name}/"
-                            f"img{str(int(x)).zfill(8)}.png"
-                        )
+                    columns = pd.MultiIndex.from_product(
+                        [["lightning_tracker"], keypoints, ["x", "y"]],
+                        names=["scorer", "bodyparts", "coords"],
                     )
-                    labels_df = labels_df.groupby('frame', as_index=False).first()
+                    video_base_name = os.path.basename(video_filename).split('.')[0]
+                    index = [
+                        f"labeled-data/{video_base_name}/img{str(int(x[0])).zfill(8)}.png"
+                        for x in data
+                    ]
+                    labels_df = pd.DataFrame([d[1:] for d in data], columns=columns, index=index)
                     data_frames.append(labels_df)
 
     if data_frames:
         # Combine all data frames into a single DataFrame
-        combined_df = pd.concat(data_frames, ignore_index=True)
-
-        # Add the scorer, bodyparts, and coords rows at the top
-        header_df = pd.DataFrame(
-            [scorer_row, bodyparts_row, coords_row],
-            columns=combined_df.columns
-        )
-        final_df = pd.concat([header_df, combined_df], ignore_index=True)
-        final_df.columns = [None] * len(final_df.columns)  # Set header to None
+        final_df_ = pd.concat(data_frames)
+        final_df = final_df_[~final_df_.index.duplicated(keep='first')]
 
         return final_df
 
