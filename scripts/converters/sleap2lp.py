@@ -21,11 +21,10 @@ import pandas as pd
 from PIL import Image
 
 
-# Functions to convert SLEAP
-def extract_frames_from_pkg_slp(file_path, base_output_dir):
+def extract_video_names_from_pkg_slp(file_path: str) -> dict:
+    """Identify video names from .pkg.slp file."""
+    video_names = {}
     with h5py.File(file_path, 'r') as hdf_file:
-        # Identify video names
-        video_names = {}
         for video_group_name in hdf_file.keys():
             if video_group_name.startswith('video'):
                 source_video_path = f'{video_group_name}/source_video'
@@ -34,6 +33,17 @@ def extract_frames_from_pkg_slp(file_path, base_output_dir):
                     source_video_dict = json.loads(source_video_json)
                     video_filename = source_video_dict['backend']['filename']
                     video_names[video_group_name] = video_filename
+    return video_names
+
+
+def extract_frames_from_pkg_slp(file_path: str, base_output_dir: str) -> None:
+    """Extract frame data from .pkg.slp file and save as png files in output directory."""
+
+    video_names = extract_video_names_from_pkg_slp(file_path)
+    if len(video_names) == 0:
+        raise RuntimeError("Could not find image data in .pkg.slp file!")
+
+    with h5py.File(file_path, 'r') as hdf_file:
 
         # Extract and save images for each video
         for video_group, video_filename in video_names.items():
@@ -55,22 +65,16 @@ def extract_frames_from_pkg_slp(file_path, base_output_dir):
                     print(f"Saved frame {frame_number} as {frame_name}")
 
 
-# Function to extract data and create the required DataFrame for multiple videos
-def extract_labels_from_pkg_slp(file_path):
+def extract_labels_from_pkg_slp(file_path: str, base_output_dir: str | None) -> pd.DataFrame:
+    """Extract label data from .pkg.slp file and save as csv file in output directory."""
+
+    video_names = extract_video_names_from_pkg_slp(file_path)
+    if len(video_names) == 0:
+        raise RuntimeError("Could not find image data in .pkg.slp file!")
+
     data_frames = []
-    scorer_row, bodyparts_row, coords_row = None, None, None
 
     with h5py.File(file_path, 'r') as hdf_file:
-        # Identify video names
-        video_names = {}
-        for video_group_name in hdf_file.keys():
-            if video_group_name.startswith('video'):
-                source_video_path = f'{video_group_name}/source_video'
-                if source_video_path in hdf_file:
-                    source_video_json = hdf_file[source_video_path].attrs['json']
-                    source_video_dict = json.loads(source_video_json)
-                    video_filename = source_video_dict['backend']['filename']
-                    video_names[video_group_name] = video_filename
 
         # Extract data for each video
         for video_group, video_filename in video_names.items():
@@ -135,35 +139,40 @@ def extract_labels_from_pkg_slp(file_path):
                     data_frames.append(labels_df)
 
     if data_frames:
-        # Combine all data frames into a single DataFrame
+
+        # combine all dataframes
         final_df_ = pd.concat(data_frames)
         final_df = final_df_[~final_df_.index.duplicated(keep='first')]
+
+        # save
+        if base_output_dir is not None:
+            final_df.to_csv(os.path.join(base_output_dir, "CollectedData.csv"))
 
         return final_df
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--slp_file", type=str)
-parser.add_argument("--lp_dir", type=str)
-args = parser.parse_args()
-slp_file = args.slp_file
-lp_dir = args.lp_dir
+if __name__ == "__main__":
 
-print(f"Converting SLEAP project located at {slp_file} to LP project located at {lp_dir}")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--slp_file", type=str)
+    parser.add_argument("--lp_dir", type=str)
+    args = parser.parse_args()
+    slp_file = args.slp_file
+    lp_dir = args.lp_dir
 
-# Check provided SLEAP path exists
-if not os.path.exists(slp_file):
-    raise FileNotFoundError(f"did not find the file {slp_file}")
+    print(f"Converting SLEAP project located at {slp_file} to LP project located at {lp_dir}")
 
-# Check paths are not the same
-if slp_file == lp_dir:
-    raise NameError("slp_file and lp_dir cannot be the same")
+    # Check provided SLEAP path exists
+    if not os.path.exists(slp_file):
+        raise FileNotFoundError(f"did not find the file {slp_file}")
 
-# Extract and save labeled data from SLEAP project
-extract_frames_from_pkg_slp(slp_file, lp_dir)
+    # Check paths are not the same
+    if slp_file == lp_dir:
+        raise NameError("slp_file and lp_dir cannot be the same")
 
-# Extract labels and create the required DataFrame
-df_all = extract_labels_from_pkg_slp(slp_file)
+    # Extract and save labeled data from SLEAP project
+    extract_frames_from_pkg_slp(slp_file, lp_dir)
 
-# Save concatenated labels
-df_all.to_csv(os.path.join(lp_dir, "CollectedData.csv"))
+    # Extract labels and create the required DataFrame
+    extract_labels_from_pkg_slp(slp_file, lp_dir)
+
