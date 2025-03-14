@@ -231,7 +231,9 @@ def _crop(args: argparse.Namespace):
     detector_cfg = OmegaConf.create(
         {
             "crop_ratio": args.crop_ratio,
-            "anchor_keypoints": args.anchor_keypoints.split(",") if args.anchor_keypoints else [],
+            "anchor_keypoints": (
+                args.anchor_keypoints.split(",") if args.anchor_keypoints else []
+            ),
         }
     )
     assert detector_cfg.crop_ratio > 1
@@ -239,9 +241,7 @@ def _crop(args: argparse.Namespace):
     for input_path in input_paths:
         if input_path.suffix == ".mp4":
             input_preds_file = model.video_preds_dir() / (input_path.stem + ".csv")
-            output_bbox_file = model.video_preds_dir() / (
-                input_path.stem + "_bbox.csv"
-            )
+            output_bbox_file = model.video_preds_dir() / (input_path.stem + "_bbox.csv")
             output_file = model.cropped_videos_dir() / ("cropped_" + input_path.name)
 
             cz.generate_cropped_video(
@@ -281,7 +281,7 @@ def _remap_preds(args: argparse.Namespace):
         input_csv_file=args.preds_file,
         input_bbox_file=args.bbox_file,
         output_csv_file=output_file,
-        mode='add',
+        mode="add",
     )
 
 
