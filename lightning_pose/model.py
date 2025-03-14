@@ -90,6 +90,10 @@ class Model:
             ckpt_file = io_utils.ckpt_path_from_base_path(
                 base_path=str(self.model_dir), model_name=self.cfg.model.model_name
             )
+            if ckpt_file is None:
+                raise FileNotFoundError(
+                    "Checkpoint file not found, have you trained for enough epochs?"
+                )
             self.model = load_model_from_checkpoint(
                 cfg=self.cfg,
                 ckpt_file=ckpt_file,
