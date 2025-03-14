@@ -511,7 +511,6 @@ def get_callbacks(
             monitor="val_supervised_loss",
             mode="min",
             filename="{epoch}-{step}-best",
-            enable_version_counter=False,
         )
         callbacks.append(ckpt_best_callback)
 
@@ -521,7 +520,6 @@ def get_callbacks(
             monitor=None,
             every_n_epochs=ckpt_every_n_epochs,
             save_top_k=-1,
-            enable_version_counter=False,
         )
         callbacks.append(ckpt_callback)
 
