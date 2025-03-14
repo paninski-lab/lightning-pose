@@ -281,6 +281,7 @@ def _remap_preds(args: argparse.Namespace):
         input_csv_file=args.preds_file,
         input_bbox_file=args.bbox_file,
         output_csv_file=output_file,
+        mode='add',
     )
 
 
