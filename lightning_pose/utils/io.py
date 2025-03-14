@@ -29,7 +29,7 @@ def ckpt_path_from_base_path(
     base_path: str,
     model_name: str,
     logging_dir_name: str = "tb_logs/",
-) -> str:
+) -> str | None:
     """Given a path to a hydra output with trained model, extract the model .ckpt file.
 
     Args:
@@ -42,23 +42,40 @@ def ckpt_path_from_base_path(
         version (int. optional):
 
     Returns:
-        str: path to model checkpoint
+        str: path to model checkpoint, or None if none found.
 
     """
     import glob
 
     model_search_path = os.path.join(
         base_path,
-        logging_dir_name,        # may change when we switch from Tensorboard
-        model_name,              # get the name string of the model (determined pre-training)
-        "version_0",             # always version_0 because enable_version_counter=False
+        logging_dir_name,  # may change when we switch from Tensorboard
+        model_name,  # get the name string of the model (determined pre-training)
+        "version_*",  # TensorBoardLogger increments versions if retraining same model.
         "checkpoints",
         "*.ckpt",
     )
-    # TODO: we're taking the last ckpt. make sure that with multiple checkpoints, this
-    # is what we want
-    model_ckpt_path = glob.glob(model_search_path)[-1]
-    return model_ckpt_path
+
+    # Find all checkpoint files
+    checkpoint_files = glob.glob(model_search_path)
+    # Return None if none were found.
+    if not checkpoint_files:
+        return None
+
+    # Get the latest version's checkpoint files.
+    ckpt_file_by_version = {}
+    for f in checkpoint_files:
+        version = re.search(r"version_(\d)", f).group(1)
+        version = int(version)
+        if version in ckpt_file_by_version:
+            raise NotImplementedError(
+                f"Multiple checkpoint files found in version directory for {f}. "
+                "Logic to select among multiple checkpoints is not yet implemented."
+            )
+        ckpt_file_by_version[version] = f
+
+    latest_version = max(ckpt_file_by_version.keys())
+    return ckpt_file_by_version[latest_version]
 
 
 @typechecked
