@@ -114,6 +114,12 @@ def _build_parser():
         "https://hydra.cc/docs/advanced/override_grammar/basic/",
     )
 
+    predict_parser.add_argument(
+    "--skip_existing",
+    action="store_true",
+    help="skip videos that already have prediction files",
+    )
+    
     post_prediction_args = predict_parser.add_argument_group("post-prediction")
     post_prediction_args.add_argument(
         "--skip_viz",
@@ -344,10 +350,10 @@ def _predict(args: argparse.Namespace):
     input_paths = [Path(p) for p in args.input_path]
 
     for p in input_paths:
-        _predict_multi_type(model, p, args.skip_viz)
+        _predict_multi_type(model, p, args.skip_viz, args.skip_existing)
 
 
-def _predict_multi_type(model: Model, path: Path, skip_viz: bool):
+def _predict_multi_type(model: Model, path: Path, skip_viz: bool, skip_existing: bool):
     if path.is_dir():
         image_files = [
             p for p in path.iterdir() if p.is_file() and p.suffix in [".png", ".jpg"]
@@ -358,12 +364,24 @@ def _predict_multi_type(model: Model, path: Path, skip_viz: bool):
             raise NotImplementedError("Predicting on image dir.")
 
         for p in video_files:
-            _predict_multi_type(model, p, skip_viz)
+            _predict_multi_type(model, p, skip_viz, skip_existing)
     elif path.suffix == ".mp4":
+        # Check if prediction file already exists
+        prediction_csv_file = model.video_preds_dir() / f"{path.stem}.csv"
+        if skip_existing and prediction_csv_file.exists():
+            print(f"Skipping {path} (prediction file already exists)")
+            return
+            
         model.predict_on_video_file(
             video_file=path, generate_labeled_video=(not skip_viz)
         )
     elif path.suffix == ".csv":
+        # Check if prediction file already exists
+        prediction_csv_file = model.image_preds_dir() / path.name / "predictions.csv"
+        if skip_existing and prediction_csv_file.exists():
+            print(f"Skipping {path} (prediction file already exists)")
+            return
+            
         model.predict_on_label_csv(
             csv_file=path,
             generate_labeled_images=False,  # TODO: implement visualization
