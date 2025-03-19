@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, open_dict
 
 __all__ = ["ModelConfig"]
 
@@ -14,6 +14,13 @@ class ModelConfig:
         return ModelConfig(OmegaConf.load(filepath))
 
     def __init__(self, cfg: DictConfig):
+        # Patch keypoint_names with keypoints in case the user
+        # is predicting on an LP App's model.
+        # https://github.com/paninski-lab/lightning-pose/issues/268
+        if "keypoints" in cfg.data and "keypoint_names" not in cfg.data:
+            with open_dict(cfg.data):
+                cfg.data.keypoint_names = cfg.data.keypoints
+                del cfg.data.keypoints
         self.cfg = cfg
 
     def is_single_view(self):
