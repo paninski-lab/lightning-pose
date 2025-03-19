@@ -78,6 +78,11 @@ training:
   rng_seed_data_pt: 0
   # rng seed for weight initialization
   rng_seed_model_pt: 0
+  # optimizer: Adam | AdamW.
+  # Recommended to use Adam for resnet backbones, and AdamW for ViT backbones.
+  optimizer: Adam
+  optimizer_params:
+    learning_rate: 1e-3
   # learning rate scheduler
   # multisteplr | [todo - reducelronplateau]
   lr_scheduler: multisteplr

@@ -4,8 +4,8 @@ from typing import Any, Literal, Union
 
 import torch
 from lightning.pytorch import LightningModule
-from omegaconf import DictConfig
-from torch.optim import Adam
+from omegaconf import DictConfig, OmegaConf
+from torch import optim
 from torch.optim.lr_scheduler import MultiStepLR
 from torchtyping import TensorType
 from typeguard import typechecked
@@ -31,8 +31,65 @@ __all__ = [
     "SemiSupervisedTrackerMixin",
 ]
 
-MULTISTEPLR_MILESTONES_DEFAULT = [100, 200, 300]
-MULTISTEPLR_GAMMA_DEFAULT = 0.5
+DEFAULT_LR_SCHEDULER_PARAMS = OmegaConf.create(
+    {
+        "milestones": [100, 200, 300],
+        "gamma": 0.5,
+    }
+)
+
+DEFAULT_OPTIMIZER_PARAMS = OmegaConf.create(
+    {
+        "learning_rate": 1e-3,
+    }
+)
+
+
+class LrNotImplementedError(NotImplementedError):
+    def __init__(self, lr_scheduler: str):
+        super(LrNotImplementedError, self).__init__(
+            "'%s' is an invalid LR scheduler. Must be multisteplr." % lr_scheduler
+        )
+        self.lr_scheduler = lr_scheduler
+
+
+class OptimizerNotImplementedError(NotImplementedError):
+    def __init__(self, optimizer: str):
+        super(LrNotImplementedError, self).__init__(
+            "'%s' is an invalid optimizer. Must be Adam or AdamW." % optimizer
+        )
+        self.optimizer = optimizer
+
+
+def _apply_defaults_for_lr_scheduler_params(
+    lr_scheduler: str, lr_scheduler_params: DictConfig | dict | None
+) -> DictConfig:
+    if lr_scheduler not in ("multistep_lr", "multisteplr"):
+        raise LrNotImplementedError(lr_scheduler)
+
+    if lr_scheduler_params is None:
+        lr_scheduler_params = DEFAULT_LR_SCHEDULER_PARAMS
+    else:
+        lr_scheduler_params = OmegaConf.merge(
+            DEFAULT_LR_SCHEDULER_PARAMS, lr_scheduler_params
+        )
+
+    return lr_scheduler_params
+
+
+def _apply_defaults_for_optimizer_params(
+    optimizer: str, optimizer_params: DictConfig | dict | None
+) -> DictConfig:
+    if optimizer not in ("Adam", "AdamW"):
+        raise OptimizerNotImplementedError(optimizer)
+
+    if optimizer_params is None:
+        optimizer_params = DEFAULT_OPTIMIZER_PARAMS
+    else:
+        optimizer_params = OmegaConf.merge(DEFAULT_OPTIMIZER_PARAMS, optimizer_params)
+
+    return optimizer_params
+
 
 # list of all allowed backbone options
 ALLOWED_BACKBONES = Literal[
@@ -155,6 +212,8 @@ class BaseFeatureExtractor(LightningModule):
         pretrained: bool = True,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: DictConfig | dict | None = None,
+        optimizer: str = "Adam",
+        optimizer_params: DictConfig | dict | None = None,
         do_context: bool = False,
         image_size: int = 256,
         model_type: Literal["heatmap", "regression"] = "heatmap",
@@ -195,7 +254,13 @@ class BaseFeatureExtractor(LightningModule):
         )
 
         self.lr_scheduler = lr_scheduler
-        self.lr_scheduler_params = lr_scheduler_params
+        self.lr_scheduler_params = _apply_defaults_for_lr_scheduler_params(
+            lr_scheduler, lr_scheduler_params
+        )
+        self.optimizer = optimizer
+        self.optimizer_params = _apply_defaults_for_optimizer_params(
+            optimizer, optimizer_params
+        )
         self.do_context = do_context
 
     def get_representations(
@@ -376,21 +441,13 @@ class BaseFeatureExtractor(LightningModule):
         return self.get_representations(images)
 
     def get_scheduler(self, optimizer):
+        if self.lr_scheduler not in ("multistep_lr", "multisteplr"):
+            raise LrNotImplementedError(self.lr_scheduler)
         # define a scheduler that reduces the base learning rate
-        if self.lr_scheduler == "multisteplr" or self.lr_scheduler == "multistep_lr":
+        milestones = self.lr_scheduler_params.milestones
+        gamma = self.lr_scheduler_params.gamma
 
-            if self.lr_scheduler_params is None:
-                milestones = MULTISTEPLR_MILESTONES_DEFAULT
-                gamma = MULTISTEPLR_GAMMA_DEFAULT
-            else:
-                milestones = self.lr_scheduler_params.get(
-                    "milestones", MULTISTEPLR_MILESTONES_DEFAULT)
-                gamma = self.lr_scheduler_params.get("gamma", MULTISTEPLR_GAMMA_DEFAULT)
-
-            scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
-
-        else:
-            raise NotImplementedError("'%s' is an invalid LR scheduler" % self.lr_scheduler)
+        scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
 
         return scheduler
 
@@ -412,7 +469,12 @@ class BaseFeatureExtractor(LightningModule):
         params = self.get_parameters()
 
         # init standard adam optimizer
-        optimizer = Adam(params, lr=1e-3)
+        if self.optimizer == "Adam":
+            optimizer = optim.Adam(params, lr=self.optimizer_params.learning_rate)
+        elif self.optimizer == "AdamW":
+            optimizer = optim.AdamW(params, lr=self.optimizer_params.learning_rate)
+        else:
+            raise OptimizerNotImplementedError(self.optimizer)
 
         # get learning rate scheduler
         scheduler = self.get_scheduler(optimizer)
