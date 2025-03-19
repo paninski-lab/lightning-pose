@@ -115,11 +115,11 @@ def _build_parser():
     )
 
     predict_parser.add_argument(
-    "--skip_existing",
-    action="store_true",
-    help="skip videos that already have prediction files",
+        "--skip_existing",
+        action="store_true",
+        help="skip videos that already have prediction files",
     )
-    
+
     post_prediction_args = predict_parser.add_argument_group("post-prediction")
     post_prediction_args.add_argument(
         "--skip_viz",
@@ -371,7 +371,7 @@ def _predict_multi_type(model: Model, path: Path, skip_viz: bool, skip_existing:
         if skip_existing and prediction_csv_file.exists():
             print(f"Skipping {path} (prediction file already exists)")
             return
-            
+
         model.predict_on_video_file(
             video_file=path, generate_labeled_video=(not skip_viz)
         )
@@ -381,7 +381,7 @@ def _predict_multi_type(model: Model, path: Path, skip_viz: bool, skip_existing:
         if skip_existing and prediction_csv_file.exists():
             print(f"Skipping {path} (prediction file already exists)")
             return
-            
+
         model.predict_on_label_csv(
             csv_file=path,
             generate_labeled_images=False,  # TODO: implement visualization
