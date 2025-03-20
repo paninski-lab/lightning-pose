@@ -228,6 +228,8 @@ class BaseFeatureExtractor(LightningModule):
         Args:
             backbone: which backbone version to use; defaults to resnet50
             pretrained: True to load weights pretrained on imagenet (torchvision models only)
+            optimizer: which optimizer class to instantiate (Adam, AdamW, more to be added in future)
+            optimizer_params: arguments to pass to optimizer
             lr_scheduler: how to schedule learning rate
             lr_scheduler_params: params for specific learning rate schedulers
             do_context: include temporal context when processing each frame
