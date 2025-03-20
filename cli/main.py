@@ -115,9 +115,9 @@ def _build_parser():
     )
 
     predict_parser.add_argument(
-        "--skip_existing",
+        "--overwrite",
         action="store_true",
-        help="skip videos that already have prediction files",
+        help="overwrite videos that already have prediction files",
     )
 
     post_prediction_args = predict_parser.add_argument_group("post-prediction")
@@ -350,7 +350,7 @@ def _predict(args: argparse.Namespace):
     input_paths = [Path(p) for p in args.input_path]
 
     for p in input_paths:
-        _predict_multi_type(model, p, args.skip_viz, args.skip_existing)
+        _predict_multi_type(model, p, args.skip_viz, not args.overwrite)
 
 
 def _predict_multi_type(model: Model, path: Path, skip_viz: bool, skip_existing: bool):
