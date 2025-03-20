@@ -143,6 +143,10 @@ See the :ref:`FAQs <faq_oom>` for more information on memory management.
 
 * ``training.rng_seed_model_pt`` (*int, default: 0*): rng seed for weight initialization of the head
 
+* ``training.optimizer`` (*str, default: Adam*): which optimizer to (Adam or AdamW)
+
+* ``training.optimizer_params.learning_rate`` (*float, default: 1e-3*): optimizer learning rate
+
 * ``training.lr_scheduler`` (*str, default: multisteplr*): reduce the learning rate by a certain
   factor after a given number of epochs (see ``training.lr_scheduler_params.multisteplr`` below)
 

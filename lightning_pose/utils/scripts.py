@@ -344,6 +344,9 @@ def get_model(
 ) -> pl.LightningModule:
     """Create model: regression or heatmap based, supervised or semi-supervised."""
 
+    optimizer = cfg.training.optimizer
+    optimizer_params = cfg.training.optimizer_params
+
     lr_scheduler = cfg.training.lr_scheduler
 
     lr_scheduler_params = OmegaConf.to_object(
@@ -366,6 +369,8 @@ def get_model(
                 backbone=cfg.model.backbone,
                 pretrained=backbone_pretrained,
                 torch_seed=cfg.training.rng_seed_model_pt,
+                optimizer=optimizer,
+                optimizer_params=optimizer_params,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
@@ -380,6 +385,8 @@ def get_model(
                 downsample_factor=cfg.data.get("downsample_factor", 2),
                 output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
+                optimizer=optimizer,
+                optimizer_params=optimizer_params,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
@@ -393,6 +400,8 @@ def get_model(
                 downsample_factor=cfg.data.get("downsample_factor", 2),
                 output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
+                optimizer=optimizer,
+                optimizer_params=optimizer_params,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
@@ -412,6 +421,8 @@ def get_model(
                 backbone=cfg.model.backbone,
                 pretrained=backbone_pretrained,
                 torch_seed=cfg.training.rng_seed_model_pt,
+                optimizer=optimizer,
+                optimizer_params=optimizer_params,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
@@ -427,6 +438,8 @@ def get_model(
                 downsample_factor=cfg.data.get("downsample_factor", 2),
                 output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
+                optimizer=optimizer,
+                optimizer_params=optimizer_params,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
@@ -441,6 +454,8 @@ def get_model(
                 downsample_factor=cfg.data.get("downsample_factor", 2),
                 output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
+                optimizer=optimizer,
+                optimizer_params=optimizer_params,
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
