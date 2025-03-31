@@ -36,4 +36,4 @@ def handle(args):
         input_bbox_file=args.bbox_file,
         output_csv_file=output_file,
         mode="add",
-    ) 
+    )

@@ -5,7 +5,8 @@ import sys
 from typing import TYPE_CHECKING
 
 from . import friendly, types
-from .commands import train, predict, crop, remap
+from .commands import COMMANDS
+
 
 def _build_parser():
     parser = friendly.ArgumentParser()
@@ -16,13 +17,12 @@ def _build_parser():
         parser_class=friendly.ArgumentSubParser,
     )
 
-    # Import and register command parsers
-    train.register_parser(subparsers)
-    predict.register_parser(subparsers)
-    crop.register_parser(subparsers)
-    remap.register_parser(subparsers)
+    # Dynamically register all available commands
+    for name, module in COMMANDS.items():
+        module.register_parser(subparsers)
 
     return parser
+
 
 def main():
     parser = _build_parser()
@@ -34,16 +34,12 @@ def main():
 
     args = parser.parse_args()
 
-    # Map commands to their handlers
-    command_handlers = {
-        "train": train.handle,
-        "predict": predict.handle,
-        "crop": crop.handle,
-        "remap": remap.handle,
-    }
+    # Get the command handler dynamically
+    command_handler = COMMANDS[args.command].handle
 
     # Execute the command
-    command_handlers[args.command](args)
+    command_handler(args)
+
 
 if __name__ == "__main__":
     main()

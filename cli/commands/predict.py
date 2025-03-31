@@ -98,17 +98,15 @@ def _predict_multi_type(model: "Model", path: Path, skip_viz: bool, overwrite: b
             _predict_multi_type(model, p, skip_viz, overwrite)
     elif path.suffix == ".mp4":
         model.predict_on_video_file(
-            video_file=path, 
-            generate_labeled_video=(not skip_viz),
-            overwrite=overwrite
+            video_file=path, generate_labeled_video=(not skip_viz), overwrite=overwrite
         )
     elif path.suffix == ".csv":
         model.predict_on_label_csv(
             csv_file=path,
             generate_labeled_images=False,  # TODO: implement visualization
-            overwrite=overwrite
+            overwrite=overwrite,
         )
     elif path.suffix in [".png", ".jpg"]:
         raise NotImplementedError("Not yet implemented: predicting on image files.")
     else:
-        pass 
+        pass

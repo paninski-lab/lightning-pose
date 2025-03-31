@@ -100,4 +100,4 @@ def handle(args):
             cfg.eval.test_videos_directory = cfg.data.video_dir
 
         os.chdir(output_dir)
-        train(cfg) 
+        train(cfg)

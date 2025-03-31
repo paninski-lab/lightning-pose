@@ -125,4 +125,4 @@ def handle(args):
                 output_csv_file=output_csv_file_path,
             )
         else:
-            raise NotImplementedError("Only mp4 and csv files are supported.") 
+            raise NotImplementedError("Only mp4 and csv files are supported.")
