@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import argparse
 import sys
-from typing import TYPE_CHECKING
 
-from . import friendly, types
+from . import friendly
 from .commands import COMMANDS
 
 

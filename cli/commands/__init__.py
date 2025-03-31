@@ -9,8 +9,3 @@ COMMANDS = {
     "crop": crop,
     "remap": remap,
 }
-
-
-def get_commands():
-    """Get all available commands."""
-    return COMMANDS
