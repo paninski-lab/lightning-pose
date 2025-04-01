@@ -1,4 +1,5 @@
 """Predict command for the lightning-pose CLI."""
+from __future__ import annotations
 
 from __future__ import annotations
 
