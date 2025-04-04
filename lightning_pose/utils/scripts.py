@@ -361,6 +361,7 @@ def get_model(
             raise RuntimeError("ViT model requires resized height and width to be equal")
 
     backbone_pretrained = cfg.model.get("backbone_pretrained", True)
+    model_path = cfg.model.get("model_path", None)
     if not semi_supervised:
         if cfg.model.model_type == "regression":
             model = RegressionTracker(
@@ -374,6 +375,7 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
+                model_path=model_path,  # pass model_path to backbone
             )
         elif cfg.model.model_type == "heatmap":
             model = HeatmapTracker(
@@ -390,6 +392,7 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
+                model_path=model_path,  # pass model_path to backbone
             )
         elif cfg.model.model_type == "heatmap_mhcrnn":
             model = HeatmapTrackerMHCRNN(
@@ -405,6 +408,7 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
+                model_path=model_path,  # pass model_path to backbone
             )
         else:
             raise NotImplementedError(
@@ -426,6 +430,7 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
+                model_path=model_path,  # pass model_path to backbone
             )
 
         elif cfg.model.model_type == "heatmap":
@@ -443,6 +448,7 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
+                model_path=model_path,  # pass model_path to backbone
             )
         elif cfg.model.model_type == "heatmap_mhcrnn":
             model = SemiSupervisedHeatmapTrackerMHCRNN(
@@ -459,6 +465,7 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
+                model_path=model_path,  # pass model_path to backbone
             )
         else:
             raise NotImplementedError(

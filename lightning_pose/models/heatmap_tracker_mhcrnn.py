@@ -49,6 +49,7 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         optimizer_params: DictConfig | dict | None = None,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: DictConfig | dict | None = None,
+        model_path: str = None,
         **kwargs: Any,
     ):
         """Initialize a DLC-like model with resnet backbone.
@@ -64,7 +65,8 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
             torch_seed: make weight initialization reproducible
             lr_scheduler: how to schedule learning rate
             lr_scheduler_params: params for specific learning rate schedulers
-                - multisteplr: milestones, gamma
+                multisteplr: milestones, gamma
+            model_path: path to model weights file
 
         """
 
@@ -90,6 +92,7 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
             optimizer_params=optimizer_params,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
+            model_path=model_path,
             do_context=True,
             **kwargs,
         )
@@ -283,6 +286,7 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
         optimizer_params: DictConfig | dict | None = None,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: DictConfig | dict | None = None,
+        model_path: str = None,
         **kwargs: Any,
     ):
         """
@@ -304,6 +308,7 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
                 multisteplr
             lr_scheduler_params: params for specific learning rate schedulers
                 multisteplr: milestones, gamma
+            model_path: path to model weights file
 
         """
         super().__init__(
@@ -318,6 +323,7 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
             optimizer_params=optimizer_params,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
+            model_path=model_path,
             **kwargs,
         )
         self.loss_factory_unsup = loss_factory_unsupervised

@@ -110,6 +110,9 @@ ALLOWED_BACKBONES = Literal[
     "efficientnet_b2",
     # "vit_h_sam",
     "vit_b_sam",
+    "vit_mae",
+    "vit_m",
+    "vit_cm"
 ]
 
 
@@ -217,6 +220,7 @@ class BaseFeatureExtractor(LightningModule):
         do_context: bool = False,
         image_size: int = 256,
         model_type: Literal["heatmap", "regression"] = "heatmap",
+        model_path: str = None,
         **kwargs: Any,
     ) -> None:
         """A CNN model that takes in images and generates features.
@@ -235,6 +239,7 @@ class BaseFeatureExtractor(LightningModule):
             do_context: include temporal context when processing each frame
             image_size: height/width of frames, for ViT models only
             model_type: type of model
+            model_path: path to model weights file
 
         """
         super().__init__()
@@ -243,7 +248,7 @@ class BaseFeatureExtractor(LightningModule):
 
         self.backbone_arch = backbone
 
-        if "sam" in self.backbone_arch:
+        if self.backbone_arch in ['vit_b_sam', 'vit_mae', 'vit_m', 'vit_cm']:
             from lightning_pose.models.backbones.vits import build_backbone
         else:
             from lightning_pose.models.backbones.torchvision import build_backbone
@@ -253,6 +258,7 @@ class BaseFeatureExtractor(LightningModule):
             pretrained=pretrained,
             model_type=model_type,  # for torchvision only
             image_size=image_size,  # for ViTs only
+            model_path=model_path,  # pass model_path to backbone
         )
 
         self.lr_scheduler = lr_scheduler

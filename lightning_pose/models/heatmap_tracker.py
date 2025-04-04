@@ -70,6 +70,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         optimizer_params: DictConfig | dict | None = None,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: DictConfig | dict | None = None,
+        model_path: str = None,
         **kwargs: Any,
     ) -> None:
         """Initialize a DLC-like model with resnet backbone.
@@ -86,6 +87,7 @@ class HeatmapTracker(BaseSupervisedTracker):
             lr_scheduler: how to schedule learning rate
             lr_scheduler_params: params for specific learning rate schedulers
                 multisteplr: milestones, gamma
+            model_path: path to model weights file
 
         """
 
@@ -99,6 +101,7 @@ class HeatmapTracker(BaseSupervisedTracker):
             optimizer_params=optimizer_params,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
+            model_path=model_path,
             **kwargs,
         )
         self.num_keypoints = num_keypoints
@@ -243,7 +246,7 @@ class HeatmapTracker(BaseSupervisedTracker):
             )
         )  # up to here results in downsample_factor=3
         n_layers_to_build = 4 - self.downsample_factor - 1
-        if self.backbone_arch in ["vit_h_sam", "vit_b_sam"]:
+        if self.backbone_arch in ["vit_h_sam", "vit_b_sam"] or "vit" in self.backbone_arch:
             n_layers_to_build = -1
         for _ in range(n_layers_to_build):
             # add upsampling layer to account for heatmap downsampling
@@ -384,6 +387,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         optimizer_params: DictConfig | dict | None = None,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: DictConfig | dict | None = None,
+        model_path: str = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -405,6 +409,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
                 multisteplr
             lr_scheduler_params: params for specific learning rate schedulers
                 multisteplr: milestones, gamma
+            model_path: path to model weights file
 
         """
         super().__init__(
@@ -419,6 +424,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             optimizer_params=optimizer_params,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
+            model_path=model_path,
             **kwargs,
         )
         self.loss_factory_unsup = loss_factory_unsupervised

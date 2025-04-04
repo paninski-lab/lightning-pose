@@ -4,6 +4,10 @@ import torch
 from typeguard import typechecked
 
 from lightning_pose.models.backbones.vit_img_encoder import ImageEncoderViT_FT
+from lightning_pose.models.backbones.vit_mae import ImageEncoderViTMAE
+import yaml
+import os
+from pathlib import Path
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -12,12 +16,13 @@ __all__ = [
 
 
 @typechecked
-def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
+def build_backbone(backbone_arch: str, image_size: int = 256, model_path: str = None, **kwargs):
     """Load backbone weights for resnet models.
 
     Args:
         backbone_arch: which backbone version/weights to use
         image_size: height/width in pixels of images (must be square)
+        model_path: path to model checkpoint file (optional)
 
     Returns:
         tuple
@@ -89,12 +94,60 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
         base.load_state_dict(new_state_dict, strict=False)
         # remove the neck in the base
         del base.neck
-
+    elif "vit" in backbone_arch and "m" in backbone_arch:
+        print(f"Loading VIT-MAE backbone from {model_path}")
+        # read config from yaml file
+        config_path = Path(__file__).parent / "config/vit_mae.yaml"
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f)
+        base = ImageEncoderViTMAE(config=config)
+        # 1. load pretrained IM MAE wights, ignore the unmatched keys
+        base.vit_mae.from_pretrained("facebook/vit-mae-base")
+        # 2. load the pretrained weights from the model_path
+        if model_path is not None:
+            ckpt_path = model_path
+            print(f"Loading VIT-MAE weights from {ckpt_path}")
+            ckpt_vit_pretrain = torch.load(ckpt_path, map_location="cpu")
+            # Create a filtered state dict for the VIT-MAE part only
+            vit_mae_state_dict = {}
+            for key, value in ckpt_vit_pretrain.items():
+                if key.startswith('vit_mae.'):
+                    model_key = key.replace('vit_mae.', '')
+                    
+                    # Skip known problematic layers with size mismatches
+                    if any(prob in model_key for prob in [
+                        'position_embeddings',
+                        'patch_embeddings.projection',
+                        'decoder_pos_embed',
+                        'decoder_pred'
+                    ]):
+                        continue
+                    
+                    # Check if shapes match before including in state dict
+                    if model_key in base.vit_mae.state_dict():
+                        if base.vit_mae.state_dict()[model_key].shape == value.shape:
+                            vit_mae_state_dict[model_key] = value        
+            # Load the filtered weights
+            base.vit_mae.load_state_dict(vit_mae_state_dict, strict=False)
+        else:
+            print("No model path provided, use default ImageNet ViT-MAE weights")
+        # 3. load neck weights from SAM
+        # ckpt_url = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth"
+        # state_dict = torch.hub.load_state_dict_from_url(ckpt_url)
+        # neck_state_dict = {}
+        # for key in state_dict:
+        #     if "neck" in key:
+        #         new_key = key.replace('image_encoder.neck.', '')
+        #         neck_state_dict[new_key] = state_dict[key]
+        # base.neck.load_state_dict(neck_state_dict, strict=True)
+        # base.train()
+        # for param in base.parameters():
+        #     param.requires_grad = True  # unfreeze all parameters for training
     else:
         raise NotImplementedError
 
     # num_fc_input_features = base.neck[-2].in_channels
     # vit models always have 768 features
     num_fc_input_features = 768
-
+    
     return base, num_fc_input_features

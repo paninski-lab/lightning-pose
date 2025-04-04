@@ -1,0 +1,42 @@
+model_class: ViT_MAE
+
+hidden_size: 768
+num_hidden_layers: 12
+num_attention_heads: 12
+intermediate_size: 3072
+hidden_act: "gelu"
+hidden_dropout_prob: 0.0
+attention_probs_dropout_prob: 0.0
+initializer_range: 0.02
+layer_norm_eps: 1.e-12
+image_size: 256 # usually 224
+patch_size: 16 # default is 16, we use large patch size
+num_channels: 3 # 3 for RGB
+qkv_bias: True
+decoder_num_attention_heads: 16
+decoder_hidden_size: 512
+decoder_num_hidden_layers: 8
+decoder_intermediate_size: 2048
+mask_ratio: 0 # 0 for no masking, usually 0.75 (MAE)
+norm_pix_loss: False
+
+embed_size: 768 # projected embedding size, used for contrastive learning
+temp_scale: False # temperature scaling for contrastive loss
+proj_type: "bn" # projection head type, linear (ln) or batchnorm (bn)
+use_whitening: False # use whitening for contrastive loss
+shuffle_group: False # shuffle embeddings for contrastive loss
+var_reg: False # use variance regularization for contrastive loss
+cov_reg: False # use covariance regularization for contrastive loss
+
+output_channels: 256 # number of output channels for lightning pose heatmap
+
+random_init: False # use random initialization instead of pretrained weights
+use_infoNCE: True # use InfoNCE loss
+infoNCE_weight: 0.03 # weight for InfoNCE loss
+use_byol: False # use BYOL loss
+byol_weight: 0.1 # weight for BYOL loss
+use_vreg: False # use variance/covariance regularization for BYOL loss
+var_weight: 0.2 # weight for variance regularization
+cov_weight: 0.1 # weight for covariance regularization
+repr_weight: 0.5 # weight for representation loss
+recon_weight: 1.0 # weight for reconstruction loss, usually 1.0
