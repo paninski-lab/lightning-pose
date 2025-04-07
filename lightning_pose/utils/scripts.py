@@ -344,8 +344,11 @@ def get_model(
 ) -> pl.LightningModule:
     """Create model: regression or heatmap based, supervised or semi-supervised."""
 
-    optimizer = cfg.training.optimizer
-    optimizer_params = cfg.training.optimizer_params
+    optimizer = cfg.training.get("optimizer", "Adam")
+    optimizer_params = cfg.training.get(
+        "optimizer_params",
+        OmegaConf.create({"learning_rate": 1e-4}),
+    )
 
     lr_scheduler = cfg.training.lr_scheduler
 
