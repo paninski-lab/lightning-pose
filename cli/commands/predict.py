@@ -1,5 +1,7 @@
 """Predict command for the lightning-pose CLI."""
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -73,18 +75,17 @@ def register_parser(subparsers):
 
 def handle(args):
     """Handle the predict command."""
-    # Import lightning_pose modules only when needed
+    # Delay this import because it's slow.
     from lightning_pose.model import Model
 
     model = Model.from_dir2(args.model_dir, hydra_overrides=args.overrides)
     input_paths = [Path(p) for p in args.input_path]
 
     for p in input_paths:
-        _predict_multi_type(model, p, args.skip_viz, args.overwrite)
+        _predict_multi_type(model, p, args.skip_viz, not args.overwrite)
 
 
-def _predict_multi_type(model: "Model", path: Path, skip_viz: bool, overwrite: bool):
-    """Handle prediction for different input types."""
+def _predict_multi_type(model: Model, path: Path, skip_viz: bool, skip_existing: bool):
     if path.is_dir():
         image_files = [
             p for p in path.iterdir() if p.is_file() and p.suffix in [".png", ".jpg"]
@@ -95,16 +96,27 @@ def _predict_multi_type(model: "Model", path: Path, skip_viz: bool, overwrite: b
             raise NotImplementedError("Predicting on image dir.")
 
         for p in video_files:
-            _predict_multi_type(model, p, skip_viz, overwrite)
+            _predict_multi_type(model, p, skip_viz, skip_existing)
     elif path.suffix == ".mp4":
+        # Check if prediction file already exists
+        prediction_csv_file = model.video_preds_dir() / f"{path.stem}.csv"
+        if skip_existing and prediction_csv_file.exists():
+            print(f"Skipping {path} (prediction file already exists)")
+            return
+
         model.predict_on_video_file(
-            video_file=path, generate_labeled_video=(not skip_viz), overwrite=overwrite
+            video_file=path, generate_labeled_video=(not skip_viz)
         )
     elif path.suffix == ".csv":
+        # Check if prediction file already exists
+        prediction_csv_file = model.image_preds_dir() / path.name / "predictions.csv"
+        if skip_existing and prediction_csv_file.exists():
+            print(f"Skipping {path} (prediction file already exists)")
+            return
+
         model.predict_on_label_csv(
             csv_file=path,
             generate_labeled_images=False,  # TODO: implement visualization
-            overwrite=overwrite,
         )
     elif path.suffix in [".png", ".jpg"]:
         raise NotImplementedError("Not yet implemented: predicting on image files.")

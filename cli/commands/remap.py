@@ -26,7 +26,6 @@ def register_parser(subparsers):
 
 def handle(args):
     """Handle the remap command."""
-    # Import lightning_pose modules only when needed
     import lightning_pose.utils.cropzoom as cz
 
     output_file = args.preds_file.with_name("remapped_" + args.preds_file.name)

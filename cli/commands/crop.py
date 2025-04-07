@@ -1,5 +1,7 @@
 """Crop command for the lightning-pose CLI."""
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -68,9 +70,8 @@ def register_parser(subparsers):
 
 def handle(args):
     """Handle the crop command."""
-    # Import lightning_pose modules only when needed
-    from lightning_pose.model import Model
     import lightning_pose.utils.cropzoom as cz
+    from lightning_pose.model import Model
 
     model_dir = args.model_dir
     model = Model.from_dir(model_dir)
