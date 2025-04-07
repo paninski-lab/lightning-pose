@@ -1,12 +1,11 @@
 """Train command for the lightning-pose CLI."""
 
+from __future__ import annotations
 import datetime
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import hydra
-from omegaconf import OmegaConf
 
 from .. import types
 
@@ -56,8 +55,7 @@ def register_parser(subparsers):
 def handle(args):
     """Handle the train command."""
     # Import lightning_pose modules only when needed
-    from lightning_pose.model import Model
-    from lightning_pose.train import train
+    import hydra
 
     if args.output_dir:
         output_dir = args.output_dir
@@ -75,6 +73,10 @@ def handle(args):
         version_base="1.1", config_dir=str(args.config_file.parent.absolute())
     ):
         cfg = hydra.compose(config_name=args.config_file.stem, overrides=args.overrides)
+
+        # Delay this import because it's slow.
+        from lightning_pose.model import Model
+        from lightning_pose.train import train
 
         # TODO: Move some aspects of directory mgmt to the train function.
         output_dir.mkdir(parents=True, exist_ok=True)

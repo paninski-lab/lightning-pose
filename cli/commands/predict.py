@@ -75,7 +75,7 @@ def register_parser(subparsers):
 
 def handle(args):
     """Handle the predict command."""
-    # Import lightning_pose modules only when needed
+    # Delay this import because it's slow.
     from lightning_pose.model import Model
 
     model = Model.from_dir2(args.model_dir, hydra_overrides=args.overrides)
