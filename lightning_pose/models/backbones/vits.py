@@ -87,10 +87,14 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
             out_chans=prompt_embed_dim,
         )
         base.load_state_dict(new_state_dict, strict=False)
+        # remove the neck in the base
+        del base.neck
 
     else:
         raise NotImplementedError
 
-    num_fc_input_features = base.neck[-2].in_channels
+    # num_fc_input_features = base.neck[-2].in_channels
+    # vit models always have 768 features
+    num_fc_input_features = 768
 
     return base, num_fc_input_features
