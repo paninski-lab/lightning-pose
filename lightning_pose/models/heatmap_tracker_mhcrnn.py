@@ -43,7 +43,6 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         backbone: ALLOWED_BACKBONES = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
-        output_shape: tuple | None = None,  # change
         torch_seed: int = 123,
         optimizer: str = "Adam",
         optimizer_params: DictConfig | dict | None = None,
@@ -60,7 +59,6 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
             downsample_factor: make heatmap smaller than original frames to save memory; subpixel
                 operations are performed for increased precision
             pretrained: True to load pretrained imagenet weights
-            output_shape: hard-coded image size to avoid dynamic shape computations
             torch_seed: make weight initialization reproducible
             lr_scheduler: how to schedule learning rate
             lr_scheduler_params: params for specific learning rate schedulers
@@ -84,7 +82,6 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
             backbone=backbone,
             downsample_factor=downsample_factor,
             pretrained=pretrained,
-            output_shape=output_shape,
             torch_seed=torch_seed,
             optimizer=optimizer,
             optimizer_params=optimizer_params,
