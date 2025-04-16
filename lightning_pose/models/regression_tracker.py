@@ -17,6 +17,7 @@ from lightning_pose.models.base import (
     BaseSupervisedTracker,
     SemiSupervisedTrackerMixin,
 )
+from lightning_pose.models.heads import LinearRegressionHead
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -80,7 +81,7 @@ class RegressionTracker(BaseSupervisedTracker):
         self.num_keypoints = num_keypoints
         self.num_targets = self.num_keypoints * 2
         self.loss_factory = loss_factory
-        self.final_layer = nn.Linear(self.num_fc_input_features, self.num_targets)
+        self.head = LinearRegressionHead(self.num_fc_input_features, self.num_targets)
         self.torch_seed = torch_seed
 
         # use this to log auxiliary information: pixel_error on labeled data
@@ -100,9 +101,7 @@ class RegressionTracker(BaseSupervisedTracker):
         # see input lines for shape of "images"
         representations = self.get_representations(images)
         # "representations" is shape (batch, features, rep_height, rep_width)
-        reps_reshaped = representations.reshape(representations.shape[0], representations.shape[1])
-        # after reshaping, is shape (batch, features)
-        out = self.final_layer(reps_reshaped)
+        out = self.head(representations)
         # "out" is shape (batch, 2 * num_keypoints)
         return out
 
