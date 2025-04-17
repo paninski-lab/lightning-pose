@@ -169,6 +169,8 @@ class HeatmapHead(nn.Module):
         self.out_channels = out_channels
         self.deconv_out_channels = deconv_out_channels
         self.downsample_factor = downsample_factor
+        # TODO: temp=1000 works for 64x64 heatmaps, need to generalize to other shapes
+        self.temperature = torch.tensor(1000.0)  # soft argmax temp
 
         n_layers = 4 - self.downsample_factor
         if self.backbone_arch in ["vit_h_sam", "vit_b_sam"]:
@@ -181,9 +183,6 @@ class HeatmapHead(nn.Module):
             n_layers=n_layers,
         )
         initialize_upsampling_layers(self.upsampling_layers)
-
-        # TODO: temp=1000 works for 64x64 heatmaps, need to generalize to other shapes
-        self.temperature = torch.tensor(1000.0)  # soft argmax temp
 
     def forward(
         self,

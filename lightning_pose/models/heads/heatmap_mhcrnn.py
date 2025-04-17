@@ -55,6 +55,14 @@ class HeatmapMHCRNNHead(nn.Module):
         """
         super().__init__()
 
+        self.backbone_arch = backbone_arch
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.deconv_out_channels = deconv_out_channels
+        self.downsample_factor = downsample_factor
+        self.upsampling_factor = upsampling_factor
+        self.temperature = torch.tensor(1000.0)  # soft argmax temp
+
         # create single-frame head
         self.head_sf = HeatmapHead(
             backbone_arch=backbone_arch,

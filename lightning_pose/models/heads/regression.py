@@ -1,6 +1,5 @@
 """Heads that produce (x, y) predictions for coordinate regression."""
 
-from lightning.pytorch import LightningModule
 from torch import nn
 from torchtyping import TensorType
 
@@ -10,7 +9,7 @@ __all__ = [
 ]
 
 
-class LinearRegressionHead(LightningModule):
+class LinearRegressionHead(nn.Module):
     """Linear regression head that converts 2D feature maps to a vector of (x, y) coordinates."""
 
     def __init__(
