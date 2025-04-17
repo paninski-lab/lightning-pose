@@ -137,6 +137,13 @@ class RegressionTracker(BaseSupervisedTracker):
         confidence = torch.zeros((predicted_keypoints.shape[0], predicted_keypoints.shape[1] // 2))
         return predicted_keypoints, confidence
 
+    def get_parameters(self):
+        params = [
+            {"params": self.backbone.parameters(), "lr": 0, "name": "backbone"},
+            {"params": self.head.parameters(), "name": "head"},
+        ]
+        return params
+
 
 @typechecked
 class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTracker):
@@ -192,7 +199,6 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
 
         # this attribute will be modified by AnnealWeight callback during training
         self.total_unsupervised_importance = torch.tensor(1.0)
-        # self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
 
     def get_loss_inputs_unlabeled(self, batch_dict: UnlabeledBatchDict) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""

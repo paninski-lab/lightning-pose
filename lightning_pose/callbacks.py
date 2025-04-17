@@ -82,12 +82,11 @@ class UnfreezeBackbone(Callback):
         optimizer = pl_module.optimizers()
         # Check our assumptions about param group indices
         assert optimizer.param_groups[0]["name"] == "backbone"
-        assert optimizer.param_groups[1]["name"].startswith("upsampling")
 
-        upsampling_lr = optimizer.param_groups[1]["lr"]
+        head_lr = optimizer.param_groups[1]["lr"]
 
         optimizer.param_groups[0]["lr"] = self._get_backbone_lr(
-            pl_module.global_step, pl_module.current_epoch, upsampling_lr
+            pl_module.global_step, pl_module.current_epoch, head_lr
         )
 
     def _get_backbone_lr(self, current_step, current_epoch, upsampling_lr):

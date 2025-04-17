@@ -454,14 +454,7 @@ class BaseFeatureExtractor(LightningModule):
         return scheduler
 
     def get_parameters(self):
-        if getattr(self, "upsampling_layers", None) is not None:
-            params = [
-                {"params": self.backbone.parameters(), "lr": 0, "name": "backbone"},
-                {"params": self.upsampling_layers.parameters(), "name": "upsampling"},
-            ]
-        else:
-            params = filter(lambda p: p.requires_grad, self.parameters())
-
+        params = filter(lambda p: p.requires_grad, self.parameters())
         return params
 
     def configure_optimizers(self) -> dict:

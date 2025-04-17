@@ -36,7 +36,7 @@ def make_upsampling_layers(
         if layer == 0:
             in_ = in_channels // 4  # division by 4 to account for PixelShuffle layer
             out_ = int_channels
-        elif layer == n_layers_to_build - 1:
+        elif layer == n_layers - 1:
             in_ = int_channels if n_layers > 1 else in_channels // 4
             out_ = out_channels
         else:
