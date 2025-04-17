@@ -99,7 +99,7 @@ class HeatmapMHCRNNHead(nn.Module):
 
         num_frames = batch_shape[0]
 
-        if len(shape) == 5 and is_multiview:
+        if len(batch_shape) == 5 and is_multiview:
             # put view info back in batch so we can properly extract heatmaps
             shape_r = features.shape
             num_frames -= 4  # we lose the first/last 2 frames of unlabeled batch due to context
