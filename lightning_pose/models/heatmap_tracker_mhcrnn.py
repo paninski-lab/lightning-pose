@@ -161,7 +161,7 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
             )
 
         # get two heatmaps for each representation (single frame, multi-frame)
-        heatmaps_sf, heatmaps_mf = self.head(representations, shape)
+        heatmaps_sf, heatmaps_mf = self.head(representations, shape, num_frames)
 
         return heatmaps_sf, heatmaps_mf
 

@@ -82,20 +82,28 @@ class HeatmapMHCRNNHead(nn.Module):
     def forward(
         self,
         features: TensorType["batch", "features", "rep_height", "rep_width", "frames"],
-        img_shape: torch.tensor,
+        batch_shape: torch.tensor,
+        num_frames: torch.tensor,
     ) -> Tuple[
         TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
         TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
     ]:
-        """Handle context frames then upsample to get final heatmaps."""
+        """Handle context frames then upsample to get final heatmaps.
+
+        Args:
+            features: outputs of backbone
+            batch_shape: identifies whether or not we need to do some reshaping
+            num_frames: number of valid frames; note this may be different from batch_shape[0] if
+                we are running inference rather than training, since we lose first/last 2 frames
+
+        """
 
         # permute to shape (frames, batch, features, rep_height, rep_width)
         features = torch.permute(features, (4, 0, 1, 2, 3))
         heatmaps_sf = self.head_sf(features[2])  # index 2 == middle frame
         heatmaps_mf = self.head_mf(features)
 
-        if len(img_shape) == 6 or len(img_shape) == 5:
-            num_frames = img_shape[0]
+        if len(batch_shape) == 6 or len(batch_shape) == 5:
             # reshape the outputs to extract the view dimension
             heatmaps_sf = heatmaps_sf.reshape(
                 num_frames, -1, heatmaps_sf.shape[-2], heatmaps_sf.shape[-1]

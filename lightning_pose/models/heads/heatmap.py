@@ -174,7 +174,7 @@ class HeatmapHead(nn.Module):
 
         n_layers = 4 - self.downsample_factor
         if self.backbone_arch in ["vit_h_sam", "vit_b_sam"]:
-            n_layers = -1
+            n_layers -= 1
 
         self.upsampling_layers = make_upsampling_layers(
             in_channels=in_channels,
