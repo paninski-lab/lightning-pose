@@ -14,6 +14,9 @@ from lightning_pose.data.utils import evaluate_heatmaps_at_location
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
+    "make_upsampling_layers",
+    "initialize_upsampling_layers",
+    "upsample",
     "HeatmapHead",
 ]
 

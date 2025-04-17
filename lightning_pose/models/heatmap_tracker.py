@@ -38,7 +38,7 @@ class HeatmapTracker(BaseSupervisedTracker):
     def __init__(
         self,
         num_keypoints: int,
-        num_targets: int = None,
+        num_targets: int | None = None,
         loss_factory: LossFactory | None = None,
         backbone: ALLOWED_BACKBONES = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
@@ -67,6 +67,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         """
 
         # for reproducible weight initialization
+        self.torch_seed = torch_seed
         torch.manual_seed(torch_seed)
 
         super().__init__(
@@ -93,7 +94,6 @@ class HeatmapTracker(BaseSupervisedTracker):
             downsample_factor=self.downsample_factor,
         )
 
-        self.torch_seed = torch_seed
         self.loss_factory = loss_factory
 
         # use this to log auxiliary information: pixel_error on labeled data

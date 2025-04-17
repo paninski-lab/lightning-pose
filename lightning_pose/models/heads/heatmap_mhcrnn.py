@@ -9,6 +9,8 @@ from lightning.pytorch import LightningModule
 from torch import nn
 from torchtyping import TensorType
 
+from lightning_pose.models.heads import HeatmapHead
+
 # to ignore imports for sphix-autoapidoc
 __all__ = [
     "HeatmapMHCRNNHead",
@@ -31,20 +33,36 @@ class HeatmapMHCRNNHead(LightningModule):
 
     def __init__(
         self,
-        single_frame_head: LightningModule,
+        backbone_arch: str,
+        in_channels: int,
+        out_channels: int,
+        deconv_out_channels: int | None = None,
+        downsample_factor: int = 2,
         upsampling_factor: int = 2,
     ):
         """
 
         Args:
-            single_frame_head: single frame heatmap head
+            backbone_arch: string denoting backbone architecture; to remove in future release
+            in_channels: number of channels in the input feature map
+            out_channels: number of channels in the output heatmap (i.e. number of keypoints)
+            deconv_out_channels: output channel number for each intermediate deconv layer; defaults
+                to number of keypoints
+            downsample_factor: make heatmaps smaller than input frames by this factor; subpixel
+                operations are performed for increased precision
             upsampling_factor: upsample features before feeding to crnn
 
         """
         super().__init__()
 
-        # store single-frame head
-        self.head_sf = single_frame_head
+        # create single-frame head
+        self.head_sf = HeatmapHead(
+            backbone_arch=backbone_arch,
+            in_channels=in_channels,
+            out_channels=out_channels,
+            deconv_out_channels=deconv_out_channels,
+            downsample_factor=downsample_factor,
+        )
 
         # create multi-frame head
         self.head_mf = UpsamplingCRNN(

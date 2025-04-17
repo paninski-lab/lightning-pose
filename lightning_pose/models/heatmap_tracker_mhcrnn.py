@@ -16,9 +16,10 @@ from lightning_pose.data.datatypes import (
 )
 from lightning_pose.data.utils import undo_affine_transform_batch
 from lightning_pose.losses.factory import LossFactory
-from lightning_pose.models import HeatmapTracker
+from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.base import (
     ALLOWED_BACKBONES,
+    BaseSupervisedTracker,
     SemiSupervisedTrackerMixin,
     convert_bbox_coords,
 )
@@ -31,12 +32,13 @@ __all__ = [
 ]
 
 
-class HeatmapTrackerMHCRNN(HeatmapTracker):
+class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
     """Multi-headed Convolutional RNN network that handles context frames."""
 
     def __init__(
         self,
         num_keypoints: int,
+        num_targets: int | None = None,
         loss_factory: LossFactory | None = None,
         backbone: ALLOWED_BACKBONES = "resnet50",
         downsample_factor: Literal[1, 2, 3] = 2,
@@ -68,6 +70,7 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
             raise NotImplementedError("MHCRNN currently only implements downsample_factor=2")
 
         # for reproducible weight initialization
+        self.torch_seed = torch_seed
         torch.manual_seed(torch_seed)
 
         # for backwards compatibility
@@ -75,12 +78,8 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
             del kwargs["do_context"]
 
         super().__init__(
-            num_keypoints=num_keypoints,
-            loss_factory=loss_factory,
             backbone=backbone,
-            downsample_factor=downsample_factor,
             pretrained=pretrained,
-            torch_seed=torch_seed,
             optimizer=optimizer,
             optimizer_params=optimizer_params,
             lr_scheduler=lr_scheduler,
@@ -89,10 +88,31 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
             **kwargs,
         )
 
-        self.multihead = HeatmapMHCRNNHead(
-            single_frame_head=self.head,
+        self.num_keypoints = num_keypoints
+        if num_targets is None:
+            self.num_targets = num_keypoints * 2
+        else:
+            self.num_targets = num_targets
+        self.downsample_factor = downsample_factor
+
+        self.head = HeatmapMHCRNNHead(
+            backbone_arch=backbone,
+            in_channels=self.num_fc_input_features,
+            out_channels=self.num_keypoints,
+            downsample_factor=self.downsample_factor,
             upsampling_factor=1 if "vit" in backbone else 2,
         )
+
+        self.loss_factory = loss_factory
+
+        # use this to log auxiliary information: pixel_error on labeled data
+        self.rmse_loss = RegressionRMSELoss()
+
+        # necessary so we don't have to pass in model arguments when loading
+        # also, "loss_factory" and "loss_factory_unsupervised" cannot be pickled
+        # (loss_factory_unsupervised might come from SemiSupervisedHeatmapTracker.__super__().
+        # otherwise it's ignored, important so that it doesn't try to pickle the dali loaders)
+        self.save_hyperparameters(ignore=["loss_factory", "loss_factory_unsupervised"])
 
     def forward(
         self,
@@ -141,7 +161,7 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
             )
 
         # get two heatmaps for each representation (context, non-context)
-        heatmaps_crnn, heatmaps_sf = self.multihead(representations, shape, num_frames)
+        heatmaps_crnn, heatmaps_sf = self.head(representations, shape, num_frames)
 
         return heatmaps_crnn, heatmaps_sf
 
@@ -156,8 +176,12 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         # images -> heatmaps
         pred_heatmaps_crnn, pred_heatmaps_sf = self.forward(batch_dict["images"])
         # heatmaps -> keypoints
-        pred_keypoints_crnn, confidence_crnn = self.head.run_subpixelmaxima(pred_heatmaps_crnn)
-        pred_keypoints_sf, confidence_sf = self.head.run_subpixelmaxima(pred_heatmaps_sf)
+        pred_keypoints_crnn, confidence_crnn = self.head.head_sf.run_subpixelmaxima(
+            pred_heatmaps_crnn
+        )
+        pred_keypoints_sf, confidence_sf = self.head.head_sf.run_subpixelmaxima(
+            pred_heatmaps_sf
+        )
         return {
             "heatmaps_targ": torch.cat([batch_dict["heatmaps"], batch_dict["heatmaps"]], dim=0),
             "heatmaps_pred": torch.cat([pred_heatmaps_crnn, pred_heatmaps_sf], dim=0),
@@ -196,8 +220,12 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
         # images -> heatmaps
         pred_heatmaps_crnn, pred_heatmaps_sf = self.forward(images)
         # heatmaps -> keypoints
-        pred_keypoints_crnn, confidence_crnn = self.head.run_subpixelmaxima(pred_heatmaps_crnn)
-        pred_keypoints_sf, confidence_sf = self.head.run_subpixelmaxima(pred_heatmaps_sf)
+        pred_keypoints_crnn, confidence_crnn = self.head.head_sf.run_subpixelmaxima(
+            pred_heatmaps_crnn
+        )
+        pred_keypoints_sf, confidence_sf = self.head.head_sf.run_subpixelmaxima(
+            pred_heatmaps_sf
+        )
         # reshape keypoints to be (batch, n_keypoints, 2)
         pred_keypoints_sf = pred_keypoints_sf.reshape(pred_keypoints_sf.shape[0], -1, 2)
         pred_keypoints_crnn = pred_keypoints_crnn.reshape(pred_keypoints_crnn.shape[0], -1, 2)
@@ -219,11 +247,7 @@ class HeatmapTrackerMHCRNN(HeatmapTracker):
     def get_parameters(self):
         params = [
             {"params": self.backbone.parameters(), "name": "backbone", "lr": 0.0},
-            {
-                "params": self.multihead.head_mf.layers.parameters(),
-                "name": "upsampling_rnn",
-            },
-            {"params": self.multihead.head_sf.parameters(), "name": "upsampling_sf"},
+            {"params": self.head.parameters(), "name": "head"},
         ]
         return params
 
