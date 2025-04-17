@@ -73,10 +73,6 @@ class UnfreezeBackbone(Callback):
         self._warmed_up = False
 
     def on_train_batch_start(self, trainer, pl_module, batch, batch_idx):
-        # This callback is only applicable to heatmap models but we
-        # might encounter a RegressionModel.
-        if not hasattr(pl_module, "upsampling_layers"):
-            return
 
         # Once backbone_lr warms up to upsampling_lr, this callback does nothing.
         # Control of backbone lr is then the sole job of the main lr scheduler.

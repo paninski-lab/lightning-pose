@@ -18,6 +18,57 @@ __all__ = [
 ]
 
 
+def make_upsampling_layers(
+    in_channels: int,
+    out_channels: int,
+    int_channels: int,
+    n_layers: int,
+) -> torch.nn.Sequential:
+    # Note:
+    # https://github.com/jgraving/DeepPoseKit/blob/
+    # cecdb0c8c364ea049a3b705275ae71a2f366d4da/deepposekit/models/DeepLabCut.py#L131
+    # in their model, the pixel shuffle happens only for downsample_factor=2
+
+    upsampling_layers = []
+    upsampling_layers.append(nn.PixelShuffle(2))
+    for layer in range(n_layers):
+
+        if layer == 0:
+            in_ = in_channels // 4  # division by 4 to account for PixelShuffle layer
+            out_ = int_channels
+        elif layer == n_layers_to_build - 1:
+            in_ = int_channels if n_layers > 1 else in_channels // 4
+            out_ = out_channels
+        else:
+            in_ = int_channels
+            out_ = int_channels
+
+        upsampling_layers.append(
+            nn.ConvTranspose2d(
+                in_channels=in_,
+                out_channels=out_,
+                kernel_size=(3, 3),
+                stride=(2, 2),
+                padding=(1, 1),
+                output_padding=(1, 1),
+            )
+        )
+
+    return nn.Sequential(*upsampling_layers)
+
+
+def initialize_upsampling_layers(layers) -> None:
+    """Intialize the Conv2DTranspose upsampling layers."""
+    for index, layer in enumerate(layers):
+        if index > 0:  # we ignore the PixelShuffle
+            if isinstance(layer, nn.ConvTranspose2d):
+                torch.nn.init.xavier_uniform_(layer.weight, gain=0.01)
+                torch.nn.init.zeros_(layer.bias)
+            elif isinstance(layer, nn.BatchNorm2d):
+                torch.nn.init.constant_(layer.weight, 1.0)
+                torch.nn.init.constant_(layer.bias, 0.0)
+
+
 def upsample(
     inputs: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
 ) -> TensorType["batch", "num_keypoints", "two_x_heatmap_height", "two_x_heatmap_width"]:
@@ -72,68 +123,20 @@ class HeatmapHead(LightningModule):
         self.deconv_out_channels = deconv_out_channels
         self.downsample_factor = downsample_factor
 
-        self.upsampling_layers = self._make_upsampling_layers(
+        n_layers = 4 - self.downsample_factor
+        if self.backbone_arch in ["vit_h_sam", "vit_b_sam"]:
+            n_layers = -1
+
+        self.upsampling_layers = make_upsampling_layers(
             in_channels=in_channels,
             out_channels=out_channels,
             int_channels=deconv_out_channels or out_channels,
+            n_layers=n_layers,
         )
-        self._initialize_upsampling_layers()
+        initialize_upsampling_layers(self.upsampling_layers)
 
         # TODO: temp=1000 works for 64x64 heatmaps, need to generalize to other shapes
         self.temperature = torch.tensor(1000.0, device=self.device)  # soft argmax temp
-
-    def _make_upsampling_layers(
-        self,
-        in_channels: int,
-        out_channels: int,
-        int_channels: int,
-    ) -> torch.nn.Sequential:
-        # Note:
-        # https://github.com/jgraving/DeepPoseKit/blob/
-        # cecdb0c8c364ea049a3b705275ae71a2f366d4da/deepposekit/models/DeepLabCut.py#L131
-        # in their model, the pixel shuffle happens only for downsample_factor=2
-
-        n_layers_to_build = 4 - self.downsample_factor
-        if self.backbone_arch in ["vit_h_sam", "vit_b_sam"]:
-            n_layers_to_build = -1
-
-        upsampling_layers = []
-        upsampling_layers.append(nn.PixelShuffle(2))
-        for layer in range(n_layers_to_build):
-
-            if layer == 0:
-                in_ = in_channels // 4  # division by 4 to account for PixelShuffle layer
-                out_ = int_channels
-            elif layer == n_layers_to_build - 1:
-                in_ = int_channels if n_layers_to_build > 1 else in_channels // 4
-                out_ = out_channels
-            else:
-                in_ = int_channels
-                out_ = int_channels
-
-            upsampling_layers.append(
-                nn.ConvTranspose2d(
-                    in_channels=in_,
-                    out_channels=out_,
-                    kernel_size=(3, 3),
-                    stride=(2, 2),
-                    padding=(1, 1),
-                    output_padding=(1, 1),
-                )
-            )
-
-        return nn.Sequential(*upsampling_layers)
-
-    def _initialize_upsampling_layers(self) -> None:
-        """Intialize the Conv2DTranspose upsampling layers."""
-        for index, layer in enumerate(self.upsampling_layers):
-            if index > 0:  # we ignore the PixelShuffle
-                if isinstance(layer, nn.ConvTranspose2d):
-                    torch.nn.init.xavier_uniform_(layer.weight, gain=0.01)
-                    torch.nn.init.zeros_(layer.bias)
-                elif isinstance(layer, nn.BatchNorm2d):
-                    torch.nn.init.constant_(layer.weight, 1.0)
-                    torch.nn.init.constant_(layer.bias, 0.0)
 
     def forward(
         self,

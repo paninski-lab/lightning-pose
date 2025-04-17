@@ -4,7 +4,6 @@ from typing import Any, Tuple
 
 import torch
 from omegaconf import DictConfig
-from torch import nn
 from torchtyping import TensorType
 from typeguard import typechecked
 from typing_extensions import Literal
