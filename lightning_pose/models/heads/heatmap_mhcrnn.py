@@ -104,7 +104,7 @@ class HeatmapMHCRNNHead(nn.Module):
             shape_r = features.shape
             num_frames -= 4  # we lose the first/last 2 frames of unlabeled batch due to context
             features = features.reshape(
-                num_frames * shape[1], -1, shape_r[-3], shape_r[-2], shape_r[-1],
+                num_frames * batch_shape[1], -1, shape_r[-3], shape_r[-2], shape_r[-1],
             )
 
         # permute to shape (frames, batch, features, rep_height, rep_width)
