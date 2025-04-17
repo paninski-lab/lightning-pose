@@ -57,6 +57,7 @@ class RegressionTracker(BaseSupervisedTracker):
         """
 
         # for reproducible weight initialization
+        self.torch_seed = torch_seed
         torch.manual_seed(torch_seed)
 
         if "vit" in backbone:
@@ -81,7 +82,6 @@ class RegressionTracker(BaseSupervisedTracker):
         self.num_targets = self.num_keypoints * 2
         self.loss_factory = loss_factory
         self.head = LinearRegressionHead(self.num_fc_input_features, self.num_targets)
-        self.torch_seed = torch_seed
 
         # use this to log auxiliary information: pixel_error on labeled data
         self.rmse_loss = RegressionRMSELoss()

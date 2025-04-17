@@ -228,7 +228,7 @@ class BaseFeatureExtractor(LightningModule):
         Args:
             backbone: which backbone version to use; defaults to resnet50
             pretrained: True to load weights pretrained on imagenet (torchvision models only)
-            optimizer: which optimizer class to instantiate (Adam, AdamW, more to be added in future)
+            optimizer: optimizer class to instantiate (Adam, AdamW, more to be added in future)
             optimizer_params: arguments to pass to optimizer
             lr_scheduler: how to schedule learning rate
             lr_scheduler_params: params for specific learning rate schedulers
@@ -518,7 +518,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         loss_rmse, _ = self.rmse_loss(stage=stage, **data_dict)
 
         if stage:
-            # logging with sync_dist=True will average the metric across GPUs in 
+            # logging with sync_dist=True will average the metric across GPUs in
             # multi-GPU training. Performance overhead was found negligible.
 
             # log overall supervised loss

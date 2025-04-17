@@ -98,9 +98,11 @@ class HeatmapMHCRNNHead(nn.Module):
             num_frames = img_shape[0]
             # reshape the outputs to extract the view dimension
             heatmaps_sf = heatmaps_sf.reshape(
-                num_frames, -1, heatmaps_sf.shape[-2], heatmaps_sf.shape[-1])
+                num_frames, -1, heatmaps_sf.shape[-2], heatmaps_sf.shape[-1]
+            )
             heatmaps_mf = heatmaps_mf.reshape(
-                num_frames, -1, heatmaps_mf.shape[-2], heatmaps_mf.shape[-1])
+                num_frames, -1, heatmaps_mf.shape[-2], heatmaps_mf.shape[-1]
+            )
 
         return heatmaps_sf, heatmaps_mf
 
@@ -274,5 +276,5 @@ class UpsamplingCRNN(nn.Module):
         # average forward/backward heatmaps
         heatmaps = (x_f + x_b) / 2
 
-        # softmax temp stays 1 here
+        # softmax temp stays 1; to modify for model predictions, see HeatmapMHCRNNHead constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))

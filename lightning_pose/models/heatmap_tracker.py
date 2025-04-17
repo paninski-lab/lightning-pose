@@ -260,20 +260,20 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
     ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
-        predicted_heatmaps = self.forward(batch_dict["frames"])
+        pred_heatmaps = self.forward(batch_dict["frames"])
         # heatmaps -> keypoints
-        predicted_keypoints_augmented, confidence = self.head.run_subpixelmaxima(predicted_heatmaps)
+        pred_keypoints_augmented, confidence = self.head.run_subpixelmaxima(pred_heatmaps)
         # undo augmentation if needed
-        predicted_keypoints = undo_affine_transform_batch(
-            keypoints_augmented=predicted_keypoints_augmented,
+        pred_keypoints = undo_affine_transform_batch(
+            keypoints_augmented=pred_keypoints_augmented,
             transforms=batch_dict["transforms"],
             is_multiview=batch_dict["is_multiview"],
         )
         # keypoints -> original image coords keypoints
-        predicted_keypoints = convert_bbox_coords(batch_dict, predicted_keypoints)
+        pred_keypoints = convert_bbox_coords(batch_dict, pred_keypoints)
         return {
-            "heatmaps_pred": predicted_heatmaps,  # if augmented, augmented heatmaps
-            "keypoints_pred": predicted_keypoints,  # if augmented, original keypoints
-            "keypoints_pred_augmented": predicted_keypoints_augmented,  # match heatmaps_pred
+            "heatmaps_pred": pred_heatmaps,  # if augmented, augmented heatmaps
+            "keypoints_pred": pred_keypoints,  # if augmented, original keypoints
+            "keypoints_pred_augmented": pred_keypoints_augmented,  # match pred_heatmaps
             "confidences": confidence,
         }
