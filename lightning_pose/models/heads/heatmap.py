@@ -16,6 +16,7 @@ __all__ = [
     "make_upsampling_layers",
     "initialize_upsampling_layers",
     "upsample",
+    "run_subpixelmaxima",
     "HeatmapHead",
 ]
 
@@ -88,6 +89,50 @@ def upsample(
     return inputs_up
 
 
+def run_subpixelmaxima(
+    heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+    downsample_factor: int,
+    temperature: torch.tensor,
+) -> Tuple[TensorType["batch", "num_targets"], TensorType["batch", "num_keypoints"]]:
+    """Use soft argmax on heatmaps.
+
+    Args:
+        heatmaps: output of upsampling layers
+        downsample_factor: controls how many times upsampling needs to be performed
+        temperature: temperature parameter of softmax; higher leads to tighter peaks
+
+    Returns:
+        tuple
+            - soft argmax of shape (batch, num_targets)
+            - confidences of shape (batch, num_keypoints)
+
+    """
+
+    # upsample heatmaps
+    for _ in range(downsample_factor):
+        heatmaps = upsample(heatmaps)
+    # find soft argmax
+    softmaxes = spatial_softmax2d(heatmaps, temperature=temperature)
+    preds = spatial_expectation2d(softmaxes, normalized_coordinates=False)
+    # compute confidences as softmax value pooled around prediction
+    confidences = evaluate_heatmaps_at_location(heatmaps=softmaxes, locs=preds)
+    # fix grid offsets from upsampling
+    if downsample_factor == 1:
+        preds -= 0.5
+    elif downsample_factor == 2:
+        preds -= 1.5
+    elif downsample_factor == 3:
+        preds -= 2.5
+
+    # NOTE: we cannot use
+    # `preds.reshape(-1, self.num_targets)`
+    # This works fine for the non-multiview case
+    # This works fine for multiview training
+    # This fails during multiview inference when we might have an arbitrary number of views
+    # that we are processing (self.num_targets is tied to the labeled data)
+    return preds.reshape(-1, heatmaps.shape[1] * 2), confidences
+
+
 class HeatmapHead(nn.Module):
     """Simple deconvolution head that converts 2D feature maps to per-keypoint heatmaps.
 
@@ -149,42 +194,5 @@ class HeatmapHead(nn.Module):
         # softmax temp stays 1 here; to modify for model predictions, see constructor
         return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
 
-    def run_subpixelmaxima(
-        self,
-        heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
-    ) -> Tuple[TensorType["batch", "num_targets"], TensorType["batch", "num_keypoints"]]:
-        """Use soft argmax on heatmaps.
-
-        Args:
-            heatmaps: output of upsampling layers
-
-        Returns:
-            tuple
-                - soft argmax of shape (batch, num_targets)
-                - confidences of shape (batch, num_keypoints)
-
-        """
-
-        # upsample heatmaps
-        for _ in range(self.downsample_factor):
-            heatmaps = upsample(heatmaps)
-        # find soft argmax
-        softmaxes = spatial_softmax2d(heatmaps, temperature=self.temperature)
-        preds = spatial_expectation2d(softmaxes, normalized_coordinates=False)
-        # compute confidences as softmax value pooled around prediction
-        confidences = evaluate_heatmaps_at_location(heatmaps=softmaxes, locs=preds)
-        # fix grid offsets from upsampling
-        if self.downsample_factor == 1:
-            preds -= 0.5
-        elif self.downsample_factor == 2:
-            preds -= 1.5
-        elif self.downsample_factor == 3:
-            preds -= 2.5
-
-        # NOTE: we cannot use
-        # `preds.reshape(-1, self.num_targets)`
-        # This works fine for the non-multiview case
-        # This works fine for multiview training
-        # This fails during multiview inference when we might have an arbitrary number of views
-        # that we are processing (self.num_targets is tied to the labeled data)
-        return preds.reshape(-1, heatmaps.shape[1] * 2), confidences
+    def run_subpixelmaxima(self, heatmaps):
+        return run_subpixelmaxima(heatmaps, self.downsample_factor, self.temperature)

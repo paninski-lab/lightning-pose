@@ -3,7 +3,6 @@
 from typing import Any, Tuple, Union
 
 import torch
-from lightning.pytorch import LightningModule
 from omegaconf import DictConfig
 from torchtyping import TensorType
 from typeguard import typechecked
@@ -103,13 +102,6 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
             downsample_factor=self.downsample_factor,
             upsampling_factor=1 if "vit" in backbone else 2,
         )
-        # from lightning_pose.models.heads import HeatmapHead
-        # self.head = HeatmapHead(
-        #         backbone_arch=backbone,
-        #         in_channels=self.num_fc_input_features,
-        #         out_channels=self.num_keypoints,
-        #         downsample_factor=self.downsample_factor,
-        # )
 
         self.loss_factory = loss_factory
 
@@ -168,11 +160,10 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
                 num_frames * shape[1], -1, shape_r[-3], shape_r[-2], shape_r[-1],
             )
 
-        # get two heatmaps for each representation (context, non-context)
-        # heatmaps_crnn, heatmaps_sf = self.head(representations, shape, num_frames)
-        heatmaps_sf = self.head(representations, shape)
+        # get two heatmaps for each representation (single frame, multi-frame)
+        heatmaps_sf, heatmaps_mf = self.head(representations, shape)
 
-        return heatmaps_sf #, heatmaps_sf
+        return heatmaps_sf, heatmaps_mf
 
     def get_loss_inputs_labeled(
         self,
@@ -183,46 +174,20 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
     ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
-        pred_heatmaps_sf = self.forward(batch_dict["images"])
-        # pred_heatmaps_crnn, pred_heatmaps_sf = self.forward(batch_dict["images"])
+        pred_heatmaps_sf, pred_heatmaps_mf = self.forward(batch_dict["images"])
         # heatmaps -> keypoints
-        # pred_keypoints_crnn, confidence_crnn = self.head.head_sf.run_subpixelmaxima(
-        #     pred_heatmaps_crnn
-        # )
-        pred_keypoints_sf, confidence_sf = self.head.run_subpixelmaxima(
-            pred_heatmaps_sf
-        )
+        pred_keypoints_sf, confidence_sf = self.head.run_subpixelmaxima(pred_heatmaps_sf)
+        pred_keypoints_mf, confidence_mf = self.head.run_subpixelmaxima(pred_heatmaps_mf)
         # bounding box coords -> original image coords
         target_keypoints = convert_bbox_coords(batch_dict, batch_dict["keypoints"])
         pred_keypoints_sf = convert_bbox_coords(batch_dict, pred_keypoints_sf)
-
-        # return {
-        #     "heatmaps_targ": torch.cat([batch_dict["heatmaps"], batch_dict["heatmaps"]], dim=0),
-        #     "heatmaps_pred": torch.cat([pred_heatmaps_crnn, pred_heatmaps_sf], dim=0),
-        #     "keypoints_targ": torch.cat([batch_dict["keypoints"], batch_dict["keypoints"]], dim=0),
-        #     "keypoints_pred": torch.cat([pred_keypoints_crnn, pred_keypoints_sf], dim=0),
-        #     "confidences": torch.cat([confidence_crnn, confidence_sf], dim=0),
-        # }
-        # return {
-        #     "heatmaps_targ": torch.cat([batch_dict["heatmaps"], batch_dict["heatmaps"]], dim=0),
-        #     "heatmaps_pred": torch.cat([pred_heatmaps_sf, pred_heatmaps_sf], dim=0),
-        #     "keypoints_targ": torch.cat([batch_dict["keypoints"], batch_dict["keypoints"]], dim=0),
-        #     "keypoints_pred": torch.cat([pred_keypoints_sf, pred_keypoints_sf], dim=0),
-        #     "confidences": torch.cat([confidence_sf, confidence_sf], dim=0),
-        # }
-        # return {
-        #     "heatmaps_targ": torch.cat([batch_dict["heatmaps"], batch_dict["heatmaps"]], dim=0),
-        #     "heatmaps_pred": torch.cat([pred_heatmaps_sf, pred_heatmaps_sf], dim=0),
-        #     "keypoints_targ": torch.cat([batch_dict["keypoints"], batch_dict["keypoints"]], dim=0),
-        #     "keypoints_pred": torch.cat([pred_keypoints_sf, pred_keypoints_sf], dim=0),
-        #     "confidences": torch.cat([confidence_sf, confidence_sf], dim=0),
-        # }
+        pred_keypoints_mf = convert_bbox_coords(batch_dict, pred_keypoints_mf)
         return {
-            "heatmaps_targ": batch_dict["heatmaps"],
-            "heatmaps_pred": pred_heatmaps_sf,
-            "keypoints_targ": target_keypoints,
-            "keypoints_pred": pred_keypoints_sf,
-            "confidences": confidence_sf,
+            "heatmaps_targ": torch.cat([batch_dict["heatmaps"], batch_dict["heatmaps"]], dim=0),
+            "heatmaps_pred": torch.cat([pred_heatmaps_sf, pred_heatmaps_mf], dim=0),
+            "keypoints_targ": torch.cat([target_keypoints, target_keypoints], dim=0),
+            "keypoints_pred": torch.cat([pred_keypoints_sf, pred_keypoints_mf], dim=0),
+            "confidences": torch.cat([confidence_sf, confidence_mf], dim=0),
         }
 
     def predict_step(
@@ -253,28 +218,30 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
             images = batch_dict["frames"]
 
         # images -> heatmaps
-        pred_heatmaps_crnn, pred_heatmaps_sf = self.forward(images)
+        pred_heatmaps_sf, pred_heatmaps_mf = self.forward(images)
+
         # heatmaps -> keypoints
-        pred_keypoints_crnn, confidence_crnn = self.head.head_sf.run_subpixelmaxima(
-            pred_heatmaps_crnn
-        )
-        pred_keypoints_sf, confidence_sf = self.head.head_sf.run_subpixelmaxima(
-            pred_heatmaps_sf
-        )
+        pred_keypoints_sf, confidence_sf = self.head.run_subpixelmaxima(pred_heatmaps_sf)
+        pred_keypoints_mf, confidence_mf = self.head.run_subpixelmaxima(pred_heatmaps_mf)
+
         # reshape keypoints to be (batch, n_keypoints, 2)
         pred_keypoints_sf = pred_keypoints_sf.reshape(pred_keypoints_sf.shape[0], -1, 2)
-        pred_keypoints_crnn = pred_keypoints_crnn.reshape(pred_keypoints_crnn.shape[0], -1, 2)
+        pred_keypoints_mf = pred_keypoints_mf.reshape(pred_keypoints_mf.shape[0], -1, 2)
+
         # find higher confidence indices
-        crnn_conf_gt = torch.gt(confidence_crnn, confidence_sf)
+        mf_conf_gt = torch.gt(confidence_mf, confidence_sf)
+
         # select higher confidence indices
-        pred_keypoints_sf[crnn_conf_gt] = pred_keypoints_crnn[crnn_conf_gt]
+        pred_keypoints_sf[mf_conf_gt] = pred_keypoints_mf[mf_conf_gt]
         pred_keypoints_sf = pred_keypoints_sf.reshape(pred_keypoints_sf.shape[0], -1)
-        confidence_sf[crnn_conf_gt] = confidence_crnn[crnn_conf_gt]
+
+        confidence_sf[mf_conf_gt] = confidence_mf[mf_conf_gt]
+
         # bounding box coords -> original image coords
         pred_keypoints_sf = convert_bbox_coords(batch_dict, pred_keypoints_sf)
 
         if return_heatmaps:
-            pred_heatmaps_sf[crnn_conf_gt] = pred_heatmaps_crnn[crnn_conf_gt]
+            pred_heatmaps_sf[mf_conf_gt] = pred_heatmaps_mf[mf_conf_gt]
             return pred_keypoints_sf, confidence_sf, pred_heatmaps_sf
         else:
             return pred_keypoints_sf, confidence_sf

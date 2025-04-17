@@ -546,14 +546,6 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         batch_idx: int,
     ) -> dict[str, TensorType[(), float]]:
         """Base training step, a wrapper around the `evaluate_labeled` method."""
-        # For debugging
-        if batch_idx == 0:
-            print("Checking if autograd is enabled:", torch.is_grad_enabled())
-            for name, param in self.named_parameters():
-                if ("backbone.7.2" in name) or ("upsampling_layers.2" in name):
-                    print(f"{name}: {param.sum()}; requires grad: {param.requires_grad}")
-                    if param.grad is not None:
-                        print(param.grad.norm().item())
         loss = self.evaluate_labeled(batch_dict, "train")
         return {"loss": loss}
 

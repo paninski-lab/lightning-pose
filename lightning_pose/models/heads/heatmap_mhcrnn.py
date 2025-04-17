@@ -9,6 +9,7 @@ from torch import nn
 from torchtyping import TensorType
 
 from lightning_pose.models.heads import HeatmapHead
+from lightning_pose.models.heads.heatmap import run_subpixelmaxima
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -63,12 +64,12 @@ class HeatmapMHCRNNHead(nn.Module):
             downsample_factor=downsample_factor,
         )
 
-        # # create multi-frame head
-        # self.head_mf = UpsamplingCRNN(
-        #     num_filters_for_upsampling=self.head_sf.in_channels,
-        #     num_keypoints=self.head_sf.out_channels,
-        #     upsampling_factor=upsampling_factor,
-        # )
+        # create multi-frame head
+        self.head_mf = UpsamplingCRNN(
+            num_filters_for_upsampling=self.head_sf.in_channels,
+            num_keypoints=self.head_sf.out_channels,
+            upsampling_factor=upsampling_factor,
+        )
 
     def forward(
         self,
@@ -79,25 +80,24 @@ class HeatmapMHCRNNHead(nn.Module):
         TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
     ]:
         """Handle context frames then upsample to get final heatmaps."""
+
         # permute to shape (frames, batch, features, rep_height, rep_width)
         features = torch.permute(features, (4, 0, 1, 2, 3))
-        # heatmaps_crnn = self.head_mf(features)
         heatmaps_sf = self.head_sf(features[2])  # index 2 == middle frame
+        heatmaps_mf = self.head_mf(features)
 
         if len(img_shape) == 6 or len(img_shape) == 5:
             num_frames = img_shape[0]
             # reshape the outputs to extract the view dimension
-            # heatmaps_crnn = heatmaps_crnn.reshape(
-            #     num_frames, -1, heatmaps_crnn.shape[-2], heatmaps_crnn.shape[-1])
             heatmaps_sf = heatmaps_sf.reshape(
                 num_frames, -1, heatmaps_sf.shape[-2], heatmaps_sf.shape[-1])
+            heatmaps_mf = heatmaps_mf.reshape(
+                num_frames, -1, heatmaps_mf.shape[-2], heatmaps_mf.shape[-1])
 
-        # normalize heatmaps
-        # softmax temp stays 1 here; to modify for model predictions, see constructor
-        # heatmaps_crnn_norm = spatial_softmax2d(heatmaps_crnn, temperature=torch.tensor([1.0]))
-        heatmaps_sf_norm = spatial_softmax2d(heatmaps_sf, temperature=torch.tensor([1.0]))
+        return heatmaps_sf, heatmaps_mf
 
-        return heatmaps_sf_norm #, heatmaps_sf_norm
+    def run_subpixelmaxima(self, heatmaps):
+        return run_subpixelmaxima(heatmaps, self.downsample_factor, self.temperature)
 
 
 class UpsamplingCRNN(nn.Module):
@@ -266,4 +266,5 @@ class UpsamplingCRNN(nn.Module):
         # average forward/backward heatmaps
         heatmaps = (x_f + x_b) / 2
 
-        return heatmaps
+        # softmax temp stays 1 here
+        return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
