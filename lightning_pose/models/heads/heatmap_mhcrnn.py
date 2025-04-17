@@ -83,7 +83,7 @@ class HeatmapMHCRNNHead(nn.Module):
         self,
         features: TensorType["batch", "features", "rep_height", "rep_width", "frames"],
         batch_shape: torch.tensor,
-        num_frames: torch.tensor,
+        is_multiview: bool,
     ) -> Tuple[
         TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
         TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
@@ -93,10 +93,19 @@ class HeatmapMHCRNNHead(nn.Module):
         Args:
             features: outputs of backbone
             batch_shape: identifies whether or not we need to do some reshaping
-            num_frames: number of valid frames; note this may be different from batch_shape[0] if
-                we are running inference rather than training, since we lose first/last 2 frames
+            is_multiview: if batch has a view dimension
 
         """
+
+        num_frames = batch_shape[0]
+
+        if len(shape) == 5 and is_multiview:
+            # put view info back in batch so we can properly extract heatmaps
+            shape_r = features.shape
+            num_frames -= 4  # we lose the first/last 2 frames of unlabeled batch due to context
+            features = features.reshape(
+                num_frames * shape[1], -1, shape_r[-3], shape_r[-2], shape_r[-1],
+            )
 
         # permute to shape (frames, batch, features, rep_height, rep_width)
         features = torch.permute(features, (4, 0, 1, 2, 3))

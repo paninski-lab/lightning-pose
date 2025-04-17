@@ -146,22 +146,13 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
         """
 
         shape = images.shape
-        num_frames = shape[0]
 
         # get one representation for each frame
         representations = self.get_representations(images, is_multiview=is_multiview)
         # representations shape is (batch, features, height, width, frames)
 
-        if len(shape) == 5 and is_multiview:
-            # put view info back in batch so we can properly extract heatmaps
-            shape_r = representations.shape
-            num_frames -= 4  # we lose the first/last 2 frames of unlabeled batch due to context
-            representations = representations.reshape(
-                num_frames * shape[1], -1, shape_r[-3], shape_r[-2], shape_r[-1],
-            )
-
         # get two heatmaps for each representation (single frame, multi-frame)
-        heatmaps_sf, heatmaps_mf = self.head(representations, shape, num_frames)
+        heatmaps_sf, heatmaps_mf = self.head(representations, shape, is_multiview)
 
         return heatmaps_sf, heatmaps_mf
 
