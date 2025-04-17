@@ -73,8 +73,7 @@ class HeatmapMHCRNNHead(nn.Module):
     def forward(
         self,
         features: TensorType["batch", "features", "rep_height", "rep_width", "frames"],
-        shape: torch.tensor,
-        num_frames: torch.tensor,
+        img_shape: torch.tensor,
     ) -> Tuple[
         TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
         TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
@@ -85,7 +84,8 @@ class HeatmapMHCRNNHead(nn.Module):
         # heatmaps_crnn = self.head_mf(features)
         heatmaps_sf = self.head_sf(features[2])  # index 2 == middle frame
 
-        if len(shape) == 6 or len(shape) == 5:
+        if len(img_shape) == 6 or len(img_shape) == 5:
+            num_frames = img_shape[0]
             # reshape the outputs to extract the view dimension
             # heatmaps_crnn = heatmaps_crnn.reshape(
             #     num_frames, -1, heatmaps_crnn.shape[-2], heatmaps_crnn.shape[-1])

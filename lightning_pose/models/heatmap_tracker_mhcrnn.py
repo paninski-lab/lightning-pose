@@ -104,6 +104,13 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
             upsampling_factor=1 if "vit" in backbone else 2,
         )
 
+        for layer in self.head.head_sf.upsampling_layers:
+            try:
+                print(layer.weight[0])
+            except:
+                continue
+        BREAK
+
         self.loss_factory = loss_factory
 
         # use this to log auxiliary information: pixel_error on labeled data
@@ -163,7 +170,7 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
 
         # get two heatmaps for each representation (context, non-context)
         # heatmaps_crnn, heatmaps_sf = self.head(representations, shape, num_frames)
-        heatmaps_crnn = self.head(representations, shape, num_frames)
+        heatmaps_crnn = self.head(representations, shape)
 
         return heatmaps_crnn #, heatmaps_sf
 
