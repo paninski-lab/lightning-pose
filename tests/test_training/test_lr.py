@@ -52,7 +52,7 @@ def test_unfreeze_epoch(cfg: DictConfig, tmp_path: Path):
     # learning rate only gets logged per epoch.
     # 2 steps per epoch, [::2] gets every 2nd element, so the value per epoch.
     backbone_lr_at_epoch = reader.scalars["lr-Adam/backbone"].tolist()[::2]
-    upsampling_lr_at_epoch = reader.scalars["lr-Adam/upsampling"].tolist()[::2]
+    upsampling_lr_at_epoch = reader.scalars["lr-Adam/head"].tolist()[::2]
 
     # Pin some values I saw on tensorboard. Not perfect, but a good change detector
     # and illustrative of the difference between epoch and step-wise unfreezing.
@@ -109,7 +109,7 @@ def test_steps(cfg: DictConfig, tmp_path: Path):
     # learning rate only gets logged per epoch.
     # 2 steps per epoch, [::2] gets every 2nd element, so the value per epoch.
     backbone_lr_at_epoch = reader.scalars["lr-Adam/backbone"].tolist()[::2]
-    upsampling_lr_at_epoch = reader.scalars["lr-Adam/upsampling"].tolist()[::2]
+    upsampling_lr_at_epoch = reader.scalars["lr-Adam/head"].tolist()[::2]
 
     # Pin some values I saw on tensorboard. Not perfect, but a good change detector
     # and illustrative of the difference between epoch and step-wise unfreezing.
