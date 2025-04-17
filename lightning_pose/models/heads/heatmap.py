@@ -6,7 +6,6 @@ import torch
 from kornia.filters import filter2d
 from kornia.geometry.subpix import spatial_expectation2d, spatial_softmax2d
 from kornia.geometry.transform.pyramid import _get_pyramid_gaussian_kernel
-from lightning.pytorch import LightningModule
 from torch import nn
 from torchtyping import TensorType
 
@@ -89,7 +88,7 @@ def upsample(
     return inputs_up
 
 
-class HeatmapHead(LightningModule):
+class HeatmapHead(nn.Module):
     """Simple deconvolution head that converts 2D feature maps to per-keypoint heatmaps.
 
     This is the standard heatmap head used in the Lightning Pose package. The head is composed of
@@ -139,7 +138,7 @@ class HeatmapHead(LightningModule):
         initialize_upsampling_layers(self.upsampling_layers)
 
         # TODO: temp=1000 works for 64x64 heatmaps, need to generalize to other shapes
-        self.temperature = torch.tensor(1000.0, device=self.device)  # soft argmax temp
+        self.temperature = torch.tensor(1000.0)  # soft argmax temp
 
     def forward(
         self,

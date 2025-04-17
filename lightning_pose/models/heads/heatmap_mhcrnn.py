@@ -5,7 +5,6 @@ from typing_extensions import Literal
 
 import torch
 from kornia.geometry.subpix import spatial_softmax2d
-from lightning.pytorch import LightningModule
 from torch import nn
 from torchtyping import TensorType
 
@@ -18,7 +17,7 @@ __all__ = [
 ]
 
 
-class HeatmapMHCRNNHead(LightningModule):
+class HeatmapMHCRNNHead(nn.Module):
     """Multi-head convolutional recurrent neural network head.
 
     This head converts a sequence of 2D feature maps to per-keypoint heatmaps for the center frame.
@@ -64,12 +63,12 @@ class HeatmapMHCRNNHead(LightningModule):
             downsample_factor=downsample_factor,
         )
 
-        # create multi-frame head
-        self.head_mf = UpsamplingCRNN(
-            num_filters_for_upsampling=self.head_sf.in_channels,
-            num_keypoints=self.head_sf.out_channels,
-            upsampling_factor=upsampling_factor,
-        )
+        # # create multi-frame head
+        # self.head_mf = UpsamplingCRNN(
+        #     num_filters_for_upsampling=self.head_sf.in_channels,
+        #     num_keypoints=self.head_sf.out_channels,
+        #     upsampling_factor=upsampling_factor,
+        # )
 
     def forward(
         self,
@@ -83,25 +82,25 @@ class HeatmapMHCRNNHead(LightningModule):
         """Handle context frames then upsample to get final heatmaps."""
         # permute to shape (frames, batch, features, rep_height, rep_width)
         features = torch.permute(features, (4, 0, 1, 2, 3))
-        heatmaps_crnn = self.head_mf(features)
+        # heatmaps_crnn = self.head_mf(features)
         heatmaps_sf = self.head_sf(features[2])  # index 2 == middle frame
 
         if len(shape) == 6 or len(shape) == 5:
             # reshape the outputs to extract the view dimension
-            heatmaps_crnn = heatmaps_crnn.reshape(
-                num_frames, -1, heatmaps_crnn.shape[-2], heatmaps_crnn.shape[-1])
+            # heatmaps_crnn = heatmaps_crnn.reshape(
+            #     num_frames, -1, heatmaps_crnn.shape[-2], heatmaps_crnn.shape[-1])
             heatmaps_sf = heatmaps_sf.reshape(
                 num_frames, -1, heatmaps_sf.shape[-2], heatmaps_sf.shape[-1])
 
         # normalize heatmaps
         # softmax temp stays 1 here; to modify for model predictions, see constructor
-        heatmaps_crnn_norm = spatial_softmax2d(heatmaps_crnn, temperature=torch.tensor([1.0]))
+        # heatmaps_crnn_norm = spatial_softmax2d(heatmaps_crnn, temperature=torch.tensor([1.0]))
         heatmaps_sf_norm = spatial_softmax2d(heatmaps_sf, temperature=torch.tensor([1.0]))
 
-        return heatmaps_crnn_norm, heatmaps_sf_norm
+        return heatmaps_sf_norm #, heatmaps_sf_norm
 
 
-class UpsamplingCRNN(torch.nn.Module):
+class UpsamplingCRNN(nn.Module):
     """Bidirectional Convolutional RNN network that handles heatmaps of context frames.
 
     The input to the CRNN is a set of heatmaps at times t-k, ..., t, ...t+k, one heatmap for each
