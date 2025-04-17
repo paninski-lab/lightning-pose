@@ -103,13 +103,13 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
             downsample_factor=self.downsample_factor,
             upsampling_factor=1 if "vit" in backbone else 2,
         )
-
-        for layer in self.head.head_sf.upsampling_layers:
-            try:
-                print(layer.weight[0])
-            except:
-                continue
-        BREAK
+        # from lightning_pose.models.heads import HeatmapHead
+        # self.head = HeatmapHead(
+        #         backbone_arch=backbone,
+        #         in_channels=self.num_fc_input_features,
+        #         out_channels=self.num_keypoints,
+        #         downsample_factor=self.downsample_factor,
+        # )
 
         self.loss_factory = loss_factory
 
@@ -170,9 +170,9 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
 
         # get two heatmaps for each representation (context, non-context)
         # heatmaps_crnn, heatmaps_sf = self.head(representations, shape, num_frames)
-        heatmaps_crnn = self.head(representations, shape)
+        heatmaps_sf = self.head(representations, shape)
 
-        return heatmaps_crnn #, heatmaps_sf
+        return heatmaps_sf #, heatmaps_sf
 
     def get_loss_inputs_labeled(
         self,
@@ -189,7 +189,7 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
         # pred_keypoints_crnn, confidence_crnn = self.head.head_sf.run_subpixelmaxima(
         #     pred_heatmaps_crnn
         # )
-        pred_keypoints_sf, confidence_sf = self.head.head_sf.run_subpixelmaxima(
+        pred_keypoints_sf, confidence_sf = self.head.run_subpixelmaxima(
             pred_heatmaps_sf
         )
         # bounding box coords -> original image coords

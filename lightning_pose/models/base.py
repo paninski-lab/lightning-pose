@@ -550,7 +550,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         if batch_idx == 0:
             print("Checking if autograd is enabled:", torch.is_grad_enabled())
             for name, param in self.named_parameters():
-                if "backbone.7" in name:
+                if ("backbone.7.2" in name) or ("upsampling_layers.2" in name):
                     print(f"{name}: {param.sum()}; requires grad: {param.requires_grad}")
                     if param.grad is not None:
                         print(param.grad.norm().item())
