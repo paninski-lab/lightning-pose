@@ -1,5 +1,3 @@
-__version__ = "1.7.1"
-
 from pathlib import Path
 
 from omegaconf import OmegaConf
