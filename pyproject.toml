@@ -69,11 +69,6 @@ python = ">=3.10,<3.13"
 [tool.poetry.scripts]
 litpose = "lightning_pose.cli.main:main"
 
-# Development dependencies group (Poetry's standard way for optional dev deps)
-[tool.poetry.group.dev]
-optional = true
-
-[tool.poetry.group.dev.dependencies]
 [project.optional-dependencies]
 dev = [
     "black",
@@ -89,19 +84,12 @@ dev = [
     "sphinx-design",
     "tbparse (<1.0.0)",
 ]
-
-# Optional dependencies group for extra models (Poetry's standard way)
-[tool.poetry.group.extra-models]
-optional = true
-
-[tool.poetry.group.extra-models.dependencies]
-lightning-bolts = "*"
+extra-models = ["lightning-bolts"]
 
 [tool.isort]
 line_length = 88
 profile = "black"
 src_paths = ["lightning_pose", "tests"]
-
 
 [tool.pytest.ini_options]
 testpaths = "tests"
