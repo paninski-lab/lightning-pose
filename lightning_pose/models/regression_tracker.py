@@ -4,7 +4,6 @@ from typing import Any, Tuple
 
 import torch
 from omegaconf import DictConfig
-from torch import nn
 from torchtyping import TensorType
 from typeguard import typechecked
 
@@ -17,6 +16,7 @@ from lightning_pose.models.base import (
     BaseSupervisedTracker,
     SemiSupervisedTrackerMixin,
 )
+from lightning_pose.models.heads import LinearRegressionHead
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -57,6 +57,7 @@ class RegressionTracker(BaseSupervisedTracker):
         """
 
         # for reproducible weight initialization
+        self.torch_seed = torch_seed
         torch.manual_seed(torch_seed)
 
         if "vit" in backbone:
@@ -80,8 +81,7 @@ class RegressionTracker(BaseSupervisedTracker):
         self.num_keypoints = num_keypoints
         self.num_targets = self.num_keypoints * 2
         self.loss_factory = loss_factory
-        self.final_layer = nn.Linear(self.num_fc_input_features, self.num_targets)
-        self.torch_seed = torch_seed
+        self.head = LinearRegressionHead(self.num_fc_input_features, self.num_targets)
 
         # use this to log auxiliary information: pixel_error on labeled data
         self.rmse_loss = RegressionRMSELoss()
@@ -100,9 +100,7 @@ class RegressionTracker(BaseSupervisedTracker):
         # see input lines for shape of "images"
         representations = self.get_representations(images)
         # "representations" is shape (batch, features, rep_height, rep_width)
-        reps_reshaped = representations.reshape(representations.shape[0], representations.shape[1])
-        # after reshaping, is shape (batch, features)
-        out = self.final_layer(reps_reshaped)
+        out = self.head(representations)
         # "out" is shape (batch, 2 * num_keypoints)
         return out
 
@@ -138,6 +136,13 @@ class RegressionTracker(BaseSupervisedTracker):
         # regression model does not include a notion of confidence, set to all zeros
         confidence = torch.zeros((predicted_keypoints.shape[0], predicted_keypoints.shape[1] // 2))
         return predicted_keypoints, confidence
+
+    def get_parameters(self):
+        params = [
+            {"params": self.backbone.parameters(), "lr": 0, "name": "backbone"},
+            {"params": self.head.parameters(), "name": "head"},
+        ]
+        return params
 
 
 @typechecked
@@ -194,7 +199,6 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
 
         # this attribute will be modified by AnnealWeight callback during training
         self.total_unsupervised_importance = torch.tensor(1.0)
-        # self.register_buffer("total_unsupervised_importance", torch.tensor(1.0))
 
     def get_loss_inputs_unlabeled(self, batch_dict: UnlabeledBatchDict) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
