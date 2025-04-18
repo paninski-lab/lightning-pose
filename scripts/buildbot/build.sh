@@ -22,9 +22,9 @@ if [ $# -eq 0 ]; then
   echo "Usage: $0 <PR_NUMBER>"
   exit 1
 fi
-
 PR_NUMBER="$1"
 
+echo "Running from $(hostname)"
 
 ml Miniforge-24.7.1-2
 conda activate $CONDA_ENV
@@ -47,5 +47,6 @@ git remote add upstream "https://github.com/$USER/$REPO_NAME.git"
 git fetch upstream "refs/pull/$PR_NUMBER/merge"
 git checkout FETCH_HEAD
 
-pytest
+# Run with html reporting.
+pytest --html=report.html --self-contained-html
 
