@@ -75,6 +75,7 @@ dev = [
     "flake8",
     "isort",
     "pytest",
+    "pytest-html",
     "pytest-mock",
     "Sphinx",
     "sphinx_rtd_theme",
