@@ -35,6 +35,11 @@ def main():
     # Get the command handler dynamically
     command_handler = COMMANDS[args.command].handle
 
+    # Run any migrations (from lightning_pose.migrations).
+    from lightning_pose.migrations.migrations import run_migrations
+
+    run_migrations()
+
     # Execute the command
     command_handler(args)
 
