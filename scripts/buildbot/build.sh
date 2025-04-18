@@ -48,3 +48,4 @@ git fetch upstream "refs/pull/$PR_NUMBER/merge"
 git checkout FETCH_HEAD
 
 pytest
+
