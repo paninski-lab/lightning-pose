@@ -14,7 +14,7 @@ REPO_NAME=lightning-pose
 
 BASE_DIR=/local/$(whoami)/builds
 TARGET_DIR=$BASE_DIR/$(date '+%Y_%m_%d-%H_%M_%S')
-CONDA_ENV=lp
+CONDA_ENV=lp_build
 
 # Check if the PR number argument is provided
 if [ $# -eq 0 ]; then
