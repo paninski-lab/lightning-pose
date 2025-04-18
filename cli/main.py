@@ -37,7 +37,6 @@ def main():
 
     # Run any migrations (from lightning_pose.migrations).
     from lightning_pose.migrations.migrations import run_migrations
-
     run_migrations()
 
     # Execute the command
