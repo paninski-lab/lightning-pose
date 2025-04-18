@@ -1,6 +1,6 @@
 """Command modules for the lightning-pose CLI."""
 
-from . import train, predict, crop, remap
+from . import crop, predict, remap, train
 
 # List of all available commands
 COMMANDS = {

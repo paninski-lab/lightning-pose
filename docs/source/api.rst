@@ -47,7 +47,7 @@ You create a model object using `Model.from_dir`:
 
 .. code-block:: python
 
-    from lightning_pose.model import Model
+    from lightning_pose.api.model import Model
 
     model = Model.from_dir("outputs/doc_model")
 
@@ -66,7 +66,7 @@ or:
 API Reference
 =============
 
-.. autoclass:: lightning_pose.model.Model
+.. autoclass:: lightning_pose.api.model.Model
     :members:
     :exclude-members: __init__, from_dir2
 
