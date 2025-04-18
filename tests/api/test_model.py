@@ -1,9 +1,9 @@
 import shutil
 from pathlib import Path
 
-from lightning_pose.model import Model
+from lightning_pose.api.model import Model
 
-from .fetch_test_data import fetch_test_data_if_needed
+from tests.fetch_test_data import fetch_test_data_if_needed
 
 
 def _setup_test_model(tmp_path, request, multiview=False):

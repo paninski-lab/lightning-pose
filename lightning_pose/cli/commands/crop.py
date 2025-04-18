@@ -10,8 +10,8 @@ from omegaconf import OmegaConf
 from .. import types
 
 if TYPE_CHECKING:
-    from lightning_pose.model import Model
     import lightning_pose.utils.cropzoom as cz
+    from lightning_pose.api.model import Model
 
 
 def register_parser(subparsers):
@@ -71,7 +71,7 @@ def register_parser(subparsers):
 def handle(args):
     """Handle the crop command."""
     import lightning_pose.utils.cropzoom as cz
-    from lightning_pose.model import Model
+    from lightning_pose.api.model import Model
 
     model_dir = args.model_dir
     model = Model.from_dir(model_dir)
