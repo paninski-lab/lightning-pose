@@ -36,7 +36,7 @@ def register_parser(subparsers):
         type=types.model_dir,
         help="explicitly specifies the output model directory.\n"
         "If not specified, defaults to "
-        "./outputs/{YYYY-MM-DD}/{HH:MM:SS}/",
+        "./outputs/{YYYY-MM-DD}/{HH-MM-SS}/",
     )
     train_parser.add_argument(
         "--detector_model",
@@ -62,7 +62,7 @@ def handle(args):
     else:
         now = datetime.datetime.now()
         output_dir = (
-            Path("outputs") / now.strftime("%Y-%m-%d") / now.strftime("%H:%M:%S")
+            Path("outputs") / now.strftime("%Y-%m-%d") / now.strftime("%H-%M-%S")
         )
 
     print(f"Output directory: {output_dir.absolute()}")
