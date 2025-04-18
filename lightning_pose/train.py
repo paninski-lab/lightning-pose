@@ -16,7 +16,7 @@ import torch
 from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 from typeguard import typechecked
 
-from lightning_pose import version
+import lightning_pose
 from lightning_pose.api.model import Model
 from lightning_pose.api.model_config import ModelConfig
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
@@ -159,10 +159,8 @@ def _train(cfg: DictConfig) -> Model:
     torch.backends.cudnn.deterministic = True
 
     # record lightning-pose version
-    lightning_pose_version = version.get_version()
-
     with open_dict(cfg):
-        cfg.model.lightning_pose_version = lightning_pose_version
+        cfg.model.lightning_pose_version = lightning_pose.version
 
     print("Our Hydra config file:")
     pretty_print_cfg(cfg)
