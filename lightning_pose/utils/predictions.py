@@ -161,9 +161,7 @@ class PredictionHandler:
         of images[-2] and images[-3]
         """
         # first pad the first two rows for which we have no valid preds.
-        preds_1 = torch.tile(
-            stacked_preds[0], (2, 1)
-        )  # copying twice the prediction for image[2]
+        preds_1 = torch.tile(stacked_preds[0], (2, 1))  # copying twice the prediction for image[2]
         preds_2 = stacked_preds[0:-2]  # throw out the last two rows.
         preds_combined = torch.vstack([preds_1, preds_2])
         # repat the last one twice
@@ -214,9 +212,7 @@ class PredictionHandler:
 
         return predictions
 
-    def make_dlc_pandas_index(
-        self, keypoint_names: list | None = None
-    ) -> pd.MultiIndex:
+    def make_dlc_pandas_index(self, keypoint_names: list | None = None) -> pd.MultiIndex:
         return make_dlc_pandas_index(
             cfg=self.cfg, keypoint_names=keypoint_names or self.keypoint_names
         )
@@ -243,7 +239,7 @@ class PredictionHandler:
                 TensorType["batch", "num_keypoints"],
             ]
         ],
-        is_multiview_video: bool = False,
+        is_multiview_video: bool=False,
     ) -> pd.DataFrame | dict[str, pd.DataFrame]:
         """
         Call this function to get a pandas dataframe of the predictions for a single video.
@@ -269,11 +265,10 @@ class PredictionHandler:
             for view_idx, view_name in enumerate(self.cfg.data.view_names):
                 idx_beg = view_idx * num_keypoints
                 idx_end = idx_beg + num_keypoints
-                stacked_preds_single = stacked_preds[:, idx_beg * 2 : idx_end * 2]
+                stacked_preds_single = stacked_preds[:, idx_beg * 2:idx_end * 2]
                 stacked_confs_single = stacked_confs[:, idx_beg:idx_end]
                 pred_arr = self.make_pred_arr_undo_resize(
-                    stacked_preds_single.cpu().numpy(),
-                    stacked_confs_single.cpu().numpy(),
+                    stacked_preds_single.cpu().numpy(), stacked_confs_single.cpu().numpy()
                 )
                 pdindex = self.make_dlc_pandas_index(self.keypoint_names)
                 df = pd.DataFrame(pred_arr, columns=pdindex)
@@ -325,10 +320,7 @@ def predict_dataset(
     delete_model = False
     if model is None:
         model = load_model_from_checkpoint(
-            cfg=cfg,
-            ckpt_file=ckpt_file,
-            eval=True,
-            data_module=data_module,
+            cfg=cfg, ckpt_file=ckpt_file, eval=True, data_module=data_module,
         )
         delete_model = True
 
@@ -398,18 +390,13 @@ def predict_single_video(
         DeprecationWarning,
     )
 
-    cfg = _get_cfg_file(
-        cfg_file=cfg_file
-    ).copy()  # copy because we update imgaug field below
+    cfg = _get_cfg_file(cfg_file=cfg_file).copy()  # copy because we update imgaug field below
 
     delete_model = False
     if model is None:
         skip_data_module = True if data_module is None else False
         model = load_model_from_checkpoint(
-            cfg=cfg,
-            ckpt_file=ckpt_file,
-            eval=True,
-            data_module=data_module,
+            cfg=cfg, ckpt_file=ckpt_file, eval=True, data_module=data_module,
             skip_data_module=skip_data_module,
         )
         delete_model = True
@@ -439,9 +426,7 @@ def predict_single_video(
     predict_loader = vid_pred_class()
 
     # initialize prediction handler class
-    pred_handler = PredictionHandler(
-        cfg=cfg, data_module=data_module, video_file=video_file
-    )
+    pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=video_file)
 
     # ----------------------------------------------------------------------------------
     # compute predictions
@@ -509,9 +494,7 @@ def get_model_class(map_type: str, semi_supervised: bool) -> Type[ALLOWED_MODELS
         elif map_type == "heatmap":
             from lightning_pose.models import SemiSupervisedHeatmapTracker as Model
         elif map_type == "heatmap_mhcrnn":
-            from lightning_pose.models import (
-                SemiSupervisedHeatmapTrackerMHCRNN as Model,
-            )
+            from lightning_pose.models import SemiSupervisedHeatmapTrackerMHCRNN as Model
         else:
             raise NotImplementedError(
                 f"{map_type} is an invalid model_type for a semi-supervised model"
@@ -545,10 +528,7 @@ def load_model_from_checkpoint(
         model as a Lightning Module
 
     """
-    from lightning_pose.utils.io import (
-        check_if_semi_supervised,
-        return_absolute_data_paths,
-    )
+    from lightning_pose.utils.io import check_if_semi_supervised, return_absolute_data_paths
     from lightning_pose.utils.scripts import (
         get_data_module,
         get_dataset,
@@ -563,9 +543,7 @@ def load_model_from_checkpoint(
         delete_extras = True
         data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
         imgaug_transform = get_imgaug_transform(cfg=cfg)
-        dataset = get_dataset(
-            cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform
-        )
+        dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
         data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
     if not data_module:
         loss_factories = {"supervised": None, "unsupervised": None}
@@ -594,9 +572,7 @@ def load_model_from_checkpoint(
             # re-initialize absolute positional embedding with *finetune* image size.
             finetune_img_size = cfg.data.image_resize_dims.height
             patch_size = model.backbone.patch_size
-            embed_dim = (
-                768  # value from lightning_pose.models.backbones.vits.build_backbone
-            )
+            embed_dim = 768  # value from lightning_pose.models.backbones.vits.build_backbone
             model.backbone.pos_embed = torch.nn.Parameter(
                 torch.zeros(
                     1,
@@ -696,9 +672,7 @@ def create_labeled_video(
         clip = clip.resize((upsample_factor * nx, upsample_factor * ny))
         nx, ny = clip.size
 
-    print(
-        f"Duration of video [s]: {np.round(dur, 2)}, recorded at {np.round(fps_og, 2)} fps!"
-    )
+    print(f"Duration of video [s]: {np.round(dur, 2)}, recorded at {np.round(fps_og, 2)} fps!")
 
     def seconds_to_hms(seconds):
         # Convert seconds to a timedelta object
@@ -759,10 +733,7 @@ def create_labeled_video(
         cv2.rectangle(
             frame,
             (text_x - int(offset / 2), text_y + int(offset / 2)),
-            (
-                text_x + text_size[0] + int(offset / 2),
-                text_y - text_size[1] - int(offset / 2),
-            ),
+            (text_x + text_size[0] + int(offset / 2), text_y - text_size[1] - int(offset / 2)),
             (0, 0, 0),  # rectangle color
             cv2.FILLED,
         )
@@ -825,7 +796,7 @@ def export_predictions_and_labeled_video(
             preds_df=preds_df,
             output_mp4_file=labeled_mp4_file,
             confidence_thresh_for_vid=cfg.eval.confidence_thresh_for_vid,
-            colormap=cfg.eval.get("colormap", "cool"),
+            colormap=cfg.eval.get("colormap", "cool")
         )
     return preds_df
 
