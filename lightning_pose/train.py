@@ -1,7 +1,6 @@
 """Example model training function."""
 
 import contextlib
-import importlib.metadata
 import math
 import os
 import random
@@ -17,6 +16,7 @@ import torch
 from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 from typeguard import typechecked
 
+from lightning_pose import version
 from lightning_pose.api.model import Model
 from lightning_pose.api.model_config import ModelConfig
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
@@ -159,7 +159,7 @@ def _train(cfg: DictConfig) -> Model:
     torch.backends.cudnn.deterministic = True
 
     # record lightning-pose version
-    lightning_pose_version = importlib.metadata.version("lightning-pose")
+    lightning_pose_version = version.get_version()
 
     with open_dict(cfg):
         cfg.model.lightning_pose_version = lightning_pose_version
