@@ -1,16 +1,16 @@
 """Train command for the lightning-pose CLI."""
 
 from __future__ import annotations
+
 import datetime
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-
 from .. import types
 
 if TYPE_CHECKING:
-    from lightning_pose.model import Model
+    from lightning_pose.api.model import Model
     from lightning_pose.train import train
 
 
@@ -75,7 +75,7 @@ def handle(args):
         cfg = hydra.compose(config_name=args.config_file.stem, overrides=args.overrides)
 
         # Delay this import because it's slow.
-        from lightning_pose.model import Model
+        from lightning_pose.api.model import Model
         from lightning_pose.train import train
 
         # TODO: Move some aspects of directory mgmt to the train function.

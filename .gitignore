@@ -22,7 +22,6 @@ var/
 wheels/
 pip-wheel-metadata/
 share/python-wheels/
-*.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
@@ -152,5 +151,5 @@ preds/
 scripts/.ipynb_checkpoints
 tb_logs
 tests/utils/test_cropzoom_data/
-tests/test_model_mirror_mouse/
-tests/test_model_mirror_mouse_multiview/
+tests/api/test_model_mirror_mouse/
+tests/api/test_model_mirror_mouse_multiview/
