@@ -32,6 +32,10 @@ def ckpt_path_from_base_path(
 ) -> str | None:
     """Given a path to a hydra output with trained model, extract the model .ckpt file.
 
+    Prioritizes the checkpoint marked with '-best.ckpt' in the latest version directory.
+    If no 'best' checkpoint is found, returns the single checkpoint if only one exists,
+    otherwise raises an error.
+
     Args:
         base_path (str): path to a folder with logs and checkpoint. for example,
             function will search base_path/logging_dir_name/model_name...
@@ -39,44 +43,75 @@ def ckpt_path_from_base_path(
             model_name in lightning-pose/scripts/config/model_params.yaml
         logging_dir_name (str, optional): name of the folder in logs, controlled in
             train_hydra.py Defaults to "tb_logs/".
-        version (int. optional):
 
     Returns:
         str: path to model checkpoint, or None if none found.
 
+    Raises:
+        ValueError: If multiple checkpoint files are found in the latest version
+                    and none are marked as '-best.ckpt'.
+
     """
     import glob
-
+    
     model_search_path = os.path.join(
         base_path,
-        logging_dir_name,  # may change when we switch from Tensorboard
-        model_name,  # get the name string of the model (determined pre-training)
-        "version_*",  # TensorBoardLogger increments versions if retraining same model.
+        logging_dir_name,
+        glob.escape(model_name),
+        "version_*",
         "checkpoints",
         "*.ckpt",
     )
 
     # Find all checkpoint files
-    checkpoint_files = glob.glob(model_search_path)
-    # Return None if none were found.
-    if not checkpoint_files:
+    all_checkpoint_files = glob.glob(model_search_path)
+    if not all_checkpoint_files:
         return None
 
-    # Get the latest version's checkpoint files.
-    ckpt_file_by_version = {}
-    for f in checkpoint_files:
-        version = re.search(r"version_(\d)", f).group(1)
-        version = int(version)
-        if version in ckpt_file_by_version:
-            raise NotImplementedError(
-                f"Multiple checkpoint files found in version directory for {f}. "
-                "Logic to select among multiple checkpoints is not yet implemented."
+    # Group checkpoints by version
+    ckpt_files_by_version = {}
+    for f in all_checkpoint_files:
+        match = re.search(r"version_(\d+)", f)
+        if match:
+            version = int(match.group(1))
+            if version not in ckpt_files_by_version:
+                ckpt_files_by_version[version] = []
+            ckpt_files_by_version[version].append(f)
+
+    if not ckpt_files_by_version:
+         # Should not happen if all_checkpoint_files is not empty and pattern matches
+        return None
+
+    # Get the latest version's checkpoint files
+    latest_version = max(ckpt_files_by_version.keys())
+    latest_version_files = ckpt_files_by_version[latest_version]
+
+    # Find the "best" checkpoint in the latest version
+    best_ckpt_file = None
+    for f in latest_version_files:
+        if "-best.ckpt" in os.path.basename(f):
+            best_ckpt_file = f
+            break  # Found the best file, stop searching
+
+    if best_ckpt_file:
+        # Found the 'best' checkpoint
+        return best_ckpt_file
+    else:
+        # No 'best' checkpoint found
+        if len(latest_version_files) == 1:
+            # Only one checkpoint file exists, return it
+            return latest_version_files[0]
+        elif len(latest_version_files) > 1:
+            # Multiple checkpoints exist, but none are marked 'best'
+            raise ValueError(
+                f"Multiple checkpoint files found in version {latest_version} directory, "
+                f"and none are marked as '-best.ckpt'. Cannot determine which to use: "
+                f"{latest_version_files}"
             )
-        ckpt_file_by_version[version] = f
-
-    latest_version = max(ckpt_file_by_version.keys())
-    return ckpt_file_by_version[latest_version]
-
+        else:
+            # This case (latest_version_files is empty) should not be reachable
+            # due to initial checks, but handle defensively.
+            return None
 
 @typechecked
 def check_if_semi_supervised(losses_to_use: ListConfig | list | None = None) -> bool:
