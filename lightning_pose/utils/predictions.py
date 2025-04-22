@@ -484,9 +484,11 @@ def get_model_class(map_type: str, semi_supervised: bool) -> Type[ALLOWED_MODELS
             from lightning_pose.models import HeatmapTracker as Model
         elif map_type == "heatmap_mhcrnn":
             from lightning_pose.models import HeatmapTrackerMHCRNN as Model
+        elif map_type == "heatmap_multiview_multihead":
+            from lightning_pose.models import HeatmapTrackerMultiviewMultihead as Model
         else:
             raise NotImplementedError(
-                "%s is an invalid model_type for a fully supervised model" % map_type
+                f"{map_type} is an invalid model_type for a fully supervised model"
             )
     else:
         if map_type == "regression":

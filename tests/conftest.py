@@ -583,7 +583,6 @@ def run_model_test(tmp_path) -> Callable:
             gc.collect()
             torch.cuda.empty_cache()
 
-
     return _run_model_test
 
 

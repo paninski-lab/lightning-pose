@@ -41,8 +41,8 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
         num_targets: int | None = None,
         loss_factory: LossFactory | None = None,
         backbone: ALLOWED_BACKBONES = "resnet50",
-        downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
+        downsample_factor: Literal[1, 2, 3] = 2,
         torch_seed: int = 123,
         optimizer: str = "Adam",
         optimizer_params: DictConfig | dict | None = None,
@@ -56,9 +56,9 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
             num_keypoints: number of body parts
             loss_factory: object to orchestrate loss computation
             backbone: ResNet or EfficientNet variant to be used
+            pretrained: True to load pretrained imagenet weights
             downsample_factor: make heatmap smaller than original frames to save memory; subpixel
                 operations are performed for increased precision
-            pretrained: True to load pretrained imagenet weights
             torch_seed: make weight initialization reproducible
             lr_scheduler: how to schedule learning rate
             lr_scheduler_params: params for specific learning rate schedulers
