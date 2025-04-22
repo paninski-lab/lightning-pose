@@ -3,8 +3,9 @@
 import numpy as np
 import pytest
 from lightning.pytorch.utilities import CombinedLoader
-from torch.utils.data import RandomSampler
+from torch.utils.data import WeightedRandomSampler, RandomSampler, DataLoader, BatchSampler
 
+from lightning_pose.data.datamodules import BaseDataModule
 
 def test_base_datamodule(cfg, base_data_module):
 
@@ -404,3 +405,81 @@ def test_multiview_heatmap_data_module_combined_context(
     )
     assert batch["unlabeled"]["transforms"].shape == (num_views, 1, 2, 3)
     assert batch["unlabeled"]["bbox"].shape == (train_size_unlabeled, num_views * 4)
+
+@pytest.mark.parametrize("enable_weighted_sampler", [True, False])
+def test_weighted_sampler_optionality(base_dataset, enable_weighted_sampler, capsys): # Add capsys to capture prints
+    """Verify that WeightedRandomSampler is used only when configured."""
+
+    print(f"\nInstantiating BaseDataModule with enable_weighted_sampler={enable_weighted_sampler}")
+    data_module = BaseDataModule(
+        dataset=base_dataset,
+        train_batch_size=4,
+        val_batch_size=4,
+        test_batch_size=4,
+        num_workers=0,
+        train_probability=0.8,
+        enable_weighted_sampler=enable_weighted_sampler,
+        torch_seed=123,
+    )
+    # Capture print output during setup
+    captured_setup = capsys.readouterr()
+    print("--- Output during BaseDataModule setup ---")
+    print(captured_setup.out)
+    print(captured_setup.err)
+    print("-----------------------------------------")
+
+    train_loader = data_module.train_dataloader()
+
+    # Debugging prints
+    print(f"\n--- Testing with enable_weighted_sampler={enable_weighted_sampler} ---")
+    print(f"data_module.train_sampler type: {type(data_module.train_sampler)}")
+    print(f"train_loader type: {type(train_loader)}")
+    # DataLoader usually wraps the sampler in a BatchSampler. Accessing .sampler might be tricky.
+    # Let's inspect the batch_sampler attribute
+    print(f"train_loader.batch_sampler type: {type(train_loader.batch_sampler)}")
+    if hasattr(train_loader.batch_sampler, 'sampler'):
+        print(f"train_loader.batch_sampler.sampler type: {type(train_loader.batch_sampler.sampler)}")
+    else:
+         print("train_loader.batch_sampler has no 'sampler' attribute")
+    print(f"train_loader.shuffle: {getattr(train_loader, 'shuffle', 'N/A')}") # shuffle attr might not exist depending on init
+    print("-----------------------------------------")
+
+
+    if enable_weighted_sampler:
+        # Case 1: Sampler was enabled AND successfully created
+        if data_module.train_sampler is not None:
+            print("Checking case: Sampler enabled and created.")
+            assert isinstance(data_module.train_sampler, WeightedRandomSampler), \
+                "data_module.train_sampler should be WeightedRandomSampler instance"
+            # When a sampler is provided, shuffle=False is passed to DataLoader init.
+            # The DataLoader instance itself might not have a .shuffle attribute after init.
+            # The key is that the batch_sampler's underlying sampler is ours.
+            assert isinstance(train_loader.batch_sampler, BatchSampler), \
+                "DataLoader should use a BatchSampler"
+            assert isinstance(train_loader.batch_sampler.sampler, WeightedRandomSampler), \
+                "BatchSampler's underlying sampler should be WeightedRandomSampler"
+
+        # Case 2: Sampler was enabled BUT creation failed (fallback)
+        else:
+            print("Checking case: Sampler enabled but creation failed (fallback).")
+            # Check our internal state
+            assert data_module.train_sampler is None, \
+                "data_module.train_sampler should be None if creation failed"
+            # Check the DataLoader's resulting state (should be like sampler disabled)
+            assert isinstance(train_loader.batch_sampler, BatchSampler), \
+                "DataLoader should use a BatchSampler"
+            # When shuffle=True, DataLoader uses RandomSampler internally
+            assert isinstance(train_loader.batch_sampler.sampler, RandomSampler), \
+                "BatchSampler's underlying sampler should be RandomSampler in fallback"
+
+    else: # enable_weighted_sampler is False
+        print("Checking case: Sampler disabled.")
+        # Check our internal state
+        assert data_module.train_sampler is None, \
+            "data_module.train_sampler should be None when disabled"
+        # Check the DataLoader's resulting state
+        assert isinstance(train_loader.batch_sampler, BatchSampler), \
+            "DataLoader should use a BatchSampler"
+        # When shuffle=True, DataLoader uses RandomSampler internally
+        assert isinstance(train_loader.batch_sampler.sampler, RandomSampler), \
+            "BatchSampler's underlying sampler should be RandomSampler when disabled"
