@@ -15,5 +15,8 @@ lightning\_pose.data
 .. automodapi:: lightning_pose.data.datasets
    :no-inheritance-diagram:
 
+.. automodapi:: lightning_pose.data.datatypes
+   :no-inheritance-diagram:
+
 .. automodapi:: lightning_pose.data.utils
    :no-inheritance-diagram:

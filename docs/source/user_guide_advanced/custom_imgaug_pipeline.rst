@@ -35,8 +35,8 @@ For each augmentation, specify:
 
 Simple example
 --------------
-This example applies an
-`Affine <https://imgaug.readthedocs.io/en/latest/source/overview/geometric.html#affine>`_
+This example applies a
+`Rotate <https://imgaug.readthedocs.io/en/latest/source/overview/geometric.html#rotate>`_
 transformation that randomly rotates images and keypoints between -10 and 10 degrees with 50%
 probability.
 
@@ -44,13 +44,13 @@ probability.
 
     training:
       imgaug:
-        Affine:
+        Rotate:
           p: 0.5
           kwargs:
             rotate: [-10, 10]
 
 * ``p``: Probability of applying the transformation
-* ``kwargs`` arguments passed to the Affine function.
+* ``kwargs`` arguments passed to the Rotate function.
 
 Complex example: 'dlc' pipeline
 -------------------------------
@@ -67,7 +67,7 @@ The order listed in the config file determines the sequence in which transformat
 
     training:
       imgaug:
-        Affine:
+        Rotate:
           p: 0.4
           kwargs:
             rotate: [-25, 25]

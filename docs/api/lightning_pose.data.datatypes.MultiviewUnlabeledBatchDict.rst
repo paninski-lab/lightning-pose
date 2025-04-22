@@ -1,7 +1,7 @@
 MultiviewUnlabeledBatchDict
 ===========================
 
-.. currentmodule:: lightning_pose.data.utils
+.. currentmodule:: lightning_pose.data.datatypes
 
 .. autoclass:: MultiviewUnlabeledBatchDict
    :show-inheritance:
