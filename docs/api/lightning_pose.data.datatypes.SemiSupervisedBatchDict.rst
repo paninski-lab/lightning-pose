@@ -1,7 +1,7 @@
 SemiSupervisedBatchDict
 =======================
 
-.. currentmodule:: lightning_pose.data.utils
+.. currentmodule:: lightning_pose.data.datatypes
 
 .. autoclass:: SemiSupervisedBatchDict
    :show-inheritance:

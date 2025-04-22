@@ -1,16 +1,16 @@
-ImageEncoderViT
-===============
+ImageEncoderViT_FT
+==================
 
 .. currentmodule:: lightning_pose.models.backbones.vit_img_encoder
 
-.. autoclass:: ImageEncoderViT
+.. autoclass:: ImageEncoderViT_FT
    :show-inheritance:
 
    .. rubric:: Methods Summary
 
    .. autosummary::
 
-      ~ImageEncoderViT.forward
+      ~ImageEncoderViT_FT.forward
 
    .. rubric:: Methods Documentation
 

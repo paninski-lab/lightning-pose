@@ -13,7 +13,6 @@ HeatmapTrackerMHCRNN
       ~HeatmapTrackerMHCRNN.forward
       ~HeatmapTrackerMHCRNN.get_loss_inputs_labeled
       ~HeatmapTrackerMHCRNN.get_parameters
-      ~HeatmapTrackerMHCRNN.heatmaps_from_representations
       ~HeatmapTrackerMHCRNN.predict_step
 
    .. rubric:: Methods Documentation
@@ -21,5 +20,4 @@ HeatmapTrackerMHCRNN
    .. automethod:: forward
    .. automethod:: get_loss_inputs_labeled
    .. automethod:: get_parameters
-   .. automethod:: heatmaps_from_representations
    .. automethod:: predict_step

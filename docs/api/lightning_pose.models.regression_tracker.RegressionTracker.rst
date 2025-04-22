@@ -12,10 +12,12 @@ RegressionTracker
 
       ~RegressionTracker.forward
       ~RegressionTracker.get_loss_inputs_labeled
+      ~RegressionTracker.get_parameters
       ~RegressionTracker.predict_step
 
    .. rubric:: Methods Documentation
 
    .. automethod:: forward
    .. automethod:: get_loss_inputs_labeled
+   .. automethod:: get_parameters
    .. automethod:: predict_step
