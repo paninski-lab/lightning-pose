@@ -3,6 +3,7 @@ from __future__ import annotations  # python 3.8 compatibility for sphinx
 
 import os
 import re
+import warnings
 from pathlib import Path
 from typing import Tuple
 
@@ -98,21 +99,41 @@ def ckpt_path_from_base_path(
         return best_ckpt_file
     else:
         # No 'best' checkpoint found
+        warnings.warn(f"No 'best' checkpoint found, falling back to latest checkpoint'.")
         if len(latest_version_files) == 1:
             # Only one checkpoint file exists, return it
             return latest_version_files[0]
-        elif len(latest_version_files) > 1:
-            # Multiple checkpoints exist, but none are marked 'best'
-            raise ValueError(
-                f"Multiple checkpoint files found in version {latest_version} directory, "
-                f"and none are marked as '-best.ckpt'. Cannot determine which to use: "
-                f"{latest_version_files}"
-            )
         else:
-            # This case (latest_version_files is empty) should not be reachable
-            # due to initial checks, but handle defensively.
-            return None
+            # Multiple checkpoints exist, but none are marked 'best'.
+            # Find the one with the highest step count.
+            ckpt_step_counts = {}
+            max_step = -1
+            latest_ckpt = None
+            parse_errors = 0
 
+            for f in latest_version_files:
+                match = re.search(r"step=(\d+)", f)
+                if match:
+                    step = int(match.group(1))
+                    ckpt_step_counts[f] = step
+                    if step > max_step:
+                        max_step = step
+                        latest_ckpt = f
+                else:
+                    parse_errors += 1
+                    warnings.warn(f"Could not parse step count from checkpoint file: {f}")
+
+            if latest_ckpt is not None:
+                return latest_ckpt
+            elif parse_errors == len(latest_version_files):
+                 # Could not parse step count from any file, return the lexicographically last one as a fallback
+                warnings.warn("Could not parse step counts from any checkpoint. Returning the lexicographically last file.")
+                return sorted(latest_version_files)[-1]
+            else:
+                 # Should not happen if latest_version_files is not empty
+                warnings.warn("Unexpected state: Multiple checkpoints, none best, step parsing inconclusive.")
+                return None
+            
 @typechecked
 def check_if_semi_supervised(losses_to_use: ListConfig | list | None = None) -> bool:
     """Use config file to determine if model is semi-supervised.
