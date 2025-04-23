@@ -307,7 +307,7 @@ def test_multiview_heatmap_data_module_combined(
     assert list(batch.keys())[1] == "unlabeled"
     assert list(batch["labeled"].keys()) == [
         "images", "keypoints", "heatmaps", "bbox", "idxs", "num_views", "concat_order",
-        "view_names",
+        "view_names", "keypoints_3d", "intrinsic_matrix", "extrinsic_matrix", "distortions",
     ]
     assert list(batch["unlabeled"].keys()) == ["frames", "transforms", "bbox", "is_multiview"]
 
@@ -385,7 +385,7 @@ def test_multiview_heatmap_data_module_combined_context(
     assert list(batch.keys())[1] == "unlabeled"
     assert list(batch["labeled"].keys()) == [
         "images", "keypoints", "heatmaps", "bbox", "idxs", "num_views", "concat_order",
-        "view_names",
+        "view_names", "keypoints_3d", "intrinsic_matrix", "extrinsic_matrix", "distortions",
     ]
     assert list(batch["unlabeled"].keys()) == ["frames", "transforms", "bbox", "is_multiview"]
 

@@ -193,7 +193,7 @@ def test_get_imgaug_transform_dlc_multiview(cfg):
     assert pipe.__str__().find("CoarseDropout") != -1
     assert pipe.__str__().find("CoarseSalt") != -1
     assert pipe.__str__().find("CoarsePepper") != -1
-    assert pipe.__str__().find("ElasticTransformation") != -1
+    assert pipe.__str__().find("ElasticTransformation") == -1
     assert pipe.__str__().find("AllChannelsHistogramEqualization") != -1
     assert pipe.__str__().find("AllChannelsCLAHE") != -1
     assert pipe.__str__().find("Emboss") != -1

@@ -122,9 +122,13 @@ class HeatmapTracker(BaseSupervisedTracker):
         # batch/views before passing to network, then we reshape
         if len(shape) > 4:
             images = images.reshape(-1, shape[-3], shape[-2], shape[-1])
+            # images = [views * batch, channels, image_height, image_width]
             representations = self.get_representations(images)
+            # representations = [views * batch, num_features, rep_height, rep_width]
             heatmaps = self.head(representations)
+            # heatmaps = [views * batch, num_keypoints, heatmap_height, heatmap_width]
             heatmaps = heatmaps.reshape(shape[0], -1, heatmaps.shape[-2], heatmaps.shape[-1])
+            # heatmaps = [batch, num_keypoints * views, heatmap_height, heatmap_width]
         else:
             representations = self.get_representations(images)
             heatmaps = self.head(representations)

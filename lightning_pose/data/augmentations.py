@@ -155,12 +155,13 @@ def expand_imgaug_str_to_dict(params: str) -> dict[str, Any]:
         }
 
         # elastic transform
-        alpha = (0, 10)  # controls strength of displacement
-        sigma = 5  # cotnrols smoothness of displacement
-        params_dict["ElasticTransformation"] = {
-            "p": 0.5,
-            "kwargs": {"alpha": alpha, "sigma": sigma},
-        }
+        if not params.endswith("mv"):
+            alpha = (0, 10)  # controls strength of displacement
+            sigma = 5  # cotnrols smoothness of displacement
+            params_dict["ElasticTransformation"] = {
+                "p": 0.5,
+                "kwargs": {"alpha": alpha, "sigma": sigma},
+            }
 
         # hist eq
         params_dict["AllChannelsHistogramEqualization"] = {"p": 0.1, "kwargs": {}}

@@ -46,6 +46,7 @@ __all__ = [
     "UnimodalLoss",
     "RegressionMSELoss",
     "RegressionRMSELoss",
+    "PairwiseProjectionsLoss",
     "get_loss_classes",
 ]
 
@@ -763,6 +764,46 @@ class RegressionRMSELoss(RegressionMSELoss):
         return torch.sqrt(loss)
 
 
+class PairwiseProjectionsLoss(Loss):
+    """Penalize projections from each pair of cameras into 3D world space."""
+
+    def __init__(self, log_weight: float = 0.0, **kwargs) -> None:
+        super().__init__(log_weight=log_weight)
+        self.loss_name = "pairwise_projections"
+
+    def remove_nans(
+        self,
+        loss: TensorType["batch", "cam_pairs", "num_keypoints"],
+        mask: TensorType["batch", "cam_pairs", "num_keypoints"],
+    ) -> TensorType["valid_losses"]:
+        return torch.masked_select(loss, mask)
+
+    def compute_loss(
+        self,
+        targets: TensorType["batch", "num_keypoints", 3],
+        predictions: TensorType["batch", "cam_pairs", "num_keypoints", 3],
+    ) -> TensorType["batch", "cam_pairs", "num_keypoints"]:
+        loss = torch.linalg.norm(targets.unsqueeze(1) - predictions, ord=2, dim=-1)
+        return loss
+
+    def __call__(
+        self,
+        keypoints_targ_3d: TensorType["batch", "num_keypoints", 3],
+        keypoints_pred_3d: TensorType["batch", "cam_pairs", "num_keypoints", 3],
+        keypoints_mask_3d: TensorType["batch", "cam_pairs", "num_keypoints"],
+        stage: Literal["train", "val", "test"] | None = None,
+        **kwargs,
+    ) -> Tuple[TensorType[()], list[dict]]:
+        elementwise_loss = self.compute_loss(
+            targets=keypoints_targ_3d,
+            predictions=keypoints_pred_3d,
+        )
+        clean_loss = self.remove_nans(loss=elementwise_loss, mask=keypoints_mask_3d)
+        scalar_loss = self.reduce_loss(clean_loss, method="mean")
+        logs = self.log_loss(loss=scalar_loss, stage=stage)
+        return self.weight * scalar_loss, logs
+
+
 @typechecked
 def get_loss_classes() -> dict[str, Type[Loss]]:
     """Get a dict with all the loss classes.
@@ -784,5 +825,6 @@ def get_loss_classes() -> dict[str, Type[Loss]]:
         "unimodal_mse": UnimodalLoss,
         "unimodal_kl": UnimodalLoss,
         "unimodal_js": UnimodalLoss,
+        "supervised_pairwise_projections": PairwiseProjectionsLoss,
     }
     return loss_dict

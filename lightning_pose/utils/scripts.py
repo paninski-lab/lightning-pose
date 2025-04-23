@@ -73,7 +73,11 @@ def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
     params = cfg.training.get("imgaug", "default")
     if isinstance(params, str):
         # enforce "dlc-mv" imgaug pipeline for multiview models (no 2D geometric transforms)
-        if params not in ["default", "none"] and cfg.model.model_type.find("multiview") > -1:
+        if (
+            params not in ["default", "none"]
+            and cfg.model.model_type.find("multiview") > -1
+            and cfg.data.get("camera_params_file", None)
+        ):
             params = "dlc-mv"
         params_dict = expand_imgaug_str_to_dict(params)
     elif isinstance(params, dict) or isinstance(params, DictConfig):
@@ -123,13 +127,14 @@ def get_dataset(
             dataset = MultiviewHeatmapDataset(
                 root_directory=data_dir,
                 csv_paths=cfg.data.csv_file,
+                view_names=list(cfg.data.view_names),
                 image_resize_height=cfg.data.image_resize_dims.height,
                 image_resize_width=cfg.data.image_resize_dims.width,
-                view_names=list(cfg.data.view_names),
-                downsample_factor=cfg.data.get("downsample_factor", 2),
                 imgaug_transform=imgaug_transform,
-                uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
+                downsample_factor=cfg.data.get("downsample_factor", 2),
                 do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
+                uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
+                camera_params_path=cfg.data.get("camera_params_file", None),
             )
         else:
             dataset = HeatmapDataset(
@@ -251,6 +256,13 @@ def get_loss_factories(
     if cfg.model.model_type.find("heatmap") > -1:
         loss_name = "heatmap_" + cfg.model.heatmap_loss_type
         loss_params_dict["supervised"][loss_name] = {"log_weight": 0.0}
+        if cfg.model.model_type.find("multiview") > -1 and cfg.data.get("camera_params_file"):
+            log_weight = cfg.losses.get("supervised_pairwise_projections", {}).get("log_weight")
+            if log_weight is not None:
+                print("adding supervised pairwise projection loss")
+                loss_params_dict["supervised"]["supervised_pairwise_projections"] = {
+                    "log_weight": log_weight
+                }
     else:
         loss_params_dict["supervised"][cfg.model.model_type] = {"log_weight": 0.0}
 
@@ -556,8 +568,11 @@ def get_callbacks(
         )
         callbacks.append(ckpt_callback)
 
-    # we just need this callback for unsupervised models
-    if (cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None):
+    # we just need this callback for unsupervised models or multiview models with non-heatmap losse
+    if (
+        ((cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None))
+        or cfg.losses.get("supervised_pairwise_projections", {}).get("log_weight") is not None
+    ):
         anneal_weight_callback = AnnealWeight(**cfg.callbacks.anneal_weight)
         callbacks.append(anneal_weight_callback)
 

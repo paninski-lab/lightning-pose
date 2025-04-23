@@ -11,6 +11,7 @@ from lightning_pose.losses.losses import (
     HeatmapKLLoss,
     HeatmapMSELoss,
     Loss,
+    PairwiseProjectionsLoss,
     PCALoss,
     RegressionMSELoss,
     RegressionRMSELoss,
@@ -470,6 +471,42 @@ def test_regression_rmse_loss():
     rmse, _ = rmse_loss(labels, preds, stage=stage)
     assert rmse == true_rmse
     assert mse == true_rmse ** 2.0
+
+
+def test_pairwise_projections_loss():
+
+    pp_loss = PairwiseProjectionsLoss(log_weight=np.log(0.5))  # set log_weight so weight=1
+
+    # when predictions equal targets, should return zero
+    num_batch = 2
+    num_keypoints = 4
+    num_cam_pairs = 3
+    keypoints_targ_3d = torch.ones(size=(num_batch, num_keypoints, 3))
+    keypoints_pred_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints, 3))
+    keypoints_mask_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints)).bool()
+    loss, logs = pp_loss(keypoints_targ_3d, keypoints_pred_3d, keypoints_mask_3d, stage=stage)
+    assert loss.shape == torch.Size([])
+    assert loss == 0.0
+    assert logs[0]["name"] == f"{stage}_pairwise_projections_loss"
+    assert logs[0]["value"] == loss / pp_loss.weight
+    assert logs[1]["name"] == "pairwise_projections_weight"
+    assert logs[1]["value"] == pp_loss.weight
+
+    # check loss works
+    keypoints_targ_3d = torch.zeros(size=(num_batch, num_keypoints, 3))
+    keypoints_pred_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints, 3))
+    keypoints_mask_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints)).bool()
+    loss, _ = pp_loss(keypoints_targ_3d, keypoints_pred_3d, keypoints_mask_3d)
+    assert loss.isclose(torch.sqrt(torch.tensor(3)))
+
+    # check mask works
+    keypoints_targ_3d = torch.zeros(size=(num_batch, num_keypoints, 3))
+    keypoints_pred_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints, 3))
+    keypoints_pred_3d[-1, ...] = 2
+    keypoints_mask_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints))
+    keypoints_mask_3d[-1, ...] = 0
+    loss, _ = pp_loss(keypoints_targ_3d, keypoints_pred_3d, keypoints_mask_3d.bool())
+    assert loss.isclose(torch.sqrt(torch.tensor(3)))
 
 
 def test_get_loss_classes():
