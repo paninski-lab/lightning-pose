@@ -89,7 +89,7 @@ def ckpt_path_from_base_path(
     # Find the "best" checkpoint in the latest version
     best_ckpt_file = None
     for f in latest_version_files:
-        if "-best.ckpt" in os.path.basename(f):
+        if f.endswith("-best.ckpt"):
             best_ckpt_file = f
             break  # Found the best file, stop searching
 
