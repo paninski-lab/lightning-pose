@@ -72,6 +72,9 @@ def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
     """
     params = cfg.training.get("imgaug", "default")
     if isinstance(params, str):
+        # enforce "dlc-mv" imgaug pipeline for multiview models (no 2D geometric transforms)
+        if params not in ["default", "none"] and cfg.model.model_type.find("multiview") > -1:
+            params = "dlc-mv"
         params_dict = expand_imgaug_str_to_dict(params)
     elif isinstance(params, dict) or isinstance(params, DictConfig):
         if isinstance(params, DictConfig):

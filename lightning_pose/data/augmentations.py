@@ -86,10 +86,20 @@ def imgaug_transform(params_dict: dict | DictConfig) -> iaa.Sequential:
 
 
 def expand_imgaug_str_to_dict(params: str) -> dict[str, Any]:
+
+    _allowed_imgaug_strs = [
+        "default",
+        "none",
+        "dlc",
+        "dlc-lr",
+        "dlc-top-down",
+        "dlc-mv",
+    ]
+
     params_dict = {}
     if params in ["default", "none"]:
         pass  # no augmentations
-    elif params in ["dlc", "dlc-lr", "dlc-top-down"]:
+    elif params in ["dlc", "dlc-lr", "dlc-top-down", "dlc-mv"]:
 
         # flip horizontally
         if params in ["dlc-lr", "dlc-top-down"]:
@@ -100,8 +110,9 @@ def expand_imgaug_str_to_dict(params: str) -> dict[str, Any]:
             params_dict["Flipud"] = {"p": 1.0, "kwargs": {"p": 0.5}}
 
         # rotate
-        rotation = 25  # rotation uniformly sampled from (-rotation, +rotation)
-        params_dict["Affine"] = {"p": 0.4, "kwargs": {"rotate": (-rotation, rotation)}}
+        if not params.endswith("mv"):
+            rotation = 25  # rotation uniformly sampled from (-rotation, +rotation)
+            params_dict["Affine"] = {"p": 0.4, "kwargs": {"rotate": (-rotation, rotation)}}
 
         # motion blur
         k = 5  # kernel size of blur
@@ -167,15 +178,15 @@ def expand_imgaug_str_to_dict(params: str) -> dict[str, Any]:
         }
 
         # crop
-        crop_by = 0.15  # number of pix to crop on each side of img given as a fraction
-        params_dict["CropAndPad"] = {
-            "p": 0.4,
-            "kwargs": {"percent": (-crop_by, crop_by), "keep_size": False},
-        }
+        if not params.endswith("mv"):
+            crop_by = 0.15  # number of pix to crop on each side of img given as a fraction
+            params_dict["CropAndPad"] = {
+                "p": 0.4,
+                "kwargs": {"percent": (-crop_by, crop_by), "keep_size": False},
+            }
     else:
         raise NotImplementedError(
-            f"cfg.training.imgaug string {params} must be in "
-            "['none', 'default', 'dlc', 'dlc-lr', 'dlc-top-down']"
+            f"cfg.training.imgaug string {params} must be in {_allowed_imgaug_strs}"
         )
 
     return params_dict

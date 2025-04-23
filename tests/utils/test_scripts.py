@@ -178,6 +178,28 @@ def test_get_imgaug_transform_dlc_top_down(cfg):
     assert pipe.__str__().find("CropAndPad") != -1
 
 
+def test_get_imgaug_transform_dlc_multiview(cfg):
+
+    cfg_tmp = copy.deepcopy(cfg)
+
+    # dlc pipeline: should contain vertical and horizontal flips, no resizing
+    cfg_tmp.training.imgaug = "dlc-mv"
+    pipe = get_imgaug_transform(cfg_tmp)
+    assert pipe.__str__().find("Resize") == -1
+    assert pipe.__str__().find("Fliplr") == -1
+    assert pipe.__str__().find("Flipud") == -1
+    assert pipe.__str__().find("Affine") == -1
+    assert pipe.__str__().find("MotionBlur") != -1
+    assert pipe.__str__().find("CoarseDropout") != -1
+    assert pipe.__str__().find("CoarseSalt") != -1
+    assert pipe.__str__().find("CoarsePepper") != -1
+    assert pipe.__str__().find("ElasticTransformation") != -1
+    assert pipe.__str__().find("AllChannelsHistogramEqualization") != -1
+    assert pipe.__str__().find("AllChannelsCLAHE") != -1
+    assert pipe.__str__().find("Emboss") != -1
+    assert pipe.__str__().find("CropAndPad") == -1
+
+
 def test_get_imgaug_transform_custom(cfg):
 
     cfg_tmp = copy.deepcopy(cfg)
