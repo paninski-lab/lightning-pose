@@ -8,7 +8,10 @@ from lightning_pose.data.cameras import (
 
 def test_project_camera_pairs_to_3d():
 
-    # hard-coded values from anipose-fly example (using aniposelib CameraGroup object)
+    # ------------------------------------------
+    # hard-coded values from anipose-fly example
+    # (using aniposelib CameraGroup object)
+    # ------------------------------------------
 
     points = torch.tensor(
         [[[244.00537479, 169.14706428],
@@ -71,6 +74,24 @@ def test_project_camera_pairs_to_3d():
 
     assert p3d.shape == (1, 3, 2, 3)  # batch, views, keypoints, coords
     assert torch.allclose(p3d, target, rtol=1e-2)
+
+    # ------------------------------------------
+    # test nan-handling
+    # ------------------------------------------
+    points[0, 0, 0] = float('nan')
+    points[0, 0, 1] = float('nan')
+    p3d = project_camera_pairs_to_3d(
+        points=points.unsqueeze(0),
+        intrinsics=intrinsics.unsqueeze(0),
+        extrinsics=extrinsics.unsqueeze(0),
+        dist=distortions.unsqueeze(0),
+    )
+    assert p3d.shape == (1, 3, 2, 3)  # batch, view combos, keypoints, coords
+    assert torch.all(torch.isnan(p3d[0, 0, 0, :]))
+    assert torch.allclose(p3d[0, 0, 1, :], target[0, 0, 1, :], rtol=1e-2)
+    assert torch.all(torch.isnan(p3d[0, 1, 0, :]))
+    assert torch.allclose(p3d[0, 1, 1, :], target[0, 1, 1, :], rtol=1e-2)
+    assert torch.allclose(p3d[0, 2], target[0, 2], rtol=1e-3)
 
 
 def test_get_valid_projection_masks():

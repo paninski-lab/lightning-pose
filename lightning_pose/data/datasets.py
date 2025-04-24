@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
+from scipy.spatial.transform import Rotation
 from torchtyping import TensorType
 from torchvision import transforms
 
@@ -347,7 +348,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         imgaug_transform: Callable | None = None,
         downsample_factor: Literal[1, 2, 3] = 2,
         do_context: bool = False,
-        resize: bool = True,
+        resize: bool = False,
         uniform_heatmaps: bool = False,
         camera_params_path: str | None = None,
     ) -> None:
@@ -414,7 +415,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 imgaug_transform=imgaug_transform,
                 downsample_factor=downsample_factor,
                 do_context=do_context,
-                resize=False,
+                resize=False,  # handled above in L396
                 uniform_heatmaps=uniform_heatmaps,
             )
             self.keypoint_names[view] = self.dataset[view].keypoint_names
@@ -513,12 +514,12 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         return len(self.view_names)
 
     @staticmethod
-    def _transform_keypoints(
+    def _scale_translate_keypoints(
         keypoints_3d: np.ndarray,
         scale_params: tuple = (0.8, 1.2),
-        shift_param: float = 0.5,
+        shift_param: float = 0.25,
     ) -> np.ndarray:
-        """Apply scale and shift transforms to 3D keypoints.
+        """Apply scale and translation transforms to 3D keypoints.
 
         Parameters
         ----------
@@ -545,18 +546,84 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         return keypoints_aug
 
     @staticmethod
+    def _rotate_camera(camera, angle_rad):
+        """Apply a rotation to a camera that correctly handles the projection math."""
+
+        cam_copy = camera.copy()
+
+        # get current camera parameters
+        R = cam_copy.get_extrinsics_mat()[:3, :3].copy()
+        t = cam_copy.get_extrinsics_mat()[:3, 3].copy()
+
+        # rotate around the world Z-axis instead of camera Z-axis
+        R_world_z = np.array([
+            [np.cos(angle_rad), -np.sin(angle_rad), 0],
+            [np.sin(angle_rad), np.cos(angle_rad), 0],
+            [0, 0, 1]
+        ])
+
+        # apply the rotation to the existing camera rotation matrix
+        R_new = R_world_z @ R
+
+        # update extrinsics
+        cam_copy.set_translation(t)
+        cam_copy.set_rotation(Rotation.from_matrix(R_new).as_rotvec())
+
+        return cam_copy
+
+    def _rotate_cameras(
+        self,
+        camgroup: CameraGroup,
+        rotation_max_angle: float = 15.0,
+    ) -> CameraGroup:
+        """Apply random 2D rotations by modifying camera extrinsics
+
+        This approach preserves 3D consistency by keeping the 3D keypoints and
+        images fixed, but rotating the cameras instead. This ensures that
+        triangulation of the 2D projections will still yield the same 3D points.
+
+        Parameters
+        ----------
+        keypoints_3d: torch.Tensor, shape (num_keypoints, 3)
+        camgroup: Camera group object containing camera parameters
+
+        Returns
+        -------
+        CameraGroup object with updated random rotation matrices
+
+        """
+
+        # Generate random rotation angles (in radians) for each view
+        angles_rad = np.random.uniform(
+            -rotation_max_angle * np.pi / 180,
+            rotation_max_angle * np.pi / 180,
+            self.num_views
+        )
+
+        # Create a copy of the camera group to modify
+        cameras_rotated = []
+        for i, camera in enumerate(camgroup.cameras):
+            cam_copy = self._rotate_camera(camera, angles_rad[i])
+            cameras_rotated.append(cam_copy)
+
+        # Create new temporary camera group with rotated cameras
+        camgroup_rotated = camgroup.copy_with_new_cameras(cameras_rotated)
+
+        return camgroup_rotated
+
+    @staticmethod
     def _transform_images(
         images: list,
-        keypoints: np.ndarray,
+        keypoints_orig: np.ndarray,
         keypoints_aug: np.ndarray
     ) -> list:
-        """Apply 2D affine transformations to frames based on augmented keypoints.
+        """Apply 2D transformations based on keypoint matching.
 
         Parameters
         ----------
         images: each element is a torch array of shape (3, height, width); h/w can be different for
             different views
-        keypoints: shape (num_views, num_keypoints, 2)
+        keypoints_orig: shape (num_views, num_keypoints, 2)
         keypoints_aug: shape (num_views, num_keypoints, 2)
 
         Returns
@@ -566,45 +633,50 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         """
 
         device = images[0].device
+        images_transformed = []
 
-        images_aug = []
-        for orig_image, orig_keypoints, new_keypoints in zip(images, keypoints, keypoints_aug):
+        for orig_image, kps_og, kps_aug in zip(images, keypoints_orig, keypoints_aug):
 
             _, img_height, img_width = orig_image.shape
 
-            # compute scale
-            orig_bbox_size = np.nanmax(orig_keypoints, axis=0) - np.nanmin(orig_keypoints, axis=0)
-            new_bbox_size = np.nanmax(new_keypoints, axis=0) - np.nanmin(new_keypoints, axis=0)
-            scale_x, scale_y = new_bbox_size / (orig_bbox_size + 1e-6)  # Prevent division by zero
+            # create a mask for valid keypoints (not NaN in either original or augmented)
+            valid_mask = ~(np.isnan(kps_og).any(axis=1) | np.isnan(kps_aug).any(axis=1))
 
-            # compute translation (shift in 2D space)
-            orig_center = np.nanmean(orig_keypoints, axis=0)
-            new_center = np.nanmean(new_keypoints, axis=0)
-            translation_x, translation_y = new_center - orig_center
+            # apply the same mask to both original and augmented keypoints
+            orig_pts = kps_og[valid_mask]
+            new_pts = kps_aug[valid_mask]
 
-            # construct affine transformation matrix (2x3)
-            M = torch.tensor([
-                [scale_x, 0, (1 - scale_x) * orig_center[0] + translation_x],
-                [0, scale_y, (1 - scale_y) * orig_center[1] + translation_y]
-            ], dtype=torch.float32, device=device)
+            # ensure we have enough points for transformation
+            if len(orig_pts) < 3:
+                # If not enough points, return original image
+                images_transformed.append(orig_image.unsqueeze(0))
+                continue
+
+            # estimate the affine transformation matrix with non-uniform scaling
+            M, _ = cv2.estimateAffinePartial2D(orig_pts, new_pts)
+
+            # convert to tensor
+            M_tensor = torch.tensor(M, dtype=torch.float32, device=device)
 
             # apply affine transformation
             # image has already been normalized, so pad with minimum value of image instead of 0s
-            images_aug.append(ktransform.warp_affine(
+            transformed_image = ktransform.warp_affine(
                 orig_image.unsqueeze(0),  # (C, H, W)
-                M.unsqueeze(0),  # (2, 3)
+                M_tensor.unsqueeze(0),  # (2, 3)
                 dsize=(img_height, img_width),  # Keep original size
                 padding_mode="fill",
-                fill_value=torch.ones(3) * orig_image.min(),
-            ))
+                fill_value=torch.ones(3, device=orig_image.device) * orig_image.min(),
+            )
 
-        return images_aug
+            images_transformed.append(transformed_image)
+
+        return images_transformed
 
     def _resize_keypoints(self, keypoints: np.ndarray, bboxes: list) -> list:
         """Resize keypoints to a uniform shape and return torch arrays."""
         keypoints_resized = []
         for idx_view in range(self.num_views):
-            keypoints_ = keypoints[idx_view]  # shape (num_keypoints, 2)
+            keypoints_ = keypoints[idx_view].copy()  # shape (num_keypoints, 2)
             bbox_ = bboxes[idx_view].cpu().numpy()
             keypoints_[:, 0] = (keypoints_[:, 0] / bbox_[3]) * self.resize_width
             keypoints_[:, 1] = (keypoints_[:, 1] / bbox_[2]) * self.resize_height
@@ -613,15 +685,17 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         return keypoints_resized
 
     def _resize_images(self, images: list) -> list:
+        """Resize images to a uniform shape."""
         images_resized = []
         for idx_view in range(self.num_views):
             images_resized.append(ktransform.resize(
-                images[idx_view],
+                images[idx_view].clone(),
                 size=(self.resize_height, self.resize_width),
             ))
         return images_resized
 
     def apply_3d_transforms(self, data_dict: dict, camgroup: CameraGroup) -> tuple:
+        """Apply 3D transforms (scale, translate) followed by rotation via camera extrinsics."""
 
         # extract keypoints and images from each view
         keypoints_2d = np.zeros((self.num_views, self.num_keypoints // self.num_views, 2))
@@ -635,18 +709,18 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             bboxes.append(example_dict["bbox"])
 
         # triangulate keypoints (2D -> 3D)
-        keypoints_3d = camgroup.triangulate_fast(keypoints_2d)
+        keypoints_3d = camgroup.triangulate_fast(keypoints_2d.copy())
 
-        # scale and translate keypoints
-        keypoints_3d_aug = self._transform_keypoints(keypoints_3d)
+        # scale and translate keypoints in 3D
+        keypoints_3d_aug = self._scale_translate_keypoints(keypoints_3d)
 
-        # project keypoints (3D -> 2D)
+        # apply rotations by modifying camera extrinsics
+        camgroup_rotated = self._rotate_cameras(camgroup)
+
+        # project 3D keypoints to 2D using the rotated cameras
         keypoints_2d_aug = camgroup.project(keypoints_3d_aug)
 
-        # scale and translate images
-        images_aug = self._transform_images(images, keypoints_2d, keypoints_2d_aug)
-
-        # resize to uniform dimensions for backbone network
+        # resize 2D keypoints to uniform dimensions for backbone network
         keypoints_2d_aug_resize_np = self._resize_keypoints(keypoints_2d_aug, bboxes)
         keypoints_2d_aug_resize = [
             torch.tensor(
@@ -656,6 +730,15 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             )
             for a in keypoints_2d_aug_resize_np
         ]
+
+        # transform images to match keypoint augmentations
+        images_aug = self._transform_images(
+            images=images,
+            keypoints_orig=keypoints_2d.copy(),
+            keypoints_aug=keypoints_2d_aug.copy(),
+        )
+
+        # resize to uniform dimensions for backbone network
         images_aug_resize = self._resize_images(images_aug)
 
         # create new data dict
@@ -670,7 +753,20 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             example_dict["heatmaps"] = self.dataset[view].compute_heatmap(example_dict)
             data_dict_aug[view] = example_dict
 
-        return data_dict_aug, torch.tensor(keypoints_3d_aug)
+        # get camera matrices
+        intrinsic_mat = torch.stack([
+            torch.tensor(cam.get_camera_matrix()) for cam in camgroup_rotated.cameras
+        ], dim=0)
+
+        extrinsic_mat = torch.stack([
+            torch.tensor(cam.get_extrinsics_mat()[:3]) for cam in camgroup_rotated.cameras
+        ], dim=0)
+
+        dists = torch.stack([
+            torch.tensor(cam.get_distortions()) for cam in camgroup_rotated.cameras
+        ], dim=0)
+
+        return data_dict_aug, torch.tensor(keypoints_3d_aug), intrinsic_mat, extrinsic_mat, dists
 
     def fusion(self, datadict: dict) -> Tuple[
         Union[
@@ -730,27 +826,34 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         for view in self.view_names:
             datadict[view] = self.dataset[view].__getitem__(idx, ignore_nans=ignore_nans)
 
-        # apply 3d augmentations if applicable
-        if self.cam_params_file_to_camgroup:
+        # apply 3D augmentations and 2D rotations if applicable
+        if (
+            self.cam_params_file_to_camgroup
+            and self.imgaug_transform.__str__().find("Resize") == -1
+        ):
+            # only apply 3d transforms if
+            # - camera calibration information is available
+            # - imgaug does not contain a resize operation, which indicates:
+            #   - val/test batch
+            #   - output of "default"/"none" pipeline (e.g. model evaluation on labeled frames)
+
             # select proper camera calibration parameters for this data point
             camgroup = self.cam_params_file_to_camgroup[self.cam_params_df.iloc[idx].file]
             # apply transforms
-            datadict, keypoints_3d = self.apply_3d_transforms(datadict, camgroup)
-            intrinsic_matrix = torch.stack([
-                torch.tensor(cam.get_camera_matrix()) for cam in camgroup.cameras
-            ], dim=0)
-            extrinsic_matrix = torch.stack([
-                torch.tensor(cam.get_extrinsics_mat()[:3]) for cam in camgroup.cameras
-            ], dim=0)
-            distortions = torch.stack([
-                torch.tensor(cam.get_distortions()) for cam in camgroup.cameras
-            ], dim=0)
+            (
+                datadict,
+                keypoints_3d,
+                intrinsic_matrix,
+                extrinsic_matrix,
+                distortions,
+            ) = self.apply_3d_transforms(datadict, camgroup)
         else:
             keypoints_3d = torch.tensor([1])
             intrinsic_matrix = torch.tensor([1])
             extrinsic_matrix = torch.tensor([1])
             distortions = torch.tensor([1])
 
+        # fuse data from all views
         images, keypoints, heatmaps, bboxes, concat_order = self.fusion(datadict)
         assert np.all(concat_order == self.view_names)
         # images normal:[view, RGB, H, W] context:[view, context, RGB, H, W]

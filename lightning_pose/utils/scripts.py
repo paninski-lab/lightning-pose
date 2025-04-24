@@ -133,6 +133,7 @@ def get_dataset(
                 imgaug_transform=imgaug_transform,
                 downsample_factor=cfg.data.get("downsample_factor", 2),
                 do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
+                resize=True if cfg.training.imgaug in ["default", "none"] else False,
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
                 camera_params_path=cfg.data.get("camera_params_file", None),
             )

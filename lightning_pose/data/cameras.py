@@ -1,3 +1,4 @@
+import copy
 import itertools
 
 from aniposelib.cameras import CameraGroup as CameraGroupAnipose
@@ -35,13 +36,48 @@ def project_camera_pairs_to_3d(
 
     p3d = []
     for j1, j2 in itertools.combinations(range(num_views), 2):
-        tri = triangulate_points(
-            P1=extrinsics[:, j1],
-            P2=extrinsics[:, j2],
-            points1=points[:, j1, ...],
-            points2=points[:, j2, ...],
+
+        points1 = points[:, j1, ...]
+        points2 = points[:, j2, ...]
+
+        # create a mask for valid keypoints
+        # a keypoint is valid if it's not NaN in BOTH views
+        valid_mask = ~(
+                torch.isnan(points1).any(dim=-1) |
+                torch.isnan(points2).any(dim=-1)
         )
+
+        # prepare points for triangulation
+        tri = torch.full(
+            (num_batch, num_keypoints, 3),
+            float('nan'),
+            device=points.device,
+            dtype=points.dtype,
+        )
+
+        # triangulate only valid points
+        for batch_idx in range(num_batch):
+            # get valid keypoint indices for this batch
+            batch_valid_indices = torch.where(valid_mask[batch_idx])[0]
+
+            if len(batch_valid_indices) > 0:
+                # extract valid points for this batch
+                batch_points1 = points1[batch_idx][valid_mask[batch_idx]]
+                batch_points2 = points2[batch_idx][valid_mask[batch_idx]]
+
+                # triangulate valid points
+                batch_tri = triangulate_points(
+                    P1=extrinsics[batch_idx, j1],
+                    P2=extrinsics[batch_idx, j2],
+                    points1=batch_points1,
+                    points2=batch_points2,
+                )
+
+                # place triangulated points back in the full tensor
+                tri[batch_idx, valid_mask[batch_idx]] = batch_tri
+
         p3d.append(tri)
+
     return torch.stack(p3d, dim=1)
 
 
@@ -101,6 +137,17 @@ class CameraGroup(CameraGroupAnipose):
             out = out[0]
 
         return out
+
+    def copy(self):
+        cameras = [cam.copy() for cam in self.cameras]
+        metadata = copy.copy(self.metadata)
+        return CameraGroup(cameras, metadata)
+
+    def copy_with_new_cameras(self, cameras):
+        """Create a new CameraGroup with the same properties but different cameras."""
+        new_group = copy.deepcopy(self)
+        new_group.cameras = cameras
+        return new_group
 
     @classmethod
     def load(cls, path):
