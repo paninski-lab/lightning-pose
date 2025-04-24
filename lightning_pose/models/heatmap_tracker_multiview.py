@@ -34,6 +34,8 @@ __all__ = [
 ]
 
 
+# TODO: HeatmapTrackerMultiview(BaseSupervisedTracker)
+
 class HeatmapTrackerMultiviewMultihead(BaseSupervisedTracker):
     """Multi-headed convolutional network that handles multi-view datasets."""
 
