@@ -370,7 +370,7 @@ def get_model(
     optimizer = cfg.training.get("optimizer", "Adam")
     optimizer_params = cfg.training.get(
         "optimizer_params",
-        OmegaConf.create({"learning_rate": 1e-4}),
+        OmegaConf.create({"learning_rate": 1e-3}),
     )
 
     lr_scheduler = cfg.training.lr_scheduler
