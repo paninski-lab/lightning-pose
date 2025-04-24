@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from typing import Callable, Literal, Tuple, Union
 
+import cv2
 import imgaug.augmenters as iaa
 import kornia.geometry.transform as ktransform
 import numpy as np
@@ -678,8 +679,8 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         for idx_view in range(self.num_views):
             keypoints_ = keypoints[idx_view].copy()  # shape (num_keypoints, 2)
             bbox_ = bboxes[idx_view].cpu().numpy()
-            keypoints_[:, 0] = (keypoints_[:, 0] / bbox_[3]) * self.resize_width
-            keypoints_[:, 1] = (keypoints_[:, 1] / bbox_[2]) * self.resize_height
+            keypoints_[:, 0] = (keypoints_[:, 0] / bbox_[3]) * self.width
+            keypoints_[:, 1] = (keypoints_[:, 1] / bbox_[2]) * self.height
             keypoints_resized.append(keypoints_.reshape(-1))
 
         return keypoints_resized
@@ -690,7 +691,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         for idx_view in range(self.num_views):
             images_resized.append(ktransform.resize(
                 images[idx_view].clone(),
-                size=(self.resize_height, self.resize_width),
+                size=(self.height, self.width),
             ))
         return images_resized
 
@@ -718,7 +719,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         camgroup_rotated = self._rotate_cameras(camgroup)
 
         # project 3D keypoints to 2D using the rotated cameras
-        keypoints_2d_aug = camgroup.project(keypoints_3d_aug)
+        keypoints_2d_aug = camgroup_rotated.project(keypoints_3d_aug)
 
         # resize 2D keypoints to uniform dimensions for backbone network
         keypoints_2d_aug_resize_np = self._resize_keypoints(keypoints_2d_aug, bboxes)
