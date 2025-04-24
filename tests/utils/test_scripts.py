@@ -122,6 +122,7 @@ def test_get_imgaug_transform_dlc(cfg):
     assert pipe.__str__().find("Resize") == -1
     assert pipe.__str__().find("Fliplr") == -1
     assert pipe.__str__().find("Flipud") == -1
+    assert pipe.__str__().find("Rot90") == -1
     assert pipe.__str__().find("Affine") != -1
     assert pipe.__str__().find("MotionBlur") != -1
     assert pipe.__str__().find("CoarseDropout") != -1
@@ -142,8 +143,9 @@ def test_get_imgaug_transform_dlc_lr(cfg):
     cfg_tmp.training.imgaug = "dlc-lr"
     pipe = get_imgaug_transform(cfg_tmp)
     assert pipe.__str__().find("Resize") == -1
-    assert pipe.__str__().find("Fliplr") != -1
+    assert pipe.__str__().find("Fliplr") == -1
     assert pipe.__str__().find("Flipud") == -1
+    assert pipe.__str__().find("Rot90(name=UnnamedRot90, parameters=[Choice(a=[0, 2]") != -1
     assert pipe.__str__().find("Affine") != -1
     assert pipe.__str__().find("MotionBlur") != -1
     assert pipe.__str__().find("CoarseDropout") != -1
@@ -164,8 +166,9 @@ def test_get_imgaug_transform_dlc_top_down(cfg):
     cfg_tmp.training.imgaug = "dlc-top-down"
     pipe = get_imgaug_transform(cfg_tmp)
     assert pipe.__str__().find("Resize") == -1
-    assert pipe.__str__().find("Fliplr") != -1
-    assert pipe.__str__().find("Flipud") != -1
+    assert pipe.__str__().find("Fliplr") == -1
+    assert pipe.__str__().find("Flipud") == -1
+    assert pipe.__str__().find("Rot90(name=UnnamedRot90, parameters=[Choice(a=[0, 1, 2, 3]") != -1
     assert pipe.__str__().find("Affine") != -1
     assert pipe.__str__().find("MotionBlur") != -1
     assert pipe.__str__().find("CoarseDropout") != -1

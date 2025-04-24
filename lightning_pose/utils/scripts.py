@@ -628,7 +628,7 @@ def compute_metrics(
         labels_file = Path(cfg.data.csv_file)
         if not labels_file.is_absolute():
             labels_file = Path(cfg.data.data_dir) / labels_file
-        labels_file = io_utils.return_absolute_path(labels_file)
+        labels_file = io_utils.return_absolute_path(str(labels_file))
         compute_metrics_single(
             cfg=cfg,
             labels_file=labels_file,
