@@ -123,7 +123,6 @@ class BaseDataModule(pl.LightningDataModule):
             else:
                 # if we're here it's because the dataset is a MultiviewHeatmapDataset that doesn't
                 # resize by default in the pipeline; we enforce resizing here on val/test batches
-                import imgaug.augmenters as iaa
                 height = self.dataset.height
                 width = self.dataset.width
                 final_transform = iaa.Sequential([iaa.Resize({"height": height, "width": width})])

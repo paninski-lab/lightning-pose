@@ -76,7 +76,7 @@ def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
         if (
             params not in ["default", "none"]
             and cfg.model.model_type.find("multiview") > -1
-            and cfg.data.get("camera_params_file", None)
+            and cfg.data.get("camera_params_file")
         ):
             params = "dlc-mv"
         params_dict = expand_imgaug_str_to_dict(params)
@@ -87,13 +87,9 @@ def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
         else:
             params_dict = params.copy()
         for transform, val in params_dict.items():
-            assert getattr(
-                iaa, transform
-            ), f"{transform} is not a valid imgaug transform"
+            assert getattr(iaa, transform), f"{transform} is not a valid imgaug transform"
     else:
-        raise TypeError(
-            f"params is of type {type(params)}, must be str, dict, or DictConfig"
-        )
+        raise TypeError(f"params is of type {type(params)}, must be str, dict, or DictConfig")
 
     return imgaug_transform(params_dict)
 
@@ -124,6 +120,16 @@ def get_dataset(
                 "No precautions regarding the size of the images were considered here, "
                 "images will be resized accordingly to configs!"
             )
+            if (
+                cfg.training.imgaug in ["default", "none"]
+                or not cfg.data.get("camera_params_file")
+            ):
+                # we are either
+                # 1. running inference on un-augmented data, and need to make sure to resize
+                # 2. using a multiview model w/o camera params, and need to take care of resizing
+                resize = True
+            else:
+                resize = False
             dataset = MultiviewHeatmapDataset(
                 root_directory=data_dir,
                 csv_paths=cfg.data.csv_file,
@@ -133,7 +139,7 @@ def get_dataset(
                 imgaug_transform=imgaug_transform,
                 downsample_factor=cfg.data.get("downsample_factor", 2),
                 do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
-                resize=True if cfg.training.imgaug in ["default", "none"] else False,
+                resize=resize,
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
                 camera_params_path=cfg.data.get("camera_params_file", None),
             )
