@@ -572,8 +572,8 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         return cam_copy
 
+    @staticmethod
     def _rotate_cameras(
-        self,
         camgroup: CameraGroup,
         rotation_max_angle: float = 15.0,
     ) -> CameraGroup:
@@ -598,13 +598,13 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         angles_rad = np.random.uniform(
             -rotation_max_angle * np.pi / 180,
             rotation_max_angle * np.pi / 180,
-            self.num_views
+            len(camgroup.cameras)
         )
 
         # Create a copy of the camera group to modify
         cameras_rotated = []
         for i, camera in enumerate(camgroup.cameras):
-            cam_copy = self._rotate_camera(camera, angles_rad[i])
+            cam_copy = MultiviewHeatmapDataset._rotate_camera(camera, angles_rad[i])
             cameras_rotated.append(cam_copy)
 
         # Create new temporary camera group with rotated cameras
