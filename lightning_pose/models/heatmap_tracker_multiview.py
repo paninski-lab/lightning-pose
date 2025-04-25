@@ -25,6 +25,7 @@ from lightning_pose.models.base import (
 from lightning_pose.models.heads import (
     ALLOWED_MULTIVIEW_HEADS,
     ALLOWED_MULTIVIEW_MULTIHEADS,
+    MultiviewFeatureTransformerHead,
     MultiviewHeatmapCNNHead,
     MultiviewHeatmapCNNMultiHead,
 )
@@ -103,6 +104,14 @@ class HeatmapTrackerMultiview(BaseSupervisedTracker):
 
         if head == "heatmap_cnn":
             self.head = MultiviewHeatmapCNNHead(
+                backbone_arch=backbone,
+                num_views=num_views,
+                in_channels=self.num_fc_input_features,
+                out_channels=self.num_keypoints,
+                downsample_factor=self.downsample_factor,
+            )
+        elif head == "feature_transformer":
+            self.head = MultiviewFeatureTransformerHead(
                 backbone_arch=backbone,
                 num_views=num_views,
                 in_channels=self.num_fc_input_features,
