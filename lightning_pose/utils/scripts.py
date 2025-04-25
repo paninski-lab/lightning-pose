@@ -35,6 +35,7 @@ from lightning_pose.metrics import (
 from lightning_pose.models import (
     HeatmapTracker,
     HeatmapTrackerMHCRNN,
+    HeatmapTrackerMultiview,
     HeatmapTrackerMultiviewMultihead,
     RegressionTracker,
     SemiSupervisedHeatmapTracker,
@@ -421,6 +422,22 @@ def get_model(
                 loss_factory=loss_factories["supervised"],
                 backbone=cfg.model.backbone,
                 pretrained=backbone_pretrained,
+                downsample_factor=cfg.data.get("downsample_factor", 2),
+                torch_seed=cfg.training.rng_seed_model_pt,
+                optimizer=optimizer,
+                optimizer_params=optimizer_params,
+                lr_scheduler=lr_scheduler,
+                lr_scheduler_params=lr_scheduler_params,
+                image_size=image_h,  # only used by ViT
+            )
+        elif cfg.model.model_type == "heatmap_multiview":
+            model = HeatmapTrackerMultiview(
+                num_keypoints=cfg.data.num_keypoints,
+                num_views=len(cfg.data.view_names),
+                loss_factory=loss_factories["supervised"],
+                backbone=cfg.model.backbone,
+                pretrained=backbone_pretrained,
+                head=cfg.model.head,
                 downsample_factor=cfg.data.get("downsample_factor", 2),
                 torch_seed=cfg.training.rng_seed_model_pt,
                 optimizer=optimizer,

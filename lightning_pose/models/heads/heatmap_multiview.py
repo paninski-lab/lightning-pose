@@ -14,9 +14,117 @@ from lightning_pose.models.heads.heatmap import run_subpixelmaxima
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
+    "MultiviewHeatmapCNNHead",
     "MultiviewHeatmapCNNMultiHead",
     "ResidualBlock",
 ]
+
+
+class MultiviewHeatmapCNNHead(nn.Module):
+    """Multi-view convolutional neural network head that operates on heatmaps.
+
+    This head takes a set of 2D feature maps corresponding to different views, and fuses them
+    together.
+
+    """
+
+    def __init__(
+        self,
+        backbone_arch: str,
+        num_views: int,
+        in_channels: int,
+        out_channels: int,
+        deconv_out_channels: int | None = None,
+        downsample_factor: int = 2,
+    ):
+        """
+
+        Args:
+            backbone_arch: string denoting backbone architecture; to remove in future release
+            num_views: number of camera views in each batch
+            in_channels: number of channels in the input feature map
+            out_channels: number of channels in the output heatmap (i.e. number of keypoints)
+            deconv_out_channels: output channel number for each intermediate deconv layer; defaults
+                to number of keypoints
+            downsample_factor: make heatmaps smaller than input frames by this factor; subpixel
+                operations are performed for increased precision
+
+        """
+        super().__init__()
+
+        self.backbone_arch = backbone_arch
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.deconv_out_channels = deconv_out_channels
+        self.downsample_factor = downsample_factor
+        self.temperature = torch.tensor(1000.0)  # soft argmax temp
+
+        # create upsampling head
+        self.upsample = HeatmapHead(
+            backbone_arch=backbone_arch,
+            in_channels=in_channels,
+            out_channels=out_channels,
+            deconv_out_channels=deconv_out_channels,
+            downsample_factor=downsample_factor,
+            final_softmax=False,
+        )
+
+        # create multi-view fusion head
+        self.num_views = num_views
+        self.fusion = ResidualBlock(
+            in_channels=num_views,
+            intermediate_channels=32,
+            out_channels=num_views,
+            final_relu=False,
+            final_softmax=True,
+        )
+
+    def forward(
+        self,
+        features: TensorType["view x batch", "features", "rep_height", "rep_width"],
+        num_views: torch.tensor,
+    ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
+        """Upsample and run multiview head to get final heatmaps.
+
+        Args:
+            features: outputs of backbone
+            num_views: number of camera views for each batch element
+
+        """
+
+        batch_size_combined = features.shape[0]
+        batch_size = int(batch_size_combined // num_views)
+
+        # upsample features
+        heatmaps = self.upsample(features)
+        # heatmaps = [view * batch, num_keypoints, heatmap_height, heatmap_width]
+        heat_height = heatmaps.shape[-2]
+        heat_width = heatmaps.shape[-1]
+
+        # now we will process the heatmaps for each set of corresponding keypoints with the
+        # multiview head; this requires lots of reshaping
+
+        heatmaps = heatmaps.reshape(batch_size, num_views, -1, heat_height, heat_width)
+        # heatmaps = [batch, views, num_keypoints, heatmap_height, heatmap_width]
+        heatmaps = heatmaps.permute(0, 2, 1, 3, 4)
+        # heatmaps = [batch, num_keypoints, views, heatmap_height, heatmap_width]
+        heatmaps = heatmaps.reshape(-1, num_views, heat_height, heat_width)
+        # heatmaps = [num_keypoints * batch, views, heatmap_height, heatmap_width]
+        heatmaps = self.fusion(heatmaps)
+        # heatmaps = [num_keypoints * batch, views, heatmap_height, heatmap_width]
+
+        # reshape heatmaps back to their original shape
+        heatmaps = heatmaps.reshape(batch_size, -1, num_views, heat_height, heat_width)
+        # heatmaps = [batch, num_keypoints, views, heatmap_height, heatmap_width]
+        heatmaps = heatmaps.permute(0, 2, 1, 3, 4)
+        # heatmaps = [batch, views, num_keypoints, heatmap_height, heatmap_width]
+        heatmaps = heatmaps.reshape(batch_size, -1, heat_height, heat_width)
+        # heatmaps = [batch, num_keypoints * views, heatmap_height, heatmap_width]
+
+        return heatmaps
+
+    def run_subpixelmaxima(self, heatmaps):
+        return run_subpixelmaxima(heatmaps, self.downsample_factor, self.temperature)
 
 
 class MultiviewHeatmapCNNMultiHead(nn.Module):
