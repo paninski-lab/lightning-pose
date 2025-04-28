@@ -33,6 +33,36 @@ def test_multiview_heatmap_cnn(
     )
 
 
+def test_multiview_feature_transformer(
+    cfg_multiview,
+    multiview_heatmap_data_module,
+    video_dataloader,
+    trainer,
+    # run_model_test,
+):
+    """Test initialization and training of a multiview model with heatmap_cnn head."""
+
+    cfg_tmp = copy.deepcopy(cfg_multiview)
+    cfg_tmp.model.model_type = "heatmap_multiview"
+    cfg_tmp.model.head = "feature_transformer"
+    cfg_tmp.model.losses_to_use = []
+
+    # TODO: need to update Model API for predictions (images and vids)
+    # run_model_test(
+    #     cfg=cfg_tmp,
+    #     data_module=multiview_heatmap_data_module,
+    #     video_dataloader=video_dataloader,
+    #     trainer=trainer,
+    # )
+
+    _run_model_test(
+        cfg=cfg_tmp,
+        data_module=multiview_heatmap_data_module,
+        video_dataloader=video_dataloader,
+        trainer=trainer,
+    )
+
+
 def _run_model_test(cfg, data_module, video_dataloader, trainer):
     """Helper function to simplify unit tests which run different models."""
 

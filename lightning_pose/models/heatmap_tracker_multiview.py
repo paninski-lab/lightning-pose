@@ -54,6 +54,7 @@ class HeatmapTrackerMultiview(BaseSupervisedTracker):
         optimizer_params: DictConfig | dict | None = None,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: DictConfig | dict | None = None,
+        image_size: int = 256,
         **kwargs: Any,
     ):
         """Initialize a DLC-like model with resnet backbone.
@@ -117,6 +118,11 @@ class HeatmapTrackerMultiview(BaseSupervisedTracker):
                 in_channels=self.num_fc_input_features,
                 out_channels=self.num_keypoints,
                 downsample_factor=self.downsample_factor,
+                transformer_d_model=512,
+                transformer_nhead=8,
+                transformer_dim_feedforward=512,
+                transformer_num_layers=4,
+                img_size=image_size,
             )
         else:
             raise NotImplementedError(
