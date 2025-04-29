@@ -33,7 +33,7 @@ __all__ = [
 
 DEFAULT_LR_SCHEDULER_PARAMS = OmegaConf.create(
     {
-        "milestones": [100, 200, 300],
+        "milestones": [150, 200, 250],
         "gamma": 0.5,
     }
 )
