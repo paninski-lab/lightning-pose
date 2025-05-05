@@ -126,8 +126,6 @@ class Model:
         csv_file: str | Path,
         data_dir: str | Path | None = None,
         compute_metrics: bool = True,
-        generate_labeled_images: bool = False,
-        output_dir: str | Path | None = UNSPECIFIED,
         add_train_val_test_set: bool = False,
     ) -> PredictionResult:
         """Predicts on a labeled dataset and computes error/loss metrics if applicable.
@@ -139,8 +137,6 @@ class Model:
             compute_metrics (bool, optional): Whether to compute pixel error and loss metrics on
                 predictions.
             generate_labeled_images (bool, optional): Whether to save labeled images. Defaults to False.
-            output_dir (str | Path, optional): The directory to save outputs to.
-                Defaults to `{model_dir}/image_preds/{csv_file_name}`. If set to None, outputs are not saved.
             add_train_val_test_set (bool): When predicting on training dataset, set to true to add the `set`
                 column to the prediction output.
         Returns:
@@ -148,22 +144,13 @@ class Model:
         """
         self._load()
         # Convert this to absolute, because if relative, downstream will
-        # assume incorrectly assume its relative to the data_dir.
+        # assume its relative to the data_dir.
         csv_file = Path(csv_file).absolute()
         if data_dir is None:
             data_dir = self.config.cfg.data.data_dir
 
-        if output_dir == self.__class__.UNSPECIFIED:
-            output_dir = self.image_preds_dir() / csv_file.name
-
-        elif output_dir is None:
-            raise NotImplementedError("Currently we must save predictions")
-
-        output_dir = Path(output_dir)
+        output_dir = self.image_preds_dir() / csv_file.name
         output_dir.mkdir(parents=True, exist_ok=True)
-
-        if generate_labeled_images:
-            raise NotImplementedError()
 
         # Point predict_dataset to the csv_file and data_dir.
         # HACK: For true multi-view model, trick predict_dataset and compute_metrics
@@ -209,6 +196,72 @@ class Model:
             metrics = None
 
         return PredictionResult(predictions=df, metrics=metrics)
+
+    def predict_on_label_csv_multiview(
+        self,
+        csv_file_per_view: list[str] | list[Path],
+        data_dir: str | Path | None = None,
+        compute_metrics: bool = True,
+        add_train_val_test_set: bool = False,
+    ) -> MultiviewPredictionResult:
+        """TODO needs docstring
+        csv_file_per_view should be in the same order as cfg.data.view_names."""
+        assert self.config.is_multi_view()
+        self._load()
+
+        view_names = self.config.cfg.data.view_names
+        assert len(csv_file_per_view) == len(
+            view_names
+        ), f"{len(csv_file_per_view)} != {len(view_names)}"
+
+        # Convert this to absolute, because if relative, downstream will
+        # assume its relative to the data_dir.
+        csv_file_per_view: list[Path] = [Path(f).absolute() for f in csv_file_per_view]
+
+        if data_dir is None:
+            data_dir = self.config.cfg.data.data_dir
+
+        # Point predict_dataset to the csv_file and data_dir.
+        cfg_overrides = {
+            "data": {
+                "data_dir": str(data_dir),
+                "csv_file": [str(p) for p in csv_file_per_view],
+            }
+        }
+
+        # Avoid annotating set=train/val/test for CSV file other than the training CSV file.
+        if not add_train_val_test_set:
+            cfg_overrides.update({"train_prob": 1, "val_prob": 0, "train_frames": 1})
+
+        cfg_pred = OmegaConf.merge(self.cfg, cfg_overrides)
+
+        data_module_pred = _build_datamodule_pred(cfg_pred)
+
+        preds_files = []
+        for view_name in view_names:
+            output_dir = self.image_preds_dir() / csv_file_per_view[view_names.index(view_name)].name
+            output_dir.mkdir(parents=True, exist_ok=True)
+            preds_files.append(str(output_dir / "predictions.csv"))
+
+        # Outputs dict[str, pd.DataFrame] because inputs indicate multiview.
+        view_to_df_dict = predict_dataset(
+            cfg_pred, data_module_pred, model=self.model, preds_file=preds_files
+        )
+
+        if compute_metrics:
+            metrics = {}
+            for view_name, _preds_file in zip(view_names, preds_files):
+                metrics[view_name] = compute_metrics_single(
+                    cfg=self.cfg,
+                    labels_file=csv_file_per_view[view_names.index(view_name)],
+                    preds_file=_preds_file,
+                    data_module=data_module_pred,
+                )
+        else:
+            metrics = None
+
+        return MultiviewPredictionResult(predictions=view_to_df_dict, metrics=metrics)
+
 
     def predict_on_video_file(
         self,

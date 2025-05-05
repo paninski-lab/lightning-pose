@@ -106,15 +106,25 @@ def _evaluate_on_training_dataset(model: Model, ood_mode=False):
     else:
         pretty_print_str("Predicting train/val/test images...")
 
-    for i, csv_file in enumerate(csv_files):
+    # Run prediction and metric computation.
+    if model.config.is_multi_view():
+        model.predict_on_label_csv_multiview(
+            csv_file_per_view=csv_files,
+            data_dir=model.config.cfg.data.data_dir,
+            compute_metrics=True,
+            add_train_val_test_set=(not ood_mode),
+        )
+    else:
+        csv_file = csv_files[0]
         model.predict_on_label_csv(
             csv_file=csv_file,
             data_dir=model.config.cfg.data.data_dir,
             compute_metrics=True,
-            generate_labeled_images=False,
             add_train_val_test_set=(not ood_mode),
         )
 
+    # Copy prediction files to legacy location in model dir.
+    for i, csv_file in enumerate(csv_files):
         if len(csv_files) > 1:
             view_name = model.config.cfg.data.view_names[i]
         # Copy output files to model_dir for backward-compatibility.
