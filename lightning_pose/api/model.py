@@ -204,8 +204,13 @@ class Model:
         compute_metrics: bool = True,
         add_train_val_test_set: bool = False,
     ) -> MultiviewPredictionResult:
-        """TODO needs docstring
-        csv_file_per_view should be in the same order as cfg.data.view_names."""
+        """Version of `predict_on_label_csv` that gives models access to all camera views of each frame.
+
+        Arguments:
+            csv_file_per_view (list[str] | list[Path]): A list of csv files each from a different view of the
+                same session. Order must match the `view_names` in the config file.
+
+        See `predict_on_label_csv` docstring for other arguments."""
         assert self.config.is_multi_view()
         self._load()
 
@@ -238,8 +243,8 @@ class Model:
         data_module_pred = _build_datamodule_pred(cfg_pred)
 
         preds_files = []
-        for view_name in view_names:
-            output_dir = self.image_preds_dir() / csv_file_per_view[view_names.index(view_name)].name
+        for i, view_name in enumerate(view_names):
+            output_dir = self.image_preds_dir() / csv_file_per_view[i].name
             output_dir.mkdir(parents=True, exist_ok=True)
             preds_files.append(str(output_dir / "predictions.csv"))
 
@@ -250,10 +255,12 @@ class Model:
 
         if compute_metrics:
             metrics = {}
-            for view_name, _preds_file in zip(view_names, preds_files):
+            for view_name, labels_file, _preds_file in zip(
+                view_names, csv_file_per_view, preds_files
+            ):
                 metrics[view_name] = compute_metrics_single(
                     cfg=self.cfg,
-                    labels_file=csv_file_per_view[view_names.index(view_name)],
+                    labels_file=str(labels_file),
                     preds_file=_preds_file,
                     data_module=data_module_pred,
                 )
@@ -342,6 +349,9 @@ class Model:
                 `utils.io.collect_video_files_by_view`.
 
         See `predict_on_video_file` docstring for other arguments."""
+        """TODO: It might make more sense to require that the order of the list match the order of the `view_names`
+        in the config file. The original reason why we made order not matter, was to support the CLI use-case.
+        A better idea is to normalize the order in the CLI code instead to simplify this function."""
         assert self.config.is_multi_view()
         self._load()
 

@@ -94,7 +94,7 @@ def cfg_multiview() -> dict:
     cfg.data.data_dir = "${LP_ROOT_PATH:}/data/mirror-mouse-example_split"
     # unrelated to multiview: add some test coverage for CSV file as absolute path.
     cfg.data.csv_file = ["${data.data_dir}/top.csv", "${data.data_dir}/bot.csv"]
-    cfg.data.view_names = ["bot", "top"]
+    cfg.data.view_names = ["top", "bot"]
     cfg.data.num_keypoints = 7
     cfg.data.keypoint_names = [
         "paw1LH", "paw2LF", "paw3RF", "paw4RH", "tailBase", "tailMid", "nose",
