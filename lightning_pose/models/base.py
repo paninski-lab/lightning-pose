@@ -87,6 +87,7 @@ def _apply_defaults_for_optimizer_params(
         optimizer_params = DEFAULT_OPTIMIZER_PARAMS
     else:
         optimizer_params = OmegaConf.merge(DEFAULT_OPTIMIZER_PARAMS, optimizer_params)
+    
 
     return optimizer_params
 
@@ -465,9 +466,9 @@ class BaseFeatureExtractor(LightningModule):
 
         # init standard adam optimizer
         if self.optimizer == "Adam":
-            optimizer = optim.Adam(params, lr=self.optimizer_params.learning_rate)
+            optimizer = optim.Adam(params, lr=float(self.optimizer_params.learning_rate))
         elif self.optimizer == "AdamW":
-            optimizer = optim.AdamW(params, lr=self.optimizer_params.learning_rate)
+            optimizer = optim.AdamW(params, lr=float(self.optimizer_params.learning_rate))
         else:
             raise OptimizerNotImplementedError(self.optimizer)
 

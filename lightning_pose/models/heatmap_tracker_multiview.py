@@ -26,6 +26,7 @@ from lightning_pose.models.heads import (
     ALLOWED_MULTIVIEW_HEADS,
     ALLOWED_MULTIVIEW_MULTIHEADS,
     MultiviewFeatureTransformerHead,
+    MultiviewFeatureTransformerHeadLearnable, # learned view embeddings
     MultiviewHeatmapCNNHead,
     MultiviewHeatmapCNNMultiHead,
 )
@@ -66,7 +67,7 @@ class HeatmapTrackerMultiview(BaseSupervisedTracker):
             backbone: ResNet or EfficientNet variant to be used
             pretrained: True to load pretrained imagenet weights
             head: architecture used to fuse view information
-                - heatmap_cnn
+                - heatmap_cnn / feature_transformer
             downsample_factor: make heatmap smaller than original frames to save memory; subpixel
                 operations are performed for increased precision
             torch_seed: make weight initialization reproducible
@@ -119,9 +120,23 @@ class HeatmapTrackerMultiview(BaseSupervisedTracker):
                 out_channels=self.num_keypoints,
                 downsample_factor=self.downsample_factor,
                 transformer_d_model=512,
+                transformer_nhead=8, # original 8
+                transformer_dim_feedforward=512,
+                transformer_num_layers=1,
+                img_size=image_size,
+            )
+        elif head == "feature_transformer_learnable":
+            # Use the new head with learnable view embeddings
+            self.head = MultiviewFeatureTransformerHeadLearnable(
+                backbone_arch=backbone,
+                num_views=num_views,
+                in_channels=self.num_fc_input_features,
+                out_channels=self.num_keypoints,
+                downsample_factor=self.downsample_factor,
+                transformer_d_model=512,
                 transformer_nhead=8,
                 transformer_dim_feedforward=512,
-                transformer_num_layers=4,
+                transformer_num_layers=2,
                 img_size=image_size,
             )
         else:
@@ -160,7 +175,7 @@ class HeatmapTrackerMultiview(BaseSupervisedTracker):
         batch_size, num_views, channels, img_height, img_width = images.shape
 
         # stack batch and view into first dim to get representations
-        images = images.reshape(-1, channels, img_height, img_width)
+        images = images.reshape(-1, channels, img_height, img_width) 
         representations = self.get_representations(images)
         # representations shape is (view * batch, num_features, rep_height, rep_width)
 

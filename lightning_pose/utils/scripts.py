@@ -373,15 +373,15 @@ def get_model(
     """Create model: regression or heatmap based, supervised or semi-supervised."""
 
     optimizer = cfg.training.get("optimizer", "Adam")
-    optimizer_params = _apply_defaults_for_optimizer_params(
-        optimizer,
-        cfg.training.get("optimizer_params"),
+    optimizer_params = cfg.training.get(
+        "optimizer_params",
+        OmegaConf.create({"learning_rate": 1e-3}),
     )
 
-    lr_scheduler = cfg.training.get("lr_scheduler", "multisteplr")
-    lr_scheduler_params = _apply_defaults_for_lr_scheduler_params(
-        lr_scheduler,
-        cfg.training.get("lr_scheduler_params", {}).get(f"{lr_scheduler}")
+    lr_scheduler = cfg.training.lr_scheduler
+
+    lr_scheduler_params = OmegaConf.to_object(
+        cfg.training.lr_scheduler_params[lr_scheduler]
     )
 
     semi_supervised = io_utils.check_if_semi_supervised(cfg.model.losses_to_use)
