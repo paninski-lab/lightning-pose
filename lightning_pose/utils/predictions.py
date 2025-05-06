@@ -852,8 +852,8 @@ def predict_video(
         video_file: Predict on a video, or for true multiview models, a list of videos
             (order: 1-1 correspondence with cfg.data.view_names).
         model: The model to predict with.
-        output_pred_file: (optional) File to save predictions in. For multiview, a list of files (1-1 correspondance
-            to cfg.data.view_names).
+        output_pred_file: (optional) File to save predictions in. For multiview, a list of files
+            (1-1 correspondance to cfg.data.view_names).
     """
 
     is_multiview = not isinstance(video_file, str)
@@ -862,22 +862,20 @@ def predict_video(
         # Validate output_pred_file is a list
         if output_pred_file is not None and not isinstance(output_pred_file, list):
             raise ValueError(
-                "for multiview prediction, 'output_pred_file' should be a list corresponding to view_names"
+                "for multiview prediction, 'output_pred_file' should be a list corresponding to "
+                "view_names"
             )
 
         # Sanity check 1-1 correspondence of video_file to cfg.data.view_names
-        # (Important since PredictionHandler relies on the correspondence to organize the outputted dict).
-        for single_video_file, view_name in zip(
-            video_file, model.config.cfg.data.view_names
-        ):
+        # (Important since PredictionHandler relies on the correspondence to organize the outputted
+        #  dict).
+        for single_video_file, view_name in zip(video_file, model.config.cfg.data.view_names):
             assert (
                 view_name in Path(single_video_file).stem
             ), "expected video_file to correspond 1-1 with cfg.data.view_name"
 
     trainer = pl.Trainer(accelerator="gpu", devices=1, logger=False)
-    model_type = (
-        "context" if model.config.cfg.model.model_type == "heatmap_mhcrnn" else "base"
-    )
+    model_type = "context" if model.config.cfg.model.model_type == "heatmap_mhcrnn" else "base"
 
     filenames = [video_file] if not is_multiview else [[f] for f in video_file]
     vid_pred_class = PrepareDALI(
