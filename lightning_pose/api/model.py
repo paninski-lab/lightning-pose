@@ -262,7 +262,6 @@ class Model:
 
         return MultiviewPredictionResult(predictions=view_to_df_dict, metrics=metrics)
 
-
     def predict_on_video_file(
         self,
         video_file: str | Path,

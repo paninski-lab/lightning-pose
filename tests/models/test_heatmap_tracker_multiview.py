@@ -68,6 +68,7 @@ def _run_model_test(cfg, data_module, video_dataloader, trainer):
 
     import gc
     import torch
+    from lightning_pose.utils.predictions import PredictionHandler
     from lightning_pose.utils.scripts import (
         get_loss_factories,
         get_model,
@@ -88,15 +89,15 @@ def _run_model_test(cfg, data_module, video_dataloader, trainer):
         # train model for a couple epochs
         trainer.fit(model=model, datamodule=data_module)
 
-        # # predict on labeled frames
-        # labeled_preds = trainer.predict(
-        #     model=model,
-        #     dataloaders=data_module.full_labeled_dataloader(),
-        #     return_predictions=True,
-        # )
-        # pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
-        # pred_handler(preds=labeled_preds)
-        #
+        # predict on labeled frames
+        labeled_preds = trainer.predict(
+            model=model,
+            dataloaders=data_module.full_labeled_dataloader(),
+            return_predictions=True,
+        )
+        pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
+        pred_handler(preds=labeled_preds)
+
         # # predict on unlabeled video
         # if video_dataloader is not None:
         #     trainer.predict(model=model, dataloaders=video_dataloader, return_predictions=True)

@@ -235,10 +235,6 @@ class HeatmapTrackerMultiview(BaseSupervisedTracker):
         pred_heatmaps = self.forward(images)
         # heatmaps -> keypoints
         pred_keypoints, confidence = self.head.run_subpixelmaxima(pred_heatmaps)
-
-        # reshape keypoints to be (batch, n_keypoints, 2)
-        pred_keypoints = pred_keypoints.reshape(pred_keypoints.shape[0], -1, 2)
-
         # bounding box coords -> original image coords
         pred_keypoints = convert_bbox_coords(batch_dict, pred_keypoints)
 
