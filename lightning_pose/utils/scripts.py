@@ -435,13 +435,16 @@ def get_model(
                 image_size=image_h,  # only used by ViT
             )
         elif cfg.model.model_type == "heatmap_multiview":
+            head = cfg.model.head
+            if head.find("transformer") > -1 and image_h != image_w:
+                raise RuntimeError(f"{head} requires resized height and width to be equal")
             model = HeatmapTrackerMultiview(
                 num_keypoints=cfg.data.num_keypoints,
                 num_views=len(cfg.data.view_names),
                 loss_factory=loss_factories["supervised"],
                 backbone=cfg.model.backbone,
                 pretrained=backbone_pretrained,
-                head=cfg.model.head,
+                head=head,
                 downsample_factor=cfg.data.get("downsample_factor", 2),
                 torch_seed=cfg.training.rng_seed_model_pt,
                 optimizer=optimizer,
@@ -622,7 +625,7 @@ def calculate_steps_per_epoch(data_module: BaseDataModule):
 @typechecked
 def compute_metrics(
     cfg: DictConfig,
-    preds_file: str | list[str],
+    preds_file: str | list[str] | Path | list[Path],
     data_module: BaseDataModule | UnlabeledDataModule | None = None,
 ) -> None:
     """Compute various metrics on predictions csv file, potentially for multiple views.
@@ -668,15 +671,15 @@ def compute_metrics(
 @typechecked
 def compute_metrics_single(
     cfg: DictConfig,
-    labels_file: str | None,
-    preds_file: str,
+    labels_file: str | Path | None,
+    preds_file: str | Path,
     data_module: BaseDataModule | UnlabeledDataModule | None = None,
 ) -> ComputeMetricsSingleResult:
     """Compute various metrics on a predictions csv file from a single view."""
     # load predictions
     pred_df = pd.read_csv(preds_file, header=[0, 1, 2], index_col=0)
     keypoint_names = io_utils.get_keypoint_names(
-        cfg, csv_file=preds_file, header_rows=[0, 1, 2])
+        cfg, csv_file=str(preds_file), header_rows=[0, 1, 2])
     xyl_mask = pred_df.columns.get_level_values("coords").isin(["x", "y", "likelihood"])
     tmp = pred_df.loc[:, xyl_mask].to_numpy().reshape(pred_df.shape[0], -1, 3)
 

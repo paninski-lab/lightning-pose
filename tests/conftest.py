@@ -50,6 +50,11 @@ def video_list() -> list[str]:
 
 
 @pytest.fixture
+def video_list_multiview() -> list[str]:
+    return get_videos_in_dir(os.path.join(TOY_MDATA_ROOT_DIR, "videos"))
+
+
+@pytest.fixture
 def toy_data_dir() -> str:
     return TOY_DATA_ROOT_DIR
 
@@ -89,7 +94,7 @@ def cfg_multiview() -> dict:
     cfg.data.data_dir = "${LP_ROOT_PATH:}/data/mirror-mouse-example_split"
     # unrelated to multiview: add some test coverage for CSV file as absolute path.
     cfg.data.csv_file = ["${data.data_dir}/top.csv", "${data.data_dir}/bot.csv"]
-    cfg.data.view_names = ["bot", "top"]
+    cfg.data.view_names = ["top", "bot"]
     cfg.data.num_keypoints = 7
     cfg.data.keypoint_names = [
         "paw1LH", "paw2LF", "paw3RF", "paw4RH", "tailBase", "tailMid", "nose",
@@ -506,6 +511,34 @@ def video_dataloader(cfg, base_dataset, video_list) -> LitDaliWrapper:
         dali_config=cfg.dali,
         filenames=video_list,
         resize_dims=[base_dataset.height, base_dataset.width],
+    )
+    video_dataloader = vid_pred_class()
+
+    # return to tests
+    yield video_dataloader
+
+    # cleanup after all tests have run (no more calls to yield)
+    del video_dataloader
+    torch.cuda.empty_cache()
+
+
+@pytest.fixture
+def video_dataloader_multiview(
+    cfg_multiview,
+    multiview_heatmap_dataset,
+    video_list_multiview,
+) -> LitDaliWrapper:
+    """Create a prediction dataloader for a new video."""
+
+    # setup
+    vid_pred_class = PrepareDALI(
+        train_stage="predict",
+        model_type="base",
+        dali_config=cfg_multiview.dali,
+        # Important: This will be a list of lists for multiview.
+        # This will trigger dali to return multiview batches to predict_step.
+        filenames=[[f] for f in video_list_multiview],
+        resize_dims=[multiview_heatmap_dataset.height, multiview_heatmap_dataset.width],
     )
     video_dataloader = vid_pred_class()
 

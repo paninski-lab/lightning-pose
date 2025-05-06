@@ -297,7 +297,7 @@ class PredictionHandler:
 def predict_dataset(
     cfg: DictConfig,
     data_module: BaseDataModule,
-    preds_file: str,
+    preds_file: str | list[str],
     ckpt_file: str | None = None,
     trainer: pl.Trainer | None = None,
     model: ALLOWED_MODELS | None = None,
@@ -338,8 +338,20 @@ def predict_dataset(
     pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
     labeled_preds_df = pred_handler(preds=labeled_preds)
     if isinstance(labeled_preds_df, dict):
-        for view_name, df in labeled_preds_df.items():
-            df.to_csv(preds_file.replace(".csv", f"_{view_name}.csv"))
+        if isinstance(preds_file, str):
+            # old logic used to save to <predictions>_<view_name>.csv
+            for view_name, df in labeled_preds_df.items():
+                df.to_csv(preds_file.replace(".csv", f"_{view_name}.csv"))
+        elif isinstance(preds_file, list):
+            # preds_file is a list of views corresponding to cfg.data.view_names.
+            # this allows the caller to specify the output locations more flexibly.
+
+            # Sanity check the order of labeled_preds_df keys matches the order of the views in the cfg.
+            assert list(labeled_preds_df.keys()) == list(cfg.data.view_names)
+
+            for (view_name, df), _pred_file in zip(labeled_preds_df.items(), preds_file):
+                df.to_csv(_pred_file)
+
     else:
         labeled_preds_df.to_csv(preds_file)
 
@@ -484,6 +496,8 @@ def get_model_class(map_type: str, semi_supervised: bool) -> Type[ALLOWED_MODELS
             from lightning_pose.models import HeatmapTracker as Model
         elif map_type == "heatmap_mhcrnn":
             from lightning_pose.models import HeatmapTrackerMHCRNN as Model
+        elif map_type == "heatmap_multiview":
+            from lightning_pose.models import HeatmapTrackerMultiview as Model
         elif map_type == "heatmap_multiview_multihead":
             from lightning_pose.models import HeatmapTrackerMultiviewMultihead as Model
         else:
@@ -838,8 +852,8 @@ def predict_video(
         video_file: Predict on a video, or for true multiview models, a list of videos
             (order: 1-1 correspondence with cfg.data.view_names).
         model: The model to predict with.
-        output_pred_file: (optional) File to save predictions in. For multiview, a list of files (1-1 correspondance
-            to cfg.data.view_names).
+        output_pred_file: (optional) File to save predictions in. For multiview, a list of files
+            (1-1 correspondance to cfg.data.view_names).
     """
 
     is_multiview = not isinstance(video_file, str)
@@ -848,22 +862,20 @@ def predict_video(
         # Validate output_pred_file is a list
         if output_pred_file is not None and not isinstance(output_pred_file, list):
             raise ValueError(
-                "for multiview prediction, 'output_pred_file' should be a list corresponding to view_names"
+                "for multiview prediction, 'output_pred_file' should be a list corresponding to "
+                "view_names"
             )
 
         # Sanity check 1-1 correspondence of video_file to cfg.data.view_names
-        # (Important since PredictionHandler relies on the correspondence to organize the outputted dict).
-        for single_video_file, view_name in zip(
-            video_file, model.config.cfg.data.view_names
-        ):
+        # (Important since PredictionHandler relies on the correspondence to organize the outputted
+        #  dict).
+        for single_video_file, view_name in zip(video_file, model.config.cfg.data.view_names):
             assert (
                 view_name in Path(single_video_file).stem
             ), "expected video_file to correspond 1-1 with cfg.data.view_name"
 
     trainer = pl.Trainer(accelerator="gpu", devices=1, logger=False)
-    model_type = (
-        "context" if model.config.cfg.model.model_type == "heatmap_mhcrnn" else "base"
-    )
+    model_type = "context" if model.config.cfg.model.model_type == "heatmap_mhcrnn" else "base"
 
     filenames = [video_file] if not is_multiview else [[f] for f in video_file]
     vid_pred_class = PrepareDALI(
