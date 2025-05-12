@@ -9,12 +9,14 @@ from lightning_pose.models.heads.heatmap_multiview import (
 from lightning_pose.models.heads.heatmap_multiview_transformer import (
     MultiviewFeatureTransformerHead,
     MultiviewFeatureTransformerHeadLearnable,
+    MultiviewFeatureTransformerHeadLearnablePositional,
 )
 from lightning_pose.models.heads.regression import LinearRegressionHead
 
 ALLOWED_MULTIVIEW_HEADS = Union[
     MultiviewFeatureTransformerHead,
     MultiviewFeatureTransformerHeadLearnable, 
+    MultiviewFeatureTransformerHeadLearnablePositional, 
     MultiviewHeatmapCNNHead,
 ]
 

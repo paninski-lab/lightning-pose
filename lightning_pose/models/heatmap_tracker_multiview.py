@@ -27,6 +27,7 @@ from lightning_pose.models.heads import (
     ALLOWED_MULTIVIEW_MULTIHEADS,
     MultiviewFeatureTransformerHead,
     MultiviewFeatureTransformerHeadLearnable, # learned view embeddings
+    MultiviewFeatureTransformerHeadLearnablePositional, # learned view embeddings + positional encodings
     MultiviewHeatmapCNNHead,
     MultiviewHeatmapCNNMultiHead,
 )
@@ -128,6 +129,20 @@ class HeatmapTrackerMultiview(BaseSupervisedTracker):
         elif head == "feature_transformer_learnable":
             # Use the new head with learnable view embeddings
             self.head = MultiviewFeatureTransformerHeadLearnable(
+                backbone_arch=backbone,
+                num_views=num_views,
+                in_channels=self.num_fc_input_features,
+                out_channels=self.num_keypoints,
+                downsample_factor=self.downsample_factor,
+                transformer_d_model=512,
+                transformer_nhead=8,
+                transformer_dim_feedforward=512,
+                transformer_num_layers=2,
+                img_size=image_size,
+            )
+        elif head == "feature_transformer_learnable_positional":
+            # Use the new head with learnable view embeddings + positional encodings
+            self.head = MultiviewFeatureTransformerHeadLearnablePositional(
                 backbone_arch=backbone,
                 num_views=num_views,
                 in_channels=self.num_fc_input_features,
