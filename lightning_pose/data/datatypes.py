@@ -145,18 +145,19 @@ class MultiviewLabeledBatchDict(TypedDict):
         TensorType["batch", 1],
     ]
     intrinsic_matrix: Union[
-        TensorType["batch", "num_views", 3, 3],
+        TensorType["batch", "num_views", 3, 3], # 3x3 matric - so we flaten this to 9 dimension
         TensorType["batch", 1],
     ]
     extrinsic_matrix: Union[
-        TensorType["batch", "num_views", 3, 4],
+        TensorType["batch", "num_views", 3, 4], # 3x4 matrix # flatten to 12 dimension
         TensorType["batch", 1],
     ]
     distortions: Union[
-        TensorType["batch", "num_views", "num_distortion_params"],
+        TensorType["batch", "num_views", "num_distortion_params"], # this is a vector of 4+ dimensions ( depends on the model of distortions )
         TensorType["batch", 1],
     ]
 
+    # we concatenate so we have ["batch", "num_view", 9+12_num_distortions_params]
 
 class MultiviewHeatmapLabeledBatchDict(MultiviewLabeledBatchDict):
     """Batch type for multiview heatmap labeled data."""

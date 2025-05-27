@@ -54,39 +54,18 @@ import copy
 #         trainer=trainer,
 #     )
 
-# def test_multiview_feature_transformer_learnable(
-#     cfg_multiview,
-#     multiview_heatmap_data_module,
-#     video_dataloader_multiview,
-#     trainer,
-#     run_model_test,
-# ):
-#     """Test initialization and training of a multiview model with feature_transformer head with learnable view embeddings."""
-
-#     cfg_tmp = copy.deepcopy(cfg_multiview)
-#     cfg_tmp.model.model_type = "heatmap_multiview"
-#     cfg_tmp.model.head = "feature_transformer_learnable"
-#     cfg_tmp.model.losses_to_use = []
-
-#     _run_model_test(
-#         cfg=cfg_tmp,
-#         data_module=multiview_heatmap_data_module,
-#         video_dataloader=video_dataloader_multiview,
-#         trainer=trainer,
-#     )
-
-def test_multiview_feature_transformer_learnable_positional(
+def test_multiview_feature_transformer_learnable(
     cfg_multiview,
     multiview_heatmap_data_module,
     video_dataloader_multiview,
     trainer,
     run_model_test,
 ):
-    """Test initialization and training of a multiview model with feature_transformer head with view + positional learnable embeddings."""
+    """Test initialization and training of a multiview model with feature_transformer head with learnable view embeddings."""
 
     cfg_tmp = copy.deepcopy(cfg_multiview)
     cfg_tmp.model.model_type = "heatmap_multiview"
-    cfg_tmp.model.head = "feature_transformer_learnable_positional"
+    cfg_tmp.model.head = "feature_transformer_learnable"
     cfg_tmp.model.losses_to_use = []
 
     _run_model_test(
@@ -95,6 +74,27 @@ def test_multiview_feature_transformer_learnable_positional(
         video_dataloader=video_dataloader_multiview,
         trainer=trainer,
     )
+
+# def test_multiview_feature_transformer_learnable_positional(
+#     cfg_multiview,
+#     multiview_heatmap_data_module,
+#     video_dataloader_multiview,
+#     trainer,
+#     run_model_test,
+# ):
+#     """Test initialization and training of a multiview model with feature_transformer head with view + positional learnable embeddings."""
+
+#     cfg_tmp = copy.deepcopy(cfg_multiview)
+#     cfg_tmp.model.model_type = "heatmap_multiview"
+#     cfg_tmp.model.head = "feature_transformer_learnable_positional"
+#     cfg_tmp.model.losses_to_use = []
+
+#     _run_model_test(
+#         cfg=cfg_tmp,
+#         data_module=multiview_heatmap_data_module,
+#         video_dataloader=video_dataloader_multiview,
+#         trainer=trainer,
+#     )
 
 
 def _run_model_test(cfg, data_module, video_dataloader, trainer):

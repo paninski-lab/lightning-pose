@@ -27,7 +27,7 @@ from lightning_pose.models.heads import (
     ALLOWED_MULTIVIEW_MULTIHEADS,
     MultiviewFeatureTransformerHead,
     MultiviewFeatureTransformerHeadLearnable, # learned view embeddings
-    MultiviewFeatureTransformerHeadLearnablePositional, # learned view embeddings + positional encodings
+    MultiviewFeatureTransformerHeadLearnableCrossView, # learned view embeddings + positional encodings
     MultiviewHeatmapCNNHead,
     MultiviewHeatmapCNNMultiHead,
 )
@@ -123,7 +123,7 @@ class HeatmapTrackerMultiview(BaseSupervisedTracker):
                 transformer_d_model=512,
                 transformer_nhead=8, # original 8
                 transformer_dim_feedforward=512,
-                transformer_num_layers=1,
+                transformer_num_layers=2,
                 img_size=image_size,
             )
         elif head == "feature_transformer_learnable":
@@ -139,20 +139,22 @@ class HeatmapTrackerMultiview(BaseSupervisedTracker):
                 transformer_dim_feedforward=512,
                 transformer_num_layers=2,
                 img_size=image_size,
+                view_embed_dim=26,# 9 + 12 +5 (distortions)
             )
-        elif head == "feature_transformer_learnable_positional":
-            # Use the new head with learnable view embeddings + positional encodings
-            self.head = MultiviewFeatureTransformerHeadLearnablePositional(
+        elif head == "feature_transformer_learnable_crossview":
+            self.head = MultiviewFeatureTransformerHeadLearnableCrossView(
                 backbone_arch=backbone,
                 num_views=num_views,
                 in_channels=self.num_fc_input_features,
                 out_channels=self.num_keypoints,
                 downsample_factor=self.downsample_factor,
-                transformer_d_model=512,
-                transformer_nhead=8,
-                transformer_dim_feedforward=512,
-                transformer_num_layers=2,
+                transformer_d_model=1024, # 512
+                transformer_nhead=16, #8
+                transformer_dim_feedforward=2048,  # usually should be larger than d_model - 512 in general 
+                transformer_num_layers=2, # 2/3 in general 
                 img_size=image_size,
+                view_embed_dim=128,
+                dropout=0.1,
             )
         else:
             raise NotImplementedError(
@@ -177,6 +179,7 @@ class HeatmapTrackerMultiview(BaseSupervisedTracker):
     def forward(
         self,
         images: TensorType["batch", "view", "channels":3, "image_height", "image_width"],
+        # batch_dict: MultiviewHeatmapLabeledBatchDict,
     ) -> TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Forward pass through the network.
 
@@ -186,16 +189,37 @@ class HeatmapTrackerMultiview(BaseSupervisedTracker):
           multiview labeled batch or unlabeled batch from DALI
 
         """
-
+    #    if "images" in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
+    #         # labeled image dataloaders
+    #         images = batch_dict["images"]
+    #     else:
+    #         # unlabeled dali video dataloaders
+    #         images = batch_dict["frames"]
+ 
         batch_size, num_views, channels, img_height, img_width = images.shape
 
+        # if batch_dict["intrinsic_matrix"].shape[-1] == 3: # when camera parameters exists we will pass them 
+        #     # we flatten the intrinisic matrix and extrinsic 
+        #     intrinsic_matrix = batch_dict["intrinsic_matrix"].reshape(batch_size, num_views, -1)
+        #     extrinsics=batch_dict["extrinsic_matrix"].reshape(batch_size, num_views, -1)
+        #     dist=batch_dict["distortions"]
+
+        #     # concatenate the camera parameters 
+        #     camera_parameters = torch.cat([intrinsic_matrix, extrinsics, dist], dim=-1)
+        
+        # else:
+        #     camera_parameters = None
+        
         # stack batch and view into first dim to get representations
         images = images.reshape(-1, channels, img_height, img_width) 
         representations = self.get_representations(images)
         # representations shape is (view * batch, num_features, rep_height, rep_width)
 
         # get heatmaps for each representation
-        heatmaps = self.head(representations, num_views)
+        heatmaps = self.head(representations, num_views) 
+        # heatmaps = self.head(representations, num_views, camera_parameters) # this is calling the forward in heatmap_multiview_transformer when having camera parameters
+
+
 
         return heatmaps
 
@@ -205,7 +229,8 @@ class HeatmapTrackerMultiview(BaseSupervisedTracker):
     ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
-        pred_heatmaps = self.forward(batch_dict["images"])
+        pred_heatmaps = self.forward(batch_dict["images"]) # no camera parameters
+        # pred_heatmaps = self.forward(batch_dict) # when we have camera parameters 
         # heatmaps -> keypoints
         pred_keypoints, confidence = self.head.run_subpixelmaxima(pred_heatmaps)
         # bounding box coords -> original image coords
@@ -225,6 +250,7 @@ class HeatmapTrackerMultiview(BaseSupervisedTracker):
             keypoints_mask_3d = get_valid_projection_masks(
                 target_keypoints.reshape((-1, num_views, num_keypoints, 2))
             )
+        
         else:
             keypoints_pred_3d = None
             keypoints_targ_3d = None
@@ -262,7 +288,8 @@ class HeatmapTrackerMultiview(BaseSupervisedTracker):
             images = batch_dict["frames"]
 
         # images -> heatmaps
-        pred_heatmaps = self.forward(images)
+        pred_heatmaps = self.forward(images) 
+        # pred_heatmaps = self.forward(batch_dict)  # when camera parameters 
         # heatmaps -> keypoints
         pred_keypoints, confidence = self.head.run_subpixelmaxima(pred_heatmaps)
         # bounding box coords -> original image coords

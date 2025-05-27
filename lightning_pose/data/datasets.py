@@ -575,7 +575,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
     @staticmethod
     def _rotate_cameras(
         camgroup: CameraGroup,
-        rotation_max_angle: float = 15.0,
+        rotation_max_angle: float = 5.0, # changed : Reduced rotation angle from 15.0
     ) -> CameraGroup:
         """Apply random 2D rotations by modifying camera extrinsics
 
@@ -716,7 +716,8 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         keypoints_3d_aug = self._scale_translate_keypoints(keypoints_3d)
 
         # apply rotations by modifying camera extrinsics
-        camgroup_rotated = self._rotate_cameras(camgroup)
+        camgroup_rotated = self._rotate_cameras(camgroup) 
+        # camgroup_rotated = camgroup # this is without rotation
 
         # project 3D keypoints to 2D using the rotated cameras
         keypoints_2d_aug = camgroup_rotated.project(keypoints_3d_aug)
@@ -832,6 +833,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             self.cam_params_file_to_camgroup
             and self.imgaug_transform.__str__().find("Resize") == -1
         ):
+            # TRAIN BATCH
             # only apply 3d transforms if
             # - camera calibration information is available
             # - imgaug does not contain a resize operation, which indicates:
@@ -848,6 +850,31 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 extrinsic_matrix,
                 distortions,
             ) = self.apply_3d_transforms(datadict, camgroup)
+        elif (
+            self.cam_params_file_to_camgroup
+            and self.imgaug_transform.__str__().find("Resize") != -1
+        ):
+            # VAL/TEST BATCH 
+            # The idea is that we want to get the intrinsic ,extrinsic and distortions, we want to keep the keypoints_3d 
+            keypoints_3d = torch.tensor([1])
+            
+            camgroup = self.cam_params_file_to_camgroup[self.cam_params_df.iloc[idx].file]
+            
+            intrinsic_matrix = torch.stack([
+                torch.tensor(cam.get_camera_matrix()) for cam in camgroup.cameras
+            ], dim=0)
+
+            extrinsic_matrix = torch.stack([
+                torch.tensor(cam.get_extrinsics_mat()[:3]) for cam in camgroup.cameras
+            ], dim=0)
+
+            distortions = torch.stack([
+                torch.tensor(cam.get_distortions()) for cam in camgroup.cameras
+            ], dim=0)
+
+            # intrinsic_matrix = torch.tensor([1])
+            # extrinsic_matrix = torch.tensor([1])
+            # distortions = torch.tensor([1])
         else:
             keypoints_3d = torch.tensor([1])
             intrinsic_matrix = torch.tensor([1])
