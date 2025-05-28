@@ -148,14 +148,30 @@ class HeatmapTrackerMultiview(BaseSupervisedTracker):
                 in_channels=self.num_fc_input_features,
                 out_channels=self.num_keypoints,
                 downsample_factor=self.downsample_factor,
-                transformer_d_model=1024, # 512
-                transformer_nhead=16, #8
-                transformer_dim_feedforward=2048,  # usually should be larger than d_model - 512 in general 
-                transformer_num_layers=2, # 2/3 in general 
+                transformer_d_model=512, # 512
+                transformer_nhead=8, #8
+                transformer_dim_feedforward=512,  # usually should be larger than d_model - 512 in general 
+                transformer_num_layers=3, # 2/3 in general 
                 img_size=image_size,
-                view_embed_dim=128,
+                view_embed_dim=64,
                 dropout=0.1,
             )
+    
+        # trying here with the 512 view embeddings that we don't need to project 
+        # elif head == "feature_transformer_learnable_crossview":
+        #     self.head = MultiviewFeatureTransformerHeadLearnableCrossView(
+        #         backbone_arch=backbone,
+        #         num_views=num_views,
+        #         in_channels=self.num_fc_input_features,
+        #         out_channels=self.num_keypoints,
+        #         downsample_factor=self.downsample_factor,
+        #         transformer_d_model=512, # 512
+        #         transformer_nhead=8, #8
+        #         transformer_dim_feedforward=512,  # usually should be larger than d_model - 512 in general 
+        #         transformer_num_layers=2, # 2/3 in general 
+        #         img_size=image_size,
+        #         dropout=0.1,
+        #     )
         else:
             raise NotImplementedError(
                 f"{head} is not a valid multiview head, choose from {ALLOWED_MULTIVIEW_HEADS}"

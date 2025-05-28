@@ -710,15 +710,18 @@ class MultiviewFeatureTransformerHeadLearnableCrossView(nn.Module):
         )
 
         # View embedding projection
-        self.view_projection = nn.Sequential(
-            nn.Linear(view_embed_dim, transformer_d_model // 2),  # Smaller projection
-            nn.LayerNorm(transformer_d_model // 2),
-            nn.ReLU(),
-            nn.Linear(transformer_d_model // 2, transformer_d_model),
-        )
-        
+        # self.view_projection = nn.Sequential(
+        #     nn.Linear(view_embed_dim, transformer_d_model // 2),  # Smaller projection
+        #     nn.LayerNorm(transformer_d_model // 2),
+        #     nn.ReLU(),
+        #     nn.Linear(transformer_d_model // 2, transformer_d_model),
+        # )
+
         # Layer normalization for combining embeddings
-        self.embed_norm = nn.LayerNorm(transformer_d_model)
+        # self.embed_norm = nn.LayerNorm(transformer_d_model)
+        self.view_projection = nn.Linear(view_embed_dim, transformer_d_model)
+        # notice that in the above I removed the embed norm. maybe it will have an influence but we will see later
+        
         
         # Create a global view context token for each view
         self.view_context_token = nn.Parameter(
@@ -822,7 +825,7 @@ class MultiviewFeatureTransformerHeadLearnableCrossView(nn.Module):
         
         # Add view embeddings to spatial tokens (avoiding in-place operations)
         tokens_with_view = tokens + view_embeds
-        tokens_with_view = self.embed_norm(tokens_with_view)
+        # tokens_with_view = self.embed_norm(tokens_with_view)
         
         # Combine tokens with context
         tokens_with_context = torch.cat([context_tokens, tokens_with_view], dim=1)
@@ -878,8 +881,10 @@ class MultiviewFeatureTransformerHeadLearnableCrossView(nn.Module):
         # Reshape back to combined view-batch form for transformer
         tokens_enhanced = updated_tokens.reshape(
             n_batch * num_views, tokens_with_context.shape[1], self.transformer_d_model
-        )
+        ) # can have the sequence be all of the views - has access to tokens from all other views and have access to the context tokens. 
         
+
+
         # Apply transformer (processing each view independently)
         transformer_output = self.transformer_encoder(tokens_enhanced)
         
@@ -1083,3 +1088,382 @@ class Reprojection3DLoss(nn.Module):
                 return squared_dist.sum() / (mask.sum() + 1e-6)
             else:
                 return squared_dist.mean()
+
+
+
+
+
+
+# # This is the new way with 512 view embeddings for the cross view 
+# class MultiviewFeatureTransformerHeadLearnableCrossView(nn.Module):
+#     """Multi-view transformer neural network head with direct view embeddings and single sequence processing.
+    
+#     This head takes a set of 2D feature maps corresponding to different views, and fuses them
+#     together using a transformer architecture with direct view embeddings and unified sequence processing.
+#     Each token represents a spatial feature output by the backbone for a single view, along with 
+#     positional embedding and direct view embedding.
+#     """
+#     def __init__(   
+#         self,
+#         backbone_arch: str,
+#         num_views: int,
+#         in_channels: int,
+#         out_channels: int,
+#         deconv_out_channels: int | None = None,
+#         downsample_factor: int = 2,
+#         transformer_d_model: int = 512,
+#         transformer_nhead: int = 8,
+#         transformer_dim_feedforward: int = 1024,
+#         transformer_num_layers: int = 2,
+#         img_size: int = 256,
+#         dropout: float = 0.1,
+#     ):
+#         super().__init__()
+
+#         self.backbone_arch = backbone_arch
+#         self.in_channels = in_channels
+#         self.out_channels = out_channels
+#         self.num_views = num_views
+#         self.transformer_d_model = transformer_d_model
+#         self.downsample_factor = downsample_factor
+#         self.temperature = nn.Parameter(torch.tensor(1000.0))
+
+#         # Tokenization layer
+#         self.tokenize = nn.Sequential(
+#             nn.Conv2d(in_channels, transformer_d_model, kernel_size=1),
+#             nn.BatchNorm2d(transformer_d_model),
+#             nn.ReLU(),
+#         )
+
+#         # Position embeddings
+#         if img_size == 128:
+#             grid_size = 4
+#         elif img_size == 256:
+#             grid_size = 8
+#         elif img_size == 384:
+#             grid_size = 12
+#         else:
+#             raise ValueError(f"Unsupported image size: {img_size}")
+            
+#         pos_embed = get_2d_sincos_pos_embed(
+#             embed_dim=transformer_d_model,
+#             grid_size=grid_size, 
+#             add_cls_token=False,
+#         )
+#         self.register_buffer('pos_embed', torch.tensor(pos_embed, dtype=torch.float).unsqueeze(0))
+
+#         # DIRECT VIEW EMBEDDINGS - No projection needed!
+#         self.view_embeddings = nn.Parameter(
+#             torch.randn(num_views, transformer_d_model) * 0.02
+#         )
+        
+#         # Learnable class token for each view (helps with view-specific reasoning)
+#         self.view_class_tokens = nn.Parameter(
+#             torch.randn(num_views, transformer_d_model) * 0.02
+#         )
+
+#         # Single transformer that processes ALL views together
+#         encoder_layer = nn.TransformerEncoderLayer(
+#             d_model=transformer_d_model,
+#             nhead=transformer_nhead,
+#             dim_feedforward=transformer_dim_feedforward,
+#             dropout=dropout,
+#             activation="gelu",
+#             layer_norm_eps=1e-05,
+#             batch_first=True,
+#             norm_first=True,  # Pre-LN for better training stability
+#         )
+#         self.transformer_encoder = nn.TransformerEncoder(
+#             encoder_layer, 
+#             num_layers=transformer_num_layers,
+#         )
+
+#         # Output head
+#         self.upsample = HeatmapHead(
+#             backbone_arch='resnet',
+#             in_channels=transformer_d_model,
+#             out_channels=out_channels,
+#             downsample_factor=2,
+#             final_softmax=True,
+#         )
+
+#         print(f"Using Fixed Multi-View Transformer:")
+#         print(f"- Direct view embeddings: {num_views} views × {transformer_d_model} dim")
+#         print(f"- Unified processing: ALL views in single transformer")
+#         print(f"- Transformer: {transformer_num_layers} layers, {transformer_nhead} heads")
+
+#     def forward(self, features, num_views):
+#         """
+#         Process all views together in a single transformer sequence.
+#         Each view's information can directly influence every other view's predictions.
+#         """
+#         batch_size_combined = features.shape[0]
+#         n_batch = batch_size_combined // num_views
+#         h, w = features.shape[-2:]
+
+#         # Step 1: Tokenize all features
+#         tokens = self.tokenize(features)  # [batch*views, d_model, h, w]
+#         tokens = tokens.reshape(batch_size_combined, self.transformer_d_model, -1)
+#         tokens = tokens.permute(0, 2, 1)  # [batch*views, h*w, d_model]
+
+#         # Step 2: Add positional embeddings to spatial tokens
+#         tokens = tokens + self.pos_embed  # [batch*views, h*w, d_model]
+
+#         # Step 3: Create the unified sequence for each batch
+#         batch_sequences = []
+        
+#         for batch_idx in range(n_batch):
+#             # Collect all views for this batch
+#             view_sequences = []
+            
+#             for view_idx in range(num_views):
+#                 # Get spatial tokens for this view and batch
+#                 global_idx = view_idx * n_batch + batch_idx
+#                 spatial_tokens = tokens[global_idx]  # [h*w, d_model]
+                
+#                 # Add view-specific information DIRECTLY to spatial tokens
+#                 view_spatial_tokens = spatial_tokens + self.view_embeddings[view_idx]
+                
+#                 # Add view-specific class token
+#                 view_class_token = self.view_class_tokens[view_idx].unsqueeze(0)  # [1, d_model]
+                
+#                 # Create sequence: [class_token, spatial_token_1, ..., spatial_token_N]
+#                 view_sequence = torch.cat([view_class_token, view_spatial_tokens], dim=0)
+#                 view_sequences.append(view_sequence)
+            
+#             # CRITICAL: Concatenate ALL views into single sequence
+#             # This allows every token to attend to tokens from ALL other views
+#             unified_sequence = torch.cat(view_sequences, dim=0)
+#             # Shape: [num_views * (1 + h*w), d_model]
+            
+#             batch_sequences.append(unified_sequence)
+        
+#         # Stack batch sequences
+#         batch_sequences = torch.stack(batch_sequences, dim=0)
+#         # Shape: [n_batch, num_views * (1 + h*w), d_model]
+
+#         # Step 4: Process through transformer
+#         # NOW every spatial token can attend to spatial tokens from ALL views
+#         transformer_output = self.transformer_encoder(batch_sequences)
+        
+#         # Step 5: Extract spatial tokens and generate heatmaps
+#         tokens_per_view = 1 + h * w
+#         all_heatmaps = []
+        
+#         for batch_idx in range(n_batch):
+#             batch_output = transformer_output[batch_idx]
+#             view_heatmaps = []
+            
+#             for view_idx in range(num_views):
+#                 # Extract spatial tokens for this view (skip class token)
+#                 start_idx = view_idx * tokens_per_view + 1
+#                 end_idx = start_idx + h * w
+                
+#                 spatial_tokens = batch_output[start_idx:end_idx]  # [h*w, d_model]
+                
+#                 # Reshape back to spatial format
+#                 spatial_tokens = spatial_tokens.view(h, w, self.transformer_d_model)
+#                 spatial_tokens = spatial_tokens.permute(2, 0, 1)  # [d_model, h, w]
+                
+#                 # Generate heatmap
+#                 heatmap = self.upsample(spatial_tokens.unsqueeze(0))
+#                 view_heatmaps.append(heatmap.squeeze(0))
+            
+#             batch_heatmaps = torch.stack(view_heatmaps)
+#             all_heatmaps.append(batch_heatmaps)
+        
+#         # Final output shape: [n_batch, num_views, out_channels, H, W]
+#         heatmaps = torch.stack(all_heatmaps)
+        
+#         # Reshape to expected output format
+#         heatmaps = heatmaps.view(n_batch, -1, heatmaps.shape[-2], heatmaps.shape[-1])
+        
+#         return heatmaps
+
+#     def run_subpixelmaxima(self, heatmaps):
+#         return run_subpixelmaxima(heatmaps, self.downsample_factor, self.temperature)
+
+
+
+
+
+
+
+
+# # Helper function for positional encoding
+# def get_2d_sincos_pos_embed(embed_dim, grid_size, add_cls_token=False):
+#     """
+#     Create 2D sine-cosine positional embeddings.
+    
+#     Args:
+#         embed_dim: Embedding dimension
+#         grid_size: Size of the grid (height=width assumed)
+#         add_cls_token: Whether to include embeddings for CLS tokens
+        
+#     Returns:
+#         Positional embeddings with shape (grid_size*grid_size, embed_dim) or 
+#         (1+grid_size*grid_size, embed_dim) if add_cls_token is True.
+#     """
+#     # Create positional embeddings by grid
+#     grid_h = grid_size
+#     grid_w = grid_size
+#     grid_h_pos = torch.arange(grid_h, dtype=torch.float32).unsqueeze(1)
+#     grid_w_pos = torch.arange(grid_w, dtype=torch.float32).unsqueeze(1)
+#     pos_embed_h = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid_h_pos)  # [H, D/2]
+#     pos_embed_w = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid_w_pos)  # [W, D/2]
+    
+#     # Create 2D positional embeddings by outer product
+#     pos_embed_2d = []
+#     for h in range(grid_h):
+#         embed_h = pos_embed_h[h:h+1]  # [1, D/2]
+#         for w in range(grid_w):
+#             embed_w = pos_embed_w[w:w+1]  # [1, D/2]
+#             embed_hw = torch.cat([embed_h.repeat(1, 1), embed_w.repeat(1, 1)], dim=1)  # [1, D]
+#             pos_embed_2d.append(embed_hw)
+    
+#     pos_embed_2d = torch.cat(pos_embed_2d, dim=0)  # [H*W, D]
+    
+#     # Add CLS token embedding if requested
+#     if add_cls_token:
+#         cls_token_embed = torch.zeros([1, embed_dim])
+#         pos_embed_2d = torch.cat([cls_token_embed, pos_embed_2d], dim=0)
+    
+#     return pos_embed_2d.numpy()
+
+
+# def get_1d_sincos_pos_embed_from_grid(embed_dim, pos_grid):
+#     """
+#     Convert 1D position grid to sinusoidal positional embeddings.
+    
+#     Args:
+#         embed_dim: Embedding dimension
+#         pos_grid: Position grid tensor of shape (length, 1)
+        
+#     Returns:
+#         Positional embeddings tensor of shape (length, embed_dim)
+#     """
+#     omega = torch.arange(embed_dim // 2, dtype=torch.float)
+#     omega = 1.0 / (10000 ** (omega / (embed_dim // 2)))
+    
+#     pos_grid = pos_grid.reshape(-1)  # [length]
+#     out = torch.einsum('i,j->ij', pos_grid, omega)  # [length, embed_dim//2]
+    
+#     emb_sin = torch.sin(out)
+#     emb_cos = torch.cos(out)
+    
+#     pos_embed = torch.cat([emb_sin, emb_cos], dim=1)  # [length, embed_dim]
+#     return pos_embed
+
+
+# class ViewConsistencyLoss(nn.Module):
+#     """Loss that enforces consistency between 3D projections from different camera pairs."""
+    
+#     def __init__(self):
+#         super().__init__()
+        
+#     def forward(self, keypoints_3d, keypoints_mask):
+#         """
+#         Args:
+#             keypoints_3d: 3D keypoints from different camera pairs [batch, cam_pairs, keypoints, 3]
+#             keypoints_mask: Validity mask for keypoints [batch, cam_pairs, keypoints]
+#         """
+#         if keypoints_3d is None or keypoints_mask is None:
+#             return torch.tensor(0.0, device='cuda' if torch.cuda.is_available() else 'cpu')
+            
+#         batch_size, cam_pairs, num_keypoints, _ = keypoints_3d.shape
+        
+#         # Skip if we only have one camera pair
+#         if cam_pairs <= 1:
+#             return torch.tensor(0.0, device=keypoints_3d.device)
+            
+#         # Calculate pairwise distances between all camera pair estimates
+#         total_loss = 0.0
+#         valid_pairs = 0
+        
+#         for i in range(cam_pairs):
+#             for j in range(i+1, cam_pairs):
+#                 # Get keypoints from both camera pairs
+#                 points_i = keypoints_3d[:, i]  # [batch, keypoints, 3]
+#                 points_j = keypoints_3d[:, j]  # [batch, keypoints, 3]
+                
+#                 # Get validity masks
+#                 mask_i = keypoints_mask[:, i]  # [batch, keypoints]
+#                 mask_j = keypoints_mask[:, j]  # [batch, keypoints]
+                
+#                 # Combined mask - only compare valid keypoints from both views
+#                 valid_mask = mask_i & mask_j  # [batch, keypoints]
+                
+#                 if valid_mask.sum() == 0:
+#                     continue
+                    
+#                 # Calculate Euclidean distance between corresponding keypoints
+#                 distances = torch.norm(points_i - points_j, dim=-1)  # [batch, keypoints]
+                
+#                 # Apply mask and calculate mean
+#                 masked_distances = distances * valid_mask.float()
+#                 pair_loss = masked_distances.sum() / (valid_mask.sum() + 1e-6)
+                
+#                 total_loss += pair_loss
+#                 valid_pairs += 1
+                
+#         # Return average loss
+#         if valid_pairs > 0:
+#             return total_loss / valid_pairs
+#         else:
+#             return torch.tensor(0.0, device=keypoints_3d.device)
+
+
+# class Reprojection3DLoss(nn.Module):
+#     """Loss that compares predicted 3D keypoints to ground truth 3D keypoints."""
+    
+#     def __init__(self):
+#         super().__init__()
+        
+#     def forward(self, pred_3d, target_3d, mask=None):
+#         """
+#         Args:
+#             pred_3d: Predicted 3D keypoints [batch, cam_pairs, keypoints, 3] or [batch, keypoints, 3]
+#             target_3d: Target 3D keypoints [batch, keypoints, 3]
+#             mask: Optional validity mask [batch, cam_pairs, keypoints] or [batch, keypoints]
+#         """
+#         if pred_3d is None or target_3d is None:
+#             return torch.tensor(0.0, device='cuda' if torch.cuda.is_available() else 'cpu')
+        
+#         # Handle different prediction shapes (multiple camera pairs vs single prediction)
+#         if len(pred_3d.shape) == 4:  # [batch, cam_pairs, keypoints, 3]
+#             batch_size, cam_pairs, num_keypoints, _ = pred_3d.shape
+            
+#             # Calculate loss for each camera pair and take the minimum
+#             min_loss = None
+            
+#             for i in range(cam_pairs):
+#                 pair_pred = pred_3d[:, i]  # [batch, keypoints, 3]
+                
+#                 # Calculate squared Euclidean distance
+#                 diff = pair_pred - target_3d
+#                 squared_dist = torch.sum(diff**2, dim=-1)  # [batch, keypoints]
+                
+#                 # Apply mask if available
+#                 if mask is not None:
+#                     pair_mask = mask[:, i]  # [batch, keypoints]
+#                     squared_dist = squared_dist * pair_mask.float()
+#                     loss = squared_dist.sum() / (pair_mask.sum() + 1e-6)
+#                 else:
+#                     loss = squared_dist.mean()
+                
+#                 # Update minimum loss
+#                 if min_loss is None or loss < min_loss:
+#                     min_loss = loss
+            
+#             return min_loss
+#         else:
+#             # Direct comparison for single 3D prediction [batch, keypoints, 3]
+#             diff = pred_3d - target_3d
+#             squared_dist = torch.sum(diff**2, dim=-1)  # [batch, keypoints]
+            
+#             # Apply mask if available
+#             if mask is not None:
+#                 squared_dist = squared_dist * mask.float()
+#                 return squared_dist.sum() / (mask.sum() + 1e-6)
+#             else:
+#                 return squared_dist.mean()
