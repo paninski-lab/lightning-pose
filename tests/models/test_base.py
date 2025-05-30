@@ -327,11 +327,11 @@ def test_representation_shapes_vit():
     ]
     # 256x256
     rep_shape_list_medium_image = [
-        torch.Size([BATCH_SIZE, 256, 16, 16]),
+        torch.Size([BATCH_SIZE, 768, 16, 16]),
     ]
     # 384x384
     rep_shape_list_large_image = [
-        torch.Size([BATCH_SIZE, 256, 24, 24]),
+        torch.Size([BATCH_SIZE, 768, 24, 24]),
     ]
     shape_list_pre_pool = [
         rep_shape_list_small_image,
