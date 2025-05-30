@@ -1,10 +1,10 @@
 """Functions for predicting keypoints on labeled datasets and unlabeled videos."""
+
 from __future__ import annotations
 
 import datetime
 import gc
 import os
-import time
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Tuple, Type
@@ -18,17 +18,15 @@ import torch
 from moviepy.editor import VideoFileClip
 from omegaconf import DictConfig, OmegaConf
 from torchtyping import TensorType
-from tqdm import tqdm
 from typeguard import typechecked
 
-from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
+from lightning_pose.data.dali import PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import count_frames
 from lightning_pose.models import ALLOWED_MODELS
-from lightning_pose.utils import pretty_print_str
 
 if TYPE_CHECKING:
-    from lightning_pose.model import Model
+    from lightning_pose.api.model import Model
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [

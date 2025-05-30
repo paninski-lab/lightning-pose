@@ -1,0 +1,98 @@
+[build-system]
+requires = ["poetry-core>=2.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[project]
+name = "lightning-pose"
+version = "1.8.1"  # Update the version according to your source
+description = "Semi-supervised pose estimation using pytorch lightning"
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "Dan Biderman", email = "danbider@gmail.com" },
+    { name = "Matt Whiteaway" },
+]
+maintainers = [
+    { name = "Karan Sikka", email = "karanssikka@gmail.com" },
+]
+keywords = ["machine learning", "deep learning", "computer_vision"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+
+dependencies = [
+    "fiftyone",
+    "h5py",
+    "hydra-core",
+    "imgaug",
+    "kaleido",
+    "kornia",
+    "lightning",
+    "matplotlib",
+    "moviepy (<2.0.0)",
+    "numpy (<2.0.0)",
+    "opencv-python-headless",
+    "pandas (>=2.0.0)",
+    "pillow",
+    "plotly",
+    "scikit-learn (>=1.5.0)",
+    "seaborn",
+    "streamlit",
+    "tensorboard (<3.0.0)",
+    "torchtyping",
+    "torchvision",
+    "typeguard",
+    "nvidia-dali-cuda110",
+    "segment-anything @ git+https://github.com/facebookresearch/segment-anything.git",
+]
+
+[project.urls]
+repository = "https://github.com/paninski-lab/lightning-pose"
+documentation = "https://lightning-pose.readthedocs.io/"
+
+
+# project.dependencies are used for metadata when building the project, tool.poetry.dependencies is only used to enrich
+# project.dependencies for locking
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+
+[tool.poetry.scripts]
+litpose = "lightning_pose.cli.main:main"
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "flake8",
+    "isort",
+    "pytest",
+    "pytest-html",
+    "pytest-mock",
+    "Sphinx",
+    "sphinx_rtd_theme",
+    "sphinx-rtd-dark-mode",
+    "sphinx-automodapi",
+    "sphinx-copybutton",
+    "sphinx-design",
+    "tbparse (<1.0.0)",
+]
+extra-models = ["lightning-bolts"]
+
+[tool.isort]
+line_length = 88
+profile = "black"
+src_paths = ["lightning_pose", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = "tests"
+generate_report_on_test = "True"
+markers = ["multigpu"]

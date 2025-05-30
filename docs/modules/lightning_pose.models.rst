@@ -22,3 +22,4 @@ Subpackages
    :maxdepth: 1
 
    lightning_pose.models.backbones
+   lightning_pose.models.heads

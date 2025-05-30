@@ -15,7 +15,7 @@ from typing import Tuple, Type
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
-    "ImageEncoderViT",
+    "ImageEncoderViT_FT",
     "resample_abs_pos_embed_nhwc",
 ]
 

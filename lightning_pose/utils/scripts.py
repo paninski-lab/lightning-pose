@@ -40,6 +40,10 @@ from lightning_pose.models import (
     SemiSupervisedHeatmapTrackerMHCRNN,
     SemiSupervisedRegressionTracker,
 )
+from lightning_pose.models.base import (
+    _apply_defaults_for_lr_scheduler_params,
+    _apply_defaults_for_optimizer_params,
+)
 from lightning_pose.utils import io as io_utils
 from lightning_pose.utils.pca import KeypointPCA
 
@@ -344,13 +348,16 @@ def get_model(
 ) -> pl.LightningModule:
     """Create model: regression or heatmap based, supervised or semi-supervised."""
 
-    optimizer = cfg.training.optimizer
-    optimizer_params = cfg.training.optimizer_params
+    optimizer = cfg.training.get("optimizer", "Adam")
+    optimizer_params = _apply_defaults_for_optimizer_params(
+        optimizer,
+        cfg.training.get("optimizer_params"),
+    )
 
-    lr_scheduler = cfg.training.lr_scheduler
-
-    lr_scheduler_params = OmegaConf.to_object(
-        cfg.training.lr_scheduler_params[lr_scheduler]
+    lr_scheduler = cfg.training.get("lr_scheduler", "multisteplr")
+    lr_scheduler_params = _apply_defaults_for_lr_scheduler_params(
+        lr_scheduler,
+        cfg.training.get("lr_scheduler_params", {}).get(f"{lr_scheduler}")
     )
 
     semi_supervised = io_utils.check_if_semi_supervised(cfg.model.losses_to_use)
@@ -383,7 +390,6 @@ def get_model(
                 backbone=cfg.model.backbone,
                 pretrained=backbone_pretrained,
                 downsample_factor=cfg.data.get("downsample_factor", 2),
-                output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
                 optimizer=optimizer,
                 optimizer_params=optimizer_params,
@@ -398,7 +404,6 @@ def get_model(
                 backbone=cfg.model.backbone,
                 pretrained=backbone_pretrained,
                 downsample_factor=cfg.data.get("downsample_factor", 2),
-                output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
                 optimizer=optimizer,
                 optimizer_params=optimizer_params,
@@ -436,7 +441,6 @@ def get_model(
                 backbone=cfg.model.backbone,
                 pretrained=backbone_pretrained,
                 downsample_factor=cfg.data.get("downsample_factor", 2),
-                output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
                 optimizer=optimizer,
                 optimizer_params=optimizer_params,
@@ -452,7 +456,6 @@ def get_model(
                 backbone=cfg.model.backbone,
                 pretrained=backbone_pretrained,
                 downsample_factor=cfg.data.get("downsample_factor", 2),
-                output_shape=data_module.dataset.output_shape,
                 torch_seed=cfg.training.rng_seed_model_pt,
                 optimizer=optimizer,
                 optimizer_params=optimizer_params,
@@ -594,7 +597,7 @@ def compute_metrics(
         labels_file = Path(cfg.data.csv_file)
         if not labels_file.is_absolute():
             labels_file = Path(cfg.data.data_dir) / labels_file
-        labels_file = io_utils.return_absolute_path(labels_file)
+        labels_file = io_utils.return_absolute_path(str(labels_file))
         compute_metrics_single(
             cfg=cfg,
             labels_file=labels_file,

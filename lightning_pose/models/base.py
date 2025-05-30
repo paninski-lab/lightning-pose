@@ -33,7 +33,7 @@ __all__ = [
 
 DEFAULT_LR_SCHEDULER_PARAMS = OmegaConf.create(
     {
-        "milestones": [100, 200, 300],
+        "milestones": [150, 200, 250],
         "gamma": 0.5,
     }
 )
@@ -228,7 +228,7 @@ class BaseFeatureExtractor(LightningModule):
         Args:
             backbone: which backbone version to use; defaults to resnet50
             pretrained: True to load weights pretrained on imagenet (torchvision models only)
-            optimizer: which optimizer class to instantiate (Adam, AdamW, more to be added in future)
+            optimizer: optimizer class to instantiate (Adam, AdamW, more to be added in future)
             optimizer_params: arguments to pass to optimizer
             lr_scheduler: how to schedule learning rate
             lr_scheduler_params: params for specific learning rate schedulers
@@ -454,14 +454,7 @@ class BaseFeatureExtractor(LightningModule):
         return scheduler
 
     def get_parameters(self):
-        if getattr(self, "upsampling_layers", None) is not None:
-            params = [
-                {"params": self.backbone.parameters(), "lr": 0, "name": "backbone"},
-                {"params": self.upsampling_layers.parameters(), "name": "upsampling"},
-            ]
-        else:
-            params = filter(lambda p: p.requires_grad, self.parameters())
-
+        params = filter(lambda p: p.requires_grad, self.parameters())
         return params
 
     def configure_optimizers(self) -> dict:
@@ -525,7 +518,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         loss_rmse, _ = self.rmse_loss(stage=stage, **data_dict)
 
         if stage:
-            # logging with sync_dist=True will average the metric across GPUs in 
+            # logging with sync_dist=True will average the metric across GPUs in
             # multi-GPU training. Performance overhead was found negligible.
 
             # log overall supervised loss
