@@ -93,8 +93,6 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
     else:
         raise NotImplementedError
 
-    # num_fc_input_features = base.neck[-2].in_channels
-    # vit models always have 768 features
-    num_fc_input_features = 768
+    num_fc_input_features = encoder_embed_dim
 
     return base, num_fc_input_features
