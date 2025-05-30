@@ -75,4 +75,16 @@ GPUs. For example, if you want to train on only the first two GPUs on your machi
 
 .. code-block:: bash
 
-    CUDA_VISIBLE_DEVICES=0,1 litpose train config.yaml
+    CUDA_VISIBLE_DEVICES=0,1 litpose train ...
+
+
+SLURM
+=====
+
+When running on SLURM, multi-GPU requires the use of ``--ntasks-per-node`` and srun.
+
+.. code-block:: bash
+
+    #SBATCH --gres=gpu:4
+    #SBATCH --ntasks-per-node=4
+    srun litpose train ...
