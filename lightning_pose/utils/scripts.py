@@ -344,7 +344,7 @@ def get_loss_factories(
 def get_model(
     cfg: DictConfig,
     data_module: BaseDataModule | UnlabeledDataModule,
-    loss_factories: dict[str, LossFactory],
+    loss_factories: dict[str, LossFactory] | dict[str, None]
 ) -> pl.LightningModule:
     """Create model: regression or heatmap based, supervised or semi-supervised."""
 
@@ -383,9 +383,13 @@ def get_model(
                 image_size=image_h,  # only used by ViT
             )
         elif cfg.model.model_type == "heatmap":
+            if data_module:
+                num_targets = data_module.dataset.num_targets
+            else:
+                num_targets = None
             model = HeatmapTracker(
                 num_keypoints=cfg.data.num_keypoints,
-                num_targets=data_module.dataset.num_targets,
+                num_targets=num_targets,
                 loss_factory=loss_factories["supervised"],
                 backbone=cfg.model.backbone,
                 pretrained=backbone_pretrained,
