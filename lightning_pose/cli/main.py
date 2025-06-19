@@ -42,7 +42,3 @@ def main():
 
     # Execute the command
     command_handler(args)
-
-
-if __name__ == "__main__":
-    main()
