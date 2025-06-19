@@ -27,6 +27,10 @@ class ArgumentParser(argparse.ArgumentParser):
     def error(self, message):
         red = "\033[91m"
         end = "\033[0m"
+
+        # Remove run_app while it's still in development.
+        message = message.replace(", run_app", "")
+
         sys.stderr.write(red + f"error:\n{message}\n\n" + end)
 
         width = shutil.get_terminal_size().columns
