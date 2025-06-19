@@ -343,7 +343,7 @@ def get_loss_factories(
 @typechecked
 def get_model(
     cfg: DictConfig,
-    data_module: BaseDataModule | UnlabeledDataModule,
+    data_module: BaseDataModule | UnlabeledDataModule | None,
     loss_factories: dict[str, LossFactory] | dict[str, None]
 ) -> pl.LightningModule:
     """Create model: regression or heatmap based, supervised or semi-supervised."""
