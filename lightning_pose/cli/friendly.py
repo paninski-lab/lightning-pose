@@ -13,6 +13,12 @@ class ArgumentParser(argparse.ArgumentParser):
         )
         self.is_sub_parser = False
 
+    def format_help(self):
+        """Modified to remove the "run_app" argument from the help text
+        while it's still under development."""
+        h = super().format_help()
+        return h.replace(",run_app", "")
+
     def print_help(self, with_welcome=True, **kwargs):
         if with_welcome and not self.is_sub_parser:
             print("Welcome to the lightning-pose CLI!\n")
