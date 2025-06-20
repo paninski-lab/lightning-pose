@@ -26,6 +26,9 @@ class SamVisionEncoderHF(nn.Module):
         self.finetune_img_size = finetune_img_size
         self.patch_size = full_model.config.vision_config.patch_size
 
+        # Move full model out of gpu memory
+        full_model.to("cpu")
+
         # Store original positional embeddings for potential resizing
         self.original_pos_embed = None
         if hasattr(self.vision_encoder, 'pos_embed'):
