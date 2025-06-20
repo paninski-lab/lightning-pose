@@ -17,8 +17,8 @@ from lightning_pose.data.datatypes import (
 from lightning_pose.data.utils import undo_affine_transform_batch
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
+from lightning_pose.models.backbones import ALLOWED_BACKBONES
 from lightning_pose.models.base import (
-    ALLOWED_BACKBONES,
     BaseSupervisedTracker,
     SemiSupervisedTrackerMixin,
     convert_bbox_coords,

@@ -17,7 +17,11 @@ import pandas as pd
 import seaborn as sns
 import streamlit as st
 
-from lightning_pose.apps.plots import get_y_label, make_plotly_catplot, make_plotly_scatterplot
+from lightning_pose.apps.plots import (
+    get_y_label,
+    make_plotly_catplot,
+    make_plotly_scatterplot,
+)
 from lightning_pose.apps.utils import (
     build_precomputed_metrics_df,
     get_df_box,

@@ -1,16 +1,16 @@
-ImageEncoderViT_FT
+SamVisionEncoderHF
 ==================
 
-.. currentmodule:: lightning_pose.models.backbones.vit_img_encoder
+.. currentmodule:: lightning_pose.models.backbones.vit_sam
 
-.. autoclass:: ImageEncoderViT_FT
+.. autoclass:: SamVisionEncoderHF
    :show-inheritance:
 
    .. rubric:: Methods Summary
 
    .. autosummary::
 
-      ~ImageEncoderViT_FT.forward
+      ~SamVisionEncoderHF.forward
 
    .. rubric:: Methods Documentation
 

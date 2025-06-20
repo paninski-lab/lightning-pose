@@ -207,7 +207,7 @@ The following parameters relate to model architecture and unsupervised losses.
     * efficientnet_b0: EfficientNet-B0 pretrained on ImageNet
     * efficientnet_b1: EfficientNet-B1 pretrained on ImageNet
     * efficientnet_b2: EfficientNet-B2 pretrained on ImageNet
-    * vit_b_sam: Segment Anything Model (Vision Transformer Base)
+    * vitb_sam: Segment Anything Model (Vision Transformer Base)
 
   Note: the file size for a single ResNet-50 network is approximately 275 MB.
 

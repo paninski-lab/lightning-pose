@@ -16,7 +16,10 @@ from omegaconf.errors import ValidationError
 from typeguard import typechecked
 
 from lightning_pose.callbacks import AnnealWeight, UnfreezeBackbone
-from lightning_pose.data.augmentations import imgaug_transform, expand_imgaug_str_to_dict
+from lightning_pose.data.augmentations import (
+    expand_imgaug_str_to_dict,
+    imgaug_transform,
+)
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import (
     BaseTrackingDataset,
@@ -24,7 +27,10 @@ from lightning_pose.data.datasets import (
     MultiviewHeatmapDataset,
 )
 from lightning_pose.data.datatypes import ComputeMetricsSingleResult
-from lightning_pose.data.utils import compute_num_train_frames, split_sizes_from_probabilities
+from lightning_pose.data.utils import (
+    compute_num_train_frames,
+    split_sizes_from_probabilities,
+)
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.metrics import (
     pca_multiview_reprojection_error,

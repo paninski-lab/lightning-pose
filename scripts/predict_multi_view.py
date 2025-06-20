@@ -1,4 +1,5 @@
 import argparse
+
 from lightning_pose.api.model import Model
 
 parser = argparse.ArgumentParser(description="Process videos using a model.")

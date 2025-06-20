@@ -13,7 +13,10 @@ from torch.utils.data import DataLoader, Subset, random_split
 
 from lightning_pose.data.dali import PrepareDALI
 from lightning_pose.data.datatypes import SemiSupervisedDataLoaderDict
-from lightning_pose.data.utils import compute_num_train_frames, split_sizes_from_probabilities
+from lightning_pose.data.utils import (
+    compute_num_train_frames,
+    split_sizes_from_probabilities,
+)
 from lightning_pose.utils.io import check_video_paths
 
 # to ignore imports for sphix-autoapidoc
