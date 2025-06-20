@@ -528,7 +528,10 @@ def load_model_from_checkpoint(
         model as a Lightning Module
 
     """
-    from lightning_pose.utils.io import check_if_semi_supervised, return_absolute_data_paths
+    from lightning_pose.utils.io import (
+        check_if_semi_supervised,
+        return_absolute_data_paths,
+    )
     from lightning_pose.utils.scripts import (
         get_data_module,
         get_dataset,

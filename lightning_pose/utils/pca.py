@@ -16,7 +16,10 @@ from typeguard import typechecked
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import MultiviewHeatmapDataset
 from lightning_pose.data.utils import DataExtractor
-from lightning_pose.losses.helpers import EmpiricalEpsilon, convert_dict_values_to_tensors
+from lightning_pose.losses.helpers import (
+    EmpiricalEpsilon,
+    convert_dict_values_to_tensors,
+)
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [

@@ -7,10 +7,7 @@ import pandas as pd
 from omegaconf import DictConfig, OmegaConf
 
 from lightning_pose.api.model_config import ModelConfig
-from lightning_pose.data.datatypes import (
-    MultiviewPredictionResult,
-    PredictionResult,
-)
+from lightning_pose.data.datatypes import MultiviewPredictionResult, PredictionResult
 from lightning_pose.models import ALLOWED_MODELS
 from lightning_pose.utils import io as io_utils
 from lightning_pose.utils.predictions import (
