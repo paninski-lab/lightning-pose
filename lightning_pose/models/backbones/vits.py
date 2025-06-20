@@ -3,7 +3,7 @@ from functools import partial
 import torch
 from typeguard import typechecked
 
-from lightning_pose.models.backbones.vit_img_encoder import ImageEncoderViT_FT
+from lightning_pose.models.backbones.vit_sam import load_sam_vision_encoder_hf
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -28,70 +28,82 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
 
     # load backbone weights
     if "vit_h_sam" in backbone_arch:
-        ckpt_url = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth"
-        state_dict = torch.hub.load_state_dict_from_url(ckpt_url)
-        encoder_embed_dim = 1280
-        encoder_depth = 32
-        encoder_num_heads = 16
-        encoder_global_attn_indexes = (7, 15, 23, 31)
-        prompt_embed_dim = 256
-        image_size = 1024
-        finetune_image_size = image_size
-        vit_patch_size = 16
-        base = ImageEncoderViT_FT(
-            depth=encoder_depth,
-            embed_dim=encoder_embed_dim,
-            img_size=image_size,
-            finetune_img_size=finetune_image_size,
-            mlp_ratio=4,
-            norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
-            num_heads=encoder_num_heads,
-            patch_size=vit_patch_size,
-            qkv_bias=True,
-            use_rel_pos=False,
-            global_attn_indexes=encoder_global_attn_indexes,
-            window_size=14,
-            out_chans=prompt_embed_dim,
-        )
-        base.load_state_dict(state_dict, strict=False)
+        backbone_arch = "vitb_sam"
+        raise DeprecationWarning('vit_h_sam is now deprecated; reverting to "vitb_sam"')
+        # ckpt_url = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth"
+        # state_dict = torch.hub.load_state_dict_from_url(ckpt_url)
+        # encoder_embed_dim = 1280
+        # encoder_depth = 32
+        # encoder_num_heads = 16
+        # encoder_global_attn_indexes = (7, 15, 23, 31)
+        # prompt_embed_dim = 256
+        # image_size = 1024
+        # finetune_image_size = image_size
+        # vit_patch_size = 16
+        # base = ImageEncoderViT_FT(
+        #     depth=encoder_depth,
+        #     embed_dim=encoder_embed_dim,
+        #     img_size=image_size,
+        #     finetune_img_size=finetune_image_size,
+        #     mlp_ratio=4,
+        #     norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
+        #     num_heads=encoder_num_heads,
+        #     patch_size=vit_patch_size,
+        #     qkv_bias=True,
+        #     use_rel_pos=False,
+        #     global_attn_indexes=encoder_global_attn_indexes,
+        #     window_size=14,
+        #     out_chans=prompt_embed_dim,
+        # )
+        # base.load_state_dict(state_dict, strict=False)
 
     elif "vit_b_sam" in backbone_arch:
-        ckpt_url = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth"
-        state_dict = torch.hub.load_state_dict_from_url(ckpt_url)
-        new_state_dict = {}
-        for key in state_dict:
-            new_key = key.replace('image_encoder.', '')
-            new_key = new_key.replace('mask_decoder.', '')
-            new_state_dict[new_key] = state_dict[key]
-        encoder_embed_dim = 768
-        encoder_depth = 12
-        encoder_num_heads = 12
-        encoder_global_attn_indexes = (2, 5, 8, 11)
-        prompt_embed_dim = 256
-        finetune_image_size = image_size
-        image_size = 1024
-        vit_patch_size = 16
-        base = ImageEncoderViT_FT(
-            depth=encoder_depth,
-            embed_dim=encoder_embed_dim,
-            img_size=image_size,
-            finetune_img_size=finetune_image_size,
-            mlp_ratio=4,
-            norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
-            num_heads=encoder_num_heads,
-            patch_size=vit_patch_size,
-            qkv_bias=True,
-            use_rel_pos=False,
-            global_attn_indexes=encoder_global_attn_indexes,
-            window_size=14,
-            out_chans=prompt_embed_dim,
+        backbone_arch = "vitb_sam"
+        raise DeprecationWarning('vit_b_sam is now deprecated; reverting to "vitb_sam"')
+        # ckpt_url = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth"
+        # state_dict = torch.hub.load_state_dict_from_url(ckpt_url)
+        # new_state_dict = {}
+        # for key in state_dict:
+        #     new_key = key.replace('image_encoder.', '')
+        #     new_key = new_key.replace('mask_decoder.', '')
+        #     new_state_dict[new_key] = state_dict[key]
+        # encoder_embed_dim = 768
+        # encoder_depth = 12
+        # encoder_num_heads = 12
+        # encoder_global_attn_indexes = (2, 5, 8, 11)
+        # prompt_embed_dim = 256
+        # finetune_image_size = image_size
+        # image_size = 1024
+        # vit_patch_size = 16
+        # base = ImageEncoderViT_FT(
+        #     depth=encoder_depth,
+        #     embed_dim=encoder_embed_dim,
+        #     img_size=image_size,
+        #     finetune_img_size=finetune_image_size,
+        #     mlp_ratio=4,
+        #     norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
+        #     num_heads=encoder_num_heads,
+        #     patch_size=vit_patch_size,
+        #     qkv_bias=True,
+        #     use_rel_pos=False,
+        #     global_attn_indexes=encoder_global_attn_indexes,
+        #     window_size=14,
+        #     out_chans=prompt_embed_dim,
+        # )
+        # base.load_state_dict(new_state_dict, strict=False)
+        # # remove the neck in the base
+        # del base.neck
+
+    if "vitb_sam" in backbone_arch:
+
+        base = load_sam_vision_encoder_hf(
+            model_name="facebook/sam-vit-base",
+            finetune_image_size=image_size,
         )
-        base.load_state_dict(new_state_dict, strict=False)
-        # remove the neck in the base
-        del base.neck
+        encoder_embed_dim = 768
 
     else:
-        raise NotImplementedError
+        raise NotImplementedError(f"{backbone_arch} is not a valid backbone")
 
     num_fc_input_features = encoder_embed_dim
 

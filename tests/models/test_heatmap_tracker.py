@@ -24,6 +24,28 @@ def test_supervised_heatmap(
     )
 
 
+def test_supervised_heatmap_vit_sam(
+    cfg,
+    heatmap_data_module,
+    video_dataloader,
+    trainer,
+    run_model_test,
+):
+    """Test the initialization and training of a supervised heatmap model."""
+
+    cfg_tmp = copy.deepcopy(cfg)
+    cfg_tmp.model.backbone = "vitb_sam"
+    cfg_tmp.model.model_type = "heatmap"
+    cfg_tmp.model.losses_to_use = []
+
+    run_model_test(
+        cfg=cfg_tmp,
+        data_module=heatmap_data_module,
+        video_dataloader=video_dataloader,
+        trainer=trainer,
+    )
+
+
 def test_supervised_multiview_heatmap(
     cfg_multiview,
     multiview_heatmap_data_module,

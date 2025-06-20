@@ -99,7 +99,7 @@ model:
   # resnet50_animal_apose | resnet50_animal_ap10k
   # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res | resnet50_human_hand
   # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
-  # vit_b_sam | vit_h_sam
+  # vitb_sam
   backbone: resnet50_animal_ap10k
   # prediction mode: regression | heatmap | heatmap_mhcrnn (context)
   model_type: heatmap

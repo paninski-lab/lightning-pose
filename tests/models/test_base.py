@@ -4,7 +4,6 @@ import gc
 
 import numpy as np
 import pytest
-import segment_anything
 import torch
 import torchvision
 
@@ -23,8 +22,8 @@ WIDTHS = [120, 246, 380]  # similar but not square
 RESNET_BACKBONES = ["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"]
 EFFICIENTNET_BACKBONES = ["efficientnet_b0", "efficientnet_b1", "efficientnet_b2"]
 VIT_BACKBONES = [
-    "vit_b_sam"
-]  # "vit_h_sam" very large (2.6GB), takes too long to download/load
+    "vitb_sam",
+]
 
 
 def test_normalized_to_bbox():
@@ -198,12 +197,10 @@ def test_backbones_efficientnet():
 
 
 def test_backbones_vit():
+    from transformers.models.sam.modeling_sam import SamPatchEmbeddings
     for ind, backbone in enumerate(VIT_BACKBONES):
         model = BaseFeatureExtractor(backbone=backbone).to(_TORCH_DEVICE)
-        assert (
-            type(list(model.backbone.children())[0])
-            == segment_anything.modeling.image_encoder.PatchEmbed
-        )
+        assert isinstance(model.backbone.vision_encoder.patch_embed, SamPatchEmbeddings)
         # remove model from gpu; then cache can be cleared
         del model
         gc.collect()
@@ -323,7 +320,7 @@ def test_representation_shapes_vit():
 
     # 128x128
     rep_shape_list_small_image = [
-        torch.Size([BATCH_SIZE, 768, 8, 8]),  # vit_b_sam
+        torch.Size([BATCH_SIZE, 768, 8, 8]),  # vitb_sam
     ]
     # 256x256
     rep_shape_list_medium_image = [

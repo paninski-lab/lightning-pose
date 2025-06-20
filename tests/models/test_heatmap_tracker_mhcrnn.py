@@ -84,9 +84,10 @@ def test_semisupervised_heatmap_mhcrnn_pcasingleview_vit(
     """
 
     cfg_tmp = copy.deepcopy(cfg)
-    cfg_tmp.model.backbone = "vit_b_sam"
+    cfg_tmp.model.backbone = "vitb_sam"
     cfg_tmp.model.model_type = "heatmap_mhcrnn"
     cfg_tmp.model.losses_to_use = ["pca_singleview"]
+    cfg_tmp.training.val_batch_size = 2
 
     run_model_test(
         cfg=cfg_tmp,
