@@ -19,15 +19,13 @@ class SamVisionEncoderHF(nn.Module):
 
         # Load the full SAM model and extract vision encoder
         full_model = SamModel.from_pretrained(model_name)
+        full_model = full_model.cpu()
         self.vision_encoder = full_model.vision_encoder
 
         # Store size information
         self.img_size = img_size
         self.finetune_img_size = finetune_img_size
         self.patch_size = full_model.config.vision_config.patch_size
-
-        # Move full model out of gpu memory
-        full_model.to("cpu")
 
         # Store original positional embeddings for potential resizing
         self.original_pos_embed = None

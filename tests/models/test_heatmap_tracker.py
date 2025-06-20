@@ -34,8 +34,8 @@ def test_supervised_heatmap_vit_sam(
     """Test the initialization and training of a supervised heatmap model."""
 
     cfg_tmp = copy.deepcopy(cfg)
-    cfg_tmp.model.backbone = "vitb_sam"
     cfg_tmp.model.model_type = "heatmap"
+    cfg_tmp.model.backbone = "vitb_sam"
     cfg_tmp.model.losses_to_use = []
 
     run_model_test(
