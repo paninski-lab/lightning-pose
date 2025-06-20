@@ -222,7 +222,7 @@ class BaseFeatureExtractor(LightningModule):
 
         self.backbone_arch = backbone
 
-        if "sam" in self.backbone_arch:
+        if self.backbone_arch.startswith("vit"):
             from lightning_pose.models.backbones.vits import build_backbone
         else:
             from lightning_pose.models.backbones.torchvision import build_backbone

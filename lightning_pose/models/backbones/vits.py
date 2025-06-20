@@ -1,9 +1,7 @@
-from functools import partial
-
-import torch
 from typeguard import typechecked
 
-from lightning_pose.models.backbones.vit_sam import load_sam_vision_encoder_hf
+from lightning_pose.models.backbones.vit_mae import ViTVisionEncoder
+from lightning_pose.models.backbones.vit_sam import SamVisionEncoderHF
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -37,11 +35,19 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
 
     if "vitb_sam" in backbone_arch:
 
-        base = load_sam_vision_encoder_hf(
+        base = SamVisionEncoderHF(
             model_name="facebook/sam-vit-base",
-            finetune_image_size=image_size,
+            finetune_img_size=image_size,
         )
         encoder_embed_dim = 768
+
+    elif "vitb_imagenet" in backbone_arch:
+
+        base = ViTVisionEncoder(
+            model_name="facebook/vit-mae-base",
+            finetune_img_size=image_size,
+        )
+        encoder_embed_dim = base.vision_encoder.config.hidden_size
 
     else:
         raise NotImplementedError(f"{backbone_arch} is not a valid backbone")
