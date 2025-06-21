@@ -22,7 +22,7 @@ RESNET_BACKBONES = ["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"
 EFFICIENTNET_BACKBONES = ["efficientnet_b0", "efficientnet_b1", "efficientnet_b2"]
 VIT_BACKBONES = [
     "vitb_sam",
-    "vitb_imagenet"
+    "vitb_imagenet",
 ]
 
 
@@ -353,7 +353,7 @@ def test_representation_shapes_vit():
             )
             # representation dim depends on both image size and backbone network
             representations = model(fake_image_batch)
-            assert representations.shape == shape_list_pre_pool[idx_image][idx_backbone]
+            assert representations.shape == shape_list_pre_pool[idx_image][0]
             # remove model/data from gpu; then cache can be cleared
             del fake_image_batch
             del representations
