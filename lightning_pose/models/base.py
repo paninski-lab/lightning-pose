@@ -222,7 +222,7 @@ class BaseFeatureExtractor(LightningModule):
 
         self.backbone_arch = backbone
 
-        if "sam" in self.backbone_arch:
+        if self.backbone_arch.startswith("vit"):
             from lightning_pose.models.backbones.vits import build_backbone
         else:
             from lightning_pose.models.backbones.torchvision import build_backbone
@@ -232,6 +232,7 @@ class BaseFeatureExtractor(LightningModule):
             pretrained=pretrained,
             model_type=model_type,  # for torchvision only
             image_size=image_size,  # for ViTs only
+            backbone_checkpoint=kwargs.get('backbone_checkpoint'),  # for ViTMAE's only
         )
 
         self.lr_scheduler = lr_scheduler

@@ -17,4 +17,5 @@ ALLOWED_BACKBONES = Literal[
     "efficientnet_b1",
     "efficientnet_b2",
     "vitb_sam",
+    "vitb_imagenet",
 ]

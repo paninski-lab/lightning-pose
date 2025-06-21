@@ -5,6 +5,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import SamModel
 
+# to ignore imports for sphix-autoapidoc
+__all__ = [
+    "SamVisionEncoderHF",
+]
+
 
 class SamVisionEncoderHF(nn.Module):
     """Wrapper around HuggingFace's SAM Vision Encoder."""
@@ -47,6 +52,11 @@ class SamVisionEncoderHF(nn.Module):
 
         # Bypass size check entirely
         self._bypass_size_check()
+
+        # Disable relative positional encoding in SAM
+        for layer in self.vision_encoder.layers:
+            if hasattr(layer.attn, "use_rel_pos"):
+                layer.attn.use_rel_pos = False
 
     def _bypass_size_check(self):
         """Completely bypass the size check in patch embedding"""
@@ -147,31 +157,3 @@ class SamVisionEncoderHF(nn.Module):
 
         # Update the vision encoder's positional embeddings
         self.vision_encoder.pos_embed = nn.Parameter(pos_embed_final)
-
-
-def load_sam_vision_encoder_hf(
-    model_name: str = "facebook/sam-vit-base",
-    finetune_image_size: int = 1024,
-    image_size: int = 1024
-):
-    """Load SAM vision encoder from HuggingFace.
-
-    Args:
-        model_name: HuggingFace model name
-            (facebook/sam-vit-base, facebook/sam-vit-large, facebook/sam-vit-huge)
-        finetune_image_size: Target image size for fine-tuning
-        image_size: Original image size (usually 1024 for SAM)
-
-    Returns:
-        SamVisionEncoderHF instance
-
-    """
-
-    # Create the wrapper
-    encoder = SamVisionEncoderHF(
-        model_name=model_name,
-        finetune_img_size=finetune_image_size,
-        img_size=image_size
-    )
-
-    return encoder
