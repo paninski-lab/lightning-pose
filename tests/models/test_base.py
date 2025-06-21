@@ -21,7 +21,7 @@ WIDTHS = [120, 246, 380]  # similar but not square
 RESNET_BACKBONES = ["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"]
 EFFICIENTNET_BACKBONES = ["efficientnet_b0", "efficientnet_b1", "efficientnet_b2"]
 VIT_BACKBONES = [
-    # "vitb_sam",
+    "vitb_sam",
     "vitb_imagenet"
 ]
 

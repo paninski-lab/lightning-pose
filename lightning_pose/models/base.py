@@ -232,6 +232,7 @@ class BaseFeatureExtractor(LightningModule):
             pretrained=pretrained,
             model_type=model_type,  # for torchvision only
             image_size=image_size,  # for ViTs only
+            backbone_checkpoint=kwargs.get('backbone_checkpoint'),  # for ViTMAE's only
         )
 
         self.lr_scheduler = lr_scheduler
