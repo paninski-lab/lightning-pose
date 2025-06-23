@@ -87,8 +87,22 @@ dev = [
 ]
 extra-models = ["lightning-bolts"]
 
+[tool.flake8]
+max-line-length = 99
+ignore = ["F821", "W503"]
+extend-ignore = ["E203"]
+exclude = [
+    ".git",
+    "__pycache__",
+    "__init__.py",
+    "build",
+    "dist",
+    "docs/",
+    "scripts/",
+]
+
 [tool.isort]
-line_length = 88
+line_length = 99
 profile = "black"
 src_paths = ["lightning_pose", "tests"]
 
