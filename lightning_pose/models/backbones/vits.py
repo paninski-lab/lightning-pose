@@ -1,8 +1,12 @@
+import math
+
 import torch
+from transformers import ViTModel
 from typeguard import typechecked
 
-from lightning_pose.models.backbones.vit_mae import ViTVisionEncoder
-from lightning_pose.models.backbones.vit_sam import SamVisionEncoderHF
+# from lightning_pose.models.backbones.vit_dino import DinoVisionEncoder
+# from lightning_pose.models.backbones.vit_mae import ViTVisionEncoder
+from lightning_pose.models.backbones.vit_sam import SamVisionEncoder
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -25,34 +29,37 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
 
     """
 
-    # load backbone weights
+    # deprecation warnings
     if "vit_h_sam" in backbone_arch:
         backbone_arch = "vitb_sam"
         raise DeprecationWarning('vit_h_sam is now deprecated; reverting to "vitb_sam"')
-
     elif "vit_b_sam" in backbone_arch:
         backbone_arch = "vitb_sam"
         raise DeprecationWarning('vit_b_sam is now deprecated; reverting to "vitb_sam"')
 
-    if "vitb_sam" in backbone_arch:
-
-        base = SamVisionEncoderHF(
+    # load backbone weights
+    if "vitb_dino" in backbone_arch or "vits_dino" in backbone_arch:
+        if "vitb_dino" in backbone_arch:
+            model_name = "facebook/dino-vitb16"
+        else:
+            model_name = "facebook/dino-vits16"
+        base = VisionEncoder(model_name=model_name)
+        encoder_embed_dim = base.vision_encoder.config.hidden_size
+    elif "vitb_imagenet" in backbone_arch:
+        base = VisionEncoder(model_name="facebook/vit-mae-base")
+        # base = ViTVisionEncoder(
+        #     model_name="facebook/vit-mae-base",
+        #     finetune_img_size=image_size,
+        # )
+        encoder_embed_dim = base.vision_encoder.config.hidden_size
+        if kwargs.get("backbone_checkpoint"):
+            load_vit_backbone_checkpoint(base, kwargs["backbone_checkpoint"])
+    elif "vitb_sam" in backbone_arch:
+        base = SamVisionEncoder(
             model_name="facebook/sam-vit-base",
             finetune_img_size=image_size,
         )
         encoder_embed_dim = 768
-
-    elif "vitb_imagenet" in backbone_arch:
-
-        base = ViTVisionEncoder(
-            model_name="facebook/vit-mae-base",
-            finetune_img_size=image_size,
-        )
-        encoder_embed_dim = base.vision_encoder.config.hidden_size
-
-        if kwargs.get("backbone_checkpoint"):
-            load_vit_backbone_checkpoint(base, kwargs["backbone_checkpoint"])
-
     else:
         raise NotImplementedError(f"{backbone_arch} is not a valid backbone")
 
@@ -68,7 +75,7 @@ def load_vit_backbone_checkpoint(base, checkpoint: str):
     vit_mae_state_dict = {}
     for key, value in ckpt_vit_pretrain.items():
         if key.startswith("vit_mae."):
-            model_key = key.replace("vit_mae.", "")
+            model_key = key.replace("vit_mae.vit", "")
             # Skip known problematic layers with size mismatches
             if any(prob in model_key for prob in [
                 "position_embeddings",
@@ -83,3 +90,43 @@ def load_vit_backbone_checkpoint(base, checkpoint: str):
                     vit_mae_state_dict[model_key] = value
     # Load the filtered weights
     base.vision_encoder.load_state_dict(vit_mae_state_dict, strict=False)
+
+
+class VisionEncoder(torch.nn.Module):
+    """Wrapper around DINO Vision Encoder."""
+
+    def __init__(self, model_name):
+        super().__init__()
+        # Load the DINO backbone
+        self.vision_encoder = ViTModel.from_pretrained(model_name)
+        if hasattr(self, "pooler"):
+            self.pooler = None
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass through the vision encoder.
+
+        Args:
+            x: Input tensor of shape (B, C, H, W)
+
+        Returns:
+            Encoded features
+        """
+
+        # Patch embedding
+        outputs = self.vision_encoder(
+            x,
+            return_dict=True,
+            output_hidden_states=False,
+            output_attentions=False,
+            interpolate_pos_encoding=True,
+        ).last_hidden_state
+
+        # skip the cls token
+        outputs = outputs[:, 1:, ...]  # [N, S, D]
+        # change the shape to [N, H, W, D] -> [N, D, H, W]
+        N = x.shape[0]
+        S = outputs.shape[1]
+        H, W = math.isqrt(S), math.isqrt(S)
+        outputs = outputs.reshape(N, H, W, -1).permute(0, 3, 1, 2)
+
+        return outputs

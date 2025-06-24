@@ -11,7 +11,7 @@ __all__ = [
 
 
 class ViTVisionEncoder(nn.Module):
-    """Wrapper around HuggingFace's ViTMAE Vision Encoder."""
+    """Wrapper around ViTMAE Vision Encoder."""
 
     def __init__(
         self,
@@ -20,40 +20,14 @@ class ViTVisionEncoder(nn.Module):
     ):
         super().__init__()
 
-        if model_name == "facebook/vit-mae-base":
-            img_size = 224
-            config = {
-                'hidden_size': 768,
-                'num_hidden_layers': 12,
-                'num_attention_heads': 12,
-                'intermediate_size': 3072,
-                'hidden_act': "gelu",
-                'hidden_dropout_prob': 0.0,
-                'attention_probs_dropout_prob': 0.0,
-                'initializer_range': 0.02,
-                'layer_norm_eps': 1.e-12,
-                'image_size': img_size,  # usually 224
-                'patch_size': 16,   # default is 16, we use large patch size
-                'num_channels': 3,  # 3 for RGB
-                'qkv_bias': True,
-                'decoder_num_attention_heads': 16,
-                'decoder_hidden_size': 512,
-                'decoder_num_hidden_layers': 8,
-                'decoder_intermediate_size': 2048,
-                'mask_ratio': 0,  # 0 for no masking, usually 0.75 (MAE)
-                'norm_pix_loss': False,
-            }
-        else:
-            raise NotImplementedError(f"{model_name} is not a valid ViTVisionEncoder model name")
-
         # Load the full ViT model and extract encoder
-        self.config = ViTMAEConfig(**config)
         self.vision_encoder = ViTMAE.from_pretrained(model_name)
         del self.vision_encoder.decoder  # remove the decoder from the vit_mae
         self.vision_encoder.config.mask_ratio = 0
+        self.config = self.vision_encoder.config
 
         # Store size information
-        self.img_size = img_size
+        self.img_size = self.config.image_size
         self.finetune_img_size = finetune_img_size
         self.patch_size = self.vision_encoder.config.patch_size
 
@@ -65,14 +39,14 @@ class ViTVisionEncoder(nn.Module):
 
         # Check if we need to resize positional embeddings
         if (
-            self.finetune_img_size != img_size
+            self.finetune_img_size != self.img_size
             and hasattr(self.vision_encoder.vit.embeddings, 'position_embeddings')
             and self.vision_encoder.vit.embeddings.position_embeddings is not None
         ):
             # Resize positional embeddings if needed
             print(
-                f"Finetune image size ({finetune_img_size}) does not match model size ({img_size})"
-                f" - recomputing position embeddings"
+                f"Finetune image size ({finetune_img_size}) does not match model size "
+                f"({self.img_size}) - recomputing position embeddings"
             )
             self._resize_pos_embed()
 
@@ -86,7 +60,7 @@ class ViTVisionEncoder(nn.Module):
             batch_size, num_channels, height, width = pixel_values.shape
 
             # Only check channel dimension
-            if num_channels != self.vision_encoder.vit.config.num_channels:
+            if num_channels != self.config.num_channels:
                 raise ValueError(
                     "Make sure that the channel dimension of the pixel values match with the one "
                     "set in the configuration."
@@ -185,7 +159,7 @@ class ViTMAE(ViTMAEForPreTraining):
     ):
         # Setting default for return_dict based on the configuration
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        if (self.training and self.config.mask_ratio > 0) or return_recon:
+        if (self.training and self.vision_encoder.config.mask_ratio > 0) or return_recon:
             outputs = self.vit(
                 pixel_values,
                 noise=noise,
