@@ -57,7 +57,6 @@ def imgaug_transform(params_dict: dict | DictConfig) -> iaa.Sequential:
     data_transform = []
 
     for transform_str, args in params_dict.items():
-
         transform = getattr(iaa, transform_str)
         apply_prob = args.get("p", 0.5)
         transform_args = args.get("args", ())
@@ -70,8 +69,10 @@ def imgaug_transform(params_dict: dict | DictConfig) -> iaa.Sequential:
             if isinstance(arg, list) or isinstance(arg, ListConfig):
                 if len(arg) == 1:
                     transform_kwargs[kw] = arg[0]
-                else:
+                elif len(arg) == 2:
                     transform_kwargs[kw] = tuple(arg)
+                else:
+                    transform_kwargs[kw] = arg
 
         # add transform to pipeline
         if apply_prob == 0.0:
@@ -94,7 +95,6 @@ def expand_imgaug_str_to_dict(params: str) -> dict[str, Any]:
     if params in ["default", "none"]:
         pass  # no augmentations
     elif params in ["dlc", "dlc-lr", "dlc-top-down"]:
-
         # rotate 0 or 180 degrees
         if params in ["dlc-lr"]:
             params_dict["Rot90"] = {"p": 1.0, "kwargs": {"k": [[0, 2]]}}
