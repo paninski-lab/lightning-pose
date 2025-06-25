@@ -1,16 +1,16 @@
-SamVisionEncoderHF
-==================
+SamVisionEncoder
+================
 
 .. currentmodule:: lightning_pose.models.backbones.vit_sam
 
-.. autoclass:: SamVisionEncoderHF
+.. autoclass:: SamVisionEncoder
    :show-inheritance:
 
    .. rubric:: Methods Summary
 
    .. autosummary::
 
-      ~SamVisionEncoderHF.forward
+      ~SamVisionEncoder.forward
 
    .. rubric:: Methods Documentation
 

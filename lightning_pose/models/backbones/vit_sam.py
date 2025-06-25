@@ -7,11 +7,11 @@ from transformers import SamModel
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
-    "SamVisionEncoderHF",
+    "SamVisionEncoder",
 ]
 
 
-class SamVisionEncoderHF(nn.Module):
+class SamVisionEncoder(nn.Module):
     """Wrapper around HuggingFace's SAM Vision Encoder."""
 
     def __init__(
