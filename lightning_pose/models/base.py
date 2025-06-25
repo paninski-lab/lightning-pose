@@ -218,7 +218,7 @@ class BaseFeatureExtractor(LightningModule):
         """
         super().__init__()
         if self.local_rank == 0:
-            print(f"\n Initializing a {self._get_name()} instance.")
+            print(f"\nInitializing a {self._get_name()} instance with {backbone} backbone.")
 
         self.backbone_arch = backbone
 
