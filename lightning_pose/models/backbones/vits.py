@@ -4,7 +4,6 @@ import torch
 from transformers import ViTModel
 from typeguard import typechecked
 
-# from lightning_pose.models.backbones.vit_mae import ViTVisionEncoder
 from lightning_pose.models.backbones.vit_sam import SamVisionEncoder
 
 # to ignore imports for sphix-autoapidoc
@@ -46,10 +45,6 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
         encoder_embed_dim = base.vision_encoder.config.hidden_size
     elif "vitb_imagenet" in backbone_arch:
         base = VisionEncoder(model_name="facebook/vit-mae-base")
-        # base = ViTVisionEncoder(
-        #     model_name="facebook/vit-mae-base",
-        #     finetune_img_size=image_size,
-        # )
         encoder_embed_dim = base.vision_encoder.config.hidden_size
         if kwargs.get("backbone_checkpoint"):
             load_vit_backbone_checkpoint(base, kwargs["backbone_checkpoint"])
@@ -74,7 +69,7 @@ def load_vit_backbone_checkpoint(base, checkpoint: str):
     vit_mae_state_dict = {}
     for key, value in ckpt_vit_pretrain.items():
         if key.startswith("vit_mae."):
-            model_key = key.replace("vit_mae.vit", "")
+            model_key = key.replace("vit_mae.vit.", "")
             # Skip known problematic layers with size mismatches
             if any(prob in model_key for prob in [
                 "position_embeddings",
@@ -92,14 +87,11 @@ def load_vit_backbone_checkpoint(base, checkpoint: str):
 
 
 class VisionEncoder(torch.nn.Module):
-    """Wrapper around DINO Vision Encoder."""
+    """Wrapper around ViT Encoder."""
 
     def __init__(self, model_name):
         super().__init__()
-        # Load the DINO backbone
-        self.vision_encoder = ViTModel.from_pretrained(model_name)
-        if hasattr(self, "pooler"):
-            self.pooler = None
+        self.vision_encoder = ViTModel.from_pretrained(model_name, add_pooling_layer=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the vision encoder.
@@ -111,7 +103,6 @@ class VisionEncoder(torch.nn.Module):
             Encoded features
         """
 
-        # Patch embedding
         outputs = self.vision_encoder(
             x,
             return_dict=True,
