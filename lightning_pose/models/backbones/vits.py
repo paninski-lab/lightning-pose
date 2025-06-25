@@ -4,7 +4,6 @@ import torch
 from transformers import ViTModel
 from typeguard import typechecked
 
-# from lightning_pose.models.backbones.vit_dino import DinoVisionEncoder
 # from lightning_pose.models.backbones.vit_mae import ViTVisionEncoder
 from lightning_pose.models.backbones.vit_sam import SamVisionEncoder
 
