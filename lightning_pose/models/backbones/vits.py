@@ -36,12 +36,11 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
         raise DeprecationWarning('vit_b_sam is now deprecated; reverting to "vitb_sam"')
 
     # load backbone weights
-    if "vitb_dino" in backbone_arch or "vits_dino" in backbone_arch:
-        if "vitb_dino" in backbone_arch:
-            model_name = "facebook/dino-vitb16"
-        else:
-            model_name = "facebook/dino-vits16"
-        base = VisionEncoder(model_name=model_name)
+    if "vits_dino" in backbone_arch:
+        base = VisionEncoder(model_name="facebook/dino-vits16")
+        encoder_embed_dim = base.vision_encoder.config.hidden_size
+    elif "vitb_dino" in backbone_arch:
+        base = VisionEncoder(model_name="facebook/dino-vitb16")
         encoder_embed_dim = base.vision_encoder.config.hidden_size
     elif "vitb_imagenet" in backbone_arch:
         base = VisionEncoder(model_name="facebook/vit-mae-base")
@@ -53,7 +52,7 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
             model_name="facebook/sam-vit-base",
             finetune_img_size=image_size,
         )
-        encoder_embed_dim = 768
+        encoder_embed_dim = base.vision_encoder.config.hidden_size
     else:
         raise NotImplementedError(f"{backbone_arch} is not a valid backbone")
 

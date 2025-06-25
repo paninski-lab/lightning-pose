@@ -20,12 +20,7 @@ HEIGHTS = [128, 256, 384]  # standard numbers, not going to bigger images due to
 WIDTHS = [120, 246, 380]  # similar but not square
 RESNET_BACKBONES = ["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"]
 EFFICIENTNET_BACKBONES = ["efficientnet_b0", "efficientnet_b1", "efficientnet_b2"]
-VIT_BACKBONES = [
-    # "vits_dino",
-    # "vitb_dino",
-    "vitb_imagenet",
-    # "vitb_sam",
-]
+VIT_BACKBONES = ["vits_dino", "vitb_dino", "vitb_imagenet", "vitb_sam"]
 
 
 def test_normalized_to_bbox():
@@ -204,9 +199,6 @@ def test_backbones_vit():
         if backbone == "vitb_sam":
             from transformers.models.sam.modeling_sam import SamPatchEmbeddings
             assert isinstance(model.backbone.vision_encoder.patch_embed, SamPatchEmbeddings)
-        # elif backbone == "vitb_imagenet":
-        #     from transformers.models.vit_mae.modeling_vit_mae import ViTMAEEmbeddings
-        #     assert isinstance(model.backbone.vision_encoder.vit.embeddings, ViTMAEEmbeddings)
         elif backbone in ["vits_dino", "vitb_dino", "vitb_imagenet"]:
             from transformers.models.vit.modeling_vit import ViTEmbeddings
             assert isinstance(model.backbone.vision_encoder.embeddings, ViTEmbeddings)
