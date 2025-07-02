@@ -70,6 +70,8 @@ def cfg() -> dict:
     config_file = lp.LP_ROOT_PATH / "scripts" / "configs" / "config_mirror-mouse-example.yaml"
     cfg = OmegaConf.load(config_file)
     # make small batches so that we can run on a gpu with limited memory
+    cfg.data.image_resize_dims.height = 128
+    cfg.data.image_resize_dims.width = 128
     cfg.training.train_batch_size = 2
     cfg.training.val_batch_size = 4
     cfg.training.test_batch_size = 4

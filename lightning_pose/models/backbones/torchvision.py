@@ -5,7 +5,7 @@ import torch
 import torchvision.models as tvmodels
 from typeguard import typechecked
 
-from lightning_pose.models.base import ALLOWED_BACKBONES
+from lightning_pose.models.backbones import ALLOWED_BACKBONES
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [

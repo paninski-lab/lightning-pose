@@ -16,7 +16,10 @@ from omegaconf.errors import ValidationError
 from typeguard import typechecked
 
 from lightning_pose.callbacks import AnnealWeight, UnfreezeBackbone
-from lightning_pose.data.augmentations import imgaug_transform, expand_imgaug_str_to_dict
+from lightning_pose.data.augmentations import (
+    expand_imgaug_str_to_dict,
+    imgaug_transform,
+)
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import (
     BaseTrackingDataset,
@@ -24,7 +27,10 @@ from lightning_pose.data.datasets import (
     MultiviewHeatmapDataset,
 )
 from lightning_pose.data.datatypes import ComputeMetricsSingleResult
-from lightning_pose.data.utils import compute_num_train_frames, split_sizes_from_probabilities
+from lightning_pose.data.utils import (
+    compute_num_train_frames,
+    split_sizes_from_probabilities,
+)
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.metrics import (
     pca_multiview_reprojection_error,
@@ -367,8 +373,8 @@ def get_loss_factories(
 @typechecked
 def get_model(
     cfg: DictConfig,
-    data_module: BaseDataModule | UnlabeledDataModule,
-    loss_factories: dict[str, LossFactory],
+    data_module: BaseDataModule | UnlabeledDataModule | None,
+    loss_factories: dict[str, LossFactory] | dict[str, None]
 ) -> pl.LightningModule:
     """Create model: regression or heatmap based, supervised or semi-supervised."""
 
@@ -407,8 +413,13 @@ def get_model(
                 image_size=image_h,  # only used by ViT
             )
         elif cfg.model.model_type == "heatmap":
+            if data_module:
+                num_targets = data_module.dataset.num_targets
+            else:
+                num_targets = None
             model = HeatmapTracker(
                 num_keypoints=cfg.data.num_keypoints,
+                num_targets=num_targets,
                 loss_factory=loss_factories["supervised"],
                 backbone=cfg.model.backbone,
                 pretrained=backbone_pretrained,
@@ -419,6 +430,7 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
+                backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
             )
         elif cfg.model.model_type == "heatmap_mhcrnn":
             model = HeatmapTrackerMHCRNN(
@@ -433,6 +445,7 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
+                backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
             )
         elif cfg.model.model_type == "heatmap_multiview":
             head = cfg.model.head
@@ -505,6 +518,7 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
+                backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
             )
         elif cfg.model.model_type == "heatmap_mhcrnn":
             model = SemiSupervisedHeatmapTrackerMHCRNN(
@@ -520,6 +534,7 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
+                backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
             )
         else:
             raise NotImplementedError(

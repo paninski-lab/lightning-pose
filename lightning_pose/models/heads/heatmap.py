@@ -176,7 +176,7 @@ class HeatmapHead(nn.Module):
         self.temperature = torch.tensor(1000.0)  # soft argmax temp
 
         n_layers = 4 - self.downsample_factor
-        if self.backbone_arch in ["vit_h_sam", "vit_b_sam"]:
+        if self.backbone_arch.startswith("vit"):
             n_layers -= 1
 
         self.upsampling_layers = make_upsampling_layers(

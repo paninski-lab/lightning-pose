@@ -20,6 +20,7 @@ from lightning_pose.data.datatypes import (
     SemiSupervisedHeatmapBatchDict,
     UnlabeledBatchDict,
 )
+from lightning_pose.models.backbones import ALLOWED_BACKBONES
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -89,28 +90,6 @@ def _apply_defaults_for_optimizer_params(
         optimizer_params = OmegaConf.merge(DEFAULT_OPTIMIZER_PARAMS, optimizer_params)
 
     return optimizer_params
-
-
-# list of all allowed backbone options
-ALLOWED_BACKBONES = Literal[
-    "resnet18",
-    "resnet34",
-    "resnet50",
-    "resnet101",
-    "resnet152",
-    "resnet50_contrastive",  # needs extra install: pip install -e .[extra_models]
-    "resnet50_animal_apose",
-    "resnet50_animal_ap10k",
-    "resnet50_human_jhmdb",
-    "resnet50_human_res_rle",
-    "resnet50_human_top_res",
-    "resnet50_human_hand",
-    "efficientnet_b0",
-    "efficientnet_b1",
-    "efficientnet_b2",
-    # "vit_h_sam",
-    "vit_b_sam",
-]
 
 
 def normalized_to_bbox(
@@ -239,11 +218,11 @@ class BaseFeatureExtractor(LightningModule):
         """
         super().__init__()
         if self.local_rank == 0:
-            print(f"\n Initializing a {self._get_name()} instance.")
+            print(f"\nInitializing a {self._get_name()} instance with {backbone} backbone.")
 
         self.backbone_arch = backbone
 
-        if "sam" in self.backbone_arch:
+        if self.backbone_arch.startswith("vit"):
             from lightning_pose.models.backbones.vits import build_backbone
         else:
             from lightning_pose.models.backbones.torchvision import build_backbone
@@ -253,6 +232,7 @@ class BaseFeatureExtractor(LightningModule):
             pretrained=pretrained,
             model_type=model_type,  # for torchvision only
             image_size=image_size,  # for ViTs only
+            backbone_checkpoint=kwargs.get('backbone_checkpoint'),  # for ViTMAE's only
         )
 
         self.lr_scheduler = lr_scheduler

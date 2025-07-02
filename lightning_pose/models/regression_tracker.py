@@ -11,11 +11,8 @@ from lightning_pose.data.datatypes import BaseLabeledBatchDict, UnlabeledBatchDi
 from lightning_pose.data.utils import undo_affine_transform
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
-from lightning_pose.models.base import (
-    ALLOWED_BACKBONES,
-    BaseSupervisedTracker,
-    SemiSupervisedTrackerMixin,
-)
+from lightning_pose.models.backbones import ALLOWED_BACKBONES
+from lightning_pose.models.base import BaseSupervisedTracker, SemiSupervisedTrackerMixin
 from lightning_pose.models.heads import LinearRegressionHead
 
 # to ignore imports for sphix-autoapidoc

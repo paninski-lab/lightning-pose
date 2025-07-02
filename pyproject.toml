@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "lightning-pose"
-version = "1.8.0"  # Update the version according to your source
+version = "1.9.0"  # Update the version according to your source
 description = "Semi-supervised pose estimation using pytorch lightning"
 license = "MIT"
 readme = "README.md"
@@ -52,9 +52,9 @@ dependencies = [
     "tensorboard (<3.0.0)",
     "torchtyping",
     "torchvision",
+    "transformers",
     "typeguard",
     "nvidia-dali-cuda110",
-    "segment-anything @ git+https://github.com/facebookresearch/segment-anything.git",
 ]
 
 [project.urls]
@@ -88,8 +88,22 @@ dev = [
 ]
 extra-models = ["lightning-bolts"]
 
+[tool.flake8]
+max-line-length = 99
+ignore = ["F821", "W503"]
+extend-ignore = ["E203"]
+exclude = [
+    ".git",
+    "__pycache__",
+    "__init__.py",
+    "build",
+    "dist",
+    "docs/",
+    "scripts/",
+]
+
 [tool.isort]
-line_length = 88
+line_length = 99
 profile = "black"
 src_paths = ["lightning_pose", "tests"]
 
