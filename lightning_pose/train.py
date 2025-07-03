@@ -95,6 +95,16 @@ def _evaluate_on_training_dataset(model: Model, ood_mode=False):
             if ood_mode:
                 csv_file = csv_file.with_stem(csv_file.stem + "_new")
             csv_files.append(csv_file)
+        if model.config.cfg.data.get("camera_params_file"):
+            camera_params_file = _absolute_csv_file(
+                model.config.cfg.data.camera_params_file,
+                model.config.cfg.data.data_dir,
+            )
+            camera_params_file = camera_params_file.with_stem(
+                camera_params_file.stem + "_new"
+            )
+        else:
+            camera_params_file = None
 
     # ood mode: skip prediction when _new files don't exist.
     if ood_mode and not csv_files[0].exists():
@@ -110,6 +120,7 @@ def _evaluate_on_training_dataset(model: Model, ood_mode=False):
     if model.config.is_multi_view():
         model.predict_on_label_csv_multiview(
             csv_file_per_view=csv_files,
+            camera_params_file=camera_params_file,
             data_dir=model.config.cfg.data.data_dir,
             compute_metrics=True,
             add_train_val_test_set=(not ood_mode),
