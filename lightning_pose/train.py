@@ -100,9 +100,10 @@ def _evaluate_on_training_dataset(model: Model, ood_mode=False):
                 model.config.cfg.data.camera_params_file,
                 model.config.cfg.data.data_dir,
             )
-            camera_params_file = camera_params_file.with_stem(
-                camera_params_file.stem + "_new"
-            )
+            if ood_mode:
+                camera_params_file = camera_params_file.with_stem(
+                    camera_params_file.stem + "_new"
+                )
         else:
             camera_params_file = None
 
