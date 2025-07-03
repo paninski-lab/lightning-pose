@@ -197,6 +197,7 @@ class Model:
     def predict_on_label_csv_multiview(
         self,
         csv_file_per_view: list[str] | list[Path],
+        camera_params_file: str | Path | None = None,
         data_dir: str | Path | None = None,
         compute_metrics: bool = True,
         add_train_val_test_set: bool = False,
@@ -230,6 +231,8 @@ class Model:
                 "csv_file": [str(p) for p in csv_file_per_view],
             }
         }
+        if camera_params_file:
+            cfg_overrides["data"]["camera_params_file"] = camera_params_file
 
         # Avoid annotating set=train/val/test for CSV file other than the training CSV file.
         if not add_train_val_test_set:
