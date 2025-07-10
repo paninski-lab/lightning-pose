@@ -153,6 +153,7 @@ def get_dataset(
                 resize=resize,
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
                 camera_params_path=cfg.data.get("camera_params_file", None),
+                bbox_paths=cfg.data.get("bbox_file", None),
             )
         else:
             dataset = HeatmapDataset(

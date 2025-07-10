@@ -46,6 +46,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         imgaug_transform: Callable | None = None,
         do_context: bool = False,
         resize: bool = True,
+        bbox_path: str | None = None,
     ) -> None:
         """Initialize a dataset for regression (rather than heatmap) models.
 
@@ -73,12 +74,15 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 sophisticated augmentations before resizing (e.g. 3d augmentations). Note that when
                 this is False, it is up to the child class to perform this resizing on both images
                 and keypoints before returning a batch of data.
+            bbox_path: path to csv file that contains bounding box information; rows must be in
+                same order as csv file
 
         """
         self.root_directory = Path(root_directory)
         self.image_resize_height = image_resize_height
         self.image_resize_width = image_resize_width
         self.csv_path = csv_path
+        self.bbox_path = bbox_path
         self.header_rows = header_rows
         self.do_context = do_context
         if resize:
@@ -116,6 +120,21 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         self.num_keypoints = self.keypoints.shape[1]
 
         self.data_length = len(self.image_names)
+
+        # load bounding box data
+        if bbox_path:
+            if os.path.isfile(bbox_path):
+                bbox_file = bbox_path
+            else:
+                bbox_file = os.path.join(root_directory, bbox_path)
+            if not os.path.exists(bbox_file):
+                raise FileNotFoundError(f"Could not find bbox file at {bbox_file}!")
+            bboxes_df = pd.read_csv(bbox_file, header=[0], index_col=0)
+            assert bboxes_df.index.equals(csv_data.index)
+            bboxes = bboxes_df.to_numpy()
+        else:
+            bboxes = [None] * len(csv_data)
+        self.bboxes = bboxes
 
     @property
     def height(self) -> int:
@@ -196,11 +215,17 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
         assert transformed_keypoints.shape == (self.num_targets,)
 
+        # x,y,h,w of bounding box
+        if self.bboxes[idx] is not None:
+            bbox = torch.tensor(self.bboxes[idx])
+        else:
+            bbox = torch.tensor([0, 0, image.height, image.width])
+
         return BaseLabeledExampleDict(
             images=transformed_images,  # shape (3, img_height, img_width) or (5, 3, H, W)
             keypoints=torch.from_numpy(transformed_keypoints),  # shape (n_targets,)
             idxs=idx,
-            bbox=torch.tensor([0, 0, image.height, image.width])  # x,y,h,w of bounding box
+            bbox=bbox,
         )
 
 
@@ -220,6 +245,7 @@ class HeatmapDataset(BaseTrackingDataset):
         do_context: bool = False,
         resize: bool = True,
         uniform_heatmaps: bool = False,
+        bbox_path: str | None = None,
     ) -> None:
         """Initialize the Heatmap Dataset.
 
@@ -243,6 +269,8 @@ class HeatmapDataset(BaseTrackingDataset):
                 and keypoints before returning a batch of data.
             uniform_heatmaps: True to force the model to output uniform heatmaps for missing data;
                 False will output all-zero heatmaps
+            bbox_path: path to csv file that contains bounding box information; rows must be in
+                same order as csv file
 
         """
         super().__init__(
@@ -254,6 +282,7 @@ class HeatmapDataset(BaseTrackingDataset):
             imgaug_transform=imgaug_transform,
             do_context=do_context,
             resize=resize,
+            bbox_path=bbox_path,
         )
 
         if self.height % 128 != 0 or self.height % 128 != 0:
@@ -352,6 +381,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         resize: bool = False,
         uniform_heatmaps: bool = False,
         camera_params_path: str | None = None,
+        bbox_paths: list[str] | None = None,
     ) -> None:
         """Initialize the MultiViewHeatmap Dataset.
 
@@ -388,6 +418,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         self.root_directory = root_directory
         self.csv_paths = csv_paths
+        self.bbox_paths = bbox_paths or [None] * len(view_names)
         self.view_names = view_names
         self.image_resize_height = image_resize_height
         self.image_resize_width = image_resize_width
@@ -406,7 +437,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         self.keypoint_names = {}
         self.data_length = {}
         self.num_keypoints = {}
-        for view, csv_path in zip(view_names, csv_paths):
+        for view, csv_path, bbox_path in zip(view_names, csv_paths, self.bbox_paths):
             self.dataset[view] = HeatmapDataset(
                 root_directory=root_directory,
                 csv_path=csv_path,
@@ -418,6 +449,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 do_context=do_context,
                 resize=False,  # handled above in L396
                 uniform_heatmaps=uniform_heatmaps,
+                bbox_path=bbox_path,
             )
             self.keypoint_names[view] = self.dataset[view].keypoint_names
             self.data_length[view] = len(self.dataset[view])
@@ -506,8 +538,8 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
     @property
     def output_shape(self) -> tuple:
         return (
-            self.height // 2**self.downsample_factor,
-            self.width // 2**self.downsample_factor,
+            self.height // 2 ** self.downsample_factor,
+            self.width // 2 ** self.downsample_factor,
         )
 
     @property
@@ -616,7 +648,8 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
     def _transform_images(
         images: list,
         keypoints_orig: np.ndarray,
-        keypoints_aug: np.ndarray
+        keypoints_aug: np.ndarray,
+        bboxes: list[np.ndarray],
     ) -> list:
         """Apply 2D transformations based on keypoint matching.
 
@@ -626,6 +659,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             different views
         keypoints_orig: shape (num_views, num_keypoints, 2)
         keypoints_aug: shape (num_views, num_keypoints, 2)
+        bboxes: shape (num_view, 4) -> x, y, h, w
 
         Returns
         -------
@@ -636,9 +670,9 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         device = images[0].device
         images_transformed = []
 
-        for orig_image, kps_og, kps_aug in zip(images, keypoints_orig, keypoints_aug):
+        for orig_img, kps_og, kps_aug, bbox in zip(images, keypoints_orig, keypoints_aug, bboxes):
 
-            _, img_height, img_width = orig_image.shape
+            _, img_height, img_width = orig_img.shape
 
             # create a mask for valid keypoints (not NaN in either original or augmented)
             valid_mask = ~(np.isnan(kps_og).any(axis=1) | np.isnan(kps_aug).any(axis=1))
@@ -647,10 +681,16 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             orig_pts = kps_og[valid_mask]
             new_pts = kps_aug[valid_mask]
 
+            # transform data points from original coordinate space to frame coordinate
+            orig_pts[:, 0] = (orig_pts[:, 0] - bbox[0]) / bbox[3] * img_width
+            new_pts[:, 0] = (new_pts[:, 0] - bbox[0]) / bbox[3] * img_width
+            orig_pts[:, 1] = (orig_pts[:, 1] - bbox[1]) / bbox[2] * img_height
+            new_pts[:, 1] = (new_pts[:, 1] - bbox[1]) / bbox[2] * img_height
+
             # ensure we have enough points for transformation
             if len(orig_pts) < 3:
                 # If not enough points, return original image
-                images_transformed.append(orig_image.unsqueeze(0))
+                images_transformed.append(orig_img.unsqueeze(0))
                 continue
 
             # estimate the affine transformation matrix with non-uniform scaling
@@ -662,11 +702,11 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             # apply affine transformation
             # image has already been normalized, so pad with minimum value of image instead of 0s
             transformed_image = ktransform.warp_affine(
-                orig_image.unsqueeze(0),  # (C, H, W)
+                orig_img.unsqueeze(0),  # (C, H, W)
                 M_tensor.unsqueeze(0),  # (2, 3)
                 dsize=(img_height, img_width),  # Keep original size
                 padding_mode="fill",
-                fill_value=torch.ones(3, device=orig_image.device) * orig_image.min(),
+                fill_value=torch.ones(3, device=orig_img.device) * orig_img.min(),
             )
 
             images_transformed.append(transformed_image)
@@ -679,10 +719,9 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         for idx_view in range(self.num_views):
             keypoints_ = keypoints[idx_view].copy()  # shape (num_keypoints, 2)
             bbox_ = bboxes[idx_view].cpu().numpy()
-            keypoints_[:, 0] = (keypoints_[:, 0] / bbox_[3]) * self.width
-            keypoints_[:, 1] = (keypoints_[:, 1] / bbox_[2]) * self.height
+            keypoints_[:, 0] = ((keypoints_[:, 0] - bbox_[0]) / bbox_[3]) * self.width
+            keypoints_[:, 1] = ((keypoints_[:, 1] - bbox_[1]) / bbox_[2]) * self.height
             keypoints_resized.append(keypoints_.reshape(-1))
-
         return keypoints_resized
 
     def _resize_images(self, images: list) -> list:
@@ -703,9 +742,18 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         images = []
         bboxes = []
         for idx_view, (view, example_dict) in enumerate(data_dict.items()):
-            keypoints_2d[idx_view, :, :] = example_dict["keypoints"].reshape(
+            keypoints_curr = example_dict["keypoints"].reshape(
                 self.num_keypoints // self.num_views, 2
-            ).cpu().numpy()
+            )
+            # transform keypoints from bbox coordinates to absolute frame coordinates
+            # 1. divide by image dims to get 0-1 normalized coords
+            keypoints_curr[:, 0] /= example_dict["images"].shape[-1]  # -1 dim is "x"
+            keypoints_curr[:, 1] /= example_dict["images"].shape[-2]  # -2 dim is "y"
+            # 2. multiply and add by bbox dims
+            keypoints_2d[idx_view] = normalized_to_bbox(
+                keypoints=keypoints_curr.unsqueeze(0),
+                bbox=example_dict["bbox"].unsqueeze(0),
+            )[0].cpu().numpy()
             images.append(example_dict["images"])
             bboxes.append(example_dict["bbox"])
 
@@ -737,6 +785,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             images=images,
             keypoints_orig=keypoints_2d.copy(),
             keypoints_aug=keypoints_2d_aug.copy(),
+            bboxes=[b.cpu().numpy() for b in bboxes],
         )
 
         # resize to uniform dimensions for backbone network
