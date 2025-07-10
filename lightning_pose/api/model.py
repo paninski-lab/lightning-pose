@@ -10,9 +10,7 @@ from lightning_pose.api.model_config import ModelConfig
 from lightning_pose.data.datatypes import MultiviewPredictionResult, PredictionResult
 from lightning_pose.models import ALLOWED_MODELS
 from lightning_pose.utils import io as io_utils
-from lightning_pose.utils.predictions import (
-    generate_labeled_video as generate_labeled_video_fn,
-)
+from lightning_pose.utils.predictions import generate_labeled_video as generate_labeled_video_fn
 from lightning_pose.utils.predictions import (
     load_model_from_checkpoint,
     predict_dataset,

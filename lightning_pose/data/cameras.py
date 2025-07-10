@@ -1,13 +1,13 @@
 import copy
 import itertools
 
+import cv2
+import numpy as np
+import torch
 from aniposelib.cameras import CameraGroup as CameraGroupAnipose
 from kornia.geometry.calibration import undistort_points
 from kornia.geometry.epipolar import triangulate_points
 from torchtyping import TensorType
-import cv2
-import numpy as np
-import torch
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [

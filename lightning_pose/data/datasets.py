@@ -16,13 +16,13 @@ from torchtyping import TensorType
 from torchvision import transforms
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
+from lightning_pose.data.cameras import CameraGroup
 from lightning_pose.data.datatypes import (
     BaseLabeledExampleDict,
     HeatmapLabeledExampleDict,
     MultiviewHeatmapLabeledExampleDict,
 )
-from lightning_pose.data.cameras import CameraGroup
-from lightning_pose.data.utils import generate_heatmaps
+from lightning_pose.data.utils import generate_heatmaps, normalized_to_bbox
 from lightning_pose.utils import io as io_utils
 
 # to ignore imports for sphix-autoapidoc

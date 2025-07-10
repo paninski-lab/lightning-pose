@@ -5,23 +5,24 @@ from typing import Any, Literal, Tuple
 
 import torch
 from omegaconf import DictConfig
-from torch import nn, Tensor
+from torch import Tensor, nn
 from torchtyping import TensorType
+
 # from typeguard import typechecked
 from typing_extensions import Literal
 
+from lightning_pose.data.cameras import get_valid_projection_masks, project_camera_pairs_to_3d
 from lightning_pose.data.datatypes import (
     MultiviewHeatmapLabeledBatchDict,
     UnlabeledBatchDict,
 )
-from lightning_pose.data.cameras import get_valid_projection_masks, project_camera_pairs_to_3d
+from lightning_pose.data.utils import convert_bbox_coords
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.base import (
     ALLOWED_BACKBONES,
     BaseSupervisedTracker,
     SemiSupervisedTrackerMixin,
-    convert_bbox_coords,
 )
 from lightning_pose.models.heads import (
     ALLOWED_MULTIVIEW_HEADS,

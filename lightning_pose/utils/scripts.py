@@ -41,9 +41,9 @@ from lightning_pose.metrics import (
 from lightning_pose.models import (
     HeatmapTracker,
     HeatmapTrackerMHCRNN,
-    HeatmapTrackerMultiviewTransformer,
     HeatmapTrackerMultiview,
     HeatmapTrackerMultiviewMultihead,
+    HeatmapTrackerMultiviewTransformer,
     RegressionTracker,
     SemiSupervisedHeatmapTracker,
     SemiSupervisedHeatmapTrackerMHCRNN,
