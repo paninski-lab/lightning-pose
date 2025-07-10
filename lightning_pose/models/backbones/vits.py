@@ -64,6 +64,9 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
 def load_vit_backbone_checkpoint(base, checkpoint: str):
     print(f"Loading VIT-MAE weights from {checkpoint}")
     ckpt_vit_pretrain = torch.load(checkpoint, map_location="cpu")
+    # extract state dict if checkpoint contains additional info
+    if "state_dict" in ckpt_vit_pretrain:
+        ckpt_vit_pretrain = ckpt_vit_pretrain["state_dict"]
     # Create a filtered state dict for the VIT-MAE part only
     vit_mae_state_dict = {}
     for key, value in ckpt_vit_pretrain.items():
@@ -72,7 +75,7 @@ def load_vit_backbone_checkpoint(base, checkpoint: str):
             # Skip known problematic layers with size mismatches
             if any(prob in model_key for prob in [
                 "position_embeddings",
-                "patch_embeddings.projection",
+                "patch_embeddings.projection",  # in case backbone was trained with grayscale imgs
                 "decoder_pos_embed",
                 "decoder_pred",
             ]):
