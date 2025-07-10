@@ -107,6 +107,23 @@ def _evaluate_on_training_dataset(model: Model, ood_mode=False):
         else:
             camera_params_file = None
 
+        # NOTE: setting bbox_files = None here is a hacky way to get the model predictions
+        # to be in the cropped image space; otherwise the bbox info would lead to 
+        # predictions in the original image space. This can be achieved post-hoc by using
+        # the CLI remap command.
+        bbox_files = None
+
+        # This is how the code would look without the hack
+        # if model.config.cfg.data.get("bbox_file"):
+        #     bbox_files = []
+        #     for bbox_file in model.config.cfg.data.bbox_file:
+        #         bbox_file = _absolute_csv_file(bbox_file, model.config.cfg.data.data_dir)
+        #         if ood_mode:
+        #             bbox_file = bbox_file.with_stem(bbox_file.stem + "_new")
+        #         bbox_files.append(bbox_file)
+        # else:
+        #     bbox_files = None
+
     # ood mode: skip prediction when _new files don't exist.
     if ood_mode and not csv_files[0].exists():
         return
@@ -121,6 +138,7 @@ def _evaluate_on_training_dataset(model: Model, ood_mode=False):
     if model.config.is_multi_view():
         model.predict_on_label_csv_multiview(
             csv_file_per_view=csv_files,
+            bbox_file_per_view=bbox_files,
             camera_params_file=camera_params_file,
             data_dir=model.config.cfg.data.data_dir,
             compute_metrics=True,
