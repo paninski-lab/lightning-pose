@@ -176,16 +176,30 @@ def _evaluate_on_training_dataset(model: Model, ood_mode=False):
             shutil.copy(p_file, out_file)
 
 
-def _predict_test_videos(model: Model):
+def _predict_test_videos(model: Model): # I need to fix this 
     if model.config.cfg.eval.predict_vids_after_training:
         pretty_print_str(f"Predicting videos in cfg.eval.test_videos_directory...")
-        for video_file in model.config.test_video_files():
-            pretty_print_str(f"Predicting video: {video_file}...")
+        # dealing with multuiview 
+        if model.config.is_multi_view():
+            # create a list of the video files for each view
+            video_files_per_view = []
+            for view_name in model.config.cfg.data.view_names:
+                video_files_per_view.append(model.config.cfg.data.video_dir / f"{view_name}.mp4")
 
-            model.predict_on_video_file(
-                Path(video_file),
+            model.predict_on_video_file_multiview(
+                video_file_per_view=video_files_per_view,
+                output_dir=model.model_dir,
+                compute_metrics=True,
                 generate_labeled_video=model.config.cfg.eval.save_vids_after_training,
             )
+        else:
+            for video_file in model.config.test_video_files():
+                pretty_print_str(f"Predicting video: {video_file}...")
+
+                model.predict_on_video_file(
+                    Path(video_file),
+                    generate_labeled_video=model.config.cfg.eval.save_vids_after_training,
+                )
 
 
 def _train(cfg: DictConfig) -> Model:

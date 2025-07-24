@@ -418,7 +418,7 @@ class Model:
         else:
             metrics = None
 
-        df_dict = {view_name: df for df in zip(view_names, df_list)}
+        df_dict = {view_name: df for view_name, df in zip(view_names, df_list)}
 
         return MultiviewPredictionResult(predictions=df_dict, metrics=metrics)
 

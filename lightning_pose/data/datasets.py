@@ -415,7 +415,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         if len(view_names) != len(csv_paths):
             raise ValueError("number of names does not match with the number of files!")
-
+        print(f" I am using the multiview heatmap dataset")
         self.root_directory = root_directory
         self.csv_paths = csv_paths
         self.bbox_paths = bbox_paths or [None] * len(view_names)
@@ -764,7 +764,8 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         keypoints_3d_aug = self._scale_translate_keypoints(keypoints_3d)
 
         # apply rotations by modifying camera extrinsics
-        camgroup_rotated = self._rotate_cameras(camgroup)
+        # camgroup_rotated = self._rotate_cameras(camgroup)
+        camgroup_rotated = camgroup # we do this because of training of the chickadee 
 
         # project 3D keypoints to 2D using the rotated cameras
         keypoints_2d_aug = camgroup_rotated.project(keypoints_3d_aug)
@@ -875,33 +876,71 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         datadict = {}
         for view in self.view_names:
             datadict[view] = self.dataset[view].__getitem__(idx, ignore_nans=ignore_nans)
-
-        # apply 3D augmentations and 2D rotations if applicable
-        if (
-            self.cam_params_file_to_camgroup
-            and self.imgaug_transform.__str__().find("Resize") == -1
-        ):
-            # only apply 3d transforms if
-            # - camera calibration information is available
-            # - imgaug does not contain a resize operation, which indicates:
-            #   - val/test batch
-            #   - output of "default"/"none" pipeline (e.g. model evaluation on labeled frames)
-
+        
+        # MODIFIED: Always load camera parameters if available
+        if self.cam_params_file_to_camgroup:
             # select proper camera calibration parameters for this data point
             camgroup = self.cam_params_file_to_camgroup[self.cam_params_df.iloc[idx].file]
-            # apply transforms
-            (
-                datadict,
-                keypoints_3d,
-                intrinsic_matrix,
-                extrinsic_matrix,
-                distortions,
-            ) = self.apply_3d_transforms(datadict, camgroup)
+            
+            # Only apply 3D transforms if no resize (original logic)
+            if self.imgaug_transform.__str__().find("Resize") == -1:
+                # apply transforms
+                (
+                    datadict,
+                    keypoints_3d,
+                    intrinsic_matrix,
+                    extrinsic_matrix,
+                    distortions,
+                ) = self.apply_3d_transforms(datadict, camgroup)
+            else:
+                # Load camera parameters but don't apply 3D transforms
+                intrinsic_matrix = torch.stack([
+                    torch.tensor(cam.get_camera_matrix()) for cam in camgroup.cameras
+                ], dim=0)
+                extrinsic_matrix = torch.stack([
+                    torch.tensor(cam.get_extrinsics_mat()[:3]) for cam in camgroup.cameras
+                ], dim=0)
+                distortions = torch.stack([
+                    torch.tensor(cam.get_distortions()) for cam in camgroup.cameras
+                ], dim=0)
+                keypoints_3d = torch.tensor([1])  # placeholder
         else:
+            # Use default values when no camera calibration
             keypoints_3d = torch.tensor([1])
-            intrinsic_matrix = torch.tensor([1])
-            extrinsic_matrix = torch.tensor([1])
-            distortions = torch.tensor([1])
+            intrinsic_matrix = torch.eye(3).unsqueeze(0)
+            extrinsic_matrix = torch.zeros(1, 3, 4)
+            distortions = torch.zeros(1, 5)
+
+        # # apply 3D augmentations and 2D rotations if applicable
+        # if (
+        #     self.cam_params_file_to_camgroup
+        #     and self.imgaug_transform.__str__().find("Resize") == -1
+        # ):
+        #     # only apply 3d transforms if
+        #     # - camera calibration information is available
+        #     # - imgaug does not contain a resize operation, which indicates:
+        #     #   - val/test batch
+        #     #   - output of "default"/"none" pipeline (e.g. model evaluation on labeled frames)
+
+        #     # select proper camera calibration parameters for this data point
+        #     camgroup = self.cam_params_file_to_camgroup[self.cam_params_df.iloc[idx].file]
+        #     # apply transforms
+        #     (
+        #         datadict,
+        #         keypoints_3d,
+        #         intrinsic_matrix,
+        #         extrinsic_matrix,
+        #         distortions,
+        #     ) = self.apply_3d_transforms(datadict, camgroup)
+        # else:
+        #     keypoints_3d = torch.tensor([1])
+        #     intrinsic_matrix = torch.eye(3).unsqueeze(0)    # CORRECT - shape [1, 3, 3]
+        #     extrinsic_matrix = torch.zeros(1, 3, 4)         # CORRECT - shape [1, 3, 4]
+        #     distortions = torch.zeros(1, 5)
+        #     # keypoints_3d = torch.tensor([1])
+        #     # intrinsic_matrix = torch.tensor([1])
+        #     # extrinsic_matrix = torch.tensor([1])
+        #     # distortions = torch.tensor([1])
 
         # fuse data from all views
         images, keypoints, heatmaps, bboxes, concat_order = self.fusion(datadict)
