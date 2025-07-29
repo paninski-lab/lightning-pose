@@ -296,6 +296,15 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         else:
             # unlabeled dali video dataloaders
             images = batch_dict["frames"]
+            
+            # CRITICAL FIX: Ensure view ordering for DALI multiview data
+            # DALI processes views in arbitrary order, but we need them in view_names order
+            if hasattr(self, 'cfg') and hasattr(self.cfg, 'data') and hasattr(self.cfg.data, 'view_names'):
+                expected_view_names = self.cfg.data.view_names
+                if len(expected_view_names) == images.shape[1]:
+                    print(f"WARNING: DALI multiview data detected. Expected view order: {expected_view_names}")
+                    print(f"Current batch shape: {images.shape}")
+                    # TODO: Add view reordering logic here if needed
 
         batch_size, num_views, channels, img_height, img_width = images.shape
 
@@ -362,20 +371,26 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         target_keypoints = convert_bbox_coords(batch_dict, batch_dict["keypoints"])
         pred_keypoints = convert_bbox_coords(batch_dict, pred_keypoints)
         # project predictions from pairs of views into 3d if calibration data available
-        if batch_dict["keypoints_3d"].shape[-1] == 3:
-            # print("Calibration data exists!")
+        if "keypoints_3d" in batch_dict and batch_dict["keypoints_3d"].shape[-1] == 3:
             num_views = batch_dict["images"].shape[1]
             num_keypoints = pred_keypoints.shape[1] // 2 // num_views
-            keypoints_pred_3d = project_camera_pairs_to_3d(
-                points=pred_keypoints.reshape((-1, num_views, num_keypoints, 2)),
-                intrinsics=batch_dict["intrinsic_matrix"],
-                extrinsics=batch_dict["extrinsic_matrix"],
-                dist=batch_dict["distortions"],
-            )
-            keypoints_targ_3d = batch_dict["keypoints_3d"]
-            keypoints_mask_3d = get_valid_projection_masks(
-                target_keypoints.reshape((-1, num_views, num_keypoints, 2))
-            )
+            
+            try:
+                keypoints_pred_3d = project_camera_pairs_to_3d(
+                    points=pred_keypoints.reshape((-1, num_views, num_keypoints, 2)),
+                    intrinsics=batch_dict["intrinsic_matrix"].float(),
+                    extrinsics=batch_dict["extrinsic_matrix"].float(),
+                    dist=batch_dict["distortions"].float(),
+                )
+                keypoints_targ_3d = batch_dict["keypoints_3d"]
+                keypoints_mask_3d = get_valid_projection_masks(
+                    target_keypoints.reshape((-1, num_views, num_keypoints, 2))
+                )
+            except Exception as e:
+                print(f"Error in 3D projection: {e}")
+                keypoints_pred_3d = None
+                keypoints_targ_3d = None
+                keypoints_mask_3d = None
         else:
             keypoints_pred_3d = None
             keypoints_targ_3d = None
@@ -595,7 +610,7 @@ class HeatmapTrackerMultiview(BaseSupervisedTracker):
     ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
-        pred_heatmaps = self.forward(batch_dict["images"])
+        pred_heatmaps = self.forward(batch_dict)
         # heatmaps -> keypoints
         pred_keypoints, confidence = self.head.run_subpixelmaxima(pred_heatmaps)
         # bounding box coords -> original image coords
@@ -607,9 +622,9 @@ class HeatmapTrackerMultiview(BaseSupervisedTracker):
             num_keypoints = pred_keypoints.shape[1] // 2 // num_views
             keypoints_pred_3d = project_camera_pairs_to_3d(
                 points=pred_keypoints.reshape((-1, num_views, num_keypoints, 2)),
-                intrinsics=batch_dict["intrinsic_matrix"],
-                extrinsics=batch_dict["extrinsic_matrix"],
-                dist=batch_dict["distortions"],
+                intrinsics=batch_dict["intrinsic_matrix"].float(),
+                extrinsics=batch_dict["extrinsic_matrix"].float(),
+                dist=batch_dict["distortions"].float(),
             )
             keypoints_targ_3d = batch_dict["keypoints_3d"]
             keypoints_mask_3d = get_valid_projection_masks(

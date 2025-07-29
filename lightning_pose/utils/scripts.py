@@ -71,24 +71,28 @@ __all__ = [
 
 @typechecked
 def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
-    """Create simple data transform pipeline that augments images.
+    """Create simple and flexible data transform pipeline that augments images and keypoints.
 
     Args:
-        cfg: standard config file that carries around dataset info; relevant is the parameter
-            "cfg.training.imgaug" which can take on the following values:
-            - default: resizing only
-            - dlc: imgaug pipeline implemented in DLC 2.0 package
-            - dlc-top-down: `dlc` pipeline plus random flipping along both horizontal and vertical
-                axes
+        cfg: configuration object containing training parameters
+
+    Returns:
+        imgaug pipeline
 
     """
+
     params = cfg.training.get("imgaug", "default")
     if isinstance(params, str):
+        # Check if user explicitly wants to use 3D augmentations for multiview models
+        use_3d_augmentations = cfg.training.get("use_3d_augmentations", None)
+        
         # enforce "dlc-mv" imgaug pipeline for multiview models (no 2D geometric transforms)
+        # only if explicitly requested or if no preference is set and camera params exist
         if (
             params not in ["default", "none"]
             and cfg.model.model_type.find("multiview") > -1
             and cfg.data.get("camera_params_file")
+            and (use_3d_augmentations is True or use_3d_augmentations is None)
         ):
             params = "dlc-mv"
         params_dict = expand_imgaug_str_to_dict(params)

@@ -877,14 +877,25 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         for view in self.view_names:
             datadict[view] = self.dataset[view].__getitem__(idx, ignore_nans=ignore_nans)
         
-        # MODIFIED: Always load camera parameters if available
+        # Always provide 3D keypoints when camera params are available
         if self.cam_params_file_to_camgroup:
             # select proper camera calibration parameters for this data point
             camgroup = self.cam_params_file_to_camgroup[self.cam_params_df.iloc[idx].file]
             
-            # Only apply 3D transforms if no resize (original logic)
+            # Load camera parameters
+            intrinsic_matrix = torch.stack([
+                torch.tensor(cam.get_camera_matrix()) for cam in camgroup.cameras
+            ], dim=0)
+            extrinsic_matrix = torch.stack([
+                torch.tensor(cam.get_extrinsics_mat()[:3]) for cam in camgroup.cameras
+            ], dim=0)
+            distortions = torch.stack([
+                torch.tensor(cam.get_distortions()) for cam in camgroup.cameras
+            ], dim=0)
+            
+            # Check if we should apply 3D augmentations (training) or just triangulate (validation)
             if self.imgaug_transform.__str__().find("Resize") == -1:
-                # apply transforms
+                # Training: apply 3D transforms with augmentations
                 (
                     datadict,
                     keypoints_3d,
@@ -893,17 +904,27 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                     distortions,
                 ) = self.apply_3d_transforms(datadict, camgroup)
             else:
-                # Load camera parameters but don't apply 3D transforms
-                intrinsic_matrix = torch.stack([
-                    torch.tensor(cam.get_camera_matrix()) for cam in camgroup.cameras
-                ], dim=0)
-                extrinsic_matrix = torch.stack([
-                    torch.tensor(cam.get_extrinsics_mat()[:3]) for cam in camgroup.cameras
-                ], dim=0)
-                distortions = torch.stack([
-                    torch.tensor(cam.get_distortions()) for cam in camgroup.cameras
-                ], dim=0)
-                keypoints_3d = torch.tensor([1])  # placeholder
+                # Validation: triangulate 3D keypoints without augmentations
+                # Extract keypoints from each view for triangulation (same logic as apply_3d_transforms)
+                keypoints_2d = np.zeros((self.num_views, self.num_keypoints // self.num_views, 2))
+                for idx_view, (view, example_dict) in enumerate(datadict.items()):
+                    # Create a copy to avoid modifying the original data
+                    keypoints_curr = example_dict["keypoints"].reshape(
+                        self.num_keypoints // self.num_views, 2
+                    ).clone()  # Clone to avoid modifying original
+                    
+                    # transform keypoints from bbox coordinates to absolute frame coordinates
+                    # 1. divide by image dims to get 0-1 normalized coords
+                    keypoints_curr[:, 0] /= example_dict["images"].shape[-1]  # -1 dim is "x"
+                    keypoints_curr[:, 1] /= example_dict["images"].shape[-2]  # -2 dim is "y"
+                    # 2. multiply and add by bbox dims
+                    keypoints_2d[idx_view] = normalized_to_bbox(
+                        keypoints=keypoints_curr.unsqueeze(0),
+                        bbox=example_dict["bbox"].unsqueeze(0),
+                    )[0].cpu().numpy()
+                
+                # Triangulate keypoints (2D -> 3D) without augmentations
+                keypoints_3d = torch.tensor(camgroup.triangulate_fast(keypoints_2d.copy()), dtype=torch.float32)
         else:
             # Use default values when no camera calibration
             keypoints_3d = torch.tensor([1])

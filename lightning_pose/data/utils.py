@@ -580,21 +580,30 @@ def convert_bbox_coords(
         predicted_keypoints[:, :, 0] /= batch_dict["frames"].shape[-1]  # -1 dim is width "x"
         predicted_keypoints[:, :, 1] /= batch_dict["frames"].shape[-2]  # -2 dim is height "y"
     # multiply and add by bbox dims (x,y,h,w)
-    if "num_views" in batch_dict.keys() and int(batch_dict["num_views"].max()) > 1:
-        unique = batch_dict["num_views"].unique()
-        if len(unique) != 1:
-            raise ValueError(
-                f"each batch element must contain the same number of views; "
-                f"found elements with {unique} views"
-            )
-        num_views = int(unique)
+    if ("num_views" in batch_dict.keys() and int(batch_dict["num_views"].max()) > 1) or batch_dict.get("is_multiview", False):
+        # For MultiviewUnlabeledBatchDict, we need to infer num_views from bbox shape
+        if "num_views" in batch_dict.keys():
+            unique = batch_dict["num_views"].unique()
+            if len(unique) != 1:
+                raise ValueError(
+                    f"each batch element must contain the same number of views; "
+                    f"found elements with {unique} views"
+                )
+            num_views = int(unique)
+        else:
+            # Infer from bbox shape: bbox has shape [seq_len, num_views * 4]
+            num_views = batch_dict["bbox"].shape[1] // 4
+            
         num_keypoints_per_view = num_keypoints // num_views
+        
         for v in range(num_views):
             idx_beg = num_keypoints_per_view * v
-            idx_end = num_keypoints_per_view * (v + 1)
+            idx_end = idx_beg + num_keypoints_per_view
+            bbox_slice = batch_dict["bbox"][:, 4 * v:4 * (v + 1)]
+            
             predicted_keypoints[:, idx_beg:idx_end, :] = normalized_to_bbox(
                 predicted_keypoints[:, idx_beg:idx_end, :],
-                batch_dict["bbox"][:, 4 * v:4 * (v + 1)],
+                bbox_slice,
             )
     else:
         predicted_keypoints = normalized_to_bbox(predicted_keypoints, batch_dict["bbox"])
