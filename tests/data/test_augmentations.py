@@ -141,3 +141,22 @@ def test_imgaug_transform(base_dataset):
     kps_0 = kps_0[0]
     assert not np.allclose(im_0, image)  # image changed
     assert not np.allclose(kps_0, keypoints, equal_nan=True)  # keypoints changed
+
+    # ------------
+    # Rot90
+    # ------------
+    params_dict = {"Rot90": {"p": 1.0, "kwargs": {"k": [[0, 1]]}}}
+    pipe = imgaug_transform(params_dict)
+    assert pipe.__str__().find("Choice(a=[0, 1]") > -1
+
+    params_dict = {"Rot90": {"p": 1.0, "kwargs": {"k": [[0, 1, 4]]}}}
+    pipe = imgaug_transform(params_dict)
+    assert pipe.__str__().find("Choice(a=[0, 1, 4]") > -1
+
+    params_dict = {"Rot90": {"p": 1.0, "kwargs": {"k": [0, 1, 4]}}}
+    pipe = imgaug_transform(params_dict)
+    assert pipe.__str__().find("Choice(a=[0, 1, 4]") > -1
+
+    params_dict = {"Rot90": {"p": 1.0, "kwargs": {"k": [0, 3]}}}
+    pipe = imgaug_transform(params_dict)
+    assert pipe.__str__().find("parameters=[DiscreteUniform(Deterministic(int 0), Deterministic(int 3)), True]") > -1
