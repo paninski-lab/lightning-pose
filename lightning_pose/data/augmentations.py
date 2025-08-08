@@ -49,6 +49,26 @@ def imgaug_transform(params_dict: dict | DictConfig) -> iaa.Sequential:
         >>>         k: 5
         >>>         angle: [-90, 90]
 
+        Create a pipeline with
+        - Rot90 transformation that is applied 100% of the time with rotations of 0, 90, 180, or 270 degrees.
+
+        >>> params_dict = {
+        >>>     'Rot90': {'p': 1.0, 'kwargs': {'k': [[0, 1, 2, 3]]}},  # note the (required) nested list
+        >>> }
+
+        In a config file, this will look like:
+        >>> training:
+        >>>   imgaug:
+        >>>     Rot90:
+        >>>       p: 1.0
+        >>>       kwargs:
+        >>>         k: [0, 1, 2, 3]
+
+        NOTE: if you pass a list of exactly 2 values to Rot90 it will be parsed as a tuple and all (discrete) rotations
+        between the two values will be sampled uniformly. 
+        For example, `k: [0, 2]` is equivalent to `k: [0, 1, 2]`.
+        If you need to _only_ sample two non-contiguous integers please raise an issue.
+
     Returns:
         imgaug pipeline
 
