@@ -103,7 +103,6 @@ def predict_videos_in_dir(cfg: DictConfig):
                 trainer=trainer,
                 model=model,
                 data_module=data_module,
-                save_heatmaps=cfg.eval.get("predict_vids_after_training_save_heatmaps", False),
             )
 
             # compute and save various metrics
