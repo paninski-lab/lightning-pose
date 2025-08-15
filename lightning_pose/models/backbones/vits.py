@@ -1,6 +1,7 @@
 import math
 
 import torch
+import safetensors
 from transformers import ViTModel
 from typeguard import typechecked
 
@@ -63,7 +64,11 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
 
 def load_vit_backbone_checkpoint(base, checkpoint: str):
     print(f"Loading VIT-MAE weights from {checkpoint}")
-    ckpt_vit_pretrain = torch.load(checkpoint, map_location="cpu")
+    # support loading safetensors
+    if checkpoint.endswith(".safetensors"):
+        ckpt_vit_pretrain = safetensors.load_file(checkpoint, device="cpu")
+    else:
+        ckpt_vit_pretrain = torch.load(checkpoint, map_location="cpu")
     # extract state dict if checkpoint contains additional info
     if "state_dict" in ckpt_vit_pretrain:
         ckpt_vit_pretrain = ckpt_vit_pretrain["state_dict"]
