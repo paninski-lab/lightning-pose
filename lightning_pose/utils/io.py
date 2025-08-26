@@ -34,8 +34,8 @@ def ckpt_path_from_base_path(
     """Given a path to a hydra output with trained model, extract the model .ckpt file.
 
     Prioritizes the checkpoint marked with '-best.ckpt' in the latest version directory.
-    If no 'best' checkpoint is found, returns the single checkpoint if only one exists,
-    otherwise raises an error.
+    If no 'best' checkpoint is found, falls back to the latest checkpoint (highest step count).
+    If only one checkpoint exists, returns it directly.
 
     Args:
         base_path (str): path to a folder with logs and checkpoint. for example,
@@ -49,8 +49,7 @@ def ckpt_path_from_base_path(
         str: path to model checkpoint, or None if none found.
 
     Raises:
-        ValueError: If multiple checkpoint files are found in the latest version
-                    and none are marked as '-best.ckpt'.
+        ValueError: If multiple 'best' checkpoint files are found (e.g., from save_top_k > 1).
 
     """
     import glob
@@ -87,16 +86,22 @@ def ckpt_path_from_base_path(
     latest_version = max(ckpt_files_by_version.keys())
     latest_version_files = ckpt_files_by_version[latest_version]
 
-    # Find the "best" checkpoint in the latest version
-    best_ckpt_file = None
+    # Find all "best" checkpoints in the latest version
+    best_ckpt_files = []
     for f in latest_version_files:
-        if f.endswith("-best.ckpt"):
-            best_ckpt_file = f
-            break  # Found the best file, stop searching
+        if "-best.ckpt" in os.path.basename(f):
+            best_ckpt_files.append(f)
 
-    if best_ckpt_file:
-        # Found the 'best' checkpoint
-        return best_ckpt_file
+    if len(best_ckpt_files) == 1:
+        # Found exactly one 'best' checkpoint
+        return best_ckpt_files[0]
+    elif len(best_ckpt_files) > 1:
+        # Multiple 'best' checkpoints found (e.g., from save_top_k parameter)
+        raise ValueError(
+            f"Multiple 'best' checkpoint files found in {latest_version_files}. "
+            f"Found {len(best_ckpt_files)} files marked as 'best': {best_ckpt_files}. "
+            "Cannot automatically select from multiple 'best' checkpoints."
+        )
     else:
         # No 'best' checkpoint found
         warnings.warn("No 'best' checkpoint found, falling back to latest checkpoint.")
