@@ -1,0 +1,6 @@
+[flake8]
+max-line-length = 99
+# E203: black conflict
+# E701: black conflict
+# F821: lot of issues regarding type annotations
+extend-ignore = E203,E701,F821

@@ -49,6 +49,26 @@ def imgaug_transform(params_dict: dict | DictConfig) -> iaa.Sequential:
         >>>         k: 5
         >>>         angle: [-90, 90]
 
+        Create a pipeline with
+        - Rot90 transformation that is applied 100% of the time with rotations of 0, 90, 180, or 270 degrees.
+
+        >>> params_dict = {
+        >>>     'Rot90': {'p': 1.0, 'kwargs': {'k': [[0, 1, 2, 3]]}},  # note the (required) nested list
+        >>> }
+
+        In a config file, this will look like:
+        >>> training:
+        >>>   imgaug:
+        >>>     Rot90:
+        >>>       p: 1.0
+        >>>       kwargs:
+        >>>         k: [0, 1, 2, 3]
+
+        NOTE: if you pass a list of exactly 2 values to Rot90 it will be parsed as a tuple and all (discrete) rotations
+        between the two values will be sampled uniformly. 
+        For example, `k: [0, 2]` is equivalent to `k: [0, 1, 2]`.
+        If you need to _only_ sample two non-contiguous integers please raise an issue.
+
     Returns:
         imgaug pipeline
 
@@ -57,17 +77,22 @@ def imgaug_transform(params_dict: dict | DictConfig) -> iaa.Sequential:
     data_transform = []
 
     for transform_str, args in params_dict.items():
-
         transform = getattr(iaa, transform_str)
         apply_prob = args.get("p", 0.5)
         transform_args = args.get("args", ())
         transform_kwargs = args.get("kwargs", {})
 
-        # make sure any lists are converted to tuples; DictConfig cannot load tuples from yaml
-        # files, but no iaa args are lists
+        # DictConfig cannot load tuples from yaml files
+        # make sure any lists are converted to tuples
+        # unless the list contains a single item, then pass through the item (hack for Rot90)
         for kw, arg in transform_kwargs.items():
             if isinstance(arg, list) or isinstance(arg, ListConfig):
-                transform_kwargs[kw] = tuple(arg)
+                if len(arg) == 1:
+                    transform_kwargs[kw] = arg[0]
+                elif len(arg) == 2:
+                    transform_kwargs[kw] = tuple(arg)
+                else:
+                    transform_kwargs[kw] = arg
 
         # add transform to pipeline
         if apply_prob == 0.0:
@@ -90,14 +115,13 @@ def expand_imgaug_str_to_dict(params: str) -> dict[str, Any]:
     if params in ["default", "none"]:
         pass  # no augmentations
     elif params in ["dlc", "dlc-lr", "dlc-top-down"]:
+        # rotate 0 or 180 degrees
+        if params in ["dlc-lr"]:
+            params_dict["Rot90"] = {"p": 1.0, "kwargs": {"k": [[0, 2]]}}
 
-        # flip horizontally
-        if params in ["dlc-lr", "dlc-top-down"]:
-            params_dict["Fliplr"] = {"p": 1.0, "kwargs": {"p": 0.5}}
-
-        # flip vertically
+        # rotate 0, 90, 180, or 270 degrees
         if params in ["dlc-top-down"]:
-            params_dict["Flipud"] = {"p": 1.0, "kwargs": {"p": 0.5}}
+            params_dict["Rot90"] = {"p": 1.0, "kwargs": {"k": [[0, 1, 2, 3]]}}
 
         # rotate
         rotation = 25  # rotation uniformly sampled from (-rotation, +rotation)

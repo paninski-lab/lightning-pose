@@ -143,6 +143,10 @@ See the :ref:`FAQs <faq_oom>` for more information on memory management.
 
 * ``training.rng_seed_model_pt`` (*int, default: 0*): rng seed for weight initialization of the head
 
+* ``training.optimizer`` (*str, default: Adam*): which optimizer to (Adam or AdamW)
+
+* ``training.optimizer_params.learning_rate`` (*float, default: 1e-3*): optimizer learning rate
+
 * ``training.lr_scheduler`` (*str, default: multisteplr*): reduce the learning rate by a certain
   factor after a given number of epochs (see ``training.lr_scheduler_params.multisteplr`` below)
 
@@ -203,7 +207,10 @@ The following parameters relate to model architecture and unsupervised losses.
     * efficientnet_b0: EfficientNet-B0 pretrained on ImageNet
     * efficientnet_b1: EfficientNet-B1 pretrained on ImageNet
     * efficientnet_b2: EfficientNet-B2 pretrained on ImageNet
-    * vit_b_sam: Segment Anything Model (Vision Transformer Base)
+    * vits_dino: Vision Transformer (Small) pretrained on ImageNet with DINO
+    * vitb_dino: Vision Transformer (Base) pretrained on ImageNet with DINO
+    * vitb_imagenet: Vision Transformer (Base) pretrained on ImageNet with MAE loss
+    * vitb_sam: Segment Anything Model (Vision Transformer Base)
 
   Note: the file size for a single ResNet-50 network is approximately 275 MB.
 

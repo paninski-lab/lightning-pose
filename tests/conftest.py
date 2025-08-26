@@ -65,6 +65,8 @@ def cfg() -> dict:
     config_file = lp.LP_ROOT_PATH / "scripts" / "configs" / "config_mirror-mouse-example.yaml"
     cfg = OmegaConf.load(config_file)
     # make small batches so that we can run on a gpu with limited memory
+    cfg.data.image_resize_dims.height = 128
+    cfg.data.image_resize_dims.width = 128
     cfg.training.train_batch_size = 2
     cfg.training.val_batch_size = 4
     cfg.training.test_batch_size = 4
@@ -142,7 +144,7 @@ def create_multiview_dataset_if_not_exists() -> None:
         dst_vid_top = os.path.join(dst_dir_vids, video.replace(".mp4", "_top.mp4"))
         dst_vid_bot = os.path.join(dst_dir_vids, video.replace(".mp4", "_bot.mp4"))
         ffmpeg_cmd = f"ffmpeg -i {src_vid} -filter_complex '[0]crop=iw:{y_split}:0:0[top];[0]crop=iw:ih-{y_split}:0:{y_split}[bot]' -map '[top]' {dst_vid_top} -map '[bot]' {dst_vid_bot}"  # noqa: E501
-        subprocess.run(ffmpeg_cmd, shell=True)
+        subprocess.run(ffmpeg_cmd, shell=True, check=True)
 
     # copy and split CollectedData.csv
     src_file = os.path.join(base_dir, "CollectedData.csv")
@@ -582,7 +584,6 @@ def run_model_test(tmp_path) -> Callable:
             del model
             gc.collect()
             torch.cuda.empty_cache()
-
 
     return _run_model_test
 

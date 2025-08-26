@@ -16,8 +16,9 @@ import torch
 from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 from typeguard import typechecked
 
-from lightning_pose.model import Model
-from lightning_pose.model_config import ModelConfig
+import lightning_pose
+from lightning_pose.api.model import Model
+from lightning_pose.api.model_config import ModelConfig
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
 from lightning_pose.utils.io import return_absolute_data_paths
 from lightning_pose.utils.scripts import (
@@ -158,10 +159,8 @@ def _train(cfg: DictConfig) -> Model:
     torch.backends.cudnn.deterministic = True
 
     # record lightning-pose version
-    from lightning_pose import __version__ as lightning_pose_version
-
     with open_dict(cfg):
-        cfg.model.lightning_pose_version = lightning_pose_version
+        cfg.model.lightning_pose_version = lightning_pose.version
 
     print("Our Hydra config file:")
     pretty_print_cfg(cfg)
@@ -270,7 +269,9 @@ def _train(cfg: DictConfig) -> Model:
     # Initialize to Trainer defaults. Note max_steps defaults to -1.
 
     # Unlike min_epoch/min_step, both of these are valid to specify.
-    check_val_every_n_epoch = cfg.training.get("check_val_every_n_epoch", 1) # 1 is default for Trainer.
+    check_val_every_n_epoch = cfg.training.get(
+        "check_val_every_n_epoch", 1
+    )  # 1 is default for Trainer.
     val_check_interval = cfg.training.get("val_check_interval")
 
     trainer = pl.Trainer(

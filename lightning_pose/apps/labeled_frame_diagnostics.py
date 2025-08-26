@@ -17,7 +17,12 @@ import pandas as pd
 import seaborn as sns
 import streamlit as st
 
-from lightning_pose.apps.plots import get_y_label, make_plotly_catplot, make_plotly_scatterplot
+from lightning_pose.apps.plots import (
+    get_y_label,
+    make_plotly_catplot,
+    make_plotly_scatterplot,
+    plot_calibration_diagram_multi,
+)
 from lightning_pose.apps.utils import (
     build_precomputed_metrics_df,
     get_df_box,
@@ -277,6 +282,91 @@ def run():
                 )
 
             st.plotly_chart(fig_scatter)
+
+        # ---------------------------------------------------
+        # calibration plot
+        # ---------------------------------------------------
+        st.header("Model Calibration Analysis")
+
+        col9, col10, col11 = st.columns(3)
+
+        with col9:
+            models_for_calib = st.multiselect(
+                "Select models to compare:", new_names, key="models_calib"
+            )
+
+        with col10:
+            n_bins = st.slider("Number of bins:", min_value=5, max_value=20, value=10)
+
+        with col11:
+            error_threshold = st.number_input(
+                "Error threshold (pixels):",
+                min_value=1.0, max_value=50.0, value=5.0, step=1.0
+            )
+
+        # Process calibration data for all selected models
+        if models_for_calib and 'pixel error' in metric_options:
+            # Collect data for all selected models
+            models_data = []
+            for model_name in models_for_calib:
+                confidence_df = dframes_metrics[model_name]['confidence']
+                pixel_error_df = df_metrics['pixel error']
+                pixel_error_df_model = pixel_error_df[
+                    (pixel_error_df.model_name == model_name) &
+                    (pixel_error_df.set == data_type)
+                ]
+
+                if keypoint_to_plot != "mean":
+                    # Get confidence and error for specific keypoint
+                    conf_cols = [
+                        c for c in confidence_df.columns
+                        if c[0] == keypoint_to_plot and c[1] == 'likelihood'
+                    ]
+                    if conf_cols:
+                        confidences = confidence_df.loc[
+                            confidence_df.iloc[:, -1] == data_type, conf_cols[0]
+                        ].values
+                        errors = pixel_error_df_model[keypoint_to_plot].values
+                    else:
+                        confidences = np.array([])
+                        errors = np.array([])
+                else:
+                    # Calculate mean confidence and error across all keypoints
+                    conf_cols = [c for c in confidence_df.columns if c[1] == 'likelihood']
+                    confidences_all = confidence_df.loc[
+                        confidence_df.iloc[:, -1] == data_type, conf_cols
+                    ].values
+                    confidences = np.nanmean(confidences_all, axis=1)
+
+                    error_cols = [kp for kp in keypoint_names]
+                    errors_all = pixel_error_df_model[error_cols].values
+                    errors = np.nanmean(errors_all, axis=1)
+
+                if len(confidences) > 0 and len(errors) > 0:
+                    # Calculate accuracies based on error threshold
+                    accuracies = (errors <= error_threshold).astype(float)
+                    models_data.append({
+                        'model_name': model_name,
+                        'confidences': confidences,
+                        'accuracies': accuracies
+                    })
+
+            if models_data:
+                # Create multi-model calibration plot
+                fig_calib = plot_calibration_diagram_multi(
+                    models_data=models_data,
+                    n_bins=n_bins,
+                    keypoint_name=keypoint_to_plot,
+                    data_type=data_type,
+                    error_threshold=error_threshold
+                )
+                st.plotly_chart(fig_calib)
+            else:
+                st.warning("No data available for calibration plot.")
+        elif not models_for_calib:
+            st.info("Please select at least one model for calibration analysis.")
+        else:
+            st.warning("Pixel error metric not available for calibration analysis.")
 
 
 if __name__ == "__main__":

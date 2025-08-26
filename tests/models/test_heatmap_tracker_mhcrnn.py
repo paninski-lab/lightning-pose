@@ -24,6 +24,28 @@ def test_supervised_heatmap_mhcrnn(
     )
 
 
+def test_supervised_heatmap_mhcrnn_vit_sam(
+    cfg,
+    heatmap_data_module_context,
+    video_dataloader,
+    trainer,
+    run_model_test,
+):
+    """Test the initialization and training of a supervised heatmap mhcrnn model."""
+
+    cfg_tmp = copy.deepcopy(cfg)
+    cfg_tmp.model.model_type = "heatmap_mhcrnn"
+    cfg_tmp.model.backbone = "vitb_sam"
+    cfg_tmp.model.losses_to_use = []
+
+    run_model_test(
+        cfg=cfg_tmp,
+        data_module=heatmap_data_module_context,
+        video_dataloader=video_dataloader,
+        trainer=trainer,
+    )
+
+
 def test_supervised_multiview_heatmap_mhcrnn(
     cfg_multiview,
     multiview_heatmap_data_module_context,
@@ -84,8 +106,8 @@ def test_semisupervised_heatmap_mhcrnn_pcasingleview_vit(
     """
 
     cfg_tmp = copy.deepcopy(cfg)
-    cfg_tmp.model.backbone = "vit_b_sam"
     cfg_tmp.model.model_type = "heatmap_mhcrnn"
+    cfg_tmp.model.backbone = "vitb_sam"
     cfg_tmp.model.losses_to_use = ["pca_singleview"]
 
     run_model_test(

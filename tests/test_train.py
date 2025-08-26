@@ -181,6 +181,7 @@ def _execute_multi_gpu_test(cfg, tmp_path, pytestconfig):
             f"--config-name=config",
         ],
         env=env,
+        check = True,
     )
     assert process.returncode == 0
 

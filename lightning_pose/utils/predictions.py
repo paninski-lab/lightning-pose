@@ -1,10 +1,10 @@
 """Functions for predicting keypoints on labeled datasets and unlabeled videos."""
+
 from __future__ import annotations
 
 import datetime
 import gc
 import os
-import time
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Tuple, Type
@@ -18,17 +18,15 @@ import torch
 from moviepy.editor import VideoFileClip
 from omegaconf import DictConfig, OmegaConf
 from torchtyping import TensorType
-from tqdm import tqdm
 from typeguard import typechecked
 
-from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
+from lightning_pose.data.dali import PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import count_frames
 from lightning_pose.models import ALLOWED_MODELS
-from lightning_pose.utils import pretty_print_str
 
 if TYPE_CHECKING:
-    from lightning_pose.model import Model
+    from lightning_pose.api.model import Model
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -530,7 +528,10 @@ def load_model_from_checkpoint(
         model as a Lightning Module
 
     """
-    from lightning_pose.utils.io import check_if_semi_supervised, return_absolute_data_paths
+    from lightning_pose.utils.io import (
+        check_if_semi_supervised,
+        return_absolute_data_paths,
+    )
     from lightning_pose.utils.scripts import (
         get_data_module,
         get_dataset,
@@ -559,7 +560,7 @@ def load_model_from_checkpoint(
         semi_supervised=semi_supervised,
     )
     # initialize a model instance, with weights loaded from .ckpt file
-    if cfg.model.backbone == "vit_b_sam":
+    if cfg.model.backbone == "vitb_sam":
         # see https://github.com/paninski-lab/lightning-pose/issues/134 for explanation of this block
         from lightning_pose.utils.scripts import get_model
 
@@ -569,20 +570,20 @@ def load_model_from_checkpoint(
             data_module=data_module,
             loss_factories=loss_factories,
         )
-        # update model parameter
-        if model.backbone.pos_embed is not None:
-            # re-initialize absolute positional embedding with *finetune* image size.
-            finetune_img_size = cfg.data.image_resize_dims.height
-            patch_size = model.backbone.patch_size
-            embed_dim = 768  # value from lightning_pose.models.backbones.vits.build_backbone
-            model.backbone.pos_embed = torch.nn.Parameter(
-                torch.zeros(
-                    1,
-                    finetune_img_size // patch_size,
-                    finetune_img_size // patch_size,
-                    embed_dim,
-                )
-            )
+        # # update model parameter
+        # if model.backbone.pos_embed is not None:
+        #     # re-initialize absolute positional embedding with *finetune* image size.
+        #     finetune_img_size = cfg.data.image_resize_dims.height
+        #     patch_size = model.backbone.patch_size
+        #     embed_dim = 768  # value from lightning_pose.models.backbones.vits.build_backbone
+        #     model.backbone.pos_embed = torch.nn.Parameter(
+        #         torch.zeros(
+        #             1,
+        #             finetune_img_size // patch_size,
+        #             finetune_img_size // patch_size,
+        #             embed_dim,
+        #         )
+        #     )
         # load weights
         state_dict = torch.load(ckpt_file)["state_dict"]
         # put weights into model

@@ -38,4 +38,3 @@ jobs:
         # -t flag is necessary to forward github cancellation event (SIGINT)
         run: |
           ssh -tt -p 55 ks3582@axon-remote.rc.zi.columbia.edu 'sh buildbot/build_srun.sh ${{ github.event.pull_request.number }}'
-

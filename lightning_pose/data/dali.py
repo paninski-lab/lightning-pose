@@ -12,7 +12,10 @@ from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
 from omegaconf import DictConfig
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
-from lightning_pose.data.datatypes import MultiviewUnlabeledBatchDict, UnlabeledBatchDict
+from lightning_pose.data.datatypes import (
+    MultiviewUnlabeledBatchDict,
+    UnlabeledBatchDict,
+)
 from lightning_pose.data.utils import count_frames
 
 # to ignore imports for sphix-autoapidoc

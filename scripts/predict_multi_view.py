@@ -1,5 +1,6 @@
 import argparse
-from lightning_pose.model import Model
+
+from lightning_pose.api.model import Model
 
 parser = argparse.ArgumentParser(description="Process videos using a model.")
 parser.add_argument("model_dir", help="Path to the model directory.")

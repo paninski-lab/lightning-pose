@@ -4,8 +4,8 @@ from typing import Any, Literal, Union
 
 import torch
 from lightning.pytorch import LightningModule
-from omegaconf import DictConfig
-from torch.optim import Adam
+from omegaconf import DictConfig, OmegaConf
+from torch import optim
 from torch.optim.lr_scheduler import MultiStepLR
 from torchtyping import TensorType
 from typeguard import typechecked
@@ -20,6 +20,7 @@ from lightning_pose.data.datatypes import (
     SemiSupervisedHeatmapBatchDict,
     UnlabeledBatchDict,
 )
+from lightning_pose.models.backbones import ALLOWED_BACKBONES
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -31,29 +32,64 @@ __all__ = [
     "SemiSupervisedTrackerMixin",
 ]
 
-MULTISTEPLR_MILESTONES_DEFAULT = [100, 200, 300]
-MULTISTEPLR_GAMMA_DEFAULT = 0.5
+DEFAULT_LR_SCHEDULER_PARAMS = OmegaConf.create(
+    {
+        "milestones": [150, 200, 250],
+        "gamma": 0.5,
+    }
+)
 
-# list of all allowed backbone options
-ALLOWED_BACKBONES = Literal[
-    "resnet18",
-    "resnet34",
-    "resnet50",
-    "resnet101",
-    "resnet152",
-    "resnet50_contrastive",  # needs extra install: pip install -e .[extra_models]
-    "resnet50_animal_apose",
-    "resnet50_animal_ap10k",
-    "resnet50_human_jhmdb",
-    "resnet50_human_res_rle",
-    "resnet50_human_top_res",
-    "resnet50_human_hand",
-    "efficientnet_b0",
-    "efficientnet_b1",
-    "efficientnet_b2",
-    # "vit_h_sam",
-    "vit_b_sam",
-]
+DEFAULT_OPTIMIZER_PARAMS = OmegaConf.create(
+    {
+        "learning_rate": 1e-3,
+    }
+)
+
+
+class LrNotImplementedError(NotImplementedError):
+    def __init__(self, lr_scheduler: str):
+        super(LrNotImplementedError, self).__init__(
+            "'%s' is an invalid LR scheduler. Must be multisteplr." % lr_scheduler
+        )
+        self.lr_scheduler = lr_scheduler
+
+
+class OptimizerNotImplementedError(NotImplementedError):
+    def __init__(self, optimizer: str):
+        super(LrNotImplementedError, self).__init__(
+            "'%s' is an invalid optimizer. Must be Adam or AdamW." % optimizer
+        )
+        self.optimizer = optimizer
+
+
+def _apply_defaults_for_lr_scheduler_params(
+    lr_scheduler: str, lr_scheduler_params: DictConfig | dict | None
+) -> DictConfig:
+    if lr_scheduler not in ("multistep_lr", "multisteplr"):
+        raise LrNotImplementedError(lr_scheduler)
+
+    if lr_scheduler_params is None:
+        lr_scheduler_params = DEFAULT_LR_SCHEDULER_PARAMS
+    else:
+        lr_scheduler_params = OmegaConf.merge(
+            DEFAULT_LR_SCHEDULER_PARAMS, lr_scheduler_params
+        )
+
+    return lr_scheduler_params
+
+
+def _apply_defaults_for_optimizer_params(
+    optimizer: str, optimizer_params: DictConfig | dict | None
+) -> DictConfig:
+    if optimizer not in ("Adam", "AdamW"):
+        raise OptimizerNotImplementedError(optimizer)
+
+    if optimizer_params is None:
+        optimizer_params = DEFAULT_OPTIMIZER_PARAMS
+    else:
+        optimizer_params = OmegaConf.merge(DEFAULT_OPTIMIZER_PARAMS, optimizer_params)
+
+    return optimizer_params
 
 
 def normalized_to_bbox(
@@ -155,6 +191,8 @@ class BaseFeatureExtractor(LightningModule):
         pretrained: bool = True,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: DictConfig | dict | None = None,
+        optimizer: str = "Adam",
+        optimizer_params: DictConfig | dict | None = None,
         do_context: bool = False,
         image_size: int = 256,
         model_type: Literal["heatmap", "regression"] = "heatmap",
@@ -169,6 +207,8 @@ class BaseFeatureExtractor(LightningModule):
         Args:
             backbone: which backbone version to use; defaults to resnet50
             pretrained: True to load weights pretrained on imagenet (torchvision models only)
+            optimizer: optimizer class to instantiate (Adam, AdamW, more to be added in future)
+            optimizer_params: arguments to pass to optimizer
             lr_scheduler: how to schedule learning rate
             lr_scheduler_params: params for specific learning rate schedulers
             do_context: include temporal context when processing each frame
@@ -178,11 +218,11 @@ class BaseFeatureExtractor(LightningModule):
         """
         super().__init__()
         if self.local_rank == 0:
-            print(f"\n Initializing a {self._get_name()} instance.")
+            print(f"\nInitializing a {self._get_name()} instance with {backbone} backbone.")
 
         self.backbone_arch = backbone
 
-        if "sam" in self.backbone_arch:
+        if self.backbone_arch.startswith("vit"):
             from lightning_pose.models.backbones.vits import build_backbone
         else:
             from lightning_pose.models.backbones.torchvision import build_backbone
@@ -192,10 +232,17 @@ class BaseFeatureExtractor(LightningModule):
             pretrained=pretrained,
             model_type=model_type,  # for torchvision only
             image_size=image_size,  # for ViTs only
+            backbone_checkpoint=kwargs.get('backbone_checkpoint'),  # for ViTMAE's only
         )
 
         self.lr_scheduler = lr_scheduler
-        self.lr_scheduler_params = lr_scheduler_params
+        self.lr_scheduler_params = _apply_defaults_for_lr_scheduler_params(
+            lr_scheduler, lr_scheduler_params
+        )
+        self.optimizer = optimizer
+        self.optimizer_params = _apply_defaults_for_optimizer_params(
+            optimizer, optimizer_params
+        )
         self.do_context = do_context
 
     def get_representations(
@@ -376,33 +423,18 @@ class BaseFeatureExtractor(LightningModule):
         return self.get_representations(images)
 
     def get_scheduler(self, optimizer):
+        if self.lr_scheduler not in ("multistep_lr", "multisteplr"):
+            raise LrNotImplementedError(self.lr_scheduler)
         # define a scheduler that reduces the base learning rate
-        if self.lr_scheduler == "multisteplr" or self.lr_scheduler == "multistep_lr":
+        milestones = self.lr_scheduler_params.milestones
+        gamma = self.lr_scheduler_params.gamma
 
-            if self.lr_scheduler_params is None:
-                milestones = MULTISTEPLR_MILESTONES_DEFAULT
-                gamma = MULTISTEPLR_GAMMA_DEFAULT
-            else:
-                milestones = self.lr_scheduler_params.get(
-                    "milestones", MULTISTEPLR_MILESTONES_DEFAULT)
-                gamma = self.lr_scheduler_params.get("gamma", MULTISTEPLR_GAMMA_DEFAULT)
-
-            scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
-
-        else:
-            raise NotImplementedError("'%s' is an invalid LR scheduler" % self.lr_scheduler)
+        scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
 
         return scheduler
 
     def get_parameters(self):
-        if getattr(self, "upsampling_layers", None) is not None:
-            params = [
-                {"params": self.backbone.parameters(), "lr": 0, "name": "backbone"},
-                {"params": self.upsampling_layers.parameters(), "name": "upsampling"},
-            ]
-        else:
-            params = filter(lambda p: p.requires_grad, self.parameters())
-
+        params = filter(lambda p: p.requires_grad, self.parameters())
         return params
 
     def configure_optimizers(self) -> dict:
@@ -412,7 +444,12 @@ class BaseFeatureExtractor(LightningModule):
         params = self.get_parameters()
 
         # init standard adam optimizer
-        optimizer = Adam(params, lr=1e-3)
+        if self.optimizer == "Adam":
+            optimizer = optim.Adam(params, lr=self.optimizer_params.learning_rate)
+        elif self.optimizer == "AdamW":
+            optimizer = optim.AdamW(params, lr=self.optimizer_params.learning_rate)
+        else:
+            raise OptimizerNotImplementedError(self.optimizer)
 
         # get learning rate scheduler
         scheduler = self.get_scheduler(optimizer)
@@ -461,7 +498,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         loss_rmse, _ = self.rmse_loss(stage=stage, **data_dict)
 
         if stage:
-            # logging with sync_dist=True will average the metric across GPUs in 
+            # logging with sync_dist=True will average the metric across GPUs in
             # multi-GPU training. Performance overhead was found negligible.
 
             # log overall supervised loss

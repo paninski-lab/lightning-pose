@@ -28,7 +28,7 @@ def test_data_extractor(base_data_module_combined, multiview_heatmap_data_module
     keypoint_tensor, images_tensor = DataExtractor(
         data_module=base_data_module_combined, cond="train", extract_images=True
     )()
-    assert images_tensor.shape == (num_frames, 3, 256, 256)
+    assert images_tensor.shape == (num_frames, 3, 128, 128)
 
     # ---------------------------
     # supervised multiview
