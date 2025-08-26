@@ -99,14 +99,13 @@ def ckpt_path_from_base_path(
         return best_ckpt_file
     else:
         # No 'best' checkpoint found
-        warnings.warn(f"No 'best' checkpoint found, falling back to latest checkpoint'.")
+        warnings.warn("No 'best' checkpoint found, falling back to latest checkpoint.")
         if len(latest_version_files) == 1:
             # Only one checkpoint file exists, return it
             return latest_version_files[0]
         else:
             # Multiple checkpoints exist, but none are marked 'best'.
-            # Find the one with the highest step count.
-            ckpt_step_counts = {}
+            # Try to find the one with the highest step count.
             max_step = -1
             latest_ckpt = None
             parse_errors = 0
@@ -115,24 +114,22 @@ def ckpt_path_from_base_path(
                 match = re.search(r"step=(\d+)", f)
                 if match:
                     step = int(match.group(1))
-                    ckpt_step_counts[f] = step
                     if step > max_step:
                         max_step = step
                         latest_ckpt = f
                 else:
                     parse_errors += 1
-                    warnings.warn(f"Could not parse step count from checkpoint file: {f}")
 
             if latest_ckpt is not None:
                 return latest_ckpt
             elif parse_errors == len(latest_version_files):
-                 # Could not parse step count from any file, return the lexicographically last one as a fallback
+                # Could not parse step count from any file, return the lexicographically last one as a fallback
                 warnings.warn("Could not parse step counts from any checkpoint. Returning the lexicographically last file.")
                 return sorted(latest_version_files)[-1]
             else:
-                 # Should not happen if latest_version_files is not empty
-                warnings.warn("Unexpected state: Multiple checkpoints, none best, step parsing inconclusive.")
-                return None
+                # Should not happen if latest_version_files is not empty
+                warnings.warn("Unexpected state: Multiple checkpoints, none best, step parsing partially successful.")
+                return latest_ckpt if latest_ckpt else sorted(latest_version_files)[-1]
             
 @typechecked
 def check_if_semi_supervised(losses_to_use: ListConfig | list | None = None) -> bool:
