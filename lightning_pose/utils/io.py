@@ -113,7 +113,6 @@ def ckpt_path_from_base_path(
             # Try to find the one with the highest step count.
             max_step = -1
             latest_ckpt = None
-            parse_errors = 0
 
             for f in latest_version_files:
                 match = re.search(r"step=(\d+)", f)
@@ -122,19 +121,16 @@ def ckpt_path_from_base_path(
                     if step > max_step:
                         max_step = step
                         latest_ckpt = f
-                else:
-                    parse_errors += 1
 
             if latest_ckpt is not None:
                 return latest_ckpt
-            elif parse_errors == len(latest_version_files):
-                # Could not parse step count from any file, return the lexicographically last one as a fallback
-                warnings.warn("Could not parse step counts from any checkpoint. Returning the lexicographically last file.")
-                return sorted(latest_version_files)[-1]
             else:
-                # Should not happen if latest_version_files is not empty
-                warnings.warn("Unexpected state: Multiple checkpoints, none best, step parsing partially successful.")
-                return latest_ckpt if latest_ckpt else sorted(latest_version_files)[-1]
+                # Could not determine which checkpoint to use
+                raise ValueError(
+                    f"Multiple checkpoint files found but cannot determine which to use: {latest_version_files}. "
+                    "None are marked as 'best' and cannot parse step counts to determine latest. "
+                    "Please manually select the appropriate checkpoint."
+                )
             
 @typechecked
 def check_if_semi_supervised(losses_to_use: ListConfig | list | None = None) -> bool:
