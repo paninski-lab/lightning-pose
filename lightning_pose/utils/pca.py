@@ -94,8 +94,8 @@ class KeypointPCA(object):
     ):
         # original shape = (batch, 2 * num_keypoints)
         # reshape to (batch, num_keypoints, 2) to easily select columns
-        ## [1,2,3,4]
-        ## [[1,2]],[3,4]]
+        # [1,2,3,4]
+        # [[1,2]],[3,4]]
         data_arr = data_arr.reshape(data_arr.shape[0], data_arr.shape[1] // 2, 2)
         # optionally choose a subset of the keypoints for the singleview pca
         if self.columns_for_singleview_pca is not None:

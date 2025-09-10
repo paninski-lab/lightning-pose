@@ -239,17 +239,20 @@ class PredictionHandler:
                 TensorType["batch", "num_keypoints"],
             ]
         ],
-        is_multiview_video: bool=False,
+        is_multiview_video: bool = False,
     ) -> pd.DataFrame | dict[str, pd.DataFrame]:
         """
         Call this function to get a pandas dataframe of the predictions for a single video.
         Assuming you've already run trainer.predict(), and have a list of Tuple predictions.
+
         Args:
             preds: list of tuples of (predictions, confidences)
-            is_multiview_video: specify True when you are using multiview video prediction dataloader,
-                i.e. for heatmap_multiview.
+            is_multiview_video: specify True when you are using multiview video prediction
+                dataloader, i.e. for heatmap_multiview.
+
         Returns:
             pd.DataFrame: index is (frame, bodypart, x, y, likelihood)
+
         """
         stacked_preds, stacked_confs = self.unpack_preds(preds=preds)
         if (
@@ -845,8 +848,8 @@ def predict_video(
         video_file: Predict on a video, or for true multiview models, a list of videos
             (order: 1-1 correspondence with cfg.data.view_names).
         model: The model to predict with.
-        output_pred_file: (optional) File to save predictions in. For multiview, a list of files (1-1 correspondance
-            to cfg.data.view_names).
+        output_pred_file: (optional) File to save predictions in.
+            For multiview, a list of files (1-1 correspondance to cfg.data.view_names).
     """
 
     is_multiview = not isinstance(video_file, str)
@@ -855,11 +858,12 @@ def predict_video(
         # Validate output_pred_file is a list
         if output_pred_file is not None and not isinstance(output_pred_file, list):
             raise ValueError(
-                "for multiview prediction, 'output_pred_file' should be a list corresponding to view_names"
+                "for multiview prediction, 'output_pred_file' should be a list corresponding to "
+                "view_names"
             )
 
-        # Sanity check 1-1 correspondence of video_file to cfg.data.view_names
-        # (Important since PredictionHandler relies on the correspondence to organize the outputted dict).
+        # sanity check 1-1 correspondence of video_file to cfg.data.view_names
+        # important since PredictionHandler relies on correspondence to organize the outputted dict
         for single_video_file, view_name in zip(
             video_file, model.config.cfg.data.view_names
         ):

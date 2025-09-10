@@ -138,7 +138,7 @@ def _evaluate_on_training_dataset(model: Model, ood_mode=False):
 
 def _predict_test_videos(model: Model):
     if model.config.cfg.eval.predict_vids_after_training:
-        pretty_print_str(f"Predicting videos in cfg.eval.test_videos_directory...")
+        pretty_print_str("Predicting videos in cfg.eval.test_videos_directory...")
         for video_file in model.config.test_video_files():
             pretty_print_str(f"Predicting video: {video_file}...")
 

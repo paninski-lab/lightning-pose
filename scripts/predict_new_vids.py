@@ -91,9 +91,6 @@ def predict_videos_in_dir(cfg: DictConfig):
             else:
                 labeled_mp4_file = None
 
-            # debug
-            print(f"\n\n{prediction_csv_file = }\n\n")
-
             export_predictions_and_labeled_video(
                 video_file=video_file,
                 cfg=cfg,

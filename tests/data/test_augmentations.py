@@ -1,10 +1,8 @@
 """Test imgaug pipeline functionality."""
 
-import copy
 import os
 
 import numpy as np
-import pytest
 from PIL import Image
 
 from lightning_pose.data.augmentations import imgaug_transform
@@ -159,4 +157,6 @@ def test_imgaug_transform(base_dataset):
 
     params_dict = {"Rot90": {"p": 1.0, "kwargs": {"k": [0, 3]}}}
     pipe = imgaug_transform(params_dict)
-    assert pipe.__str__().find("parameters=[DiscreteUniform(Deterministic(int 0), Deterministic(int 3)), True]") > -1
+    assert pipe.__str__().find(
+        "parameters=[DiscreteUniform(Deterministic(int 0), Deterministic(int 3)), True]"
+    ) > -1
