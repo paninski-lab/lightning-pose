@@ -559,49 +559,55 @@ def load_model_from_checkpoint(
         map_type=cfg.model.model_type,
         semi_supervised=semi_supervised,
     )
-    # initialize a model instance, with weights loaded from .ckpt file
-    if cfg.model.backbone == "vitb_sam":
-        # see https://github.com/paninski-lab/lightning-pose/issues/134 for explanation of this block
-        from lightning_pose.utils.scripts import get_model
 
-        # load model first
-        model = get_model(
-            cfg,
-            data_module=data_module,
-            loss_factories=loss_factories,
-        )
-        # # update model parameter
-        # if model.backbone.pos_embed is not None:
-        #     # re-initialize absolute positional embedding with *finetune* image size.
-        #     finetune_img_size = cfg.data.image_resize_dims.height
-        #     patch_size = model.backbone.patch_size
-        #     embed_dim = 768  # value from lightning_pose.models.backbones.vits.build_backbone
-        #     model.backbone.pos_embed = torch.nn.Parameter(
-        #         torch.zeros(
-        #             1,
-        #             finetune_img_size // patch_size,
-        #             finetune_img_size // patch_size,
-        #             embed_dim,
-        #         )
-        #     )
-        # load weights
-        state_dict = torch.load(ckpt_file)["state_dict"]
-        # put weights into model
-        model.load_state_dict(state_dict, strict=False)
+    # initialize a model instance, load weights from .ckpt file (fix state_dict keys if needed)
+    try:
+        checkpoint = torch.load(ckpt_file)
+    except Exception as e:
+        print(f"Warning: Failed to load checkpoint with default settings: {e}")
+        print("Attempting to load with weights_only=False...")
+        checkpoint = torch.load(ckpt_file, weights_only=False)
+    state_dict = checkpoint.get("state_dict", checkpoint)
+
+    # fix state dict key mismatch for upsampling layers
+    # old checkpoints may have 'upsampling_layers' without 'head.' prefix
+    keys_remapped = False
+    for key in list(state_dict.keys()):
+        if key.startswith("upsampling_layers."):
+            # Add 'head.' prefix if missing
+            new_key = "head." + key
+            state_dict[new_key] = state_dict.pop(key)
+            keys_remapped = True
+
+    if keys_remapped:
+        # save the fixed state dict back to checkpoint
+        checkpoint["state_dict"] = state_dict
+        # create a temporary file with the fixed checkpoint
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.ckpt', delete=False) as tmp_file:
+            torch.save(checkpoint, tmp_file.name)
+            fixed_ckpt_file = tmp_file.name
     else:
-        if semi_supervised:
-            model = ModelClass.load_from_checkpoint(
-                ckpt_file,
-                loss_factory=loss_factories["supervised"],
-                loss_factory_unsupervised=loss_factories["unsupervised"],
-                strict=False,
-            )
-        else:
-            model = ModelClass.load_from_checkpoint(
-                ckpt_file,
-                loss_factory=loss_factories["supervised"],
-                strict=False,
-            )
+        fixed_ckpt_file = ckpt_file
+
+    if semi_supervised:
+        model = ModelClass.load_from_checkpoint(
+            fixed_ckpt_file,
+            loss_factory=loss_factories["supervised"],
+            loss_factory_unsupervised=loss_factories["unsupervised"],
+            strict=False,
+        )
+    else:
+        model = ModelClass.load_from_checkpoint(
+            fixed_ckpt_file,
+            loss_factory=loss_factories["supervised"],
+            strict=False,
+        )
+
+    # clean up temporary file if created
+    if keys_remapped:
+        import os
+        os.unlink(fixed_ckpt_file)
 
     if eval:
         model.eval()
