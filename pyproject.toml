@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "lightning-pose"
-version = "1.9.1"
+version = "1.9.2"
 description = "Semi-supervised pose estimation using pytorch lightning"
 license = "MIT"
 readme = "README.md"
