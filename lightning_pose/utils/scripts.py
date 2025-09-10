@@ -489,7 +489,13 @@ def get_model(
         if not ckpt.endswith(".ckpt"):
             import glob
             ckpt = glob.glob(os.path.join(ckpt, "**", "*.ckpt"), recursive=True)[0]
-        state_dict = torch.load(ckpt)["state_dict"]
+        # Try loading with default settings first, fallback to weights_only=False if needed
+        try:
+            state_dict = torch.load(ckpt)["state_dict"]
+        except Exception as e:
+            print(f"Warning: Failed to load checkpoint with default settings: {e}")
+            print("Attempting to load with weights_only=False...")
+            state_dict = torch.load(ckpt, weights_only=False)["state_dict"]
         # try loading all weights
         try:
             model.load_state_dict(state_dict, strict=False)

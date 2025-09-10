@@ -585,7 +585,13 @@ def load_model_from_checkpoint(
         #         )
         #     )
         # load weights
-        state_dict = torch.load(ckpt_file)["state_dict"]
+        # Try loading with default settings first, fallback to weights_only=False if needed
+        try:
+            state_dict = torch.load(ckpt_file)["state_dict"]
+        except Exception as e:
+            print(f"Warning: Failed to load checkpoint with default settings: {e}")
+            print("Attempting to load with weights_only=False...")
+            state_dict = torch.load(ckpt_file, weights_only=False)["state_dict"]
         # Fix state dict key mismatch for upsampling layers
         # Old checkpoints may have 'upsampling_layers' without 'head.' prefix
         fixed_state_dict = {}
@@ -600,7 +606,13 @@ def load_model_from_checkpoint(
         model.load_state_dict(fixed_state_dict, strict=False)
     else:
         # Load checkpoint and fix state dict keys if needed
-        checkpoint = torch.load(ckpt_file)
+        # Try loading with default settings first, fallback to weights_only=False if needed
+        try:
+            checkpoint = torch.load(ckpt_file)
+        except Exception as e:
+            print(f"Warning: Failed to load checkpoint with default settings: {e}")
+            print("Attempting to load with weights_only=False...")
+            checkpoint = torch.load(ckpt_file, weights_only=False)
         state_dict = checkpoint.get("state_dict", checkpoint)
         
         # Fix state dict key mismatch for upsampling layers
