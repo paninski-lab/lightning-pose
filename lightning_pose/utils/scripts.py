@@ -27,10 +27,6 @@ from lightning_pose.data.datasets import (
     MultiviewHeatmapDataset,
 )
 from lightning_pose.data.datatypes import ComputeMetricsSingleResult
-from lightning_pose.data.utils import (
-    compute_num_train_frames,
-    split_sizes_from_probabilities,
-)
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.metrics import (
     pca_multiview_reprojection_error,
@@ -179,7 +175,7 @@ def get_data_module(
     val_batch_size = int(np.ceil(cfg.training.val_batch_size / cfg.training.num_gpus))
 
     semi_supervised = io_utils.check_if_semi_supervised(cfg.model.losses_to_use)
-    if not semi_supervised:        
+    if not semi_supervised:
         data_module = BaseDataModule(
             dataset=dataset,
             train_batch_size=train_batch_size,
@@ -198,7 +194,7 @@ def get_data_module(
             np.ceil(cfg.dali.base.train.sequence_length / cfg.training.num_gpus)
         )
         # Maintain effective context batch size in num_gpus adjustment,
-        # otherwise the effective context batch size will be too small due to the 
+        # otherwise the effective context batch size will be too small due to the
         # 2 context frames on each side of center.
         _effective_context_batch_size = max(cfg.dali.context.train.batch_size - 4, 0)
         # Each GPU should get the effective batch size / num_gpus, + 4 for context frames.
@@ -208,7 +204,7 @@ def get_data_module(
 
         if cfg.model.model_type == "heatmap_mhcrnn" and context_batch_size < 5:
             raise ValidationError(
-                f"dali.context.train.batch_size must be >= 5 * num_gpus for "
+                "dali.context.train.batch_size must be >= 5 * num_gpus for "
                 "semi-supervised context models. "
                 "Found {cfg.dali.context.train.batch_size}"
             )
@@ -731,7 +727,9 @@ def compute_metrics_single(
             # add train/val/test split
             if set is not None:
                 pcasv_df["set"] = set
-            save_file = preds_file_path.with_name(preds_file_path.stem + "_pca_singleview_error.csv")
+            save_file = preds_file_path.with_name(
+                preds_file_path.stem + "_pca_singleview_error.csv"
+            )
             pcasv_df.to_csv(save_file)
             result.pca_sv_df = pcasv_df
 
@@ -739,7 +737,7 @@ def compute_metrics_single(
             # PCA will fail if not enough train frames.
             # skip pca metric in this case.
             # re-raise if this is not the PCA error this try is intended to swallow
-            if not "cannot fit PCA" in str(e):
+            if "cannot fit PCA" not in str(e):
                 raise e
 
     if "pca_multiview" in metrics_to_compute:

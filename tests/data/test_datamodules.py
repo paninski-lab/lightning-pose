@@ -227,7 +227,7 @@ def test_base_data_module_combined(cfg, base_data_module_combined):
 
     # test outputs for single batch
     loader = base_data_module_combined.train_dataloader()
-    assert isinstance(loader.sampler["labeled"], RandomSampler) # shuffle=True
+    assert isinstance(loader.sampler["labeled"], RandomSampler)  # shuffle=True
 
     batch = next(iter(loader))
     # batch tuple in lightning >=2.0.9

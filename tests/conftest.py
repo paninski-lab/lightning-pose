@@ -8,7 +8,6 @@ construction relies heavily on the utility functions provided in `utils/scripts.
 import copy
 import gc
 import os
-import shutil
 import subprocess
 from pathlib import Path
 from typing import Callable

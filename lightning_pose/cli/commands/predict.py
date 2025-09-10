@@ -42,7 +42,7 @@ def register_parser(subparsers):
         "input_path",
         type=Path,
         nargs="+",
-        help="one or more paths. They can be video files, image files, CSV files, or directories.\n"
+        help="one or more paths; can be video files, image files, CSV files, or directories.\n"
         "    directory: predicts over videos or images in the directory.\n"
         "               saves image outputs to `image_preds/<directory_name>`\n"
         "    video file: predicts on the video\n"

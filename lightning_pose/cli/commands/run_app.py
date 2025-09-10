@@ -27,7 +27,10 @@ def handle(args):
     import importlib.util
     if not importlib.util.find_spec('litpose_app'):
         import sys
-        print("❌ App not installed. To install the app:\n\n    pip install lightning-pose-app\n", file=sys.stderr)
+        print(
+            "❌ App not installed. To install the app:\n\n    pip install lightning-pose-app\n",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     # Import lightning_pose modules only when needed

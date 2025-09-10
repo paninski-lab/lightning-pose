@@ -7,6 +7,7 @@ import pandas as pd
 
 from lightning_pose.utils import io as io_utils
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dlc_dir", type=str)
@@ -23,11 +24,13 @@ if __name__ == "__main__":
 
     # check paths are not the same
     if dlc_dir == lp_dir:
-        raise NameError(f"dlc_dir and lp_dir cannot be the same")
+        raise NameError("dlc_dir and lp_dir cannot be the same")
 
     # find all labeled data in DLC project
-    dirs = [f for f in os.listdir(os.path.join(dlc_dir, "labeled-data")) if not f.startswith('.') if not f.endswith('_labeled')]
-
+    dirs = [
+        f for f in os.listdir(os.path.join(dlc_dir, "labeled-data"))
+        if not f.startswith('.') if not f.endswith('_labeled')
+    ]
 
     dirs.sort()
     dfs = []
@@ -54,9 +57,11 @@ if __name__ == "__main__":
                 df_tmp = df_tmp2
         except IndexError:
             try:
-                h5_file = glob.glob(os.path.join(dlc_dir, "labeled-data", d, "CollectedData*.h5"))[0]
+                h5_file = glob.glob(
+                    os.path.join(dlc_dir, "labeled-data", d, "CollectedData*.h5")
+                )[0]
                 df_tmp = pd.read_hdf(h5_file)
-                if type(df_tmp.index) == pd.core.indexes.multi.MultiIndex:
+                if isinstance(df_tmp.index, pd.core.indexes.multi.MultiIndex):
                     # new DLC labeling scheme that splits video/image in different cells
                     imgs = [i[2] for i in df_tmp.index]
                     vids = [df_tmp.index[0][1] for _ in imgs]
@@ -93,4 +98,3 @@ if __name__ == "__main__":
     # check
     for im in df_all.index:
         assert os.path.exists(os.path.join(lp_dir, im))
-

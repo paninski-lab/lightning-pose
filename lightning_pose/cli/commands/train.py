@@ -29,7 +29,7 @@ def register_parser(subparsers):
         type=types.config_file,
         help="path a config file.\n"
         "Download and modify the config template from: \n"
-        "https://github.com/paninski-lab/lightning-pose/blob/main/scripts/configs/config_default.yaml",
+        "https://github.com/paninski-lab/lightning-pose/blob/main/scripts/configs/config_default.yaml",  # noqa
     )
     train_parser.add_argument(
         "--output_dir",
