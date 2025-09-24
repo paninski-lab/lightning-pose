@@ -63,7 +63,9 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
 
 def load_vit_backbone_checkpoint(base, checkpoint: str):
     print(f"Loading VIT-MAE weights from {checkpoint}")
-    ckpt_vit_pretrain = torch.load(checkpoint, map_location="cpu")
+    # Load checkpoint using centralized safe torch.load
+    from lightning_pose.utils.predictions import safe_torch_load
+    ckpt_vit_pretrain = safe_torch_load(checkpoint, map_location="cpu")
     # Create a filtered state dict for the VIT-MAE part only
     vit_mae_state_dict = {}
     for key, value in ckpt_vit_pretrain.items():

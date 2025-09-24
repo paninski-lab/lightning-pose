@@ -64,15 +64,29 @@ class DataExtractor(object):
                 )
 
                 # make new augmentation pipeline that just resizes
-                if not isinstance(imgaug_curr[-1], iaa.Resize):
-                    # we currently assume the last transform is resizing
-                    raise NotImplementedError
-                # keep the resizing aug
-                imgaug_new = iaa.Sequential([imgaug_curr[-1]])
+                print(f"DEBUG: Augmentation pipeline: {imgaug_curr}")
+                print(f"DEBUG: Last augmentation: {imgaug_curr[-1]}")
+                print(f"DEBUG: Is last augmentation Resize? {isinstance(imgaug_curr[-1], iaa.Resize)}")
+
+                # if not isinstance(imgaug_curr[-1], iaa.Resize):
+                #     # we currently assume the last transform is resizing
+                #     print(f"ERROR: Last augmentation is not Resize! It's: {type(imgaug_curr[-1])}")
+                #     raise NotImplementedError(f"Last augmentation must be Resize, but got {type(imgaug_curr[-1])}")
+                # # keep the resizing aug
+                # imgaug_new = iaa.Sequential([imgaug_curr[-1]])
+                
+                
+                # Create a simple resize-only augmentation pipeline for PCA
+                # Use the same resize dimensions as the original dataset
+                dataset_old = data_module.dataset
+                image_resize_height = dataset_old.image_resize_height
+                image_resize_width = dataset_old.image_resize_width
+                imgaug_new = iaa.Sequential([iaa.Resize({"height": image_resize_height, "width": image_resize_width})])
+                print(f"DEBUG: Created new resize-only augmentation: {imgaug_new}")
 
                 # TODO: is there a cleaner way to do this?
                 # rebuild dataset with new aug pipeline
-                dataset_old = data_module.dataset
+                # dataset_old = data_module.dataset # this should be here 
                 if isinstance(data_module.dataset, HeatmapDataset):
                     dataset_new = HeatmapDataset(
                         root_directory=dataset_old.root_directory,

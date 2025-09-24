@@ -47,6 +47,7 @@ from lightning_pose.models import (
     RegressionTracker,
     SemiSupervisedHeatmapTracker,
     SemiSupervisedHeatmapTrackerMHCRNN,
+    SemiSupervisedHeatmapTrackerMultiviewTransformer,
     SemiSupervisedRegressionTracker,
 )
 from lightning_pose.models.base import (
@@ -55,6 +56,7 @@ from lightning_pose.models.base import (
 )
 from lightning_pose.utils import io as io_utils
 from lightning_pose.utils.pca import KeypointPCA
+from lightning_pose.utils.predictions import safe_torch_load
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -84,7 +86,7 @@ def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
     params = cfg.training.get("imgaug", "default")
     if isinstance(params, str):
         # Check if user explicitly wants to use 3D augmentations for multiview models
-        use_3d_augmentations = cfg.training.get("use_3d_augmentations", None)
+        imagug_3d = cfg.training.get("imgaug_3d", None)
         
         # enforce "dlc-mv" imgaug pipeline for multiview models (no 2D geometric transforms)
         # only if explicitly requested or if no preference is set and camera params exist
@@ -92,7 +94,7 @@ def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
             params not in ["default", "none"]
             and cfg.model.model_type.find("multiview") > -1
             and cfg.data.get("camera_params_file")
-            and (use_3d_augmentations is True or use_3d_augmentations is None)
+            and (imagug_3d is True or imagug_3d is None)
         ):
             params = "dlc-mv"
         params_dict = expand_imgaug_str_to_dict(params)
@@ -458,6 +460,7 @@ def get_model(
                 raise RuntimeError(
                     "heatmap_multiview_transformer requires resized height and width to be equal"
                 )
+            
             model = HeatmapTrackerMultiviewTransformer(
                 num_keypoints=cfg.data.num_keypoints,
                 num_views=len(cfg.data.view_names),
@@ -472,6 +475,12 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
+                # Curriculum learning parameters from config
+                backbone_unfreeze_step=cfg.training.get("unfreezing_step", 400),
+                curriculum_steps=cfg.training.get("curriculum_learning", {}).get("curriculum_steps", 5000),
+                patch_masking_delay=cfg.training.get("curriculum_learning", {}).get("patch_masking_delay", 300),
+                initial_mask_ratio=cfg.training.get("curriculum_learning", {}).get("initial_mask_ratio", 0.1),
+                max_mask_ratio=cfg.training.get("curriculum_learning", {}).get("max_mask_ratio", 0.5),
             )
         elif cfg.model.model_type == "heatmap_multiview":
             head = cfg.model.head
@@ -562,6 +571,35 @@ def get_model(
                 image_size=image_h,  # only used by ViT
                 backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
             )
+        elif cfg.model.model_type == "heatmap_multiview_transformer":
+            if image_h != image_w:
+                raise RuntimeError(
+                    "heatmap_multiview_transformer requires resized height and width to be equal"
+                )
+            
+            model = SemiSupervisedHeatmapTrackerMultiviewTransformer(
+                num_keypoints=cfg.data.num_keypoints,
+                num_views=len(cfg.data.view_names),
+                loss_factory=loss_factories["supervised"],
+                loss_factory_unsupervised=loss_factories["unsupervised"],
+                backbone=cfg.model.backbone,
+                pretrained=backbone_pretrained,
+                head=cfg.model.head,
+                downsample_factor=cfg.data.get("downsample_factor", 2),
+                torch_seed=cfg.training.rng_seed_model_pt,
+                optimizer=optimizer,
+                optimizer_params=optimizer_params,
+                lr_scheduler=lr_scheduler,
+                lr_scheduler_params=lr_scheduler_params,
+                image_size=image_h,  # only used by ViT
+                # Curriculum learning parameters from config
+                backbone_unfreeze_step=cfg.training.get("unfreezing_step", 400),
+                curriculum_steps=cfg.training.get("curriculum_learning", {}).get("curriculum_steps", 5000),
+                patch_masking_delay=cfg.training.get("curriculum_learning", {}).get("patch_masking_delay", 300),
+                initial_mask_ratio=cfg.training.get("curriculum_learning", {}).get("initial_mask_ratio", 0.1),
+                max_mask_ratio=cfg.training.get("curriculum_learning", {}).get("max_mask_ratio", 0.5),
+                # masking_type=cfg.model.get("masking_type", "none"),  # Use patch masking by default
+            )
         else:
             raise NotImplementedError(
                 f"{cfg.model.model_type} invalid cfg.model.model_type for a semi-supervised model"
@@ -574,7 +612,8 @@ def get_model(
         if not ckpt.endswith(".ckpt"):
             import glob
             ckpt = glob.glob(os.path.join(ckpt, "**", "*.ckpt"), recursive=True)[0]
-        state_dict = torch.load(ckpt)["state_dict"]
+        # Load weights using centralized safe torch.load
+        state_dict = safe_torch_load(ckpt)["state_dict"]
         # try loading all weights
         try:
             model.load_state_dict(state_dict, strict=False)
@@ -640,10 +679,11 @@ def get_callbacks(
         )
         callbacks.append(ckpt_callback)
 
-    # we just need this callback for unsupervised models or multiview models with non-heatmap losse
+    # we just need this callback for unsupervised models
     if (
         ((cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None))
         or cfg.losses.get("supervised_pairwise_projections", {}).get("log_weight") is not None
+        # (cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None)
     ):
         anneal_weight_callback = AnnealWeight(**cfg.callbacks.anneal_weight)
         callbacks.append(anneal_weight_callback)

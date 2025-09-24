@@ -201,7 +201,7 @@ def get_videos_in_dir(
         video_files = [
             [
                 os.path.join(video_dir, f) for f in all_video_files if
-                (f.endswith(allowed_formats) and f.split(".")[-2].endswith(view))
+                (f.endswith(allowed_formats) and (f.split(".")[-2].endswith(view) or f"_" + view + "_" in f)) # I added this to handle the case where the view name is not the last part of the filename
             ]
             for view in view_names
         ]

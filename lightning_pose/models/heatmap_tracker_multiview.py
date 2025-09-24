@@ -33,87 +33,16 @@ from lightning_pose.models.heads import (
     MultiviewHeatmapCNNMultiHead,
     MultiviewFeatureTransformerHeadLearnableCrossView,
 )
+from lightning_pose.models.curriculum_masking import CurriculumMasking
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
     "HeatmapTrackerMultiview",
     "HeatmapTrackerMultiviewMultihead",
     "HeatmapTrackerMultiviewTransformer",
+    "SemiSupervisedHeatmapTrackerMultiviewTransformer",
 ]
 
-class CrossViewAttention(nn.Module):
-    def __init__(self, embed_dim: int, num_heads: int = 8, dropout: float = 0.1):
-        super().__init__()
-
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-
-        # Multi-head attention for cross-view communication
-        self.cross_attention = nn.MultiheadAttention(
-            embed_dim, num_heads, dropout=dropout, batch_first=True
-        )
-          
-        # layer normalization and feedforward 
-        self.norm1 = nn.LayerNorm(embed_dim)
-        self.norm2 = nn.LayerNorm(embed_dim)
-        self.ffn = nn.Sequential(
-            nn.Linear(embed_dim, embed_dim * 4),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(embed_dim * 4, embed_dim),
-            nn.Dropout(dropout),
-        )
-    
-    def forward(self, x: torch.Tensor, num_views: int) -> torch.Tensor:
-        """
-        Apply cross-view attention.
-        
-        Args:
-            x: Input tensor of shape (batch, view*patches, embed_dim)
-            num_views: Number of views
-            
-        Returns:
-            Enhanced tensor with cross-view information exchange
-        """
-        batch_size, total_patches, embed_dim = x.shape
-        patches_per_view = total_patches // num_views
-
-        # Reshape to separate views: (batch, num_views, patches_per_view, embed_dim)
-        x_views = x.view(batch_size, num_views, patches_per_view, embed_dim)
-        
-        # Apply cross-view attention for each spatial position
-        enhanced_patches = []
-        
-        for patch_idx in range(patches_per_view):
-            # Extract same spatial position across all views
-            # Shape: (batch, num_views, embed_dim)
-            patch_across_views = x_views[:, :, patch_idx, :]
-            
-            # Apply cross-view attention (views attend to each other)
-            residual = patch_across_views
-            patch_across_views = self.norm1(patch_across_views)
-            
-            attended_patch, attention_weights = self.cross_attention(
-                patch_across_views,  # query
-                patch_across_views,  # key  
-                patch_across_views   # value
-            )
-            
-            # Residual connection
-            attended_patch = residual + attended_patch
-            
-            # Feed-forward network with residual connection
-            residual = attended_patch
-            attended_patch = self.norm2(attended_patch)
-            attended_patch = residual + self.ffn(attended_patch)
-            
-            enhanced_patches.append(attended_patch)
-        
-        # Reconstruct tensor: (batch, num_views, patches_per_view, embed_dim)
-        enhanced_views = torch.stack(enhanced_patches, dim=2)
-        
-        # Reshape back to original format: (batch, view*patches, embed_dim)
-        return enhanced_views.view(batch_size, total_patches, embed_dim)
 
 class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
     """Transformer network that handles multi-view datasets."""
@@ -123,54 +52,49 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         num_keypoints: int,
         num_views: int,
         loss_factory: LossFactory | None = None,
-        backbone: Literal["vits_dino", "vitb_dino", "vitb_imagenet"] = "vitb_imagenet",
+        backbone: Literal["vits_dino", "vitb_dino", "vitb_imagenet", "vitb_sam"] = "vitb_imagenet",
         pretrained: bool = True,
-        # head: Literal["heatmap_cnn"] = "heatmap_cnn",
         head: Literal["heatmap_cnn", "feature_transformer_learnable_crossview"] = "heatmap_cnn",
-        downsample_factor: Literal[1] = 1,  # Changed from 2 to 1 to match head configuration
+        downsample_factor: Literal[1] = 1,
         torch_seed: int = 123,
         optimizer: str = "Adam",
         optimizer_params: DictConfig | dict | None = None,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: DictConfig | dict | None = None,
         image_size: int = 256,
+        masking_type: Literal["view", "patch", "none"] = "patch",
+        # Curriculum learning parameters
+        backbone_unfreeze_step: int = 400,
+        curriculum_steps: int = 5000,
+        patch_masking_delay: int = 300,
+        initial_mask_ratio: float = 0.1,
+        max_mask_ratio: float = 0.5,
         **kwargs: Any,
     ):
-        """Initialize a multi-view model with transformer backbone.
-
-        Args:
-            num_keypoints: number of body parts
-            num_views: number of camera views
-            loss_factory: object to orchestrate loss computation
-            backbone: transformer variant to be used; cannot use convnets with this model
-            pretrained: True to load pretrained imagenet weights
-            head: architecture used to project per-view information to 2D heatmaps
-                - heatmap_cnn
-            downsample_factor: make heatmap smaller than original frames to save memory; subpixel
-                operations are performed for increased precision
-            torch_seed: make weight initialization reproducible
-            lr_scheduler: how to schedule learning rate
-            lr_scheduler_params: params for specific learning rate schedulers
-                - multisteplr: milestones, gamma
-
-        """
-
-        self.num_views = num_views
-
-        # for reproducible weight initialization
+        """Initialize a multi-view model with transformer backbone."""
+        # Reproducible weight initialization
         self.torch_seed = torch_seed
         torch.manual_seed(torch_seed)
+
+        # Initialize curriculum masking
+        self.curriculum_masking = CurriculumMasking(
+            num_views=num_views,
+            masking_type=masking_type,
+            backbone_unfreeze_step=backbone_unfreeze_step,
+            curriculum_steps=curriculum_steps,
+            patch_masking_delay=patch_masking_delay,
+            initial_mask_ratio=initial_mask_ratio,
+            max_mask_ratio=max_mask_ratio,
+        )
         
-        # Add step tracking for curriculum learning
+        self.num_views = num_views
         self.current_training_step = 0
 
-        # for backwards compatibility
+        # Backwards compatibility
         if "do_context" in kwargs.keys():
             print("HeatmapTrackerMultiviewTransformer does not currently support context frames")
-            # del kwargs["do_context"]
 
-        print(f" we are using the Heatmap Multiview Transformer model with {num_views} views")
-        print(f" backbone: {backbone}, pretrained: {pretrained}, head: {head}")
+        print(f"Initializing Heatmap Multiview Transformer: {num_views} views, {backbone} backbone, {head} head, {masking_type} masking")
         
         super().__init__(
             backbone=backbone,
@@ -186,27 +110,26 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         self.num_keypoints = num_keypoints
         self.downsample_factor = downsample_factor
 
-        #Create learnable view embeddings for each view
+        # Create learnable view embeddings
         self.view_embeddings = nn.Parameter(
             torch.randn(self.num_views, self.num_fc_input_features) * 0.02
-        )  # Small initialization for stability
+        )
 
-        
-        # add cross-view attention layers 
-        cross_view_num_heads = 8
-        cross_view_num_layers = 2
-        cross_view_dropout = 0.15
+        # Initialize head
+        self._setup_head(head, backbone, num_views, image_size)
 
-        self.cross_view_layers = nn.ModuleList([
-            CrossViewAttention(
-                embed_dim=self.num_fc_input_features,
-                num_heads=cross_view_num_heads,
-                dropout=cross_view_dropout
-            )
-            for _ in range(cross_view_num_layers)
-        ])
+        self.loss_factory = loss_factory
+        self.rmse_loss = RegressionRMSELoss()
+        self.total_unsupervised_importance = torch.tensor(1.0)
 
-    
+        # Initially freeze backbone parameters
+        for param in self.backbone.parameters():
+            param.requires_grad = False
+
+        self.save_hyperparameters(ignore=["loss_factory", "loss_factory_unsupervised"])
+
+    def _setup_head(self, head: str, backbone: str, num_views: int, image_size: int):
+        """Setup the model head based on configuration."""
         if head == "heatmap_cnn":
             self.head = HeatmapHead(
                 backbone_arch=backbone,
@@ -214,15 +137,13 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
                 out_channels=self.num_keypoints,
                 downsample_factor=self.downsample_factor,
             )
-        
         elif head == "feature_transformer_learnable_crossview":
-            """Multiview Feature Transformer Head with learnable cross-view embeddings."""
             self.head = MultiviewFeatureTransformerHeadLearnableCrossView(
                 backbone_arch=backbone,
                 num_views=num_views,
                 in_channels=self.num_fc_input_features,
                 out_channels=self.num_keypoints,
-                downsample_factor=self.downsample_factor,  # Use model-level downsample_factor
+                downsample_factor=self.downsample_factor,
                 transformer_d_model=512,
                 transformer_nhead=8,
                 transformer_dim_feedforward=512,
@@ -231,188 +152,56 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
                 view_embed_dim=128,
                 dropout=0.1,
             )
-
-
-
-        else:
+        else:       
             raise NotImplementedError(f"{head} is not a valid multiview transformer head")
 
-        self.loss_factory = loss_factory
-
-        # use this to log auxiliary information: pixel_error on labeled data
-        self.rmse_loss = RegressionRMSELoss()
-
-        # this attribute will be modified by AnnealWeight callback during training and can be
-        # used to weight supervised, non-heatmap losses
-        self.total_unsupervised_importance = torch.tensor(1.0)
-
-        # Initially freeze backbone parameters - will be unfrozen after 400 steps
-        print("Freezing backbone parameters initially - will unfreeze after 400 steps")
-        for param in self.backbone.parameters():
-            param.requires_grad = False
-
-        # necessary so we don't have to pass in model arguments when loading
-        # also, "loss_factory" and "loss_factory_unsupervised" cannot be pickled
-        # (loss_factory_unsupervised might come from SemiSupervisedHeatmapTracker.__super__().
-        # otherwise it's ignored, important so that it doesn't try to pickle the dali loaders)
-        self.save_hyperparameters(ignore=["loss_factory", "loss_factory_unsupervised"])
-
-    def apply_random_view_masking(self, images, mask_ratio=None, training_step=0):
-        """
-        Apply random view masking during training with curriculum learning.
-        
-        Args:
-            images: Input tensor of shape (batch, num_views, channels, height, width)
-            mask_ratio: Override masking ratio (if None, uses curriculum learning)
-            training_step: Current training step for curriculum learning
-            
-        Returns:
-            tuple: (masked_images, view_mask)
-                - masked_images: Images with randomly selected views zeroed out
-                - view_mask: Binary mask indicating which views are kept (1) or masked (0)
-        """
-        if not self.training:
-            # During evaluation, don't apply masking
-            batch_size = images.shape[0]
-            view_mask = torch.ones(batch_size, self.num_views, device=images.device)
-            return images, view_mask
-            
-        batch_size, num_views, channels, height, width = images.shape
-        device = images.device
-        
-        # Curriculum learning: start at 0.1, increase to 0.5 over 5,000 steps
-        if mask_ratio is None:
-            curriculum_steps = 5000  # Number of steps to reach max masking
-            progress = min(training_step / curriculum_steps, 1.0)
-            mask_ratio = 0.1 + progress * 0.4  # 0.1 -> 0.5
-        
-        # Always keep minimum 2 views (never mask more than num_views - 2)
-        max_masked_views = max(0, num_views - 2)
-        num_views_to_mask = int(min(mask_ratio * num_views, max_masked_views))
-        
-        # Initialize view mask (1 = keep, 0 = mask)
-        view_mask = torch.ones(batch_size, num_views, device=device)
-        masked_images = images.clone()
-        
-        # Apply masking per batch sample
-        for batch_idx in range(batch_size):
-            if num_views_to_mask > 0:
-                # Randomly select views to mask
-                view_indices = torch.randperm(num_views, device=device)[:num_views_to_mask]
-                view_mask[batch_idx, view_indices] = 0
-                
-                # Zero out the selected views completely
-                for view_idx in view_indices:
-                    masked_images[batch_idx, view_idx] = 0
-        
-        return masked_images, view_mask
-
-    def get_training_schedule_info(self, current_step):
-        """Get information about current training schedule progress."""
-        curriculum_steps = 5000
-        backbone_unfreeze_step = 400
-        
-        # Masking schedule
-        progress = min(current_step / curriculum_steps, 1.0)
-        current_mask_ratio = 0.1 + progress * 0.4
-        
-        # Backbone status
-        backbone_frozen = current_step < backbone_unfreeze_step
-        
-        return {
-            "step": current_step,
-            "mask_ratio": current_mask_ratio,
-            "backbone_frozen": backbone_frozen,
-            "curriculum_progress": f"{progress*100:.1f}%",
-            "steps_to_unfreeze": max(0, backbone_unfreeze_step - current_step),
-            "steps_to_max_masking": max(0, curriculum_steps - current_step)
-        }
 
     def training_step(self, batch_dict, batch_idx):
         """Override training step to track current step for curriculum learning and backbone unfreezing."""
-        # Update training step for curriculum learning
         self.current_training_step = self.trainer.global_step
         
-        # Unfreeze backbone after 400 steps
-        if self.current_training_step == 400:
-            print(f"Step {self.current_training_step}: Unfreezing backbone parameters")
+        # Handle backbone unfreezing
+        if self.curriculum_masking.should_unfreeze_backbone(self.current_training_step):
             for param in self.backbone.parameters():
                 param.requires_grad = True
             self.log("backbone_unfrozen", 1.0, on_step=True, on_epoch=False)
         
-        # Log current mask ratio and training milestones
-        if self.current_training_step % 100 == 0:  # Log every 100 steps
-            curriculum_steps = 5000  # Updated to match 5000 step training
-            progress = min(self.current_training_step / curriculum_steps, 1.0)
-            current_mask_ratio = 0.1 + progress * 0.4
-            self.log("mask_ratio", current_mask_ratio, on_step=True, on_epoch=False, prog_bar=True)
-            
-            # Log training schedule milestones
-            if self.current_training_step in [1000, 2500, 4000, 5000]:
-                schedule_info = self.get_training_schedule_info(self.current_training_step)
-                print(f"Step {self.current_training_step} Training Schedule:")
-                print(f"  - Mask ratio: {schedule_info['mask_ratio']:.3f}")
-                print(f"  - Curriculum progress: {schedule_info['curriculum_progress']}")
-                print(f"  - Backbone frozen: {schedule_info['backbone_frozen']}")
-                if schedule_info['steps_to_max_masking'] > 0:
-                    print(f"  - Steps to max masking: {schedule_info['steps_to_max_masking']}")
-                else:
-                    print(f"  - Maximum masking reached!")
+        # Handle patch masking start
+        if self.curriculum_masking.should_start_patch_masking(self.current_training_step):
+            self.log("patch_masking_started", 1.0, on_step=True, on_epoch=False)
         
-        # Log backbone freezing status
-        backbone_frozen = any(not p.requires_grad for p in self.backbone.parameters())
-        if self.current_training_step % 500 == 0:
-            self.log("backbone_frozen", float(backbone_frozen), on_step=True, on_epoch=False)
+        # Log training progress
+        self._log_training_progress()
         
-        # Call parent training step
         return super().training_step(batch_dict, batch_idx)
+
+    def _log_training_progress(self):
+        """Log training progress and milestones."""
+        if not (self.curriculum_masking.use_view_masking or self.curriculum_masking.use_patch_masking):
+            return
+            
+        schedule_info = self.curriculum_masking.get_training_schedule_info(self.current_training_step)
+        
+        # Log mask ratio every 100 steps
+        if self.current_training_step % 100 == 0:
+            if self.curriculum_masking.masking_type == "view":
+                self.log("view_mask_ratio", schedule_info['mask_ratio'], on_step=True, on_epoch=False, prog_bar=True)
+            elif self.curriculum_masking.masking_type == "patch":
+                self.log("patch_mask_ratio", schedule_info['mask_ratio'], on_step=True, on_epoch=False, prog_bar=True)
+        
+        # Log backbone status every 500 steps
+        if self.current_training_step % 500 == 0:
+            backbone_frozen = any(not p.requires_grad for p in self.backbone.parameters())
+            self.log("backbone_frozen", float(backbone_frozen), on_step=True, on_epoch=False)
 
     def validation_step(self, batch_dict, batch_idx):
         """Override validation step to test model performance with different masking levels."""
-        # Standard validation without masking
         val_loss = super().validation_step(batch_dict, batch_idx)
         
-        # Test with different masking levels during validation
-        if batch_idx % 10 == 0:  # Only test on every 10th batch to save compute
-            original_training_state = self.training
-            self.train()  # Temporarily set to training mode to enable masking
-            
-            mask_ratios = [0.2, 0.4]
-            for mask_ratio in mask_ratios:
-                try:
-                    # Create a copy of batch_dict for testing
-                    test_batch = dict(batch_dict)
-                    
-                    # Apply masking with specific ratio
-                    if "images" in test_batch:
-                        original_images = test_batch["images"].clone()
-                        masked_images, _ = self.apply_random_view_masking(
-                            original_images, mask_ratio=mask_ratio, training_step=self.current_training_step
-                        )
-                        test_batch["images"] = masked_images
-                    
-                    # Get predictions with masked views
-                    loss_inputs = self.get_loss_inputs_labeled(test_batch)
-                    if self.loss_factory is not None:
-                        losses_dict = self.loss_factory.compute_loss(loss_inputs)
-                        mask_loss = losses_dict["total_loss"] if "total_loss" in losses_dict else 0.0
-                        
-                        # Log masking performance
-                        self.log(
-                            f"val_loss_mask_{mask_ratio}",
-                            mask_loss,
-                            on_step=False,
-                            on_epoch=True,
-                            prog_bar=False,
-                            sync_dist=True
-                        )
-                
-                except Exception as e:
-                    # Don't fail validation if masking test fails
-                    pass
-            
-            # Restore original training state
-            self.train(original_training_state)
+        # Optional: Test masking performance during validation (disabled by default for simplicity)
+        # Uncomment the following lines if you want to test masking performance during validation
+        # if (self.curriculum_masking.use_view_masking or self.curriculum_masking.use_patch_masking) and batch_idx % 10 == 0:
+        #     self._test_masking_performance(batch_dict)
         
         return val_loss
 
@@ -455,33 +244,6 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         embedding_dim = embedding_output.shape[2]
         batch_size = view_batch_size // self.num_views
 
-
-        # intrinsics = intrinsics.float() # [batch*views, 3, 3]
-        # extrinsics = extrinsics.float() # [batch*views, 3, 4]
-        # distortions = distortions.float() # [batch*views, 5] 
-
-        # # CHANGE: Get actual image size instead of hardcoding 256
-        # img_height, img_width = images.shape[-2:]  # Get from input images
-        
-        # # Normalize camera parameters with actual image dimensions
-        # intrinsics_norm = intrinsics.clone()
-        # intrinsics_norm[:, 0, 0] /= img_width   # fx normalized by width
-        # intrinsics_norm[:, 1, 1] /= img_height  # fy normalized by height  
-        # intrinsics_norm[:, 0, 2] /= img_width   # cx normalized by width
-        # intrinsics_norm[:, 1, 2] /= img_height  # cy normalized by height
-        
-        # extrinsics_norm = extrinsics.clone()
-        # extrinsics_norm[:, :, 3] /= 100.0  # Scale translation
-        # distortions_norm = torch.clamp(distortions, -1.0, 1.0)
-
-
-        # camera_params = torch.cat([
-        #     intrinsics_norm.view(-1, 9),      # 3x3 intrinsics flattened
-        #     extrinsics_norm.view(-1, 12),     # 3x4 extrinsics flattened  
-        #     distortions_norm.view(-1, distortions_norm.shape[-1]),    # distortion parameters
-        # ], dim=1)
-
-        
         # Create view indices to map each sample to its corresponding view
         # Shape: (view * batch,)
         view_indices = torch.arange(self.num_views, device=embedding_output.device)
@@ -511,9 +273,6 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         sequence_output = encoder_outputs[0]
         outputs = self.backbone.vision_encoder.layernorm(sequence_output)
         # shape: (batch, view * num_patches, embedding_dim)
-
-        for cross_view_layer in self.cross_view_layers:
-            outputs = cross_view_layer(outputs, self.num_views)
 
         # reshape data to (view * batch, embedding_dim, height, width) for head processing
         patch_size = outputs.shape[1] // self.num_views
@@ -551,16 +310,17 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         if hasattr(self, 'cfg') and hasattr(self.cfg, 'data') and hasattr(self.cfg.data, 'view_names'):
             expected_view_names = self.cfg.data.view_names
             if len(expected_view_names) == images.shape[1]:
-                print(f"WARNING: DALI multiview data detected. Expected view order: {expected_view_names}")
-                print(f"Current batch shape: {images.shape}")
                 # TODO: Add view reordering logic here if needed
+                pass
 
         batch_size, num_views, channels, img_height, img_width = images.shape
 
-        # Apply random view masking during training for robustness
+        # Apply masking during training for robustness
         if self.training:
-            print(f"Applying random view masking at step {self.current_training_step}")
-            images, view_mask = self.apply_random_view_masking(images, training_step=self.current_training_step)
+            if self.curriculum_masking.use_view_masking:
+                images, _ = self.curriculum_masking.apply_view_masking(images, training_step=self.current_training_step)
+            elif self.curriculum_masking.use_patch_masking:
+                images, _ = self.curriculum_masking.apply_patch_masking(images, training_step=self.current_training_step)
 
         # extract camera parameters from batch (optional for video prediction)
         if "intrinsic_matrix" in batch_dict:
@@ -628,6 +388,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         if "keypoints_3d" in batch_dict and batch_dict["keypoints_3d"].shape[-1] == 3:
             num_views = batch_dict["images"].shape[1]
             num_keypoints = pred_keypoints.shape[1] // 2 // num_views
+
             
             try:
                 keypoints_pred_3d = project_camera_pairs_to_3d(
@@ -640,6 +401,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
                 keypoints_mask_3d = get_valid_projection_masks(
                     target_keypoints.reshape((-1, num_views, num_keypoints, 2))
                 )
+
             except Exception as e:
                 print(f"Error in 3D projection: {e}")
                 keypoints_pred_3d = None
@@ -699,7 +461,6 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             {"params": self.backbone.parameters(), "name": "backbone", "lr": 0.0},
             {"params": self.head.parameters(), "name": "head"},
             {"params": [self.view_embeddings], "name": "view_embeddings"},
-            {"params": self.cross_view_layers.parameters(), "name": "cross_view_layers"},
         ]
         
         # params = [
@@ -730,24 +491,7 @@ class HeatmapTrackerMultiview(BaseSupervisedTracker):
         image_size: int = 256,
         **kwargs: Any,
     ):
-        """Initialize a DLC-like model with resnet backbone.
-
-        Args:
-            num_keypoints: number of body parts
-            num_views: number of camera views
-            loss_factory: object to orchestrate loss computation
-            backbone: ResNet or EfficientNet variant to be used
-            pretrained: True to load pretrained imagenet weights
-            head: architecture used to fuse view information
-                - heatmap_cnn
-            downsample_factor: make heatmap smaller than original frames to save memory; subpixel
-                operations are performed for increased precision
-            torch_seed: make weight initialization reproducible
-            lr_scheduler: how to schedule learning rate
-            lr_scheduler_params: params for specific learning rate schedulers
-                - multisteplr: milestones, gamma
-
-        """
+        """Initialize a DLC-like model with resnet backbone."""
 
         if downsample_factor != 2:
             raise NotImplementedError(
@@ -838,14 +582,7 @@ class HeatmapTrackerMultiview(BaseSupervisedTracker):
         self,
         images: TensorType["batch", "view", "channels":3, "image_height", "image_width"],
     ) -> TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"]:
-        """Forward pass through the network.
-
-        Batch options
-        -------------
-        - TensorType["batch", "view", "channels":3, "image_height", "image_width"]
-          multiview labeled batch or unlabeled batch from DALI
-
-        """
+        """Forward pass through the network."""
 
         batch_size, num_views, channels, img_height, img_width = images.shape
 
@@ -901,21 +638,14 @@ class HeatmapTrackerMultiview(BaseSupervisedTracker):
             "keypoints_mask_3d": keypoints_mask_3d,  # shape (2*batch, cam_pairs, num_keypoints)
         }
 
-
-
     def predict_step(
         self,
         batch_dict: MultiviewHeatmapLabeledBatchDict | UnlabeledBatchDict,
         batch_idx: int,
         return_heatmaps: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor] | Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Predict heatmaps and keypoints for a batch of video frames.
+        """Predict heatmaps and keypoints for a batch of video frames."""
 
-        Assuming a DALI video loader is passed in
-        > trainer = Trainer(devices=8, accelerator="gpu")
-        > predictions = trainer.predict(model, data_loader)
-
-        """
         if "images" in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
             # labeled image dataloaders
             images = batch_dict["images"]
@@ -1172,3 +902,116 @@ class HeatmapTrackerMultiviewMultihead(BaseSupervisedTracker):
             {"params": self.head.parameters(), "name": "head"},
         ]
         return params
+
+
+class SemiSupervisedHeatmapTrackerMultiviewTransformer(SemiSupervisedTrackerMixin, HeatmapTrackerMultiviewTransformer):
+    """Semi-supervised version of the HeatmapTrackerMultiviewTransformer that supports unsupervised losses."""
+
+    def __init__(
+        self,
+        num_keypoints: int,
+        num_views: int,
+        loss_factory: LossFactory | None = None,
+        loss_factory_unsupervised: LossFactory | None = None,
+        backbone: Literal["vits_dino", "vitb_dino", "vitb_imagenet", "vitb_sam"] = "vitb_imagenet",
+        pretrained: bool = True,
+        head: Literal["heatmap_cnn", "feature_transformer_learnable_crossview"] = "heatmap_cnn",
+        downsample_factor: Literal[1] = 1,
+        torch_seed: int = 123,
+        optimizer: str = "Adam",
+        optimizer_params: DictConfig | dict | None = None,
+        lr_scheduler: str = "multisteplr",
+        lr_scheduler_params: DictConfig | dict | None = None,
+        image_size: int = 256,
+        masking_type: Literal["view", "patch", "none"] = "none",
+        # Curriculum learning parameters
+        backbone_unfreeze_step: int = 400,
+        curriculum_steps: int = 5000,
+        patch_masking_delay: int = 300,
+        initial_mask_ratio: float = 0.1,
+        max_mask_ratio: float = 0.5,
+        **kwargs: Any,
+    ):
+        """Initialize a semi-supervised multi-view model with transformer backbone.
+
+        Args:
+            num_keypoints: number of body parts
+            num_views: number of camera views
+            loss_factory: object to orchestrate supervised loss computation
+            loss_factory_unsupervised: object to orchestrate unsupervised loss computation
+            backbone: transformer variant to be used; cannot use convnets with this model
+            pretrained: True to load pretrained imagenet weights
+            head: architecture used to project per-view information to 2D heatmaps
+            downsample_factor: make heatmap smaller than original frames to save memory
+            torch_seed: make weight initialization reproducible
+            lr_scheduler: how to schedule learning rate
+            lr_scheduler_params: params for specific learning rate schedulers
+            image_size: size of input images (height=width for ViT models)
+            masking_type: type of masking to use during training
+                - "view": mask entire views randomly
+                - "patch": mask random patches within views
+                - "none": no masking
+            backbone_unfreeze_step: step at which to unfreeze backbone parameters
+            curriculum_steps: total steps for curriculum learning (when masking reaches maximum)
+            patch_masking_delay: steps to wait after backbone unfreezing before starting patch masking
+            initial_mask_ratio: initial masking ratio (starts at this value)
+            max_mask_ratio: maximum masking ratio (reaches this value at curriculum_steps)
+
+        """
+        # Initialize the parent class (HeatmapTrackerMultiviewTransformer)
+        super().__init__(
+            num_keypoints=num_keypoints,
+            num_views=num_views,
+            loss_factory=loss_factory,
+            backbone=backbone,
+            pretrained=pretrained,
+            head=head,
+            downsample_factor=downsample_factor,
+            torch_seed=torch_seed,
+            optimizer=optimizer,
+            optimizer_params=optimizer_params,
+            lr_scheduler=lr_scheduler,
+            lr_scheduler_params=lr_scheduler_params,
+            image_size=image_size,
+            masking_type=masking_type,
+            backbone_unfreeze_step=backbone_unfreeze_step,
+            curriculum_steps=curriculum_steps,
+            patch_masking_delay=patch_masking_delay,
+            initial_mask_ratio=initial_mask_ratio,
+            max_mask_ratio=max_mask_ratio,
+            **kwargs,
+        )
+        
+        # Store the unsupervised loss factory
+        self.loss_factory_unsup = loss_factory_unsupervised
+
+    def get_loss_inputs_unlabeled(self, batch_dict: UnlabeledBatchDict) -> dict:
+        """Return predicted heatmaps for unlabeled data (required by SemiSupervisedTrackerMixin)."""
+        # Get frames from unlabeled batch
+        if isinstance(batch_dict, dict):
+            if "frames" in batch_dict:
+                images = batch_dict["frames"]
+            else:
+                # Fallback for other unlabeled data formats
+                images = batch_dict.get("images", None)
+                if images is None:
+                    raise ValueError("Unlabeled batch must contain 'frames' or 'images'")
+        else:
+            # If batch_dict is already a tensor (images), use it directly
+            images = batch_dict
+        
+        # Create a proper batch_dict for the forward method
+        # The forward method expects a dict with 'frames' key for unlabeled data
+        batch_dict_for_forward = {"frames": images}
+        
+        # Forward pass to get heatmaps (this will apply masking if enabled)
+        pred_heatmaps = self.forward(batch_dict_for_forward)
+        
+        # Convert heatmaps to keypoints for temporal loss
+        pred_keypoints, confidence = self.head.run_subpixelmaxima(pred_heatmaps)
+        
+        # For unsupervised losses, we need both heatmaps and keypoints
+        return {
+            "heatmaps_pred": pred_heatmaps,
+            "keypoints_pred": pred_keypoints,
+        }
