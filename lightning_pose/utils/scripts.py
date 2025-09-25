@@ -477,10 +477,7 @@ def get_model(
                 image_size=image_h,  # only used by ViT
                 # Curriculum learning parameters from config
                 backbone_unfreeze_step=cfg.training.get("unfreezing_step", 400),
-                curriculum_steps=cfg.training.get("curriculum_learning", {}).get("curriculum_steps", 5000),
-                patch_masking_delay=cfg.training.get("curriculum_learning", {}).get("patch_masking_delay", 300),
-                initial_mask_ratio=cfg.training.get("curriculum_learning", {}).get("initial_mask_ratio", 0.1),
-                max_mask_ratio=cfg.training.get("curriculum_learning", {}).get("max_mask_ratio", 0.5),
+                patch_mask_config=cfg.training.get("patch_mask", {}),
             )
         elif cfg.model.model_type == "heatmap_multiview":
             head = cfg.model.head
@@ -594,11 +591,7 @@ def get_model(
                 image_size=image_h,  # only used by ViT
                 # Curriculum learning parameters from config
                 backbone_unfreeze_step=cfg.training.get("unfreezing_step", 400),
-                curriculum_steps=cfg.training.get("curriculum_learning", {}).get("curriculum_steps", 5000),
-                patch_masking_delay=cfg.training.get("curriculum_learning", {}).get("patch_masking_delay", 300),
-                initial_mask_ratio=cfg.training.get("curriculum_learning", {}).get("initial_mask_ratio", 0.1),
-                max_mask_ratio=cfg.training.get("curriculum_learning", {}).get("max_mask_ratio", 0.5),
-                # masking_type=cfg.model.get("masking_type", "none"),  # Use patch masking by default
+                patch_mask_config=cfg.training.get("patch_mask", {}),
             )
         else:
             raise NotImplementedError(

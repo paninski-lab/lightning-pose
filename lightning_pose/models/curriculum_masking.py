@@ -10,66 +10,34 @@ class CurriculumMasking:
     def __init__(
         self,
         num_views: int,
-        masking_type: Literal["view", "patch", "none"] = "patch",
+        patch_mask_config: dict = None,
         backbone_unfreeze_step: int = 400,
-        curriculum_steps: int = 5000,
-        patch_masking_delay: int = 300,
-        initial_mask_ratio: float = 0.1,
-        max_mask_ratio: float = 0.5,
     ):
         """Initialize curriculum masking parameters.
         
         Args:
             num_views: Number of camera views
-            masking_type: Type of masking to apply
+            patch_mask_config: Dictionary containing patch masking configuration
+                - init_step: Step to start patch masking
+                - final_step: Step when patch masking reaches maximum
+                - init_ratio: Initial masking ratio
+                - final_ratio: Final masking ratio
             backbone_unfreeze_step: Step to unfreeze backbone
-            curriculum_steps: Total steps for curriculum learning
-            patch_masking_delay: Delay before starting patch masking
-            initial_mask_ratio: Starting masking ratio
-            max_mask_ratio: Maximum masking ratio
         """
         self.num_views = num_views
-        self.masking_type = masking_type
         self.backbone_unfreeze_step = backbone_unfreeze_step
-        self.curriculum_steps = curriculum_steps
-        self.patch_masking_delay = patch_masking_delay
-        self.initial_mask_ratio = initial_mask_ratio
-        self.max_mask_ratio = max_mask_ratio
         
-        self.use_view_masking = masking_type == "view"
-        self.use_patch_masking = masking_type == "patch"
-    
-    def apply_view_masking(self, images: torch.Tensor, training_step: int = 0) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Apply random view masking with curriculum learning."""
-        if not images.requires_grad:  # Not in training mode
-            batch_size = images.shape[0]
-            view_mask = torch.ones(batch_size, self.num_views, device=images.device)
-            return images, view_mask
-            
-        batch_size, num_views, channels, height, width = images.shape
-        device = images.device
+        # Parse patch masking configuration
+        if patch_mask_config is None:
+            patch_mask_config = {}
         
-        # Calculate current mask ratio
-        progress = min(training_step / self.curriculum_steps, 1.0)
-        mask_ratio = self.initial_mask_ratio + progress * (self.max_mask_ratio - self.initial_mask_ratio)
+        self.patch_init_step = patch_mask_config.get("init_step", 700)
+        self.patch_final_step = patch_mask_config.get("final_step", 5000)
+        self.patch_init_ratio = patch_mask_config.get("init_ratio", 0.0)
+        self.patch_final_ratio = patch_mask_config.get("final_ratio", 0.5)
         
-        # Calculate number of views to mask
-        max_masked_views = max(0, num_views - 1)
-        num_views_to_mask = int(min(mask_ratio * num_views, max_masked_views))
-        
-        # Initialize masks
-        view_mask = torch.ones(batch_size, num_views, device=device)
-        masked_images = images.clone()
-        
-        # Apply masking per batch sample
-        for batch_idx in range(batch_size):
-            if num_views_to_mask > 0:
-                view_indices = torch.randperm(num_views, device=device)[:num_views_to_mask]
-                view_mask[batch_idx, view_indices] = 0
-                for view_idx in view_indices:
-                    masked_images[batch_idx, view_idx] = 0
-        
-        return masked_images, view_mask
+        # Automatically enable patch masking if final_ratio > 0
+        self.use_patch_masking = self.patch_final_ratio > 0.0
     
     def apply_patch_masking(self, images: torch.Tensor, training_step: int = 0) -> Tuple[torch.Tensor, torch.Tensor]:
         """Apply random patch masking with curriculum learning."""
@@ -86,15 +54,13 @@ class CurriculumMasking:
         batch_size, num_views, channels, height, width = images.shape
         device = images.device
         
-        # Calculate current mask ratio
-        patch_masking_start_step = self.backbone_unfreeze_step + self.patch_masking_delay
-        
-        if training_step < patch_masking_start_step:
+        # Calculate current mask ratio using new configuration
+        if training_step < self.patch_init_step:
             mask_ratio = 0.0
         else:
-            curriculum_steps_for_patch = self.curriculum_steps - patch_masking_start_step
-            progress = min((training_step - patch_masking_start_step) / curriculum_steps_for_patch, 1.0)
-            mask_ratio = self.initial_mask_ratio + progress * (self.max_mask_ratio - self.initial_mask_ratio)
+            curriculum_steps_for_patch = self.patch_final_step - self.patch_init_step
+            progress = min((training_step - self.patch_init_step) / curriculum_steps_for_patch, 1.0)
+            mask_ratio = self.patch_init_ratio + progress * (self.patch_final_ratio - self.patch_init_ratio)
         
         # Calculate patch dimensions
         patch_size = 16
@@ -122,13 +88,11 @@ class CurriculumMasking:
         return masked_images, patch_mask
     
     def apply_masking(self, images: torch.Tensor, training_step: int = 0) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Apply appropriate masking based on masking type."""
-        if self.use_view_masking:
-            return self.apply_view_masking(images, training_step)
-        elif self.use_patch_masking:
+        """Apply patch masking if enabled, otherwise return original images."""
+        if self.use_patch_masking:
             return self.apply_patch_masking(images, training_step)
         else:
-            # No masking
+            # No masking - return original images and dummy mask
             batch_size, num_views = images.shape[:2]
             device = images.device
             dummy_mask = torch.ones(batch_size, num_views, device=device)
@@ -136,27 +100,19 @@ class CurriculumMasking:
     
     def get_training_schedule_info(self, current_step: int) -> Dict[str, Any]:
         """Get information about current training schedule progress."""
-        if self.masking_type == "view":
-            progress = min(current_step / self.curriculum_steps, 1.0)
-            current_mask_ratio = self.initial_mask_ratio + progress * (self.max_mask_ratio - self.initial_mask_ratio)
-            curriculum_progress = f"{progress*100:.1f}%"
-            steps_to_max_masking = max(0, self.curriculum_steps - current_step)
-            steps_to_patch_masking = 0
-        elif self.masking_type == "patch":
-            patch_masking_start_step = self.backbone_unfreeze_step + self.patch_masking_delay
-            
-            if current_step < patch_masking_start_step:
+        if self.use_patch_masking:
+            if current_step < self.patch_init_step:
                 current_mask_ratio = 0.0
                 curriculum_progress = "0.0%"
-                steps_to_patch_masking = patch_masking_start_step - current_step
-                steps_to_max_masking = self.curriculum_steps - current_step
+                steps_to_patch_masking = self.patch_init_step - current_step
+                steps_to_max_masking = self.patch_final_step - current_step
             else:
-                curriculum_steps_for_patch = self.curriculum_steps - patch_masking_start_step
-                progress = min((current_step - patch_masking_start_step) / curriculum_steps_for_patch, 1.0)
-                current_mask_ratio = self.initial_mask_ratio + progress * (self.max_mask_ratio - self.initial_mask_ratio)
+                curriculum_steps_for_patch = self.patch_final_step - self.patch_init_step
+                progress = min((current_step - self.patch_init_step) / curriculum_steps_for_patch, 1.0)
+                current_mask_ratio = self.patch_init_ratio + progress * (self.patch_final_ratio - self.patch_init_ratio)
                 curriculum_progress = f"{progress*100:.1f}%"
                 steps_to_patch_masking = 0
-                steps_to_max_masking = max(0, self.curriculum_steps - current_step)
+                steps_to_max_masking = max(0, self.patch_final_step - current_step)
         else:
             current_mask_ratio = 0.0
             curriculum_progress = "0.0%"
@@ -181,5 +137,4 @@ class CurriculumMasking:
     
     def should_start_patch_masking(self, current_step: int) -> bool:
         """Check if patch masking should start at current step."""
-        patch_masking_start_step = self.backbone_unfreeze_step + self.patch_masking_delay
-        return self.masking_type == "patch" and current_step == patch_masking_start_step
+        return self.use_patch_masking and current_step == self.patch_init_step
