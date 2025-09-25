@@ -24,7 +24,7 @@ def register_parser(subparsers):
             """\
             Crops a video or labeled frames based on model predictions.
             Requires model predictions to already have been generated using `litpose predict`.
-    
+
             Cropped videos are saved to:
                 <model_dir>/
                 └── video_preds/
@@ -45,7 +45,7 @@ def register_parser(subparsers):
                         └── a/b/c/<image_name>.png        (cropped images)\
             """
         ),
-        usage="litpose crop <model_dir> <input_path:video|csv>... --crop_ratio=CROP_RATIO --anchor_keypoints=x,y,z",
+        usage="litpose crop <model_dir> <input_path:video|csv>... --crop_ratio=CROP_RATIO --anchor_keypoints=x,y,z",  # noqa
     )
     crop_parser.add_argument(
         "model_dir", type=types.existing_model_dir, help="path to a model directory"

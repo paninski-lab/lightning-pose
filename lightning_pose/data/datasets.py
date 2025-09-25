@@ -102,7 +102,9 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
         csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
         csv_data = io_utils.fix_empty_first_row(csv_data)
-        self.keypoint_names = io_utils.get_keypoint_names(csv_file=csv_file, header_rows=header_rows)
+        self.keypoint_names = io_utils.get_keypoint_names(
+            csv_file=csv_file, header_rows=header_rows,
+        )
         self.image_names = list(csv_data.index)
         self.keypoints = torch.tensor(csv_data.to_numpy(), dtype=torch.float32)
         # convert to x,y coordinates
@@ -519,7 +521,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 img_file_names.add(Path(heatmaps.image_names[idx]).name)
                 if len(img_file_names) > 1:
                     raise ImportError(
-                        f"Discrepancy in image file names across CSV files! "
+                        "Discrepancy in image file names across CSV files! "
                         "index:{idx}, image file names:{img_file_names}"
                     )
 

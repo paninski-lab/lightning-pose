@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from . import rename_time_directories
 
 MIGRATIONS = [

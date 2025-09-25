@@ -494,7 +494,7 @@ def undo_affine_transform(
 
 
 def undo_affine_transform_batch(
-    keypoints_augmented: TensorType["seq_len", "num_keypoints x 2"],
+    keypoints_augmented: TensorType["seq_len", "num_keypointsx2"],
     transforms: Union[
         TensorType["seq_len", "h":2, "w":3],
         TensorType["h":2, "w":3],
@@ -504,7 +504,7 @@ def undo_affine_transform_batch(
         TensorType["num_views", "null":1, "null":1],
     ],
     is_multiview: bool = False,
-) -> TensorType["seq_len", "num_keypoints x 2"]:
+) -> TensorType["seq_len", "num_keypointsx2"]:
     """Potentially undo an affine transform given a tensor of keypoints and the tranform matrix."""
 
     # undo augmentation if needed

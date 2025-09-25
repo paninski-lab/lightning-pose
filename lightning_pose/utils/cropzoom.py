@@ -125,7 +125,7 @@ def _crop_images(
 
     def _file_exists(path):
         # Cache path.exists() as an easy way to speed up.
-        # TODO: This is still slow. Get all files in the directory and check if the file is in the list.
+        # TODO: This is still slow. Get all files in the dir and check if file is in the list.
         if path in _file_cache:
             return _file_cache[path]
         exists = (root_directory / path).exists()

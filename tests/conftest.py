@@ -8,7 +8,6 @@ construction relies heavily on the utility functions provided in `utils/scripts.
 import copy
 import gc
 import os
-import shutil
 import subprocess
 from pathlib import Path
 from typing import Callable
@@ -556,8 +555,14 @@ def video_dataloader_multiview(
 def trainer(cfg) -> pl.Trainer:
     """Create a basic pytorch lightning trainer for testing models."""
 
-    cfg.training.unfreezing_epoch = 1 # exercise unfreezing
-    callbacks = get_callbacks(cfg, early_stopping=False, lr_monitor=False, backbone_unfreeze=True, checkpointing=False)
+    cfg.training.unfreezing_epoch = 1  # exercise unfreezing
+    callbacks = get_callbacks(
+        cfg,
+        early_stopping=False,
+        lr_monitor=False,
+        backbone_unfreeze=True,
+        checkpointing=False,
+    )
 
     trainer = pl.Trainer(
         accelerator="gpu",
@@ -567,7 +572,7 @@ def trainer(cfg) -> pl.Trainer:
         check_val_every_n_epoch=1,
         log_every_n_steps=1,
         callbacks=callbacks,
-        enable_checkpointing = False,
+        enable_checkpointing=False,
         limit_train_batches=2,
         num_sanity_val_steps=0,
         logger=False,
