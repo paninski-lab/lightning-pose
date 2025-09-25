@@ -14,9 +14,10 @@ from typing_extensions import Literal
 from lightning_pose.data.cameras import get_valid_projection_masks, project_camera_pairs_to_3d
 from lightning_pose.data.datatypes import (
     MultiviewHeatmapLabeledBatchDict,
+    MultiviewUnlabeledBatchDict,
     UnlabeledBatchDict,
 )
-from lightning_pose.data.utils import convert_bbox_coords
+from lightning_pose.data.utils import convert_bbox_coords, undo_affine_transform_batch
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.base import (
@@ -965,45 +966,85 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(SemiSupervisedTrackerMixi
         # Initialize total_unsupervised_importance for SemiSupervisedTrackerMixin
         if not hasattr(self, 'total_unsupervised_importance'):
             self.total_unsupervised_importance = torch.tensor(0.0)
+            
+        # Debug: Check if unsupervised loss factory is properly set
+        print(f"DEBUG: SemiSupervisedHeatmapTrackerMultiviewTransformer initialized")
+        print(f"DEBUG: loss_factory_unsupervised is None: {loss_factory_unsupervised is None}")
+        if loss_factory_unsupervised is not None:
+            print(f"DEBUG: Unsupervised loss factory has losses: {list(loss_factory_unsupervised.loss_instance_dict.keys())}")
+        print(f"DEBUG: total_unsupervised_importance: {self.total_unsupervised_importance}")
 
-    def get_loss_inputs_unlabeled(self, batch_dict: UnlabeledBatchDict) -> dict:
+    def get_loss_inputs_unlabeled(self, batch_dict: UnlabeledBatchDict | MultiviewUnlabeledBatchDict) -> dict:
         """Return predicted heatmaps and keypoints for unlabeled data (required by SemiSupervisedTrackerMixin)."""
-        # Get frames from unlabeled batch
-        if isinstance(batch_dict, dict):
-            if "frames" in batch_dict:
-                images = batch_dict["frames"]
-            else:
-                # Fallback for other unlabeled data formats
-                images = batch_dict.get("images", None)
-                if images is None:
-                    raise ValueError("Unlabeled batch must contain 'frames' or 'images'")
-        else:
-            # If batch_dict is already a tensor (images), use it directly
-            images = batch_dict
+        # Debug: Print batch_dict structure
+        print(f"DEBUG: batch_dict keys: {list(batch_dict.keys())}")
+        print(f"DEBUG: batch_dict['is_multiview']: {batch_dict.get('is_multiview', 'NOT_FOUND')}")
+        print(f"DEBUG: transforms shape: {batch_dict['transforms'].shape}")
         
-        # Create a proper batch_dict for the forward method
-        # The forward method expects a dict with 'frames' key for unlabeled data
-        batch_dict_for_forward = {"frames": images}
+        # images -> heatmaps (match single-view implementation exactly)
+        pred_heatmaps = self.forward(batch_dict)
+        # heatmaps -> keypoints
+        pred_keypoints_augmented, confidence = self.head.run_subpixelmaxima(pred_heatmaps)
         
-        # Forward pass to get heatmaps (this will apply masking if enabled)
-        pred_heatmaps = self.forward(batch_dict_for_forward)
+        print(f"DEBUG: pred_keypoints_augmented shape: {pred_keypoints_augmented.shape}")
+        print(f"DEBUG: confidence shape: {confidence.shape}")
         
-        # Convert heatmaps to keypoints for temporal and PCA losses
-        pred_keypoints, confidence = self.head.run_subpixelmaxima(pred_heatmaps)
+        # undo augmentation if needed
+        # Fix transforms shape: squeeze extra dimension if present
+        transforms = batch_dict["transforms"]
+        print(f"DEBUG: Original transforms shape: {transforms.shape}")
         
-        # For unsupervised losses, we need both heatmaps and keypoints
-        # The keypoints need to be reshaped for multiview PCA loss
-        batch_size = pred_keypoints.shape[0]
-        num_views = self.num_views
-        total_coords = pred_keypoints.shape[1]  # Total x,y coordinates across all views
-        num_keypoints_per_view = total_coords // (num_views * 2)  # keypoints per view
+        # Handle different possible transform shapes
+        if len(transforms.shape) == 4:
+            # Shape [num_views, 1, 2, 3] -> squeeze to [num_views, 2, 3]
+            if transforms.shape[1] == 1:
+                transforms = transforms.squeeze(1)
+                print(f"DEBUG: Squeezed transforms shape: {transforms.shape}")
+            # Shape [1, num_views, 2, 3] -> squeeze to [num_views, 2, 3]  
+            elif transforms.shape[0] == 1:
+                transforms = transforms.squeeze(0)
+                print(f"DEBUG: Squeezed transforms shape: {transforms.shape}")
         
-        # Reshape keypoints to [batch, views, keypoints, 2] for multiview losses
-        pred_keypoints_reshaped = pred_keypoints.reshape(batch_size, num_views, num_keypoints_per_view, 2)
+        # Ensure transforms have the expected shape for multiview: [num_views, 2, 3]
+        if batch_dict["is_multiview"] and len(transforms.shape) != 3:
+            print(f"WARNING: Expected transforms shape [num_views, 2, 3] for multiview, got {transforms.shape}")
         
-        return {
-            "heatmaps_pred": pred_heatmaps,
-            "keypoints_pred": pred_keypoints,
-            "keypoints_pred_reshaped": pred_keypoints_reshaped,
+        # Debug: Check what we're passing to undo_affine_transform_batch
+        print(f"DEBUG: About to call undo_affine_transform_batch with:")
+        print(f"  - keypoints_augmented shape: {pred_keypoints_augmented.shape}")
+        print(f"  - transforms shape: {transforms.shape}")
+        print(f"  - is_multiview: {batch_dict['is_multiview']}")
+        
+        pred_keypoints = undo_affine_transform_batch(
+            keypoints_augmented=pred_keypoints_augmented,
+            transforms=transforms,
+            is_multiview=batch_dict["is_multiview"],
+        )
+        
+        print(f"DEBUG: pred_keypoints after undo_affine_transform_batch shape: {pred_keypoints.shape}")
+        
+        # keypoints -> original image coords keypoints
+        pred_keypoints = convert_bbox_coords(batch_dict, pred_keypoints)
+        
+        print(f"DEBUG: pred_keypoints after convert_bbox_coords shape: {pred_keypoints.shape}")
+        
+        result = {
+            "heatmaps_pred": pred_heatmaps,  # if augmented, augmented heatmaps
+            "keypoints_pred": pred_keypoints,  # if augmented, original keypoints
+            "keypoints_pred_augmented": pred_keypoints_augmented,  # match pred_heatmaps
             "confidences": confidence,
         }
+        
+        print(f"DEBUG: Returning from get_loss_inputs_unlabeled with keys: {list(result.keys())}")
+        print(f"DEBUG: keypoints_pred shape: {result['keypoints_pred'].shape}")
+        print(f"DEBUG: confidences shape: {result['confidences'].shape}")
+        
+        # Debug: Check if we have the unsupervised loss factory
+        if hasattr(self, 'loss_factory_unsup'):
+            print(f"DEBUG: loss_factory_unsup exists: {self.loss_factory_unsup is not None}")
+            if self.loss_factory_unsup is not None:
+                print(f"DEBUG: loss_factory_unsup has losses: {list(self.loss_factory_unsup.loss_instance_dict.keys())}")
+        else:
+            print("DEBUG: loss_factory_unsup does not exist!")
+        
+        return result
