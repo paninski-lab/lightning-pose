@@ -199,7 +199,7 @@ class Model:
     def predict_on_label_csv_multiview(
         self,
         csv_file_per_view: list[str] | list[Path],
-        bbox_file_per_view: list[str] | list[Path] | None,
+        bbox_file_per_view: list[str] | list[Path] | None = None,
         camera_params_file: str | Path | None = None,
         data_dir: str | Path | None = None,
         compute_metrics: bool = True,
