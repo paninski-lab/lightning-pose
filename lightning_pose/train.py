@@ -181,6 +181,7 @@ def _predict_test_videos(model: Model): # I need to fix this
         pretty_print_str(f"Predicting videos in cfg.eval.test_videos_directory...")
         # dealing with multuiview 
         if model.config.is_multi_view():
+            #TODO: this is a hacky way to get the video files for each view
             # create a list of the video files for each view
             video_files_per_view = []
             for view_name in model.config.cfg.data.view_names:

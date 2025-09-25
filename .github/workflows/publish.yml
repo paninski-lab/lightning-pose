@@ -1,0 +1,72 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Extract version from pyproject.toml
+      id: get_version
+      run: |
+        # Extract version from [project] section
+        VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+        echo "project_version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Project version: $VERSION"
+
+    - name: Extract tag version
+      id: get_tag
+      run: |
+        # Remove 'refs/tags/' prefix and optional 'v' prefix
+        TAG_VERSION=${GITHUB_REF#refs/tags/}
+        TAG_VERSION=${TAG_VERSION#v}
+        echo "tag_version=$TAG_VERSION" >> $GITHUB_OUTPUT
+        echo "Tag version: $TAG_VERSION"
+
+    - name: Verify version matches tag
+      run: |
+        if [ "${{ steps.get_version.outputs.project_version }}" != "${{ steps.get_tag.outputs.tag_version }}" ]; then
+          echo "ERROR: Tag version (${{ steps.get_tag.outputs.tag_version }}) doesn't match project version (${{ steps.get_version.outputs.project_version }})"
+          echo "Please ensure your git tag matches the version in pyproject.toml [project] section"
+          exit 1
+        fi
+        echo "Version verification passed"
+
+    - name: Install dependencies
+      run: poetry install --only-root
+
+    - name: Build package
+      run: poetry build
+
+    - name: Verify build contents
+      run: |
+        echo "Built packages:"
+        ls -la dist/
+        echo "Checking wheel contents:"
+        python -m zipfile -l dist/*.whl | head -20
+
+    - name: Publish to PyPI
+      run: poetry publish --username __token__ --password ${{ secrets.PYPI_API_TOKEN }}
+
+    - name: Verify publication
+      run: |
+        echo "🎉 Successfully published lightning-pose v${{ steps.get_version.outputs.project_version }} to PyPI!"
+        echo "Package should be available at: https://pypi.org/project/lightning-pose/${{ steps.get_version.outputs.project_version }}/"

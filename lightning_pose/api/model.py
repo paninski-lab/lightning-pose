@@ -127,13 +127,17 @@ class Model:
 
         Args:
             csv_file (str | Path): Path to the CSV file of images, keypoint locations.
-            data_dir (str | Path, optional): Root path for relative paths in the CSV file. Defaults to the
-                data_dir originally used when training.
+            data_dir (str | Path, optional): Root path for relative paths in the CSV file.
+                Defaults to the data_dir originally used when training.
             compute_metrics (bool, optional): Whether to compute pixel error and loss metrics on
                 predictions.
-            generate_labeled_images (bool, optional): Whether to save labeled images. Defaults to False.
-            add_train_val_test_set (bool): When predicting on training dataset, set to true to add the `set`
-                column to the prediction output.
+            generate_labeled_images (bool, optional): Whether to save labeled images.
+                Defaults to False.
+            output_dir (str | Path, optional): The directory to save outputs to.
+                Defaults to `{model_dir}/image_preds/{csv_file_name}`.
+                If set to None, outputs are not saved.
+            add_train_val_test_set (bool): When predicting on training dataset, set to true to add
+                the `set` column to the prediction output.
         Returns:
             PredictionResult: A PredictionResult object containing the predictions and metrics.
         """
@@ -195,7 +199,7 @@ class Model:
     def predict_on_label_csv_multiview(
         self,
         csv_file_per_view: list[str] | list[Path],
-        bbox_file_per_view: list[str] | list[Path] | None,
+        bbox_file_per_view: list[str] | list[Path] | None = None,
         camera_params_file: str | Path | None = None,
         data_dir: str | Path | None = None,
         compute_metrics: bool = True,
@@ -283,13 +287,17 @@ class Model:
 
         Args:
             video_file (str | Path): Path to the video file.
+            output_dir (str | Path, optional): The directory to save outputs to.
+                Defaults to `{model_dir}/image_preds/{csv_file_name}`.
+                If set to None, outputs are not saved.
             compute_metrics (bool, optional): Whether to compute pixel error and loss metrics on
                 predictions.
-            generate_labeled_video (bool, optional): Whether to save a labeled video. Defaults to False.
-            output_dir (str | Path, optional): The directory to save outputs to.
-                Defaults to `{model_dir}/image_preds/{csv_file_name}`. If set to None, outputs are not saved.
+            generate_labeled_video (bool, optional): Whether to save a labeled video.
+                Defaults to False.
+
         Returns:
             PredictionResult: A PredictionResult object containing the predictions and metrics.
+
         """
         self._load()
         video_file = Path(video_file)
@@ -343,18 +351,26 @@ class Model:
         compute_metrics: bool = True,
         generate_labeled_video: bool = False,
     ) -> MultiviewPredictionResult:
-        """Version of `predict_on_video_file` that gives models access to multiple camera views of each frame.
+        """Version of `predict_on_video_file` that accesses to multiple camera views of each frame.
 
         Arguments:
-            video_file_per_view (list[str] | list[Path]): A list of video files each from a different view of the
-                same session. Number of video files must match the `view_names` in the config file. Order of the list
-                does not matter: video files are intelligently matched to views by their filename using
-                `utils.io.collect_video_files_by_view`.
+            video_file_per_view (list[str] | list[Path]): A list of video files each from a
+                different view of the same session.
+                Number of video files must match the `view_names` in the config file.
+                Order of the list does not matter: video files are intelligently matched to views
+                by their filename using `utils.io.collect_video_files_by_view`.
+            output_dir (str | Path, optional): The directory to save outputs to.
+                Defaults to `{model_dir}/image_preds/{csv_file_name}`.
+                If set to None, outputs are not saved.
+            compute_metrics (bool, optional): Whether to compute pixel error and loss metrics on
+                predictions.
+            generate_labeled_video (bool, optional): Whether to save a labeled video.
+                Defaults to False.
 
-        See `predict_on_video_file` docstring for other arguments."""
-        """TODO: It might make more sense to require that the order of the list match the order of the `view_names`
-        in the config file. The original reason why we made order not matter, was to support the CLI use-case.
-        A better idea is to normalize the order in the CLI code instead to simplify this function."""
+        Returns:
+            MultiviewPredictionResult: object containing the predictions and metrics for each view.
+
+        """
         assert self.config.is_multi_view()
         self._load()
 

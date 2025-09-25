@@ -263,8 +263,10 @@ def check_video_paths(
 def collect_video_files_by_view(video_files: list[Path], view_names: list[str]) -> dict[str, Path]:
     """Given a list of video files, matches them to views based on their filenames.
 
-    Filenames must contain their corresponding view's name, separated by the rest of the filename by
-    some non-alphanumeric delimiter. For example, mouse_top_3.mp4 is allowed, but mousetop3.mp4 is not allowed."""
+    Filenames must contain their corresponding view's name, separated by the rest of the filename
+    by some non-alphanumeric delimiter. For example, mouse_top_3.mp4 is allowed, but mousetop3.mp4
+    is not allowed.
+    """
     assert len(video_files) == len(view_names), f"{len(video_files)} != {len(view_names)}"
     video_files_by_view: dict[str, Path] = {}
     for view_name in view_names:
@@ -313,6 +315,7 @@ def get_context_img_paths(center_img_path: Path) -> list[Path]:
         context_img_paths.append(path)
 
     return context_img_paths
+
 
 def fix_empty_first_row(df: pd.DataFrame) -> pd.DataFrame:
     """Fixes a problem with `pd.read_csv` where if the first row is all NaN

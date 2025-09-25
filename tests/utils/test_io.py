@@ -151,7 +151,7 @@ def test_collect_video_files_by_view():
         "top": Path("a/simple_top.mp4"),
     }
 
-    # We just match based on view matching, we don't care about differences in the rest of the string.
+    # we just match based on view matching, we don't care about diffs in the rest of the string
     # TBD whether this is the desired behavior.
     view_to_file = collect_video_files_by_view(
         [Path("a/complex_top_2.mp4"), Path("a/simple_bot.mp4")], ["bot", "top"]

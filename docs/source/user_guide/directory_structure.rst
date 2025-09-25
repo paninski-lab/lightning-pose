@@ -55,8 +55,27 @@ Lightning Pose format by running the following script from the command line
 That's it!
 After this you will need to update your config file with the correct paths (see next page).
 
+Converting SLEAP projects to Lightning Pose format
+================================================
+
+First, export your SLEAP project as a .pkg.slp file (Predict -> Export Labels Package in the SLEAP gui). 
+Then, once you have installed Lightning Pose, you can convert previous SLEAP projects into the proper
+Lightning Pose format by running the following script from the command line
+(make sure to activate the conda environment):
+
+.. code-block:: console
+
+    python scripts/converters/slp2lp.py --slp_file=/path/to/<project>.pkg.slp --lp_dir=/path/to/lp/dir
+
+.. Note::
+
+    This script is only available through the :ref:`conda from source <conda_from_source>` installation method.
+
+That's it!
+After this you will need to update your config file with the correct paths (see next page).
+
 Converting other projects to Lightning Pose format
 ==================================================
-Coming soon. If you have labeled data from other pose estimation packages (like SLEAP or DPK) and
+Coming soon. If you have labeled data from other pose estimation packages (like DPK) and
 would like to try out Lightning Pose, please
 `raise an issue <https://github.com/paninski-lab/lightning-pose/issues>`_.

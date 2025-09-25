@@ -175,4 +175,3 @@ if __name__ == "__main__":
 
     # Extract labels and create the required DataFrame
     extract_labels_from_pkg_slp(slp_file, lp_dir)
-

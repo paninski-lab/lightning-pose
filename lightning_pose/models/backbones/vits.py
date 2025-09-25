@@ -63,9 +63,16 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
 
 def load_vit_backbone_checkpoint(base, checkpoint: str):
     print(f"Loading VIT-MAE weights from {checkpoint}")
-    # Load checkpoint using centralized safe torch.load
-    from lightning_pose.utils.predictions import safe_torch_load
-    ckpt_vit_pretrain = safe_torch_load(checkpoint, map_location="cpu")
+    # Try loading with default settings first, fallback to weights_only=False if needed
+    try:
+        ckpt_vit_pretrain = torch.load(checkpoint, map_location="cpu")
+    except Exception as e:
+        print(f"Warning: Failed to load checkpoint with default settings: {e}")
+        print("Attempting to load with weights_only=False...")
+        ckpt_vit_pretrain = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    # extract state dict if checkpoint contains additional info
+    if "state_dict" in ckpt_vit_pretrain:
+        ckpt_vit_pretrain = ckpt_vit_pretrain["state_dict"]
     # Create a filtered state dict for the VIT-MAE part only
     vit_mae_state_dict = {}
     for key, value in ckpt_vit_pretrain.items():
@@ -74,7 +81,7 @@ def load_vit_backbone_checkpoint(base, checkpoint: str):
             # Skip known problematic layers with size mismatches
             if any(prob in model_key for prob in [
                 "position_embeddings",
-                "patch_embeddings.projection",
+                "patch_embeddings.projection",  # in case backbone was trained with grayscale imgs
                 "decoder_pos_embed",
                 "decoder_pred",
             ]):
