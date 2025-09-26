@@ -794,6 +794,13 @@ class PairwiseProjectionsLoss(Loss):
         stage: Literal["train", "val", "test"] | None = None,
         **kwargs,
     ) -> Tuple[TensorType[()], list[dict]]:
+        # Check if 3D keypoints are available
+        if keypoints_targ_3d is None or keypoints_pred_3d is None or keypoints_mask_3d is None:
+            print(f"Warning: 3D keypoints not available for {stage} stage. Skipping supervised_pairwise_projections loss.")
+            # Return zero loss when 3D data is not available
+            logs = self.log_loss(loss=torch.tensor(0.0), stage=stage)
+            return torch.tensor(0.0), logs
+            
         elementwise_loss = self.compute_loss(
             targets=keypoints_targ_3d,
             predictions=keypoints_pred_3d,

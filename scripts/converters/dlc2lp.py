@@ -7,7 +7,6 @@ import pandas as pd
 
 from lightning_pose.utils import io as io_utils
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dlc_dir", type=str)

@@ -34,15 +34,14 @@ from lightning_pose.metrics import (
     pixel_error,
     temporal_norm,
 )
-from lightning_pose.models import (
+from lightning_pose.models import (  # HeatmapTrackerMultiview,; HeatmapTrackerMultiviewMultihead,
     HeatmapTracker,
     HeatmapTrackerMHCRNN,
-    HeatmapTrackerMultiview,
-    HeatmapTrackerMultiviewMultihead,
     HeatmapTrackerMultiviewTransformer,
     RegressionTracker,
     SemiSupervisedHeatmapTracker,
     SemiSupervisedHeatmapTrackerMHCRNN,
+    SemiSupervisedHeatmapTrackerMultiviewTransformer,
     SemiSupervisedRegressionTracker,
 )
 from lightning_pose.models.base import (
@@ -67,24 +66,28 @@ __all__ = [
 
 @typechecked
 def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
-    """Create simple data transform pipeline that augments images.
+    """Create simple and flexible data transform pipeline that augments images and keypoints.
 
     Args:
-        cfg: standard config file that carries around dataset info; relevant is the parameter
-            "cfg.training.imgaug" which can take on the following values:
-            - default: resizing only
-            - dlc: imgaug pipeline implemented in DLC 2.0 package
-            - dlc-top-down: `dlc` pipeline plus random flipping along both horizontal and vertical
-                axes
+        cfg: configuration object containing training parameters
+
+    Returns:
+        imgaug pipeline
 
     """
+
     params = cfg.training.get("imgaug", "default")
     if isinstance(params, str):
+        # Check if user explicitly wants to use 3D augmentations for multiview models
+        imagug_3d = cfg.training.get("imgaug_3d", None)
+        
         # enforce "dlc-mv" imgaug pipeline for multiview models (no 2D geometric transforms)
+        # only if explicitly requested or if no preference is set and camera params exist
         if (
             params not in ["default", "none"]
             and cfg.model.model_type.find("multiview") > -1
             and cfg.data.get("camera_params_file")
+            and (imagug_3d is True or imagug_3d is None)
         ):
             params = "dlc-mv"
         params_dict = expand_imgaug_str_to_dict(params)
@@ -450,6 +453,7 @@ def get_model(
                 raise RuntimeError(
                     "heatmap_multiview_transformer requires resized height and width to be equal"
                 )
+            
             model = HeatmapTrackerMultiviewTransformer(
                 num_keypoints=cfg.data.num_keypoints,
                 num_views=len(cfg.data.view_names),
@@ -464,6 +468,9 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
+                # Curriculum learning parameters from config
+                backbone_unfreeze_step=cfg.training.get("unfreezing_step", 400),
+                patch_mask_config=cfg.training.get("patch_mask", {}),
             )
         elif cfg.model.model_type == "heatmap_multiview":
             head = cfg.model.head
@@ -554,6 +561,31 @@ def get_model(
                 image_size=image_h,  # only used by ViT
                 backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
             )
+        elif cfg.model.model_type == "heatmap_multiview_transformer":
+            if image_h != image_w:
+                raise RuntimeError(
+                    "heatmap_multiview_transformer requires resized height and width to be equal"
+                )
+            
+            model = SemiSupervisedHeatmapTrackerMultiviewTransformer(
+                num_keypoints=cfg.data.num_keypoints,
+                num_views=len(cfg.data.view_names),
+                loss_factory=loss_factories["supervised"],
+                loss_factory_unsupervised=loss_factories["unsupervised"],
+                backbone=cfg.model.backbone,
+                pretrained=backbone_pretrained,
+                head=cfg.model.head,
+                downsample_factor=cfg.data.get("downsample_factor", 2),
+                torch_seed=cfg.training.rng_seed_model_pt,
+                optimizer=optimizer,
+                optimizer_params=optimizer_params,
+                lr_scheduler=lr_scheduler,
+                lr_scheduler_params=lr_scheduler_params,
+                image_size=image_h,  # only used by ViT
+                # Curriculum learning parameters from config
+                backbone_unfreeze_step=cfg.training.get("unfreezing_step", 400),
+                patch_mask_config=cfg.training.get("patch_mask", {}),
+            )
         else:
             raise NotImplementedError(
                 f"{cfg.model.model_type} invalid cfg.model.model_type for a semi-supervised model"
@@ -638,10 +670,11 @@ def get_callbacks(
         )
         callbacks.append(ckpt_callback)
 
-    # we just need this callback for unsupervised models or multiview models with non-heatmap losse
+    # we just need this callback for unsupervised models
     if (
         ((cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None))
         or cfg.losses.get("supervised_pairwise_projections", {}).get("log_weight") is not None
+        # (cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None)
     ):
         anneal_weight_callback = AnnealWeight(**cfg.callbacks.anneal_weight)
         callbacks.append(anneal_weight_callback)
