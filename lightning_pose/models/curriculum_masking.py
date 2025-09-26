@@ -1,7 +1,8 @@
 """Utility classes for curriculum learning and masking in multiview transformer models."""
 
+from typing import Any, Dict, Literal, Tuple
+
 import torch
-from typing import Literal, Tuple, Dict, Any
 
 
 class CurriculumMasking:

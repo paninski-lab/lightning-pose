@@ -34,11 +34,9 @@ from lightning_pose.metrics import (
     pixel_error,
     temporal_norm,
 )
-from lightning_pose.models import (
+from lightning_pose.models import (  # HeatmapTrackerMultiview,; HeatmapTrackerMultiviewMultihead,
     HeatmapTracker,
     HeatmapTrackerMHCRNN,
-    # HeatmapTrackerMultiview,
-    # HeatmapTrackerMultiviewMultihead,
     HeatmapTrackerMultiviewTransformer,
     RegressionTracker,
     SemiSupervisedHeatmapTracker,
@@ -52,7 +50,6 @@ from lightning_pose.models.base import (
 )
 from lightning_pose.utils import io as io_utils
 from lightning_pose.utils.pca import KeypointPCA
-from lightning_pose.utils.predictions import safe_torch_load
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [

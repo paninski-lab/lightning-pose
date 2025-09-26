@@ -20,7 +20,7 @@ import lightning_pose
 from lightning_pose.api.model import Model
 from lightning_pose.api.model_config import ModelConfig
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
-from lightning_pose.utils.io import return_absolute_data_paths, find_video_files_for_views
+from lightning_pose.utils.io import find_video_files_for_views, return_absolute_data_paths
 from lightning_pose.utils.scripts import (
     calculate_steps_per_epoch,
     get_callbacks,

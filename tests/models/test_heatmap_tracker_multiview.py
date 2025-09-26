@@ -7,7 +7,6 @@ import torch
 
 from lightning_pose.data.datatypes import MultiviewHeatmapLabeledExampleDict
 
-
 # def test_multiview_heatmap_cnn(
 #     cfg_multiview,
 #     multiview_heatmap_data_module,

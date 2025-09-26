@@ -20,31 +20,6 @@ from omegaconf import DictConfig, OmegaConf
 from torchtyping import TensorType
 from typeguard import typechecked
 
-
-def safe_torch_load(file_path, **kwargs):
-    """Safely load torch checkpoint with PyTorch 2.6+ compatibility.
-    
-    This function handles the PyTorch 2.6+ weights_only issue by trying secure loading first,
-    then falling back to weights_only=False if needed for omegaconf compatibility.
-    
-    Args:
-        file_path: Path to the checkpoint file
-        **kwargs: Additional arguments to pass to torch.load
-        
-    Returns:
-        Loaded checkpoint data
-    """
-    try:
-        return torch.load(file_path, **kwargs)
-    except Exception as e:
-        if "weights_only" in str(e):
-            # If weights_only fails, try with weights_only=False for compatibility
-            print(f"Warning: Using weights_only=False for checkpoint loading due to PyTorch 2.6+ compatibility issue")
-            kwargs['weights_only'] = False
-            return torch.load(file_path, **kwargs)
-        else:
-            raise e
-
 from lightning_pose.data.dali import PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import count_frames
@@ -63,7 +38,6 @@ __all__ = [
     "load_model_from_checkpoint",
     "create_labeled_video",
     "export_predictions_and_labeled_video",
-    "safe_torch_load",
 ]
 
 

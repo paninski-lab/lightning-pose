@@ -8,9 +8,7 @@ from lightning_pose.models.heatmap_tracker_mhcrnn import (
     HeatmapTrackerMHCRNN,
     SemiSupervisedHeatmapTrackerMHCRNN,
 )
-from lightning_pose.models.heatmap_tracker_multiview import (
-    # HeatmapTrackerMultiview,
-    # HeatmapTrackerMultiviewMultihead,
+from lightning_pose.models.heatmap_tracker_multiview import (  # HeatmapTrackerMultiview,; HeatmapTrackerMultiviewMultihead,
     HeatmapTrackerMultiviewTransformer,
     SemiSupervisedHeatmapTrackerMultiviewTransformer,
 )

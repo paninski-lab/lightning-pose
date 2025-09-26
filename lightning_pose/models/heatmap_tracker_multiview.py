@@ -25,16 +25,16 @@ from lightning_pose.models.base import (
     BaseSupervisedTracker,
     SemiSupervisedTrackerMixin,
 )
+from lightning_pose.models.curriculum_masking import CurriculumMasking
 from lightning_pose.models.heads import (
     ALLOWED_MULTIVIEW_HEADS,
     ALLOWED_MULTIVIEW_MULTIHEADS,
     HeatmapHead,
     MultiviewFeatureTransformerHead,
+    MultiviewFeatureTransformerHeadLearnableCrossView,
     MultiviewHeatmapCNNHead,
     MultiviewHeatmapCNNMultiHead,
-    MultiviewFeatureTransformerHeadLearnableCrossView,
 )
-from lightning_pose.models.curriculum_masking import CurriculumMasking
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [

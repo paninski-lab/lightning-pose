@@ -610,7 +610,6 @@ def test_convert_bbox_coords(heatmap_data_module, multiview_heatmap_data_module)
     # -------------------------------------
     # test on single view dataset
     # -------------------------------------
-
     # params
     x_crop = 25
     y_crop = 40

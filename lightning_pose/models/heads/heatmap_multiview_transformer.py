@@ -1,19 +1,18 @@
 """Heads that produce heatmap predictions for heatmap regression."""
 
+import math
 from typing import Tuple
-from typing_extensions import Literal
 
 import numpy as np
 import torch
 import torch.nn.functional as F
-import math
 from kornia.geometry.subpix import spatial_softmax2d
-from torch import nn, Tensor
+from torch import Tensor, nn
 from torchtyping import TensorType
+from typing_extensions import Literal
 
 from lightning_pose.models.heads import HeatmapHead
 from lightning_pose.models.heads.heatmap import run_subpixelmaxima
-
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
