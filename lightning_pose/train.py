@@ -20,7 +20,7 @@ import lightning_pose
 from lightning_pose.api.model import Model
 from lightning_pose.api.model_config import ModelConfig
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
-from lightning_pose.utils.io import return_absolute_data_paths
+from lightning_pose.utils.io import return_absolute_data_paths, find_video_files_for_views
 from lightning_pose.utils.scripts import (
     calculate_steps_per_epoch,
     get_callbacks,
@@ -176,20 +176,20 @@ def _evaluate_on_training_dataset(model: Model, ood_mode=False):
             shutil.copy(p_file, out_file)
 
 
-def _predict_test_videos(model: Model): # I need to fix this 
+def _predict_test_videos(model: Model):
     if model.config.cfg.eval.predict_vids_after_training:
         pretty_print_str(f"Predicting videos in cfg.eval.test_videos_directory...")
-        # dealing with multuiview 
+        # dealing with multiview 
         if model.config.is_multi_view():
-            #TODO: this is a hacky way to get the video files for each view
-            # create a list of the video files for each view
-            video_files_per_view = []
-            for view_name in model.config.cfg.data.view_names:
-                video_files_per_view.append(model.config.cfg.data.video_dir / f"{view_name}.mp4")
+            # Find video files for each view using utils function
+            video_files_per_view = find_video_files_for_views(
+                video_dir=model.config.cfg.data.video_dir,
+                view_names=model.config.cfg.data.view_names
+            )
 
             model.predict_on_video_file_multiview(
                 video_file_per_view=video_files_per_view,
-                output_dir=model.model_dir,
+                # output_dir=model.model_dir,
                 compute_metrics=True,
                 generate_labeled_video=model.config.cfg.eval.save_vids_after_training,
             )
