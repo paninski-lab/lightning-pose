@@ -508,7 +508,9 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
 class SemiSupervisedTrackerMixin(object):
     """Mixin class providing training step function for semi-supervised models."""
 
-    def get_loss_inputs_unlabeled(self, batch_dict: UnlabeledBatchDict) -> dict:
+    def get_loss_inputs_unlabeled(
+        self,
+        batch_dict: UnlabeledBatchDict | MultiviewUnlabeledBatchDict) -> dict: #  I tried to add MultiviewUnlabeledBatchDict to the type but it didn't work
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         raise NotImplementedError
 

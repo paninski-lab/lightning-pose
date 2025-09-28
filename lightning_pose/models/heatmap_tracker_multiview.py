@@ -78,11 +78,11 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             num_views=num_views,
             patch_mask_config=patch_mask_config,
             backbone_unfreeze_step=backbone_unfreeze_step,
+            patch_seed=torch_seed,  # Use the same seed as model initialization
         )
         
         self.num_views = num_views
         self.current_training_step = 0
-
         # Backwards compatibility
         if "do_context" in kwargs.keys():
             print("HeatmapTrackerMultiviewTransformer does not currently support context frames")
@@ -114,8 +114,6 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
 
         self.loss_factory = loss_factory
         self.rmse_loss = RegressionRMSELoss()
-        # I removed the total_unsupervised_importance
-        # self.total_unsupervised_importance = torch.tensor(0.0)  # Start with 0 for proper annealing
 
         # Initially freeze backbone parameters
         for param in self.backbone.parameters():
@@ -151,52 +149,47 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             raise NotImplementedError(f"{head} is not a valid multiview transformer head")
 
 
-    def training_step(self, batch_dict, batch_idx):
-        """Override training step to track current step for curriculum learning and backbone unfreezing."""
-        self.current_training_step = self.trainer.global_step
+    # def training_step(self, batch_dict, batch_idx):
+    #     """Override training step to track current step for curriculum learning and backbone unfreezing."""
+    #     self.current_training_step = self.trainer.global_step
         
-        # Handle backbone unfreezing
-        if self.curriculum_masking.should_unfreeze_backbone(self.current_training_step):
-            for param in self.backbone.parameters():
-                param.requires_grad = True
-            self.log("backbone_unfrozen", 1.0, on_step=True, on_epoch=False)
+    #     # Handle backbone unfreezing
+    #     if self.curriculum_masking.should_unfreeze_backbone(self.current_training_step):
+    #         for param in self.backbone.parameters():
+    #             param.requires_grad = True
+    #         self.log("backbone_unfrozen", 1.0, on_step=True, on_epoch=False)
         
-        # Handle patch masking start
-        if self.curriculum_masking.should_start_patch_masking(self.current_training_step):
-            self.log("patch_masking_started", 1.0, on_step=True, on_epoch=False)
+    #     # Handle patch masking start
+    #     if self.curriculum_masking.should_start_patch_masking(self.current_training_step):
+    #         self.log("patch_masking_started", 1.0, on_step=True, on_epoch=False)
         
-        # Log training progress
-        self._log_training_progress()
+    #     # Log training progress
+    #     self._log_training_progress()
         
-        return super().training_step(batch_dict, batch_idx)
+    #     return super().training_step(batch_dict, batch_idx)
 
-    def _log_training_progress(self):
-        """Log training progress and milestones."""
-        if not self.curriculum_masking.use_patch_masking:
-            return
+    # def _log_training_progress(self):
+    #     """Log training progress and milestones."""
+    #     if not self.curriculum_masking.use_patch_masking:
+    #         return
             
-        schedule_info = self.curriculum_masking.get_training_schedule_info(self.current_training_step)
+    #     schedule_info = self.curriculum_masking.get_training_schedule_info(self.current_training_step)
         
-        # Log mask ratio every 100 steps
-        if self.current_training_step % 100 == 0:
-            if self.curriculum_masking.use_patch_masking:
-                self.log("patch_mask_ratio", schedule_info['mask_ratio'], on_step=True, on_epoch=False, prog_bar=True)
+    #     # Log mask ratio every 100 steps
+    #     if self.current_training_step % 100 == 0:
+    #         if self.curriculum_masking.use_patch_masking:
+    #             self.log("patch_mask_ratio", schedule_info['mask_ratio'], on_step=True, on_epoch=False, prog_bar=True)
         
-        # Log backbone status every 500 steps
-        if self.current_training_step % 500 == 0:
-            backbone_frozen = any(not p.requires_grad for p in self.backbone.parameters())
-            self.log("backbone_frozen", float(backbone_frozen), on_step=True, on_epoch=False)
+    #     # Log backbone status every 500 steps
+    #     if self.current_training_step % 500 == 0:
+    #         backbone_frozen = any(not p.requires_grad for p in self.backbone.parameters())
+    #         self.log("backbone_frozen", float(backbone_frozen), on_step=True, on_epoch=False)
 
-    def validation_step(self, batch_dict, batch_idx):
-        """Override validation step to test model performance with different masking levels."""
-        val_loss = super().validation_step(batch_dict, batch_idx)
+    # def validation_step(self, batch_dict, batch_idx):
+    #     """Override validation step to test model performance with different masking levels."""
+    #     val_loss = super().validation_step(batch_dict, batch_idx)
         
-        # Optional: Test masking performance during validation (disabled by default for simplicity)
-        # Uncomment the following lines if you want to test masking performance during validation
-        # if self.curriculum_masking.use_patch_masking and batch_idx % 10 == 0:
-        #     self._test_masking_performance(batch_dict)
-        
-        return val_loss
+    #     return val_loss
 
     def forward_vit(
         self,
@@ -298,19 +291,16 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         else:
             # unlabeled dali video dataloaders
             images = batch_dict["frames"]
-        # CRITICAL FIX: Ensure view ordering for DALI multiview data
-        # DALI processes views in arbitrary order, but we need them in view_names order
-        # if hasattr(self, 'cfg') and hasattr(self.cfg, 'data') and hasattr(self.cfg.data, 'view_names'):
-        #     expected_view_names = self.cfg.data.view_names
-        #     if len(expected_view_names) == images.shape[1]:
-        #         # TODO: Add view reordering logic here if needed
-        #         pass
 
         batch_size, num_views, channels, img_height, img_width = images.shape
 
+        # Update current training step for curriculum learning
+        if hasattr(self, 'trainer') and self.trainer is not None:
+            self.current_training_step = self.trainer.global_step
+
         # Apply masking during training for robustness
         if self.training and self.curriculum_masking.use_patch_masking:
-            images, _ = self.curriculum_masking.apply_patch_masking(images, training_step=self.current_training_step)
+            images, _ = self.curriculum_masking.apply_patch_masking(images, training_step=self.current_training_step, is_training=self.training)
 
         # extract camera parameters from batch (optional for video prediction)
         if "intrinsic_matrix" in batch_dict:
@@ -367,6 +357,20 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         batch_dict: MultiviewHeatmapLabeledBatchDict,
     ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
+        # Update current training step for curriculum learning
+        if hasattr(self, 'trainer') and self.trainer is not None:
+            self.current_training_step = self.trainer.global_step
+            
+            # Handle backbone unfreezing
+            if self.curriculum_masking.should_unfreeze_backbone(self.current_training_step):
+                for param in self.backbone.parameters():
+                    param.requires_grad = True
+                self.log("backbone_unfrozen", 1.0, on_step=True, on_epoch=False)
+            
+            # Handle patch masking start
+            if self.curriculum_masking.should_start_patch_masking(self.current_training_step):
+                self.log("patch_masking_started", 1.0, on_step=True, on_epoch=False)
+        
         # images -> heatmaps
         pred_heatmaps = self.forward(batch_dict)
         # heatmaps -> keypoints
@@ -402,6 +406,10 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             keypoints_targ_3d = None
             keypoints_mask_3d = None
 
+        if self.curriculum_masking.use_patch_masking:
+            schedule_info = self.curriculum_masking.get_training_schedule_info(self.current_training_step)    
+            self.log("patch_mask_ratio", schedule_info['mask_ratio'], on_step=True, on_epoch=False, prog_bar=True)
+
         return {
             "heatmaps_targ": batch_dict["heatmaps"],
             "heatmaps_pred": pred_heatmaps,
@@ -427,14 +435,6 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
 
         """
         # images -> heatmaps
-        # if isinstance(batch_dict, dict) and "images" in batch_dict:
-        #     # Convert to proper type for labeled data
-        #     labeled_batch = MultiviewHeatmapLabeledBatchDict(**batch_dict)
-        #     pred_heatmaps = self.forward(labeled_batch)
-        # else:
-        #     # Handle unlabeled data - this should not happen for this model
-        #     raise ValueError("HeatmapTrackerMultiviewTransformer expects labeled data")
-        
         pred_heatmaps = self.forward(batch_dict)
         # heatmaps -> keypoints
         pred_keypoints, confidence = self.head.run_subpixelmaxima(pred_heatmaps)
@@ -453,11 +453,6 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             {"params": [self.view_embeddings], "name": "view_embeddings"},
         ]
         
-        # params = [
-        #     {"params": self.backbone.parameters(), "name": "backbone", "lr": 0.0},
-        #     {"params": self.head.parameters(), "name": "head", "lr": 5e-4},  # Middle ground: 5e-4
-        #     {"params": [self.view_embeddings], "name": "view_embeddings", "lr": 5e-4},  # Same as head
-        # ]
         return params
 
 
@@ -530,64 +525,72 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(SemiSupervisedTrackerMixi
             **kwargs,
         )
         
-        # Store the unsupervised loss factory
         self.loss_factory_unsup = loss_factory_unsupervised
         
-        # Initialize total_unsupervised_importance for SemiSupervisedTrackerMixin
-        # if not hasattr(self, 'total_unsupervised_importance'):
-        #     self.total_unsupervised_importance = torch.tensor(0.0)
         self.total_unsupervised_importance = torch.tensor(1.0)
             
-        # Debug: Check if unsupervised loss factory is properly set
-        print(f"DEBUG: SemiSupervisedHeatmapTrackerMultiviewTransformer initialized")
-        print(f"DEBUG: loss_factory_unsupervised is None: {loss_factory_unsupervised is None}")
-        if loss_factory_unsupervised is not None:
-            print(f"DEBUG: Unsupervised loss factory has losses: {list(loss_factory_unsupervised.loss_instance_dict.keys())}")
-        print(f"DEBUG: total_unsupervised_importance: {self.total_unsupervised_importance}")
+
+    # def training_step(self, batch_dict, batch_idx):
+    #     """Override training step to include curriculum learning and call SemiSupervisedTrackerMixin.training_step."""
+    #     # Track current step for curriculum learning and backbone unfreezing
+    #     self.current_training_step = self.trainer.global_step
+        
+    #     # Handle backbone unfreezing
+    #     if self.curriculum_masking.should_unfreeze_backbone(self.current_training_step):
+    #         for param in self.backbone.parameters():
+    #             param.requires_grad = True
+    #         self.log("backbone_unfrozen", 1.0, on_step=True, on_epoch=False)
+        
+    #     # Handle patch masking start
+    #     if self.curriculum_masking.should_start_patch_masking(self.current_training_step):
+    #         self.log("patch_masking_started", 1.0, on_step=True, on_epoch=False)
+        
+    #     # Log training progress
+    #     self._log_training_progress()
+        
+    #     # Call SemiSupervisedTrackerMixin.training_step instead of BaseSupervisedTracker.training_step
+    #     return SemiSupervisedTrackerMixin.training_step(self, batch_dict, batch_idx)
 
     def get_loss_inputs_unlabeled(
         self,
         batch_dict: UnlabeledBatchDict | MultiviewUnlabeledBatchDict,
     ) -> dict:
         """Return predicted heatmaps and keypoints for unlabeled data (required by SemiSupervisedTrackerMixin)."""
-        # Debug: Print batch_dict structure
-        print(f"DEBUG: batch_dict keys: {list(batch_dict.keys())}")
-        print(f"DEBUG: batch_dict['is_multiview']: {batch_dict.get('is_multiview', 'NOT_FOUND')}")
-        print(f"DEBUG: transforms shape: {batch_dict['transforms'].shape}")
+        # Update current training step for curriculum learning
+        if hasattr(self, 'trainer') and self.trainer is not None:
+            self.current_training_step = self.trainer.global_step
+            
+            # Handle backbone unfreezing
+            if self.curriculum_masking.should_unfreeze_backbone(self.current_training_step):
+                for param in self.backbone.parameters():
+                    param.requires_grad = True
+                self.log("backbone_unfrozen", 1.0, on_step=True, on_epoch=False)
+            
+            # Handle patch masking start
+            if self.curriculum_masking.should_start_patch_masking(self.current_training_step):
+                self.log("patch_masking_started", 1.0, on_step=True, on_epoch=False)
         
         # images -> heatmaps (match single-view implementation exactly)
         pred_heatmaps = self.forward(batch_dict)
         # heatmaps -> keypoints
         pred_keypoints_augmented, confidence = self.head.run_subpixelmaxima(pred_heatmaps)
         
-        print(f"DEBUG: pred_keypoints_augmented shape: {pred_keypoints_augmented.shape}")
-        print(f"DEBUG: confidence shape: {confidence.shape}")
-        
         # undo augmentation if needed
         # Fix transforms shape: squeeze extra dimension if present
         transforms = batch_dict["transforms"]
-        print(f"DEBUG: Original transforms shape: {transforms.shape}")
         
         # Handle different possible transform shapes
         if len(transforms.shape) == 4:
             # Shape [num_views, 1, 2, 3] -> squeeze to [num_views, 2, 3]
             if transforms.shape[1] == 1:
                 transforms = transforms.squeeze(1)
-                print(f"DEBUG: Squeezed transforms shape: {transforms.shape}")
             # Shape [1, num_views, 2, 3] -> squeeze to [num_views, 2, 3]  
             elif transforms.shape[0] == 1:
                 transforms = transforms.squeeze(0)
-                print(f"DEBUG: Squeezed transforms shape: {transforms.shape}")
         
         # Ensure transforms have the expected shape for multiview: [num_views, 2, 3]
         if batch_dict["is_multiview"] and len(transforms.shape) != 3:
             print(f"WARNING: Expected transforms shape [num_views, 2, 3] for multiview, got {transforms.shape}")
-        
-        # Debug: Check what we're passing to undo_affine_transform_batch
-        print(f"DEBUG: About to call undo_affine_transform_batch with:")
-        print(f"  - keypoints_augmented shape: {pred_keypoints_augmented.shape}")
-        print(f"  - transforms shape: {transforms.shape}")
-        print(f"  - is_multiview: {batch_dict['is_multiview']}")
         
         pred_keypoints = undo_affine_transform_batch(
             keypoints_augmented=pred_keypoints_augmented,
@@ -595,12 +598,8 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(SemiSupervisedTrackerMixi
             is_multiview=batch_dict["is_multiview"],
         )
         
-        print(f"DEBUG: pred_keypoints after undo_affine_transform_batch shape: {pred_keypoints.shape}")
-        
         # keypoints -> original image coords keypoints
         pred_keypoints = convert_bbox_coords(batch_dict, pred_keypoints)
-        
-        print(f"DEBUG: pred_keypoints after convert_bbox_coords shape: {pred_keypoints.shape}")
         
         result = {
             "heatmaps_pred": pred_heatmaps,  # if augmented, augmented heatmaps
@@ -608,18 +607,6 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(SemiSupervisedTrackerMixi
             "keypoints_pred_augmented": pred_keypoints_augmented,  # match pred_heatmaps
             "confidences": confidence,
         }
-        
-        print(f"DEBUG: Returning from get_loss_inputs_unlabeled with keys: {list(result.keys())}")
-        print(f"DEBUG: keypoints_pred shape: {result['keypoints_pred'].shape}")
-        print(f"DEBUG: confidences shape: {result['confidences'].shape}")
-        
-        # Debug: Check if we have the unsupervised loss factory
-        # if hasattr(self, 'loss_factory_unsup'):
-        #     print(f"DEBUG: loss_factory_unsup exists: {self.loss_factory_unsup is not None}")
-        #     if self.loss_factory_unsup is not None:
-        #         print(f"DEBUG: loss_factory_unsup has losses: {list(self.loss_factory_unsup.loss_instance_dict.keys())}")
-        # else:
-        #     print("DEBUG: loss_factory_unsup does not exist!")
         
         return result
 

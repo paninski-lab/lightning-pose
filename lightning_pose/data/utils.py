@@ -63,11 +63,6 @@ class DataExtractor(object):
                     MultiviewHeatmapDataset,
                 )
 
-                # make new augmentation pipeline that just resizes
-                print(f"DEBUG: Augmentation pipeline: {imgaug_curr}")
-                print(f"DEBUG: Last augmentation: {imgaug_curr[-1]}")
-                print(f"DEBUG: Is last augmentation Resize? {isinstance(imgaug_curr[-1], iaa.Resize)}")
-
                 # if not isinstance(imgaug_curr[-1], iaa.Resize):
                 #     # we currently assume the last transform is resizing
                 #     print(f"ERROR: Last augmentation is not Resize! It's: {type(imgaug_curr[-1])}")
@@ -82,7 +77,6 @@ class DataExtractor(object):
                 image_resize_height = dataset_old.image_resize_height
                 image_resize_width = dataset_old.image_resize_width
                 imgaug_new = iaa.Sequential([iaa.Resize({"height": image_resize_height, "width": image_resize_width})])
-                print(f"DEBUG: Created new resize-only augmentation: {imgaug_new}")
 
                 # TODO: is there a cleaner way to do this?
                 # rebuild dataset with new aug pipeline

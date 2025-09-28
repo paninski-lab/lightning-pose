@@ -13,6 +13,7 @@ class CurriculumMasking:
         num_views: int,
         patch_mask_config: dict = None,
         backbone_unfreeze_step: int = 400,
+        patch_seed: int = None,
     ):
         """Initialize curriculum masking parameters.
         
@@ -24,9 +25,11 @@ class CurriculumMasking:
                 - init_ratio: Initial masking ratio
                 - final_ratio: Final masking ratio
             backbone_unfreeze_step: Step to unfreeze backbone
+            patch_seed: Seed for deterministic patch masking (None for random)
         """
         self.num_views = num_views
         self.backbone_unfreeze_step = backbone_unfreeze_step
+        self.patch_seed = patch_seed
         
         # Parse patch masking configuration
         if patch_mask_config is None:
@@ -34,15 +37,15 @@ class CurriculumMasking:
         
         self.patch_init_step = patch_mask_config.get("init_step", 700)
         self.patch_final_step = patch_mask_config.get("final_step", 5000)
-        self.patch_init_ratio = patch_mask_config.get("init_ratio", 0.0)
+        self.patch_init_ratio = patch_mask_config.get("init_ratio", 0.1)
         self.patch_final_ratio = patch_mask_config.get("final_ratio", 0.5)
         
         # Automatically enable patch masking if final_ratio > 0
         self.use_patch_masking = self.patch_final_ratio > 0.0
     
-    def apply_patch_masking(self, images: torch.Tensor, training_step: int = 0) -> Tuple[torch.Tensor, torch.Tensor]:
+    def apply_patch_masking(self, images: torch.Tensor, training_step: int = 0, is_training: bool = True) -> Tuple[torch.Tensor, torch.Tensor]:
         """Apply random patch masking with curriculum learning."""
-        if not images.requires_grad:  # Not in training mode
+        if not is_training:  # Not in training mode
             batch_size, num_views, channels, height, width = images.shape
             device = images.device
             patch_size = 16
@@ -78,7 +81,16 @@ class CurriculumMasking:
         for batch_idx in range(batch_size):
             for view_idx in range(num_views):
                 if patches_to_mask_per_view > 0:
-                    patch_indices = torch.randperm(total_patches_per_view, device=device)[:patches_to_mask_per_view]
+                    # Use seed for deterministic patch selection if provided
+                    if self.patch_seed is not None:
+                        # Create a deterministic seed based on training step, batch, and view
+                        deterministic_seed = self.patch_seed + training_step * 1000 + batch_idx * 100 + view_idx
+                        generator = torch.Generator(device=device).manual_seed(deterministic_seed)
+                        patch_indices = torch.randperm(total_patches_per_view, device=device, generator=generator)[:patches_to_mask_per_view]
+                    else:
+                        # Random patch selection (original behavior)
+                        patch_indices = torch.randperm(total_patches_per_view, device=device)[:patches_to_mask_per_view]
+                    
                     patch_mask[batch_idx, view_idx, patch_indices] = 0
                     
                     for patch_idx in patch_indices:
@@ -88,10 +100,10 @@ class CurriculumMasking:
         
         return masked_images, patch_mask
     
-    def apply_masking(self, images: torch.Tensor, training_step: int = 0) -> Tuple[torch.Tensor, torch.Tensor]:
+    def apply_masking(self, images: torch.Tensor, training_step: int = 0, is_training: bool = True) -> Tuple[torch.Tensor, torch.Tensor]:
         """Apply patch masking if enabled, otherwise return original images."""
         if self.use_patch_masking:
-            return self.apply_patch_masking(images, training_step)
+            return self.apply_patch_masking(images, training_step, is_training)
         else:
             # No masking - return original images and dummy mask
             batch_size, num_views = images.shape[:2]
