@@ -149,48 +149,6 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             raise NotImplementedError(f"{head} is not a valid multiview transformer head")
 
 
-    # def training_step(self, batch_dict, batch_idx):
-    #     """Override training step to track current step for curriculum learning and backbone unfreezing."""
-    #     self.current_training_step = self.trainer.global_step
-        
-    #     # Handle backbone unfreezing
-    #     if self.curriculum_masking.should_unfreeze_backbone(self.current_training_step):
-    #         for param in self.backbone.parameters():
-    #             param.requires_grad = True
-    #         self.log("backbone_unfrozen", 1.0, on_step=True, on_epoch=False)
-        
-    #     # Handle patch masking start
-    #     if self.curriculum_masking.should_start_patch_masking(self.current_training_step):
-    #         self.log("patch_masking_started", 1.0, on_step=True, on_epoch=False)
-        
-    #     # Log training progress
-    #     self._log_training_progress()
-        
-    #     return super().training_step(batch_dict, batch_idx)
-
-    # def _log_training_progress(self):
-    #     """Log training progress and milestones."""
-    #     if not self.curriculum_masking.use_patch_masking:
-    #         return
-            
-    #     schedule_info = self.curriculum_masking.get_training_schedule_info(self.current_training_step)
-        
-    #     # Log mask ratio every 100 steps
-    #     if self.current_training_step % 100 == 0:
-    #         if self.curriculum_masking.use_patch_masking:
-    #             self.log("patch_mask_ratio", schedule_info['mask_ratio'], on_step=True, on_epoch=False, prog_bar=True)
-        
-    #     # Log backbone status every 500 steps
-    #     if self.current_training_step % 500 == 0:
-    #         backbone_frozen = any(not p.requires_grad for p in self.backbone.parameters())
-    #         self.log("backbone_frozen", float(backbone_frozen), on_step=True, on_epoch=False)
-
-    # def validation_step(self, batch_dict, batch_idx):
-    #     """Override validation step to test model performance with different masking levels."""
-    #     val_loss = super().validation_step(batch_dict, batch_idx)
-        
-    #     return val_loss
-
     def forward_vit(
         self,
         images: TensorType["view * batch", "channels":3, "image_height", "image_width"],
@@ -530,26 +488,6 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(SemiSupervisedTrackerMixi
         self.total_unsupervised_importance = torch.tensor(1.0)
             
 
-    # def training_step(self, batch_dict, batch_idx):
-    #     """Override training step to include curriculum learning and call SemiSupervisedTrackerMixin.training_step."""
-    #     # Track current step for curriculum learning and backbone unfreezing
-    #     self.current_training_step = self.trainer.global_step
-        
-    #     # Handle backbone unfreezing
-    #     if self.curriculum_masking.should_unfreeze_backbone(self.current_training_step):
-    #         for param in self.backbone.parameters():
-    #             param.requires_grad = True
-    #         self.log("backbone_unfrozen", 1.0, on_step=True, on_epoch=False)
-        
-    #     # Handle patch masking start
-    #     if self.curriculum_masking.should_start_patch_masking(self.current_training_step):
-    #         self.log("patch_masking_started", 1.0, on_step=True, on_epoch=False)
-        
-    #     # Log training progress
-    #     self._log_training_progress()
-        
-    #     # Call SemiSupervisedTrackerMixin.training_step instead of BaseSupervisedTracker.training_step
-    #     return SemiSupervisedTrackerMixin.training_step(self, batch_dict, batch_idx)
 
     def get_loss_inputs_unlabeled(
         self,
@@ -570,7 +508,7 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(SemiSupervisedTrackerMixi
             if self.curriculum_masking.should_start_patch_masking(self.current_training_step):
                 self.log("patch_masking_started", 1.0, on_step=True, on_epoch=False)
         
-        # images -> heatmaps (match single-view implementation exactly)
+        # images -> heatmaps 
         pred_heatmaps = self.forward(batch_dict)
         # heatmaps -> keypoints
         pred_keypoints_augmented, confidence = self.head.run_subpixelmaxima(pred_heatmaps)

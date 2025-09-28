@@ -83,13 +83,11 @@ class CurriculumMasking:
                 if patches_to_mask_per_view > 0:
                     # Use seed for deterministic patch selection if provided
                     if self.patch_seed is not None:
-                        # Create a deterministic seed based on training step, batch, and view
-                        deterministic_seed = self.patch_seed + training_step * 1000 + batch_idx * 100 + view_idx
-                        generator = torch.Generator(device=device).manual_seed(deterministic_seed)
-                        patch_indices = torch.randperm(total_patches_per_view, device=device, generator=generator)[:patches_to_mask_per_view]
-                    else:
-                        # Random patch selection (original behavior)
-                        patch_indices = torch.randperm(total_patches_per_view, device=device)[:patches_to_mask_per_view]
+                        # Simple approach: set global seed before each randperm call
+                        torch.manual_seed(self.patch_seed + training_step + batch_idx + view_idx)
+                    
+                    # Random patch selection (same for both seeded and unseeded)
+                    patch_indices = torch.randperm(total_patches_per_view, device=device)[:patches_to_mask_per_view]
                     
                     patch_mask[batch_idx, view_idx, patch_indices] = 0
                     
