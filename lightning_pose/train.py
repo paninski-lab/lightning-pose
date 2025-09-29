@@ -108,7 +108,7 @@ def _evaluate_on_training_dataset(model: Model, ood_mode=False):
             camera_params_file = None
 
         # NOTE: setting bbox_files = None here is a hacky way to get the model predictions
-        # to be in the cropped image space; otherwise the bbox info would lead to 
+        # to be in the cropped image space; otherwise the bbox info would lead to
         # predictions in the original image space. This can be achieved post-hoc by using
         # the CLI remap command.
         bbox_files = None
@@ -178,8 +178,8 @@ def _evaluate_on_training_dataset(model: Model, ood_mode=False):
 
 def _predict_test_videos(model: Model):
     if model.config.cfg.eval.predict_vids_after_training:
-        pretty_print_str(f"Predicting videos in cfg.eval.test_videos_directory...")
-        # dealing with multiview 
+        pretty_print_str("Predicting videos in cfg.eval.test_videos_directory...")
+        # dealing with multiview
         if model.config.is_multi_view():
             # Find video files for each view using utils function
             video_files_per_view = find_video_files_for_views(

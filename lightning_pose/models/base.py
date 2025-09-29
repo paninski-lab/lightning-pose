@@ -510,7 +510,8 @@ class SemiSupervisedTrackerMixin(object):
 
     def get_loss_inputs_unlabeled(
         self,
-        batch_dict: UnlabeledBatchDict | MultiviewUnlabeledBatchDict) -> dict: #  I tried to add MultiviewUnlabeledBatchDict to the type but it didn't work
+        batch_dict: UnlabeledBatchDict | MultiviewUnlabeledBatchDict,
+    ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         raise NotImplementedError
 
