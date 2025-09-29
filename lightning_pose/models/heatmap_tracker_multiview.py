@@ -64,7 +64,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         lr_scheduler_params: DictConfig | dict | None = None,
         image_size: int = 256,
         # Curriculum learning parameters
-        backbone_unfreeze_step: int = 400,
+        # backbone_unfreeze_step: int = 400,
         patch_mask_config: dict | None = None,
         **kwargs: Any,
     ):
@@ -77,7 +77,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         self.curriculum_masking = CurriculumMasking(
             num_views=num_views,
             patch_mask_config=patch_mask_config,
-            backbone_unfreeze_step=backbone_unfreeze_step,
+            # backbone_unfreeze_step=backbone_unfreeze_step,
             patch_seed=torch_seed,  # Use the same seed as model initialization
         )
         
@@ -104,25 +104,12 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         self.num_keypoints = num_keypoints
         self.downsample_factor = downsample_factor
 
-        # Create learnable view embeddings
+        # Create learnable view embeddings for each view 
         self.view_embeddings = nn.Parameter(
             torch.randn(self.num_views, self.num_fc_input_features) * 0.02
         )
 
-        # Initialize head
-        self._setup_head(head, backbone, num_views, image_size)
-
-        self.loss_factory = loss_factory
-        self.rmse_loss = RegressionRMSELoss()
-
-        # Initially freeze backbone parameters
-        for param in self.backbone.parameters():
-            param.requires_grad = False
-
-        self.save_hyperparameters(ignore=["loss_factory", "loss_factory_unsupervised"])
-
-    def _setup_head(self, head: str, backbone: str, num_views: int, image_size: int):
-        """Setup the model head based on configuration."""
+        # initialize model head 
         if head == "heatmap_cnn":
             self.head = HeatmapHead(
                 backbone_arch=backbone,
@@ -130,13 +117,15 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
                 out_channels=self.num_keypoints,
                 downsample_factor=self.downsample_factor,
             )
+        
         elif head == "feature_transformer_learnable_crossview":
+            """Multiview Feature Transformer Head with learnable cross-view embeddings."""
             self.head = MultiviewFeatureTransformerHeadLearnableCrossView(
                 backbone_arch=backbone,
                 num_views=num_views,
                 in_channels=self.num_fc_input_features,
                 out_channels=self.num_keypoints,
-                downsample_factor=self.downsample_factor,
+                downsample_factor=self.downsample_factor,  # Use model-level downsample_factor
                 transformer_d_model=512,
                 transformer_nhead=8,
                 transformer_dim_feedforward=512,
@@ -148,6 +137,20 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         else:       
             raise NotImplementedError(f"{head} is not a valid multiview transformer head")
 
+        self.loss_factory = loss_factory
+        # use this to log auxiliary information: pixel_error on labeled data
+        self.rmse_loss = RegressionRMSELoss()
+
+        #TODO make sure we don't need this and remove it if not. 
+        # Initially freeze backbone parameters
+        # for param in self.backbone.parameters():
+        #     param.requires_grad = False
+
+        # necessary so we don't have to pass in model arguments when loading
+        # also, "loss_factory" and "loss_factory_unsupervised" cannot be pickled
+        # (loss_factory_unsupervised might come from SemiSupervisedHeatmapTracker.__super__().
+        # otherwise it's ignored, important so that it doesn't try to pickle the dali loaders)
+        self.save_hyperparameters(ignore=["loss_factory", "loss_factory_unsupervised"])
 
     def forward_vit(
         self,
@@ -319,11 +322,11 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         if hasattr(self, 'trainer') and self.trainer is not None:
             self.current_training_step = self.trainer.global_step
             
-            # Handle backbone unfreezing
-            if self.curriculum_masking.should_unfreeze_backbone(self.current_training_step):
-                for param in self.backbone.parameters():
-                    param.requires_grad = True
-                self.log("backbone_unfrozen", 1.0, on_step=True, on_epoch=False)
+            # # Handle backbone unfreezing
+            # if self.curriculum_masking.should_unfreeze_backbone(self.current_training_step):
+            #     for param in self.backbone.parameters():
+            #         param.requires_grad = True
+            #     self.log("backbone_unfrozen", 1.0, on_step=True, on_epoch=False)
             
             # Handle patch masking start
             if self.curriculum_masking.should_start_patch_masking(self.current_training_step):
@@ -436,7 +439,7 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(SemiSupervisedTrackerMixi
         lr_scheduler_params: DictConfig | dict | None = None,
         image_size: int = 256,
         # Curriculum learning parameters
-        backbone_unfreeze_step: int = 400,
+        # backbone_unfreeze_step: int = 400,
         patch_mask_config: dict | None = None,
         **kwargs: Any,
     ):
@@ -478,7 +481,7 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(SemiSupervisedTrackerMixi
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
             image_size=image_size,
-            backbone_unfreeze_step=backbone_unfreeze_step,
+            # backbone_unfreeze_step=backbone_unfreeze_step,
             patch_mask_config=patch_mask_config,
             **kwargs,
         )
@@ -498,11 +501,11 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(SemiSupervisedTrackerMixi
         if hasattr(self, 'trainer') and self.trainer is not None:
             self.current_training_step = self.trainer.global_step
             
-            # Handle backbone unfreezing
-            if self.curriculum_masking.should_unfreeze_backbone(self.current_training_step):
-                for param in self.backbone.parameters():
-                    param.requires_grad = True
-                self.log("backbone_unfrozen", 1.0, on_step=True, on_epoch=False)
+            # # Handle backbone unfreezing
+            # if self.curriculum_masking.should_unfreeze_backbone(self.current_training_step):
+            #     for param in self.backbone.parameters():
+            #         param.requires_grad = True
+            #     self.log("backbone_unfrozen", 1.0, on_step=True, on_epoch=False)
             
             # Handle patch masking start
             if self.curriculum_masking.should_start_patch_masking(self.current_training_step):

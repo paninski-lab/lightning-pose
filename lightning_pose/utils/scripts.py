@@ -469,7 +469,7 @@ def get_model(
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
                 # Curriculum learning parameters from config
-                backbone_unfreeze_step=cfg.training.get("unfreezing_step", 400),
+                # backbone_unfreeze_step=cfg.training.get("unfreezing_step", 400),
                 patch_mask_config=cfg.training.get("patch_mask", {}),
             )
         elif cfg.model.model_type == "heatmap_multiview":
