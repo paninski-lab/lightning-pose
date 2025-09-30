@@ -254,11 +254,12 @@ class PatchMasker:
         batch_size, num_views, channels, height, width = images.shape
         device = images.device
 
+        patch_size = 16
+        num_patches_h = height // patch_size
+        num_patches_w = width // patch_size
+
         if not is_training:  # Not in training mode
             # Calculate patch size (assuming 16x16 patches for ViT)
-            patch_size = 16
-            num_patches_h = height // patch_size
-            num_patches_w = width // patch_size
             total_patches_per_view = num_patches_h * num_patches_w
 
             # Create patch mask with all patches kept (1)
@@ -279,11 +280,7 @@ class PatchMasker:
             )
 
         # Calculate patch dimensions (assuming 16x16 patches for ViT)
-        patch_size = 16
-        num_patches_h = height // patch_size
-        num_patches_w = width // patch_size
         total_patches_per_view = num_patches_h * num_patches_w
-
         patches_to_mask_per_view = int(mask_ratio * total_patches_per_view)
 
         # Initialize masks
