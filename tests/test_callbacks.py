@@ -37,18 +37,16 @@ def test_patch_masking_callback():
         "init_step": 100,
         "final_step": 500,
         "init_ratio": 0.1,
-        "final_ratio": 0.5
+        "final_ratio": 0.5,
     }
 
     patch_masking_enabled = PatchMasking(
         patch_mask_config=patch_mask_config_enabled,
-        num_views=2,
-        patch_seed=42
+        patch_seed=42,
     )
 
     # Test initialization - access through curriculum_masking attribute
     assert patch_masking_enabled.curriculum_masking.use_patch_masking == True
-    assert patch_masking_enabled.curriculum_masking.num_views == 2
     assert patch_masking_enabled.curriculum_masking.patch_seed == 42
 
     # Test curriculum schedule at different steps
@@ -93,8 +91,7 @@ def test_patch_masking_callback():
 
     patch_masking_disabled = PatchMasking(
         patch_mask_config=patch_mask_config_disabled,
-        num_views=2,
-        patch_seed=42
+        patch_seed=42,
     )
 
     # Test that curriculum masking is properly disabled
