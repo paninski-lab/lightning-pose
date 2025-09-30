@@ -483,7 +483,6 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
-                patch_mask_config=cfg.training.get("patch_mask", {}),
             )
         elif cfg.model.model_type == "heatmap_multiview":
             head = cfg.model.head
@@ -681,7 +680,8 @@ def get_callbacks(
         )
         callbacks.append(ckpt_callback)
 
-    # we just need this callback for unsupervised models
+    # we just need this callback for unsupervised models 
+    # or multiview models with non-heatmap losses
     if (
         ((cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None))
         or cfg.losses.get("supervised_pairwise_projections", {}).get("log_weight") is not None
@@ -697,7 +697,6 @@ def get_callbacks(
 
         patch_masking_callback = PatchMasking(
             patch_mask_config=cfg.training.get("patch_mask", {}),
-            num_views=len(cfg.data.view_names),
             patch_seed=cfg.training.rng_seed_model_pt,
         )
         callbacks.append(patch_masking_callback)

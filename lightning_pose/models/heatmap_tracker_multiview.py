@@ -24,7 +24,6 @@ from lightning_pose.models.base import (
 )
 from lightning_pose.models.heads import (
     HeatmapHead,
-    MultiviewHeatmapCNNHead,
 )
 
 # to ignore imports for sphix-autoapidoc
@@ -44,8 +43,8 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         loss_factory: LossFactory | None = None,
         backbone: Literal["vits_dino", "vitb_dino", "vitb_imagenet", "vitb_sam"] = "vitb_imagenet",
         pretrained: bool = True,
-        head: Literal["heatmap_cnn", "feature_transformer_learnable_crossview"] = "heatmap_cnn",
-        downsample_factor: Literal[1, 2] = 1,
+        head: Literal["heatmap_cnn"] = "heatmap_cnn",
+        downsample_factor: Literal[1, 2, 3] = 2,
         torch_seed: int = 123,
         optimizer: str = "Adam",
         optimizer_params: DictConfig | dict | None = None,
@@ -54,10 +53,32 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         image_size: int = 256,
         **kwargs: Any,
     ):
-        """Initialize a multi-view model with transformer backbone."""
+        """Initialize a multi-view model with transformer backbone.
+        Args:
+            num_keypoints: number of body parts
+            num_views: number of camera views
+            loss_factory: object to orchestrate loss computation
+            backbone: transformer variant to be used; cannot use convnets with this model
+            pretrained: True to load pretrained imagenet weights
+            head: architecture used to project per-view information to 2D heatmaps
+                - heatmap_cnn
+            downsample_factor: make heatmap smaller than original frames to save memory; subpixel
+                operations are performed for increased precision
+            torch_seed: make weight initialization reproducible
+            lr_scheduler: how to schedule learning rate
+            lr_scheduler_params: params for specific learning rate schedulers
+                - multisteplr: milestones, gamma
+            image_size: size of input images (height=width for ViT models)
+            **kwargs: additional arguments
+        """
         # Reproducible weight initialization
         self.torch_seed = torch_seed
         torch.manual_seed(torch_seed)
+        torch.cuda.manual_seed_all(torch_seed)
+
+        # Deterministic behavior
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
         self.num_views = num_views
 
@@ -82,8 +103,14 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         self.downsample_factor = downsample_factor
 
         # Create learnable view embeddings for each view
+        # Use seeded random generation for reproducibility
+        # Create view embeddings with device-aware generator
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        generator = torch.Generator(device=device)
+        generator.manual_seed(torch_seed)
         self.view_embeddings = nn.Parameter(
-            torch.randn(self.num_views, self.num_fc_input_features) * 0.02
+            torch.randn(self.num_views, self.num_fc_input_features,
+                    generator=generator, device=device) * 0.02
         )
 
         # initialize model head
@@ -110,9 +137,6 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
     def forward_vit(
         self,
         images: TensorType["view * batch", "channels":3, "image_height", "image_width"],
-        intrinsics: TensorType["view * batch", 3, 3],
-        extrinsics: TensorType["view * batch", 3, 4],
-        distortions: TensorType["view * batch", "num_dist_params"],
     ):
         """Override forward pass through the vision encoder to add view embeddings."""
 
@@ -124,7 +148,6 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         #     interpolate_pos_encoding=True,
         # ).last_hidden_state
 
-        # -----------------------------------------------------------------------------------------
         # this block mostly copies self.vision_encoder.forward(), except for addition of view embed
 
         # create patch embeddings and add position embeddings; remove CLS token
@@ -132,12 +155,6 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             images, bool_masked_pos=None, interpolate_pos_encoding=True,
         )[:, 1:]
         # shape: (view * batch, num_patches, embedding_dim)
-
-        # -----------------------------------------------------------------------------------------
-        # IMPLEMENTATION: Learnable View Embeddings
-        # -----------------------------------------------------------------------------------------
-
-        # -----------------------------------------------------------------------------------------
 
         # get dims for reshaping
         view_batch_size = embedding_output.shape[0]
@@ -209,57 +226,9 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
 
         batch_size, num_views, channels, img_height, img_width = images.shape
 
-        # extract camera parameters from batch (optional for video prediction)
-        if "intrinsic_matrix" in batch_dict:
-            intrinsics = batch_dict["intrinsic_matrix"]
-            extrinsics = batch_dict["extrinsic_matrix"]
-            distortions = batch_dict["distortions"]
-
-            # stack batch and view into first dim to pass through transformer
-            images = images.reshape(-1, channels, img_height, img_width)
-            if intrinsics.shape[1] == 1:  # Placeholder case [batch, 1]
-                # First reshape to add the missing dimensions
-                intrinsics = intrinsics.reshape(-1, 1, 3, 3)  # [16, 1, 3, 3]
-                extrinsics = extrinsics.reshape(-1, 1, 3, 4)  # [16, 1, 3, 4]
-                distortions = distortions.reshape(-1, 1, 5)  # [16,1,5]
-
-                # Then expand the second dimension
-                intrinsics = intrinsics.expand(-1, self.num_views, -1, -1).reshape(-1, 3, 3)
-                extrinsics = extrinsics.expand(-1, self.num_views, -1, -1).reshape(-1, 3, 4)
-                distortions = (
-                    distortions.expand(-1, self.num_views, -1)
-                    .reshape(-1, distortions.shape[-1])
-                )
-
-            else:  # Normal case [batch, num_views, ...]
-                # Reshape real camera parameters
-                intrinsics = intrinsics.reshape(-1, 3, 3)
-                extrinsics = extrinsics.reshape(-1, 3, 4)
-                distortions = distortions.reshape(-1, distortions.shape[-1])
-        else:
-            # For video prediction without camera parameters, create dummy parameters
-            # These won't be used in the forward pass but are needed for the function signature
-            images = images.reshape(-1, channels, img_height, img_width)
-            batch_size_total = images.shape[0]
-            device = images.device
-
-            # Create dummy camera parameters
-            intrinsics = (
-                torch.eye(3, device=device)
-                .unsqueeze(0)
-                .expand(batch_size_total, -1, -1)
-            )
-
-            extrinsics = (
-                torch.eye(3, 4, device=device)
-                .unsqueeze(0)
-                .expand(batch_size_total, -1, -1)
-            )
-
-            distortions = torch.zeros(batch_size_total, 5, device=device)
-
+        images_flat = images.reshape(-1, channels, img_height, img_width)
         # pass through transformer to get base representations
-        representations = self.forward_vit(images, intrinsics, extrinsics, distortions)
+        representations = self.forward_vit(images_flat)
         # shape: (view * batch, num_features, rep_height, rep_width)
 
         # get heatmaps for each representation
@@ -373,7 +342,7 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(
         loss_factory_unsupervised: LossFactory | None = None,
         backbone: Literal["vits_dino", "vitb_dino", "vitb_imagenet", "vitb_sam"] = "vitb_imagenet",
         pretrained: bool = True,
-        head: Literal["heatmap_cnn", "feature_transformer_learnable_crossview"] = "heatmap_cnn",
+        head: Literal["heatmap_cnn"] = "heatmap_cnn",
         downsample_factor: Literal[1, 2, 3] = 2,
         torch_seed: int = 123,
         optimizer: str = "Adam",

@@ -570,14 +570,15 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         # step 1: apply scaling
         scale_factor = np.random.uniform(*scale_params)  # scale scene up or down
 
-        #TODO figure out what to do with all Nan frames
+        # TODO figure out what to do with all Nan frames
         # Handle NaN values in keypoints_3d
         # if np.isnan(keypoints_3d).any():
         #     print("Warning: NaN values detected in keypoints_3d, replacing with zeros")
         #     keypoints_3d_clean = np.nan_to_num(keypoints_3d, nan=0.0)
         # else:
         #     keypoints_3d_clean = keypoints_3d
-        #TODO handle NaN values in keypoints_3d
+
+        # TODO handle NaN values in keypoints_3d
         keypoints_3d_clean = keypoints_3d.copy()
 
         median = np.nanmedian(keypoints_3d_clean, axis=0)
@@ -778,7 +779,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         # apply rotations by modifying camera extrinsics
         # camgroup_rotated = self._rotate_cameras(camgroup)
-        #TODO handle rotation of cameras
+        # TODO handle rotation of cameras
         camgroup_rotated = camgroup
 
         # project 3D keypoints to 2D using the rotated cameras

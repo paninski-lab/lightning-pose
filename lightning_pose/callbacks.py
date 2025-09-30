@@ -74,7 +74,7 @@ class UnfreezeBackbone(Callback):
         self.warm_up_ratio = warm_up_ratio
         self._warmed_up = False
 
-    def on_train_batch_start(self, trainer, pl_module, batch, batch_idx):
+    def on_train_batch_start(self, trainer, pl_module, batch, batch_idx) -> None:
 
         # Once backbone_lr warms up to upsampling_lr, this callback does nothing.
         # Control of backbone lr is then the sole job of the main lr scheduler.
@@ -142,14 +142,12 @@ class PatchMasking(Callback):
     def __init__(
         self,
         patch_mask_config: dict = None,
-        num_views: int = 1,
         patch_seed: int = 0,
     ):
         super().__init__()
 
         # Initialize curriculum masking
         self.curriculum_masking = PatchMasker(
-            num_views=num_views,
             patch_mask_config=patch_mask_config,
             patch_seed=patch_seed,
         )
@@ -175,7 +173,7 @@ class PatchMasking(Callback):
         masked_images, patch_mask = self.curriculum_masking.apply_patch_masking(
             images,
             training_step=trainer.global_step,
-            is_training=True
+            is_training=True,
         )
 
         # Update the batch with masked images
@@ -191,7 +189,7 @@ class PatchMasking(Callback):
         # Store patch mask for potential use in loss computation
         pl_module.current_patch_mask = patch_mask
 
-    def on_train_epoch_end(self, trainer, pl_module):
+    def on_train_epoch_end(self, trainer, pl_module) -> None:
         """Log curriculum progress."""
         if not self.curriculum_masking.use_patch_masking:
             return
@@ -201,23 +199,8 @@ class PatchMasking(Callback):
         # Log curriculum information - only log numeric values
         pl_module.log(
             "patch_mask_ratio", schedule_info['mask_ratio'],
-            on_step=False, on_epoch=True, prog_bar=True
+            on_step=False, on_epoch=True, prog_bar=True,
         )
-
-        # Convert curriculum progress to numeric value for logging
-        curriculum_progress_str = schedule_info['curriculum_progress']
-        curriculum_progress_numeric = float(curriculum_progress_str.replace('%', ''))
-        pl_module.log(
-            "curriculum_progress", curriculum_progress_numeric,
-            on_step=False, on_epoch=True
-        )
-
-        # Log when patch masking starts
-        if self.curriculum_masking.should_start_patch_masking(trainer.global_step):
-            pl_module.log(
-                "patch_masking_started", 1.0,
-                on_step=False, on_epoch=True
-            )
 
 
 class PatchMasker:
@@ -225,14 +208,12 @@ class PatchMasker:
 
     def __init__(
         self,
-        num_views: int,
-        patch_mask_config: dict = None,
+        patch_mask_config: dict | None = None,
         patch_seed: int = 0,
     ):
         """Initialize curriculum masking parameters.
 
         Args:
-            num_views: Number of camera views
             patch_mask_config: Dictionary containing patch masking configuration
                 - init_step: Step to start patch masking
                 - final_step: Step when patch masking reaches maximum
@@ -240,7 +221,6 @@ class PatchMasker:
                 - final_ratio: Final masking ratio
             patch_seed: Seed for deterministic patch masking to allow reproducibility.
         """
-        self.num_views = num_views
         self.patch_seed = patch_seed
 
         # Parse patch masking configuration
@@ -266,14 +246,15 @@ class PatchMasker:
         self,
         images: torch.Tensor,
         training_step: int = 0,
-        is_training: bool = True
+        is_training: bool = True,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Apply random patch masking with curriculum learning."""
-        if not is_training:  # Not in training mode
-            # during evaluation, don't apply masking
-            batch_size, num_views, channels, height, width = images.shape
-            device = images.device
 
+        # during training, apply masking
+        batch_size, num_views, channels, height, width = images.shape
+        device = images.device
+
+        if not is_training:  # Not in training mode
             # Calculate patch size (assuming 16x16 patches for ViT)
             patch_size = 16
             num_patches_h = height // patch_size
@@ -283,10 +264,6 @@ class PatchMasker:
             # Create patch mask with all patches kept (1)
             patch_mask = torch.ones(batch_size, num_views, total_patches_per_view, device=device)
             return images, patch_mask
-
-        # during training, apply masking
-        batch_size, num_views, channels, height, width = images.shape
-        device = images.device
 
         # Calculate current mask ratio
         # start with no masking until patch_init_step
@@ -326,13 +303,15 @@ class PatchMasker:
                         + batch_idx * 1000
                         + view_idx * 100
                     )
-                    # Set the seed for this specific patch selection
-                    torch.manual_seed(deterministic_seed)
+                    # Create a local generator instead of modifying global torch seed
+                    local_generator = torch.Generator(device=device)
+                    local_generator.manual_seed(deterministic_seed)
 
-                    # Random patch selection with deterministic seed
+                    # Random patch selection with local generator
                     patch_indices = torch.randperm(
                         total_patches_per_view,
-                        device=device
+                        device=device,
+                        generator=local_generator
                     )[:patches_to_mask_per_view]
                     patch_mask[batch_idx, view_idx, patch_indices] = 0
                     # Zero out the selected patches
@@ -355,7 +334,7 @@ class PatchMasker:
         self,
         images: torch.Tensor,
         training_step: int = 0,
-        is_training: bool = True
+        is_training: bool = True,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Apply patch masking if enabled, otherwise return original images."""
         if self.use_patch_masking:
