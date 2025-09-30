@@ -20,7 +20,7 @@ import lightning_pose
 from lightning_pose.api.model import Model
 from lightning_pose.api.model_config import ModelConfig
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
-from lightning_pose.utils.io import return_absolute_data_paths
+from lightning_pose.utils.io import find_video_files_for_views, return_absolute_data_paths
 from lightning_pose.utils.scripts import (
     calculate_steps_per_epoch,
     get_callbacks,
@@ -108,7 +108,7 @@ def _evaluate_on_training_dataset(model: Model, ood_mode=False):
             camera_params_file = None
 
         # NOTE: setting bbox_files = None here is a hacky way to get the model predictions
-        # to be in the cropped image space; otherwise the bbox info would lead to 
+        # to be in the cropped image space; otherwise the bbox info would lead to
         # predictions in the original image space. This can be achieved post-hoc by using
         # the CLI remap command.
         bbox_files = None
@@ -179,13 +179,28 @@ def _evaluate_on_training_dataset(model: Model, ood_mode=False):
 def _predict_test_videos(model: Model):
     if model.config.cfg.eval.predict_vids_after_training:
         pretty_print_str("Predicting videos in cfg.eval.test_videos_directory...")
-        for video_file in model.config.test_video_files():
-            pretty_print_str(f"Predicting video: {video_file}...")
+        # dealing with multiview
+        if model.config.is_multi_view():
+            # Find video files for each view using utils function
+            video_files_per_view = find_video_files_for_views(
+                video_dir=model.config.cfg.data.video_dir,
+                view_names=model.config.cfg.data.view_names
+            )
 
-            model.predict_on_video_file(
-                Path(video_file),
+            model.predict_on_video_file_multiview(
+                video_file_per_view=video_files_per_view,
+                # output_dir=model.model_dir,
+                compute_metrics=True,
                 generate_labeled_video=model.config.cfg.eval.save_vids_after_training,
             )
+        else:
+            for video_file in model.config.test_video_files():
+                pretty_print_str(f"Predicting video: {video_file}...")
+
+                model.predict_on_video_file(
+                    Path(video_file),
+                    generate_labeled_video=model.config.cfg.eval.save_vids_after_training,
+                )
 
 
 def _train(cfg: DictConfig) -> Model:

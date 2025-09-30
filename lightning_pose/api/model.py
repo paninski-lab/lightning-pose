@@ -205,11 +205,11 @@ class Model:
         compute_metrics: bool = True,
         add_train_val_test_set: bool = False,
     ) -> MultiviewPredictionResult:
-        """Version of `predict_on_label_csv` that gives models access to all camera views of each frame.
+        """Version of `predict_on_label_csv` that gives models access to all views of each frame.
 
         Arguments:
-            csv_file_per_view (list[str] | list[Path]): A list of csv files each from a different view of the
-                same session. Order must match the `view_names` in the config file.
+            csv_file_per_view (list[str] | list[Path]): A list of csv files each from a different
+            view of the same session. Order must match the `view_names` in the config file.
 
         See `predict_on_label_csv` docstring for other arguments."""
         assert self.config.is_multi_view()
@@ -434,7 +434,7 @@ class Model:
         else:
             metrics = None
 
-        df_dict = {view_name: df for df in zip(view_names, df_list)}
+        df_dict = {view_name: df for view_name, df in zip(view_names, df_list)}
 
         return MultiviewPredictionResult(predictions=df_dict, metrics=metrics)
 

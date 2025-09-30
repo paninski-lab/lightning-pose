@@ -349,7 +349,7 @@ def predict_dataset(
             # preds_file is a list of views corresponding to cfg.data.view_names.
             # this allows the caller to specify the output locations more flexibly.
 
-            # Sanity check the order of labeled_preds_df keys matches the order of the views in the cfg.
+            # Check the order of labeled_preds_df keys matches the order of the views in the cfg.
             assert list(labeled_preds_df.keys()) == list(cfg.data.view_names)
 
             for (view_name, df), _pred_file in zip(labeled_preds_df.items(), preds_file):
@@ -503,6 +503,8 @@ def get_model_class(map_type: str, semi_supervised: bool) -> Type[ALLOWED_MODELS
             from lightning_pose.models import HeatmapTrackerMultiview as Model
         elif map_type == "heatmap_multiview_multihead":
             from lightning_pose.models import HeatmapTrackerMultiviewMultihead as Model
+        elif map_type == "heatmap_multiview_transformer":
+            from lightning_pose.models import HeatmapTrackerMultiviewTransformer as Model
         else:
             raise NotImplementedError(
                 f"{map_type} is an invalid model_type for a fully supervised model"
@@ -514,6 +516,8 @@ def get_model_class(map_type: str, semi_supervised: bool) -> Type[ALLOWED_MODELS
             from lightning_pose.models import SemiSupervisedHeatmapTracker as Model
         elif map_type == "heatmap_mhcrnn":
             from lightning_pose.models import SemiSupervisedHeatmapTrackerMHCRNN as Model
+        elif map_type == "heatmap_multiview_transformer":
+            from lightning_pose.models import SemiSupervisedHeatmapTrackerMultiviewTransformer as Model
         else:
             raise NotImplementedError(
                 f"{map_type} is an invalid model_type for a semi-supervised model"

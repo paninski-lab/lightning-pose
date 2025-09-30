@@ -9,7 +9,6 @@ import copy
 import gc
 import os
 import subprocess
-from pathlib import Path
 from typing import Callable
 
 import cv2

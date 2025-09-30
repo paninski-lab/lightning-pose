@@ -417,7 +417,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         if len(view_names) != len(csv_paths):
             raise ValueError("number of names does not match with the number of files!")
-
+        print("Using MultiviewHeatmapDataset")
         self.root_directory = root_directory
         self.csv_paths = csv_paths
         self.bbox_paths = bbox_paths or [None] * len(view_names)
@@ -569,8 +569,20 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         """
         # step 1: apply scaling
         scale_factor = np.random.uniform(*scale_params)  # scale scene up or down
-        median = np.nanmedian(keypoints_3d, axis=0)
-        keypoints_aug = (keypoints_3d - median) * scale_factor + median
+
+        # TODO figure out what to do with all Nan frames
+        # Handle NaN values in keypoints_3d
+        # if np.isnan(keypoints_3d).any():
+        #     print("Warning: NaN values detected in keypoints_3d, replacing with zeros")
+        #     keypoints_3d_clean = np.nan_to_num(keypoints_3d, nan=0.0)
+        # else:
+        #     keypoints_3d_clean = keypoints_3d
+
+        # TODO handle NaN values in keypoints_3d
+        keypoints_3d_clean = keypoints_3d.copy()
+
+        median = np.nanmedian(keypoints_3d_clean, axis=0)
+        keypoints_aug = (keypoints_3d_clean - median) * scale_factor + median
 
         # step 2: apply translation
         extent = np.nanmax(keypoints_aug, axis=0) - np.nanmin(keypoints_aug, axis=0)
@@ -766,7 +778,9 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         keypoints_3d_aug = self._scale_translate_keypoints(keypoints_3d)
 
         # apply rotations by modifying camera extrinsics
-        camgroup_rotated = self._rotate_cameras(camgroup)
+        # camgroup_rotated = self._rotate_cameras(camgroup)
+        # TODO handle rotation of cameras
+        camgroup_rotated = camgroup
 
         # project 3D keypoints to 2D using the rotated cameras
         keypoints_2d_aug = camgroup_rotated.project(keypoints_3d_aug)
@@ -878,32 +892,64 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         for view in self.view_names:
             datadict[view] = self.dataset[view].__getitem__(idx, ignore_nans=ignore_nans)
 
-        # apply 3D augmentations and 2D rotations if applicable
-        if (
-            self.cam_params_file_to_camgroup
-            and self.imgaug_transform.__str__().find("Resize") == -1
-        ):
-            # only apply 3d transforms if
-            # - camera calibration information is available
-            # - imgaug does not contain a resize operation, which indicates:
-            #   - val/test batch
-            #   - output of "default"/"none" pipeline (e.g. model evaluation on labeled frames)
-
+        # Always provide 3D keypoints when camera params are available
+        if self.cam_params_file_to_camgroup:
             # select proper camera calibration parameters for this data point
             camgroup = self.cam_params_file_to_camgroup[self.cam_params_df.iloc[idx].file]
-            # apply transforms
-            (
-                datadict,
-                keypoints_3d,
-                intrinsic_matrix,
-                extrinsic_matrix,
-                distortions,
-            ) = self.apply_3d_transforms(datadict, camgroup)
+
+            # Load camera parameters
+            intrinsic_matrix = torch.stack([
+                torch.tensor(cam.get_camera_matrix()) for cam in camgroup.cameras
+            ], dim=0)
+            extrinsic_matrix = torch.stack([
+                torch.tensor(cam.get_extrinsics_mat()[:3]) for cam in camgroup.cameras
+            ], dim=0)
+            distortions = torch.stack([
+                torch.tensor(cam.get_distortions()) for cam in camgroup.cameras
+            ], dim=0)
+
+            # Check if we should apply 3D augmentations (training) or just triangulate (validation)
+            if self.imgaug_transform.__str__().find("Resize") == -1:
+                # Training: apply 3D transforms with augmentations
+                (
+                    datadict,
+                    keypoints_3d,
+                    intrinsic_matrix,
+                    extrinsic_matrix,
+                    distortions,
+                ) = self.apply_3d_transforms(datadict, camgroup)
+            else:
+                # Validation: triangulate 3D keypoints without augmentations
+                # Extract keypoints from each view for triangulation (same as apply_3d_transforms)
+                keypoints_2d = np.zeros((self.num_views, self.num_keypoints // self.num_views, 2))
+                for idx_view, (view, example_dict) in enumerate(datadict.items()):
+                    # Create a copy to avoid modifying the original data
+                    keypoints_curr = example_dict["keypoints"].reshape(
+                        self.num_keypoints // self.num_views, 2
+                    ).clone()  # Clone to avoid modifying original
+
+                    # transform keypoints from bbox coordinates to absolute frame coordinates
+                    # 1. divide by image dims to get 0-1 normalized coords
+                    keypoints_curr[:, 0] /= example_dict["images"].shape[-1]  # -1 dim is "x"
+                    keypoints_curr[:, 1] /= example_dict["images"].shape[-2]  # -2 dim is "y"
+                    # 2. multiply and add by bbox dims
+                    keypoints_2d[idx_view] = normalized_to_bbox(
+                        keypoints=keypoints_curr.unsqueeze(0),
+                        bbox=example_dict["bbox"].unsqueeze(0),
+                    )[0].cpu().numpy()
+
+                # Triangulate keypoints (2D -> 3D) without augmentations
+                keypoints_3d = torch.tensor(
+                    camgroup.triangulate_fast(keypoints_2d),
+                    dtype=torch.float32,
+                )
+
         else:
+            # Use default values when no camera calibration
             keypoints_3d = torch.tensor([1])
-            intrinsic_matrix = torch.tensor([1])
-            extrinsic_matrix = torch.tensor([1])
-            distortions = torch.tensor([1])
+            intrinsic_matrix = torch.eye(3).unsqueeze(0)
+            extrinsic_matrix = torch.zeros(1, 3, 4)
+            distortions = torch.zeros(1, 5)
 
         # fuse data from all views
         images, keypoints, heatmaps, bboxes, concat_order = self.fusion(datadict)

@@ -794,6 +794,14 @@ class PairwiseProjectionsLoss(Loss):
         stage: Literal["train", "val", "test"] | None = None,
         **kwargs,
     ) -> Tuple[TensorType[()], list[dict]]:
+        # Check if 3D keypoints are available
+        if keypoints_targ_3d is None or keypoints_pred_3d is None or keypoints_mask_3d is None:
+            raise ValueError(
+                f"3D keypoints not available for {stage} stage. "
+                "Camera params file is required but not found;"
+                "Turn off supervised_pairwise_projections loss to avoid this error."
+            )
+
         elementwise_loss = self.compute_loss(
             targets=keypoints_targ_3d,
             predictions=keypoints_pred_3d,
