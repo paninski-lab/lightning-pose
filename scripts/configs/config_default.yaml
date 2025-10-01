@@ -170,7 +170,7 @@ eval:
   # confidence threshold for plotting a vid
   confidence_thresh_for_vid: 0.90
   # paths to the hydra config files in the output folder, OR absolute paths to such folders.
-  # used in scripts/predict_new_vids.py and scripts/create_fiftyone_dataset.py
+  # used in scripts/predict_new_vids.py
   hydra_paths: [" "]
 
 callbacks:
