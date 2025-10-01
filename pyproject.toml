@@ -32,7 +32,6 @@ classifiers = [
 
 dependencies = [
     "aniposelib",
-    "fiftyone",
     "h5py",
     "hydra-core",
     "imgaug",

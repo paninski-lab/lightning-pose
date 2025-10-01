@@ -169,21 +169,9 @@ eval:
   colormap: "cool"
   # confidence threshold for plotting a vid
   confidence_thresh_for_vid: 0.90
-
   # paths to the hydra config files in the output folder, OR absolute paths to such folders.
-  # used in scripts/predict_new_vids.py and scripts/create_fiftyone_dataset.py
+  # used in scripts/predict_new_vids.py
   hydra_paths: [" "]
-
-  fiftyone:
-    # will be the name of the dataset (Mongo DB) created by FiftyOne
-    dataset_name: test
-    # if you want to manually provide a different model name to be displayed in FiftyOne
-    model_display_names: ["test_model"]
-    # whether to launch the app from the script (True), or from ipython (and have finer control over the outputs)
-    launch_app_from_script: false
-    remote: true # for LAI, must be False
-    address: 127.0.0.1 # ip to launch the app on.
-    port: 5151 # port to launch the app on.
 
 callbacks:
   anneal_weight:
