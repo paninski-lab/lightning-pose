@@ -292,6 +292,17 @@ class TestMultiviewHeatmapDataset:
             )[0].cpu().numpy()
             assert np.array_equal(keypoints_curr, result[idx_view])
 
+    def test_apply_3d_transforms_all_nans(self, multiview_heatmap_dataset):
+
+        datadict = {}
+        for view in multiview_heatmap_dataset.view_names:
+            datadict[view] = multiview_heatmap_dataset.dataset[view].__getitem__(
+                0, ignore_nans=True,
+            )
+            datadict[view]["keypoints"].fill_(float('nan'))
+        datadict, keypoints_3d = multiview_heatmap_dataset.apply_3d_transforms(datadict, None)
+        assert torch.all(torch.isnan(keypoints_3d))
+
 
 def test_equal_return_sizes(base_dataset, heatmap_dataset):
     # can only assert the batches are the same if not using imgaug pipeline

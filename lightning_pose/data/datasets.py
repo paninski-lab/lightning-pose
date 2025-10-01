@@ -628,7 +628,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             # ensure we have enough points for transformation
             if len(orig_pts) < 3:
                 # If not enough points, return original image
-                images_transformed.append(orig_img.unsqueeze(0))
+                images_transformed.append(orig_img.clone().unsqueeze(0))
                 continue
 
             # estimate the affine transformation matrix with non-uniform scaling
@@ -651,17 +651,25 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         return images_transformed
 
-    def _get_2d_keypoints_from_example_dict_absolute_coords(self, data_dict: dict) -> np.ndarray:
+    def _get_2d_keypoints_from_example_dict_absolute_coords(
+        self,
+        data_dict: dict,
+        clone: bool = True,
+    ) -> np.ndarray:
         keypoints_2d = np.zeros((self.num_views, self.num_keypoints // self.num_views, 2))
         for idx_view, (view, example_dict) in enumerate(data_dict.items()):
-            # create a copy to avoid modifying the original data
-            keypoints_curr = example_dict["keypoints"].reshape(
-                self.num_keypoints // self.num_views, 2
-            ).clone()
+            if clone:
+                keypoints_curr = example_dict["keypoints"].reshape(
+                    self.num_keypoints // self.num_views, 2
+                ).clone()
+            else:
+                keypoints_curr = example_dict["keypoints"].reshape(
+                    self.num_keypoints // self.num_views, 2
+                )
             # transform keypoints from bbox coordinates to absolute frame coordinates
             # 1. divide by image dims to get 0-1 normalized coords
-            keypoints_curr[:, 0] /= example_dict["images"].shape[-1]  # -1 dim is "x"
-            keypoints_curr[:, 1] /= example_dict["images"].shape[-2]  # -2 dim is "y"
+            keypoints_curr[:, 0] = keypoints_curr[:, 0] / example_dict["images"].shape[-1]  # -1 dim is "x"
+            keypoints_curr[:, 1] = keypoints_curr[:, 1] / example_dict["images"].shape[-2]  # -2 dim is "y"
             # 2. multiply and add by bbox dims
             keypoints_2d[idx_view] = normalized_to_bbox(
                 keypoints=keypoints_curr.unsqueeze(0),
@@ -701,33 +709,46 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             images.append(example_dict["images"])
             bboxes.append(example_dict["bbox"])
 
-        # triangulate keypoints (2D -> 3D)
-        keypoints_3d = camgroup.triangulate_fast(keypoints_2d.copy())
+        if np.all(np.isnan(keypoints_2d)):
+            keypoints_3d_aug = np.nan * np.zeros((self.num_keypoints // self.num_views, 3))
+            keypoints_2d_aug_resize = [
+                torch.tensor(
+                    np.nan * np.zeros((self.num_keypoints // self.num_views * 2)),
+                    dtype=example_dict["keypoints"].dtype,
+                    device=example_dict["keypoints"].device,
+                )
+                for _, example_dict in data_dict.items()
+            ]
+            images_aug = images
+        else:
 
-        # scale and translate keypoints in 3D
-        keypoints_3d_aug = self._scale_translate_keypoints(keypoints_3d)
+            # triangulate keypoints (2D -> 3D)
+            keypoints_3d = camgroup.triangulate_fast(keypoints_2d.copy())
 
-        # project 3D keypoints to 2D using the rotated cameras
-        keypoints_2d_aug = camgroup.project(keypoints_3d_aug)
+            # scale and translate keypoints in 3D
+            keypoints_3d_aug = self._scale_translate_keypoints(keypoints_3d)
 
-        # resize 2D keypoints to uniform dimensions for backbone network
-        keypoints_2d_aug_resize_np = self._resize_keypoints(keypoints_2d_aug, bboxes)
-        keypoints_2d_aug_resize = [
-            torch.tensor(
-                a,
-                dtype=example_dict["keypoints"].dtype,
-                device=example_dict["keypoints"].device,
+            # project 3D keypoints to 2D using the rotated cameras
+            keypoints_2d_aug = camgroup.project(keypoints_3d_aug)
+
+            # resize 2D keypoints to uniform dimensions for backbone network
+            keypoints_2d_aug_resize_np = self._resize_keypoints(keypoints_2d_aug, bboxes)
+            keypoints_2d_aug_resize = [
+                torch.tensor(
+                    a,
+                    dtype=example_dict["keypoints"].dtype,
+                    device=example_dict["keypoints"].device,
+                )
+                for a in keypoints_2d_aug_resize_np
+            ]
+
+            # transform images to match keypoint augmentations
+            images_aug = self._transform_images(
+                images=images,
+                keypoints_orig=keypoints_2d.copy(),
+                keypoints_aug=keypoints_2d_aug.copy(),
+                bboxes=[b.cpu().numpy() for b in bboxes],
             )
-            for a in keypoints_2d_aug_resize_np
-        ]
-
-        # transform images to match keypoint augmentations
-        images_aug = self._transform_images(
-            images=images,
-            keypoints_orig=keypoints_2d.copy(),
-            keypoints_aug=keypoints_2d_aug.copy(),
-            bboxes=[b.cpu().numpy() for b in bboxes],
-        )
 
         # resize to uniform dimensions for backbone network
         images_aug_resize = self._resize_images(images_aug)
@@ -805,6 +826,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         datadict = {}
         for view in self.view_names:
             datadict[view] = self.dataset[view].__getitem__(idx, ignore_nans=ignore_nans)
+        print(self.dataset[view].image_names[idx])
 
         # always provide 3D keypoints when camera params are available
         if self.cam_params_file_to_camgroup:
@@ -824,18 +846,23 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
             # check if we should apply 3D augmentations (training) or just triangulate (validation)
             if self.imgaug_transform.__str__().find("Resize") == -1:
-                # Training: apply 3D transforms with augmentations
+                # training: apply 3D transforms with augmentations
                 datadict, keypoints_3d = self.apply_3d_transforms(datadict, camgroup)
             else:
                 # validation: triangulate 3D keypoints without augmentations
                 # extract keypoints from each view for triangulation (same as apply_3d_transforms)
-                keypoints_2d = self._get_2d_keypoints_from_example_dict_absolute_coords(data_dict)
-                # triangulate keypoints (2D -> 3D) without augmentations
-                keypoints_3d = torch.tensor(
-                    camgroup.triangulate_fast(keypoints_2d),
-                    dtype=keypoints_2d.dtype,
-                    device=keypoints_2d.device,
+                keypoints_2d = self._get_2d_keypoints_from_example_dict_absolute_coords(
+                    datadict, clone=True,
                 )
+                # triangulate keypoints (2D -> 3D) without augmentations
+                if np.all(np.isnan(keypoints_2d)):
+                    keypoints_3d = torch.tensor(
+                        np.nan * np.zeros((self.num_keypoints // self.num_views, 3)),
+                    )
+                else:
+                    keypoints_3d = torch.tensor(
+                        camgroup.triangulate_fast(keypoints_2d),
+                    )
 
         else:
             # Use default values when no camera calibration
@@ -850,16 +877,16 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         # images normal:[view, RGB, H, W] context:[view, context, RGB, H, W]
 
         return MultiviewHeatmapLabeledExampleDict(
-            images=images,  # shape (3, H, W) or (5, 3, H, W)
-            keypoints=keypoints,  # shape (n_targets,)
-            heatmaps=heatmaps,
-            bbox=bboxes,
+            images=images.clone(),  # shape (3, H, W) or (5, 3, H, W)
+            keypoints=keypoints.clone(),  # shape (n_targets,)
+            heatmaps=heatmaps.clone(),
+            bbox=bboxes.clone(),
             idxs=idx,
             num_views=self.num_views,  # int
             concat_order=concat_order,  # list[str]
             view_names=self.view_names,  # list[str]
-            keypoints_3d=keypoints_3d,
-            intrinsic_matrix=intrinsic_matrix,
-            extrinsic_matrix=extrinsic_matrix,
-            distortions=distortions,
+            keypoints_3d=keypoints_3d.clone(),
+            intrinsic_matrix=intrinsic_matrix.clone(),
+            extrinsic_matrix=extrinsic_matrix.clone(),
+            distortions=distortions.clone(),
         )
