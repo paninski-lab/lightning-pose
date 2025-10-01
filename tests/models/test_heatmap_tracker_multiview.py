@@ -15,7 +15,7 @@ def test_multiview_transformer(
     trainer,
     run_model_test,
 ):
-    """Test initialization and training of a multiview model with feature_transformer head."""
+    """Test initialization and training of a multiview model with heatmap head."""
 
     cfg_tmp = copy.deepcopy(cfg_multiview)
     cfg_tmp.model.model_type = "heatmap_multiview_transformer"
@@ -37,7 +37,41 @@ def test_multiview_transformer(
     run_model_test(
         cfg=cfg_tmp,
         data_module=data_module,
-        video_dataloader=None,  # video_dataloader_multiview,  # skip for now, no cam params
+        video_dataloader=video_dataloader_multiview,
+        trainer=trainer,
+    )
+
+
+def test_semisupervised_multiview_transformer_temporal(
+    cfg_multiview,
+    multiview_heatmap_dataset,
+    video_dataloader_multiview,
+    trainer,
+    run_model_test,
+):
+    """Test initialization and training of a semi-supervised multiview model with heatmap head."""
+
+    cfg_tmp = copy.deepcopy(cfg_multiview)
+    cfg_tmp.model.model_type = "heatmap_multiview_transformer"
+    cfg_tmp.model.backbone = "vits_dino"
+    cfg_tmp.model.head = "heatmap_cnn"
+    cfg_tmp.model.losses_to_use = ["temporal"]
+
+    # make mock dataset that returns fake camera parameters
+    from lightning_pose.utils.scripts import get_data_module
+    data_module = get_data_module(
+        cfg_tmp,
+        dataset=MockCameraDatasetWrapper(
+            multiview_heatmap_dataset,
+            num_views=len(cfg_tmp.data.view_names),
+        ),
+        video_dir=cfg_tmp.data.video_dir,
+    )
+
+    run_model_test(
+        cfg=cfg_tmp,
+        data_module=data_module,
+        video_dataloader=video_dataloader_multiview,
         trainer=trainer,
     )
 
