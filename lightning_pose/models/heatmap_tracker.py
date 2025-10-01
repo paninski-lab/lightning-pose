@@ -49,7 +49,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         lr_scheduler_params: DictConfig | dict | None = None,
         **kwargs: Any,
     ) -> None:
-        """Initialize a DLC-like model with resnet backbone.
+        """Initialize a heatmap-based pose estimation model with conv or transformer backbone.
 
         Args:
             num_keypoints: number of body parts

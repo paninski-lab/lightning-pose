@@ -327,12 +327,9 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
 
 class SemiSupervisedHeatmapTrackerMultiviewTransformer(
     SemiSupervisedTrackerMixin,
-    HeatmapTrackerMultiviewTransformer
+    HeatmapTrackerMultiviewTransformer,
 ):
-    """
-        Semi-supervised version of the HeatmapTrackerMultiviewTransformer
-        that supports unsupervised losses.
-    """
+    """Semi-supervised HeatmapTrackerMultiviewTransformer that supports unsupervised losses."""
 
     def __init__(
         self,
