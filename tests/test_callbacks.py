@@ -1,4 +1,4 @@
-from lightning_pose.callbacks import UnfreezeBackbone, PatchMasking
+from lightning_pose.callbacks import PatchMasking, UnfreezeBackbone
 
 
 def test_unfreeze_backbone_epoch():

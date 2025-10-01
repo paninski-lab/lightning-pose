@@ -15,7 +15,7 @@ from omegaconf import DictConfig, OmegaConf
 from omegaconf.errors import ValidationError
 from typeguard import typechecked
 
-from lightning_pose.callbacks import AnnealWeight, UnfreezeBackbone, PatchMasking
+from lightning_pose.callbacks import AnnealWeight, PatchMasking, UnfreezeBackbone
 from lightning_pose.data.augmentations import (
     expand_imgaug_str_to_dict,
     imgaug_transform,
