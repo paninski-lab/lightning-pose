@@ -12,10 +12,7 @@ from lightning_pose.models.heads import HeatmapHead
 from lightning_pose.models.heads.heatmap import run_subpixelmaxima
 
 # to ignore imports for sphix-autoapidoc
-__all__ = [
-    "HeatmapMHCRNNHead",
-    "UpsamplingCRNN",
-]
+__all__ = []
 
 
 class HeatmapMHCRNNHead(nn.Module):

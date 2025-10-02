@@ -1,0 +1,210 @@
+data:
+  # resize dimensions to streamline model creation
+  image_resize_dims:
+    height: null
+    width: null
+  # ABSOLUTE path to data directory
+  data_dir: /replace/with/your/path
+  # ABSOLUTE path to unlabeled videos' directory
+  video_dir: /replace/with/your/path
+  # location of labels; this should be relative to `data_dir` or an absolute path.
+  # replace {camn} with your camera names, add more rows as necessary
+  csv_file:
+    - CollectedData_{cam0}.csv
+    - CollectedData_{cam1}.csv
+  # location of bboxes; this should be relative to `data_dir` or an absolute path.
+  # replace {camn} with your camera names, add more rows as necessary
+  # if no bounding boxes, delete all list entries and "bbox_file" entry
+  bbox_file:
+    - bboxes_{cam0}.csv
+    - bboxes_{cam1}.csv
+  view_names:
+    - {cam0}
+    - {cam1}
+  # location of csv file that points to camera parameter toml file
+  camera_params_file: null
+  # total number of keypoints
+  num_keypoints: null
+  # keypoint names; should be the same set of keypoints for each view
+  keypoint_names: null
+  # for mirrored setups with all keypoints defined in same csv file, define matching
+  # columns for different keypoints (assumes x-y-x-y interleaving)
+  # each list corresponds to a single view, so in the example below there are 2 views
+  # keypoint 0 is from view 0 and matches up with keypoint 8 from view 2
+  # columns that correspond to keypoints only labeled in a single view are omitted
+  # this info is only used for the multiview pca loss
+  mirrored_column_matches: null
+  # list of indices of keypoints used for pca singleview loss (use order of labels file)
+  columns_for_singleview_pca: null
+
+training:
+  # select from one of several predefined image/video augmentation pipelines
+  # default: resizing only
+  # dlc: imgaug pipeline implemented in DLC 2.0 package
+  # dlc-lr: dlc augmenation plus horizontal flips
+  # dlc-top-down: dlc augmentations plus vertical and horizontal flips
+  imgaug: dlc
+  # 3d augmentations require camera calibration
+  imgaug_3d: true
+  # batch size of labeled data during training
+  train_batch_size: 16
+  # batch size of labeled data during validation
+  val_batch_size: 32
+  # batch size of labeled data during test
+  test_batch_size: 32
+  # fraction of labeled data used for training
+  train_prob: 0.95
+  # fraction of labeled data used for validation (remaining used for test)
+  val_prob: 0.05
+  # <=1 - fraction of total train frames (determined by `train_prob`) used for training
+  # >1 - number of total train frames used for training
+  train_frames: 1
+  # number of gpus to train a single model
+  num_gpus: 1
+  # epoch at which backbone network weights begin updating
+  # For counting in steps, replace `unfreezing_epoch` with `unfreezing_step`.
+  unfreezing_epoch: 20
+  # max training epochs; training may exit before due to early stopping
+  # For counting in steps, replace `min_epochs` with `min_steps`,
+  # and `max_epochs` with `max_steps`.
+  min_epochs: 300
+  max_epochs: 300
+  # frequency to log training metrics for tensorboard (one step is one batch)
+  log_every_n_steps: 10
+  # frequency to log validation metrics for tensorboard
+  # For counting in steps, replace `check_val_every_n_epoch` with `val_check_interval`
+  check_val_every_n_epoch: 5
+  # save model weights every n epochs; must be divisible by check_val_every_n_epoch above
+  # if null, only best weights will be saved after training
+  ckpt_every_n_epochs: null
+  # rng seed for labeled batches
+  rng_seed_data_pt: 0
+  # rng seed for weight initialization
+  rng_seed_model_pt: 0
+  # optimizer: Adam | AdamW.
+  # Recommended to use Adam for resnet backbones, and AdamW for ViT backbones.
+  optimizer: Adam
+  optimizer_params:
+    learning_rate: 5e-5
+  # learning rate scheduler
+  # multisteplr | [todo: reducelronplateau, cosine]
+  lr_scheduler: multisteplr
+  lr_scheduler_params:
+    multisteplr:
+      # Epochs at which to reduce learning rate by `gamma`.
+      # For counting in steps, replace `milestones` with `milestone_steps`
+      # caveat with `milestone_steps`: if not aligned with an epoch, it will round up to the next epoch.
+      milestones: [150, 200, 250]
+      gamma: 0.5
+  # how to treat missing hand labels; false to drop, true to force uniform heatmaps
+  # true will lead to better confidence values
+  uniform_heatmaps_for_nan_keypoints: true
+  # randomly mask out patches during training to make model more robust to occlusions
+  # set `final_ratio: 0.0` to skip patch masking
+  patch_mask:
+    init_epoch: 40
+    final_epoch: 300
+    init_ratio: 0.0
+    final_ratio: 0.5
+
+model:
+  # list of unsupervised losses
+  # "pca_singleview" | "pca_multiview" | "temporal" | "unimodal_mse" | "unimodal_kl"
+  losses_to_use: []
+  # backbone network:
+  # resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
+  # resnet50_animal_apose | resnet50_animal_ap10k
+  # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res | resnet50_human_hand
+  # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
+  # vits_dino | vitb_dino
+  # vitb_imagenet
+  # vitb_sam
+  backbone: vits_dino
+  # prediction mode: heatmap | heatmap_multiview_transformer
+  model_type: heatmap_multiview_transformer
+  # which heatmap loss to use
+  # mse | kl | js
+  heatmap_loss_type: mse
+  # directory name for model saving
+  model_name: test
+  # load model from checkpoint
+  checkpoint: null
+
+dali:
+  base:
+    train:
+      sequence_length: 32
+    predict:
+      sequence_length: 96
+
+  context:
+    train:
+      batch_size: 16
+    predict:
+      sequence_length: 96
+
+losses:
+  # loss = projection onto the discarded eigenvectors
+  pca_multiview:
+    # weight in front of PCA loss
+    log_weight: 5.0
+    # predictions should lie within the low-d subspace spanned by these components
+    components_to_keep: 3
+    # absolute error (in pixels) below which pca loss is zeroed out; if null, an empirical
+    # epsilon is computed using the labeled data
+    epsilon: null
+  # loss = projection onto the discarded eigenvectors
+  pca_singleview:
+    # weight in front of PCA loss
+    log_weight: 5.0
+    # predictions should lie within the low-d subspace spanned by components that describe this fraction of variance
+    components_to_keep: 0.99
+    # absolute error (in pixels) below which pca loss is zeroed out; if null, an empirical
+    # epsilon is computed using the labeled data
+    epsilon: null
+  # loss = norm of distance between successive timepoints
+  temporal:
+    # weight in front of temporal loss
+    log_weight: 5.0
+    # for epsilon insensitive rectification
+    # (in pixels; diffs below this are not penalized)
+    epsilon: 20.0
+    # nan removal value.
+    # (in prob; heatmaps with max prob values are removed)
+    prob_threshold: 0.05
+  # loss = error between predictions and their 3d reprojections; requires camera calibration
+  supervised_pairwise_projections:
+    # weight in front of loss
+    log_weight: 0.5
+
+eval:
+  # predict? used in scripts/train_hydra.py
+  predict_vids_after_training: true
+  # str with an absolute path to a directory containing videos for prediction.
+  test_videos_directory: ${data.video_dir}
+  # save labeled .mp4? used in scripts/train_hydra.py and scripts/predict_new_vids.py
+  save_vids_after_training: false
+  # matplotlib sequential or diverging colormap name for prediction visualization
+  # sequential options: viridis, plasma, magma, inferno, cool, etc.
+  # diverging options: RdBu, coolwarm, Spectral, etc.
+  colormap: "cool"
+  # confidence threshold for plotting a vid
+  confidence_thresh_for_vid: 0.90
+  # paths to the hydra config files in the output folder, OR absolute paths to such folders.
+  # used in scripts/predict_new_vids.py
+  hydra_paths: [" "]
+
+callbacks:
+  anneal_weight:
+    attr_name: total_unsupervised_importance
+    init_val: 0.0
+    increase_factor: 0.01
+    final_val: 1.0
+    freeze_until_epoch: 0
+
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}

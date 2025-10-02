@@ -7,9 +7,7 @@ from typeguard import typechecked
 from lightning_pose.models.backbones.vit_sam import SamVisionEncoder
 
 # to ignore imports for sphix-autoapidoc
-__all__ = [
-    "build_backbone",
-]
+__all__ = []
 
 
 @typechecked

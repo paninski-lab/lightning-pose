@@ -217,7 +217,7 @@ def _train(cfg: DictConfig) -> Model:
     with open_dict(cfg):
         cfg.model.lightning_pose_version = lightning_pose.version
 
-    print("Our Hydra config file:")
+    print("Config file:")
     pretty_print_cfg(cfg)
 
     ModelConfig(cfg).validate()
@@ -243,7 +243,7 @@ def _train(cfg: DictConfig) -> Model:
 
     steps_per_epoch = calculate_steps_per_epoch(data_module)
 
-    # Convert milestone_steps to milestones if applicable (before `get_model`).
+    # convert milestone_steps to milestones if applicable (before `get_model`).
     if (
         "multisteplr" in cfg.training.lr_scheduler_params
         and "milestone_steps" in cfg.training.lr_scheduler_params.multisteplr
@@ -251,6 +251,14 @@ def _train(cfg: DictConfig) -> Model:
         milestone_steps = cfg.training.lr_scheduler_params.multisteplr.milestone_steps
         milestones = [math.ceil(s / steps_per_epoch) for s in milestone_steps]
         cfg.training.lr_scheduler_params.multisteplr.milestones = milestones
+
+    # convert patch masking epochs if applicable (before `get_callbacks`)
+    if "patch_mask" in cfg.training and "init_epoch" in cfg.training.patch_mask:
+        init_step = math.ceil(cfg.training.patch_mask.init_epoch * steps_per_epoch)
+        final_step = math.ceil(cfg.training.patch_mask.final_epoch * steps_per_epoch)
+        with open_dict(cfg):
+            cfg.training.patch_mask.init_step = init_step
+            cfg.training.patch_mask.final_step = final_step
 
     # model
     model = get_model(cfg=cfg, data_module=data_module, loss_factories=loss_factories)
@@ -304,15 +312,9 @@ def _train(cfg: DictConfig) -> Model:
 
     # set up trainer
 
-    # Old configs may have num_gpus: 0. We will remove support in a future release.
-    if cfg.training.num_gpus == 0:
-        warnings.warn(
-            "Config contains unsupported value num_gpus: 0. "
-            "Update num_gpus to 1 in your config."
-        )
     cfg.training.num_gpus = max(cfg.training.num_gpus, 1)
 
-    # Initialize to Trainer defaults. Note max_steps defaults to -1.
+    # initialize to Trainer defaults. Note max_steps defaults to -1.
     min_steps, max_steps, min_epochs, max_epochs = (None, -1, None, None)
     if "min_steps" in cfg.training:
         min_steps = cfg.training.min_steps
@@ -321,12 +323,8 @@ def _train(cfg: DictConfig) -> Model:
         min_epochs = cfg.training.min_epochs
         max_epochs = cfg.training.max_epochs
 
-    # Initialize to Trainer defaults. Note max_steps defaults to -1.
-
     # Unlike min_epoch/min_step, both of these are valid to specify.
-    check_val_every_n_epoch = cfg.training.get(
-        "check_val_every_n_epoch", 1
-    )  # 1 is default for Trainer.
+    check_val_every_n_epoch = cfg.training.get("check_val_every_n_epoch", 1)
     val_check_interval = cfg.training.get("val_check_interval")
 
     trainer = pl.Trainer(
