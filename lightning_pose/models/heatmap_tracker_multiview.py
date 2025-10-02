@@ -17,8 +17,8 @@ from lightning_pose.data.datatypes import (
 from lightning_pose.data.utils import convert_bbox_coords, undo_affine_transform_batch
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
+from lightning_pose.models.backbones import ALLOWED_TRANSFORMER_BACKBONES
 from lightning_pose.models.base import (
-    ALLOWED_BACKBONES,
     BaseSupervisedTracker,
     SemiSupervisedTrackerMixin,
 )
@@ -41,7 +41,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         num_keypoints: int,
         num_views: int,
         loss_factory: LossFactory | None = None,
-        backbone: Literal["vits_dino", "vitb_dino", "vitb_imagenet", "vitb_sam"] = "vitb_imagenet",
+        backbone: ALLOWED_TRANSFORMER_BACKBONES = "vits_dino",
         pretrained: bool = True,
         head: Literal["heatmap_cnn"] = "heatmap_cnn",
         downsample_factor: Literal[1, 2, 3] = 2,
@@ -95,6 +95,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             optimizer_params=optimizer_params,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
+            image_size=image_size,
             do_context=False,
             **kwargs,
         )
@@ -109,8 +110,9 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         generator = torch.Generator(device=device)
         generator.manual_seed(torch_seed)
         self.view_embeddings = nn.Parameter(
-            torch.randn(self.num_views, self.num_fc_input_features,
-                    generator=generator, device=device) * 0.02
+            torch.randn(
+                self.num_views, self.num_fc_input_features, generator=generator, device=device,
+            ) * 0.02
         )
 
         # initialize model head
@@ -337,7 +339,7 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(
         num_views: int,
         loss_factory: LossFactory | None = None,
         loss_factory_unsupervised: LossFactory | None = None,
-        backbone: Literal["vits_dino", "vitb_dino", "vitb_imagenet", "vitb_sam"] = "vitb_imagenet",
+        backbone: ALLOWED_TRANSFORMER_BACKBONES = "vits_dino",
         pretrained: bool = True,
         head: Literal["heatmap_cnn"] = "heatmap_cnn",
         downsample_factor: Literal[1, 2, 3] = 2,

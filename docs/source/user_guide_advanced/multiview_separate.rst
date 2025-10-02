@@ -7,9 +7,10 @@ Multiview: separate data streams
 In addition to the mirrored setups discussed on the previous page, Lightning Pose also supports
 more traditional multiview data, where the same scene is captured from different angles with
 different cameras.
-Each view is treated as an independent input to a single network.
-This way, the network can learn from different perspectives and be agnostic to the correlations
-between the different views.
+
+We offer a multi-view transformer solution that processes all views simultaneously, learning
+cross-view correlations to improve performance.
+
 Similar to the single view setup, Lightning Pose produces a separate csv file with the predicted
 keypoints for each video
 
@@ -32,10 +33,10 @@ Lightning Pose assumes the following project directory structure:
 
     /path/to/project/
       ├── <LABELED_DATA_DIR>/
-      │   ├── session0_view0/
+      │   ├── session0_view0/
       │   └── session0_view1/
       ├── <VIDEO_DIR>/
-      │   ├── session0_view0.mp4
+      │   ├── session0_view0.mp4
       │   └── session0_view1.mp4
       ├── view0.csv
       └── view1.csv
@@ -88,6 +89,57 @@ Again, assume that we are working with the two-view dataset used as an example a
   (3) as in the non-multiview case, you must specify you want to use this loss
   :ref:`elsewhere in the config file <unsup_config>`.
 * ``columns_for_singleview_pca``: NOT YET IMPLEMENTED
+
+To utilize the multi-view transformer, modify the following entries:
+
+.. code-block:: yaml
+
+    model:
+        backbone: vits_dino
+        model_type: heatmap_multiview_transformer
+
+The backbone can be any of the available backbones that start with the string "vit", indicating
+Vision Transformer.
+The "heatmap_multiview_transformer" will then use the specified backbone to process all camera
+view simultaneously.
+
+Patch masking
+=============
+
+The self-attention of the MVT enables the network to utilize information from multiple views, which
+is particularly advantageous for handling occlusions.
+To encourage the model to develop this cross-view reasoning during training, we introduce a pixel
+space patch masking scheme inspired by the success of masked autoencoders and dropout.
+We use a training curriculum that starts with a short warmup period where no patches are masked
+(controlled by `training.patch_mask.init_step` in the config file), then increase the ratio of
+masked patches over the course of training (controlled by `trainin.patch_mask.init/final_ratio).
+This technique creates gradients that flow through the attention mechanism and encourage
+cross-view information propagation, which in turn develops internal representations that capture
+statistical relationships between the different views.
+
+.. code-block:: yaml
+
+    training:
+        patch_mask:
+            init_step: 0  # step to start patch masking
+            final_step: 5000  # step when patch masking reaches maximum
+            init_ratio: 0.0  # initial masking ratio
+            final_ratio: 0.5  # final masking ratio
+
+To turn patch masking off, set `final_ratio: 0.0`.
+
+3D augmentations and loss
+=========================
+
+.. code-block:: yaml
+
+    training:
+        imgaug: dlc
+        imgaug_3d: true
+
+    losses:
+        supervised_pairwise_projections:
+            log_weight: 0.5
 
 Training and inference
 ======================

@@ -473,40 +473,59 @@ def test_regression_rmse_loss():
     assert mse == true_rmse ** 2.0
 
 
-def test_pairwise_projections_loss():
+class TestPairwiseProjectionsLoss:
 
-    pp_loss = PairwiseProjectionsLoss(log_weight=np.log(0.5))  # set log_weight so weight=1
+    @pytest.fixture
+    def pp_loss(self):
+        loss = PairwiseProjectionsLoss(log_weight=np.log(0.5))  # set log_weight so weight=1
+        return loss
 
-    # when predictions equal targets, should return zero
-    num_batch = 2
-    num_keypoints = 4
-    num_cam_pairs = 3
-    keypoints_targ_3d = torch.ones(size=(num_batch, num_keypoints, 3))
-    keypoints_pred_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints, 3))
-    keypoints_mask_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints)).bool()
-    loss, logs = pp_loss(keypoints_targ_3d, keypoints_pred_3d, keypoints_mask_3d, stage=stage)
-    assert loss.shape == torch.Size([])
-    assert loss == 0.0
-    assert logs[0]["name"] == f"{stage}_pairwise_projections_loss"
-    assert logs[0]["value"] == loss / pp_loss.weight
-    assert logs[1]["name"] == "pairwise_projections_weight"
-    assert logs[1]["value"] == pp_loss.weight
+    def test_zero_loss_when_predictions_equal_targets(self, pp_loss):
+        num_batch = 2
+        num_keypoints = 4
+        num_cam_pairs = 3
+        keypoints_targ_3d = torch.ones(size=(num_batch, num_keypoints, 3))
+        keypoints_pred_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints, 3))
+        keypoints_mask_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints)).bool()
+        loss, logs = pp_loss(keypoints_targ_3d, keypoints_pred_3d, keypoints_mask_3d, stage=stage)
+        assert loss.shape == torch.Size([])
+        assert loss == 0.0
+        assert logs[0]["name"] == f"{stage}_pairwise_projections_loss"
+        assert logs[0]["value"] == loss / pp_loss.weight
+        assert logs[1]["name"] == "pairwise_projections_weight"
+        assert logs[1]["value"] == pp_loss.weight
 
-    # check loss works
-    keypoints_targ_3d = torch.zeros(size=(num_batch, num_keypoints, 3))
-    keypoints_pred_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints, 3))
-    keypoints_mask_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints)).bool()
-    loss, _ = pp_loss(keypoints_targ_3d, keypoints_pred_3d, keypoints_mask_3d)
-    assert loss.isclose(torch.sqrt(torch.tensor(3)))
+    def test_actual_values(self, pp_loss):
+        num_batch = 2
+        num_keypoints = 4
+        num_cam_pairs = 3
+        keypoints_targ_3d = torch.zeros(size=(num_batch, num_keypoints, 3))
+        keypoints_pred_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints, 3))
+        keypoints_mask_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints)).bool()
+        loss, _ = pp_loss(keypoints_targ_3d, keypoints_pred_3d, keypoints_mask_3d)
+        assert loss.isclose(torch.sqrt(torch.tensor(3)))
 
-    # check mask works
-    keypoints_targ_3d = torch.zeros(size=(num_batch, num_keypoints, 3))
-    keypoints_pred_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints, 3))
-    keypoints_pred_3d[-1, ...] = 2
-    keypoints_mask_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints))
-    keypoints_mask_3d[-1, ...] = 0
-    loss, _ = pp_loss(keypoints_targ_3d, keypoints_pred_3d, keypoints_mask_3d.bool())
-    assert loss.isclose(torch.sqrt(torch.tensor(3)))
+    def test_mask(self, pp_loss):
+        num_batch = 2
+        num_keypoints = 4
+        num_cam_pairs = 3
+        keypoints_targ_3d = torch.zeros(size=(num_batch, num_keypoints, 3))
+        keypoints_pred_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints, 3))
+        keypoints_pred_3d[-1, ...] = 2
+        keypoints_mask_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints))
+        keypoints_mask_3d[-1, ...] = 0
+        loss, _ = pp_loss(keypoints_targ_3d, keypoints_pred_3d, keypoints_mask_3d.bool())
+        assert loss.isclose(torch.sqrt(torch.tensor(3)))
+
+    def test_all_nans(self, pp_loss):
+        num_batch = 1
+        num_keypoints = 4
+        num_cam_pairs = 3
+        keypoints_targ_3d = torch.full((num_batch, num_keypoints, 3), float('nan'))
+        keypoints_pred_3d = torch.full((num_batch, num_cam_pairs, num_keypoints, 3), float('nan'))
+        keypoints_mask_3d = torch.zeros(size=(num_batch, num_cam_pairs, num_keypoints))
+        loss, _ = pp_loss(keypoints_targ_3d, keypoints_pred_3d, keypoints_mask_3d.bool())
+        assert loss.item() == 0.0
 
 
 def test_get_loss_classes():
