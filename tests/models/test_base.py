@@ -2,7 +2,6 @@
 
 import gc
 
-import pytest
 import torch
 import torchvision
 

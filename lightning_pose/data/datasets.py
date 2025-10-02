@@ -11,7 +11,6 @@ import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
-from scipy.spatial.transform import Rotation
 from torchtyping import TensorType
 from torchvision import transforms
 
@@ -668,8 +667,8 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 )
             # transform keypoints from bbox coordinates to absolute frame coordinates
             # 1. divide by image dims to get 0-1 normalized coords
-            keypoints_curr[:, 0] = keypoints_curr[:, 0] / example_dict["images"].shape[-1]  # -1 dim is "x"
-            keypoints_curr[:, 1] = keypoints_curr[:, 1] / example_dict["images"].shape[-2]  # -2 dim is "y"
+            keypoints_curr[:, 0] = keypoints_curr[:, 0] / example_dict["images"].shape[-1]  # -1 x
+            keypoints_curr[:, 1] = keypoints_curr[:, 1] / example_dict["images"].shape[-2]  # -2 y
             # 2. multiply and add by bbox dims
             keypoints_2d[idx_view] = normalized_to_bbox(
                 keypoints=keypoints_curr.unsqueeze(0),

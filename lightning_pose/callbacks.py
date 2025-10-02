@@ -1,6 +1,7 @@
+from typing import Any, Dict, Tuple
+
 import lightning.pytorch as pl
 import torch
-from typing import Any, Dict, Tuple
 from lightning.pytorch.callbacks import Callback
 
 # to ignore imports for sphix-autoapidoc

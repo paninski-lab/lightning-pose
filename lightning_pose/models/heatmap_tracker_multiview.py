@@ -110,8 +110,9 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         generator = torch.Generator(device=device)
         generator.manual_seed(torch_seed)
         self.view_embeddings = nn.Parameter(
-            torch.randn(self.num_views, self.num_fc_input_features,
-                    generator=generator, device=device) * 0.02
+            torch.randn(
+                self.num_views, self.num_fc_input_features, generator=generator, device=device,
+            ) * 0.02
         )
 
         # initialize model head

@@ -635,8 +635,7 @@ def get_callbacks(
         )
         callbacks.append(ckpt_callback)
 
-    # we just need this callback for unsupervised models 
-    # or multiview models with non-heatmap losses
+    # we just need this callback for unsupervised losses or multiview models with 3d loss
     if (
         ((cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None))
         or cfg.losses.get("supervised_pairwise_projections", {}).get("log_weight") is not None

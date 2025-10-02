@@ -71,7 +71,7 @@ class TestPatchMasking:
 
     def test_initialization_enabled(self, patch_masking_enabled):
         """Test initialization - access through curriculum_masking attribute"""
-        assert patch_masking_enabled.curriculum_masking.use_patch_masking == True
+        assert patch_masking_enabled.curriculum_masking.use_patch_masking is True
         assert patch_masking_enabled.curriculum_masking.patch_seed == 42
 
     def test_schedule_at_different_steps(self, patch_masking_enabled):
@@ -110,7 +110,7 @@ class TestPatchMasking:
 
     def test_initialization_disabled(self, patch_masking_disabled):
         """Test that curriculum masking is properly disabled"""
-        assert patch_masking_disabled.curriculum_masking.use_patch_masking == False
+        assert patch_masking_disabled.curriculum_masking.use_patch_masking is False
 
     def test_schedule_disabled(self, patch_masking_disabled):
         """Test that schedule info returns default values when disabled"""
@@ -330,7 +330,6 @@ class TestPatchMasker:
         )
 
         patch_size = 16
-        num_patches_h = 224 // patch_size
         num_patches_w = 224 // patch_size
 
         for b in range(batch_size):
