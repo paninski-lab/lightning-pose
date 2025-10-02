@@ -16,10 +16,7 @@ from lightning_pose.models.base import BaseSupervisedTracker, SemiSupervisedTrac
 from lightning_pose.models.heads import LinearRegressionHead
 
 # to ignore imports for sphix-autoapidoc
-__all__ = [
-    "RegressionTracker",
-    "SemiSupervisedRegressionTracker",
-]
+__all__ = []
 
 
 class RegressionTracker(BaseSupervisedTracker):

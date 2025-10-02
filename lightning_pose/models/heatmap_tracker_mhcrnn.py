@@ -14,22 +14,18 @@ from lightning_pose.data.datatypes import (
     MultiviewUnlabeledBatchDict,
     UnlabeledBatchDict,
 )
-from lightning_pose.data.utils import undo_affine_transform_batch
+from lightning_pose.data.utils import convert_bbox_coords, undo_affine_transform_batch
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.backbones import ALLOWED_BACKBONES
 from lightning_pose.models.base import (
     BaseSupervisedTracker,
     SemiSupervisedTrackerMixin,
-    convert_bbox_coords,
 )
 from lightning_pose.models.heads import HeatmapMHCRNNHead
 
 # to ignore imports for sphix-autoapidoc
-__all__ = [
-    "HeatmapTrackerMHCRNN",
-    "SemiSupervisedHeatmapTrackerMHCRNN",
-]
+__all__ = []
 
 
 class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
@@ -41,8 +37,8 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
         num_targets: int | None = None,
         loss_factory: LossFactory | None = None,
         backbone: ALLOWED_BACKBONES = "resnet50",
-        downsample_factor: Literal[1, 2, 3] = 2,
         pretrained: bool = True,
+        downsample_factor: Literal[1, 2, 3] = 2,
         torch_seed: int = 123,
         optimizer: str = "Adam",
         optimizer_params: DictConfig | dict | None = None,
@@ -56,9 +52,9 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
             num_keypoints: number of body parts
             loss_factory: object to orchestrate loss computation
             backbone: ResNet or EfficientNet variant to be used
+            pretrained: True to load pretrained imagenet weights
             downsample_factor: make heatmap smaller than original frames to save memory; subpixel
                 operations are performed for increased precision
-            pretrained: True to load pretrained imagenet weights
             torch_seed: make weight initialization reproducible
             lr_scheduler: how to schedule learning rate
             lr_scheduler_params: params for specific learning rate schedulers

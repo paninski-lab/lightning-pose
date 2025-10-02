@@ -81,6 +81,29 @@ class MultiviewLabeledExampleDict(TypedDict):
     num_views: int
     concat_order: list[str]
     view_names: list[str]
+    # these attributes exist if camera calibration info is available
+    keypoints_3d: Union[
+        TensorType["num_keypoints", 3],
+        TensorType["null":1],
+        torch.Tensor,
+    ]
+    intrinsic_matrix: Union[
+        TensorType["num_views", 3, 3],
+        TensorType["null":1],
+        torch.Tensor,
+    ]
+    extrinsic_matrix: Union[
+        TensorType["num_views", 3, 4],
+        TensorType["null":1],
+        torch.Tensor,
+    ]
+    distortions: Union[
+        TensorType["num_views", "num_distortion_params"],
+        TensorType["null":1],
+        torch.Tensor,
+    ]
+    # for distortion params info see
+    # https://kornia.readthedocs.io/en/latest/geometry.calibration.html
 
 
 class MultiviewHeatmapLabeledExampleDict(MultiviewLabeledExampleDict):
@@ -116,6 +139,23 @@ class MultiviewLabeledBatchDict(TypedDict):
     num_views: TensorType["batch", int]
     concat_order: list  # [Tuple[str]]
     view_names: list  # [Tuple[str]]
+    # these attributes exist if camera calibration info is available
+    keypoints_3d: Union[
+        TensorType["batch", "num_keypoints", 3],
+        TensorType["batch", 1],
+    ]
+    intrinsic_matrix: Union[
+        TensorType["batch", "num_views", 3, 3],
+        TensorType["batch", 1],
+    ]
+    extrinsic_matrix: Union[
+        TensorType["batch", "num_views", 3, 4],
+        TensorType["batch", 1],
+    ]
+    distortions: Union[
+        TensorType["batch", "num_views", "num_distortion_params"],
+        TensorType["batch", 1],
+    ]
 
 
 class MultiviewHeatmapLabeledBatchDict(MultiviewLabeledBatchDict):

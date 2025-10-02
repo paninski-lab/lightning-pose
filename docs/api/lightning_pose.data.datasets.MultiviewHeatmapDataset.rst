@@ -19,6 +19,7 @@ MultiviewHeatmapDataset
 
    .. autosummary::
 
+      ~MultiviewHeatmapDataset.apply_3d_transforms
       ~MultiviewHeatmapDataset.check_data_images_names
       ~MultiviewHeatmapDataset.fusion
 
@@ -31,5 +32,6 @@ MultiviewHeatmapDataset
 
    .. rubric:: Methods Documentation
 
+   .. automethod:: apply_3d_transforms
    .. automethod:: check_data_images_names
    .. automethod:: fusion

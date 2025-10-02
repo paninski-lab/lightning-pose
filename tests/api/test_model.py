@@ -5,7 +5,7 @@ from lightning_pose.api.model import Model
 from tests.fetch_test_data import fetch_test_data_if_needed
 
 
-def _setup_test_model(tmp_path, request, multiview=False):
+def _setup_test_model(tmp_path, request, multiview=False) -> Model:
     # Get the trained model for testing.
     dataset_name = (
         "test_model_mirror_mouse"
@@ -55,7 +55,7 @@ def test_predict_on_label_csv_singleview(tmp_path, request, toy_data_dir):
     ).is_file()
 
 
-def test_predict_on_label_csv_multiview(tmp_path, request, toy_mdata_dir):
+def test_predict_on_label_csv_method_multiview_model(tmp_path, request, toy_mdata_dir):
     model = _setup_test_model(tmp_path, request, multiview=True)
 
     # Test prediction on a CSV file.
@@ -64,6 +64,28 @@ def test_predict_on_label_csv_multiview(tmp_path, request, toy_mdata_dir):
     assert (model.image_preds_dir() / "top.csv" / "predictions.csv").is_file()
     assert (
         model.image_preds_dir() / "top.csv" / "predictions_pixel_error.csv"
+    ).is_file()
+
+
+def test_predict_on_label_csv_multiview(tmp_path, request, toy_mdata_dir):
+    model = _setup_test_model(tmp_path, request, multiview=True)
+
+    # Test prediction on CSV files.
+    model.predict_on_label_csv_multiview(
+        [
+            Path(toy_mdata_dir) / "top.csv",
+            Path(toy_mdata_dir) / "bot.csv",
+        ]
+    )
+
+    assert (model.image_preds_dir() / "top.csv" / "predictions.csv").is_file()
+    assert (
+        model.image_preds_dir() / "top.csv" / "predictions_pixel_error.csv"
+    ).is_file()
+
+    assert (model.image_preds_dir() / "bot.csv" / "predictions.csv").is_file()
+    assert (
+        model.image_preds_dir() / "bot.csv" / "predictions_pixel_error.csv"
     ).is_file()
 
 

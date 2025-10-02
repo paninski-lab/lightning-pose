@@ -66,7 +66,11 @@ class LossFactory(pl.LightningModule):
             # "stage" is used for logging purposes
             curr_loss, log_list = loss_instance(stage=stage, **kwargs)
             current_weighted_loss = loss_instance.weight * curr_loss
-            tot_loss += anneal_weight * current_weighted_loss
+            if anneal_weight is None or loss_name in ["heatmap_mse", "heatmap_kl", "heatmap_js"]:
+                anneal_weight_ = 1.0
+            else:
+                anneal_weight_ = anneal_weight
+            tot_loss += anneal_weight_ * current_weighted_loss
 
             # log weighted losses (unweighted losses auto-logged by loss instance)
             log_list += [

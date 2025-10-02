@@ -116,7 +116,6 @@ def _predict_multi_type(model: Model, path: Path, skip_viz: bool, skip_existing:
 
         model.predict_on_label_csv(
             csv_file=path,
-            generate_labeled_images=False,  # TODO: implement visualization
         )
     elif path.suffix in [".png", ".jpg"]:
         raise NotImplementedError("Not yet implemented: predicting on image files.")

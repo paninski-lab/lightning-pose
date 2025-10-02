@@ -107,12 +107,6 @@ Method 2: conda from source
 
    This installation might take between 3-10 minutes, depending on your machine and internet connection.
 
-   If you are using Ubuntu 22.04 or newer, you'll need an additional update for the Fiftyone package:
-
-   .. code-block:: console
-
-       pip install fiftyone-db-ubuntu2204
-
 #. Verify that all the unit tests are passing on your machine by running
 
    .. code-block:: console

@@ -24,8 +24,6 @@ from lightning_pose.models.backbones import ALLOWED_BACKBONES
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
-    "normalized_to_bbox",
-    "convert_bbox_coords",
     "get_context_from_sequence",
     "BaseFeatureExtractor",
     "BaseSupervisedTracker",
@@ -90,69 +88,6 @@ def _apply_defaults_for_optimizer_params(
         optimizer_params = OmegaConf.merge(DEFAULT_OPTIMIZER_PARAMS, optimizer_params)
 
     return optimizer_params
-
-
-def normalized_to_bbox(
-    keypoints: TensorType["batch", "num_keypoints", "xy":2],
-    bbox: TensorType["batch", "xyhw":4]
-) -> TensorType["batch", "num_keypoints", "xy":2]:
-    if keypoints.shape[0] == bbox.shape[0]:
-        # normal batch
-        keypoints[:, :, 0] *= bbox[:, 3].unsqueeze(1)  # scale x by box width
-        keypoints[:, :, 0] += bbox[:, 0].unsqueeze(1)  # add bbox x offset
-        keypoints[:, :, 1] *= bbox[:, 2].unsqueeze(1)  # scale y by box height
-        keypoints[:, :, 1] += bbox[:, 1].unsqueeze(1)  # add bbox y offset
-    else:
-        # context batch; we don't have predictions for first/last two frames
-        keypoints[:, :, 0] *= bbox[2:-2, 3].unsqueeze(1)  # scale x by box width
-        keypoints[:, :, 0] += bbox[2:-2, 0].unsqueeze(1)  # add bbox x offset
-        keypoints[:, :, 1] *= bbox[2:-2, 2].unsqueeze(1)  # scale y by box height
-        keypoints[:, :, 1] += bbox[2:-2, 1].unsqueeze(1)  # add bbox y offset
-    return keypoints
-
-
-def convert_bbox_coords(
-    batch_dict: (
-        HeatmapLabeledBatchDict
-        | MultiviewHeatmapLabeledBatchDict
-        | MultiviewUnlabeledBatchDict
-        | UnlabeledBatchDict
-    ),
-    predicted_keypoints: TensorType["batch", "num_targets"],
-) -> TensorType["batch", "num_targets"]:
-    """Transform keypoints from bbox coordinates to absolute frame coordinates."""
-    num_targets = predicted_keypoints.shape[1]
-    num_keypoints = num_targets // 2
-    # reshape from (batch, n_targets) back to (batch, n_key, 2), in x,y order
-    predicted_keypoints = predicted_keypoints.reshape((-1, num_keypoints, 2))
-    # divide by image dims to get 0-1 normalized coordinates
-    if "images" in batch_dict.keys():
-        predicted_keypoints[:, :, 0] /= batch_dict["images"].shape[-1]  # -1 dim is width "x"
-        predicted_keypoints[:, :, 1] /= batch_dict["images"].shape[-2]  # -2 dim is height "y"
-    else:  # we have unlabeled dict, 'frames' instead of 'images'
-        predicted_keypoints[:, :, 0] /= batch_dict["frames"].shape[-1]  # -1 dim is width "x"
-        predicted_keypoints[:, :, 1] /= batch_dict["frames"].shape[-2]  # -2 dim is height "y"
-    # multiply and add by bbox dims (x,y,h,w)
-    if "num_views" in batch_dict.keys() and int(batch_dict["num_views"].max()) > 1:
-        unique = batch_dict["num_views"].unique()
-        if len(unique) != 1:
-            raise ValueError(
-                f"each batch element must contain the same number of views; "
-                f"found elements with {unique} views"
-            )
-        num_views = int(unique)
-        num_keypoints_per_view = num_keypoints // num_views
-        for v in range(num_views):
-            idx_beg = num_keypoints_per_view * v
-            idx_end = num_keypoints_per_view * (v + 1)
-            predicted_keypoints[:, idx_beg:idx_end, :] = normalized_to_bbox(
-                predicted_keypoints[:, idx_beg:idx_end, :],
-                batch_dict["bbox"][:, 4 * v:4 * (v + 1)],
-            )
-    else:
-        predicted_keypoints = normalized_to_bbox(predicted_keypoints, batch_dict["bbox"])
-    # return new keypoints, reshaped to (batch, num_targets)
-    return predicted_keypoints.reshape((-1, num_targets))
 
 
 def get_context_from_sequence(
@@ -485,6 +420,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
             MultiviewHeatmapLabeledBatchDict,
         ],
         stage: Literal["train", "val", "test"] | None = None,
+        anneal_weight: torch.Tensor | None = None,
     ) -> TensorType[(), float]:
         """Compute and log the losses on a batch of labeled data."""
 
@@ -492,7 +428,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         data_dict = self.get_loss_inputs_labeled(batch_dict=batch_dict)
 
         # compute and log loss on labeled data
-        loss, log_list = self.loss_factory(stage=stage, **data_dict)
+        loss, log_list = self.loss_factory(stage=stage, anneal_weight=anneal_weight, **data_dict)
 
         # compute and log pixel_error loss on labeled data
         loss_rmse, _ = self.rmse_loss(stage=stage, **data_dict)
@@ -526,7 +462,19 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         batch_idx: int,
     ) -> dict[str, TensorType[(), float]]:
         """Base training step, a wrapper around the `evaluate_labeled` method."""
-        loss = self.evaluate_labeled(batch_dict, "train")
+        # on each epoch, self.total_unsupervised_importance is modified by the
+        # AnnealWeight callback
+        if hasattr(self, "total_unsupervised_importance"):
+            self.log(
+                "total_unsupervised_importance",
+                self.total_unsupervised_importance,
+                prog_bar=True,
+                # don't need to sync_dist because this is always the same across processes.
+            )
+            anneal_weight = self.total_unsupervised_importance
+        else:
+            anneal_weight = None
+        loss = self.evaluate_labeled(batch_dict, "train", anneal_weight=anneal_weight)
         return {"loss": loss}
 
     def validation_step(
@@ -560,7 +508,10 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
 class SemiSupervisedTrackerMixin(object):
     """Mixin class providing training step function for semi-supervised models."""
 
-    def get_loss_inputs_unlabeled(self, batch_dict: UnlabeledBatchDict) -> dict:
+    def get_loss_inputs_unlabeled(
+        self,
+        batch_dict: UnlabeledBatchDict | MultiviewUnlabeledBatchDict,
+    ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         raise NotImplementedError
 
@@ -617,6 +568,7 @@ class SemiSupervisedTrackerMixin(object):
         loss_super = self.evaluate_labeled(
             batch_dict=batch_dict["labeled"],
             stage="train",
+            anneal_weight=self.total_unsupervised_importance,
         )
 
         # computes and logs unsupervised losses

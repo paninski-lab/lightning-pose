@@ -1,7 +1,7 @@
 SemiSupervisedRegressionTracker
 ===============================
 
-.. currentmodule:: lightning_pose.models.regression_tracker
+.. currentmodule:: lightning_pose.models
 
 .. autoclass:: SemiSupervisedRegressionTracker
    :show-inheritance:

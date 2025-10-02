@@ -12,13 +12,7 @@ from torchtyping import TensorType
 from lightning_pose.data.utils import evaluate_heatmaps_at_location
 
 # to ignore imports for sphix-autoapidoc
-__all__ = [
-    "make_upsampling_layers",
-    "initialize_upsampling_layers",
-    "upsample",
-    "run_subpixelmaxima",
-    "HeatmapHead",
-]
+__all__ = []
 
 
 def make_upsampling_layers(
@@ -38,7 +32,10 @@ def make_upsampling_layers(
 
         if layer == 0:
             in_ = in_channels // 4  # division by 4 to account for PixelShuffle layer
-            out_ = int_channels
+            if n_layers == 1:
+                out_ = out_channels
+            else:
+                out_ = int_channels
         elif layer == n_layers - 1:
             in_ = int_channels if n_layers > 1 else in_channels // 4
             out_ = out_channels
@@ -149,6 +146,7 @@ class HeatmapHead(nn.Module):
         out_channels: int,
         deconv_out_channels: int | None = None,
         downsample_factor: int = 2,
+        final_softmax: bool = True,
     ):
         """
 
@@ -160,6 +158,7 @@ class HeatmapHead(nn.Module):
                 to number of keypoints
             downsample_factor: make heatmaps smaller than input frames by this factor; subpixel
                 operations are performed for increased precision
+            final_softmax: pass final heatmaps through a 2D softmax with temperature 1.0
 
         """
         super().__init__()
@@ -169,6 +168,7 @@ class HeatmapHead(nn.Module):
         self.out_channels = out_channels
         self.deconv_out_channels = deconv_out_channels
         self.downsample_factor = downsample_factor
+        self.final_softmax = final_softmax
         # TODO: temp=1000 works for 64x64 heatmaps, need to generalize to other shapes
         self.temperature = torch.tensor(1000.0)  # soft argmax temp
 
@@ -190,8 +190,10 @@ class HeatmapHead(nn.Module):
     ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
         """Upsample representations and normalize to get final heatmaps."""
         heatmaps = self.upsampling_layers(features)
-        # softmax temp stays 1 here; to modify for model predictions, see constructor
-        return spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
+        if self.final_softmax:
+            # softmax temp stays 1 here; to modify for model predictions, see constructor
+            heatmaps = spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
+        return heatmaps
 
     def run_subpixelmaxima(self, heatmaps):
         return run_subpixelmaxima(heatmaps, self.downsample_factor, self.temperature)
