@@ -719,7 +719,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 )
                 for _, example_dict in data_dict.items()
             ]
-            images_aug = images
+            images_aug = [im.unsqueeze(0) for im in images]
         else:
 
             # triangulate keypoints (2D -> 3D)
@@ -826,7 +826,6 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         datadict = {}
         for view in self.view_names:
             datadict[view] = self.dataset[view].__getitem__(idx, ignore_nans=ignore_nans)
-        print(self.dataset[view].image_names[idx])
 
         # always provide 3D keypoints when camera params are available
         if self.cam_params_file_to_camgroup:

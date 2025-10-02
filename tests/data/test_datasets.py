@@ -294,14 +294,22 @@ class TestMultiviewHeatmapDataset:
 
     def test_apply_3d_transforms_all_nans(self, multiview_heatmap_dataset):
 
+        num_keypoints = multiview_heatmap_dataset.num_keypoints
+        num_views = multiview_heatmap_dataset.num_views
+
         datadict = {}
         for view in multiview_heatmap_dataset.view_names:
             datadict[view] = multiview_heatmap_dataset.dataset[view].__getitem__(
                 0, ignore_nans=True,
             )
             datadict[view]["keypoints"].fill_(float('nan'))
-        datadict, keypoints_3d = multiview_heatmap_dataset.apply_3d_transforms(datadict, None)
+        datadict_aug, keypoints_3d = multiview_heatmap_dataset.apply_3d_transforms(datadict, None)
         assert torch.all(torch.isnan(keypoints_3d))
+        assert keypoints_3d.shape == (num_keypoints // num_views, 3)
+        for view in multiview_heatmap_dataset.view_names:
+            assert datadict_aug[view]["images"].shape == (3, 256, 256)
+            assert datadict_aug[view]["keypoints"].shape == (num_keypoints,)
+            assert datadict_aug[view]["bbox"].shape == (4,)
 
 
 def test_equal_return_sizes(base_dataset, heatmap_dataset):
