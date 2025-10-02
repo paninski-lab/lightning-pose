@@ -1,7 +1,7 @@
 HeatmapMHCRNNHead
 =================
 
-.. currentmodule:: lightning_pose.models.heads.heatmap_mhcrnn
+.. currentmodule:: lightning_pose.models.heads
 
 .. autoclass:: HeatmapMHCRNNHead
    :show-inheritance:

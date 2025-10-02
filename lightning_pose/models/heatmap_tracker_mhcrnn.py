@@ -25,10 +25,7 @@ from lightning_pose.models.base import (
 from lightning_pose.models.heads import HeatmapMHCRNNHead
 
 # to ignore imports for sphix-autoapidoc
-__all__ = [
-    "HeatmapTrackerMHCRNN",
-    "SemiSupervisedHeatmapTrackerMHCRNN",
-]
+__all__ = []
 
 
 class HeatmapTrackerMHCRNN(BaseSupervisedTracker):

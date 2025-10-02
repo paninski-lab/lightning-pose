@@ -34,16 +34,6 @@ from lightning_pose.metrics import (
     pixel_error,
     temporal_norm,
 )
-from lightning_pose.models import (
-    HeatmapTracker,
-    HeatmapTrackerMHCRNN,
-    HeatmapTrackerMultiviewTransformer,
-    RegressionTracker,
-    SemiSupervisedHeatmapTracker,
-    SemiSupervisedHeatmapTrackerMHCRNN,
-    SemiSupervisedHeatmapTrackerMultiviewTransformer,
-    SemiSupervisedRegressionTracker,
-)
 from lightning_pose.models.base import (
     _apply_defaults_for_lr_scheduler_params,
     _apply_defaults_for_optimizer_params,
@@ -416,6 +406,7 @@ def get_model(
     backbone_pretrained = cfg.model.get("backbone_pretrained", True)
     if not semi_supervised:
         if cfg.model.model_type == "regression":
+            from lightning_pose.models import RegressionTracker
             model = RegressionTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -433,6 +424,7 @@ def get_model(
                 num_targets = data_module.dataset.num_targets
             else:
                 num_targets = None
+            from lightning_pose.models import HeatmapTracker
             model = HeatmapTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 num_targets=num_targets,
@@ -449,6 +441,7 @@ def get_model(
                 backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
             )
         elif cfg.model.model_type == "heatmap_mhcrnn":
+            from lightning_pose.models import HeatmapTrackerMHCRNN
             model = HeatmapTrackerMHCRNN(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -464,6 +457,7 @@ def get_model(
                 backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
             )
         elif cfg.model.model_type == "heatmap_multiview_transformer":
+            from lightning_pose.models import HeatmapTrackerMultiviewTransformer
             model = HeatmapTrackerMultiviewTransformer(
                 num_keypoints=cfg.data.num_keypoints,
                 num_views=len(cfg.data.view_names),
@@ -487,6 +481,7 @@ def get_model(
 
     else:
         if cfg.model.model_type == "regression":
+            from lightning_pose.models import SemiSupervisedRegressionTracker
             model = SemiSupervisedRegressionTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -502,6 +497,7 @@ def get_model(
             )
 
         elif cfg.model.model_type == "heatmap":
+            from lightning_pose.models import SemiSupervisedHeatmapTracker
             model = SemiSupervisedHeatmapTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -518,6 +514,7 @@ def get_model(
                 backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
             )
         elif cfg.model.model_type == "heatmap_mhcrnn":
+            from lightning_pose.models import SemiSupervisedHeatmapTrackerMHCRNN
             model = SemiSupervisedHeatmapTrackerMHCRNN(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -534,6 +531,7 @@ def get_model(
                 backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
             )
         elif cfg.model.model_type == "heatmap_multiview_transformer":
+            from lightning_pose.models import SemiSupervisedHeatmapTrackerMultiviewTransformer
             model = SemiSupervisedHeatmapTrackerMultiviewTransformer(
                 num_keypoints=cfg.data.num_keypoints,
                 num_views=len(cfg.data.view_names),

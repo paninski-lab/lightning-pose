@@ -1,7 +1,7 @@
 RegressionTracker
 =================
 
-.. currentmodule:: lightning_pose.models.regression_tracker
+.. currentmodule:: lightning_pose.models
 
 .. autoclass:: RegressionTracker
    :show-inheritance:

@@ -27,10 +27,7 @@ from lightning_pose.models.heads import (
 )
 
 # to ignore imports for sphix-autoapidoc
-__all__ = [
-    "HeatmapTrackerMultiviewTransformer",
-    "SemiSupervisedHeatmapTrackerMultiviewTransformer",
-]
+__all__ = []
 
 
 class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
@@ -70,19 +67,16 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
                 - multisteplr: milestones, gamma
             image_size: size of input images (height=width for ViT models)
             **kwargs: additional arguments
+
         """
-        # Reproducible weight initialization
+
+        # for reproducible weight initialization
         self.torch_seed = torch_seed
         torch.manual_seed(torch_seed)
-        torch.cuda.manual_seed_all(torch_seed)
-
-        # Deterministic behavior
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
 
         self.num_views = num_views
 
-        # Backwards compatibility
+        # backwards compatibility
         if "do_context" in kwargs.keys():
             raise ValueError(
                 "HeatmapTrackerMultiviewTransformer does not currently support context frames"
@@ -103,9 +97,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         self.num_keypoints = num_keypoints
         self.downsample_factor = downsample_factor
 
-        # Create learnable view embeddings for each view
-        # Use seeded random generation for reproducibility
-        # Create view embeddings with device-aware generator
+        # create learnable view embeddings for each view
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         generator = torch.Generator(device=device)
         generator.manual_seed(torch_seed)
@@ -127,6 +119,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             raise NotImplementedError(f"{head} is not a valid multiview transformer head")
 
         self.loss_factory = loss_factory
+
         # use this to log auxiliary information: pixel_error on labeled data
         self.rmse_loss = RegressionRMSELoss()
 
@@ -368,7 +361,8 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(
             image_size: size of input images (height=width for ViT models)
 
         """
-        # Initialize the parent class (HeatmapTrackerMultiviewTransformer)
+
+        # initialize the parent class (HeatmapTrackerMultiviewTransformer)
         super().__init__(
             num_keypoints=num_keypoints,
             num_views=num_views,
