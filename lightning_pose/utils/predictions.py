@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
-from moviepy.editor import VideoFileClip
+from moviepy import VideoFileClip
 from omegaconf import DictConfig, OmegaConf
 from torchtyping import TensorType
 from typeguard import typechecked
@@ -703,7 +703,7 @@ def create_labeled_video(
         upsample_factor = 1
 
     if upsample_factor > 1:
-        clip = clip.resize((upsample_factor * nx, upsample_factor * ny))
+        clip = clip.resized((upsample_factor * nx, upsample_factor * ny))
         nx, ny = clip.size
 
     print(f"Duration of video [s]: {np.round(dur, 2)}, recorded at {np.round(fps_og, 2)} fps!")
@@ -783,7 +783,7 @@ def create_labeled_video(
         )
         return frame
 
-    clip_marked = clip.fl(add_marker_and_timestamps)
+    clip_marked = clip.transform(add_marker_and_timestamps)
     clip_marked.write_videofile(
         output_video_path, codec="libx264", fps=fps or fps_og or 20.0
     )

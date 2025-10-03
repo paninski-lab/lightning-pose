@@ -7,13 +7,13 @@ sphinx-design
 aniposelib
 h5py
 hydra-core
-imgaug
+imaug
 kaleido
 kornia
 lightning
 matplotlib
-moviepy<2.0.0
-numpy<2.0.0
+moviepy>=2.0.0
+numpy>=2.0.0
 opencv-python
 pandas
 pillow
