@@ -103,7 +103,8 @@ def test_predict_on_video_file_singleview(tmp_path, request, toy_data_dir):
 
     # Test labeled_video generation.
     model.predict_on_video_file(
-        Path(toy_data_dir) / "videos" / "test_vid.mp4", generate_labeled_video=True
+        Path(toy_data_dir) / "videos" / "test_vid.mp4",
+        generate_labeled_video=True,
     )
     assert (model.labeled_videos_dir() / "test_vid_labeled.mp4").is_file()
 
@@ -113,7 +114,8 @@ def test_predict_on_video_file_method_multiview_model(tmp_path, request, toy_mda
 
     # Test prediction on a test video.
     model.predict_on_video_file(
-        Path(toy_mdata_dir) / "videos" / "test_vid_top.mp4", generate_labeled_video=True
+        Path(toy_mdata_dir) / "videos" / "test_vid_top.mp4",
+        generate_labeled_video=True,
     )
     assert (model.video_preds_dir() / "test_vid_top.csv").is_file()
     assert (model.video_preds_dir() / "test_vid_top_temporal_norm.csv").is_file()
