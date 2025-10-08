@@ -45,6 +45,7 @@ dependencies = [
     "pandas (>=2.0.0)",
     "pillow",
     "plotly",
+    "safetensors",
     "scikit-learn (>=1.5.0)",
     "seaborn",
     "streamlit",
