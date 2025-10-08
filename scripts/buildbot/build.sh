@@ -48,5 +48,6 @@ git fetch upstream "refs/pull/$PR_NUMBER/merge"
 git checkout FETCH_HEAD
 
 # Run with html reporting.
+pip install ".[dev]" # Install any new dependencies.
 pytest --html=report.html --self-contained-html
 

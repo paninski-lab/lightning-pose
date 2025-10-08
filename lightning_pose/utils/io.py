@@ -18,6 +18,8 @@ __all__ = [
     "get_keypoint_names",
     "return_absolute_path",
     "return_absolute_data_paths",
+    "extract_session_name_from_video",
+    "find_video_files_for_views",
     "get_videos_in_dir",
     "check_video_paths",
     "get_context_img_paths",
@@ -200,8 +202,15 @@ def get_videos_in_dir(
         all_video_files = sorted(os.listdir(video_dir))
         video_files = [
             [
-                os.path.join(video_dir, f) for f in all_video_files if
-                (f.endswith(allowed_formats) and f.split(".")[-2].endswith(view))
+                os.path.join(video_dir, f)
+                for f in all_video_files
+                if (
+                    f.endswith(allowed_formats)
+                    and (
+                        f.split(".")[-2].endswith(view)
+                        or f"_{view}_" in f
+                    )
+                )
             ]
             for view in view_names
         ]
@@ -263,8 +272,10 @@ def check_video_paths(
 def collect_video_files_by_view(video_files: list[Path], view_names: list[str]) -> dict[str, Path]:
     """Given a list of video files, matches them to views based on their filenames.
 
-    Filenames must contain their corresponding view's name, separated by the rest of the filename by
-    some non-alphanumeric delimiter. For example, mouse_top_3.mp4 is allowed, but mousetop3.mp4 is not allowed."""
+    Filenames must contain their corresponding view's name, separated by the rest of the filename
+    by some non-alphanumeric delimiter. For example, mouse_top_3.mp4 is allowed, but mousetop3.mp4
+    is not allowed.
+    """
     assert len(video_files) == len(view_names), f"{len(video_files)} != {len(view_names)}"
     video_files_by_view: dict[str, Path] = {}
     for view_name in view_names:
@@ -314,6 +325,7 @@ def get_context_img_paths(center_img_path: Path) -> list[Path]:
 
     return context_img_paths
 
+
 def fix_empty_first_row(df: pd.DataFrame) -> pd.DataFrame:
     """Fixes a problem with `pd.read_csv` where if the first row is all NaN
     it gets dropped.
@@ -337,3 +349,75 @@ def fix_empty_first_row(df: pd.DataFrame) -> pd.DataFrame:
         return fixed_df
 
     return df
+
+
+def extract_session_name_from_video(video_filename: str, view_names: list[str]) -> str:
+    """
+    Extract session name from video filename by removing the view name.
+
+    Simple approach: remove the underscore and view name from the filename.
+
+    Args:
+        video_filename: Name of the video file (with or without extension)
+        view_names: List of possible view names to remove
+
+    Returns:
+        Session name with view name removed
+    """
+    # Remove file extension if present
+    name_without_ext = Path(video_filename).stem
+
+    # Try to remove each view name (with underscore before it)
+    for view_name in view_names:
+        if view_name in name_without_ext:
+            # Remove the underscore and view name
+            session_name = name_without_ext.replace(f"_{view_name}", "")
+            return session_name
+
+    # If no view name found, return the original name
+    return name_without_ext
+
+
+def find_video_files_for_views(video_dir: str, view_names: list[str]) -> list[str]:
+    """
+    Find video files for each view by looking for files that contain the view name.
+
+    Args:
+        video_dir: Directory containing video files
+        view_names: List of view names to find videos for
+
+    Returns:
+        List of video file paths, one for each view
+    """
+    video_dir_path = Path(video_dir)
+
+    if not video_dir_path.exists():
+        raise FileNotFoundError(f"Video directory not found: {video_dir}")
+
+    # Get all video files in the directory
+    all_video_files = list(video_dir_path.glob("*.mp4"))
+
+    if not all_video_files:
+        raise FileNotFoundError(f"No video files found in {video_dir}")
+
+    video_files_per_view = []
+
+    # Find videos for each view
+    for view_name in view_names:
+        video_file = None
+
+        # Look for videos that contain this view name
+        for video_path in all_video_files:
+            if view_name in video_path.name:
+                video_file = str(video_path)
+                break
+
+        if video_file is None:
+            # Fallback: use the first available video file
+            video_file = str(all_video_files[0])
+            print(f"Warning: No specific video found for view '{view_name}', using: {video_file}")
+
+        video_files_per_view.append(video_file)
+        print(f"Found video for view '{view_name}': {video_file}")
+
+    return video_files_per_view

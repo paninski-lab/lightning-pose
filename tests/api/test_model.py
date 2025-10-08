@@ -5,7 +5,7 @@ from lightning_pose.api.model import Model
 from tests.fetch_test_data import fetch_test_data_if_needed
 
 
-def _setup_test_model(tmp_path, request, multiview=False):
+def _setup_test_model(tmp_path, request, multiview=False) -> Model:
     # Get the trained model for testing.
     dataset_name = (
         "test_model_mirror_mouse"
@@ -55,7 +55,7 @@ def test_predict_on_label_csv_singleview(tmp_path, request, toy_data_dir):
     ).is_file()
 
 
-def test_predict_on_label_csv_multiview(tmp_path, request, toy_mdata_dir):
+def test_predict_on_label_csv_method_multiview_model(tmp_path, request, toy_mdata_dir):
     model = _setup_test_model(tmp_path, request, multiview=True)
 
     # Test prediction on a CSV file.
@@ -64,6 +64,28 @@ def test_predict_on_label_csv_multiview(tmp_path, request, toy_mdata_dir):
     assert (model.image_preds_dir() / "top.csv" / "predictions.csv").is_file()
     assert (
         model.image_preds_dir() / "top.csv" / "predictions_pixel_error.csv"
+    ).is_file()
+
+
+def test_predict_on_label_csv_multiview(tmp_path, request, toy_mdata_dir):
+    model = _setup_test_model(tmp_path, request, multiview=True)
+
+    # Test prediction on CSV files.
+    model.predict_on_label_csv_multiview(
+        [
+            Path(toy_mdata_dir) / "top.csv",
+            Path(toy_mdata_dir) / "bot.csv",
+        ]
+    )
+
+    assert (model.image_preds_dir() / "top.csv" / "predictions.csv").is_file()
+    assert (
+        model.image_preds_dir() / "top.csv" / "predictions_pixel_error.csv"
+    ).is_file()
+
+    assert (model.image_preds_dir() / "bot.csv" / "predictions.csv").is_file()
+    assert (
+        model.image_preds_dir() / "bot.csv" / "predictions_pixel_error.csv"
     ).is_file()
 
 
@@ -81,7 +103,8 @@ def test_predict_on_video_file_singleview(tmp_path, request, toy_data_dir):
 
     # Test labeled_video generation.
     model.predict_on_video_file(
-        Path(toy_data_dir) / "videos" / "test_vid.mp4", generate_labeled_video=True
+        Path(toy_data_dir) / "videos" / "test_vid.mp4",
+        generate_labeled_video=True,
     )
     assert (model.labeled_videos_dir() / "test_vid_labeled.mp4").is_file()
 
@@ -91,7 +114,8 @@ def test_predict_on_video_file_method_multiview_model(tmp_path, request, toy_mda
 
     # Test prediction on a test video.
     model.predict_on_video_file(
-        Path(toy_mdata_dir) / "videos" / "test_vid_top.mp4", generate_labeled_video=True
+        Path(toy_mdata_dir) / "videos" / "test_vid_top.mp4",
+        generate_labeled_video=True,
     )
     assert (model.video_preds_dir() / "test_vid_top.csv").is_file()
     assert (model.video_preds_dir() / "test_vid_top_temporal_norm.csv").is_file()

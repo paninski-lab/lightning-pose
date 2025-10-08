@@ -1,7 +1,7 @@
 HeatmapHead
 ===========
 
-.. currentmodule:: lightning_pose.models.heads.heatmap
+.. currentmodule:: lightning_pose.models.heads
 
 .. autoclass:: HeatmapHead
    :show-inheritance:

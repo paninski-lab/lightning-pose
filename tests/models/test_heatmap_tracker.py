@@ -24,7 +24,7 @@ def test_supervised_heatmap(
     )
 
 
-def test_supervised_heatmap_vit_sam(
+def test_supervised_heatmap_vitb_sam(
     cfg,
     heatmap_data_module,
     video_dataloader,
@@ -36,6 +36,50 @@ def test_supervised_heatmap_vit_sam(
     cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.model_type = "heatmap"
     cfg_tmp.model.backbone = "vitb_sam"
+    cfg_tmp.model.losses_to_use = []
+
+    run_model_test(
+        cfg=cfg_tmp,
+        data_module=heatmap_data_module,
+        video_dataloader=video_dataloader,
+        trainer=trainer,
+    )
+
+
+def test_supervised_heatmap_vitb_imagenet(
+    cfg,
+    heatmap_data_module,
+    video_dataloader,
+    trainer,
+    run_model_test,
+):
+    """Test the initialization and training of a supervised heatmap model."""
+
+    cfg_tmp = copy.deepcopy(cfg)
+    cfg_tmp.model.model_type = "heatmap"
+    cfg_tmp.model.backbone = "vitb_imagenet"
+    cfg_tmp.model.losses_to_use = []
+
+    run_model_test(
+        cfg=cfg_tmp,
+        data_module=heatmap_data_module,
+        video_dataloader=video_dataloader,
+        trainer=trainer,
+    )
+
+
+def test_supervised_heatmap_vits_dino(
+    cfg,
+    heatmap_data_module,
+    video_dataloader,
+    trainer,
+    run_model_test,
+):
+    """Test the initialization and training of a supervised heatmap model."""
+
+    cfg_tmp = copy.deepcopy(cfg)
+    cfg_tmp.model.model_type = "heatmap"
+    cfg_tmp.model.backbone = "vits_dino"
     cfg_tmp.model.losses_to_use = []
 
     run_model_test(

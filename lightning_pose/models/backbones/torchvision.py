@@ -8,10 +8,7 @@ from typeguard import typechecked
 from lightning_pose.models.backbones import ALLOWED_BACKBONES
 
 # to ignore imports for sphix-autoapidoc
-__all__ = [
-    "build_backbone",
-    "grab_layers_sequential",
-]
+__all__ = []
 
 
 @typechecked

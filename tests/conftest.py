@@ -8,9 +8,7 @@ construction relies heavily on the utility functions provided in `utils/scripts.
 import copy
 import gc
 import os
-import shutil
 import subprocess
-from pathlib import Path
 from typing import Callable
 
 import cv2
@@ -47,6 +45,11 @@ TOY_MDATA_ROOT_DIR = str(lp.LP_ROOT_PATH / "data" / "mirror-mouse-example_split"
 @pytest.fixture
 def video_list() -> list[str]:
     return get_videos_in_dir(os.path.join(TOY_DATA_ROOT_DIR, "videos"))
+
+
+@pytest.fixture
+def video_list_multiview() -> list[str]:
+    return get_videos_in_dir(os.path.join(TOY_MDATA_ROOT_DIR, "videos"))
 
 
 @pytest.fixture
@@ -91,7 +94,7 @@ def cfg_multiview() -> dict:
     cfg.data.data_dir = "${LP_ROOT_PATH:}/data/mirror-mouse-example_split"
     # unrelated to multiview: add some test coverage for CSV file as absolute path.
     cfg.data.csv_file = ["${data.data_dir}/top.csv", "${data.data_dir}/bot.csv"]
-    cfg.data.view_names = ["bot", "top"]
+    cfg.data.view_names = ["top", "bot"]
     cfg.data.num_keypoints = 7
     cfg.data.keypoint_names = [
         "paw1LH", "paw2LF", "paw3RF", "paw4RH", "tailBase", "tailMid", "nose",
@@ -520,11 +523,45 @@ def video_dataloader(cfg, base_dataset, video_list) -> LitDaliWrapper:
 
 
 @pytest.fixture
+def video_dataloader_multiview(
+    cfg_multiview,
+    multiview_heatmap_dataset,
+    video_list_multiview,
+) -> LitDaliWrapper:
+    """Create a prediction dataloader for a new video."""
+
+    # setup
+    vid_pred_class = PrepareDALI(
+        train_stage="predict",
+        model_type="base",
+        dali_config=cfg_multiview.dali,
+        # Important: This will be a list of lists for multiview.
+        # This will trigger dali to return multiview batches to predict_step.
+        filenames=[[f] for f in video_list_multiview],
+        resize_dims=[multiview_heatmap_dataset.height, multiview_heatmap_dataset.width],
+    )
+    video_dataloader = vid_pred_class()
+
+    # return to tests
+    yield video_dataloader
+
+    # cleanup after all tests have run (no more calls to yield)
+    del video_dataloader
+    torch.cuda.empty_cache()
+
+
+@pytest.fixture
 def trainer(cfg) -> pl.Trainer:
     """Create a basic pytorch lightning trainer for testing models."""
 
-    cfg.training.unfreezing_epoch = 1 # exercise unfreezing
-    callbacks = get_callbacks(cfg, early_stopping=False, lr_monitor=False, backbone_unfreeze=True, checkpointing=False)
+    cfg.training.unfreezing_epoch = 1  # exercise unfreezing
+    callbacks = get_callbacks(
+        cfg,
+        early_stopping=False,
+        lr_monitor=False,
+        backbone_unfreeze=True,
+        checkpointing=False,
+    )
 
     trainer = pl.Trainer(
         accelerator="gpu",
@@ -534,7 +571,7 @@ def trainer(cfg) -> pl.Trainer:
         check_val_every_n_epoch=1,
         log_every_n_steps=1,
         callbacks=callbacks,
-        enable_checkpointing = False,
+        enable_checkpointing=False,
         limit_train_batches=2,
         num_sanity_val_steps=0,
         logger=False,

@@ -20,7 +20,7 @@ import lightning_pose
 from lightning_pose.api.model import Model
 from lightning_pose.api.model_config import ModelConfig
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
-from lightning_pose.utils.io import return_absolute_data_paths
+from lightning_pose.utils.io import find_video_files_for_views, return_absolute_data_paths
 from lightning_pose.utils.scripts import (
     calculate_steps_per_epoch,
     get_callbacks,
@@ -95,6 +95,34 @@ def _evaluate_on_training_dataset(model: Model, ood_mode=False):
             if ood_mode:
                 csv_file = csv_file.with_stem(csv_file.stem + "_new")
             csv_files.append(csv_file)
+        if model.config.cfg.data.get("camera_params_file"):
+            camera_params_file = _absolute_csv_file(
+                model.config.cfg.data.camera_params_file,
+                model.config.cfg.data.data_dir,
+            )
+            if ood_mode:
+                camera_params_file = camera_params_file.with_stem(
+                    camera_params_file.stem + "_new"
+                )
+        else:
+            camera_params_file = None
+
+        # NOTE: setting bbox_files = None here is a hacky way to get the model predictions
+        # to be in the cropped image space; otherwise the bbox info would lead to
+        # predictions in the original image space. This can be achieved post-hoc by using
+        # the CLI remap command.
+        bbox_files = None
+
+        # This is how the code would look without the hack
+        # if model.config.cfg.data.get("bbox_file"):
+        #     bbox_files = []
+        #     for bbox_file in model.config.cfg.data.bbox_file:
+        #         bbox_file = _absolute_csv_file(bbox_file, model.config.cfg.data.data_dir)
+        #         if ood_mode:
+        #             bbox_file = bbox_file.with_stem(bbox_file.stem + "_new")
+        #         bbox_files.append(bbox_file)
+        # else:
+        #     bbox_files = None
 
     # ood mode: skip prediction when _new files don't exist.
     if ood_mode and not csv_files[0].exists():
@@ -106,15 +134,27 @@ def _evaluate_on_training_dataset(model: Model, ood_mode=False):
     else:
         pretty_print_str("Predicting train/val/test images...")
 
-    for i, csv_file in enumerate(csv_files):
+    # Run prediction and metric computation.
+    if model.config.is_multi_view():
+        model.predict_on_label_csv_multiview(
+            csv_file_per_view=csv_files,
+            bbox_file_per_view=bbox_files,
+            camera_params_file=camera_params_file,
+            data_dir=model.config.cfg.data.data_dir,
+            compute_metrics=True,
+            add_train_val_test_set=(not ood_mode),
+        )
+    else:
+        csv_file = csv_files[0]
         model.predict_on_label_csv(
             csv_file=csv_file,
             data_dir=model.config.cfg.data.data_dir,
             compute_metrics=True,
-            generate_labeled_images=False,
             add_train_val_test_set=(not ood_mode),
         )
 
+    # Copy prediction files to legacy location in model dir.
+    for i, csv_file in enumerate(csv_files):
         if len(csv_files) > 1:
             view_name = model.config.cfg.data.view_names[i]
         # Copy output files to model_dir for backward-compatibility.
@@ -138,14 +178,29 @@ def _evaluate_on_training_dataset(model: Model, ood_mode=False):
 
 def _predict_test_videos(model: Model):
     if model.config.cfg.eval.predict_vids_after_training:
-        pretty_print_str(f"Predicting videos in cfg.eval.test_videos_directory...")
-        for video_file in model.config.test_video_files():
-            pretty_print_str(f"Predicting video: {video_file}...")
+        pretty_print_str("Predicting videos in cfg.eval.test_videos_directory...")
+        # dealing with multiview
+        if model.config.is_multi_view():
+            # Find video files for each view using utils function
+            video_files_per_view = find_video_files_for_views(
+                video_dir=model.config.cfg.data.video_dir,
+                view_names=model.config.cfg.data.view_names
+            )
 
-            model.predict_on_video_file(
-                Path(video_file),
+            model.predict_on_video_file_multiview(
+                video_file_per_view=video_files_per_view,
+                # output_dir=model.model_dir,
+                compute_metrics=True,
                 generate_labeled_video=model.config.cfg.eval.save_vids_after_training,
             )
+        else:
+            for video_file in model.config.test_video_files():
+                pretty_print_str(f"Predicting video: {video_file}...")
+
+                model.predict_on_video_file(
+                    Path(video_file),
+                    generate_labeled_video=model.config.cfg.eval.save_vids_after_training,
+                )
 
 
 def _train(cfg: DictConfig) -> Model:
@@ -162,7 +217,7 @@ def _train(cfg: DictConfig) -> Model:
     with open_dict(cfg):
         cfg.model.lightning_pose_version = lightning_pose.version
 
-    print("Our Hydra config file:")
+    print("Config file:")
     pretty_print_cfg(cfg)
 
     ModelConfig(cfg).validate()
@@ -188,7 +243,7 @@ def _train(cfg: DictConfig) -> Model:
 
     steps_per_epoch = calculate_steps_per_epoch(data_module)
 
-    # Convert milestone_steps to milestones if applicable (before `get_model`).
+    # convert milestone_steps to milestones if applicable (before `get_model`).
     if (
         "multisteplr" in cfg.training.lr_scheduler_params
         and "milestone_steps" in cfg.training.lr_scheduler_params.multisteplr
@@ -196,6 +251,14 @@ def _train(cfg: DictConfig) -> Model:
         milestone_steps = cfg.training.lr_scheduler_params.multisteplr.milestone_steps
         milestones = [math.ceil(s / steps_per_epoch) for s in milestone_steps]
         cfg.training.lr_scheduler_params.multisteplr.milestones = milestones
+
+    # convert patch masking epochs if applicable (before `get_callbacks`)
+    if "patch_mask" in cfg.training and "init_epoch" in cfg.training.patch_mask:
+        init_step = math.ceil(cfg.training.patch_mask.init_epoch * steps_per_epoch)
+        final_step = math.ceil(cfg.training.patch_mask.final_epoch * steps_per_epoch)
+        with open_dict(cfg):
+            cfg.training.patch_mask.init_step = init_step
+            cfg.training.patch_mask.final_step = final_step
 
     # model
     model = get_model(cfg=cfg, data_module=data_module, loss_factories=loss_factories)
@@ -249,15 +312,9 @@ def _train(cfg: DictConfig) -> Model:
 
     # set up trainer
 
-    # Old configs may have num_gpus: 0. We will remove support in a future release.
-    if cfg.training.num_gpus == 0:
-        warnings.warn(
-            "Config contains unsupported value num_gpus: 0. "
-            "Update num_gpus to 1 in your config."
-        )
     cfg.training.num_gpus = max(cfg.training.num_gpus, 1)
 
-    # Initialize to Trainer defaults. Note max_steps defaults to -1.
+    # initialize to Trainer defaults. Note max_steps defaults to -1.
     min_steps, max_steps, min_epochs, max_epochs = (None, -1, None, None)
     if "min_steps" in cfg.training:
         min_steps = cfg.training.min_steps
@@ -266,12 +323,8 @@ def _train(cfg: DictConfig) -> Model:
         min_epochs = cfg.training.min_epochs
         max_epochs = cfg.training.max_epochs
 
-    # Initialize to Trainer defaults. Note max_steps defaults to -1.
-
     # Unlike min_epoch/min_step, both of these are valid to specify.
-    check_val_every_n_epoch = cfg.training.get(
-        "check_val_every_n_epoch", 1
-    )  # 1 is default for Trainer.
+    check_val_every_n_epoch = cfg.training.get("check_val_every_n_epoch", 1)
     val_check_interval = cfg.training.get("val_check_interval")
 
     trainer = pl.Trainer(

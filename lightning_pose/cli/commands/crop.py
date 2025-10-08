@@ -10,8 +10,8 @@ from omegaconf import OmegaConf
 from .. import types
 
 if TYPE_CHECKING:
-    import lightning_pose.utils.cropzoom as cz
-    from lightning_pose.api.model import Model
+    import lightning_pose.utils.cropzoom as cz  # noqa: F401
+    from lightning_pose.api.model import Model  # noqa: F401
 
 
 def register_parser(subparsers):
@@ -24,7 +24,7 @@ def register_parser(subparsers):
             """\
             Crops a video or labeled frames based on model predictions.
             Requires model predictions to already have been generated using `litpose predict`.
-    
+
             Cropped videos are saved to:
                 <model_dir>/
                 └── video_preds/
@@ -45,7 +45,7 @@ def register_parser(subparsers):
                         └── a/b/c/<image_name>.png        (cropped images)\
             """
         ),
-        usage="litpose crop <model_dir> <input_path:video|csv>... --crop_ratio=CROP_RATIO --anchor_keypoints=x,y,z",
+        usage="litpose crop <model_dir> <input_path:video|csv>... --crop_ratio=CROP_RATIO --anchor_keypoints=x,y,z",  # noqa
     )
     crop_parser.add_argument(
         "model_dir", type=types.existing_model_dir, help="path to a model directory"
@@ -70,8 +70,8 @@ def register_parser(subparsers):
 
 def handle(args):
     """Handle the crop command."""
-    import lightning_pose.utils.cropzoom as cz
-    from lightning_pose.api.model import Model
+    import lightning_pose.utils.cropzoom as cz  # noqa: F811
+    from lightning_pose.api.model import Model  # noqa: F811
 
     model_dir = args.model_dir
     model = Model.from_dir(model_dir)

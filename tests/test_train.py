@@ -22,7 +22,7 @@ def chdir(dir):
 
 
 def _test_cfg(cfg):
-    pwd = os.getcwd()
+
     # copy config and update paths
     cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.eval.test_videos_directory = cfg_tmp.data.video_dir
@@ -41,6 +41,7 @@ def _test_cfg(cfg):
     # predict on vid
     cfg_tmp.eval.predict_vids_after_training = True
     cfg_tmp.eval.save_vids_after_training = True
+
     return cfg_tmp
 
 
@@ -178,10 +179,10 @@ def _execute_multi_gpu_test(cfg, tmp_path, pytestconfig):
             "python",
             pytestconfig.rootpath / "scripts" / "train_hydra.py",
             f"--config-path={tmp_path}",
-            f"--config-name=config",
+            "--config-name=config",
         ],
         env=env,
-        check = True,
+        check=True,
     )
     assert process.returncode == 0
 

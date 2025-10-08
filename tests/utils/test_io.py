@@ -13,6 +13,8 @@ from lightning_pose.utils.io import (
     check_if_semi_supervised,
     check_video_paths,
     collect_video_files_by_view,
+    extract_session_name_from_video,
+    find_video_files_for_views,
     get_context_img_paths,
     get_videos_in_dir,
 )
@@ -151,7 +153,7 @@ def test_collect_video_files_by_view():
         "top": Path("a/simple_top.mp4"),
     }
 
-    # We just match based on view matching, we don't care about differences in the rest of the string.
+    # we just match based on view matching, we don't care about diffs in the rest of the string
     # TBD whether this is the desired behavior.
     view_to_file = collect_video_files_by_view(
         [Path("a/complex_top_2.mp4"), Path("a/simple_bot.mp4")], ["bot", "top"]
@@ -226,6 +228,67 @@ def test_get_context_img_paths():
     with pytest.raises(ValueError):
         collect_video_files_by_view(
             [Path("foo.mp4"), Path("baz.mp4")], ["foo", "bar"])
+
+
+def test_extract_session_name_from_video():
+    view_names = ["top", "bot"]
+
+    # Test 1: basic case with view name
+    session_name = extract_session_name_from_video("mouse_session_top.mp4", view_names)
+    assert session_name == "mouse_session"
+
+    # Test 2: basecase case with second view name
+    session_name = extract_session_name_from_video("mouse_session_bot", view_names)
+    assert session_name == "mouse_session"
+
+    # Test 3: view name at the middle
+    session_name = extract_session_name_from_video("mouse_session_top_135.mp4", view_names)
+    assert session_name == "mouse_session_135"
+
+    # Test 4: no view name in filename
+    session_name = extract_session_name_from_video("mouse_session.mp4", view_names)
+    assert session_name == "mouse_session"
+
+    # Test 5: multiple underscores in filename + view name at the middle
+    session_name = extract_session_name_from_video("mouse_session_2023_top_135.mp4", view_names)
+    assert session_name == "mouse_session_2023_135"
+
+
+def test_find_video_files_for_views(toy_data_dir, tmpdir):
+    # Create test directory with video files
+    test_dir = os.path.join(str(tmpdir), "test_videos")
+    os.makedirs(test_dir)
+
+    # Get the toy video file using the same method as other tests
+    videos_dir = os.path.join(toy_data_dir, "videos")
+    toy_video_list = get_videos_in_dir(videos_dir)
+    toy_video = toy_video_list[0]
+
+    # Create test video files
+    video1_path = os.path.join(test_dir, "session1_top.mp4")
+    video2_path = os.path.join(test_dir, "session1_bot.mp4")
+
+    # Copy toy video to create test files
+    shutil.copyfile(toy_video, video1_path)
+    shutil.copyfile(toy_video, video2_path)
+
+    view_names = ["top", "bot"]
+
+    # Test 1: find videos for specified views
+    video_files = find_video_files_for_views(test_dir, view_names)
+    assert len(video_files) == 2
+    assert "top" in video_files[0]
+    assert "bot" in video_files[1]
+
+    # Test 2: directory doesn't exist
+    with pytest.raises(FileNotFoundError):
+        find_video_files_for_views("/nonexistent/dir", view_names)
+
+    # Test 3: no video files in directory
+    empty_dir = os.path.join(str(tmpdir), "empty_dir")
+    os.makedirs(empty_dir)
+    with pytest.raises(FileNotFoundError):
+        find_video_files_for_views(empty_dir, view_names)
 
 
 def test_fix_empty_first_row(tmp_path):

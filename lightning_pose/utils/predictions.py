@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
-from moviepy.editor import VideoFileClip
+from moviepy import VideoFileClip
 from omegaconf import DictConfig, OmegaConf
 from torchtyping import TensorType
 from typeguard import typechecked
@@ -239,17 +239,20 @@ class PredictionHandler:
                 TensorType["batch", "num_keypoints"],
             ]
         ],
-        is_multiview_video: bool=False,
+        is_multiview_video: bool = False,
     ) -> pd.DataFrame | dict[str, pd.DataFrame]:
         """
         Call this function to get a pandas dataframe of the predictions for a single video.
         Assuming you've already run trainer.predict(), and have a list of Tuple predictions.
+
         Args:
             preds: list of tuples of (predictions, confidences)
-            is_multiview_video: specify True when you are using multiview video prediction dataloader,
-                i.e. for heatmap_multiview.
+            is_multiview_video: specify True when you are using multiview video prediction
+                dataloader, i.e. for heatmap_multiview.
+
         Returns:
             pd.DataFrame: index is (frame, bodypart, x, y, likelihood)
+
         """
         stacked_preds, stacked_confs = self.unpack_preds(preds=preds)
         if (
@@ -297,7 +300,7 @@ class PredictionHandler:
 def predict_dataset(
     cfg: DictConfig,
     data_module: BaseDataModule,
-    preds_file: str,
+    preds_file: str | list[str],
     ckpt_file: str | None = None,
     trainer: pl.Trainer | None = None,
     model: ALLOWED_MODELS | None = None,
@@ -338,8 +341,20 @@ def predict_dataset(
     pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
     labeled_preds_df = pred_handler(preds=labeled_preds)
     if isinstance(labeled_preds_df, dict):
-        for view_name, df in labeled_preds_df.items():
-            df.to_csv(preds_file.replace(".csv", f"_{view_name}.csv"))
+        if isinstance(preds_file, str):
+            # old logic used to save to <predictions>_<view_name>.csv
+            for view_name, df in labeled_preds_df.items():
+                df.to_csv(preds_file.replace(".csv", f"_{view_name}.csv"))
+        elif isinstance(preds_file, list):
+            # preds_file is a list of views corresponding to cfg.data.view_names.
+            # this allows the caller to specify the output locations more flexibly.
+
+            # Check the order of labeled_preds_df keys matches the order of the views in the cfg.
+            assert list(labeled_preds_df.keys()) == list(cfg.data.view_names)
+
+            for (view_name, df), _pred_file in zip(labeled_preds_df.items(), preds_file):
+                df.to_csv(_pred_file)
+
     else:
         labeled_preds_df.to_csv(preds_file)
 
@@ -484,9 +499,15 @@ def get_model_class(map_type: str, semi_supervised: bool) -> Type[ALLOWED_MODELS
             from lightning_pose.models import HeatmapTracker as Model
         elif map_type == "heatmap_mhcrnn":
             from lightning_pose.models import HeatmapTrackerMHCRNN as Model
+        elif map_type == "heatmap_multiview":
+            from lightning_pose.models import HeatmapTrackerMultiview as Model
+        elif map_type == "heatmap_multiview_multihead":
+            from lightning_pose.models import HeatmapTrackerMultiviewMultihead as Model
+        elif map_type == "heatmap_multiview_transformer":
+            from lightning_pose.models import HeatmapTrackerMultiviewTransformer as Model
         else:
             raise NotImplementedError(
-                "%s is an invalid model_type for a fully supervised model" % map_type
+                f"{map_type} is an invalid model_type for a fully supervised model"
             )
     else:
         if map_type == "regression":
@@ -495,6 +516,10 @@ def get_model_class(map_type: str, semi_supervised: bool) -> Type[ALLOWED_MODELS
             from lightning_pose.models import SemiSupervisedHeatmapTracker as Model
         elif map_type == "heatmap_mhcrnn":
             from lightning_pose.models import SemiSupervisedHeatmapTrackerMHCRNN as Model
+        elif map_type == "heatmap_multiview_transformer":
+            from lightning_pose.models import (
+                SemiSupervisedHeatmapTrackerMultiviewTransformer as Model,
+            )
         else:
             raise NotImplementedError(
                 f"{map_type} is an invalid model_type for a semi-supervised model"
@@ -559,49 +584,55 @@ def load_model_from_checkpoint(
         map_type=cfg.model.model_type,
         semi_supervised=semi_supervised,
     )
-    # initialize a model instance, with weights loaded from .ckpt file
-    if cfg.model.backbone == "vitb_sam":
-        # see https://github.com/paninski-lab/lightning-pose/issues/134 for explanation of this block
-        from lightning_pose.utils.scripts import get_model
 
-        # load model first
-        model = get_model(
-            cfg,
-            data_module=data_module,
-            loss_factories=loss_factories,
-        )
-        # # update model parameter
-        # if model.backbone.pos_embed is not None:
-        #     # re-initialize absolute positional embedding with *finetune* image size.
-        #     finetune_img_size = cfg.data.image_resize_dims.height
-        #     patch_size = model.backbone.patch_size
-        #     embed_dim = 768  # value from lightning_pose.models.backbones.vits.build_backbone
-        #     model.backbone.pos_embed = torch.nn.Parameter(
-        #         torch.zeros(
-        #             1,
-        #             finetune_img_size // patch_size,
-        #             finetune_img_size // patch_size,
-        #             embed_dim,
-        #         )
-        #     )
-        # load weights
-        state_dict = torch.load(ckpt_file)["state_dict"]
-        # put weights into model
-        model.load_state_dict(state_dict, strict=False)
+    # initialize a model instance, load weights from .ckpt file (fix state_dict keys if needed)
+    try:
+        checkpoint = torch.load(ckpt_file)
+    except Exception as e:
+        print(f"Warning: Failed to load checkpoint with default settings: {e}")
+        print("Attempting to load with weights_only=False...")
+        checkpoint = torch.load(ckpt_file, weights_only=False)
+    state_dict = checkpoint.get("state_dict", checkpoint)
+
+    # fix state dict key mismatch for upsampling layers
+    # old checkpoints may have 'upsampling_layers' without 'head.' prefix
+    keys_remapped = False
+    for key in list(state_dict.keys()):
+        if key.startswith("upsampling_layers."):
+            # Add 'head.' prefix if missing
+            new_key = "head." + key
+            state_dict[new_key] = state_dict.pop(key)
+            keys_remapped = True
+
+    if keys_remapped:
+        # save the fixed state dict back to checkpoint
+        checkpoint["state_dict"] = state_dict
+        # create a temporary file with the fixed checkpoint
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.ckpt', delete=False) as tmp_file:
+            torch.save(checkpoint, tmp_file.name)
+            fixed_ckpt_file = tmp_file.name
     else:
-        if semi_supervised:
-            model = ModelClass.load_from_checkpoint(
-                ckpt_file,
-                loss_factory=loss_factories["supervised"],
-                loss_factory_unsupervised=loss_factories["unsupervised"],
-                strict=False,
-            )
-        else:
-            model = ModelClass.load_from_checkpoint(
-                ckpt_file,
-                loss_factory=loss_factories["supervised"],
-                strict=False,
-            )
+        fixed_ckpt_file = ckpt_file
+
+    if semi_supervised:
+        model = ModelClass.load_from_checkpoint(
+            fixed_ckpt_file,
+            loss_factory=loss_factories["supervised"],
+            loss_factory_unsupervised=loss_factories["unsupervised"],
+            strict=False,
+        )
+    else:
+        model = ModelClass.load_from_checkpoint(
+            fixed_ckpt_file,
+            loss_factory=loss_factories["supervised"],
+            strict=False,
+        )
+
+    # clean up temporary file if created
+    if keys_remapped:
+        import os
+        os.unlink(fixed_ckpt_file)
 
     if eval:
         model.eval()
@@ -672,7 +703,7 @@ def create_labeled_video(
         upsample_factor = 1
 
     if upsample_factor > 1:
-        clip = clip.resize((upsample_factor * nx, upsample_factor * ny))
+        clip = clip.resized((upsample_factor * nx, upsample_factor * ny))
         nx, ny = clip.size
 
     print(f"Duration of video [s]: {np.round(dur, 2)}, recorded at {np.round(fps_og, 2)} fps!")
@@ -752,7 +783,7 @@ def create_labeled_video(
         )
         return frame
 
-    clip_marked = clip.fl(add_marker_and_timestamps)
+    clip_marked = clip.transform(add_marker_and_timestamps)
     clip_marked.write_videofile(
         output_video_path, codec="libx264", fps=fps or fps_og or 20.0
     )
@@ -839,8 +870,8 @@ def predict_video(
         video_file: Predict on a video, or for true multiview models, a list of videos
             (order: 1-1 correspondence with cfg.data.view_names).
         model: The model to predict with.
-        output_pred_file: (optional) File to save predictions in. For multiview, a list of files (1-1 correspondance
-            to cfg.data.view_names).
+        output_pred_file: (optional) File to save predictions in.
+            For multiview, a list of files (1-1 correspondance to cfg.data.view_names).
     """
 
     is_multiview = not isinstance(video_file, str)
@@ -849,11 +880,12 @@ def predict_video(
         # Validate output_pred_file is a list
         if output_pred_file is not None and not isinstance(output_pred_file, list):
             raise ValueError(
-                "for multiview prediction, 'output_pred_file' should be a list corresponding to view_names"
+                "for multiview prediction, 'output_pred_file' should be a list corresponding to "
+                "view_names"
             )
 
-        # Sanity check 1-1 correspondence of video_file to cfg.data.view_names
-        # (Important since PredictionHandler relies on the correspondence to organize the outputted dict).
+        # sanity check 1-1 correspondence of video_file to cfg.data.view_names
+        # important since PredictionHandler relies on correspondence to organize the outputted dict
         for single_video_file, view_name in zip(
             video_file, model.config.cfg.data.view_names
         ):
@@ -862,9 +894,7 @@ def predict_video(
             ), "expected video_file to correspond 1-1 with cfg.data.view_name"
 
     trainer = pl.Trainer(accelerator="gpu", devices=1, logger=False)
-    model_type = (
-        "context" if model.config.cfg.model.model_type == "heatmap_mhcrnn" else "base"
-    )
+    model_type = "context" if model.config.cfg.model.model_type == "heatmap_mhcrnn" else "base"
 
     filenames = [video_file] if not is_multiview else [[f] for f in video_file]
     vid_pred_class = PrepareDALI(

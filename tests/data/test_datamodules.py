@@ -86,7 +86,9 @@ def test_multiview_heatmap_datamodule(cfg_multiview, multiview_heatmap_data_modu
     num_targets = multiview_heatmap_data_module.dataset.num_targets
     num_view = multiview_heatmap_data_module.dataset.num_views
 
+    # ----------------------------
     # check train batch properties
+    # ----------------------------
     batch = next(iter(multiview_heatmap_data_module.train_dataloader()))
     assert batch["images"].shape == (train_size, num_view, 3, im_height, im_width)
     assert batch["keypoints"].shape == (train_size, num_targets)
@@ -100,7 +102,9 @@ def test_multiview_heatmap_datamodule(cfg_multiview, multiview_heatmap_data_modu
     assert not np.allclose(b1["images"], b2["images"])
     assert not np.allclose(b1["keypoints"], b2["keypoints"], equal_nan=True)
 
+    # ----------------------------
     # check val batch properties
+    # ----------------------------
     val_dataloader = multiview_heatmap_data_module.val_dataloader()
     batch = next(iter(val_dataloader))
     assert batch["images"].shape == (val_size, num_view, 3, im_height, im_width)
@@ -115,6 +119,9 @@ def test_multiview_heatmap_datamodule(cfg_multiview, multiview_heatmap_data_modu
     assert np.allclose(b1["images"], b2["images"])
     assert np.allclose(b1["keypoints"], b2["keypoints"], equal_nan=True)
 
+    # ----------------------------
+    # check test batch properties
+    # ----------------------------
     test_dataloader = multiview_heatmap_data_module.test_dataloader()
     batch = next(iter(test_dataloader))
     assert batch["images"].shape == (test_size, num_view, 3, im_height, im_width)
@@ -227,7 +234,7 @@ def test_base_data_module_combined(cfg, base_data_module_combined):
 
     # test outputs for single batch
     loader = base_data_module_combined.train_dataloader()
-    assert isinstance(loader.sampler["labeled"], RandomSampler) # shuffle=True
+    assert isinstance(loader.sampler["labeled"], RandomSampler)  # shuffle=True
 
     batch = next(iter(loader))
     # batch tuple in lightning >=2.0.9
@@ -307,7 +314,7 @@ def test_multiview_heatmap_data_module_combined(
     assert list(batch.keys())[1] == "unlabeled"
     assert list(batch["labeled"].keys()) == [
         "images", "keypoints", "heatmaps", "bbox", "idxs", "num_views", "concat_order",
-        "view_names",
+        "view_names", "keypoints_3d", "intrinsic_matrix", "extrinsic_matrix", "distortions",
     ]
     assert list(batch["unlabeled"].keys()) == ["frames", "transforms", "bbox", "is_multiview"]
 
@@ -385,7 +392,7 @@ def test_multiview_heatmap_data_module_combined_context(
     assert list(batch.keys())[1] == "unlabeled"
     assert list(batch["labeled"].keys()) == [
         "images", "keypoints", "heatmaps", "bbox", "idxs", "num_views", "concat_order",
-        "view_names",
+        "view_names", "keypoints_3d", "intrinsic_matrix", "extrinsic_matrix", "distortions",
     ]
     assert list(batch["unlabeled"].keys()) == ["frames", "transforms", "bbox", "is_multiview"]
 

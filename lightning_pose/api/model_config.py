@@ -35,8 +35,6 @@ class ModelConfig:
             )
         return True
 
-    ## Eval ##
-
     def test_video_files(self) -> list[Path]:
         files = check_video_paths(
             return_absolute_path(self.cfg.eval.test_videos_directory)

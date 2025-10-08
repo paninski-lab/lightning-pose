@@ -14,22 +14,18 @@ from lightning_pose.data.datatypes import (
     MultiviewUnlabeledBatchDict,
     UnlabeledBatchDict,
 )
-from lightning_pose.data.utils import undo_affine_transform_batch
+from lightning_pose.data.utils import convert_bbox_coords, undo_affine_transform_batch
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.backbones import ALLOWED_BACKBONES
 from lightning_pose.models.base import (
     BaseSupervisedTracker,
     SemiSupervisedTrackerMixin,
-    convert_bbox_coords,
 )
 from lightning_pose.models.heads import HeatmapHead
 
 # to ignore imports for sphix-autoapidoc
-__all__ = [
-    "HeatmapTracker",
-    "SemiSupervisedHeatmapTracker",
-]
+__all__ = []
 
 
 class HeatmapTracker(BaseSupervisedTracker):
@@ -50,7 +46,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         lr_scheduler_params: DictConfig | dict | None = None,
         **kwargs: Any,
     ) -> None:
-        """Initialize a DLC-like model with resnet backbone.
+        """Initialize a heatmap-based pose estimation model with conv or transformer backbone.
 
         Args:
             num_keypoints: number of body parts
@@ -122,9 +118,13 @@ class HeatmapTracker(BaseSupervisedTracker):
         # batch/views before passing to network, then we reshape
         if len(shape) > 4:
             images = images.reshape(-1, shape[-3], shape[-2], shape[-1])
+            # images = [views * batch, channels, image_height, image_width]
             representations = self.get_representations(images)
+            # representations = [views * batch, num_features, rep_height, rep_width]
             heatmaps = self.head(representations)
+            # heatmaps = [views * batch, num_keypoints, heatmap_height, heatmap_width]
             heatmaps = heatmaps.reshape(shape[0], -1, heatmaps.shape[-2], heatmaps.shape[-1])
+            # heatmaps = [batch, num_keypoints * views, heatmap_height, heatmap_width]
         else:
             representations = self.get_representations(images)
             heatmaps = self.head(representations)

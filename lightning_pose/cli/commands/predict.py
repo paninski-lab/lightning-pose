@@ -42,7 +42,7 @@ def register_parser(subparsers):
         "input_path",
         type=Path,
         nargs="+",
-        help="one or more paths. They can be video files, image files, CSV files, or directories.\n"
+        help="one or more paths; can be video files, image files, CSV files, or directories.\n"
         "    directory: predicts over videos or images in the directory.\n"
         "               saves image outputs to `image_preds/<directory_name>`\n"
         "    video file: predicts on the video\n"
@@ -116,7 +116,6 @@ def _predict_multi_type(model: Model, path: Path, skip_viz: bool, skip_existing:
 
         model.predict_on_label_csv(
             csv_file=path,
-            generate_labeled_images=False,  # TODO: implement visualization
         )
     elif path.suffix in [".png", ".jpg"]:
         raise NotImplementedError("Not yet implemented: predicting on image files.")

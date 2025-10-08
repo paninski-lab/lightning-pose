@@ -6,9 +6,7 @@ import torch.nn.functional as F
 from transformers import SamModel
 
 # to ignore imports for sphix-autoapidoc
-__all__ = [
-    "SamVisionEncoder",
-]
+__all__ = []
 
 
 class SamVisionEncoder(nn.Module):

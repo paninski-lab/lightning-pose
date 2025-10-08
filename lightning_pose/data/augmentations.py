@@ -50,10 +50,10 @@ def imgaug_transform(params_dict: dict | DictConfig) -> iaa.Sequential:
         >>>         angle: [-90, 90]
 
         Create a pipeline with
-        - Rot90 transformation that is applied 100% of the time with rotations of 0, 90, 180, or 270 degrees.
+        - Rot90 transformation applied 100% of the time with rotations of 0, 90, 180, 270 degrees.
 
         >>> params_dict = {
-        >>>     'Rot90': {'p': 1.0, 'kwargs': {'k': [[0, 1, 2, 3]]}},  # note the (required) nested list
+        >>>     'Rot90': {'p': 1.0, 'kwargs': {'k': [[0, 1, 2, 3]]}},  # note required nested list
         >>> }
 
         In a config file, this will look like:
@@ -64,8 +64,8 @@ def imgaug_transform(params_dict: dict | DictConfig) -> iaa.Sequential:
         >>>       kwargs:
         >>>         k: [0, 1, 2, 3]
 
-        NOTE: if you pass a list of exactly 2 values to Rot90 it will be parsed as a tuple and all (discrete) rotations
-        between the two values will be sampled uniformly. 
+        NOTE: if you pass a list of exactly 2 values to Rot90 it will be parsed as a tuple and all
+        (discrete) rotations between the two values will be sampled uniformly.
         For example, `k: [0, 2]` is equivalent to `k: [0, 1, 2]`.
         If you need to _only_ sample two non-contiguous integers please raise an issue.
 
@@ -111,10 +111,21 @@ def imgaug_transform(params_dict: dict | DictConfig) -> iaa.Sequential:
 
 
 def expand_imgaug_str_to_dict(params: str) -> dict[str, Any]:
+
+    _allowed_imgaug_strs = [
+        "default",
+        "none",
+        "dlc",
+        "dlc-lr",
+        "dlc-top-down",
+        "dlc-mv",
+    ]
+
     params_dict = {}
     if params in ["default", "none"]:
         pass  # no augmentations
-    elif params in ["dlc", "dlc-lr", "dlc-top-down"]:
+    elif params in ["dlc", "dlc-lr", "dlc-top-down", "dlc-mv"]:
+
         # rotate 0 or 180 degrees
         if params in ["dlc-lr"]:
             params_dict["Rot90"] = {"p": 1.0, "kwargs": {"k": [[0, 2]]}}
@@ -124,8 +135,9 @@ def expand_imgaug_str_to_dict(params: str) -> dict[str, Any]:
             params_dict["Rot90"] = {"p": 1.0, "kwargs": {"k": [[0, 1, 2, 3]]}}
 
         # rotate
-        rotation = 25  # rotation uniformly sampled from (-rotation, +rotation)
-        params_dict["Affine"] = {"p": 0.4, "kwargs": {"rotate": (-rotation, rotation)}}
+        if not params.endswith("mv"):
+            rotation = 25  # rotation uniformly sampled from (-rotation, +rotation)
+            params_dict["Affine"] = {"p": 0.4, "kwargs": {"rotate": (-rotation, rotation)}}
 
         # motion blur
         k = 5  # kernel size of blur
@@ -168,12 +180,13 @@ def expand_imgaug_str_to_dict(params: str) -> dict[str, Any]:
         }
 
         # elastic transform
-        alpha = (0, 10)  # controls strength of displacement
-        sigma = 5  # cotnrols smoothness of displacement
-        params_dict["ElasticTransformation"] = {
-            "p": 0.5,
-            "kwargs": {"alpha": alpha, "sigma": sigma},
-        }
+        if not params.endswith("mv"):
+            alpha = (0, 10)  # controls strength of displacement
+            sigma = 5  # cotnrols smoothness of displacement
+            params_dict["ElasticTransformation"] = {
+                "p": 0.5,
+                "kwargs": {"alpha": alpha, "sigma": sigma},
+            }
 
         # hist eq
         params_dict["AllChannelsHistogramEqualization"] = {"p": 0.1, "kwargs": {}}
@@ -191,15 +204,15 @@ def expand_imgaug_str_to_dict(params: str) -> dict[str, Any]:
         }
 
         # crop
-        crop_by = 0.15  # number of pix to crop on each side of img given as a fraction
-        params_dict["CropAndPad"] = {
-            "p": 0.4,
-            "kwargs": {"percent": (-crop_by, crop_by), "keep_size": False},
-        }
+        if not params.endswith("mv"):
+            crop_by = 0.15  # number of pix to crop on each side of img given as a fraction
+            params_dict["CropAndPad"] = {
+                "p": 0.4,
+                "kwargs": {"percent": (-crop_by, crop_by), "keep_size": False},
+            }
     else:
         raise NotImplementedError(
-            f"cfg.training.imgaug string {params} must be in "
-            "['none', 'default', 'dlc', 'dlc-lr', 'dlc-top-down']"
+            f"cfg.training.imgaug string {params} must be in {_allowed_imgaug_strs}"
         )
 
     return params_dict

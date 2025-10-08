@@ -10,9 +10,7 @@ from lightning_pose.api.model_config import ModelConfig
 from lightning_pose.data.datatypes import MultiviewPredictionResult, PredictionResult
 from lightning_pose.models import ALLOWED_MODELS
 from lightning_pose.utils import io as io_utils
-from lightning_pose.utils.predictions import (
-    generate_labeled_video as generate_labeled_video_fn,
-)
+from lightning_pose.utils.predictions import generate_labeled_video as generate_labeled_video_fn
 from lightning_pose.utils.predictions import (
     load_model_from_checkpoint,
     predict_dataset,
@@ -123,44 +121,35 @@ class Model:
         csv_file: str | Path,
         data_dir: str | Path | None = None,
         compute_metrics: bool = True,
-        generate_labeled_images: bool = False,
-        output_dir: str | Path | None = UNSPECIFIED,
         add_train_val_test_set: bool = False,
     ) -> PredictionResult:
         """Predicts on a labeled dataset and computes error/loss metrics if applicable.
 
         Args:
             csv_file (str | Path): Path to the CSV file of images, keypoint locations.
-            data_dir (str | Path, optional): Root path for relative paths in the CSV file. Defaults to the
-                data_dir originally used when training.
+            data_dir (str | Path, optional): Root path for relative paths in the CSV file.
+                Defaults to the data_dir originally used when training.
             compute_metrics (bool, optional): Whether to compute pixel error and loss metrics on
                 predictions.
-            generate_labeled_images (bool, optional): Whether to save labeled images. Defaults to False.
+            generate_labeled_images (bool, optional): Whether to save labeled images.
+                Defaults to False.
             output_dir (str | Path, optional): The directory to save outputs to.
-                Defaults to `{model_dir}/image_preds/{csv_file_name}`. If set to None, outputs are not saved.
-            add_train_val_test_set (bool): When predicting on training dataset, set to true to add the `set`
-                column to the prediction output.
+                Defaults to `{model_dir}/image_preds/{csv_file_name}`.
+                If set to None, outputs are not saved.
+            add_train_val_test_set (bool): When predicting on training dataset, set to true to add
+                the `set` column to the prediction output.
         Returns:
             PredictionResult: A PredictionResult object containing the predictions and metrics.
         """
         self._load()
         # Convert this to absolute, because if relative, downstream will
-        # assume incorrectly assume its relative to the data_dir.
+        # assume its relative to the data_dir.
         csv_file = Path(csv_file).absolute()
         if data_dir is None:
             data_dir = self.config.cfg.data.data_dir
 
-        if output_dir == self.__class__.UNSPECIFIED:
-            output_dir = self.image_preds_dir() / csv_file.name
-
-        elif output_dir is None:
-            raise NotImplementedError("Currently we must save predictions")
-
-        output_dir = Path(output_dir)
+        output_dir = self.image_preds_dir() / csv_file.name
         output_dir.mkdir(parents=True, exist_ok=True)
-
-        if generate_labeled_images:
-            raise NotImplementedError()
 
         # Point predict_dataset to the csv_file and data_dir.
         # HACK: For true multi-view model, trick predict_dataset and compute_metrics
@@ -207,6 +196,86 @@ class Model:
 
         return PredictionResult(predictions=df, metrics=metrics)
 
+    def predict_on_label_csv_multiview(
+        self,
+        csv_file_per_view: list[str] | list[Path],
+        bbox_file_per_view: list[str] | list[Path] | None = None,
+        camera_params_file: str | Path | None = None,
+        data_dir: str | Path | None = None,
+        compute_metrics: bool = True,
+        add_train_val_test_set: bool = False,
+    ) -> MultiviewPredictionResult:
+        """Version of `predict_on_label_csv` that gives models access to all views of each frame.
+
+        Arguments:
+            csv_file_per_view (list[str] | list[Path]): A list of csv files each from a different
+            view of the same session. Order must match the `view_names` in the config file.
+
+        See `predict_on_label_csv` docstring for other arguments."""
+        assert self.config.is_multi_view()
+        self._load()
+
+        view_names = self.config.cfg.data.view_names
+        assert len(csv_file_per_view) == len(
+            view_names
+        ), f"{len(csv_file_per_view)} != {len(view_names)}"
+
+        # Convert this to absolute, because if relative, downstream will
+        # assume its relative to the data_dir.
+        csv_file_per_view: list[Path] = [Path(f).absolute() for f in csv_file_per_view]
+
+        if data_dir is None:
+            data_dir = self.config.cfg.data.data_dir
+
+        # Point predict_dataset to the csv_file and data_dir.
+        cfg_overrides = {
+            "data": {
+                "data_dir": str(data_dir),
+                "csv_file": [str(p) for p in csv_file_per_view],
+            }
+        }
+        if camera_params_file:
+            cfg_overrides["data"]["camera_params_file"] = camera_params_file
+        if bbox_file_per_view:
+            cfg_overrides["data"]["bbox_file"] = [str(p) for p in bbox_file_per_view]
+        else:
+            cfg_overrides["data"]["bbox_file"] = None
+
+        # Avoid annotating set=train/val/test for CSV file other than the training CSV file.
+        if not add_train_val_test_set:
+            cfg_overrides.update({"train_prob": 1, "val_prob": 0, "train_frames": 1})
+
+        cfg_pred = OmegaConf.merge(self.cfg, cfg_overrides)
+
+        data_module_pred = _build_datamodule_pred(cfg_pred)
+
+        preds_files = []
+        for i, view_name in enumerate(view_names):
+            output_dir = self.image_preds_dir() / csv_file_per_view[i].name
+            output_dir.mkdir(parents=True, exist_ok=True)
+            preds_files.append(str(output_dir / "predictions.csv"))
+
+        # Outputs dict[str, pd.DataFrame] because inputs indicate multiview.
+        view_to_df_dict = predict_dataset(
+            cfg_pred, data_module_pred, model=self.model, preds_file=preds_files
+        )
+
+        if compute_metrics:
+            metrics = {}
+            for view_name, labels_file, _preds_file in zip(
+                view_names, csv_file_per_view, preds_files
+            ):
+                metrics[view_name] = compute_metrics_single(
+                    cfg=self.cfg,
+                    labels_file=str(labels_file),
+                    preds_file=_preds_file,
+                    data_module=data_module_pred,
+                )
+        else:
+            metrics = None
+
+        return MultiviewPredictionResult(predictions=view_to_df_dict, metrics=metrics)
+
     def predict_on_video_file(
         self,
         video_file: str | Path,
@@ -218,13 +287,17 @@ class Model:
 
         Args:
             video_file (str | Path): Path to the video file.
+            output_dir (str | Path, optional): The directory to save outputs to.
+                Defaults to `{model_dir}/image_preds/{csv_file_name}`.
+                If set to None, outputs are not saved.
             compute_metrics (bool, optional): Whether to compute pixel error and loss metrics on
                 predictions.
-            generate_labeled_video (bool, optional): Whether to save a labeled video. Defaults to False.
-            output_dir (str | Path, optional): The directory to save outputs to.
-                Defaults to `{model_dir}/image_preds/{csv_file_name}`. If set to None, outputs are not saved.
+            generate_labeled_video (bool, optional): Whether to save a labeled video.
+                Defaults to False.
+
         Returns:
             PredictionResult: A PredictionResult object containing the predictions and metrics.
+
         """
         self._load()
         video_file = Path(video_file)
@@ -278,15 +351,26 @@ class Model:
         compute_metrics: bool = True,
         generate_labeled_video: bool = False,
     ) -> MultiviewPredictionResult:
-        """Version of `predict_on_video_file` that gives models access to multiple camera views of each frame.
+        """Version of `predict_on_video_file` that accesses to multiple camera views of each frame.
 
         Arguments:
-            video_file_per_view (list[str] | list[Path]): A list of video files each from a different view of the
-                same session. Number of video files must match the `view_names` in the config file. Order of the list
-                does not matter: video files are intelligently matched to views by their filename using
-                `utils.io.collect_video_files_by_view`.
+            video_file_per_view (list[str] | list[Path]): A list of video files each from a
+                different view of the same session.
+                Number of video files must match the `view_names` in the config file.
+                Order of the list does not matter: video files are intelligently matched to views
+                by their filename using `utils.io.collect_video_files_by_view`.
+            output_dir (str | Path, optional): The directory to save outputs to.
+                Defaults to `{model_dir}/image_preds/{csv_file_name}`.
+                If set to None, outputs are not saved.
+            compute_metrics (bool, optional): Whether to compute pixel error and loss metrics on
+                predictions.
+            generate_labeled_video (bool, optional): Whether to save a labeled video.
+                Defaults to False.
 
-        See `predict_on_video_file` docstring for other arguments."""
+        Returns:
+            MultiviewPredictionResult: object containing the predictions and metrics for each view.
+
+        """
         assert self.config.is_multi_view()
         self._load()
 
@@ -350,7 +434,7 @@ class Model:
         else:
             metrics = None
 
-        df_dict = {view_name: df for df in zip(view_names, df_list)}
+        df_dict = {view_name: df for view_name, df in zip(view_names, df_list)}
 
         return MultiviewPredictionResult(predictions=df_dict, metrics=metrics)
 
