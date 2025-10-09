@@ -4,24 +4,6 @@
 Organizing your data
 ####################
 
-In addition to the single camera setups discussed in the previous user guide, Lightning Pose also
-supports multi-camera setups, where the same scene is captured from different angles with
-different cameras.
-
-We offer a multi-view transformer solution that processes all views simultaneously, learning
-cross-view correlations to improve performance.
-
-Similar to the single-view setup, Lightning Pose produces a separate csv file with the predicted
-keypoints for each video.
-
-.. note::
-
-    As of October 2025, multi-view Lightning Pose does not yet support context
-    frames or unsupervised losses.
-
-Data
-====
-
 Organizing your data for multi-view models follows a similar structure to the single-view data
 organization.
 
@@ -60,7 +42,7 @@ A template file can be found
 When training a model on a new dataset, you must copy/paste this template onto your local machine
 and update the arguments to match your data.
 
-To switch to multi-view from single-view you need to change two `data` fields.
+To switch to multi-view from single-view you need to change two ``data`` fields.
 Again, assume that we are working with the two-view dataset used as an example above:
 
 .. code-block:: yaml
@@ -72,34 +54,10 @@ Again, assume that we are working with the two-view dataset used as an example a
       view_names:
         - view0
         - view1
-      mirrored_column_matches: [see bullet below]
-      columns_for_singleview_pca: [see bullet below]
 
 
 * ``csv_file``: list of csv filenames for each view
 * ``view_names``: list view names
-* ``mirrored_column_matches``: NOT YET IMPLEMENTED
-* ``columns_for_singleview_pca``: NOT YET IMPLEMENTED
-
-When selecting the model type, you can choose a single-view backbone that processes all data but
-treats each view independently, or you can choose a multi-view transformer backbone that processes
-all views in parallel, and generally produces better predictions (with a higher memory footprint).
-
-The single-view backbone can be any of the options detailed in the
-:ref:`single-view configuration file <config_file>`.
-
-To utilize the multi-view transformer, modify the following entries:
-
-.. code-block:: yaml
-
-    model:
-        backbone: vits_dino
-        model_type: heatmap_multiview_transformer
-
-The backbone can be any of the available backbones that start with the string "vit", indicating
-Vision Transformer.
-The "heatmap_multiview_transformer" will then use the specified backbone to process all camera
-view simultaneously.
 
 .. _camera_calibration:
 
@@ -189,25 +147,25 @@ Example TOML calibration file:
     name = "view0"
     size = [2816, 1408]
     matrix = [
-        [1993.4081690654443, 0.0, 1408.0],
-        [0.0, 1993.4081690654443, 704.0],
-        [1451.1476580656524, 993.0837019939651, 1.0]
+        [1993.4, 0.0, 1408.0],
+        [0.0, 1993.4, 704.0],
+        [1451.1, 993.0, 1.0]
     ]
-    distortions = [-0.12195815878265595, 0.0, 0.0, 0.0, 0.0]
-    rotation = [0.8303789685332773, -2.001032237863851, 1.6300264070095984]
-    translation = [-0.00022245814550818306, 0.12246651754623207, 1.482604298814455]
+    distortions = [-0.121, 0.0, 0.0, 0.0, 0.0]
+    rotation = [0.830, -2.001, 1.630]
+    translation = [-0.001, 0.122, 1.482]
 
     [cam_1]
     name = "view1"
     size = [2816, 1408]
     matrix = [
-        [1915.1338980527164, 0.0, 1408.0],
-        [0.0, 1915.1338980527164, 704.0],
-        [1585.2911468259772, 835.4951473708139, 1.0]
+        [1915.1, 0.0, 1408.0],
+        [0.0, 1915.1, 704.0],
+        [1585.2, 835.4, 1.0]
     ]
-    distortions = [-0.05766653125021494, 0.0, 0.0, 0.0, 0.0]
-    rotation = [1.8834914719847418, -0.7651517408153989, 0.6043793276117848]
-    translation = [0.0033497878323108087, 0.0898116056570519, 1.5456462827735487]
+    distortions = [-0.057, 0.0, 0.0, 0.0, 0.0]
+    rotation = [1.883, -0.765, 0.604]
+    translation = [0.003, 0.089, 1.545]
 
     [metadata]
     # Optional metadata section for additional information
