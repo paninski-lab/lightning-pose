@@ -169,6 +169,8 @@ See the :ref:`FAQs <faq_oom>` for more information on memory management.
   This parameter is not included in the config by default and should be added manually to the
   ``training`` section.
 
+.. _config_file_model:
+
 Model parameters
 ================
 
@@ -223,6 +225,7 @@ The following parameters relate to model architecture and unsupervised losses.
       frames as input, and outputs two heatmaps: one "context-aware" and one "static".
       The prediction with the highest confidence is automatically chosen.
       See the :ref:`Temporal Context Network<mhcrnn>` page for more information.
+    * heatmap_multiview_transformer: see :ref:`multi-view docs <user_guide_multiview>` for more information.
 
 * ``model.heatmap_loss_type`` (*str, default: mse*): (experimental) loss to compute difference
   between ground truth and predicted heatmaps
