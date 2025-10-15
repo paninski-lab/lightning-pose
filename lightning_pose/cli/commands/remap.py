@@ -13,7 +13,7 @@ def register_parser(subparsers):
             Remaps predictions from cropped to original coordinate space.
             Requires model predictions to already have been generated using `litpose predict`.
 
-            Remapped predictions are saved as "remapped_{preds_file}" in the same folder as 
+            Remapped predictions are saved as "remapped_{preds_file}" in the same folder as
             preds_file.
             """
         ),

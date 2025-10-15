@@ -7,12 +7,25 @@ data:
   data_dir: /replace/with/your/path
   # ABSOLUTE path to unlabeled videos' directory
   video_dir: /replace/with/your/path
-  # location of labels; this should be relative to `data_dir`
-  # or an absolute path.
-  csv_file: CollectedData.csv
+  # location of labels; this should be relative to `data_dir` or an absolute path.
+  # replace {camn} with your camera names, add more rows as necessary
+  csv_file:
+    - CollectedData_{cam0}.csv
+    - CollectedData_{cam1}.csv
+  # location of bboxes; this should be relative to `data_dir` or an absolute path.
+  # replace {camn} with your camera names, add more rows as necessary
+  # if no bounding boxes, delete all list entries and "bbox_file" entry
+  bbox_file:
+    - bboxes_{cam0}.csv
+    - bboxes_{cam1}.csv
+  view_names:
+    - {cam0}
+    - {cam1}
+  # location of csv file that points to camera parameter toml file
+  camera_params_file: null
   # total number of keypoints
   num_keypoints: null
-  # keypoint names
+  # keypoint names; should be the same set of keypoints for each view
   keypoint_names: null
   # for mirrored setups with all keypoints defined in same csv file, define matching
   # columns for different keypoints (assumes x-y-x-y interleaving)
@@ -31,6 +44,8 @@ training:
   # dlc-lr: dlc augmenation plus horizontal flips
   # dlc-top-down: dlc augmentations plus vertical and horizontal flips
   imgaug: dlc
+  # 3d augmentations require camera calibration
+  imgaug_3d: true
   # batch size of labeled data during training
   train_batch_size: 16
   # batch size of labeled data during validation
@@ -62,11 +77,6 @@ training:
   # save model weights every n epochs; must be divisible by check_val_every_n_epoch above
   # if null, only best weights will be saved after training
   ckpt_every_n_epochs: null
-  # perform early stopping; if this is false, the default is to train for the max number of epochs
-  # and save out the best model according to validation loss
-  early_stopping: false
-  # epochs over which to assess validation metrics for early stopping
-  early_stop_patience: 3
   # rng seed for labeled batches
   rng_seed_data_pt: 0
   # rng seed for weight initialization
@@ -75,7 +85,7 @@ training:
   # Recommended to use Adam for resnet backbones, and AdamW for ViT backbones.
   optimizer: Adam
   optimizer_params:
-    learning_rate: 1e-3
+    learning_rate: 5e-5
   # learning rate scheduler
   # multisteplr | [todo: reducelronplateau, cosine]
   lr_scheduler: multisteplr
@@ -89,6 +99,13 @@ training:
   # how to treat missing hand labels; false to drop, true to force uniform heatmaps
   # true will lead to better confidence values
   uniform_heatmaps_for_nan_keypoints: true
+  # randomly mask out patches during training to make model more robust to occlusions
+  # set `final_ratio: 0.0` to skip patch masking
+  patch_mask:
+    init_epoch: 40
+    final_epoch: 300
+    init_ratio: 0.0
+    final_ratio: 0.5
 
 model:
   # list of unsupervised losses
@@ -102,9 +119,9 @@ model:
   # vits_dino | vitb_dino
   # vitb_imagenet
   # vitb_sam
-  backbone: resnet50_animal_ap10k
-  # prediction mode: regression | heatmap | heatmap_mhcrnn (context)
-  model_type: heatmap
+  backbone: vits_dino
+  # prediction mode: heatmap | heatmap_multiview_transformer
+  model_type: heatmap_multiview_transformer
   # which heatmap loss to use
   # mse | kl | js
   heatmap_loss_type: mse
@@ -155,6 +172,10 @@ losses:
     # nan removal value.
     # (in prob; heatmaps with max prob values are removed)
     prob_threshold: 0.05
+  # loss = error between predictions and their 3d reprojections; requires camera calibration
+  supervised_pairwise_projections:
+    # weight in front of loss
+    log_weight: 0.5
 
 eval:
   # predict? used in scripts/train_hydra.py

@@ -12,13 +12,7 @@ from torchtyping import TensorType
 from lightning_pose.data.utils import evaluate_heatmaps_at_location
 
 # to ignore imports for sphix-autoapidoc
-__all__ = [
-    "make_upsampling_layers",
-    "initialize_upsampling_layers",
-    "upsample",
-    "run_subpixelmaxima",
-    "HeatmapHead",
-]
+__all__ = []
 
 
 def make_upsampling_layers(
@@ -38,7 +32,10 @@ def make_upsampling_layers(
 
         if layer == 0:
             in_ = in_channels // 4  # division by 4 to account for PixelShuffle layer
-            out_ = int_channels
+            if n_layers == 1:
+                out_ = out_channels
+            else:
+                out_ = int_channels
         elif layer == n_layers - 1:
             in_ = int_channels if n_layers > 1 else in_channels // 4
             out_ = out_channels

@@ -1,7 +1,7 @@
 LinearRegressionHead
 ====================
 
-.. currentmodule:: lightning_pose.models.heads.regression
+.. currentmodule:: lightning_pose.models.heads
 
 .. autoclass:: LinearRegressionHead
    :show-inheritance:

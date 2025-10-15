@@ -4,9 +4,7 @@ from torch import nn
 from torchtyping import TensorType
 
 # to ignore imports for sphix-autoapidoc
-__all__ = [
-    "LinearRegressionHead",
-]
+__all__ = []
 
 
 class LinearRegressionHead(nn.Module):

@@ -1,7 +1,7 @@
 SemiSupervisedHeatmapTracker
 ============================
 
-.. currentmodule:: lightning_pose.models.heatmap_tracker
+.. currentmodule:: lightning_pose.models
 
 .. autoclass:: SemiSupervisedHeatmapTracker
    :show-inheritance:

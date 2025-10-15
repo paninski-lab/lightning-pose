@@ -13,7 +13,6 @@ For each feature, we point out necessary modifications and useful information re
    unsupervised_losses
    context_frames
    multiview_fused
-   multiview_separate
    multi_gpu_training
    cropzoom_pipeline
    custom_imgaug_pipeline

@@ -15,7 +15,7 @@ from omegaconf import DictConfig, OmegaConf
 from omegaconf.errors import ValidationError
 from typeguard import typechecked
 
-from lightning_pose.callbacks import AnnealWeight, UnfreezeBackbone, PatchMasking
+from lightning_pose.callbacks import AnnealWeight, PatchMasking, UnfreezeBackbone
 from lightning_pose.data.augmentations import (
     expand_imgaug_str_to_dict,
     imgaug_transform,
@@ -33,18 +33,6 @@ from lightning_pose.metrics import (
     pca_singleview_reprojection_error,
     pixel_error,
     temporal_norm,
-)
-from lightning_pose.models import (
-    HeatmapTracker,
-    HeatmapTrackerMHCRNN,
-    HeatmapTrackerMultiviewTransformer,
-    HeatmapTrackerMultiviewMHCRNN,
-    RegressionTracker,
-    SemiSupervisedHeatmapTracker,
-    SemiSupervisedHeatmapTrackerMHCRNN,
-    SemiSupervisedHeatmapTrackerMultiviewTransformer,
-    SemiSupervisedHeatmapTrackerMultiviewMHCRNN,
-    SemiSupervisedRegressionTracker,
 )
 from lightning_pose.models.base import (
     _apply_defaults_for_lr_scheduler_params,
@@ -166,7 +154,7 @@ def get_dataset(
                 image_resize_width=cfg.data.image_resize_dims.width,
                 imgaug_transform=imgaug_transform,
                 downsample_factor=cfg.data.get("downsample_factor", 2),
-                do_context=cfg.model.model_type in ["heatmap_mhcrnn", "heatmap_multiview_transformer_mhcrnn"],  # context for mhcrnn models
+                do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
                 resize=resize,
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
                 camera_params_path=cfg.data.get("camera_params_file", None),
@@ -418,6 +406,7 @@ def get_model(
     backbone_pretrained = cfg.model.get("backbone_pretrained", True)
     if not semi_supervised:
         if cfg.model.model_type == "regression":
+            from lightning_pose.models import RegressionTracker
             model = RegressionTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -435,6 +424,7 @@ def get_model(
                 num_targets = data_module.dataset.num_targets
             else:
                 num_targets = None
+            from lightning_pose.models import HeatmapTracker
             model = HeatmapTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 num_targets=num_targets,
@@ -451,6 +441,7 @@ def get_model(
                 backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
             )
         elif cfg.model.model_type == "heatmap_mhcrnn":
+            from lightning_pose.models import HeatmapTrackerMHCRNN
             model = HeatmapTrackerMHCRNN(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -466,73 +457,14 @@ def get_model(
                 backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
             )
         elif cfg.model.model_type == "heatmap_multiview_transformer":
-            if image_h != image_w:
-                raise RuntimeError(
-                    "heatmap_multiview_transformer requires resized height and width to be equal"
-                )
-
+            from lightning_pose.models import HeatmapTrackerMultiviewTransformer
             model = HeatmapTrackerMultiviewTransformer(
                 num_keypoints=cfg.data.num_keypoints,
                 num_views=len(cfg.data.view_names),
                 loss_factory=loss_factories["supervised"],
                 backbone=cfg.model.backbone,
                 pretrained=backbone_pretrained,
-                head=cfg.model.head,
-                downsample_factor=cfg.data.get("downsample_factor", 2),
-                torch_seed=cfg.training.rng_seed_model_pt,
-                optimizer=optimizer,
-                optimizer_params=optimizer_params,
-                lr_scheduler=lr_scheduler,
-                lr_scheduler_params=lr_scheduler_params,
-                image_size=image_h,  # only used by ViT
-            )
-        elif cfg.model.model_type == "heatmap_multiview_transformer_mhcrnn":
-            if image_h != image_w:
-                raise RuntimeError(
-                    "heatmap_multiview_transformer_mhcrnn requires resized height and width to be equal"
-                )
-
-            model = HeatmapTrackerMultiviewMHCRNN(
-                num_keypoints=cfg.data.num_keypoints,
-                num_views=len(cfg.data.view_names),
-                loss_factory=loss_factories["supervised"],
-                backbone=cfg.model.backbone,
-                pretrained=backbone_pretrained,
-                downsample_factor=cfg.data.get("downsample_factor", 2),
-                torch_seed=cfg.training.rng_seed_model_pt,
-                optimizer=optimizer,
-                optimizer_params=optimizer_params,
-                lr_scheduler=lr_scheduler,
-                lr_scheduler_params=lr_scheduler_params,
-                image_size=image_h,  # only used by ViT
-            )
-        elif cfg.model.model_type == "heatmap_multiview":
-            head = cfg.model.head
-            if head.find("transformer") > -1 and image_h != image_w:
-                raise RuntimeError(f"{head} requires resized height and width to be equal")
-            model = HeatmapTrackerMultiview(
-                num_keypoints=cfg.data.num_keypoints,
-                num_views=len(cfg.data.view_names),
-                loss_factory=loss_factories["supervised"],
-                backbone=cfg.model.backbone,
-                pretrained=backbone_pretrained,
-                head=head,
-                downsample_factor=cfg.data.get("downsample_factor", 2),
-                torch_seed=cfg.training.rng_seed_model_pt,
-                optimizer=optimizer,
-                optimizer_params=optimizer_params,
-                lr_scheduler=lr_scheduler,
-                lr_scheduler_params=lr_scheduler_params,
-                image_size=image_h,  # only used by ViT
-            )
-        elif cfg.model.model_type == "heatmap_multiview_multihead":
-            model = HeatmapTrackerMultiviewMultihead(
-                num_keypoints=cfg.data.num_keypoints,
-                num_views=len(cfg.data.view_names),
-                loss_factory=loss_factories["supervised"],
-                backbone=cfg.model.backbone,
-                pretrained=backbone_pretrained,
-                head=cfg.model.head,
+                head=cfg.model.get("head", "heatmap_cnn"),
                 downsample_factor=cfg.data.get("downsample_factor", 2),
                 torch_seed=cfg.training.rng_seed_model_pt,
                 optimizer=optimizer,
@@ -549,6 +481,7 @@ def get_model(
 
     else:
         if cfg.model.model_type == "regression":
+            from lightning_pose.models import SemiSupervisedRegressionTracker
             model = SemiSupervisedRegressionTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -564,6 +497,7 @@ def get_model(
             )
 
         elif cfg.model.model_type == "heatmap":
+            from lightning_pose.models import SemiSupervisedHeatmapTracker
             model = SemiSupervisedHeatmapTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -580,6 +514,7 @@ def get_model(
                 backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
             )
         elif cfg.model.model_type == "heatmap_mhcrnn":
+            from lightning_pose.models import SemiSupervisedHeatmapTrackerMHCRNN
             model = SemiSupervisedHeatmapTrackerMHCRNN(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -596,11 +531,7 @@ def get_model(
                 backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
             )
         elif cfg.model.model_type == "heatmap_multiview_transformer":
-            if image_h != image_w:
-                raise RuntimeError(
-                    "heatmap_multiview_transformer requires resized height and width to be equal"
-                )
-
+            from lightning_pose.models import SemiSupervisedHeatmapTrackerMultiviewTransformer
             model = SemiSupervisedHeatmapTrackerMultiviewTransformer(
                 num_keypoints=cfg.data.num_keypoints,
                 num_views=len(cfg.data.view_names),
@@ -608,7 +539,7 @@ def get_model(
                 loss_factory_unsupervised=loss_factories["unsupervised"],
                 backbone=cfg.model.backbone,
                 pretrained=backbone_pretrained,
-                head=cfg.model.head,
+                head=cfg.model.get("head", "heatmap_cnn"),
                 downsample_factor=cfg.data.get("downsample_factor", 2),
                 torch_seed=cfg.training.rng_seed_model_pt,
                 optimizer=optimizer,
@@ -617,27 +548,6 @@ def get_model(
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
                 patch_mask_config=cfg.training.get("patch_mask", {}),
-            )
-        elif cfg.model.model_type == "heatmap_multiview_transformer_mhcrnn":
-            if image_h != image_w:
-                raise RuntimeError(
-                    "heatmap_multiview_transformer_mhcrnn requires resized height and width to be equal"
-                )
-
-            model = SemiSupervisedHeatmapTrackerMultiviewMHCRNN(
-                num_keypoints=cfg.data.num_keypoints,
-                num_views=len(cfg.data.view_names),
-                loss_factory=loss_factories["supervised"],
-                loss_factory_unsupervised=loss_factories["unsupervised"],
-                backbone=cfg.model.backbone,
-                pretrained=backbone_pretrained,
-                downsample_factor=cfg.data.get("downsample_factor", 2),
-                torch_seed=cfg.training.rng_seed_model_pt,
-                optimizer=optimizer,
-                optimizer_params=optimizer_params,
-                lr_scheduler=lr_scheduler,
-                lr_scheduler_params=lr_scheduler_params,
-                image_size=image_h,  # only used by ViT
             )
         else:
             raise NotImplementedError(
@@ -723,8 +633,7 @@ def get_callbacks(
         )
         callbacks.append(ckpt_callback)
 
-    # we just need this callback for unsupervised models 
-    # or multiview models with non-heatmap losses
+    # we just need this callback for unsupervised losses or multiview models with 3d loss
     if (
         ((cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None))
         or cfg.losses.get("supervised_pairwise_projections", {}).get("log_weight") is not None

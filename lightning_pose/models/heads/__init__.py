@@ -9,13 +9,14 @@ from lightning_pose.models.heads.heatmap_multiview import (
 
 from lightning_pose.models.heads.regression import LinearRegressionHead
 
-ALLOWED_MULTIVIEW_HEADS = Union[
-    MultiviewHeatmapCNNHead,
-]
-
-ALLOWED_MULTIVIEW_MULTIHEADS = Union[
-    MultiviewHeatmapCNNMultiHead,
-]
+# reassign module to make classes appear to belong here
+HeatmapHead.__module__ = "lightning_pose.models.heads"
+HeatmapMHCRNNHead.__module__ = "lightning_pose.models.heads"
+LinearRegressionHead.__module__ = "lightning_pose.models.heads"
 
 # to ignore imports for sphix-autoapidoc
-__all__ = []
+__all__ = [
+    "HeatmapHead",
+    "HeatmapMHCRNNHead",
+    "LinearRegressionHead",
+]

@@ -189,18 +189,6 @@ eval:
   predict_vids_after_training: true
   # save .mp4?
   save_vids_after_training: false
-  fiftyone:
-    # will be the name of the dataset (Mongo DB) created by FiftyOne. for video dataset, we will append dataset_name + "_video"
-    dataset_name: mirror-fish
-    # if you want to manually provide a different model name to be displayed in FiftyOne
-    model_display_names: ["test_model"]
-    # whether to launch the app from the script (True), or from ipython (and have finer control over the outputs)
-    launch_app_from_script: false
-
-    remote: True # for LAI, must be False
-    address: 127.0.0.1 # ip to launch the app on.
-    port: 5151 # port to launch the app on.
-
   # str with an absolute path to a directory containing videos for prediction.
   test_videos_directory: /home/zeus/content/data/mirror-fish/videos_new
   # confidence threshold for plotting a vid

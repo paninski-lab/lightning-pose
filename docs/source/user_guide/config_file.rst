@@ -19,7 +19,7 @@ The config file contains several sections:
 * ``model``: backbone architecture, unsupervised losses to use, etc.
 * ``dali``: batch sizes for unlabeled video data
 * ``losses``: hyperparameters for unsupervised losses
-* ``eval``: paths for video inference and fiftyone app
+* ``eval``: paths for video inference
 
 Data parameters
 ===============
@@ -169,6 +169,8 @@ See the :ref:`FAQs <faq_oom>` for more information on memory management.
   This parameter is not included in the config by default and should be added manually to the
   ``training`` section.
 
+.. _config_file_model:
+
 Model parameters
 ================
 
@@ -223,6 +225,7 @@ The following parameters relate to model architecture and unsupervised losses.
       frames as input, and outputs two heatmaps: one "context-aware" and one "static".
       The prediction with the highest confidence is automatically chosen.
       See the :ref:`Temporal Context Network<mhcrnn>` page for more information.
+    * heatmap_multiview_transformer: see :ref:`multi-view docs <user_guide_multiview>` for more information.
 
 * ``model.heatmap_loss_type`` (*str, default: mse*): (experimental) loss to compute difference
   between ground truth and predicted heatmaps
@@ -272,10 +275,5 @@ The following parameters are used for general evaluation.
 * ``eval.confidence_thresh_for_vid`` (*float, default: 0.9*): predictions with confidence below this
   value will not be plotted in the labeled videos
 
-* ``eval.fiftyone.dataset_name`` (*str, default: test*): name of the FiftyOne dataset
-
-* ``eval.fiftyone.model_display_names`` (*list, default: [test_model]*): shorthand name for each of
-  the models specified in ``hydra_paths``
-
 * ``eval.hydra_paths`` (*list, default: []*): absolute paths to model directories, only for use with
-  scripts/create_fiftyone_dataset.py (see :ref:`FiftyOne <fiftyone>` docs).
+  scripts/predict_new_vids.py.

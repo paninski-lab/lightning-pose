@@ -17,8 +17,8 @@ from lightning_pose.data.datatypes import (
 from lightning_pose.data.utils import convert_bbox_coords, undo_affine_transform_batch
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
+from lightning_pose.models.backbones import ALLOWED_TRANSFORMER_BACKBONES
 from lightning_pose.models.base import (
-    ALLOWED_BACKBONES,
     BaseSupervisedTracker,
     SemiSupervisedTrackerMixin,
 )
@@ -27,10 +27,7 @@ from lightning_pose.models.heads import (
 )
 
 # to ignore imports for sphix-autoapidoc
-__all__ = [
-    "HeatmapTrackerMultiviewTransformer",
-    "SemiSupervisedHeatmapTrackerMultiviewTransformer",
-]
+__all__ = []
 
 
 class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
@@ -41,7 +38,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         num_keypoints: int,
         num_views: int,
         loss_factory: LossFactory | None = None,
-        backbone: Literal["vits_dino", "vitb_dino", "vitb_imagenet", "vitb_sam"] = "vitb_imagenet",
+        backbone: ALLOWED_TRANSFORMER_BACKBONES = "vits_dino",
         pretrained: bool = True,
         head: Literal["heatmap_cnn"] = "heatmap_cnn",
         downsample_factor: Literal[1, 2, 3] = 2,
@@ -70,19 +67,16 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
                 - multisteplr: milestones, gamma
             image_size: size of input images (height=width for ViT models)
             **kwargs: additional arguments
+
         """
-        # Reproducible weight initialization
+
+        # for reproducible weight initialization
         self.torch_seed = torch_seed
         torch.manual_seed(torch_seed)
-        torch.cuda.manual_seed_all(torch_seed)
-
-        # Deterministic behavior
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
 
         self.num_views = num_views
 
-        # Backwards compatibility
+        # backwards compatibility
         if "do_context" in kwargs.keys():
             raise ValueError(
                 "HeatmapTrackerMultiviewTransformer does not currently support context frames"
@@ -95,6 +89,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             optimizer_params=optimizer_params,
             lr_scheduler=lr_scheduler,
             lr_scheduler_params=lr_scheduler_params,
+            image_size=image_size,
             do_context=False,
             **kwargs,
         )
@@ -102,15 +97,14 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         self.num_keypoints = num_keypoints
         self.downsample_factor = downsample_factor
 
-        # Create learnable view embeddings for each view
-        # Use seeded random generation for reproducibility
-        # Create view embeddings with device-aware generator
+        # create learnable view embeddings for each view
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         generator = torch.Generator(device=device)
         generator.manual_seed(torch_seed)
         self.view_embeddings = nn.Parameter(
-            torch.randn(self.num_views, self.num_fc_input_features,
-                    generator=generator, device=device) * 0.02
+            torch.randn(
+                self.num_views, self.num_fc_input_features, generator=generator, device=device,
+            ) * 0.02
         )
 
         # initialize model head
@@ -125,6 +119,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             raise NotImplementedError(f"{head} is not a valid multiview transformer head")
 
         self.loss_factory = loss_factory
+
         # use this to log auxiliary information: pixel_error on labeled data
         self.rmse_loss = RegressionRMSELoss()
 
@@ -225,6 +220,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             images = batch_dict["frames"]
 
         batch_size, num_views, channels, img_height, img_width = images.shape
+
         images_flat = images.reshape(-1, channels, img_height, img_width)
         # pass through transformer to get base representations
         representations = self.forward_vit(images_flat)
@@ -326,12 +322,9 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
 
 class SemiSupervisedHeatmapTrackerMultiviewTransformer(
     SemiSupervisedTrackerMixin,
-    HeatmapTrackerMultiviewTransformer
+    HeatmapTrackerMultiviewTransformer,
 ):
-    """
-        Semi-supervised version of the HeatmapTrackerMultiviewTransformer
-        that supports unsupervised losses.
-    """
+    """Semi-supervised HeatmapTrackerMultiviewTransformer that supports unsupervised losses."""
 
     def __init__(
         self,
@@ -339,7 +332,7 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(
         num_views: int,
         loss_factory: LossFactory | None = None,
         loss_factory_unsupervised: LossFactory | None = None,
-        backbone: Literal["vits_dino", "vitb_dino", "vitb_imagenet", "vitb_sam"] = "vitb_imagenet",
+        backbone: ALLOWED_TRANSFORMER_BACKBONES = "vits_dino",
         pretrained: bool = True,
         head: Literal["heatmap_cnn"] = "heatmap_cnn",
         downsample_factor: Literal[1, 2, 3] = 2,
@@ -368,7 +361,8 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(
             image_size: size of input images (height=width for ViT models)
 
         """
-        # Initialize the parent class (HeatmapTrackerMultiviewTransformer)
+
+        # initialize the parent class (HeatmapTrackerMultiviewTransformer)
         super().__init__(
             num_keypoints=num_keypoints,
             num_views=num_views,

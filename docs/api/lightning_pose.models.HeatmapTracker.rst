@@ -1,7 +1,7 @@
 HeatmapTracker
 ==============
 
-.. currentmodule:: lightning_pose.models.heatmap_tracker
+.. currentmodule:: lightning_pose.models
 
 .. autoclass:: HeatmapTracker
    :show-inheritance:

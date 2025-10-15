@@ -498,7 +498,7 @@ class NaNPCA(PCA):
                     B = np.linalg.inv(W.T @ cov_mat @ W)
                     z_hat = B @ W.T @ cov_mat @ X_[i]  # compute posterior mean
                     X_transformed[i] = z_hat
-                except:
+                except Exception:
                     X_transformed[i] = 0
 
         if self.whiten:

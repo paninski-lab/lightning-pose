@@ -4,8 +4,11 @@ import numpy as np
 import pytest
 import torch
 
-from lightning_pose.apps.fiftyone import check_lists_equal
 from lightning_pose.utils.pca import KeypointPCA
+
+
+def check_lists_equal(list_0: list, list_1: list) -> bool:
+    return (len(list_0) == len(list_1)) and sorted(list_0) == sorted(list_1)
 
 
 def test_pca_keypoint_class_singleview(cfg, base_data_module_combined):

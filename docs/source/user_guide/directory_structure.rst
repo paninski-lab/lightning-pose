@@ -56,7 +56,7 @@ That's it!
 After this you will need to update your config file with the correct paths (see next page).
 
 Converting SLEAP projects to Lightning Pose format
-================================================
+==================================================
 
 First, export your SLEAP project as a .pkg.slp file (Predict -> Export Labels Package in the SLEAP gui). 
 Then, once you have installed Lightning Pose, you can convert previous SLEAP projects into the proper

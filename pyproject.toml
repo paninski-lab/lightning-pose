@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "lightning-pose"
-version = "1.9.2"
+version = "2.0.1"
 description = "Semi-supervised pose estimation using pytorch lightning"
 license = "MIT"
 readme = "README.md"
@@ -32,20 +32,20 @@ classifiers = [
 
 dependencies = [
     "aniposelib",
-    "fiftyone",
     "h5py",
     "hydra-core",
-    "imgaug",
+    "imaug",
     "kaleido",
     "kornia",
     "lightning",
     "matplotlib",
-    "moviepy (<2.0.0)",
-    "numpy (<2.0.0)",
+    "moviepy (>=2.0.0)",
+    "numpy (>=2.0.0)",
     "opencv-python-headless",
     "pandas (>=2.0.0)",
     "pillow",
     "plotly",
+    "safetensors",
     "scikit-learn (>=1.5.0)",
     "seaborn",
     "streamlit",
