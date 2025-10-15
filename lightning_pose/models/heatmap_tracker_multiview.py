@@ -225,7 +225,6 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             images = batch_dict["frames"]
 
         batch_size, num_views, channels, img_height, img_width = images.shape
-
         images_flat = images.reshape(-1, channels, img_height, img_width)
         # pass through transformer to get base representations
         representations = self.forward_vit(images_flat)

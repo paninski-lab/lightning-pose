@@ -12,6 +12,10 @@ from lightning_pose.models.heatmap_tracker_multiview import (
     HeatmapTrackerMultiviewTransformer,
     SemiSupervisedHeatmapTrackerMultiviewTransformer,
 )
+from lightning_pose.models.heatmap_tracker_multiview_mhcrnn import (
+    HeatmapTrackerMultiviewMHCRNN,
+    SemiSupervisedHeatmapTrackerMultiviewMHCRNN,
+)
 from lightning_pose.models.regression_tracker import (
     RegressionTracker,
     SemiSupervisedRegressionTracker,
@@ -24,6 +28,8 @@ ALLOWED_MODELS = Union[
     SemiSupervisedHeatmapTrackerMHCRNN,
     HeatmapTrackerMultiviewTransformer,
     SemiSupervisedHeatmapTrackerMultiviewTransformer,
+    HeatmapTrackerMultiviewMHCRNN,
+    SemiSupervisedHeatmapTrackerMultiviewMHCRNN,
     RegressionTracker,
     SemiSupervisedRegressionTracker
 ]
