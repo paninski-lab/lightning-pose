@@ -1,6 +1,7 @@
 """Path handling functions."""
 from __future__ import annotations  # python 3.8 compatibility for sphinx
 
+import collections
 import os
 import re
 from pathlib import Path
@@ -378,16 +379,57 @@ def extract_session_name_from_video(video_filename: str, view_names: list[str]) 
     return name_without_ext
 
 
-def find_video_files_for_views(video_dir: str, view_names: list[str]) -> list[str]:
+def split_video_files_by_view(
+    video_paths: list[Path],
+    view_names: list[str],
+) -> list[list[str]]:
     """
-    Find video files for each view by looking for files that contain the view name.
+    For a list of videos from different sessions and views, split them up and return a list of lists
+    like `[[session0_view0.mp4, session0_view1.mp4, ...], [session1_view0.mp4, session1_view1.mp4, ...], ...]`
 
     Args:
         video_dir: Directory containing video files
         view_names: List of view names to find videos for
 
     Returns:
-        List of video file paths, one for each view
+        List for each session, each containing a sub-list with videos for each view for that session
+    """
+    # map of session -> view -> video
+    session_view_video_map = collections.defaultdict(dict)
+
+    for video_path in video_paths:
+        session = extract_session_name_from_video(video_path.name, view_names)
+        view = None
+        for view_name in view_names:
+            if view_name in video_path.name:
+                view = view_name
+                break
+
+        if view is not None:
+            session_view_video_map[session][view] = video_path
+
+    video_views_per_session = [
+        [views[view_name] for view_name in view_names]
+        for views in session_view_video_map.values()
+        # if we have all views for this session, add them all to the list
+        if all(view_name in views for view_name in view_names)
+    ]
+    return video_views_per_session
+
+
+def find_video_files_for_views(
+    video_dir: str, view_names: list[str]
+) -> list[list[str]]:
+    """
+    Search inside a folder to find a list of videos from different sessions and views, split them up and return a list of lists
+    like `[[session0_view0.mp4, session0_view1.mp4, ...], [session1_view0.mp4, session1_view1.mp4, ...], ...]`
+
+    Args:
+        video_dir: Directory containing video files
+        view_names: List of view names to find videos for
+
+    Returns:
+        List for each session, each containing a sub-list with videos for each view for that session
     """
     video_dir_path = Path(video_dir)
 
@@ -400,24 +442,4 @@ def find_video_files_for_views(video_dir: str, view_names: list[str]) -> list[st
     if not all_video_files:
         raise FileNotFoundError(f"No video files found in {video_dir}")
 
-    video_files_per_view = []
-
-    # Find videos for each view
-    for view_name in view_names:
-        video_file = None
-
-        # Look for videos that contain this view name
-        for video_path in all_video_files:
-            if view_name in video_path.name:
-                video_file = str(video_path)
-                break
-
-        if video_file is None:
-            # Fallback: use the first available video file
-            video_file = str(all_video_files[0])
-            print(f"Warning: No specific video found for view '{view_name}', using: {video_file}")
-
-        video_files_per_view.append(video_file)
-        print(f"Found video for view '{view_name}': {video_file}")
-
-    return video_files_per_view
+    return split_video_files_by_view(all_video_files, view_names)
