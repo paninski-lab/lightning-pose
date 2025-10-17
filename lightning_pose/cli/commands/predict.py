@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 
 from .. import types
 
+from ...utils.io import split_video_files_by_view
+
 if TYPE_CHECKING:
     from lightning_pose.api.model import Model
 
@@ -81,8 +83,13 @@ def handle(args):
     model = Model.from_dir2(args.model_dir, hydra_overrides=args.overrides)
     input_paths = [Path(p) for p in args.input_path]
 
-    for p in input_paths:
-        _predict_multi_type(model, p, args.skip_viz, not args.overwrite)
+    if model.config.is_multi_view():
+        _predict_multi_type_multi_view(
+            model, input_paths, args.skip_viz, not args.overwrite
+        )
+    else:
+        for p in input_paths:
+            _predict_multi_type(model, p, args.skip_viz, not args.overwrite)
 
 
 def _predict_multi_type(model: Model, path: Path, skip_viz: bool, skip_existing: bool):
@@ -121,3 +128,40 @@ def _predict_multi_type(model: Model, path: Path, skip_viz: bool, skip_existing:
         raise NotImplementedError("Not yet implemented: predicting on image files.")
     else:
         pass
+
+
+def _predict_multi_type_multi_view(
+    model: Model, paths: list[Path], skip_viz: bool, skip_existing: bool
+):
+    # if we pass in all videos, collect them into session batches and process
+    if all(path.suffix == ".mp4" for path in paths):
+        video_files_split = split_video_files_by_view(
+            paths, model.config.cfg.data.view_names
+        )
+        for video_file_per_view in video_files_split:
+            if skip_existing and all(
+                (model.video_preds_dir() / f"{Path(video).stem}.csv").exists()
+                for video in video_file_per_view
+            ):
+                print(
+                    f"Skipping {video_file_per_view} (prediction file already exists)"
+                )
+                continue
+
+            model.predict_on_video_file_multiview(
+                video_file_per_view, generate_labeled_video=not skip_viz
+            )
+    # if we have a list of directories, we process the videos in each separately
+    elif all(path.is_dir() for path in paths):
+        for path in paths:
+            video_files = [
+                p for p in path.iterdir() if p.is_file() and p.suffix == ".mp4"
+            ]
+            if len(video_files) > 0:
+                _predict_multi_type_multi_view(
+                    model, video_files, skip_viz, skip_existing
+                )
+    else:
+        raise NotImplementedError(
+            "For multi view model predictions, either pass in multiple video views to be predicted, or a directory containing videos"
+        )
