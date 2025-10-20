@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+from pprint import pprint
 from typing import TYPE_CHECKING
 
 from .. import types
 
-from ...utils.io import split_video_files_by_view
 
 if TYPE_CHECKING:
     from lightning_pose.api.model import Model
@@ -102,8 +102,10 @@ def _predict_multi_type(model: Model, path: Path, skip_viz: bool, skip_existing:
         if len(image_files) > 0:
             raise NotImplementedError("Predicting on image dir.")
 
+        print(f"Processing directory {path}")
         for p in video_files:
             _predict_multi_type(model, p, skip_viz, skip_existing)
+
     elif path.suffix == ".mp4":
         # Check if prediction file already exists
         prediction_csv_file = model.video_preds_dir() / f"{path.stem}.csv"
@@ -133,19 +135,35 @@ def _predict_multi_type(model: Model, path: Path, skip_viz: bool, skip_existing:
 def _predict_multi_type_multi_view(
     model: Model, paths: list[Path], skip_viz: bool, skip_existing: bool
 ):
+    # delay this import because it's slow
+    from lightning_pose.utils.io import (
+        split_video_files_by_view,
+        extract_session_name_from_video,
+    )
+
     # if we pass in all videos, collect them into session batches and process
     if all(path.suffix == ".mp4" for path in paths):
         video_files_split = split_video_files_by_view(
             paths, model.config.cfg.data.view_names
+        )
+        print(f"Grouped {len(paths)} videos into {len(video_files_split)} sessions:")
+        pprint(
+            [
+                extract_session_name_from_video(
+                    video_file_per_view[0].name, model.config.cfg.data.view_names
+                )
+                for video_file_per_view in video_files_split
+            ],
         )
         for video_file_per_view in video_files_split:
             if skip_existing and all(
                 (model.video_preds_dir() / f"{Path(video).stem}.csv").exists()
                 for video in video_file_per_view
             ):
-                print(
-                    f"Skipping {video_file_per_view} (prediction file already exists)"
+                session_name = extract_session_name_from_video(
+                    Path(video_file_per_view[0]).name, model.config.cfg.data.view_names
                 )
+                print(f"Skipping {session_name} (prediction file already exists)")
                 continue
 
             model.predict_on_video_file_multiview(
@@ -158,9 +176,13 @@ def _predict_multi_type_multi_view(
                 p for p in path.iterdir() if p.is_file() and p.suffix == ".mp4"
             ]
             if len(video_files) > 0:
+                print(f"Processing directory {path}")
+
                 _predict_multi_type_multi_view(
                     model, video_files, skip_viz, skip_existing
                 )
+            else:
+                print(f"Skipping {path}: no videos found.")
     else:
         raise NotImplementedError(
             "For multi view model predictions, either pass in multiple video views to be predicted, or a directory containing videos"
