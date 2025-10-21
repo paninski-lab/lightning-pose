@@ -5,6 +5,7 @@ from __future__ import annotations  # python 3.8 compatibility for sphinx
 import collections
 import os
 import re
+import warnings
 from pathlib import Path
 from typing import Tuple
 
@@ -37,6 +38,10 @@ def ckpt_path_from_base_path(
 ) -> str | None:
     """Given a path to a hydra output with trained model, extract the model .ckpt file.
 
+    Prioritizes the checkpoint marked with '-best.ckpt' in the latest version directory.
+    If no 'best' checkpoint is found, falls back to the latest checkpoint (highest step count).
+    If only one checkpoint exists, returns it directly.
+
     Args:
         base_path (str): path to a folder with logs and checkpoint. for example,
             function will search base_path/logging_dir_name/model_name...
@@ -44,45 +49,94 @@ def ckpt_path_from_base_path(
             model_name in lightning-pose/scripts/config/model_params.yaml
         logging_dir_name (str, optional): name of the folder in logs, controlled in
             train_hydra.py Defaults to "tb_logs/".
-        version (int. optional):
 
     Returns:
         str: path to model checkpoint, or None if none found.
 
+    Raises:
+        ValueError: If multiple 'best' checkpoint files are found (e.g., from save_top_k > 1).
+
     """
     import glob
-
+    
     model_search_path = os.path.join(
         base_path,
-        logging_dir_name,  # may change when we switch from Tensorboard
-        model_name,  # get the name string of the model (determined pre-training)
-        "version_*",  # TensorBoardLogger increments versions if retraining same model.
+        logging_dir_name,
+        glob.escape(model_name),
+        "version_*",
         "checkpoints",
         "*.ckpt",
     )
 
     # Find all checkpoint files
-    checkpoint_files = glob.glob(model_search_path)
-    # Return None if none were found.
-    if not checkpoint_files:
+    all_checkpoint_files = glob.glob(model_search_path)
+    if not all_checkpoint_files:
         return None
 
-    # Get the latest version's checkpoint files.
-    ckpt_file_by_version = {}
-    for f in checkpoint_files:
-        version = re.search(r"version_(\d)", f).group(1)
-        version = int(version)
-        if version in ckpt_file_by_version:
-            raise NotImplementedError(
-                f"Multiple checkpoint files found in version directory for {f}. "
-                "Logic to select among multiple checkpoints is not yet implemented."
-            )
-        ckpt_file_by_version[version] = f
+    # Group checkpoints by version
+    ckpt_files_by_version = {}
+    for f in all_checkpoint_files:
+        match = re.search(r"version_(\d+)", f)
+        if match:
+            version = int(match.group(1))
+            if version not in ckpt_files_by_version:
+                ckpt_files_by_version[version] = []
+            ckpt_files_by_version[version].append(f)
 
-    latest_version = max(ckpt_file_by_version.keys())
-    return ckpt_file_by_version[latest_version]
+    if not ckpt_files_by_version:
+         # Should not happen if all_checkpoint_files is not empty and pattern matches
+        return None
 
+    # Get the latest version's checkpoint files
+    latest_version = max(ckpt_files_by_version.keys())
+    latest_version_files = ckpt_files_by_version[latest_version]
 
+    # Find all "best" checkpoints in the latest version
+    best_ckpt_files = []
+    for f in latest_version_files:
+        if "-best.ckpt" in os.path.basename(f):
+            best_ckpt_files.append(f)
+
+    if len(best_ckpt_files) == 1:
+        # Found exactly one 'best' checkpoint
+        return best_ckpt_files[0]
+    elif len(best_ckpt_files) > 1:
+        # Multiple 'best' checkpoints found (e.g., from save_top_k parameter)
+        raise ValueError(
+            f"Multiple 'best' checkpoint files found in {latest_version_files}. "
+            f"Found {len(best_ckpt_files)} files marked as 'best': {best_ckpt_files}. "
+            "Cannot automatically select from multiple 'best' checkpoints."
+        )
+    else:
+        # No 'best' checkpoint found
+        warnings.warn("No 'best' checkpoint found, falling back to latest checkpoint.")
+        if len(latest_version_files) == 1:
+            # Only one checkpoint file exists, return it
+            return latest_version_files[0]
+        else:
+            # Multiple checkpoints exist, but none are marked 'best'.
+            # Try to find the one with the highest step count.
+            max_step = -1
+            latest_ckpt = None
+
+            for f in latest_version_files:
+                match = re.search(r"step=(\d+)", f)
+                if match:
+                    step = int(match.group(1))
+                    if step > max_step:
+                        max_step = step
+                        latest_ckpt = f
+
+            if latest_ckpt is not None:
+                return latest_ckpt
+            else:
+                # Could not determine which checkpoint to use
+                raise ValueError(
+                    f"Multiple checkpoint files found but cannot determine which to use: {latest_version_files}. "
+                    "None are marked as 'best' and cannot parse step counts to determine latest. "
+                    "Please manually select the appropriate checkpoint."
+                )
+            
 @typechecked
 def check_if_semi_supervised(losses_to_use: ListConfig | list | None = None) -> bool:
     """Use config file to determine if model is semi-supervised.
