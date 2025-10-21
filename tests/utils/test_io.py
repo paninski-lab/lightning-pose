@@ -311,7 +311,7 @@ def test_split_video_files_per_view():
 
     # Test 1: one session with two views
     video_files_per_session = split_video_files_by_view(
-        [Path("session1_top"), Path("session1_bot")], view_names
+        [Path("/video_dir/session1_top"), Path("/video_dir/session1_bot")], view_names
     )
     assert len(video_files_per_session) == 1
 
@@ -323,10 +323,10 @@ def test_split_video_files_per_view():
     # Test 2: two sessions with two views
     video_files_per_session = split_video_files_by_view(
         [
-            Path("session1_top"),
-            Path("session1_bot"),
-            Path("session2_top"),
-            Path("session2_bot"),
+            Path("/video_dir/session1_top"),
+            Path("/video_dir/session1_bot"),
+            Path("/video_dir/session2_top"),
+            Path("/video_dir/session2_bot"),
         ],
         view_names,
     )
@@ -343,7 +343,12 @@ def test_split_video_files_per_view():
 
     # Test 3: extra unrelated video
     video_files_per_session = split_video_files_by_view(
-        [Path("session1_top"), Path("session1_bot"), Path("session1_side")], view_names
+        [
+            Path("/video_dir/session1_top"),
+            Path("/video_dir/session1_bot"),
+            Path("/video_dir/session1_side"),
+        ],
+        view_names,
     )
     assert len(video_files_per_session) == 1
 
@@ -354,7 +359,7 @@ def test_split_video_files_per_view():
 
     # Test 4: no relevant video files
     video_files_per_session = split_video_files_by_view(
-        [Path("session1_side")], view_names
+        [Path("/video_dir/session1_side")], view_names
     )
     assert len(video_files_per_session) == 0
 
