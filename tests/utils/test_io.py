@@ -18,7 +18,157 @@ from lightning_pose.utils.io import (
     get_context_img_paths,
     get_videos_in_dir,
     split_video_files_by_view,
+    ckpt_path_from_base_path,
 )
+
+
+def test_ckpt_path_from_base_path_no_checkpoints(tmp_path: Path):
+    """
+    Test Case 1: No checkpoint files found.
+    Expects None.
+    """
+    base_path = tmp_path / "project"
+    model_name = "my_model"
+    logging_dir_name = "tb_logs"
+
+    (base_path / logging_dir_name / model_name / "version_0" / "checkpoints").mkdir(parents=True)
+
+    result = ckpt_path_from_base_path(str(base_path), model_name, logging_dir_name)
+    assert result is None
+
+
+def test_ckpt_path_from_base_path_one_best_checkpoint(tmp_path: Path):
+    """
+    Test Case 2: Exactly one "best" checkpoint found in the latest version.
+    Expects the path to the best checkpoint.
+    """
+    base_path = tmp_path / "project"
+    model_name = "my_model"
+    logging_dir_name = "tb_logs"
+
+    # Create older version checkpoints
+    (base_path / logging_dir_name / model_name / "version_0" / "checkpoints").mkdir(parents=True)
+    (base_path / logging_dir_name / model_name / "version_0" / "checkpoints" / "epoch=10-step=100.ckpt").touch()
+
+    # Create latest version checkpoints with one best
+    latest_version_path = base_path / logging_dir_name / model_name / "version_1" / "checkpoints"
+    latest_version_path.mkdir(parents=True)
+    (latest_version_path / "epoch=5-step=50.ckpt").touch()
+    expected_ckpt = latest_version_path / "epoch=12-step=120-best.ckpt"
+    expected_ckpt.touch()
+
+    result = ckpt_path_from_base_path(str(base_path), model_name, logging_dir_name)
+    assert result == str(expected_ckpt)
+
+
+def test_ckpt_path_from_base_path_multiple_best_checkpoints(tmp_path: Path):
+    """
+    Test Case 3: Multiple "best" checkpoints found in the latest version.
+    Expects ValueError.
+    """
+    base_path = tmp_path / "project"
+    model_name = "my_model"
+    logging_dir_name = "tb_logs"
+
+    # Create latest version checkpoints with multiple best
+    latest_version_path = base_path / logging_dir_name / model_name / "version_1" / "checkpoints"
+    latest_version_path.mkdir(parents=True)
+    (latest_version_path / "epoch=5-step=50-best.ckpt").touch()
+    (latest_version_path / "epoch=12-step=120-best.ckpt").touch()
+
+    with pytest.raises(ValueError, match="Multiple 'best' checkpoint files found"):
+        ckpt_path_from_base_path(str(base_path), model_name, logging_dir_name)
+
+
+def test_ckpt_path_from_base_path_highest_step_count(tmp_path: Path):
+    """
+    Test Case 4: No "best" checkpoint, but multiple checkpoints, pick the one with highest step count in latest version.
+    Expects the path to the checkpoint with the highest step.
+    """
+    base_path = tmp_path / "project"
+    model_name = "my_model"
+    logging_dir_name = "tb_logs"
+
+    # Create older version checkpoints
+    (base_path / logging_dir_name / model_name / "version_0" / "checkpoints").mkdir(parents=True)
+    (base_path / logging_dir_name / model_name / "version_0" / "checkpoints" / "epoch=10-step=100.ckpt").touch()
+
+    # Create latest version checkpoints without a best, but with varying steps
+    latest_version_path = base_path / logging_dir_name / model_name / "version_1" / "checkpoints"
+    latest_version_path.mkdir(parents=True)
+    (latest_version_path / "epoch=5-step=50.ckpt").touch()
+    expected_ckpt = latest_version_path / "epoch=12-step=120.ckpt"
+    (latest_version_path / "epoch=12-step=120.ckpt").touch()
+    (latest_version_path / "epoch=11-step=110.ckpt").touch()
+
+    # Capture warnings as "No 'best' checkpoint found" is expected
+    with pytest.warns(UserWarning, match="No 'best' checkpoint found"):
+        result = ckpt_path_from_base_path(str(base_path), model_name, logging_dir_name)
+    assert result == str(expected_ckpt)
+
+
+def test_ckpt_path_from_base_path_single_checkpoint_no_best(tmp_path: Path):
+    """
+    Test Case 5: No "best" checkpoint, and only one checkpoint file in the latest version.
+    Expects the path to that single checkpoint.
+    """
+    base_path = tmp_path / "project"
+    model_name = "my_model"
+    logging_dir_name = "tb_logs"
+
+    # Create older version checkpoints
+    (base_path / logging_dir_name / model_name / "version_0" / "checkpoints").mkdir(parents=True)
+    (base_path / logging_dir_name / model_name / "version_0" / "checkpoints" / "epoch=10-step=100.ckpt").touch()
+
+    # Create latest version with only one checkpoint, no best
+    latest_version_path = base_path / logging_dir_name / model_name / "version_1" / "checkpoints"
+    latest_version_path.mkdir(parents=True)
+    expected_ckpt = latest_version_path / "epoch=5-step=50.ckpt"
+    expected_ckpt.touch()
+
+    with pytest.warns(UserWarning, match="No 'best' checkpoint found"):
+        result = ckpt_path_from_base_path(str(base_path), model_name, logging_dir_name)
+    assert result == str(expected_ckpt)
+
+
+def test_ckpt_path_from_base_path_cannot_parse_step(tmp_path: Path):
+    """
+    Test Case 6: No "best" checkpoint, multiple checkpoints, but step count cannot be parsed.
+    Expects ValueError.
+    """
+    base_path = tmp_path / "project"
+    model_name = "my_model"
+    logging_dir_name = "tb_logs"
+
+    # Create latest version with multiple checkpoints, no best, and unparsable steps
+    latest_version_path = base_path / logging_dir_name / model_name / "version_1" / "checkpoints"
+    latest_version_path.mkdir(parents=True)
+    (latest_version_path / "model_v1_A.ckpt").touch()
+    (latest_version_path / "model_v1_B.ckpt").touch()
+
+    with pytest.raises(ValueError, match="cannot parse step counts to determine latest"):
+        with pytest.warns(UserWarning, match="No 'best' checkpoint found"):
+            ckpt_path_from_base_path(str(base_path), model_name, logging_dir_name)
+
+
+def test_ckpt_path_from_base_path_custom_logging_dir_name(tmp_path: Path):
+    """
+    Test Case 7: Different `logging_dir_name`.
+    Expects the correct path using the custom logging directory.
+    """
+    base_path = tmp_path / "project"
+    model_name = "my_model"
+    logging_dir_name = "my_custom_logs"
+
+    # Create directory structure with custom logging_dir_name
+    latest_version_path = base_path / logging_dir_name / model_name / "version_0" / "checkpoints"
+    latest_version_path.mkdir(parents=True)
+    expected_ckpt = latest_version_path / "epoch=1-step=10-best.ckpt"
+    expected_ckpt.touch()
+
+    result = ckpt_path_from_base_path(str(base_path), model_name, logging_dir_name)
+    assert result == str(expected_ckpt)
+
 
 
 def test_check_if_semisupervised():
