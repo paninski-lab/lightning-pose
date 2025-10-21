@@ -7,7 +7,6 @@ import random
 import re
 import shutil
 import sys
-import warnings
 from pathlib import Path
 
 import lightning.pytorch as pl
@@ -190,7 +189,6 @@ def _predict_test_videos(model: Model):
             ):
                 model.predict_on_video_file_multiview(
                     video_file_per_view=video_file_per_view,
-                    # output_dir=model.model_dir,
                     compute_metrics=True,
                     generate_labeled_video=model.config.cfg.eval.save_vids_after_training,
                 )
