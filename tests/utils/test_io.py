@@ -17,6 +17,7 @@ from lightning_pose.utils.io import (
     find_video_files_for_views,
     get_context_img_paths,
     get_videos_in_dir,
+    split_video_files_by_view,
 )
 
 
@@ -291,8 +292,8 @@ def test_find_video_files_for_views(toy_data_dir, tmpdir):
 
     video_files = video_files_per_session[0]
     assert len(video_files) == 2
-    assert "top" in video_files[0]
-    assert "bot" in video_files[1]
+    assert "top" in str(video_files[0])
+    assert "bot" in str(video_files[1])
 
     # Test 2: directory doesn't exist
     with pytest.raises(FileNotFoundError):
@@ -303,6 +304,63 @@ def test_find_video_files_for_views(toy_data_dir, tmpdir):
     os.makedirs(empty_dir)
     with pytest.raises(FileNotFoundError):
         find_video_files_for_views(empty_dir, view_names)
+
+
+def test_split_video_files_per_view():
+    view_names = ["top", "bot"]
+
+    # Test 1: one session with two views
+    video_files_per_session = split_video_files_by_view(
+        [Path("session1_top"), Path("session1_bot")], view_names
+    )
+    assert len(video_files_per_session) == 1
+
+    video_files = video_files_per_session[0]
+    assert len(video_files) == 2
+    assert "top" in str(video_files[0])
+    assert "bot" in str(video_files[1])
+
+    # Test 2: two sessions with two views
+    video_files_per_session = split_video_files_by_view(
+        [
+            Path("session1_top"),
+            Path("session1_bot"),
+            Path("session2_top"),
+            Path("session2_bot"),
+        ],
+        view_names,
+    )
+    assert len(video_files_per_session) == 2
+
+    video_files1 = video_files_per_session[0]
+    assert len(video_files1) == 2
+    assert "top" in str(video_files1[0])
+    assert "bot" in str(video_files1[1])
+    video_files2 = video_files_per_session[1]
+    assert len(video_files2) == 2
+    assert "top" in str(video_files2[0])
+    assert "bot" in str(video_files2[1])
+
+    # Test 3: extra unrelated video
+    video_files_per_session = split_video_files_by_view(
+        [Path("session1_top"), Path("session1_bot"), Path("session1_side")], view_names
+    )
+    assert len(video_files_per_session) == 1
+
+    video_files = video_files_per_session[0]
+    assert len(video_files) == 2
+    assert "top" in str(video_files[0])
+    assert "bot" in str(video_files[1])
+
+    # Test 4: no relevant video files
+    video_files_per_session = split_video_files_by_view(
+        [Path("session1_side")], view_names
+    )
+    assert len(video_files_per_session) == 0
+
+    # Test 5: no video files
+    video_files_per_session = split_video_files_by_view([], view_names)
+    assert len(video_files_per_session) == 0
 
 
 def test_fix_empty_first_row(tmp_path):
