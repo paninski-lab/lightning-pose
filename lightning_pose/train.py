@@ -7,7 +7,6 @@ import random
 import re
 import shutil
 import sys
-import warnings
 from pathlib import Path
 
 import lightning.pytorch as pl
@@ -20,7 +19,10 @@ import lightning_pose
 from lightning_pose.api.model import Model
 from lightning_pose.api.model_config import ModelConfig
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
-from lightning_pose.utils.io import find_video_files_for_views, return_absolute_data_paths
+from lightning_pose.utils.io import (
+    find_video_files_for_views,
+    return_absolute_data_paths,
+)
 from lightning_pose.utils.scripts import (
     calculate_steps_per_epoch,
     get_callbacks,
@@ -181,18 +183,15 @@ def _predict_test_videos(model: Model):
         pretty_print_str("Predicting videos in cfg.eval.test_videos_directory...")
         # dealing with multiview
         if model.config.is_multi_view():
-            # Find video files for each view using utils function
-            video_files_per_view = find_video_files_for_views(
+            for video_file_per_view in find_video_files_for_views(
                 video_dir=model.config.cfg.data.video_dir,
-                view_names=model.config.cfg.data.view_names
-            )
-
-            model.predict_on_video_file_multiview(
-                video_file_per_view=video_files_per_view,
-                # output_dir=model.model_dir,
-                compute_metrics=True,
-                generate_labeled_video=model.config.cfg.eval.save_vids_after_training,
-            )
+                view_names=model.config.cfg.data.view_names,
+            ):
+                model.predict_on_video_file_multiview(
+                    video_file_per_view=video_file_per_view,
+                    compute_metrics=True,
+                    generate_labeled_video=model.config.cfg.eval.save_vids_after_training,
+                )
         else:
             for video_file in model.config.test_video_files():
                 pretty_print_str(f"Predicting video: {video_file}...")
