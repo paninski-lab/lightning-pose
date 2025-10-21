@@ -281,9 +281,9 @@ def collect_video_files_by_view(
     by some non-alphanumeric delimiter. For example, mouse_top_3.mp4 is allowed, but mousetop3.mp4
     is not allowed.
     """
-    assert len(video_files) == len(
-        view_names
-    ), f"{len(video_files)} != {len(view_names)}"
+    assert len(video_files) == len(view_names), (
+        f"{len(video_files)} != {len(view_names)}"
+    )
     video_files_by_view: dict[str, Path] = {}
     for view_name in view_names:
         # Search all the video_files for a match.
@@ -310,9 +310,9 @@ def get_context_img_paths(center_img_path: Path) -> list[Path]:
     Negative indices are floored at 0.
     """
     match = re.search(r"(\d+)", center_img_path.stem)
-    assert (
-        match is not None
-    ), f"No frame index in filename, can't get context frames: {center_img_path.name}"
+    assert match is not None, (
+        f"No frame index in filename, can't get context frames: {center_img_path.name}"
+    )
 
     center_index_string = match.group()
     center_index = int(center_index_string)
@@ -387,7 +387,9 @@ def extract_session_name_from_video(video_filename: str, view_names: list[str]) 
     return name_without_ext
 
 
-def extract_view_name_from_video(video_filename: str, view_names: list[str]) -> str:
+def extract_view_name_from_video(
+    video_filename: str, view_names: list[str]
+) -> str | None:
     """Like extract_session_name_from_video but returns the view name (or None if not found)."""
     for view_name in view_names:
         if view_name in Path(video_filename).stem:
