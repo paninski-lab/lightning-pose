@@ -39,13 +39,11 @@ to a local file and modify the ``data`` section to point to your own dataset. Fo
 Sections other than ``data`` have reasonable defaults for getting started,
 but can be modified as well. For the full reference of fields, see :ref:`config_file`.
 
+.. _train-a-model:
+
 Train a model
 =============
-
-Since version 1.7.0, installing lightning-pose also installs ``litpose``,
-a command-line tool built on top of the :ref:`lightning_pose_api`.
-
-To train a model, just point ``litpose train`` at your config file:
+The command ``litpose train`` (installed with lightning-pose) is used to train a model from the command line:
 
 .. code-block:: shell
 
@@ -66,7 +64,7 @@ To customize the output directory, use the ``--output_dir OUTPUT_DIR`` flag of t
     environment with lightning-pose installed, and that you're using version >= 1.7.0
     (verify this using ``pip show lightning-pose``).
 
-For the full listing of training options, run ``litpose train --help``.
+For the full listing of training options, see the CLI reference: :ref:`Train <cli-train>`. 
 
 Config overrides
 ----------------

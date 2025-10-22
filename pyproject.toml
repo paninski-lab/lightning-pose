@@ -79,6 +79,7 @@ dev = [
     "pytest-html",
     "pytest-mock",
     "Sphinx",
+    "sphinx-argparse",
     "sphinx_rtd_theme",
     "sphinx-rtd-dark-mode",
     "sphinx-automodapi",

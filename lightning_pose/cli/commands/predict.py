@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import textwrap
 from pathlib import Path
 from pprint import pprint
 from typing import TYPE_CHECKING
@@ -17,23 +18,29 @@ def register_parser(subparsers):
     """Register the predict command parser."""
     predict_parser = subparsers.add_parser(
         "predict",
-        description="Predicts keypoints on videos or images.\n"
-        "\n"
-        "  Video predictions are saved to:\n"
-        "    <model_dir>/\n"
-        "    └── video_preds/\n"
-        "        ├── <video_filename>.csv              (predictions)\n"
-        "        ├── <video_filename>_<metric>.csv     (losses)\n"
-        "        └── labeled_videos/\n"
-        "            └── <video_filename>_labeled.mp4\n"
-        "\n"
-        "  Image predictions are saved to:\n"
-        "    <model_dir>/\n"
-        "    └── image_preds/\n"
-        "        └── <image_dirname | csv_filename | timestamp>/\n"
-        "            ├── predictions.csv\n"
-        "            ├── predictions_<metric>.csv      (losses)\n"
-        "            └── <image_filename>_labeled.png\n",
+        description=textwrap.dedent(
+            """\
+        Predicts keypoints on videos or images.
+
+          Video predictions are saved to::
+          
+            <model_dir>/
+            └── video_preds/
+                ├── <video_filename>.csv              (predictions)
+                ├── <video_filename>_<metric>.csv     (losses)
+                └── labeled_videos/
+                    └── <video_filename>_labeled.mp4
+
+          Image predictions are saved to::
+          
+            <model_dir>/
+            └── image_preds/
+                └── <image_dirname | csv_filename | timestamp>/
+                    ├── predictions.csv
+                    ├── predictions_<metric>.csv      (losses)
+                    └── <image_filename>_labeled.png
+        """
+        ),
         usage="litpose predict <model_dir> <input_path:video|image|dir|csv>...  [OPTIONS]",
     )
     predict_parser.add_argument(
@@ -44,14 +51,15 @@ def register_parser(subparsers):
         "input_path",
         type=Path,
         nargs="+",
-        help="one or more paths; can be video files, image files, CSV files, or directories.\n"
-        "    directory: predicts over videos or images in the directory.\n"
-        "               saves image outputs to `image_preds/<directory_name>`\n"
-        "    video file: predicts on the video\n"
-        "    image file: predicts on the image. saves outputs to `image_preds/<timestamp>`\n"
-        "    CSV file: predicts on the images specified in the file.\n"
-        "              uses the labels to compute pixel error.\n"
-        "              saves outputs to `image_preds/<csv_file_name>`\n",
+        help=textwrap.dedent(
+            """\
+            one or more  video files, image files, CSV files, or directories to run prediction on
+            
+            * directories: iterates over videos or images in the directory
+            * CSV file: must be formatted as a label file. predicts on the frames and computes pixel error
+                    against keypoint labels
+            """
+        ),
     )
     predict_parser.add_argument(
         "--overrides",
@@ -73,6 +81,16 @@ def register_parser(subparsers):
         action="store_true",
         help="skip generating prediction-annotated images/videos",
     )
+    return predict_parser
+
+
+def get_parser():
+    """Return an ArgumentParser for the `litpose predict` subcommand (for docs)."""
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="litpose")
+    subparsers = parser.add_subparsers(dest="command")
+    return register_parser(subparsers)
 
 
 def handle(args):

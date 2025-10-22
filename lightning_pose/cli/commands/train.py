@@ -50,6 +50,16 @@ def register_parser(subparsers):
         help="overrides attributes of the config file. Uses hydra syntax:\n"
         "https://hydra.cc/docs/advanced/override_grammar/basic/",
     )
+    return train_parser
+
+
+def get_parser():
+    """Return an ArgumentParser for the `litpose train` subcommand (for docs)."""
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="litpose")
+    subparsers = parser.add_subparsers(dest="command")
+    return register_parser(subparsers)
 
 
 def handle(args):

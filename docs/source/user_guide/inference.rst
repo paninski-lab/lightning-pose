@@ -4,9 +4,9 @@
 Inference
 #########
 
-Since version 1.7.0, installing lightning-pose also installs ``litpose``,
-a command-line tool built on top of the :ref:`lightning_pose_api`.
 The command ``litpose predict`` is used to run model inference on new data.
+
+.. _inference-on-new-videos:
 
 Inference on new videos
 =======================
@@ -29,17 +29,15 @@ The ``litpose predict`` command saves frame-by-frame predictions and confidences
 unsupervised losses in CSV file per loss type. By default it also generates videos annotated with 
 predictions, a feature which can be disabled using the ``--skip_viz`` flag.
 
-For the full list of options:
-
-.. code-block:: shell
-
-    litpose predict --help
+For the full list of options, see the CLI reference: :ref:`Predict <cli-predict>`. 
 
 .. note::
 
   Videos *must* be mp4 files that use the h.264 codec; see more information in the
   :ref:`FAQs<faq_video_formats>`.
 
+
+.. _inference-on-new-images:
 
 Inference on new images
 =======================
