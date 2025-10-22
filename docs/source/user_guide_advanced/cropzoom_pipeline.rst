@@ -23,6 +23,8 @@ lightning pose model. We provide additional tools that help you compose these mo
 * ``litpose remap``: Given the pose model's predictions and the crop bounding boxes,
   remaps the predictions to the original coordinate space.
 
+For the full command-line reference for these tools, see the CLI page sections: :ref:`Crop <cli-crop>` and :ref:`Remap <cli-remap>`.
+
 Training
 --------
 
@@ -81,6 +83,8 @@ Training script
     litpose train config.yaml --output_dir $MODEL_DIR/$POSE_MODEL \
         --detector_model=$MODEL_DIR/$DETECTOR_MODEL
 
+For command-line options of the ``litpose crop`` command used above, see :ref:`the CLI Crop section <cli-crop>`.
+
 Prediction on videos script
 ---------------------------
 
@@ -96,6 +100,8 @@ Prediction on videos script
 
     litpose remap $MODEL_DIR/$POSE_MODEL/video_preds/cropped_TRQ177_200624_112234_lBack.short.csv \
         $MODEL_DIR/$DETECTOR_MODEL/video_preds/test_vid.short_bbox.csv
+
+For detailed command-line options, see :ref:`Crop <cli-crop>` and :ref:`Remap <cli-remap>`.
 
 Prediction on OOD Labeled Data
 ------------------------------

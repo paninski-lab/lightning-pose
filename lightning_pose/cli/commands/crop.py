@@ -18,14 +18,23 @@ def register_parser(subparsers):
     """Register the crop command parser."""
     from textwrap import dedent
 
-    crop_parser = subparsers.add_parser(
-        "crop",
-        description=dedent(
-            """\
-            Crops a video or labeled frames based on model predictions.
-            Requires model predictions to already have been generated using `litpose predict`.
+    # Choose documentation link depending on whether we're being imported by Sphinx
+    import sys
 
-            Cropped videos are saved to:
+    is_building_docs = "sphinx" in sys.modules
+    _doc_link = (
+        ":doc:`source/user_guide_advanced/cropzoom_pipeline`"
+        if is_building_docs
+        else "https://lightning-pose.readthedocs.io/en/latest/source/user_guide_advanced/cropzoom_pipeline.html"
+    )
+
+    description_text = dedent(
+        f"""\
+            Crops a video or labeled frames based on model predictions.
+            Requires model predictions to already have been generated using ``litpose predict``.
+
+            Cropped videos are saved to::
+
                 <model_dir>/
                 └── video_preds/
                     ├── <video_filename>.csv              (predictions)
@@ -34,7 +43,8 @@ def register_parser(subparsers):
                 └── cropped_videos/
                     └── cropped_<video_filename>.mp4      (cropped video)
 
-            Cropped images are saved to:
+            Cropped images are saved to::
+
                 <model_dir>/
                 └── image_preds/
                     └── <csv_file_name>/
@@ -42,9 +52,16 @@ def register_parser(subparsers):
                         ├── bbox.csv                      (bbox)
                         └── cropped_<csv_file_name>.csv   (cropped labels)
                 └── cropped_images/
-                        └── a/b/c/<image_name>.png        (cropped images)\
+                        └── a/b/c/<image_name>.png        (cropped images)
+
+            For an end-to-end usage example of the CropZoom workflow, see the user guide:
+            {_doc_link}.
             """
-        ),
+    )
+
+    crop_parser = subparsers.add_parser(
+        "crop",
+        description=description_text,
         usage="litpose crop <model_dir> <input_path:video|csv>... --crop_ratio=CROP_RATIO --anchor_keypoints=x,y,z",  # noqa
     )
     crop_parser.add_argument(
@@ -66,6 +83,16 @@ def register_parser(subparsers):
         default="",  # Or a reasonable default like "0,0,0" if appropriate
         help="Comma-separated list of anchor keypoint names, defaults to all keypoints",
     )
+    return crop_parser
+
+
+def get_parser():
+    """Return an ArgumentParser for the `litpose crop` subcommand (for docs)."""
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="litpose")
+    subparsers = parser.add_subparsers(dest="command")
+    return register_parser(subparsers)
 
 
 def handle(args):

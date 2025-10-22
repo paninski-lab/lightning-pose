@@ -33,6 +33,7 @@ extensions = [
     'sphinx_copybutton',  # add copy button to code blocks
     'sphinx_design',  # dropdowns
     'sphinx_rtd_dark_mode',
+    'sphinxarg.ext',  # sphinx-argparse for CLI docs
 ]
 
 # for automodapi, avoids having methods and attrs of classes shown multiple times
