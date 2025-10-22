@@ -11,7 +11,7 @@ def register_parser(subparsers):
 
     is_building_docs = "sphinx" in sys.modules
     _doc_link = (
-        ":doc:`source/user_guide_advanced/cropzoom_pipeline`"
+        ":doc:`user_guide_advanced/cropzoom_pipeline`"
         if is_building_docs
         else "https://lightning-pose.readthedocs.io/en/latest/source/user_guide_advanced/cropzoom_pipeline.html"
     )
