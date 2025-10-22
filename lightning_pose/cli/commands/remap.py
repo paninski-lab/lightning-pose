@@ -24,7 +24,7 @@ def register_parser(subparsers):
             Remapped predictions are saved as ``remapped_{{preds_file}}`` in the same folder as
             preds_file.
 
-            For an end-to-end usage example of the CropZoom workflow, see the user guide:
+            For an end-to-end usage example of the Cropzoom workflow, see the user guide:
             {_doc_link}.
             """
     )

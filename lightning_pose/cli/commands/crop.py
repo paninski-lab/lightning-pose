@@ -54,7 +54,7 @@ def register_parser(subparsers):
                 └── cropped_images/
                         └── a/b/c/<image_name>.png        (cropped images)
 
-            For an end-to-end usage example of the CropZoom workflow, see the user guide:
+            For an end-to-end usage example of the Cropzoom workflow, see the user guide:
             {_doc_link}.
             """
     )
