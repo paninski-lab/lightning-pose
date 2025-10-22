@@ -4,6 +4,7 @@ sphinx-rtd-dark-mode
 sphinx-automodapi
 sphinx-copybutton
 sphinx-design
+sphinx-argparse
 aniposelib
 h5py
 hydra-core
