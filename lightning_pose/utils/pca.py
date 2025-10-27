@@ -1,7 +1,7 @@
 """PCA class to assist with computing PCA losses."""
 
 import warnings
-from typing import Literal
+from typing import Literal, Any
 
 import numpy as np
 import torch

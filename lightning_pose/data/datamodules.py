@@ -217,7 +217,8 @@ class UnlabeledDataModule(BaseDataModule):
 
         Args:
             dataset: pytorch Dataset for labeled data
-            video_paths_list: absolute paths of videos ("unlabeled" data)
+            # Change: list[str] | list[list[str]] (singleview, multiview respectively)
+            video_paths_list: absolute paths of videos ("unlabeled" data) # Replace with session list
             view_names: if fitting a non-mirrored multiview model, pass view names in order to
                 correctly organize the video paths
             dali_config: see `dali` entry of default config file for keys
@@ -251,6 +252,8 @@ class UnlabeledDataModule(BaseDataModule):
             torch_seed=torch_seed,
         )
         self.video_paths_list = video_paths_list
+        # Replace with path_resolver(sessions,view_names) -> filenames.
+        # Remove and use video_paths_list directly.
         self.filenames = check_video_paths(self.video_paths_list, view_names=view_names)
         self.num_workers_for_unlabeled = 1  # WARNING!! do not increase above 1, weird behavior
         self.dali_config = dali_config

@@ -148,7 +148,7 @@ def get_dataset(
                 resize = False
             dataset = MultiviewHeatmapDataset(
                 root_directory=data_dir,
-                csv_paths=cfg.data.csv_file,
+                csv_paths=cfg.data.csv_file, # Replace with LabelFileKey.
                 view_names=list(cfg.data.view_names),
                 image_resize_height=cfg.data.image_resize_dims.height,
                 image_resize_width=cfg.data.image_resize_dims.width,
@@ -157,13 +157,13 @@ def get_dataset(
                 do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
                 resize=resize,
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
-                camera_params_path=cfg.data.get("camera_params_file", None),
-                bbox_paths=cfg.data.get("bbox_file", None),
+                camera_params_path=cfg.data.get("camera_params_file", None), # No longer needed, derivable from (sessionkey, view)
+                bbox_paths=cfg.data.get("bbox_file", None), # No longer needed: derivable from (labelfilekey, view)
             )
         else:
             dataset = HeatmapDataset(
                 root_directory=data_dir,
-                csv_path=cfg.data.csv_file,
+                csv_path=cfg.data.csv_file, # replace with labelfilekey
                 image_resize_height=cfg.data.image_resize_dims.height,
                 image_resize_width=cfg.data.image_resize_dims.width,
                 imgaug_transform=imgaug_transform,
@@ -248,6 +248,7 @@ def get_data_module(
         view_names = list(view_names) if view_names is not None else None
         data_module = UnlabeledDataModule(
             dataset=dataset,
+            # Change to list[str] or list[list[str]]
             video_paths_list=video_dir,
             view_names=view_names,
             train_batch_size=train_batch_size,

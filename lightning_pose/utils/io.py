@@ -1,5 +1,7 @@
-"""Path handling functions."""
-
+"""
+Path manipulation functions. Note: functions that resolve keys to paths in
+the project directory should instead go in :mod:`lightning_pose.utils.paths`
+"""
 from __future__ import annotations  # python 3.8 compatibility for sphinx
 
 import collections
@@ -58,7 +60,7 @@ def ckpt_path_from_base_path(
 
     """
     import glob
-    
+
     model_search_path = os.path.join(
         base_path,
         logging_dir_name,
@@ -136,7 +138,7 @@ def ckpt_path_from_base_path(
                     "None are marked as 'best' and cannot parse step counts to determine latest. "
                     "Please manually select the appropriate checkpoint."
                 )
-            
+
 @typechecked
 def check_if_semi_supervised(losses_to_use: ListConfig | list | None = None) -> bool:
     """Use config file to determine if model is semi-supervised.
@@ -218,6 +220,7 @@ def return_absolute_path(possibly_relative_path: str, n_dirs_back: int = 3) -> s
     return abs_path
 
 
+# Change to lookup from the project
 @typechecked
 def return_absolute_data_paths(
     data_cfg: DictConfig, n_dirs_back: int = 3
@@ -297,7 +300,7 @@ def get_videos_in_dir(
 
     return video_files
 
-
+# Remove
 @typechecked
 def check_video_paths(
     video_paths: list[str] | str,
@@ -356,6 +359,7 @@ def collect_video_files_by_view(
     return video_files_by_view
 
 
+# Remove and use path resolver instead.
 @typechecked
 def get_context_img_paths(center_img_path: Path) -> list[Path]:
     """Given the path to a center image frame, return paths of 5 context frames

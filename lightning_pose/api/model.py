@@ -92,12 +92,15 @@ class Model:
                 skip_data_module=True,
             )
 
+    # remove
     def image_preds_dir(self) -> Path:
         return self.model_dir / "image_preds"
 
+    # remove
     def video_preds_dir(self) -> Path:
         return self.model_dir / "video_preds"
 
+    # remove
     def labeled_videos_dir(self) -> Path:
         return self.model_dir / "video_preds" / "labeled_videos"
 
@@ -311,6 +314,7 @@ class Model:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        # Use path resolver(session + optional view)
         prediction_csv_file = output_dir / f"{video_file.stem}.csv"
 
         df: pd.DataFrame = predict_video(
@@ -398,6 +402,7 @@ class Model:
             _view_to_video_file[view_name] for view_name in view_names
         ]
 
+        # Use path resolver(sessions + views)
         prediction_csv_file_list = [
             str(output_dir / f"{video_file.stem}.csv")
             for video_file in video_file_per_view
