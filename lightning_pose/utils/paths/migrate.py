@@ -250,12 +250,14 @@ def duplicate_original_video_structure(
         # Map videos => videos_orig to backup ind videos
         # Map videos* => videos* to backup other video dir structure
         .and_then(
-            lambda path: (
-                Path("videos_orig")
-                if Path(path_str).parent.name == "videos"
-                else Path(path_str).parent
+            lambda path: Ok(
+                (
+                    Path("videos_orig")
+                    if Path(path_str).parent.name == "videos"
+                    else Path(path_str).parent
+                )
             )
-            / path.filename
+            / path.name
         )
     )
 
