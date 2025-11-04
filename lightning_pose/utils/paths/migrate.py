@@ -256,8 +256,8 @@ def duplicate_original_video_structure(
                     if Path(path_str).parent.name == "videos"
                     else Path(path_str).parent
                 )
+                / path.name
             )
-            / path.name
         )
     )
 
