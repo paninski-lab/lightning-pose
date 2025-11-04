@@ -342,16 +342,16 @@ def migrate_directory_structure_core(
     input_paths: List[TInputPath],
     source_resolver: BasePathResolverV1,
     dest_resolver: BasePathResolverV1,
-) -> Tuple[Dict[str, Path], List[str]]:
+) -> Tuple[List[Tuple[str, Path]], List[str]]:
     """
     Pure core migration: maps input file paths to new paths using resolvers
     via a functional composition of parse, sanitize, and serialize.
 
     - Skips directory entries and '.' paths before processing.
     - Uses a Result monad to handle success/failure of each step.
-    - Returns a tuple: ({original_path_str: Path(new_path)}, [unparsed_file_paths]).
+    - Returns a tuple: ([(original_path_str, Path(new_path)), ...], [unparsed_file_paths]).
     """
-    output_paths_map: dict[str, Path] = {}
+    project_mapping: List[Tuple[str, Path]] = []
     unparsed_files: list[str] = []
 
     for path_str, file_type in input_paths:
@@ -359,11 +359,11 @@ def migrate_directory_structure_core(
             (path_str, file_type), source_resolver, dest_resolver
         )
         if result.is_ok():
-            output_paths_map[path_str] = result.unwrap()
+            project_mapping.append((path_str, result.unwrap()))
         else:
             # All failures (skipped, parsing, sanitization, serialization)
             # are collected as unparsed for now.
             unparsed_files.append(path_str)
             # Optionally, you could log result.unwrap_err() for more detailed reporting
 
-    return output_paths_map, unparsed_files
+    return project_mapping, unparsed_files

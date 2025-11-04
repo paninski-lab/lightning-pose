@@ -37,7 +37,7 @@ def read_directory_structure_from_disk(base_dir: str) -> list[tuple[str, str]]:
 def apply_migration(
     source_directory: str,
     destination_directory: str,
-    mapping: Dict[str, Path],
+    mapping: List[Tuple[str, Path]],  # Changed from Dict[str, Path]
     dry_run: bool,
 ) -> Tuple[int, int, List[str]]:
     """
@@ -46,8 +46,7 @@ def apply_migration(
     Args:
         source_directory: The root of the original project directory.
         destination_directory: The root of the new, migrated directory structure.
-        mapping: A dictionary where keys are original relative paths (str)
-                 and values are new relative paths (Path object).
+        mapping: A list of tuples where each tuple is (original_relative_path_str, new_relative_path_obj).
         dry_run: If True, prints actions without performing them.
 
     Returns:
@@ -76,7 +75,7 @@ def apply_migration(
     files_copied = 0
     failed_files = []
 
-    for original_rel_path_str, new_path_obj in mapping.items():
+    for original_rel_path_str, new_path_obj in mapping:  # Changed iteration
         original_full_path = source_base_path_obj / original_rel_path_str
         new_full_path = dest_base_path_obj / new_path_obj
 
@@ -215,18 +214,20 @@ if __name__ == "__main__":
     # Additional mapping for video files and unparsed files.
     # map_files("videos/*", "videos_orig/*")
     # map_files("videos*", "videos*")
-    output_paths_map2: dict[str, Path] = {}
+    output_paths_map2: List[Tuple[str, Path]] = []  # Changed to List[Tuple[str, Path]]
     for path_str, file_type in input_paths:
         result = duplicate_original_video_structure(
             (path_str, file_type), source_resolver, dest_resolver
         )
         if result.is_ok():
-            output_paths_map2[path_str] = result.unwrap()
+            output_paths_map2.append((path_str, result.unwrap()))  # Appending tuple
+    project_mapping.extend(output_paths_map2)
 
     # Additionally store unparsed files in "misc/*"
-    output_paths_map3: dict[str, Path] = {}
+    output_paths_map3: List[Tuple[str, Path]] = []  # Changed to List[Tuple[str, Path]]
     for path_str in unparsed_files_for_report:
-        output_paths_map3[path_str] = Path("misc") / path_str
+        output_paths_map3.append((path_str, Path("misc") / path_str))  # Appending tuple
+    project_mapping.extend(output_paths_map3)
 
     # --- Save Mapping CSVs ---
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -245,7 +246,7 @@ if __name__ == "__main__":
     with open(out_csv, mode="w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["original_path", "new_path"])
-        for k, v in sorted(project_mapping.items(), key=lambda x: x[0]):
+        for k, v in sorted(project_mapping, key=lambda x: x[0]):  # Changed iteration
             writer.writerow([k, str(v)])
     print(f"Saved generated mapping to {out_csv}")
 
