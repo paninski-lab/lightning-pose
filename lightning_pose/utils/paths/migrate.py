@@ -229,7 +229,10 @@ def duplicate_original_video_structure(
     dest_resolver: BasePathResolverV1,
 ) -> Result[Path, MigrationError]:
     """
-    Additionally maps
+    Additionally maps video dir structure
+        # Map videos => videos_orig to backup ind videos
+        # Map videos* => videos* to backup other video dir structure
+
     """
     path_str, file_type = input_path_tuple
 
@@ -240,15 +243,17 @@ def duplicate_original_video_structure(
             )
         )
 
-    # Compose the functions using the Result monad's and_then method
-    # The dest_resolver needs to be 'carried through' the chain.
-    # Lambdas are used here to create closures over dest_resolver.
+    if not (path_str.startswith("video") and path_str.endswith(".mp4")):
+        return Err(
+            ParsingError(
+                f"Skipped non-video file: '{path_str}'", original_path=path_str
+            )
+        )
+
     return (
         parse_path(path_str, source_resolver)
         .and_then(lambda parsed_info: sanitize_key(parsed_info))
         .and_then(lambda sanitized_info: serialize_key(sanitized_info, dest_resolver))
-        # Map videos => videos_orig to backup ind videos
-        # Map videos* => videos* to backup other video dir structure
         .and_then(
             lambda path: Ok(
                 (
