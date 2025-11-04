@@ -9,6 +9,7 @@ from typing import List, Dict, Tuple
 from lightning_pose.utils.paths.migrate import (
     build_resolvers_from_config,
     migrate_directory_structure_core,
+    duplicate_original_video_structure,
 )
 
 
@@ -180,7 +181,7 @@ if __name__ == "__main__":
             )
         if dest_path_obj.exists() and any(dest_path_obj.iterdir()):
             print(
-                f"WARNING: Destination directory '{args.destination_directory}' exists and is not empty."
+                f"WAR: Destination directorNINGy '{args.destination_directory}' exists and is not empty."
             )
             response = input(
                 "This could overwrite existing files. Continue anyway? (y/N): "
@@ -199,17 +200,33 @@ if __name__ == "__main__":
             f"ERROR: Failed to build resolvers for '{args.config_dir}': {e}"
         )
 
-    input_paths_from_disk = read_directory_structure_from_disk(args.source_directory)
-    if not input_paths_from_disk:
+    input_paths = read_directory_structure_from_disk(args.source_directory)
+    if not input_paths:
         print(f"No files found in source directory: {args.source_directory}")
         raise SystemExit(0)
 
     project_mapping, unparsed_files_for_report = migrate_directory_structure_core(
-        input_paths_from_disk, source_resolver, dest_resolver
+        input_paths, source_resolver, dest_resolver
     )
     print(
         f"Generated {len(project_mapping)} mappings. {len(unparsed_files_for_report)} unparsed files."
     )
+
+    # Additional mapping for video files and unparsed files.
+    # map_files("videos/*", "videos_orig/*")
+    # map_files("videos*", "videos*")
+    output_paths_map2: dict[str, Path] = {}
+    for path_str, file_type in input_paths:
+        result = duplicate_original_video_structure(
+            (path_str, file_type), source_resolver, dest_resolver
+        )
+        if result.is_ok():
+            output_paths_map2[path_str] = result.unwrap()
+
+    # Additionally store unparsed files in "misc/*"
+    output_paths_map3: dict[str, Path] = {}
+    for path_str in unparsed_files_for_report:
+        output_paths_map3[path_str] = Path("misc") / path_str
 
     # --- Save Mapping CSVs ---
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -259,11 +276,3 @@ if __name__ == "__main__":
         print(f"  Files copied: {copied}")
         if failed_ops:
             print(f"  Failed operations: {len(failed_ops)} (see above for details)")
-
-    if unparsed_files_for_report:
-        print(
-            "\nWARNING: The following files were not parsed and were not included in the migration:"
-        )
-        for f in unparsed_files_for_report:
-            print(f"  - {Path(args.source_directory) / f}")
-        print("Please review these files manually.")

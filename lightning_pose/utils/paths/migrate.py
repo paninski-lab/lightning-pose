@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Tuple, Dict, List
+from typing import Iterable, Tuple, Dict, List, Union, Generic, TypeVar, Callable, Any
 import os
 import re
 import yaml
+from enum import Enum
 
 from lightning_pose.data.datatypes import ProjectConfig
 from lightning_pose.data.keys import (
@@ -14,6 +15,7 @@ from lightning_pose.data.keys import (
     SessionKey,
     LabelFileKey,
 )
+from lightning_pose.utils.paths.base_path_resolver_v1 import BasePathResolverV1
 from lightning_pose.utils.paths.path_resolver import PathResolver
 from lightning_pose.utils.paths import PathParseException, PathType
 
@@ -21,7 +23,86 @@ from lightning_pose.utils.paths import PathParseException, PathType
 TInputPath = Tuple[str, str]  # (path_str, "file"|"directory")
 
 
-def _sanitize_key(parsed_key):
+# --- Result Monad Implementation ---
+class MigrationError(Exception):
+    pass
+
+
+class ParsingError(MigrationError):
+    def __init__(self, message, original_path: str):
+        super().__init__(message)
+        self.original_path = original_path
+
+
+class SanitizationError(MigrationError):
+    def __init__(self, message, parsed_key: Any, path_type: PathType):
+        super().__init__(message)
+        self.parsed_key = parsed_key
+        self.path_type = path_type
+
+
+class SerializationError(MigrationError):
+    def __init__(self, message, sanitized_key: Any, path_type: PathType):
+        super().__init__(message)
+        self.sanitized_key = sanitized_key
+        self.path_type = path_type
+
+
+T = TypeVar("T")
+E = TypeVar("E", bound=MigrationError)
+
+
+class Result(Generic[T, E]):
+    pass
+
+
+class Ok(Result[T, E]):
+    def __init__(self, value: T):
+        self._value = value
+
+    def is_ok(self) -> bool:
+        return True
+
+    def is_err(self) -> bool:
+        return False
+
+    def unwrap(self) -> T:
+        return self._value
+
+    def unwrap_err(self) -> E:
+        raise RuntimeError("Called unwrap_err on an Ok value")
+
+    def and_then(self, func: Callable[[T], "Result[U, E_new]"]) -> "Result[U, E_new]":
+        return func(self._value)
+
+
+U = TypeVar("U")  # For and_then
+E_new = TypeVar("E_new", bound=MigrationError)  # For and_then
+
+
+class Err(Result[T, E]):
+    def __init__(self, error: E):
+        self._error = error
+
+    def is_ok(self) -> bool:
+        return False
+
+    def is_err(self) -> bool:
+        return True
+
+    def unwrap(self) -> T:
+        raise self._error
+
+    def unwrap_err(self) -> E:
+        return self._error
+
+    def and_then(self, func: Callable[[T], "Result[U, E_new]"]) -> "Result[T, E_new]":
+        # If it's an Err, just pass the Err along, func is not called
+        return self  # type: ignore
+
+
+# --- Original _sanitize_key function (remains mostly unchanged) ---
+def _sanitize_key(parsed_key: Any) -> Any:
     """
     Sanitize keys returned by a resolver's reverse() to ensure they can be fed
     into the destination resolver's get().
@@ -56,6 +137,157 @@ def _sanitize_key(parsed_key):
     return parsed_key
 
 
+ParsedInfo = Tuple[Any, PathType]  # (parsed_key, path_type_enum)
+SanitizedInfo = Tuple[Any, PathType]  # (sanitized_key, path_type_enum)
+
+
+def parse_path(
+    path_str: str, source_resolver: BasePathResolverV1
+) -> Result[ParsedInfo, ParsingError]:
+    """
+    Attempts to parse a path string using all available PathTypes in the source resolver.
+    Returns Ok((parsed_key, path_type)) on success, or Err(ParsingError) on failure.
+    """
+    for path_type_enum in PathType:
+        try:
+            parsed_key = source_resolver.for_(path_type_enum).reverse(path_str)
+            if isinstance(parsed_key, bool) and not parsed_key:
+                # Specific error condition from original code
+                raise PathParseException("Parsed key is boolean False")
+            return Ok((parsed_key, path_type_enum))
+        except PathParseException:
+            # Continue to next PathType if this one fails to parse
+            continue
+        except Exception as e:
+            # Catch other unexpected errors during parsing
+            return Err(
+                ParsingError(
+                    f"Unexpected error during parsing '{path_str}': {e}",
+                    original_path=path_str,
+                )
+            )
+    return Err(
+        ParsingError(
+            f"No PathType could parse the path: '{path_str}'", original_path=path_str
+        )
+    )
+
+
+def sanitize_key(parsed_info: ParsedInfo) -> Result[SanitizedInfo, SanitizationError]:
+    """
+    Sanitizes a parsed key. Returns Ok((sanitized_key, path_type)) on success,
+    or Err(SanitizationError) if _sanitize_key were to fail (currently it doesn't raise).
+    """
+    parsed_key, path_type_enum = parsed_info
+    try:
+        sanitized_key = _sanitize_key(parsed_key)
+        return Ok((sanitized_key, path_type_enum))
+    except Exception as e:
+        # In the current _sanitize_key implementation, this block might not be hit,
+        # but it's good practice for future modifications.
+        return Err(
+            SanitizationError(
+                f"Error sanitizing key '{parsed_key}' for PathType '{path_type_enum}': {e}",
+                parsed_key=parsed_key,
+                path_type=path_type_enum,
+            )
+        )
+
+
+def serialize_key(
+    sanitized_info: SanitizedInfo, dest_resolver: BasePathResolverV1
+) -> Result[Path, SerializationError]:
+    """
+    Serializes a sanitized key into a new Path object using the destination resolver.
+    Returns Ok(new_path) on success, or Err(SerializationError) on failure.
+    """
+    sanitized_key, path_type_enum = sanitized_info
+    try:
+        if isinstance(sanitized_key, tuple) and type(sanitized_key).__name__ == "tuple":
+            # Handles regular tuples vs. potential named tuples or other objects
+            new_path = dest_resolver.for_(path_type_enum).get(*sanitized_key)
+        elif isinstance(sanitized_key, bool):
+            # Original code asserted `sanitized_key`, implying it must be True here
+            assert sanitized_key
+            new_path = dest_resolver.for_(path_type_enum).get()
+        else:
+            new_path = dest_resolver.for_(path_type_enum).get(sanitized_key)
+        return Ok(new_path)
+    except Exception as e:
+        return Err(
+            SerializationError(
+                f"Error serializing key '{sanitized_key}' for PathType '{path_type_enum}': {e}",
+                sanitized_key=sanitized_key,
+                path_type=path_type_enum,
+            )
+        )
+
+
+def duplicate_original_video_structure(
+    input_path_tuple: TInputPath,
+    source_resolver: BasePathResolverV1,
+    dest_resolver: BasePathResolverV1,
+) -> Result[Path, MigrationError]:
+    """
+    Additionally maps
+    """
+    path_str, file_type = input_path_tuple
+
+    if path_str == "." or file_type != "file":
+        return Err(
+            ParsingError(
+                f"Skipped (non-file or '.' entry): '{path_str}'", original_path=path_str
+            )
+        )
+
+    # Compose the functions using the Result monad's and_then method
+    # The dest_resolver needs to be 'carried through' the chain.
+    # Lambdas are used here to create closures over dest_resolver.
+    return (
+        parse_path(path_str, source_resolver)
+        .and_then(lambda parsed_info: sanitize_key(parsed_info))
+        .and_then(lambda sanitized_info: serialize_key(sanitized_info, dest_resolver))
+        # Map videos => videos_orig to backup ind videos
+        # Map videos* => videos* to backup other video dir structure
+        .and_then(
+            lambda path: (
+                Path("videos_orig")
+                if Path(path_str).parent.name == "videos"
+                else Path(path_str).parent
+            )
+            / path.filename
+        )
+    )
+
+
+def migrate_single_path(
+    input_path_tuple: TInputPath,
+    source_resolver: BasePathResolverV1,
+    dest_resolver: BasePathResolverV1,
+) -> Result[Path, MigrationError]:
+    """
+    Composes parse, sanitize, and serialize operations for a single input path.
+    Returns Ok(new_path) if migration is successful, or Err(MigrationError) if any step fails.
+    """
+    path_str, file_type = input_path_tuple
+
+    if path_str == "." or file_type != "file":
+        return Err(
+            ParsingError(
+                f"Skipped (non-file or '.' entry): '{path_str}'", original_path=path_str
+            )
+        )
+
+    # Compose the functions using the Result monad's and_then method
+    # The dest_resolver needs to be 'carried through' the chain.
+    # Lambdas are used here to create closures over dest_resolver.
+    return (
+        parse_path(path_str, source_resolver)
+        .and_then(lambda parsed_info: sanitize_key(parsed_info))
+        .and_then(lambda sanitized_info: serialize_key(sanitized_info, dest_resolver))
+    )
+
+
 def build_resolvers_from_config(model_dir: str | Path):
     """
     Build source/destination path resolvers for a project by reading its config YAML
@@ -74,15 +306,13 @@ def build_resolvers_from_config(model_dir: str | Path):
             break
 
     if config_file_path is None:
-        raise FileNotFoundError(
-            f"No YAML config found in model dir: {model_dir}")
+        raise FileNotFoundError(f"No YAML config found in model dir: {model_dir}")
 
     with open(config_file_path, "r") as f:
         config = yaml.safe_load(f) or {}
 
     if "data" not in config:
-        raise KeyError(
-            f"'data' section not found in config: {config_file_path}")
+        raise KeyError(f"'data' section not found in config: {config_file_path}")
 
     project_view_names = config["data"].get("view_names", []) or []
     project_keypoint_names = config["data"].get("keypoint_names", []) or []
@@ -108,74 +338,30 @@ def build_resolvers_from_config(model_dir: str | Path):
 
 def migrate_directory_structure_core(
     input_paths: List[TInputPath],
-    source_resolver,
-    dest_resolver,
+    source_resolver: BasePathResolverV1,
+    dest_resolver: BasePathResolverV1,
 ) -> Tuple[Dict[str, Path], List[str]]:
     """
-    Pure core migration: map input file paths to new paths using resolvers.
+    Pure core migration: maps input file paths to new paths using resolvers
+    via a functional composition of parse, sanitize, and serialize.
 
-    - Skips directory entries.
-    - Tries all PathType parsers until one reverse() succeeds.
-    - Handles tuple/boolean/None keys and sanitizes them before dest get().
+    - Skips directory entries and '.' paths before processing.
+    - Uses a Result monad to handle success/failure of each step.
     - Returns a tuple: ({original_path_str: Path(new_path)}, [unparsed_file_paths]).
     """
     output_paths_map: dict[str, Path] = {}
     unparsed_files: list[str] = []
 
     for path_str, file_type in input_paths:
-        if path_str == ".":
-            continue
-        if file_type != "file":
-            continue
-
-        parsed_successfully = False
-        parsed_key = None
-        for path_type_enum in PathType:
-            try:
-                parsed_key = source_resolver.for_(path_type_enum).reverse(path_str)
-                if isinstance(parsed_key, bool) and not parsed_key:
-                    raise PathParseException()
-
-                sanitized_key = _sanitize_key(parsed_key)
-
-                if isinstance(sanitized_key, tuple) and type(sanitized_key).__name__ == "tuple":
-                    new_path = dest_resolver.for_(path_type_enum).get(*sanitized_key)
-                elif isinstance(sanitized_key, bool):
-                    assert sanitized_key
-                    new_path = dest_resolver.for_(path_type_enum).get()
-                else:
-                    new_path = dest_resolver.for_(path_type_enum).get(sanitized_key)
-
-                output_paths_map[path_str] = new_path
-                parsed_successfully = True
-                break
-            except PathParseException:
-                continue
-            except Exception:
-                # fail this file, move on
-                parsed_successfully = False
-                break
-        if not parsed_successfully:
+        result = migrate_single_path(
+            (path_str, file_type), source_resolver, dest_resolver
+        )
+        if result.is_ok():
+            output_paths_map[path_str] = result.unwrap()
+        else:
+            # All failures (skipped, parsing, sanitization, serialization)
+            # are collected as unparsed for now.
             unparsed_files.append(path_str)
+            # Optionally, you could log result.unwrap_err() for more detailed reporting
 
     return output_paths_map, unparsed_files
-
-
-def migrate_directory_structure(
-    data_dir: str | Path,
-    model_dir: str | Path,
-    dry_run: bool = True,
-) -> Dict[str, Path]:
-    """
-    High-level wrapper for future direct filesystem migrations.
-
-    For now, only validates arguments and constructs resolvers. It returns an empty
-    mapping; the CSV-driven workflow should call `migrate_directory_structure_core`.
-    """
-    if not dry_run:
-        raise NotImplementedError("dry_run=False is not implemented yet")
-
-    _ = Path(data_dir)  # reserved for future use
-    source_resolver, dest_resolver = build_resolvers_from_config(model_dir)
-    # Without a list of input files, there's nothing to migrate here.
-    return {}
