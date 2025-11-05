@@ -1,24 +1,21 @@
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Iterable, Tuple, Dict, List, Union, Generic, TypeVar, Callable, Any
 import os
 import re
+from pathlib import Path
+from typing import Tuple, List, Generic, TypeVar, Callable, Any
+
 import yaml
-from enum import Enum
 
 from lightning_pose.data.datatypes import ProjectConfig
 from lightning_pose.data.keys import (
     VideoFileKey,
     FrameKey,
     ViewName,
-    SessionKey,
-    LabelFileKey,
 )
+from lightning_pose.utils.paths import PathParseException, PathType
 from lightning_pose.utils.paths.base_path_resolver_v1 import BasePathResolverV1
 from lightning_pose.utils.paths.path_resolver import PathResolver
-from lightning_pose.utils.paths import PathParseException, PathType
-
 
 TInputPath = Tuple[str, str]  # (path_str, "file"|"directory")
 
@@ -53,8 +50,20 @@ E = TypeVar("E", bound=MigrationError)
 
 
 class Result(Generic[T, E]):
-    pass
+    def is_ok(self) -> bool:
+        raise NotImplementedError
 
+    def is_err(self) -> bool:
+        raise NotImplementedError
+
+    def unwrap(self) -> T:
+        raise NotImplementedError
+
+    def unwrap_err(self) -> E:
+        raise NotImplementedError
+
+    def and_then(self, func: Callable[[T], "Result[U, E_new]"]) -> "Result[U, E_new]":
+        raise NotImplementedError
 
 class Ok(Result[T, E]):
     def __init__(self, value: T):
@@ -101,7 +110,6 @@ class Err(Result[T, E]):
         return self  # type: ignore
 
 
-# --- Original _sanitize_key function (remains mostly unchanged) ---
 def _sanitize_key(parsed_key: Any) -> Any:
     """
     Sanitize keys returned by a resolver's reverse() to ensure they can be fed
@@ -223,50 +231,6 @@ def serialize_key(
         )
 
 
-def duplicate_original_video_structure(
-    input_path_tuple: TInputPath,
-    source_resolver: BasePathResolverV1,
-    dest_resolver: BasePathResolverV1,
-) -> Result[Path, MigrationError]:
-    """
-    Additionally maps video dir structure
-        # Map videos => videos_orig to backup ind videos
-        # Map videos* => videos* to backup other video dir structure
-
-    """
-    path_str, file_type = input_path_tuple
-
-    if path_str == "." or file_type != "file":
-        return Err(
-            ParsingError(
-                f"Skipped (non-file or '.' entry): '{path_str}'", original_path=path_str
-            )
-        )
-
-    if not (path_str.startswith("video") and path_str.endswith(".mp4")):
-        return Err(
-            ParsingError(
-                f"Skipped non-video file: '{path_str}'", original_path=path_str
-            )
-        )
-
-    return (
-        parse_path(path_str, source_resolver)
-        .and_then(lambda parsed_info: sanitize_key(parsed_info))
-        .and_then(lambda sanitized_info: serialize_key(sanitized_info, dest_resolver))
-        .and_then(
-            lambda path: Ok(
-                (
-                    Path("videos_orig")
-                    if Path(path_str).parent.name == "videos"
-                    else Path(path_str).parent
-                )
-                / path.name
-            )
-        )
-    )
-
-
 def migrate_single_path(
     input_path_tuple: TInputPath,
     source_resolver: BasePathResolverV1,
@@ -366,9 +330,38 @@ def migrate_directory_structure_core(
         if result.is_ok():
             project_mapping.append((path_str, result.unwrap()))
         else:
-            # All failures (skipped, parsing, sanitization, serialization)
-            # are collected as unparsed for now.
             unparsed_files.append(path_str)
-            # Optionally, you could log result.unwrap_err() for more detailed reporting
+
+
+    # Additional mapping for video files and unparsed files.
+    # map_files("videos/*", "videos_orig/*")
+    # map_files("videos*", "videos*")
+    for path_str, file_type in input_paths:
+        def post_process_video(path: Path) -> Result[Path, ParsingError]:
+            if path.parts[0].startswith("video") and path.suffix == ".mp4":
+                return Ok(
+                    (
+                        Path("videos_orig")
+                        if path.parent.name == "videos"
+                        else path.parent
+                    )
+                    / path.name
+                )
+            else:
+                return Err(
+                    ParsingError(
+                        f"Skipped non-video file: '{path_str}'", original_path=path_str
+                    )
+                )
+
+        result = migrate_single_path(
+            (path_str, file_type), source_resolver, dest_resolver
+        ).and_then(post_process_video)
+        if result.is_ok():
+            project_mapping.append((path_str, result.unwrap()))  # Appending tuple
+
+    # Additionally store unparsed files in "misc/*"
+    for path_str in unparsed_files:
+        project_mapping.append((path_str, Path("misc") / path_str))  # Appending tuple
 
     return project_mapping, unparsed_files

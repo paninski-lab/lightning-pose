@@ -211,23 +211,6 @@ if __name__ == "__main__":
         f"Generated {len(project_mapping)} mappings. {len(unparsed_files_for_report)} unparsed files."
     )
 
-    # Additional mapping for video files and unparsed files.
-    # map_files("videos/*", "videos_orig/*")
-    # map_files("videos*", "videos*")
-    output_paths_map2: List[Tuple[str, Path]] = []  # Changed to List[Tuple[str, Path]]
-    for path_str, file_type in input_paths:
-        result = duplicate_original_video_structure(
-            (path_str, file_type), source_resolver, dest_resolver
-        )
-        if result.is_ok():
-            output_paths_map2.append((path_str, result.unwrap()))  # Appending tuple
-    project_mapping.extend(output_paths_map2)
-
-    # Additionally store unparsed files in "misc/*"
-    output_paths_map3: List[Tuple[str, Path]] = []  # Changed to List[Tuple[str, Path]]
-    for path_str in unparsed_files_for_report:
-        output_paths_map3.append((path_str, Path("misc") / path_str))  # Appending tuple
-    project_mapping.extend(output_paths_map3)
 
     # --- Save Mapping CSVs ---
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
