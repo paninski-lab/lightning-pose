@@ -259,6 +259,10 @@ def run_migration(input_dir: Path, output_dir: Path, dry_run: bool):
     else:
         print(f"--- EXECUTING MIGRATION to: {output_dir} ---")
 
+        if output_dir.exists() and output_dir.is_dir() and any(output_dir.iterdir()):
+            print(f"Error: Output directory '{output_dir}' already exists and is not empty.")
+            raise SystemExit(1)
+
         # Ensure output directory exists before execution starts
         # This will create parent directories if they don't exist.
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -324,11 +328,11 @@ def main():
 
     if not input_path.is_dir():
         print(f"Error: Input directory not found or is not a directory: {input_path}")
-        return
+        raise SystemExit(1)
     if input_path == output_path:
         print(f"Error: Input and output directories cannot be the same: {input_path}")
         print("Please specify distinct directories to prevent data loss.")
-        return
+        raise SystemExit(1)
 
     # Run the main process
     try:
