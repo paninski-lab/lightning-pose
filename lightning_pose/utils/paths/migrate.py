@@ -65,6 +65,7 @@ class Result(Generic[T, E]):
     def and_then(self, func: Callable[[T], "Result[U, E_new]"]) -> "Result[U, E_new]":
         raise NotImplementedError
 
+
 class Ok(Result[T, E]):
     def __init__(self, value: T):
         self._value = value
@@ -231,34 +232,6 @@ def serialize_key(
         )
 
 
-def migrate_single_path(
-    input_path_tuple: TInputPath,
-    source_resolver: BasePathResolverV1,
-    dest_resolver: BasePathResolverV1,
-) -> Result[Path, MigrationError]:
-    """
-    Composes parse, sanitize, and serialize operations for a single input path.
-    Returns Ok(new_path) if migration is successful, or Err(MigrationError) if any step fails.
-    """
-    path_str, file_type = input_path_tuple
-
-    if path_str == "." or file_type != "file":
-        return Err(
-            ParsingError(
-                f"Skipped (non-file or '.' entry): '{path_str}'", original_path=path_str
-            )
-        )
-
-    # Compose the functions using the Result monad's and_then method
-    # The dest_resolver needs to be 'carried through' the chain.
-    # Lambdas are used here to create closures over dest_resolver.
-    return (
-        parse_path(path_str, source_resolver)
-        .and_then(lambda parsed_info: sanitize_key(parsed_info))
-        .and_then(lambda sanitized_info: serialize_key(sanitized_info, dest_resolver))
-    )
-
-
 def build_resolvers_from_config(model_dir: str | Path):
     """
     Build source/destination path resolvers for a project by reading its config YAML
@@ -323,30 +296,38 @@ def migrate_directory_structure_core(
     project_mapping: List[Tuple[str, Path]] = []
     unparsed_files: list[str] = []
 
+    # Filter out directories and "." paths
+    input_paths = [
+        (path_str, file_type)
+        for path_str, file_type in input_paths
+        if path_str == "." or file_type != "file"
+    ]
+
+    # 1. Migrate all files to their proper locations.
     for path_str, file_type in input_paths:
-        result = migrate_single_path(
-            (path_str, file_type), source_resolver, dest_resolver
+        result = (
+            parse_path(path_str, source_resolver)
+            .and_then(sanitize_key)
+            .and_then(
+                lambda sanitized_info: serialize_key(sanitized_info, dest_resolver)
+            )
         )
         if result.is_ok():
             project_mapping.append((path_str, result.unwrap()))
         else:
             unparsed_files.append(path_str)
 
-
-    # Additional mapping for video files and unparsed files.
-    # map_files("videos/*", "videos_orig/*")
-    # map_files("videos*", "videos*")
+    # 2. Preserve video directory structure by creating additional mappings.
+    #    "videos/*" => "videos_orig/*" (usually IND files)
+    #    "videos*" => "videos*"
     for path_str, file_type in input_paths:
+
         def post_process_video(path: Path) -> Result[Path, ParsingError]:
             if path.parts[0].startswith("video") and path.suffix == ".mp4":
-                return Ok(
-                    (
-                        Path("videos_orig")
-                        if path.parent.name == "videos"
-                        else path.parent
-                    )
-                    / path.name
+                new_parent = (
+                    Path("videos_orig") if path.parent.name == "videos" else path.parent
                 )
+                return Ok(new_parent / path.name)
             else:
                 return Err(
                     ParsingError(
@@ -354,14 +335,27 @@ def migrate_directory_structure_core(
                     )
                 )
 
-        result = migrate_single_path(
-            (path_str, file_type), source_resolver, dest_resolver
-        ).and_then(post_process_video)
+        result = (
+            parse_path(path_str, source_resolver)
+            .and_then(sanitize_key)
+            .and_then(
+                lambda sanitized_info: serialize_key(sanitized_info, dest_resolver)
+            )
+            .and_then(post_process_video)
+        )
         if result.is_ok():
-            project_mapping.append((path_str, result.unwrap()))  # Appending tuple
+            project_mapping.append((path_str, result.unwrap()))
 
-    # Additionally store unparsed files in "misc/*"
+    # 3. Map unparsed files to "misc/*"
     for path_str in unparsed_files:
-        project_mapping.append((path_str, Path("misc") / path_str))  # Appending tuple
+        project_mapping.append((path_str, Path("misc") / path_str))
+
+
+    for path_str, result_path in project_mapping:
+        print(f"{path_str} => {result_path}")
 
     return project_mapping, unparsed_files
+
+
+def migrate_files_containing_references():
+    pass
