@@ -67,7 +67,7 @@ Working with resources
 ======================
 Forward mapping: keys → paths
 ----------------------------
-Use ``get(key)`` to build a relative path from a typed key.
+Use ``get_path(key)`` to build a relative path from a typed key.
 
 .. code-block:: python
 
@@ -75,24 +75,24 @@ Use ``get(key)`` to build a relative path from a typed key.
 
    # videos
    vkey = VideoFileKey(session_key="sessionA", view=None)  # single-view
-   rel_video = schema.videos.get(vkey)        # Path('videos/sessionA.mp4')
+   rel_video = schema.videos.get_path(vkey)        # Path('videos/sessionA.mp4')
 
    # frames (with zero-padded index)
    fkey = FrameKey(session_key="sessionA", view=None, frame_index=42)
-   rel_frame = schema.frames.get(fkey)        # Path('labeled-data/frames/sessionA/frame_00000042.png')
+   rel_frame = schema.frames.get_path(fkey)        # Path('labeled-data/frames/sessionA/frame_00000042.png')
 
 Reverse parsing: paths → keys
 -----------------------------
-Use ``reverse(rel_path)`` to parse a relative path back into a key.
+Use ``parse_path(rel_path)`` to parse a relative path back into a key.
 
 .. code-block:: python
 
-   k = schema.videos.reverse("videos/sessionA.mp4")
+   k = schema.videos.parse_path("videos/sessionA.mp4")
    assert isinstance(k, type(vkey))
    assert k == vkey
 
 .. note::
-   ``reverse`` expects a relative path (project-root relative). It raises
+   ``parse_path`` expects a relative path (project-root relative). It raises
    ``ValueError`` for absolute inputs and ``PathParseException`` when the path
    does not match the resource pattern.
 
@@ -103,31 +103,35 @@ files and their parsed keys from disk. Methods raise a clear ``RuntimeError`` if
 ``schema.base_dir`` is ``None``.
 
 - ``iter_paths()`` → yields absolute ``Path`` objects
-- ``iter_keys(strict=False)`` → yields parsed keys (skips unparsable files unless ``strict=True``)
-- ``get_all(return_='keys' | 'paths' | 'both', sort=True, strict=False)`` → convenience wrapper
+- ``iter_keys()`` → yields parsed keys; by default enumeration is strict and will raise if it encounters a non-matching file. To bypass, pass ``strict=False``.
+- ``list_keys(sort=True)`` → collect and optionally sort keys into a list
 
 Examples:
 
 .. code-block:: python
 
    # list all videos on disk (keys)
-   video_keys = schema.videos.get_all()  # default return_='keys'
+   video_keys = schema.videos.list_keys()  # list[VideoFileKey]
 
    # absolute paths to label CSVs
-   label_paths = schema.label_files.get_all(return_='paths')
+   label_paths = list(schema.label_files.iter_paths())
 
    # pairs of (key, absolute path)
-   key_and_path = schema.frames.get_all(return_='both')
+   key_and_path = [
+       (schema.frames.parse_path(p.relative_to(schema.base_dir)), p)
+       for p in schema.frames.iter_paths()
+   ]
 
-Strict parsing during enumeration
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Use ``strict=True`` to fail fast on stray files that don’t match the resource
-pattern.
+Strictness during enumeration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+By default, enumeration is strict and will raise a ``PathParseException`` if a
+non-matching file is encountered. To bypass strict behavior and skip
+non-matching files, pass ``strict=False``.
 
 .. code-block:: python
 
-   # raises PathParseException if a non-matching file is encountered
-   keys = list(schema.videos.iter_keys(strict=True))
+   # skip files that do not match the expected pattern
+   keys = list(schema.videos.iter_keys(strict=False))
 
 Predicate resources
 -------------------
@@ -149,10 +153,10 @@ In multiview projects, view-specific placeholders appear in templates and keys.
    vA = VideoFileKey(session_key="S1", view="camA")
    vB = VideoFileKey(session_key="S1", view="camB")
 
-   pA = mv_schema.videos.get(vA)  # Path('videos/S1_camA.mp4')
-   pB = mv_schema.videos.get(vB)  # Path('videos/S1_camB.mp4')
+   pA = mv_schema.videos.get_path(vA)  # Path('videos/S1_camA.mp4')
+   pB = mv_schema.videos.get_path(vB)  # Path('videos/S1_camB.mp4')
 
-   kA = mv_schema.videos.reverse("videos/S1_camA.mp4")
+   kA = mv_schema.videos.parse_path("videos/S1_camA.mp4")
    assert kA == vA
 
 Recipes
@@ -164,8 +168,11 @@ List all videos and their label files
 
    from lightning_pose.utils.paths import ResourceType
 
-   videos = schema.videos.get_all()                     # list[VideoFileKey]
-   labels = schema.label_files.get_all(return_='both')  # list[(LabelFileKey|View, Path)]
+   videos = schema.videos.list_keys()                     # list[VideoFileKey]
+   labels = [
+       (schema.label_files.parse_path(p.relative_to(schema.base_dir)), p)
+       for p in schema.label_files.iter_paths()
+   ]  # list[((LabelFileKey, View|None), Path)]
 
    # Create a map from video session to label file path(s)
    from collections import defaultdict
@@ -176,7 +183,7 @@ List all videos and their label files
 
    # Use resource map generically
    frames_util = schema.for_(ResourceType.frames)
-   frame_keys = frames_util.get_all()  # list[FrameKey]
+   frame_keys = frames_util.list_keys()  # list[FrameKey]
 
 Find all frames for a specific session
 --------------------------------------
@@ -184,7 +191,7 @@ Find all frames for a specific session
 .. code-block:: python
 
    # Filter in memory after enumeration
-   all_frames = schema.frames.get_all()
+   all_frames = schema.frames.list_keys()
    s1_frames = [fk for fk in all_frames if fk.session_key == "sessionA"]
 
 Validate key ↔ path round-trip
