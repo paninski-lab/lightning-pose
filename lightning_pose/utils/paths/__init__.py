@@ -1,7 +1,7 @@
 from pathlib import Path, PurePath, PureWindowsPath, PurePosixPath
 from enum import Enum
 from dataclasses import dataclass
-from typing import Callable, Any, TypeVar, Generic, Union, Mapping, Optional
+from typing import Callable, Any, TypeVar, Generic, Union, Mapping, Optional, Iterator, Literal
 from abc import ABC, abstractmethod
 import re
 
