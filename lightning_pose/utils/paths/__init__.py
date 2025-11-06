@@ -18,17 +18,20 @@ def _check_relative_and_normalize(path: Path | str) -> PurePath:
     return PurePosixPath(str(path).replace("\\", "/"))
 
 
-# Define a TypeVar for the key type that get_ and parse_ methods operate on
+# Define TypeVars:
+# - KeyType is used for concrete spec/default util implementation (invariant)
+# - KeyType_co is covariant for the abstract interface so return types narrow correctly
 KeyType = TypeVar('KeyType')
+KeyType_co = TypeVar('KeyType_co', covariant=True)
 
 
-class AbstractResourceUtil(Generic[KeyType], ABC):
+class AbstractResourceUtil(Generic[KeyType_co], ABC):
     @abstractmethod
     def get_path(self, *args: Any, **kwargs: Any) -> Path:
         ...
 
     @abstractmethod
-    def parse_path(self, path: Union[Path, str]) -> KeyType:
+    def parse_path(self, path: Union[Path, str]) -> KeyType_co:
         ...
 
     def iter_paths(self) -> Iterator[Path]:
@@ -37,10 +40,10 @@ class AbstractResourceUtil(Generic[KeyType], ABC):
     def list_paths(self, *, sort: bool = True) -> list[Path]:
         return sorted(self.iter_paths(), key=lambda p: str(p)) if sort else list(self.iter_paths())
 
-    def iter_keys(self, *, strict: bool = False) -> Iterator[KeyType]:
+    def iter_keys(self, *, strict: bool = False) -> Iterator[KeyType_co]:
         raise NotImplementedError()
 
-    def list_keys(self, *, sort: bool = True, strict: bool = False) -> list[KeyType]:
+    def list_keys(self, *, sort: bool = True, strict: bool = False) -> list[KeyType_co]:
         keys = list(self.iter_keys(strict=strict))
         if sort:
             try:
@@ -157,7 +160,7 @@ class DefaultResourceUtil(AbstractResourceUtil[KeyType]):
         if self._spec.from_key is None:
             raise ValueError(f"from_key not defined for resource {self._spec.name}.")
         if len(args) != 1:
-            raise TypeError("DefaultResourceUtil.get() expects a single key argument.")
+            raise TypeError("DefaultResourceUtil.get_path() expects a single key argument.")
         key = args[0]
         data = dict(self._spec.from_key(key))
         template = self._select_template()
