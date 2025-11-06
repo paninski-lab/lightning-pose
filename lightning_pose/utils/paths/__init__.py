@@ -25,7 +25,8 @@ KeyType = TypeVar('KeyType')
 KeyType_co = TypeVar('KeyType_co', covariant=True)
 
 
-class AbstractResourceUtil(Generic[KeyType_co], ABC):
+class BaseResourceUtil(Generic[KeyType_co], ABC):
+    """This is a base class. The concrete class is either DefaultResourceUtil or _LegacyResourceUtil."""
     @abstractmethod
     def get_path(self, *args: Any, **kwargs: Any) -> Path:
         ...
@@ -86,7 +87,7 @@ class ResourceSpec(Generic[KeyType]):
     list_keys: Optional[Callable[[], list[KeyType]]] = None
 
 
-class DefaultResourceUtil(AbstractResourceUtil[KeyType]):
+class DefaultResourceUtil(BaseResourceUtil[KeyType]):
     def __init__(self, spec: ResourceSpec[KeyType], is_multiview: bool, get_base_dir: Optional[Callable[[], Optional[Path]]] = None):
         self._spec = spec
         self._is_multiview = is_multiview

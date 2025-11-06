@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any, TYPE_CHECKING, overload, Optional
 from typing import Literal
 
-from lightning_pose.utils.paths import ResourceType, AbstractResourceUtil
+from lightning_pose.utils.paths import ResourceType, BaseResourceUtil
 
 if TYPE_CHECKING:
     from typing import Optional
@@ -26,26 +26,26 @@ class BaseProjectSchemaV1(ABC):
 
     # Precise overloads for for_(), allowing static narrowing when literals are used.
     @overload
-    def for_(self, resource_type: Literal[ResourceType.videos]) -> AbstractResourceUtil["VideoFileKey"]: ...
+    def for_(self, resource_type: Literal[ResourceType.videos]) -> BaseResourceUtil["VideoFileKey"]: ...
     @overload
-    def for_(self, resource_type: Literal[ResourceType.video_boxes]) -> AbstractResourceUtil["VideoFileKey"]: ...
+    def for_(self, resource_type: Literal[ResourceType.video_boxes]) -> BaseResourceUtil["VideoFileKey"]: ...
     @overload
-    def for_(self, resource_type: Literal[ResourceType.frames]) -> AbstractResourceUtil["FrameKey"]: ...
+    def for_(self, resource_type: Literal[ResourceType.frames]) -> BaseResourceUtil["FrameKey"]: ...
     @overload
-    def for_(self, resource_type: Literal[ResourceType.label_files]) -> AbstractResourceUtil[tuple["LabelFileKey", Optional["ViewName"]]]: ...
+    def for_(self, resource_type: Literal[ResourceType.label_files]) -> BaseResourceUtil[tuple["LabelFileKey", Optional["ViewName"]]]: ...
     @overload
-    def for_(self, resource_type: Literal[ResourceType.label_file_bboxes]) -> AbstractResourceUtil[tuple["LabelFileKey", Optional["ViewName"]]]: ...
+    def for_(self, resource_type: Literal[ResourceType.label_file_bboxes]) -> BaseResourceUtil[tuple["LabelFileKey", Optional["ViewName"]]]: ...
     @overload
-    def for_(self, resource_type: Literal[ResourceType.center_frames]) -> AbstractResourceUtil["VideoFileKey"]: ...
+    def for_(self, resource_type: Literal[ResourceType.center_frames]) -> BaseResourceUtil["VideoFileKey"]: ...
     @overload
-    def for_(self, resource_type: Literal[ResourceType.session_calibrations]) -> AbstractResourceUtil["SessionKey"]: ...
+    def for_(self, resource_type: Literal[ResourceType.session_calibrations]) -> BaseResourceUtil["SessionKey"]: ...
     @overload
-    def for_(self, resource_type: Literal[ResourceType.project_calibration]) -> AbstractResourceUtil[bool]: ...
+    def for_(self, resource_type: Literal[ResourceType.project_calibration]) -> BaseResourceUtil[bool]: ...
     @overload
-    def for_(self, resource_type: Literal[ResourceType.calibration_backups]) -> AbstractResourceUtil[tuple["SessionKey", int]]: ...
+    def for_(self, resource_type: Literal[ResourceType.calibration_backups]) -> BaseResourceUtil[tuple["SessionKey", int]]: ...
 
     @abstractmethod
-    def for_(self, resource_type: ResourceType) -> AbstractResourceUtil[Any]:
+    def for_(self, resource_type: ResourceType) -> BaseResourceUtil[Any]:
         """Return the resource util for the given type."""
         raise NotImplementedError
 
@@ -57,12 +57,12 @@ class BaseProjectSchemaV1(ABC):
             )
         return self.base_dir
 
-    videos: AbstractResourceUtil["VideoFileKey"]
-    video_boxes: AbstractResourceUtil["VideoFileKey"]
-    frames: AbstractResourceUtil["FrameKey"]
-    label_files: AbstractResourceUtil[tuple["LabelFileKey", Optional["ViewName"]]]
-    label_file_bboxes: AbstractResourceUtil[tuple["LabelFileKey", Optional["ViewName"]]]
-    center_frames: AbstractResourceUtil["VideoFileKey"]
-    session_calibrations: AbstractResourceUtil["SessionKey"]
-    project_calibration: AbstractResourceUtil[bool]
-    calibration_backups: AbstractResourceUtil[tuple["SessionKey", int]]
+    videos: BaseResourceUtil["VideoFileKey"]
+    video_boxes: BaseResourceUtil["VideoFileKey"]
+    frames: BaseResourceUtil["FrameKey"]
+    label_files: BaseResourceUtil[tuple["LabelFileKey", Optional["ViewName"]]]
+    label_file_bboxes: BaseResourceUtil[tuple["LabelFileKey", Optional["ViewName"]]]
+    center_frames: BaseResourceUtil["VideoFileKey"]
+    session_calibrations: BaseResourceUtil["SessionKey"]
+    project_calibration: BaseResourceUtil[bool]
+    calibration_backups: BaseResourceUtil[tuple["SessionKey", int]]

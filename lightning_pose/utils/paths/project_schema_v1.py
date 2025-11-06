@@ -12,7 +12,7 @@ from lightning_pose.utils.paths import (
     ResourceSpec,
     DefaultResourceUtil,
     ResourceType,
-    AbstractResourceUtil,
+    BaseResourceUtil,
 )
 from lightning_pose.utils.paths.base_project_schema_v1 import BaseProjectSchemaV1
 
@@ -109,7 +109,7 @@ class ProjectSchemaV1(BaseProjectSchemaV1):
         self.project_calibration = DefaultResourceUtil(self._project_calib_spec, self.is_multiview, base_dir_getter)
         self.calibration_backups = DefaultResourceUtil(self._calib_backup_spec, self.is_multiview, base_dir_getter)
 
-        self._resource_map: dict[ResourceType, AbstractResourceUtil[Any]] = {
+        self._resource_map: dict[ResourceType, BaseResourceUtil[Any]] = {
             ResourceType.videos: self.videos,
             ResourceType.video_boxes: self.video_boxes,
             ResourceType.frames: self.frames,
@@ -122,5 +122,5 @@ class ProjectSchemaV1(BaseProjectSchemaV1):
         }
 
     # Return spec-driven resource utils only
-    def for_(self, path_type: ResourceType) -> AbstractResourceUtil[Any]:
+    def for_(self, path_type: ResourceType) -> BaseResourceUtil[Any]:
         return self._resource_map[path_type]
