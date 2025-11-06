@@ -14,7 +14,7 @@ from lightning_pose.data.datatypes import ProjectDirs
 from lightning_pose.data.keys import SessionKey
 from lightning_pose.project import get_project_config
 from lightning_pose.utils.io import fix_empty_first_row
-from lightning_pose.utils.paths import PathParseException, PathType
+from lightning_pose.utils.paths import PathParseException, ResourceType
 from lightning_pose.utils.paths.base_project_schema_v1 import BaseProjectSchemaV1
 from lightning_pose.utils.paths.migrate import (
     build_resolvers_from_config,
@@ -31,21 +31,19 @@ dest_resolver: BaseProjectSchemaV1
 
 def get_center_frames(input_dir: Path) -> dict[SessionKey, set[int]]:
     project = get_project_config(ProjectDirs(data_dir=input_dir))
-    path_resolver = ProjectSchema.for_project(project)
-    label_file_keys = path_resolver.for_(PathType.label_files).get_all()
-    # label_file_keys = project_path_util.LabelFileUtils.get_all()
+    project_schema = ProjectSchema.for_project(project)
+    label_file_keys = project_schema.label_files.list_keys()
     center_frames = defaultdict(set)
     for key in label_file_keys:
-        df = pd.read_csv(path_resolver.get_label_file_path(key, project.view_names[0]))
+        df = pd.read_csv(project_schema.label_files.get_path((key, project.view_names[0])))
         df = fix_empty_first_row(df)
         for rel_path in df.index:
-            frame_key = path_resolver.parse_frame_path(rel_path)
+            frame_key = project_schema.frames.parse_path(rel_path)
             center_frames[frame_key.session_key].add(frame_key.frame_index)
     return center_frames
 
 def process_file(source_path: Path, input_dir: Path, output_dir: Path) -> List[FileOp]:
-
-        """
+    """
     Args:
         source_path: The full path to the original file in the input directory.
         input_dir: The root of the input directory being scanned.
