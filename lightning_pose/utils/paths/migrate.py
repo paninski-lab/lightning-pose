@@ -13,9 +13,9 @@ from lightning_pose.data.keys import (
     FrameKey,
     ViewName,
 )
-from lightning_pose.utils.paths import PathParseException, PathType
-from lightning_pose.utils.paths.base_path_resolver_v1 import BasePathResolverV1
-from lightning_pose.utils.paths.path_resolver import PathResolver
+from lightning_pose.utils.paths import PathParseException, ResourceType
+from lightning_pose.utils.paths.base_project_schema_v1 import BaseProjectSchemaV1
+from lightning_pose.utils.paths.project_schema import ProjectSchema
 
 TInputPath = Tuple[str, str]  # (path_str, "file"|"directory")
 
@@ -56,18 +56,18 @@ def _sanitize_key(parsed_key: Any) -> Any:
     return parsed_key
 
 
-ParsedKeys = Tuple[Any, PathType]  # (parsed_key, path_type_enum)
-SanitizedInfo = Tuple[Any, PathType]  # (sanitized_key, path_type_enum)
+ParsedKeys = Tuple[Any, ResourceType]  # (parsed_key, path_type_enum)
+SanitizedInfo = Tuple[Any, ResourceType]  # (sanitized_key, path_type_enum)
 
 
 def parse_path(
-    path_str: str, source_resolver: BasePathResolverV1
+    path_str: str, source_resolver: BaseProjectSchemaV1
 ) -> ParsedKeys:
     """
     Attempts to parse a path string using all available PathTypes in the source resolver.
     Returns Ok((parsed_key, path_type)) on success, or Err(ParsingError) on failure.
     """
-    for path_type_enum in PathType:
+    for path_type_enum in ResourceType:
         try:
             parsed_key = source_resolver.for_(path_type_enum).reverse(path_str)
             if isinstance(parsed_key, bool) and not parsed_key:
@@ -91,23 +91,19 @@ def sanitize_key(parsed_info: ParsedKeys) -> SanitizedInfo:
 
 
 def get_path(
-    sanitized_key: Any, path_type_enum: PathType, dest_resolver: BasePathResolverV1
+    sanitized_key: Any, path_type_enum: ResourceType, dest_resolver: BaseProjectSchemaV1
 ) -> Path:
     """
     Serializes a sanitized key into a new Path object using the destination resolver.
     Returns Ok(new_path) on success, or Err(SerializationError) on failure.
     """
 
-    if isinstance(sanitized_key, tuple) and type(sanitized_key).__name__ == "tuple":
-        # Handles regular tuples vs. potential named tuples or other objects
-        new_path = dest_resolver.for_(path_type_enum).get(*sanitized_key)
-    elif isinstance(sanitized_key, bool):
-        # Original code asserted `sanitized_key`, implying it must be True here
+    if isinstance(sanitized_key, bool):
+        # Predicate resources: no key args
         assert sanitized_key
-        new_path = dest_resolver.for_(path_type_enum).get()
-    else:
-        new_path = dest_resolver.for_(path_type_enum).get(sanitized_key)
-    return new_path
+        return dest_resolver.for_(path_type_enum).get()
+    # Always pass the key as a single argument, even if it is a tuple
+    return dest_resolver.for_(path_type_enum).get(sanitized_key)
 
 
 def build_resolvers_from_config(search_dir: str | Path):
@@ -145,7 +141,7 @@ def build_resolvers_from_config(search_dir: str | Path):
         view_names=project_view_names,
         keypoint_names=project_keypoint_names,
     )
-    source_resolver = PathResolver.for_project(src_cfg)
+    source_resolver = ProjectSchema.for_project(src_cfg)
 
     # Destination: v1
     dst_cfg = ProjectConfig(
@@ -153,7 +149,7 @@ def build_resolvers_from_config(search_dir: str | Path):
         view_names=project_view_names,
         keypoint_names=project_keypoint_names,
     )
-    dest_resolver = PathResolver.for_project(dst_cfg)
+    dest_resolver = ProjectSchema.for_project(dst_cfg)
 
     return source_resolver, dest_resolver
 

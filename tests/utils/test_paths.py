@@ -3,7 +3,7 @@ from pathlib import Path, PureWindowsPath, PurePosixPath
 
 from lightning_pose.data.datatypes import Project
 from lightning_pose.data.keys import VideoFileKey, FrameKey
-from lightning_pose.utils.paths.base_path_resolver_v1 import (
+from lightning_pose.utils.paths.base_project_schema_v1 import (
     ProjectPathUtil,
     PathParseException,
 )
