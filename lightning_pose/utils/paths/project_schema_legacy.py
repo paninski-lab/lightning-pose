@@ -20,29 +20,29 @@ class ProjectSchemaLegacy(BaseProjectSchemaV1):
         self.view_names = view_names
         super().__init__(is_multiview=len(view_names) > 0, *args, **kwargs)
 
-        # Explicit resource utils for legacy behavior
-        self._videos = _LegacyVideoUtil(self)
-        self._video_boxes = _LegacyVideoBBoxUtil(self)
-        self._frames = _LegacyFrameUtil(self)
-        self._label_files = _LegacyLabelFileUtil(self)
-        self._label_file_bboxes = _LegacyLabelFileBBoxUtil(self)
-        self._center_frames = _LegacyCenterFramesUtil(self)
-        self._session_calibrations = _LegacySessionCalibrationUtil(self)
-        self._project_calibration = _LegacyProjectCalibrationUtil(self)
-        self._calibration_backups = _LegacyCalibrationBackupUtil(self)
+        # Explicit resource utils for legacy behavior (public attributes)
+        self.videos = _LegacyVideoUtil(self)
+        self.video_boxes = _LegacyVideoBBoxUtil(self)
+        self.frames = _LegacyFrameUtil(self)
+        self.label_files = _LegacyLabelFileUtil(self)
+        self.label_file_bboxes = _LegacyLabelFileBBoxUtil(self)
+        self.center_frames = _LegacyCenterFramesUtil(self)
+        self.session_calibrations = _LegacySessionCalibrationUtil(self)
+        self.project_calibration = _LegacyProjectCalibrationUtil(self)
+        self.calibration_backups = _LegacyCalibrationBackupUtil(self)
 
         # Lazy import to avoid circulars at module import time
         from lightning_pose.utils.paths import ResourceType, AbstractResourceUtil  # type: ignore
         self._resource_map: dict[ResourceType, AbstractResourceUtil] = {
-            ResourceType.videos: self._videos,
-            ResourceType.video_boxes: self._video_boxes,
-            ResourceType.frames: self._frames,
-            ResourceType.label_files: self._label_files,
-            ResourceType.label_file_bboxes: self._label_file_bboxes,
-            ResourceType.center_frames: self._center_frames,
-            ResourceType.session_calibrations: self._session_calibrations,
-            ResourceType.project_calibration: self._project_calibration,
-            ResourceType.calibration_backups: self._calibration_backups,
+            ResourceType.videos: self.videos,
+            ResourceType.video_boxes: self.video_boxes,
+            ResourceType.frames: self.frames,
+            ResourceType.label_files: self.label_files,
+            ResourceType.label_file_bboxes: self.label_file_bboxes,
+            ResourceType.center_frames: self.center_frames,
+            ResourceType.session_calibrations: self.session_calibrations,
+            ResourceType.project_calibration: self.project_calibration,
+            ResourceType.calibration_backups: self.calibration_backups,
         }
 
     # Inline for_ returning resource utils
