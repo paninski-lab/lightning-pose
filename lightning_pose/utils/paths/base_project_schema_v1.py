@@ -1,4 +1,5 @@
 from abc import abstractmethod, ABC
+from pathlib import Path
 from typing import Any, TYPE_CHECKING, overload, Optional
 from typing import Literal
 
@@ -17,9 +18,11 @@ if TYPE_CHECKING:
 
 class BaseProjectSchemaV1(ABC):
     is_multiview: bool
+    base_dir: Path | None
 
-    def __init__(self, is_multiview: bool):
+    def __init__(self, is_multiview: bool, base_dir: Path | None = None):
         self.is_multiview = is_multiview
+        self.base_dir = base_dir
 
     # Precise overloads for for_(), allowing static narrowing when literals are used.
     @overload
@@ -45,6 +48,14 @@ class BaseProjectSchemaV1(ABC):
     def for_(self, resource_type: ResourceType) -> AbstractResourceUtil[Any]:
         """Return the resource util for the given type."""
         raise NotImplementedError
+
+    def _require_base_dir(self) -> Path:
+        if self.base_dir is None:
+            raise RuntimeError(
+                "Schema.base_dir is None; filesystem enumeration requires a base_dir. "
+                "Construct the schema via ProjectSchema.for_project(...) or pass base_dir to for_version(...)."
+            )
+        return self.base_dir
 
     videos: AbstractResourceUtil["VideoFileKey"]
     video_boxes: AbstractResourceUtil["VideoFileKey"]

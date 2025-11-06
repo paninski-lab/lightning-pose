@@ -69,7 +69,7 @@ def parse_path(
     """
     for path_type_enum in ResourceType:
         try:
-            parsed_key = source_resolver.for_(path_type_enum).reverse(path_str)
+            parsed_key = source_resolver.for_(path_type_enum).parse_path(path_str)
             if isinstance(parsed_key, bool) and not parsed_key:
                 # Specific error condition from original code
                 raise PathParseException("Parsed key is boolean False")
@@ -101,9 +101,9 @@ def get_path(
     if isinstance(sanitized_key, bool):
         # Predicate resources: no key args
         assert sanitized_key
-        return dest_resolver.for_(path_type_enum).get()
+        return dest_resolver.for_(path_type_enum).get_path()
     # Always pass the key as a single argument, even if it is a tuple
-    return dest_resolver.for_(path_type_enum).get(sanitized_key)
+    return dest_resolver.for_(path_type_enum).get_path(sanitized_key)
 
 
 def build_resolvers_from_config(search_dir: str | Path):

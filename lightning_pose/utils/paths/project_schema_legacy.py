@@ -85,13 +85,13 @@ class _LegacyVideoUtil(AbstractResourceUtil[VideoFileKey]):
     def __init__(self, schema: "ProjectSchemaLegacy"):
         self._schema = schema
 
-    def get(self, key: VideoFileKey) -> Path:
+    def get_path(self, key: VideoFileKey) -> Path:
         if self._schema.is_multiview:
             return Path(f"{key.session_key}_{key.view}.mp4")
         else:
             return Path(f"{key.session_key}.mp4")
 
-    def reverse(self, path: Path | str) -> VideoFileKey:
+    def parse_path(self, path: Path | str) -> VideoFileKey:
         path = _check_relative_and_normalize(path)
         if not path.suffix == ".mp4":
             raise PathParseException()
@@ -105,13 +105,13 @@ class _LegacyVideoBBoxUtil(AbstractResourceUtil[VideoFileKey]):
     def __init__(self, schema: "ProjectSchemaLegacy"):
         self._schema = schema
 
-    def get(self, key: VideoFileKey) -> Path:
+    def get_path(self, key: VideoFileKey) -> Path:
         if self._schema.is_multiview:
             return Path(f"{key.session_key}_{key.view}_bbox.csv")
         else:
             return Path(f"{key.session_key}_bbox.csv")
 
-    def reverse(self, path: Path | str) -> VideoFileKey:
+    def parse_path(self, path: Path | str) -> VideoFileKey:
         path = _check_relative_and_normalize(path)
         if not path.suffix == ".csv":
             raise PathParseException()
@@ -125,7 +125,7 @@ class _LegacyFrameUtil(AbstractResourceUtil[FrameKey]):
     def __init__(self, schema: "ProjectSchemaLegacy"):
         self._schema = schema
 
-    def get(self, key: FrameKey) -> Path:
+    def get_path(self, key: FrameKey) -> Path:
         # Choose a conservative legacy-friendly location
         if self._schema.is_multiview:
             dir_name = f"{key.session_key}_{key.view}"
@@ -134,7 +134,7 @@ class _LegacyFrameUtil(AbstractResourceUtil[FrameKey]):
         # Use a generic filename that matches the legacy parser pattern
         return Path("labeled-data") / dir_name / f"frame_{key.frame_index}.png"
 
-    def reverse(self, path: Path | str) -> FrameKey:
+    def parse_path(self, path: Path | str) -> FrameKey:
         path = _check_relative_and_normalize(path)
         # Regex to capture the directory segment containing session and view
         # e.g., "labeled-data/sessionkey_view/" or "labeled-data/sessionkey/"
@@ -158,11 +158,11 @@ class _LegacyLabelFileUtil(AbstractResourceUtil[tuple[LabelFileKey, ViewName | N
     def __init__(self, schema: "ProjectSchemaLegacy"):
         self._schema = schema
 
-    def get(self, key_view: tuple[LabelFileKey, ViewName | None]) -> Path:
+    def get_path(self, key_view: tuple[LabelFileKey, ViewName | None]) -> Path:
         # Legacy label file naming is dataset-specific; generation is not supported.
         raise NotImplementedError("Legacy label file path generation is not supported.")
 
-    def reverse(self, path: Path | str) -> tuple[LabelFileKey, ViewName | None]:
+    def parse_path(self, path: Path | str) -> tuple[LabelFileKey, ViewName | None]:
         path = _check_relative_and_normalize(path)
         if path.suffix != ".csv":
             raise PathParseException()
@@ -182,11 +182,11 @@ class _LegacyLabelFileBBoxUtil(AbstractResourceUtil[tuple[LabelFileKey, ViewName
     def __init__(self, schema: "ProjectSchemaLegacy"):
         self._schema = schema
 
-    def get(self, key_view: tuple[LabelFileKey, ViewName | None]) -> Path:
+    def get_path(self, key_view: tuple[LabelFileKey, ViewName | None]) -> Path:
         # Legacy label bbox naming is dataset-specific; generation is not supported.
         raise NotImplementedError("Legacy label bbox path generation is not supported.")
 
-    def reverse(self, path: Path | str) -> tuple[LabelFileKey, ViewName | None]:
+    def parse_path(self, path: Path | str) -> tuple[LabelFileKey, ViewName | None]:
         path = _check_relative_and_normalize(path)
         if not Path(path.as_posix()).name.startswith("bboxes_"):
             raise PathParseException()
@@ -199,14 +199,14 @@ class _LegacyCenterFramesUtil(AbstractResourceUtil[VideoFileKey]):
     def __init__(self, schema: "ProjectSchemaLegacy"):
         self._schema = schema
 
-    def get(self, key: VideoFileKey) -> Path:
+    def get_path(self, key: VideoFileKey) -> Path:
         if self._schema.is_multiview:
             dir_name = f"{key.session_key}_{key.view}"
         else:
             dir_name = f"{key.session_key}"
         return Path("labeled-data") / dir_name / "center_frames.txt"
 
-    def reverse(self, path: Path | str) -> VideoFileKey:
+    def parse_path(self, path: Path | str) -> VideoFileKey:
         path = _check_relative_and_normalize(path)
         pattern = r"labeled-data/(?P<session_view_str>[^/]+)/center_frames\.txt"
         m = re.search(pattern, path.as_posix())
@@ -222,10 +222,10 @@ class _LegacySessionCalibrationUtil(AbstractResourceUtil[SessionKey]):
     def __init__(self, schema: "ProjectSchemaLegacy"):
         self._schema = schema
 
-    def get(self, key: SessionKey) -> Path:
+    def get_path(self, key: SessionKey) -> Path:
         return Path("calibrations") / f"{key}.toml"
 
-    def reverse(self, path: Path | str) -> SessionKey:
+    def parse_path(self, path: Path | str) -> SessionKey:
         path = _check_relative_and_normalize(path)
         pattern = r"calibrations/(?P<session>[^/]+)\.toml"
         m = re.match(pattern, path.as_posix())
@@ -240,11 +240,11 @@ class _LegacyProjectCalibrationUtil(AbstractResourceUtil[bool]):
     def __init__(self, schema: "ProjectSchemaLegacy"):
         self._schema = schema
 
-    def get(self) -> Path:  # type: ignore[override]
+    def get_path(self) -> Path:  # type: ignore[override]
         # Legacy project calibration file name
         return Path("calibration.toml")
 
-    def reverse(self, path: Path | str) -> bool:
+    def parse_path(self, path: Path | str) -> bool:
         path = _check_relative_and_normalize(path)
         pattern = r"calibration\.toml"
         return bool(re.match(pattern, path.as_posix()))
@@ -254,11 +254,11 @@ class _LegacyCalibrationBackupUtil(AbstractResourceUtil[tuple[SessionKey, int]])
     def __init__(self, schema: "ProjectSchemaLegacy"):
         self._schema = schema
 
-    def get(self, key: tuple[SessionKey, int]) -> Path:
+    def get_path(self, key: tuple[SessionKey, int]) -> Path:
         session_key, time_ns = key
         return Path("calibration_backups") / f"{session_key}.{time_ns}.toml"
 
-    def reverse(self, path: Path | str) -> tuple[SessionKey, int]:
+    def parse_path(self, path: Path | str) -> tuple[SessionKey, int]:
         path = _check_relative_and_normalize(path)
         pattern = r"calibration_backups/(?P<session>[^/]+)\.(?P<time>\d+)\.toml"
         m = re.match(pattern, path.as_posix())
