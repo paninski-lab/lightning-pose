@@ -1,6 +1,6 @@
 import re
-import sys
 from pathlib import Path
+
 from lightning_pose.data.keys import (
     VideoFileKey,
     FrameKey,
@@ -8,8 +8,8 @@ from lightning_pose.data.keys import (
     ViewName,
     LabelFileKey,
 )
-from lightning_pose.utils.paths.base_project_schema_v1 import BaseProjectSchemaV1
 from lightning_pose.utils.paths import _check_relative_and_normalize, PathParseException
+from lightning_pose.utils.paths.base_project_schema_v1 import BaseProjectSchemaV1
 
 
 class ProjectSchemaLegacy(BaseProjectSchemaV1):

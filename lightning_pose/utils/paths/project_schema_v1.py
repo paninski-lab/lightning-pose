@@ -1,5 +1,3 @@
-import re
-from pathlib import Path
 from typing import Any
 
 from lightning_pose.data.keys import (
@@ -10,8 +8,6 @@ from lightning_pose.data.keys import (
     ViewName,
 )
 from lightning_pose.utils.paths import (
-    PathParseException,
-    _check_relative_and_normalize,
     ResourceSpec,
     DefaultResourceUtil,
     ResourceType,
