@@ -185,19 +185,15 @@ class DefaultResourceUtil(AbstractResourceUtil[KeyType]):
             raise ValueError(f"to_key not defined for resource {self._spec.name}.")
         return self._spec.to_key(m.groupdict())  # type: ignore[return-value]
 
-    def list_keys(self) -> list[KeyType]:
-        if self._spec.list_keys is None:
-            raise NotImplementedError()
-        return self._spec.list_keys()
-
     # Filesystem-backed enumeration
     def iter_paths(self) -> Iterator[Path]:
+        """Return paths relative to base directory"""
         if self._spec.is_predicate:
             raise TypeError(f"Enumeration not supported for predicate resource {self._spec.name}.")
         base_dir = self._require_base_dir()
         start_dir_rel, pattern = self._derive_glob()
         start_dir_abs = (base_dir / start_dir_rel).resolve()
-        yield from (p for p in start_dir_abs.glob(pattern) if p.is_file())
+        yield from (p.relative_to(base_dir) for p in start_dir_abs.glob(pattern) if p.is_file())
 
     def iter_keys(self, *, strict: bool = False) -> Iterator[KeyType]:
         base_dir = self._require_base_dir()

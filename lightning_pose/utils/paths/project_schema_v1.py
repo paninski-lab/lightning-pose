@@ -28,7 +28,7 @@ class ProjectSchemaV1(BaseProjectSchemaV1):
             template_multi="videos/{session_key}_{view}.mp4",
             pattern_single=r"videos/(?P<session_key>[^/]+)\.mp4",
             pattern_multi=r"videos/(?P<session_key>[^/]+)_(?P<view>[^/_]+)\.mp4",
-            to_key=lambda g: VideoFileKey(session_key=g["session_key"], view=g.get_path("view")),
+            to_key=lambda g: VideoFileKey(session_key=g["session_key"], view=g.get("view")),
             from_key=lambda k: {"session_key": k.session_key, "view": k.view},
         )
         self._video_bbox_spec = ResourceSpec[VideoFileKey](
@@ -37,7 +37,7 @@ class ProjectSchemaV1(BaseProjectSchemaV1):
             template_multi="videos/{session_key}_{view}_bbox.csv",
             pattern_single=r"videos/(?P<session_key>[^/]+)_bbox\.csv",
             pattern_multi=r"videos/(?P<session_key>[^/]+)_(?P<view>[^/_]+)_bbox\.csv",
-            to_key=lambda g: VideoFileKey(session_key=g["session_key"], view=g.get_path("view")),
+            to_key=lambda g: VideoFileKey(session_key=g["session_key"], view=g.get("view")),
             from_key=lambda k: {"session_key": k.session_key, "view": k.view},
         )
         self._frame_spec = ResourceSpec[FrameKey](
@@ -46,7 +46,7 @@ class ProjectSchemaV1(BaseProjectSchemaV1):
             template_multi="labeled-data/frames/{session_key}_{view}/frame_{frame_index:08d}.png",
             pattern_single=r"labeled-data/frames/(?P<session_key>[^/]+)/frame_(?P<frame_index>\d{8})\.png",
             pattern_multi=r"labeled-data/frames/(?P<session_key>[^/]+)_(?P<view>[^/_]+)/frame_(?P<frame_index>\d{8})\.png",
-            to_key=lambda g: FrameKey(session_key=g["session_key"], view=g.get_path("view"), frame_index=int(g["frame_index"])),
+            to_key=lambda g: FrameKey(session_key=g["session_key"], view=g.get("view"), frame_index=int(g["frame_index"])),
             from_key=lambda k: {"session_key": k.session_key, "view": k.view, "frame_index": k.frame_index},
         )
         self._label_file_spec = ResourceSpec[tuple[LabelFileKey, ViewName | None]](
@@ -55,7 +55,7 @@ class ProjectSchemaV1(BaseProjectSchemaV1):
             template_multi="labeled-data/labels/{label_file_key}_{view}.csv",
             pattern_single=r"labeled-data/labels/(?P<label_file_key>[^/]+)\.csv",
             pattern_multi=r"labeled-data/labels/(?P<label_file_key>[^/]+)_(?P<view>[^/_]+)\.csv",
-            to_key=lambda g: (g["label_file_key"], g.get_path("view")),
+            to_key=lambda g: (g["label_file_key"], g.get("view")),
             from_key=lambda kv: {"label_file_key": kv[0], "view": kv[1]},
         )
         self._label_file_bbox_spec = ResourceSpec[tuple[LabelFileKey, ViewName | None]](
@@ -64,7 +64,7 @@ class ProjectSchemaV1(BaseProjectSchemaV1):
             template_multi="labeled-data/labels/{label_file_key}_{view}_bbox.csv",
             pattern_single=r"labeled-data/labels/(?P<label_file_key>[^/]+)_bbox\.csv",
             pattern_multi=r"labeled-data/labels/(?P<label_file_key>[^/]+)_(?P<view>[^/_]+)_bbox\.csv",
-            to_key=lambda g: (g["label_file_key"], g.get_path("view")),
+            to_key=lambda g: (g["label_file_key"], g.get("view")),
             from_key=lambda kv: {"label_file_key": kv[0], "view": kv[1]},
         )
         self._center_frames_spec = ResourceSpec[VideoFileKey](
@@ -73,7 +73,7 @@ class ProjectSchemaV1(BaseProjectSchemaV1):
             template_multi="labeled-data/frames/{session_key}_{view}/center_frames.txt",
             pattern_single=r"labeled-data/(?P<session_key>[^/]+)/center_frames\.txt",
             pattern_multi=r"labeled-data/frames/(?P<session_key>[^/]+)_(?P<view>[^/_]+)/center_frames\.txt",
-            to_key=lambda g: VideoFileKey(session_key=g["session_key"], view=g.get_path("view")),
+            to_key=lambda g: VideoFileKey(session_key=g["session_key"], view=g.get("view")),
             from_key=lambda k: {"session_key": k.session_key, "view": k.view},
         )
         self._session_calib_spec = ResourceSpec[SessionKey](

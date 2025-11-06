@@ -4,52 +4,54 @@
 Project directory & ProjectSchema
 ###################################
 
-`ProjectSchemaV1` provides a standardized way to build and parse
-project-relative paths (videos, frames, labels, calibrations, etc.).
-It supports both forward mapping (keys → paths), reverse parsing (paths → keys),
-and filesystem enumeration. This interface is preferred to manipulating paths
-directly because it makes code robust to changes in LP's file structure
-down the line.
+A **Project** is the root container of your all your lightning pose data and models.
+All data is contained in the project directory.
 
-This page shows how to use it by example. For full API details, see the
-reference at the end of the page.
+The **Project Schema** bidirectionally maps resources
+to paths based on naming conventions. For example, the video for session
+``Session1`` and view ``Cam-A`` is always stored in ``videos/Session1_Cam-A.mp4``.
+
+If you write scripts that rely on schema assumptions,
+we recommend using the ``ProjectSchema`` utility
+described in the rest of this doc.
 
 .. contents:: On this page
    :local:
    :depth: 2
 
-What is a schema?
-=================
-A schema defines the layout of project files. In v1, each resource (e.g.,
-``videos``, ``frames``, ``label-files``) has:
 
-- a template for building paths, and
-- a pattern for parsing paths back into lookup keys.
+Step 1: Construct a ProjectSchema object
+========================================
+You can construct a schema by manually specifying the version,
+or by providing a project and the version will be inferred automatically.
 
-Creating a schema
-=================
-You can construct a schema in two ways.
-
-From a registered project (recommended)
----------------------------------------
+From project (recommended)
+---------------------------
 If your project is registered via ``projects.toml`` and has a ``project.toml``
 under the data directory, use ``for_project``. This automatically configures
-single-vs-multiview, schema version, and the base directory used for filesystem
+single-vs-multiview, schema version, and the base directory used for resource
 enumeration.
 
 .. code-block:: python
 
    from lightning_pose.utils.paths.project_schema import ProjectSchema
 
-   # project can be a string key, ProjectKey, ProjectDirs, or ProjectConfig
    schema = ProjectSchema.for_project("my_project")
-   # schema.base_dir is set to your project's data directory
-   print(schema.is_multiview, schema.base_dir)
+
+Or skip the ``projects.toml`` lookup by providing project directories manually:
+
+.. code-block:: python
+
+   from lightning_pose.data.datatypes import ProjectDirs
+   from lightning_pose.utils.paths.project_schema import ProjectSchema
+
+   schema = ProjectSchema.for_project(ProjectDirs(data_dir="/absolute/path/to/my/data"))
 
 From scratch / by version
 -------------------------
-If you’re not using a registered project, construct by version and pass the
-``base_dir`` explicitly (recommended when you want to use enumeration helpers).
+Under the hood, the ``for_project`` method unpacks a project config and creates
+the correct version of schema. You can do this manually as follows. ``base_dir`` is
+required to use enumeration methods (like list all videos).
 
 .. code-block:: python
 
@@ -65,8 +67,9 @@ If you’re not using a registered project, construct by version and pass the
 
 Working with resources
 ======================
-Forward mapping: keys → paths
-----------------------------
+
+Getting the path for a resource: keys -> path
+---------------------------------------------
 Use ``get_path(key)`` to build a relative path from a typed key.
 
 .. code-block:: python
@@ -81,8 +84,8 @@ Use ``get_path(key)`` to build a relative path from a typed key.
    fkey = FrameKey(session_key="sessionA", view=None, frame_index=42)
    rel_frame = schema.frames.get_path(fkey)        # Path('labeled-data/frames/sessionA/frame_00000042.png')
 
-Reverse parsing: paths → keys
------------------------------
+Parsing the path for a resource: path → keys
+---------------------------
 Use ``parse_path(rel_path)`` to parse a relative path back into a key.
 
 .. code-block:: python
@@ -96,31 +99,47 @@ Use ``parse_path(rel_path)`` to parse a relative path back into a key.
    ``ValueError`` for absolute inputs and ``PathParseException`` when the path
    does not match the resource pattern.
 
-Filesystem enumeration
-----------------------
-If your schema was constructed with a ``base_dir``, you can enumerate existing
-files and their parsed keys from disk. Methods raise a clear ``RuntimeError`` if
-``schema.base_dir`` is ``None``.
+Listing out resources (enumeration)
+-----------------------------------
+The following methods list out resources currently present in the project directory.
 
-- ``iter_paths()`` → yields absolute ``Path`` objects
+- ``iter_paths()`` → yields ``Path`` objects relative to ``schema.base_dir``
 - ``iter_keys()`` → yields parsed keys; by default enumeration is strict and will raise if it encounters a non-matching file. To bypass, pass ``strict=False``.
 - ``list_keys(sort=True)`` → collect and optionally sort keys into a list
 
-Examples:
+Example: listing out video files
 
-.. code-block:: python
+.. code-block:: pycon
 
-   # list all videos on disk (keys)
-   video_keys = schema.videos.list_keys()  # list[VideoFileKey]
+   >>> video_keys = schema.videos.list_keys()
 
-   # absolute paths to label CSVs
-   label_paths = list(schema.label_files.iter_paths())
+   >>> for v_key in video_keys:
+   ...     print(v_key.session_key, v_key.view)
+   ...
+   05272019_fly1_0_R1C24_rot-ccw-006_sec, Cam-A
+   05272019_fly1_0_R1C24_rot-ccw-006_sec, Cam-B
+   05272019_fly1_0_R3C1_str-cw-0_sec, Cam-A
+   05272019_fly1_0_R3C1_str-cw-0_sec, Cam-B
+   ...
 
-   # pairs of (key, absolute path)
-   key_and_path = [
-       (schema.frames.parse_path(p.relative_to(schema.base_dir)), p)
-       for p in schema.frames.iter_paths()
-   ]
+Example: listing out label files and their paths
+
+.. code-block:: pycon
+
+   >>> key_and_path = [
+   ...     (schema.label_files.parse_path(p), p)
+   ...     for p in schema.label_files.iter_paths()
+   ... ]
+   >>> for (labelfilekey, view), path in key_and_path:
+   ...     print(f"{labelfilekey}, {view}, {path}")
+   ...
+   CollectedData, Cam-A, labeled-data/labels/CollectedData_Cam-A.csv
+   CollectedData_new, Cam-A, labeled-data/labels/CollectedData_new_Cam-A.csv
+   CollectedData, Cam-B, labeled-data/labels/CollectedData_Cam-B.csv
+   CollectedData_new, Cam-B, labeled-data/labels/CollectedData_new_Cam-B.csv
+   CollectedData, Cam-C, labeled-data/labels/CollectedData_Cam-C.csv
+   ...
+
 
 Strictness during enumeration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -197,24 +216,6 @@ Validate key ↔ path round-trip
    path = schema.frames.get_path(fk)
    assert schema.frames.parse_path(path) == fk
 
-Troubleshooting
-===============
-- ``RuntimeError: ... base_dir is None``
-
-  Construct the schema with a base directory (either via
-  ``ProjectSchema.for_project(...)`` or by passing ``base_dir=...`` to
-  ``ProjectSchema.for_version(...)``) before using filesystem enumeration.
-
-- ``PathParseException: Could not parse ...``
-
-  The file does not match the resource’s expected pattern. Ensure you’re passing
-  a project-relative path to ``parse_path`` and that the path layout matches the
-  schema templates.
-
-- ``ValueError: Argument must be relative path`` (in ``reverse``)
-
-  ``reverse`` only accepts project-relative paths. Convert absolute paths to
-  relative using ``p.relative_to(schema.base_dir)`` first.
 
 API reference
 =============

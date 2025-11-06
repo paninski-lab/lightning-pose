@@ -34,9 +34,9 @@ __all__ = [
 
 
 class ProjectDirs(typing.NamedTuple):
-    project_key: str = None
-    data_dir: Path = None
-    model_dir: Path = None
+    project_key: str | None = None
+    data_dir: Path | None = None
+    model_dir: Path | None = None
 
 
 class ProjectConfig(pydantic.BaseModel):
