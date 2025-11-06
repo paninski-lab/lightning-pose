@@ -10,20 +10,23 @@ from lightning_pose.data.keys import (
 )
 from lightning_pose.utils.paths import (
     ResourceSpec,
-    DefaultResourceUtil,
+    ResourceUtilImpl,
     ResourceType,
-    BaseResourceUtil,
+    ResourceUtil,
 )
-from lightning_pose.utils.paths.base_project_schema_v1 import BaseProjectSchemaV1
+from lightning_pose.utils.paths.project_schema import ProjectSchema
 
 
-class ProjectSchemaV1(BaseProjectSchemaV1):
+class ProjectSchemaV1(ProjectSchema):
+    """
+    Contains ResourceUtils for all types of project resources.
+    """
     def __init__(self, is_multiview: bool, base_dir: Path | None = None):
         super().__init__(is_multiview, base_dir)
 
         # Define specs for each resource
         self._video_spec = ResourceSpec[VideoFileKey](
-            name=ResourceType.videos,
+            name=ResourceType.VIDEO,
             template_single="videos/{session_key}.mp4",
             template_multi="videos/{session_key}_{view}.mp4",
             pattern_single=r"videos/(?P<session_key>[^/]+)\.mp4",
@@ -32,7 +35,7 @@ class ProjectSchemaV1(BaseProjectSchemaV1):
             from_key=lambda k: {"session_key": k.session_key, "view": k.view},
         )
         self._video_bbox_spec = ResourceSpec[VideoFileKey](
-            name=ResourceType.video_boxes,
+            name=ResourceType.VIDEO_BBOX,
             template_single="videos/{session_key}_bbox.csv",
             template_multi="videos/{session_key}_{view}_bbox.csv",
             pattern_single=r"videos/(?P<session_key>[^/]+)_bbox\.csv",
@@ -41,7 +44,7 @@ class ProjectSchemaV1(BaseProjectSchemaV1):
             from_key=lambda k: {"session_key": k.session_key, "view": k.view},
         )
         self._frame_spec = ResourceSpec[FrameKey](
-            name=ResourceType.frames,
+            name=ResourceType.FRAME,
             template_single="labeled-data/frames/{session_key}/frame_{frame_index:08d}.png",
             template_multi="labeled-data/frames/{session_key}_{view}/frame_{frame_index:08d}.png",
             pattern_single=r"labeled-data/frames/(?P<session_key>[^/]+)/frame_(?P<frame_index>\d{8})\.png",
@@ -50,7 +53,7 @@ class ProjectSchemaV1(BaseProjectSchemaV1):
             from_key=lambda k: {"session_key": k.session_key, "view": k.view, "frame_index": k.frame_index},
         )
         self._label_file_spec = ResourceSpec[tuple[LabelFileKey, ViewName | None]](
-            name=ResourceType.label_files,
+            name=ResourceType.LABEL_FILE,
             template_single="labeled-data/labels/{label_file_key}.csv",
             template_multi="labeled-data/labels/{label_file_key}_{view}.csv",
             pattern_single=r"labeled-data/labels/(?P<label_file_key>[^/]+)\.csv",
@@ -59,7 +62,7 @@ class ProjectSchemaV1(BaseProjectSchemaV1):
             from_key=lambda kv: {"label_file_key": kv[0], "view": kv[1]},
         )
         self._label_file_bbox_spec = ResourceSpec[tuple[LabelFileKey, ViewName | None]](
-            name=ResourceType.label_file_bboxes,
+            name=ResourceType.LABEL_FILE_BBOX,
             template_single="labeled-data/labels/{label_file_key}_bbox.csv",
             template_multi="labeled-data/labels/{label_file_key}_{view}_bbox.csv",
             pattern_single=r"labeled-data/labels/(?P<label_file_key>[^/]+)_bbox\.csv",
@@ -68,7 +71,7 @@ class ProjectSchemaV1(BaseProjectSchemaV1):
             from_key=lambda kv: {"label_file_key": kv[0], "view": kv[1]},
         )
         self._center_frames_spec = ResourceSpec[VideoFileKey](
-            name=ResourceType.center_frames,
+            name=ResourceType.CENTER_FRAME_LIST,
             template_single="labeled-data/{session_key}/center_frames.txt",
             template_multi="labeled-data/frames/{session_key}_{view}/center_frames.txt",
             pattern_single=r"labeled-data/(?P<session_key>[^/]+)/center_frames\.txt",
@@ -77,20 +80,19 @@ class ProjectSchemaV1(BaseProjectSchemaV1):
             from_key=lambda k: {"session_key": k.session_key, "view": k.view},
         )
         self._session_calib_spec = ResourceSpec[SessionKey](
-            name=ResourceType.session_calibrations,
+            name=ResourceType.SESSION_CALIBRATION,
             template_multi="calibrations/{session_key}.toml",
             pattern_multi=r"calibrations/(?P<session_key>[^/]+)\.toml",
             to_key=lambda g: g["session_key"],
             from_key=lambda k: {"session_key": k},
         )
-        self._project_calib_spec = ResourceSpec[bool](
-            name=ResourceType.project_calibration,
+        self._project_calib_spec = ResourceSpec[None](
+            name=ResourceType.PROJECT_CALIBRATION,
             template_multi="calibrations/default.toml",
             pattern_multi=r"calibrations/default\.toml",
-            is_predicate=True,
         )
         self._calib_backup_spec = ResourceSpec[tuple[SessionKey, int]](
-            name=ResourceType.calibration_backups,
+            name=ResourceType.CALIBRATION_BACKUP,
             template_multi="calibration_backups/{session_key}.{time_ns}.toml",
             pattern_multi=r"calibration_backups/(?P<session_key>[^/]+)\.(?P<time_ns>\d+)\.toml",
             to_key=lambda g: (g["session_key"], int(g["time_ns"])),
@@ -99,28 +101,28 @@ class ProjectSchemaV1(BaseProjectSchemaV1):
 
         # Create resource utils
         base_dir_getter = lambda: self.base_dir
-        self.videos = DefaultResourceUtil(self._video_spec, self.is_multiview, base_dir_getter)
-        self.video_boxes = DefaultResourceUtil(self._video_bbox_spec, self.is_multiview, base_dir_getter)
-        self.frames = DefaultResourceUtil(self._frame_spec, self.is_multiview, base_dir_getter)
-        self.label_files = DefaultResourceUtil(self._label_file_spec, self.is_multiview, base_dir_getter)
-        self.label_file_bboxes = DefaultResourceUtil(self._label_file_bbox_spec, self.is_multiview, base_dir_getter)
-        self.center_frames = DefaultResourceUtil(self._center_frames_spec, self.is_multiview, base_dir_getter)
-        self.session_calibrations = DefaultResourceUtil(self._session_calib_spec, self.is_multiview, base_dir_getter)
-        self.project_calibration = DefaultResourceUtil(self._project_calib_spec, self.is_multiview, base_dir_getter)
-        self.calibration_backups = DefaultResourceUtil(self._calib_backup_spec, self.is_multiview, base_dir_getter)
+        self.videos = ResourceUtilImpl(self._video_spec, self.is_multiview, base_dir_getter)
+        self.video_boxes = ResourceUtilImpl(self._video_bbox_spec, self.is_multiview, base_dir_getter)
+        self.frames = ResourceUtilImpl(self._frame_spec, self.is_multiview, base_dir_getter)
+        self.label_files = ResourceUtilImpl(self._label_file_spec, self.is_multiview, base_dir_getter)
+        self.label_file_bboxes = ResourceUtilImpl(self._label_file_bbox_spec, self.is_multiview, base_dir_getter)
+        self.center_frames = ResourceUtilImpl(self._center_frames_spec, self.is_multiview, base_dir_getter)
+        self.session_calibrations = ResourceUtilImpl(self._session_calib_spec, self.is_multiview, base_dir_getter)
+        self.project_calibration = ResourceUtilImpl(self._project_calib_spec, self.is_multiview, base_dir_getter)
+        self.calibration_backups = ResourceUtilImpl(self._calib_backup_spec, self.is_multiview, base_dir_getter)
 
-        self._resource_map: dict[ResourceType, BaseResourceUtil[Any]] = {
-            ResourceType.videos: self.videos,
-            ResourceType.video_boxes: self.video_boxes,
-            ResourceType.frames: self.frames,
-            ResourceType.label_files: self.label_files,
-            ResourceType.label_file_bboxes: self.label_file_bboxes,
-            ResourceType.center_frames: self.center_frames,
-            ResourceType.session_calibrations: self.session_calibrations,
-            ResourceType.project_calibration: self.project_calibration,
-            ResourceType.calibration_backups: self.calibration_backups,
+        self._resource_map: dict[ResourceType, ResourceUtil[Any]] = {
+            ResourceType.VIDEO: self.videos,
+            ResourceType.VIDEO_BBOX: self.video_boxes,
+            ResourceType.FRAME: self.frames,
+            ResourceType.LABEL_FILE: self.label_files,
+            ResourceType.LABEL_FILE_BBOX: self.label_file_bboxes,
+            ResourceType.CENTER_FRAME_LIST: self.center_frames,
+            ResourceType.SESSION_CALIBRATION: self.session_calibrations,
+            ResourceType.PROJECT_CALIBRATION: self.project_calibration,
+            ResourceType.CALIBRATION_BACKUP: self.calibration_backups,
         }
 
-    # Return spec-driven resource utils only
-    def for_(self, path_type: ResourceType) -> BaseResourceUtil[Any]:
-        return self._resource_map[path_type]
+
+    def for_(self, resource_type: ResourceType) -> ResourceUtil[Any]:
+        return self._resource_map[resource_type]

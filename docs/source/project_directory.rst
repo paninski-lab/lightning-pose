@@ -85,7 +85,7 @@ Use ``get_path(key)`` to build a relative path from a typed key.
    rel_frame = schema.frames.get_path(fkey)        # Path('labeled-data/frames/sessionA/frame_00000042.png')
 
 Parsing the path for a resource: path → keys
----------------------------
+------------------------------------------------------
 Use ``parse_path(rel_path)`` to parse a relative path back into a key.
 
 .. code-block:: python
@@ -100,7 +100,7 @@ Use ``parse_path(rel_path)`` to parse a relative path back into a key.
    does not match the resource pattern.
 
 Listing out resources (enumeration)
------------------------------------
+----------------------------------------------------------------------------
 The following methods list out resources currently present in the project directory.
 
 - ``iter_paths()`` → yields ``Path`` objects relative to ``schema.base_dir``
@@ -111,7 +111,7 @@ Example: listing out video files
 
 .. code-block:: pycon
 
-   >>> video_keys = schema.videos.list_keys()
+   >>> video_keys = schema.VIDEO.list_keys().list_keys()
 
    >>> for v_key in video_keys:
    ...     print(v_key.session_key, v_key.view)
@@ -122,12 +122,13 @@ Example: listing out video files
    05272019_fly1_0_R3C1_str-cw-0_sec, Cam-B
    ...
 
+
 Example: listing out label files and their paths
 
 .. code-block:: pycon
 
    >>> key_and_path = [
-   ...     (schema.label_files.parse_path(p), p)
+   ...     (schema.LABEL_FILE.parse_path(p), p)
    ...     for p in schema.label_files.iter_paths()
    ... ]
    >>> for (labelfilekey, view), path in key_and_path:
@@ -141,93 +142,17 @@ Example: listing out label files and their paths
    ...
 
 
-Strictness during enumeration
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-By default, enumeration is strict and will raise a ``PathParseException`` if a
-non-matching file is encountered. To bypass strict behavior and skip
-non-matching files, pass ``strict=False``.
-
-.. code-block:: python
-
-   # skip files that do not match the expected pattern
-   keys = list(schema.videos.iter_keys(strict=False))
-
-
-Single-view vs multiview
-========================
-In multiview projects, view-specific placeholders appear in templates and keys.
-
-.. code-block:: python
-
-   from lightning_pose.data.keys import VideoFileKey
-
-   mv_schema = ProjectSchema.for_version(1, is_multiview=True, base_dir=schema.base_dir)
-
-   vA = VideoFileKey(session_key="S1", view="camA")
-   vB = VideoFileKey(session_key="S1", view="camB")
-
-   pA = mv_schema.videos.get_path(vA)  # Path('videos/S1_camA.mp4')
-   pB = mv_schema.videos.get_path(vB)  # Path('videos/S1_camB.mp4')
-
-   kA = mv_schema.videos.parse_path("videos/S1_camA.mp4")
-   assert kA == vA
-
-Recipes
-=======
-List all videos and their label files
--------------------------------------
-
-.. code-block:: python
-
-   from lightning_pose.utils.paths import ResourceType
-
-   videos = schema.videos.list_keys()                     # list[VideoFileKey]
-   labels = [
-       (schema.label_files.parse_path(p.relative_to(schema.base_dir)), p)
-       for p in schema.label_files.iter_paths()
-   ]  # list[((LabelFileKey, View|None), Path)]
-
-   # Create a map from video session to label file path(s)
-   from collections import defaultdict
-   by_session = defaultdict(list)
-   for (label_key, path) in labels:
-       lfile_key, view = label_key  # unpack tuple
-       by_session[lfile_key].append(path)
-
-   # Use resource map generically
-   frames_util = schema.for_(ResourceType.frames)
-   frame_keys = frames_util.list_keys()  # list[FrameKey]
-
-Find all frames for a specific session
---------------------------------------
-
-.. code-block:: python
-
-   # Filter in memory after enumeration
-   all_frames = schema.frames.list_keys()
-   s1_frames = [fk for fk in all_frames if fk.session_key == "sessionA"]
-
-Validate key ↔ path round-trip
-------------------------------
-
-.. code-block:: python
-
-   fk = FrameKey(session_key="S2", view=None, frame_index=123)
-   path = schema.frames.get_path(fk)
-   assert schema.frames.parse_path(path) == fk
-
-
 API reference
 =============
 
-.. autoclass:: lightning_pose.utils.paths.project_schema_v1.ProjectSchemaV1
-    :special-members: __init__
-    :inherited-members:
+.. autoclass:: lightning_pose.utils.paths.project_schema.ProjectSchema
     :members:
     :member-order: bysource
     :undoc-members:
+    :exclude-members: for_,__init__
 
-.. autoclass:: lightning_pose.utils.paths.AbstractResourceUtil
+
+.. autoclass:: lightning_pose.utils.paths.ResourceUtil
     :inherited-members:
     :members:
     :member-order: bysource

@@ -14,11 +14,9 @@ from lightning_pose.data.keys import (
     ViewName,
 )
 from lightning_pose.utils.paths import PathParseException, ResourceType
-from lightning_pose.utils.paths.base_project_schema_v1 import BaseProjectSchemaV1
 from lightning_pose.utils.paths.project_schema import ProjectSchema
 
 TInputPath = Tuple[str, str]  # (path_str, "file"|"directory")
-
 
 
 def _sanitize_key(parsed_key: Any) -> Any:
@@ -61,7 +59,7 @@ SanitizedInfo = Tuple[Any, ResourceType]  # (sanitized_key, path_type_enum)
 
 
 def parse_path(
-    path_str: str, source_resolver: BaseProjectSchemaV1
+    path_str: str, source_resolver: ProjectSchema
 ) -> ParsedKeys:
     """
     Attempts to parse a path string using all available PathTypes in the source resolver.
@@ -91,7 +89,7 @@ def sanitize_key(parsed_info: ParsedKeys) -> SanitizedInfo:
 
 
 def get_path(
-    sanitized_key: Any, path_type_enum: ResourceType, dest_resolver: BaseProjectSchemaV1
+    sanitized_key: Any, path_type_enum: ResourceType, dest_resolver: ProjectSchema
 ) -> Path:
     """
     Serializes a sanitized key into a new Path object using the destination resolver.

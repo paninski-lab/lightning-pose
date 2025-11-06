@@ -15,7 +15,6 @@ from lightning_pose.data.keys import SessionKey
 from lightning_pose.project import get_project_config
 from lightning_pose.utils.io import fix_empty_first_row
 from lightning_pose.utils.paths import PathParseException, ResourceType
-from lightning_pose.utils.paths.base_project_schema_v1 import BaseProjectSchemaV1
 from lightning_pose.utils.paths.migrate import (
     build_resolvers_from_config,
     parse_path,
@@ -25,8 +24,8 @@ from lightning_pose.utils.paths.migrate import (
 from lightning_pose.utils.paths.project_schema import ProjectSchema
 
 # These will be set by run_migration()
-source_resolver: BaseProjectSchemaV1
-dest_resolver: BaseProjectSchemaV1
+source_resolver: ProjectSchema
+dest_resolver: ProjectSchema
 
 
 def get_center_frames(input_dir: Path) -> dict[SessionKey, set[int]]:

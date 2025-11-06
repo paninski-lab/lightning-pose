@@ -9,10 +9,10 @@ from lightning_pose.data.keys import (
     LabelFileKey,
 )
 from lightning_pose.utils.paths import _check_relative_and_normalize, PathParseException
-from lightning_pose.utils.paths.base_project_schema_v1 import BaseProjectSchemaV1
+from lightning_pose.utils.paths.project_schema import ProjectSchema
 
 
-class ProjectSchemaLegacy(BaseProjectSchemaV1):
+class ProjectSchemaLegacy(ProjectSchema):
     """Parser for paths in projects before V1 schema. Used exclusively by migration scripts."""
     # Legacy parser needs access to view names for parsing.
     view_names: list[str]
@@ -33,17 +33,17 @@ class ProjectSchemaLegacy(BaseProjectSchemaV1):
         self.calibration_backups = _LegacyCalibrationBackupUtil(self)
 
         # Lazy import to avoid circulars at module import time
-        from lightning_pose.utils.paths import ResourceType, BaseResourceUtil  # type: ignore
-        self._resource_map: dict[ResourceType, BaseResourceUtil] = {
-            ResourceType.videos: self.videos,
-            ResourceType.video_boxes: self.video_boxes,
-            ResourceType.frames: self.frames,
-            ResourceType.label_files: self.label_files,
-            ResourceType.label_file_bboxes: self.label_file_bboxes,
-            ResourceType.center_frames: self.center_frames,
-            ResourceType.session_calibrations: self.session_calibrations,
-            ResourceType.project_calibration: self.project_calibration,
-            ResourceType.calibration_backups: self.calibration_backups,
+        from lightning_pose.utils.paths import ResourceType, ResourceUtil  # type: ignore
+        self._resource_map: dict[ResourceType, ResourceUtil] = {
+            ResourceType.VIDEO: self.videos,
+            ResourceType.VIDEO_BBOX: self.video_boxes,
+            ResourceType.FRAME: self.frames,
+            ResourceType.LABEL_FILE: self.label_files,
+            ResourceType.LABEL_FILE_BBOX: self.label_file_bboxes,
+            ResourceType.CENTER_FRAME_LIST: self.center_frames,
+            ResourceType.SESSION_CALIBRATION: self.session_calibrations,
+            ResourceType.PROJECT_CALIBRATION: self.project_calibration,
+            ResourceType.CALIBRATION_BACKUP: self.calibration_backups,
         }
 
     # Inline for_ returning resource utils
@@ -79,10 +79,10 @@ class ProjectSchemaLegacy(BaseProjectSchemaV1):
 # ---------------------------------------------------------------------------
 # Explicit legacy resource util classes implementing get()/reverse()
 # ---------------------------------------------------------------------------
-from lightning_pose.utils.paths import BaseResourceUtil, ResourceType  # type: ignore
+from lightning_pose.utils.paths import ResourceUtil, ResourceType  # type: ignore
 
 
-class _LegacyVideoUtil(BaseResourceUtil[VideoFileKey]):
+class _LegacyVideoUtil(ResourceUtil[VideoFileKey]):
     def __init__(self, schema: "ProjectSchemaLegacy"):
         self._schema = schema
 
@@ -99,7 +99,7 @@ class _LegacyVideoUtil(BaseResourceUtil[VideoFileKey]):
         return self._schema._parse_session_name_and_view(path.stem)
 
 
-class _LegacyVideoBBoxUtil(BaseResourceUtil[VideoFileKey]):
+class _LegacyVideoBBoxUtil(ResourceUtil[VideoFileKey]):
     def __init__(self, schema: "ProjectSchemaLegacy"):
         self._schema = schema
 
@@ -116,7 +116,7 @@ class _LegacyVideoBBoxUtil(BaseResourceUtil[VideoFileKey]):
         return self._schema._parse_session_name_and_view(stem_without_bbox)
 
 
-class _LegacyFrameUtil(BaseResourceUtil[FrameKey]):
+class _LegacyFrameUtil(ResourceUtil[FrameKey]):
     def __init__(self, schema: "ProjectSchemaLegacy"):
         self._schema = schema
 
@@ -143,7 +143,7 @@ class _LegacyFrameUtil(BaseResourceUtil[FrameKey]):
         )
 
 
-class _LegacyLabelFileUtil(BaseResourceUtil[tuple[LabelFileKey, ViewName | None]]):
+class _LegacyLabelFileUtil(ResourceUtil[tuple[LabelFileKey, ViewName | None]]):
     def __init__(self, schema: "ProjectSchemaLegacy"):
         self._schema = schema
 
@@ -166,7 +166,7 @@ class _LegacyLabelFileUtil(BaseResourceUtil[tuple[LabelFileKey, ViewName | None]
         return LabelFileKey(labelfilekey), video_file_key.view
 
 
-class _LegacyLabelFileBBoxUtil(BaseResourceUtil[tuple[LabelFileKey, ViewName | None]]):
+class _LegacyLabelFileBBoxUtil(ResourceUtil[tuple[LabelFileKey, ViewName | None]]):
     def __init__(self, schema: "ProjectSchemaLegacy"):
         self._schema = schema
 
@@ -182,7 +182,7 @@ class _LegacyLabelFileBBoxUtil(BaseResourceUtil[tuple[LabelFileKey, ViewName | N
         return labelfilekey, video_file_key.view
 
 
-class _LegacyCenterFramesUtil(BaseResourceUtil[VideoFileKey]):
+class _LegacyCenterFramesUtil(ResourceUtil[VideoFileKey]):
     def __init__(self, schema: "ProjectSchemaLegacy"):
         self._schema = schema
 
@@ -201,7 +201,7 @@ class _LegacyCenterFramesUtil(BaseResourceUtil[VideoFileKey]):
         return self._schema._parse_session_name_and_view(session_view_str)
 
 
-class _LegacySessionCalibrationUtil(BaseResourceUtil[SessionKey]):
+class _LegacySessionCalibrationUtil(ResourceUtil[SessionKey]):
     def __init__(self, schema: "ProjectSchemaLegacy"):
         self._schema = schema
 
@@ -219,20 +219,23 @@ class _LegacySessionCalibrationUtil(BaseResourceUtil[SessionKey]):
         return SessionKey(m.group("session"))
 
 
-class _LegacyProjectCalibrationUtil(BaseResourceUtil[bool]):
+class _LegacyProjectCalibrationUtil(ResourceUtil[None]):
     def __init__(self, schema: "ProjectSchemaLegacy"):
         self._schema = schema
 
     def get_path(self) -> Path:  # type: ignore[override]
         raise NotImplementedError()
 
-    def parse_path(self, path: Path | str) -> bool:
+    def parse_path(self, path: Path | str) -> None:
         path = _check_relative_and_normalize(path)
         pattern = r"calibration\.toml"
-        return bool(re.match(pattern, path.as_posix()))
+        m = re.match(pattern, path.as_posix())
+        if not m:
+            raise PathParseException()
+        return None
 
 
-class _LegacyCalibrationBackupUtil(BaseResourceUtil[tuple[SessionKey, int]]):
+class _LegacyCalibrationBackupUtil(ResourceUtil[tuple[SessionKey, int]]):
     def __init__(self, schema: "ProjectSchemaLegacy"):
         self._schema = schema
 

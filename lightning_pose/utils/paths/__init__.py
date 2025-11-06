@@ -18,33 +18,48 @@ def _check_relative_and_normalize(path: Path | str) -> PurePath:
     return PurePosixPath(str(path).replace("\\", "/"))
 
 
-# Define TypeVars:
-# - KeyType is used for concrete spec/default util implementation (invariant)
-# - KeyType_co is covariant for the abstract interface so return types narrow correctly
 KeyType = TypeVar('KeyType')
-KeyType_co = TypeVar('KeyType_co', covariant=True)
 
 
-class BaseResourceUtil(Generic[KeyType_co], ABC):
-    """This is a base class. The concrete class is either DefaultResourceUtil or _LegacyResourceUtil."""
-    @abstractmethod
-    def get_path(self, *args: Any, **kwargs: Any) -> Path:
-        ...
+class ResourceUtil(Generic[KeyType], ABC):
+    """Base class for resource schema utilities.
+    The type of key for this resource is a generic type parameter.
+    To find the type of the key, see the signature of the `ProjectSchema`
+    attribute for this resource.
+    """
+    def get_path(self, key: KeyType, **kwargs: Any) -> Path:
+        """Return the path for a resource."""
+        raise NotImplementedError()
 
-    @abstractmethod
-    def parse_path(self, path: Union[Path, str]) -> KeyType_co:
-        ...
+    def parse_path(self, path: Union[Path, str]) -> KeyType:
+        """
+        Return the resource key for a path, or raise `PathParseException` if the
+        path is not valid for this resource type.
+        """
+        raise NotImplementedError()
 
     def iter_paths(self) -> Iterator[Path]:
+        """
+        Iterate over this resource's paths relative to base directory.
+        """
         raise NotImplementedError()
 
     def list_paths(self, *, sort: bool = True) -> list[Path]:
+        """
+        Returns a list of paths relative to base directory.
+        """
         return sorted(self.iter_paths(), key=lambda p: str(p)) if sort else list(self.iter_paths())
 
-    def iter_keys(self, *, strict: bool = False) -> Iterator[KeyType_co]:
+    def iter_keys(self, *, strict: bool = False) -> Iterator[KeyType]:
+        """
+        Iterate over this resource's keys.
+        """
         raise NotImplementedError()
 
-    def list_keys(self, *, sort: bool = True, strict: bool = False) -> list[KeyType_co]:
+    def list_keys(self, *, sort: bool = True, strict: bool = False) -> list[KeyType]:
+        """
+        Returns a list of this resource's keys.
+        """
         keys = list(self.iter_keys(strict=strict))
         if sort:
             try:
@@ -59,15 +74,15 @@ class BaseResourceUtil(Generic[KeyType_co], ABC):
 # Resource type enum (new name), with temporary alias for PathType
 # ---------------------------------------------------------------------------
 class ResourceType(str, Enum):
-    videos = 'videos'
-    video_boxes = 'video-bboxes'
-    label_files = 'label-files'
-    label_file_bboxes = 'label-file-bboxes'
-    frames = 'frames'
-    session_calibrations = 'session-calibrations'
-    calibration_backups = 'calibration-backups'
-    center_frames = 'center-frames'
-    project_calibration = 'project-calibration'
+    VIDEO = 'videos'
+    VIDEO_BBOX = 'video-bboxes'
+    LABEL_FILE = 'label-files'
+    LABEL_FILE_BBOX = 'label-file-bboxes'
+    FRAME = 'frames'
+    SESSION_CALIBRATION = 'session-calibrations'
+    CALIBRATION_BACKUP = 'calibration-backups'
+    CENTER_FRAME_LIST = 'center-frames'
+    PROJECT_CALIBRATION = 'project-calibration'
 
 
 
@@ -86,8 +101,11 @@ class ResourceSpec(Generic[KeyType]):
     is_predicate: bool = False
     list_keys: Optional[Callable[[], list[KeyType]]] = None
 
+    def __repr__(self):
+        return f"{self.name} sphinx hello world "
 
-class DefaultResourceUtil(BaseResourceUtil[KeyType]):
+
+class ResourceUtilImpl(ResourceUtil[KeyType]):
     def __init__(self, spec: ResourceSpec[KeyType], is_multiview: bool, get_base_dir: Optional[Callable[[], Optional[Path]]] = None):
         self._spec = spec
         self._is_multiview = is_multiview
@@ -148,25 +166,19 @@ class DefaultResourceUtil(BaseResourceUtil[KeyType]):
         pattern_rel = glob_pattern[len(start_dir):] if start_dir and glob_pattern.startswith(start_dir) else glob_pattern
         return Path(start_dir), pattern_rel
 
-    def get_path(self, *args: Any, **kwargs: Any) -> Path:
+    def get_path(self, key: KeyType, **kwargs: Any) -> Path:
         # For spec-driven utils, a single positional key is expected by default
-        if self._spec.is_predicate:
-            # Predicate resources typically have a fixed path and no key args
-            template = self._select_template()
-            if not template:
-                raise ValueError(f"No template defined for predicate resource {self._spec.name}.")
-            # Allow kwargs to fill placeholders if any
-            return Path(template.format(**kwargs))
-
-        if self._spec.from_key is None:
-            raise ValueError(f"from_key not defined for resource {self._spec.name}.")
-        if len(args) != 1:
-            raise TypeError("DefaultResourceUtil.get_path() expects a single key argument.")
-        key = args[0]
-        data = dict(self._spec.from_key(key))
         template = self._select_template()
         if not template:
             raise ValueError(f"No template defined for resource {self._spec.name} (is_multiview={self._is_multiview}).")
+
+        # If a formatter is provided, use it; otherwise allow keyless singleton resources
+        if self._spec.from_key is not None and key is not None:
+            data: dict[str, Any] = dict(self._spec.from_key(key))
+        else:
+            data = {}
+        # kwargs can always be used to fill placeholders (e.g., time_ns)
+        data.update(kwargs)
         # Support standard formatting, including zero-padded numbers via preformatted values in from_key
         return Path(template.format(**data))
 
@@ -182,18 +194,14 @@ class DefaultResourceUtil(BaseResourceUtil[KeyType]):
             raise PathParseException(
                 f"Could not parse {self._spec.name} path: {normalized.as_posix()}, multiview={self._is_multiview}"
             )
-        if self._spec.is_predicate:
-            # type: ignore[return-value]
-            return True  # type: ignore
         if self._spec.to_key is None:
-            raise ValueError(f"to_key not defined for resource {self._spec.name}.")
-        return self._spec.to_key(m.groupdict())  # type: ignore[return-value]
+            # Keyless resource: return None as key
+            return None  # type: ignore[return-value]
+        return self._spec.to_key(m.groupdict())
 
     # Filesystem-backed enumeration
     def iter_paths(self) -> Iterator[Path]:
         """Return paths relative to base directory"""
-        if self._spec.is_predicate:
-            raise TypeError(f"Enumeration not supported for predicate resource {self._spec.name}.")
         base_dir = self._require_base_dir()
         start_dir_rel, pattern = self._derive_glob()
         start_dir_abs = (base_dir / start_dir_rel).resolve()

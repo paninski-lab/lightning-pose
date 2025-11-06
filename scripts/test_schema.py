@@ -16,3 +16,4 @@ key_and_path = [
 
 for (labelfilekey, view), path in key_and_path:
     print(f"{labelfilekey}, {view}, {path}")
+

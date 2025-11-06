@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Callable, TypeVar, Generic, Any
 
 from lightning_pose.utils.paths import PathParseException
-from lightning_pose.utils.paths.base_project_schema_v1 import BaseProjectSchemaV1
+from lightning_pose.utils.paths.project_schema import ProjectSchema
 from lightning_pose.utils.paths.migrate import (
     build_resolvers_from_config,
     parse_path,
@@ -18,8 +18,8 @@ from lightning_pose.utils.paths.migrate import (
 )
 
 # These will be set by run_migration()
-source_resolver: BaseProjectSchemaV1
-dest_resolver: BaseProjectSchemaV1
+source_resolver: ProjectSchema
+dest_resolver: ProjectSchema
 
 
 def process_file(source_path: Path, input_dir: Path, output_dir: Path) -> List[FileOp]:
