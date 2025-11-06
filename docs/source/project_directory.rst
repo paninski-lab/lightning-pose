@@ -133,12 +133,6 @@ non-matching files, pass ``strict=False``.
    # skip files that do not match the expected pattern
    keys = list(schema.videos.iter_keys(strict=False))
 
-Predicate resources
--------------------
-Some resources represent the presence of a specific file rather than a
-collection (e.g., ``project-calibration``). For such resources,
-``iter_paths``, ``iter_keys``, and ``get_all`` are not supported and will raise
-``TypeError``.
 
 Single-view vs multiview
 ========================
@@ -200,8 +194,8 @@ Validate key ↔ path round-trip
 .. code-block:: python
 
    fk = FrameKey(session_key="S2", view=None, frame_index=123)
-   path = schema.frames.get(fk)
-   assert schema.frames.reverse(path) == fk
+   path = schema.frames.get_path(fk)
+   assert schema.frames.parse_path(path) == fk
 
 Troubleshooting
 ===============
@@ -214,7 +208,7 @@ Troubleshooting
 - ``PathParseException: Could not parse ...``
 
   The file does not match the resource’s expected pattern. Ensure you’re passing
-  a project-relative path to ``reverse`` and that the path layout matches the
+  a project-relative path to ``parse_path`` and that the path layout matches the
   schema templates.
 
 - ``ValueError: Argument must be relative path`` (in ``reverse``)
