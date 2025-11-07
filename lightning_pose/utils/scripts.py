@@ -171,7 +171,9 @@ def get_dataset(
                 do_context=cfg.model.model_type
                 == "heatmap_mhcrnn",  # context only for mhcrnn
                 resize=resize,
-                uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
+                uniform_heatmaps=cfg.training.get(
+                    "uniform_heatmaps_for_nan_keypoints", False
+                ),
                 camera_params_path=cfg.data.get("camera_params_file", None),
                 bbox_paths=cfg.data.get("bbox_file", None),
             )
@@ -1110,7 +1112,7 @@ def get_dataloader_factory(
                 num_workers=num_workers,
                 persistent_workers=True if num_workers > 0 else False,
                 shuffle=True,
-                generator=torch.Generator().manual_seed(cfg.data.rng_seed_data_pt),
+                generator=torch.Generator().manual_seed(cfg.training.rng_seed_data_pt),
             )
         if stage == "val":
             return DataLoader(
