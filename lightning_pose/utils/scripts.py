@@ -6,6 +6,8 @@ import warnings
 from collections import OrderedDict
 from pathlib import Path
 
+import copy
+from typing import TYPE_CHECKING, Callable
 import imgaug.augmenters as iaa
 import lightning.pytorch as pl
 import numpy as np
@@ -20,6 +22,7 @@ from lightning_pose.data.augmentations import (
     expand_imgaug_str_to_dict,
     imgaug_transform,
 )
+
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import (
     BaseTrackingDataset,
@@ -27,6 +30,10 @@ from lightning_pose.data.datasets import (
     MultiviewHeatmapDataset,
 )
 from lightning_pose.data.datatypes import ComputeMetricsSingleResult
+from lightning_pose.data.utils import (
+    compute_num_train_frames,
+    split_sizes_from_probabilities,
+)
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.metrics import (
     pca_multiview_reprojection_error,
@@ -40,6 +47,7 @@ from lightning_pose.models.base import (
 )
 from lightning_pose.utils import io as io_utils
 from lightning_pose.utils.pca import KeypointPCA
+from torch.utils.data import Subset, random_split, DataLoader
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -51,6 +59,7 @@ __all__ = [
     "get_callbacks",
     "calculate_steps_per_epoch",
     "compute_metrics",
+    "get_split_datasets",
 ]
 
 
@@ -103,9 +112,13 @@ def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
         else:
             params_dict = params.copy()
         for transform, val in params_dict.items():
-            assert getattr(iaa, transform), f"{transform} is not a valid imgaug transform"
+            assert getattr(
+                iaa, transform
+            ), f"{transform} is not a valid imgaug transform"
     else:
-        raise TypeError(f"params is of type {type(params)}, must be str, dict, or DictConfig")
+        raise TypeError(
+            f"params is of type {type(params)}, must be str, dict, or DictConfig"
+        )
 
     return imgaug_transform(params_dict)
 
@@ -120,7 +133,9 @@ def get_dataset(
 
     if cfg.model.model_type == "regression":
         if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
-            raise NotImplementedError("Multi-view support only available for heatmap-based models")
+            raise NotImplementedError(
+                "Multi-view support only available for heatmap-based models"
+            )
         else:
             dataset = BaseTrackingDataset(
                 root_directory=data_dir,
@@ -136,9 +151,8 @@ def get_dataset(
                 "No precautions regarding the size of the images were considered here, "
                 "images will be resized accordingly to configs!"
             )
-            if (
-                cfg.training.imgaug in ["default", "none"]
-                or not cfg.data.get("camera_params_file")
+            if cfg.training.imgaug in ["default", "none"] or not cfg.data.get(
+                "camera_params_file"
             ):
                 # we are either
                 # 1. running inference on un-augmented data, and need to make sure to resize
@@ -154,7 +168,8 @@ def get_dataset(
                 image_resize_width=cfg.data.image_resize_dims.width,
                 imgaug_transform=imgaug_transform,
                 downsample_factor=cfg.data.get("downsample_factor", 2),
-                do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
+                do_context=cfg.model.model_type
+                == "heatmap_mhcrnn",  # context only for mhcrnn
                 resize=resize,
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
                 camera_params_path=cfg.data.get("camera_params_file", None),
@@ -168,14 +183,31 @@ def get_dataset(
                 image_resize_width=cfg.data.image_resize_dims.width,
                 imgaug_transform=imgaug_transform,
                 downsample_factor=cfg.data.get("downsample_factor", 2),
-                do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
-                uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
+                do_context=cfg.model.model_type
+                == "heatmap_mhcrnn",  # context only for mhcrnn
+                uniform_heatmaps=cfg.training.get(
+                    "uniform_heatmaps_for_nan_keypoints", False
+                ),
             )
 
     else:
-        raise NotImplementedError("%s is an invalid cfg.model.model_type" % cfg.model.model_type)
+        raise NotImplementedError(
+            "%s is an invalid cfg.model.model_type" % cfg.model.model_type
+        )
 
     return dataset
+
+
+def get_train_val_batches(cfg: DictConfig) -> tuple[int, int]:
+    """Determine the number of batches to use for training and validation."""
+    # Divide config batch_size by num_gpus to maintain the same effective batch
+    # size in a multi-gpu setting.
+    train_batch_size = int(
+        np.ceil(cfg.training.train_batch_size / cfg.training.num_gpus)
+    )
+    val_batch_size = int(np.ceil(cfg.training.val_batch_size / cfg.training.num_gpus))
+
+    return train_batch_size, val_batch_size
 
 
 @typechecked
@@ -183,8 +215,13 @@ def get_data_module(
     cfg: DictConfig,
     dataset: BaseTrackingDataset | HeatmapDataset | MultiviewHeatmapDataset,
     video_dir: str | None = None,
+    dataloader_factory: Callable[[str], DataLoader] | None = None,
 ) -> BaseDataModule | UnlabeledDataModule:
-    """Create a data module that splits a dataset into train/val/test iterators."""
+    """Create a data module using provided dataloader factory (preferred).
+
+    If `dataloader_factory` is None, this function will derive splits and create a
+    default labeled dataloader factory from cfg for backward compatibility.
+    """
 
     # Old configs may have num_gpus: 0. We will remove support in a future release.
     if cfg.training.num_gpus == 0:
@@ -194,25 +231,20 @@ def get_data_module(
         )
     cfg.training.num_gpus = max(cfg.training.num_gpus, 1)
 
-    # Divide config batch_size by num_gpus to maintain the same effective batch
-    # size in a multi-gpu setting.
-    train_batch_size = int(
-        np.ceil(cfg.training.train_batch_size / cfg.training.num_gpus)
-    )
-    val_batch_size = int(np.ceil(cfg.training.val_batch_size / cfg.training.num_gpus))
-
     semi_supervised = io_utils.check_if_semi_supervised(cfg.model.losses_to_use)
+
+    # Build splits and default factory if not provided
+    splits = get_split_datasets(cfg=cfg, dataset=dataset)
+    if dataloader_factory is None:
+        dataloader_factory = get_dataloader_factory(
+            cfg=cfg, dataset=dataset, splits=splits
+        )
+
     if not semi_supervised:
         data_module = BaseDataModule(
             dataset=dataset,
-            train_batch_size=train_batch_size,
-            val_batch_size=val_batch_size,
-            test_batch_size=cfg.training.test_batch_size,
-            num_workers=cfg.training.get("num_workers"),
-            train_probability=cfg.training.train_prob,
-            val_probability=cfg.training.val_prob,
-            train_frames=cfg.training.train_frames,
-            torch_seed=cfg.training.rng_seed_data_pt,
+            splits=splits,
+            dataloader_factory=dataloader_factory,
         )
     else:
         # Divide config batch_size by num_gpus to maintain the same effective batch
@@ -248,17 +280,11 @@ def get_data_module(
         view_names = list(view_names) if view_names is not None else None
         data_module = UnlabeledDataModule(
             dataset=dataset,
+            splits=splits,
+            dataloader_factory=dataloader_factory,
             video_paths_list=video_dir,
             view_names=view_names,
-            train_batch_size=train_batch_size,
-            val_batch_size=val_batch_size,
-            test_batch_size=cfg.training.test_batch_size,
-            num_workers=cfg.training.get("num_workers"),
-            train_probability=cfg.training.train_prob,
-            val_probability=cfg.training.val_prob,
-            train_frames=cfg.training.train_frames,
             dali_config=dali_config,
-            torch_seed=cfg.training.rng_seed_data_pt,
             imgaug=cfg.training.get("imgaug", "default"),
         )
     return data_module
@@ -280,8 +306,12 @@ def get_loss_factories(
     if cfg.model.model_type.find("heatmap") > -1:
         loss_name = "heatmap_" + cfg.model.heatmap_loss_type
         loss_params_dict["supervised"][loss_name] = {"log_weight": 0.0}
-        if cfg.model.model_type.find("multiview") > -1 and cfg.data.get("camera_params_file"):
-            log_weight = cfg.losses.get("supervised_pairwise_projections", {}).get("log_weight")
+        if cfg.model.model_type.find("multiview") > -1 and cfg.data.get(
+            "camera_params_file"
+        ):
+            log_weight = cfg.losses.get("supervised_pairwise_projections", {}).get(
+                "log_weight"
+            )
             if log_weight is not None:
                 print("adding supervised pairwise projection loss")
                 loss_params_dict["supervised"]["supervised_pairwise_projections"] = {
@@ -317,7 +347,9 @@ def get_loss_factories(
                     "original_image_width"
                 ] = width_og
                 # record downsampled image dims
-                height_ds = int(height_og // (2 ** cfg.data.get("downsample_factor", 2)))
+                height_ds = int(
+                    height_og // (2 ** cfg.data.get("downsample_factor", 2))
+                )
                 width_ds = int(width_og // (2 ** cfg.data.get("downsample_factor", 2)))
                 loss_params_dict["unsupervised"][loss_name][
                     "downsampled_image_height"
@@ -326,9 +358,9 @@ def get_loss_factories(
                     "downsampled_image_width"
                 ] = width_ds
                 if loss_name[:8] == "unimodal":
-                    loss_params_dict["unsupervised"][loss_name][
-                        "uniform_heatmaps"
-                    ] = cfg.training.get("uniform_heatmaps_for_nan_keypoints", False)
+                    loss_params_dict["unsupervised"][loss_name]["uniform_heatmaps"] = (
+                        cfg.training.get("uniform_heatmaps_for_nan_keypoints", False)
+                    )
             elif loss_name == "pca_multiview":
                 if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
                     # assume user has provided a set of columns that are present in each view
@@ -338,8 +370,10 @@ def get_loss_factories(
                         loss_params_dict["unsupervised"][loss_name][
                             "mirrored_column_matches"
                         ] = [
-                            (v * num_keypoints
-                             + np.array(cfg.data.mirrored_column_matches, dtype=int)).tolist()
+                            (
+                                v * num_keypoints
+                                + np.array(cfg.data.mirrored_column_matches, dtype=int)
+                            ).tolist()
                             for v in range(num_views)
                         ]
                     else:
@@ -360,7 +394,7 @@ def get_loss_factories(
                 else:
                     loss_params_dict["unsupervised"][loss_name][
                         "columns_for_singleview_pca"
-                    ] = cfg.data.get('columns_for_singleview_pca', None)
+                    ] = cfg.data.get("columns_for_singleview_pca", None)
 
     # build supervised loss factory, which orchestrates all supervised losses
     loss_factory_sup = LossFactory(
@@ -380,9 +414,30 @@ def get_loss_factories(
 def get_model(
     cfg: DictConfig,
     data_module: BaseDataModule | UnlabeledDataModule | None,
-    loss_factories: dict[str, LossFactory] | dict[str, None]
+    loss_factories: dict[str, LossFactory] | dict[str, None],
 ) -> pl.LightningModule:
     """Create model: regression or heatmap based, supervised or semi-supervised."""
+
+    ## BEGIN: Hack for model training only (not needed for inference)
+    steps_per_epoch = calculate_steps_per_epoch(data_module)
+
+    # convert milestone_steps to milestones if applicable (before `get_model`).
+    if (
+        "multisteplr" in cfg.training.lr_scheduler_params
+        and "milestone_steps" in cfg.training.lr_scheduler_params.multisteplr
+    ):
+        milestone_steps = cfg.training.lr_scheduler_params.multisteplr.milestone_steps
+        milestones = [math.ceil(s / steps_per_epoch) for s in milestone_steps]
+        cfg.training.lr_scheduler_params.multisteplr.milestones = milestones
+
+    # convert patch masking epochs if applicable (before `get_callbacks`)
+    if "patch_mask" in cfg.training and "init_epoch" in cfg.training.patch_mask:
+        init_step = math.ceil(cfg.training.patch_mask.init_epoch * steps_per_epoch)
+        final_step = math.ceil(cfg.training.patch_mask.final_epoch * steps_per_epoch)
+        with open_dict(cfg):
+            cfg.training.patch_mask.init_step = init_step
+            cfg.training.patch_mask.final_step = final_step
+    ## END: Hack for model training only (not needed for inference)
 
     optimizer = cfg.training.get("optimizer", "Adam")
     optimizer_params = _apply_defaults_for_optimizer_params(
@@ -392,8 +447,7 @@ def get_model(
 
     lr_scheduler = cfg.training.get("lr_scheduler", "multisteplr")
     lr_scheduler_params = _apply_defaults_for_lr_scheduler_params(
-        lr_scheduler,
-        cfg.training.get("lr_scheduler_params", {}).get(f"{lr_scheduler}")
+        lr_scheduler, cfg.training.get("lr_scheduler_params", {}).get(f"{lr_scheduler}")
     )
 
     semi_supervised = io_utils.check_if_semi_supervised(cfg.model.losses_to_use)
@@ -401,12 +455,15 @@ def get_model(
     image_w = cfg.data.image_resize_dims.width
     if "vit" in cfg.model.backbone:
         if image_h != image_w:
-            raise RuntimeError("ViT model requires resized height and width to be equal")
+            raise RuntimeError(
+                "ViT model requires resized height and width to be equal"
+            )
 
     backbone_pretrained = cfg.model.get("backbone_pretrained", True)
     if not semi_supervised:
         if cfg.model.model_type == "regression":
             from lightning_pose.models import RegressionTracker
+
             model = RegressionTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -425,6 +482,7 @@ def get_model(
             else:
                 num_targets = None
             from lightning_pose.models import HeatmapTracker
+
             model = HeatmapTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 num_targets=num_targets,
@@ -438,10 +496,13 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
-                backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
+                backbone_checkpoint=cfg.model.get(
+                    "backbone_checkpoint"
+                ),  # only used by ViTMAE
             )
         elif cfg.model.model_type == "heatmap_mhcrnn":
             from lightning_pose.models import HeatmapTrackerMHCRNN
+
             model = HeatmapTrackerMHCRNN(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -454,10 +515,13 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
-                backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
+                backbone_checkpoint=cfg.model.get(
+                    "backbone_checkpoint"
+                ),  # only used by ViTMAE
             )
         elif cfg.model.model_type == "heatmap_multiview_transformer":
             from lightning_pose.models import HeatmapTrackerMultiviewTransformer
+
             model = HeatmapTrackerMultiviewTransformer(
                 num_keypoints=cfg.data.num_keypoints,
                 num_views=len(cfg.data.view_names),
@@ -482,6 +546,7 @@ def get_model(
     else:
         if cfg.model.model_type == "regression":
             from lightning_pose.models import SemiSupervisedRegressionTracker
+
             model = SemiSupervisedRegressionTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -498,6 +563,7 @@ def get_model(
 
         elif cfg.model.model_type == "heatmap":
             from lightning_pose.models import SemiSupervisedHeatmapTracker
+
             model = SemiSupervisedHeatmapTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -511,10 +577,13 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
-                backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
+                backbone_checkpoint=cfg.model.get(
+                    "backbone_checkpoint"
+                ),  # only used by ViTMAE
             )
         elif cfg.model.model_type == "heatmap_mhcrnn":
             from lightning_pose.models import SemiSupervisedHeatmapTrackerMHCRNN
+
             model = SemiSupervisedHeatmapTrackerMHCRNN(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -528,10 +597,15 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
-                backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
+                backbone_checkpoint=cfg.model.get(
+                    "backbone_checkpoint"
+                ),  # only used by ViTMAE
             )
         elif cfg.model.model_type == "heatmap_multiview_transformer":
-            from lightning_pose.models import SemiSupervisedHeatmapTrackerMultiviewTransformer
+            from lightning_pose.models import (
+                SemiSupervisedHeatmapTrackerMultiviewTransformer,
+            )
+
             model = SemiSupervisedHeatmapTrackerMultiviewTransformer(
                 num_keypoints=cfg.data.num_keypoints,
                 num_views=len(cfg.data.view_names),
@@ -560,6 +634,7 @@ def get_model(
         print(f"Loading weights from {ckpt}")
         if not ckpt.endswith(".ckpt"):
             import glob
+
             ckpt = glob.glob(os.path.join(ckpt, "**", "*.ckpt"), recursive=True)[0]
         # Try loading with default settings first, fallback to weights_only=False if needed
         try:
@@ -582,15 +657,20 @@ def get_model(
     return model
 
 
+def get_training_logger(cfg):
+    return pl.loggers.TensorBoardLogger("tb_logs", name=cfg.model.model_name)
+
+
 @typechecked
 def get_callbacks(
     cfg: DictConfig,
-    early_stopping=False,
     checkpointing=True,
-    lr_monitor=True,
-    ckpt_every_n_epochs=None,
     backbone_unfreeze=True,
 ) -> list:
+    # Param extraction from train.py. May be overridden for testing.
+    early_stopping = cfg.training.get("early_stopping", False)
+    lr_monitor = True
+    ckpt_every_n_epochs = cfg.training.get("ckpt_every_n_epochs", None)
 
     callbacks = []
 
@@ -635,9 +715,10 @@ def get_callbacks(
 
     # we just need this callback for unsupervised losses or multiview models with 3d loss
     if (
-        ((cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None))
-        or cfg.losses.get("supervised_pairwise_projections", {}).get("log_weight") is not None
-    ):
+        (cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None)
+    ) or cfg.losses.get("supervised_pairwise_projections", {}).get(
+        "log_weight"
+    ) is not None:
         anneal_weight_callback = AnnealWeight(**cfg.callbacks.anneal_weight)
         callbacks.append(anneal_weight_callback)
 
@@ -657,8 +738,23 @@ def get_callbacks(
 
 
 def calculate_steps_per_epoch(data_module: BaseDataModule):
-    train_dataset_length = len(data_module.train_dataset)
-    steps_per_epoch = math.ceil(train_dataset_length / data_module.train_batch_size)
+    """Infer steps per epoch from the training dataloader.
+
+    For semi-supervised (CombinedLoader), we still enforce a minimum of 10 steps
+    to encourage more unlabeled exposure when labeled data is scarce.
+    """
+    train_loader = data_module.train_dataloader()
+    try:
+        steps_per_epoch = len(train_loader)
+    except TypeError:
+        # Fallback: compute from dataset length and an inferred batch size where possible
+        train_dataset_length = len(data_module.train_dataset)
+        # Try to get batch_size attribute if available
+        batch_size = getattr(train_loader, "batch_size", None)
+        if not batch_size or batch_size == 0:
+            # conservative default to avoid division by zero
+            batch_size = 1
+        steps_per_epoch = math.ceil(train_dataset_length / batch_size)
 
     is_unsupervised = isinstance(data_module, UnlabeledDataModule)
 
@@ -725,7 +821,8 @@ def compute_metrics_single(
     # load predictions
     pred_df = pd.read_csv(preds_file, header=[0, 1, 2], index_col=0)
     keypoint_names = io_utils.get_keypoint_names(
-        cfg, csv_file=str(preds_file), header_rows=[0, 1, 2])
+        cfg, csv_file=str(preds_file), header_rows=[0, 1, 2]
+    )
     xyl_mask = pred_df.columns.get_level_values("coords").isin(["x", "y", "likelihood"])
     tmp = pred_df.loc[:, xyl_mask].to_numpy().reshape(pred_df.shape[0], -1, 3)
 
@@ -756,14 +853,18 @@ def compute_metrics_single(
         data_module is not None
         and cfg.data.get("columns_for_singleview_pca", None) is not None
         and len(cfg.data.columns_for_singleview_pca) != 0
-        and not isinstance(data_module.dataset, MultiviewHeatmapDataset)  # mirrored-only for now
+        and not isinstance(
+            data_module.dataset, MultiviewHeatmapDataset
+        )  # mirrored-only for now
     ):
         metrics_to_compute += ["pca_singleview"]
     if (
         data_module is not None
         and cfg.data.get("mirrored_column_matches", None) is not None
         and len(cfg.data.mirrored_column_matches) != 0
-        and not isinstance(data_module.dataset, MultiviewHeatmapDataset)  # mirrored-only for now
+        and not isinstance(
+            data_module.dataset, MultiviewHeatmapDataset
+        )  # mirrored-only for now
     ):
         metrics_to_compute += ["pca_multiview"]
 
@@ -795,7 +896,9 @@ def compute_metrics_single(
         # add train/val/test split
         if set is not None:
             temporal_norm_df["set"] = set
-        save_file = preds_file_path.with_name(preds_file_path.stem + "_temporal_norm.csv")
+        save_file = preds_file_path.with_name(
+            preds_file_path.stem + "_temporal_norm.csv"
+        )
         temporal_norm_df.to_csv(save_file)
         result.temporal_norm_df = temporal_norm_df
 
@@ -807,15 +910,22 @@ def compute_metrics_single(
                 data_module=data_module,
                 components_to_keep=cfg.losses.pca_singleview.components_to_keep,
                 empirical_epsilon_percentile=cfg.losses.pca_singleview.get(
-                    "empirical_epsilon_percentile", 1.0),
+                    "empirical_epsilon_percentile", 1.0
+                ),
                 columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
-                centering_method=cfg.losses.pca_singleview.get("centering_method", None),
+                centering_method=cfg.losses.pca_singleview.get(
+                    "centering_method", None
+                ),
             )
             # re-fit pca on the labeled data to get params
             pca()
             # compute reprojection error
-            pcasv_error_per_keypoint = pca_singleview_reprojection_error(keypoints_pred, pca)
-            pcasv_df = pd.DataFrame(pcasv_error_per_keypoint, index=index, columns=keypoint_names)
+            pcasv_error_per_keypoint = pca_singleview_reprojection_error(
+                keypoints_pred, pca
+            )
+            pcasv_df = pd.DataFrame(
+                pcasv_error_per_keypoint, index=index, columns=keypoint_names
+            )
             # add train/val/test split
             if set is not None:
                 pcasv_df["set"] = set
@@ -839,19 +949,231 @@ def compute_metrics_single(
             data_module=data_module,
             components_to_keep=cfg.losses.pca_singleview.components_to_keep,
             empirical_epsilon_percentile=cfg.losses.pca_singleview.get(
-                "empirical_epsilon_percentile", 1.0),
+                "empirical_epsilon_percentile", 1.0
+            ),
             mirrored_column_matches=cfg.data.mirrored_column_matches,
         )
         # re-fit pca on the labeled data to get params
         pca()
         # compute reprojection error
         pcamv_error_per_keypoint = pca_multiview_reprojection_error(keypoints_pred, pca)
-        pcamv_df = pd.DataFrame(pcamv_error_per_keypoint, index=index, columns=keypoint_names)
+        pcamv_df = pd.DataFrame(
+            pcamv_error_per_keypoint, index=index, columns=keypoint_names
+        )
         # add train/val/test split
         if set is not None:
             pcamv_df["set"] = set
-        save_file = preds_file_path.with_name(preds_file_path.stem + "_pca_multiview_error.csv")
+        save_file = preds_file_path.with_name(
+            preds_file_path.stem + "_pca_multiview_error.csv"
+        )
         pcamv_df.to_csv(save_file)
         result.pca_mv_df = pcamv_df
 
     return result
+
+
+@typechecked
+def get_split_datasets(
+    cfg: DictConfig,
+    dataset: torch.utils.data.Dataset,
+) -> tuple[Subset, Subset, Subset]:
+    """Split a dataset into train/val/test subsets with augmentation-aware handling.
+
+    This mirrors the logic previously implemented in BaseDataModule._setup.
+
+    Args:
+        cfg: Full config; split-related parameters are read from `cfg.training`:
+            - `train_prob`, optional `val_prob`, optional `test_prob`
+            - `train_frames` (int or float)
+            - `rng_seed_data_pt` (int)
+        dataset: The full dataset to split.
+
+    Returns:
+        Tuple of (train_subset, val_subset, test_subset).
+    """
+    datalen = len(dataset)
+    print(f"Number of labeled images in the full dataset (train+val+test): {datalen}")
+
+    # derive split parameters from cfg
+    train_probability = cfg.training.get("train_prob", 0.8)
+    val_probability = cfg.training.get("val_prob", None)
+    test_probability = cfg.training.get("test_prob", None)
+    train_frames = cfg.training.get("train_frames", None)
+    torch_seed = cfg.training.get("rng_seed_data_pt", 42)
+
+    # split data based on provided probabilities
+    data_splits_list = split_sizes_from_probabilities(
+        datalen,
+        train_probability=train_probability,
+        val_probability=val_probability,
+        test_probability=test_probability,
+    )
+
+    if (
+        getattr(dataset, "imgaug_transform", None) is not None
+        and len(dataset.imgaug_transform) == 1
+    ):
+        # no augmentations in the pipeline; subsets can share same underlying dataset
+        train_dataset, val_dataset, test_dataset = random_split(
+            dataset,
+            data_splits_list,
+            generator=torch.Generator().manual_seed(torch_seed),
+        )
+    else:
+        # augmentations in the pipeline; we want validation and test datasets that only resize
+        # we can't simply change the imgaug pipeline in the datasets after they've been split
+        # because the subsets actually point to the same underlying dataset, so we create
+        # separate datasets here
+        train_idxs, val_idxs, test_idxs = random_split(
+            range(len(dataset)),
+            data_splits_list,
+            generator=torch.Generator().manual_seed(torch_seed),
+        )
+
+        train_dataset = Subset(copy.deepcopy(dataset), indices=list(train_idxs))
+        val_dataset = Subset(copy.deepcopy(dataset), indices=list(val_idxs))
+        test_dataset = Subset(copy.deepcopy(dataset), indices=list(test_idxs))
+
+        # only use the final resize transform for the validation and test datasets
+        # try to pull the final transform; if unavailable (e.g., multiview that doesn't resize
+        # by default), enforce resizing to dataset.height/width
+        if (
+            getattr(dataset, "imgaug_transform", None) is not None
+            and len(dataset.imgaug_transform) > 0
+            and dataset.imgaug_transform[-1].__str__().find("Resize") == 0
+        ):
+            final_transform = iaa.Sequential([dataset.imgaug_transform[-1]])
+        else:
+            height = getattr(dataset, "height", None)
+            width = getattr(dataset, "width", None)
+            if height is None or width is None:
+                raise AttributeError(
+                    "Dataset must have 'height' and 'width' attributes when no final Resize transform is present."
+                )
+            final_transform = iaa.Sequential(
+                [iaa.Resize({"height": height, "width": width})]
+            )
+
+        val_dataset.dataset.imgaug_transform = final_transform
+        if hasattr(val_dataset.dataset, "dataset"):
+            # this will get triggered for multiview datasets
+            print("val: updating children datasets with resize imgaug pipeline")
+            for _, dset in val_dataset.dataset.dataset.items():
+                dset.imgaug_transform = final_transform
+
+        test_dataset.dataset.imgaug_transform = final_transform
+        if hasattr(test_dataset.dataset, "dataset"):
+            # this will get triggered for multiview datasets
+            print("test: updating children datasets with resize imgaug pipeline")
+            for _, dset in test_dataset.dataset.dataset.items():
+                dset.imgaug_transform = final_transform
+
+    # further subsample training data if desired
+    if train_frames is not None:
+        n_frames = compute_num_train_frames(len(train_dataset), train_frames)
+        if n_frames < len(train_dataset):
+            # reflect further subsampling from train_frames
+            train_dataset.indices = train_dataset.indices[:n_frames]
+
+    print(
+        f"Dataset splits -- "
+        f"train: {len(train_dataset)}, "
+        f"val: {len(val_dataset)}, "
+        f"test: {len(test_dataset)}"
+    )
+
+    return train_dataset, val_dataset, test_dataset
+
+
+def get_dataloader_factory(
+    cfg: DictConfig,
+    dataset: torch.utils.data.Dataset,
+    splits: tuple[Subset, Subset, Subset],
+) -> Callable[[str], DataLoader]:
+    """Returns stage -> dataloader for labeled data (train/val/test/full)."""
+    train_batch_size, val_batch_size = get_train_val_batches(cfg)
+    train_dataset, val_dataset, test_dataset = splits
+
+    def get_dataloader(stage: str) -> DataLoader:
+        num_workers = cfg.training.get("num_workers")
+        if num_workers is None:
+            slurm_cpus = os.getenv("SLURM_CPUS_PER_TASK")
+            if slurm_cpus:
+                num_workers = int(slurm_cpus)
+            else:
+                # Fallback to os.cpu_count()
+                num_workers = os.cpu_count()
+        if stage == "train":
+            return DataLoader(
+                train_dataset,
+                batch_size=train_batch_size,
+                num_workers=num_workers,
+                persistent_workers=True if num_workers > 0 else False,
+                shuffle=True,
+                generator=torch.Generator().manual_seed(cfg.data.rng_seed_data_pt),
+            )
+        if stage == "val":
+            return DataLoader(
+                val_dataset,
+                batch_size=val_batch_size,
+                num_workers=num_workers,
+                persistent_workers=True if num_workers > 0 else False,
+            )
+        if stage == "test":
+            return DataLoader(
+                test_dataset,
+                batch_size=cfg.training.test_batch_size,
+                num_workers=num_workers,
+                persistent_workers=True if num_workers > 0 else False,
+            )
+        if stage == "full":
+            return DataLoader(
+                dataset,
+                batch_size=val_batch_size,
+                num_workers=num_workers,
+                persistent_workers=True if num_workers > 0 else False,
+            )
+        raise NotImplementedError(f"Unknown stage: {stage}")
+
+    return get_dataloader
+
+
+def get_training_trainer(
+    cfg: DictConfig, logger, callbacks, steps_per_epoch
+) -> pl.Trainer:
+    """Get trainer for training."""
+    # set up trainer
+
+    cfg.training.num_gpus = max(cfg.training.num_gpus, 1)
+
+    # initialize to Trainer defaults. Note max_steps defaults to -1.
+    min_steps, max_steps, min_epochs, max_epochs = (None, -1, None, None)
+    if "min_steps" in cfg.training:
+        min_steps = cfg.training.min_steps
+        max_steps = cfg.training.max_steps
+    else:
+        min_epochs = cfg.training.min_epochs
+        max_epochs = cfg.training.max_epochs
+
+    # Unlike min_epoch/min_step, both of these are valid to specify.
+    check_val_every_n_epoch = cfg.training.get("check_val_every_n_epoch", 1)
+    val_check_interval = cfg.training.get("val_check_interval")
+
+    return pl.Trainer(
+        accelerator="gpu",
+        devices=cfg.training.num_gpus,
+        max_epochs=max_epochs,
+        min_epochs=min_epochs,
+        max_steps=max_steps,
+        min_steps=min_steps,
+        check_val_every_n_epoch=check_val_every_n_epoch,
+        val_check_interval=val_check_interval,
+        log_every_n_steps=cfg.training.log_every_n_steps,
+        callbacks=callbacks,
+        logger=logger,
+        # To understand why we set this, see 'max_size_cycle' in UnlabeledDataModule.
+        limit_train_batches=cfg.training.get("limit_train_batches") or steps_per_epoch,
+        accumulate_grad_batches=cfg.training.get("accumulate_grad_batches", 1),
+        profiler=cfg.training.get("profiler", None),
+        sync_batchnorm=True,
+    )
