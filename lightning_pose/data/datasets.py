@@ -60,6 +60,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
         Args:
             root_directory: path to data directory
+            # Replace with label file key + view.
             csv_path: path to CSV file (within root_directory). CSV file should be in the form
                 (image_path, bodypart_1_x, bodypart_1_y, ..., bodypart_n_y)
                 Note: image_path is relative to the given root_directory
@@ -73,6 +74,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 sophisticated augmentations before resizing (e.g. 3d augmentations). Note that when
                 this is False, it is up to the child class to perform this resizing on both images
                 and keypoints before returning a batch of data.
+            # Remove, we have label file key + optional view already.
             bbox_path: path to csv file that contains bounding box information; rows must be in
                 same order as csv file
 
@@ -104,6 +106,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         self.keypoint_names = io_utils.get_keypoint_names(
             csv_file=csv_file, header_rows=header_rows,
         )
+        # Instead parse out the session, view, frameindex.
         self.image_names = list(csv_data.index)
         self.keypoints = torch.tensor(csv_data.to_numpy(), dtype=torch.float32)
         # convert to x,y coordinates
@@ -149,8 +152,10 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         return self.data_length
 
     def __getitem__(self, idx: int) -> BaseLabeledExampleDict:
+        # Instead, this is session, view, frameindex.
         img_name = self.image_names[idx]
         keypoints_on_image = self.keypoints[idx]
+        # Instead, generate path using pathresolver.
         img_path = self.root_directory / img_name
         if not self.do_context:
             # read image from file and apply transformations (if any)
@@ -171,6 +176,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             transformed_images = self.pytorch_transform(transformed_images)
 
         else:
+            # Instead, use session, view, frameindex from above, +- 2, generate resulting path.
             context_img_paths = io_utils.get_context_img_paths(img_path)
             # read the images from image list to create dataset
             images = []
@@ -252,6 +258,7 @@ class HeatmapDataset(BaseTrackingDataset):
 
         Args:
             root_directory: path to data directory
+            # Replace with label file key + optional view.
             csv_path: path to CSV or h5 file  (within root_directory). CSV file
                 should be in the form
                 (image_path, bodypart_1_x, bodypart_1_y, ..., bodypart_n_y)
@@ -270,6 +277,7 @@ class HeatmapDataset(BaseTrackingDataset):
                 and keypoints before returning a batch of data.
             uniform_heatmaps: True to force the model to output uniform heatmaps for missing data;
                 False will output all-zero heatmaps
+            # Replace with optional view. bbox file key is (labelfilekey, optional view)
             bbox_path: path to csv file that contains bounding box information; rows must be in
                 same order as csv file
 
@@ -388,6 +396,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         Args:
             root_directory: path to data directory
+            # Replace with label_file key + view names
             csv_paths: paths to CSV files (within root_directory). CSV files should be in this form
                 (image_path, bodypart_1_x, bodypart_1_y, ..., bodypart_n_y)
                 these should match in all CSV files
@@ -407,8 +416,10 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 and keypoints before returning a batch of data.
             uniform_heatmaps: True to force the model to output uniform heatmaps for missing data;
                 False will output all-zero heatmaps
+            # Remove, use path resolver on session key instead, with session / project fallback logic
             camera_params_path: path to toml file with camera calibration parameters in format
                 output by anipose
+            # Remove, use path resolver instead.
             bbox_paths: paths to csv files of the form
                 (image_path, x, h, height, width)
                 where (x, y) correspond to upper left corner of bbox.
@@ -440,10 +451,11 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         self.keypoint_names = {}
         self.data_length = {}
         self.num_keypoints = {}
+        # For labelfilekey, view...
         for view, csv_path, bbox_path in zip(view_names, csv_paths, self.bbox_paths):
             self.dataset[view] = HeatmapDataset(
                 root_directory=root_directory,
-                csv_path=csv_path,
+                csv_path=csv_path, # Pass in labelfilekey
                 image_resize_height=image_resize_height,
                 image_resize_width=image_resize_width,
                 header_rows=header_rows,
@@ -452,7 +464,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 do_context=do_context,
                 resize=False,  # handled above in L396
                 uniform_heatmaps=uniform_heatmaps,
-                bbox_path=bbox_path,
+                bbox_path=bbox_path, # Replace with view, this is generatable from labelfilekey+view.
             )
             self.keypoint_names[view] = self.dataset[view].keypoint_names
             self.data_length[view] = len(self.dataset[view])

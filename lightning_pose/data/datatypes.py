@@ -1,13 +1,19 @@
 """Classes to streamline data typechecking."""
+
 from __future__ import annotations
 
+import typing
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TypedDict, Union
 
 import pandas as pd
 import torch
 from nvidia.dali.plugin.pytorch import DALIGenericIterator
 from torchtyping import TensorType
+import pydantic
+from lightning_pose.data.keys import ProjectKey
+
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -25,6 +31,25 @@ __all__ = [
     "SemiSupervisedHeatmapBatchDict",
     "SemiSupervisedDataLoaderDict",
 ]
+
+
+class ProjectDirs(typing.NamedTuple):
+    project_key: str | None = None
+    data_dir: Path | None = None
+    model_dir: Path | None = None
+
+
+class ProjectConfig(pydantic.BaseModel):
+    """Class to the project config"""
+    dirs: ProjectDirs = None
+    view_names: list[str] = []
+    keypoint_names: list[str] = []
+    schema_version: int = 0
+
+    @property
+    def project_key(self) -> str:
+        """Get the project key from dirs."""
+        return self.dirs.project_key
 
 
 @dataclass
@@ -55,6 +80,7 @@ class ComputeMetricsSingleResult:
 
 class BaseLabeledExampleDict(TypedDict):
     """Return type when calling __getitem__() on BaseTrackingDataset."""
+
     images: Union[
         TensorType["RGB":3, "image_height", "image_width", float],
         TensorType["frames", "RGB":3, "image_height", "image_width", float],
@@ -66,14 +92,18 @@ class BaseLabeledExampleDict(TypedDict):
 
 class HeatmapLabeledExampleDict(BaseLabeledExampleDict):
     """Return type when calling __getitem__() on HeatmapTrackingDataset."""
+
     heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width", float]
 
 
 class MultiviewLabeledExampleDict(TypedDict):
     """Return type when calling __getitem__() on MultiviewDataset."""
+
     images: Union[
         TensorType["num_views", "RGB":3, "image_height", "image_width", float],
-        TensorType["num_views", "frames", "RGB":3, "image_height", "image_width", float],
+        TensorType[
+            "num_views", "frames", "RGB":3, "image_height", "image_width", float
+        ],
     ]
     keypoints: TensorType["num_targets", float]
     bbox: TensorType["num_views", "xyhw":4, float]
@@ -108,11 +138,13 @@ class MultiviewLabeledExampleDict(TypedDict):
 
 class MultiviewHeatmapLabeledExampleDict(MultiviewLabeledExampleDict):
     """Return type when calling __getitem__() on MultiviewHeatmapDataset."""
+
     heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width", float]
 
 
 class BaseLabeledBatchDict(TypedDict):
     """Batch type for base labeled data."""
+
     images: Union[
         TensorType["batch", "RGB":3, "image_height", "image_width", float],
         TensorType["batch", "frames", "RGB":3, "image_height", "image_width", float],
@@ -124,14 +156,26 @@ class BaseLabeledBatchDict(TypedDict):
 
 class HeatmapLabeledBatchDict(BaseLabeledBatchDict):
     """Batch type for heatmap labeled data."""
-    heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width", float]
+
+    heatmaps: TensorType[
+        "batch", "num_keypoints", "heatmap_height", "heatmap_width", float
+    ]
 
 
 class MultiviewLabeledBatchDict(TypedDict):
     """Batch type for multiview labeled data."""
+
     images: Union[
         TensorType["batch", "num_views", "RGB":3, "image_height", "image_width", float],
-        TensorType["batch", "num_views", "frames", "RGB":3, "image_height", "image_width", float],
+        TensorType[
+            "batch",
+            "num_views",
+            "frames",
+            "RGB":3,
+            "image_height",
+            "image_width",
+            float,
+        ],
     ]
     keypoints: TensorType["batch", "num_targets", float]
     bbox: TensorType["batch", "num_views * xyhw", float]
@@ -160,11 +204,15 @@ class MultiviewLabeledBatchDict(TypedDict):
 
 class MultiviewHeatmapLabeledBatchDict(MultiviewLabeledBatchDict):
     """Batch type for multiview heatmap labeled data."""
-    heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width", float]
+
+    heatmaps: TensorType[
+        "batch", "num_keypoints", "heatmap_height", "heatmap_width", float
+    ]
 
 
 class UnlabeledBatchDict(TypedDict):
     """Batch type for unlabeled data."""
+
     frames: TensorType["seq_len", "RGB":3, "image_height", "image_width", float]
     transforms: Union[
         TensorType["seq_len", "h":2, "w":3, float],
@@ -181,19 +229,26 @@ class UnlabeledBatchDict(TypedDict):
     # torch.Tensor: necessary, getting error about torch.AnnotatedAlias that I don't understand
 
     bbox: TensorType["seq_len", "xyhw":4, float]
-    is_multiview: bool = False  # helps with downstream logic since isinstance fails on TypedDicts
+    is_multiview: bool = (
+        False  # helps with downstream logic since isinstance fails on TypedDicts
+    )
 
 
 class MultiviewUnlabeledBatchDict(TypedDict):
     """Batch type for multiview unlabeled data."""
-    frames: TensorType["seq_len", "num_views", "RGB":3, "image_height", "image_width", float]
+
+    frames: TensorType[
+        "seq_len", "num_views", "RGB":3, "image_height", "image_width", float
+    ]
     transforms: Union[
         TensorType["num_views", "h":2, "w":3, float],
         TensorType["num_views", "null":1, "null":1, float],
         torch.Tensor,
     ]
     bbox: TensorType["seq_len", "num_views * xyhw", float]
-    is_multiview: bool = True  # helps with downstream logic since isinstance fails on TypedDicts
+    is_multiview: bool = (
+        True  # helps with downstream logic since isinstance fails on TypedDicts
+    )
 
 
 class SemiSupervisedBatchDict(TypedDict):

@@ -52,3 +52,5 @@ def __getattr__(name: str) -> Any:
         return __get_package_version()
     else:
         raise AttributeError(f"No attribute {name} in module {__name__}.")
+
+LP_DIR = Path.home() / ".lightning_pose"

@@ -35,6 +35,7 @@ training to diagnostic visualizations.
    source/developer_guide/index
    source/faqs
    source/api
+   source/project_directory
    source/cli
 
 Indices and tables
