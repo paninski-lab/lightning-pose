@@ -1,7 +1,13 @@
+import json
+import os
+import time
+from pathlib import Path
 from typing import Any, Dict, Tuple
 
 import lightning.pytorch as pl
+import pytest
 import torch
+from lightning import Trainer, LightningModule
 from lightning.pytorch.callbacks import Callback
 
 # to ignore imports for sphix-autoapidoc
@@ -40,9 +46,7 @@ class AnnealWeight(Callback):
             pass
         else:
             eff_epoch: int = pl_module.current_epoch - self.freeze_until_epoch
-            value: float = min(
-                self.init_val + eff_epoch * self.increase_factor, self.final_val
-            )
+            value: float = min(self.init_val + eff_epoch * self.increase_factor, self.final_val)
             # Dan: removed buffer; seems to complicate checkpoint loading
             # pl_module.register_buffer(self.attr_name, torch.tensor(value))
             setattr(pl_module, self.attr_name, torch.tensor(value))
@@ -59,6 +63,8 @@ class UnfreezeBackbone(Callback):
     lightning-ai/pytorch-lightning#20340 for context.
     """
 
+    _initial_lr: int
+
     def __init__(
         self,
         unfreeze_epoch: int | None = None,
@@ -66,9 +72,7 @@ class UnfreezeBackbone(Callback):
         initial_ratio=0.1,
         warm_up_ratio=1.5,
     ):
-        assert (unfreeze_epoch is None) != (
-            unfreeze_step is None
-        ), "Exactly one must be provided."
+        assert (unfreeze_epoch is None) != (unfreeze_step is None), "Exactly one must be provided."
         self.unfreeze_epoch = unfreeze_epoch
         self.unfreeze_step = unfreeze_step
         self.initial_ratio = initial_ratio
@@ -129,9 +133,7 @@ class UnfreezeBackbone(Callback):
         # upsampling_lr is subject to change via the scheduler.
         if current_epoch > unfreeze_epoch:
             epochs_since_thaw = current_epoch - unfreeze_epoch
-            next_lr = min(
-                self._initial_lr * self.warm_up_ratio**epochs_since_thaw, upsampling_lr
-            )
+            next_lr = min(self._initial_lr * self.warm_up_ratio**epochs_since_thaw, upsampling_lr)
             if next_lr == upsampling_lr:
                 self._warmed_up = True
             return next_lr
@@ -199,8 +201,11 @@ class PatchMasking(Callback):
 
         # Log curriculum information - only log numeric values
         pl_module.log(
-            "patch_mask_ratio", schedule_info['mask_ratio'],
-            on_step=False, on_epoch=True, prog_bar=True,
+            "patch_mask_ratio",
+            schedule_info["mask_ratio"],
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
         )
 
 
@@ -275,9 +280,8 @@ class PatchMasker:
             # start patch masking at patch_init_step, reach max by patch_final_step
             curr_steps_for_patch = self.patch_final_step - self.patch_init_step
             progress = min((training_step - self.patch_init_step) / curr_steps_for_patch, 1.0)
-            mask_ratio = (
-                self.patch_init_ratio
-                + progress * (self.patch_final_ratio - self.patch_init_ratio)
+            mask_ratio = self.patch_init_ratio + progress * (
+                self.patch_final_ratio - self.patch_init_ratio
             )
 
         # Calculate patch dimensions (assuming 16x16 patches for ViT)
@@ -296,10 +300,7 @@ class PatchMasker:
                     # Same patches are masked for the same training step, batch, and view
                     # Using multiplication to avoid seed collisions between different combinations
                     deterministic_seed = (
-                        self.patch_seed
-                        + training_step
-                        + batch_idx * 1000
-                        + view_idx * 100
+                        self.patch_seed + training_step + batch_idx * 1000 + view_idx * 100
                     )
                     # Create a local generator instead of modifying global torch seed
                     local_generator = torch.Generator(device=device)
@@ -307,9 +308,7 @@ class PatchMasker:
 
                     # Random patch selection with local generator
                     patch_indices = torch.randperm(
-                        total_patches_per_view,
-                        device=device,
-                        generator=local_generator
+                        total_patches_per_view, device=device, generator=local_generator
                     )[:patches_to_mask_per_view]
                     patch_mask[batch_idx, view_idx, patch_indices] = 0
                     # Zero out the selected patches
@@ -322,8 +321,8 @@ class PatchMasker:
                             batch_idx,
                             view_idx,
                             :,
-                            patch_h:patch_h + patch_size,
-                            patch_w:patch_w + patch_size
+                            patch_h : patch_h + patch_size,
+                            patch_w : patch_w + patch_size,
                         ] = 0
 
         return masked_images, patch_mask
@@ -344,10 +343,7 @@ class PatchMasker:
             dummy_mask = torch.ones(batch_size, num_views, device=device)
             return images, dummy_mask
 
-    def get_training_schedule_info(
-        self,
-        current_step: int
-    ) -> Dict[str, Any]:
+    def get_training_schedule_info(self, current_step: int) -> Dict[str, Any]:
         """Get information about current training schedule progress."""
         if self.use_patch_masking:
             if current_step < self.patch_init_step:
@@ -358,9 +354,8 @@ class PatchMasker:
             else:
                 curr_steps_for_patch = self.patch_final_step - self.patch_init_step
                 progress = min((current_step - self.patch_init_step) / curr_steps_for_patch, 1.0)
-                current_mask_ratio = (
-                    self.patch_init_ratio
-                    + progress * (self.patch_final_ratio - self.patch_init_ratio)
+                current_mask_ratio = self.patch_init_ratio + progress * (
+                    self.patch_final_ratio - self.patch_init_ratio
                 )
                 curriculum_progress = f"{progress*100:.1f}%"
                 steps_to_patch_masking = 0
@@ -376,12 +371,170 @@ class PatchMasker:
             "mask_ratio": current_mask_ratio,
             "curriculum_progress": curriculum_progress,
             "steps_to_patch_masking": steps_to_patch_masking,
-            "steps_to_max_masking": steps_to_max_masking
+            "steps_to_max_masking": steps_to_max_masking,
         }
 
-    def should_start_patch_masking(
-        self,
-        current_step: int
-    ) -> bool:
+    def should_start_patch_masking(self, current_step: int) -> bool:
         """Check if patch masking should start at current step."""
         return self.use_patch_masking and current_step == self.patch_init_step
+
+
+class JSONInferenceProgressTracker(Callback):
+    """
+    A PyTorch Lightning callback that tracks prediction progress and saves it
+    to a specified JSON file.
+    """
+
+    def __init__(self, filepath: Path):
+        super().__init__()
+        self.filepath = filepath
+        self.current_step = 0
+        self.total_steps = 0
+
+        # Ensure the file exists (or is cleared) and the directory is available
+        os.makedirs(os.path.dirname(self.filepath) or ".", exist_ok=True)
+        self._save_progress(0, 1)
+
+    def _save_progress(self, current: int, total: int):
+        """Helper function to write the progress dictionary to the JSON file."""
+        progress_data = {
+            "completed": current,
+            "total": total,
+            "timestamp": time.time(),
+        }
+
+        # Use a temporary file and rename to ensure atomic write,
+        # preventing external readers from getting a half-written file.
+        temp_filepath = f"{self.filepath}.tmp"
+        try:
+            with open(temp_filepath, "w") as f:
+                json.dump(progress_data, f, indent=4)
+            os.replace(temp_filepath, self.filepath)
+        except Exception as e:
+            # Handle potential file I/O errors gracefully
+            print(f"\n[Error saving progress to JSON]: {e}")
+            if os.path.exists(temp_filepath):
+                os.remove(temp_filepath)
+
+    def on_predict_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        """Called when prediction starts."""
+
+        # Calculate the total number of batches to predict
+        self.total_steps = trainer.num_predict_batches[0]  # Assumes one dataloader
+        self.current_step = 0
+
+        # Save initial state
+        self._save_progress(self.current_step, self.total_steps)
+
+    def on_predict_batch_end(
+        self,
+        trainer: Trainer,
+        pl_module: LightningModule,
+        outputs,
+        batch,
+        batch_idx: int,
+        dataloader_idx: int = 0,
+    ) -> None:
+        """Called when a prediction batch ends."""
+        self.current_step += 1
+
+        # Save updated progress
+        self._save_progress(self.current_step, self.total_steps)
+
+    def on_predict_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        """Called when prediction finishes."""
+        # Save final state
+        self._save_progress(self.total_steps, self.total_steps)
+
+
+class JSONTrainingProgressTracker(Callback):
+    """
+    Tracks training progress (epochs or epochs) and saves it to a JSON file.
+    """
+
+    steps_mode: bool
+
+    def __init__(self, filepath: Path):
+        super().__init__()
+        self.filepath = filepath
+        self.current = 0
+        self.total = 0
+
+        os.makedirs(os.path.dirname(self.filepath) or ".", exist_ok=True)
+        # Initialize with a base state (0 completed out of 1 total placeholder)
+        self._save_progress(0, 1)
+
+    def _save_progress(self, completed: int, total: int):
+        """Helper function to write the progress dictionary to the JSON file.
+
+        Training is different from inference because the existing file has pid and status
+        information that we should not entirely overwrite.
+        """
+        progress_data = {
+            "status": "TRAINING" if completed < total else "EVALUATING",
+            "progress": {
+                "completed": completed,
+                "total": total,
+                "timestamp": time.time(),
+            },
+        }
+
+        existing_file_contents = (
+            json.load(open(self.filepath)) if os.path.exists(self.filepath) else {}
+        )
+        new_file_contents = {**existing_file_contents, **progress_data}
+
+        # Use a temporary file and rename to ensure atomic write,
+        # preventing external readers from getting a half-written file.
+        temp_filepath = f"{self.filepath}.tmp"
+        try:
+            with open(temp_filepath, "w") as f:
+                json.dump(new_file_contents, f, indent=4)
+            os.replace(temp_filepath, self.filepath)
+        except Exception as e:
+            # Handle potential file I/O errors gracefully
+            print(f"\n[Error saving progress to JSON]: {e}")
+            if os.path.exists(temp_filepath):
+                os.remove(temp_filepath)
+
+    def on_train_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        """Called when training starts."""
+
+        # Determine tracking mode based on Trainer configuration
+        max_epochs = trainer.max_epochs if trainer.max_epochs is not None else 0
+        max_steps = trainer.max_steps if trainer.max_steps is not None else 0
+
+        # Default to epoch tracking unless max_epochs is 0 or -1 (unlimited)
+        self.total, self.steps_mode = max_epochs, False
+        if not self.total or max_epochs == -1:
+            self.total, self.steps_mode = max_steps, True
+
+        self.current = 0
+
+        # Save initial state
+        self._save_progress(self.current, self.total)
+
+    def on_train_batch_end(
+        self, trainer: Trainer, pl_module: LightningModule, outputs, batch, batch_idx: int
+    ) -> None:
+        """Called when a training batch ends, used for step mode."""
+        if self.steps_mode and self.total > 0:
+            # trainer.global_step is 0-indexed
+            self.current = trainer.global_step + 1
+            self._save_progress(self.current, self.total)
+
+    def on_train_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        """Called after an epoch finishes, used for epoch mode."""
+        if not self.steps_mode and self.total > 0:
+            # trainer.current_epoch is 0-indexed, so we add 1 for "completed" count
+            self.current = trainer.current_epoch + 1
+            self._save_progress(self.current, self.total)
+
+    def on_train_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        """Called when training finishes."""
+        self.current = self.total  # Ensure completed == total
+        self._save_progress(self.current, self.total)
+
+        print(
+            f"\n[JSONTrainingProgressTracker] Training finished. Final status saved to {self.filepath}"
+        )

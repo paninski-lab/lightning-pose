@@ -31,6 +31,8 @@ __all__ = [
     "MultiviewHeatmapDataset",
 ]
 
+from lightning_pose.utils.paths.path_util import PathUtil
+
 
 class BaseTrackingDataset(torch.utils.data.Dataset):
     """Base dataset that contains images and keypoints as (x, y) pairs."""
@@ -375,13 +377,14 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         view_names: list[str],
         image_resize_height: int,
         image_resize_width: int,
+        path_util: PathUtil,
         header_rows: list[int] | None = [0, 1, 2],
         imgaug_transform: Callable | None = None,
         downsample_factor: Literal[1, 2, 3] = 2,
         do_context: bool = False,
         resize: bool = False,
         uniform_heatmaps: bool = False,
-        camera_params_path: str | None = None,
+        provide_triangulated_points: bool = False,
         bbox_paths: list[str] | None = None,
     ) -> None:
         """Initialize the MultiViewHeatmap Dataset.
@@ -407,8 +410,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 and keypoints before returning a batch of data.
             uniform_heatmaps: True to force the model to output uniform heatmaps for missing data;
                 False will output all-zero heatmaps
-            camera_params_path: path to toml file with camera calibration parameters in format
-                output by anipose
+            provide_triangulated_points: whether to use camera params to triangulate
             bbox_paths: paths to csv files of the form
                 (image_path, x, h, height, width)
                 where (x, y) correspond to upper left corner of bbox.
@@ -425,7 +427,11 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         self.view_names = view_names
         self.image_resize_height = image_resize_height
         self.image_resize_width = image_resize_width
+        self.path_util = path_util
         self.do_context = do_context
+        self.provide_triangulated_points = provide_triangulated_points
+        if do_context and provide_triangulated_points:
+            raise NotImplementedError("cannot use 3d features with context models yet")
 
         # do this here so resizing doesn't get added multiple times when iterating over views
         if resize:
@@ -466,36 +472,6 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         self.num_targets = self.num_keypoints * 2
 
-        if camera_params_path is not None:
-
-            assert not do_context, "3D augmentations for context model not yet supported"
-
-            cam_params_df = pd.read_csv(camera_params_path, index_col=0, header=[0])
-
-            # make sure image numbers at least match
-            img_idxs_labels = [
-                i.split('/')[-1] for i in self.dataset[self.view_names[0]].image_names
-            ]
-            img_idxs_calib = [i.split('/')[-1] for i in cam_params_df.index]
-            assert np.all(img_idxs_labels == img_idxs_calib)
-
-            cam_params_file_to_camgroup = {}
-            for cam_params_file in cam_params_df.file.unique():
-                camgroup = CameraGroup.load(os.path.join(root_directory, cam_params_file))
-                cam_names = camgroup.get_names()
-                assert np.all(cam_names == view_names), (
-                    "cfg.data.view_names must have same camera order as camera calibration file; "
-                    f"instead found {view_names} and {cam_names}."
-                )
-                cam_params_file_to_camgroup[cam_params_file] = camgroup
-
-        else:
-            cam_params_df = None
-            cam_params_file_to_camgroup = None
-
-        self.cam_params_df = cam_params_df
-        self.cam_params_file_to_camgroup = cam_params_file_to_camgroup
-
     def check_data_images_names(self):
         """Data checking
         Each object in self.datasets will have the attribute image_names
@@ -506,25 +482,28 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         """
         # check if all CSV files have the same number of rows
         if len(set(list(self.data_length.values()))) != 1:
-            raise ImportError("the CSV files do not match in row numbers!")
+            raise ValueError("the CSV files do not match in row numbers!")
 
         for key_num, keypoint in enumerate(self.keypoint_names[self.view_names[0]]):
             for view, keypointComp in self.keypoint_names.items():
                 if keypoint != keypointComp[key_num]:
-                    raise ImportError(f"the keypoints are not in correct order! \
+                    raise ValueError(
+                        f"the keypoints are not in correct order! \
                                       view: {self.view_names[0]} vs {view} | \
                                         {keypoint} != {keypointComp}")
 
         self.data_length = list(self.data_length.values())[0]
         for idx in range(self.data_length):
-            img_file_names = set()
+            last_row_key = None
             for view, heatmaps in self.dataset.items():
-                img_file_names.add(Path(heatmaps.image_names[idx]).name)
-                if len(img_file_names) > 1:
-                    raise ImportError(
-                        "Discrepancy in image file names across CSV files! "
-                        "index:{idx}, image file names:{img_file_names}"
+                _frame_key = self.path_util.frames.parse_path(heatmaps.image_names[idx])
+                this_row_key = (_frame_key.session_key, _frame_key.frame_index)
+                if last_row_key is not None and last_row_key != this_row_key:
+                    raise ValueError(
+                        "Discrepancy in session names across CSV files! "
+                        f"last:{last_row_key}, this:{this_row_key}"
                     )
+                last_row_key = this_row_key
 
     @property
     def height(self) -> int:
@@ -821,15 +800,32 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         """
 
         # load frames/keypoints and apply per-frame augmentations
-        ignore_nans = True if self.cam_params_file_to_camgroup else False
         datadict = {}
         for view in self.view_names:
-            datadict[view] = self.dataset[view].__getitem__(idx, ignore_nans=ignore_nans)
+            datadict[view] = self.dataset[view].__getitem__(
+                idx, ignore_nans=self.provide_triangulated_points
+            )
+
+        # check if camera params are available
+        _frame_key = self.path_util.frames.parse_path(
+            self.dataset[self.view_names[0]].image_names[idx]
+        )
+        session = _frame_key.session_key
+        calibration_file = self.root_directory / self.path_util.calibrations.get_path(session)
+
+        camgroup = None
+        if calibration_file.is_file():
+            camgroup = CameraGroup.load(calibration_file)
+
+            # Validate view_name order consistency
+            cam_names = camgroup.get_names()
+            assert np.all(cam_names == self.view_names), (
+                "cfg.data.view_names must have same camera order as camera calibration file; "
+                f"instead found {self.view_names} and {cam_names}."
+            )
 
         # always provide 3D keypoints when camera params are available
-        if self.cam_params_file_to_camgroup:
-            # select proper camera calibration parameters for this data point
-            camgroup = self.cam_params_file_to_camgroup[self.cam_params_df.iloc[idx].file]
+        if camgroup is not None:
 
             # load camera parameters
             intrinsic_matrix = torch.stack([

@@ -15,7 +15,12 @@ from omegaconf import DictConfig, OmegaConf
 from omegaconf.errors import ValidationError
 from typeguard import typechecked
 
-from lightning_pose.callbacks import AnnealWeight, PatchMasking, UnfreezeBackbone
+from lightning_pose.callbacks import (
+    AnnealWeight,
+    PatchMasking,
+    UnfreezeBackbone,
+    JSONTrainingProgressTracker,
+)
 from lightning_pose.data.augmentations import (
     expand_imgaug_str_to_dict,
     imgaug_transform,
@@ -39,6 +44,8 @@ from lightning_pose.models.base import (
     _apply_defaults_for_optimizer_params,
 )
 from lightning_pose.utils import io as io_utils
+from lightning_pose.utils.paths.path_util import PathUtil
+from lightning_pose.utils.paths.path_util_legacy import PathUtilLegacy
 from lightning_pose.utils.pca import KeypointPCA
 
 # to ignore imports for sphix-autoapidoc
@@ -136,9 +143,8 @@ def get_dataset(
                 "No precautions regarding the size of the images were considered here, "
                 "images will be resized accordingly to configs!"
             )
-            if (
-                cfg.training.imgaug in ["default", "none"]
-                or not cfg.data.get("camera_params_file")
+            if cfg.training.imgaug in ["default", "none"] or not cfg.data.get(
+                "camera_params_file"
             ):
                 # we are either
                 # 1. running inference on un-augmented data, and need to make sure to resize
@@ -146,18 +152,20 @@ def get_dataset(
                 resize = True
             else:
                 resize = False
+            path_util = PathUtilLegacy(view_names=list(cfg.data.view_names))
             dataset = MultiviewHeatmapDataset(
                 root_directory=data_dir,
                 csv_paths=cfg.data.csv_file,
                 view_names=list(cfg.data.view_names),
                 image_resize_height=cfg.data.image_resize_dims.height,
                 image_resize_width=cfg.data.image_resize_dims.width,
+                path_util=path_util,
                 imgaug_transform=imgaug_transform,
                 downsample_factor=cfg.data.get("downsample_factor", 2),
                 do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
                 resize=resize,
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
-                camera_params_path=cfg.data.get("camera_params_file", None),
+                provide_triangulated_points=("camera_params_file" in cfg.data),
                 bbox_paths=cfg.data.get("bbox_file", None),
             )
         else:
@@ -196,9 +204,7 @@ def get_data_module(
 
     # Divide config batch_size by num_gpus to maintain the same effective batch
     # size in a multi-gpu setting.
-    train_batch_size = int(
-        np.ceil(cfg.training.train_batch_size / cfg.training.num_gpus)
-    )
+    train_batch_size = int(np.ceil(cfg.training.train_batch_size / cfg.training.num_gpus))
     val_batch_size = int(np.ceil(cfg.training.val_batch_size / cfg.training.num_gpus))
 
     semi_supervised = io_utils.check_if_semi_supervised(cfg.model.losses_to_use)
@@ -310,36 +316,28 @@ def get_loss_factories(
                 )
                 height_og = cfg.data.image_resize_dims.height
                 width_og = cfg.data.image_resize_dims.width
-                loss_params_dict["unsupervised"][loss_name][
-                    "original_image_height"
-                ] = height_og
-                loss_params_dict["unsupervised"][loss_name][
-                    "original_image_width"
-                ] = width_og
+                loss_params_dict["unsupervised"][loss_name]["original_image_height"] = height_og
+                loss_params_dict["unsupervised"][loss_name]["original_image_width"] = width_og
                 # record downsampled image dims
                 height_ds = int(height_og // (2 ** cfg.data.get("downsample_factor", 2)))
                 width_ds = int(width_og // (2 ** cfg.data.get("downsample_factor", 2)))
-                loss_params_dict["unsupervised"][loss_name][
-                    "downsampled_image_height"
-                ] = height_ds
-                loss_params_dict["unsupervised"][loss_name][
-                    "downsampled_image_width"
-                ] = width_ds
+                loss_params_dict["unsupervised"][loss_name]["downsampled_image_height"] = height_ds
+                loss_params_dict["unsupervised"][loss_name]["downsampled_image_width"] = width_ds
                 if loss_name[:8] == "unimodal":
-                    loss_params_dict["unsupervised"][loss_name][
-                        "uniform_heatmaps"
-                    ] = cfg.training.get("uniform_heatmaps_for_nan_keypoints", False)
+                    loss_params_dict["unsupervised"][loss_name]["uniform_heatmaps"] = (
+                        cfg.training.get("uniform_heatmaps_for_nan_keypoints", False)
+                    )
             elif loss_name == "pca_multiview":
                 if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
                     # assume user has provided a set of columns that are present in each view
                     num_keypoints = cfg.data.num_keypoints
                     num_views = len(cfg.data.view_names)
                     if isinstance(cfg.data.mirrored_column_matches[0], int):
-                        loss_params_dict["unsupervised"][loss_name][
-                            "mirrored_column_matches"
-                        ] = [
-                            (v * num_keypoints
-                             + np.array(cfg.data.mirrored_column_matches, dtype=int)).tolist()
+                        loss_params_dict["unsupervised"][loss_name]["mirrored_column_matches"] = [
+                            (
+                                v * num_keypoints
+                                + np.array(cfg.data.mirrored_column_matches, dtype=int)
+                            ).tolist()
                             for v in range(num_views)
                         ]
                     else:
@@ -358,9 +356,9 @@ def get_loss_factories(
                         "The Pose PCA loss is currently not implemented for multiview data."
                     )
                 else:
-                    loss_params_dict["unsupervised"][loss_name][
-                        "columns_for_singleview_pca"
-                    ] = cfg.data.get('columns_for_singleview_pca', None)
+                    loss_params_dict["unsupervised"][loss_name]["columns_for_singleview_pca"] = (
+                        cfg.data.get("columns_for_singleview_pca", None)
+                    )
 
     # build supervised loss factory, which orchestrates all supervised losses
     loss_factory_sup = LossFactory(
@@ -380,7 +378,7 @@ def get_loss_factories(
 def get_model(
     cfg: DictConfig,
     data_module: BaseDataModule | UnlabeledDataModule | None,
-    loss_factories: dict[str, LossFactory] | dict[str, None]
+    loss_factories: dict[str, LossFactory] | dict[str, None],
 ) -> pl.LightningModule:
     """Create model: regression or heatmap based, supervised or semi-supervised."""
 
@@ -392,8 +390,7 @@ def get_model(
 
     lr_scheduler = cfg.training.get("lr_scheduler", "multisteplr")
     lr_scheduler_params = _apply_defaults_for_lr_scheduler_params(
-        lr_scheduler,
-        cfg.training.get("lr_scheduler_params", {}).get(f"{lr_scheduler}")
+        lr_scheduler, cfg.training.get("lr_scheduler_params", {}).get(f"{lr_scheduler}")
     )
 
     semi_supervised = io_utils.check_if_semi_supervised(cfg.model.losses_to_use)
@@ -407,6 +404,7 @@ def get_model(
     if not semi_supervised:
         if cfg.model.model_type == "regression":
             from lightning_pose.models import RegressionTracker
+
             model = RegressionTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -425,6 +423,7 @@ def get_model(
             else:
                 num_targets = None
             from lightning_pose.models import HeatmapTracker
+
             model = HeatmapTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 num_targets=num_targets,
@@ -442,6 +441,7 @@ def get_model(
             )
         elif cfg.model.model_type == "heatmap_mhcrnn":
             from lightning_pose.models import HeatmapTrackerMHCRNN
+
             model = HeatmapTrackerMHCRNN(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -458,6 +458,7 @@ def get_model(
             )
         elif cfg.model.model_type == "heatmap_multiview_transformer":
             from lightning_pose.models import HeatmapTrackerMultiviewTransformer
+
             model = HeatmapTrackerMultiviewTransformer(
                 num_keypoints=cfg.data.num_keypoints,
                 num_views=len(cfg.data.view_names),
@@ -482,6 +483,7 @@ def get_model(
     else:
         if cfg.model.model_type == "regression":
             from lightning_pose.models import SemiSupervisedRegressionTracker
+
             model = SemiSupervisedRegressionTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -498,6 +500,7 @@ def get_model(
 
         elif cfg.model.model_type == "heatmap":
             from lightning_pose.models import SemiSupervisedHeatmapTracker
+
             model = SemiSupervisedHeatmapTracker(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -515,6 +518,7 @@ def get_model(
             )
         elif cfg.model.model_type == "heatmap_mhcrnn":
             from lightning_pose.models import SemiSupervisedHeatmapTrackerMHCRNN
+
             model = SemiSupervisedHeatmapTrackerMHCRNN(
                 num_keypoints=cfg.data.num_keypoints,
                 loss_factory=loss_factories["supervised"],
@@ -532,6 +536,7 @@ def get_model(
             )
         elif cfg.model.model_type == "heatmap_multiview_transformer":
             from lightning_pose.models import SemiSupervisedHeatmapTrackerMultiviewTransformer
+
             model = SemiSupervisedHeatmapTrackerMultiviewTransformer(
                 num_keypoints=cfg.data.num_keypoints,
                 num_views=len(cfg.data.view_names),
@@ -560,6 +565,7 @@ def get_model(
         print(f"Loading weights from {ckpt}")
         if not ckpt.endswith(".ckpt"):
             import glob
+
             ckpt = glob.glob(os.path.join(ckpt, "**", "*.ckpt"), recursive=True)[0]
         # Try loading with default settings first, fallback to weights_only=False if needed
         try:
@@ -590,6 +596,7 @@ def get_callbacks(
     lr_monitor=True,
     ckpt_every_n_epochs=None,
     backbone_unfreeze=True,
+    status_file: Path | None = None,
 ) -> list:
 
     callbacks = []
@@ -635,9 +642,8 @@ def get_callbacks(
 
     # we just need this callback for unsupervised losses or multiview models with 3d loss
     if (
-        ((cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None))
-        or cfg.losses.get("supervised_pairwise_projections", {}).get("log_weight") is not None
-    ):
+        (cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None)
+    ) or cfg.losses.get("supervised_pairwise_projections", {}).get("log_weight") is not None:
         anneal_weight_callback = AnnealWeight(**cfg.callbacks.anneal_weight)
         callbacks.append(anneal_weight_callback)
 
@@ -653,6 +659,8 @@ def get_callbacks(
         )
         callbacks.append(patch_masking_callback)
 
+    if status_file is not None:
+        callbacks.append(JSONTrainingProgressTracker(status_file))
     return callbacks
 
 
@@ -725,7 +733,8 @@ def compute_metrics_single(
     # load predictions
     pred_df = pd.read_csv(preds_file, header=[0, 1, 2], index_col=0)
     keypoint_names = io_utils.get_keypoint_names(
-        cfg, csv_file=str(preds_file), header_rows=[0, 1, 2])
+        cfg, csv_file=str(preds_file), header_rows=[0, 1, 2]
+    )
     xyl_mask = pred_df.columns.get_level_values("coords").isin(["x", "y", "likelihood"])
     tmp = pred_df.loc[:, xyl_mask].to_numpy().reshape(pred_df.shape[0], -1, 3)
 
@@ -807,7 +816,8 @@ def compute_metrics_single(
                 data_module=data_module,
                 components_to_keep=cfg.losses.pca_singleview.components_to_keep,
                 empirical_epsilon_percentile=cfg.losses.pca_singleview.get(
-                    "empirical_epsilon_percentile", 1.0),
+                    "empirical_epsilon_percentile", 1.0
+                ),
                 columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
                 centering_method=cfg.losses.pca_singleview.get("centering_method", None),
             )
@@ -839,7 +849,8 @@ def compute_metrics_single(
             data_module=data_module,
             components_to_keep=cfg.losses.pca_singleview.components_to_keep,
             empirical_epsilon_percentile=cfg.losses.pca_singleview.get(
-                "empirical_epsilon_percentile", 1.0),
+                "empirical_epsilon_percentile", 1.0
+            ),
             mirrored_column_matches=cfg.data.mirrored_column_matches,
         )
         # re-fit pca on the labeled data to get params

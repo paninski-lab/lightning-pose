@@ -108,6 +108,9 @@ line_length = 99
 profile = "black"
 src_paths = ["lightning_pose", "tests"]
 
+[tool.black]
+line-length = 99
+
 [tool.pytest.ini_options]
 testpaths = "tests"
 generate_report_on_test = "True"

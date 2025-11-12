@@ -7,7 +7,7 @@ import gc
 import os
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Tuple, Type
+from typing import TYPE_CHECKING, Tuple, Type, Literal
 
 import cv2
 import lightning.pytorch as pl
@@ -20,6 +20,7 @@ from omegaconf import DictConfig, OmegaConf
 from torchtyping import TensorType
 from typeguard import typechecked
 
+from lightning_pose.callbacks import JSONInferenceProgressTracker
 from lightning_pose.data.dali import PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import count_frames
@@ -268,7 +269,7 @@ class PredictionHandler:
             for view_idx, view_name in enumerate(self.cfg.data.view_names):
                 idx_beg = view_idx * num_keypoints
                 idx_end = idx_beg + num_keypoints
-                stacked_preds_single = stacked_preds[:, idx_beg * 2:idx_end * 2]
+                stacked_preds_single = stacked_preds[:, idx_beg * 2 : idx_end * 2]
                 stacked_confs_single = stacked_confs[:, idx_beg:idx_end]
                 pred_arr = self.make_pred_arr_undo_resize(
                     stacked_preds_single.cpu().numpy(), stacked_confs_single.cpu().numpy()
@@ -323,7 +324,10 @@ def predict_dataset(
     delete_model = False
     if model is None:
         model = load_model_from_checkpoint(
-            cfg=cfg, ckpt_file=ckpt_file, eval=True, data_module=data_module,
+            cfg=cfg,
+            ckpt_file=ckpt_file,
+            eval=True,
+            data_module=data_module,
         )
         delete_model = True
 
@@ -411,7 +415,10 @@ def predict_single_video(
     if model is None:
         skip_data_module = True if data_module is None else False
         model = load_model_from_checkpoint(
-            cfg=cfg, ckpt_file=ckpt_file, eval=True, data_module=data_module,
+            cfg=cfg,
+            ckpt_file=ckpt_file,
+            eval=True,
+            data_module=data_module,
             skip_data_module=skip_data_module,
         )
         delete_model = True
@@ -609,7 +616,8 @@ def load_model_from_checkpoint(
         checkpoint["state_dict"] = state_dict
         # create a temporary file with the fixed checkpoint
         import tempfile
-        with tempfile.NamedTemporaryFile(suffix='.ckpt', delete=False) as tmp_file:
+
+        with tempfile.NamedTemporaryFile(suffix=".ckpt", delete=False) as tmp_file:
             torch.save(checkpoint, tmp_file.name)
             fixed_ckpt_file = tmp_file.name
     else:
@@ -632,6 +640,7 @@ def load_model_from_checkpoint(
     # clean up temporary file if created
     if keys_remapped:
         import os
+
         os.unlink(fixed_ckpt_file)
 
     if eval:
@@ -784,9 +793,7 @@ def create_labeled_video(
         return frame
 
     clip_marked = clip.transform(add_marker_and_timestamps)
-    clip_marked.write_videofile(
-        output_video_path, codec="libx264", fps=fps or fps_og or 20.0
-    )
+    clip_marked.write_videofile(output_video_path, codec="libx264", fps=fps or fps_og or 20.0)
     clip_marked.close()
 
 
@@ -830,7 +837,7 @@ def export_predictions_and_labeled_video(
             preds_df=preds_df,
             output_mp4_file=labeled_mp4_file,
             confidence_thresh_for_vid=cfg.eval.confidence_thresh_for_vid,
-            colormap=cfg.eval.get("colormap", "cool")
+            colormap=cfg.eval.get("colormap", "cool"),
         )
     return preds_df
 
@@ -864,6 +871,7 @@ def predict_video(
     video_file: str | list[str],
     model: Model,
     output_pred_file: str | list[str] | None = None,
+    progress_file: Path | None = None,
 ) -> pd.DataFrame | list[pd.DataFrame]:
     """
     Args:
@@ -886,15 +894,22 @@ def predict_video(
 
         # sanity check 1-1 correspondence of video_file to cfg.data.view_names
         # important since PredictionHandler relies on correspondence to organize the outputted dict
-        for single_video_file, view_name in zip(
-            video_file, model.config.cfg.data.view_names
-        ):
+        for single_video_file, view_name in zip(video_file, model.config.cfg.data.view_names):
             assert (
                 view_name in Path(single_video_file).stem
             ), "expected video_file to correspond 1-1 with cfg.data.view_name"
 
-    trainer = pl.Trainer(accelerator="gpu", devices=1, logger=False)
-    model_type = "context" if model.config.cfg.model.model_type == "heatmap_mhcrnn" else "base"
+    trainer = pl.Trainer(
+        accelerator="gpu",
+        devices=1,
+        logger=False,
+        callbacks=(
+            [JSONInferenceProgressTracker(progress_file)] if progress_file is not None else None
+        ),
+    )
+    model_type: Literal["base", "context"] = (
+        "context" if model.config.cfg.model.model_type == "heatmap_mhcrnn" else "base"
+    )
 
     filenames = [video_file] if not is_multiview else [[f] for f in video_file]
     vid_pred_class = PrepareDALI(
@@ -929,9 +944,7 @@ def predict_video(
 
     # Convert to a 1-1 correspondence list similar to video_files, for multiview.
     if isinstance(preds_df, dict):
-        preds_df = [
-            preds_df[view_name] for view_name in model.config.cfg.data.view_names
-        ]
+        preds_df = [preds_df[view_name] for view_name in model.config.cfg.data.view_names]
 
     if output_pred_file is not None:
         # save the predictions to a csv; create directory if it doesn't exist

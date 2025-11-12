@@ -1,6 +1,7 @@
 """Example model training function."""
 
 import contextlib
+import json
 import math
 import os
 import random
@@ -50,7 +51,9 @@ def chdir(dir: str | Path):
 
 @typechecked
 def train(
-    cfg: DictConfig, model_dir: str | Path | None = None, skip_evaluation=False
+    cfg: DictConfig,
+    model_dir: str | Path | None = None,
+    skip_evaluation=False,
 ) -> Model:
     """
     Trains a model using the configuration `cfg`. Saves model to `model_dir`
@@ -59,8 +62,9 @@ def train(
     # Default to cwd for backwards compatibility. Future: make model_dir required.
     model_dir = Path(model_dir or os.getcwd())
     model_dir.mkdir(parents=True, exist_ok=True)
+    status_file_path = model_dir / "train_status.json"
     with chdir(model_dir):
-        model = _train(cfg)
+        model = _train(cfg, status_file=status_file_path)
     # Comment out the above, and uncomment the below to skip
     # training and go straight to post-training analysis:
     # model = Model.from_dir(os.getcwd())
@@ -69,6 +73,17 @@ def train(
         _evaluate_on_training_dataset(model)
         _evaluate_on_training_dataset(model, ood_mode=True)
         _predict_test_videos(model)
+
+    # Update status file to COMPLETED
+    try:
+        with open(status_file_path) as f:
+            status_file_contents = json.load(f)
+    except FileNotFoundError:
+        status_file_contents = {}
+    status_file_contents["status"] = "COMPLETED"
+    with open(str(status_file_path.with_suffix(".json.tmp")), "w") as f:
+        json.dump(status_file_contents, f)
+    os.replace(str(status_file_path.with_suffix(".json.tmp")), status_file_path)
 
     return model
 
@@ -103,9 +118,7 @@ def _evaluate_on_training_dataset(model: Model, ood_mode=False):
                 model.config.cfg.data.data_dir,
             )
             if ood_mode:
-                camera_params_file = camera_params_file.with_stem(
-                    camera_params_file.stem + "_new"
-                )
+                camera_params_file = camera_params_file.with_stem(camera_params_file.stem + "_new")
         else:
             camera_params_file = None
 
@@ -161,9 +174,7 @@ def _evaluate_on_training_dataset(model: Model, ood_mode=False):
             view_name = model.config.cfg.data.view_names[i]
         # Copy output files to model_dir for backward-compatibility.
         # New users should look up these files in image_preds.
-        for p_file in (model.image_preds_dir() / csv_file.name).glob(
-            "predictions*.csv"
-        ):
+        for p_file in (model.image_preds_dir() / csv_file.name).glob("predictions*.csv"):
             metric_suffix = re.match(r"predictions(.*)\.csv", p_file.name)[1]
             out_file = "predictions"
             if len(csv_files) > 1:
@@ -202,7 +213,7 @@ def _predict_test_videos(model: Model):
                 )
 
 
-def _train(cfg: DictConfig) -> Model:
+def _train(cfg: DictConfig, status_file: Path = None) -> Model:
     # reset all seeds
     seed = 0
     os.environ["PYTHONHASHSEED"] = str(seed)
@@ -307,6 +318,7 @@ def _train(cfg: DictConfig) -> Model:
         early_stopping=cfg.training.get("early_stopping", False),
         lr_monitor=True,
         ckpt_every_n_epochs=cfg.training.get("ckpt_every_n_epochs", None),
+        status_file=status_file,
     )
 
     # set up trainer

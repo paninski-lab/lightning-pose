@@ -57,9 +57,7 @@ class Model:
         if hydra_overrides is not None:
             import hydra
 
-            with hydra.initialize_config_dir(
-                version_base="1.1", config_dir=str(model_dir)
-            ):
+            with hydra.initialize_config_dir(version_base="1.1", config_dir=str(model_dir)):
                 cfg = hydra.compose(config_name="config", overrides=hydra_overrides)
                 config = ModelConfig(cfg)
         else:
@@ -110,10 +108,7 @@ class Model:
     def cropped_csv_file_path(self, csv_file_path: str | Path):
         csv_file_path = Path(csv_file_path)
         return (
-            self.model_dir
-            / "image_preds"
-            / csv_file_path.name
-            / ("cropped_" + csv_file_path.name)
+            self.model_dir / "image_preds" / csv_file_path.name / ("cropped_" + csv_file_path.name)
         )
 
     def predict_on_label_csv(
@@ -180,9 +175,7 @@ class Model:
         preds_file_path = output_dir / "predictions.csv"
         preds_file = str(preds_file_path)
 
-        df = predict_dataset(
-            cfg_pred, data_module_pred, model=self.model, preds_file=preds_file
-        )
+        df = predict_dataset(cfg_pred, data_module_pred, model=self.model, preds_file=preds_file)
 
         if compute_metrics:
             metrics = compute_metrics_single(
@@ -282,6 +275,7 @@ class Model:
         output_dir: str | Path | None = UNSPECIFIED,
         compute_metrics: bool = True,
         generate_labeled_video: bool = False,
+        progress_file: Path | None = None,
     ) -> PredictionResult:
         """Predicts on a video file and computes unsupervised loss metrics if applicable.
 
@@ -294,6 +288,8 @@ class Model:
                 predictions.
             generate_labeled_video (bool, optional): Whether to save a labeled video.
                 Defaults to False.
+            progress_file (Path, optional): Path to a file to save progress information for the App.
+                Defaults to None.
 
         Returns:
             PredictionResult: A PredictionResult object containing the predictions and metrics.
@@ -317,11 +313,10 @@ class Model:
             video_file=str(video_file),
             model=self,
             output_pred_file=str(prediction_csv_file),
+            progress_file=progress_file,
         )
         if generate_labeled_video:
-            labeled_mp4_file = str(
-                self.labeled_videos_dir() / f"{video_file.stem}_labeled.mp4"
-            )
+            labeled_mp4_file = str(self.labeled_videos_dir() / f"{video_file.stem}_labeled.mp4")
             generate_labeled_video_fn(
                 video_file=str(video_file),
                 preds_df=df,
@@ -350,6 +345,7 @@ class Model:
         output_dir: str | Path | None = UNSPECIFIED,
         compute_metrics: bool = True,
         generate_labeled_video: bool = False,
+        progress_file: Path | None = None,
     ) -> MultiviewPredictionResult:
         """Version of `predict_on_video_file` that accesses to multiple camera views of each frame.
 
@@ -366,6 +362,7 @@ class Model:
                 predictions.
             generate_labeled_video (bool, optional): Whether to save a labeled video.
                 Defaults to False.
+            progress_file (Path, optional): Path to a file to save progress information for the App.
 
         Returns:
             MultiviewPredictionResult: object containing the predictions and metrics for each view.
@@ -399,14 +396,14 @@ class Model:
         ]
 
         prediction_csv_file_list = [
-            str(output_dir / f"{video_file.stem}.csv")
-            for video_file in video_file_per_view
+            str(output_dir / f"{video_file.stem}.csv") for video_file in video_file_per_view
         ]
 
         df_list: list[pd.DataFrame] = predict_video(
             video_file=list(map(str, video_file_per_view)),
             model=self,
             output_pred_file=prediction_csv_file_list,
+            progress_file=progress_file,
         )
         if generate_labeled_video:
             for video_file, preds_df in zip(video_file_per_view, df_list):
