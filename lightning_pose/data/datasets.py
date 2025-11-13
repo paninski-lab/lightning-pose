@@ -570,23 +570,8 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         # step 1: apply scaling
         scale_factor = np.random.uniform(*scale_params)  # scale scene up or down
 
-        # Handle NaN values in keypoints_3d
-        if np.isnan(keypoints_3d).any():
-            print("Warning: NaN values detected in keypoints_3d, replacing with zeros")
-            keypoints_3d_clean = np.nan_to_num(keypoints_3d, nan=0.0)
-        else:
-            keypoints_3d_clean = keypoints_3d
-
-        # median = np.nanmedian(keypoints_3d, axis=0)
-        # keypoints_aug = (keypoints_3d - median) * scale_factor + median
-
-        # # step 2: apply translation
-        # extent = np.nanmax(keypoints_aug, axis=0) - np.nanmin(keypoints_aug, axis=0)
-        # rands = 2 * np.random.rand(3) - 1  # in [-1, 1]
-        # shift = shift_param * extent * rands
-        # keypoints_aug += shift
-        median = np.nanmedian(keypoints_3d_clean, axis=0)
-        keypoints_aug = (keypoints_3d_clean - median) * scale_factor + median
+        median = np.nanmedian(keypoints_3d, axis=0)
+        keypoints_aug = (keypoints_3d - median) * scale_factor + median
 
         # step 2: apply translation
         extent = np.nanmax(keypoints_aug, axis=0) - np.nanmin(keypoints_aug, axis=0)
@@ -737,6 +722,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         # extract keypoints and images from each view
         keypoints_2d = self._get_2d_keypoints_from_example_dict_absolute_coords(data_dict)
+        
         images = []
         bboxes = []
         for idx_view, (view, example_dict) in enumerate(data_dict.items()):
@@ -791,6 +777,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
             # resize 2D keypoints to uniform dimensions for backbone network
             keypoints_2d_aug_resize_np = self._resize_keypoints(keypoints_2d_aug, bboxes)
+            
             keypoints_2d_aug_resize = [
                 torch.tensor(
                     a,
