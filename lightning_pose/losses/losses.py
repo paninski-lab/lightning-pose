@@ -24,6 +24,7 @@ from typing import Literal, Tuple, Type
 
 import torch
 from kornia.losses import js_div_loss_2d, kl_div_loss_2d
+from kornia.geometry.calibration import distort_points
 from omegaconf import ListConfig
 from torch.nn import functional as F
 from torchtyping import TensorType
