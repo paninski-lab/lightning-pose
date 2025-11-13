@@ -852,6 +852,7 @@ class PairwiseProjectionsLoss(Loss):
         scalar_loss = self.reduce_loss(clean_loss, method="mean")
 
         logs = self.log_loss(loss=scalar_loss, stage=stage)
+        print(f" the logs are")
 
         return self.weight * scalar_loss, logs
 
