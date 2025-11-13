@@ -108,6 +108,13 @@ class Loss:
         return loss
 
     def reduce_loss(self, loss: torch.Tensor, method: str = "mean") -> TensorType[()]:
+        # Handle empty tensors (e.g., when all keypoints are masked out)
+        # if loss.numel() == 0:
+        #     return torch.tensor(0.0, device=loss.device, dtype=loss.dtype)
+        # # Handle NaN values in loss tensor
+        # if torch.isnan(loss).any():
+        #     # Replace NaN with 0 for reduction
+        #     loss = torch.where(torch.isnan(loss), torch.zeros_like(loss), loss)
         return self.reduce_methods_dict[method](loss)
 
     def log_loss(
@@ -784,7 +791,13 @@ class PairwiseProjectionsLoss(Loss):
         targets: TensorType["batch", "num_keypoints", 3],
         predictions: TensorType["batch", "cam_pairs", "num_keypoints", 3],
     ) -> TensorType["batch", "cam_pairs", "num_keypoints"]:
-        loss = torch.linalg.norm(targets.unsqueeze(1) - predictions, ord=2, dim=-1)
+        # Compute difference
+        diff = targets.unsqueeze(1) - predictions
+        # Replace NaN values with 0 before computing norm to avoid NaN in loss
+        diff = torch.where(torch.isnan(diff), torch.zeros_like(diff), diff)
+        loss = torch.linalg.norm(diff, ord=2, dim=-1)
+        # Replace any remaining NaN in loss with 0
+        loss = torch.where(torch.isnan(loss), torch.zeros_like(loss), loss)
         return loss
 
     def __call__(
@@ -819,8 +832,6 @@ class PairwiseProjectionsLoss(Loss):
             scalar_loss = self.reduce_loss(clean_loss, method="mean")
 
         logs = self.log_loss(loss=scalar_loss, stage=stage)
-        print(f" the logs are")
-
         return self.weight * scalar_loss, logs
 
 
