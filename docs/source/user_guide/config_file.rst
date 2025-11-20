@@ -210,7 +210,9 @@ The following parameters relate to model architecture and unsupervised losses.
     * efficientnet_b1: EfficientNet-B1 pretrained on ImageNet
     * efficientnet_b2: EfficientNet-B2 pretrained on ImageNet
     * vits_dino: Vision Transformer (Small) pretrained on ImageNet with DINO
+    * vits_dinov2: Vision Transformer (Small) pretrained on ImageNet with DINOv2
     * vitb_dino: Vision Transformer (Base) pretrained on ImageNet with DINO
+    * vitb_dinov2: Vision Transformer (Base) pretrained on ImageNet with DINOv2
     * vitb_imagenet: Vision Transformer (Base) pretrained on ImageNet with MAE loss
     * vitb_sam: Segment Anything Model (Vision Transformer Base)
 

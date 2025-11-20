@@ -17,14 +17,18 @@ ALLOWED_BACKBONES = Literal[
     "efficientnet_b1",
     "efficientnet_b2",
     "vits_dino",
+    "vits_dinov2",
     "vitb_dino",
+    "vitb_dinov2",
     "vitb_imagenet",
     "vitb_sam",
 ]
 
 ALLOWED_TRANSFORMER_BACKBONES = Literal[
     "vits_dino",
+    "vits_dinov2",
     "vitb_dino",
+    "vitb_dinov2",
     "vitb_imagenet",
     "vitb_sam",
 ]
