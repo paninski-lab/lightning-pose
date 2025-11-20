@@ -31,10 +31,22 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
         base = VisionEncoder(model_name="facebook/dino-vitb16")
         encoder_embed_dim = base.vision_encoder.config.hidden_size
     elif backbone_arch == "vits_dinov2":
-        base = VisionEncoderDinov2(model_name="facebook/dinov2-small")
+        base = VisionEncoderDino(model_name="facebook/dinov2-small", pretrained_patch_size=14)
         encoder_embed_dim = base.vision_encoder.config.hidden_size
     elif backbone_arch == "vitb_dinov2":
-        base = VisionEncoderDinov2(model_name="facebook/dinov2-base")
+        base = VisionEncoderDino(model_name="facebook/dinov2-base", pretrained_patch_size=14)
+        encoder_embed_dim = base.vision_encoder.config.hidden_size
+    elif backbone_arch == "vits_dinov3":
+        base = VisionEncoderDino(
+            model_name="facebook/dinov3-vits16-pretrain-lvd1689m",
+            pretrained_patch_size=16,
+        )
+        encoder_embed_dim = base.vision_encoder.config.hidden_size
+    elif backbone_arch == "vitb_dinov3":
+        base = VisionEncoderDino(
+            model_name="facebook/dinov3-vitb16-pretrain-lvd1689m",
+            pretrained_patch_size=16,
+        )
         encoder_embed_dim = base.vision_encoder.config.hidden_size
     elif "vitb_imagenet" in backbone_arch:
         base = VisionEncoder(model_name="facebook/vit-mae-base")
@@ -130,16 +142,20 @@ class VisionEncoder(torch.nn.Module):
         return outputs
 
 
-class VisionEncoderDinov2(torch.nn.Module):
-    """Wrapper around DINOv2 Encoder."""
+class VisionEncoderDino(torch.nn.Module):
+    """Wrapper around DINOv2/DINOv3 Encoder."""
 
-    def __init__(self, model_name, patch_size=16):
+    def __init__(self, model_name, pretrained_patch_size):
         super().__init__()
         from transformers import AutoModel
         self.vision_encoder = AutoModel.from_pretrained(model_name)
-        # self.vision_encoder is class transformers.models.dinov2.modeling_dinov2.Dinov2Model
+        # self.vision_encoder is one of:
+        # - transformers.models.dinov2.modeling_dinov2.Dinov2Model
+        # - transformers.models.dinov3_vit.modeling_dinov3_vit.Dinov3ViTModel
 
-        if patch_size != 14:
+        if pretrained_patch_size != 16:
+            # use patch size of 16 for all models
+            patch_size = 16
             self.patch_size = patch_size
             self._resize_patch_embedding_weights()
             self.vision_encoder.config.patch_size = patch_size
