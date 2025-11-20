@@ -177,8 +177,10 @@ class VisionEncoderDino(torch.nn.Module):
             output_hidden_states=False,
         ).last_hidden_state
 
-        # skip the cls token
-        outputs = outputs[:, 1:, ...]  # [N, S, D]
+        # v2/v3 each have 1 CLS token, v3 has 4 register tokens
+        num_prefix = 1 + getattr(self.vision_encoder.config, "num_register_tokens", 0)
+        # skip the cls+register token
+        outputs = outputs[:, num_prefix:, ...]  # [N, S, D]
         # change the shape to [N, H, W, D] -> [N, D, H, W]
         N, _, height, width = x.shape
         patch_size = self.vision_encoder.config.patch_size
@@ -202,7 +204,7 @@ class VisionEncoderDino(torch.nn.Module):
             size=(new_h, new_w),
             mode='bicubic',
             align_corners=True,
-            antialias=True,  # Reduces aliasing artifacts
+            antialias=True,  # reduces aliasing artifacts
         )
 
         # Reshape back to original format
