@@ -2,10 +2,7 @@ import math
 
 import safetensors
 import torch
-from transformers import ViTModel
 from typeguard import typechecked
-
-from lightning_pose.models.backbones.vit_sam import SamVisionEncoder
 
 # to ignore imports for sphix-autoapidoc
 __all__ = []
@@ -26,27 +23,38 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
 
     """
 
-    # deprecation warnings
-    if "vit_h_sam" in backbone_arch:
-        backbone_arch = "vitb_sam"
-        raise DeprecationWarning('vit_h_sam is now deprecated; reverting to "vitb_sam"')
-    elif "vit_b_sam" in backbone_arch:
-        backbone_arch = "vitb_sam"
-        raise DeprecationWarning('vit_b_sam is now deprecated; reverting to "vitb_sam"')
-
     # load backbone weights
-    if "vits_dino" in backbone_arch:
+    if backbone_arch == "vits_dino":
         base = VisionEncoder(model_name="facebook/dino-vits16")
         encoder_embed_dim = base.vision_encoder.config.hidden_size
-    elif "vitb_dino" in backbone_arch:
+    elif backbone_arch == "vitb_dino":
         base = VisionEncoder(model_name="facebook/dino-vitb16")
+        encoder_embed_dim = base.vision_encoder.config.hidden_size
+    elif backbone_arch == "vits_dinov2":
+        base = VisionEncoderDino(model_name="facebook/dinov2-small", pretrained_patch_size=14)
+        encoder_embed_dim = base.vision_encoder.config.hidden_size
+    elif backbone_arch == "vitb_dinov2":
+        base = VisionEncoderDino(model_name="facebook/dinov2-base", pretrained_patch_size=14)
+        encoder_embed_dim = base.vision_encoder.config.hidden_size
+    elif backbone_arch == "vits_dinov3":
+        base = VisionEncoderDino(
+            model_name="facebook/dinov3-vits16-pretrain-lvd1689m",
+            pretrained_patch_size=16,
+        )
+        encoder_embed_dim = base.vision_encoder.config.hidden_size
+    elif backbone_arch == "vitb_dinov3":
+        base = VisionEncoderDino(
+            model_name="facebook/dinov3-vitb16-pretrain-lvd1689m",
+            pretrained_patch_size=16,
+        )
         encoder_embed_dim = base.vision_encoder.config.hidden_size
     elif "vitb_imagenet" in backbone_arch:
         base = VisionEncoder(model_name="facebook/vit-mae-base")
         encoder_embed_dim = base.vision_encoder.config.hidden_size
         if kwargs.get("backbone_checkpoint"):
             load_vit_backbone_checkpoint(base, kwargs["backbone_checkpoint"])
-    elif "vitb_sam" in backbone_arch:
+    elif backbone_arch == "vitb_sam":
+        from lightning_pose.models.backbones.vit_sam import SamVisionEncoder
         base = SamVisionEncoder(
             model_name="facebook/sam-vit-base",
             finetune_img_size=image_size,
@@ -98,10 +106,11 @@ def load_vit_backbone_checkpoint(base, checkpoint: str):
 
 
 class VisionEncoder(torch.nn.Module):
-    """Wrapper around ViT Encoder."""
+    """Wrapper around generic ViT Encoder."""
 
     def __init__(self, model_name):
         super().__init__()
+        from transformers import ViTModel
         self.vision_encoder = ViTModel.from_pretrained(model_name, add_pooling_layer=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -131,3 +140,82 @@ class VisionEncoder(torch.nn.Module):
         outputs = outputs.reshape(N, H, W, -1).permute(0, 3, 1, 2)
 
         return outputs
+
+
+class VisionEncoderDino(torch.nn.Module):
+    """Wrapper around DINOv2/DINOv3 Encoder."""
+
+    def __init__(self, model_name, pretrained_patch_size):
+        super().__init__()
+        from transformers import AutoModel
+        self.vision_encoder = AutoModel.from_pretrained(model_name)
+        # self.vision_encoder is one of:
+        # - transformers.models.dinov2.modeling_dinov2.Dinov2Model
+        # - transformers.models.dinov3_vit.modeling_dinov3_vit.Dinov3ViTModel
+
+        if pretrained_patch_size != 16:
+            # use patch size of 16 for all models
+            patch_size = 16
+            self.patch_size = patch_size
+            self._resize_patch_embedding_weights()
+            self.vision_encoder.config.patch_size = patch_size
+            self.vision_encoder.embeddings.patch_size = patch_size
+            self.vision_encoder.embeddings.patch_embeddings.patch_size = patch_size
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass through the vision encoder.
+
+        Args:
+            x: Input tensor of shape (B, C, H, W)
+
+        Returns:
+            Encoded features
+        """
+
+        outputs = self.vision_encoder(
+            x,
+            output_hidden_states=False,
+        ).last_hidden_state
+
+        # v2/v3 each have 1 CLS token, v3 has 4 register tokens
+        num_prefix = 1 + getattr(self.vision_encoder.config, "num_register_tokens", 0)
+        # skip the cls+register token
+        outputs = outputs[:, num_prefix:, ...]  # [N, S, D]
+        # change the shape to [N, H, W, D] -> [N, D, H, W]
+        N, _, height, width = x.shape
+        patch_size = self.vision_encoder.config.patch_size
+        H, W = int(height / patch_size), int(width / patch_size)
+        outputs = outputs.reshape(N, H, W, -1).permute(0, 3, 1, 2)
+
+        return outputs
+
+    def _resize_patch_embedding_weights(self):
+
+        projection = self.vision_encoder.embeddings.patch_embeddings.projection
+        out_channels, in_channels, old_h, old_w = projection.weight.shape
+        new_h, new_w = (self.patch_size, self.patch_size)
+
+        # Reshape to (out_channels * in_channels, 1, old_h, old_w) for interpolation
+        reshaped = projection.weight.data.view(out_channels * in_channels, 1, old_h, old_w)
+
+        # Use bicubic interpolation
+        resized = torch.nn.functional.interpolate(
+            reshaped,
+            size=(new_h, new_w),
+            mode='bicubic',
+            align_corners=True,
+            antialias=True,  # reduces aliasing artifacts
+        )
+
+        # Reshape back to original format
+        new_weights = resized.view(out_channels, in_channels, new_h, new_w)
+
+        new_projection = torch.nn.Conv2d(
+            in_channels, out_channels, kernel_size=new_h, stride=new_h,
+            bias=projection.bias is not None,
+        )
+        new_projection.weight.data = new_weights
+        if projection.bias is not None:
+            new_projection.bias.data = projection.bias.data
+
+        self.vision_encoder.embeddings.patch_embeddings.projection = new_projection

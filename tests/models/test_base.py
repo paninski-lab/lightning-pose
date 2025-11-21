@@ -14,7 +14,16 @@ HEIGHTS = [128, 256, 384]  # standard numbers, not going to bigger images due to
 WIDTHS = [120, 246, 380]  # similar but not square
 RESNET_BACKBONES = ["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"]
 EFFICIENTNET_BACKBONES = ["efficientnet_b0", "efficientnet_b1", "efficientnet_b2"]
-VIT_BACKBONES = ["vits_dino", "vitb_dino", "vitb_imagenet", "vitb_sam"]
+VIT_BACKBONES = [
+    "vits_dino",
+    "vitb_dino",
+    "vits_dinov2",
+    "vitb_dinov2",
+    # "vits_dinov3",
+    # "vitb_dinov3",
+    "vitb_imagenet",
+    "vitb_sam",
+]
 
 
 def test_backbones_resnet():
@@ -60,6 +69,12 @@ def test_backbones_vit():
         elif backbone in ["vits_dino", "vitb_dino", "vitb_imagenet"]:
             from transformers.models.vit.modeling_vit import ViTEmbeddings
             assert isinstance(model.backbone.vision_encoder.embeddings, ViTEmbeddings)
+        elif backbone in ["vits_dinov2", "vitb_dinov2"]:
+            from transformers.models.dinov2.modeling_dinov2 import Dinov2Embeddings
+            assert isinstance(model.backbone.vision_encoder.embeddings, Dinov2Embeddings)
+        elif backbone in ["vits_dinov3", "vitb_dinov3"]:
+            from transformers.models.dinov3_vit.modeling_dinov3_vit import Dinov3ViTEmbeddings
+            assert isinstance(model.backbone.vision_encoder.embeddings, Dinov3ViTEmbeddings)
         # remove model from gpu; then cache can be cleared
         del model
         gc.collect()
@@ -177,6 +192,26 @@ def test_representation_shapes_vit():
             256: torch.Size([BATCH_SIZE, 768, 16, 16]),
             384: torch.Size([BATCH_SIZE, 768, 24, 24]),
         },
+        "vits_dinov2": {
+            128: torch.Size([BATCH_SIZE, 384, 8, 8]),
+            256: torch.Size([BATCH_SIZE, 384, 16, 16]),
+            384: torch.Size([BATCH_SIZE, 384, 24, 24]),
+        },
+        "vitb_dinov2": {
+            128: torch.Size([BATCH_SIZE, 768, 8, 8]),
+            256: torch.Size([BATCH_SIZE, 768, 16, 16]),
+            384: torch.Size([BATCH_SIZE, 768, 24, 24]),
+        },
+        # "vits_dinov3": {
+        #     128: torch.Size([BATCH_SIZE, 384, 8, 8]),
+        #     256: torch.Size([BATCH_SIZE, 384, 16, 16]),
+        #     384: torch.Size([BATCH_SIZE, 384, 24, 24]),
+        # },
+        # "vitb_dinov3": {
+        #     128: torch.Size([BATCH_SIZE, 768, 8, 8]),
+        #     256: torch.Size([BATCH_SIZE, 768, 16, 16]),
+        #     384: torch.Size([BATCH_SIZE, 768, 24, 24]),
+        # },
         "vitb_imagenet": {
             128: torch.Size([BATCH_SIZE, 768, 8, 8]),
             256: torch.Size([BATCH_SIZE, 768, 16, 16]),
