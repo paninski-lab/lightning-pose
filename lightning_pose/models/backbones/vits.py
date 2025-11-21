@@ -72,7 +72,7 @@ def load_vit_backbone_checkpoint(base, checkpoint: str):
     print(f"Loading VIT-MAE weights from {checkpoint}")
     # support loading safetensors
     if checkpoint.endswith(".safetensors"):
-        ckpt_vit_pretrain = safetensors.load_file(checkpoint, device="cpu")
+        ckpt_vit_pretrain = safetensors.torch.load_file(checkpoint, device="cpu")
     else:
         # Try loading with default settings first, fallback to weights_only=False if needed
         try:
