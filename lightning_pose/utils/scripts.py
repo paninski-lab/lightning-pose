@@ -472,6 +472,7 @@ def get_model(
                 lr_scheduler=lr_scheduler,
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
+                backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
             )
         else:
             raise NotImplementedError(
