@@ -9,7 +9,6 @@ import shutil
 import sys
 from pathlib import Path
 
-import lightning.pytorch as pl
 import numpy as np
 import torch
 from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
@@ -21,17 +20,8 @@ from lightning_pose.api.model_config import ModelConfig
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
 from lightning_pose.utils.io import (
     find_video_files_for_views,
-    return_absolute_data_paths,
 )
-from lightning_pose.utils.scripts import (
-    calculate_steps_per_epoch,
-    get_callbacks,
-    get_data_module,
-    get_dataset,
-    get_imgaug_transform,
-    get_loss_factories,
-    get_model,
-)
+from lightning_pose.utils.mega_factory_impl import ModelComponentContainerImpl
 
 # to ignore imports for sphinx-autoapidoc
 __all__ = ["train"]
@@ -221,46 +211,7 @@ def _train(cfg: DictConfig) -> Model:
 
     ModelConfig(cfg).validate()
 
-    # path handling for toy data
-    data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
-
-    # ----------------------------------------------------------------------------------
-    # Set up data/model objects
-    # ----------------------------------------------------------------------------------
-
-    # imgaug transform
-    imgaug_transform = get_imgaug_transform(cfg=cfg)
-
-    # dataset
-    dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
-
-    # datamodule; breaks up dataset into train/val/test
-    data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
-
-    # build loss factory which orchestrates different losses
-    loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
-
-    steps_per_epoch = calculate_steps_per_epoch(data_module)
-
-    # convert milestone_steps to milestones if applicable (before `get_model`).
-    if (
-        "multisteplr" in cfg.training.lr_scheduler_params
-        and "milestone_steps" in cfg.training.lr_scheduler_params.multisteplr
-    ):
-        milestone_steps = cfg.training.lr_scheduler_params.multisteplr.milestone_steps
-        milestones = [math.ceil(s / steps_per_epoch) for s in milestone_steps]
-        cfg.training.lr_scheduler_params.multisteplr.milestones = milestones
-
-    # convert patch masking epochs if applicable (before `get_callbacks`)
-    if "patch_mask" in cfg.training and "init_epoch" in cfg.training.patch_mask:
-        init_step = math.ceil(cfg.training.patch_mask.init_epoch * steps_per_epoch)
-        final_step = math.ceil(cfg.training.patch_mask.final_epoch * steps_per_epoch)
-        with open_dict(cfg):
-            cfg.training.patch_mask.init_step = init_step
-            cfg.training.patch_mask.final_step = final_step
-
-    # model
-    model = get_model(cfg=cfg, data_module=data_module, loss_factories=loss_factories)
+    container = ModelComponentContainerImpl(cfg)
 
     # ----------------------------------------------------------------------------------
     # Save configuration in output directory
@@ -284,7 +235,7 @@ def _train(cfg: DictConfig) -> Model:
     for csv_file in csv_files:
         src_csv_file = Path(csv_file)
         if not src_csv_file.is_absolute():
-            src_csv_file = Path(data_dir) / src_csv_file
+            src_csv_file = Path(cfg.data.data_dir) / src_csv_file
 
         dest_csv_file = Path(hydra_output_directory) / src_csv_file.name
         shutil.copyfile(src_csv_file, dest_csv_file)
@@ -294,7 +245,7 @@ def _train(cfg: DictConfig) -> Model:
     # ----------------------------------------------------------------------------------
 
     # logger
-    logger = pl.loggers.TensorBoardLogger("tb_logs", name=cfg.model.model_name)
+    logger = container.get_logger()
     # Log hydra config to tensorboard as helpful metadata.
     for key, value in cfg.items():
         logger.experiment.add_text(
@@ -302,51 +253,10 @@ def _train(cfg: DictConfig) -> Model:
         )
 
     # early stopping, learning rate monitoring, model checkpointing, backbone unfreezing
-    callbacks = get_callbacks(
-        cfg,
-        early_stopping=cfg.training.get("early_stopping", False),
-        lr_monitor=True,
-        ckpt_every_n_epochs=cfg.training.get("ckpt_every_n_epochs", None),
-    )
-
-    # set up trainer
-
-    cfg.training.num_gpus = max(cfg.training.num_gpus, 1)
-
-    # initialize to Trainer defaults. Note max_steps defaults to -1.
-    min_steps, max_steps, min_epochs, max_epochs = (None, -1, None, None)
-    if "min_steps" in cfg.training:
-        min_steps = cfg.training.min_steps
-        max_steps = cfg.training.max_steps
-    else:
-        min_epochs = cfg.training.min_epochs
-        max_epochs = cfg.training.max_epochs
-
-    # Unlike min_epoch/min_step, both of these are valid to specify.
-    check_val_every_n_epoch = cfg.training.get("check_val_every_n_epoch", 1)
-    val_check_interval = cfg.training.get("val_check_interval")
-
-    trainer = pl.Trainer(
-        accelerator="gpu",
-        devices=cfg.training.num_gpus,
-        max_epochs=max_epochs,
-        min_epochs=min_epochs,
-        max_steps=max_steps,
-        min_steps=min_steps,
-        check_val_every_n_epoch=check_val_every_n_epoch,
-        val_check_interval=val_check_interval,
-        log_every_n_steps=cfg.training.log_every_n_steps,
-        callbacks=callbacks,
-        logger=logger,
-        # To understand why we set this, see 'max_size_cycle' in UnlabeledDataModule.
-        limit_train_batches=cfg.training.get("limit_train_batches") or steps_per_epoch,
-        accumulate_grad_batches=cfg.training.get("accumulate_grad_batches", 1),
-        profiler=cfg.training.get("profiler", None),
-        sync_batchnorm=True,
-    )
 
     # train model!
-    trainer.fit(model=model, datamodule=data_module)
+    trainer = container.get_trainer()
+    trainer.fit(model=container.get_model(), datamodule=container.get_data_module())
 
     # When devices > 0, lightning creates a process per device.
     # Kill processes other than the main process, otherwise they all go forward.
