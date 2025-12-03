@@ -38,6 +38,7 @@ dependencies = [
     "kaleido",
     "kornia",
     "lightning (~=2.5.0)",
+    "pytorch-lightning (~=2.5.0)",
     "matplotlib",
     "moviepy (>=2.0.0)",
     "numpy (>=2.0.0)",
