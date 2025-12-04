@@ -144,7 +144,6 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         # ).last_hidden_state
 
         # this block mostly copies self.vision_encoder.forward(), except for addition of view embed
-
         # create patch embeddings and add position embeddings; remove CLS token
         try:
             embedding_output = self.backbone.vision_encoder.embeddings(
