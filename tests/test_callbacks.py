@@ -1,7 +1,17 @@
+import json
+from pathlib import Path
+
 import pytest
 import torch
+from lightning import Trainer, LightningModule
 
-from lightning_pose.callbacks import PatchMasker, PatchMasking, UnfreezeBackbone
+from lightning_pose.callbacks import (
+    PatchMasker,
+    PatchMasking,
+    UnfreezeBackbone,
+    JSONInferenceProgressTracker,
+    JSONTrainingProgressTracker,
+)
 
 
 def test_unfreeze_backbone_epoch():
@@ -342,3 +352,275 @@ class TestPatchMasker:
                         b, v, :, patch_h:patch_h + patch_size, patch_w:patch_w + patch_size
                     ]
                     assert torch.all(patch_region == 0)
+
+
+## Fixtures just for JSON*ProgressTracker
+
+
+@pytest.fixture
+def mock_trainer_infer(mocker):
+    """Mock a Trainer instance for INFERENCE tests."""
+    mock = mocker.Mock(spec=Trainer)
+    mock.num_predict_batches = [10]
+    return mock
+
+
+@pytest.fixture
+def mock_trainer_epoch(mocker):
+    """Mock a Trainer instance for EPOCH TRAINING tests (max_epochs set)."""
+    mock = mocker.Mock(spec=Trainer)
+    mock.max_epochs = 3
+    mock.max_steps = -1  # Set to default 'unlimited' for epoch mode
+    mock.current_epoch = 0
+    mock.global_step = 0
+    return mock
+
+
+@pytest.fixture
+def mock_trainer_step(mocker):
+    """Mock a Trainer instance for STEP TRAINING tests (max_epochs set to 0)."""
+    mock = mocker.Mock(spec=Trainer)
+    mock.max_epochs = 0  # Forces step mode
+    mock.max_steps = 100
+    mock.current_epoch = 0
+    mock.global_step = 0
+    return mock
+
+
+@pytest.fixture
+def mock_module(mocker):
+    """Mock a minimal LightningModule."""
+    return mocker.Mock(spec=LightningModule)
+
+
+@pytest.fixture
+def progress_filepath(tmp_path) -> Path:
+    """Create a temporary path for the JSON file."""
+    # Ensure a directory is used to test the os.path.dirname logic
+    return tmp_path / "temp_dir" / "progress.json"
+
+
+class BaseTestProgressTracker:
+    def _read_progress(self, filepath: Path | str):
+        """Helper to read the JSON file content."""
+        with open(filepath, "r") as f:
+            return json.load(f)
+
+
+class TestJSONInferenceProgressTracker(BaseTestProgressTracker):
+
+    def test_initialization_creates_file_and_directory(self, progress_filepath):
+        """Test that the callback creates the file path and initializes content."""
+        tracker = JSONInferenceProgressTracker(filepath=progress_filepath)
+
+        assert Path(tracker.filepath).exists()
+
+        data = self._read_progress(tracker.filepath)
+
+        # Check initial state (0 completed, 1 total placeholder)
+        assert data["completed"] == 0
+        assert data["total"] == 1
+        assert "timestamp" in data
+
+    def test_on_predict_start_sets_total_steps(self, mock_trainer, mock_module, progress_filepath):
+        """Test that on_predict_start correctly calculates and saves total steps."""
+        tracker = JSONInferenceProgressTracker(filepath=progress_filepath)
+
+        tracker.on_predict_start(mock_trainer, mock_module)
+
+        # Check internal state
+        assert tracker.total_steps == 10
+        assert tracker.current_step == 0
+
+        # Check file content
+        data = self._read_progress(tracker.filepath)
+        assert data["completed"] == 0
+        assert data["total"] == 10  # Total steps should now be 10
+
+    def test_on_predict_batch_end_updates_progress(
+        self, mock_trainer, mock_module, progress_filepath
+    ):
+        """Test progress updates after processing a few batches."""
+        tracker = JSONInferenceProgressTracker(filepath=progress_filepath)
+
+        # Simulate start
+        tracker.on_predict_start(mock_trainer, mock_module)
+
+        # Simulate 3 batch ends
+        for i in range(1, 4):
+            tracker.on_predict_batch_end(mock_trainer, mock_module, None, None, i - 1)
+
+            # Check internal step count
+            assert tracker.current_step == i
+
+            # Check file content
+            data = self._read_progress(tracker.filepath)
+            assert data["completed"] == i
+            assert data["total"] == 10
+            assert "timestamp" in data
+
+    def test_on_predict_end_finalizes_progress(self, mock_trainer, mock_module, progress_filepath):
+        """Test that on_predict_end sets completed count equal to total steps."""
+        tracker = JSONInferenceProgressTracker(filepath=progress_filepath)
+
+        # Simulate start (total=10)
+        tracker.on_predict_start(mock_trainer, mock_module)
+
+        # Simulate full progress (10 batches)
+        for i in range(10):
+            tracker.on_predict_batch_end(mock_trainer, mock_module, None, None, i)
+
+        # Simulate end
+        tracker.on_predict_end(mock_trainer, mock_module)
+
+        # Check internal state (should be 10/10)
+        assert tracker.current_step == 10
+
+        # Check file content (should be 10/10)
+        data = self._read_progress(tracker.filepath)
+        assert data["completed"] == 10
+        assert data["total"] == 10
+
+
+class TestJSONTrainingProgressTracker:
+
+    def _read_progress_train(self, filepath: Path | str):
+        """Helper to read the JSON file content and extract progress and status."""
+        with open(filepath, "r") as f:
+            data = json.load(f)
+        # Return the progress dict for easier checking, but also check status
+        return data["progress"], data["status"]
+
+    def test_initialization_creates_file_and_directory(self, progress_filepath):
+        """Test that the callback creates the file path and initializes content."""
+        tracker = JSONTrainingProgressTracker(filepath=progress_filepath)
+
+        assert Path(tracker.filepath).exists()
+
+        progress_data, status = self._read_progress_train(tracker.filepath)
+
+        # Check initial state (0 completed out of 1 total placeholder)
+        assert progress_data["completed"] == 0
+        assert progress_data["total"] == 1
+        assert "timestamp" in progress_data
+        # Status check for initialization (0 < 1)
+        assert status == "TRAINING"
+
+    # -------------------------------------
+    # Epoch Mode Tests (max_epochs > 0)
+    # -------------------------------------
+
+    def test_on_train_start_epoch_mode(self, mock_trainer_epoch, mock_module, progress_filepath):
+        """Test that on_train_start correctly sets epoch mode and initial file state."""
+        tracker = JSONTrainingProgressTracker(filepath=progress_filepath)
+        tracker.on_train_start(mock_trainer_epoch, mock_module)
+
+        # Check file content
+        progress_data, status = self._read_progress_train(tracker.filepath)
+
+        assert progress_data["completed"] == 0
+        assert progress_data["total"] == 3
+        assert status == "TRAINING"  # 0 < 3
+
+    def test_on_train_epoch_end_updates_progress_epoch_mode(
+        self, mock_trainer_epoch, mock_module, progress_filepath
+    ):
+        """Test progress updates after each epoch in epoch mode."""
+        tracker = JSONTrainingProgressTracker(filepath=progress_filepath)
+        tracker.on_train_start(mock_trainer_epoch, mock_module)  # total=3, mode=epoch
+
+        # Simulate Epoch 0 completion (updates to completed 1)
+        mock_trainer_epoch.current_epoch = 0
+        tracker.on_train_epoch_end(mock_trainer_epoch, mock_module)
+
+        progress_data, status = self._read_progress_train(tracker.filepath)
+        assert progress_data["completed"] == 1
+        assert progress_data["total"] == 3
+        assert status == "TRAINING"  # 1 < 3
+
+        # Simulate Epoch 1 completion (updates to completed 2)
+        mock_trainer_epoch.current_epoch = 1
+        tracker.on_train_epoch_end(mock_trainer_epoch, mock_module)
+
+        progress_data, status = self._read_progress_train(tracker.filepath)
+        assert progress_data["completed"] == 2
+        assert progress_data["total"] == 3
+        assert status == "TRAINING"  # 2 < 3
+
+    def test_on_train_end_finalizes_progress_epoch_mode(
+        self, mock_trainer_epoch, mock_module, progress_filepath
+    ):
+        """Test that on_train_end sets completed count equal to total epochs AND sets status to EVALUATING."""
+        tracker = JSONTrainingProgressTracker(filepath=progress_filepath)
+        tracker.on_train_start(mock_trainer_epoch, mock_module)
+
+        # Simulate all epochs completing up to the last update before end hook
+        mock_trainer_epoch.current_epoch = 2
+        tracker.on_train_epoch_end(mock_trainer_epoch, mock_module)
+
+        # Call on_train_end hook
+        tracker.on_train_end(mock_trainer_epoch, mock_module)
+
+        progress_data, status = self._read_progress_train(tracker.filepath)
+        assert progress_data["completed"] == 3
+        assert progress_data["total"] == 3
+        assert status == "EVALUATING"  # 3 == 3
+
+    # -------------------------------------
+    # Step Mode Tests (max_epochs = 0)
+    # -------------------------------------
+
+    def test_on_train_start_step_mode(self, mock_trainer_step, mock_module, progress_filepath):
+        """Test that on_train_start correctly sets step mode and initial file state."""
+        tracker = JSONTrainingProgressTracker(filepath=progress_filepath)
+        tracker.on_train_start(mock_trainer_step, mock_module)
+
+        # Check file content
+        progress_data, status = self._read_progress_train(tracker.filepath)
+
+        assert progress_data["completed"] == 0
+        assert progress_data["total"] == 100
+        assert status == "TRAINING"  # 0 < 100
+
+    def test_on_train_batch_end_updates_progress_step_mode(
+        self, mock_trainer_step, mock_module, progress_filepath
+    ):
+        """Test progress updates after batches in step mode."""
+        tracker = JSONTrainingProgressTracker(filepath=progress_filepath)
+        tracker.on_train_start(mock_trainer_step, mock_module)  # total=100, mode=step
+
+        # Simulate batch 10 completion (global_step=9 -> completed=10)
+        mock_trainer_step.global_step = 9
+        tracker.on_train_batch_end(mock_trainer_step, mock_module, None, None, 9)
+
+        progress_data, status = self._read_progress_train(tracker.filepath)
+        assert progress_data["completed"] == 10
+        assert progress_data["total"] == 100
+        assert status == "TRAINING"  # 10 < 100
+
+        # Simulate batch 50 completion (global_step=49 -> completed=50)
+        mock_trainer_step.global_step = 49
+        tracker.on_train_batch_end(mock_trainer_step, mock_module, None, None, 49)
+
+        progress_data, status = self._read_progress_train(tracker.filepath)
+        assert progress_data["completed"] == 50
+        assert progress_data["total"] == 100
+        assert status == "TRAINING"  # 50 < 100
+
+    def test_on_train_end_finalizes_progress_step_mode(
+        self, mock_trainer_step, mock_module, progress_filepath
+    ):
+        """Test that on_train_end sets completed count equal to total steps AND sets status to EVALUATING."""
+        tracker = JSONTrainingProgressTracker(filepath=progress_filepath)
+        tracker.on_train_start(mock_trainer_step, mock_module)
+
+        # Set current step to almost finished state
+        tracker.current = 99
+
+        # Call on_train_end hook
+        tracker.on_train_end(mock_trainer_step, mock_module)
+
+        progress_data, status = self._read_progress_train(tracker.filepath)
+        assert progress_data["completed"] == 100
+        assert progress_data["total"] == 100
+        assert status == "EVALUATING"  # 100 == 100

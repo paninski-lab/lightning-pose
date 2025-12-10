@@ -15,7 +15,12 @@ from omegaconf import DictConfig, OmegaConf
 from omegaconf.errors import ValidationError
 from typeguard import typechecked
 
-from lightning_pose.callbacks import AnnealWeight, PatchMasking, UnfreezeBackbone
+from lightning_pose.callbacks import (
+    AnnealWeight,
+    PatchMasking,
+    UnfreezeBackbone,
+    JSONTrainingProgressTracker,
+)
 from lightning_pose.data.augmentations import (
     expand_imgaug_str_to_dict,
     imgaug_transform,
@@ -591,6 +596,7 @@ def get_callbacks(
     lr_monitor=True,
     ckpt_every_n_epochs=None,
     backbone_unfreeze=True,
+    status_file: Path | None = None,
 ) -> list:
 
     callbacks = []
@@ -654,6 +660,8 @@ def get_callbacks(
         )
         callbacks.append(patch_masking_callback)
 
+    if status_file is not None:
+        callbacks.append(JSONTrainingProgressTracker(status_file))
     return callbacks
 
 

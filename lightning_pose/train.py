@@ -1,6 +1,7 @@
 """Example model training function."""
 
 import contextlib
+import json
 import math
 import os
 import random
@@ -59,8 +60,9 @@ def train(
     # Default to cwd for backwards compatibility. Future: make model_dir required.
     model_dir = Path(model_dir or os.getcwd())
     model_dir.mkdir(parents=True, exist_ok=True)
+    status_file_path = model_dir / "train_status.json"
     with chdir(model_dir):
-        model = _train(cfg)
+        model = _train(cfg, status_file=status_file_path)
     # Comment out the above, and uncomment the below to skip
     # training and go straight to post-training analysis:
     # model = Model.from_dir(os.getcwd())
@@ -69,6 +71,17 @@ def train(
         _evaluate_on_training_dataset(model)
         _evaluate_on_training_dataset(model, ood_mode=True)
         _predict_test_videos(model)
+
+    # Update status file to COMPLETED
+    try:
+        with open(status_file_path) as f:
+            status_file_contents = json.load(f)
+    except FileNotFoundError:
+        status_file_contents = {}
+    status_file_contents["status"] = "COMPLETED"
+    with open(str(status_file_path.with_suffix(".json.tmp")), "w") as f:
+        json.dump(status_file_contents, f)
+    os.replace(str(status_file_path.with_suffix(".json.tmp")), status_file_path)
 
     return model
 
@@ -202,7 +215,7 @@ def _predict_test_videos(model: Model):
                 )
 
 
-def _train(cfg: DictConfig) -> Model:
+def _train(cfg: DictConfig, status_file: Path = None) -> Model:
     # reset all seeds
     seed = 0
     os.environ["PYTHONHASHSEED"] = str(seed)
@@ -307,6 +320,7 @@ def _train(cfg: DictConfig) -> Model:
         early_stopping=cfg.training.get("early_stopping", False),
         lr_monitor=True,
         ckpt_every_n_epochs=cfg.training.get("ckpt_every_n_epochs", None),
+        status_file=status_file,
     )
 
     # set up trainer

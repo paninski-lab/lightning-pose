@@ -7,7 +7,7 @@ import gc
 import os
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Tuple, Type
+from typing import TYPE_CHECKING, Tuple, Type, Literal
 
 import cv2
 import lightning.pytorch as pl
@@ -20,6 +20,7 @@ from omegaconf import DictConfig, OmegaConf
 from torchtyping import TensorType
 from typeguard import typechecked
 
+from lightning_pose.callbacks import JSONInferenceProgressTracker
 from lightning_pose.data.dali import PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import count_frames
@@ -864,6 +865,7 @@ def predict_video(
     video_file: str | list[str],
     model: Model,
     output_pred_file: str | list[str] | None = None,
+    progress_file: Path | None = None,
 ) -> pd.DataFrame | list[pd.DataFrame]:
     """
     Args:
@@ -893,8 +895,17 @@ def predict_video(
                 view_name in Path(single_video_file).stem
             ), "expected video_file to correspond 1-1 with cfg.data.view_name"
 
-    trainer = pl.Trainer(accelerator="gpu", devices=1, logger=False)
-    model_type = "context" if model.config.cfg.model.model_type == "heatmap_mhcrnn" else "base"
+    trainer = pl.Trainer(
+        accelerator="gpu",
+        devices=1,
+        logger=False,
+        callbacks=(
+            [JSONInferenceProgressTracker(progress_file)] if progress_file is not None else None
+        ),
+    )
+    model_type: Literal["base", "context"] = (
+        "context" if model.config.cfg.model.model_type == "heatmap_mhcrnn" else "base"
+    )
 
     filenames = [video_file] if not is_multiview else [[f] for f in video_file]
     vid_pred_class = PrepareDALI(
