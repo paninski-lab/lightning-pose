@@ -321,7 +321,7 @@ def check_video_paths(
         if isinstance(filename, str):
             filename = [filename]
         for f in filename:
-            assert f.endswith(".mp4"), "video files must be mp4 format!"
+            assert f.endswith((".mp4", ".avi")), "video files must be mp4 or avi!"
 
     return filenames
 

@@ -1,0 +1,102 @@
+data:
+  data_dir: /n/netscratch/kempner_bsabatini_lab/Lab/twheatcroft/LP_projects/tw_threeCam_allMice-Tom-2025-11-25_LP
+  video_dir: videos
+  labeled_data_dir: labeled-data
+  unlabeled_data_dir: unlabeled-data
+  use_unlabeled: true
+  video_extension: avi
+  view_names:
+  - cam1
+  - cam2
+  - cam3
+  csv_file:
+  - CollectedData_cam1_lp.csv
+  - CollectedData_cam2_lp.csv
+  - CollectedData_cam3_lp.csv
+  image_resize_dims:
+    height: 512
+    width: 512
+  num_keypoints: 15
+  mirrored_column_matches:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+  - 13
+  - 14
+training:
+  max_epochs: 120
+  min_epochs: 1
+  unfreezing_epoch: 1
+  batch_size: 8
+  unlabeled_batch_size: 256
+  imgaug: dlc
+  imgaug_multiview: true
+  lr_scheduler_params: {}
+  num_gpus: 1
+  train_batch_size: 8
+  val_batch_size: 8
+  test_batch_size: 8
+  train_prob: 0.95
+  val_prob: 0.05
+  train_frames: 1
+  num_workers: 4
+  log_every_n_steps: 10
+  check_val_every_n_epoch: 5
+  rng_seed_data_pt: 0
+  rng_seed_model_pt: 0
+  lr_scheduler: multisteplr
+model:
+  model_type: heatmap_multiview_transformer
+  backbone: vits_dino
+  final_layer: linear
+  losses_to_use:
+  - temporal
+  - pca_multiview
+losses:
+  supervised_heatmap:
+    weight: 1.0
+  temporal:
+    log_weight: 6.0
+    prob_threshold: 0.05
+    epsilon: 20.0
+  pca_singleview:
+    log_weight: 6.0
+    components_to_keep: 0.99
+    epsilon: null
+  pca_multiview:
+    log_weight: 6.0
+    components_to_keep: 3
+    epsilon: null
+dali:
+  base:
+    train:
+      sequence_length: 16
+    predict:
+      sequence_length: 128
+  context:
+    train:
+      batch_size: 1
+    predict:
+      sequence_length: 128
+optim:
+  lr: 0.0001
+  weight_decay: 1.0e-05
+logging:
+  log_dir: logs
+callbacks:
+  anneal_weight:
+    attr_name: temporal_log_weight
+    init_val: 0.0
+    increase_factor: 0.01
+    final_val: 1.0
+    freeze_until_epoch: 0
