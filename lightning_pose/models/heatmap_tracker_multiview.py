@@ -146,9 +146,15 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         # this block mostly copies self.vision_encoder.forward(), except for addition of view embed
 
         # create patch embeddings and add position embeddings; remove CLS token
-        embedding_output = self.backbone.vision_encoder.embeddings(
-            images, bool_masked_pos=None, interpolate_pos_encoding=True,
-        )[:, 1:]
+        try:
+            embedding_output = self.backbone.vision_encoder.embeddings(
+                images, bool_masked_pos=None, interpolate_pos_encoding=True,
+            )[:, 1:]
+        except TypeError:
+            # DINOv3 doesn't have `interpolate_pos_encoding` arg, does this by default
+            embedding_output = self.backbone.vision_encoder.embeddings(
+                images, bool_masked_pos=None,
+            )[:, 1:]
         # shape: (view * batch, num_patches, embedding_dim)
 
         # get dims for reshaping
