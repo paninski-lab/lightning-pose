@@ -69,7 +69,7 @@ class TestPatchMasking:
             "init_step": 100,
             "final_step": 500,
             "init_ratio": 0.1,
-            "final_ratio": 0.0  # Disabled
+            "final_ratio": 0.0,  # Disabled
         }
 
         patch_masking_disabled = PatchMasking(
@@ -89,29 +89,29 @@ class TestPatchMasking:
 
         # before masking starts
         schedule_info = patch_masking_enabled.curriculum_masking.get_training_schedule_info(50)
-        assert schedule_info['mask_ratio'] == 0.0
-        assert schedule_info['curriculum_progress'] == "0.0%"
+        assert schedule_info["mask_ratio"] == 0.0
+        assert schedule_info["curriculum_progress"] == "0.0%"
 
         # at masking start
         schedule_info = patch_masking_enabled.curriculum_masking.get_training_schedule_info(100)
-        assert schedule_info['mask_ratio'] == 0.1
-        assert schedule_info['curriculum_progress'] == "0.0%"
+        assert schedule_info["mask_ratio"] == 0.1
+        assert schedule_info["curriculum_progress"] == "0.0%"
 
         # mid-way through curriculum
         schedule_info = patch_masking_enabled.curriculum_masking.get_training_schedule_info(300)
         expected_ratio = 0.1 + (300 - 100) / (500 - 100) * (0.5 - 0.1)  # 0.3
-        assert abs(schedule_info['mask_ratio'] - expected_ratio) < 1e-6
-        assert schedule_info['curriculum_progress'] == "50.0%"
+        assert abs(schedule_info["mask_ratio"] - expected_ratio) < 1e-6
+        assert schedule_info["curriculum_progress"] == "50.0%"
 
         # at final step
         schedule_info = patch_masking_enabled.curriculum_masking.get_training_schedule_info(500)
-        assert schedule_info['mask_ratio'] == 0.5
-        assert schedule_info['curriculum_progress'] == "100.0%"
+        assert schedule_info["mask_ratio"] == 0.5
+        assert schedule_info["curriculum_progress"] == "100.0%"
 
         # after final step
         schedule_info = patch_masking_enabled.curriculum_masking.get_training_schedule_info(700)
-        assert schedule_info['mask_ratio'] == 0.5
-        assert schedule_info['curriculum_progress'] == "100.0%"
+        assert schedule_info["mask_ratio"] == 0.5
+        assert schedule_info["curriculum_progress"] == "100.0%"
 
     def test_should_start_patch_masking(self, patch_masking_enabled):
         assert not patch_masking_enabled.curriculum_masking.should_start_patch_masking(99)
@@ -125,10 +125,10 @@ class TestPatchMasking:
     def test_schedule_disabled(self, patch_masking_disabled):
         """Test that schedule info returns default values when disabled"""
         schedule_info = patch_masking_disabled.curriculum_masking.get_training_schedule_info(300)
-        assert schedule_info['mask_ratio'] == 0.0
-        assert schedule_info['curriculum_progress'] == "0.0%"
-        assert schedule_info['steps_to_max_masking'] == 0
-        assert schedule_info['steps_to_patch_masking'] == 0
+        assert schedule_info["mask_ratio"] == 0.0
+        assert schedule_info["curriculum_progress"] == "0.0%"
+        assert schedule_info["steps_to_max_masking"] == 0
+        assert schedule_info["steps_to_patch_masking"] == 0
 
 
 class TestPatchMasker:
@@ -201,7 +201,9 @@ class TestPatchMasker:
         images = torch.randn(batch_size, num_views, 3, 224, 224)
 
         masked_images, patch_mask = basic_masker.apply_patch_masking(
-            images, training_step=500, is_training=False,
+            images,
+            training_step=500,
+            is_training=False,
         )
 
         assert torch.equal(masked_images, images)
@@ -213,7 +215,9 @@ class TestPatchMasker:
         images = torch.randn(batch_size, num_views, 3, 224, 224)
 
         masked_images, patch_mask = basic_masker.apply_patch_masking(
-            images, training_step=50, is_training=True,
+            images,
+            training_step=50,
+            is_training=True,
         )
 
         assert torch.equal(masked_images, images)
@@ -237,7 +241,9 @@ class TestPatchMasker:
         images = torch.randn(batch_size, num_views, 3, 224, 224)
 
         masked_images, patch_mask = basic_masker.apply_patch_masking(
-            images, training_step=1000, is_training=True,
+            images,
+            training_step=1000,
+            is_training=True,
         )
 
         num_patches = (224 // 16) * (224 // 16)
@@ -254,10 +260,14 @@ class TestPatchMasker:
         images = torch.randn(batch_size, num_views, 3, 224, 224)
 
         masked_images_1, patch_mask_1 = basic_masker.apply_patch_masking(
-            images.clone(), training_step=500, is_training=True,
+            images.clone(),
+            training_step=500,
+            is_training=True,
         )
         masked_images_2, patch_mask_2 = basic_masker.apply_patch_masking(
-            images.clone(), training_step=500, is_training=True,
+            images.clone(),
+            training_step=500,
+            is_training=True,
         )
 
         assert torch.equal(masked_images_1, masked_images_2)
@@ -336,7 +346,9 @@ class TestPatchMasker:
         images = torch.ones(batch_size, num_views, 3, 224, 224)
 
         masked_images, patch_mask = basic_masker.apply_patch_masking(
-            images, training_step=500, is_training=True,
+            images,
+            training_step=500,
+            is_training=True,
         )
 
         patch_size = 16
@@ -349,7 +361,7 @@ class TestPatchMasker:
                     patch_h = (patch_idx // num_patches_w) * patch_size
                     patch_w = (patch_idx % num_patches_w) * patch_size
                     patch_region = masked_images[
-                        b, v, :, patch_h:patch_h + patch_size, patch_w:patch_w + patch_size
+                        b, v, :, patch_h : patch_h + patch_size, patch_w : patch_w + patch_size
                     ]
                     assert torch.all(patch_region == 0)
 
@@ -422,11 +434,13 @@ class TestJSONInferenceProgressTracker(BaseTestProgressTracker):
         assert data["total"] == 1
         assert "timestamp" in data
 
-    def test_on_predict_start_sets_total_steps(self, mock_trainer, mock_module, progress_filepath):
+    def test_on_predict_start_sets_total_steps(
+        self, mock_trainer_infer, mock_module, progress_filepath
+    ):
         """Test that on_predict_start correctly calculates and saves total steps."""
         tracker = JSONInferenceProgressTracker(filepath=progress_filepath)
 
-        tracker.on_predict_start(mock_trainer, mock_module)
+        tracker.on_predict_start(mock_trainer_infer, mock_module)
 
         # Check internal state
         assert tracker.total_steps == 10
@@ -438,17 +452,17 @@ class TestJSONInferenceProgressTracker(BaseTestProgressTracker):
         assert data["total"] == 10  # Total steps should now be 10
 
     def test_on_predict_batch_end_updates_progress(
-        self, mock_trainer, mock_module, progress_filepath
+        self, mock_trainer_infer, mock_module, progress_filepath
     ):
         """Test progress updates after processing a few batches."""
         tracker = JSONInferenceProgressTracker(filepath=progress_filepath)
 
         # Simulate start
-        tracker.on_predict_start(mock_trainer, mock_module)
+        tracker.on_predict_start(mock_trainer_infer, mock_module)
 
         # Simulate 3 batch ends
         for i in range(1, 4):
-            tracker.on_predict_batch_end(mock_trainer, mock_module, None, None, i - 1)
+            tracker.on_predict_batch_end(mock_trainer_infer, mock_module, None, None, i - 1)
 
             # Check internal step count
             assert tracker.current_step == i
@@ -459,19 +473,21 @@ class TestJSONInferenceProgressTracker(BaseTestProgressTracker):
             assert data["total"] == 10
             assert "timestamp" in data
 
-    def test_on_predict_end_finalizes_progress(self, mock_trainer, mock_module, progress_filepath):
+    def test_on_predict_end_finalizes_progress(
+        self, mock_trainer_infer, mock_module, progress_filepath
+    ):
         """Test that on_predict_end sets completed count equal to total steps."""
         tracker = JSONInferenceProgressTracker(filepath=progress_filepath)
 
         # Simulate start (total=10)
-        tracker.on_predict_start(mock_trainer, mock_module)
+        tracker.on_predict_start(mock_trainer_infer, mock_module)
 
         # Simulate full progress (10 batches)
         for i in range(10):
-            tracker.on_predict_batch_end(mock_trainer, mock_module, None, None, i)
+            tracker.on_predict_batch_end(mock_trainer_infer, mock_module, None, None, i)
 
         # Simulate end
-        tracker.on_predict_end(mock_trainer, mock_module)
+        tracker.on_predict_end(mock_trainer_infer, mock_module)
 
         # Check internal state (should be 10/10)
         assert tracker.current_step == 10
