@@ -1,7 +1,7 @@
 name: Lint
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize, reopened]
 
 # To cancel a currently running workflow from the same PR, branch or tag when a new workflow is triggered
