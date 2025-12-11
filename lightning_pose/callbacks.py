@@ -370,7 +370,7 @@ class PatchMasker:
                     self.patch_init_ratio
                     + progress * (self.patch_final_ratio - self.patch_init_ratio)
                 )
-                curriculum_progress = f"{progress*100:.1f}%"
+                curriculum_progress = f"{progress * 100:.1f}%"
                 steps_to_patch_masking = 0
                 steps_to_max_masking = max(0, self.patch_final_step - current_step)
         else:

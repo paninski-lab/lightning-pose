@@ -58,7 +58,7 @@ def ckpt_path_from_base_path(
 
     """
     import glob
-    
+
     model_search_path = os.path.join(
         base_path,
         logging_dir_name,
@@ -84,7 +84,7 @@ def ckpt_path_from_base_path(
             ckpt_files_by_version[version].append(f)
 
     if not ckpt_files_by_version:
-         # Should not happen if all_checkpoint_files is not empty and pattern matches
+        # Should not happen if all_checkpoint_files is not empty and pattern matches
         return None
 
     # Get the latest version's checkpoint files
@@ -136,7 +136,8 @@ def ckpt_path_from_base_path(
                     "None are marked as 'best' and cannot parse step counts to determine latest. "
                     "Please manually select the appropriate checkpoint."
                 )
-            
+
+
 @typechecked
 def check_if_semi_supervised(losses_to_use: ListConfig | list | None = None) -> bool:
     """Use config file to determine if model is semi-supervised.

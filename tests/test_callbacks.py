@@ -366,7 +366,7 @@ class TestPatchMasker:
                     assert torch.all(patch_region == 0)
 
 
-## Fixtures just for JSON*ProgressTracker
+# Fixtures just for JSON*ProgressTracker
 
 
 @pytest.fixture
