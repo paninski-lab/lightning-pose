@@ -220,11 +220,11 @@ class LitDaliWrapper(DALIGenericIterator):
             # final shape: ("seq_len", "num_views * xyhw")
             bbox = torch.cat([
                 torch.tensor([
-                        0,
-                        0,
-                        batch[0][key][0, 1],
-                        batch[0][key][0, 2],
-                    ],
+                    0,
+                    0,
+                    batch[0][key][0, 1],
+                    batch[0][key][0, 2],
+                ],
                     device=frames.device
                 ) for key in batch[0].keys() if "frame_size" in key
             ], dim=0).repeat(frames.shape[0], 1)

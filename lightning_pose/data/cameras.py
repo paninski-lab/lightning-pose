@@ -43,8 +43,8 @@ def project_camera_pairs_to_3d(
         # create a mask for valid keypoints
         # a keypoint is valid if it's not NaN in BOTH views
         valid_mask = ~(
-                torch.isnan(points1).any(dim=-1) |
-                torch.isnan(points2).any(dim=-1)
+            torch.isnan(points1).any(dim=-1)
+            | torch.isnan(points2).any(dim=-1)
         )
 
         # prepare points for triangulation

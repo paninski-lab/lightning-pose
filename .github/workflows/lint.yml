@@ -1,0 +1,46 @@
+name: Lint
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# To cancel a currently running workflow from the same PR, branch or tag when a new workflow is triggered
+# https://stackoverflow.com/a/72408109
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install linters
+        run: pip install autopep8 flake8
+
+      - name: Check formatting with autopep8
+        run: autopep8 --diff --recursive --exit-code lightning_pose tests
+        # Reads config from [tool.autopep8] in pyproject.toml
+
+      - name: Lint with flake8 (critical errors only)
+        run: flake8 lightning_pose tests --select=E9,F63,F7,F82
+        # Reads config from .flake8 file
+
+      - name: Show fix instructions if formatting needed
+        if: failure()
+        run: |
+          echo ""
+          echo "Linting failed!"
+          echo ""
+          echo "To fix formatting issues locally, run:"
+          echo "  autopep8 --in-place --recursive lightning_pose tests"
+          echo ""
+          echo "To check for flake8 errors locally, run:"
+          echo "  flake8 lightning_pose tests --select=E9,F63,F7,F82"
+          echo ""

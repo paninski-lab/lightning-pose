@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any, Dict, Tuple
 
 import lightning.pytorch as pl
-import pytest
 import torch
 from lightning import Trainer, LightningModule
 from lightning.pytorch.callbacks import Callback
@@ -370,7 +369,7 @@ class PatchMasker:
                     self.patch_init_ratio
                     + progress * (self.patch_final_ratio - self.patch_init_ratio)
                 )
-                curriculum_progress = f"{progress*100:.1f}%"
+                curriculum_progress = f"{progress * 100:.1f}%"
                 steps_to_patch_masking = 0
                 steps_to_max_masking = max(0, self.patch_final_step - current_step)
         else:
@@ -552,5 +551,6 @@ class JSONTrainingProgressTracker(Callback):
         self._save_progress(self.current, self.total)
 
         print(
-            f"\n[JSONTrainingProgressTracker] Training finished. Final status saved to {self.filepath}"
+            f"\n[JSONTrainingProgressTracker] Training finished. "
+            f"Final status saved to {self.filepath}"
         )

@@ -312,8 +312,8 @@ def run():
                 confidence_df = dframes_metrics[model_name]['confidence']
                 pixel_error_df = df_metrics['pixel error']
                 pixel_error_df_model = pixel_error_df[
-                    (pixel_error_df.model_name == model_name) &
-                    (pixel_error_df.set == data_type)
+                    (pixel_error_df.model_name == model_name)
+                    & (pixel_error_df.set == data_type)
                 ]
 
                 if keypoint_to_plot != "mean":

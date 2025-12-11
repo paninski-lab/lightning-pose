@@ -48,7 +48,8 @@ def test_ckpt_path_from_base_path_one_best_checkpoint(tmp_path: Path):
 
     # Create older version checkpoints
     (base_path / logging_dir_name / model_name / "version_0" / "checkpoints").mkdir(parents=True)
-    (base_path / logging_dir_name / model_name / "version_0" / "checkpoints" / "epoch=10-step=100.ckpt").touch()
+    (base_path / logging_dir_name / model_name / "version_0"
+     / "checkpoints" / "epoch=10-step=100.ckpt").touch()
 
     # Create latest version checkpoints with one best
     latest_version_path = base_path / logging_dir_name / model_name / "version_1" / "checkpoints"
@@ -82,7 +83,8 @@ def test_ckpt_path_from_base_path_multiple_best_checkpoints(tmp_path: Path):
 
 def test_ckpt_path_from_base_path_highest_step_count(tmp_path: Path):
     """
-    Test Case 4: No "best" checkpoint, but multiple checkpoints, pick the one with highest step count in latest version.
+    Test Case 4: No "best" checkpoint, but multiple checkpoints, pick the one with highest step
+    count in latest version.
     Expects the path to the checkpoint with the highest step.
     """
     base_path = tmp_path / "project"
@@ -91,7 +93,8 @@ def test_ckpt_path_from_base_path_highest_step_count(tmp_path: Path):
 
     # Create older version checkpoints
     (base_path / logging_dir_name / model_name / "version_0" / "checkpoints").mkdir(parents=True)
-    (base_path / logging_dir_name / model_name / "version_0" / "checkpoints" / "epoch=10-step=100.ckpt").touch()
+    (base_path / logging_dir_name / model_name / "version_0"
+     / "checkpoints" / "epoch=10-step=100.ckpt").touch()
 
     # Create latest version checkpoints without a best, but with varying steps
     latest_version_path = base_path / logging_dir_name / model_name / "version_1" / "checkpoints"
@@ -118,7 +121,8 @@ def test_ckpt_path_from_base_path_single_checkpoint_no_best(tmp_path: Path):
 
     # Create older version checkpoints
     (base_path / logging_dir_name / model_name / "version_0" / "checkpoints").mkdir(parents=True)
-    (base_path / logging_dir_name / model_name / "version_0" / "checkpoints" / "epoch=10-step=100.ckpt").touch()
+    (base_path / logging_dir_name / model_name / "version_0"
+     / "checkpoints" / "epoch=10-step=100.ckpt").touch()
 
     # Create latest version with only one checkpoint, no best
     latest_version_path = base_path / logging_dir_name / model_name / "version_1" / "checkpoints"
@@ -168,7 +172,6 @@ def test_ckpt_path_from_base_path_custom_logging_dir_name(tmp_path: Path):
 
     result = ckpt_path_from_base_path(str(base_path), model_name, logging_dir_name)
     assert result == str(expected_ckpt)
-
 
 
 def test_check_if_semisupervised():

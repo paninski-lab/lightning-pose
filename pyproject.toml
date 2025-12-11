@@ -74,7 +74,7 @@ litpose = "lightning_pose.cli.main:main"
 
 [project.optional-dependencies]
 dev = [
-    "black",
+    "autopep8",
     "flake8",
     "isort",
     "pytest",
@@ -112,6 +112,10 @@ src_paths = ["lightning_pose", "tests"]
 
 [tool.black]
 line-length = 99
+
+[tool.autopep8]
+line-length = 99
+ignore = ["E203", "W503", "F821"]
 
 [tool.pytest.ini_options]
 testpaths = "tests"
