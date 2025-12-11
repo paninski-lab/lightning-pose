@@ -1,7 +1,13 @@
+import json
+import os
+import time
+from pathlib import Path
 from typing import Any, Dict, Tuple
 
 import lightning.pytorch as pl
+import pytest
 import torch
+from lightning import Trainer, LightningModule
 from lightning.pytorch.callbacks import Callback
 
 # to ignore imports for sphix-autoapidoc
@@ -58,6 +64,8 @@ class UnfreezeBackbone(Callback):
     Use instead of pl.callbacks.BackboneFinetuning in order to use multi-GPU (DDP). See
     lightning-ai/pytorch-lightning#20340 for context.
     """
+
+    _initial_lr: int
 
     def __init__(
         self,
@@ -385,3 +393,164 @@ class PatchMasker:
     ) -> bool:
         """Check if patch masking should start at current step."""
         return self.use_patch_masking and current_step == self.patch_init_step
+
+
+class JSONInferenceProgressTracker(Callback):
+    """
+    A PyTorch Lightning callback that tracks prediction progress and saves it
+    to a specified JSON file.
+    """
+
+    def __init__(self, filepath: Path):
+        super().__init__()
+        self.filepath = filepath
+        self.current_step = 0
+        self.total_steps = 0
+
+        # Ensure the file exists (or is cleared) and the directory is available
+        os.makedirs(os.path.dirname(self.filepath) or ".", exist_ok=True)
+        self._save_progress(0, 1)
+
+    def _save_progress(self, current: int, total: int):
+        """Helper function to write the progress dictionary to the JSON file."""
+        progress_data = {
+            "completed": current,
+            "total": total,
+            "timestamp": time.time(),
+        }
+
+        # Use a temporary file and rename to ensure atomic write,
+        # preventing external readers from getting a half-written file.
+        temp_filepath = f"{self.filepath}.tmp"
+        try:
+            with open(temp_filepath, "w") as f:
+                json.dump(progress_data, f, indent=4)
+            os.replace(temp_filepath, self.filepath)
+        except Exception as e:
+            # Handle potential file I/O errors gracefully
+            print(f"\n[Error saving progress to JSON]: {e}")
+            if os.path.exists(temp_filepath):
+                os.remove(temp_filepath)
+
+    def on_predict_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        """Called when prediction starts."""
+
+        # Calculate the total number of batches to predict
+        self.total_steps = trainer.num_predict_batches[0]  # Assumes one dataloader
+        self.current_step = 0
+
+        # Save initial state
+        self._save_progress(self.current_step, self.total_steps)
+
+    def on_predict_batch_end(
+        self,
+        trainer: Trainer,
+        pl_module: LightningModule,
+        outputs,
+        batch,
+        batch_idx: int,
+        dataloader_idx: int = 0,
+    ) -> None:
+        """Called when a prediction batch ends."""
+        self.current_step += 1
+
+        # Save updated progress
+        self._save_progress(self.current_step, self.total_steps)
+
+    def on_predict_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        """Called when prediction finishes."""
+        # Save final state
+        self._save_progress(self.total_steps, self.total_steps)
+
+
+class JSONTrainingProgressTracker(Callback):
+    """
+    Tracks training progress (epochs or epochs) and saves it to a JSON file.
+    """
+
+    steps_mode: bool
+
+    def __init__(self, filepath: Path):
+        super().__init__()
+        self.filepath = filepath
+        self.current = 0
+        self.total = 0
+
+        os.makedirs(os.path.dirname(self.filepath) or ".", exist_ok=True)
+        # Initialize with a base state (0 completed out of 1 total placeholder)
+        self._save_progress(0, 1)
+
+    def _save_progress(self, completed: int, total: int):
+        """Helper function to write the progress dictionary to the JSON file.
+
+        Training is different from inference because the existing file has pid and status
+        information that we should not entirely overwrite.
+        """
+        progress_data = {
+            "status": "TRAINING" if completed < total else "EVALUATING",
+            "progress": {
+                "completed": completed,
+                "total": total,
+                "timestamp": time.time(),
+            },
+        }
+
+        existing_file_contents = (
+            json.load(open(self.filepath)) if os.path.exists(self.filepath) else {}
+        )
+        new_file_contents = {**existing_file_contents, **progress_data}
+
+        # Use a temporary file and rename to ensure atomic write,
+        # preventing external readers from getting a half-written file.
+        temp_filepath = f"{self.filepath}.tmp"
+        try:
+            with open(temp_filepath, "w") as f:
+                json.dump(new_file_contents, f, indent=4)
+            os.replace(temp_filepath, self.filepath)
+        except Exception as e:
+            # Handle potential file I/O errors gracefully
+            print(f"\n[Error saving progress to JSON]: {e}")
+            if os.path.exists(temp_filepath):
+                os.remove(temp_filepath)
+
+    def on_train_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        """Called when training starts."""
+
+        # Determine tracking mode based on Trainer configuration
+        max_epochs = trainer.max_epochs if trainer.max_epochs is not None else 0
+        max_steps = trainer.max_steps if trainer.max_steps is not None else 0
+
+        # Default to epoch tracking unless max_epochs is 0 or -1 (unlimited)
+        self.total, self.steps_mode = max_epochs, False
+        if not self.total or max_epochs == -1:
+            self.total, self.steps_mode = max_steps, True
+
+        self.current = 0
+
+        # Save initial state
+        self._save_progress(self.current, self.total)
+
+    def on_train_batch_end(
+        self, trainer: Trainer, pl_module: LightningModule, outputs, batch, batch_idx: int
+    ) -> None:
+        """Called when a training batch ends, used for step mode."""
+        if self.steps_mode and self.total > 0:
+            # trainer.global_step is 0-indexed
+            self.current = trainer.global_step + 1
+            self._save_progress(self.current, self.total)
+
+    def on_train_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        """Called after an epoch finishes, used for epoch mode."""
+        if not self.steps_mode and self.total > 0:
+            # trainer.current_epoch is 0-indexed, so we add 1 for "completed" count
+            self.current = trainer.current_epoch + 1
+            self._save_progress(self.current, self.total)
+
+    def on_train_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        """Called when training finishes."""
+        self.current = self.total  # Ensure completed == total
+        self._save_progress(self.current, self.total)
+
+        print(
+            f"\n[JSONTrainingProgressTracker] Training finished. Final status saved to {self.filepath}"
+        )

@@ -282,6 +282,7 @@ class Model:
         output_dir: str | Path | None = UNSPECIFIED,
         compute_metrics: bool = True,
         generate_labeled_video: bool = False,
+        progress_file: Path | None = None,
     ) -> PredictionResult:
         """Predicts on a video file and computes unsupervised loss metrics if applicable.
 
@@ -294,6 +295,8 @@ class Model:
                 predictions.
             generate_labeled_video (bool, optional): Whether to save a labeled video.
                 Defaults to False.
+            progress_file (Path, optional): Path to a file to save progress information for the App.
+                Defaults to None.
 
         Returns:
             PredictionResult: A PredictionResult object containing the predictions and metrics.
@@ -317,11 +320,10 @@ class Model:
             video_file=str(video_file),
             model=self,
             output_pred_file=str(prediction_csv_file),
+            progress_file=progress_file,
         )
         if generate_labeled_video:
-            labeled_mp4_file = str(
-                self.labeled_videos_dir() / f"{video_file.stem}_labeled.mp4"
-            )
+            labeled_mp4_file = str(self.labeled_videos_dir() / f"{video_file.stem}_labeled.mp4")
             generate_labeled_video_fn(
                 video_file=str(video_file),
                 preds_df=df,
@@ -350,6 +352,7 @@ class Model:
         output_dir: str | Path | None = UNSPECIFIED,
         compute_metrics: bool = True,
         generate_labeled_video: bool = False,
+        progress_file: Path | None = None,
     ) -> MultiviewPredictionResult:
         """Version of `predict_on_video_file` that accesses to multiple camera views of each frame.
 
@@ -366,6 +369,7 @@ class Model:
                 predictions.
             generate_labeled_video (bool, optional): Whether to save a labeled video.
                 Defaults to False.
+            progress_file (Path, optional): Path to a file to save progress information for the App.
 
         Returns:
             MultiviewPredictionResult: object containing the predictions and metrics for each view.
@@ -407,6 +411,7 @@ class Model:
             video_file=list(map(str, video_file_per_view)),
             model=self,
             output_pred_file=prediction_csv_file_list,
+            progress_file=progress_file,
         )
         if generate_labeled_video:
             for video_file, preds_df in zip(video_file_per_view, df_list):
