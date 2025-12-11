@@ -4,7 +4,6 @@ import shutil
 from pathlib import Path
 from typing import Union
 
-import pytest
 from omegaconf import OmegaConf
 
 from lightning_pose.utils.cropzoom import (

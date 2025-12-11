@@ -83,7 +83,8 @@ def test_ckpt_path_from_base_path_multiple_best_checkpoints(tmp_path: Path):
 
 def test_ckpt_path_from_base_path_highest_step_count(tmp_path: Path):
     """
-    Test Case 4: No "best" checkpoint, but multiple checkpoints, pick the one with highest step count in latest version.
+    Test Case 4: No "best" checkpoint, but multiple checkpoints, pick the one with highest step
+    count in latest version.
     Expects the path to the checkpoint with the highest step.
     """
     base_path = tmp_path / "project"

@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any, Dict, Tuple
 
 import lightning.pytorch as pl
-import pytest
 import torch
 from lightning import Trainer, LightningModule
 from lightning.pytorch.callbacks import Callback
@@ -552,5 +551,6 @@ class JSONTrainingProgressTracker(Callback):
         self._save_progress(self.current, self.total)
 
         print(
-            f"\n[JSONTrainingProgressTracker] Training finished. Final status saved to {self.filepath}"
+            f"\n[JSONTrainingProgressTracker] Training finished. "
+            f"Final status saved to {self.filepath}"
         )
