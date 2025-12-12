@@ -22,6 +22,7 @@ def test_base_datamodule(cfg, base_data_module):
     assert batch["images"].shape == (train_size, 3, im_height, im_width)
     assert batch["keypoints"].shape == (train_size, num_targets)
     # check imgaug pipeline makes no-repeatable data
+    np.random.seed(0)
     b1 = base_data_module.train_dataset[0]
     b2 = base_data_module.train_dataset[0]
     assert not np.allclose(b1["images"], b2["images"])
