@@ -618,17 +618,18 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             orig_pts = kps_og[valid_mask]
             new_pts = kps_aug[valid_mask]
 
+            # ensure we have enough points for transformation
+            if len(orig_pts) < 3:
+                raise RuntimeError(
+                    "Fewer than 3 valid keypoints in 3d data augmentation; "
+                    "this error should have been caught earlier!"
+                )
+
             # transform data points from original coordinate space to frame coordinate
             orig_pts[:, 0] = (orig_pts[:, 0] - bbox[0]) / bbox[3] * img_width
             new_pts[:, 0] = (new_pts[:, 0] - bbox[0]) / bbox[3] * img_width
             orig_pts[:, 1] = (orig_pts[:, 1] - bbox[1]) / bbox[2] * img_height
             new_pts[:, 1] = (new_pts[:, 1] - bbox[1]) / bbox[2] * img_height
-
-            # ensure we have enough points for transformation
-            if len(orig_pts) < 3:
-                # If not enough points, return original image
-                images_transformed.append(orig_img.clone().unsqueeze(0))
-                continue
 
             # estimate the affine transformation matrix with non-uniform scaling
             M, _ = cv2.estimateAffinePartial2D(orig_pts, new_pts)
@@ -697,7 +698,26 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             ))
         return images_resized
 
-    def apply_3d_transforms(self, data_dict: dict, camgroup: CameraGroup) -> tuple:
+    @staticmethod
+    def _sufficient_keypoints_for_augmentation(keypoints: np.ndarray) -> bool:
+        """Check if there are >=3 non-NaN keypoints in all views, required for augmentation."""
+        for keypoints_curr in keypoints:
+            # create a mask for valid keypoints
+            valid_mask = ~np.isnan(keypoints_curr).any(axis=1)
+            # apply the same mask to both original and augmented keypoints
+            keypoints_masked = keypoints_curr[valid_mask]
+            # ensure we have enough points for transformation
+            if len(keypoints_masked) < 3:
+                return False
+        return True
+
+    def apply_3d_transforms(
+        self,
+        data_dict: dict,
+        camgroup: CameraGroup,
+        scale_params: tuple = (0.8, 1.2),
+        shift_param: float = 0.25,
+    ) -> tuple:
         """Apply 3D transforms to keypoint and image data (scale, translate)."""
 
         # extract keypoints and images from each view
@@ -724,11 +744,35 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             # triangulate keypoints (2D -> 3D)
             keypoints_3d = camgroup.triangulate_fast(keypoints_2d.copy())
 
-            # scale and translate keypoints in 3D
-            keypoints_3d_aug = self._scale_translate_keypoints(keypoints_3d)
+            # if fewer than 3 valid keypoints in at least one view, cannot perform augmentation
+            if not self._sufficient_keypoints_for_augmentation(keypoints_2d):
 
-            # project 3D keypoints to 2D using the rotated cameras
-            keypoints_2d_aug = camgroup.project(keypoints_3d_aug)
+                # keep 3d keypoints the same
+                keypoints_3d_aug = keypoints_3d.copy()
+
+                # keep 2d keypoints the same
+                keypoints_2d_aug = keypoints_2d.copy()
+
+                # keep images the same
+                images_aug = [im.unsqueeze(0) for im in images]
+
+            else:
+
+                # scale and translate keypoints in 3D
+                keypoints_3d_aug = self._scale_translate_keypoints(
+                    keypoints_3d, scale_params=scale_params, shift_param=shift_param,
+                )
+
+                # project 3D keypoints to 2D using the rotated cameras
+                keypoints_2d_aug = camgroup.project(keypoints_3d_aug)
+
+                # transform images to match keypoint augmentations
+                images_aug = self._transform_images(
+                    images=images,
+                    keypoints_orig=keypoints_2d.copy(),
+                    keypoints_aug=keypoints_2d_aug.copy(),
+                    bboxes=[b.cpu().numpy() for b in bboxes],
+                )
 
             # resize 2D keypoints to uniform dimensions for backbone network
             keypoints_2d_aug_resize_np = self._resize_keypoints(keypoints_2d_aug, bboxes)
@@ -740,14 +784,6 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 )
                 for a in keypoints_2d_aug_resize_np
             ]
-
-            # transform images to match keypoint augmentations
-            images_aug = self._transform_images(
-                images=images,
-                keypoints_orig=keypoints_2d.copy(),
-                keypoints_aug=keypoints_2d_aug.copy(),
-                bboxes=[b.cpu().numpy() for b in bboxes],
-            )
 
         # resize to uniform dimensions for backbone network
         images_aug_resize = self._resize_images(images_aug)

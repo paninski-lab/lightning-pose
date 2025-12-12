@@ -7,7 +7,7 @@ import gc
 import os
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Tuple, Type, Literal
+from typing import TYPE_CHECKING, Literal, Tuple, Type
 
 import cv2
 import lightning.pytorch as pl

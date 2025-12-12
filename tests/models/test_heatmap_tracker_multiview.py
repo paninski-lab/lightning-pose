@@ -5,6 +5,7 @@ import copy
 import numpy as np
 import torch
 
+from lightning_pose.data.datasets import MultiviewHeatmapDataset
 from lightning_pose.data.datatypes import MultiviewHeatmapLabeledExampleDict
 
 
@@ -76,14 +77,14 @@ def test_semisupervised_multiview_transformer_temporal(
     )
 
 
-class MockCameraDatasetWrapper:
+class MockCameraDatasetWrapper(MultiviewHeatmapDataset):
     """Wrapper that adds mock camera calibration data to an existing dataset."""
 
     def __init__(self, original_dataset, num_views=2, image_height=256, image_width=256):
         self.original_dataset = original_dataset
-        self.num_views = num_views
-        self.image_height = image_height
-        self.image_width = image_width
+        self.view_names = [f"view{i}" for i in range(num_views)]
+        self.image_resize_height = image_height
+        self.image_resize_width = image_width
 
     def __len__(self):
         return len(self.original_dataset)
@@ -106,8 +107,8 @@ class MockCameraDatasetWrapper:
         for view_idx in range(self.num_views):
             # Realistic focal lengths and principal points
             fx = fy = 800.0 + torch.randn(1) * 50  # ~800 ± 50 pixels
-            cx = self.image_width / 2 + torch.randn(1) * 10  # near image center
-            cy = self.image_height / 2 + torch.randn(1) * 10
+            cx = self.image_resize_width / 2 + torch.randn(1) * 10  # near image center
+            cy = self.image_resize_height / 2 + torch.randn(1) * 10
 
             intrinsic_matrix[view_idx] = torch.tensor([
                 [fx, 0, cx],
@@ -166,14 +167,14 @@ class MockCameraDatasetWrapper:
         return MockCameraDatasetWrapper(
             copy.copy(self.original_dataset),
             self.num_views,
-            self.image_height,
-            self.image_width,
+            self.image_resize_height,
+            self.image_resize_width,
         )
 
     def __deepcopy__(self, memo):
         return MockCameraDatasetWrapper(
             copy.deepcopy(self.original_dataset, memo),
             self.num_views,
-            self.image_height,
-            self.image_width,
+            self.image_resize_height,
+            self.image_resize_width,
         )

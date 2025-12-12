@@ -16,10 +16,9 @@ if TYPE_CHECKING:
 
 def register_parser(subparsers):
     """Register the crop command parser."""
-    from textwrap import dedent
-
     # Choose documentation link depending on whether we're being imported by Sphinx
     import sys
+    from textwrap import dedent
 
     is_building_docs = "sphinx" in sys.modules
     _doc_link = (
