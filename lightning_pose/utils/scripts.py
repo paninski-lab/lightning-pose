@@ -17,9 +17,9 @@ from typeguard import typechecked
 
 from lightning_pose.callbacks import (
     AnnealWeight,
+    JSONTrainingProgressTracker,
     PatchMasking,
     UnfreezeBackbone,
-    JSONTrainingProgressTracker,
 )
 from lightning_pose.data.augmentations import (
     expand_imgaug_str_to_dict,

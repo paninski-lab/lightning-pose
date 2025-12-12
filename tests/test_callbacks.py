@@ -3,14 +3,14 @@ from pathlib import Path
 
 import pytest
 import torch
-from lightning import Trainer, LightningModule
+from lightning import LightningModule, Trainer
 
 from lightning_pose.callbacks import (
+    JSONInferenceProgressTracker,
+    JSONTrainingProgressTracker,
     PatchMasker,
     PatchMasking,
     UnfreezeBackbone,
-    JSONInferenceProgressTracker,
-    JSONTrainingProgressTracker,
 )
 
 

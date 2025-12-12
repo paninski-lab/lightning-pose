@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 
 from .. import types
 
-
 if TYPE_CHECKING:
     from lightning_pose.api.model import Model
 
@@ -175,8 +174,8 @@ def _predict_multi_type_multi_view(
 ):
     # delay this import because it's slow
     from lightning_pose.utils.io import (
-        split_video_files_by_view,
         extract_session_name_from_video,
+        split_video_files_by_view,
     )
 
     # if we pass in all videos, collect them into session batches and process

@@ -12,13 +12,13 @@ from lightning_pose.utils import io as io_utils
 from lightning_pose.utils.io import (
     check_if_semi_supervised,
     check_video_paths,
+    ckpt_path_from_base_path,
     collect_video_files_by_view,
     extract_session_name_from_video,
     find_video_files_for_views,
     get_context_img_paths,
     get_videos_in_dir,
     split_video_files_by_view,
-    ckpt_path_from_base_path,
 )
 
 
