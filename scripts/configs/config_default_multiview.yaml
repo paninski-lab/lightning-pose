@@ -3,26 +3,56 @@ data:
   image_resize_dims:
     height: null
     width: null
-  # ABSOLUTE path to data directory
+
+  # The root location for all project data files (absolute path)
   data_dir: /replace/with/your/path
-  # ABSOLUTE path to unlabeled videos' directory
-  video_dir: /replace/with/your/path
-  # location of labels; this should be relative to `data_dir` or an absolute path.
-  # replace {camn} with your camera names, add more rows as necessary
-  csv_file:
-    - CollectedData_{cam0}.csv
-    - CollectedData_{cam1}.csv
-  # location of bboxes; this should be relative to `data_dir` or an absolute path.
-  # replace {camn} with your camera names, add more rows as necessary
-  # if no bounding boxes, delete all list entries and "bbox_file" entry
-  bbox_file:
-    - bboxes_{cam0}.csv
-    - bboxes_{cam1}.csv
+
+  # optional override for the list of sessions used in unsupervised training.
+  #
+  # relative path to a TXT file where each line is the SessionKey.
+  # example: if the file contains "Session1\nSession2", then it will use only
+  # these video files for unsupervised training:
+  #   - videos/Session1_<ViewName>.mp4
+  #   - videos/Session2_<ViewName>.mp4
+  # if set to null, all available sessions are used.
+  unsup_sessions_list: null
+
+  # optional override for the label file key.
+  # If set to null, the default key "default" is used.
+  #
+  # The key resolves to label files like:
+  #   labeled-data/labels/<Key>_<ViewName>.csv
+  # (Example using the default key: labeled-data/labels/default_front.csv)
+  label_file_key: null
+
+  # whether to use bounding-box files to allow cropped datasets to use 3d image
+  # augmentation (imgaug_3d) and 3d losses (pairwise_projections).
+  use_bboxes: false
+
+  # optional override for LabelFile-BboxFile mapping when `use_bboxes` is true.
+  #
+  # relative path to a CSV file containing "LabelFileKey,BboxFileKey" pairs.
+  # if the CSV contains a row "default,v2", the bounding box file path changes
+  #   from the default of
+  #      labeled-data/bboxes/default_<ViewName>.csv
+  #   -> to
+  #      labeled-data/bboxes/v2_<ViewName>.csv
+  session_bbox_file: null
+
   view_names:
     - {cam0}
     - {cam1}
-  # location of csv file that points to camera parameter toml file
-  camera_params_file: null
+
+  # optional override for Session-CalibrationFile mapping.
+  #
+  # relative path to a CSV file containing "SessionKey,CalibrationFileKey" pairs.
+  # if the CSV contains a row "Session1,v2", the calibration file path changes
+  #   from the default of
+  #      calibrations/Session1_<ViewName>.toml
+  #   -> to
+  #      calibrations/v2_<ViewName>.toml
+  session_calibration_file: null
+
   # total number of keypoints
   num_keypoints: null
   # keypoint names; should be the same set of keypoints for each view
