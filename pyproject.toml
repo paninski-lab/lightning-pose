@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "lightning-pose"
-version = "2.0.2"
+version = "2.0.3"
 description = "Semi-supervised pose estimation using pytorch lightning"
 license = "MIT"
 readme = "README.md"
@@ -35,7 +35,6 @@ dependencies = [
     "h5py",
     "hydra-core",
     "imaug",
-    "kaleido",
     "kornia",
     "lightning (~=2.5.0)",
     "pytorch-lightning (~=2.5.0)",
@@ -45,11 +44,8 @@ dependencies = [
     "opencv-python-headless",
     "pandas (>=2.0.0)",
     "pillow",
-    "plotly",
     "safetensors",
     "scikit-learn (>=1.5.0)",
-    "seaborn",
-    "streamlit",
     "tensorboard (<3.0.0)",
     "torchtyping",
     "torch (<3.0.0)",
@@ -82,11 +78,11 @@ dev = [
     "pytest-mock",
     "Sphinx",
     "sphinx-argparse",
-    "sphinx_rtd_theme",
-    "sphinx-rtd-dark-mode",
     "sphinx-automodapi",
     "sphinx-copybutton",
     "sphinx-design",
+    "sphinx-rtd-dark-mode",
+    "sphinx_rtd_theme",
     "tbparse (<1.0.0)",
 ]
 extra-models = ["lightning-bolts"]

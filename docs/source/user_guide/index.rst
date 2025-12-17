@@ -14,4 +14,3 @@ The advanced user guides cover topics like unsupervised losses and multiple came
    config_file
    training
    inference
-   evaluation
