@@ -8,7 +8,7 @@ from omegaconf import DictConfig
 from torch import nn
 from torchtyping import TensorType
 
-from lightning_pose.data.cameras import get_valid_projection_masks, project_camera_pairs_to_3d
+from lightning_pose.data.cameras import project_camera_pairs_to_3d
 from lightning_pose.data.datatypes import (
     MultiviewHeatmapLabeledBatchDict,
     MultiviewUnlabeledBatchDict,
@@ -266,19 +266,14 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
                     dist=batch_dict["distortions"].float(),
                 )
                 keypoints_targ_3d = batch_dict["keypoints_3d"]
-                keypoints_mask_3d = get_valid_projection_masks(
-                    target_keypoints.reshape((-1, num_views, num_keypoints, 2))
-                )
 
             except Exception as e:
                 print(f"Error in 3D projection: {e}")
                 keypoints_pred_3d = None
                 keypoints_targ_3d = None
-                keypoints_mask_3d = None
         else:
             keypoints_pred_3d = None
             keypoints_targ_3d = None
-            keypoints_mask_3d = None
 
         return {
             "heatmaps_targ": batch_dict["heatmaps"],
@@ -288,7 +283,6 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             "confidences": confidence,
             "keypoints_targ_3d": keypoints_targ_3d,  # shape (2*batch, num_keypoints, 3)
             "keypoints_pred_3d": keypoints_pred_3d,  # shape (2*batch, cam_pairs, num_keypoints, 3)
-            "keypoints_mask_3d": keypoints_mask_3d,  # shape (2*batch, cam_pairs, num_keypoints)
         }
 
     def predict_step(

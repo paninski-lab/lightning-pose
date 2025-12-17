@@ -486,8 +486,7 @@ class TestPairwiseProjectionsLoss:
         num_cam_pairs = 3
         keypoints_targ_3d = torch.ones(size=(num_batch, num_keypoints, 3))
         keypoints_pred_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints, 3))
-        keypoints_mask_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints)).bool()
-        loss, logs = pp_loss(keypoints_targ_3d, keypoints_pred_3d, keypoints_mask_3d, stage=stage)
+        loss, logs = pp_loss(keypoints_targ_3d, keypoints_pred_3d, stage=stage)
         assert loss.shape == torch.Size([])
         assert loss == 0.0
         assert logs[0]["name"] == f"{stage}_pairwise_projections_loss"
@@ -501,31 +500,52 @@ class TestPairwiseProjectionsLoss:
         num_cam_pairs = 3
         keypoints_targ_3d = torch.zeros(size=(num_batch, num_keypoints, 3))
         keypoints_pred_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints, 3))
-        keypoints_mask_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints)).bool()
-        loss, _ = pp_loss(keypoints_targ_3d, keypoints_pred_3d, keypoints_mask_3d)
+        loss, _ = pp_loss(keypoints_targ_3d, keypoints_pred_3d)
         assert loss.isclose(torch.sqrt(torch.tensor(3)))
 
-    def test_mask(self, pp_loss):
-        num_batch = 2
-        num_keypoints = 4
-        num_cam_pairs = 3
-        keypoints_targ_3d = torch.zeros(size=(num_batch, num_keypoints, 3))
-        keypoints_pred_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints, 3))
-        keypoints_pred_3d[-1, ...] = 2
-        keypoints_mask_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints))
-        keypoints_mask_3d[-1, ...] = 0
-        loss, _ = pp_loss(keypoints_targ_3d, keypoints_pred_3d, keypoints_mask_3d.bool())
-        assert loss.isclose(torch.sqrt(torch.tensor(3)))
-
-    def test_all_nans(self, pp_loss):
+    def test_targets_all_nans(self, pp_loss):
         num_batch = 1
         num_keypoints = 4
         num_cam_pairs = 3
         keypoints_targ_3d = torch.full((num_batch, num_keypoints, 3), float('nan'))
-        keypoints_pred_3d = torch.full((num_batch, num_cam_pairs, num_keypoints, 3), float('nan'))
-        keypoints_mask_3d = torch.zeros(size=(num_batch, num_cam_pairs, num_keypoints))
-        loss, _ = pp_loss(keypoints_targ_3d, keypoints_pred_3d, keypoints_mask_3d.bool())
+        keypoints_pred_3d = torch.ones((num_batch, num_cam_pairs, num_keypoints, 3))
+        loss, _ = pp_loss(keypoints_targ_3d, keypoints_pred_3d)
         assert loss.item() == 0.0
+
+    def test_predictions_all_nans(self, pp_loss):
+        num_batch = 1
+        num_keypoints = 4
+        num_cam_pairs = 3
+        keypoints_targ_3d = torch.ones((num_batch, num_keypoints, 3))
+        keypoints_pred_3d = torch.full((num_batch, num_cam_pairs, num_keypoints, 3), float('nan'))
+        loss, _ = pp_loss(keypoints_targ_3d, keypoints_pred_3d)
+        assert loss.item() == 0.0
+
+    def test_targets_partial_nans(self, pp_loss):
+        num_batch = 2
+        num_keypoints = 4
+        num_cam_pairs = 2
+        keypoints_targ_3d = torch.zeros(size=(num_batch, num_keypoints, 3))
+        keypoints_targ_3d[0, 0, :] = float('nan')  # first keypoint in first batch NaN
+        keypoints_pred_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints, 3))
+        loss, _ = pp_loss(keypoints_targ_3d, keypoints_pred_3d)
+        # each valid position has loss = sqrt(3) (distance from 0 to 1 in 3D)
+        expected_loss = torch.sqrt(torch.tensor(3.0))
+        assert loss.isclose(expected_loss)
+
+    def test_predictions_partial_nans(self, pp_loss):
+        num_batch = 3
+        num_keypoints = 4
+        num_cam_pairs = 3
+        keypoints_targ_3d = torch.zeros(size=(num_batch, num_keypoints, 3))
+        keypoints_pred_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints, 3))
+        keypoints_pred_3d[0, 0, 0, :] = float('nan')
+        keypoints_pred_3d[1, 1, :, :] = float('nan')
+        keypoints_pred_3d[2, :, :, :] = float('nan')
+        loss, _ = pp_loss(keypoints_targ_3d, keypoints_pred_3d)
+        # each valid position has loss = sqrt(3) (distance from 0 to 1 in 3D)
+        expected_loss = torch.sqrt(torch.tensor(3.0))
+        assert loss.isclose(expected_loss)
 
 
 def test_get_loss_classes():
