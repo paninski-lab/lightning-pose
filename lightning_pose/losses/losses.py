@@ -774,9 +774,12 @@ class PairwiseProjectionsLoss(Loss):
     def remove_nans(
         self,
         loss: TensorType["batch", "cam_pairs", "num_keypoints"],
-        mask: TensorType["batch", "cam_pairs", "num_keypoints"],
     ) -> TensorType["valid_losses"]:
-        return torch.masked_select(loss, mask)
+        mask = ~torch.isnan(loss)
+        if mask.sum() == 0.0:
+            return torch.tensor(0.0, device=loss.device, dtype=loss.dtype)
+        else:
+            return torch.masked_select(loss, ~torch.isnan(loss))
 
     def compute_loss(
         self,
@@ -790,32 +793,24 @@ class PairwiseProjectionsLoss(Loss):
         self,
         keypoints_targ_3d: TensorType["batch", "num_keypoints", 3],
         keypoints_pred_3d: TensorType["batch", "cam_pairs", "num_keypoints", 3],
-        keypoints_mask_3d: TensorType["batch", "cam_pairs", "num_keypoints"],
         stage: Literal["train", "val", "test"] | None = None,
         **kwargs,
     ) -> Tuple[TensorType[()], list[dict]]:
 
         # check if 3D keypoints are available
-        if keypoints_targ_3d is None or keypoints_pred_3d is None or keypoints_mask_3d is None:
+        if keypoints_targ_3d is None or keypoints_pred_3d is None:
             raise ValueError(
                 f"3D keypoints not available for {stage} stage. "
                 "Camera params file is required but not found;"
                 "Turn off supervised_pairwise_projections loss to avoid this error."
             )
 
-        if keypoints_mask_3d.sum() == 0:
-            scalar_loss = torch.tensor(
-                0.0,
-                device=keypoints_targ_3d.device,
-                dtype=keypoints_targ_3d.dtype,
-            )
-        else:
-            elementwise_loss = self.compute_loss(
-                targets=keypoints_targ_3d,
-                predictions=keypoints_pred_3d,
-            )
-            clean_loss = self.remove_nans(loss=elementwise_loss, mask=keypoints_mask_3d)
-            scalar_loss = self.reduce_loss(clean_loss, method="mean")
+        elementwise_loss = self.compute_loss(
+            targets=keypoints_targ_3d,
+            predictions=keypoints_pred_3d,
+        )
+        clean_loss = self.remove_nans(loss=elementwise_loss)
+        scalar_loss = self.reduce_loss(clean_loss, method="mean")
 
         logs = self.log_loss(loss=scalar_loss, stage=stage)
 

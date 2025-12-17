@@ -81,20 +81,6 @@ def project_camera_pairs_to_3d(
     return torch.stack(p3d, dim=1)
 
 
-def get_valid_projection_masks(
-    points: TensorType["batch", "num_views", "num_keypoints", 2]
-) -> TensorType["batch", "cam_pair", "num_keypoints"]:
-
-    num_batch, num_views, num_keypoints, _ = points.shape
-
-    m3d = []
-    for j1, j2 in itertools.combinations(range(num_views), 2):
-        points1 = points[:, j1, :, 0]
-        points2 = points[:, j2, :, 0]
-        m3d.append(~torch.isnan(points1 + points2))
-    return torch.stack(m3d, dim=1)
-
-
 class CameraGroup(CameraGroupAnipose):
     """Inherit Anipose camera group and add new non-jitted triangulation method for dataloaders."""
 

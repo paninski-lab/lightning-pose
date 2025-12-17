@@ -92,38 +92,3 @@ def test_project_camera_pairs_to_3d():
     assert torch.all(torch.isnan(p3d[0, 1, 0, :]))
     assert torch.allclose(p3d[0, 1, 1, :], target[0, 1, 1, :], rtol=1e-2)
     assert torch.allclose(p3d[0, 2], target[0, 2], rtol=1e-3)
-
-
-def test_get_valid_projection_masks():
-
-    n_batch = 2
-    n_views = 3
-    n_keypoints = 4
-    points = torch.randn((n_batch, n_views, n_keypoints, 2))
-
-    points[0, 0, 0, :] = float('nan')  # nan1
-    points[0, 0, 1, :] = float('nan')  # nan2
-    points[1, 2, 3, :] = float('nan')  # nan3
-
-    masks = get_valid_projection_masks(points)
-
-    assert masks.shape == (n_batch, 3, n_keypoints)  # 3 = 3 choose 2
-
-    # effect of nan1
-    assert ~masks[0, 0, 0]
-    masks[0, 0, 0] = True
-    assert ~masks[0, 1, 0]
-    masks[0, 1, 0] = True
-    # effect of nan2
-    assert ~masks[0, 0, 1]
-    masks[0, 0, 1] = True
-    assert ~masks[0, 1, 1]
-    masks[0, 1, 1] = True
-    # effect of nan3
-    assert ~masks[1, 1, 3]
-    masks[1, 1, 3] = True
-    assert ~masks[1, 2, 3]
-    masks[1, 2, 3] = True
-
-    # test others
-    assert torch.all(masks)
