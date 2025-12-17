@@ -12,7 +12,6 @@ from torchtyping import TensorType
 # to ignore imports for sphix-autoapidoc
 __all__ = [
     "project_camera_pairs_to_3d",
-    "get_valid_projection_masks",
     "CameraGroup",
 ]
 
