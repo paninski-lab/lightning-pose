@@ -1,9 +1,6 @@
 import torch
 
-from lightning_pose.data.cameras import (
-    get_valid_projection_masks,
-    project_camera_pairs_to_3d,
-)
+from lightning_pose.data.cameras import project_camera_pairs_to_3d
 
 
 def test_project_camera_pairs_to_3d():
