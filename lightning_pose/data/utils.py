@@ -542,6 +542,7 @@ def normalized_to_bbox(
     keypoints: TensorType["batch", "num_keypoints", "xy":2],
     bbox: TensorType["batch", "xyhw":4]
 ) -> TensorType["batch", "num_keypoints", "xy":2]:
+    """Transform keypoints to normalized coordinates to bbox coordinates"""
     if keypoints.shape[0] == bbox.shape[0]:
         # normal batch
         keypoints[:, :, 0] *= bbox[:, 3].unsqueeze(1)  # scale x by box width
