@@ -259,6 +259,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             num_keypoints = pred_keypoints.shape[1] // 2 // num_views
 
             try:
+                # project from 2D to 3D
                 keypoints_pred_3d = project_camera_pairs_to_3d(
                     points=pred_keypoints.reshape((-1, num_views, num_keypoints, 2)),
                     intrinsics=batch_dict["intrinsic_matrix"].float(),
@@ -266,14 +267,30 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
                     dist=batch_dict["distortions"].float(),
                 )
                 keypoints_targ_3d = batch_dict["keypoints_3d"]
+                # project from 3D back to 2D in original image coordinates
+                keypoints_pred_2d_reprojected_original = project_3d_to_2d(
+                    points_3d=torch.mean(keypoints_pred_3d, dim=1),
+                    intrinsics=batch_dict["intrinsic_matrix"].float(),
+                    extrinsics=batch_dict["extrinsic_matrix"].float(),
+                    dist=batch_dict["distortions"].float(),
+                )
+                # convert from original image coords to bbox coords (necessary for heatmaps)
+                keypoints_pred_2d_reprojected = convert_original_to_bbox_coords(
+                    keypoints=keypoints_pred_2d_reprojected_original,
+                    batch_dict=batch_dict,
+                    target_width=self.width,  # assuming these are available in your class
+                    target_height=self.height,
+                )
 
             except Exception as e:
                 print(f"Error in 3D projection: {e}")
                 keypoints_pred_3d = None
                 keypoints_targ_3d = None
+                keypoints_pred_2d_reprojected = None
         else:
             keypoints_pred_3d = None
             keypoints_targ_3d = None
+            keypoints_pred_2d_reprojected = None
 
         return {
             "heatmaps_targ": batch_dict["heatmaps"],
@@ -283,6 +300,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             "confidences": confidence,
             "keypoints_targ_3d": keypoints_targ_3d,  # shape (2*batch, num_keypoints, 3)
             "keypoints_pred_3d": keypoints_pred_3d,  # shape (2*batch, cam_pairs, num_keypoints, 3)
+            "keypoints_pred_2d_reprojected": keypoints_pred_2d_reprojected,
         }
 
     def predict_step(
