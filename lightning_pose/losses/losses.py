@@ -776,17 +776,55 @@ class PairwiseProjectionsLoss(Loss):
         loss: TensorType["batch", "cam_pairs", "num_keypoints"],
     ) -> TensorType["valid_losses"]:
         mask = ~torch.isnan(loss)
-        if mask.sum() == 0.0:
-            return torch.tensor(0.0, device=loss.device, dtype=loss.dtype)
+        valid_losses = torch.masked_select(loss, mask)
+        if valid_losses.numel() == 0:
+            # No valid losses, return zero that preserves gradients
+            # Use torch.where to avoid nan*0.0 issues
+            dummy_loss = torch.where(mask, loss, torch.zeros_like(loss))
+            return dummy_loss.sum()  # This will be 0.0 and preserve gradients
         else:
-            return torch.masked_select(loss, ~torch.isnan(loss))
+            return valid_losses
 
     def compute_loss(
         self,
         targets: TensorType["batch", "num_keypoints", 3],
         predictions: TensorType["batch", "cam_pairs", "num_keypoints", 3],
     ) -> TensorType["batch", "cam_pairs", "num_keypoints"]:
-        loss = torch.linalg.norm(targets.unsqueeze(1) - predictions, ord=2, dim=-1)
+
+        # Check for NaN targets AND predictions
+        nan_targets = torch.isnan(targets).any(dim=-1)  # [batch, num_keypoints]
+        nan_predictions = torch.isnan(predictions).any(dim=-1)  # [batch, cam_pairs, num_keypoints]
+
+        # Expand target NaN mask to match prediction dimensions
+        nan_targets_expanded = nan_targets.unsqueeze(1)  # [batch, 1, num_keypoints]
+
+        # Combined NaN mask
+        combined_nan_mask = \
+            nan_targets_expanded | nan_predictions  # [batch, cam_pairs, num_keypoints]
+
+        # Create clean targets and predictions - replace NaNs with zeros and detach
+        clean_targets = torch.where(
+            nan_targets.unsqueeze(-1),  # [batch, num_keypoints, 1]
+            torch.zeros_like(targets).detach(),
+            targets,
+        )
+
+        clean_predictions = torch.where(
+            combined_nan_mask.unsqueeze(-1),  # [batch, cam_pairs, num_keypoints, 1]
+            torch.zeros_like(predictions).detach(),
+            predictions,
+        )
+
+        # Compute loss with clean tensors
+        loss = torch.linalg.norm(clean_targets.unsqueeze(1) - clean_predictions, ord=2, dim=-1)
+
+        # Set loss to NaN where either targets or predictions were originally NaN
+        loss = torch.where(
+            combined_nan_mask,
+            torch.tensor(float('nan'), device=loss.device, dtype=loss.dtype),
+            loss,
+        )
+
         return loss
 
     def __call__(
