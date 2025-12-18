@@ -8,7 +8,7 @@ from omegaconf import DictConfig
 from torch import nn
 from torchtyping import TensorType
 
-from lightning_pose.data.cameras import project_camera_pairs_to_3d
+from lightning_pose.data.cameras import project_3d_to_2d, project_camera_pairs_to_3d
 from lightning_pose.data.datatypes import (
     MultiviewHeatmapLabeledBatchDict,
     MultiviewUnlabeledBatchDict,
@@ -271,18 +271,19 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
                     dist=batch_dict["distortions"].float(),
                 )
                 keypoints_targ_3d = batch_dict["keypoints_3d"]
-                # project from 3D back to 2D in original image coordinates
-                keypoints_pred_2d_reprojected_original = project_3d_to_2d(
-                    points_3d=torch.mean(keypoints_pred_3d, dim=1),
-                    intrinsics=batch_dict["intrinsic_matrix"].float(),
-                    extrinsics=batch_dict["extrinsic_matrix"].float(),
-                    dist=batch_dict["distortions"].float(),
-                )
-                # convert from original image coords to model-input coords (necessary for heatmaps)
-                keypoints_pred_2d_reprojected = convert_original_to_model_coords(
-                    batch_dict=batch_dict,
-                    original_keypoints=keypoints_pred_2d_reprojected_original,
-                )
+                # # project from 3D back to 2D in original image coordinates
+                # keypoints_pred_2d_reprojected_original = project_3d_to_2d(
+                #     points_3d=torch.mean(keypoints_pred_3d, dim=1),
+                #     intrinsics=batch_dict["intrinsic_matrix"].float(),
+                #     extrinsics=batch_dict["extrinsic_matrix"].float(),
+                #     dist=batch_dict["distortions"].float(),
+                # )
+                # # convert from original image coords to model-input coords (necessary for heatmaps)
+                # keypoints_pred_2d_reprojected = convert_original_to_model_coords(
+                #     batch_dict=batch_dict,
+                #     original_keypoints=keypoints_pred_2d_reprojected_original,
+                # )
+                keypoints_pred_2d_reprojected = None
 
             except Exception as e:
                 print(f"Error in 3D projection: {e}")

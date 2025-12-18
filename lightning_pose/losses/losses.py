@@ -855,6 +855,60 @@ class PairwiseProjectionsLoss(Loss):
         return self.weight * scalar_loss, logs
 
 
+# TODO
+# class ReprojectionHeatmapLoss(Loss):
+#     """Penalize error between predicted 2D->3D->2D->heatmap and ground truth heatmap."""
+#
+#     def __init__(self, log_weight: float = 0.0, **kwargs) -> None:
+#         super().__init__(log_weight=log_weight)
+#         self.loss_name = "reprojection_heatmap"
+#
+#     def remove_nans(
+#         self,
+#         loss: TensorType["batch", "cam_pairs", "num_keypoints"],
+#     ) -> TensorType["valid_losses"]:
+#         mask = ~torch.isnan(loss)
+#         if mask.sum() == 0.0:
+#             return torch.tensor(0.0, device=loss.device, dtype=loss.dtype)
+#         else:
+#             return torch.masked_select(loss, ~torch.isnan(loss))
+#
+#     def compute_loss(
+#         self,
+#         targets: TensorType["batch", "num_keypoints", 3],
+#         predictions: TensorType["batch", "cam_pairs", "num_keypoints", 3],
+#     ) -> TensorType["batch", "cam_pairs", "num_keypoints"]:
+#         loss = torch.linalg.norm(targets.unsqueeze(1) - predictions, ord=2, dim=-1)
+#         return loss
+#
+#     def __call__(
+#         self,
+#         keypoints_targ_3d: TensorType["batch", "num_keypoints", 3],
+#         keypoints_pred_3d: TensorType["batch", "cam_pairs", "num_keypoints", 3],
+#         stage: Literal["train", "val", "test"] | None = None,
+#         **kwargs,
+#     ) -> Tuple[TensorType[()], list[dict]]:
+#
+#         # check if 3D keypoints are available
+#         if keypoints_targ_3d is None or keypoints_pred_3d is None:
+#             raise ValueError(
+#                 f"3D keypoints not available for {stage} stage. "
+#                 "Camera params file is required but not found;"
+#                 "Turn off supervised_pairwise_projections loss to avoid this error."
+#             )
+#
+#         elementwise_loss = self.compute_loss(
+#             targets=keypoints_targ_3d,
+#             predictions=keypoints_pred_3d,
+#         )
+#         clean_loss = self.remove_nans(loss=elementwise_loss)
+#         scalar_loss = self.reduce_loss(clean_loss, method="mean")
+#
+#         logs = self.log_loss(loss=scalar_loss, stage=stage)
+#
+#         return self.weight * scalar_loss, logs
+
+
 @typechecked
 def get_loss_classes() -> dict[str, Type[Loss]]:
     """Get a dict with all the loss classes.
@@ -877,5 +931,6 @@ def get_loss_classes() -> dict[str, Type[Loss]]:
         "unimodal_kl": UnimodalLoss,
         "unimodal_js": UnimodalLoss,
         "supervised_pairwise_projections": PairwiseProjectionsLoss,
+        # "supervised_reprojection_heatmap": ReprojectionHeatmapLoss,
     }
     return loss_dict
