@@ -508,18 +508,28 @@ class TestPairwiseProjectionsLoss:
         num_keypoints = 4
         num_cam_pairs = 3
         keypoints_targ_3d = torch.full((num_batch, num_keypoints, 3), float('nan'))
-        keypoints_pred_3d = torch.ones((num_batch, num_cam_pairs, num_keypoints, 3))
+        keypoints_pred_3d = torch.ones(
+            (num_batch, num_cam_pairs, num_keypoints, 3),
+            requires_grad=True,
+        )
         loss, _ = pp_loss(keypoints_targ_3d, keypoints_pred_3d)
         assert loss.item() == 0.0
+        loss.backward()
+        assert not torch.isnan(keypoints_pred_3d.grad).any(), "gradients contain NaN values"
 
     def test_predictions_all_nans(self, pp_loss):
         num_batch = 1
         num_keypoints = 4
         num_cam_pairs = 3
         keypoints_targ_3d = torch.ones((num_batch, num_keypoints, 3))
-        keypoints_pred_3d = torch.full((num_batch, num_cam_pairs, num_keypoints, 3), float('nan'))
+        keypoints_pred_3d = torch.full(
+            (num_batch, num_cam_pairs, num_keypoints, 3), float('nan'),
+            requires_grad=True,
+        )
         loss, _ = pp_loss(keypoints_targ_3d, keypoints_pred_3d)
         assert loss.item() == 0.0
+        loss.backward()
+        assert not torch.isnan(keypoints_pred_3d.grad).any(), "gradients contain NaN values"
 
     def test_targets_partial_nans(self, pp_loss):
         num_batch = 2
@@ -527,11 +537,16 @@ class TestPairwiseProjectionsLoss:
         num_cam_pairs = 2
         keypoints_targ_3d = torch.zeros(size=(num_batch, num_keypoints, 3))
         keypoints_targ_3d[0, 0, :] = float('nan')  # first keypoint in first batch NaN
-        keypoints_pred_3d = torch.ones(size=(num_batch, num_cam_pairs, num_keypoints, 3))
+        keypoints_pred_3d = torch.ones(
+            size=(num_batch, num_cam_pairs, num_keypoints, 3),
+            requires_grad=True,
+        )
         loss, _ = pp_loss(keypoints_targ_3d, keypoints_pred_3d)
         # each valid position has loss = sqrt(3) (distance from 0 to 1 in 3D)
         expected_loss = torch.sqrt(torch.tensor(3.0))
         assert loss.isclose(expected_loss)
+        loss.backward()
+        assert not torch.isnan(keypoints_pred_3d.grad).any(), "gradients contain NaN values"
 
     def test_predictions_partial_nans(self, pp_loss):
         num_batch = 3
@@ -542,10 +557,13 @@ class TestPairwiseProjectionsLoss:
         keypoints_pred_3d[0, 0, 0, :] = float('nan')
         keypoints_pred_3d[1, 1, :, :] = float('nan')
         keypoints_pred_3d[2, :, :, :] = float('nan')
+        keypoints_pred_3d.requires_grad_(True)  # need to do this after inplace operations
         loss, _ = pp_loss(keypoints_targ_3d, keypoints_pred_3d)
         # each valid position has loss = sqrt(3) (distance from 0 to 1 in 3D)
         expected_loss = torch.sqrt(torch.tensor(3.0))
         assert loss.isclose(expected_loss)
+        loss.backward()
+        assert not torch.isnan(keypoints_pred_3d.grad).any(), "gradients contain NaN values"
 
 
 def test_get_loss_classes():
