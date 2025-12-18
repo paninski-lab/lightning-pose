@@ -172,10 +172,14 @@ losses:
     # nan removal value.
     # (in prob; heatmaps with max prob values are removed)
     prob_threshold: 0.05
-  # loss = error between predictions and their 3d reprojections; requires camera calibration
+  # loss = error between predicted pairwise 3d projections and ground truth 3d keypoints; requires camera calibration
   supervised_pairwise_projections:
     # weight in front of loss
     log_weight: 0.5
+  # loss = error between predicted, reprojected 2d heatmaps and 2d ground truth heatmaps; requires camera calibration
+  supervised_reprojection_heatmap:
+    # weight in front of loss
+    log_weight: 0.0  # log_weight=0.0 corresponds to 0.5 * loss
 
 eval:
   # predict? used in scripts/train_hydra.py
