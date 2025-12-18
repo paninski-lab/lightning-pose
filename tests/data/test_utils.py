@@ -7,7 +7,11 @@ import pytest
 import torch
 from kornia.geometry.subpix import spatial_expectation2d, spatial_softmax2d
 
-from lightning_pose.data.utils import generate_heatmaps
+from lightning_pose.data.utils import (
+    convert_original_to_model_coords,
+    generate_heatmaps,
+    original_to_model,
+)
 
 
 def test_data_extractor(base_data_module_combined, multiview_heatmap_data_module_combined):
@@ -700,3 +704,235 @@ def test_convert_bbox_coords(heatmap_data_module, multiview_heatmap_data_module)
     # make sure code complains when batch elements have different numbers of views
     with pytest.raises(ValueError):
         convert_bbox_coords(batch_dict, batch_dict['keypoints'])
+
+
+class TestConvertOriginalToModelCoords:
+
+    def test_convert_original_to_model_coords_basic(self):
+        """Test convert_original_to_model_coords with multiview setup."""
+
+        # Create mock batch_dict
+        batch_dict = {
+            "num_views": torch.tensor([2, 2]),  # 2 views per batch element
+            "images": torch.zeros(2, 2, 3, 256, 256),  # (batch, views, channels, height, width)
+            "bbox": torch.tensor([
+                # Batch element 0: view 0, view 1
+                [0., 0., 100., 200., 50., 25., 100., 200.],
+                # Batch element 1: view 0, view 1
+                [10., 10., 80., 160., 60., 30., 80., 160.],
+            ])
+        }
+
+        # Original keypoints: (batch=2, views=2, keypoints=3, xy=2)
+        original_keypoints = torch.tensor([
+            [  # Batch element 0
+                [  # View 0: bbox [0, 0, 100, 200]
+                    [0., 0.],  # top-left
+                    [200., 100.],  # bottom-right
+                    [100., 50.],  # center
+                ],
+                [  # View 1: bbox [50, 25, 100, 200]
+                    [50., 25.],  # top-left
+                    [250., 125.],  # bottom-right
+                    [150., 75.],  # center
+                ]
+            ],
+            [  # Batch element 1
+                [  # View 0: bbox [10, 10, 80, 160]
+                    [10., 10.],  # top-left
+                    [170., 90.],  # bottom-right
+                    [90., 50.],  # center
+                ],
+                [  # View 1: bbox [60, 30, 80, 160]
+                    [60., 30.],  # top-left
+                    [220., 110.],  # bottom-right
+                    [140., 70.],  # center
+                ]
+            ]
+        ])
+
+        # Convert to model coordinates
+        model_keypoints = convert_original_to_model_coords(batch_dict, original_keypoints)
+
+        # Check output shape
+        assert model_keypoints.shape == (2, 2, 3, 2)
+
+        # Check that all corner points map correctly
+        # Top-left corners should be (0, 0)
+        assert torch.allclose(model_keypoints[:, :, 0, :], torch.zeros(2, 2, 2), atol=1e-6)
+
+        # Bottom-right corners should be (256, 256)
+        assert torch.allclose(model_keypoints[:, :, 1, :], torch.full((2, 2, 2), 256.0), atol=1e-6)
+
+        # Centers should be (128, 128)
+        assert torch.allclose(model_keypoints[:, :, 2, :], torch.full((2, 2, 2), 128.0), atol=1e-6)
+
+    def test_convert_original_to_model_coords_different_views(self):
+        """Test with different number of views and keypoints."""
+
+        # Create batch_dict with 3 views
+        batch_dict = {
+            "num_views": torch.tensor([3, 3]),
+            "images": torch.zeros(2, 3, 3, 128, 128),  # 128x128 model input
+            "bbox": torch.tensor([
+                # Batch 0: 3 views with different bboxes
+                [0., 0., 50., 100., 25., 25., 50., 100., 50., 50., 50., 100.],
+                # Batch 1: 3 views
+                [10., 10., 60., 120., 30., 30., 60., 120., 60., 60., 60., 120.],
+            ])
+        }
+
+        # Test with 2 keypoints per view
+        original_keypoints = torch.tensor([
+            [  # Batch 0
+                [[0., 0.], [100., 50.]],  # View 0: corners of bbox [0,0,50,100]
+                [[25., 25.], [125., 75.]],  # View 1: corners of bbox [25,25,50,100]
+                [[50., 50.], [150., 100.]],  # View 2: corners of bbox [50,50,50,100]
+            ],
+            [  # Batch 1
+                [[10., 10.], [130., 70.]],  # View 0: corners of bbox [10,10,60,120]
+                [[30., 30.], [150., 90.]],  # View 1: corners of bbox [30,30,60,120]
+                [[60., 60.], [180., 120.]],  # View 2: corners of bbox [60,60,60,120]
+            ]
+        ])
+
+        model_keypoints = convert_original_to_model_coords(batch_dict, original_keypoints)
+
+        # Check output shape: (batch=2, views=3, keypoints=2, xy=2)
+        assert model_keypoints.shape == (2, 3, 2, 2)
+
+        # All top-left corners should map to (0, 0)
+        assert torch.allclose(model_keypoints[:, :, 0, :], torch.zeros(2, 3, 2), atol=1e-6)
+
+        # All bottom-right corners should map to (128, 128) since model is 128x128
+        assert torch.allclose(model_keypoints[:, :, 1, :], torch.full((2, 3, 2), 128.0), atol=1e-6)
+
+
+class TestOriginalToModel:
+
+    def test_original_to_model_basic(self):
+        """Test original_to_model with basic coordinate transformations."""
+
+        model_width = 256.
+        model_height = 256.
+
+        bboxes = [
+            torch.tensor([0., 0., 100., 200.]),  # bbox at origin, height=100, width=200
+            torch.tensor([50., 25., 100., 200.]),  # bbox offset, same dimensions
+        ]
+
+        for bbox in bboxes:
+
+            # Define test keypoints based on the bbox
+            x, y, h, w = bbox[0], bbox[1], bbox[2], bbox[3]
+            keypoints = torch.tensor([
+                [[x.item(), y.item()]],           # top-left corner of bbox
+                [[x.item() + w.item(), y.item() + h.item()]], # bottom-right corner of bbox
+                [[x.item() + w.item()/2, y.item() + h.item()/2]], # center of bbox
+            ])
+
+            kps = original_to_model(
+                keypoints.clone(),
+                bbox.unsqueeze(0).repeat([3, 1]),
+                model_width,
+                model_height,
+            )
+
+            # Top-left corner of bbox (0,0 in normalized space) should map to (0, 0) in model space
+            expected_x = 0.0
+            expected_y = 0.0
+            assert torch.isclose(kps[0, 0, 0], torch.tensor(expected_x), atol=1e-6)
+            assert torch.isclose(kps[0, 0, 1], torch.tensor(expected_y), atol=1e-6)
+
+            # Bottom-right corner of bbox (1,1 in normalized space) should map to
+            # (model_width, model_height)
+            expected_x = model_width
+            expected_y = model_height
+            assert torch.isclose(kps[1, 0, 0], torch.tensor(expected_x), atol=1e-6)
+            assert torch.isclose(kps[1, 0, 1], torch.tensor(expected_y), atol=1e-6)
+
+            # Center of bbox (0.5, 0.5 in normalized space) should map to
+            # (model_width/2, model_height/2)
+            expected_x = model_width / 2
+            expected_y = model_height / 2
+            assert torch.isclose(kps[2, 0, 0], torch.tensor(expected_x), atol=1e-6)
+            assert torch.isclose(kps[2, 0, 1], torch.tensor(expected_y), atol=1e-6)
+
+    def test_original_to_model_context_batch(self):
+        """Test original_to_model with context batch (extra bbox entries for edges)."""
+
+        model_width = 256.
+        model_height = 256.
+
+        # Test different bboxes with context (7 entries, uses middle 3: [2:-2])
+        bboxes = [
+            torch.tensor([0., 0., 100., 200.]),  # bbox at origin
+            torch.tensor([50., 25., 100., 200.]),  # bbox offset
+        ]
+
+        for bbox in bboxes:
+
+            # Define test keypoints based on the bbox
+            x, y, h, w = bbox[0], bbox[1], bbox[2], bbox[3]
+            keypoints = torch.tensor([
+                [[x.item(), y.item()]],  # top-left corner of bbox
+                [[x.item() + w.item(), y.item() + h.item()]],  # bottom-right corner
+                [[x.item() + w.item() / 2, y.item() + h.item() / 2]],  # center of bbox
+            ])
+
+            # Create 7-entry bbox tensor for context batch
+            bbox_context = bbox.unsqueeze(0).repeat([7, 1])
+
+            kps = original_to_model(
+                keypoints.clone(),
+                bbox_context,
+                model_width,
+                model_height,
+            )
+
+            # Same assertions as basic test since the function should use bbox[2:-2]
+            # which gives us the middle entries (same as the original bbox)
+
+            # Top-left corner
+            assert torch.isclose(kps[0, 0, 0], torch.tensor(0.0), atol=1e-6)
+            assert torch.isclose(kps[0, 0, 1], torch.tensor(0.0), atol=1e-6)
+
+            # Bottom-right corner
+            assert torch.isclose(kps[1, 0, 0], torch.tensor(model_width), atol=1e-6)
+            assert torch.isclose(kps[1, 0, 1], torch.tensor(model_height), atol=1e-6)
+
+            # Center
+            assert torch.isclose(kps[2, 0, 0], torch.tensor(model_width / 2), atol=1e-6)
+            assert torch.isclose(kps[2, 0, 1], torch.tensor(model_height / 2), atol=1e-6)
+
+    def test_original_to_model_different_dimensions(self):
+        """Test with non-square model dimensions."""
+
+        keypoints = torch.tensor([
+            [[50., 25.]],  # top-left of bbox
+            [[150., 75.]],  # bottom-right of bbox
+            [[100., 50.]],  # center of bbox
+        ])
+
+        bbox = torch.tensor([50., 25., 50., 100.])  # x=50, y=25, h=50, w=100
+        model_width = 128.
+        model_height = 64.
+
+        kps = original_to_model(
+            keypoints,
+            bbox.unsqueeze(0).repeat([3, 1]),
+            model_width,
+            model_height
+        )
+
+        # Top-left: (50-50)/100 * 128 = 0, (25-25)/50 * 64 = 0
+        assert torch.isclose(kps[0, 0, 0], torch.tensor(0.0), atol=1e-6)
+        assert torch.isclose(kps[0, 0, 1], torch.tensor(0.0), atol=1e-6)
+
+        # Bottom-right: (150-50)/100 * 128 = 128, (75-25)/50 * 64 = 64
+        assert torch.isclose(kps[1, 0, 0], torch.tensor(128.0), atol=1e-6)
+        assert torch.isclose(kps[1, 0, 1], torch.tensor(64.0), atol=1e-6)
+
+        # Center: (100-50)/100 * 128 = 64, (50-25)/50 * 64 = 32
+        assert torch.isclose(kps[2, 0, 0], torch.tensor(64.0), atol=1e-6)
+        assert torch.isclose(kps[2, 0, 1], torch.tensor(32.0), atol=1e-6)

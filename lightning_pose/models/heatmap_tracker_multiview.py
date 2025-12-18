@@ -14,7 +14,11 @@ from lightning_pose.data.datatypes import (
     MultiviewUnlabeledBatchDict,
     UnlabeledBatchDict,
 )
-from lightning_pose.data.utils import convert_bbox_coords, undo_affine_transform_batch
+from lightning_pose.data.utils import (
+    convert_bbox_coords,
+    convert_original_to_model_coords,
+    undo_affine_transform_batch,
+)
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.backbones import ALLOWED_TRANSFORMER_BACKBONES
@@ -274,12 +278,10 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
                     extrinsics=batch_dict["extrinsic_matrix"].float(),
                     dist=batch_dict["distortions"].float(),
                 )
-                # convert from original image coords to bbox coords (necessary for heatmaps)
-                keypoints_pred_2d_reprojected = convert_original_to_bbox_coords(
-                    keypoints=keypoints_pred_2d_reprojected_original,
+                # convert from original image coords to model-input coords (necessary for heatmaps)
+                keypoints_pred_2d_reprojected = convert_original_to_model_coords(
                     batch_dict=batch_dict,
-                    target_width=self.width,  # assuming these are available in your class
-                    target_height=self.height,
+                    original_keypoints=keypoints_pred_2d_reprojected_original,
                 )
 
             except Exception as e:
@@ -298,8 +300,8 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             "keypoints_targ": target_keypoints,
             "keypoints_pred": pred_keypoints,
             "confidences": confidence,
-            "keypoints_targ_3d": keypoints_targ_3d,  # shape (2*batch, num_keypoints, 3)
-            "keypoints_pred_3d": keypoints_pred_3d,  # shape (2*batch, cam_pairs, num_keypoints, 3)
+            "keypoints_targ_3d": keypoints_targ_3d,  # shape (batch, num_keypoints, 3)
+            "keypoints_pred_3d": keypoints_pred_3d,  # shape (batch, cam_pairs, num_keypoints, 3)
             "keypoints_pred_2d_reprojected": keypoints_pred_2d_reprojected,
         }
 

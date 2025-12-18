@@ -30,6 +30,8 @@ __all__ = [
     "undo_affine_transform_batch",
     "normalized_to_bbox",
     "convert_bbox_coords",
+    "convert_original_to_model_coords",
+    "original_to_model",
 ]
 
 
@@ -542,7 +544,7 @@ def normalized_to_bbox(
     keypoints: TensorType["batch", "num_keypoints", "xy":2],
     bbox: TensorType["batch", "xyhw":4]
 ) -> TensorType["batch", "num_keypoints", "xy":2]:
-    """Transform keypoints to normalized coordinates to bbox coordinates"""
+    """Transform keypoints from normalized coordinates to bbox coordinates"""
     if keypoints.shape[0] == bbox.shape[0]:
         # normal batch
         keypoints[:, :, 0] *= bbox[:, 3].unsqueeze(1)  # scale x by box width
@@ -613,3 +615,75 @@ def convert_bbox_coords(
         predicted_keypoints = normalized_to_bbox(predicted_keypoints, batch_dict["bbox"])
     # return new keypoints, reshaped to (batch, num_targets)
     return predicted_keypoints.reshape((-1, num_targets))
+
+
+def convert_original_to_model_coords(
+    batch_dict: MultiviewHeatmapLabeledBatchDict,
+    original_keypoints: TensorType["batch", "num_views", "num_keypoints", 2],
+) -> TensorType["batch", "num_views", "num_keypoints", 2]:
+    """Transform keypoints from original frame coordinates to model input coordinates."""
+
+    batch_size, num_views, num_keypoints, _ = original_keypoints.shape
+
+    # Get model input dimensions
+    model_height = batch_dict["images"].shape[-2]  # height
+    model_width = batch_dict["images"].shape[-1]  # width
+
+    # Clone to avoid modifying original
+    model_keypoints = original_keypoints.clone()
+
+    # Process each view
+    for v in range(num_views):
+        bbox_slice = batch_dict["bbox"][:, 4 * v:4 * (v + 1)]  # (batch, 4)
+
+        model_keypoints[:, v, :, :] = original_to_model(
+            original_keypoints[:, v, :, :],  # (batch, num_keypoints, 2)
+            bbox_slice,  # (batch, 4)
+            model_width,
+            model_height,
+        )
+
+    return model_keypoints
+
+
+def original_to_model(
+    keypoints: TensorType["batch", "num_keypoints", 2],
+    bbox: TensorType["batch", 4],
+    model_width: float,
+    model_height: float,
+) -> TensorType["batch", "num_keypoints", 2]:
+    """Convert keypoints from original image coordinates to model input coordinates.
+
+    This combines the transformations:
+    1. original → bbox: subtract offset, divide by bbox dimensions
+    2. bbox → model: multiply by model dimensions
+
+    bbox format: [x, y, h, w] where x,y is top-left corner
+    """
+    model_keypoints = keypoints.clone()
+
+    if keypoints.shape[0] == bbox.shape[0]:
+        # normal batch
+        # Step 1: original → bbox (normalize to [0,1] relative to bbox)
+        model_keypoints[:, :, 0] -= bbox[:, 0].unsqueeze(1)  # subtract bbox x offset
+        model_keypoints[:, :, 0] /= bbox[:, 3].unsqueeze(1)  # divide by box width
+        model_keypoints[:, :, 1] -= bbox[:, 1].unsqueeze(1)  # subtract bbox y offset
+        model_keypoints[:, :, 1] /= bbox[:, 2].unsqueeze(1)  # divide by box height
+
+        # Step 2: bbox → model (scale to model dimensions)
+        model_keypoints[:, :, 0] *= model_width  # scale to model width
+        model_keypoints[:, :, 1] *= model_height  # scale to model height
+
+    else:
+        # context batch; we don't have predictions for first/last two frames
+        # Step 1: original → bbox
+        model_keypoints[:, :, 0] -= bbox[2:-2, 0].unsqueeze(1)  # subtract bbox x offset
+        model_keypoints[:, :, 0] /= bbox[2:-2, 3].unsqueeze(1)  # divide by box width
+        model_keypoints[:, :, 1] -= bbox[2:-2, 1].unsqueeze(1)  # subtract bbox y offset
+        model_keypoints[:, :, 1] /= bbox[2:-2, 2].unsqueeze(1)  # divide by box height
+
+        # Step 2: bbox → model
+        model_keypoints[:, :, 0] *= model_width  # scale to model width
+        model_keypoints[:, :, 1] *= model_height  # scale to model height
+
+    return model_keypoints
