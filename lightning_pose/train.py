@@ -12,6 +12,7 @@ from pathlib import Path
 import lightning.pytorch as pl
 import numpy as np
 import torch
+from lightning.pytorch.strategies import DDPStrategy
 from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 from typeguard import typechecked
 
@@ -326,9 +327,17 @@ def _train(cfg: DictConfig) -> Model:
     check_val_every_n_epoch = cfg.training.get("check_val_every_n_epoch", 1)
     val_check_interval = cfg.training.get("val_check_interval")
 
+    # Set DDP strategy with find_unused_parameters=True for multi-GPU training
+    # This is needed because the UnfreezeBackbone callback freezes backbone parameters
+    # during early epochs, making them unused in the backward pass
+    strategy = None
+    if cfg.training.num_gpus > 1:
+        strategy = DDPStrategy(find_unused_parameters=True)
+
     trainer = pl.Trainer(
         accelerator="gpu",
         devices=cfg.training.num_gpus,
+        strategy=strategy,
         max_epochs=max_epochs,
         min_epochs=min_epochs,
         max_steps=max_steps,

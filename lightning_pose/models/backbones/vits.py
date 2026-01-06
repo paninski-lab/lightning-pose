@@ -36,6 +36,9 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
     elif backbone_arch == "vitb_dinov2":
         base = VisionEncoderDino(model_name="facebook/dinov2-base", pretrained_patch_size=14)
         encoder_embed_dim = base.vision_encoder.config.hidden_size
+    elif backbone_arch == "vitl_dinov2":
+        base = VisionEncoderDino(model_name="facebook/dinov2-large", pretrained_patch_size=14)
+        encoder_embed_dim = base.vision_encoder.config.hidden_size
     elif backbone_arch == "vits_dinov3":
         base = VisionEncoderDino(
             model_name="facebook/dinov3-vits16-pretrain-lvd1689m",
@@ -51,8 +54,6 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
     elif "vitb_imagenet" in backbone_arch:
         base = VisionEncoder(model_name="facebook/vit-mae-base")
         encoder_embed_dim = base.vision_encoder.config.hidden_size
-        if kwargs.get("backbone_checkpoint"):
-            load_vit_backbone_checkpoint(base, kwargs["backbone_checkpoint"])
     elif backbone_arch == "vitb_sam":
         from lightning_pose.models.backbones.vit_sam import SamVisionEncoder
         base = SamVisionEncoder(
@@ -62,17 +63,18 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
         encoder_embed_dim = base.vision_encoder.config.hidden_size
     else:
         raise NotImplementedError(f"{backbone_arch} is not a valid backbone")
-
+    if kwargs.get("backbone_checkpoint"):
+        load_vit_backbone_checkpoint(base, kwargs["backbone_checkpoint"])
     num_fc_input_features = encoder_embed_dim
 
     return base, num_fc_input_features
 
 
 def load_vit_backbone_checkpoint(base, checkpoint: str):
-    print(f"Loading VIT-MAE weights from {checkpoint}")
+    print(f"Loading ViT weights from {checkpoint}")
     # support loading safetensors
     if checkpoint.endswith(".safetensors"):
-        ckpt_vit_pretrain = safetensors.load_file(checkpoint, device="cpu")
+        ckpt_vit_pretrain = safetensors.torch.load_file(checkpoint, device="cpu")
     else:
         # Try loading with default settings first, fallback to weights_only=False if needed
         try:
@@ -89,20 +91,20 @@ def load_vit_backbone_checkpoint(base, checkpoint: str):
     for key, value in ckpt_vit_pretrain.items():
         if key.startswith("vit_mae."):
             model_key = key.replace("vit_mae.vit.", "")
-            # Skip known problematic layers with size mismatches
-            if any(prob in model_key for prob in [
-                "position_embeddings",
-                "patch_embeddings.projection",  # in case backbone was trained with grayscale imgs
-                "decoder_pos_embed",
-                "decoder_pred",
-            ]):
-                continue
-            # Check if shapes match before including in state dict
             if model_key in base.vision_encoder.state_dict():
                 if base.vision_encoder.state_dict()[model_key].shape == value.shape:
                     vit_mae_state_dict[model_key] = value
-    # Load the filtered weights
-    base.vision_encoder.load_state_dict(vit_mae_state_dict, strict=False)
+        elif key.startswith("vit."):
+            model_key = key.replace("vit.", "")
+            if model_key in base.vision_encoder.state_dict():
+                if base.vision_encoder.state_dict()[model_key].shape == value.shape:
+                    vit_mae_state_dict[model_key] = value
+    missing_keys, unexpected_keys = base.vision_encoder.load_state_dict(vit_mae_state_dict, strict=False)
+    print(f'missing_keys: {missing_keys}')
+    print(f'unexpected_keys: {unexpected_keys}')
+    # exit()
+    # # Load the filtered weights
+    # base.vision_encoder.load_state_dict(vit_mae_state_dict, strict=False)
 
 
 class VisionEncoder(torch.nn.Module):
