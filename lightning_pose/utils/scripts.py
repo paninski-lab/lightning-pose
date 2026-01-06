@@ -159,7 +159,7 @@ def get_dataset(
                 image_resize_width=cfg.data.image_resize_dims.width,
                 imgaug_transform=imgaug_transform,
                 downsample_factor=cfg.data.get("downsample_factor", 2),
-                do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
+                do_context=cfg.model.model_type in ["heatmap_mhcrnn", "heatmap_multiview_transformer_mhcrnn"],  # context for mhcrnn models
                 resize=resize,
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
                 camera_params_path=cfg.data.get("camera_params_file", None),
@@ -173,7 +173,7 @@ def get_dataset(
                 image_resize_width=cfg.data.image_resize_dims.width,
                 imgaug_transform=imgaug_transform,
                 downsample_factor=cfg.data.get("downsample_factor", 2),
-                do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
+                do_context=cfg.model.model_type in ["heatmap_mhcrnn", "heatmap_multiview_transformer_mhcrnn"],  # context for mhcrnn models
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
             )
 
@@ -234,7 +234,7 @@ def get_data_module(
             np.ceil(_effective_context_batch_size / cfg.training.num_gpus + 4)
         )
 
-        if cfg.model.model_type == "heatmap_mhcrnn" and context_batch_size < 5:
+        if cfg.model.model_type in ["heatmap_mhcrnn", "heatmap_multiview_transformer_mhcrnn"] and context_batch_size < 5:
             raise ValidationError(
                 "dali.context.train.batch_size must be >= 5 * num_gpus for "
                 "semi-supervised context models. "
@@ -470,6 +470,23 @@ def get_model(
                 backbone=cfg.model.backbone,
                 pretrained=backbone_pretrained,
                 head=cfg.model.get("head", "heatmap_cnn"),
+                downsample_factor=cfg.data.get("downsample_factor", 2),
+                torch_seed=cfg.training.rng_seed_model_pt,
+                optimizer=optimizer,
+                optimizer_params=optimizer_params,
+                lr_scheduler=lr_scheduler,
+                lr_scheduler_params=lr_scheduler_params,
+                image_size=image_h,  # only used by ViT
+                backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
+            )
+        elif cfg.model.model_type == "heatmap_multiview_transformer_mhcrnn":
+            from lightning_pose.models import HeatmapTrackerMultiviewMHCRNN
+            model = HeatmapTrackerMultiviewMHCRNN(
+                num_keypoints=cfg.data.num_keypoints,
+                num_views=len(cfg.data.view_names),
+                loss_factory=loss_factories["supervised"],
+                backbone=cfg.model.backbone,
+                pretrained=backbone_pretrained,
                 downsample_factor=cfg.data.get("downsample_factor", 2),
                 torch_seed=cfg.training.rng_seed_model_pt,
                 optimizer=optimizer,

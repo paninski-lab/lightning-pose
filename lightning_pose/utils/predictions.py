@@ -100,7 +100,7 @@ class PredictionHandler:
         if self.data_module:
             return self.data_module.dataset.do_context
         else:
-            return self.cfg.model.model_type == "heatmap_mhcrnn"
+            return self.cfg.model.model_type in ["heatmap_mhcrnn", "heatmap_multiview_transformer_mhcrnn"]
 
     def unpack_preds(
         self,
@@ -139,7 +139,7 @@ class PredictionHandler:
             if self.do_context:
                 # fix shifts in the context model
                 stacked_preds = self.fix_context_preds_confs(stacked_preds)
-                if self.cfg.model.model_type == "heatmap_mhcrnn":
+                if self.cfg.model.model_type in ["heatmap_mhcrnn", "heatmap_multiview_transformer_mhcrnn"]:
                     stacked_confs = self.fix_context_preds_confs(
                         stacked_confs, zero_pad_confidence=False
                     )
@@ -426,7 +426,7 @@ def predict_single_video(
     # set up
     # ----------------------------------------------------------------------------------
     # initialize
-    model_type = "context" if cfg.model.model_type == "heatmap_mhcrnn" else "base"
+    model_type = "context" if cfg.model.model_type in ["heatmap_mhcrnn", "heatmap_multiview_transformer_mhcrnn"] else "base"
     cfg.training.imgaug = "default"
     vid_pred_class = PrepareDALI(
         train_stage="predict",
@@ -506,6 +506,8 @@ def get_model_class(map_type: str, semi_supervised: bool) -> Type[ALLOWED_MODELS
             from lightning_pose.models import HeatmapTrackerMultiviewMultihead as Model
         elif map_type == "heatmap_multiview_transformer":
             from lightning_pose.models import HeatmapTrackerMultiviewTransformer as Model
+        elif map_type == "heatmap_multiview_transformer_mhcrnn":
+            from lightning_pose.models import HeatmapTrackerMultiviewMHCRNN as Model
         else:
             raise NotImplementedError(
                 f"{map_type} is an invalid model_type for a fully supervised model"
@@ -904,7 +906,7 @@ def predict_video(
         ),
     )
     model_type: Literal["base", "context"] = (
-        "context" if model.config.cfg.model.model_type == "heatmap_mhcrnn" else "base"
+        "context" if model.config.cfg.model.model_type in ["heatmap_mhcrnn", "heatmap_multiview_transformer_mhcrnn"] else "base"
     )
 
     filenames = [video_file] if not is_multiview else [[f] for f in video_file]
