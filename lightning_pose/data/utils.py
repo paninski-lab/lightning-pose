@@ -346,6 +346,7 @@ def generate_heatmaps(
     output_shape: Tuple[int, int],
     sigma: float = 1.25,
     uniform_heatmaps: bool = False,
+    keep_gradients: bool = False,
 ) -> TensorType["batch", "num_keypoints", "height", "width"]:
     """Generate 2D Gaussian heatmaps from mean and sigma.
 
@@ -356,12 +357,16 @@ def generate_heatmaps(
         output_shape: dimensions of downsampled heatmap, (height, width)
         sigma: control spread of gaussian
         uniform_heatmaps: output uniform heatmaps if missing ground truth label, rather than skip
+        keep_gradients: True to not detach gradients from keypoints before creating heatmaps
 
     Returns:
         batch of 2D heatmaps
 
     """
-    keypoints = keypoints.detach().clone()
+    if keep_gradients:
+        keypoints = keypoints.clone()
+    else:
+        keypoints = keypoints.detach().clone()
     out_height = output_shape[0]
     out_width = output_shape[1]
     keypoints[:, :, 1] *= out_height / height

@@ -855,58 +855,93 @@ class PairwiseProjectionsLoss(Loss):
         return self.weight * scalar_loss, logs
 
 
-# TODO
-# class ReprojectionHeatmapLoss(Loss):
-#     """Penalize error between predicted 2D->3D->2D->heatmap and ground truth heatmap."""
-#
-#     def __init__(self, log_weight: float = 0.0, **kwargs) -> None:
-#         super().__init__(log_weight=log_weight)
-#         self.loss_name = "reprojection_heatmap"
-#
-#     def remove_nans(
-#         self,
-#         loss: TensorType["batch", "cam_pairs", "num_keypoints"],
-#     ) -> TensorType["valid_losses"]:
-#         mask = ~torch.isnan(loss)
-#         if mask.sum() == 0.0:
-#             return torch.tensor(0.0, device=loss.device, dtype=loss.dtype)
-#         else:
-#             return torch.masked_select(loss, ~torch.isnan(loss))
-#
-#     def compute_loss(
-#         self,
-#         targets: TensorType["batch", "num_keypoints", 3],
-#         predictions: TensorType["batch", "cam_pairs", "num_keypoints", 3],
-#     ) -> TensorType["batch", "cam_pairs", "num_keypoints"]:
-#         loss = torch.linalg.norm(targets.unsqueeze(1) - predictions, ord=2, dim=-1)
-#         return loss
-#
-#     def __call__(
-#         self,
-#         keypoints_targ_3d: TensorType["batch", "num_keypoints", 3],
-#         keypoints_pred_3d: TensorType["batch", "cam_pairs", "num_keypoints", 3],
-#         stage: Literal["train", "val", "test"] | None = None,
-#         **kwargs,
-#     ) -> Tuple[TensorType[()], list[dict]]:
-#
-#         # check if 3D keypoints are available
-#         if keypoints_targ_3d is None or keypoints_pred_3d is None:
-#             raise ValueError(
-#                 f"3D keypoints not available for {stage} stage. "
-#                 "Camera params file is required but not found;"
-#                 "Turn off supervised_pairwise_projections loss to avoid this error."
-#             )
-#
-#         elementwise_loss = self.compute_loss(
-#             targets=keypoints_targ_3d,
-#             predictions=keypoints_pred_3d,
-#         )
-#         clean_loss = self.remove_nans(loss=elementwise_loss)
-#         scalar_loss = self.reduce_loss(clean_loss, method="mean")
-#
-#         logs = self.log_loss(loss=scalar_loss, stage=stage)
-#
-#         return self.weight * scalar_loss, logs
+class ReprojectionHeatmapLoss(Loss):
+    """Penalize error between predicted 2D->3D->2D->heatmap and ground truth heatmap."""
+
+    def __init__(
+        self,
+        original_image_height: int,
+        original_image_width: int,
+        downsampled_image_height: int,
+        downsampled_image_width: int,
+        log_weight: float = 0.0,
+        uniform_heatmaps: bool = False,
+        **kwargs,
+    ) -> None:
+        super().__init__(log_weight=log_weight)
+        self.loss_name = "reprojection_heatmap"
+        self.original_image_height = original_image_height
+        self.original_image_width = original_image_width
+        self.downsampled_image_height = downsampled_image_height
+        self.downsampled_image_width = downsampled_image_width
+        self.uniform_heatmaps = uniform_heatmaps
+
+    def remove_nans(
+        self,
+        loss: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+        targets: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+    ) -> TensorType["valid_losses"]:
+        # Create mask for valid keypoints (non-zero targets)
+        squeezed_targets = targets.reshape(targets.shape[0], targets.shape[1], -1)
+        valid_keypoints = ~torch.all(squeezed_targets == 0.0, dim=-1)  # [batch, num_keypoints]
+
+        # Expand mask to match loss dimensions
+        valid_mask = valid_keypoints.unsqueeze(-1).unsqueeze(-1)  # [batch, num_keypoints, 1, 1]
+        valid_mask = valid_mask.expand_as(loss)  # [batch, num_keypoints, h, w]
+
+        valid_losses = torch.masked_select(loss, valid_mask)
+
+        if valid_losses.numel() == 0:
+            # No valid losses, return zero that preserves gradients
+            dummy_loss = torch.where(valid_mask, loss, torch.zeros_like(loss))
+            return dummy_loss.sum()  # This will be 0.0 and preserve gradients
+        else:
+            return valid_losses
+
+    def compute_loss(
+        self,
+        targets: TensorType["batch_x_num_keypoints", "heatmap_height", "heatmap_width"],
+        predictions: TensorType["batch_x_num_keypoints", "heatmap_height", "heatmap_width"],
+    ) -> TensorType["batch_x_num_keypoints", "heatmap_height", "heatmap_width"]:
+        h = targets.shape[1]
+        w = targets.shape[2]
+        # multiply by number of pixels in heatmap to standardize loss range
+        loss = F.mse_loss(targets, predictions, reduction="none") * h * w
+        return loss
+
+    def __call__(
+        self,
+        heatmaps_targ: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+        keypoints_pred_2d_reprojected: TensorType["batch", "num_keypoints", 2],
+        stage: Literal["train", "val", "test"] | None = None,
+        **kwargs,
+    ) -> Tuple[TensorType[()], list[dict]]:
+
+        # check if reprojected keypoints are available
+        if keypoints_pred_2d_reprojected is None:
+            raise ValueError(
+                f"Reprojected keypoints not available for {stage} stage. "
+                "Camera params file is required but not found;"
+                "Turn off supervised_reprojection_heatmap loss to avoid this error."
+            )
+
+        # create heatmaps from 2d reprojections
+        heatmaps_pred = generate_heatmaps(
+            keypoints=keypoints_pred_2d_reprojected,
+            height=self.original_image_height,
+            width=self.original_image_width,
+            output_shape=(self.downsampled_image_height, self.downsampled_image_width),
+            uniform_heatmaps=self.uniform_heatmaps,
+            keep_gradients=True,
+        )
+
+        elementwise_loss = self.compute_loss(targets=heatmaps_targ, predictions=heatmaps_pred)
+        clean_loss = self.remove_nans(loss=elementwise_loss, targets=heatmaps_targ)
+        scalar_loss = self.reduce_loss(clean_loss, method="mean")
+
+        logs = self.log_loss(loss=scalar_loss, stage=stage)
+
+        return self.weight * scalar_loss, logs
 
 
 @typechecked
@@ -931,6 +966,6 @@ def get_loss_classes() -> dict[str, Type[Loss]]:
         "unimodal_kl": UnimodalLoss,
         "unimodal_js": UnimodalLoss,
         "supervised_pairwise_projections": PairwiseProjectionsLoss,
-        # "supervised_reprojection_heatmap": ReprojectionHeatmapLoss,
+        "supervised_reprojection_heatmap": ReprojectionHeatmapLoss,
     }
     return loss_dict

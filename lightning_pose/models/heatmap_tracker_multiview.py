@@ -261,7 +261,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         if "keypoints_3d" in batch_dict and batch_dict["keypoints_3d"].shape[-1] == 3:
             num_views = batch_dict["images"].shape[1]
             num_keypoints = pred_keypoints.shape[1] // 2 // num_views
-
+            h, w = pred_heatmaps.shape[-2:]
             try:
                 # project from 2D to 3D
                 keypoints_pred_3d = project_camera_pairs_to_3d(
@@ -271,19 +271,19 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
                     dist=batch_dict["distortions"].float(),
                 )
                 keypoints_targ_3d = batch_dict["keypoints_3d"]
-                # # project from 3D back to 2D in original image coordinates
-                # keypoints_pred_2d_reprojected_original = project_3d_to_2d(
-                #     points_3d=torch.mean(keypoints_pred_3d, dim=1),
-                #     intrinsics=batch_dict["intrinsic_matrix"].float(),
-                #     extrinsics=batch_dict["extrinsic_matrix"].float(),
-                #     dist=batch_dict["distortions"].float(),
-                # )
-                # # convert from original image coords to model-input coords (necessary for heatmaps)
-                # keypoints_pred_2d_reprojected = convert_original_to_model_coords(
-                #     batch_dict=batch_dict,
-                #     original_keypoints=keypoints_pred_2d_reprojected_original,
-                # )
-                keypoints_pred_2d_reprojected = None
+                # project from 3D back to 2D in original image coordinates
+                keypoints_pred_2d_reprojected_original = project_3d_to_2d(
+                    points_3d=torch.mean(keypoints_pred_3d, dim=1),
+                    intrinsics=batch_dict["intrinsic_matrix"].float(),
+                    extrinsics=batch_dict["extrinsic_matrix"].float(),
+                    dist=batch_dict["distortions"].float(),
+                )
+                # convert from original image coords to model-input coords (necessary for heatmaps)
+                keypoints_pred_2d_reprojected = convert_original_to_model_coords(
+                    batch_dict=batch_dict,
+                    original_keypoints=keypoints_pred_2d_reprojected_original,
+                ).reshape(-1, num_views * num_keypoints, h, w)
+                # keypoints_pred_2d_reprojected = None
 
             except Exception as e:
                 print(f"Error in 3D projection: {e}")

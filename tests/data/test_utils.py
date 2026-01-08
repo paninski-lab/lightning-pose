@@ -160,147 +160,147 @@ def test_compute_num_train_frames():
         compute_num_train_frames(len_train_data, train_frames=-1)
 
 
-def test_generate_heatmaps(cfg, heatmap_dataset):
+class TestGenerateHeatmaps:
 
-    im_height = cfg.data.image_resize_dims.height
-    im_width = cfg.data.image_resize_dims.width
+    def test_basic(self, cfg, heatmap_dataset):
 
-    batch = heatmap_dataset.__getitem__(idx=0)
-    heatmap_gt = batch["heatmaps"].unsqueeze(0)
-    keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
-    heatmap_torch = generate_heatmaps(
-        keypts_gt,
-        height=im_height,
-        width=im_width,
-        output_shape=(heatmap_gt.shape[2], heatmap_gt.shape[3]),
-    )
+        im_height = cfg.data.image_resize_dims.height
+        im_width = cfg.data.image_resize_dims.width
 
-    # find soft argmax and confidence of ground truth heatmap
-    softmaxes_gt = spatial_softmax2d(heatmap_gt, temperature=torch.tensor(100))
-    preds_gt = spatial_expectation2d(softmaxes_gt, normalized_coordinates=False)
-    confidences_gt = torch.amax(softmaxes_gt, dim=(2, 3))
+        batch = heatmap_dataset.__getitem__(idx=0)
+        heatmap_gt = batch["heatmaps"].unsqueeze(0)
+        keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
+        heatmap_torch = generate_heatmaps(
+            keypts_gt,
+            height=im_height,
+            width=im_width,
+            output_shape=(heatmap_gt.shape[2], heatmap_gt.shape[3]),
+        )
 
-    # find soft argmax and confidence of generated heatmap
-    softmaxes_torch = spatial_softmax2d(heatmap_torch, temperature=torch.tensor(100))
-    preds_torch = spatial_expectation2d(softmaxes_torch, normalized_coordinates=False)
-    confidences_torch = torch.amax(softmaxes_torch, dim=(2, 3))
+        # find soft argmax and confidence of ground truth heatmap
+        softmaxes_gt = spatial_softmax2d(heatmap_gt, temperature=torch.tensor(100))
+        preds_gt = spatial_expectation2d(softmaxes_gt, normalized_coordinates=False)
+        confidences_gt = torch.amax(softmaxes_gt, dim=(2, 3))
 
-    assert (preds_gt == preds_torch).all()
-    assert (confidences_gt == confidences_torch).all()
+        # find soft argmax and confidence of generated heatmap
+        softmaxes_torch = spatial_softmax2d(heatmap_torch, temperature=torch.tensor(100))
+        preds_torch = spatial_expectation2d(softmaxes_torch, normalized_coordinates=False)
+        confidences_torch = torch.amax(softmaxes_torch, dim=(2, 3))
 
-    # cleanup
-    del batch
-    del heatmap_gt, keypts_gt
-    del softmaxes_gt, preds_gt, confidences_gt
-    del softmaxes_torch, preds_torch, confidences_torch
-    torch.cuda.empty_cache()  # remove tensors from gpu
+        assert (preds_gt == preds_torch).all()
+        assert (confidences_gt == confidences_torch).all()
 
+        # cleanup
+        del batch
+        del heatmap_gt, keypts_gt
+        del softmaxes_gt, preds_gt, confidences_gt
+        del softmaxes_torch, preds_torch, confidences_torch
+        torch.cuda.empty_cache()  # remove tensors from gpu
 
-def test_generate_uniform_heatmaps(cfg, toy_data_dir):
+    def test_uniform_heatmaps(self, cfg, toy_data_dir):
 
-    from lightning_pose.utils.scripts import get_dataset, get_imgaug_transform
+        from lightning_pose.utils.scripts import get_dataset, get_imgaug_transform
 
-    # update config
-    cfg_tmp = copy.deepcopy(cfg)
-    cfg_tmp.model.model_type = "heatmap"
-    cfg_tmp.training.uniform_heatmaps_for_nan_keypoints = True
+        # update config
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.model_type = "heatmap"
+        cfg_tmp.training.uniform_heatmaps_for_nan_keypoints = True
 
-    # build dataset with these new image dimensions
-    imgaug_transform = get_imgaug_transform(cfg_tmp)
-    heatmap_dataset = get_dataset(
-        cfg_tmp,
-        data_dir=toy_data_dir,
-        imgaug_transform=imgaug_transform,
-    )
+        # build dataset with these new image dimensions
+        imgaug_transform = get_imgaug_transform(cfg_tmp)
+        heatmap_dataset = get_dataset(
+            cfg_tmp,
+            data_dir=toy_data_dir,
+            imgaug_transform=imgaug_transform,
+        )
 
-    im_height = cfg.data.image_resize_dims.height
-    im_width = cfg.data.image_resize_dims.width
+        im_height = cfg.data.image_resize_dims.height
+        im_width = cfg.data.image_resize_dims.width
 
-    batch = heatmap_dataset.__getitem__(idx=0)
-    heatmap_gt = batch["heatmaps"].unsqueeze(0)
-    keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
+        batch = heatmap_dataset.__getitem__(idx=0)
+        heatmap_gt = batch["heatmaps"].unsqueeze(0)
+        keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
 
-    heatmap_uniform_torch = generate_heatmaps(
-        keypts_gt,
-        height=im_height,
-        width=im_width,
-        output_shape=(heatmap_gt.shape[2], heatmap_gt.shape[3]),
-        uniform_heatmaps=True,
-    )
+        heatmap_uniform_torch = generate_heatmaps(
+            keypts_gt,
+            height=im_height,
+            width=im_width,
+            output_shape=(heatmap_gt.shape[2], heatmap_gt.shape[3]),
+            uniform_heatmaps=True,
+        )
 
-    # find soft argmax and confidence of ground truth heatmap
-    softmaxes_gt = spatial_softmax2d(heatmap_gt, temperature=torch.tensor(100))
-    preds_gt = spatial_expectation2d(softmaxes_gt, normalized_coordinates=False)
-    confidences_gt = torch.amax(softmaxes_gt, dim=(2, 3))
+        # find soft argmax and confidence of ground truth heatmap
+        softmaxes_gt = spatial_softmax2d(heatmap_gt, temperature=torch.tensor(100))
+        preds_gt = spatial_expectation2d(softmaxes_gt, normalized_coordinates=False)
+        confidences_gt = torch.amax(softmaxes_gt, dim=(2, 3))
 
-    # find soft argmax and confidence of generated heatmap
-    softmaxes_torch = spatial_softmax2d(
-        heatmap_uniform_torch, temperature=torch.tensor(100)
-    )
-    preds_torch = spatial_expectation2d(softmaxes_torch, normalized_coordinates=False)
-    confidences_torch = torch.amax(softmaxes_torch, dim=(2, 3))
+        # find soft argmax and confidence of generated heatmap
+        softmaxes_torch = spatial_softmax2d(
+            heatmap_uniform_torch, temperature=torch.tensor(100)
+        )
+        preds_torch = spatial_expectation2d(softmaxes_torch, normalized_coordinates=False)
+        confidences_torch = torch.amax(softmaxes_torch, dim=(2, 3))
 
-    assert (preds_gt == preds_torch).all()
-    assert (confidences_gt == confidences_torch).all()
+        assert (preds_gt == preds_torch).all()
+        assert (confidences_gt == confidences_torch).all()
 
-    # cleanup
-    del batch
-    del heatmap_gt, keypts_gt
-    del softmaxes_gt, preds_gt, confidences_gt
-    del softmaxes_torch, preds_torch, confidences_torch
-    torch.cuda.empty_cache()  # remove tensors from gpu
+        # cleanup
+        del batch
+        del heatmap_gt, keypts_gt
+        del softmaxes_gt, preds_gt, confidences_gt
+        del softmaxes_torch, preds_torch, confidences_torch
+        torch.cuda.empty_cache()  # remove tensors from gpu
 
+    def test_weird_shape(self, cfg, toy_data_dir):
 
-def test_generate_heatmaps_weird_shape(cfg, toy_data_dir):
+        from lightning_pose.utils.scripts import get_dataset, get_imgaug_transform
 
-    from lightning_pose.utils.scripts import get_dataset, get_imgaug_transform
+        img_shape = (384, 256)
 
-    img_shape = (384, 256)
+        # update config
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.model_type = "heatmap"
+        cfg_tmp.data.image_resize_dims.height = img_shape[0]
+        cfg_tmp.data.image_resize_dims.width = img_shape[1]
 
-    # update config
-    cfg_tmp = copy.deepcopy(cfg)
-    cfg_tmp.model.model_type = "heatmap"
-    cfg_tmp.data.image_resize_dims.height = img_shape[0]
-    cfg_tmp.data.image_resize_dims.width = img_shape[1]
+        # build dataset with these new image dimensions
+        imgaug_transform = get_imgaug_transform(cfg_tmp)
+        dataset = get_dataset(
+            cfg_tmp,
+            data_dir=toy_data_dir,
+            imgaug_transform=imgaug_transform,
+        )
 
-    # build dataset with these new image dimensions
-    imgaug_transform = get_imgaug_transform(cfg_tmp)
-    dataset = get_dataset(
-        cfg_tmp,
-        data_dir=toy_data_dir,
-        imgaug_transform=imgaug_transform,
-    )
+        # now same test as `test_basic`
+        batch = dataset.__getitem__(idx=0)
+        heatmap_gt = batch["heatmaps"].unsqueeze(0)
+        keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
+        heatmap_torch = generate_heatmaps(
+            keypts_gt,
+            height=img_shape[0],
+            width=img_shape[1],
+            output_shape=(heatmap_gt.shape[2], heatmap_gt.shape[3]),
+        )
 
-    # now same test as `test_generate_heatmaps`
-    batch = dataset.__getitem__(idx=0)
-    heatmap_gt = batch["heatmaps"].unsqueeze(0)
-    keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
-    heatmap_torch = generate_heatmaps(
-        keypts_gt,
-        height=img_shape[0],
-        width=img_shape[1],
-        output_shape=(heatmap_gt.shape[2], heatmap_gt.shape[3]),
-    )
+        # find soft argmax and confidence of ground truth heatmap
+        softmaxes_gt = spatial_softmax2d(heatmap_gt, temperature=torch.tensor(100))
+        preds_gt = spatial_expectation2d(softmaxes_gt, normalized_coordinates=False)
+        confidences_gt = torch.amax(softmaxes_gt, dim=(2, 3))
 
-    # find soft argmax and confidence of ground truth heatmap
-    softmaxes_gt = spatial_softmax2d(heatmap_gt, temperature=torch.tensor(100))
-    preds_gt = spatial_expectation2d(softmaxes_gt, normalized_coordinates=False)
-    confidences_gt = torch.amax(softmaxes_gt, dim=(2, 3))
+        # find soft argmax and confidence of generated heatmap
+        softmaxes_torch = spatial_softmax2d(heatmap_torch, temperature=torch.tensor(100))
+        preds_torch = spatial_expectation2d(softmaxes_torch, normalized_coordinates=False)
+        confidences_torch = torch.amax(softmaxes_torch, dim=(2, 3))
 
-    # find soft argmax and confidence of generated heatmap
-    softmaxes_torch = spatial_softmax2d(heatmap_torch, temperature=torch.tensor(100))
-    preds_torch = spatial_expectation2d(softmaxes_torch, normalized_coordinates=False)
-    confidences_torch = torch.amax(softmaxes_torch, dim=(2, 3))
+        assert (preds_gt == preds_torch).all()
+        assert (confidences_gt == confidences_torch).all()
 
-    assert (preds_gt == preds_torch).all()
-    assert (confidences_gt == confidences_torch).all()
-
-    # cleanup
-    del batch
-    del heatmap_gt, keypts_gt
-    del softmaxes_gt, preds_gt, confidences_gt
-    del softmaxes_torch, preds_torch, confidences_torch
-    torch.cuda.empty_cache()  # remove tensors from gpu
+        # cleanup
+        del batch
+        del heatmap_gt, keypts_gt
+        del softmaxes_gt, preds_gt, confidences_gt
+        del softmaxes_torch, preds_torch, confidences_torch
+        torch.cuda.empty_cache()  # remove tensors from gpu
 
 
 def test_evaluate_heatmaps_at_location():
