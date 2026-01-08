@@ -4,7 +4,11 @@ from omegaconf import DictConfig, OmegaConf, open_dict
 
 __all__ = ["ModelConfig"]
 
-from lightning_pose.utils.io import check_video_paths, return_absolute_path
+from lightning_pose.utils.io import (
+    check_video_paths,
+    return_absolute_path,
+    find_video_files_for_views,
+)
 
 
 class ModelConfig:
@@ -30,16 +34,20 @@ class ModelConfig:
         if self.cfg.data.get("view_names") is None:
             return False
         if len(self.cfg.data.view_names) == 1:
-            raise ValueError(
-                "view_names should not be specified if there is only one view."
-            )
+            raise ValueError("view_names should not be specified if there is only one view.")
         return True
 
-    def test_video_files(self) -> list[Path]:
-        files = check_video_paths(
-            return_absolute_path(self.cfg.eval.test_videos_directory)
-        )
+    def test_video_files_singleview(self) -> list[Path]:
+        assert self.is_single_view(), "Use test_video_files_multiview for multi-view"
+        files = check_video_paths(return_absolute_path(self.cfg.eval.test_videos_directory))
         return [Path(f) for f in files]
+
+    def test_video_files_multiview(self):
+        assert self.is_multi_view()
+        return find_video_files_for_views(
+            video_dir=self.cfg.eval.test_videos_directory,
+            view_names=self.cfg.data.view_names,
+        )
 
     def validate(self):
         self._validate_steps_vs_epochs()
@@ -53,14 +61,8 @@ class ModelConfig:
             assert "unfreezing_step" in self.cfg.training
             assert "unfreezing_epoch" not in self.cfg.training
             if "multisteplr" in self.cfg.training.lr_scheduler_params:
-                assert (
-                    "milestone_steps"
-                    in self.cfg.training.lr_scheduler_params.multisteplr
-                )
-                assert (
-                    "milestones"
-                    not in self.cfg.training.lr_scheduler_params.multisteplr
-                )
+                assert "milestone_steps" in self.cfg.training.lr_scheduler_params.multisteplr
+                assert "milestones" not in self.cfg.training.lr_scheduler_params.multisteplr
 
         else:
             assert "min_steps" not in self.cfg.training
@@ -70,8 +72,5 @@ class ModelConfig:
             assert "unfreezing_step" not in self.cfg.training
             assert "unfreezing_epoch" in self.cfg.training
             if "multisteplr" in self.cfg.training.lr_scheduler_params:
-                assert (
-                    "milestone_steps"
-                    not in self.cfg.training.lr_scheduler_params.multisteplr
-                )
+                assert "milestone_steps" not in self.cfg.training.lr_scheduler_params.multisteplr
                 assert "milestones" in self.cfg.training.lr_scheduler_params.multisteplr

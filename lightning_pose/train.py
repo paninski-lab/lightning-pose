@@ -50,9 +50,7 @@ def chdir(dir: str | Path):
 
 
 @typechecked
-def train(
-    cfg: DictConfig, model_dir: str | Path | None = None, skip_evaluation=False
-) -> Model:
+def train(cfg: DictConfig, model_dir: str | Path | None = None, skip_evaluation=False) -> Model:
     """
     Trains a model using the configuration `cfg`. Saves model to `model_dir`
     (defaults to cwd if unspecified).
@@ -116,9 +114,7 @@ def _evaluate_on_training_dataset(model: Model, ood_mode=False):
                 model.config.cfg.data.data_dir,
             )
             if ood_mode:
-                camera_params_file = camera_params_file.with_stem(
-                    camera_params_file.stem + "_new"
-                )
+                camera_params_file = camera_params_file.with_stem(camera_params_file.stem + "_new")
         else:
             camera_params_file = None
 
@@ -174,9 +170,7 @@ def _evaluate_on_training_dataset(model: Model, ood_mode=False):
             view_name = model.config.cfg.data.view_names[i]
         # Copy output files to model_dir for backward-compatibility.
         # New users should look up these files in image_preds.
-        for p_file in (model.image_preds_dir() / csv_file.name).glob(
-            "predictions*.csv"
-        ):
+        for p_file in (model.image_preds_dir() / csv_file.name).glob("predictions*.csv"):
             metric_suffix = re.match(r"predictions(.*)\.csv", p_file.name)[1]
             out_file = "predictions"
             if len(csv_files) > 1:
@@ -196,17 +190,14 @@ def _predict_test_videos(model: Model):
         pretty_print_str("Predicting videos in cfg.eval.test_videos_directory...")
         # dealing with multiview
         if model.config.is_multi_view():
-            for video_file_per_view in find_video_files_for_views(
-                video_dir=model.config.cfg.data.video_dir,
-                view_names=model.config.cfg.data.view_names,
-            ):
+            for video_file_per_view in model.config.test_video_files_multiview():
                 model.predict_on_video_file_multiview(
                     video_file_per_view=video_file_per_view,
                     compute_metrics=True,
                     generate_labeled_video=model.config.cfg.eval.save_vids_after_training,
                 )
         else:
-            for video_file in model.config.test_video_files():
+            for video_file in model.config.test_video_files_singleview():
                 pretty_print_str(f"Predicting video: {video_file}...")
 
                 model.predict_on_video_file(
