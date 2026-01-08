@@ -6,7 +6,7 @@ Training
 
 If this is your first time training a model, you'll need to:
 
-#. Organize your data (per the document in :ref:`directory_structure`)
+#. Organize your data (per the document in :ref:`sv_organizing_data`)
 #. Create a valid config file
 
 After that, you are ready to train a model.
