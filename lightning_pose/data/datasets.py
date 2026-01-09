@@ -487,15 +487,13 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             cam_params_files = cam_params_df.file.unique()
 
         else:
-            # signal to downstream code that calibrations filename must be computed using session key
-            cam_params_df = None
-
-            # Default to all calibration files in calibrations directory.
-            cam_params_files = [
-                str(p.relative_to(root_directory))
-                for p in (Path(root_directory) / "calibrations").iterdir()
-                if p.suffix == ".toml"
-            ]
+            if (Path(root_directory) / "calibrations").is_dir():
+                # Default to all calibration files in calibrations directory.
+                cam_params_files = [
+                    str(p.relative_to(root_directory))
+                    for p in (Path(root_directory) / "calibrations").iterdir()
+                    if p.suffix == ".toml"
+                ]
 
         if len(cam_params_files) > 0:
             cam_params_file_to_camgroup = {}
