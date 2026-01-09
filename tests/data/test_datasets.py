@@ -1,7 +1,7 @@
 """Test basic dataset functionality."""
 
 import copy
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import cv2
 import numpy as np
@@ -27,6 +27,7 @@ def test_base_dataset(cfg, base_dataset):
     assert batch["keypoints"].shape == (num_targets,)
     assert isinstance(batch["images"], torch.Tensor)
     assert isinstance(batch["keypoints"], torch.Tensor)
+
 
 @pytest.fixture
 def camera_group():
@@ -81,6 +82,7 @@ def camera_group():
 
     # Create the CameraGroup
     return CameraGroup(cameras)
+
 
 class TestHeatmapDataset:
 
@@ -660,7 +662,6 @@ class TestMultiviewHeatmapDataset:
 class TestApply3DTransforms:
     """Tests for MultiviewHeatmapDataset.apply_3d_transforms method."""
 
-
     @pytest.fixture
     def valid_data_dict(self, multiview_heatmap_dataset):
         """Create a data dictionary with valid keypoints for testing."""
@@ -911,7 +912,6 @@ class TestApply3DTransforms:
         no_change(datadict)
 
         # Create data dict with insufficient keypoints only on a single view
-        view_name = multiview_heatmap_dataset.view_names[0]
         datadict_1 = copy.deepcopy(valid_data_dict)
         datadict_1[view]["keypoints"].fill_(float("nan"))
         no_change(datadict_1)
