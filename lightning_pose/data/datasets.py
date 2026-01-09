@@ -494,7 +494,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             cam_params_files = [
                 str(p.relative_to(root_directory))
                 for p in (Path(root_directory) / "calibrations").iterdir()
-                if p.suffix == "toml"
+                if p.suffix == ".toml"
             ]
 
         if len(cam_params_files) > 0:
