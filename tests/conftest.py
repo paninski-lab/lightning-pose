@@ -9,7 +9,7 @@ import copy
 import gc
 import os
 import subprocess
-from typing import Callable
+from typing import Callable, Any, Generator
 
 import cv2
 import imgaug.augmenters as iaa
@@ -17,7 +17,7 @@ import lightning.pytorch as pl
 import pandas as pd
 import pytest
 import torch
-from omegaconf import OmegaConf
+from omegaconf import OmegaConf, DictConfig
 
 import lightning_pose as lp
 from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
@@ -63,7 +63,7 @@ def toy_mdata_dir() -> str:
 
 
 @pytest.fixture
-def cfg() -> dict:
+def cfg() -> dict | DictConfig:
     """Load all toy data config file without hydra."""
     config_file = lp.LP_ROOT_PATH / "scripts" / "configs" / "config_mirror-mouse-example.yaml"
     cfg = OmegaConf.load(config_file)
@@ -80,7 +80,7 @@ def cfg() -> dict:
 
 
 @pytest.fixture
-def cfg_multiview() -> dict:
+def cfg_multiview() -> dict | DictConfig:
     """Load all toy data config file without hydra."""
     config_file = lp.LP_ROOT_PATH / "scripts" / "configs" / "config_mirror-mouse-example.yaml"
     cfg = OmegaConf.load(config_file)
@@ -223,14 +223,13 @@ def base_dataset(cfg, imgaug_transform) -> BaseTrackingDataset:
 
 
 @pytest.fixture
-def heatmap_dataset(cfg, imgaug_transform) -> HeatmapDataset:
+def heatmap_dataset(cfg, imgaug_transform) -> Generator[HeatmapDataset, None, None]:
     """Create a dataset for heatmap models from toy data."""
 
     # setup
-    cfg_tmp = copy.deepcopy(cfg)
-    cfg_tmp.model.model_type = "heatmap"
+    assert cfg.model.model_type == "heatmap"
     heatmap_dataset = get_dataset(
-        cfg_tmp, data_dir=TOY_DATA_ROOT_DIR, imgaug_transform=imgaug_transform
+        cfg, data_dir=TOY_DATA_ROOT_DIR, imgaug_transform=imgaug_transform
     )
 
     # return to tests
