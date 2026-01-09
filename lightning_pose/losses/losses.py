@@ -275,6 +275,10 @@ class HeatmapJSLoss(HeatmapLoss):
 class PCALoss(Loss):
     """Penalize predictions that fall outside a low-dimensional subspace."""
 
+    # define all valid loss names as class constants
+    LOSS_NAME_MULTIVIEW = "pca_multiview"
+    LOSS_NAME_SINGLEVIEW = "pca_singleview"
+
     def __init__(
         self,
         loss_name: Literal["pca_singleview", "pca_multiview"],
@@ -292,6 +296,10 @@ class PCALoss(Loss):
     ) -> None:
         super().__init__(data_module=data_module, log_weight=log_weight)
         self.device = device
+
+        # validate against class constants
+        if loss_name not in (self.LOSS_NAME_MULTIVIEW, self.LOSS_NAME_SINGLEVIEW):
+            raise ValueError(f"Invalid loss_name: {loss_name}")
         self.loss_name = loss_name
 
         if loss_name == "pca_multiview":
@@ -473,6 +481,9 @@ class TemporalHeatmapLoss(Loss):
 
     """
 
+    LOSS_NAME_MSE = "temporal_heatmap_mse"
+    LOSS_NAME_KL = "temporal_heatmap_kl"
+
     def __init__(
         self,
         loss_name: Literal["temporal_heatmap_mse", "temporal_heatmap_kl"],
@@ -483,6 +494,9 @@ class TemporalHeatmapLoss(Loss):
         **kwargs,
     ) -> None:
         super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
+
+        if loss_name not in (self.LOSS_NAME_MSE, self.LOSS_NAME_KL):
+            raise ValueError(f"Invalid loss_name: {loss_name}")
         self.loss_name = loss_name
 
         if self.loss_name == "temporal_heatmap_mse":
@@ -571,6 +585,10 @@ class TemporalHeatmapLoss(Loss):
 class UnimodalLoss(Loss):
     """Encourage heatmaps to be unimodal using various measures."""
 
+    LOSS_NAME_MSE = "unimodal_mse"
+    LOSS_NAME_KL = "unimodal_kl"
+    LOSS_NAME_JS = "unimodal_js"
+
     def __init__(
         self,
         loss_name: Literal["unimodal_mse", "unimodal_kl", "unimodal_js"],
@@ -587,7 +605,10 @@ class UnimodalLoss(Loss):
 
         super().__init__(data_module=data_module, log_weight=log_weight)
 
+        if loss_name not in (self.LOSS_NAME_MSE, self.LOSS_NAME_KL, self.LOSS_NAME_JS):
+            raise ValueError(f"Invalid loss_name: {loss_name}")
         self.loss_name = loss_name
+
         self.original_image_height = original_image_height
         self.original_image_width = original_image_width
         self.downsampled_image_height = downsampled_image_height
@@ -965,14 +986,14 @@ def get_loss_classes() -> dict[str, Type[Loss]]:
         HeatmapMSELoss.loss_name: HeatmapMSELoss,
         HeatmapKLLoss.loss_name: HeatmapKLLoss,
         HeatmapJSLoss.loss_name: HeatmapJSLoss,
-        "pca_multiview": PCALoss,
-        "pca_singleview": PCALoss,
+        PCALoss.LOSS_NAME_MULTIVIEW: PCALoss,
+        PCALoss.LOSS_NAME_SINGLEVIEW: PCALoss,
         TemporalLoss.loss_name: TemporalLoss,
-        "temporal_heatmap_mse": TemporalHeatmapLoss,
-        "temporal_heatmap_kl": TemporalHeatmapLoss,
-        "unimodal_mse": UnimodalLoss,
-        "unimodal_kl": UnimodalLoss,
-        "unimodal_js": UnimodalLoss,
+        TemporalHeatmapLoss.LOSS_NAME_MSE: TemporalHeatmapLoss,
+        TemporalHeatmapLoss.LOSS_NAME_KL: TemporalHeatmapLoss,
+        UnimodalLoss.LOSS_NAME_MSE: UnimodalLoss,
+        UnimodalLoss.LOSS_NAME_KL: UnimodalLoss,
+        UnimodalLoss.LOSS_NAME_JS: UnimodalLoss,
         PairwiseProjectionsLoss.loss_name: PairwiseProjectionsLoss,
         ReprojectionHeatmapLoss.loss_name: ReprojectionHeatmapLoss,
     }
