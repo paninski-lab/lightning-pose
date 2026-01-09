@@ -2,11 +2,11 @@
 Importing labeled data
 ##########################
 
-You can import labeled data from other software like DLC and Sleap
+You can import labeled data from other software like DLC and SLEAP
 using scripts in the Lightning Pose git repo.
 
-DLC
-====
+Importing from DLC
+====================
 
 Run the following script from the git repo:
 
@@ -15,8 +15,13 @@ Run the following script from the git repo:
     python scripts/converters/dlc2lp.py --dlc_dir=/path/to/dlc_dir --lp_dir=/path/to/lp_dir
 
 
-SLEAP
-======
+Importing from SLEAP
+======================
+
+.. note::
+
+    The script only works with single-view, single-animal SLEAP projects.
+    A multi-view, single-animal SLEAP is in the works.
 
 First, export your SLEAP project as a .pkg.slp file (Predict -> Export Labels Package in the SLEAP gui).
 Then run the following script from the git repo:

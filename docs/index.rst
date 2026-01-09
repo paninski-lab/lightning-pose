@@ -119,7 +119,7 @@ Cloud Application & Workflow
 Read the papers
 ----------------
 
-The original Nature Methods 2024 paper that introduced lightning pose for single view pose estimation using semisupervised learning and ensemble kalman smoothing (EKS):
+The original Nature Methods 2024 paper that introduced Lightning Pose for single-view pose estimation using semisupervised learning and ensemble kalman smoothing (EKS):
 
 | **Lightning Pose: improved animal pose estimation via semi-supervised learning, Bayesian ensembling and cloud-native open-source tools**
 | Biderman, D., Whiteway, M. R., Hurwitz, C., et al.
@@ -129,7 +129,7 @@ The original Nature Methods 2024 paper that introduced lightning pose for single
    :margin: 2 0 0 0
 
    .. grid-item::
-      .. button-link:: https://doi.org/10.1038/s41592-024-02319-1
+      .. button-link:: https://pmc.ncbi.nlm.nih.gov/articles/PMC12087009/
          :color: primary
          :outline:
 
