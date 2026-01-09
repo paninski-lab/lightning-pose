@@ -10,7 +10,7 @@ Before proceeding, ensure your system meets these hardware and software specific
 
 * **Operating System**: Linux or Windows Subsystem for Linux (`WSL2 <https://learn.microsoft.com/en-us/windows/wsl/install>`_).
 * **Hardware**: An NVIDIA GPU is required for model training and inference.
-* **Driver**: NVIDIA Driver supporting CUDA 12.4 or higher.
+* **Driver**: NVIDIA Driver supporting CUDA 12.0 or higher.
 
 -----------------------------
 Step 1: Install Dependencies

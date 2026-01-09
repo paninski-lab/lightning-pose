@@ -1,7 +1,7 @@
-.. lightning-pose documentation master file, created by
-   sphinx-quickstart on Thu Nov  9 13:15:31 2023.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+.. rst-class:: home-display-none
+
+Lightning Pose Homepage
+========================
 
 .. image:: images/LightningPose_horizontal_light.png
 
@@ -156,15 +156,21 @@ patch masking, 3d image augmentation and losses, and multiview EKS.
 
 --------
 
+
 Get started with the app
 -------------------------
 
 The lightning pose app provides an easy-to-use GUI to access most lightning pose features.
 
 To get started, :doc:`install lightning pose <source/installation_guide>`
-and follow the :doc:`New user tutorial <source/user_guide/new_user_tutorial>`.
+and follow the :doc:`New user tutorial <source/create_first_project>`.
 It covers the end-to-end workflow of labeling, training, and evaluation.
 
+.. toctree::
+   :maxdepth: 2
+   :hidden:
+
+   self
 
 .. toctree::
    :maxdepth: 2

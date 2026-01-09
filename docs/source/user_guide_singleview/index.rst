@@ -1,5 +1,5 @@
 ######################
-Single View
+Singleview
 ######################
 
 This user guide walks you through using the Lightning Pose CLI for

@@ -53,10 +53,6 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 html_theme = "sphinx_rtd_theme"
-html_theme_options = {
-    # Set this to False to keep the sidebar expanded
-    "logo_only": True,
-}
 html_logo = "images/LightningPose_logo_light.png"
 html_favicon = "images/favicon.ico"
 
