@@ -466,21 +466,41 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         self.num_targets = self.num_keypoints * 2
 
-        if camera_params_path is not None:
+        cam_params_df = None
+        cam_params_file_to_camgroup = None
+        cam_params_files = []
 
-            assert not do_context, "3D augmentations for context model not yet supported"
+        if do_context:
+            assert not camera_params_path, "3D augmentations for context model not yet supported"
+
+        elif camera_params_path is not None:
 
             cam_params_df = pd.read_csv(camera_params_path, index_col=0, header=[0])
 
             # make sure image numbers at least match
             img_idxs_labels = [
-                i.split('/')[-1] for i in self.dataset[self.view_names[0]].image_names
+                i.split("/")[-1] for i in self.dataset[self.view_names[0]].image_names
             ]
-            img_idxs_calib = [i.split('/')[-1] for i in cam_params_df.index]
+            img_idxs_calib = [i.split("/")[-1] for i in cam_params_df.index]
             assert np.all(img_idxs_labels == img_idxs_calib)
 
+            cam_params_files = cam_params_df.file.unique()
+
+        else:
+            # signal to downstream code that calibrations filename must be computed using session key
+            cam_params_df = None
+
+            # Default to all calibration files in calibrations directory.
+            cam_params_files = [
+                str(p.relative_to(root_directory))
+                for p in (Path(root_directory) / "calibrations").iterdir()
+                if p.suffix == "toml"
+            ]
+
+        if len(cam_params_files) > 0:
             cam_params_file_to_camgroup = {}
-            for cam_params_file in cam_params_df.file.unique():
+
+            for cam_params_file in cam_params_files:
                 camgroup = CameraGroup.load(os.path.join(root_directory, cam_params_file))
                 cam_names = camgroup.get_names()
                 assert np.all(cam_names == view_names), (
@@ -488,10 +508,6 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                     f"instead found {view_names} and {cam_names}."
                 )
                 cam_params_file_to_camgroup[cam_params_file] = camgroup
-
-        else:
-            cam_params_df = None
-            cam_params_file_to_camgroup = None
 
         self.cam_params_df = cam_params_df
         self.cam_params_file_to_camgroup = cam_params_file_to_camgroup
@@ -865,7 +881,16 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         # always provide 3D keypoints when camera params are available
         if self.cam_params_file_to_camgroup:
             # select proper camera calibration parameters for this data point
-            camgroup = self.cam_params_file_to_camgroup[self.cam_params_df.iloc[idx].file]
+            if self.cam_params_df is not None:
+                calibration_file = self.cam_params_df.iloc[idx].file
+            else:
+                # infer calibration file path from session key embedded in frame path.
+                frame_rel_path = self.dataset[self.view_names[0]].image_names[idx]
+                # labeled-data/session0_view0/img001.png -> session0
+                session_key = frame_rel_path.split("/")[1].rpartition("_")[0]
+                calibration_file = str(Path("calibrations") / (session_key + ".toml"))
+
+            camgroup = self.cam_params_file_to_camgroup[calibration_file]
 
             # load camera parameters
             intrinsic_matrix = torch.stack([
