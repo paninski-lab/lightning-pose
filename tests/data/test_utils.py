@@ -302,6 +302,176 @@ class TestGenerateHeatmaps:
         del softmaxes_torch, preds_torch, confidences_torch
         torch.cuda.empty_cache()  # remove tensors from gpu
 
+    def test_keep_gradients(self):
+        """Test that gradients flow through keypoints when keep_gradients=True."""
+
+        # Create mock data
+        batch_size = 2
+        num_keypoints = 4
+        im_height = 256
+        im_width = 256
+        output_height = 64
+        output_width = 64
+
+        # Create keypoints that require gradients
+        keypts_with_grad = torch.tensor([
+            [[32.0, 64.0], [128.0, 96.0], [200.0, 150.0], [100.0, 200.0]],  # batch 1
+            [[64.0, 32.0], [160.0, 120.0], [180.0, 180.0], [120.0, 220.0]]  # batch 2
+        ], dtype=torch.float32, requires_grad=True)
+
+        # Generate heatmaps with gradients enabled
+        heatmap_torch = generate_heatmaps(
+            keypts_with_grad,
+            height=im_height,
+            width=im_width,
+            output_shape=(output_height, output_width),
+            keep_gradients=True,
+        )
+
+        # Compute a simple loss and backpropagate
+        loss = torch.sum(heatmap_torch)
+        loss.backward()
+
+        # Check that gradients exist and are finite
+        assert keypts_with_grad.grad is not None, "No gradients computed for keypoints"
+        assert torch.isfinite(keypts_with_grad.grad).all(), "Gradients contain NaN or inf values"
+        assert not torch.all(keypts_with_grad.grad == 0), "All gradients are zero"
+
+        # Test the opposite: gradients should NOT flow when keep_gradients=False
+        keypts_no_grad = torch.tensor([
+            [[32.0, 64.0], [128.0, 96.0], [200.0, 150.0], [100.0, 200.0]],  # batch 1
+            [[64.0, 32.0], [160.0, 120.0], [180.0, 180.0], [120.0, 220.0]]  # batch 2
+        ], dtype=torch.float32, requires_grad=True)
+
+        heatmap_no_grad = generate_heatmaps(
+            keypts_no_grad,
+            height=im_height,
+            width=im_width,
+            output_shape=(output_height, output_width),
+            keep_gradients=False,
+        )
+
+        # Check that the heatmap doesn't require gradients (computation graph is detached)
+        assert not heatmap_no_grad.requires_grad, \
+            "Heatmap should not require gradients when keep_gradients=False"
+
+        # Since heatmap_no_grad doesn't require gradients, we can't call backward on it
+        # Instead, verify that the original keypoints have no gradients after this operation
+        # (they shouldn't since the computation was detached)
+        assert keypts_no_grad.grad is None, "Original keypoints should have no gradients yet"
+
+    def test_out_of_bounds_nan_indices(self):
+        """Out-of-bounds keypoints are marked as NaN and filled with appropriate heatmaps."""
+
+        # Create mock data with some out-of-bounds keypoints
+        batch_size = 2
+        num_keypoints = 4
+        im_height = 256
+        im_width = 256
+        output_height = 64
+        output_width = 64
+
+        keypoints = torch.tensor([
+            [
+                [32.0, 32.0],  # valid keypoint
+                [-10.0, 50.0],  # x out of bounds (< -1 after scaling)
+                [500.0, 32.0],  # x out of bounds (> width + 1 after scaling)
+                [32.0, 500.0]  # y out of bounds (> height + 1 after scaling)
+            ],
+            [
+                [32.0, -10.0],  # y out of bounds (< -1 after scaling)
+                [64.0, 64.0],  # valid keypoint
+                [float('nan'), 32.0],  # explicit NaN
+                [128.0, 128.0]  # valid keypoint
+            ]
+        ], dtype=torch.float32)
+
+        # Test with uniform_heatmaps=False (zeros for invalid)
+        heatmaps = generate_heatmaps(
+            keypoints,
+            height=im_height,
+            width=im_width,
+            output_shape=(output_height, output_width),
+            uniform_heatmaps=False,
+        )
+
+        # Check that out-of-bounds keypoints result in zero heatmaps
+        zeros_heatmap = torch.zeros(output_height, output_width)
+        assert torch.allclose(heatmaps[0, 1], zeros_heatmap)  # x < -1
+        assert torch.allclose(heatmaps[0, 2], zeros_heatmap)  # x > width+1
+        assert torch.allclose(heatmaps[0, 3], zeros_heatmap)  # y > height+1
+        assert torch.allclose(heatmaps[1, 0], zeros_heatmap)  # y < -1
+        assert torch.allclose(heatmaps[1, 2], zeros_heatmap)  # explicit NaN
+
+        # Check that valid keypoints result in non-zero heatmaps
+        assert not torch.allclose(heatmaps[0, 0], zeros_heatmap)  # valid
+        assert not torch.allclose(heatmaps[1, 1], zeros_heatmap)  # valid
+        assert not torch.allclose(heatmaps[1, 3], zeros_heatmap)  # valid
+
+        # Test with uniform_heatmaps=True
+        heatmaps_uniform = generate_heatmaps(
+            keypoints,
+            height=im_height,
+            width=im_width,
+            output_shape=(output_height, output_width),
+            uniform_heatmaps=True,
+        )
+
+        # Check that out-of-bounds keypoints result in uniform heatmaps
+        uniform_heatmap = torch.ones(output_height, output_width) / (output_height * output_width)
+        assert torch.allclose(heatmaps_uniform[0, 1], uniform_heatmap)  # x < -1
+        assert torch.allclose(heatmaps_uniform[0, 2], uniform_heatmap)  # x > width+1
+        assert torch.allclose(heatmaps_uniform[1, 2], uniform_heatmap)  # explicit NaN
+
+    def test_extreme_keypoint_clamping(self):
+        """Test that extreme keypoint values are clamped to prevent numerical issues."""
+
+        # Create keypoints with extreme values
+        batch_size = 1
+        num_keypoints = 4
+        im_height = 256
+        im_width = 256
+        output_height = 64
+        output_width = 64
+
+        extreme_keypoints = torch.tensor([
+            [
+                [-100000000.0, 32.0],  # extremely negative x
+                [100000000.0, 32.0],  # extremely positive x
+                [32.0, -100000000.0],  # extremely negative y
+                [32.0, 100000000.0]  # extremely positive y
+            ]
+        ], dtype=torch.float32, requires_grad=True)
+
+        # Function should not crash and should produce finite heatmaps
+        heatmaps = generate_heatmaps(
+            extreme_keypoints,
+            height=im_height,
+            width=im_width,
+            output_shape=(output_height, output_width),
+            keep_gradients=True,
+        )
+
+        # Check that all heatmaps are finite (no NaN or inf values from extreme computations)
+        assert torch.isfinite(heatmaps).all(), "Heatmaps contain NaN or inf values"
+
+        # Check that heatmaps have correct shape
+        assert heatmaps.shape == (batch_size, num_keypoints, output_height, output_width)
+
+        # Check that gradients can flow through (no numerical issues)
+        loss = torch.sum(heatmaps)
+        loss.backward()
+        assert extreme_keypoints.grad is not None
+        assert torch.isfinite(extreme_keypoints.grad).all(), "Gradients contain NaN or inf values"
+
+        # Verify clamping behavior: extreme values should be treated as out-of-bounds
+        # and filled with zeros (since uniform_heatmaps=False by default)
+        expected_zero = torch.zeros(output_height, output_width)
+        assert torch.allclose(heatmaps[0, 0], expected_zero)  # extreme negative x
+        assert torch.allclose(heatmaps[0, 1], expected_zero)  # extreme positive x
+        assert torch.allclose(heatmaps[0, 2], expected_zero)  # extreme negative y
+        assert torch.allclose(heatmaps[0, 3], expected_zero)  # extreme positive y
+
 
 def test_evaluate_heatmaps_at_location():
 
@@ -827,8 +997,8 @@ class TestOriginalToModel:
             x, y, h, w = bbox[0], bbox[1], bbox[2], bbox[3]
             keypoints = torch.tensor([
                 [[x.item(), y.item()]],           # top-left corner of bbox
-                [[x.item() + w.item(), y.item() + h.item()]], # bottom-right corner of bbox
-                [[x.item() + w.item()/2, y.item() + h.item()/2]], # center of bbox
+                [[x.item() + w.item(), y.item() + h.item()]],  # bottom-right corner of bbox
+                [[x.item() + w.item()/2, y.item() + h.item()/2]],  # center of bbox
             ])
 
             kps = original_to_model(

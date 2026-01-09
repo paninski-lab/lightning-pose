@@ -287,21 +287,25 @@ def get_loss_factories(
         loss_params_dict["supervised"][loss_name] = {"log_weight": 0.0}
         if cfg.model.model_type.find("multiview") > -1 and cfg.data.get("camera_params_file"):
 
-            log_weight_sp = cfg.losses.get("supervised_pairwise_projections", {}).get("log_weight")
+            log_weight_sp = cfg.losses.get(
+                "supervised_pairwise_projections", {}
+            ).get("log_weight")
             if log_weight_sp is not None:
-                print("adding supervised pairwise projection loss")
+                print("Adding supervised pairwise projection loss")
                 loss_params_dict["supervised"]["supervised_pairwise_projections"] = {
                     "log_weight": log_weight_sp
                 }
 
-            log_weight_hr = cfg.losses.get("supervised_reprojection_heatmap", {}).get("log_weight")
+            log_weight_hr = cfg.losses.get(
+                "supervised_reprojection_heatmap_mse", {}
+            ).get("log_weight")
             if log_weight_hr is not None:
-                print("adding supervised reprojection heatmap loss")
+                print("Adding supervised reprojection heatmap loss")
                 height_og = cfg.data.image_resize_dims.height
                 width_og = cfg.data.image_resize_dims.width
                 height_ds = int(height_og // (2 ** cfg.data.get("downsample_factor", 2)))
                 width_ds = int(width_og // (2 ** cfg.data.get("downsample_factor", 2)))
-                loss_params_dict["supervised"]["supervised_reprojection_heatmap"] = {
+                loss_params_dict["supervised"]["supervised_reprojection_heatmap_mse"] = {
                     "log_weight": log_weight_hr,
                     "original_image_height": height_og,
                     "original_image_width": width_og,
@@ -657,10 +661,14 @@ def get_callbacks(
         )
         callbacks.append(ckpt_callback)
 
-    # we just need this callback for unsupervised losses or multiview models with 3d loss
+    # we need this callback for both supervised and unsupervised losses
+    has_supervised_loss = any(
+        loss_config.get("log_weight") is not None
+        for loss_name, loss_config in cfg.losses.items() if loss_name.startswith("supervised_")
+    )
     if (
         ((cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None))
-        or cfg.losses.get("supervised_pairwise_projections", {}).get("log_weight") is not None
+        or has_supervised_loss
     ):
         anneal_weight_callback = AnnealWeight(**cfg.callbacks.anneal_weight)
         callbacks.append(anneal_weight_callback)
