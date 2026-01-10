@@ -623,12 +623,14 @@ def load_model_from_checkpoint(
             loss_factory=loss_factories["supervised"],
             loss_factory_unsupervised=loss_factories["unsupervised"],
             strict=False,
+            weights_only=False,
         )
     else:
         model = ModelClass.load_from_checkpoint(
             fixed_ckpt_file,
             loss_factory=loss_factories["supervised"],
             strict=False,
+            weights_only=False,
         )
 
     # clean up temporary file if created
