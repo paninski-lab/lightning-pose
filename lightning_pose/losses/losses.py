@@ -716,7 +716,7 @@ class UnimodalLoss(Loss):
 class RegressionMSELoss(Loss):
     """MSE loss between ground truth and predicted coordinates."""
 
-    loss_name = "regression_mse"
+    loss_name = "regression"
 
     def __init__(
         self,

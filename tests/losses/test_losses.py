@@ -434,9 +434,9 @@ def test_regression_mse_loss():
     loss, logs = mse_loss(true_keypoints, predicted_keypoints, stage=stage)
     assert loss.shape == torch.Size([])
     assert loss == 0.0
-    assert logs[0]["name"] == "%s_regression_mse_loss" % stage
+    assert logs[0]["name"] == "%s_regression_loss" % stage
     assert logs[0]["value"] == loss / mse_loss.weight
-    assert logs[1]["name"] == "regression_mse_weight"
+    assert logs[1]["name"] == "regression_weight"
     assert logs[1]["value"] == mse_loss.weight
 
     # when predictions do not equal targets, should return positive value
@@ -496,9 +496,9 @@ class TestPairwiseProjectionsLoss:
         loss, logs = pp_loss(keypoints_targ_3d, keypoints_pred_3d, stage=stage)
         assert loss.shape == torch.Size([])
         assert loss == 0.0
-        assert logs[0]["name"] == f"{stage}_pairwise_projections_loss"
+        assert logs[0]["name"] == f"{stage}_supervised_pairwise_projections_loss"
         assert logs[0]["value"] == loss / pp_loss.weight
-        assert logs[1]["name"] == "pairwise_projections_weight"
+        assert logs[1]["name"] == "supervised_pairwise_projections_weight"
         assert logs[1]["value"] == pp_loss.weight
 
     def test_actual_values(self, pp_loss):
@@ -611,9 +611,9 @@ class TestReprojectionHeatmapLoss:
 
         # Loss should be positive when predictions differ from targets
         assert loss.item() > 0.0
-        assert logs[0]["name"] == f"{stage}_reprojection_heatmap_loss"
+        assert logs[0]["name"] == f"{stage}_supervised_reprojection_heatmap_mse_loss"
         assert logs[0]["value"] == loss / rh_loss.weight
-        assert logs[1]["name"] == "reprojection_heatmap_weight"
+        assert logs[1]["name"] == "supervised_reprojection_heatmap_mse_weight"
         assert logs[1]["value"] == rh_loss.weight
 
     def test_targets_all_zeros(self, rh_loss):
