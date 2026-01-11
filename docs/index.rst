@@ -178,6 +178,9 @@ It covers the end-to-end workflow of labeling, training, and evaluation.
    :caption: Getting started
 
    source/installation_guide
+   source/core_concepts
+   source/create_first_project
+   source/example_data
    source/importing_labeled_data
 
 .. toctree::
