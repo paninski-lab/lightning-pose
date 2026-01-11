@@ -697,8 +697,12 @@ class HeatmapTrackerMultiviewAggregator(BaseSupervisedTracker):
 
         # Initialize VGGT aggregator
         aggregator_checkpoint = kwargs.get("aggregator_checkpoint", None)
+        if self.num_fc_input_features != 1024:
+            self.proj = nn.Linear(self.num_fc_input_features, 1024)
+        else:
+            self.proj = None
         self.aggregator = VGGTAggregator(
-            embedding_dim=self.num_fc_input_features,
+            embedding_dim=1024,
             num_views=self.num_views,
             aggregator_checkpoint=aggregator_checkpoint,
         )
@@ -706,7 +710,7 @@ class HeatmapTrackerMultiviewAggregator(BaseSupervisedTracker):
         if head == "heatmap_cnn":
             self.head = HeatmapHead(
                 backbone_arch=backbone,
-                in_channels=self.num_fc_input_features * 2,
+                in_channels=1024 * 2,
                 out_channels=self.num_keypoints,
                 downsample_factor=self.downsample_factor,
             )
@@ -738,6 +742,10 @@ class HeatmapTrackerMultiviewAggregator(BaseSupervisedTracker):
         view_batch_size, _, embedding_dim = outputs.shape
         outputs = outputs.reshape(batch_size, -1, embedding_dim)
         # shape: (batch, num_views * num_patches, embedding_dim)
+        # project to 1024 if needed
+        if self.proj is not None:
+            outputs = self.proj(outputs)
+            embedding_dim = 1024
 
         # reshape data to (view * batch, embedding_dim, height, width) for head processing
         patch_size = outputs.shape[1] // self.num_views
