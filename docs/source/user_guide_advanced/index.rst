@@ -1,8 +1,8 @@
 ######################
-User guide: advanced
+Advanced Topics
 ######################
 
-This user guide addresses some of the more advanced features of Lightning Pose.
+This part of the CLI user guide addresses some of the more advanced features of Lightning Pose.
 For each feature, we point out necessary modifications and useful information related to the
 **data** and **config file**.
 

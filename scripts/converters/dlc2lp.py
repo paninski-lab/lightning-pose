@@ -5,7 +5,20 @@ import shutil
 
 import pandas as pd
 
-from lightning_pose.utils import io as io_utils
+
+def fix_empty_first_row(df: pd.DataFrame) -> pd.DataFrame:
+    """Copied out of lightning_pose.utils.io"""
+    if df.index.name is not None:
+        new_row = {col: np.nan for col in df.columns}
+        prepend_df = pd.DataFrame(
+            new_row, index=[df.index.name], columns=df.columns, dtype="float64"
+        )
+        fixed_df = pd.concat([prepend_df, df])
+        assert fixed_df.index.name is None
+        return fixed_df
+
+    return df
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -27,8 +40,10 @@ if __name__ == "__main__":
 
     # find all labeled data in DLC project
     dirs = [
-        f for f in os.listdir(os.path.join(dlc_dir, "labeled-data"))
-        if not f.startswith('.') if not f.endswith('_labeled')
+        f
+        for f in os.listdir(os.path.join(dlc_dir, "labeled-data"))
+        if not f.startswith(".")
+        if not f.endswith("_labeled")
     ]
 
     dirs.sort()
@@ -38,35 +53,43 @@ if __name__ == "__main__":
         try:
             csv_file = glob.glob(os.path.join(dlc_dir, "labeled-data", d, "CollectedData*.csv"))[0]
             df_tmp = pd.read_csv(csv_file, header=[0, 1, 2], index_col=0)
-            df_tmp = io_utils.fix_empty_first_row(df_tmp)
+            df_tmp = fix_empty_first_row(df_tmp)
             if len(df_tmp.index.unique()) != df_tmp.shape[0]:
                 # new DLC labeling scheme that splits video/image in different cells
                 vids = df_tmp.loc[
-                       :, ("Unnamed: 1_level_0", "Unnamed: 1_level_1", "Unnamed: 1_level_2")]
+                    :, ("Unnamed: 1_level_0", "Unnamed: 1_level_1", "Unnamed: 1_level_2")
+                ]
                 imgs = df_tmp.loc[
-                       :, ("Unnamed: 2_level_0", "Unnamed: 2_level_1", "Unnamed: 2_level_2")]
+                    :, ("Unnamed: 2_level_0", "Unnamed: 2_level_1", "Unnamed: 2_level_2")
+                ]
                 new_col = [f"labeled-data/{v}/{i}" for v, i in zip(vids, imgs)]
                 df_tmp1 = df_tmp.drop(
-                    ("Unnamed: 1_level_0", "Unnamed: 1_level_1", "Unnamed: 1_level_2"), axis=1,
+                    ("Unnamed: 1_level_0", "Unnamed: 1_level_1", "Unnamed: 1_level_2"),
+                    axis=1,
                 )
                 df_tmp2 = df_tmp1.drop(
-                    ("Unnamed: 2_level_0", "Unnamed: 2_level_1", "Unnamed: 2_level_2"), axis=1,
+                    ("Unnamed: 2_level_0", "Unnamed: 2_level_1", "Unnamed: 2_level_2"),
+                    axis=1,
                 )
                 df_tmp2.index = new_col
                 df_tmp = df_tmp2
         except IndexError:
             try:
-                h5_file = glob.glob(
-                    os.path.join(dlc_dir, "labeled-data", d, "CollectedData*.h5")
-                )[0]
+                h5_file = glob.glob(os.path.join(dlc_dir, "labeled-data", d, "CollectedData*.h5"))[
+                    0
+                ]
                 df_tmp = pd.read_hdf(h5_file)
                 if isinstance(df_tmp.index, pd.core.indexes.multi.MultiIndex):
                     # new DLC labeling scheme that splits video/image in different cells
                     imgs = [i[2] for i in df_tmp.index]
                     vids = [df_tmp.index[0][1] for _ in imgs]
                     new_col = [f"labeled-data/{v}/{i}" for v, i in zip(vids, imgs)]
-                    df_tmp1 = df_tmp.reset_index().drop(
-                        columns="level_0").drop(columns="level_1").drop(columns="level_2")
+                    df_tmp1 = (
+                        df_tmp.reset_index()
+                        .drop(columns="level_0")
+                        .drop(columns="level_1")
+                        .drop(columns="level_2")
+                    )
                     df_tmp1.index = new_col
                     df_tmp = df_tmp1
             except IndexError:

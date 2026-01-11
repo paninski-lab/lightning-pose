@@ -1,3 +1,8 @@
+/* Hide the main title only on the homepage */
+.home-display-none h1:first-child {
+    display: none;
+}
+
 /*
     Hacks to fix sphinx-rtd-theme styles leaking past dark theme
     Related issue: https://github.com/MrDogeBro/sphinx_rtd_dark_mode/issues/43
