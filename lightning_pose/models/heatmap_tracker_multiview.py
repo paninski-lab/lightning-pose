@@ -724,13 +724,17 @@ class HeatmapTrackerMultiviewAggregator(BaseSupervisedTracker):
         # otherwise it's ignored, important so that it doesn't try to pickle the dali loaders)
         self.save_hyperparameters(ignore=["loss_factory", "loss_factory_unsupervised"])
 
+        self.num_special_tokens = 1
+        if 'dinov3' in backbone:
+            self.num_special_tokens = 5
+
     def forward_vit(
         self,
         images: TensorType["view * batch", "channels":3, "image_height", "image_width"],
     ):
         """Override forward pass through the vision encoder to add view embeddings."""
         batch_size = images.shape[0] // self.num_views
-        outputs = self.backbone.vision_encoder(images,interpolate_pos_encoding=True)[0][:, 1:]
+        outputs = self.backbone.vision_encoder(images,interpolate_pos_encoding=True)[0][:, self.num_special_tokens:]
         view_batch_size, _, embedding_dim = outputs.shape
         outputs = outputs.reshape(batch_size, -1, embedding_dim)
         # shape: (batch, num_views * num_patches, embedding_dim)

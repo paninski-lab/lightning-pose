@@ -51,6 +51,12 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
             pretrained_patch_size=16,
         )
         encoder_embed_dim = base.vision_encoder.config.hidden_size
+    elif backbone_arch == "vitl_dinov3":
+        base = VisionEncoderDino(
+            model_name="facebook/dinov3-vitl16-pretrain-lvd1689m",
+            pretrained_patch_size=16,
+        )
+        encoder_embed_dim = base.vision_encoder.config.hidden_size
     elif "vitb_imagenet" in backbone_arch:
         base = VisionEncoder(model_name="facebook/vit-mae-base")
         encoder_embed_dim = base.vision_encoder.config.hidden_size
