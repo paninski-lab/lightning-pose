@@ -200,6 +200,7 @@ It covers the end-to-end workflow of labeling, training, and evaluation.
    source/developer_guide/index
    source/faqs
    Release notes <https://github.com/paninski-lab/lightning-pose/releases>
+   source/migrating_to_app
 
 .. toctree::
    :maxdepth: 2

@@ -13,33 +13,31 @@ From a command line, activate your conda environment and run:
 
     $ litpose run_app
 
-You should see some output that says the server is running on port 8000.
-Now that the server is running, open a web browser and navigate to
-``http://localhost:8000`` if you ran the server on your local machine,
-or replace ``localhost`` with the IP address of the machine where you ran the app.
+You should see output saying that the server is running on port 8080. This is a TCP/IP
+port accessible from your web browser. If you're running this locally, navigate to
+``http://localhost:8080``. Otherwise, replace ``localhost`` with the IP address
+of the machine where you ran the app, or, use the port forwarding features
+of your cloud environment to access the port remotely.
 
 .. note::
-    In cloud environments, the cloud provider has some mechanism for opening the port
-    and providing a link for you to access it. In Lightning Studio, this is done
-    using the Port icon on the right hand side.
+    In Lightning Studio, a cloud provider we frequently recommend, this is done
+    using the Port plugin icon on the right hand side.
+    See `the video in their docs <https://lightning.ai/docs/overview/ai-studio/deploy-on-public-ports#deploy-on-public-ports>`_ for the process.
 
-Once the app is open in the browser, it should look like this:
+Once the app is open in the browser, it should look like this. Click on New Project and begin to fill out the form.
 
 .. image:: /images/app_screenshots/app_new_project_page.png
 
-Then, click on New Project and begin to fill out the form.
-
 .. image:: /images/app_screenshots/app_new_project_form.png
 
+Important: Specifying Data directory
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Data directory
-~~~~~~~~~~~~~~
+**Our recommendation is** ``HOME_DIR/LPProjects/YourProjectNameHere``
+**where HOME_DIR is your home directory path.** You can get the home directory path
+for your machine by running ``echo ~`` in a terminal.
 
-Specify the directory where Lightning Pose will store the project.
-Our recommendation is ``HOME_DIR/LPProjects/YourProjectNameHere``. Get your home directory path by
-running ``echo ~`` in a terminal.
-
-Model directory can be left as the default.
+Leave Model directory as the default.
 
 Keypoints and View names
 ~~~~~~~~~~~~~~
@@ -48,7 +46,7 @@ First name your keypoints, the points you'd like to track. The names
 will be used as column headers in label files and prediction output files.
 
 Views are the names of your camera views. **If you have only one view, you can
-leave this blank**. For multiple views, **your videos must end in _viewname as
+leave this blank**. For multiple views, **your video files must end in _viewname as
 the suffix**. This convention is relied upon for Lightning Pose to
 extract the View name and Session name from a video's filename.
 
@@ -60,8 +58,8 @@ to the project home page.
 Label data
 -----------
 
-This tutorial assumes you do not yet have labels.
-If you have labels, see `<importing_labeled_data>`_.
+This tutorial assumes you do not yet have labeled data.
+Otherwise, see `<importing_labeled_data>`_.
 
 Labeling occurs in the Labeler module.
 
@@ -100,6 +98,9 @@ You need to hit save in order to persist the label file.
 
 .. image:: /images/app_screenshots/app_labeler_with_unlabeled_frame_loaded.png
 
+You can zoom into a tile by scrolling. Keypoints can be moved by dragging.
+To remove a keypoint, find it in the table of keypoints on the right and click the X button.
+
 Explainer: Label files
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -130,8 +131,45 @@ Training will begin automatically.
 
 .. image:: /images/app_screenshots/app_model_creation_form.png
 
+Click on a model in the models table to see its details.
+
+Under the hood, the App is using the CLI to train a model. The General tab
+shows the raw model configuration file that was used for training.
+The Logs tab shows the streaming log output from the ``litpose train`` command.
+
+Once training is complete, you can run inference on a model. Select the model
+in the table, and click the Run inference Action from the Actions button.
+
+Follow the instructions to upload the video for inference.
+
+.. image:: /images/app_screenshots/app_model_inference.png
+
+Again, the App is using the CLI to run inference, which stores predictions inside
+the model directory. To view the predictions in the App, we need to switch to the Viewer module.
+
 
 Visualize predictions
 ----------------------
 
-This doc is a work in progress.
+Once in the Viewer module, you can select a session from the left hand side, and find
+its model outputs on the right hand side.
+
+.. image:: /images/app_screenshots/app_viewer.png
+
+You can zoom into a tile by scrolling. The bottom playback bar displays the
+time and frame number. When paused and the slider is the active element (click on it once to
+make it the active element, you'll see it gets outlined), you can
+use the left and right arrows keys to move the slider frame by frame.
+
+
+Next steps
+----------------------
+
+From here, you can:
+
+* label more frames (especially in problematic scenarios)
+* train new models (train for more epochs or different settings)
+* run inference on more videos
+* copy the project directory to another machine to run inference or train more models via the CLI
+
+We are working on adding documentation for the above workflows. Stay tuned!

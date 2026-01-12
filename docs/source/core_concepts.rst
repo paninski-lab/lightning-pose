@@ -6,7 +6,7 @@ Before moving on to using Lightning Pose, its worth pausing to learn the core co
 The two interfaces: The App and the CLI
 ----------------------------------------
 
-At the heart of LP is the ``lightning_pose`` python package. Built on top of this are two end-user interfaces: **``litpose``**, the command-line interface (CLI), and the **App**, run via ``litpose run_app``.
+At the heart of LP is the ``lightning_pose`` python package. Built on top of this are two end-user interfaces: ``litpose``, the command-line interface (CLI), and the App, which is run via ``litpose run_app``.
 
 **How to choose**
 
