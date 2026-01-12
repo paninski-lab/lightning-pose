@@ -259,17 +259,24 @@ class PatchMasker:
         """Apply random patch masking with curriculum learning."""
 
         # during training, apply masking
-        batch_size, num_views, channels, height, width = images.shape
+        if len(images.shape) == 6:
+            # Context model: (batch, views, frames, channels, height, width)
+            batch_size, num_views, num_frames, channels, height, width = images.shape
+            is_context = True
+        else:
+            # Standard model: (batch, views, channels, height, width)
+            batch_size, num_views, channels, height, width = images.shape
+            is_context = False
+            num_frames = 1
+        
         device = images.device
 
         patch_size = 16
         num_patches_h = height // patch_size
         num_patches_w = width // patch_size
+        total_patches_per_view = num_patches_h * num_patches_w
 
         if not is_training:  # Not in training mode
-            # Calculate patch size (assuming 16x16 patches for ViT)
-            total_patches_per_view = num_patches_h * num_patches_w
-
             # Create patch mask with all patches kept (1)
             patch_mask = torch.ones(batch_size, num_views, total_patches_per_view, device=device)
             return images, patch_mask
@@ -287,8 +294,7 @@ class PatchMasker:
                 + progress * (self.patch_final_ratio - self.patch_init_ratio)
             )
 
-        # Calculate patch dimensions (assuming 16x16 patches for ViT)
-        total_patches_per_view = num_patches_h * num_patches_w
+        # Calculate patches to mask
         patches_to_mask_per_view = int(mask_ratio * total_patches_per_view)
 
         # Initialize masks
@@ -300,38 +306,40 @@ class PatchMasker:
             for view_idx in range(num_views):
                 if patches_to_mask_per_view > 0:
                     # Create a deterministic seed for this specific combination
-                    # Same patches are masked for the same training step, batch, and view
-                    # Using multiplication to avoid seed collisions between different combinations
                     deterministic_seed = (
                         self.patch_seed
                         + training_step
                         + batch_idx * 1000
                         + view_idx * 100
                     )
-                    # Create a local generator instead of modifying global torch seed
                     local_generator = torch.Generator(device=device)
                     local_generator.manual_seed(deterministic_seed)
 
-                    # Random patch selection with local generator
+                    # Random patch selection
                     patch_indices = torch.randperm(
                         total_patches_per_view,
                         device=device,
                         generator=local_generator
                     )[:patches_to_mask_per_view]
                     patch_mask[batch_idx, view_idx, patch_indices] = 0
-                    # Zero out the selected patches
-                    for patch_idx in patch_indices:
-                        # Convert patch index to spatial coordinates
-                        patch_h = (patch_idx // num_patches_w) * patch_size
-                        patch_w = (patch_idx % num_patches_w) * patch_size
-                        # Zero out the patch region
-                        masked_images[
-                            batch_idx,
-                            view_idx,
-                            :,
-                            patch_h:patch_h + patch_size,
-                            patch_w:patch_w + patch_size
-                        ] = 0
+                    
+                    # Zero out the selected patches across all frames if context model
+                    for p_idx in patch_indices:
+                        patch_h = (p_idx // num_patches_w) * patch_size
+                        patch_w = (p_idx % num_patches_w) * patch_size
+                        
+                        if is_context:
+                            masked_images[
+                                batch_idx, view_idx, :, :, 
+                                patch_h:patch_h + patch_size,
+                                patch_w:patch_w + patch_size
+                            ] = 0
+                        else:
+                            masked_images[
+                                batch_idx, view_idx, :,
+                                patch_h:patch_h + patch_size,
+                                patch_w:patch_w + patch_size
+                            ] = 0
 
         return masked_images, patch_mask
 

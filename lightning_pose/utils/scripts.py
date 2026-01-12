@@ -667,7 +667,7 @@ def get_callbacks(
 
     # add patch masking callback for multiview transformer models if patch masking is enabled
     if (
-        cfg.model.model_type == "heatmap_multiview_transformer"
+        cfg.model.model_type in ["heatmap_multiview_transformer", "heatmap_multiview_transformer_mhcrnn"]
         and cfg.training.get("patch_mask", {}).get("final_ratio", 0.0) > 0.0
     ):
 

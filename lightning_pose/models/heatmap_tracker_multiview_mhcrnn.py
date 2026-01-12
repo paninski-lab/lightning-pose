@@ -85,6 +85,13 @@ class HeatmapTrackerMultiviewMHCRNN(BaseSupervisedTracker):
             num_views=num_views,
         )
 
+        # Create learnable temporal embeddings for context frames
+        self.context_length = kwargs.get("context_length", 5)
+        self.temporal_embeddings = nn.Parameter(
+            torch.randn(self.context_length, self.num_fc_input_features,
+                       generator=generator, device=device) * 0.02
+        )
+
         self.loss_factory = loss_factory
         self.rmse_loss = RegressionRMSELoss()
 
@@ -92,97 +99,82 @@ class HeatmapTrackerMultiviewMHCRNN(BaseSupervisedTracker):
 
     def forward_vit(
         self,
-        images: TensorType["view * batch * frames", "channels":3, "image_height", "image_width"],
-        num_frames: int,
+        images: TensorType["batch", "views", "frames", "channels", "height", "width"],
     ):
-        """Optimized ViT forward pass: process frames separately to reduce attention complexity.
+        """Factorized Spatio-Temporal-View Attention.
         
-        Instead of processing all frames together (O((views×frames×patches)²)),
-        we process each frame separately (O(frames × (views×patches)²)),
-        keeping attention complexity linear in frames instead of quadratic.
+        Learns spatial, view, and temporal dependencies independently across 
+        different groups of transformer layers. This "divided attention" approach
+        is efficient and generalizes better to OOD data by factorizing the 
+        learning task.
         """
+        batch_size, num_views, num_frames, channels, H_img, W_img = images.shape
         
-        # Reshape to separate frames: (batch, views, frames, channels, H, W)
-        total_samples = images.shape[0]  # views * batch * frames
-        batch_size = total_samples // (self.num_views * num_frames)
-        images = images.reshape(batch_size, self.num_views, num_frames, *images.shape[1:])
-        # Shape: (batch, views, frames, channels, H, W)
+        # Flatten for embedding: (batch * views * frames, C, H, W)
+        images_flat = images.reshape(-1, channels, H_img, W_img)
         
-        # Process each frame separately through transformer
-        # This keeps attention at views × patches per frame (same as original multiview)
-        frame_features_list = []
+        # Get patch embeddings and spatial pos embeddings
+        try:
+            embedding_output = self.backbone.vision_encoder.embeddings(
+                images_flat, bool_masked_pos=None, interpolate_pos_encoding=True,
+            )[:, 1:]
+        except TypeError:
+            # DINOv3 doesn't have `interpolate_pos_encoding` arg
+            embedding_output = self.backbone.vision_encoder.embeddings(
+                images_flat, bool_masked_pos=None,
+            )[:, 1:]
         
-        for frame_idx in range(num_frames):
-            # Extract one frame: (batch, views, channels, H, W)
-            frame_images = images[:, :, frame_idx, :, :, :]
-            frame_images_flat = frame_images.reshape(-1, *frame_images.shape[2:])
-            # Shape: (batch × views, channels, H, W)
-            
-            # Create patch embeddings and add position embeddings; remove CLS token
-            try:
-                embedding_output = self.backbone.vision_encoder.embeddings(
-                    frame_images_flat, bool_masked_pos=None, interpolate_pos_encoding=True,
-                )[:, 1:]
-            except TypeError:
-                # DINOv3 doesn't have `interpolate_pos_encoding` arg
-                embedding_output = self.backbone.vision_encoder.embeddings(
-                    frame_images_flat, bool_masked_pos=None,
-                )[:, 1:]
-            # Shape: (batch × views, num_patches, embedding_dim)
-            
-            # Get dimensions
-            num_patches = embedding_output.shape[1]
-            embedding_dim = embedding_output.shape[2]
-            
-            # Create view indices: [0,1,2,3,0,1,2,3,...] for this frame
-            view_indices = torch.arange(self.num_views, device=embedding_output.device)
-            view_indices = view_indices.repeat(batch_size)
-            
-            # Get view embeddings for each sample
-            view_embeddings_batch = self.view_embeddings[view_indices]
-            
-            # Expand view embeddings to match patch dimensions
-            view_embeddings_expanded = view_embeddings_batch.unsqueeze(1).expand(-1, num_patches, -1)
-            embedding_output = embedding_output + view_embeddings_expanded
-            
-            # Reshape for transformer: (batch, views × num_patches, embedding_dim)
-            # This is the KEY: attention only over views × patches, not frames
-            embedding_output = embedding_output.reshape(
-                batch_size, self.num_views * num_patches, embedding_dim,
-            )
-            
-            # Push through ViT encoder (attention over views × patches only)
-            encoder_outputs = self.backbone.vision_encoder.encoder(
-                embedding_output,
-                head_mask=None,
-                output_attentions=False,
-                output_hidden_states=False,
-                return_dict=None,
-            )
-            sequence_output = encoder_outputs[0]
-            outputs = self.backbone.vision_encoder.layernorm(sequence_output)
-            # Shape: (batch, views × num_patches, embedding_dim)
-            
-            # Reshape to (batch × views, embedding_dim, height, width)
-            patch_size = outputs.shape[1] // self.num_views
-            H, W = math.isqrt(patch_size), math.isqrt(patch_size)
-            outputs = outputs.reshape(batch_size, self.num_views, patch_size, embedding_dim)
-            outputs = outputs.reshape(batch_size, self.num_views, H, W, embedding_dim).permute(
-                0, 1, 4, 2, 3
-            )  # Shape: (batch, views, embedding_dim, H, W)
-            outputs = outputs.reshape(batch_size * self.num_views, embedding_dim, H, W)
-            
-            frame_features_list.append(outputs)
+        # Shape: (batch * views * frames, num_patches, dim)
+        num_patches = embedding_output.shape[1]
+        dim = embedding_output.shape[2]
         
-        # Stack frames: (batch × views, embedding_dim, H, W, frames)
-        # This will be reshaped in forward() to (batch × views, embedding_dim, H, W, frames)
-        return torch.stack(frame_features_list, dim=-1)
+        # Add view embeddings
+        # Create indices: [0,0,0, 1,1,1, ...] then repeat for batch
+        view_indices = torch.arange(num_views, device=images.device).repeat_interleave(num_frames).repeat(batch_size)
+        view_embeds = self.view_embeddings[view_indices].unsqueeze(1) # (B*V*F, 1, dim)
+        embedding_output = embedding_output + view_embeds
+        
+        # Add temporal embeddings
+        # Create indices: [0,1,2, 0,1,2, ...] then repeat for batch*views
+        temp_indices = torch.arange(num_frames, device=images.device).repeat(batch_size * num_views)
+        temp_embeds = self.temporal_embeddings[temp_indices].unsqueeze(1) # (B*V*F, 1, dim)
+        embedding_output = embedding_output + temp_embeds
+        
+        # Transformer layers
+        all_layers = self.backbone.vision_encoder.encoder.layer
+        
+        # Joint Spatio-Temporal-View Attention
+        # This IS the Multiview Transformer. We expand the sequence to include all 
+        # frames and views. Every patch in every camera at every timepoint can 
+        # attend to every other patch. This allows for global triangulation 
+        # across both space and time.
+        
+        # Shape: (batch, views * frames * num_patches, dim)
+        hidden_states = embedding_output.reshape(batch_size, num_views * num_frames * num_patches, dim)
+        
+        # Pass through ALL transformer layers jointly
+        for layer in all_layers:
+            hidden_states = layer(hidden_states)[0]
+            
+        # Final LayerNorm
+        sequence_output = self.backbone.vision_encoder.layernorm(hidden_states)
+        
+        # Reshape back to spatial dimensions for head
+        # Sequence: (batch, views * frames * num_patches, dim)
+        # Target: (batch * views, dim, H_p, W_p, frames)
+        H_p, W_p = math.isqrt(num_patches), math.isqrt(num_patches)
+        outputs = sequence_output.reshape(batch_size, num_views, num_frames, H_p, W_p, dim)
+        outputs = outputs.permute(0, 1, 5, 3, 4, 2) # (batch, views, dim, H, W, frames)
+        outputs = outputs.reshape(batch_size * num_views, dim, H_p, W_p, num_frames)
+        
+        return outputs
+    
 
     def forward(
         self,
         batch_dict: MultiviewHeatmapLabeledBatchDict | UnlabeledBatchDict,
     ) -> Tuple[TensorType, TensorType]:
-        """Efficient forward pass with single backbone call."""
+        """Efficient forward pass with factorized transformer."""
         
         # Extract pixel data
         if "images" in batch_dict.keys():
@@ -276,21 +268,12 @@ class HeatmapTrackerMultiviewMHCRNN(BaseSupervisedTracker):
         batch_size, num_views, frames, channels, img_height, img_width = images.shape
         batch_shape = torch.tensor(images.shape)
 
-        # ✅ OPTIMIZED: Process frames separately in transformer (reduces attention complexity)
-        # Flatten all frames × views for embedding creation
-        images_flat = images.reshape(-1, channels, img_height, img_width)
-        # Shape: [batch * views * frames, 3, H, W]
-        
-        # forward_vit now processes frames separately and returns (batch×views, features, H, W, frames)
-        features = self.forward_vit(images_flat, frames)
+        # forward_vit now processes spatio-temporal-view factorized attention
+        features = self.forward_vit(images)
         # Shape: [batch × views, features, fh, fw, frames]
         
-        # Prepare for MHCRNN: already in correct shape!
-        features_mhcrnn = features
-        # Shape: [batch*views, features, fh, fw, frames]
-        
         # MHCRNN temporal processing
-        heatmaps_sf, heatmaps_mf = self.head(features_mhcrnn, batch_shape, is_multiview=True)
+        heatmaps_sf, heatmaps_mf = self.head(features, batch_shape, is_multiview=True)
         
         # Reshape to [batch, views * keypoints, height, width]
         heatmaps_sf = heatmaps_sf.reshape(
@@ -303,6 +286,8 @@ class HeatmapTrackerMultiviewMHCRNN(BaseSupervisedTracker):
         )
         
         return heatmaps_sf, heatmaps_mf
+    
+    
 
     def get_loss_inputs_labeled(
         self,
@@ -420,3 +405,5 @@ class SemiSupervisedHeatmapTrackerMultiviewMHCRNN(SemiSupervisedTrackerMixin, He
         loss_factory_unsupervised = kwargs.get("loss_factory_unsupervised")
         super().__init__(*args, **kwargs)
         self.loss_factory_unsup = kwargs.get("loss_factory_unsupervised")
+
+

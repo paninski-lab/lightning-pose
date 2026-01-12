@@ -581,6 +581,48 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         return keypoints_aug
 
+    # @staticmethod
+    # def _rotate_keypoints_3d(
+    #     keypoints_3d: np.ndarray,
+    #     max_rotation_degrees: float = 25.0,
+    # ) -> np.ndarray:
+    #     """Apply random 3D rotation to keypoints.
+        
+    #     Parameters
+    #     ----------
+    #     keypoints_3d: original keypoints, shape (num_keypoints, 3)
+    #     max_rotation_degrees: maximum rotation angle in degrees for each axis
+        
+    #     Returns
+    #     -------
+    #     np.ndarray: rotated keypoints, shape (num_keypoints, 3)
+    #     """
+    #     from scipy.spatial.transform import Rotation as R
+        
+    #     # Random rotation angles for each axis (in degrees)
+    #     angles = np.random.uniform(
+    #         -max_rotation_degrees, 
+    #         max_rotation_degrees, 
+    #         size=3
+    #     )
+        
+    #     # Create rotation matrix
+    #     rotation = R.from_euler('xyz', angles, degrees=True)
+        
+    #     # Center keypoints at median before rotation
+    #     median = np.nanmedian(keypoints_3d, axis=0)
+    #     centered_kps = keypoints_3d - median
+        
+    #     # Apply rotation (handling NaNs)
+    #     valid_mask = ~np.isnan(centered_kps).any(axis=1)
+    #     rotated_kps = centered_kps.copy()
+    #     rotated_kps[valid_mask] = rotation.apply(centered_kps[valid_mask])
+        
+    #     # Translate back
+    #     rotated_kps += median
+        
+    #     return rotated_kps
+
     @staticmethod
     def _transform_images(
         images: list,
@@ -648,6 +690,25 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             )
 
             images_transformed.append(transformed_image)
+
+            # # FIX: Use findHomography or estimateAffinePartial2D with stricter constraints
+            # # With only 3 points, we want to avoid non-uniform scaling/shearing
+            # M, _ = cv2.estimateAffinePartial2D(
+            #     orig_pts, 
+            #     new_pts, 
+            #     method=cv2.LMEDS # More robust to outliers than default
+            # )
+
+            # M_tensor = torch.tensor(M, dtype=torch.float32, device=device)
+
+            # # FIX: padding_mode="reflection" makes OOD data look more natural than black bars
+            # transformed_image = ktransform.warp_affine(
+            #     orig_img.unsqueeze(0),
+            #     M_tensor.unsqueeze(0),
+            #     dsize=(img_height, img_width),
+            #     padding_mode="reflection", 
+            # )
+            # images_transformed.append(transformed_image)
 
         return images_transformed
 
@@ -717,6 +778,8 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         camgroup: CameraGroup,
         scale_params: tuple = (0.8, 1.2),
         shift_param: float = 0.25,
+        # scale_params: tuple = (0.95, 1.05),
+        # shift_param: float = 0.05,
     ) -> tuple:
         """Apply 3D transforms to keypoint and image data (scale, translate)."""
 
@@ -803,6 +866,124 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             data_dict_aug[view] = example_dict
 
         return data_dict_aug, torch.tensor(keypoints_3d_aug)
+
+
+    # def apply_3d_transforms(
+    #     self,
+    #     data_dict: dict,
+    #     camgroup: CameraGroup,
+    #     scale_params: tuple = (0.8, 1.2),
+    #     shift_param: float = 0.25,
+    #     rotation_degrees: float = 25.0,
+    # ) -> tuple:
+    #     """Apply 3D transforms to keypoint and image data (scale, translate, rotate).
+        
+    #     Parameters
+    #     ----------
+    #     data_dict: dictionary with view names as keys and example dicts as values
+    #     camgroup: CameraGroup object with camera calibration parameters
+    #     scale_params: (min, max) ratio of scaling to apply to 3D keypoints
+    #     shift_param: max shift in each dimension, as a fraction of the range (kp_max - kp_min)
+    #     rotation_degrees: maximum rotation angle in degrees for each axis
+        
+    #     Returns
+    #     -------
+    #     tuple: (data_dict_aug, keypoints_3d_aug)
+    #         - data_dict_aug: augmented data dictionary with transformed images and keypoints
+    #         - keypoints_3d_aug: augmented 3D keypoints, shape (num_keypoints, 3)
+    #     """
+        
+    #     # extract keypoints and images from each view
+    #     keypoints_2d = self._get_2d_keypoints_from_example_dict_absolute_coords(data_dict)
+        
+    #     images = []
+    #     bboxes = []
+    #     for idx_view, (view, example_dict) in enumerate(data_dict.items()):
+    #         images.append(example_dict["images"])
+    #         bboxes.append(example_dict["bbox"])
+
+    #     if np.all(np.isnan(keypoints_2d)):
+    #         # all keypoints are NaN - return NaN arrays without augmentation
+    #         keypoints_3d_aug = np.nan * np.zeros((self.num_keypoints // self.num_views, 3))
+    #         keypoints_2d_aug_resize = [
+    #             torch.tensor(
+    #                 np.nan * np.zeros((self.num_keypoints // self.num_views * 2)),
+    #                 dtype=example_dict["keypoints"].dtype,
+    #                 device=example_dict["keypoints"].device,
+    #             )
+    #             for _, example_dict in data_dict.items()
+    #         ]
+    #         images_aug = [im.unsqueeze(0) for im in images]
+    #     else:
+    #         # triangulate keypoints (2D -> 3D)
+    #         keypoints_3d = camgroup.triangulate_fast(keypoints_2d.copy())
+
+    #         # if fewer than 3 valid keypoints in at least one view, cannot perform augmentation
+    #         if not self._sufficient_keypoints_for_augmentation(keypoints_2d):
+    #             # keep 3d keypoints the same
+    #             keypoints_3d_aug = keypoints_3d.copy()
+
+    #             # keep 2d keypoints the same
+    #             keypoints_2d_aug = keypoints_2d.copy()
+
+    #             # keep images the same
+    #             images_aug = [im.unsqueeze(0) for im in images]
+
+    #         else:
+    #             # STEP 1: Apply 3D rotation
+    #             keypoints_3d_rotated = self._rotate_keypoints_3d(
+    #                 keypoints_3d, 
+    #                 max_rotation_degrees=rotation_degrees,
+    #             )
+                
+    #             # STEP 2: Apply scale and translation
+    #             keypoints_3d_aug = self._scale_translate_keypoints(
+    #                 keypoints_3d_rotated, 
+    #                 scale_params=scale_params, 
+    #                 shift_param=shift_param,
+    #             )
+
+    #             # STEP 3: Project augmented 3D keypoints back to 2D using cameras
+    #             keypoints_2d_aug = camgroup.project(keypoints_3d_aug)
+
+    #             # STEP 4: Transform images to match keypoint augmentations
+    #             images_aug = self._transform_images(
+    #                 images=images,
+    #                 keypoints_orig=keypoints_2d.copy(),
+    #                 keypoints_aug=keypoints_2d_aug.copy(),
+    #                 bboxes=[b.cpu().numpy() for b in bboxes],
+    #             )
+
+    #         # resize 2D keypoints to uniform dimensions for backbone network
+    #         keypoints_2d_aug_resize_np = self._resize_keypoints(keypoints_2d_aug, bboxes)
+            
+    #         keypoints_2d_aug_resize = [
+    #             torch.tensor(
+    #                 a,
+    #                 dtype=example_dict["keypoints"].dtype,
+    #                 device=example_dict["keypoints"].device,
+    #             )
+    #             for a in keypoints_2d_aug_resize_np
+    #         ]
+
+    #     # resize images to uniform dimensions for backbone network
+    #     images_aug_resize = self._resize_images(images_aug)
+
+    #     # create new data dict with augmented data
+    #     data_dict_aug = {}
+    #     for idx_view, view in enumerate(self.view_names):
+    #         example_dict = BaseLabeledExampleDict(
+    #             images=images_aug_resize[idx_view][0],  # take image from view, ignore batch dim
+    #             keypoints=keypoints_2d_aug_resize[idx_view],
+    #             bbox=data_dict[view]["bbox"],
+    #             idxs=data_dict[view]["idxs"],
+    #         )
+    #         example_dict["heatmaps"] = self.dataset[view].compute_heatmap(example_dict)
+    #         data_dict_aug[view] = example_dict
+
+    #     return data_dict_aug, torch.tensor(keypoints_3d_aug)
+
+
 
     def fusion(self, datadict: dict) -> Tuple[
         Union[
