@@ -424,21 +424,20 @@ def evaluate_heatmaps_at_location(
     j = torch.arange(heatmaps_padded.shape[1], device=heatmaps_padded.device).reshape(
         1, -1, 1, 1
     )
-    # Handle NaN values: replace with 0 and clamp to prevent index out of bounds
-    nan_mask = torch.isnan(locs).any(dim=-1)
-    locs_safe = torch.where(torch.isnan(locs), torch.zeros_like(locs), locs)
-    k = torch.clamp(locs_safe[:, :, None, 1, None].type(torch.int64) + num_pad, 0, heatmaps_padded.shape[2] - 1)
-    m = torch.clamp(locs_safe[:, :, 0, None, None].type(torch.int64) + num_pad, 0, heatmaps_padded.shape[3] - 1)
+    k = locs[:, :, None, 1, None].type(torch.int64) + num_pad
+    m = locs[:, :, 0, None, None].type(torch.int64) + num_pad
     offsets = list(np.arange(-pix_to_consider, pix_to_consider + 1))
     vals_all = []
     for offset in offsets:
+        k_offset = k + offset
         for offset_2 in offsets:
-            k_offset = torch.clamp(k + offset, 0, heatmaps_padded.shape[2] - 1)
-            m_offset = torch.clamp(m + offset_2, 0, heatmaps_padded.shape[3] - 1)
-            vals_all.append(heatmaps_padded[i, j, k_offset, m_offset].squeeze(-1).squeeze(-1))
+            m_offset = m + offset_2
+            # get rid of singleton dims
+            vals = heatmaps_padded[i, j, k_offset, m_offset].squeeze(-1).squeeze(-1)
+            vals_all.append(vals)
     vals = torch.stack(vals_all, 0).sum(0)
-    vals[nan_mask] = 0.0  # Set confidence to zero for NaN locations
     return vals
+
 
 
 # @typechecked
@@ -546,23 +545,16 @@ def normalized_to_bbox(
 ) -> TensorType["batch", "num_keypoints", "xy":2]:
     if keypoints.shape[0] == bbox.shape[0]:
         # normal batch
-        bbox_width = bbox[:, 3].unsqueeze(1)
-        bbox_x = bbox[:, 0].unsqueeze(1)
-        bbox_height = bbox[:, 2].unsqueeze(1)
-        bbox_y = bbox[:, 1].unsqueeze(1)
-        
-        keypoints[:, :, 0] *= bbox_width  # scale x by box width
-        keypoints[:, :, 0] += bbox_x  # add bbox x offset
-        keypoints[:, :, 1] *= bbox_height  # scale y by box height
-        keypoints[:, :, 1] += bbox_y  # add bbox y offset
+        keypoints[:, :, 0] *= bbox[:, 3].unsqueeze(1)  # scale x by box width
+        keypoints[:, :, 0] += bbox[:, 0].unsqueeze(1)  # add bbox x offset
+        keypoints[:, :, 1] *= bbox[:, 2].unsqueeze(1)  # scale y by box height
+        keypoints[:, :, 1] += bbox[:, 1].unsqueeze(1)  # add bbox y offset
     else:
         # context batch; we don't have predictions for first/last two frames
-        bbox_slice = bbox[2:-2]
-        keypoints[:, :, 0] *= bbox_slice[:, 3].unsqueeze(1)  # scale x by box width
-        keypoints[:, :, 0] += bbox_slice[:, 0].unsqueeze(1)  # add bbox x offset
-        keypoints[:, :, 1] *= bbox_slice[:, 2].unsqueeze(1)  # scale y by box height
-        keypoints[:, :, 1] += bbox_slice[:, 1].unsqueeze(1)  # add bbox y offset
-    
+        keypoints[:, :, 0] *= bbox[2:-2, 3].unsqueeze(1)  # scale x by box width
+        keypoints[:, :, 0] += bbox[2:-2, 0].unsqueeze(1)  # add bbox x offset
+        keypoints[:, :, 1] *= bbox[2:-2, 2].unsqueeze(1)  # scale y by box height
+        keypoints[:, :, 1] += bbox[2:-2, 1].unsqueeze(1)  # add bbox y offset
     return keypoints
 
 
@@ -582,25 +574,19 @@ def convert_bbox_coords(
     predicted_keypoints = predicted_keypoints.reshape((-1, num_keypoints, 2))
     # divide by image dims to get 0-1 normalized coordinates
     if "images" in batch_dict.keys():
-        img_shape = batch_dict["images"].shape
-        predicted_keypoints[:, :, 0] /= img_shape[-1]  # -1 dim is width "x"
-        predicted_keypoints[:, :, 1] /= img_shape[-2]  # -2 dim is height "y"
+        predicted_keypoints[:, :, 0] /= batch_dict["images"].shape[-1]  # -1 dim is width "x"
+        predicted_keypoints[:, :, 1] /= batch_dict["images"].shape[-2]  # -2 dim is height "y"
     else:  # we have unlabeled dict, 'frames' instead of 'images'
-        frames_shape = batch_dict["frames"].shape
-        predicted_keypoints[:, :, 0] /= frames_shape[-1]  # -1 dim is width "x"
-        predicted_keypoints[:, :, 1] /= frames_shape[-2]  # -2 dim is height "y"
-    
+        predicted_keypoints[:, :, 0] /= batch_dict["frames"].shape[-1]  # -1 dim is width "x"
+        predicted_keypoints[:, :, 1] /= batch_dict["frames"].shape[-2]  # -2 dim is height "y"
     # multiply and add by bbox dims (x,y,h,w)
-    has_num_views = "num_views" in batch_dict.keys()
-    is_multiview_flag = batch_dict.get("is_multiview", False)
-    
     if (
-        (has_num_views and int(batch_dict["num_views"].max()) > 1)
-        or is_multiview_flag
+        ("num_views" in batch_dict.keys() and int(batch_dict["num_views"].max()) > 1)
+        or batch_dict.get("is_multiview", False)
     ):
         # the first check is for labeled batches while is_multiview is for unlabeled batches
         # For MultiviewUnlabeledBatchDict, we need to infer num_views from bbox shape
-        if has_num_views:
+        if "num_views" in batch_dict.keys():
             unique = batch_dict["num_views"].unique()
             if len(unique) != 1:
                 raise ValueError(
@@ -614,27 +600,16 @@ def convert_bbox_coords(
 
         num_keypoints_per_view = num_keypoints // num_views
 
-        if batch_dict["bbox"].shape[1] < num_views * 4:
-            raise ValueError(
-                f"bbox shape mismatch: expected at least {num_views * 4} columns "
-                f"(num_views={num_views} * 4), but got {batch_dict['bbox'].shape[1]}"
-            )
-
         for v in range(num_views):
             idx_beg = num_keypoints_per_view * v
             idx_end = idx_beg + num_keypoints_per_view
-            bbox_start = 4 * v
-            bbox_end = 4 * (v + 1)
-            
-            bbox_slice = batch_dict["bbox"][:, bbox_start:bbox_end]
-            kp_slice = predicted_keypoints[:, idx_beg:idx_end, :]
+            bbox_slice = batch_dict["bbox"][:, 4 * v:4 * (v + 1)]
 
             predicted_keypoints[:, idx_beg:idx_end, :] = normalized_to_bbox(
-                kp_slice,
+                predicted_keypoints[:, idx_beg:idx_end, :],
                 bbox_slice,
             )
     else:
-        predicted_keypoints = normalized_to_bbox(predicted_keypoints, batch_dict["bbox"])    
+        predicted_keypoints = normalized_to_bbox(predicted_keypoints, batch_dict["bbox"])
     # return new keypoints, reshaped to (batch, num_targets)
-    result = predicted_keypoints.reshape((-1, num_targets))
-    return result
+    return predicted_keypoints.reshape((-1, num_targets))
