@@ -337,6 +337,63 @@ def compute_num_train_frames(
 
 
 # @typechecked
+# def generate_heatmaps(
+#     keypoints: TensorType["batch", "num_keypoints", 2],
+#     height: int,
+#     width: int,
+#     output_shape: Tuple[int, int],
+#     sigma: float = 1.25,
+#     uniform_heatmaps: bool = False,
+# ) -> TensorType["batch", "num_keypoints", "height", "width"]:
+#     """Generate 2D Gaussian heatmaps from mean and sigma.
+
+#     Args:
+#         keypoints: coordinates that serve as mean of gaussian bump
+#         height: height of reshaped image (pixels, e.g., 128, 256, 512...)
+#         width: width of reshaped image (pixels, e.g., 128, 256, 512...)
+#         output_shape: dimensions of downsampled heatmap, (height, width)
+#         sigma: control spread of gaussian
+#         uniform_heatmaps: output uniform heatmaps if missing ground truth label, rather than skip
+
+#     Returns:
+#         batch of 2D heatmaps
+
+#     """
+#     keypoints = keypoints.detach().clone()
+#     out_height = output_shape[0]
+#     out_width = output_shape[1]
+#     keypoints[:, :, 1] *= out_height / height
+#     keypoints[:, :, 0] *= out_width / width
+#     nan_idxs = torch.isnan(keypoints)[:, :, 0]
+#     xv = torch.arange(out_width, device=keypoints.device)
+#     yv = torch.arange(out_height, device=keypoints.device)
+#     # note flipped order because of pytorch's ij and numpy's xy indexing for meshgrid
+#     xx, yy = torch.meshgrid(yv, xv, indexing="ij")
+#     # adds batch and num_keypoints dimensions to grids
+#     xx = xx.unsqueeze(0).unsqueeze(0)
+#     yy = yy.unsqueeze(0).unsqueeze(0)
+#     # adds dimension corresponding to the first dimension of the 2d grid
+#     keypoints = keypoints.unsqueeze(2)
+#     # evaluates 2d gaussian with mean equal to the keypoint and var equal to sigma^2
+#     heatmaps = (yy - keypoints[:, :, :, :1]) ** 2  # also flipped order here
+#     heatmaps += (xx - keypoints[:, :, :, 1:]) ** 2  # also flipped order here
+#     heatmaps *= -1
+#     heatmaps /= 2 * sigma**2
+#     heatmaps = torch.exp(heatmaps)
+#     # normalize all heatmaps to one
+#     heatmaps = heatmaps / torch.sum(heatmaps, dim=(2, 3), keepdim=True)
+#     # replace nans with zeros heatmaps
+#     # (all zeros heatmaps are ignored in the supervised heatmap loss)
+#     if uniform_heatmaps:
+#         filler_heatmap = torch.ones(
+#             (out_height, out_width), device=keypoints.device
+#         ) / (out_height * out_width)
+#     else:
+#         filler_heatmap = torch.zeros((out_height, out_width), device=keypoints.device)
+
+#     heatmaps[nan_idxs] = filler_heatmap
+#     return heatmaps
+
 def generate_heatmaps(
     keypoints: TensorType["batch", "num_keypoints", 2],
     height: int,
@@ -344,6 +401,7 @@ def generate_heatmaps(
     output_shape: Tuple[int, int],
     sigma: float = 1.25,
     uniform_heatmaps: bool = False,
+    keep_gradients: bool = False,
 ) -> TensorType["batch", "num_keypoints", "height", "width"]:
     """Generate 2D Gaussian heatmaps from mean and sigma.
 
@@ -354,17 +412,38 @@ def generate_heatmaps(
         output_shape: dimensions of downsampled heatmap, (height, width)
         sigma: control spread of gaussian
         uniform_heatmaps: output uniform heatmaps if missing ground truth label, rather than skip
+        keep_gradients: True to not detach gradients from keypoints before creating heatmaps
 
     Returns:
         batch of 2D heatmaps
 
     """
-    keypoints = keypoints.detach().clone()
+    if keep_gradients:
+        keypoints = keypoints.clone()
+    else:
+        keypoints = keypoints.detach().clone()
     out_height = output_shape[0]
     out_width = output_shape[1]
     keypoints[:, :, 1] *= out_height / height
     keypoints[:, :, 0] *= out_width / width
-    nan_idxs = torch.isnan(keypoints)[:, :, 0]
+    # nan_idxs = torch.isnan(keypoints)[:, :, 0]
+    # Mark as invalid: NaN keypoints OR out-of-bounds keypoints
+    nan_idxs = (
+        torch.isnan(keypoints)[:, :, 0] |  # Original NaN check
+        (keypoints[:, :, 0] < -1) |  # x < -1
+        (keypoints[:, :, 0] > out_width + 1) |  # x > width + 1
+        (keypoints[:, :, 1] < -1) |  # y < -1
+        (keypoints[:, :, 1] > out_height + 1)  # y > height + 1
+    )
+
+    # Clamp keypoints to prevent extreme Gaussian computations
+    # Use a reasonable buffer around the image bounds
+    # keypoints[:, :, 0] = torch.clamp(keypoints[:, :, 0], -margin, out_width + margin)
+    # keypoints[:, :, 1] = torch.clamp(keypoints[:, :, 1], -margin, out_height + margin)
+    clamped_x = torch.clamp(keypoints[:, :, 0], -1, out_width + 1)
+    clamped_y = torch.clamp(keypoints[:, :, 1], -1, out_height + 1)
+    keypoints = torch.stack([clamped_x, clamped_y], dim=2)
+
     xv = torch.arange(out_width, device=keypoints.device)
     yv = torch.arange(out_height, device=keypoints.device)
     # note flipped order because of pytorch's ij and numpy's xy indexing for meshgrid
@@ -393,6 +472,7 @@ def generate_heatmaps(
 
     heatmaps[nan_idxs] = filler_heatmap
     return heatmaps
+
 
 
 # @typechecked
