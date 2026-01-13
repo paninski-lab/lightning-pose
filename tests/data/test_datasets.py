@@ -1,7 +1,7 @@
 """Test basic dataset functionality."""
 
 import copy
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import cv2
 import numpy as np
@@ -27,6 +27,61 @@ def test_base_dataset(cfg, base_dataset):
     assert batch["keypoints"].shape == (num_targets,)
     assert isinstance(batch["images"], torch.Tensor)
     assert isinstance(batch["keypoints"], torch.Tensor)
+
+
+@pytest.fixture
+def camera_group():
+    """Create a mock CameraGroup object."""
+
+    # ------------------------------------------
+    # hard-coded values from anipose-fly example
+    # (using aniposelib CameraGroup object)
+    # ------------------------------------------
+
+    from aniposelib.cameras import Camera
+    from lightning_pose.data.cameras import CameraGroup
+
+    intrinsics = torch.tensor(
+        [[[1.4633e+04, 0.0000e+00, 4.1600e+02],
+          [0.0000e+00, 1.4633e+04, 3.1600e+02],
+          [0.0000e+00, 0.0000e+00, 1.0000e+00]],
+
+         [[1.6343e+04, 0.0000e+00, 4.1600e+02],
+          [0.0000e+00, 1.6343e+04, 3.1600e+02],
+          [0.0000e+00, 0.0000e+00, 1.0000e+00]]]
+    )
+    extrinsics = torch.tensor(
+        [[[7.9065e-01, -1.3940e-01, 5.9619e-01, -1.4132e+00],
+          [-2.8695e-02, 9.6423e-01, 2.6351e-01, -1.0720e+00],
+          [-6.1160e-01, -2.2545e-01, 7.5837e-01, 4.7490e+01]],
+
+         [[9.6419e-01, 1.3962e-01, 2.2546e-01, 1.2773e-01],
+          [-1.2986e-01, 9.8986e-01, -5.7627e-02, -5.1388e-01],
+          [-2.3122e-01, 2.6284e-02, 9.7255e-01, 7.0362e+01]]]
+    )
+    distortions = torch.tensor(
+        [[-21.4957, 0.0000, 0.0000, 0.0000, 0.0000],
+         [-14.0726, 0.0000, 0.0000, 0.0000, 0.0000]]
+    )
+
+    cameras = []
+    for i in range(2):
+
+        # Convert rotation matrix to rotation vector using Rodrigues
+        rotation_matrix = extrinsics[i][:3, :3].numpy()
+        rvec, _ = cv2.Rodrigues(rotation_matrix)
+        rvec = rvec.flatten()  # Make it a 1D vector
+
+        camera = Camera(
+            matrix=intrinsics[i].numpy(),
+            rvec=rvec,
+            tvec=extrinsics[i][:3, 3].numpy(),  # Translation vector (3,)
+            dist=distortions[i].numpy(),
+        )
+        cameras.append(camera)
+
+    # Create the CameraGroup
+    return CameraGroup(cameras)
 
 
 class TestHeatmapDataset:
@@ -559,63 +614,53 @@ class TestMultiviewHeatmapDataset:
             )[0].cpu().numpy()
             assert np.array_equal(keypoints_curr, result[idx_view])
 
+    def test_init_with_discovered_calibrations(
+        self, cfg_multiview, imgaug_transform, tmp_path, camera_group,
+    ):
+        """Test initialization when camera_params_path is None and calibrations are discovered."""
+        import shutil
+        from lightning_pose.utils.scripts import get_dataset
+
+        # 1. Setup mock root directory by copying data_dir
+        # Use toy data as base but move to tmp_path
+        shutil.copytree(cfg_multiview.data.data_dir, tmp_path, dirs_exist_ok=True)
+
+        # 2. Setup calibrations directory and serialized CameraGroup
+        calib_dir = tmp_path / "calibrations"
+        calib_dir.mkdir()
+        calib_file = calib_dir / "session0.toml"
+        camera_group.cameras[0].name = 'top'
+        camera_group.cameras[1].name = 'bot'
+        camera_group.cameras[0].size = (1080, 1920),  # Fake size, doesn't get used.
+        camera_group.cameras[1].size = (1080, 1920),  # Fake size, doesn't get used.
+        camera_group.dump(str(calib_file))
+
+        # 3. Modify config to point to tmp_path
+        cfg_tmp = copy.deepcopy(cfg_multiview)
+        assert cfg_tmp.model.model_type == "heatmap"
+        cfg_tmp.data.data_dir = str(tmp_path)
+
+        # 4. Construct dataset with camera_params_path=None (default)
+        dataset = get_dataset(
+            cfg_tmp,
+            data_dir=str(tmp_path),
+            imgaug_transform=imgaug_transform,
+        )
+
+        # 5. Verifications
+        assert isinstance(dataset, MultiviewHeatmapDataset)
+        # verify calibrations were found in the directory
+        assert dataset.cam_params_df is None
+        assert dataset.cam_params_file_to_camgroup is not None
+        assert "calibrations/session0.toml" in dataset.cam_params_file_to_camgroup
+        assert isinstance(
+            dataset.cam_params_file_to_camgroup["calibrations/session0.toml"],
+            type(camera_group),
+        )
+
 
 class TestApply3DTransforms:
     """Tests for MultiviewHeatmapDataset.apply_3d_transforms method."""
-
-    @pytest.fixture
-    def camera_group(self):
-        """Create a mock CameraGroup object."""
-
-        # ------------------------------------------
-        # hard-coded values from anipose-fly example
-        # (using aniposelib CameraGroup object)
-        # ------------------------------------------
-
-        from aniposelib.cameras import Camera
-        from lightning_pose.data.cameras import CameraGroup
-
-        intrinsics = torch.tensor(
-            [[[1.4633e+04, 0.0000e+00, 4.1600e+02],
-              [0.0000e+00, 1.4633e+04, 3.1600e+02],
-              [0.0000e+00, 0.0000e+00, 1.0000e+00]],
-
-             [[1.6343e+04, 0.0000e+00, 4.1600e+02],
-              [0.0000e+00, 1.6343e+04, 3.1600e+02],
-              [0.0000e+00, 0.0000e+00, 1.0000e+00]]]
-        )
-        extrinsics = torch.tensor(
-            [[[7.9065e-01, -1.3940e-01, 5.9619e-01, -1.4132e+00],
-              [-2.8695e-02, 9.6423e-01, 2.6351e-01, -1.0720e+00],
-              [-6.1160e-01, -2.2545e-01, 7.5837e-01, 4.7490e+01]],
-
-             [[9.6419e-01, 1.3962e-01, 2.2546e-01, 1.2773e-01],
-              [-1.2986e-01, 9.8986e-01, -5.7627e-02, -5.1388e-01],
-              [-2.3122e-01, 2.6284e-02, 9.7255e-01, 7.0362e+01]]]
-        )
-        distortions = torch.tensor(
-            [[-21.4957, 0.0000, 0.0000, 0.0000, 0.0000],
-             [-14.0726, 0.0000, 0.0000, 0.0000, 0.0000]]
-        )
-
-        cameras = []
-        for i in range(2):
-
-            # Convert rotation matrix to rotation vector using Rodrigues
-            rotation_matrix = extrinsics[i][:3, :3].numpy()
-            rvec, _ = cv2.Rodrigues(rotation_matrix)
-            rvec = rvec.flatten()  # Make it a 1D vector
-
-            camera = Camera(
-                matrix=intrinsics[i].numpy(),
-                rvec=rvec,
-                tvec=extrinsics[i][:3, 3].numpy(),  # Translation vector (3,)
-                dist=distortions[i].numpy(),
-            )
-            cameras.append(camera)
-
-        # Create the CameraGroup
-        return CameraGroup(cameras)
 
     @pytest.fixture
     def valid_data_dict(self, multiview_heatmap_dataset):
@@ -867,7 +912,6 @@ class TestApply3DTransforms:
         no_change(datadict)
 
         # Create data dict with insufficient keypoints only on a single view
-        view_name = multiview_heatmap_dataset.view_names[0]
         datadict_1 = copy.deepcopy(valid_data_dict)
         datadict_1[view]["keypoints"].fill_(float("nan"))
         no_change(datadict_1)
