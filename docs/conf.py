@@ -6,15 +6,15 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath("../"))
+sys.path.insert(0, os.path.abspath('../'))
 
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = "lightning-pose"
-copyright = "2023, Dan Biderman, Matt Whiteway"
-author = "Dan Biderman, Matt Whiteway"
+project = 'lightning-pose'
+copyright = '2023, Dan Biderman, Matt Whiteway'
+author = 'Dan Biderman, Matt Whiteway'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -23,44 +23,44 @@ author = "Dan Biderman, Matt Whiteway"
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    "sphinx.ext.napoleon",  # parsing of different docstring styles
-    "sphinx.ext.autodoc",  # allows automatic parsing of docstrings
-    "sphinx.ext.autosummary",  # Create neat summary tables for modules/classes/methods etc
-    "sphinx.ext.mathjax",  # allows mathjax in documentation
-    "sphinx.ext.viewcode",  # links documentation to source code
-    "sphinx.ext.githubpages",  # allows integration with github
-    "sphinx_automodapi.automodapi",
-    "sphinx_copybutton",  # add copy button to code blocks
-    "sphinx_design",  # dropdowns
-    "sphinx_rtd_dark_mode",
-    "sphinxarg.ext",  # sphinx-argparse for CLI docs
+    'sphinx.ext.napoleon',  # parsing of different docstring styles
+    'sphinx.ext.autodoc',  # allows automatic parsing of docstrings
+    'sphinx.ext.autosummary',  # Create neat summary tables for modules/classes/methods etc
+    'sphinx.ext.mathjax',  # allows mathjax in documentation
+    'sphinx.ext.viewcode',  # links documentation to source code
+    'sphinx.ext.githubpages',  # allows integration with github
+    'sphinx_automodapi.automodapi',
+    'sphinx_copybutton',  # add copy button to code blocks
+    'sphinx_design',  # dropdowns
+    'sphinx_rtd_dark_mode',
+    'sphinxarg.ext',  # sphinx-argparse for CLI docs
 ]
 
 # for automodapi, avoids having methods and attrs of classes shown multiple times
 numpydoc_show_class_members = False
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ["_templates"]
+templates_path = ['_templates']
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-html_theme = "sphinx_rtd_theme"
+html_theme = 'sphinx_rtd_theme'
 html_logo = "images/LightningPose_logo_light.png"
 html_favicon = "images/favicon.ico"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ["_static"]
-html_css_files = ["lightningpose.css"]
+html_static_path = ['_static']
+html_css_files = ['lightningpose.css']
 
 autosummary_generate = True
 
@@ -71,8 +71,8 @@ default_dark_mode = True
 # If you want to document __init__() functions for python classes
 # https://stackoverflow.com/a/61732050/1925967
 autodoc_default_options = {
-    "special-members": "__init__",
+    'special-members': '__init__',
 }
 
 # Declutters class signature by moving constructor to separate method.
-autodoc_class_signature = "separated"
+autodoc_class_signature = 'separated'
