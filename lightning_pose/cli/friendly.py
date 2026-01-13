@@ -13,12 +13,6 @@ class ArgumentParser(argparse.ArgumentParser):
         )
         self.is_sub_parser = False
 
-    def format_help(self):
-        """Modified to remove the "run_app" argument from the help text
-        while it's still under development."""
-        h = super().format_help()
-        return h.replace(",run_app", "")
-
     def print_help(self, with_welcome=True, **kwargs):
         if with_welcome and not self.is_sub_parser:
             print("Welcome to the lightning-pose CLI!\n")
@@ -27,9 +21,6 @@ class ArgumentParser(argparse.ArgumentParser):
     def error(self, message):
         red = "\033[91m"
         end = "\033[0m"
-
-        # Remove run_app while it's still in development.
-        message = message.replace(", run_app", "")
 
         sys.stderr.write(red + f"error:\n{message}\n\n" + end)
 
@@ -57,9 +48,7 @@ class _HelpFormatter(argparse.HelpFormatter):
 
         lines: list[str] = []
         for p in paragraphs:
-            p_lines = textwrap.wrap(
-                p, width, break_long_words=False, break_on_hyphens=False
-            )
+            p_lines = textwrap.wrap(p, width, break_long_words=False, break_on_hyphens=False)
             # An empty paragraph should result in a newline.
             if not p_lines:
                 p_lines = [""]
@@ -67,9 +56,7 @@ class _HelpFormatter(argparse.HelpFormatter):
         return lines
 
     def _fill_text(self, text: str, width: int, indent: str) -> str:
-        return "\n".join(
-            indent + line for line in self._split_lines(text, width - len(indent))
-        )
+        return "\n".join(indent + line for line in self._split_lines(text, width - len(indent)))
 
     def _format_action(self, *args, **kwargs):
         """Modified to add a newline after each argument, for better readability."""

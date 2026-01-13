@@ -1,7 +1,7 @@
 .. _config_file:
 
 ######################
-The configuration file
+Model config.yaml
 ######################
 
 Users interact with Lighting Pose through a single configuration file. This file points to data
