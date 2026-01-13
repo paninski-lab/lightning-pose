@@ -26,9 +26,9 @@ of your cloud environment to access the port remotely.
 
 Once the app is open in the browser, it should look like this. Click on New Project and begin to fill out the form.
 
-.. image:: /images/app_screenshots/app_new_project_page.png
+.. image:: https://ksikka.github.io/lightning-pose-statics/docs/images/app_screenshots/app_new_project_page.png
 
-.. image:: /images/app_screenshots/app_new_project_form.png
+.. image:: https://ksikka.github.io/lightning-pose-statics/docs/images/app_screenshots/app_new_project_form.png
 
 Important: Specifying Data directory
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -53,7 +53,7 @@ extract the View name and Session name from a video's filename.
 That's it! Hit save and your project will be created. You will be redirected
 to the project home page.
 
-.. image:: /images/app_screenshots/app_project_home.png
+.. image:: https://ksikka.github.io/lightning-pose-statics/docs/images/app_screenshots/app_project_home.png
 
 Label data
 -----------
@@ -63,7 +63,7 @@ Otherwise, see `<importing_labeled_data>`_.
 
 Labeling occurs in the Labeler module.
 
-.. image:: /images/app_screenshots/app_labeler_home.png
+.. image:: https://ksikka.github.io/lightning-pose-statics/docs/images/app_screenshots/app_labeler_home.png
 
 
 Create a label file and extract frames
@@ -75,19 +75,19 @@ This opens the "extract frames" workflow:
 - upload a session for frame extraction
 - specify frame extraction settings
 
-.. image:: /images/app_screenshots/app_extract_frames_name_lblfile.png
+.. image:: https://ksikka.github.io/lightning-pose-statics/docs/images/app_screenshots/app_extract_frames_name_lblfile.png
 
 Leave the default name and click next. You will see the session selection screen.
 On the right, click Upload Session.
 
-.. image:: /images/app_screenshots/app_extract_frames_2_select_session.png
+.. image:: https://ksikka.github.io/lightning-pose-statics/docs/images/app_screenshots/app_extract_frames_2_select_session.png
 
 Select videos from your local filesystem and click Import.
 Videos will upload and be transcoded. Upon completion, the video import dialog
 will close and you will be able to see and select the newly uploaded session on the
 left hand side of the session selection screen.
 
-.. image:: /images/app_screenshots/app_session_import_successful.png
+.. image:: https://ksikka.github.io/lightning-pose-statics/docs/images/app_screenshots/app_session_import_successful.png
 
 
 Label frames
@@ -96,7 +96,7 @@ Label frames
 Click an unlabeled frame on the left and start labeling.
 You need to hit save in order to persist the label file.
 
-.. image:: /images/app_screenshots/app_labeler_with_unlabeled_frame_loaded.png
+.. image:: https://ksikka.github.io/lightning-pose-statics/docs/images/app_screenshots/app_labeler_with_unlabeled_frame_loaded.png
 
 You can zoom into a tile by scrolling. Keypoints can be moved by dragging.
 To remove a keypoint, find it in the table of keypoints on the right and click the X button.
@@ -104,17 +104,24 @@ To remove a keypoint, find it in the table of keypoints on the right and click t
 Explainer: Label files
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-See docs for directory structure of label files.
+Lightning Pose searches the data directory for all CSV files in order to populate the
+label file selection dropdown.
 
-1. You might want to backup a copy the label files before doing
-a round of labeling or label refinement.
-Copy the files and suffix with a timestamp or ID.
-These will be selectable in the label file dropdown, and serve as a backup
-and allow you to compare model performance before and after.
+In multiview projects, the term "label file" is a misnomer - it's actually a set of label files
+under the hood, one for each view. For example, ``CollectedData_*.csv`` refers to the set of files:
 
-2. Most users will have just one primary label file. However some users might
-have niche use cases such as keeping separate "in-distribution" and "out-of-distribution"
-label files. This is mostly useful for model research.
+* ``CollectedData_view0.csv``
+* ``CollectedData_view1.csv``
+
+You should have just one such set of label files as primary. The primary
+use-case for having multiple label file sets is backups or versioning.
+You can copy label files periodically and suffix with the date. For example:
+
+* ``CollectedData_YYYYMMDD_view0.csv``
+* ``CollectedData_YYYYMMDD_view1.csv``
+
+Note that the file must ennd in ``_viewN`` for multiview projects (single view projects do not have this
+suffix).
 
 Multiview features
 ~~~~~~~~~~~~~~~~~~~~~
@@ -129,7 +136,7 @@ Create a model
 In the Models module, click New Model and follow the instructions to create a model.
 Training will begin automatically.
 
-.. image:: /images/app_screenshots/app_model_creation_form.png
+.. image:: https://ksikka.github.io/lightning-pose-statics/docs/images/app_screenshots/app_model_creation_form.png
 
 Click on a model in the models table to see its details.
 
@@ -142,7 +149,7 @@ in the table, and click the Run inference Action from the Actions button.
 
 Follow the instructions to upload the video for inference.
 
-.. image:: /images/app_screenshots/app_model_inference.png
+.. image:: https://ksikka.github.io/lightning-pose-statics/docs/images/app_screenshots/app_model_inference.png
 
 Again, the App is using the CLI to run inference, which stores predictions inside
 the model directory. To view the predictions in the App, we need to switch to the Viewer module.
@@ -154,7 +161,7 @@ Visualize predictions
 Once in the Viewer module, you can select a session from the left hand side, and find
 its model outputs on the right hand side.
 
-.. image:: /images/app_screenshots/app_viewer.png
+.. image:: https://ksikka.github.io/lightning-pose-statics/docs/images/app_screenshots/app_viewer.png
 
 You can zoom into a tile by scrolling. The bottom playback bar displays the
 time and frame number. When paused and the slider is the active element (click on it once to

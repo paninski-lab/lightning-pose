@@ -30,6 +30,10 @@ Then run the following script from the git repo:
 
     python scripts/converters/slp2lp.py --slp_file=/path/to/<project>.pkg.slp --lp_dir=/path/to/lp/dir
 
+Importing from the legacy Lightning Pose-app
+==============================================
+
+See the `app migration guide <source/migration_to_app>`_.
 
 Request support for more converters
 ====================================

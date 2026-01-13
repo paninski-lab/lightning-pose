@@ -163,7 +163,7 @@ Get started with the app
 The lightning pose app provides an easy-to-use GUI to access most lightning pose features.
 
 To get started, :doc:`install lightning pose <source/installation_guide>`
-and follow the :doc:`New user tutorial <source/create_first_project>`.
+and follow the :doc:`Create your first project <source/create_first_project>` tutorial.
 It covers the end-to-end workflow of labeling, training, and evaluation.
 
 .. toctree::
