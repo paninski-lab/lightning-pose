@@ -1,5 +1,6 @@
 ![](https://github.com/paninski-lab/lightning-pose/raw/main/docs/images/LightningPose_horizontal_light.png)
 
+
 [![Discord](https://img.shields.io/discord/1103381776895856720)](https://discord.gg/tDUPdRj4BM)
 ![GitHub](https://img.shields.io/github/license/paninski-lab/lightning-pose)
 [![Documentation Status](https://readthedocs.org/projects/lightning-pose/badge/?version=latest)](https://lightning-pose.readthedocs.io/en/latest/?badge=latest)
