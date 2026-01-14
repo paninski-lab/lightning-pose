@@ -7,33 +7,61 @@
 ![PyPI Downloads](https://static.pepy.tech/badge/lightning-pose/week)
 
 
-Pose estimation models implemented in **Pytorch Lightning**, supporting massively accelerated training on _unlabeled_ videos using **NVIDIA DALI**. 
-Models can be evaluated with **TensorBoard**, **FiftyOne**, and **Streamlit**.
+Lightning Pose is an end-to-end toolkit designed for robust multi-view and single-view animal
+pose estimation using advanced transformer architectures. It leverages Multi-View Transformers
+and patch-masking training to learn geometric relationships between views,
+resulting in strong performance on occlusions [Aharon, Lee et al. 2025](https://arxiv.org/abs/2510.09903).
+For single-view datasets  it leverages temporal context and learned plausibility constraints for strong performance
+in challenging scenarios [Biderman, Whiteway et al. 2024, Nature Methods](https://rdcu.be/dLP3z).
+It has a rich GUI that supports the end-to-end workflow: labeling, model management, and evaluation.
 
-As of June 2024, Lightning Pose is now [published in Nature Methods](https://rdcu.be/dLP3z)!
 
-## Try our demo
+## Installation
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/paninski-lab/lightning-pose/blob/main/scripts/litpose_training_demo.ipynb)
+Lightning-pose requires a Linux or WSL environment with an NVIDIA GPU.
 
-Train a network on an example dataset and visualize the results in Google Colab.
+For users without access to a local NVIDIA GPU, it is highly recommended to
+use the [Lightning AI](https://lightning.ai/) cloud environment, which provides
+persistent, browser-based "Studios" with on-demand access to powerful GPUs
+and pre-configured CUDA environments.
+
+Install dependencies:
+
+```shell
+sudo apt install ffmpeg
+
+# Verify nvidia-driver with CUDA 12+
+nvidia-smi
+```
+
+In a clean python virtual environment (conda or other virtual environment manager), run:
+
+```shell
+pip install lightning-pose lightning-pose-app
+```
+
+That's it! To run the app:
+
+```shell
+litpose run_app
+```
+
+Please see the [installation guide](https://lightning-pose.readthedocs.io/en/latest/source/installation_guide.html)
+for more detailed instructions, and feel free to reach out to us on [Discord](https://discord.gg/tDUPdRj4BM)
+in case of any hiccups.
 
 ## Getting Started
-Please see the [Lightning Pose documentation](https://lightning-pose.readthedocs.io/) 
-for installation instructions and user guides.
-Note that the Lightning Pose package provides tools for training and evaluating models on 
-_already labeled data_ and unlabeled video clips. 
 
-We also offer a [browser-based application](https://github.com/Lightning-Universe/Pose-app) that 
-supports the full life cycle of a pose estimation project, from data annotation to model training 
-to diagnostic visualizations.
+To get started with Lightning Pose, follow the guides on our documentation:
+* [Create your first project](https://lightning-pose.readthedocs.io/en/latest/source/create_first_project.html) using the app
+* or follow the CLI User Guides ([Singleview](https://lightning-pose.readthedocs.io/en/latest/source/user_guide_singleview/index.html), [Multiview](https://lightning-pose.readthedocs.io/en/latest/source/user_guide_multiview/index.html)).
+
+## Community
 
 The Lightning Pose team also actively develops the 
 [Ensemble Kalman Smoother (EKS)](https://github.com/paninski-lab/eks), 
 a simple and performant post-processor that works with any pose estimation package including 
 Lightning Pose, DeepLabCut, and SLEAP.
-
-## Community
 
 Lightning Pose is primarily maintained by 
 [Karan Sikka](https://github.com/ksikka) (Columbia University),
@@ -41,6 +69,5 @@ Lightning Pose is primarily maintained by
 and
 [Dan Biderman](https://dan-biderman.netlify.app) (Stanford University). 
  
-
 Lightning Pose is under active development and we welcome community contributions.
 Whether you want to implement some of your own ideas or help out with our [development roadmap](docs/roadmap.md), please get in touch with us on Discord (see contributing guidelines [here](CONTRIBUTING.md)). 
