@@ -16,11 +16,7 @@ in challenging scenarios [Biderman, Whiteway et al. 2024, Nature Methods](https:
 It has a rich GUI that supports the end-to-end workflow: labeling, model management, and evaluation.
 
 
-## Getting Started
-
-### Installation
-
-This is an abridged version of the [installation guide](https://lightning-pose.readthedocs.io/en/latest/source/installation_guide.html).
+## Installation
 
 Lightning-pose requires a Linux or WSL environment with an NVIDIA GPU.
 
@@ -53,6 +49,12 @@ litpose run_app
 Please see the [installation guide](https://lightning-pose.readthedocs.io/en/latest/source/installation_guide.html)
 for more detailed instructions, and feel free to reach out to us on [Discord](https://discord.gg/tDUPdRj4BM)
 in case of any hiccups.
+
+## Getting Started
+
+To get started with Lightning Pose, follow the guides on our documentation:
+* [Create your first project](https://lightning-pose.readthedocs.io/en/latest/source/create_first_project.html) using the app
+* or follow the CLI User Guides ([Singleview](https://lightning-pose.readthedocs.io/en/latest/source/user_guide_singleview/index.html), [Multiview](https://lightning-pose.readthedocs.io/en/latest/source/user_guide_multiview/index.html)).
 
 ## Community
 
