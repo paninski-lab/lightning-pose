@@ -8,6 +8,7 @@ from lightning_pose.data.cameras import project_3d_to_2d, project_camera_pairs_t
 # 05272019_fly1_0_R1C24_rot-ccw-0.06_sec
 # --------------------------------------------
 
+
 @pytest.fixture
 def points_2d():
     return torch.tensor(
