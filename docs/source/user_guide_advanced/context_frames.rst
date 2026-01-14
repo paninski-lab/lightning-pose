@@ -14,7 +14,7 @@ This page describes updates to the data and config file in order to properly use
 Data
 ====
 The TCN requires the addition of context frames in the labeled data directory
-(referred to as ``<LABELED_DATA_DIR>`` in :ref:`Organizing your data <directory_structure>`).
+(referred to as ``<LABELED_DATA_DIR>`` in :ref:`Organizing your data <sv_organizing_data>`).
 
 For example, if the labels csv file contains a frame named ``labeled-data/session_00/img009.png``
 then you will need to add the frames ``img007.png``, ``img008.png``, ``img010.png``, ``img011.png``

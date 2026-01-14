@@ -22,7 +22,7 @@ def register_parser(subparsers):
 
     is_building_docs = "sphinx" in sys.modules
     _doc_link = (
-        ":doc:`user_guide_advanced/cropzoom_pipeline`"
+        ":doc:`Cropzoom pipeline </source/user_guide_advanced/cropzoom_pipeline>`"
         if is_building_docs
         else "https://lightning-pose.readthedocs.io/en/latest/source/user_guide_advanced/cropzoom_pipeline.html"
     )
@@ -67,9 +67,7 @@ def register_parser(subparsers):
         "model_dir", type=types.existing_model_dir, help="path to a model directory"
     )
 
-    crop_parser.add_argument(
-        "input_path", type=Path, nargs="+", help="one or more files"
-    )
+    crop_parser.add_argument("input_path", type=Path, nargs="+", help="one or more files")
     crop_parser.add_argument(
         "--crop_ratio",
         type=float,

@@ -1,11 +1,10 @@
 .. _user_guide_multiview:
 
 #####################
-User guide: multiview
+Multiview
 #####################
 
-In addition to the single camera setups discussed in the previous user guide, Lightning Pose also
-supports multi-camera setups, where the same scene is captured from different angles with
+Lightning Pose supports multi-camera setups, where the same scene is captured from different angles with
 different cameras.
 
 We offer a multi-view transformer solution that processes all views simultaneously, learning
