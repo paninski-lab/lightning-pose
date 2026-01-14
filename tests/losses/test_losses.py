@@ -15,6 +15,7 @@ from lightning_pose.losses.losses import (
     PCALoss,
     RegressionMSELoss,
     RegressionRMSELoss,
+    ReprojectionHeatmapLoss,
     TemporalLoss,
     UnimodalLoss,
     get_loss_classes,
@@ -433,9 +434,9 @@ def test_regression_mse_loss():
     loss, logs = mse_loss(true_keypoints, predicted_keypoints, stage=stage)
     assert loss.shape == torch.Size([])
     assert loss == 0.0
-    assert logs[0]["name"] == "%s_regression_mse_loss" % stage
+    assert logs[0]["name"] == "%s_regression_loss" % stage
     assert logs[0]["value"] == loss / mse_loss.weight
-    assert logs[1]["name"] == "regression_mse_weight"
+    assert logs[1]["name"] == "regression_weight"
     assert logs[1]["value"] == mse_loss.weight
 
     # when predictions do not equal targets, should return positive value
@@ -446,31 +447,37 @@ def test_regression_mse_loss():
     assert loss > 0.0
 
 
-def test_regression_rmse_loss():
-    mse_loss = RegressionMSELoss(log_weight=np.log(0.5))  # set log_weight so weight=1
-    rmse_loss = RegressionRMSELoss(log_weight=np.log(0.5))  # set log_weight so weight=1
+class TestRegressionRMSELoss:
 
-    # when predictions equal targets, should return zero
-    true_keypoints = torch.ones(size=(12, 32))
-    predicted_keypoints = torch.ones(size=(12, 32))
-    loss, logs = rmse_loss(true_keypoints, predicted_keypoints, stage=stage)
-    assert loss.shape == torch.Size([])
-    assert loss == 0.0
-    assert logs[0]["name"] == "%s_rmse_loss" % stage
-    assert logs[0]["value"] == loss / mse_loss.weight
-    assert logs[1]["name"] == "rmse_weight"
-    assert logs[1]["value"] == mse_loss.weight
+    @pytest.fixture
+    def mse_loss(self):
+        return RegressionMSELoss(log_weight=np.log(0.5))  # set log_weight so weight=1
 
-    # compute exact rmse from mse
-    n = 4
-    batch_size = 3
-    labels = 2 * torch.ones((batch_size, n))
-    preds = torch.zeros((batch_size, n))
-    true_rmse = 2.0
-    mse, _ = mse_loss(labels, preds, stage=stage)
-    rmse, _ = rmse_loss(labels, preds, stage=stage)
-    assert rmse == true_rmse
-    assert mse == true_rmse ** 2.0
+    @pytest.fixture
+    def rmse_loss(self):
+        return RegressionRMSELoss(log_weight=np.log(0.5))  # set log_weight so weight=1
+
+    def test_zero_loss_when_predictions_equal_targets(self, rmse_loss):
+        true_keypoints = torch.ones(size=(12, 32))
+        predicted_keypoints = torch.ones(size=(12, 32))
+        loss, logs = rmse_loss(true_keypoints, predicted_keypoints, stage=stage)
+        assert loss.shape == torch.Size([])
+        assert loss == 0.0
+        assert logs[0]["name"] == "%s_rmse_loss" % stage
+        assert logs[0]["value"] == loss / rmse_loss.weight
+        assert logs[1]["name"] == "rmse_weight"
+        assert logs[1]["value"] == rmse_loss.weight
+
+    def test_rmse_from_mse(self, mse_loss, rmse_loss):
+        n = 4
+        batch_size = 3
+        labels = 2 * torch.ones((batch_size, n))
+        preds = torch.zeros((batch_size, n))
+        true_rmse = 2.0
+        mse, _ = mse_loss(labels, preds, stage=stage)
+        rmse, _ = rmse_loss(labels, preds, stage=stage)
+        assert rmse == true_rmse
+        assert mse == true_rmse ** 2.0
 
 
 class TestPairwiseProjectionsLoss:
@@ -489,9 +496,9 @@ class TestPairwiseProjectionsLoss:
         loss, logs = pp_loss(keypoints_targ_3d, keypoints_pred_3d, stage=stage)
         assert loss.shape == torch.Size([])
         assert loss == 0.0
-        assert logs[0]["name"] == f"{stage}_pairwise_projections_loss"
+        assert logs[0]["name"] == f"{stage}_supervised_pairwise_projections_loss"
         assert logs[0]["value"] == loss / pp_loss.weight
-        assert logs[1]["name"] == "pairwise_projections_weight"
+        assert logs[1]["name"] == "supervised_pairwise_projections_weight"
         assert logs[1]["value"] == pp_loss.weight
 
     def test_actual_values(self, pp_loss):
@@ -564,6 +571,180 @@ class TestPairwiseProjectionsLoss:
         assert loss.isclose(expected_loss)
         loss.backward()
         assert not torch.isnan(keypoints_pred_3d.grad).any(), "gradients contain NaN values"
+
+
+class TestReprojectionHeatmapLoss:
+
+    @pytest.fixture
+    def rh_loss(self):
+        """Create a ReprojectionHeatmapLoss instance with standard parameters."""
+        loss = ReprojectionHeatmapLoss(
+            original_image_height=512,
+            original_image_width=512,
+            downsampled_image_height=64,
+            downsampled_image_width=64,
+            log_weight=np.log(0.5),  # set log_weight so weight=0.5
+            uniform_heatmaps=False,
+        )
+        return loss
+
+    def test_actual_values(self, rh_loss):
+        """Test loss computation with actual different values."""
+        batch_size = 2
+        num_keypoints = 4
+        heatmap_height = 64
+        heatmap_width = 64
+
+        # Create target heatmaps
+        heatmaps_targ = torch.zeros(
+            size=(batch_size, num_keypoints, heatmap_height, heatmap_width)
+        )
+        heatmaps_targ[0, 0, 30:35, 30:35] = 1.0
+
+        # Create keypoints that will generate different heatmaps
+        keypoints_pred_2d = torch.tensor([
+            [[10.0, 10.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]],  # different location
+            [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]]
+        ], dtype=torch.float32)
+
+        loss, logs = rh_loss(heatmaps_targ, keypoints_pred_2d, stage=stage)
+
+        # Loss should be positive when predictions differ from targets
+        assert loss.item() > 0.0
+        assert logs[0]["name"] == f"{stage}_supervised_reprojection_heatmap_mse_loss"
+        assert logs[0]["value"] == loss / rh_loss.weight
+        assert logs[1]["name"] == "supervised_reprojection_heatmap_mse_weight"
+        assert logs[1]["value"] == rh_loss.weight
+
+    def test_targets_all_zeros(self, rh_loss):
+        """Test behavior when all target heatmaps are zeros (invalid keypoints)."""
+        batch_size = 2
+        num_keypoints = 4
+        heatmap_height = 64
+        heatmap_width = 64
+
+        # All zero heatmaps (should be ignored by remove_nans)
+        heatmaps_targ = torch.zeros(
+            size=(batch_size, num_keypoints, heatmap_height, heatmap_width)
+        )
+
+        keypoints_pred_2d = torch.tensor([
+            [[32.0, 32.0], [100.0, 150.0], [200.0, 300.0], [400.0, 450.0]],
+            [[150.0, 22.0], [80.0, 120.0], [250.0, 350.0], [350.0, 400.0]]
+        ], dtype=torch.float32, requires_grad=True)
+
+        loss, _ = rh_loss(heatmaps_targ, keypoints_pred_2d)
+
+        # Since all targets are zeros (ignored), loss should be zero
+        assert loss.item() == 0.0
+        loss.backward()
+        # Gradients should be well-behaved (not NaN)
+        assert not torch.isnan(keypoints_pred_2d.grad).any(), "gradients contain NaN values"
+
+    def test_none_reprojected_keypoints_raises_error(self, rh_loss):
+        """Test that passing None for reprojected keypoints raises ValueError."""
+        stage = "train"
+        batch_size = 2
+        num_keypoints = 4
+        heatmap_height = 64
+        heatmap_width = 64
+
+        heatmaps_targ = torch.zeros(
+            size=(batch_size, num_keypoints, heatmap_height, heatmap_width)
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            rh_loss(heatmaps_targ, None, stage=stage)
+
+        assert "Reprojected keypoints not available" in str(exc_info.value)
+        assert stage in str(exc_info.value)
+
+    def test_targets_partial_zeros(self, rh_loss):
+        """Test behavior when some target heatmaps are zeros."""
+        batch_size = 2
+        num_keypoints = 4
+        heatmap_height = 64
+        heatmap_width = 64
+
+        heatmaps_targ = torch.zeros(
+            size=(batch_size, num_keypoints, heatmap_height, heatmap_width))
+        # Make some keypoints valid (non-zero)
+        heatmaps_targ[0, 0, 30:35, 30:35] = 1.0  # first keypoint in first batch
+        heatmaps_targ[1, 2, 20:25, 40:45] = 1.0  # third keypoint in second batch
+
+        keypoints_pred_2d = torch.tensor([
+            [[10.0, 10.0], [100.0, 150.0], [200.0, 300.0], [400.0, 450.0]],
+            # different from target
+            [[150.0, 22.0], [80.0, 120.0], [10.0, 10.0], [350.0, 400.0]]  # different from target
+        ], dtype=torch.float32, requires_grad=True)
+
+        loss, _ = rh_loss(heatmaps_targ, keypoints_pred_2d)
+
+        # Loss should be positive for valid keypoints
+        assert loss.item() > 0.0
+        loss.backward()
+        assert not torch.isnan(keypoints_pred_2d.grad).any(), "gradients contain NaN values"
+
+    def test_gradient_flow(self, rh_loss):
+        """Test that gradients flow properly through the loss."""
+        batch_size = 1
+        num_keypoints = 1
+        heatmap_height = 64
+        heatmap_width = 64
+
+        heatmaps_targ = torch.zeros(
+            size=(batch_size, num_keypoints, heatmap_height, heatmap_width)
+        )
+        heatmaps_targ[0, 0, 30:35, 30:35] = 1.0
+
+        # Create keypoints that require gradients
+        keypoints_pred_2d = torch.tensor([[[10.0, 10.0]]], dtype=torch.float32, requires_grad=True)
+
+        loss, _ = rh_loss(heatmaps_targ, keypoints_pred_2d)
+        loss.backward()
+
+        # Check that gradients exist and are finite
+        assert keypoints_pred_2d.grad is not None
+        assert torch.isfinite(keypoints_pred_2d.grad).all()
+
+    def test_remove_nans_functionality(self, rh_loss):
+        """Test the remove_nans method directly."""
+        batch_size = 2
+        num_keypoints = 4
+        heatmap_height = 64
+        heatmap_width = 64
+
+        # Create targets with some all-zero heatmaps (should be removed)
+        targets = torch.zeros(size=(batch_size, num_keypoints, heatmap_height, heatmap_width))
+        targets[0, 0, 30:35, 30:35] = 1.0  # valid keypoint
+        targets[1, 2, 20:25, 40:45] = 1.0  # valid keypoint
+        # targets[0, 1], targets[0, 2], targets[0, 3], targets[1, 0], targets[1, 1], targets[1, 3]
+        # are all zeros
+
+        predictions = torch.ones_like(targets) * 0.5
+
+        # Compute elementwise loss first
+        elementwise_loss = rh_loss.compute_loss(targets, predictions)
+
+        clean_loss = rh_loss.remove_nans(elementwise_loss, targets)
+
+        # Should only have valid losses from 2 keypoints * heatmap_height * heatmap_width pixels
+        expected_num_elements = 2 * heatmap_height * heatmap_width
+        assert clean_loss.numel() == expected_num_elements
+        assert clean_loss.dim() == 1  # Should be flattened
+        assert torch.all(torch.isfinite(clean_loss))
+
+    def test_compute_loss_method(self, rh_loss):
+        """Test the compute_loss method directly."""
+        targets = torch.zeros(size=(2, 32, 32))
+        predictions = torch.ones(size=(2, 32, 32))
+
+        elementwise_loss = rh_loss.compute_loss(targets, predictions)
+
+        # Should be MSE loss scaled by h*w
+        expected_loss = (predictions - targets) ** 2 * 32 * 32
+        assert torch.allclose(elementwise_loss, expected_loss)
+        assert elementwise_loss.shape == targets.shape
 
 
 def test_get_loss_classes():

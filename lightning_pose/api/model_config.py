@@ -6,8 +6,8 @@ __all__ = ["ModelConfig"]
 
 from lightning_pose.utils.io import (
     check_video_paths,
-    return_absolute_path,
     find_video_files_for_views,
+    return_absolute_path,
 )
 
 

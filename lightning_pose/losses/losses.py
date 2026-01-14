@@ -47,6 +47,7 @@ __all__ = [
     "RegressionMSELoss",
     "RegressionRMSELoss",
     "PairwiseProjectionsLoss",
+    "ReprojectionHeatmapLoss",
     "get_loss_classes",
 ]
 
@@ -82,7 +83,6 @@ class Loss:
         # epsilon can either by a float or a list of floats
         self.epsilon = torch.tensor(epsilon, dtype=torch.float)
         self.log_weight = torch.tensor(log_weight, dtype=torch.float)
-        self.loss_name = "base"
 
         self.reduce_methods_dict = {"mean": torch.mean, "sum": torch.sum}
 
@@ -193,6 +193,8 @@ class HeatmapLoss(Loss):
 class HeatmapMSELoss(HeatmapLoss):
     """MSE loss between heatmaps."""
 
+    loss_name = "heatmap_mse"
+
     def __init__(
         self,
         data_module: BaseDataModule | UnlabeledDataModule | None = None,
@@ -200,7 +202,6 @@ class HeatmapMSELoss(HeatmapLoss):
         **kwargs,
     ) -> None:
         super().__init__(data_module=data_module, log_weight=log_weight)
-        self.loss_name = "heatmap_mse"
 
     def compute_loss(
         self,
@@ -218,6 +219,8 @@ class HeatmapMSELoss(HeatmapLoss):
 class HeatmapKLLoss(HeatmapLoss):
     """Kullback-Leibler loss between heatmaps."""
 
+    loss_name = "heatmap_kl"
+
     def __init__(
         self,
         data_module: BaseDataModule | UnlabeledDataModule | None = None,
@@ -226,7 +229,6 @@ class HeatmapKLLoss(HeatmapLoss):
     ) -> None:
         super().__init__(data_module=data_module, log_weight=log_weight)
         self.loss = kl_div_loss_2d
-        self.loss_name = "heatmap_kl"
 
     def compute_loss(
         self,
@@ -245,6 +247,8 @@ class HeatmapKLLoss(HeatmapLoss):
 class HeatmapJSLoss(HeatmapLoss):
     """Kullback-Leibler loss between heatmaps."""
 
+    loss_name = "heatmap_js"
+
     def __init__(
         self,
         data_module: BaseDataModule | UnlabeledDataModule | None = None,
@@ -253,7 +257,6 @@ class HeatmapJSLoss(HeatmapLoss):
     ) -> None:
         super().__init__(data_module=data_module, log_weight=log_weight)
         self.loss = js_div_loss_2d
-        self.loss_name = "heatmap_js"
 
     def compute_loss(
         self,
@@ -272,6 +275,10 @@ class HeatmapJSLoss(HeatmapLoss):
 class PCALoss(Loss):
     """Penalize predictions that fall outside a low-dimensional subspace."""
 
+    # define all valid loss names as class constants
+    LOSS_NAME_MULTIVIEW = "pca_multiview"
+    LOSS_NAME_SINGLEVIEW = "pca_singleview"
+
     def __init__(
         self,
         loss_name: Literal["pca_singleview", "pca_multiview"],
@@ -289,6 +296,10 @@ class PCALoss(Loss):
     ) -> None:
         super().__init__(data_module=data_module, log_weight=log_weight)
         self.device = device
+
+        # validate against class constants
+        if loss_name not in (self.LOSS_NAME_MULTIVIEW, self.LOSS_NAME_SINGLEVIEW):
+            raise ValueError(f"Invalid loss_name: {loss_name}")
         self.loss_name = loss_name
 
         if loss_name == "pca_multiview":
@@ -378,6 +389,8 @@ class TemporalLoss(Loss):
 
     """
 
+    loss_name = "temporal"
+
     def __init__(
         self,
         data_module: BaseDataModule | UnlabeledDataModule | None = None,
@@ -387,7 +400,6 @@ class TemporalLoss(Loss):
         **kwargs,
     ) -> None:
         super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
-        self.loss_name = "temporal"
         self.prob_threshold = torch.tensor(prob_threshold, dtype=torch.float)
 
     def rectify_epsilon(
@@ -469,6 +481,9 @@ class TemporalHeatmapLoss(Loss):
 
     """
 
+    LOSS_NAME_MSE = "temporal_heatmap_mse"
+    LOSS_NAME_KL = "temporal_heatmap_kl"
+
     def __init__(
         self,
         loss_name: Literal["temporal_heatmap_mse", "temporal_heatmap_kl"],
@@ -479,6 +494,9 @@ class TemporalHeatmapLoss(Loss):
         **kwargs,
     ) -> None:
         super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
+
+        if loss_name not in (self.LOSS_NAME_MSE, self.LOSS_NAME_KL):
+            raise ValueError(f"Invalid loss_name: {loss_name}")
         self.loss_name = loss_name
 
         if self.loss_name == "temporal_heatmap_mse":
@@ -567,6 +585,10 @@ class TemporalHeatmapLoss(Loss):
 class UnimodalLoss(Loss):
     """Encourage heatmaps to be unimodal using various measures."""
 
+    LOSS_NAME_MSE = "unimodal_mse"
+    LOSS_NAME_KL = "unimodal_kl"
+    LOSS_NAME_JS = "unimodal_js"
+
     def __init__(
         self,
         loss_name: Literal["unimodal_mse", "unimodal_kl", "unimodal_js"],
@@ -583,7 +605,10 @@ class UnimodalLoss(Loss):
 
         super().__init__(data_module=data_module, log_weight=log_weight)
 
+        if loss_name not in (self.LOSS_NAME_MSE, self.LOSS_NAME_KL, self.LOSS_NAME_JS):
+            raise ValueError(f"Invalid loss_name: {loss_name}")
         self.loss_name = loss_name
+
         self.original_image_height = original_image_height
         self.original_image_width = original_image_width
         self.downsampled_image_height = downsampled_image_height
@@ -691,6 +716,8 @@ class UnimodalLoss(Loss):
 class RegressionMSELoss(Loss):
     """MSE loss between ground truth and predicted coordinates."""
 
+    loss_name = "regression"
+
     def __init__(
         self,
         data_module: BaseDataModule | UnlabeledDataModule | None = None,
@@ -699,7 +726,6 @@ class RegressionMSELoss(Loss):
         **kwargs,
     ) -> None:
         super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
-        self.loss_name = "regression_mse"
 
     def remove_nans(
         self,
@@ -743,6 +769,8 @@ class RegressionMSELoss(Loss):
 class RegressionRMSELoss(RegressionMSELoss):
     """Root MSE loss between ground truth and predicted coordinates."""
 
+    loss_name = "rmse"
+
     def __init__(
         self,
         data_module: BaseDataModule | UnlabeledDataModule | None = None,
@@ -751,7 +779,6 @@ class RegressionRMSELoss(RegressionMSELoss):
         **kwargs,
     ) -> None:
         super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
-        self.loss_name = "rmse"
 
     def compute_loss(
         self,
@@ -767,9 +794,10 @@ class RegressionRMSELoss(RegressionMSELoss):
 class PairwiseProjectionsLoss(Loss):
     """Penalize projections from each pair of cameras into 3D world space."""
 
+    loss_name = "supervised_pairwise_projections"
+
     def __init__(self, log_weight: float = 0.0, **kwargs) -> None:
         super().__init__(log_weight=log_weight)
-        self.loss_name = "pairwise_projections"
 
     def remove_nans(
         self,
@@ -855,6 +883,96 @@ class PairwiseProjectionsLoss(Loss):
         return self.weight * scalar_loss, logs
 
 
+class ReprojectionHeatmapLoss(Loss):
+    """Penalize error between predicted 2D->3D->2D->heatmap and ground truth heatmap."""
+
+    loss_name = "supervised_reprojection_heatmap_mse"
+
+    def __init__(
+        self,
+        original_image_height: int,
+        original_image_width: int,
+        downsampled_image_height: int,
+        downsampled_image_width: int,
+        log_weight: float = 0.0,
+        uniform_heatmaps: bool = False,
+        **kwargs,
+    ) -> None:
+        super().__init__(log_weight=log_weight)
+        self.original_image_height = original_image_height
+        self.original_image_width = original_image_width
+        self.downsampled_image_height = downsampled_image_height
+        self.downsampled_image_width = downsampled_image_width
+        self.uniform_heatmaps = uniform_heatmaps
+
+    def remove_nans(
+        self,
+        loss: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+        targets: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+    ) -> TensorType["valid_losses"]:
+        # Create mask for valid keypoints (non-zero targets)
+        squeezed_targets = targets.reshape(targets.shape[0], targets.shape[1], -1)
+        valid_keypoints = ~torch.all(squeezed_targets == 0.0, dim=-1)  # [batch, num_keypoints]
+
+        # Expand mask to match loss dimensions
+        valid_mask = valid_keypoints.unsqueeze(-1).unsqueeze(-1)  # [batch, num_keypoints, 1, 1]
+        valid_mask = valid_mask.expand_as(loss)  # [batch, num_keypoints, h, w]
+
+        valid_losses = torch.masked_select(loss, valid_mask)
+
+        if valid_losses.numel() == 0:
+            # No valid losses, return zero that preserves gradients
+            dummy_loss = torch.where(valid_mask, loss, torch.zeros_like(loss))
+            return dummy_loss.sum()  # This will be 0.0 and preserve gradients
+        else:
+            return valid_losses
+
+    def compute_loss(
+        self,
+        targets: TensorType["batch_x_num_keypoints", "heatmap_height", "heatmap_width"],
+        predictions: TensorType["batch_x_num_keypoints", "heatmap_height", "heatmap_width"],
+    ) -> TensorType["batch_x_num_keypoints", "heatmap_height", "heatmap_width"]:
+        h = targets.shape[1]
+        w = targets.shape[2]
+        # multiply by number of pixels in heatmap to standardize loss range
+        loss = F.mse_loss(targets, predictions, reduction="none") * h * w
+        return loss
+
+    def __call__(
+        self,
+        heatmaps_targ: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+        keypoints_pred_2d_reprojected: TensorType["batch", "num_keypoints", 2],
+        stage: Literal["train", "val", "test"] | None = None,
+        **kwargs,
+    ) -> Tuple[TensorType[()], list[dict]]:
+
+        # check if reprojected keypoints are available
+        if keypoints_pred_2d_reprojected is None:
+            raise ValueError(
+                f"Reprojected keypoints not available for {stage} stage. "
+                "Camera params file is required but not found;"
+                "Turn off supervised_reprojection_heatmap loss to avoid this error."
+            )
+
+        # create heatmaps from 2d reprojections
+        heatmaps_pred = generate_heatmaps(
+            keypoints=keypoints_pred_2d_reprojected,
+            height=self.original_image_height,
+            width=self.original_image_width,
+            output_shape=(self.downsampled_image_height, self.downsampled_image_width),
+            uniform_heatmaps=self.uniform_heatmaps,
+            keep_gradients=True,
+        )
+
+        elementwise_loss = self.compute_loss(targets=heatmaps_targ, predictions=heatmaps_pred)
+        clean_loss = self.remove_nans(loss=elementwise_loss, targets=heatmaps_targ)
+        scalar_loss = self.reduce_loss(clean_loss, method="mean")
+
+        logs = self.log_loss(loss=scalar_loss, stage=stage)
+
+        return self.weight * scalar_loss, logs
+
+
 @typechecked
 def get_loss_classes() -> dict[str, Type[Loss]]:
     """Get a dict with all the loss classes.
@@ -864,18 +982,19 @@ def get_loss_classes() -> dict[str, Type[Loss]]:
 
     """
     loss_dict = {
-        "regression": RegressionMSELoss,
-        "heatmap_mse": HeatmapMSELoss,
-        "heatmap_kl": HeatmapKLLoss,
-        "heatmap_js": HeatmapJSLoss,
-        "pca_multiview": PCALoss,
-        "pca_singleview": PCALoss,
-        "temporal": TemporalLoss,
-        "temporal_heatmap_mse": TemporalHeatmapLoss,
-        "temporal_heatmap_kl": TemporalHeatmapLoss,
-        "unimodal_mse": UnimodalLoss,
-        "unimodal_kl": UnimodalLoss,
-        "unimodal_js": UnimodalLoss,
-        "supervised_pairwise_projections": PairwiseProjectionsLoss,
+        RegressionMSELoss.loss_name: RegressionMSELoss,
+        HeatmapMSELoss.loss_name: HeatmapMSELoss,
+        HeatmapKLLoss.loss_name: HeatmapKLLoss,
+        HeatmapJSLoss.loss_name: HeatmapJSLoss,
+        PCALoss.LOSS_NAME_MULTIVIEW: PCALoss,
+        PCALoss.LOSS_NAME_SINGLEVIEW: PCALoss,
+        TemporalLoss.loss_name: TemporalLoss,
+        TemporalHeatmapLoss.LOSS_NAME_MSE: TemporalHeatmapLoss,
+        TemporalHeatmapLoss.LOSS_NAME_KL: TemporalHeatmapLoss,
+        UnimodalLoss.LOSS_NAME_MSE: UnimodalLoss,
+        UnimodalLoss.LOSS_NAME_KL: UnimodalLoss,
+        UnimodalLoss.LOSS_NAME_JS: UnimodalLoss,
+        PairwiseProjectionsLoss.loss_name: PairwiseProjectionsLoss,
+        ReprojectionHeatmapLoss.loss_name: ReprojectionHeatmapLoss,
     }
     return loss_dict

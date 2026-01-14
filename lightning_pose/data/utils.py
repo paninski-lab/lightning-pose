@@ -30,6 +30,8 @@ __all__ = [
     "undo_affine_transform_batch",
     "normalized_to_bbox",
     "convert_bbox_coords",
+    "convert_original_to_model_coords",
+    "original_to_model",
 ]
 
 
@@ -344,6 +346,7 @@ def generate_heatmaps(
     output_shape: Tuple[int, int],
     sigma: float = 1.25,
     uniform_heatmaps: bool = False,
+    keep_gradients: bool = False,
 ) -> TensorType["batch", "num_keypoints", "height", "width"]:
     """Generate 2D Gaussian heatmaps from mean and sigma.
 
@@ -354,17 +357,38 @@ def generate_heatmaps(
         output_shape: dimensions of downsampled heatmap, (height, width)
         sigma: control spread of gaussian
         uniform_heatmaps: output uniform heatmaps if missing ground truth label, rather than skip
+        keep_gradients: True to not detach gradients from keypoints before creating heatmaps
 
     Returns:
         batch of 2D heatmaps
 
     """
-    keypoints = keypoints.detach().clone()
+    if keep_gradients:
+        keypoints = keypoints.clone()
+    else:
+        keypoints = keypoints.detach().clone()
     out_height = output_shape[0]
     out_width = output_shape[1]
     keypoints[:, :, 1] *= out_height / height
     keypoints[:, :, 0] *= out_width / width
-    nan_idxs = torch.isnan(keypoints)[:, :, 0]
+    # nan_idxs = torch.isnan(keypoints)[:, :, 0]
+    # Mark as invalid: NaN keypoints OR out-of-bounds keypoints
+    nan_idxs = (
+        torch.isnan(keypoints)[:, :, 0]  # Original NaN check
+        | (keypoints[:, :, 0] < -1)  # x < -1
+        | (keypoints[:, :, 0] > out_width + 1)  # x > width + 1
+        | (keypoints[:, :, 1] < -1)  # y < -1
+        | (keypoints[:, :, 1] > out_height + 1)  # y > height + 1
+    )
+
+    # Clamp keypoints to prevent extreme Gaussian computations
+    # Use a reasonable buffer around the image bounds
+    # keypoints[:, :, 0] = torch.clamp(keypoints[:, :, 0], -margin, out_width + margin)
+    # keypoints[:, :, 1] = torch.clamp(keypoints[:, :, 1], -margin, out_height + margin)
+    clamped_x = torch.clamp(keypoints[:, :, 0], -1, out_width + 1)
+    clamped_y = torch.clamp(keypoints[:, :, 1], -1, out_height + 1)
+    keypoints = torch.stack([clamped_x, clamped_y], dim=2)
+
     xv = torch.arange(out_width, device=keypoints.device)
     yv = torch.arange(out_height, device=keypoints.device)
     # note flipped order because of pytorch's ij and numpy's xy indexing for meshgrid
@@ -542,6 +566,7 @@ def normalized_to_bbox(
     keypoints: TensorType["batch", "num_keypoints", "xy":2],
     bbox: TensorType["batch", "xyhw":4]
 ) -> TensorType["batch", "num_keypoints", "xy":2]:
+    """Transform keypoints from normalized coordinates to bbox coordinates"""
     if keypoints.shape[0] == bbox.shape[0]:
         # normal batch
         keypoints[:, :, 0] *= bbox[:, 3].unsqueeze(1)  # scale x by box width
@@ -565,19 +590,23 @@ def convert_bbox_coords(
         | UnlabeledBatchDict
     ),
     predicted_keypoints: TensorType["batch", "num_targets"],
+    in_place: bool = True,
 ) -> TensorType["batch", "num_targets"]:
     """Transform keypoints from bbox coordinates to absolute frame coordinates."""
     num_targets = predicted_keypoints.shape[1]
     num_keypoints = num_targets // 2
     # reshape from (batch, n_targets) back to (batch, n_key, 2), in x,y order
-    predicted_keypoints = predicted_keypoints.reshape((-1, num_keypoints, 2))
+    if in_place:
+        predicted_keypoints_ = predicted_keypoints.reshape((-1, num_keypoints, 2))
+    else:
+        predicted_keypoints_ = predicted_keypoints.clone().reshape((-1, num_keypoints, 2))
     # divide by image dims to get 0-1 normalized coordinates
     if "images" in batch_dict.keys():
-        predicted_keypoints[:, :, 0] /= batch_dict["images"].shape[-1]  # -1 dim is width "x"
-        predicted_keypoints[:, :, 1] /= batch_dict["images"].shape[-2]  # -2 dim is height "y"
+        predicted_keypoints_[:, :, 0] /= batch_dict["images"].shape[-1]  # -1 dim is width "x"
+        predicted_keypoints_[:, :, 1] /= batch_dict["images"].shape[-2]  # -2 dim is height "y"
     else:  # we have unlabeled dict, 'frames' instead of 'images'
-        predicted_keypoints[:, :, 0] /= batch_dict["frames"].shape[-1]  # -1 dim is width "x"
-        predicted_keypoints[:, :, 1] /= batch_dict["frames"].shape[-2]  # -2 dim is height "y"
+        predicted_keypoints_[:, :, 0] /= batch_dict["frames"].shape[-1]  # -1 dim is width "x"
+        predicted_keypoints_[:, :, 1] /= batch_dict["frames"].shape[-2]  # -2 dim is height "y"
     # multiply and add by bbox dims (x,y,h,w)
     if (
         ("num_views" in batch_dict.keys() and int(batch_dict["num_views"].max()) > 1)
@@ -604,11 +633,83 @@ def convert_bbox_coords(
             idx_end = idx_beg + num_keypoints_per_view
             bbox_slice = batch_dict["bbox"][:, 4 * v:4 * (v + 1)]
 
-            predicted_keypoints[:, idx_beg:idx_end, :] = normalized_to_bbox(
-                predicted_keypoints[:, idx_beg:idx_end, :],
+            predicted_keypoints_[:, idx_beg:idx_end, :] = normalized_to_bbox(
+                predicted_keypoints_[:, idx_beg:idx_end, :],
                 bbox_slice,
             )
     else:
-        predicted_keypoints = normalized_to_bbox(predicted_keypoints, batch_dict["bbox"])
+        predicted_keypoints_ = normalized_to_bbox(predicted_keypoints_, batch_dict["bbox"])
     # return new keypoints, reshaped to (batch, num_targets)
-    return predicted_keypoints.reshape((-1, num_targets))
+    return predicted_keypoints_.reshape((-1, num_targets))
+
+
+def convert_original_to_model_coords(
+    batch_dict: MultiviewHeatmapLabeledBatchDict,
+    original_keypoints: TensorType["batch", "num_views", "num_keypoints", 2],
+) -> TensorType["batch", "num_views", "num_keypoints", 2]:
+    """Transform keypoints from original frame coordinates to model input coordinates."""
+
+    batch_size, num_views, num_keypoints, _ = original_keypoints.shape
+
+    # Get model input dimensions
+    model_height = batch_dict["images"].shape[-2]  # height
+    model_width = batch_dict["images"].shape[-1]  # width
+
+    # Clone to avoid modifying original
+    model_keypoints = original_keypoints.clone()
+
+    # Process each view
+    for v in range(num_views):
+        bbox_slice = batch_dict["bbox"][:, 4 * v:4 * (v + 1)]  # (batch, 4)
+
+        model_keypoints[:, v, :, :] = original_to_model(
+            original_keypoints[:, v, :, :],  # (batch, num_keypoints, 2)
+            bbox_slice,  # (batch, 4)
+            model_width,
+            model_height,
+        )
+
+    return model_keypoints
+
+
+def original_to_model(
+    keypoints: TensorType["batch", "num_keypoints", 2],
+    bbox: TensorType["batch", 4],
+    model_width: float,
+    model_height: float,
+) -> TensorType["batch", "num_keypoints", 2]:
+    """Convert keypoints from original image coordinates to model input coordinates.
+
+    This combines the transformations:
+    1. original → bbox: subtract offset, divide by bbox dimensions
+    2. bbox → model: multiply by model dimensions
+
+    bbox format: [x, y, h, w] where x,y is top-left corner
+    """
+    model_keypoints = keypoints.clone()
+
+    if keypoints.shape[0] == bbox.shape[0]:
+        # normal batch
+        # Step 1: original → bbox (normalize to [0,1] relative to bbox)
+        model_keypoints[:, :, 0] -= bbox[:, 0].unsqueeze(1)  # subtract bbox x offset
+        model_keypoints[:, :, 0] /= bbox[:, 3].unsqueeze(1)  # divide by box width
+        model_keypoints[:, :, 1] -= bbox[:, 1].unsqueeze(1)  # subtract bbox y offset
+        model_keypoints[:, :, 1] /= bbox[:, 2].unsqueeze(1)  # divide by box height
+
+        # Step 2: bbox → model (scale to model dimensions)
+        model_keypoints[:, :, 0] *= model_width  # scale to model width
+        model_keypoints[:, :, 1] *= model_height  # scale to model height
+
+    else:
+        # context batch; we don't have predictions for first/last two frames
+        # Step 1: original → bbox
+        model_keypoints[:, :, 0] -= bbox[2:-2, 0].unsqueeze(1)  # subtract bbox x offset
+        model_keypoints[:, :, 0] /= bbox[2:-2, 3].unsqueeze(1)  # divide by box width
+        model_keypoints[:, :, 1] -= bbox[2:-2, 1].unsqueeze(1)  # subtract bbox y offset
+        model_keypoints[:, :, 1] /= bbox[2:-2, 2].unsqueeze(1)  # divide by box height
+
+        # Step 2: bbox → model
+        model_keypoints[:, :, 0] *= model_width  # scale to model width
+        model_keypoints[:, :, 1] *= model_height  # scale to model height
+
+    return model_keypoints

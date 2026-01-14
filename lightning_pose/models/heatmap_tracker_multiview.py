@@ -8,13 +8,17 @@ from omegaconf import DictConfig
 from torch import nn
 from torchtyping import TensorType
 
-from lightning_pose.data.cameras import project_camera_pairs_to_3d
+from lightning_pose.data.cameras import project_3d_to_2d, project_camera_pairs_to_3d
 from lightning_pose.data.datatypes import (
     MultiviewHeatmapLabeledBatchDict,
     MultiviewUnlabeledBatchDict,
     UnlabeledBatchDict,
 )
-from lightning_pose.data.utils import convert_bbox_coords, undo_affine_transform_batch
+from lightning_pose.data.utils import (
+    convert_bbox_coords,
+    convert_original_to_model_coords,
+    undo_affine_transform_batch,
+)
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.backbones import ALLOWED_TRANSFORMER_BACKBONES
@@ -257,8 +261,8 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         if "keypoints_3d" in batch_dict and batch_dict["keypoints_3d"].shape[-1] == 3:
             num_views = batch_dict["images"].shape[1]
             num_keypoints = pred_keypoints.shape[1] // 2 // num_views
-
             try:
+                # project from 2D to 3D
                 keypoints_pred_3d = project_camera_pairs_to_3d(
                     points=pred_keypoints.reshape((-1, num_views, num_keypoints, 2)),
                     intrinsics=batch_dict["intrinsic_matrix"].float(),
@@ -266,14 +270,33 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
                     dist=batch_dict["distortions"].float(),
                 )
                 keypoints_targ_3d = batch_dict["keypoints_3d"]
+                if "supervised_reprojection_heatmap_mse" in \
+                        self.loss_factory.loss_instance_dict.keys():
+                    # project from 3D back to 2D in original image coordinates
+                    # print(f'intrinsics: {batch_dict["intrinsic_matrix"][0, 0]}')
+                    keypoints_pred_2d_reprojected_original = project_3d_to_2d(
+                        points_3d=torch.mean(keypoints_pred_3d, dim=1),
+                        intrinsics=batch_dict["intrinsic_matrix"].float(),
+                        extrinsics=batch_dict["extrinsic_matrix"].float(),
+                        dist=batch_dict["distortions"].float(),
+                    )
+                    # convert from original image coords to model-input coords for heatmaps
+                    keypoints_pred_2d_reprojected = convert_original_to_model_coords(
+                        batch_dict=batch_dict,
+                        original_keypoints=keypoints_pred_2d_reprojected_original,
+                    ).reshape(-1, num_views * num_keypoints, 2)
+                else:
+                    keypoints_pred_2d_reprojected = None
 
             except Exception as e:
                 print(f"Error in 3D projection: {e}")
                 keypoints_pred_3d = None
                 keypoints_targ_3d = None
+                keypoints_pred_2d_reprojected = None
         else:
             keypoints_pred_3d = None
             keypoints_targ_3d = None
+            keypoints_pred_2d_reprojected = None
 
         return {
             "heatmaps_targ": batch_dict["heatmaps"],
@@ -281,8 +304,9 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             "keypoints_targ": target_keypoints,
             "keypoints_pred": pred_keypoints,
             "confidences": confidence,
-            "keypoints_targ_3d": keypoints_targ_3d,  # shape (2*batch, num_keypoints, 3)
-            "keypoints_pred_3d": keypoints_pred_3d,  # shape (2*batch, cam_pairs, num_keypoints, 3)
+            "keypoints_targ_3d": keypoints_targ_3d,  # shape (batch, num_keypoints, 3)
+            "keypoints_pred_3d": keypoints_pred_3d,  # shape (batch, cam_pairs, num_keypoints, 3)
+            "keypoints_pred_2d_reprojected": keypoints_pred_2d_reprojected,
         }
 
     def predict_step(

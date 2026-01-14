@@ -7,7 +7,11 @@ import pytest
 import torch
 from kornia.geometry.subpix import spatial_expectation2d, spatial_softmax2d
 
-from lightning_pose.data.utils import generate_heatmaps
+from lightning_pose.data.utils import (
+    convert_original_to_model_coords,
+    generate_heatmaps,
+    original_to_model,
+)
 
 
 def test_data_extractor(base_data_module_combined, multiview_heatmap_data_module_combined):
@@ -156,147 +160,317 @@ def test_compute_num_train_frames():
         compute_num_train_frames(len_train_data, train_frames=-1)
 
 
-def test_generate_heatmaps(cfg, heatmap_dataset):
+class TestGenerateHeatmaps:
 
-    im_height = cfg.data.image_resize_dims.height
-    im_width = cfg.data.image_resize_dims.width
+    def test_basic(self, cfg, heatmap_dataset):
 
-    batch = heatmap_dataset.__getitem__(idx=0)
-    heatmap_gt = batch["heatmaps"].unsqueeze(0)
-    keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
-    heatmap_torch = generate_heatmaps(
-        keypts_gt,
-        height=im_height,
-        width=im_width,
-        output_shape=(heatmap_gt.shape[2], heatmap_gt.shape[3]),
-    )
+        im_height = cfg.data.image_resize_dims.height
+        im_width = cfg.data.image_resize_dims.width
 
-    # find soft argmax and confidence of ground truth heatmap
-    softmaxes_gt = spatial_softmax2d(heatmap_gt, temperature=torch.tensor(100))
-    preds_gt = spatial_expectation2d(softmaxes_gt, normalized_coordinates=False)
-    confidences_gt = torch.amax(softmaxes_gt, dim=(2, 3))
+        batch = heatmap_dataset.__getitem__(idx=0)
+        heatmap_gt = batch["heatmaps"].unsqueeze(0)
+        keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
+        heatmap_torch = generate_heatmaps(
+            keypts_gt,
+            height=im_height,
+            width=im_width,
+            output_shape=(heatmap_gt.shape[2], heatmap_gt.shape[3]),
+        )
 
-    # find soft argmax and confidence of generated heatmap
-    softmaxes_torch = spatial_softmax2d(heatmap_torch, temperature=torch.tensor(100))
-    preds_torch = spatial_expectation2d(softmaxes_torch, normalized_coordinates=False)
-    confidences_torch = torch.amax(softmaxes_torch, dim=(2, 3))
+        # find soft argmax and confidence of ground truth heatmap
+        softmaxes_gt = spatial_softmax2d(heatmap_gt, temperature=torch.tensor(100))
+        preds_gt = spatial_expectation2d(softmaxes_gt, normalized_coordinates=False)
+        confidences_gt = torch.amax(softmaxes_gt, dim=(2, 3))
 
-    assert (preds_gt == preds_torch).all()
-    assert (confidences_gt == confidences_torch).all()
+        # find soft argmax and confidence of generated heatmap
+        softmaxes_torch = spatial_softmax2d(heatmap_torch, temperature=torch.tensor(100))
+        preds_torch = spatial_expectation2d(softmaxes_torch, normalized_coordinates=False)
+        confidences_torch = torch.amax(softmaxes_torch, dim=(2, 3))
 
-    # cleanup
-    del batch
-    del heatmap_gt, keypts_gt
-    del softmaxes_gt, preds_gt, confidences_gt
-    del softmaxes_torch, preds_torch, confidences_torch
-    torch.cuda.empty_cache()  # remove tensors from gpu
+        assert (preds_gt == preds_torch).all()
+        assert (confidences_gt == confidences_torch).all()
 
+        # cleanup
+        del batch
+        del heatmap_gt, keypts_gt
+        del softmaxes_gt, preds_gt, confidences_gt
+        del softmaxes_torch, preds_torch, confidences_torch
+        torch.cuda.empty_cache()  # remove tensors from gpu
 
-def test_generate_uniform_heatmaps(cfg, toy_data_dir):
+    def test_uniform_heatmaps(self, cfg, toy_data_dir):
 
-    from lightning_pose.utils.scripts import get_dataset, get_imgaug_transform
+        from lightning_pose.utils.scripts import get_dataset, get_imgaug_transform
 
-    # update config
-    cfg_tmp = copy.deepcopy(cfg)
-    cfg_tmp.model.model_type = "heatmap"
-    cfg_tmp.training.uniform_heatmaps_for_nan_keypoints = True
+        # update config
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.model_type = "heatmap"
+        cfg_tmp.training.uniform_heatmaps_for_nan_keypoints = True
 
-    # build dataset with these new image dimensions
-    imgaug_transform = get_imgaug_transform(cfg_tmp)
-    heatmap_dataset = get_dataset(
-        cfg_tmp,
-        data_dir=toy_data_dir,
-        imgaug_transform=imgaug_transform,
-    )
+        # build dataset with these new image dimensions
+        imgaug_transform = get_imgaug_transform(cfg_tmp)
+        heatmap_dataset = get_dataset(
+            cfg_tmp,
+            data_dir=toy_data_dir,
+            imgaug_transform=imgaug_transform,
+        )
 
-    im_height = cfg.data.image_resize_dims.height
-    im_width = cfg.data.image_resize_dims.width
+        im_height = cfg.data.image_resize_dims.height
+        im_width = cfg.data.image_resize_dims.width
 
-    batch = heatmap_dataset.__getitem__(idx=0)
-    heatmap_gt = batch["heatmaps"].unsqueeze(0)
-    keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
+        batch = heatmap_dataset.__getitem__(idx=0)
+        heatmap_gt = batch["heatmaps"].unsqueeze(0)
+        keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
 
-    heatmap_uniform_torch = generate_heatmaps(
-        keypts_gt,
-        height=im_height,
-        width=im_width,
-        output_shape=(heatmap_gt.shape[2], heatmap_gt.shape[3]),
-        uniform_heatmaps=True,
-    )
+        heatmap_uniform_torch = generate_heatmaps(
+            keypts_gt,
+            height=im_height,
+            width=im_width,
+            output_shape=(heatmap_gt.shape[2], heatmap_gt.shape[3]),
+            uniform_heatmaps=True,
+        )
 
-    # find soft argmax and confidence of ground truth heatmap
-    softmaxes_gt = spatial_softmax2d(heatmap_gt, temperature=torch.tensor(100))
-    preds_gt = spatial_expectation2d(softmaxes_gt, normalized_coordinates=False)
-    confidences_gt = torch.amax(softmaxes_gt, dim=(2, 3))
+        # find soft argmax and confidence of ground truth heatmap
+        softmaxes_gt = spatial_softmax2d(heatmap_gt, temperature=torch.tensor(100))
+        preds_gt = spatial_expectation2d(softmaxes_gt, normalized_coordinates=False)
+        confidences_gt = torch.amax(softmaxes_gt, dim=(2, 3))
 
-    # find soft argmax and confidence of generated heatmap
-    softmaxes_torch = spatial_softmax2d(
-        heatmap_uniform_torch, temperature=torch.tensor(100)
-    )
-    preds_torch = spatial_expectation2d(softmaxes_torch, normalized_coordinates=False)
-    confidences_torch = torch.amax(softmaxes_torch, dim=(2, 3))
+        # find soft argmax and confidence of generated heatmap
+        softmaxes_torch = spatial_softmax2d(
+            heatmap_uniform_torch, temperature=torch.tensor(100)
+        )
+        preds_torch = spatial_expectation2d(softmaxes_torch, normalized_coordinates=False)
+        confidences_torch = torch.amax(softmaxes_torch, dim=(2, 3))
 
-    assert (preds_gt == preds_torch).all()
-    assert (confidences_gt == confidences_torch).all()
+        assert (preds_gt == preds_torch).all()
+        assert (confidences_gt == confidences_torch).all()
 
-    # cleanup
-    del batch
-    del heatmap_gt, keypts_gt
-    del softmaxes_gt, preds_gt, confidences_gt
-    del softmaxes_torch, preds_torch, confidences_torch
-    torch.cuda.empty_cache()  # remove tensors from gpu
+        # cleanup
+        del batch
+        del heatmap_gt, keypts_gt
+        del softmaxes_gt, preds_gt, confidences_gt
+        del softmaxes_torch, preds_torch, confidences_torch
+        torch.cuda.empty_cache()  # remove tensors from gpu
 
+    def test_weird_shape(self, cfg, toy_data_dir):
 
-def test_generate_heatmaps_weird_shape(cfg, toy_data_dir):
+        from lightning_pose.utils.scripts import get_dataset, get_imgaug_transform
 
-    from lightning_pose.utils.scripts import get_dataset, get_imgaug_transform
+        img_shape = (384, 256)
 
-    img_shape = (384, 256)
+        # update config
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.model_type = "heatmap"
+        cfg_tmp.data.image_resize_dims.height = img_shape[0]
+        cfg_tmp.data.image_resize_dims.width = img_shape[1]
 
-    # update config
-    cfg_tmp = copy.deepcopy(cfg)
-    cfg_tmp.model.model_type = "heatmap"
-    cfg_tmp.data.image_resize_dims.height = img_shape[0]
-    cfg_tmp.data.image_resize_dims.width = img_shape[1]
+        # build dataset with these new image dimensions
+        imgaug_transform = get_imgaug_transform(cfg_tmp)
+        dataset = get_dataset(
+            cfg_tmp,
+            data_dir=toy_data_dir,
+            imgaug_transform=imgaug_transform,
+        )
 
-    # build dataset with these new image dimensions
-    imgaug_transform = get_imgaug_transform(cfg_tmp)
-    dataset = get_dataset(
-        cfg_tmp,
-        data_dir=toy_data_dir,
-        imgaug_transform=imgaug_transform,
-    )
+        # now same test as `test_basic`
+        batch = dataset.__getitem__(idx=0)
+        heatmap_gt = batch["heatmaps"].unsqueeze(0)
+        keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
+        heatmap_torch = generate_heatmaps(
+            keypts_gt,
+            height=img_shape[0],
+            width=img_shape[1],
+            output_shape=(heatmap_gt.shape[2], heatmap_gt.shape[3]),
+        )
 
-    # now same test as `test_generate_heatmaps`
-    batch = dataset.__getitem__(idx=0)
-    heatmap_gt = batch["heatmaps"].unsqueeze(0)
-    keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
-    heatmap_torch = generate_heatmaps(
-        keypts_gt,
-        height=img_shape[0],
-        width=img_shape[1],
-        output_shape=(heatmap_gt.shape[2], heatmap_gt.shape[3]),
-    )
+        # find soft argmax and confidence of ground truth heatmap
+        softmaxes_gt = spatial_softmax2d(heatmap_gt, temperature=torch.tensor(100))
+        preds_gt = spatial_expectation2d(softmaxes_gt, normalized_coordinates=False)
+        confidences_gt = torch.amax(softmaxes_gt, dim=(2, 3))
 
-    # find soft argmax and confidence of ground truth heatmap
-    softmaxes_gt = spatial_softmax2d(heatmap_gt, temperature=torch.tensor(100))
-    preds_gt = spatial_expectation2d(softmaxes_gt, normalized_coordinates=False)
-    confidences_gt = torch.amax(softmaxes_gt, dim=(2, 3))
+        # find soft argmax and confidence of generated heatmap
+        softmaxes_torch = spatial_softmax2d(heatmap_torch, temperature=torch.tensor(100))
+        preds_torch = spatial_expectation2d(softmaxes_torch, normalized_coordinates=False)
+        confidences_torch = torch.amax(softmaxes_torch, dim=(2, 3))
 
-    # find soft argmax and confidence of generated heatmap
-    softmaxes_torch = spatial_softmax2d(heatmap_torch, temperature=torch.tensor(100))
-    preds_torch = spatial_expectation2d(softmaxes_torch, normalized_coordinates=False)
-    confidences_torch = torch.amax(softmaxes_torch, dim=(2, 3))
+        assert (preds_gt == preds_torch).all()
+        assert (confidences_gt == confidences_torch).all()
 
-    assert (preds_gt == preds_torch).all()
-    assert (confidences_gt == confidences_torch).all()
+        # cleanup
+        del batch
+        del heatmap_gt, keypts_gt
+        del softmaxes_gt, preds_gt, confidences_gt
+        del softmaxes_torch, preds_torch, confidences_torch
+        torch.cuda.empty_cache()  # remove tensors from gpu
 
-    # cleanup
-    del batch
-    del heatmap_gt, keypts_gt
-    del softmaxes_gt, preds_gt, confidences_gt
-    del softmaxes_torch, preds_torch, confidences_torch
-    torch.cuda.empty_cache()  # remove tensors from gpu
+    def test_keep_gradients(self):
+        """Test that gradients flow through keypoints when keep_gradients=True."""
+
+        # Create mock data
+        batch_size = 2
+        num_keypoints = 4
+        im_height = 256
+        im_width = 256
+        output_height = 64
+        output_width = 64
+
+        # Create keypoints that require gradients
+        keypts_with_grad = torch.tensor([
+            [[32.0, 64.0], [128.0, 96.0], [200.0, 150.0], [100.0, 200.0]],  # batch 1
+            [[64.0, 32.0], [160.0, 120.0], [180.0, 180.0], [120.0, 220.0]]  # batch 2
+        ], dtype=torch.float32, requires_grad=True)
+
+        # Generate heatmaps with gradients enabled
+        heatmap_torch = generate_heatmaps(
+            keypts_with_grad,
+            height=im_height,
+            width=im_width,
+            output_shape=(output_height, output_width),
+            keep_gradients=True,
+        )
+
+        # Compute a simple loss and backpropagate
+        loss = torch.sum(heatmap_torch)
+        loss.backward()
+
+        # Check that gradients exist and are finite
+        assert keypts_with_grad.grad is not None, "No gradients computed for keypoints"
+        assert torch.isfinite(keypts_with_grad.grad).all(), "Gradients contain NaN or inf values"
+        assert not torch.all(keypts_with_grad.grad == 0), "All gradients are zero"
+
+        # Test the opposite: gradients should NOT flow when keep_gradients=False
+        keypts_no_grad = torch.tensor([
+            [[32.0, 64.0], [128.0, 96.0], [200.0, 150.0], [100.0, 200.0]],  # batch 1
+            [[64.0, 32.0], [160.0, 120.0], [180.0, 180.0], [120.0, 220.0]]  # batch 2
+        ], dtype=torch.float32, requires_grad=True)
+
+        heatmap_no_grad = generate_heatmaps(
+            keypts_no_grad,
+            height=im_height,
+            width=im_width,
+            output_shape=(output_height, output_width),
+            keep_gradients=False,
+        )
+
+        # Check that the heatmap doesn't require gradients (computation graph is detached)
+        assert not heatmap_no_grad.requires_grad, \
+            "Heatmap should not require gradients when keep_gradients=False"
+
+        # Since heatmap_no_grad doesn't require gradients, we can't call backward on it
+        # Instead, verify that the original keypoints have no gradients after this operation
+        # (they shouldn't since the computation was detached)
+        assert keypts_no_grad.grad is None, "Original keypoints should have no gradients yet"
+
+    def test_out_of_bounds_nan_indices(self):
+        """Out-of-bounds keypoints are marked as NaN and filled with appropriate heatmaps."""
+
+        # Create mock data with some out-of-bounds keypoints
+        batch_size = 2
+        num_keypoints = 4
+        im_height = 256
+        im_width = 256
+        output_height = 64
+        output_width = 64
+
+        keypoints = torch.tensor([
+            [
+                [32.0, 32.0],  # valid keypoint
+                [-10.0, 50.0],  # x out of bounds (< -1 after scaling)
+                [500.0, 32.0],  # x out of bounds (> width + 1 after scaling)
+                [32.0, 500.0]  # y out of bounds (> height + 1 after scaling)
+            ],
+            [
+                [32.0, -10.0],  # y out of bounds (< -1 after scaling)
+                [64.0, 64.0],  # valid keypoint
+                [float('nan'), 32.0],  # explicit NaN
+                [128.0, 128.0]  # valid keypoint
+            ]
+        ], dtype=torch.float32)
+
+        # Test with uniform_heatmaps=False (zeros for invalid)
+        heatmaps = generate_heatmaps(
+            keypoints,
+            height=im_height,
+            width=im_width,
+            output_shape=(output_height, output_width),
+            uniform_heatmaps=False,
+        )
+
+        # Check that out-of-bounds keypoints result in zero heatmaps
+        zeros_heatmap = torch.zeros(output_height, output_width)
+        assert torch.allclose(heatmaps[0, 1], zeros_heatmap)  # x < -1
+        assert torch.allclose(heatmaps[0, 2], zeros_heatmap)  # x > width+1
+        assert torch.allclose(heatmaps[0, 3], zeros_heatmap)  # y > height+1
+        assert torch.allclose(heatmaps[1, 0], zeros_heatmap)  # y < -1
+        assert torch.allclose(heatmaps[1, 2], zeros_heatmap)  # explicit NaN
+
+        # Check that valid keypoints result in non-zero heatmaps
+        assert not torch.allclose(heatmaps[0, 0], zeros_heatmap)  # valid
+        assert not torch.allclose(heatmaps[1, 1], zeros_heatmap)  # valid
+        assert not torch.allclose(heatmaps[1, 3], zeros_heatmap)  # valid
+
+        # Test with uniform_heatmaps=True
+        heatmaps_uniform = generate_heatmaps(
+            keypoints,
+            height=im_height,
+            width=im_width,
+            output_shape=(output_height, output_width),
+            uniform_heatmaps=True,
+        )
+
+        # Check that out-of-bounds keypoints result in uniform heatmaps
+        uniform_heatmap = torch.ones(output_height, output_width) / (output_height * output_width)
+        assert torch.allclose(heatmaps_uniform[0, 1], uniform_heatmap)  # x < -1
+        assert torch.allclose(heatmaps_uniform[0, 2], uniform_heatmap)  # x > width+1
+        assert torch.allclose(heatmaps_uniform[1, 2], uniform_heatmap)  # explicit NaN
+
+    def test_extreme_keypoint_clamping(self):
+        """Test that extreme keypoint values are clamped to prevent numerical issues."""
+
+        # Create keypoints with extreme values
+        batch_size = 1
+        num_keypoints = 4
+        im_height = 256
+        im_width = 256
+        output_height = 64
+        output_width = 64
+
+        extreme_keypoints = torch.tensor([
+            [
+                [-100000000.0, 32.0],  # extremely negative x
+                [100000000.0, 32.0],  # extremely positive x
+                [32.0, -100000000.0],  # extremely negative y
+                [32.0, 100000000.0]  # extremely positive y
+            ]
+        ], dtype=torch.float32, requires_grad=True)
+
+        # Function should not crash and should produce finite heatmaps
+        heatmaps = generate_heatmaps(
+            extreme_keypoints,
+            height=im_height,
+            width=im_width,
+            output_shape=(output_height, output_width),
+            keep_gradients=True,
+        )
+
+        # Check that all heatmaps are finite (no NaN or inf values from extreme computations)
+        assert torch.isfinite(heatmaps).all(), "Heatmaps contain NaN or inf values"
+
+        # Check that heatmaps have correct shape
+        assert heatmaps.shape == (batch_size, num_keypoints, output_height, output_width)
+
+        # Check that gradients can flow through (no numerical issues)
+        loss = torch.sum(heatmaps)
+        loss.backward()
+        assert extreme_keypoints.grad is not None
+        assert torch.isfinite(extreme_keypoints.grad).all(), "Gradients contain NaN or inf values"
+
+        # Verify clamping behavior: extreme values should be treated as out-of-bounds
+        # and filled with zeros (since uniform_heatmaps=False by default)
+        expected_zero = torch.zeros(output_height, output_width)
+        assert torch.allclose(heatmaps[0, 0], expected_zero)  # extreme negative x
+        assert torch.allclose(heatmaps[0, 1], expected_zero)  # extreme positive x
+        assert torch.allclose(heatmaps[0, 2], expected_zero)  # extreme negative y
+        assert torch.allclose(heatmaps[0, 3], expected_zero)  # extreme positive y
 
 
 def test_evaluate_heatmaps_at_location():
@@ -700,3 +874,235 @@ def test_convert_bbox_coords(heatmap_data_module, multiview_heatmap_data_module)
     # make sure code complains when batch elements have different numbers of views
     with pytest.raises(ValueError):
         convert_bbox_coords(batch_dict, batch_dict['keypoints'])
+
+
+class TestConvertOriginalToModelCoords:
+
+    def test_convert_original_to_model_coords_basic(self):
+        """Test convert_original_to_model_coords with multiview setup."""
+
+        # Create mock batch_dict
+        batch_dict = {
+            "num_views": torch.tensor([2, 2]),  # 2 views per batch element
+            "images": torch.zeros(2, 2, 3, 256, 256),  # (batch, views, channels, height, width)
+            "bbox": torch.tensor([
+                # Batch element 0: view 0, view 1
+                [0., 0., 100., 200., 50., 25., 100., 200.],
+                # Batch element 1: view 0, view 1
+                [10., 10., 80., 160., 60., 30., 80., 160.],
+            ])
+        }
+
+        # Original keypoints: (batch=2, views=2, keypoints=3, xy=2)
+        original_keypoints = torch.tensor([
+            [  # Batch element 0
+                [  # View 0: bbox [0, 0, 100, 200]
+                    [0., 0.],  # top-left
+                    [200., 100.],  # bottom-right
+                    [100., 50.],  # center
+                ],
+                [  # View 1: bbox [50, 25, 100, 200]
+                    [50., 25.],  # top-left
+                    [250., 125.],  # bottom-right
+                    [150., 75.],  # center
+                ]
+            ],
+            [  # Batch element 1
+                [  # View 0: bbox [10, 10, 80, 160]
+                    [10., 10.],  # top-left
+                    [170., 90.],  # bottom-right
+                    [90., 50.],  # center
+                ],
+                [  # View 1: bbox [60, 30, 80, 160]
+                    [60., 30.],  # top-left
+                    [220., 110.],  # bottom-right
+                    [140., 70.],  # center
+                ]
+            ]
+        ])
+
+        # Convert to model coordinates
+        model_keypoints = convert_original_to_model_coords(batch_dict, original_keypoints)
+
+        # Check output shape
+        assert model_keypoints.shape == (2, 2, 3, 2)
+
+        # Check that all corner points map correctly
+        # Top-left corners should be (0, 0)
+        assert torch.allclose(model_keypoints[:, :, 0, :], torch.zeros(2, 2, 2), atol=1e-6)
+
+        # Bottom-right corners should be (256, 256)
+        assert torch.allclose(model_keypoints[:, :, 1, :], torch.full((2, 2, 2), 256.0), atol=1e-6)
+
+        # Centers should be (128, 128)
+        assert torch.allclose(model_keypoints[:, :, 2, :], torch.full((2, 2, 2), 128.0), atol=1e-6)
+
+    def test_convert_original_to_model_coords_different_views(self):
+        """Test with different number of views and keypoints."""
+
+        # Create batch_dict with 3 views
+        batch_dict = {
+            "num_views": torch.tensor([3, 3]),
+            "images": torch.zeros(2, 3, 3, 128, 128),  # 128x128 model input
+            "bbox": torch.tensor([
+                # Batch 0: 3 views with different bboxes
+                [0., 0., 50., 100., 25., 25., 50., 100., 50., 50., 50., 100.],
+                # Batch 1: 3 views
+                [10., 10., 60., 120., 30., 30., 60., 120., 60., 60., 60., 120.],
+            ])
+        }
+
+        # Test with 2 keypoints per view
+        original_keypoints = torch.tensor([
+            [  # Batch 0
+                [[0., 0.], [100., 50.]],  # View 0: corners of bbox [0,0,50,100]
+                [[25., 25.], [125., 75.]],  # View 1: corners of bbox [25,25,50,100]
+                [[50., 50.], [150., 100.]],  # View 2: corners of bbox [50,50,50,100]
+            ],
+            [  # Batch 1
+                [[10., 10.], [130., 70.]],  # View 0: corners of bbox [10,10,60,120]
+                [[30., 30.], [150., 90.]],  # View 1: corners of bbox [30,30,60,120]
+                [[60., 60.], [180., 120.]],  # View 2: corners of bbox [60,60,60,120]
+            ]
+        ])
+
+        model_keypoints = convert_original_to_model_coords(batch_dict, original_keypoints)
+
+        # Check output shape: (batch=2, views=3, keypoints=2, xy=2)
+        assert model_keypoints.shape == (2, 3, 2, 2)
+
+        # All top-left corners should map to (0, 0)
+        assert torch.allclose(model_keypoints[:, :, 0, :], torch.zeros(2, 3, 2), atol=1e-6)
+
+        # All bottom-right corners should map to (128, 128) since model is 128x128
+        assert torch.allclose(model_keypoints[:, :, 1, :], torch.full((2, 3, 2), 128.0), atol=1e-6)
+
+
+class TestOriginalToModel:
+
+    def test_original_to_model_basic(self):
+        """Test original_to_model with basic coordinate transformations."""
+
+        model_width = 256.
+        model_height = 256.
+
+        bboxes = [
+            torch.tensor([0., 0., 100., 200.]),  # bbox at origin, height=100, width=200
+            torch.tensor([50., 25., 100., 200.]),  # bbox offset, same dimensions
+        ]
+
+        for bbox in bboxes:
+
+            # Define test keypoints based on the bbox
+            x, y, h, w = bbox[0], bbox[1], bbox[2], bbox[3]
+            keypoints = torch.tensor([
+                [[x.item(), y.item()]],           # top-left corner of bbox
+                [[x.item() + w.item(), y.item() + h.item()]],  # bottom-right corner of bbox
+                [[x.item() + w.item() / 2, y.item() + h.item() / 2]],  # center of bbox
+            ])
+
+            kps = original_to_model(
+                keypoints.clone(),
+                bbox.unsqueeze(0).repeat([3, 1]),
+                model_width,
+                model_height,
+            )
+
+            # Top-left corner of bbox (0,0 in normalized space) should map to (0, 0) in model space
+            expected_x = 0.0
+            expected_y = 0.0
+            assert torch.isclose(kps[0, 0, 0], torch.tensor(expected_x), atol=1e-6)
+            assert torch.isclose(kps[0, 0, 1], torch.tensor(expected_y), atol=1e-6)
+
+            # Bottom-right corner of bbox (1,1 in normalized space) should map to
+            # (model_width, model_height)
+            expected_x = model_width
+            expected_y = model_height
+            assert torch.isclose(kps[1, 0, 0], torch.tensor(expected_x), atol=1e-6)
+            assert torch.isclose(kps[1, 0, 1], torch.tensor(expected_y), atol=1e-6)
+
+            # Center of bbox (0.5, 0.5 in normalized space) should map to
+            # (model_width/2, model_height/2)
+            expected_x = model_width / 2
+            expected_y = model_height / 2
+            assert torch.isclose(kps[2, 0, 0], torch.tensor(expected_x), atol=1e-6)
+            assert torch.isclose(kps[2, 0, 1], torch.tensor(expected_y), atol=1e-6)
+
+    def test_original_to_model_context_batch(self):
+        """Test original_to_model with context batch (extra bbox entries for edges)."""
+
+        model_width = 256.
+        model_height = 256.
+
+        # Test different bboxes with context (7 entries, uses middle 3: [2:-2])
+        bboxes = [
+            torch.tensor([0., 0., 100., 200.]),  # bbox at origin
+            torch.tensor([50., 25., 100., 200.]),  # bbox offset
+        ]
+
+        for bbox in bboxes:
+
+            # Define test keypoints based on the bbox
+            x, y, h, w = bbox[0], bbox[1], bbox[2], bbox[3]
+            keypoints = torch.tensor([
+                [[x.item(), y.item()]],  # top-left corner of bbox
+                [[x.item() + w.item(), y.item() + h.item()]],  # bottom-right corner
+                [[x.item() + w.item() / 2, y.item() + h.item() / 2]],  # center of bbox
+            ])
+
+            # Create 7-entry bbox tensor for context batch
+            bbox_context = bbox.unsqueeze(0).repeat([7, 1])
+
+            kps = original_to_model(
+                keypoints.clone(),
+                bbox_context,
+                model_width,
+                model_height,
+            )
+
+            # Same assertions as basic test since the function should use bbox[2:-2]
+            # which gives us the middle entries (same as the original bbox)
+
+            # Top-left corner
+            assert torch.isclose(kps[0, 0, 0], torch.tensor(0.0), atol=1e-6)
+            assert torch.isclose(kps[0, 0, 1], torch.tensor(0.0), atol=1e-6)
+
+            # Bottom-right corner
+            assert torch.isclose(kps[1, 0, 0], torch.tensor(model_width), atol=1e-6)
+            assert torch.isclose(kps[1, 0, 1], torch.tensor(model_height), atol=1e-6)
+
+            # Center
+            assert torch.isclose(kps[2, 0, 0], torch.tensor(model_width / 2), atol=1e-6)
+            assert torch.isclose(kps[2, 0, 1], torch.tensor(model_height / 2), atol=1e-6)
+
+    def test_original_to_model_different_dimensions(self):
+        """Test with non-square model dimensions."""
+
+        keypoints = torch.tensor([
+            [[50., 25.]],  # top-left of bbox
+            [[150., 75.]],  # bottom-right of bbox
+            [[100., 50.]],  # center of bbox
+        ])
+
+        bbox = torch.tensor([50., 25., 50., 100.])  # x=50, y=25, h=50, w=100
+        model_width = 128.
+        model_height = 64.
+
+        kps = original_to_model(
+            keypoints,
+            bbox.unsqueeze(0).repeat([3, 1]),
+            model_width,
+            model_height
+        )
+
+        # Top-left: (50-50)/100 * 128 = 0, (25-25)/50 * 64 = 0
+        assert torch.isclose(kps[0, 0, 0], torch.tensor(0.0), atol=1e-6)
+        assert torch.isclose(kps[0, 0, 1], torch.tensor(0.0), atol=1e-6)
+
+        # Bottom-right: (150-50)/100 * 128 = 128, (75-25)/50 * 64 = 64
+        assert torch.isclose(kps[1, 0, 0], torch.tensor(128.0), atol=1e-6)
+        assert torch.isclose(kps[1, 0, 1], torch.tensor(64.0), atol=1e-6)
+
+        # Center: (100-50)/100 * 128 = 64, (50-25)/50 * 64 = 32
+        assert torch.isclose(kps[2, 0, 0], torch.tensor(64.0), atol=1e-6)
+        assert torch.isclose(kps[2, 0, 1], torch.tensor(32.0), atol=1e-6)
