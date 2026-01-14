@@ -42,14 +42,51 @@ For example, this is a fairly typical ``~/.lightning-pose/projects.toml`` file:
 
 The structure of the data and model directories is documented in Reference: Directory Structure.
 
-Key properties of a project
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Important: Naming video files for Lightning Pose
+--------------------------------------------------
 
-The project directories are designed to be:
+Video file naming is important. **When you upload files to Lightning Pose,
+we only get the filename, so it's important that it fully and uniquely describe the
+video being uploaded.**
 
-1. Portable. You can copy them across machines.
-2. Highly structured, according to a documented schema.
-3. Modular. You can created a copy a subset of the directory for specific purposes (like inference on a cluster).
+A simple and effective starting point is:
 
-The  ``~/.lightning-pose/projects.toml`` file is **not** portable since it contains absolute paths.
+.. code-block::
 
+    SUBJECT_DATE_TIME_VIEW.mp4
+
+Plan for change
+~~~~~~~~~~~~~~~~
+
+You should anticipate any changes you might need to make and plan for them now.
+For example, if you anticipate cropping or clipping, you might
+say to yourself that you'll embed more metadata like:
+
+.. code-block::
+
+    SUBJECT_DATE_TIME_CLIP_T1-T2_VIEW.mp4
+
+If you have multiple methodologies for cropping, you might further extend
+the naming convention like so:
+
+.. code-block::
+
+    SUBJECT_DATE_TIME_CLIP_T1-T2_CROP_cropper_model_1_VIEW.mp4
+
+View name must always be the last token
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In multiview projects, we always parse a video filename as SESSION_VIEW.mp4.
+View must be the last token in your naming scheme, and must not contain underscores.
+
+Use valid characters
+~~~~~~~~~~~~~~~~~~~~~~
+Stick with filesystem and URL-safe characters: alphanumeric, -, _.
+
+Use a uniform naming scheme throughout the app
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Whether you upload videos in the Labeler for extracting frames for labeling,
+or uploading videos for inference, we store videos in the same directory.
+All videos are available to view in the Viewer. Use a uniform naming scheme
+across all these tasks, so that names don't conflict in the
+project directory, and so that you can easily identify videos and related
+files in the Viewer and project directories.

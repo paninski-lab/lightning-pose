@@ -1,6 +1,6 @@
-===================
-Multiview Structure
-===================
+======================================
+Multiview Data Directory Structure
+======================================
 
 The detailed documentation for a multiview project data directory.
 
@@ -33,8 +33,6 @@ The detailed documentation for a multiview project data directory.
          ├── session0.toml
          ├── session1.toml
          └── ...
-
-
 
 **3. Bounding Boxes (Optional)**
 
