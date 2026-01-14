@@ -29,7 +29,7 @@ Lightning Pose Homepage
 
         Temporal context networks that learn from unlabeled video.
 
-    .. grid-item-card:: ☁️ Cloud Ready
+    .. grid-item-card:: ☁️ Cloud Ready GUI
         :class-card: feature-toggle-card
 
         Browser-based labeling and training on headless GPU servers.
