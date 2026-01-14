@@ -573,6 +573,7 @@ class TestApply3DTransforms:
         # ------------------------------------------
 
         from aniposelib.cameras import Camera
+
         from lightning_pose.data.cameras import CameraGroup
 
         intrinsics = torch.tensor(

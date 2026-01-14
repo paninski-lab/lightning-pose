@@ -1,9 +1,7 @@
 import pytest
-
 import torch
 
 from lightning_pose.data.cameras import project_3d_to_2d, project_camera_pairs_to_3d
-
 
 # --------------------------------------------
 # file-level fixtures from anipose-fly example

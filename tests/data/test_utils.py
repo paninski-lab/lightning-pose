@@ -998,7 +998,7 @@ class TestOriginalToModel:
             keypoints = torch.tensor([
                 [[x.item(), y.item()]],           # top-left corner of bbox
                 [[x.item() + w.item(), y.item() + h.item()]],  # bottom-right corner of bbox
-                [[x.item() + w.item()/2, y.item() + h.item()/2]],  # center of bbox
+                [[x.item() + w.item() / 2, y.item() + h.item() / 2]],  # center of bbox
             ])
 
             kps = original_to_model(

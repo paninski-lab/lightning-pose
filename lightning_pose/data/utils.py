@@ -374,11 +374,11 @@ def generate_heatmaps(
     # nan_idxs = torch.isnan(keypoints)[:, :, 0]
     # Mark as invalid: NaN keypoints OR out-of-bounds keypoints
     nan_idxs = (
-        torch.isnan(keypoints)[:, :, 0] |  # Original NaN check
-        (keypoints[:, :, 0] < -1) |  # x < -1
-        (keypoints[:, :, 0] > out_width + 1) |  # x > width + 1
-        (keypoints[:, :, 1] < -1) |  # y < -1
-        (keypoints[:, :, 1] > out_height + 1)  # y > height + 1
+        torch.isnan(keypoints)[:, :, 0]  # Original NaN check
+        | (keypoints[:, :, 0] < -1)  # x < -1
+        | (keypoints[:, :, 0] > out_width + 1)  # x > width + 1
+        | (keypoints[:, :, 1] < -1)  # y < -1
+        | (keypoints[:, :, 1] > out_height + 1)  # y > height + 1
     )
 
     # Clamp keypoints to prevent extreme Gaussian computations
