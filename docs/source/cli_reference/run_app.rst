@@ -1,5 +1,5 @@
 Run App
------
+=======
 
 .. argparse::
    :module: lightning_pose.cli.commands.run_app

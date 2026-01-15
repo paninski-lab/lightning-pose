@@ -40,7 +40,7 @@ for your machine by running ``echo ~`` in a terminal.
 Leave Model directory as the default.
 
 Keypoints and View names
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 First name your keypoints, the points you'd like to track. The names
 will be used as column headers in label files and prediction output files.

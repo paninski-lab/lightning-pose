@@ -17,7 +17,7 @@ to make it compatible with the new app.
     cp -r ~/Pose-app/data/PROJECT_NAME  ~/LPProjects/PROJECT_NAME
 
 2. Fix data directory structure
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The old app directory structure is as follows:
 
