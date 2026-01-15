@@ -1,3 +1,5 @@
+.. _migrating_to_app:
+
 Migrating to the App
 =====================
 
