@@ -3,79 +3,82 @@
 Migrating to the App
 =====================
 
-In v2.0.5 we launched a new App to replace the
-old `Pose app <https://pose-app.readthedocs.io/en/latest/>`_.
-It adds Multiview support and better usability.
-
-The directory structure changes are outlined in this <document>.
-The latest structure is fully documented in <reference>.
-
 From the old app
 -----------------
 
-The old app supported singleview projects only, so these instructions
-will create an app-compatible singleview project.
+These instructions convert a singleview project directory from the old app
+to make it compatible with the new app.
 
-1. Copy the old app's project directory out app ~/Pose-app/data/<PROJ_NAME>
-to ~/LPProjects/<PROJ_NAME>
+
+1. Copy the old app's project directory out into a new folder to work on:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: console
+ 
+    # Copies project directory from old path to new location.
+    cp -r ~/Pose-app/data/PROJECT_NAME  ~/LPProjects/PROJECT_NAME
 
 2. Fix data directory structure
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- copy videos_infer -> videos
-- remove unused label_ pkl files, selected_frames files. If you had unlabeled frames in the labeling queue,
-these will be lost and need to be re-extracted. Alternatively, manually migrate these using the
-to unlabeled sidecar format.
-- rm unused model_config_*
+The old app directory structure is as follows:
 
-Unused files
-~~~~~~~~~~~~~
+.. code-block::
+    PROJ_DIR/
+    ├── labeled-data/
+    |   ├── session0/
+    |   │   └── selected_frames.csv
+    ├── videos/
+    ├── videos_infer/
+    ├── CollectedData.csv
+    ├── label_studio_config.xml
+    ├── label_studio_metadata.yaml
+    ├── label_studio_tasks.pkl
+    ├── model_config_<PROJ_NAME>.yaml
+    └── models/
+        |--YYYY-MM-DD/
+            |-- HH-MM-SS_model_name/
+                └── video_preds_infer/
 
-The following files from the old app are unused and can be deleted:
+The task is to make the directory structure conform to the specification in :doc:`directory_structure_reference/singleview_structure`.
 
-- label studio pkl files
-- selected_frames.csv
-- model_config.yaml
+The following changes are required:
 
+1. Create a ``project.yaml`` file in the project data directory per the :doc:`docs <source/directory_structure_reference/project_yaml_file_format>`. 
+2. Add the project to ``~/.lightning-pose/projects.toml``, following the example in :ref:`project_directories`.
+3. Copy all videos from the ``videos_infer`` to ``videos`` directory. (Required to see these in the viewer.)
+4. Rename the video prediction directory in the model directories from ``video_preds_infer`` to ``video_preds``.
 
+The following are recommended, but not strictly required:
 
-3. Add project.yaml file and projects.toml file.
+5. Remove ``label_studio`` files.  If you had unlabeled frames in the labeling queue,
+   these will be lost and need to be re-extracted. Alternatively, manually migrate these using the
+   to unlabeled sidecar format.
+6. Remove ``model_config_<PROJ_NAME>.yaml`` file, as its no longer used.
+7. Use ffmpeg to re-encode videos such that every frame is an Intra frame. This is required
+   in order for the app viewer to be 100% frame-accurate, but not strictly required otherwise.
 
-See the section dedicated to this task.
+That's it. Next time you run the app and you should see your new singleview project.
 
-4. Fix model directory structure
-
-video_preds_infer -> video_preds
-
-5. Process videos
-
-run: ffmpeg...
-
-This will make them frame-accurate in the viewer, at the cost of taking up more space.
-If you absolutely can't afford to use more space, skip this step with the caveat that the
-viewer might not be frame-accurate.
-
-5. Run the app.
-
-That's it. Run the app and you'll see your new singleview project.
-
-Changes from CLI-only usage to the App
+From the CLI
 ----------------------------------------
 
-The app is designed to work with just the following:
-- Add project.yaml file to data directory
-- Update projects.toml file
+The task is to make the directory structure conform to the specification in :doc:`directory_structure_reference/singleview_structure`
+or :doc:`directory_structure_reference/multiview_structure`, depending on your project type.
 
-But for maximum compatibility, you should:
+The app `should` work with just the following:
 
-Consider:
+1. Create a ``project.yaml`` file in the project data directory per the :doc:`docs <source/directory_structure_reference/project_yaml_file_format>`. 
+2. Add the project to ``~/.lightning-pose/projects.toml``, following the example in :ref:`project_directories`.
+
+You should consider:
+
 - Moving models into data directory so it's one directory, rather than having models and data be separate.
-- If you do this, you can remove the model_dir attribute in projects.toml.
+- If you do this, you can remove the ``model_dir`` attribute from the projects.toml file.
 
-Consider:
-- Label files are stored as specified
-- Extracted frame names are stored as specified
-- Multiview: verify calibration naming
+Verify:
 
-How to add project.yaml file and projects.toml file
-----------------------------------------------------
+- Label files are stored as expected
+- Extracted frames are stored as specified
+- Multiview: verify calibration file naming
 

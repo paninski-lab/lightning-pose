@@ -80,6 +80,9 @@ This opens the "extract frames" workflow:
 Leave the default name and click next. You will see the session selection screen.
 On the right, click Upload Session.
 
+.. note::
+    See :doc:`source/naming_videofiles` for important information on video filenames before proceeding.
+
 .. image:: https://paninski-lab.github.io/lightning-pose-statics/docs/images/app_screenshots/app_extract_frames_2_select_session.png
 
 Select videos from your local filesystem and click Import.
