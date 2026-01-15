@@ -208,7 +208,6 @@ It covers the end-to-end workflow of labeling, training, and evaluation.
    :hidden:
    :caption: Reference
 
-   source/user_guide_singleview/config_file
    source/directory_structure_reference/index
    source/api
    source/cli_reference/index

@@ -20,3 +20,4 @@ of the Lightning Pose project.
     label_csv_file_format
     camera_calibration_file_format
     bounding_box_file_format
+    model_config_file
