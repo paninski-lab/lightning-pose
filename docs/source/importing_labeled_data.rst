@@ -35,7 +35,7 @@ Then run the following script from the git repo:
 Importing from the legacy Lightning Pose-app
 ==============================================
 
-See the `app migration guide <source/migration_to_app>`_.
+See the :doc:`app migration guide <migrating_to_app>`.
 
 Request support for more converters
 ====================================

@@ -1,3 +1,5 @@
+.. _migrating_to_app:
+
 Migrating to the App
 =====================
 
@@ -70,12 +72,31 @@ The app `should` work with just the following:
 1. Create a ``project.yaml`` file in the project data directory per the :doc:`docs <directory_structure_reference/project_yaml_file_format>`. 
 2. Add the project to ``~/.lightning-pose/projects.toml``, following the example in :ref:`project_directories`.
 
+Simplest example
+~~~~~~~~~~~~~~~~~
+
+If your current directory structure is:
+
+.. code-block::
+
+    ~/data/
+    ~/lightning-pose/outputs/
+
+Then you can add a :doc:`projects.yaml <directory_structure_reference/project_yaml_file_format>` file at ``~/data/project.yaml``, and
+add the following to ``~/.lightning-pose/projects.toml``:
+
+.. code-block:: toml
+
+    [example-project]
+    data_dir = "/home/username/data"
+    model_dir = "/home/username/lightning-pose/outputs"
+
 You should consider:
 
 - Moving models into data directory so it's one directory, rather than having models and data be separate.
 - If you do this, you can remove the ``model_dir`` attribute from the projects.toml file.
 
-Verify:
+Verify that the following against the :doc:`Directory Structure <directory_structure_reference/index>` docs:
 
 - Label files are stored as expected
 - Extracted frames are stored as specified
