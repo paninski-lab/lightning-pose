@@ -8,6 +8,7 @@ Data directory structure
 ========================
 
 .. note::
+
     The Lightning Pose CLI historically supported flexible data organization, as written in this document.
     The Lightning Pose App requires a more constrained directory structure.
 

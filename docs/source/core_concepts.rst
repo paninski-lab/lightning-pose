@@ -40,6 +40,7 @@ For example, this is a fairly typical ``~/.lightning-pose/projects.toml`` file:
     # model_dir omitted, defaults to "/home/username/LPProjects/models"
 
 .. note::
+
   If you move the project directories, you should update the ``projects.toml`` file with their new locations.
 
 The structure of the data and model directories is documented in Reference: Directory Structure.

@@ -54,6 +54,7 @@ Execution model
 ===============
 
 .. warning::
+
     The implementation spawns ``num_gpus - 1`` processes of the same command originally executed,
     repeating all of the command's execution per process.
     Thus it is advised to only run multi-GPU training in a dedicated training script

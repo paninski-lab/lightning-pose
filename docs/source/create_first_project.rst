@@ -20,6 +20,7 @@ of the machine where you ran the app, or, use the port forwarding features
 of your cloud environment to access the port remotely.
 
 .. note::
+
     In Lightning Studio, a cloud provider we frequently recommend, this is done
     using the Port plugin icon on the right hand side.
     See `the video in their docs <https://lightning.ai/docs/overview/ai-studio/deploy-on-public-ports#deploy-on-public-ports>`_ for the process.
@@ -81,6 +82,7 @@ Leave the default name and click next. You will see the session selection screen
 On the right, click Upload Session.
 
 .. note::
+
     See :doc:`naming_videofiles` for important information on video filenames before proceeding.
 
 .. image:: https://paninski-lab.github.io/lightning-pose-statics/docs/images/app_screenshots/app_extract_frames_2_select_session.png
