@@ -64,4 +64,4 @@ Preferred structure:
 
 .. note::
     Migrating from the old Pose-app requires further changes.
-    See the App Migration Guide.
+    See the :doc:`migrating_to_app`.
