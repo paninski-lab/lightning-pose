@@ -1,5 +1,3 @@
-.. _migrating_to_app
-
 Migrating to the App
 =====================
 
@@ -24,6 +22,7 @@ to make it compatible with the new app.
 The old app directory structure is as follows:
 
 .. code-block::
+
     PROJ_DIR/
     ├── labeled-data/
     |   └── session0/

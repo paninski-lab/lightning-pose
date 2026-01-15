@@ -112,7 +112,7 @@ For example, ``CollectedData_view0.unlabeled`` contains:
     labeled-data/session0_view0/frame00000123.png
     ...
 
-.. _session_calib_req:
+.. _project_calib_req:
 
 Project-level Camera Calibration File [6]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
