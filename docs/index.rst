@@ -179,8 +179,8 @@ It covers the end-to-end workflow of labeling, training, and evaluation.
 
    source/installation_guide
    source/core_concepts
+   source/naming_videofiles
    source/create_first_project
-   source/example_data
    source/importing_labeled_data
 
 .. toctree::
@@ -200,6 +200,7 @@ It covers the end-to-end workflow of labeling, training, and evaluation.
    source/developer_guide/index
    source/faqs
    Release notes <https://github.com/paninski-lab/lightning-pose/releases>
+   source/directory_structure_changelog
    source/migrating_to_app
 
 .. toctree::
@@ -207,6 +208,6 @@ It covers the end-to-end workflow of labeling, training, and evaluation.
    :hidden:
    :caption: Reference
 
-   source/user_guide_singleview/config_file
+   source/directory_structure_reference/index
    source/api
    source/cli_reference/index

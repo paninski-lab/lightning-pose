@@ -1,5 +1,5 @@
 Lightning Pose command-line interface (CLI)
-==========================================
+===========================================
 
 .. toctree::
    :maxdepth: 1

@@ -58,6 +58,7 @@ If you don't already have ``conda`` installed, download and install it from `her
    conda activate lp
 
 .. tip::
+
    **Check your environment**: Always ensure your terminal prompt is prefixed with ``(lp)`` before running installation or training commands. This confirms you are working within the isolated environment and not your system's global Python.
 
 ----------------------------------
@@ -94,6 +95,7 @@ Use this if you plan to modify the source code. This requires cloning the reposi
    pip install -e .
 
 .. note::
+
    In case of a PyTorch installation issue in either Option A or B, You may need to install the PyTorch matching your CUDA version by following the `PyTorch Installation Guide <https://pytorch.org/get-started/locally/>`_.
 
 ----------------------

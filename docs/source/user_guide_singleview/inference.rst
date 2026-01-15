@@ -58,7 +58,11 @@ run:
 Output location
 ===============
 
-Video predictions are saved to:
+Video and image predictions are saved within the model directory. 
+For a detailed reference on the model directory structure, see 
+:doc:`/source/directory_structure_reference/model_dir_structure`.
+
+Briefly, video predictions are saved to:
 
 .. code-block::
 

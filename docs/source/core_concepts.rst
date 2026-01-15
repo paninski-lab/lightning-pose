@@ -15,6 +15,8 @@ At the heart of LP is the ``lightning_pose`` python package. Built on top of thi
 
 The App and CLI are interoperable via working on a common Project.
 
+.. _project_directories:
+
 The Project and its directories
 ---------------------------------
 
@@ -38,18 +40,8 @@ For example, this is a fairly typical ``~/.lightning-pose/projects.toml`` file:
     # model_dir omitted, defaults to "/home/username/LPProjects/models"
 
 .. note::
+
   If you move the project directories, you should update the ``projects.toml`` file with their new locations.
 
 The structure of the data and model directories is documented in Reference: Directory Structure.
-
-Key properties of a project
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The project directories are designed to be:
-
-1. Portable. You can copy them across machines.
-2. Highly structured, according to a documented schema.
-3. Modular. You can created a copy a subset of the directory for specific purposes (like inference on a cluster).
-
-The  ``~/.lightning-pose/projects.toml`` file is **not** portable since it contains absolute paths.
 

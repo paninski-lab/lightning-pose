@@ -20,6 +20,7 @@ of the machine where you ran the app, or, use the port forwarding features
 of your cloud environment to access the port remotely.
 
 .. note::
+
     In Lightning Studio, a cloud provider we frequently recommend, this is done
     using the Port plugin icon on the right hand side.
     See `the video in their docs <https://lightning.ai/docs/overview/ai-studio/deploy-on-public-ports#deploy-on-public-ports>`_ for the process.
@@ -40,7 +41,7 @@ for your machine by running ``echo ~`` in a terminal.
 Leave Model directory as the default.
 
 Keypoints and View names
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 First name your keypoints, the points you'd like to track. The names
 will be used as column headers in label files and prediction output files.
@@ -59,7 +60,7 @@ Label data
 -----------
 
 This tutorial assumes you do not yet have labeled data.
-Otherwise, see `<importing_labeled_data>`_.
+Otherwise, see :ref:`importing_labeled_data`.
 
 Labeling occurs in the Labeler module.
 
@@ -79,6 +80,10 @@ This opens the "extract frames" workflow:
 
 Leave the default name and click next. You will see the session selection screen.
 On the right, click Upload Session.
+
+.. note::
+
+    See :doc:`naming_videofiles` for important information on video filenames before proceeding.
 
 .. image:: https://paninski-lab.github.io/lightning-pose-statics/docs/images/app_screenshots/app_extract_frames_2_select_session.png
 

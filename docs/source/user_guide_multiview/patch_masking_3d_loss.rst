@@ -33,7 +33,7 @@ To encourage the model to develop this cross-view reasoning during training, we 
 space patch masking scheme inspired by the success of masked autoencoders and dropout.
 We use a training curriculum that starts with a short warmup period where no patches are masked
 (controlled by ``training.patch_mask.init_epoch`` in the config file), then increase the ratio of
-masked patches over the course of training (controlled by `trainin.patch_mask.init/final_ratio).
+masked patches over the course of training (controlled by ``training.patch_mask.init_ratio`` and ``training.patch_mask.final_ratio``).
 This technique creates gradients that flow through the attention mechanism and encourage
 cross-view information propagation, which in turn develops internal representations that capture
 statistical relationships between the different views.
