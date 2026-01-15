@@ -204,7 +204,7 @@ It covers the end-to-end workflow of labeling, training, and evaluation.
    source/migrating_to_app
 
 .. toctree::
-   :maxdepth: 3
+   :maxdepth: 2
    :hidden:
    :caption: Reference
 

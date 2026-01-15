@@ -26,8 +26,8 @@ The old app directory structure is as follows:
 .. code-block::
     PROJ_DIR/
     ├── labeled-data/
-    |   ├── session0/
-    |   │   └── selected_frames.csv
+    |   └── session0/
+    |       └── selected_frames.csv
     ├── videos/
     ├── videos_infer/
     ├── CollectedData.csv
@@ -36,8 +36,8 @@ The old app directory structure is as follows:
     ├── label_studio_tasks.pkl
     ├── model_config_<PROJ_NAME>.yaml
     └── models/
-        |--YYYY-MM-DD/
-            |-- HH-MM-SS_model_name/
+        └── YYYY-MM-DD/
+            └── HH-MM-SS_model_name/
                 └── video_preds_infer/
 
 The task is to make the directory structure conform to the specification in :doc:`directory_structure_reference/singleview_structure`.
