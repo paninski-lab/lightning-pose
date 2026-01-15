@@ -7,6 +7,9 @@ Organizing your data
 Organizing your data for multi-view models follows a similar structure to the single-view data
 organization.
 
+For a comprehensive reference on the required directory structure and file formats, see the
+:doc:`/source/directory_structure_reference/multiview_structure`.
+
 As an example, let's assume a dataset has two camera views from a given session ("session0"),
 which we'll call "view0" and "view1".
 Lightning Pose assumes the following project directory structure:
@@ -14,6 +17,7 @@ Lightning Pose assumes the following project directory structure:
 .. code-block::
 
     /path/to/project/
+      ├── project.yaml
       ├── <LABELED_DATA_DIR>/
       │   ├── session0_view0/
       │   └── session0_view1/
@@ -23,13 +27,13 @@ Lightning Pose assumes the following project directory structure:
       ├── view0.csv
       └── view1.csv
 
+* ``project.yaml``: contains project-level metadata. See :doc:`/source/directory_structure_reference/project_yaml_file_format`.
+
 * ``<LABELED_DATA_DIR>/``: The directory name, any subdirectory names, and image names are all flexible, as long as they are consistent with the first column of `<view_name>.csv` files (see below). As an example, each session/view pair can have its own subdirectory, which contains images that correspond to the labels. The same frames from all the views must have the same names; for example, the images corresponding to time point 39 should be named "<LABELED_DATA_DIR>/session0_view0/img000039.png" and "<LABELED_DATA_DIR>/session0_view1/img000039.png".
 
-* ``<VIDEO_DIR>/``: This is a single directory of videos, which **must** following the naming convention ``<session_name>_<view_name>.csv``. So in our example there should be two videos, named ``session0_view0.mp4`` and ``session0_view1.mp4``.
+* ``<VIDEO_DIR>/``: This is a single directory of videos, which **must** follow the naming convention ``<session_name>_<view_name>.mp4``. So in our example there should be two videos, named ``session0_view0.mp4`` and ``session0_view1.mp4``.
 
-* ``<view_name>.csv``: For each view (camera) there should be a table with keypoint labels (rows: frames; columns: keypoints). Note that these files can take any name, and need to be listed in the config file under the ``data.csv_file`` section. Each csv file must contain the same set of keypoints, and each must have the same number of rows (corresponding to specific points in time).
-
-See `</directory_structure_reference/multiview_structure>`_ for more information.
+* ``<view_name>.csv``: For each view (camera) there should be a table with keypoint labels (rows: frames; columns: keypoints). Note that these files can take any name, and need to be listed in the config file under the ``data.csv_file`` section. Each csv file must contain the same set of keypoints, and each must have the same number of rows (corresponding to specific points in time). For more details on the format, see :doc:`/source/directory_structure_reference/label_csv_file_format`.
 
 The configuration file
 =======================
@@ -72,7 +76,12 @@ This calibration data is stored in a specific format using TOML files that follo
 Required calibration files
 --------------------------
 
-Your project directory must include two additional components for camera calibration:
+Your project directory must include calibration information. See the 
+:doc:`/source/directory_structure_reference/camera_calibration_file_format` for detailed 
+information on the file format and structure, including how to use the ``calibrations.csv`` 
+index file.
+
+The following structure is typically used:
 
 .. code-block::
 
@@ -94,12 +103,15 @@ Your project directory must include two additional components for camera calibra
 Bounding boxes
 ==============
 
-When working with small animals in large arenas, you may have already performed rough tracking 
-and cropped the animal out of the larger image. In this scenario, Lightning Pose needs to know 
-the bounding box coordinates for each labeled frame to properly apply 3D augmentations and 
+When working with small animals in large arenas, you may have already performed rough tracking
+and cropped the animal out of the larger image. In this scenario, Lightning Pose needs to know
+the bounding box coordinates for each labeled frame to properly apply 3D augmentations and
 loss functions.
 
-Bounding box files are provided in the top-level project directory with the naming convention 
+See the :doc:`/source/directory_structure_reference/bounding_box_file_format` for detailed 
+specifications.
+
+Bounding box files are provided in the top-level project directory with the naming convention
 ``bboxes_<view_name>.csv``, where ``<view_name>`` matches the view names specified in your 
 configuration file.
 

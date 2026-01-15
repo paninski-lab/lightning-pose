@@ -35,5 +35,8 @@ video data must be stored as:
       ├── sessionX_view1.mp4
       └── ...
 
-Lightning Pose produces a separate csv file with the predicted keypoints for each video, 
+Lightning Pose produces a separate csv file with the predicted keypoints for each video,
 maintaining the same file structure as the input data organization.
+
+For a detailed reference on where these predictions are stored within the model directory, see
+:doc:`/source/directory_structure_reference/model_dir_structure`.

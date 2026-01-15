@@ -7,19 +7,29 @@ Organizing your data
 Data directory structure
 ========================
 
+.. note::
+    The Lightning Pose CLI historically supported flexible data organization, as written in this document.
+    The Lightning Pose App requires a more constrained directory structure.
+
+    See the :doc:`/source/directory_structure_reference/singleview_structure` for the detailed reference of the expected directory structure
+    that is fully app-compatible.
+
 Lightning Pose assumes the following project directory structure, as in the example dataset
 `here <https://github.com/paninski-lab/lightning-pose/tree/main/data/mirror-mouse-example>`_.
 
 .. code-block::
 
     /path/to/project/
+      ├── project.yaml
       ├── <LABELED_DATA_DIR>/
       ├── <VIDEO_DIR>/
       └── <YOUR_LABELED_FRAMES>.csv
 
+* ``project.yaml``: contains project-level metadata. See :doc:`/source/directory_structure_reference/project_yaml_file_format`.
+
 * ``<YOUR_LABELED_FRAMES>.csv``: a table with keypoint labels (rows: frames; columns: keypoints).
   Note that this file can take any name, and needs to be specified in the config file under
-  ``data.csv_file``.
+  ``data.csv_file``. For more details on the format, see :doc:`/source/directory_structure_reference/label_csv_file_format`.
 
 * ``<LABELED_DATA_DIR>/``: contains images that correspond to the labels, and can include
   subdirectories.
