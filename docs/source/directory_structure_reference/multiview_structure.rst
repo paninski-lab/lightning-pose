@@ -93,7 +93,7 @@ The files are aligned across views: the Nth row in each file is for the same fra
 The naming convention is ``<LabelFileKey>_<View>.csv`` where a LabelFileKey of "CollectedData"
 signifies that the default label file for training.
 
-See `<label_csv_file_format>`_
+See :ref:`label_csv_file_format`
 
 .. _unlabeled_sidecar_file_req:
 
@@ -120,7 +120,7 @@ Project-level Camera Calibration File [6]
 Used as a fallback when the session-level calibration file
 is not found.
 
-See `<camera_calibration_file_format>`_.
+See :ref:`camera_calibration_file_format`.
 
 
 .. _session_calib_req:
@@ -128,7 +128,7 @@ See `<camera_calibration_file_format>`_.
 Session-level Camera Calibration Files [7]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-See `<camera_calibration_file_format>`_.
+See :ref:`camera_calibration_file_format`.
 
 * Used for App Labeler Multiview features: triangulation/reprojection and bundle adjustment
 * Used for CLI 3d losses and augmentation features
@@ -143,4 +143,4 @@ Bounding Boxes [7]
 The bounding box coordinates for each labeled frame to properly apply 3D augmentations and
 loss functions.
 
-See `<bounding_box_file_format>`_.
+See :ref:`bounding_box_file_format`.

@@ -59,7 +59,7 @@ Label data
 -----------
 
 This tutorial assumes you do not yet have labeled data.
-Otherwise, see `<importing_labeled_data>`_.
+Otherwise, see :ref:`importing_labeled_data`.
 
 Labeling occurs in the Labeler module.
 

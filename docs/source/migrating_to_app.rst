@@ -12,7 +12,7 @@ to make it compatible with the new app.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: console
- 
+
     # Copies project directory from old path to new location.
     cp -r ~/Pose-app/data/PROJECT_NAME  ~/LPProjects/PROJECT_NAME
 

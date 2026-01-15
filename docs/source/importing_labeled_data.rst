@@ -1,3 +1,5 @@
+.. _importing_labeled_data:
+
 ##########################
 Importing labeled data
 ##########################

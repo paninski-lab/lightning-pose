@@ -5,8 +5,8 @@ Naming your video files
 
 Lightning Pose expects Session and view names to be embedded in the filename as follows:
 
-.. code-block:
-    
+.. code-block::
+
     SESSION_VIEW.mp4
 
 View is present only for multiview projects. For singleview projects, it's just ``SESSION.mp4``.
