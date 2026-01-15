@@ -19,4 +19,4 @@ there is a _VIEW suffix, it is omitted.
       |   └── session1.mp4
       └-─ CollectedData.csv
 
-For more information on the files above and their formats, see :doc:`directory_structure_reference/multiview_structure`.
+For more information on the files above and their formats, see :doc:`multiview_structure`.

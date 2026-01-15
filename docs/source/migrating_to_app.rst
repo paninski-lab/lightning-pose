@@ -44,7 +44,7 @@ The task is to make the directory structure conform to the specification in :doc
 
 The following changes are required:
 
-1. Create a ``project.yaml`` file in the project data directory per the :doc:`docs <source/directory_structure_reference/project_yaml_file_format>`. 
+1. Create a ``project.yaml`` file in the project data directory per the :doc:`docs <directory_structure_reference/project_yaml_file_format>`. 
 2. Add the project to ``~/.lightning-pose/projects.toml``, following the example in :ref:`project_directories`.
 3. Copy all videos from the ``videos_infer`` to ``videos`` directory. (Required to see these in the viewer.)
 4. Rename the video prediction directory in the model directories from ``video_preds_infer`` to ``video_preds``.
@@ -68,7 +68,7 @@ or :doc:`directory_structure_reference/multiview_structure`, depending on your p
 
 The app `should` work with just the following:
 
-1. Create a ``project.yaml`` file in the project data directory per the :doc:`docs <source/directory_structure_reference/project_yaml_file_format>`. 
+1. Create a ``project.yaml`` file in the project data directory per the :doc:`docs <directory_structure_reference/project_yaml_file_format>`. 
 2. Add the project to ``~/.lightning-pose/projects.toml``, following the example in :ref:`project_directories`.
 
 You should consider:

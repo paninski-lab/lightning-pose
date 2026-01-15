@@ -36,4 +36,4 @@ This approach makes labeling simpler, but there are several drawbacks:
 * Inference on all new videos must also be run on fused frames, requiring an additional preprocessing step to fuse frames.
 
 In the case of non-mirrored setups we recommend keeping the views separate;
-see the :ref:`Multiview: separate data streams <multiview_separate>` section for more information.
+see the :ref:`Multiview <user_guide_multiview>` section for more information.
