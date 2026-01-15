@@ -1,6 +1,8 @@
 import shutil
 from pathlib import Path
 
+import pytest
+
 from lightning_pose.api.model import Model
 from tests.fetch_test_data import fetch_test_data_if_needed
 
