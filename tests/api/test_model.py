@@ -38,6 +38,7 @@ def _setup_test_model(tmp_path, request, multiview=False) -> Model:
     return model
 
 
+@pytest.mark.skip(reason="Broken due to inability to download test fixtures from figshare")
 def test_predict_on_label_csv_singleview(tmp_path, request, toy_data_dir):
     model = _setup_test_model(tmp_path, request)
 
@@ -55,6 +56,7 @@ def test_predict_on_label_csv_singleview(tmp_path, request, toy_data_dir):
     ).is_file()
 
 
+@pytest.mark.skip(reason="Broken due to inability to download test fixtures from figshare")
 def test_predict_on_label_csv_method_multiview_model(tmp_path, request, toy_mdata_dir):
     model = _setup_test_model(tmp_path, request, multiview=True)
 
@@ -67,6 +69,7 @@ def test_predict_on_label_csv_method_multiview_model(tmp_path, request, toy_mdat
     ).is_file()
 
 
+@pytest.mark.skip(reason="Broken due to inability to download test fixtures from figshare")
 def test_predict_on_label_csv_multiview(tmp_path, request, toy_mdata_dir):
     model = _setup_test_model(tmp_path, request, multiview=True)
 
@@ -89,6 +92,7 @@ def test_predict_on_label_csv_multiview(tmp_path, request, toy_mdata_dir):
     ).is_file()
 
 
+@pytest.mark.skip(reason="Broken due to inability to download test fixtures from figshare")
 def test_predict_on_video_file_singleview(tmp_path, request, toy_data_dir):
     model = _setup_test_model(tmp_path, request)
 
@@ -109,6 +113,7 @@ def test_predict_on_video_file_singleview(tmp_path, request, toy_data_dir):
     assert (model.labeled_videos_dir() / "test_vid_labeled.mp4").is_file()
 
 
+@pytest.mark.skip(reason="Broken due to inability to download test fixtures from figshare")
 def test_predict_on_video_file_method_multiview_model(tmp_path, request, toy_mdata_dir):
     model = _setup_test_model(tmp_path, request, multiview=True)
 
@@ -122,6 +127,7 @@ def test_predict_on_video_file_method_multiview_model(tmp_path, request, toy_mda
     assert (model.labeled_videos_dir() / "test_vid_top_labeled.mp4").is_file()
 
 
+@pytest.mark.skip(reason="Broken due to inability to download test fixtures from figshare")
 def test_predict_on_video_file_multiview(tmp_path, request, toy_mdata_dir):
     model = _setup_test_model(tmp_path, request, multiview=True)
 

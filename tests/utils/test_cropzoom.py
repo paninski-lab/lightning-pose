@@ -73,6 +73,7 @@ def compare_directories(dir1: Path, dir2: Path) -> Union[int, dict]:
     return results
 
 
+@pytest.mark.skip(reason="Broken due to inability to download test fixtures from figshare")
 def test_generate_cropped_labeled_frames(tmp_path, request):
     # Fetch a dataset and a fully trained model's predictions on it.
     fetch_test_data_if_needed(request.path.parent, "test_cropzoom_data")
@@ -111,6 +112,7 @@ def test_generate_cropped_labeled_frames(tmp_path, request):
     assert comparison == 24
 
 
+@pytest.mark.skip(reason="Broken due to inability to download test fixtures from figshare")
 def test_generate_cropped_video(tmp_path, request):
     # Fetch a dataset and a fully trained model's predictions on it.
     fetch_test_data_if_needed(request.path.parent, "test_cropzoom_data")
