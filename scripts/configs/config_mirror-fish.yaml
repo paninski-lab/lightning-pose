@@ -183,8 +183,6 @@ losses:
     prob_threshold: 0.05
 
 eval:
-  # paths to the hydra config files in the output folder, OR absolute paths to such folders.
-  hydra_paths: [" "]
   # predict?
   predict_vids_after_training: true
   # save .mp4?
