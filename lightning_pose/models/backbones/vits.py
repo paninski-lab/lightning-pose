@@ -37,15 +37,13 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
         base = VisionEncoderDino(model_name="facebook/dinov2-base", pretrained_patch_size=14)
         encoder_embed_dim = base.vision_encoder.config.hidden_size
     elif backbone_arch == "vits_dinov3":
-        base = VisionEncoderDino(
-            model_name="facebook/dinov3-vits16-pretrain-lvd1689m",
-            pretrained_patch_size=16,
+        base = _load_dinov3_with_auth_check(
+            model_name="facebook/dinov3-vits16-pretrain-lvd1689m", pretrained_patch_size=16,
         )
         encoder_embed_dim = base.vision_encoder.config.hidden_size
     elif backbone_arch == "vitb_dinov3":
-        base = VisionEncoderDino(
-            model_name="facebook/dinov3-vitb16-pretrain-lvd1689m",
-            pretrained_patch_size=16,
+        base = _load_dinov3_with_auth_check(
+            model_name="facebook/dinov3-vitb16-pretrain-lvd1689m", pretrained_patch_size=16,
         )
         encoder_embed_dim = base.vision_encoder.config.hidden_size
     elif "vitb_imagenet" in backbone_arch:
@@ -95,6 +93,65 @@ def load_vit_backbone_checkpoint(base, checkpoint: str):
                     vit_mae_state_dict[model_key] = value
     # Load the filtered weights
     base.vision_encoder.load_state_dict(vit_mae_state_dict, strict=False)
+
+
+def _load_dinov3_with_auth_check(model_name: str, pretrained_patch_size: int):
+    """Helper to load DINOv3 models with proper error handling for gated repos."""
+
+    dinov3_access_help = """
+    ================================================================================
+    DINOv3 Model Access Required
+    ================================================================================
+
+    The DINOv3 models are gated on HuggingFace and require authentication.
+    Please follow these steps to gain access:
+
+    1. CREATE A HUGGINGFACE ACCOUNT (if you don't have one):
+       - Go to https://huggingface.co/join
+       - Sign up with your email
+
+    2. REQUEST ACCESS TO THE MODEL:
+       - Visit https://huggingface.co/facebook/dinov3-vits16-pretrain-lvd1689m
+       - Click "Agree and access repository"
+       - Accept the terms of use
+       - You should receive immediate access
+
+    3. CREATE AN ACCESS TOKEN:
+       - Go to https://huggingface.co/settings/tokens
+       - Click "New token"
+       - Give it a name (e.g., "lightning-pose-dinov3")
+       - Select "Read" permission (sufficient for downloading models)
+       - Click "Generate token"
+       - COPY THE TOKEN - you won't be able to see it again!
+
+    4. INSTALL/UPDATE HUGGINGFACE PACKAGES AND LOGIN FROM THE TERMINAL:
+       pip install -U transformers huggingface_hub
+       hf auth login
+
+       When prompted, paste your token and press Enter.
+
+    5. RE-RUN YOUR CODE
+
+    For more information, visit: https://huggingface.co/docs/hub/security-tokens
+
+    Note: Both vits_dinov3 and vitb_dinov3 backbones require this authentication.
+    ================================================================================
+    """
+
+    try:
+        return VisionEncoderDino(
+            model_name=model_name,
+            pretrained_patch_size=pretrained_patch_size,
+        )
+    except OSError as e:
+        if "gated repo" in str(e).lower():
+            print(dinov3_access_help)
+            raise RuntimeError(
+                "Cannot access DINOv3 model. Please follow the instructions above to "
+                "authenticate with HuggingFace."
+            ) from e
+        else:
+            raise
 
 
 class VisionEncoder(torch.nn.Module):
