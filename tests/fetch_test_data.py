@@ -8,13 +8,13 @@ import requests
 def fetch_test_data_if_needed(dir: Path, dataset_name: str) -> None:
     datasets_url_dict = {
         "test_cropzoom_data":
-            "https://github.com/paninksi-lab/lightning-pose-test-fixtures/releases/download/v1/"
+            "https://github.com/paninski-lab/lightning-pose-test-fixtures/releases/download/v1/"
             "test_cropzoom_data.zip",
         "test_model_mirror_mouse":
-            "https://github.com/paninksi-lab/lightning-pose-test-fixtures/releases/download/v1/"
+            "https://github.com/paninski-lab/lightning-pose-test-fixtures/releases/download/v1/"
             "test_model_mirror_mouse.zip",
         "test_model_mirror_mouse_multiview":
-            "https://github.com/paninksi-lab/lightning-pose-test-fixtures/releases/download/v1/"
+            "https://github.com/paninski-lab/lightning-pose-test-fixtures/releases/download/v1/"
             "test_model_mirror_mouse_multiview.zip",
     }
     # check if data exists
