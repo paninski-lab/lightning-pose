@@ -7,15 +7,21 @@ import requests
 
 def fetch_test_data_if_needed(dir: Path, dataset_name: str) -> None:
     datasets_url_dict = {
-        "test_cropzoom_data": "https://figshare.com/ndownloader/files/52544084",
-        "test_model_mirror_mouse": "https://figshare.com/ndownloader/files/51726884",
-        "test_model_mirror_mouse_multiview": "https://figshare.com/ndownloader/files/51727520",
+        "test_cropzoom_data":
+            "https://github.com/ksikka/lightning-pose-test-fixtures/releases/download/v1/"
+            "test_cropzoom_data.zip",
+        "test_model_mirror_mouse":
+            "https://github.com/ksikka/lightning-pose-test-fixtures/releases/download/v1/"
+            "test_model_mirror_mouse.zip",
+        "test_model_mirror_mouse_multiview":
+            "https://github.com/ksikka/lightning-pose-test-fixtures/releases/download/v1/"
+            "test_model_mirror_mouse_multiview.zip",
     }
     # check if data exists
     dataset_dir = dir / dataset_name
     # TODO Add a way to force download fresh data.
-    # Maybe compare file size of stored dataset and figshare dataset?
-    # Figshare filesize can be gotten with HEAD request, and stored
+    # Maybe compare file size of local dataset and remote dataset?
+    # Remote filesize can be gotten with HEAD request, and stored
     # in the dataset directory.
     if dataset_dir.exists():
         return
