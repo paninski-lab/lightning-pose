@@ -1,6 +1,7 @@
 """Run inference on a list of models and videos."""
 
 import os
+import warnings
 
 import hydra
 import lightning.pytorch as pl
@@ -21,6 +22,21 @@ from lightning_pose.utils.scripts import (
     get_data_module,
     get_dataset,
     get_imgaug_transform,
+)
+
+
+# Issue deprecation warning
+warnings.warn(
+    "This script is deprecated and will be removed in a future version. "
+    "Please use the command line interface instead:\n\n"
+    "To predict on one or more video files:\n"
+    "  litpose predict <model_dir> <video_file1> <video_file2> ...\n\n"
+    "To predict on a folder of video files:\n"
+    "  litpose predict <model_dir> <video_files_dir>\n\n"
+    "For more information, visit:\n"
+    "https://lightning-pose.readthedocs.io/en/latest/source/user_guide_singleview/inference.html",
+    DeprecationWarning,
+    stacklevel=2
 )
 
 
