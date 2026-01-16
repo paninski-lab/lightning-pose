@@ -204,6 +204,7 @@ The following parameters relate to model architecture and unsupervised losses.
     * resnet152: ResNet-152 pretrained on ImageNet
     * resnet50_contrastive: ResNet-50 pretrained on ImageNet using SimCLR
     * resnet50_animal_apose: ResNet-50 pretrained on an animal pose dataset (Cao et al 2019, Cross-Domain Adaptation for Animal Pose Estimation)
+    * resnet50_animal_ap10k: ResNet-50 pretrained on AP10k dataset (Yu et al 2021, A Benchmark for Animal Pose Estimation in the Wild)
     * resnet50_human_jhmdb: ResNet-50 pretrained on JHMDB dataset (Jhuang et al 2013, Towards Understanding Action Recognition)
     * resnet50_human_res_rle: a regression-based ResNet-50 pretrained on MPii dataset (Andriluka et al 2014, 2D Human Pose Estimation: New Benchmark and State of the Art Analysis)
     * resnet50_human_top_rle: a heatmap-based ResNet-50 pretrained on MPii dataset (Xiao et al 2014, Simple Baselines for Human Pose Estimation and Tracking)
@@ -280,6 +281,3 @@ The following parameters are used for general evaluation.
 
 * ``eval.confidence_thresh_for_vid`` (*float, default: 0.9*): predictions with confidence below this
   value will not be plotted in the labeled videos
-
-* ``eval.hydra_paths`` (*list, default: []*): absolute paths to model directories, only for use with
-  scripts/predict_new_vids.py.
