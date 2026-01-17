@@ -2,6 +2,8 @@
 
 import copy
 
+import pytest
+
 
 def test_supervised_heatmap(
     cfg,
@@ -112,26 +114,46 @@ def test_supervised_heatmap_vits_dinov2(
     )
 
 
-# def test_supervised_heatmap_vits_dinov3(
-#     cfg,
-#     heatmap_data_module,
-#     video_dataloader,
-#     trainer,
-#     run_model_test,
-# ):
-#     """Test the initialization and training of a supervised heatmap model."""
-#
-#     cfg_tmp = copy.deepcopy(cfg)
-#     cfg_tmp.model.model_type = "heatmap"
-#     cfg_tmp.model.backbone = "vits_dinov3"
-#     cfg_tmp.model.losses_to_use = []
-#
-#     run_model_test(
-#         cfg=cfg_tmp,
-#         data_module=heatmap_data_module,
-#         video_dataloader=video_dataloader,
-#         trainer=trainer,
-#     )
+def test_supervised_heatmap_vits_dinov3(
+        cfg,
+        heatmap_data_module,
+        video_dataloader,
+        trainer,
+        run_model_test,
+):
+    """Test the initialization and training of a supervised heatmap model."""
+
+    cfg_tmp = copy.deepcopy(cfg)
+    cfg_tmp.model.model_type = "heatmap"
+    cfg_tmp.model.backbone = "vits_dinov3"
+    cfg_tmp.model.losses_to_use = []
+
+    # Check if we have HuggingFace auth
+    try:
+        from huggingface_hub import HfFolder
+        token = HfFolder.get_token()
+        has_hf_auth = token is not None
+    except ImportError:
+        # huggingface_hub not installed (e.g., in CI)
+        has_hf_auth = False
+
+    if has_hf_auth:
+        # with auth - should run normally
+        run_model_test(
+            cfg=cfg_tmp,
+            data_module=heatmap_data_module,
+            video_dataloader=video_dataloader,
+            trainer=trainer,
+        )
+    else:
+        # CI or no auth - should raise proper error
+        with pytest.raises(RuntimeError, match="Cannot access DINOv3 model"):
+            run_model_test(
+                cfg=cfg_tmp,
+                data_module=heatmap_data_module,
+                video_dataloader=video_dataloader,
+                trainer=trainer,
+            )
 
 
 def test_supervised_multiview_heatmap(

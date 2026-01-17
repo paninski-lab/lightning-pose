@@ -1,5 +1,5 @@
 # See documentation in scripts/buildbot/README
-name: SSH and Execute Build Script
+name: Run tests
 
 on:
   pull_request_target:
