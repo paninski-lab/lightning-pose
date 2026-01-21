@@ -94,6 +94,19 @@ def _compute_bbox_df(
 
 
 def _crop_image(img_path, bbox, cropped_img_path):
+    """
+    Crops an image to the specified bounding box and saves the cropped image.
+
+    Args:
+        img_path (Path): The path to the input image file.
+        bbox (tuple[int, int, int, int]): A tuple specifying the bounding box
+            (left, upper, right, lower) for cropping the image.
+        cropped_img_path (Path): The path where the cropped image will be saved. The
+            parent directories will be created if they do not exist.
+
+    Returns:
+        None
+    """
     img = Image.open(img_path)
     img = img.crop(bbox)
     cropped_img_path.parent.mkdir(parents=True, exist_ok=True)
@@ -107,8 +120,9 @@ def _star_crop_image(args):
 @typechecked
 def _crop_images(bbox_df: pd.DataFrame, root_directory: Path, output_directory: Path) -> None:
     """
-    Crops images based on bounding box data provided in a DataFrame and stores the cropped images in
-    a specified output directory. (Also crops context frames).
+    Crops a directory of images based on bounding box data provided in a DataFrame and stores
+    the cropped images in a specified output directory. Also looks for and crops context frames
+    in the directory.
 
     Args:
         bbox_df (pd.DataFrame): DataFrame containing bounding box information for cropping. The DataFrame
@@ -122,8 +136,6 @@ def _crop_images(bbox_df: pd.DataFrame, root_directory: Path, output_directory: 
             improperly specified.
 
     Note:
-        - Context frame cropping depends on additional logic. Only cropped images for specific context
-          frames will be saved based on the conditions outlined.
         - Multiprocessing is utilized for scaling the cropping operations across multiple CPU cores.
         - User must ensure the validity and compatibility of paths and bounding box data prior to
           execution.
