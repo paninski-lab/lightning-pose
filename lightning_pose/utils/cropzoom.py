@@ -20,9 +20,7 @@ __all__ = [
 
 
 @typechecked
-def _calculate_bbox_size(
-    keypoints_per_frame: np.ndarray, crop_ratio: float = 1.0
-) -> np.ndarray:
+def _calculate_bbox_size(keypoints_per_frame: np.ndarray, crop_ratio: float = 1.0) -> np.ndarray:
     """Computes bounding box size for each frame.
 
     Arguments:
@@ -39,9 +37,7 @@ def _calculate_bbox_size(
     max_y_diff_per_frame = np.max(y_coords, axis=1) - np.min(y_coords, axis=1)
 
     # Max of x_diff and y_diff for each frame. Shape of (frames,).
-    max_bbox_size_per_frame = np.max(
-        [max_x_diff_per_frame, max_y_diff_per_frame], axis=0
-    )
+    max_bbox_size_per_frame = np.max([max_x_diff_per_frame, max_y_diff_per_frame], axis=0)
 
     # Scale by crop_ratio, and take ceiling.
     bbox_size_per_frame = np.ceil(max_bbox_size_per_frame * crop_ratio).astype(int)
@@ -73,14 +69,10 @@ def _compute_bbox_df(
             not invalid_keypoints
         ), f"Anchor keypoints not found in DataFrame: {invalid_keypoints}"
 
-        coord_mask &= pred_df.columns.get_level_values("bodyparts").isin(
-            anchor_keypoints
-        )
+        coord_mask &= pred_df.columns.get_level_values("bodyparts").isin(anchor_keypoints)
 
     # Shape: (frames, keypoints, x|y)
-    keypoints_per_frame = (
-        pred_df.loc[:, coord_mask].to_numpy().reshape(pred_df.shape[0], -1, 2)
-    )
+    keypoints_per_frame = pred_df.loc[:, coord_mask].to_numpy().reshape(pred_df.shape[0], -1, 2)
 
     bbox_sizes = _calculate_bbox_size(keypoints_per_frame, crop_ratio=crop_ratio)
 
@@ -113,13 +105,29 @@ def _star_crop_image(args):
 
 
 @typechecked
-def _crop_images(
-    bbox_df: pd.DataFrame, root_directory: Path, output_directory: Path
-) -> None:
-    """Crops images according to their bboxes in `bbox_df`.
+def _crop_images(bbox_df: pd.DataFrame, root_directory: Path, output_directory: Path) -> None:
+    """
+    Crops images based on bounding box data provided in a DataFrame and stores the cropped images in
+    a specified output directory. (Also crops context frames).
 
-    root_directory: root of img paths in bbox_df.
-    output_directory: where to save cropped images."""
+    Args:
+        bbox_df (pd.DataFrame): DataFrame containing bounding box information for cropping. The DataFrame
+            is expected to have an index representing image paths, and include columns `x`, `y`, `w`, and
+            `h` representing bounding box coordinates and dimensions.
+        root_directory (Path): Path to the directory containing the original images to be processed.
+        output_directory (Path): Path to the directory where cropped images will be saved.
+
+    Raises:
+        ValueError: Raised if invalid data is encountered in the bounding box DataFrame or if paths are
+            improperly specified.
+
+    Note:
+        - Context frame cropping depends on additional logic. Only cropped images for specific context
+          frames will be saved based on the conditions outlined.
+        - Multiprocessing is utilized for scaling the cropping operations across multiple CPU cores.
+        - User must ensure the validity and compatibility of paths and bounding box data prior to
+          execution.
+    """
 
     _file_cache: dict[Path, bool] = {}
 
@@ -169,6 +177,23 @@ def _crop_images(
 
 @typechecked
 def _crop_video_moviepy(video_file: Path, bbox_df: pd.DataFrame, output_file: Path):
+    """
+    Crops a video using bounding box dimensions specified in a DataFrame and saves the
+    output to a given file path.
+
+    Parameters:
+        video_file (Path): Input path to the video file to be processed.
+        bbox_df (pd.DataFrame): DataFrame containing bounding box information for frames.
+            It must include the columns `x`, `y`, `w`, and `h` representing the top-left
+            corner coordinates, width, and height of the bounding box, respectively.
+        output_file (Path): Path to save the cropped output video file.
+
+    Raises:
+        KeyError: If the DataFrame does not contain required bounding box columns (`x`,
+            `y`, `w`, and `h`).
+        ValueError: If the input video file cannot be read or if the bounding box
+            dimensions result in invalid operations.
+    """
     clip = VideoFileClip(str(video_file))
 
     h = bbox_df["h"].median()
@@ -280,10 +305,20 @@ def generate_cropped_csv_file(
     output_csv_file: str | Path,
     mode: str = "subtract",
 ):
-    """Translate a CSV file by bbox file.
-    Requires the files have the same index.
+    """
+    Adjusts coordinates in the input CSV file either by adding or subtracting
+    corresponding values from a bounding box CSV file. The resulting data is saved
+    to a new output CSV file.
 
-    Defaults to subtraction. Can use mode='add' to map from cropped to original space.
+    Parameters:
+        input_csv_file (str | Path): Path to the input CSV file containing coordinate data.
+        input_bbox_file (str | Path): Path to the CSV file containing bounding box data.
+        output_csv_file (str | Path): Path where the output CSV file will be saved.
+        mode (str): Specifies the operation to apply to the coordinates. Must be
+            "add" or "subtract". Defaults to "subtract".
+
+    Raises:
+        ValueError: If the provided mode is not "add" or "subtract".
     """
     if mode not in ("add", "subtract"):
         raise ValueError(f"{mode} is not a valid mode")
