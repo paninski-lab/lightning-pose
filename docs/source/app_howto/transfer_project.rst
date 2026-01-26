@@ -89,5 +89,4 @@ You can be selective about what you transfer by:
 * selectively including just the models you need
 * omitting videos if you do not need to view or extract frames from them
 
-When in doubt, consult the :ref:`Directory Structure Reference <source/directory_structure_reference/index>` to see what the purpose of each file is.
-
+When in doubt, consult the :doc:`Directory Structure Reference </source/directory_structure_reference/index>` to see what the purpose of each file is.
