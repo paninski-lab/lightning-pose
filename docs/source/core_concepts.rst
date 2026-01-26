@@ -1,3 +1,5 @@
+.. _core_concepts:
+
 Core concepts
 ==============
 
@@ -36,12 +38,11 @@ For example, this is a fairly typical ``~/.lightning-pose/projects.toml`` file:
 .. code-block:: toml
 
     [my_project]
-    data_dir = "/home/username/LPProjects/data"
-    # model_dir omitted, defaults to "/home/username/LPProjects/models"
+    data_dir = "/home/username/LPProjects/my_project/data"
+    # model_dir omitted, defaults to "/home/username/LPProjects/my_project/models"
 
 .. note::
 
   If you move the project directories, you should update the ``projects.toml`` file with their new locations.
 
-The structure of the data and model directories is documented in Reference: Directory Structure.
-
+The structure of the data and model directories is documented in :doc:`Directory Structure Reference <directory_structure_reference/index>`.
