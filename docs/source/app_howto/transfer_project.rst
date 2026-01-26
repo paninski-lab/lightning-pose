@@ -77,3 +77,17 @@ Consider using ssh, scp, or sftp. These topics are well covered on the internet.
 ------------------------------------
 
 Once you've downloaded and extracted the project directory onto the new machine, follow this guide: :ref:`add_existing_project`
+
+Appendix: Transferring a subset of the project directory
+----------------------------------------------------------
+
+A project directory can get very large due to excessive models and videos.
+
+You can be selective about what you transfer by:
+
+* omitting the models directory entirely if you do not need to do any model operations
+* selectively including just the models you need
+* omitting videos if you do not need to view or extract frames from them
+
+When in doubt, consult the :ref:`Directory Structure Reference <source/directory_structure_reference/index>` to see what the purpose of each file is.
+

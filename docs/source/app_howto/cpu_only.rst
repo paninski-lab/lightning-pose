@@ -4,12 +4,12 @@ Installing the App CPU-only
 =============================
 
 It's possible to run the app without an NVIDIA GPU for labeling and viewing only.
-Model operations require the GPU.
+(Model operations not supported as they require a GPU.)
 
 Install the app
 ----------------
 
-The full lightning-pose package will not install without an nvidia GPU,
+The full lightning-pose package will not install without an NVIDIA GPU,
 but we can install a lightweight version that will allow the app to run.
 
 .. code-block:: bash
