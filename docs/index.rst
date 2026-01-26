@@ -186,22 +186,26 @@ It covers the end-to-end workflow of labeling, training, and evaluation.
 .. toctree::
    :maxdepth: 4
    :hidden:
-   :caption: CLI User guide
+   :caption: CLI User guides
 
    source/user_guide_singleview/index
    source/user_guide_multiview/index
    source/user_guide_advanced/index
+   source/app_howto/index
 
 .. toctree::
    :maxdepth: 2
    :hidden:
    :caption: Community
 
-   source/developer_guide/index
-   source/faqs
-   Release notes <https://github.com/paninski-lab/lightning-pose/releases>
-   source/directory_structure_changelog
    source/migrating_to_app
+   Discord channel <https://discord.gg/tDUPdRj4BM>
+   Github Repo <https://github.com/paninski-lab/lightning-pose>
+   Release notes <https://github.com/paninski-lab/lightning-pose/releases>
+   App Github Repo <https://github.com/paninski-lab/lightning-pose-app>
+   App Release notes <https://github.com/paninski-lab/lightning-pose-app?tab=readme-ov-file#-release-notes>
+   source/faqs
+
 
 .. toctree::
    :maxdepth: 2
@@ -211,3 +215,4 @@ It covers the end-to-end workflow of labeling, training, and evaluation.
    source/directory_structure_reference/index
    source/api
    source/cli_reference/index
+   source/developer_guide/index
