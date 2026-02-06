@@ -14,7 +14,7 @@ The general flow of each loss class is as follows:
 - step 2: epsilon-insensitivity: set loss to zero for any batch element with loss < epsilon
 - step 3: reduce loss (usually mean)
 - step 4: log values to a dict
-- step 5: return weighted loss
+- step 5: return loss
 
 """
 
@@ -135,7 +135,7 @@ class Loss:
         # self.reduce_loss()
         # self.log_loss()
 
-        # return self.weight * scalar_loss, logs
+        # return scalar_loss, logs
         raise NotImplementedError
 
 
@@ -186,7 +186,7 @@ class HeatmapLoss(Loss):
         scalar_loss = self.reduce_loss(elementwise_loss, method="mean")
         logs = self.log_loss(loss=scalar_loss, stage=stage)
 
-        return self.weight * scalar_loss, logs
+        return scalar_loss, logs
 
 
 # @typechecked
@@ -367,7 +367,7 @@ class PCALoss(Loss):
         epsilon_insensitive_loss = self.rectify_epsilon(loss=elementwise_loss)
         scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
         logs = self.log_loss(loss=scalar_loss, stage=stage)
-        return self.weight * scalar_loss, logs
+        return scalar_loss, logs
 
 
 # @typechecked
@@ -458,7 +458,7 @@ class TemporalLoss(Loss):
         epsilon_insensitive_loss = self.rectify_epsilon(loss=clean_loss)
         scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
         logs = self.log_loss(loss=scalar_loss, stage=stage)
-        return self.weight * scalar_loss, logs
+        return scalar_loss, logs
 
 
 # @typechecked
@@ -560,7 +560,7 @@ class TemporalHeatmapLoss(Loss):
         scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
         logs = self.log_loss(loss=scalar_loss, stage=stage)
 
-        return self.weight * scalar_loss, logs
+        return scalar_loss, logs
 
 
 # @typechecked
@@ -684,7 +684,7 @@ class UnimodalLoss(Loss):
         scalar_loss = self.reduce_loss(elementwise_loss, method="mean")
         logs = self.log_loss(loss=scalar_loss, stage=stage)
 
-        return self.weight * scalar_loss, logs
+        return scalar_loss, logs
 
 
 # @typechecked
@@ -736,7 +736,7 @@ class RegressionMSELoss(Loss):
         scalar_loss = self.reduce_loss(elementwise_loss, method="mean")
         logs = self.log_loss(loss=scalar_loss, stage=stage)
 
-        return self.weight * scalar_loss, logs
+        return scalar_loss, logs
 
 
 # @typechecked
@@ -819,7 +819,7 @@ class PairwiseProjectionsLoss(Loss):
 
         logs = self.log_loss(loss=scalar_loss, stage=stage)
 
-        return self.weight * scalar_loss, logs
+        return scalar_loss, logs
 
 
 @typechecked
