@@ -9,6 +9,15 @@ over time.
    :local:
    :depth: 2
 
+
+v2.0.5.3 | Feb 8, 2026
+------------------------------------
+
+This version changed the unlabeled sidecar file to jsonl format.
+E.g. ``CollectedData_top.unlabeled`` was converted to
+``CollectedData_top.unlabeled.jsonl``. This was done to support embedding
+model predictions when extracting a frame from the viewer.
+
 v2.0.5-app-compatible | Jan 14, 2026
 ------------------------------------
 
