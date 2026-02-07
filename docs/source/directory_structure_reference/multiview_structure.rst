@@ -104,7 +104,7 @@ These files contain the unlabeled frame queue for the App.
 The files are aligned across views: the Nth row in each file is for the same frame across cameras.
 They are newline-separated JSONs.
 
-For example, ``CollectedData_view0.unlabeled`` contains:
+For example, ``CollectedData_view0.unlabeled.jsonl`` contains:
 
 .. code-block::
 
