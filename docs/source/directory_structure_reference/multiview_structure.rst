@@ -20,8 +20,8 @@ The detailed documentation for a multiview project data directory.
       │   └── session0_view1.mp4
       ├── CollectedData_view0.csv ...........................[4]
       └── CollectedData_view1.csv
-      ├── CollectedData_view0.unlabeled .....................[5]
-      └── CollectedData_view1.unlabeled
+      ├── CollectedData_view0.unlabeled.jsonl ...............[5]
+      └── CollectedData_view1.unlabeled.jsonl
 
 **2. Camera Calibrations (Optional)**
 
@@ -102,15 +102,23 @@ Unlabeled Sidecar Files [5]
 
 These files contain the unlabeled frame queue for the App.
 The files are aligned across views: the Nth row in each file is for the same frame across cameras.
-They are newline-separated lists of paths.
+They are newline-separated JSONs.
 
-For example, ``CollectedData_view0.unlabeled`` contains:
+For example, ``CollectedData_view0.unlabeled.jsonl`` contains:
 
 .. code-block::
 
-    labeled-data/session0_view0/frame00000001.png
-    labeled-data/session0_view0/frame00000123.png
+    {"frame_path": "labeled-data/session0_view0/frame00000001.png", predictions: null}
+    {"frame_path": "labeled-data/session0_view0/frame00000123.png, predictions: null}
     ...
+
+The predictions field contains initial predictions for the unlabeled frame.
+This field is only populated when extracting a frame from the Viewer. Example:
+
+.. code-block::
+
+    {"frame_path":"labeled-data/session0_view0/frame00000001.png","predictions":{"model_name":"50_epoch","date_time":1770480952922,"predictions":[{"keypoint_name":"head","x":156.1,"y":105.3},{"keypoint_name":"tail","x":313.8,"y":255.4}]}}
+
 
 .. _project_calib_req:
 
