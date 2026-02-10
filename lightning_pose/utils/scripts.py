@@ -402,6 +402,44 @@ def get_loss_factories(
     return {"supervised": loss_factory_sup, "unsupervised": loss_factory_unsup}
 
 
+def _extract_camera_params_from_dataset(
+    data_module: BaseDataModule | UnlabeledDataModule | None,
+) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+    """Extract camera intrinsics and extrinsics from the dataset's camera calibration.
+
+    Used to provide camera geometry to multiview transformer models for 3D-aware
+    Plücker ray positional embeddings.
+
+    Args:
+        data_module: data module containing the dataset
+
+    Returns:
+        Tuple of (camera_intrinsics, camera_extrinsics), each (num_views, 3, 3/4) or None.
+
+    """
+    if data_module is None:
+        return None, None
+
+    dataset = data_module.dataset
+    if not hasattr(dataset, 'cam_params_file_to_camgroup'):
+        return None, None
+    if dataset.cam_params_file_to_camgroup is None:
+        return None, None
+
+    # Use the first camera group (cameras are typically fixed across frames)
+    first_camgroup = list(dataset.cam_params_file_to_camgroup.values())[0]
+    camera_intrinsics = torch.stack([
+        torch.tensor(cam.get_camera_matrix(), dtype=torch.float32)
+        for cam in first_camgroup.cameras
+    ], dim=0)  # (num_views, 3, 3)
+    camera_extrinsics = torch.stack([
+        torch.tensor(cam.get_extrinsics_mat()[:3], dtype=torch.float32)
+        for cam in first_camgroup.cameras
+    ], dim=0)  # (num_views, 3, 4)
+
+    return camera_intrinsics, camera_extrinsics
+
+
 @typechecked
 def get_model(
     cfg: DictConfig,
@@ -484,6 +522,9 @@ def get_model(
             )
         elif cfg.model.model_type == "heatmap_multiview_transformer":
             from lightning_pose.models import HeatmapTrackerMultiviewTransformer
+            camera_intrinsics, camera_extrinsics = _extract_camera_params_from_dataset(
+                data_module
+            )
             model = HeatmapTrackerMultiviewTransformer(
                 num_keypoints=cfg.data.num_keypoints,
                 num_views=len(cfg.data.view_names),
@@ -499,6 +540,8 @@ def get_model(
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
                 backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
+                camera_intrinsics=camera_intrinsics,
+                camera_extrinsics=camera_extrinsics,
             )
         else:
             raise NotImplementedError(
@@ -559,6 +602,9 @@ def get_model(
             )
         elif cfg.model.model_type == "heatmap_multiview_transformer":
             from lightning_pose.models import SemiSupervisedHeatmapTrackerMultiviewTransformer
+            camera_intrinsics, camera_extrinsics = _extract_camera_params_from_dataset(
+                data_module
+            )
             model = SemiSupervisedHeatmapTrackerMultiviewTransformer(
                 num_keypoints=cfg.data.num_keypoints,
                 num_views=len(cfg.data.view_names),
@@ -575,6 +621,8 @@ def get_model(
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
                 patch_mask_config=cfg.training.get("patch_mask", {}),
+                camera_intrinsics=camera_intrinsics,
+                camera_extrinsics=camera_extrinsics,
             )
         else:
             raise NotImplementedError(

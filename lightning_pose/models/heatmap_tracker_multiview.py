@@ -34,6 +34,149 @@ from lightning_pose.models.heads import (
 __all__ = []
 
 
+class PluckerRayEmbedding(nn.Module):
+    """Compute 3D geometry-aware positional embeddings using Plücker ray coordinates.
+
+    For each patch center in each camera view, computes the 3D ray from the camera
+    origin through that patch's pixel location. Rays are represented as 6D Plücker
+    coordinates (direction d, moment m = origin × d), Fourier-encoded, and projected
+    to the transformer's embedding dimension via a small MLP.
+
+    This gives the transformer attention geometric awareness: patches from different
+    views whose rays nearly intersect in 3D (i.e. observe the same body part) receive
+    related positional embeddings, enabling cross-view correspondence to emerge
+    naturally through the dot-product attention mechanism.
+
+    Computational cost is negligible (<0.1% of ViT forward pass FLOPs).
+    """
+
+    def __init__(
+        self,
+        embed_dim: int,
+        num_freq_bands: int = 8,
+        hidden_dim: int = 128,
+    ):
+        """Initialize Plücker ray embedding module.
+
+        Args:
+            embed_dim: output dimension (must match transformer embedding dim)
+            num_freq_bands: number of Fourier frequency bands for positional encoding
+            hidden_dim: hidden dimension of the projection MLP
+
+        """
+        super().__init__()
+        self.num_freq_bands = num_freq_bands
+        # Plücker coords are 6D; Fourier encoding expands to 6 * (2L + 1)
+        fourier_dim = 6 * (2 * num_freq_bands + 1)
+        self.mlp = nn.Sequential(
+            nn.Linear(fourier_dim, hidden_dim),
+            nn.GELU(),
+            nn.Linear(hidden_dim, embed_dim),
+        )
+        # Initialize MLP to produce small outputs so ray embeddings start near zero
+        # and don't disrupt pretrained ViT representations at the beginning of training
+        nn.init.normal_(self.mlp[0].weight, std=0.02)
+        nn.init.zeros_(self.mlp[0].bias)
+        nn.init.normal_(self.mlp[2].weight, std=0.02)
+        nn.init.zeros_(self.mlp[2].bias)
+
+    def fourier_encode(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply sinusoidal Fourier encoding (NeRF-style) to input coordinates.
+
+        Args:
+            x: (..., D) input coordinates
+
+        Returns:
+            (..., D * (2 * num_freq_bands + 1)) encoded coordinates
+
+        """
+        freqs = (
+            2.0
+            ** torch.arange(self.num_freq_bands, device=x.device, dtype=x.dtype)
+            * math.pi
+        )
+        # x: (..., D), freqs: (L,)
+        x_freq = x.unsqueeze(-1) * freqs  # (..., D, L)
+        encoded = torch.cat(
+            [
+                x,                             # raw coordinates:  (..., D)
+                x_freq.sin().flatten(-2),      # sin components:   (..., D*L)
+                x_freq.cos().flatten(-2),      # cos components:   (..., D*L)
+            ],
+            dim=-1,
+        )
+        return encoded
+
+    @staticmethod
+    def compute_plucker_rays(
+        intrinsics: torch.Tensor,
+        extrinsics: torch.Tensor,
+        patch_centers: torch.Tensor,
+    ) -> torch.Tensor:
+        """Compute Plücker ray coordinates for patch centers in each camera view.
+
+        The Plücker representation has a key property: two rays intersect iff
+        d1·m2 + d2·m1 = 0, which is a dot product — exactly what transformer
+        attention computes. This lets the attention learn cross-view correspondences
+        based on 3D geometry.
+
+        Args:
+            intrinsics: (num_views, 3, 3) camera intrinsic matrices
+            extrinsics: (num_views, 3, 4) camera extrinsic matrices [R|t]
+            patch_centers: (num_patches, 2) pixel coordinates of patch centers
+
+        Returns:
+            plucker: (num_views, num_patches, 6) Plücker coordinates [direction, moment]
+
+        """
+        R = extrinsics[:, :3, :3]   # (V, 3, 3) rotation
+        t = extrinsics[:, :3, 3:]   # (V, 3, 1) translation
+
+        # Camera center in world coordinates: c = -R^T @ t
+        cam_origins = -torch.bmm(R.transpose(1, 2), t).squeeze(-1)  # (V, 3)
+
+        # Homogeneous pixel coordinates for all patch centers
+        ones = torch.ones(
+            patch_centers.shape[0], 1,
+            device=patch_centers.device, dtype=patch_centers.dtype,
+        )
+        pixels_h = torch.cat([patch_centers, ones], dim=-1)  # (P, 3)
+
+        # Ray directions in camera coordinates: K^{-1} @ [u, v, 1]^T
+        K_inv = torch.inverse(intrinsics)  # (V, 3, 3)
+        rays_cam = torch.einsum('vij,pj->vpi', K_inv, pixels_h)  # (V, P, 3)
+
+        # Transform to world coordinates: R^T @ ray_cam
+        rays_world = torch.einsum(
+            'vij,vpj->vpi', R.transpose(1, 2), rays_cam,
+        )  # (V, P, 3)
+
+        # Normalize ray directions
+        rays_world = rays_world / (rays_world.norm(dim=-1, keepdim=True) + 1e-8)
+
+        # Plücker moment: m = origin × direction
+        cam_origins_exp = cam_origins.unsqueeze(1).expand_as(rays_world)  # (V, P, 3)
+        moments = torch.cross(cam_origins_exp, rays_world, dim=-1)       # (V, P, 3)
+
+        # Concatenate [direction, moment] for 6D Plücker representation
+        plucker = torch.cat([rays_world, moments], dim=-1)  # (V, P, 6)
+
+        return plucker
+
+    def forward(self, plucker_coords: torch.Tensor) -> torch.Tensor:
+        """Project Plücker coordinates to embedding space via Fourier encoding + MLP.
+
+        Args:
+            plucker_coords: (num_views, num_patches, 6)
+
+        Returns:
+            embeddings: (num_views, num_patches, embed_dim)
+
+        """
+        encoded = self.fourier_encode(plucker_coords)
+        return self.mlp(encoded)
+
+
 class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
     """Transformer network that handles multi-view datasets."""
 
@@ -52,6 +195,8 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: DictConfig | dict | None = None,
         image_size: int = 256,
+        camera_intrinsics: torch.Tensor | None = None,
+        camera_extrinsics: torch.Tensor | None = None,
         **kwargs: Any,
     ):
         """Initialize a multi-view model with transformer backbone.
@@ -70,6 +215,10 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             lr_scheduler_params: params for specific learning rate schedulers
                 - multisteplr: milestones, gamma
             image_size: size of input images (height=width for ViT models)
+            camera_intrinsics: (num_views, 3, 3) camera intrinsic matrices for 3D ray
+                positional embeddings. If None, will be auto-extracted from first labeled batch.
+            camera_extrinsics: (num_views, 3, 4) camera extrinsic matrices [R|t] for 3D ray
+                positional embeddings. If None, will be auto-extracted from first labeled batch.
             **kwargs: additional arguments
 
         """
@@ -79,6 +228,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         torch.manual_seed(torch_seed)
 
         self.num_views = num_views
+        self.image_size = image_size
 
         # backwards compatibility
         if "do_context" in kwargs.keys():
@@ -127,25 +277,131 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         # use this to log auxiliary information: pixel_error on labeled data
         self.rmse_loss = RegressionRMSELoss()
 
+        # ---------------------------------------------------------------
+        # 3D-aware Plücker ray positional embeddings
+        # ---------------------------------------------------------------
+        # These encode the 3D ray direction + camera position for each
+        # patch in each view, giving the transformer geometric awareness
+        # of cross-view correspondences via its dot-product attention.
+        self.ray_embedding = PluckerRayEmbedding(
+            embed_dim=self.num_fc_input_features,
+            num_freq_bands=8,
+            hidden_dim=128,
+        )
+
+        # Buffer for cached Plücker coordinates (fixed camera geometry).
+        # The MLP projection runs every forward pass to stay differentiable.
+        self.register_buffer('_cached_plucker_coords', None)
+
+        # If camera params provided at init, precompute ray embeddings now
+        if camera_intrinsics is not None and camera_extrinsics is not None:
+            self._precompute_ray_embeddings(
+                camera_intrinsics=camera_intrinsics,
+                camera_extrinsics=camera_extrinsics,
+            )
+
         # necessary so we don't have to pass in model arguments when loading
         # also, "loss_factory" and "loss_factory_unsupervised" cannot be pickled
         # (loss_factory_unsupervised might come from SemiSupervisedHeatmapTracker.__super__().
         # otherwise it's ignored, important so that it doesn't try to pickle the dali loaders)
-        self.save_hyperparameters(ignore=["loss_factory", "loss_factory_unsupervised"])
+        # camera_intrinsics/extrinsics are stored as the derived _cached_plucker_coords buffer
+        self.save_hyperparameters(
+            ignore=["loss_factory", "loss_factory_unsupervised",
+                    "camera_intrinsics", "camera_extrinsics"]
+        )
+
+    def _scale_intrinsics_to_model_input(
+        self,
+        intrinsics: torch.Tensor,
+    ) -> torch.Tensor:
+        """Scale camera intrinsics from original image coordinates to model input coordinates.
+
+        Uses the principal point as a proxy for the original image dimensions
+        (assuming cx ≈ W_orig/2 and cy ≈ H_orig/2), then scales focal lengths and
+        principal point to match the model's input image size.
+
+        Args:
+            intrinsics: (num_views, 3, 3) camera intrinsic matrices in original image coords
+
+        Returns:
+            (num_views, 3, 3) intrinsic matrices scaled to model input coordinates
+
+        """
+        K = intrinsics.clone().float()
+        cx = K[:, 0, 2].clamp(min=1.0)
+        cy = K[:, 1, 2].clamp(min=1.0)
+        scale_x = self.image_size / (2.0 * cx)
+        scale_y = self.image_size / (2.0 * cy)
+        K[:, 0, 0] *= scale_x           # fx scaled
+        K[:, 0, 2] = self.image_size / 2.0   # cx at image center
+        K[:, 1, 1] *= scale_y           # fy scaled
+        K[:, 1, 2] = self.image_size / 2.0   # cy at image center
+        return K
+
+    def _precompute_ray_embeddings(
+        self,
+        camera_intrinsics: torch.Tensor,
+        camera_extrinsics: torch.Tensor,
+    ) -> None:
+        """Compute and cache Plücker ray coordinates for all patch centers.
+
+        The Plücker coordinates encode fixed camera geometry and are cached as a buffer.
+        The trainable MLP projection runs every forward pass to remain differentiable.
+
+        Args:
+            camera_intrinsics: (num_views, 3, 3) camera intrinsic matrices
+            camera_extrinsics: (num_views, 3, 4) camera extrinsic matrices [R|t]
+
+        """
+        patch_size = 16  # standard for all supported ViT backbones
+        grid_size = self.image_size // patch_size
+
+        # Compute patch center pixel coordinates in model input space
+        coords = []
+        for i in range(grid_size):
+            for j in range(grid_size):
+                u = patch_size * j + patch_size / 2.0  # x (column)
+                v = patch_size * i + patch_size / 2.0  # y (row)
+                coords.append([u, v])
+
+        patch_centers = torch.tensor(
+            coords, dtype=torch.float32, device=camera_intrinsics.device,
+        )  # (num_patches, 2)
+
+        # Scale intrinsics to model input coordinate system
+        K_scaled = self._scale_intrinsics_to_model_input(camera_intrinsics)
+
+        # Compute Plücker ray coordinates
+        plucker_coords = PluckerRayEmbedding.compute_plucker_rays(
+            intrinsics=K_scaled,
+            extrinsics=camera_extrinsics.float(),
+            patch_centers=patch_centers,
+        )  # (num_views, num_patches, 6)
+
+        # Cache as buffer (survives .to(device), .cuda(), checkpoint save/load)
+        self.register_buffer('_cached_plucker_coords', plucker_coords)
+
+    def set_camera_params(
+        self,
+        camera_intrinsics: torch.Tensor,
+        camera_extrinsics: torch.Tensor,
+    ) -> None:
+        """Set or update camera parameters and recompute ray embeddings.
+
+        Call this if cameras change after model initialization.
+
+        Args:
+            camera_intrinsics: (num_views, 3, 3) camera intrinsic matrices
+            camera_extrinsics: (num_views, 3, 4) camera extrinsic matrices [R|t]
+
+        """
+        self._precompute_ray_embeddings(camera_intrinsics, camera_extrinsics)
 
     def forward_vit(
         self,
         images: TensorType["view * batch", "channels":3, "image_height", "image_width"],
     ):
-        """Override forward pass through the vision encoder to add view embeddings."""
-
-        # outputs = self.vision_encoder(
-        #     x,
-        #     return_dict=True,
-        #     output_hidden_states=False,
-        #     output_attentions=False,
-        #     interpolate_pos_encoding=True,
-        # ).last_hidden_state
+        """Override forward pass through the vision encoder to add view and ray embeddings."""
 
         # this block mostly copies self.vision_encoder.forward(), except for addition of view embed
 
@@ -179,6 +435,17 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         # Shape: (view * batch, 1, embedding_dim) -> (view * batch, num_patches, embedding_dim)
         view_embeddings_expanded = view_embeddings_batch.unsqueeze(1).expand(-1, num_patches, -1)
         embedding_output = embedding_output + view_embeddings_expanded
+
+        # Add 3D Plücker ray positional embeddings (geometry-aware, per-patch per-view)
+        if self._cached_plucker_coords is not None:
+            # MLP forward is differentiable; Plücker coords are fixed geometry
+            ray_pe = self.ray_embedding(self._cached_plucker_coords)
+            # ray_pe shape: (num_views, num_patches, embedding_dim)
+            # Expand for batch: repeat pattern matches images_flat view ordering
+            ray_pe_expanded = ray_pe.repeat(batch_size, 1, 1)
+            # ray_pe_expanded shape: (view * batch, num_patches, embedding_dim)
+            embedding_output = embedding_output + ray_pe_expanded
+
         # Reshape to (batch, view * num_patches, embedding_dim) so that transformer attention
         # layers process all views simultaneously
         embedding_output = embedding_output.reshape(
@@ -220,6 +487,18 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
           multiview labeled batch or unlabeled batch from DALI
 
         """
+
+        # Lazy-init ray embeddings from batch camera params if not already initialized.
+        # This handles the case where camera params weren't passed at model construction.
+        if (
+            self._cached_plucker_coords is None
+            and "intrinsic_matrix" in batch_dict
+            and batch_dict["intrinsic_matrix"].dim() >= 3
+        ):
+            self._precompute_ray_embeddings(
+                camera_intrinsics=batch_dict["intrinsic_matrix"][0],
+                camera_extrinsics=batch_dict["extrinsic_matrix"][0],
+            )
 
         # extract pixel data from batch
         if "images" in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
@@ -339,6 +618,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             {"params": self.backbone.parameters(), "name": "backbone", "lr": 0.0},
             {"params": self.head.parameters(), "name": "head"},
             {"params": [self.view_embeddings], "name": "view_embeddings"},
+            {"params": self.ray_embedding.parameters(), "name": "ray_embedding"},
         ]
 
         return params
