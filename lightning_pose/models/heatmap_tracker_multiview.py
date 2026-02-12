@@ -195,6 +195,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: DictConfig | dict | None = None,
         image_size: int = 256,
+        use_ray_embeddings: bool = False,
         camera_intrinsics: torch.Tensor | None = None,
         camera_extrinsics: torch.Tensor | None = None,
         **kwargs: Any,
@@ -215,10 +216,16 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             lr_scheduler_params: params for specific learning rate schedulers
                 - multisteplr: milestones, gamma
             image_size: size of input images (height=width for ViT models)
+            use_ray_embeddings: if True, add 3D-aware Plücker ray positional embeddings
+                using camera parameters. Requires camera_intrinsics and camera_extrinsics.
             camera_intrinsics: (num_views, 3, 3) camera intrinsic matrices for 3D ray
-                positional embeddings. If None, will be auto-extracted from first labeled batch.
+                positional embeddings. Only used when use_ray_embeddings=True.
+                If None and use_ray_embeddings=True, will be auto-extracted from first
+                labeled batch.
             camera_extrinsics: (num_views, 3, 4) camera extrinsic matrices [R|t] for 3D ray
-                positional embeddings. If None, will be auto-extracted from first labeled batch.
+                positional embeddings. Only used when use_ray_embeddings=True.
+                If None and use_ray_embeddings=True, will be auto-extracted from first
+                labeled batch.
             **kwargs: additional arguments
 
         """
@@ -278,27 +285,30 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         self.rmse_loss = RegressionRMSELoss()
 
         # ---------------------------------------------------------------
-        # 3D-aware Plücker ray positional embeddings
+        # 3D-aware Plücker ray positional embeddings (optional)
         # ---------------------------------------------------------------
-        # These encode the 3D ray direction + camera position for each
-        # patch in each view, giving the transformer geometric awareness
-        # of cross-view correspondences via its dot-product attention.
-        self.ray_embedding = PluckerRayEmbedding(
-            embed_dim=self.num_fc_input_features,
-            num_freq_bands=8,
-            hidden_dim=128,
-        )
+        self.use_ray_embeddings = use_ray_embeddings
 
-        # Buffer for cached Plücker coordinates (fixed camera geometry).
-        # The MLP projection runs every forward pass to stay differentiable.
-        self.register_buffer('_cached_plucker_coords', None)
-
-        # If camera params provided at init, precompute ray embeddings now
-        if camera_intrinsics is not None and camera_extrinsics is not None:
-            self._precompute_ray_embeddings(
-                camera_intrinsics=camera_intrinsics,
-                camera_extrinsics=camera_extrinsics,
+        if self.use_ray_embeddings:
+            # These encode the 3D ray direction + camera position for each
+            # patch in each view, giving the transformer geometric awareness
+            # of cross-view correspondences via its dot-product attention.
+            self.ray_embedding = PluckerRayEmbedding(
+                embed_dim=self.num_fc_input_features,
+                num_freq_bands=8,
+                hidden_dim=128,
             )
+
+            # Buffer for cached Plücker coordinates (fixed camera geometry).
+            # The MLP projection runs every forward pass to stay differentiable.
+            self.register_buffer('_cached_plucker_coords', None)
+
+            # If camera params provided at init, precompute ray embeddings now
+            if camera_intrinsics is not None and camera_extrinsics is not None:
+                self._precompute_ray_embeddings(
+                    camera_intrinsics=camera_intrinsics,
+                    camera_extrinsics=camera_extrinsics,
+                )
 
         # necessary so we don't have to pass in model arguments when loading
         # also, "loss_factory" and "loss_factory_unsupervised" cannot be pickled
@@ -437,7 +447,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         embedding_output = embedding_output + view_embeddings_expanded
 
         # Add 3D Plücker ray positional embeddings (geometry-aware, per-patch per-view)
-        if self._cached_plucker_coords is not None:
+        if self.use_ray_embeddings and self._cached_plucker_coords is not None:
             # MLP forward is differentiable; Plücker coords are fixed geometry
             ray_pe = self.ray_embedding(self._cached_plucker_coords)
             # ray_pe shape: (num_views, num_patches, embedding_dim)
@@ -491,7 +501,8 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         # Lazy-init ray embeddings from batch camera params if not already initialized.
         # This handles the case where camera params weren't passed at model construction.
         if (
-            self._cached_plucker_coords is None
+            self.use_ray_embeddings
+            and self._cached_plucker_coords is None
             and "intrinsic_matrix" in batch_dict
             and batch_dict["intrinsic_matrix"].dim() >= 3
         ):
@@ -618,8 +629,11 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             {"params": self.backbone.parameters(), "name": "backbone", "lr": 0.0},
             {"params": self.head.parameters(), "name": "head"},
             {"params": [self.view_embeddings], "name": "view_embeddings"},
-            {"params": self.ray_embedding.parameters(), "name": "ray_embedding"},
         ]
+        if self.use_ray_embeddings:
+            params.append(
+                {"params": self.ray_embedding.parameters(), "name": "ray_embedding"},
+            )
 
         return params
 

@@ -522,8 +522,9 @@ def get_model(
             )
         elif cfg.model.model_type == "heatmap_multiview_transformer":
             from lightning_pose.models import HeatmapTrackerMultiviewTransformer
-            camera_intrinsics, camera_extrinsics = _extract_camera_params_from_dataset(
-                data_module
+            use_ray = cfg.model.get("use_ray_embeddings", False)
+            camera_intrinsics, camera_extrinsics = (
+                _extract_camera_params_from_dataset(data_module) if use_ray else (None, None)
             )
             model = HeatmapTrackerMultiviewTransformer(
                 num_keypoints=cfg.data.num_keypoints,
@@ -540,6 +541,7 @@ def get_model(
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
                 backbone_checkpoint=cfg.model.get("backbone_checkpoint"),  # only used by ViTMAE
+                use_ray_embeddings=use_ray,
                 camera_intrinsics=camera_intrinsics,
                 camera_extrinsics=camera_extrinsics,
             )
@@ -602,8 +604,9 @@ def get_model(
             )
         elif cfg.model.model_type == "heatmap_multiview_transformer":
             from lightning_pose.models import SemiSupervisedHeatmapTrackerMultiviewTransformer
-            camera_intrinsics, camera_extrinsics = _extract_camera_params_from_dataset(
-                data_module
+            use_ray = cfg.model.get("use_ray_embeddings", False)
+            camera_intrinsics, camera_extrinsics = (
+                _extract_camera_params_from_dataset(data_module) if use_ray else (None, None)
             )
             model = SemiSupervisedHeatmapTrackerMultiviewTransformer(
                 num_keypoints=cfg.data.num_keypoints,
@@ -621,6 +624,7 @@ def get_model(
                 lr_scheduler_params=lr_scheduler_params,
                 image_size=image_h,  # only used by ViT
                 patch_mask_config=cfg.training.get("patch_mask", {}),
+                use_ray_embeddings=use_ray,
                 camera_intrinsics=camera_intrinsics,
                 camera_extrinsics=camera_extrinsics,
             )
