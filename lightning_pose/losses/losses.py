@@ -880,7 +880,7 @@ class PairwiseProjectionsLoss(Loss):
 
         logs = self.log_loss(loss=scalar_loss, stage=stage)
 
-        return self.weight * scalar_loss, logs
+        return scalar_loss, logs
 
 
 class ReprojectionHeatmapLoss(Loss):

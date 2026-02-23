@@ -40,7 +40,7 @@ def test_heatmap_mse_loss():
     assert loss.shape == torch.Size([])
     assert loss == 0.0
     assert logs[0]["name"] == "%s_heatmap_mse_loss" % stage
-    assert logs[0]["value"] == loss / heatmap_mse_loss.weight
+    assert logs[0]["value"] == loss
     assert logs[1]["name"] == "heatmap_mse_weight"
     assert logs[1]["value"] == heatmap_mse_loss.weight
 
@@ -72,7 +72,7 @@ def test_heatmap_kl_loss():
     assert loss.shape == torch.Size([])
     assert np.isclose(loss.detach().cpu().numpy(), 0.0, rtol=1e-5)
     assert logs[0]["name"] == "%s_heatmap_kl_loss" % stage
-    assert logs[0]["value"] == loss / heatmap_loss.weight
+    assert logs[0]["value"] == loss
     assert logs[1]["name"] == "heatmap_kl_weight"
     assert logs[1]["value"] == heatmap_loss.weight
 
@@ -102,7 +102,7 @@ def test_heatmap_js_loss():
     assert loss.shape == torch.Size([])
     assert np.isclose(loss.detach().cpu().numpy(), 0.0, rtol=1e-5)
     assert logs[0]["name"] == "%s_heatmap_js_loss" % stage
-    assert logs[0]["value"] == loss / heatmap_loss.weight
+    assert logs[0]["value"] == loss
     assert logs[1]["name"] == "heatmap_js_weight"
     assert logs[1]["value"] == heatmap_loss.weight
 
@@ -135,7 +135,7 @@ def test_pca_singleview_loss(cfg, base_data_module, device):
     assert loss.shape == torch.Size([])
     assert loss > 0.0
     assert logs[0]["name"] == "%s_pca_singleview_loss" % stage
-    assert logs[0]["value"] == loss / pca_loss.weight
+    assert logs[0]["value"] == loss
     assert logs[1]["name"] == "pca_singleview_weight"
     assert logs[1]["value"] == pca_loss.weight
 
@@ -185,7 +185,7 @@ def test_pca_multiview_loss(cfg, base_data_module, device):
     assert loss.shape == torch.Size([])
     assert loss > 0.0
     assert logs[0]["name"] == "%s_pca_multiview_loss" % stage
-    assert logs[0]["value"] == loss / pca_loss.weight
+    assert logs[0]["value"] == loss
     assert logs[1]["name"] == "pca_multiview_weight"
     assert logs[1]["value"] == pca_loss.weight
 
@@ -238,7 +238,7 @@ def test_temporal_loss():
     assert loss.shape == torch.Size([])
     assert loss == 0.0
     assert logs[0]["name"] == "%s_temporal_loss" % stage
-    assert logs[0]["value"] == loss / temporal_loss.weight
+    assert logs[0]["value"] == loss
     assert logs[1]["name"] == "temporal_weight"
     assert logs[1]["value"] == temporal_loss.weight
 
@@ -340,7 +340,7 @@ def test_unimodal_mse_loss():
     assert loss.shape == torch.Size([])
     assert loss > 0.0
     assert logs[0]["name"] == "%s_unimodal_mse_loss" % stage
-    assert logs[0]["value"] == loss / uni_loss.weight
+    assert logs[0]["value"] == loss
     assert logs[1]["name"] == "unimodal_mse_weight"
     assert logs[1]["value"] == uni_loss.weight
 
@@ -380,7 +380,7 @@ def test_unimodal_kl_loss():
     assert loss.shape == torch.Size([])
     assert loss > 0.0
     assert logs[0]["name"] == "%s_unimodal_kl_loss" % stage
-    assert logs[0]["value"] == loss / uni_loss.weight
+    assert logs[0]["value"] == loss
     assert logs[1]["name"] == "unimodal_kl_weight"
     assert logs[1]["value"] == uni_loss.weight
 
@@ -420,7 +420,7 @@ def test_unimodal_js_loss():
     assert loss.shape == torch.Size([])
     assert loss > 0.0
     assert logs[0]["name"] == "%s_unimodal_js_loss" % stage
-    assert logs[0]["value"] == loss / uni_loss.weight
+    assert logs[0]["value"] == loss
     assert logs[1]["name"] == "unimodal_js_weight"
     assert logs[1]["value"] == uni_loss.weight
 
@@ -435,7 +435,7 @@ def test_regression_mse_loss():
     assert loss.shape == torch.Size([])
     assert loss == 0.0
     assert logs[0]["name"] == "%s_regression_loss" % stage
-    assert logs[0]["value"] == loss / mse_loss.weight
+    assert logs[0]["value"] == loss
     assert logs[1]["name"] == "regression_weight"
     assert logs[1]["value"] == mse_loss.weight
 
@@ -464,7 +464,7 @@ class TestRegressionRMSELoss:
         assert loss.shape == torch.Size([])
         assert loss == 0.0
         assert logs[0]["name"] == "%s_rmse_loss" % stage
-        assert logs[0]["value"] == loss / rmse_loss.weight
+        assert logs[0]["value"] == loss
         assert logs[1]["name"] == "rmse_weight"
         assert logs[1]["value"] == rmse_loss.weight
 
@@ -497,7 +497,7 @@ class TestPairwiseProjectionsLoss:
         assert loss.shape == torch.Size([])
         assert loss == 0.0
         assert logs[0]["name"] == f"{stage}_supervised_pairwise_projections_loss"
-        assert logs[0]["value"] == loss / pp_loss.weight
+        assert logs[0]["value"] == loss
         assert logs[1]["name"] == "supervised_pairwise_projections_weight"
         assert logs[1]["value"] == pp_loss.weight
 
@@ -612,7 +612,7 @@ class TestReprojectionHeatmapLoss:
         # Loss should be positive when predictions differ from targets
         assert loss.item() > 0.0
         assert logs[0]["name"] == f"{stage}_supervised_reprojection_heatmap_mse_loss"
-        assert logs[0]["value"] == loss / rh_loss.weight
+        assert logs[0]["value"] == loss
         assert logs[1]["name"] == "supervised_reprojection_heatmap_mse_weight"
         assert logs[1]["value"] == rh_loss.weight
 
