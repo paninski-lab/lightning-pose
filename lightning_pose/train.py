@@ -218,7 +218,7 @@ def _train(cfg: DictConfig, status_file: Path = None) -> Model:
 
     # record lightning-pose version
     with open_dict(cfg):
-        cfg.creation_datetime = datetime.now().toisoformat()
+        cfg.creation_datetime = datetime.now().isoformat()
         cfg.model.lightning_pose_version = lightning_pose.version
 
     print("Config file:")
