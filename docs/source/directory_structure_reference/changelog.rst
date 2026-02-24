@@ -10,6 +10,16 @@ over time.
    :depth: 2
 
 
+v2.0.7.0 | Feb 26, 2026
+------------------------------------
+
+* Added ``creation_datetime`` to the model config file, for display in the model list page.
+  The app backfills the field for existing models on startup.
+* Videos must be stored in ``DATA_DIR/videos`` to be viewable in the viewer. Previously the
+  app supported viewing videos anywhere in the data directory.
+* Label files must be stored at the top-level of ``DATA_DIR`` to be accessible in the labeler. Previously the
+  app supported viewing label files anywhere in the data directory.
+
 v2.0.5.3 | Feb 8, 2026
 ------------------------------------
 

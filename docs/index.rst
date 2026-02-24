@@ -199,11 +199,11 @@ It covers the end-to-end workflow of labeling, training, and evaluation.
    :caption: Community
 
    source/migrating_to_app
-   Discord channel <https://discord.gg/tDUPdRj4BM>
-   Github Repo <https://github.com/paninski-lab/lightning-pose>
-   Release notes <https://github.com/paninski-lab/lightning-pose/releases>
-   App Github Repo <https://github.com/paninski-lab/lightning-pose-app>
-   App Release notes <https://github.com/paninski-lab/lightning-pose-app?tab=readme-ov-file#-release-notes>
+   💬 Discord channel <https://discord.gg/tDUPdRj4BM>
+   🐙 Github Repo <https://github.com/paninski-lab/lightning-pose>
+   📣 Release notes <https://github.com/paninski-lab/lightning-pose/releases>
+   🐙 App Github Repo <https://github.com/paninski-lab/lightning-pose-app>
+   📣 App Release notes <https://github.com/paninski-lab/lightning-pose-app?tab=readme-ov-file#-release-notes>
    source/faqs
 
 

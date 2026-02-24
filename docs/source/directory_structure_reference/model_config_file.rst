@@ -281,3 +281,13 @@ The following parameters are used for general evaluation.
 
 * ``eval.confidence_thresh_for_vid`` (*float, default: 0.9*): predictions with confidence below this
   value will not be plotted in the labeled videos
+
+Additional Metadata
+===================
+
+The following parameters are added to the config by lightning pose on model creation:
+
+* ``creation_datetime``: (*string*) An ISO datetime string of the model creation datetime.
+
+* ``model.lightning_pose_version``: (*string*) The lightning-pose package version number that created
+ this model.
