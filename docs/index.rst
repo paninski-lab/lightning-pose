@@ -20,8 +20,9 @@ Lightning Pose Homepage
      Check out the `release notes <https://github.com/paninski-lab/lightning-pose-app?tab=readme-ov-file#-release-notes>`_
      for the latest updates. New capabilities are released weekly.
 
-   * **Join the discord:**
-     Engage with us in the `Discord channel <https://discord.gg/tDUPdRj4BM>`_.
+   * **📣 Join the discord:** Have a question or feature request?
+     Just want to chat? We'd love to hear from you in the
+     `Discord channel <https://discord.gg/tDUPdRj4BM>`_!
 
 .. meta::
    :description: Accessible documentation for animal pose estimation.
