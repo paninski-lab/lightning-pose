@@ -81,18 +81,34 @@ Option B: Installation from Source (Development)
 
 Use this if you plan to modify the source code. This requires cloning the repositories for an **editable** install.
 
+If you want to edit the core training/inference logic:
+
 .. code-block:: bash
 
    # Clone the core repo and install
    git clone https://github.com/paninski-lab/lightning-pose.git
    cd lightning-pose
-   pip install -e .
+   pip install -e ".[dev]"
    cd ..
+
+If you want to edit the app/UI code:
+
+.. code-block:: bash
 
    # Clone the app repo and install
    git clone https://github.com/paninski-lab/lightning-pose-app.git
-   cd lightning-pose-app
+   cd lightning-pose-app/app_server
    pip install -e .
+   cd ..
+
+   # Install node.js via nvm to be able to compile and run the web UI.
+   # Follow the directions here: https://github.com/nvm-sh/nvm
+   # Then:
+   npm install -g @angular/cli
+   cd web_ui
+   npm install
+   cd ..
+   honcho -f Procfile.dev
 
 .. note::
 

@@ -1,6 +1,7 @@
 """Example model training function."""
 
 import contextlib
+from datetime import datetime
 import json
 import math
 import os
@@ -21,7 +22,6 @@ from lightning_pose.api.model import Model
 from lightning_pose.api.model_config import ModelConfig
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
 from lightning_pose.utils.io import (
-    find_video_files_for_views,
     return_absolute_data_paths,
 )
 from lightning_pose.utils.scripts import (
@@ -218,6 +218,7 @@ def _train(cfg: DictConfig, status_file: Path = None) -> Model:
 
     # record lightning-pose version
     with open_dict(cfg):
+        cfg.creation_datetime = datetime.now().isoformat()
         cfg.model.lightning_pose_version = lightning_pose.version
 
     print("Config file:")
@@ -302,7 +303,8 @@ def _train(cfg: DictConfig, status_file: Path = None) -> Model:
     # Log hydra config to tensorboard as helpful metadata.
     for key, value in cfg.items():
         logger.experiment.add_text(
-            "hydra_config_%s" % key, "```\n%s```" % OmegaConf.to_yaml(value)
+            "hydra_config_%s" % key,
+            "```\n%s```" % (value if isinstance(value, str) else OmegaConf.to_yaml(value))
         )
 
     # early stopping, learning rate monitoring, model checkpointing, backbone unfreezing

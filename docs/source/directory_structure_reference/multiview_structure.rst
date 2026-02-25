@@ -19,7 +19,7 @@ The detailed documentation for a multiview project data directory.
       │   ├── session0_view0.mp4
       │   └── session0_view1.mp4
       ├── CollectedData_view0.csv ...........................[4]
-      └── CollectedData_view1.csv
+      ├── CollectedData_view1.csv
       ├── CollectedData_view0.unlabeled.jsonl ...............[5]
       └── CollectedData_view1.unlabeled.jsonl
 

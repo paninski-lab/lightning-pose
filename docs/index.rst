@@ -5,6 +5,24 @@ Lightning Pose Homepage
 
 .. image:: images/LightningPose_horizontal_light.png
 
+.. admonition:: 📢 Official Release: Lightning Pose App 2.0
+
+   A new modern UI is available for multi-camera single-animal pose estimation,
+   featuring end-to-end support for labeling, model management, and viewing predictions.
+
+   Since the initial release in late Jan 2026. Over 40 researchers from 8 countries have installed and run the app.
+
+   * **Get started:**
+     Check out the :doc:`Create your first project <source/create_first_project>` tutorial and
+     :doc:`installation guide <source/installation_guide>`.
+
+   * **See what's new:**
+     Check out the `release notes <https://github.com/paninski-lab/lightning-pose-app?tab=readme-ov-file#-release-notes>`_
+     for the latest updates. New capabilities are released weekly.
+
+   * **📣 Join the discord:** Have a question or feature request?
+     Just want to chat? We'd love to hear from you in the
+     `Discord channel <https://discord.gg/tDUPdRj4BM>`_!
 
 .. meta::
    :description: Accessible documentation for animal pose estimation.
@@ -175,7 +193,7 @@ It covers the end-to-end workflow of labeling, training, and evaluation.
 .. toctree::
    :maxdepth: 2
    :hidden:
-   :caption: Getting started
+   :caption: 🚀 Getting started
 
    source/installation_guide
    source/core_concepts
@@ -186,7 +204,7 @@ It covers the end-to-end workflow of labeling, training, and evaluation.
 .. toctree::
    :maxdepth: 4
    :hidden:
-   :caption: CLI User guides
+   :caption: 💻 CLI User guides
 
    source/user_guide_singleview/index
    source/user_guide_multiview/index
@@ -196,13 +214,13 @@ It covers the end-to-end workflow of labeling, training, and evaluation.
 .. toctree::
    :maxdepth: 2
    :hidden:
-   :caption: Community
+   :caption: 🧑‍🤝‍🧑 Community
 
    source/migrating_to_app
-   Discord channel <https://discord.gg/tDUPdRj4BM>
+   📣 Discord channel 📣 <https://discord.gg/tDUPdRj4BM>
    Github Repo <https://github.com/paninski-lab/lightning-pose>
    Release notes <https://github.com/paninski-lab/lightning-pose/releases>
-   App Github Repo <https://github.com/paninski-lab/lightning-pose-app>
+   App Github Repo 📁 <https://github.com/paninski-lab/lightning-pose-app>
    App Release notes <https://github.com/paninski-lab/lightning-pose-app?tab=readme-ov-file#-release-notes>
    source/faqs
 
@@ -210,7 +228,7 @@ It covers the end-to-end workflow of labeling, training, and evaluation.
 .. toctree::
    :maxdepth: 2
    :hidden:
-   :caption: Reference
+   :caption: 📖 Reference
 
    source/directory_structure_reference/index
    source/api

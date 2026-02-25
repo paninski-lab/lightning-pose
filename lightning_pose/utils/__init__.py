@@ -20,7 +20,10 @@ def pretty_print_cfg(cfg):
         print("--------------------")
         print("%s parameters" % key)
         print("--------------------")
-        for k, v in val.items():
-            print("{}: {}".format(k, v))
+        if hasattr(val, "items"):
+            for k, v in val.items():
+                print("{}: {}".format(k, v))
+        if isinstance(val, str):
+            print(val)
         print()
     print("\n\n")
