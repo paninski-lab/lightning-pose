@@ -63,6 +63,17 @@ or:
 
     model.predict_on_label_csv("path/to/csv_file.csv")
 
+To predict on a single numpy frame (no file I/O):
+
+.. code-block:: python
+
+    import numpy as np
+
+    frame = np.array(...)  # (H, W, 3) uint8 RGB
+    result = model.predict_frame(frame)
+    keypoints = result["keypoints"]   # (num_kp, 2) float32
+    confidence = result["confidence"] # (num_kp,) float32
+
 API Reference
 =============
 
