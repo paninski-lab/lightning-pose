@@ -14,7 +14,6 @@ from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
 from lightning_pose.data.datatypes import MultiviewPredictionResult, PredictionResult
 from lightning_pose.data.utils import convert_bbox_coords
 from lightning_pose.models import ALLOWED_MODELS
-from lightning_pose.models.heatmap_tracker_mhcrnn import HeatmapTrackerMHCRNN
 from lightning_pose.utils import io as io_utils
 from lightning_pose.utils.predictions import generate_labeled_video as generate_labeled_video_fn
 from lightning_pose.utils.predictions import (
@@ -154,9 +153,8 @@ class Model:
 
         Returns:
             {"keypoints": (num_kp, 2) float32 array (x, y) in original frame coords,
-             "confidence": (num_kp,) float32 in [0, 1] -- softmax peak intensity
-              per keypoint, not a calibrated probability.
-              For regression models, confidence is always 1.0.}
+             "confidence": (num_kp,) float32 in [0, 1] -- likelihood/confidence
+              per keypoint. For regression models, confidence is always 1.0.}
 
         Raises:
             ValueError: If frame_rgb has wrong shape/dtype, bbox has non-positive
@@ -193,10 +191,10 @@ class Model:
         if frame_rgb.size == 0:
             raise ValueError("frame_rgb is empty")
 
-        is_mhcrnn = isinstance(self.model, HeatmapTrackerMHCRNN)
-        if is_mhcrnn and not is_context_input:
+        is_context_model = self.model.do_context
+        if is_context_model and not is_context_input:
             raise ValueError(
-                "Context (MHCRNN) model requires frame_rgb of shape (T, H, W, 3) "
+                "Context model requires frame_rgb of shape (T, H, W, 3) "
                 "where T is the temporal context length (typically 5). "
                 "Use predict_on_video_file for single-frame input."
             )
@@ -288,8 +286,8 @@ class Model:
         kp_pred = result["keypoints_pred"]
         has_confidence = "confidences" in result
 
-        if is_mhcrnn:
-            # MHCRNN get_loss_inputs_labeled concatenates [sf; mf] along batch dim
+        if is_context_model:
+            # Context model's get_loss_inputs_labeled concatenates [sf; mf] along batch dim
             n = kp_pred.shape[0] // 2
             kp_sf = kp_pred[:n].reshape(n, -1, 2)
             kp_mf = kp_pred[n:].reshape(n, -1, 2)
