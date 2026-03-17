@@ -1,0 +1,186 @@
+# model configuration
+model:
+  name: beast3d
+  type: beast3d_for_pretraining
+  seed: 0
+  checkpoint: null  # load weights from checkpoint
+  model_class: vit
+  pretrained_url: https://huggingface.co/qitaoz/E-RayZer/blob/main/checkpoints/erayzer_multi.pt
+  model_params:
+    patch_size: 16
+    patch_embed: dinov3_vits16_reg
+    embed_dim: 384
+    depth: 8
+    num_heads: 4
+    mlp_ratio: 4.0
+    intermediate_layer_idx: [1, 3, 5, 7]
+    enable_camera: true
+    enable_point: true
+    enable_depth: false
+    enable_track: false
+    target_view_range: [1, 1] # [min_view, max_view)
+    inference: false
+    norm_camera: false
+    crop_bbox: true
+    use_mask: true
+
+    image_size: 256 # usually 224
+    inference: false
+    model:
+      class_name: erayzer_core.model.erayzer.ERayZer
+      gaussians:
+        n_gaussians: 1
+        range_setting:
+          far: 2 # extrinsic translation has been normalized into [-1, 1]
+          near: 0
+          type: linear_depth
+        sh_degree: 3
+        upsampler:
+          upsample_factor: 1
+      gs_per_pixel_sqrt: 1
+      hard_pixelalign: true
+      image_tokenizer:
+        image_size: 256
+        in_channels: 3
+        patch_size: 16
+        use_off_the_shelf: false
+      input_with_pe: true
+      near_plane: 0.05 # extrinsic translation has been normalized into [-1, 1]
+      pose_latent:
+        canonical: middle
+        length: 1
+        mode: pairwise
+      scaling_bias: -3.0
+      scaling_max: -2.0
+      target_image:
+        height: 256
+        width: 256
+      transformer:
+        d: 768
+        d_head: 64
+        decoder_n_layer: 8
+        depth_init: true
+        encoder_geom_n_layer: 16
+        encoder_n_layer: 16
+        fix_decoder: false
+        neck_n_layer: 1
+        special_init: true
+        use_qk_norm: true
+      use_deferred_rendering: false
+      use_gsplat: true
+    training:
+      allowed_gradnorm_factor: 5.0
+      amp_dtype: bf16
+      batch_size_per_gpu: 24
+      beta1: 0.9
+      beta2: 0.95
+      camera_center_reg_weight: 0.0
+      center_crop: true
+      checkpoint_every: 2000
+      dataset: dl3dv
+      domain_randomization: true
+      force_first_last_in_input: false
+      force_resume_ckpt: false
+      freeze_focal_steps: 200
+      grad_accum_steps: 1
+      grad_checkpoint_every: 1
+      grad_clip_norm: 1.0
+      l2_loss_weight: 1.0
+      lr: 0.0004
+      max_fwdbwd_passes: 152000
+      max_resample_tries: 200
+      no_pass_steps: 200
+      normalize_distance_to: 2.0
+      num_all_views: 10
+      num_epochs: 1000000
+      num_input_views: 5
+      num_target_views: 5
+      num_threads: 8
+      num_views: 10
+      num_workers: 4
+      perceptual_loss_weight: 0.2 # usually 0.2
+      pose_consistency_reg_weight: 0.0
+      prefetch_factor: 8
+      print_every: 20
+      random_shuffle: false
+      random_split: true
+      reset_lr: false
+      reset_training_state: false
+      reset_weight_decay: false
+      resume_ckpt: none
+      single_scene_overfit: false
+      square_crop: true
+      torch_compile: false
+      use_amp: true
+      use_gt_intrinsics: false
+      use_rel_pose: true
+      use_tf32: true
+      view_selector:
+        curriculum_iter: 86000
+        curriculum_start_max_frame_dist: 1.0
+        curriculum_start_min_frame_dist: 1.0
+        max_frame_dist: 0.5
+        min_frame_dist: 1.0
+        type: covisibility
+        use_curriculum: true
+      vis_every: 500
+      wandb_exp_name: rayzerpp-vggt-gs-dl3dv-filtered-bs-192-10view-5-5-middle-covis-single-86000-iter-min-1.0-1.0-max-1.0-0.5-resample
+      wandb_log_every: 50
+      wandb_offline: false
+      warmup: 3000
+      weight_decay: 0.05
+
+
+    
+
+# training configuration
+training:
+  seed: 0
+  imgaug: default
+  train_batch_size: 32    # per GPU default is 16
+  val_batch_size: 1024
+  test_batch_size: 128
+  num_epochs: 800
+  num_workers: 16  # Number of CPU workers for the DataLoader
+  num_gpus: 1
+  num_nodes: 1
+  # frequency to log training metrics
+  log_every_n_steps: 10
+  log_every_n_epochs: 20
+  # frequency to log validation metrics
+  check_val_every_n_epoch: 5 # no matter here, no use
+  resume: null
+  # resume:  /data/Projects/multi-view/logs/beast3d_for_pretraining_chickadee_cam_2026_02_15_05_47_33
+  resume_from_best: false
+  # frequency to save model
+  save_every_n_epochs: 10
+  save_plots: true
+  save_plots_every_n_epochs: 1
+
+  effective_batch_size: 256 # if null, use the default value from the optimizer
+
+  use_wandb: true
+  use_bfloat16: true
+
+  # loss weights
+  l2_loss_weight: 1.0
+  lpips_loss_weight: 0.0
+  perceptual_loss_weight: 0.2
+
+# optimizer configuration
+optimizer:
+  type: AdamW
+  accumulate_grad_batches: 1
+  scheduler_type: constant
+  lr: 5.e-5
+  wd: 0.05
+  warmup_pct: 0.15 # cosine/linear
+  gamma: 0.95     # step
+  div_factor: 10  # cosine
+  scheduler: cosine # step/cosine/linear
+
+# data configuration
+data:
+  name: cam_3d
+  num_videos: 3
+  data_dir: data/ssl/chickadee_cam

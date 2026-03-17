@@ -3,7 +3,9 @@ import math
 import safetensors
 import torch
 from typeguard import typechecked
-
+from lightning_pose.models.backbones.beast3d.beast3d import BEAST3D
+from easydict import EasyDict as edict
+import yaml
 # to ignore imports for sphix-autoapidoc
 __all__ = []
 
@@ -67,9 +69,21 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
             finetune_img_size=image_size,
         )
         encoder_embed_dim = base.vision_encoder.config.hidden_size
+    elif backbone_arch == "beast3d":
+        config_path = "/data/Projects/lightning-pose/lightning_pose/models/configs/beast3d_chickadee.yaml"
+        with open(config_path, "r") as f:
+            config = yaml.load(f, Loader=yaml.FullLoader)
+        config = edict(config)
+        base = BEAST3D(config)
+        encoder_embed_dim = 768
+        if kwargs.get("backbone_checkpoint"):
+            # load beast3d checkpoint
+            checkpoint = torch.load(kwargs["backbone_checkpoint"], map_location="cpu")
+            msg = base.load_state_dict(checkpoint, strict=False)
+            print(f"Loaded beast3d checkpoint from {kwargs['backbone_checkpoint']} with msg: {msg}")
     else:
         raise NotImplementedError(f"{backbone_arch} is not a valid backbone")
-    if kwargs.get("backbone_checkpoint"):
+    if kwargs.get("backbone_checkpoint") and not backbone_arch == "beast3d":
         load_vit_backbone_checkpoint(base, kwargs["backbone_checkpoint"])
     num_fc_input_features = encoder_embed_dim
 

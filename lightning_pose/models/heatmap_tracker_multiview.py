@@ -7,6 +7,7 @@ import torch
 from omegaconf import DictConfig
 from torch import nn
 from torchtyping import TensorType
+from einops import rearrange
 
 from lightning_pose.data.cameras import get_valid_projection_masks, project_camera_pairs_to_3d
 from lightning_pose.data.datatypes import (
@@ -738,7 +739,7 @@ class HeatmapTrackerMultiviewAggregator(BaseSupervisedTracker):
     ):
         """Override forward pass through the vision encoder to add view embeddings."""
         batch_size = images.shape[0] // self.num_views
-        outputs = self.backbone.vision_encoder(images,interpolate_pos_encoding=True)[0][:, self.num_special_tokens:]
+        outputs = self.backbone.vision_encoder(images)[0][:, self.num_special_tokens:]
         view_batch_size, _, embedding_dim = outputs.shape
         outputs = outputs.reshape(batch_size, -1, embedding_dim)
         # shape: (batch, num_views * num_patches, embedding_dim)
@@ -885,6 +886,255 @@ class HeatmapTrackerMultiviewAggregator(BaseSupervisedTracker):
         ]
 
         return params
+
+class HeatmapTracker3DTransformer(BaseSupervisedTracker):
+    """Aggregator network that handles multi-view datasets."""
+
+    def __init__(
+        self,
+        num_keypoints: int,
+        num_views: int,
+        loss_factory: LossFactory | None = None,
+        backbone: ALLOWED_TRANSFORMER_BACKBONES = "vits_dino",
+        pretrained: bool = True,
+        head: Literal["heatmap_cnn"] = "heatmap_cnn",
+        downsample_factor: Literal[1, 2, 3] = 2,
+        torch_seed: int = 123,
+        optimizer: str = "Adam",
+        optimizer_params: DictConfig | dict | None = None,
+        lr_scheduler: str = "multisteplr",
+        lr_scheduler_params: DictConfig | dict | None = None,
+        image_size: int = 256,
+        **kwargs: Any,
+    ):
+        """Initialize a multi-view model with transformer backbone.
+        Args:
+            num_keypoints: number of body parts
+            num_views: number of camera views
+            loss_factory: object to orchestrate loss computation
+            backbone: transformer variant to be used; cannot use convnets with this model
+            pretrained: True to load pretrained imagenet weights
+            head: architecture used to project per-view information to 2D heatmaps
+                - heatmap_cnn
+            downsample_factor: make heatmap smaller than original frames to save memory; subpixel
+                operations are performed for increased precision
+            torch_seed: make weight initialization reproducible
+            lr_scheduler: how to schedule learning rate
+            lr_scheduler_params: params for specific learning rate schedulers
+                - multisteplr: milestones, gamma
+            image_size: size of input images (height=width for ViT models)
+            **kwargs: additional arguments
+                - aggregator_checkpoint: path to pretrained aggregator checkpoint (optional)
+
+        """
+
+        # for reproducible weight initialization
+        self.torch_seed = torch_seed
+        torch.manual_seed(torch_seed)
+
+        self.num_views = num_views
+
+        # backwards compatibility
+        if "do_context" in kwargs.keys():
+            raise ValueError(
+                "HeatmapTrackerMultiviewTransformer does not currently support context frames"
+            )
+
+        super().__init__(
+            backbone=backbone,
+            pretrained=pretrained,
+            optimizer=optimizer,
+            optimizer_params=optimizer_params,
+            lr_scheduler=lr_scheduler,
+            lr_scheduler_params=lr_scheduler_params,
+            image_size=image_size,
+            do_context=False,
+            **kwargs,
+        )
+
+        self.num_keypoints = num_keypoints
+        self.downsample_factor = downsample_factor
+
+        # create learnable view embeddings for each view
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        generator = torch.Generator(device=device)
+        generator.manual_seed(torch_seed)
+        self.ln = nn.LayerNorm(768)
+        # initialize model head
+        if head == "heatmap_cnn":
+            self.head = HeatmapHead(
+                backbone_arch=backbone,
+                in_channels=768,
+                out_channels=self.num_keypoints,
+                downsample_factor=self.downsample_factor,
+            )
+        else:
+            raise NotImplementedError(f"{head} is not a valid multiview transformer head")
+
+        self.loss_factory = loss_factory
+
+        # use this to log auxiliary information: pixel_error on labeled data
+        self.rmse_loss = RegressionRMSELoss()
+
+        # necessary so we don't have to pass in model arguments when loading
+        # also, "loss_factory" and "loss_factory_unsupervised" cannot be pickled
+        # (loss_factory_unsupervised might come from SemiSupervisedHeatmapTracker.__super__().
+        # otherwise it's ignored, important so that it doesn't try to pickle the dali loaders)
+        self.save_hyperparameters(ignore=["loss_factory", "loss_factory_unsupervised"])
+
+        self.num_special_tokens = 1
+        if 'dinov3' in backbone:
+            self.num_special_tokens = 5
+
+    def forward_beast3d(
+        self,
+        images: TensorType["batch", "view", "channels":3, "image_height", "image_width"],
+        intrinsic_matrix: TensorType["batch", "view", 3, 3],
+        extrinsic_matrix: TensorType["batch", "view", 4, 4],
+        bbox: TensorType["batch", "view", 4],
+    ):
+        """Override forward pass through the vision encoder to add view embeddings."""
+        B, V, C, H, W = images.shape
+        outputs = self.backbone(
+            images=images, intrinsic_matrix=intrinsic_matrix, extrinsic_matrix=extrinsic_matrix, bbox=bbox
+        )
+        outputs = self.ln(outputs)
+        p_h, p_w = math.isqrt(outputs.shape[-2]), math.isqrt(outputs.shape[-2])
+        outputs = rearrange(outputs, 'b v (h w) d -> (b v) h w d', h=p_h, w=p_w)
+        outputs = outputs.permute(0, 3, 1, 2)
+
+        return outputs
+    
+    def forward_aggregator(
+        self,
+        representations: TensorType["batch * num_views", "embedding_dim", "height", "width"],
+    ) -> TensorType["batch * num_views", "embedding_dim", "height", "width"]:
+        """Forward pass through the aggregator network."""
+        return self.aggregator(representations)
+
+    def forward(
+        self,
+        batch_dict: MultiviewHeatmapLabeledBatchDict,
+    ) -> TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"]:
+        """Forward pass through the network.
+
+        Batch options
+        -------------
+        - TensorType["batch", "view", "channels":3, "image_height", "image_width"]
+          multiview labeled batch or unlabeled batch from DALI
+
+        """
+        # extract pixel data from batch
+        if "images" in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
+            # labeled image dataloaders
+            images = batch_dict["images"]
+        else:
+            # unlabeled dali video dataloaders
+            images = batch_dict["frames"]
+        # print(f'images shape: {images.shape}')
+
+        batch_size, num_views, channels, img_height, img_width = images.shape
+        intrinsic_matrix = batch_dict["intrinsic_matrix"]
+        extrinsic_matrix = batch_dict["extrinsic_matrix"]
+        bbox = batch_dict["bbox"].reshape(batch_size, num_views, -1)
+
+        # pass through transformer to get base representations
+        representations = self.forward_beast3d(
+            images=images, intrinsic_matrix=intrinsic_matrix, extrinsic_matrix=extrinsic_matrix, bbox=bbox
+        )
+        # get heatmaps for each representation
+        heatmaps = self.head(representations)
+        
+        # reshape to put all views from a single example together
+        heatmaps = heatmaps.reshape(batch_size, -1, heatmaps.shape[-2], heatmaps.shape[-1])
+        return heatmaps
+
+    def get_loss_inputs_labeled(
+        self,
+        batch_dict: MultiviewHeatmapLabeledBatchDict,
+    ) -> dict:
+        """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
+
+        # images -> heatmaps
+        pred_heatmaps = self.forward(batch_dict)
+        # heatmaps -> keypoints
+        pred_keypoints, confidence = self.head.run_subpixelmaxima(pred_heatmaps)
+        # bounding box coords -> original image coords
+        target_keypoints = convert_bbox_coords(batch_dict, batch_dict["keypoints"])
+        pred_keypoints = convert_bbox_coords(batch_dict, pred_keypoints)
+        # project predictions from pairs of views into 3d if calibration data available
+        # disable 3D projection for now
+        if "keypoints_3d" in batch_dict and batch_dict["keypoints_3d"].shape[-1] == 3 and False:
+            num_views = batch_dict["images"].shape[1]
+            num_keypoints = pred_keypoints.shape[1] // 2 // num_views
+
+            try:
+                keypoints_pred_3d = project_camera_pairs_to_3d(
+                    points=pred_keypoints.reshape((-1, num_views, num_keypoints, 2)),
+                    intrinsics=batch_dict["intrinsic_matrix"].float(),
+                    extrinsics=batch_dict["extrinsic_matrix"].float(),
+                    dist=batch_dict["distortions"].float(),
+                )
+                keypoints_targ_3d = batch_dict["keypoints_3d"]
+                keypoints_mask_3d = get_valid_projection_masks(
+                    target_keypoints.reshape((-1, num_views, num_keypoints, 2))
+                )
+
+            except Exception as e:
+                print(f"Error in 3D projection: {e}")
+                keypoints_pred_3d = None
+                keypoints_targ_3d = None
+                keypoints_mask_3d = None
+        else:
+            keypoints_pred_3d = None
+            keypoints_targ_3d = None
+            keypoints_mask_3d = None
+
+        return {
+            "heatmaps_targ": batch_dict["heatmaps"],
+            "heatmaps_pred": pred_heatmaps,
+            "keypoints_targ": target_keypoints,
+            "keypoints_pred": pred_keypoints,
+            "confidences": confidence,
+            "keypoints_targ_3d": keypoints_targ_3d,  # shape (2*batch, num_keypoints, 3)
+            "keypoints_pred_3d": keypoints_pred_3d,  # shape (2*batch, cam_pairs, num_keypoints, 3)
+            "keypoints_mask_3d": keypoints_mask_3d,  # shape (2*batch, cam_pairs, num_keypoints)
+        }
+
+    def predict_step(
+        self,
+        batch_dict: MultiviewHeatmapLabeledBatchDict | UnlabeledBatchDict,
+        batch_idx: int,
+        return_heatmaps: bool = False,
+    ) -> Tuple[torch.Tensor, torch.Tensor] | Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Predict heatmaps and keypoints for a batch of video frames.
+
+        Assuming a DALI video loader is passed in
+        > trainer = Trainer(devices=8, accelerator="gpu")
+        > predictions = trainer.predict(model, data_loader)
+
+        """
+        # images -> heatmaps
+        pred_heatmaps = self.forward(batch_dict)
+        # heatmaps -> keypoints
+        pred_keypoints, confidence = self.head.run_subpixelmaxima(pred_heatmaps)
+        # bounding box coords -> original image coords
+        pred_keypoints = convert_bbox_coords(batch_dict, pred_keypoints)
+
+        if return_heatmaps:
+            return pred_keypoints, confidence, pred_heatmaps
+        else:
+            return pred_keypoints, confidence
+
+    def get_parameters(self):
+        params = [
+            {"params": self.backbone.parameters(), "name": "backbone", "lr": 0.0},
+            {"params": self.ln.parameters(), "name": "ln"},
+            {"params": self.head.parameters(), "name": "head"},
+        ]
+
+        return params
+
 
 
 class SemiSupervisedHeatmapTrackerMultiviewTransformer(

@@ -23,6 +23,7 @@ VIT_BACKBONES = [
     "vitb_dinov3",
     "vitb_imagenet",
     "vitb_sam",
+    "beast3d",
 ]
 
 
