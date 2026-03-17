@@ -994,7 +994,6 @@ class HeatmapTracker3DTransformer(BaseSupervisedTracker):
         bbox: TensorType["batch", "view", 4],
     ):
         """Override forward pass through the vision encoder to add view embeddings."""
-        B, V, C, H, W = images.shape
         outputs = self.backbone(
             images=images, intrinsic_matrix=intrinsic_matrix, extrinsic_matrix=extrinsic_matrix, bbox=bbox
         )
@@ -1002,7 +1001,6 @@ class HeatmapTracker3DTransformer(BaseSupervisedTracker):
         p_h, p_w = math.isqrt(outputs.shape[-2]), math.isqrt(outputs.shape[-2])
         outputs = rearrange(outputs, 'b v (h w) d -> (b v) h w d', h=p_h, w=p_w)
         outputs = outputs.permute(0, 3, 1, 2)
-
         return outputs
     
     def forward_aggregator(

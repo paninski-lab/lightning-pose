@@ -226,7 +226,6 @@ class BEAST3D(ERayZer):
 
     def inference_render(self, batch):
         all_images = batch['images']
-        # all_images = all_images * 2.0 - 1.0 # range (0,1) to (-1,1)
         c2w = batch['c2w']
         fxfycxcy = batch['fxfycxcy']
 
@@ -260,90 +259,11 @@ class BEAST3D(ERayZer):
         input_tokens = torch.cat([input_img_tokens, plucker_emb_input], dim=-1)
         input_tokens = self.mlp_fuse(input_tokens)
         # encoder layers, predict depths and feature vectors
-        with torch.autocast(device_type=input_tokens.device.type, dtype=torch.float16):
+        with torch.autocast(device_type=input_tokens.device.type, dtype=torch.bfloat16):
             input_tokens = self.run_vggt_encoder_geom(input_tokens, B, V)
         input_tokens = rearrange(input_tokens, 'b (v n) d -> b v n d', b=B, v=V)
         return input_tokens
-
-    def inference_render_video(self, batch):
-        render_results = self.inference_render(batch)
-        gaussian_attrs = render_results.gaussian_attrs
-        c2w = render_results.c2w.float()
-        v = c2w.shape[1]
-        fxfycxcy = render_results.fxfycxcy.float()
-        with torch.no_grad():
-            vis_only_results = self.render_images_video(gaussian_attrs, c2w, fxfycxcy, normalized=False, step_back=self.config.get('evaluation_step_back_distance', 0), frustum_constraint=True)
-        render_results.render_video = vis_only_results.rendered_images_video.detach().clamp(0, 1)
-        xyz = gaussian_attrs.xyz
-        features = gaussian_attrs.features
-        scaling = gaussian_attrs.scaling
-        rotation = gaussian_attrs.rotation
-        opacity = gaussian_attrs.opacity
-        gaussians = []
-        pixelalign_xyz = []
-        pixelalign_opacity = []
-        gaussians_usage = []
-        gaussians_scale = []
-        gaussians_opacity = []
-        for b in range(xyz.size(0)):
-            self.renderer.gaussians_model.empty()
-            gaussians_model = copy.deepcopy(self.renderer.gaussians_model)
-            gaussians.append(
-                gaussians_model.set_data(
-                    xyz[b].detach().float(),
-                    features[b].detach().float(),
-                    scaling[b].detach().float(),
-                    rotation[b].detach().float(),
-                    opacity[b].detach().float(),
-                )
-            )
-
-            threshold = 0.05
-            usage_mask = gaussian_attrs.sigmoid_opacity[b] > threshold
-            usage = usage_mask.sum() / usage_mask.numel()
-            if torch.is_tensor(usage):
-                usage = usage.item()
-            gaussians_usage.append(usage)
-
-            mean_scale = gaussians[-1].get_scaling.mean()
-            if torch.is_tensor(mean_scale):
-                mean_scale = mean_scale.item()
-            gaussians_scale.append(mean_scale)
-
-            mean_opacity = gaussians[-1].get_opacity.mean()
-            if torch.is_tensor(mean_opacity):
-                mean_opacity = mean_opacity.item()
-            gaussians_opacity.append(mean_opacity)
-
-            img_aligned_xyz = gaussians[-1].get_xyz
-            img_aligned_opacity = gaussian_attrs.sigmoid_opacity[b]
-            img_aligned_opacity = rearrange(
-                img_aligned_opacity,
-                "(v hh ww ph pw) c -> v c (hh ph) (ww pw)",
-                v=v,
-                hh=self.hh,
-                ww=self.ww,
-                ph=self.ph,
-                pw=self.pw,
-            )
-            img_aligned_xyz = rearrange(
-                img_aligned_xyz,
-                "(v hh ww ph pw) c -> v c (hh ph) (ww pw)",
-                v=v,
-                hh=self.hh,
-                ww=self.ww,
-                ph=self.ph,
-                pw=self.pw,
-            )
-            pixelalign_xyz.append(img_aligned_xyz)
-            pixelalign_opacity.append(img_aligned_opacity)
-        pixelalign_xyz = torch.stack(pixelalign_xyz, dim=0)
-        render_results.pixelalign_xyz = pixelalign_xyz
-        render_results.pixelalign_opacity = pixelalign_opacity
-        render_results.gaussians = gaussians
-
-        return render_results
-
+    
     def forward(self, images, intrinsic_matrix, extrinsic_matrix, bbox):
         device = images.device
         batch_size, num_views, channels, img_height, img_width = images.shape
