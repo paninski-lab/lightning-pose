@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 import numpy as np
 import torch
 from easydict import EasyDict as edict
-from einops import rearrange
+from einops import rearrange, repeat
 import torch.nn.functional as F
 from erayzer_core.model.erayzer import (ERayZer,
                                         cam_info_to_plucker, get_cam_se3)
@@ -176,6 +176,61 @@ def get_fxfycxcy_from_intrinsics(intrinsics):
     cy = intrinsics[..., 1, 2]
     return torch.stack([fx, fy, cx, cy], dim=-1)
 
+# class BEAST3D(ERayZer):
+#     def __init__(self, config):
+#         super().__init__(config.model.model_params)
+#         # load pretrained weights
+#         if config.model.pretrained_url:
+#             checkpoint = torch.load(_get_ckpt_from_hf(config.model.pretrained_url), map_location='cpu')
+#             msg = self.load_state_dict(checkpoint['model'], strict=False)
+#             print(f"Loaded pretrained weights from {config.model.pretrained_url} with msg: {msg}")
+#         else:
+#             print(f"No pretrained URL provided for {self.__class__.__name__}")
+#         # delete the transformer_encoder_geom
+#         del self.transformer_encoder_geom
+#         # delete the pose_predictor
+#         del self.pose_predictor
+#         # delete upsamper
+#         del self.upsampler
+#         # delete renderer
+#         del self.renderer
+#         # delete image_token_decoder
+#         del self.image_token_decoder
+
+#     def inference_render(self, batch):
+#         all_images = batch['images']
+
+#         B, V, C, H, W = all_images.shape
+
+#         input_images = all_images
+#         input_img_tokens = self.image_tokenizer(input_images)
+#         if self.use_pe_embedding_layer:
+#             input_img_tokens = self.add_spatial_pe(
+#                 input_img_tokens,
+#                 B, V,
+#                 self.hh,
+#                 self.ww,
+#                 embedder=self.pe_embedder,
+#             )
+#         # concanate all tokens together
+#         cam_tokens = repeat(self.camera_token, '1 n d -> bv n d', bv=B*V)
+#         register_tokens = repeat(self.register_token, '1 n d -> bv n d', bv=B*V)
+#         all_tokens = torch.cat([cam_tokens, register_tokens, input_img_tokens], dim=1)
+#         all_tokens = rearrange(all_tokens, '(b v) n d -> b (v n) d', b=B)
+#         # encoder layers, predict depths and feature vectors
+#         with torch.autocast(device_type=all_tokens.device.type, dtype=torch.bfloat16):
+#             all_tokens = self.run_vggt_encoder(all_tokens, B, V)
+#         all_tokens = rearrange(all_tokens, 'b (v n) d -> b v n d', b=B, v=V)
+#         # get tokens
+#         tokens = all_tokens[:, :, 5:, :]
+#         return tokens
+    
+#     def forward(self, images, intrinsic_matrix, extrinsic_matrix, bbox):
+#         batch = edict(
+#             images=images,
+#         )
+#         return self.inference_render(batch)
+
 class BEAST3D(ERayZer):
     def __init__(self, config):
         super().__init__(config.model.model_params)
@@ -192,37 +247,14 @@ class BEAST3D(ERayZer):
         del self.pose_predictor
         # delete the camera_token
         del self.camera_token
+        # delete the register_token
+        del self.register_token
         # delete upsamper
         del self.upsampler
         # delete renderer
         del self.renderer
         # delete image_token_decoder
         del self.image_token_decoder
-
-    def hard_pixelalign(self, xyz, c2w, fxfycxcy, B, v):
-        """Apply hard pixel alignment: project xyz to rays and back."""
-        input_img_aligned_xyz = rearrange(
-            xyz,
-            "b (v hh ww ph pw) c -> b v c (hh ph) (ww pw)",
-            v=v,
-            hh=self.hh,
-            ww=self.ww,
-            ph=self.ph,
-            pw=self.pw,
-        )
-        input_img_aligned_xyz = input_img_aligned_xyz.mean(dim=2, keepdim=True)
-        input_img_aligned_xyz = self.range_func(input_img_aligned_xyz)
-        plucker_rays_input = cam_info_to_plucker(c2w, fxfycxcy, self.config.model.target_image, normalized=False, return_moment=False)
-        plucker_rays_input = rearrange(plucker_rays_input, '(b v) c h w -> b v c h w', b=B)
-        ray_o, ray_d = plucker_rays_input.split([3, 3], dim=2)
-        input_img_aligned_xyz = ray_o + input_img_aligned_xyz * ray_d
-        xyz = rearrange(
-            input_img_aligned_xyz,
-            "b v c (hh ph) (ww pw) -> b (v hh ww ph pw) c",
-            ph=self.ph,
-            pw=self.pw,
-        )
-        return xyz
 
     def inference_render(self, batch):
         all_images = batch['images']
@@ -233,7 +265,6 @@ class BEAST3D(ERayZer):
 
         input_images = all_images
         input_img_tokens = self.image_tokenizer(input_images)
-        _, n, d = input_img_tokens.shape
         if self.use_pe_embedding_layer:
             input_img_tokens = self.add_spatial_pe(
                 input_img_tokens,

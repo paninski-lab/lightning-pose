@@ -1002,13 +1002,6 @@ class HeatmapTracker3DTransformer(BaseSupervisedTracker):
         outputs = rearrange(outputs, 'b v (h w) d -> (b v) h w d', h=p_h, w=p_w)
         outputs = outputs.permute(0, 3, 1, 2)
         return outputs
-    
-    def forward_aggregator(
-        self,
-        representations: TensorType["batch * num_views", "embedding_dim", "height", "width"],
-    ) -> TensorType["batch * num_views", "embedding_dim", "height", "width"]:
-        """Forward pass through the aggregator network."""
-        return self.aggregator(representations)
 
     def forward(
         self,
@@ -1029,7 +1022,6 @@ class HeatmapTracker3DTransformer(BaseSupervisedTracker):
         else:
             # unlabeled dali video dataloaders
             images = batch_dict["frames"]
-        # print(f'images shape: {images.shape}')
 
         batch_size, num_views, channels, img_height, img_width = images.shape
         intrinsic_matrix = batch_dict["intrinsic_matrix"]
@@ -1062,7 +1054,7 @@ class HeatmapTracker3DTransformer(BaseSupervisedTracker):
         pred_keypoints = convert_bbox_coords(batch_dict, pred_keypoints)
         # project predictions from pairs of views into 3d if calibration data available
         # disable 3D projection for now
-        if "keypoints_3d" in batch_dict and batch_dict["keypoints_3d"].shape[-1] == 3 and False:
+        if "keypoints_3d" in batch_dict and batch_dict["keypoints_3d"].shape[-1] == 3:
             num_views = batch_dict["images"].shape[1]
             num_keypoints = pred_keypoints.shape[1] // 2 // num_views
 
