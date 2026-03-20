@@ -382,7 +382,7 @@ class BaseFeatureExtractor(LightningModule):
         if self.optimizer == "Adam":
             optimizer = optim.Adam(params, lr=self.optimizer_params.learning_rate)
         elif self.optimizer == "AdamW":
-            optimizer = optim.AdamW(params, lr=self.optimizer_params.learning_rate)
+            optimizer = optim.AdamW(params, lr=self.optimizer_params.learning_rate, weight_decay=0.05)
         else:
             raise OptimizerNotImplementedError(self.optimizer)
 

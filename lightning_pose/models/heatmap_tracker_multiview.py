@@ -1053,8 +1053,7 @@ class HeatmapTracker3DTransformer(BaseSupervisedTracker):
         target_keypoints = convert_bbox_coords(batch_dict, batch_dict["keypoints"])
         pred_keypoints = convert_bbox_coords(batch_dict, pred_keypoints)
         # project predictions from pairs of views into 3d if calibration data available
-        # disable 3D projection for now
-        if "keypoints_3d" in batch_dict and batch_dict["keypoints_3d"].shape[-1] == 3:
+        if "keypoints_3d" in batch_dict and batch_dict["keypoints_3d"].shape[-1] == 3 and False:
             num_views = batch_dict["images"].shape[1]
             num_keypoints = pred_keypoints.shape[1] // 2 // num_views
 
