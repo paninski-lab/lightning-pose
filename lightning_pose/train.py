@@ -13,6 +13,7 @@ from pathlib import Path
 import lightning.pytorch as pl
 import numpy as np
 import torch
+from lightning.pytorch.strategies import DDPStrategy
 from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 from typeguard import typechecked
 
@@ -340,24 +341,31 @@ def _train(cfg: DictConfig, status_file: Path = None) -> Model:
     check_val_every_n_epoch = cfg.training.get("check_val_every_n_epoch", 1)
     val_check_interval = cfg.training.get("val_check_interval")
 
-    trainer = pl.Trainer(
-        accelerator="gpu",
-        devices=cfg.training.num_gpus,
-        max_epochs=max_epochs,
-        min_epochs=min_epochs,
-        max_steps=max_steps,
-        min_steps=min_steps,
-        check_val_every_n_epoch=check_val_every_n_epoch,
-        val_check_interval=val_check_interval,
-        log_every_n_steps=cfg.training.log_every_n_steps,
-        callbacks=callbacks,
-        logger=logger,
+    # Set DDP strategy with find_unused_parameters=True for multi-GPU training.
+    # This is needed because the UnfreezeBackbone callback freezes backbone parameters
+    # during early epochs, making them unused in the backward pass.
+    trainer_kwargs = {
+        "accelerator": "gpu",
+        "devices": cfg.training.num_gpus,
+        "max_epochs": max_epochs,
+        "min_epochs": min_epochs,
+        "max_steps": max_steps,
+        "min_steps": min_steps,
+        "check_val_every_n_epoch": check_val_every_n_epoch,
+        "val_check_interval": val_check_interval,
+        "log_every_n_steps": cfg.training.log_every_n_steps,
+        "callbacks": callbacks,
+        "logger": logger,
         # To understand why we set this, see 'max_size_cycle' in UnlabeledDataModule.
-        limit_train_batches=cfg.training.get("limit_train_batches") or steps_per_epoch,
-        accumulate_grad_batches=cfg.training.get("accumulate_grad_batches", 1),
-        profiler=cfg.training.get("profiler", None),
-        sync_batchnorm=True,
-    )
+        "limit_train_batches": cfg.training.get("limit_train_batches") or steps_per_epoch,
+        "accumulate_grad_batches": cfg.training.get("accumulate_grad_batches", 1),
+        "profiler": cfg.training.get("profiler", None),
+        "sync_batchnorm": True,
+    }
+    if cfg.training.num_gpus > 1:
+        trainer_kwargs["strategy"] = DDPStrategy(find_unused_parameters=True)
+
+    trainer = pl.Trainer(**trainer_kwargs)
 
     # train model!
     trainer.fit(model=model, datamodule=data_module)

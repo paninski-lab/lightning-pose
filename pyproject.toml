@@ -32,6 +32,7 @@ classifiers = [
 
 dependencies = [
     "aniposelib",
+    "easydict",
     "h5py",
     "hydra-core",
     "imaug",
@@ -53,6 +54,7 @@ dependencies = [
     "transformers==4.52.4",
     "typeguard",
     "nvidia-dali-cuda110",
+    "pyyaml",
 ]
 
 [project.urls]

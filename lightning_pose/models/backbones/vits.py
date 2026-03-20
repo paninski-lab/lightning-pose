@@ -1,7 +1,10 @@
 import math
+import os
 
 import safetensors
 import torch
+import yaml
+from easydict import EasyDict as edict
 from typeguard import typechecked
 
 # to ignore imports for sphix-autoapidoc
@@ -48,11 +51,35 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
             pretrained_patch_size=16,
         )
         encoder_embed_dim = base.vision_encoder.config.hidden_size
+    elif backbone_arch == "vitl_dinov2":
+        base = VisionEncoderDino(model_name="facebook/dinov2-large", pretrained_patch_size=14)
+        encoder_embed_dim = base.vision_encoder.config.hidden_size
+    elif backbone_arch == "vitl_dinov3":
+        base = VisionEncoderDino(
+            model_name="facebook/dinov3-vitl16-pretrain-lvd1689m",
+            pretrained_patch_size=16,
+        )
+        encoder_embed_dim = base.vision_encoder.config.hidden_size
+    elif backbone_arch == "beast3d":
+        config_dir = os.path.join(os.path.dirname(__file__), "..", "configs")
+        config_path = os.path.join(config_dir, "beast3d_chickadee.yaml")
+        with open(config_path, "r") as f:
+            config = yaml.load(f, Loader=yaml.FullLoader)
+        config = edict(config)
+        from lightning_pose.models.backbones.beast3d.beast3d import BEAST3D
+        base = BEAST3D(config)
+        encoder_embed_dim = 768
+        if kwargs.get("backbone_checkpoint"):
+            checkpoint = torch.load(kwargs["backbone_checkpoint"], map_location="cpu")
+            msg = base.load_state_dict(checkpoint, strict=False)
+            print(f"Loaded beast3d checkpoint from {kwargs['backbone_checkpoint']} with msg: {msg}")
+        else:
+            raise NotImplementedError(
+                f"{backbone_arch} requires backbone_checkpoint to be set in kwargs"
+            )
     elif "vitb_imagenet" in backbone_arch:
         base = VisionEncoder(model_name="facebook/vit-mae-base")
         encoder_embed_dim = base.vision_encoder.config.hidden_size
-        if kwargs.get("backbone_checkpoint"):
-            load_vit_backbone_checkpoint(base, kwargs["backbone_checkpoint"])
     elif backbone_arch == "vitb_sam":
         from lightning_pose.models.backbones.vit_sam import SamVisionEncoder
         base = SamVisionEncoder(
@@ -63,13 +90,16 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
     else:
         raise NotImplementedError(f"{backbone_arch} is not a valid backbone")
 
+    if kwargs.get("backbone_checkpoint") and backbone_arch != "beast3d":
+        load_vit_backbone_checkpoint(base, kwargs["backbone_checkpoint"])
+
     num_fc_input_features = encoder_embed_dim
 
     return base, num_fc_input_features
 
 
 def load_vit_backbone_checkpoint(base, checkpoint: str):
-    print(f"Loading VIT-MAE weights from {checkpoint}")
+    print(f"Loading ViT weights from {checkpoint}")
     # support loading safetensors
     if checkpoint.endswith(".safetensors"):
         ckpt_vit_pretrain = safetensors.torch.load_file(checkpoint, device="cpu")
@@ -84,7 +114,7 @@ def load_vit_backbone_checkpoint(base, checkpoint: str):
     # extract state dict if checkpoint contains additional info
     if "state_dict" in ckpt_vit_pretrain:
         ckpt_vit_pretrain = ckpt_vit_pretrain["state_dict"]
-    # Create a filtered state dict for the VIT-MAE part only
+    # Create a filtered state dict for the VIT-MAE / ViT part only
     vit_mae_state_dict = {}
     for key, value in ckpt_vit_pretrain.items():
         if key.startswith("vit_mae."):
@@ -93,8 +123,17 @@ def load_vit_backbone_checkpoint(base, checkpoint: str):
             if model_key in base.vision_encoder.state_dict():
                 if base.vision_encoder.state_dict()[model_key].shape == value.shape:
                     vit_mae_state_dict[model_key] = value
-    # Load the filtered weights
-    base.vision_encoder.load_state_dict(vit_mae_state_dict, strict=False)
+        elif key.startswith("vit."):
+            model_key = key.replace("vit.", "")
+            if model_key in base.vision_encoder.state_dict():
+                if base.vision_encoder.state_dict()[model_key].shape == value.shape:
+                    vit_mae_state_dict[model_key] = value
+    missing_keys, unexpected_keys = base.vision_encoder.load_state_dict(
+        vit_mae_state_dict, strict=False
+    )
+    if missing_keys or unexpected_keys:
+        print(f"missing_keys: {missing_keys}")
+        print(f"unexpected_keys: {unexpected_keys}")
 
 
 class VisionEncoder(torch.nn.Module):
