@@ -24,7 +24,6 @@ from lightning_pose.utils.scripts import (
     get_imgaug_transform,
 )
 
-
 # Issue deprecation warning
 warnings.warn(
     "This script is deprecated and will be removed in a future version. "
