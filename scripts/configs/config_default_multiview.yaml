@@ -172,10 +172,6 @@ losses:
     # nan removal value.
     # (in prob; heatmaps with max prob values are removed)
     prob_threshold: 0.05
-  # loss = error between predicted pairwise 3d projections and ground truth 3d keypoints; requires camera calibration
-  supervised_pairwise_projections:
-    # weight in front of loss
-    log_weight: 0.5
   # loss = error between predicted, reprojected 2d heatmaps and 2d ground truth heatmaps; requires camera calibration
   supervised_reprojection_heatmap_mse:
     # weight in front of loss

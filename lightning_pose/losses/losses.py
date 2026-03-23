@@ -283,7 +283,7 @@ class PCALoss(Loss):
         self,
         loss_name: Literal["pca_singleview", "pca_multiview"],
         components_to_keep: int | float = 0.95,
-        empirical_epsilon_percentile: float = 0.99,
+        empirical_epsilon_percentile: float = 99.0,
         epsilon: float | None = None,
         empirical_epsilon_multiplier: float = 1.0,
         mirrored_column_matches: ListConfig | list | None = None,

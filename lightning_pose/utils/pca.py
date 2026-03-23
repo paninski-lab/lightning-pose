@@ -37,12 +37,34 @@ class KeypointPCA(object):
         loss_type: Literal["pca_singleview", "pca_multiview"],
         data_module: UnlabeledDataModule | BaseDataModule,
         components_to_keep: int | float | None = 0.99,
-        empirical_epsilon_percentile: float = 90.0,
+        empirical_epsilon_percentile: float = 99.0,
         mirrored_column_matches: ListConfig | list | None = None,
         columns_for_singleview_pca: ListConfig | list | None = None,
         device: Literal["cuda", "cpu"] | torch.device = "cpu",
         centering_method: Literal["mean", "median"] | None = None,
     ) -> None:
+        """Initialize KeypointPCA.
+
+        Args:
+            loss_type: type of PCA loss; ``"pca_singleview"`` fits PCA on all keypoints from a
+                single camera, ``"pca_multiview"`` fits PCA across views of the same keypoints.
+            data_module: data module used to extract labeled training data for fitting PCA.
+            components_to_keep: number of PCA components to retain. An ``int`` specifies the
+                exact count; a ``float`` in ``[0, 1]`` specifies the minimum cumulative explained
+                variance; ``None`` keeps all components.
+            empirical_epsilon_percentile: percentile in ``[0, 100]`` of the reprojection error
+                distribution used to set the epsilon threshold for the PCA loss.
+            mirrored_column_matches: for multiview data, a list of keypoint index lists — one per
+                camera view — identifying which keypoints correspond across views. For a
+                ``MultiviewHeatmapDataset``, may also be provided as a flat list of per-view
+                keypoint indices that will be expanded automatically.
+            columns_for_singleview_pca: subset of keypoint indices to include when fitting
+                singleview PCA. ``None`` uses all keypoints.
+            device: device on which PCA parameters (tensors) are stored.
+            centering_method: if not ``None``, subtract the per-frame keypoint centroid before
+                fitting PCA. ``"mean"`` uses the arithmetic mean; ``"median"`` uses the median.
+
+        """
         self.loss_type = loss_type
         self.data_module = data_module
         self.components_to_keep = components_to_keep
@@ -265,7 +287,28 @@ class NaNPCA(PCA):
         power_iteration_normalizer: str = "auto",
         random_state: int | None = None,
     ) -> None:
+        """Initialize NaNPCA.
 
+        Accepts the same arguments as ``sklearn.decomposition.PCA`` but always uses the
+        ``"covariance_eigh"`` solver, which is required for NaN-aware covariance estimation.
+
+        Args:
+            n_components: number of components to keep. ``None`` keeps ``min(n_samples,
+                n_features)`` components.
+            copy: if ``False``, input data may be overwritten during fitting.
+            whiten: if ``True``, components are divided by the square root of their explained
+                variance so that transformed outputs have unit variance.
+            svd_solver: accepted for API compatibility but always overridden to
+                ``"covariance_eigh"``.
+            tol: tolerance for singular values when ``svd_solver="arpack"`` (unused here).
+            iterated_power: number of power-method iterations (unused with
+                ``"covariance_eigh"``).
+            n_oversamples: extra samples for randomized SVD (unused with ``"covariance_eigh"``).
+            power_iteration_normalizer: normalizer for randomized SVD (unused with
+                ``"covariance_eigh"``).
+            random_state: random seed for reproducibility (unused with ``"covariance_eigh"``).
+
+        """
         # force solver to be "covariance_eigh"
         super().__init__(
             n_components=n_components,
@@ -516,6 +559,18 @@ class ComponentChooser:
         fitted_pca_object: PCA,
         components_to_keep: int | float | None,
     ) -> None:
+        """Initialize ComponentChooser.
+
+        Args:
+            fitted_pca_object: a fitted ``sklearn.decomposition.PCA`` or ``NaNPCA`` instance whose
+                ``explained_variance_ratio_`` attribute is used to select the number of
+                components.
+            components_to_keep: criterion for selecting components. An ``int`` returns that
+                exact count; a ``float`` in ``[0, 1]`` returns the minimum number of components
+                needed to reach that cumulative explained-variance threshold; ``None`` keeps all
+                components.
+
+        """
         self.fitted_pca_object = fitted_pca_object
         # can be either a float indicating proportion of explained variance, or an
         # integer specifying the number of components
