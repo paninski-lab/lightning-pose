@@ -74,8 +74,8 @@ class Loss:
         Args:
             data_module: give losses access to data for computing data-specific loss params
             epsilon: loss values below epsilon will be zeroed out
-            log_weight: natural log of the weight in front of the loss term in the final
-                objective function
+            log_weight: final weight in front of the loss term in the objective function is
+                computed as ``1.0 / (2.0 * exp(log_weight))``.
 
         """
         super().__init__()
@@ -149,6 +149,14 @@ class HeatmapLoss(Loss):
         log_weight: float = 0.0,
         **kwargs,
     ) -> None:
+        """Initialize HeatmapLoss.
+
+        Args:
+            data_module: data module providing access to datasets; passed to the parent class.
+            log_weight: final weight in front of the loss term in the objective function is
+                computed as ``1.0 / (2.0 * exp(log_weight))``.
+
+        """
         super().__init__(data_module=data_module, log_weight=log_weight)
 
     def remove_nans(
@@ -201,6 +209,14 @@ class HeatmapMSELoss(HeatmapLoss):
         log_weight: float = 0.0,
         **kwargs,
     ) -> None:
+        """Initialize HeatmapMSELoss.
+
+        Args:
+            data_module: data module providing access to datasets; passed to the parent class.
+            log_weight: final weight in front of the loss term in the objective function is
+                computed as ``1.0 / (2.0 * exp(log_weight))``.
+
+        """
         super().__init__(data_module=data_module, log_weight=log_weight)
 
     def compute_loss(
@@ -227,6 +243,14 @@ class HeatmapKLLoss(HeatmapLoss):
         log_weight: float = 0.0,
         **kwargs,
     ) -> None:
+        """Initialize HeatmapKLLoss.
+
+        Args:
+            data_module: data module providing access to datasets; passed to the parent class.
+            log_weight: final weight in front of the loss term in the objective function is
+                computed as ``1.0 / (2.0 * exp(log_weight))``.
+
+        """
         super().__init__(data_module=data_module, log_weight=log_weight)
         self.loss = kl_div_loss_2d
 
@@ -245,7 +269,7 @@ class HeatmapKLLoss(HeatmapLoss):
 
 # @typechecked
 class HeatmapJSLoss(HeatmapLoss):
-    """Kullback-Leibler loss between heatmaps."""
+    """Jensen-Shannon loss between heatmaps."""
 
     loss_name = "heatmap_js"
 
@@ -255,6 +279,14 @@ class HeatmapJSLoss(HeatmapLoss):
         log_weight: float = 0.0,
         **kwargs,
     ) -> None:
+        """Initialize HeatmapJSLoss.
+
+        Args:
+            data_module: data module providing access to datasets; passed to the parent class.
+            log_weight: final weight in front of the loss term in the objective function is
+                computed as ``1.0 / (2.0 * exp(log_weight))``.
+
+        """
         super().__init__(data_module=data_module, log_weight=log_weight)
         self.loss = js_div_loss_2d
 
@@ -294,6 +326,33 @@ class PCALoss(Loss):
         centering_method: Literal["mean", "median"] | None = None,
         **kwargs,
     ) -> None:
+        """Initialize PCALoss.
+
+        Fits a :class:`KeypointPCA` object on the training data and uses the resulting
+        low-dimensional subspace to penalize out-of-subspace predictions at training time.
+
+        Args:
+            loss_name: ``"pca_singleview"`` penalizes single-camera predictions;
+                ``"pca_multiview"`` penalizes predictions that are inconsistent across views.
+            components_to_keep: passed to :class:`KeypointPCA`; see its docstring for details.
+            empirical_epsilon_percentile: percentile of the training-data reprojection error
+                used to set epsilon when ``epsilon`` is ``None``; in ``[0, 100]``.
+            epsilon: if not ``None``, use this fixed epsilon value and ignore
+                ``empirical_epsilon_percentile``.
+            empirical_epsilon_multiplier: scalar multiplier applied to the empirically computed
+                epsilon before use.
+            mirrored_column_matches: required for ``"pca_multiview"``; see :class:`KeypointPCA`
+                for details.
+            columns_for_singleview_pca: subset of keypoint indices to use for singleview PCA;
+                ``None`` uses all keypoints.
+            data_module: data module used by :class:`KeypointPCA` to extract training data.
+            log_weight: final weight in front of the loss term in the objective function is
+                computed as ``1.0 / (2.0 * exp(log_weight))``.
+            device: device on which PCA parameters are stored and loss is computed.
+            centering_method: if not ``None``, subtract the per-frame keypoint centroid before
+                fitting PCA. ``"mean"`` uses the arithmetic mean; ``"median"`` uses the median.
+
+        """
         super().__init__(data_module=data_module, log_weight=log_weight)
         self.device = device
 
@@ -399,6 +458,18 @@ class TemporalLoss(Loss):
         log_weight: float = 0.0,
         **kwargs,
     ) -> None:
+        """Initialize TemporalLoss.
+
+        Args:
+            data_module: data module providing access to datasets; passed to the parent class.
+            epsilon: loss values below this threshold are zeroed out. May be a scalar or a list
+                with one value per keypoint.
+            prob_threshold: predictions whose confidence is below this value are excluded from
+                the loss computation.
+            log_weight: final weight in front of the loss term in the objective function is
+                computed as ``1.0 / (2.0 * exp(log_weight))``.
+
+        """
         super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
         self.prob_threshold = torch.tensor(prob_threshold, dtype=torch.float)
 
@@ -493,6 +564,20 @@ class TemporalHeatmapLoss(Loss):
         log_weight: float = 0.0,
         **kwargs,
     ) -> None:
+        """Initialize TemporalHeatmapLoss.
+
+        Args:
+            loss_name: ``"temporal_heatmap_mse"`` uses pixel-wise MSE between consecutive
+                heatmaps; ``"temporal_heatmap_kl"`` uses the KL divergence.
+            data_module: data module providing access to datasets; passed to the parent class.
+            epsilon: loss values below this threshold are zeroed out. May be a scalar or a list
+                with one value per keypoint.
+            prob_threshold: predictions whose confidence is below this value are excluded from
+                the loss computation.
+            log_weight: final weight in front of the loss term in the objective function is
+                computed as ``1.0 / (2.0 * exp(log_weight))``.
+
+        """
         super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
 
         if loss_name not in (self.LOSS_NAME_MSE, self.LOSS_NAME_KL):
@@ -602,6 +687,29 @@ class UnimodalLoss(Loss):
         uniform_heatmaps: bool = False,
         **kwargs,
     ) -> None:
+        """Initialize UnimodalLoss.
+
+        Generates an ideal unimodal heatmap from each predicted keypoint coordinate and
+        penalizes the difference between that ideal heatmap and the network's predicted heatmap.
+
+        Args:
+            loss_name: divergence measure to use. ``"unimodal_mse"`` uses pixel-wise MSE;
+                ``"unimodal_kl"`` uses KL divergence; ``"unimodal_js"`` uses Jensen-Shannon
+                divergence.
+            original_image_height: height of the full-resolution input image in pixels, used
+                when generating ideal heatmaps.
+            original_image_width: width of the full-resolution input image in pixels.
+            downsampled_image_height: height of the heatmap output (after backbone downsampling).
+            downsampled_image_width: width of the heatmap output.
+            data_module: data module providing access to datasets; passed to the parent class.
+            prob_threshold: predictions whose confidence is below this value are excluded from
+                the loss computation.
+            log_weight: final weight in front of the loss term in the objective function is
+                computed as ``1.0 / (2.0 * exp(log_weight))``.
+            uniform_heatmaps: if ``True``, generate uniform (flat) target heatmaps for NaN
+                ground truth keypoints instead of ignoring them in the loss.
+
+        """
 
         super().__init__(data_module=data_module, log_weight=log_weight)
 
@@ -725,6 +833,15 @@ class RegressionMSELoss(Loss):
         log_weight: float = 0.0,
         **kwargs,
     ) -> None:
+        """Initialize RegressionMSELoss.
+
+        Args:
+            data_module: data module providing access to datasets; passed to the parent class.
+            epsilon: loss values below this threshold are zeroed out.
+            log_weight: final weight in front of the loss term in the objective function is
+                computed as ``1.0 / (2.0 * exp(log_weight))``.
+
+        """
         super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
 
     def remove_nans(
@@ -778,6 +895,15 @@ class RegressionRMSELoss(RegressionMSELoss):
         log_weight: float = 0.0,
         **kwargs,
     ) -> None:
+        """Initialize RegressionRMSELoss.
+
+        Args:
+            data_module: data module providing access to datasets; passed to the parent class.
+            epsilon: loss values below this threshold are zeroed out.
+            log_weight: final weight in front of the loss term in the objective function is
+                computed as ``1.0 / (2.0 * exp(log_weight))``.
+
+        """
         super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
 
     def compute_loss(
@@ -797,6 +923,13 @@ class PairwiseProjectionsLoss(Loss):
     loss_name = "supervised_pairwise_projections"
 
     def __init__(self, log_weight: float = 0.0, **kwargs) -> None:
+        """Initialize PairwiseProjectionsLoss.
+
+        Args:
+            log_weight: final weight in front of the loss term in the objective function is
+                computed as ``1.0 / (2.0 * exp(log_weight))``.
+
+        """
         super().__init__(log_weight=log_weight)
 
     def remove_nans(
@@ -898,6 +1031,23 @@ class ReprojectionHeatmapLoss(Loss):
         uniform_heatmaps: bool = False,
         **kwargs,
     ) -> None:
+        """Initialize ReprojectionHeatmapLoss.
+
+        Converts 2D reprojected keypoints (obtained by projecting 3D triangulated predictions
+        back into each camera's image plane) into heatmaps and compares them with the ground
+        truth heatmaps using pixel-wise MSE.
+
+        Args:
+            original_image_height: height of the full-resolution input image in pixels.
+            original_image_width: width of the full-resolution input image in pixels.
+            downsampled_image_height: height of the heatmap output (after backbone downsampling).
+            downsampled_image_width: width of the heatmap output.
+            log_weight: final weight in front of the loss term in the objective function is
+                computed as ``1.0 / (2.0 * exp(log_weight))``.
+            uniform_heatmaps: if ``True``, generate uniform (flat) target heatmaps for NaN
+                ground truth keypoints instead of ignoring them in the loss.
+
+        """
         super().__init__(log_weight=log_weight)
         self.original_image_height = original_image_height
         self.original_image_width = original_image_width
