@@ -3,7 +3,6 @@ import warnings
 
 from lightning_pose.api.model import Model
 
-
 # Issue deprecation warning
 warnings.warn(
     "This script is deprecated and will be removed in a future version. "

@@ -10,9 +10,9 @@
 Lightning Pose is an end-to-end toolkit designed for robust multi-view and single-view animal
 pose estimation using advanced transformer architectures. It leverages Multi-View Transformers
 and patch-masking training to learn geometric relationships between views,
-resulting in strong performance on occlusions [Aharon, Lee et al. 2025](https://arxiv.org/abs/2510.09903).
-For single-view datasets  it leverages temporal context and learned plausibility constraints for strong performance
-in challenging scenarios [Biderman, Whiteway et al. 2024, Nature Methods](https://rdcu.be/dLP3z).
+resulting in strong performance on occlusions [Aharon, et al. 2025](https://arxiv.org/abs/2510.09903).
+For single-view datasets it leverages temporal context and learned plausibility constraints for 
+strong performance in challenging scenarios [Biderman, Whiteway et al. 2024, Nature Methods](https://rdcu.be/dLP3z).
 It has a rich GUI that supports the end-to-end workflow: labeling, model management, and evaluation.
 
 
@@ -64,10 +64,20 @@ a simple and performant post-processor that works with any pose estimation packa
 Lightning Pose, DeepLabCut, and SLEAP.
 
 Lightning Pose is primarily maintained by 
-[Karan Sikka](https://github.com/ksikka) (Columbia University),
-[Matt Whiteway](https://themattinthehatt.github.io) (Columbia University),
-and
-[Dan Biderman](https://dan-biderman.netlify.app) (Stanford University). 
+[Karan Sikka](https://github.com/ksikka) (Columbia University) and
+[Matt Whiteway](https://themattinthehatt.github.io) (Columbia University). 
  
 Lightning Pose is under active development and we welcome community contributions.
-Whether you want to implement some of your own ideas or help out with our [development roadmap](docs/roadmap.md), please get in touch with us on Discord (see contributing guidelines [here](CONTRIBUTING.md)). 
+Whether you want to implement some of your own ideas or help out with our [development roadmap](docs/roadmap.md), please get in touch with us on Discord (see contributing guidelines [here](CONTRIBUTING.md)).
+
+## Funding
+
+We are grateful for support from the following:
+* Gatsby Charitable Foundation GAT3708
+* [NIH R50NS145433](https://reporter.nih.gov/search/Hmj4KMmLv0evcYPlPEDa-Q/project-details/11240675)
+* [NIH U19NS123716](https://reporter.nih.gov/search/Hmj4KMmLv0evcYPlPEDa-Q/project-details/11141703)
+* [NSF 1707398](https://ui.adsabs.harvard.edu/abs/2017nsf....1707398A/abstract)
+* [The NSF AI Institute for Artificial and Natural Intelligence](https://ui.adsabs.harvard.edu/abs/2023nsf....2229929Z/abstract)
+* Simons Foundation
+* Wellcome Trust 216324
+* Zuckerman Institute (Columbia University) Team Science

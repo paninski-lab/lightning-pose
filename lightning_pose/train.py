@@ -1,7 +1,6 @@
 """Example model training function."""
 
 import contextlib
-from datetime import datetime
 import json
 import math
 import os
@@ -9,6 +8,7 @@ import random
 import re
 import shutil
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import lightning.pytorch as pl
