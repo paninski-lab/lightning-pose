@@ -56,7 +56,7 @@ To turn patch masking off, set ``final_ratio: 0.0``.
 .. note::
 
     As of March 2026, the unsupervised losses introduced in the original Lightning Pose paper have
-    not yet been implemented for the ``multi-view transformer`` model, including the
+    not yet been implemented for the ``heatmap_multiview_transformer`` model, including the
     ``pca_multiview`` loss.
 
 The MVT produces a 2D heatmap for each keypoint in each view.
@@ -97,16 +97,37 @@ To compute the 3D reprojection loss, we:
 The advantage of this loss is that it is on the same scale as the standard supervised heatmap loss,
 which may make for easier hyperparameter tuning.
 
-The default ``log_weight`` value of 1.0 should be a reasonable place to start; if the training curve
+The default ``log_weight`` value of 3.0 should be a reasonable place to start; if the training curve
 for this loss is unstable (for example it doesn't decrease, or spikes to a large value during training),
-you can _decrease_ the effect of the 3D loss by _increasing_ the log_weight; we recommend a secondary
-value of 1.5.
+you can *decrease* the effect of the 3D loss by *increasing* the log_weight; we recommend a secondary
+value of 3.5.
 
 .. code-block:: yaml
 
     losses:
         supervised_reprojection_heatmap_mse:
-            log_weight: 1.0
+            log_weight: 3.0
 
 To turn this loss off (but, for example, continue to use 3D augmentations), set
 ``log_weight: null`` in the config file.
+
+To stabilize training, the 3D loss is slowly annealed over many epochs.
+The default annealing schedule can be found in the ``callbacks`` section of the config file:
+
+.. code-block:: yaml
+
+    callbacks:
+      anneal_weight:
+        attr_name: total_unsupervised_importance
+        init_val: 0.0
+        increase_factor: 0.01
+        final_val: 1.0
+        freeze_until_epoch: 60
+
+The default configuration above indicates that the 3D loss starts at a value of 0.0 (``init_val``)
+until epoch 60 (``freeze_until_epoch``), at which point it increases by 0.01 on each epoch
+(``increase_factor``) until it hits a value of 1.0 (``final_val``).
+This annealing weight multiples the already-weighted loss term (defined by ``log_weight`` described above).
+With these settings, the 3D loss will attain its full value after 1.0/0.01=100 epochs after unfreezing (epoch 160).
+The default of 60 is reasonable and used across our analyses, but you may find unfreezing later or
+annealing more slowly (by decreasing ``increase_factor``) may lead to more stable training curves.
