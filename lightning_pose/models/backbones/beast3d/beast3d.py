@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 import sys
 
-sys.path.append("/data/Projects/lightning-pose/third_party/E-RayZer")
+sys.path.append("/scratch/yl6624/Project/multi-view/third_party/lightning-pose/third_party/E-RayZer")
 import copy
 from huggingface_hub import hf_hub_download
 from typing import Tuple
@@ -178,84 +178,84 @@ def get_fxfycxcy_from_intrinsics(intrinsics):
     cy = intrinsics[..., 1, 2]
     return torch.stack([fx, fy, cx, cy], dim=-1)
 
-# class BEAST3D(ERayZer):
-#     def __init__(self, config):
-#         super().__init__(config.model.model_params)
-#         # load pretrained weights
-#         if config.model.pretrained_url:
-#             checkpoint = torch.load(_get_ckpt_from_hf(config.model.pretrained_url), map_location='cpu')
-#             msg = self.load_state_dict(checkpoint['model'], strict=False)
-#             print(f"Loaded pretrained weights from {config.model.pretrained_url} with msg: {msg}")
-#         else:
-#             print(f"No pretrained URL provided for {self.__class__.__name__}")
-#         # delete upsamper
-#         del self.upsampler
-#         # delete renderer
-#         del self.renderer
-#         # delete image_token_decoder
-#         del self.image_token_decoder
+class ERAYZER(ERayZer):
+    def __init__(self, config):
+        super().__init__(config.model.model_params)
+        # load pretrained weights
+        if config.model.pretrained_url:
+            checkpoint = torch.load(_get_ckpt_from_hf(config.model.pretrained_url), map_location='cpu')
+            msg = self.load_state_dict(checkpoint['model'], strict=False)
+            print(f"Loaded pretrained weights from {config.model.pretrained_url} with msg: {msg}")
+        else:
+            print(f"No pretrained URL provided for {self.__class__.__name__}")
+        # delete upsamper
+        del self.upsampler
+        # delete renderer
+        del self.renderer
+        # delete image_token_decoder
+        del self.image_token_decoder
 
-#     def inference_render(self, batch):
-#         all_images = batch['images']
+    def inference_render(self, batch):
+        all_images = batch['images']
 
-#         B, V, C, H, W = all_images.shape
+        B, V, C, H, W = all_images.shape
 
-#         input_images = all_images
-#         input_img_tokens = self.image_tokenizer(input_images)  # [(B*V), N, d]
-#         if self.use_pe_embedding_layer:
-#             input_img_tokens = self.add_spatial_pe(
-#                 input_img_tokens,
-#                 B, V,
-#                 self.hh,
-#                 self.ww,
-#                 embedder=self.pe_embedder,
-#             )
-#         # concanate all tokens together
-#         n = input_img_tokens.shape[1]
-#         cam_tokens = repeat(self.camera_token, '1 n d -> bv n d', bv=B*V)
-#         register_tokens = repeat(self.register_token, '1 n d -> bv n d', bv=B*V)
-#         all_tokens = torch.cat([cam_tokens, register_tokens, input_img_tokens], dim=1)
-#         all_tokens = rearrange(all_tokens, '(b v) n d -> b (v n) d', b=B)
-#         # stage 1: pose estimation encoder
-#         with torch.autocast(device_type=all_tokens.device.type, dtype=torch.bfloat16):
-#             all_tokens = self.run_vggt_encoder(all_tokens, B, V)
-#         all_tokens = rearrange(all_tokens, 'b (v n) d -> (b v) n d', v=V)
-#         cam_tokens_out, _, _ = all_tokens.split([1, self.num_register_tokens, n], dim=1)
+        input_images = all_images
+        input_img_tokens = self.image_tokenizer(input_images)  # [(B*V), N, d]
+        if self.use_pe_embedding_layer:
+            input_img_tokens = self.add_spatial_pe(
+                input_img_tokens,
+                B, V,
+                self.hh,
+                self.ww,
+                embedder=self.pe_embedder,
+            )
+        # concanate all tokens together
+        n = input_img_tokens.shape[1]
+        cam_tokens = repeat(self.camera_token, '1 n d -> bv n d', bv=B*V)
+        register_tokens = repeat(self.register_token, '1 n d -> bv n d', bv=B*V)
+        all_tokens = torch.cat([cam_tokens, register_tokens, input_img_tokens], dim=1)
+        all_tokens = rearrange(all_tokens, '(b v) n d -> b (v n) d', b=B)
+        # stage 1: pose estimation encoder
+        with torch.autocast(device_type=all_tokens.device.type, dtype=torch.bfloat16):
+            all_tokens = self.run_vggt_encoder(all_tokens, B, V)
+        all_tokens = rearrange(all_tokens, 'b (v n) d -> (b v) n d', v=V)
+        cam_tokens_out, _, _ = all_tokens.split([1, self.num_register_tokens, n], dim=1)
 
-#         # predict camera poses from cam tokens
-#         cam_tokens_out = cam_tokens_out[:, 0]  # [(B*V), d]
-#         cam_info = self.pose_predictor(cam_tokens_out, V)  # [(B*V), num_pose_element+3+4]
-#         pred_c2w, pred_fxfycxcy = get_cam_se3(cam_info)  # [(B*V), 4, 4], [(B*V), 4]
-#         pred_c2w = rearrange(pred_c2w, '(b v) n d -> b v n d', b=B)
-#         pred_fxfycxcy = rearrange(pred_fxfycxcy, '(b v) d -> b v d', b=B).detach()
+        # predict camera poses from cam tokens
+        cam_tokens_out = cam_tokens_out[:, 0]  # [(B*V), d]
+        cam_info = self.pose_predictor(cam_tokens_out, V)  # [(B*V), num_pose_element+3+4]
+        pred_c2w, pred_fxfycxcy = get_cam_se3(cam_info)  # [(B*V), 4, 4], [(B*V), 4]
+        pred_c2w = rearrange(pred_c2w, '(b v) n d -> b v n d', b=B)
+        pred_fxfycxcy = rearrange(pred_fxfycxcy, '(b v) d -> b v d', b=B).detach()
 
-#         # stage 2: add camera embedding via plucker rays
-#         plucker_rays_input = cam_info_to_plucker(pred_c2w, pred_fxfycxcy, self.config.model.target_image, normalized=True, return_moment=True)
-#         plucker_rays_input = rearrange(plucker_rays_input, '(b v) c h w -> b v h w c', b=B, v=V)
-#         plucker_rays_input = plucker_rays_input.float()
-#         plucker_emb_input = self.input_pose_tokenizer(plucker_rays_input)
-#         if self.use_pe_embedding_layer:
-#             plucker_emb_input = self.add_spatial_pe(
-#                 plucker_emb_input,
-#                 B, V,
-#                 self.hh, self.ww,
-#                 embedder=self.pe_embedder_plucker,
-#             )
-#         plucker_emb_input = rearrange(plucker_emb_input, '(b v) n d -> b (v n) d', v=V)
-#         img_tokens_out = rearrange(input_img_tokens, '(b v) n d -> b (v n) d', b=B, v=V)
-#         input_tokens = torch.cat([img_tokens_out, plucker_emb_input], dim=-1)
-#         input_tokens = self.mlp_fuse(input_tokens)
-#         # geometry encoder
-#         with torch.autocast(device_type=input_tokens.device.type, dtype=torch.bfloat16):
-#             input_tokens = self.run_vggt_encoder_geom(input_tokens, B, V)
-#         input_tokens = rearrange(input_tokens, 'b (v n) d -> b v n d', b=B, v=V)
-#         return input_tokens.float()
+        # stage 2: add camera embedding via plucker rays
+        plucker_rays_input = cam_info_to_plucker(pred_c2w, pred_fxfycxcy, self.config.model.target_image, normalized=True, return_moment=True)
+        plucker_rays_input = rearrange(plucker_rays_input, '(b v) c h w -> b v h w c', b=B, v=V)
+        plucker_rays_input = plucker_rays_input.float()
+        plucker_emb_input = self.input_pose_tokenizer(plucker_rays_input)
+        if self.use_pe_embedding_layer:
+            plucker_emb_input = self.add_spatial_pe(
+                plucker_emb_input,
+                B, V,
+                self.hh, self.ww,
+                embedder=self.pe_embedder_plucker,
+            )
+        plucker_emb_input = rearrange(plucker_emb_input, '(b v) n d -> b (v n) d', v=V)
+        img_tokens_out = rearrange(input_img_tokens, '(b v) n d -> b (v n) d', b=B, v=V)
+        input_tokens = torch.cat([img_tokens_out, plucker_emb_input], dim=-1)
+        input_tokens = self.mlp_fuse(input_tokens)
+        # geometry encoder
+        with torch.autocast(device_type=input_tokens.device.type, dtype=torch.bfloat16):
+            input_tokens = self.run_vggt_encoder_geom(input_tokens, B, V)
+        input_tokens = rearrange(input_tokens, 'b (v n) d -> b v n d', b=B, v=V)
+        return input_tokens.float()
 
-#     def forward(self, images, intrinsic_matrix, extrinsic_matrix, bbox):
-#         batch = edict(
-#             images=images,
-#         )
-#         return self.inference_render(batch)
+    def forward(self, images, intrinsic_matrix, extrinsic_matrix, bbox):
+        batch = edict(
+            images=images,
+        )
+        return self.inference_render(batch)
 
 # class BEAST3D(ERayZer):
 #     def __init__(self, config):
@@ -317,6 +317,8 @@ class BEAST3D(ERayZer):
     def __init__(self, config):
         super().__init__(config.model.model_params)
 
+        self.use_dinov3 = getattr(config.model, 'use_dinov3', False)
+
         # load pretrained weights
         if config.model.pretrained_url:
             checkpoint = torch.load(_get_ckpt_from_hf(config.model.pretrained_url), map_location='cpu')
@@ -324,6 +326,16 @@ class BEAST3D(ERayZer):
             print(f"Loaded pretrained weights from {config.model.pretrained_url} with msg: {msg}")
         else:
             print(f"No pretrained URL provided for {self.__class__.__name__}")
+
+        if self.use_dinov3:
+            from transformers import AutoModel
+            del self.image_tokenizer
+            self.dinov3 = AutoModel.from_pretrained("facebook/dinov3-vitb16-pretrain-lvd1689m")
+            self.dinov3.eval()
+            for param in self.dinov3.parameters():
+                param.requires_grad = False
+            print("BEAST3D: using DINOv3 ViT-base as image tokenizer (frozen)")
+
         # delete the transformer_encoder
         del self.transformer_encoder
         # delete the pose_predictor
@@ -339,6 +351,24 @@ class BEAST3D(ERayZer):
         # delete image_token_decoder
         del self.image_token_decoder
 
+    def train(self, mode=True):
+        """Override to keep DINOv3 frozen in eval mode."""
+        super().train(mode)
+        if self.use_dinov3:
+            self.dinov3.eval()
+        return self
+
+    def _get_image_tokens(self, images):
+        """Extract image tokens of shape (B*V, N, d) from input images (B, V, C, H, W) in [0, 1] range."""
+        if self.use_dinov3:
+            imgs_flat = rearrange(images, 'b v c h w -> (b v) c h w')
+            with torch.no_grad():
+                dino_out = self.dinov3(imgs_flat, output_hidden_states=False).last_hidden_state
+            num_prefix = 1 + getattr(self.dinov3.config, 'num_register_tokens', 0)
+            return dino_out[:, num_prefix:, :]  # (B*V, N, 768)
+        else:
+            return self.image_tokenizer(images)  # (B*V, N, d)
+
     def inference_render(self, batch):
         all_images = batch['images']
         c2w = batch['c2w']
@@ -347,7 +377,7 @@ class BEAST3D(ERayZer):
         B, V, C, H, W = all_images.shape
 
         input_images = all_images
-        input_img_tokens = self.image_tokenizer(input_images)
+        input_img_tokens = self._get_image_tokens(input_images)
         if self.use_pe_embedding_layer:
             input_img_tokens = self.add_spatial_pe(
                 input_img_tokens,

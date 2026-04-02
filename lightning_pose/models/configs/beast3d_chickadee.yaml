@@ -6,6 +6,7 @@ model:
   checkpoint: null  # load weights from checkpoint
   model_class: vit
   pretrained_url: https://huggingface.co/qitaoz/E-RayZer/blob/main/checkpoints/erayzer_multi.pt
+  use_dinov3: true
   model_params:
     patch_size: 16
     patch_embed: dinov3_vits16_reg
