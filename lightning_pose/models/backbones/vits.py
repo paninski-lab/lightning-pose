@@ -3,7 +3,7 @@ import math
 import safetensors
 import torch
 from typeguard import typechecked
-from lightning_pose.models.backbones.beast3d.beast3d import BEAST3D
+from lightning_pose.models.backbones.beast3d.beast3d import BEAST3D, ERAYZER
 from easydict import EasyDict as edict
 import yaml
 # to ignore imports for sphix-autoapidoc
@@ -70,17 +70,20 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
         )
         encoder_embed_dim = base.vision_encoder.config.hidden_size
     elif backbone_arch == "beast3d":
-        config_path = "/data/Projects/lightning-pose/lightning_pose/models/configs/beast3d_chickadee.yaml"
+        config_path = "/scratch/yl6624/Project/multi-view/third_party/lightning-pose/lightning_pose/models/configs/beast3d_chickadee.yaml"
         with open(config_path, "r") as f:
             config = yaml.load(f, Loader=yaml.FullLoader)
         config = edict(config)
-        base = BEAST3D(config)
         encoder_embed_dim = 768
         if kwargs.get("backbone_checkpoint"):
+            base = BEAST3D(config)
             # load beast3d checkpoint
             checkpoint = torch.load(kwargs["backbone_checkpoint"], map_location="cpu")
             msg = base.load_state_dict(checkpoint, strict=False)
             print(f"Loaded beast3d checkpoint from {kwargs['backbone_checkpoint']} with msg: {msg}")
+        else:
+            base = ERAYZER(config)
+            print("Initialized ERAYZER backbone without loading pretrained weights")
     else:
         raise NotImplementedError(f"{backbone_arch} is not a valid backbone")
     if kwargs.get("backbone_checkpoint") and not backbone_arch == "beast3d":
