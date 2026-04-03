@@ -362,6 +362,7 @@ def _train(cfg: DictConfig, status_file: Path = None) -> Model:
         "profiler": cfg.training.get("profiler", None),
         "sync_batchnorm": True,
     }
+    # Only set strategy for multi-GPU training
     if cfg.training.num_gpus > 1:
         trainer_kwargs["strategy"] = DDPStrategy(find_unused_parameters=True)
 

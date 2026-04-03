@@ -54,7 +54,7 @@ class RegressionTracker(BaseSupervisedTracker):
         self.torch_seed = torch_seed
         torch.manual_seed(torch_seed)
 
-        if "vit" in backbone:
+        if "vit" in backbone or "beast3d" in backbone:
             raise ValueError("Regression trackers are not compatible with ViT backbones")
 
         # for backwards compatibility

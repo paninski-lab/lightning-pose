@@ -1,0 +1,4 @@
+[submodule "third_party/E-RayZer"]
+	path = third_party/E-RayZer
+	url = https://github.com/PPWangyc/E-RayZer.git
+	branch = working

@@ -17,7 +17,7 @@ specified in the configuration file:
         backbone: vits_dino
         model_type: heatmap_multiview_transformer
 
-The backbone can be any of the available backbones that start with the string "vit"
+The backbone can be any of the available backbones that start with the string "vit" or "beast3d"
 (see options :ref:`here <config_file_model>`),
 indicating Vision Transformer.
 The "heatmap_multiview_transformer" will then use the specified backbone to process all camera

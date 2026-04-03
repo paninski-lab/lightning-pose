@@ -506,6 +506,10 @@ def get_model_class(map_type: str, semi_supervised: bool) -> Type[ALLOWED_MODELS
             from lightning_pose.models import HeatmapTrackerMultiviewMultihead as Model
         elif map_type == "heatmap_multiview_transformer":
             from lightning_pose.models import HeatmapTrackerMultiviewTransformer as Model
+        elif map_type == "heatmap_multiview_aggregator":
+            from lightning_pose.models import HeatmapTrackerMultiviewAggregator as Model
+        elif map_type == "heatmap_3d_transformer":
+            from lightning_pose.models import HeatmapTracker3DTransformer as Model
         else:
             raise NotImplementedError(
                 f"{map_type} is an invalid model_type for a fully supervised model"
@@ -622,12 +626,14 @@ def load_model_from_checkpoint(
             loss_factory=loss_factories["supervised"],
             loss_factory_unsupervised=loss_factories["unsupervised"],
             strict=False,
+            weights_only=False,
         )
     else:
         model = ModelClass.load_from_checkpoint(
             fixed_ckpt_file,
             loss_factory=loss_factories["supervised"],
             strict=False,
+            weights_only=False,
         )
 
     # clean up temporary file if created

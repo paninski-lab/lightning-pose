@@ -96,7 +96,7 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
             in_channels=self.num_fc_input_features,
             out_channels=self.num_keypoints,
             downsample_factor=self.downsample_factor,
-            upsampling_factor=1 if "vit" in backbone else 2,
+            upsampling_factor=1 if "vit" in backbone or "beast3d" in backbone else 2,
         )
 
         self.loss_factory = loss_factory
