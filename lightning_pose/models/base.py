@@ -157,7 +157,8 @@ class BaseFeatureExtractor(LightningModule):
 
         self.backbone_arch = backbone
 
-        if self.backbone_arch.startswith("vit"):
+        # ViT/DINO/DINOv2/DINOv3/BEAST3D live in vits.py; everything else in torchvision.py.
+        if self.backbone_arch.startswith("vit") or self.backbone_arch == "beast3d":
             from lightning_pose.models.backbones.vits import build_backbone
         else:
             from lightning_pose.models.backbones.torchvision import build_backbone

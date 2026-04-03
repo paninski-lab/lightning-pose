@@ -148,17 +148,21 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         # ).last_hidden_state
 
         # this block mostly copies self.vision_encoder.forward(), except for addition of view embed
+        ve = self.backbone.vision_encoder
+        # CLS + optional register tokens (DINOv2/DINOv3) — not patch tokens
+        num_prefix = 1 + getattr(ve.config, "num_register_tokens", 0)
 
-        # create patch embeddings and add position embeddings; remove CLS token
+        # create patch embeddings and add position embeddings; strip prefix tokens
         try:
-            embedding_output = self.backbone.vision_encoder.embeddings(
+            hidden_states = ve.embeddings(
                 images, bool_masked_pos=None, interpolate_pos_encoding=True,
-            )[:, 1:]
+            )
         except TypeError:
-            # DINOv3 doesn't have `interpolate_pos_encoding` arg, does this by default
-            embedding_output = self.backbone.vision_encoder.embeddings(
-                images, bool_masked_pos=None,
-            )[:, 1:]
+            try:
+                hidden_states = ve.embeddings(images, bool_masked_pos=None)
+            except TypeError:
+                hidden_states = ve.embeddings(images)
+        embedding_output = hidden_states[:, num_prefix:, :]
         # shape: (view * batch, num_patches, embedding_dim)
 
         # get dims for reshaping
@@ -185,16 +189,36 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             batch_size, self.num_views * num_patches, embedding_dim,
         )
 
-        # push data through vit encoder
-        encoder_outputs = self.backbone.vision_encoder.encoder(
-            embedding_output,
-            head_mask=None,
-            output_attentions=False,
-            output_hidden_states=False,
-            return_dict=None,
-        )
-        sequence_output = encoder_outputs[0]
-        outputs = self.backbone.vision_encoder.layernorm(sequence_output)
+        # ViT / DINOv2: nn.Encoder stack + layernorm. DINOv3: ModuleList + RoPE + norm (no .encoder).
+        if hasattr(ve, "layer") and hasattr(ve, "rope_embeddings") and not hasattr(ve, "encoder"):
+            # DINOv3ViTModel — RoPE cos/sin are per spatial patch; tile for fused multiview sequence
+            cos, sin = ve.rope_embeddings(images)
+            cos = cos.repeat(self.num_views, 1)
+            sin = sin.repeat(self.num_views, 1)
+            position_embeddings = (cos, sin)
+            hidden_states = embedding_output
+            for layer_module in ve.layer:
+                hidden_states = layer_module(
+                    hidden_states,
+                    attention_mask=None,
+                    position_embeddings=position_embeddings,
+                )
+            outputs = ve.norm(hidden_states)
+        elif hasattr(ve, "encoder"):
+            encoder_outputs = ve.encoder(
+                embedding_output,
+                head_mask=None,
+                output_attentions=False,
+                output_hidden_states=False,
+                return_dict=None,
+            )
+            sequence_output = encoder_outputs[0]
+            outputs = ve.layernorm(sequence_output)
+        else:
+            raise NotImplementedError(
+                "Multiview ViT forward is only implemented for ViT/DINOv2 (.encoder) "
+                "or DINOv3 (.layer + rope_embeddings)."
+            )
         # shape: (batch, view * num_patches, embedding_dim)
 
         # reshape data to (view * batch, embedding_dim, height, width) for head processing

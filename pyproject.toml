@@ -51,7 +51,8 @@ dependencies = [
     "torchtyping",
     "torch (<3.0.0)",
     "torchvision (<0.25.0)",
-    "transformers==4.52.4",
+    # DINOv3 (vit*_dinov3 backbones) needs dinov3_vit in AutoConfig; use >=4.57
+    "transformers>=4.57.0,<6.0.0",
     "typeguard",
     "nvidia-dali-cuda110",
     "pyyaml",

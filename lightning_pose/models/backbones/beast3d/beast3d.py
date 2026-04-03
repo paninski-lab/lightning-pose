@@ -3,9 +3,21 @@
 #
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
+import os
 import sys
+from pathlib import Path
 
-sys.path.append("/data/Projects/lightning-pose/third_party/E-RayZer")
+# Match PPWangyc/lightning-pose dinov2: submodule at third_party/E-RayZer
+# https://github.com/PPWangyc/lightning-pose/tree/dinov2
+_repo_root = Path(__file__).resolve().parents[4]
+_erayzer_candidates = [
+    os.environ.get("E_RAYZER_PATH"),
+    str(_repo_root / "third_party" / "E-RayZer"),
+]
+for _p in _erayzer_candidates:
+    if _p and Path(_p).is_dir():
+        sys.path.insert(0, str(Path(_p).resolve()))
+        break
 import copy
 from huggingface_hub import hf_hub_download
 from typing import Tuple
