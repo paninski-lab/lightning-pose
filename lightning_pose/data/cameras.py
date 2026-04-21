@@ -38,44 +38,39 @@ def project_camera_pairs_to_3d(
     p3d = []
     for j1, j2 in itertools.combinations(range(num_views), 2):
 
-        points1 = points[:, j1, ...]
-        points2 = points[:, j2, ...]
+        points1 = points[:, j1, ...]  # (B, K, 2)
+        points2 = points[:, j2, ...]  # (B, K, 2)
 
         # create a mask for valid keypoints
         # a keypoint is valid if it's not NaN in BOTH views
         valid_mask = ~(
             torch.isnan(points1).any(dim=-1)
             | torch.isnan(points2).any(dim=-1)
+        )  # (B, K)
+
+        # replace NaN with 0 so SVD inside triangulate_points stays finite;
+        # outputs at those positions are masked back to NaN below, so this
+        # substitution is numerically inert for valid keypoints (each point's
+        # DLT depends only on its own coordinates, no cross-keypoint coupling).
+        valid_expanded = valid_mask.unsqueeze(-1)
+        points1_safe = torch.where(valid_expanded, points1, torch.zeros_like(points1))
+        points2_safe = torch.where(valid_expanded, points2, torch.zeros_like(points2))
+
+        # batched triangulation over (B, K) in a single call
+        # kornia accepts P with shape (*, 3, 4) and points with shape (*, N, 2)
+        tri = triangulate_points(
+            P1=extrinsics[:, j1],  # (B, 3, 4)
+            P2=extrinsics[:, j2],  # (B, 3, 4)
+            points1=points1_safe,  # (B, K, 2)
+            points2=points2_safe,  # (B, K, 2)
+        )  # -> (B, K, 3)
+
+        # restore NaN at positions where either view was invalid
+        tri = torch.where(
+            valid_expanded,
+            tri,
+            torch.full_like(tri, float('nan')),
         )
-
-        # prepare points for triangulation
-        tri = torch.full(
-            (num_batch, num_keypoints, 3),
-            float('nan'),
-            device=points.device,
-            dtype=points.dtype,
-        )
-
-        # triangulate only valid points
-        for batch_idx in range(num_batch):
-            # get valid keypoint indices for this batch
-            batch_valid_indices = torch.where(valid_mask[batch_idx])[0]
-
-            if len(batch_valid_indices) > 0:
-                # extract valid points for this batch
-                batch_points1 = points1[batch_idx][valid_mask[batch_idx]]
-                batch_points2 = points2[batch_idx][valid_mask[batch_idx]]
-
-                # triangulate valid points
-                batch_tri = triangulate_points(
-                    P1=extrinsics[batch_idx, j1],
-                    P2=extrinsics[batch_idx, j2],
-                    points1=batch_points1,
-                    points2=batch_points2,
-                )
-
-                # place triangulated points back in the full tensor
-                tri[batch_idx, valid_mask[batch_idx]] = batch_tri
 
         p3d.append(tri)
 

@@ -29,6 +29,7 @@ from torch.nn import functional as F
 from torchtyping import TensorType
 from typeguard import typechecked
 
+from lightning_pose.data.cameras import project_3d_to_2d, project_camera_pairs_to_3d
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import generate_heatmaps
 from lightning_pose.utils.pca import KeypointPCA
@@ -48,6 +49,7 @@ __all__ = [
     "RegressionRMSELoss",
     "PairwiseProjectionsLoss",
     "ReprojectionHeatmapLoss",
+    "UnsupervisedReprojectionLoss",
     "get_loss_classes",
 ]
 
@@ -1123,6 +1125,321 @@ class ReprojectionHeatmapLoss(Loss):
         return scalar_loss, logs
 
 
+class UnsupervisedReprojectionLoss(Loss):
+    """Cycle-reprojection consistency loss for unlabeled multiview data.
+
+    Triangulates predicted 2D keypoints to 3D via pairwise camera triangulation,
+    aggregates pairs with ``nanmedian`` for robustness, then reprojects the 3D point
+    back to each view and penalizes the per-keypoint L2 distance between the original
+    prediction and the reprojection.
+
+    Path A v1: a single session's calibration is loaded at init time from
+    ``data_module.dataset.cam_params_file_to_camgroup`` and reused for every unlabeled
+    batch. For fly-anipose with multi-session calibration, pass the session key via
+    the ``session`` kwarg; otherwise the first entry is used.
+    """
+
+    loss_name = "cycle_reprojection"
+
+    def __init__(
+        self,
+        data_module: BaseDataModule | UnlabeledDataModule | None = None,
+        log_weight: float = 0.0,
+        epsilon: float = 0.0,
+        prob_threshold: float = 0.05,
+        session: str | None = None,
+        verbose: bool = False,
+        **kwargs,
+    ) -> None:
+        """Initialize UnsupervisedReprojectionLoss.
+
+        Args:
+            data_module: labeled data module; must expose a dataset with
+                ``cam_params_file_to_camgroup`` populated.
+            log_weight: final weight = ``1.0 / (2.0 * exp(log_weight))``.
+            epsilon: per-keypoint L2 reprojection error (pixels) below which loss
+                contributions are zeroed out.
+            prob_threshold: minimum confidence for a keypoint to contribute to the
+                loss. Applied per (view, keypoint).
+            session: optional key from the ``file`` column of ``camera_params_file``
+                selecting which session's calibration to use. If ``None``, the first
+                session is used.
+            verbose: if True, prints a one-line reprojection-error summary every call.
+                A full init-time diagnostic and a first-forward diagnostic print are
+                emitted regardless of this flag.
+
+        """
+        super().__init__(data_module=data_module, epsilon=epsilon, log_weight=log_weight)
+        self.prob_threshold = torch.tensor(prob_threshold, dtype=torch.float)
+        self.verbose = verbose
+        self._did_first_call_debug = False
+
+        cam_params_dict = getattr(
+            getattr(data_module, "dataset", None), "cam_params_file_to_camgroup", None,
+        )
+        if not cam_params_dict:
+            raise ValueError(
+                "cycle_reprojection loss requires camera calibration. Set "
+                "data.camera_params_file in the config."
+            )
+
+        if session is not None:
+            if session not in cam_params_dict:
+                raise ValueError(
+                    f"cycle_reprojection: session '{session}' not in camera_params_file. "
+                    f"Available: {list(cam_params_dict.keys())}"
+                )
+        else:
+            session = next(iter(cam_params_dict))
+        camgroup = cam_params_dict[session]
+        self.session_used = session
+
+        # store calibration as plain tensors (Loss is not an nn.Module, so register_buffer
+        # is unavailable); they are moved to the input device inside __call__, matching the
+        # pattern used by TemporalLoss.rectify_epsilon / PCALoss.compute_loss.
+        self.cal_intrinsic = torch.stack(
+            [torch.tensor(cam.get_camera_matrix()) for cam in camgroup.cameras], dim=0,
+        ).float()
+        self.cal_extrinsic = torch.stack(
+            [torch.tensor(cam.get_extrinsics_mat()[:3]) for cam in camgroup.cameras], dim=0,
+        ).float()
+        self.cal_distortions = torch.stack(
+            [torch.tensor(cam.get_distortions()) for cam in camgroup.cameras], dim=0,
+        ).float()
+        self.num_views = self.cal_intrinsic.shape[0]
+
+        self._print_init_diagnostics(cam_params_dict)
+
+    def _print_init_diagnostics(self, cam_params_dict: dict) -> None:
+        """Dump calibration summary + a self-test triangulation at init time."""
+        prefix = "[cycle_reprojection]"
+        print(f"{prefix} Path A v1 — single-session calibration (does NOT vary per batch).")
+        print(f"{prefix} sessions in camera_params_file ({len(cam_params_dict)}):")
+        for k in cam_params_dict:
+            marker = "  <-- USED" if k == self.session_used else ""
+            print(f"{prefix}   - {k}{marker}")
+        if len(cam_params_dict) > 1:
+            print(
+                f"{prefix} WARNING: {len(cam_params_dict)} sessions found but only "
+                f"'{self.session_used}' is used. If unlabeled videos come from other "
+                f"sessions, their reprojection residuals will be computed against the "
+                f"WRONG camera geometry. See Path B to fix per-session."
+            )
+        print(f"{prefix} num_views: {self.num_views}")
+        for v in range(self.num_views):
+            K = self.cal_intrinsic[v]
+            E = self.cal_extrinsic[v]
+            fx, fy = K[0, 0].item(), K[1, 1].item()
+            cx, cy = K[0, 2].item(), K[1, 2].item()
+            t_norm = E[:, 3].norm().item()
+            print(
+                f"{prefix}   view {v}: fx={fx:.1f} fy={fy:.1f} "
+                f"cx={cx:.1f} cy={cy:.1f} |t|={t_norm:.2f}"
+            )
+        self._self_test_roundtrip()
+
+    def _self_test_roundtrip(self) -> None:
+        """3D -> 2D -> 3D round-trip on the scene center; residual should be ~0."""
+        prefix = "[cycle_reprojection]"
+        try:
+            # scene anchor: centroid of camera centers (C_v = -R_v^T t_v)
+            R = self.cal_extrinsic[:, :, :3]                  # (V, 3, 3)
+            t = self.cal_extrinsic[:, :, 3]                   # (V, 3)
+            centers = -torch.einsum(
+                "vij,vj->vi", R.transpose(-1, -2), t,
+            )                                                  # (V, 3)
+            anchor = centers.mean(dim=0).unsqueeze(0).unsqueeze(0)  # (1, 1, 3)
+
+            intr = self.cal_intrinsic.unsqueeze(0)            # (1, V, 3, 3)
+            extr = self.cal_extrinsic.unsqueeze(0)            # (1, V, 3, 4)
+            dst = self.cal_distortions.unsqueeze(0)           # (1, V, D)
+
+            proj_2d = project_3d_to_2d(
+                points_3d=anchor, intrinsics=intr, extrinsics=extr, dist=dst,
+            )                                                  # (1, V, 1, 2)
+            if torch.isnan(proj_2d).any():
+                print(
+                    f"{prefix} self-test: anchor projection produced NaN "
+                    f"(anchor behind some camera). Skipping round-trip."
+                )
+                return
+            tri_3d = project_camera_pairs_to_3d(
+                points=proj_2d, intrinsics=intr, extrinsics=extr, dist=dst,
+            )                                                  # (1, pairs, 1, 3)
+            median_3d = torch.nanmedian(tri_3d, dim=1).values   # (1, 1, 3)
+            residual = (median_3d - anchor).norm(dim=-1).item()
+            print(
+                f"{prefix} self-test 3D->2D->3D residual: {residual:.4e} "
+                f"(expect ~1e-3 or smaller for a well-calibrated session)"
+            )
+            if residual > 0.1:
+                print(
+                    f"{prefix} WARNING: large self-test residual — check that "
+                    "camera_params_file units match keypoint units (world coords "
+                    "vs pixels, meters vs millimeters, etc.)."
+                )
+        except Exception as e:
+            print(f"{prefix} self-test FAILED with {type(e).__name__}: {e}")
+
+    def compute_loss(
+        self,
+        keypoints_pred: TensorType["batch", "num_views", "num_keypoints", 2],
+        intrinsics: TensorType["batch", "num_views", 3, 3],
+        extrinsics: TensorType["batch", "num_views", 3, 4],
+        dist: TensorType["batch", "num_views", "num_params"],
+    ) -> TensorType["batch", "num_views", "num_keypoints"]:
+        points_3d_pairs = project_camera_pairs_to_3d(
+            points=keypoints_pred, intrinsics=intrinsics, extrinsics=extrinsics, dist=dist,
+        )
+        # median over cam_pairs; nanmedian ignores failed triangulations
+        points_3d = torch.nanmedian(points_3d_pairs, dim=1).values
+        reprojected_2d = project_3d_to_2d(
+            points_3d=points_3d, intrinsics=intrinsics, extrinsics=extrinsics, dist=dist,
+        )
+        return torch.linalg.norm(keypoints_pred - reprojected_2d, ord=2, dim=-1)
+
+    def remove_nans(
+        self,
+        loss: TensorType["batch", "num_views", "num_keypoints"],
+        confidences: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        valid_mask = ~torch.isnan(loss)
+        if confidences is not None:
+            conf = confidences.reshape(loss.shape)
+            valid_mask = valid_mask & (conf >= self.prob_threshold.to(conf.device))
+        valid_losses = torch.masked_select(loss, valid_mask)
+        if valid_losses.numel() == 0:
+            # zero that preserves gradients (mirrors PairwiseProjectionsLoss.remove_nans)
+            dummy = torch.where(valid_mask, loss, torch.zeros_like(loss))
+            return dummy.sum()
+        return valid_losses
+
+    def __call__(
+        self,
+        keypoints_pred: TensorType["batch", "two_x_num_views_x_num_keypoints"],
+        confidences: TensorType["batch", "num_views_x_num_keypoints"] | None = None,
+        stage: Literal["train", "val", "test"] | None = None,
+        **kwargs,
+    ) -> Tuple[TensorType[()], list[dict]]:
+        batch = keypoints_pred.shape[0]
+        num_keypoints = keypoints_pred.shape[1] // 2 // self.num_views
+        pred = keypoints_pred.reshape(batch, self.num_views, num_keypoints, 2)
+
+        device = keypoints_pred.device
+        intrinsics = self.cal_intrinsic.to(device).unsqueeze(0).expand(batch, -1, -1, -1)
+        extrinsics = self.cal_extrinsic.to(device).unsqueeze(0).expand(batch, -1, -1, -1)
+        dist = self.cal_distortions.to(device).unsqueeze(0).expand(batch, -1, -1)
+
+        elementwise_loss = self.compute_loss(
+            keypoints_pred=pred, intrinsics=intrinsics, extrinsics=extrinsics, dist=dist,
+        )
+
+        if not self._did_first_call_debug:
+            self._did_first_call_debug = True
+            self._print_first_call_debug(
+                keypoints_pred=keypoints_pred,
+                pred=pred,
+                elementwise_loss=elementwise_loss,
+                confidences=confidences,
+            )
+
+        clean_loss = self.remove_nans(loss=elementwise_loss, confidences=confidences)
+        epsilon_insensitive_loss = self.rectify_epsilon(loss=clean_loss)
+        scalar_loss = self.reduce_loss(epsilon_insensitive_loss, method="mean")
+
+        if self.verbose:
+            with torch.no_grad():
+                not_nan = ~torch.isnan(elementwise_loss)
+                n_not_nan = int(not_nan.sum().item())
+                n_total = int(not_nan.numel())
+                conf_str = ""
+                if confidences is not None:
+                    conf_reshaped = confidences.reshape(elementwise_loss.shape)
+                    conf_mask = conf_reshaped >= self.prob_threshold.to(confidences.device)
+                    n_conf = int((not_nan & conf_mask).sum().item())
+                    conf_mean = conf_reshaped[not_nan].mean().item() if n_not_nan > 0 else float("nan")
+                    conf_str = f" conf_mean={conf_mean:.4f} conf_pass={n_conf}/{n_not_nan}"
+                    valid_final = not_nan & conf_mask
+                else:
+                    valid_final = not_nan
+                    n_conf = n_not_nan
+                raw_mean = (
+                    elementwise_loss[valid_final].mean().item()
+                    if n_conf > 0 else float("nan")
+                )
+                print(
+                    f"[cycle_reprojection] stage={stage} batch={pred.shape[0]} "
+                    f"not_nan={n_not_nan}/{n_total}{conf_str} "
+                    f"raw_mean_pix={raw_mean:.4f} "
+                    f"post_eps_scalar={scalar_loss.item():.4f}"
+                )
+
+        logs = self.log_loss(loss=scalar_loss, stage=stage)
+        return scalar_loss, logs
+
+    def _print_first_call_debug(
+        self,
+        keypoints_pred: torch.Tensor,
+        pred: torch.Tensor,
+        elementwise_loss: torch.Tensor,
+        confidences: torch.Tensor | None,
+    ) -> None:
+        """One-shot diagnostic on the first forward call."""
+        prefix = "[cycle_reprojection]"
+        with torch.no_grad():
+            print(f"{prefix} FIRST FORWARD")
+            print(
+                f"{prefix}   keypoints_pred: shape={tuple(keypoints_pred.shape)} "
+                f"device={keypoints_pred.device} dtype={keypoints_pred.dtype}"
+            )
+            print(
+                f"{prefix}   calibration (stored on {self.cal_intrinsic.device}, "
+                f"moved to {keypoints_pred.device} for compute)"
+            )
+            if confidences is not None:
+                print(
+                    f"{prefix}   confidences: shape={tuple(confidences.shape)} "
+                    f"min={confidences.min().item():.3f} "
+                    f"mean={confidences.mean().item():.3f} "
+                    f"max={confidences.max().item():.3f}"
+                )
+            # pred stats (detect obvious scale/units mismatch vs calibration)
+            finite = torch.isfinite(pred)
+            if finite.any():
+                vals = pred[finite]
+                print(
+                    f"{prefix}   pred coords (pixels?): "
+                    f"min={vals.min().item():.1f} "
+                    f"max={vals.max().item():.1f} "
+                    f"mean={vals.mean().item():.1f}"
+                )
+            # reprojection error distribution pre-epsilon, pre-conf-mask
+            finite_loss = elementwise_loss[~torch.isnan(elementwise_loss)]
+            if finite_loss.numel() > 0:
+                q = torch.quantile(
+                    finite_loss.float(), torch.tensor([0.5, 0.95], device=finite_loss.device),
+                )
+                print(
+                    f"{prefix}   reprojection err (pixels, pre-epsilon): "
+                    f"mean={finite_loss.mean().item():.2f} "
+                    f"median={q[0].item():.2f} "
+                    f"p95={q[1].item():.2f} "
+                    f"max={finite_loss.max().item():.2f}"
+                )
+                if finite_loss.mean().item() > 1e3:
+                    print(
+                        f"{prefix}   WARNING: reprojection error >1000 px suggests "
+                        "geometry/units mismatch (wrong session calibration for these "
+                        "unlabeled frames, or pixel vs normalized-coord mismatch)."
+                    )
+            nan_frac_pred = torch.isnan(pred).any(dim=-1).float().mean().item()
+            nan_frac_loss = torch.isnan(elementwise_loss).float().mean().item()
+            print(
+                f"{prefix}   NaN fraction: pred={nan_frac_pred:.3f} "
+                f"elementwise_loss={nan_frac_loss:.3f}"
+            )
+
+
 @typechecked
 def get_loss_classes() -> dict[str, Type[Loss]]:
     """Get a dict with all the loss classes.
@@ -1146,5 +1463,6 @@ def get_loss_classes() -> dict[str, Type[Loss]]:
         UnimodalLoss.LOSS_NAME_JS: UnimodalLoss,
         PairwiseProjectionsLoss.loss_name: PairwiseProjectionsLoss,
         ReprojectionHeatmapLoss.loss_name: ReprojectionHeatmapLoss,
+        UnsupervisedReprojectionLoss.loss_name: UnsupervisedReprojectionLoss,
     }
     return loss_dict
