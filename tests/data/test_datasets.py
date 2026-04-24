@@ -463,51 +463,6 @@ class TestMultiviewHeatmapDataset:
             # check that output is a different tensor (cloned)
             assert result[idx_view] is not images[idx_view]
 
-    def test_sufficient_keypoints_for_augmentation(self):
-        """Test _sufficient_keypoints_for_augmentation with various keypoint configurations."""
-
-        # Test case: All views have sufficient keypoints (>=3 valid)
-        kps_1 = np.array([
-            # View 1: 4 valid keypoints
-            [[100, 200], [150, 250], [250, 350]],
-            # View 2: 3 valid keypoints (minimum required)
-            [[110, 210], [160, 260], [210, 310]],
-            # View 3: 5 valid keypoints
-            [[120, 220], [170, 270], [320, 420]],
-        ])
-        assert MultiviewHeatmapDataset._sufficient_keypoints_for_augmentation(kps_1)
-
-        # Test case: Views with NaN values but still sufficient valid keypoints
-        kps_2 = np.array([
-            # View 1: 4 valid keypoints + 1 NaN keypoint
-            [[100, 200], [150, 250], [200, 300], [250, 350], [np.nan, np.nan]],
-            # View 2: 3 valid keypoints + 2 partial NaN keypoints
-            [[110, 210], [160, 260], [210, 310], [np.nan, np.nan], [np.nan, np.nan]],
-            # View 3: 5 valid keypoints + 1 completely NaN keypoint
-            [[120, 220], [170, 270], [220, 320], [270, 370], [320, 420]],
-        ])
-        assert MultiviewHeatmapDataset._sufficient_keypoints_for_augmentation(kps_2)
-
-        # Test case: Views with NaN values that result in insufficient valid keypoints
-        kps_3 = np.array([
-            # View 1: 3 valid keypoints + 2 NaN keypoints
-            [[100, 200], [150, 250], [200, 300], [np.nan, np.nan], [np.nan, np.nan]],
-            # View 2: Only 2 valid keypoints + 3 NaN/partial NaN keypoints
-            [[110, 210], [160, 260], [np.nan, np.nan], [np.nan, np.nan], [np.nan, np.nan]],
-            # View 3: 4 valid keypoints
-            [[120, 220], [170, 270], [220, 320], [270, 370], [275, 375]],
-        ])
-        assert not MultiviewHeatmapDataset._sufficient_keypoints_for_augmentation(kps_3)
-
-        # Test case: All keypoints are NaN
-        kps_4 = np.array([
-            # View 1: All NaN keypoints
-            [[np.nan, np.nan], [np.nan, np.nan], [np.nan, np.nan], [np.nan, np.nan]],
-            # View 2: All NaN keypoints
-            [[np.nan, np.nan], [np.nan, np.nan], [np.nan, np.nan], [np.nan, np.nan]],
-        ])
-        assert not MultiviewHeatmapDataset._sufficient_keypoints_for_augmentation(kps_4)
-
     def test_get_2d_keypoints_from_example_dict_absolute_coords(self, multiview_heatmap_dataset):
 
         from lightning_pose.data.utils import normalized_to_bbox
@@ -878,6 +833,67 @@ class TestApply3DTransforms:
         datadict_2[view]["keypoints"].fill_(float("nan"))
         datadict_2[view]["keypoints"][:4] = torch.tensor([100.0, 100.0, 200.0, 200.0])
         no_change(datadict_2)
+
+    def test_mismatched_valid_keypoints_across_views(
+        self,
+        multiview_heatmap_dataset,
+        valid_data_dict,
+        camera_group,
+    ):
+        """Test fallback when each view has >=3 valid keypoints but the valid sets don't overlap.
+
+        Without the valid_kps < 3 check, this case would not be caught:
+        each view independently has >=3 valid keypoints, but no keypoint is valid in all views
+        simultaneously, so triangulation produces 0 valid 3D points. The code would then raise a
+        RuntimeError inside _transform_images.
+        """
+
+        num_kp_per_view = (
+            multiview_heatmap_dataset.num_keypoints // multiview_heatmap_dataset.num_views
+        )
+        view_names = multiview_heatmap_dataset.view_names
+
+        datadict = copy.deepcopy(valid_data_dict)
+
+        # View 0: keypoints 0,1,2 valid; rest NaN
+        kp0 = datadict[view_names[0]]["keypoints"]
+        kp0.fill_(float("nan"))
+        kp0[0:6] = torch.tensor([100.0, 100.0, 150.0, 100.0, 200.0, 100.0])
+
+        # View 1: keypoints 3,4,5 valid; rest NaN  (no overlap with view 0)
+        kp1 = datadict[view_names[1]]["keypoints"]
+        kp1.fill_(float("nan"))
+        kp1[6:12] = torch.tensor([110.0, 110.0, 160.0, 110.0, 210.0, 110.0])
+
+        # Each view has 3 valid keypoints, but valid_kps after triangulation == 0 < 3.
+        # Without the valid_kps < 3 guard this call raises RuntimeError.
+        np.random.seed(42)
+        torch.manual_seed(42)
+        datadict_aug, keypoints_3d_aug = multiview_heatmap_dataset.apply_3d_transforms(
+            data_dict=datadict,
+            camgroup=camera_group,
+            scale_params=(0.5, 2.0),
+            shift_param=0.5,
+        )
+
+        # Should fall back: 3D keypoints unchanged (all NaN, nothing triangulated)
+        original_keypoints_2d = (
+            multiview_heatmap_dataset._get_2d_keypoints_from_example_dict_absolute_coords(datadict)
+        )
+        original_3d = camera_group.triangulate_fast(original_keypoints_2d.copy())
+        assert np.allclose(keypoints_3d_aug.numpy(), original_3d, equal_nan=True, atol=1e-3)
+
+        # 2D keypoints should also be unchanged
+        for view in view_names:
+            original_kp = datadict[view]["keypoints"]
+            augmented_kp = datadict_aug[view]["keypoints"]
+            valid_mask = ~torch.isnan(original_kp)
+            assert torch.allclose(
+                original_kp[valid_mask],
+                augmented_kp[valid_mask],
+                equal_nan=True,
+                atol=1e-3,
+            )
 
     def test_all_nans(self, multiview_heatmap_dataset):
 
