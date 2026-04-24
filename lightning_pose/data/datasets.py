@@ -698,19 +698,6 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             ))
         return images_resized
 
-    @staticmethod
-    def _sufficient_keypoints_for_augmentation(keypoints: np.ndarray) -> bool:
-        """Check if there are >=3 non-NaN keypoints in all views, required for augmentation."""
-        for keypoints_curr in keypoints:
-            # create a mask for valid keypoints
-            valid_mask = ~np.isnan(keypoints_curr).any(axis=1)
-            # apply the same mask to both original and augmented keypoints
-            keypoints_masked = keypoints_curr[valid_mask]
-            # ensure we have enough points for transformation
-            if len(keypoints_masked) < 3:
-                return False
-        return True
-
     def apply_3d_transforms(
         self,
         data_dict: dict,
@@ -744,8 +731,11 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             # triangulate keypoints (2D -> 3D)
             keypoints_3d = camgroup.triangulate_fast(keypoints_2d.copy())
 
-            # if fewer than 3 valid keypoints in at least one view, cannot perform augmentation
-            if not self._sufficient_keypoints_for_augmentation(keypoints_2d):
+            # check number of properly triangulated points
+            valid_kps = np.sum(~(np.isnan(keypoints_3d).any(axis=1)))
+
+            # if fewer than 3 valid triangulated keypoints, cannot perform augmentation
+            if valid_kps < 3:
 
                 # keep 3d keypoints the same
                 keypoints_3d_aug = keypoints_3d.copy()

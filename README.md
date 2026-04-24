@@ -10,7 +10,8 @@
 Lightning Pose is an end-to-end toolkit designed for robust multi-view and single-view animal
 pose estimation using advanced transformer architectures. It leverages Multi-View Transformers
 and patch-masking training to learn geometric relationships between views,
-resulting in strong performance on occlusions [Aharon, et al. 2025](https://arxiv.org/abs/2510.09903).
+resulting in strong performance on occlusions 
+[Aharon, Whiteway et al. 2026](https://www.biorxiv.org/content/10.64898/2026.04.20.719731v1).
 For single-view datasets it leverages temporal context and learned plausibility constraints for 
 strong performance in challenging scenarios [Biderman, Whiteway et al. 2024, Nature Methods](https://rdcu.be/dLP3z).
 It has a rich GUI that supports the end-to-end workflow: labeling, model management, and evaluation.
