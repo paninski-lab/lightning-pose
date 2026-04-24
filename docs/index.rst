@@ -10,7 +10,7 @@ Lightning Pose Homepage
    A new modern UI is available for multi-camera single-animal pose estimation,
    featuring end-to-end support for labeling, model management, and viewing predictions.
 
-   Since the initial release in late Jan 2026. Over 40 researchers from 8 countries have installed and run the app.
+   Since the initial release in late Jan 2026. Over 70 researchers from 10+ countries have installed and run the app.
 
    * **Get started:**
      Check out the :doc:`Create your first project <source/create_first_project>` tutorial and
@@ -153,22 +153,22 @@ The original Nature Methods 2024 paper that introduced Lightning Pose for single
 
          *Nature Methods* 21, 1316–1328 (2024)
 
-The 2025 paper that added robust multiview support using multiview transformers (MVT),
+The 2026 preprint that added robust multiview support using multiview transformers (MVT),
 patch masking, 3d image augmentation and losses, and multiview EKS.
 
-| **An Uncertainty-Aware Framework for Data-Efficient Multi-View Animal Pose Estimation**
-| Aharon, L., Lee, K., et al.
+| **Lightning Pose 3D: an uncertainty-aware framework for data-efficient multi-view animal pose estimation**
+| Aharon, L., Whiteway, M. R., et al.
 
 .. grid::
    :padding: 0
    :margin: 2 0 0 0
 
    .. grid-item::
-      .. button-link:: https://arxiv.org/abs/2510.09903
+      .. button-link:: https://www.biorxiv.org/content/10.64898/2026.04.20.719731v1
          :color: primary
          :outline:
 
-         arXiv Preprint (2025)
+         bioRxiv Preprint (2026)
 
 .. rst-class:: section-multi-view
 
