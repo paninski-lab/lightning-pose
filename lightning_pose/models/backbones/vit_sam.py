@@ -113,8 +113,8 @@ class SamVisionEncoder(nn.Module):
                     hidden_states,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, output_attentions=None)
-            hidden_states = layer_outputs[0]
+                layer_outputs = layer_module(hidden_states)
+            hidden_states = layer_outputs
 
         # Reshape to [B, C, H, W]
         features = hidden_states.permute(0, 3, 1, 2)

@@ -189,7 +189,6 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         encoder_outputs = self.backbone.vision_encoder.encoder(
             embedding_output,
             head_mask=None,
-            output_attentions=False,
             output_hidden_states=False,
             return_dict=None,
         )

@@ -176,7 +176,6 @@ class VisionEncoder(torch.nn.Module):
             x,
             return_dict=True,
             output_hidden_states=False,
-            output_attentions=False,
             interpolate_pos_encoding=True,
         ).last_hidden_state
 
