@@ -12,13 +12,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     steps:
       - name: Add SSH key to agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.KS3582_AXON_SSH_PRIVATE_KEY }}
+          ssh-private-key: ${{ secrets.MW3323_AXON_SSH_PRIVATE_KEY }}
 
       - name: Add known hosts
         run: |
@@ -37,4 +37,4 @@ jobs:
       - name: Execute build script via SSH
         # -t flag is necessary to forward github cancellation event (SIGINT)
         run: |
-          ssh -tt -p 55 ks3582@axon-remote.rc.zi.columbia.edu 'sh buildbot/build_srun.sh ${{ github.event.pull_request.number }}'
+          ssh -tt -p 55 mw3323@axon-remote.rc.zi.columbia.edu 'sh buildbot/build_srun.sh ${{ github.event.pull_request.number }}'

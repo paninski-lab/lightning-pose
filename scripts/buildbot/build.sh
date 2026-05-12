@@ -26,8 +26,16 @@ PR_NUMBER="$1"
 
 echo "Running from $(hostname)"
 
+# Activate environment
+echo "Setting up environment..."
+source ~/.bashrc
 ml Miniforge-24.7.1-2
 conda activate $CONDA_ENV
+ml gcc/14.1                        # satisfies NumPy >= 2 requirement
+export LD_PRELOAD=/home/$(whoami)/.conda/envs/$CONDA_ENV/lib/libstdc++.so.6
+echo "Active conda environment: $CONDA_ENV"
+echo "Python location: $(which python)"
+echo "Pip location $(which pip)"
 
 # Remove builds older than 24 hours
 find "$BASE_DIR" -maxdepth 1 -type d -mtime +0 -print0 | while IFS= read -r -d $'\0' directory; do
@@ -47,7 +55,11 @@ git remote add upstream "https://github.com/$USER/$REPO_NAME.git"
 git fetch upstream "refs/pull/$PR_NUMBER/merge"
 git checkout FETCH_HEAD
 
-# Run with html reporting.
+# Install with checks
 pip install ".[dev]" # Install any new dependencies.
-pytest --html=report.html --self-contained-html
+echo "Pip install exit code: $?"
+pip show lightning_pose
+python -c "import lightning_pose; print('LP location:', lightning_pose.__file__); print('LP import successful')"
 
+# Run with html reporting.
+pytest --html=report.html --self-contained-html
