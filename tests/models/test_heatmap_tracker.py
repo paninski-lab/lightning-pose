@@ -129,10 +129,10 @@ def test_supervised_heatmap_vits_dinov3(
     cfg_tmp.model.losses_to_use = []
 
     # Check if we have HuggingFace auth
+    has_hf_auth = False
     try:
-        from huggingface_hub import HfFolder
-        token = HfFolder.get_token()
-        has_hf_auth = token is not None
+        from huggingface_hub import get_token
+        has_hf_auth = get_token() is not None
     except ImportError:
         # huggingface_hub not installed (e.g., in CI)
         has_hf_auth = False
