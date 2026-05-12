@@ -6,6 +6,7 @@ from typing import Callable, Literal, Tuple, Union
 
 import cv2
 import imgaug.augmenters as iaa
+import imgaug.augmenters.size as _iaa_size
 import kornia.geometry.transform as ktransform
 import numpy as np
 import pandas as pd
@@ -30,6 +31,20 @@ __all__ = [
     "HeatmapDataset",
     "MultiviewHeatmapDataset",
 ]
+
+
+def _patched_prevent(axis_size, crop_start, crop_end):
+    """Monkey patch to fix imaug 0.4.2 compatability issue with numpy 2.x"""
+    result = _iaa_size._prevent_zero_sizes_after_crops_(
+        np.array([axis_size], dtype=np.int32),
+        np.array([crop_start], dtype=np.int32),
+        np.array([crop_end], dtype=np.int32),
+    )
+    return tuple(int(np.asarray(v).flat[0]) for v in result)
+
+
+#  monkey patch to fix imaug 0.4.2 compatability issue with numpy 2.x
+_iaa_size._prevent_zero_size_after_crop_ = _patched_prevent
 
 
 class BaseTrackingDataset(torch.utils.data.Dataset):
