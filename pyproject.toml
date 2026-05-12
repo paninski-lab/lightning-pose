@@ -42,7 +42,7 @@ dependencies = [
     "moviepy (>=2.0.0)",
     "numpy (>=2.0.0)",
     "opencv-python-headless",
-    "pandas (>=2.0.0)",
+    "pandas (>=2.2.2)",
     "pillow",
     "safetensors",
     "scikit-learn (>=1.5.0)",
