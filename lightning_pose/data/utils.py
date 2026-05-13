@@ -1,6 +1,6 @@
 """Dataset/data module utilities."""
 import os
-from typing import Any, Literal, Tuple, Union
+from typing import Any, Literal
 
 import imgaug.augmenters as iaa
 import lightning.pytorch as pl
@@ -35,7 +35,7 @@ __all__ = [
 ]
 
 
-class DataExtractor(object):
+class DataExtractor:
     """Helper class to extract all data from a data module."""
 
     def __init__(
@@ -143,7 +143,7 @@ class DataExtractor(object):
 
     @property
     def dataset_length(self) -> int:
-        name = "%s_dataset" % self.cond
+        name = f"{self.cond}_dataset"
         return len(getattr(self.data_module, name))
 
     def get_loader(
@@ -170,17 +170,17 @@ class DataExtractor(object):
 
     def iterate_over_dataloader(
         self, loader: torch.utils.data.DataLoader
-    ) -> Tuple[
+    ) -> tuple[
         TensorType["num_examples", Any],
-        Union[
-            TensorType["num_examples", 3, "image_width", "image_height"],
-            TensorType["num_examples", "frames", 3, "image_width", "image_height"],
-            None,
-        ],
+        (
+            TensorType["num_examples", 3, "image_width", "image_height"]
+            | TensorType["num_examples", "frames", 3, "image_width", "image_height"]
+            | None
+        ),
     ]:
         keypoints_list = []
         images_list = []
-        for ind, batch in enumerate(loader):
+        for _ind, batch in enumerate(loader):
             keypoints_list.append(batch["keypoints"])
             if self.extract_images:
                 images_list.append(batch["images"])
@@ -199,13 +199,13 @@ class DataExtractor(object):
 
     def __call__(
         self,
-    ) -> Tuple[
+    ) -> tuple[
         TensorType["num_examples", Any],
-        Union[
-            TensorType["num_examples", 3, "image_width", "image_height"],
-            TensorType["num_examples", "frames", 3, "image_width", "image_height"],
-            None,
-        ],
+        (
+            TensorType["num_examples", 3, "image_width", "image_height"]
+            | TensorType["num_examples", "frames", 3, "image_width", "image_height"]
+            | None
+        ),
     ]:
         loader = self.get_loader()
         loader = self.verify_labeled_loader(loader)
@@ -343,7 +343,7 @@ def generate_heatmaps(
     keypoints: TensorType["batch", "num_keypoints", 2],
     height: int,
     width: int,
-    output_shape: Tuple[int, int],
+    output_shape: tuple[int, int],
     sigma: float = 1.25,
     uniform_heatmaps: bool = False,
     keep_gradients: bool = False,
@@ -518,14 +518,14 @@ def undo_affine_transform(
 
 def undo_affine_transform_batch(
     keypoints_augmented: TensorType["seq_len", "num_keypointsx2"],
-    transforms: Union[
-        TensorType["seq_len", "h":2, "w":3],
-        TensorType["h":2, "w":3],
-        TensorType["seq_len", "null":1],
-        TensorType["null":1],
-        TensorType["num_views", "h":2, "w":3],
-        TensorType["num_views", "null":1, "null":1],
-    ],
+    transforms: (
+        TensorType["seq_len", "h":2, "w":3]
+        | TensorType["h":2, "w":3]
+        | TensorType["seq_len", "null":1]
+        | TensorType["null":1]
+        | TensorType["num_views", "h":2, "w":3]
+        | TensorType["num_views", "null":1, "null":1]
+    ),
     is_multiview: bool = False,
 ) -> TensorType["seq_len", "num_keypointsx2"]:
     """Potentially undo an affine transform given a tensor of keypoints and the tranform matrix."""

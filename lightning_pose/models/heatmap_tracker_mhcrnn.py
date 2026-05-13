@@ -1,12 +1,11 @@
 """Models that produce heatmaps of keypoints from images."""
 
-from typing import Any, Tuple, Union
+from typing import Any, Literal
 
 import torch
 from omegaconf import DictConfig
 from torchtyping import TensorType
 from typeguard import typechecked
-from typing_extensions import Literal
 
 from lightning_pose.data.datatypes import (
     HeatmapLabeledBatchDict,
@@ -112,14 +111,14 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
 
     def forward(
         self,
-        images: Union[
-            TensorType["batch", "frames", "channels":3, "image_height", "image_width"],
-            TensorType["batch", "channels":3, "image_height", "image_width"],
-            TensorType["batch", "view", "frames", "channels":3, "image_height", "image_width"],
-            TensorType["batch", "view", "channels":3, "image_height", "image_width"],
-        ],
+        images: (
+            TensorType["batch", "frames", "channels":3, "image_height", "image_width"]
+            | TensorType["batch", "channels":3, "image_height", "image_width"]
+            | TensorType["batch", "view", "frames", "channels":3, "image_height", "image_width"]
+            | TensorType["batch", "view", "channels":3, "image_height", "image_width"]
+        ),
         is_multiview: bool = False,
-    ) -> Tuple[
+    ) -> tuple[
             TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"],
             TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"],
     ]:
@@ -154,10 +153,7 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
 
     def get_loss_inputs_labeled(
         self,
-        batch_dict: Union[
-            HeatmapLabeledBatchDict,
-            MultiviewHeatmapLabeledBatchDict,
-        ],
+        batch_dict: HeatmapLabeledBatchDict | MultiviewHeatmapLabeledBatchDict,
     ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
@@ -179,17 +175,12 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
 
     def predict_step(
         self,
-        batch_dict: Union[
-            HeatmapLabeledBatchDict,
-            MultiviewHeatmapLabeledBatchDict,
-            UnlabeledBatchDict,
-        ],
+        batch_dict: (
+            HeatmapLabeledBatchDict | MultiviewHeatmapLabeledBatchDict | UnlabeledBatchDict
+        ),
         batch_idx: int,
         return_heatmaps: bool | None = False,
-    ) -> Union[
-        Tuple[torch.Tensor, torch.Tensor],
-        Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
-    ]:
+    ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Predict heatmaps and keypoints for a batch of video frames.
 
         Assuming a DALI video loader is passed in
@@ -300,10 +291,7 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
 
     def get_loss_inputs_unlabeled(
         self,
-        batch_dict: Union[
-            UnlabeledBatchDict,
-            MultiviewUnlabeledBatchDict,
-        ]
+        batch_dict: UnlabeledBatchDict | MultiviewUnlabeledBatchDict
     ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)"""
 

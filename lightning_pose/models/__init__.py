@@ -27,16 +27,16 @@ SemiSupervisedHeatmapTrackerMultiviewTransformer.__module__ = "lightning_pose.mo
 RegressionTracker.__module__ = "lightning_pose.models"
 SemiSupervisedRegressionTracker.__module__ = "lightning_pose.models"
 
-ALLOWED_MODELS = Union[
-    HeatmapTracker,
-    SemiSupervisedHeatmapTracker,
-    HeatmapTrackerMHCRNN,
-    SemiSupervisedHeatmapTrackerMHCRNN,
-    HeatmapTrackerMultiviewTransformer,
-    SemiSupervisedHeatmapTrackerMultiviewTransformer,
-    RegressionTracker,
-    SemiSupervisedRegressionTracker,
-]
+ALLOWED_MODELS = (
+    HeatmapTracker
+    | SemiSupervisedHeatmapTracker
+    | HeatmapTrackerMHCRNN
+    | SemiSupervisedHeatmapTrackerMHCRNN
+    | HeatmapTrackerMultiviewTransformer
+    | SemiSupervisedHeatmapTrackerMultiviewTransformer
+    | RegressionTracker
+    | SemiSupervisedRegressionTracker
+)
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [

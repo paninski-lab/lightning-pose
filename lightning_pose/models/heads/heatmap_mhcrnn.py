@@ -1,12 +1,12 @@
 """Heads that produce heatmap predictions for heatmap regression."""
 
-from typing import Tuple
+
+from typing import Literal
 
 import torch
 from kornia.geometry.subpix import spatial_softmax2d
 from torch import nn
 from torchtyping import TensorType
-from typing_extensions import Literal
 
 from lightning_pose.models.heads import HeatmapHead
 from lightning_pose.models.heads.heatmap import run_subpixelmaxima
@@ -81,7 +81,7 @@ class HeatmapMHCRNNHead(nn.Module):
         features: TensorType["batch", "features", "rep_height", "rep_width", "frames"],
         batch_shape: torch.tensor,
         is_multiview: bool,
-    ) -> Tuple[
+    ) -> tuple[
         TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
         TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
     ]:
@@ -243,13 +243,13 @@ class UpsamplingCRNN(nn.Module):
 
         torch.nn.init.xavier_uniform_(self.W_f.weight, gain=1.0)
         torch.nn.init.zeros_(self.W_f.bias)
-        for index, layer in enumerate(self.H_f):
+        for _index, layer in enumerate(self.H_f):
             torch.nn.init.xavier_uniform_(layer.weight, gain=1.0)
             torch.nn.init.zeros_(layer.bias)
 
         torch.nn.init.xavier_uniform_(self.W_b.weight, gain=1.0)
         torch.nn.init.zeros_(self.W_b.bias)
-        for index, layer in enumerate(self.H_b):
+        for _index, layer in enumerate(self.H_b):
             torch.nn.init.xavier_uniform_(layer.weight, gain=1.0)
             torch.nn.init.zeros_(layer.bias)
 
@@ -265,7 +265,7 @@ class UpsamplingCRNN(nn.Module):
             frames, batch, n_features, rep_height, rep_width = features.shape
             frames_batch_shape = batch * frames
             representations_batch_frames: TensorType[
-                "batch*frames", "features", "rep_height", "rep_width"
+                batch*frames, features, rep_height, rep_width
             ] = features.reshape(frames_batch_shape, n_features, rep_height, rep_width)
             x_tensor = self.W_pre(self.pixel_shuffle(representations_batch_frames))
             x_tensor = x_tensor.reshape(

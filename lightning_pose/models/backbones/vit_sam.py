@@ -106,7 +106,7 @@ class SamVisionEncoder(nn.Module):
             hidden_states = hidden_states + self.vision_encoder.pos_embed
 
         # Transformer layers
-        for i, layer_module in enumerate(self.vision_encoder.layers):
+        for _i, layer_module in enumerate(self.vision_encoder.layers):
             if self.vision_encoder.gradient_checkpointing and self.vision_encoder.training:
                 layer_outputs = self.vision_encoder._gradient_checkpointing_func(
                     layer_module.__call__,

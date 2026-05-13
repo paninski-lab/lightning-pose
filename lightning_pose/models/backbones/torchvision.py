@@ -1,5 +1,4 @@
 from collections import OrderedDict
-from typing import Tuple
 
 import torch
 import torchvision.models as tvmodels
@@ -17,7 +16,7 @@ def build_backbone(
     pretrained: bool = True,
     model_type: str = "heatmap",
     **kwargs,
-) -> Tuple:
+) -> tuple:
     """Load backbone weights for resnets, efficientnets, and other models from torchvision.
 
     Args:
@@ -36,18 +35,18 @@ def build_backbone(
         # load resnet50 pretrained using SimCLR on imagenet
         try:
             from pl_bolts.models.self_supervised import SimCLR
-        except ImportError:
+        except ImportError as err:
             raise Exception(
                 "lightning-bolts package is not installed.\n"
                 "Run `pip install lightning-bolts` "
                 "in order to access 'resnet50_contrastive' backbone"
-            )
+            ) from err
         ckpt_url = "https://pl-bolts-weights.s3.us-east-2.amazonaws.com/simclr/bolts_simclr_imagenet/simclr_imagenet.ckpt"  # noqa: E501
         simclr = SimCLR.load_from_checkpoint(ckpt_url, strict=False)
         base = simclr.encoder
 
     elif "resnet50_animal" in backbone_arch:
-        base = getattr(tvmodels, "resnet50")(weights=None)
+        base = tvmodels.resnet50(weights=None)
         backbone_type = "_".join(backbone_arch.split("_")[2:])
         if backbone_type == "apose":
             ckpt_url = "https://download.openmmlab.com/mmpose/animal/resnet/res50_animalpose_256x256-e1f30bff_20210426.pth"  # noqa: E501
@@ -63,7 +62,7 @@ def build_backbone(
         base.load_state_dict(new_state_dict, strict=False)
 
     elif "resnet50_human" in backbone_arch:
-        base = getattr(tvmodels, "resnet50")(weights=None)
+        base = tvmodels.resnet50(weights=None)
         backbone_type = "_".join(backbone_arch.split("_")[2:])
         if backbone_type == "jhmdb":
             ckpt_url = "https://download.openmmlab.com/mmpose/top_down/resnet/res50_jhmdb_sub3_256x256-c4ec1a0b_20201122.pth"  # noqa: E501

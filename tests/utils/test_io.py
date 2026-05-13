@@ -213,7 +213,7 @@ def test_get_videos_in_dir(toy_data_dir, tmpdir):
     shutil.copyfile(video_list[0], os.path.join(test_2_dir, "vid3.xyz"))
     video_list_3 = get_videos_in_dir(test_2_dir)
     assert len(video_list_3) == 2
-    assert all([v1 == v2 for v1, v2 in zip(video_list_2, video_list_3)])
+    assert all([v1 == v2 for v1, v2 in zip(video_list_2, video_list_3, strict=True)])
 
     # --------------------
     # multiview tests
@@ -277,7 +277,7 @@ def test_check_video_paths(toy_data_dir, tmpdir):
 
     # test 3: pass list, two videos, should get the list back
     video_list_3 = check_video_paths(video_list_2)
-    assert all([v1 == v2 for v1, v2 in zip(video_list_2, video_list_3)])
+    assert all([v1 == v2 for v1, v2 in zip(video_list_2, video_list_3, strict=True)])
 
     # test 4: pass single file, get list with that file back
     video_list_4 = check_video_paths(video_list[0])

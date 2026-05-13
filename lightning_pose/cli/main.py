@@ -16,7 +16,7 @@ def _build_parser():
     )
 
     # Dynamically register all available commands
-    for name, module in COMMANDS.items():
+    for _name, module in COMMANDS.items():
         module.register_parser(subparsers)
 
     return parser

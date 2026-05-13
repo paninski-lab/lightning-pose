@@ -18,11 +18,11 @@ def pretty_print_cfg(cfg):
         if key == "eval":
             continue
         print("--------------------")
-        print("%s parameters" % key)
+        print(f"{key} parameters")
         print("--------------------")
         if hasattr(val, "items"):
             for k, v in val.items():
-                print("{}: {}".format(k, v))
+                print(f"{k}: {v}")
         if isinstance(val, str):
             print(val)
         print()

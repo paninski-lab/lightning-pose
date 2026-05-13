@@ -107,7 +107,7 @@ def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
             params_dict = OmegaConf.to_object(params)
         else:
             params_dict = params.copy()
-        for transform, val in params_dict.items():
+        for transform, _val in params_dict.items():
             assert getattr(iaa, transform), f"{transform} is not a valid imgaug transform"
     else:
         raise TypeError(f"params is of type {type(params)}, must be str, dict, or DictConfig")
@@ -178,7 +178,7 @@ def get_dataset(
             )
 
     else:
-        raise NotImplementedError("%s is an invalid cfg.model.model_type" % cfg.model.model_type)
+        raise NotImplementedError(f"{cfg.model.model_type} is an invalid cfg.model.model_type")
 
     return dataset
 
@@ -195,7 +195,8 @@ def get_data_module(
     if cfg.training.num_gpus == 0:
         warnings.warn(
             "Config contains unsupported value num_gpus: 0. "
-            "Update num_gpus to 1 in your config."
+            "Update num_gpus to 1 in your config.",
+            stacklevel=2,
         )
     cfg.training.num_gpus = max(cfg.training.num_gpus, 1)
 
@@ -723,7 +724,7 @@ def compute_metrics(
     if not isinstance(cfg.data.csv_file, str):
         assert isinstance(preds_file, list)
         assert len(preds_file) == len(cfg.data.csv_file)
-        for csv_file, preds_file_ in zip(cfg.data.csv_file, preds_file):
+        for csv_file, preds_file_ in zip(cfg.data.csv_file, preds_file, strict=True):
             labels_file = Path(csv_file)
             if not labels_file.is_absolute():
                 labels_file = Path(cfg.data.data_dir) / labels_file

@@ -415,7 +415,7 @@ def progress_filepath(tmp_path) -> Path:
 class BaseTestProgressTracker:
     def _read_progress(self, filepath: Path | str):
         """Helper to read the JSON file content."""
-        with open(filepath, "r") as f:
+        with open(filepath) as f:
             return json.load(f)
 
 
@@ -502,7 +502,7 @@ class TestJSONTrainingProgressTracker:
 
     def _read_progress_train(self, filepath: Path | str):
         """Helper to read the JSON file content and extract progress and status."""
-        with open(filepath, "r") as f:
+        with open(filepath) as f:
             data = json.load(f)
         # Return the progress dict for easier checking, but also check status
         return data["progress"], data["status"]
@@ -566,7 +566,9 @@ class TestJSONTrainingProgressTracker:
     def test_on_train_end_finalizes_progress_epoch_mode(
         self, mock_trainer_epoch, mock_module, progress_filepath
     ):
-        """Test that on_train_end sets completed count equal to total epochs AND sets status to EVALUATING."""
+        """Test that on_train_end sets completed count equal to total epochs AND sets status
+        to EVALUATING.
+        """
         tracker = JSONTrainingProgressTracker(filepath=progress_filepath)
         tracker.on_train_start(mock_trainer_epoch, mock_module)
 
@@ -626,7 +628,9 @@ class TestJSONTrainingProgressTracker:
     def test_on_train_end_finalizes_progress_step_mode(
         self, mock_trainer_step, mock_module, progress_filepath
     ):
-        """Test that on_train_end sets completed count equal to total steps AND sets status to EVALUATING."""
+        """Test that on_train_end sets completed count equal to total steps AND sets status
+        to EVALUATING.
+        """
         tracker = JSONTrainingProgressTracker(filepath=progress_filepath)
         tracker.on_train_start(mock_trainer_step, mock_module)
 

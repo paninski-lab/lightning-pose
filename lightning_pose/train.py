@@ -303,8 +303,8 @@ def _train(cfg: DictConfig, status_file: Path = None) -> Model:
     # Log hydra config to tensorboard as helpful metadata.
     for key, value in cfg.items():
         logger.experiment.add_text(
-            "hydra_config_%s" % key,
-            "```\n%s```" % (value if isinstance(value, str) else OmegaConf.to_yaml(value))
+            f"hydra_config_{key}",
+            f"```\n{value if isinstance(value, str) else OmegaConf.to_yaml(value)}```",
         )
 
     # early stopping, learning rate monitoring, model checkpointing, backbone unfreezing

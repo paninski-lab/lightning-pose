@@ -1,6 +1,5 @@
 """Heads that produce heatmap predictions for heatmap regression."""
 
-from typing import Tuple
 
 import torch
 from kornia.filters import filter2d
@@ -90,7 +89,7 @@ def run_subpixelmaxima(
     heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
     downsample_factor: int,
     temperature: torch.tensor,
-) -> Tuple[TensorType["batch", "num_targets"], TensorType["batch", "num_keypoints"]]:
+) -> tuple[TensorType["batch", "num_targets"], TensorType["batch", "num_keypoints"]]:
     """Use soft argmax on heatmaps.
 
     Args:

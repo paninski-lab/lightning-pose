@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TypedDict, Union
+from typing import TypedDict
 
 import pandas as pd
 import torch
@@ -55,10 +55,10 @@ class ComputeMetricsSingleResult:
 
 class BaseLabeledExampleDict(TypedDict):
     """Return type when calling __getitem__() on BaseTrackingDataset."""
-    images: Union[
-        TensorType["RGB":3, "image_height", "image_width", float],
-        TensorType["frames", "RGB":3, "image_height", "image_width", float],
-    ]
+    images: (
+        TensorType["RGB":3, "image_height", "image_width", float]
+        | TensorType["frames", "RGB":3, "image_height", "image_width", float]
+    )
     keypoints: TensorType["num_targets", float]
     bbox: TensorType["xyhw":4, float]
     idxs: int
@@ -71,10 +71,10 @@ class HeatmapLabeledExampleDict(BaseLabeledExampleDict):
 
 class MultiviewLabeledExampleDict(TypedDict):
     """Return type when calling __getitem__() on MultiviewDataset."""
-    images: Union[
-        TensorType["num_views", "RGB":3, "image_height", "image_width", float],
-        TensorType["num_views", "frames", "RGB":3, "image_height", "image_width", float],
-    ]
+    images: (
+        TensorType["num_views", "RGB":3, "image_height", "image_width", float]
+        | TensorType["num_views", "frames", "RGB":3, "image_height", "image_width", float]
+    )
     keypoints: TensorType["num_targets", float]
     bbox: TensorType["num_views", "xyhw":4, float]
     idxs: int
@@ -82,26 +82,14 @@ class MultiviewLabeledExampleDict(TypedDict):
     concat_order: list[str]
     view_names: list[str]
     # these attributes exist if camera calibration info is available
-    keypoints_3d: Union[
-        TensorType["num_keypoints", 3],
-        TensorType["null":1],
-        torch.Tensor,
-    ]
-    intrinsic_matrix: Union[
-        TensorType["num_views", 3, 3],
-        TensorType["null":1],
-        torch.Tensor,
-    ]
-    extrinsic_matrix: Union[
-        TensorType["num_views", 3, 4],
-        TensorType["null":1],
-        torch.Tensor,
-    ]
-    distortions: Union[
-        TensorType["num_views", "num_distortion_params"],
-        TensorType["null":1],
-        torch.Tensor,
-    ]
+    keypoints_3d: TensorType["num_keypoints", 3] | TensorType["null":1] | torch.Tensor
+    intrinsic_matrix: TensorType["num_views", 3, 3] | TensorType["null":1] | torch.Tensor
+    extrinsic_matrix: TensorType["num_views", 3, 4] | TensorType["null":1] | torch.Tensor
+    distortions: (
+        TensorType["num_views", "num_distortion_params"]
+        | TensorType["null":1]
+        | torch.Tensor
+    )
     # for distortion params info see
     # https://kornia.readthedocs.io/en/latest/geometry.calibration.html
 
@@ -113,10 +101,10 @@ class MultiviewHeatmapLabeledExampleDict(MultiviewLabeledExampleDict):
 
 class BaseLabeledBatchDict(TypedDict):
     """Batch type for base labeled data."""
-    images: Union[
-        TensorType["batch", "RGB":3, "image_height", "image_width", float],
-        TensorType["batch", "frames", "RGB":3, "image_height", "image_width", float],
-    ]
+    images: (
+        TensorType["batch", "RGB":3, "image_height", "image_width", float]
+        | TensorType["batch", "frames", "RGB":3, "image_height", "image_width", float]
+    )
     keypoints: TensorType["batch", "num_targets", float]
     bbox: TensorType["batch", "xyhw":4, float]
     idxs: TensorType["batch", int]
@@ -129,10 +117,10 @@ class HeatmapLabeledBatchDict(BaseLabeledBatchDict):
 
 class MultiviewLabeledBatchDict(TypedDict):
     """Batch type for multiview labeled data."""
-    images: Union[
-        TensorType["batch", "num_views", "RGB":3, "image_height", "image_width", float],
-        TensorType["batch", "num_views", "frames", "RGB":3, "image_height", "image_width", float],
-    ]
+    images: (
+        TensorType["batch", "num_views", "RGB":3, "image_height", "image_width", float]
+        | TensorType["batch", "num_views", "frames", "RGB":3, "image_height", "image_width", float]
+    )
     keypoints: TensorType["batch", "num_targets", float]
     bbox: TensorType["batch", "num_views * xyhw", float]
     idxs: TensorType["batch", int]
@@ -140,22 +128,10 @@ class MultiviewLabeledBatchDict(TypedDict):
     concat_order: list  # [Tuple[str]]
     view_names: list  # [Tuple[str]]
     # these attributes exist if camera calibration info is available
-    keypoints_3d: Union[
-        TensorType["batch", "num_keypoints", 3],
-        TensorType["batch", 1],
-    ]
-    intrinsic_matrix: Union[
-        TensorType["batch", "num_views", 3, 3],
-        TensorType["batch", 1],
-    ]
-    extrinsic_matrix: Union[
-        TensorType["batch", "num_views", 3, 4],
-        TensorType["batch", 1],
-    ]
-    distortions: Union[
-        TensorType["batch", "num_views", "num_distortion_params"],
-        TensorType["batch", 1],
-    ]
+    keypoints_3d: TensorType["batch", "num_keypoints", 3] | TensorType["batch", 1]
+    intrinsic_matrix: TensorType["batch", "num_views", 3, 3] | TensorType["batch", 1]
+    extrinsic_matrix: TensorType["batch", "num_views", 3, 4] | TensorType["batch", 1]
+    distortions: TensorType["batch", "num_views", "num_distortion_params"] | TensorType["batch", 1]
 
 
 class MultiviewHeatmapLabeledBatchDict(MultiviewLabeledBatchDict):
@@ -166,13 +142,13 @@ class MultiviewHeatmapLabeledBatchDict(MultiviewLabeledBatchDict):
 class UnlabeledBatchDict(TypedDict):
     """Batch type for unlabeled data."""
     frames: TensorType["seq_len", "RGB":3, "image_height", "image_width", float]
-    transforms: Union[
-        TensorType["seq_len", "h":2, "w":3, float],
-        TensorType["h":2, "w":3, float],
-        TensorType["seq_len", "null":1, float],
-        TensorType["null":1, float],
-        torch.Tensor,
-    ]
+    transforms: (
+        TensorType["seq_len", "h":2, "w":3, float]
+        | TensorType["h":2, "w":3, float]
+        | TensorType["seq_len", "null":1, float]
+        | TensorType["null":1, float]
+        | torch.Tensor
+    )
     # transforms shapes
     # (seq_len, 2, 3): different transform for each sequence
     # (2, 3): same transform for all returned frames/keypoints
@@ -187,11 +163,11 @@ class UnlabeledBatchDict(TypedDict):
 class MultiviewUnlabeledBatchDict(TypedDict):
     """Batch type for multiview unlabeled data."""
     frames: TensorType["seq_len", "num_views", "RGB":3, "image_height", "image_width", float]
-    transforms: Union[
-        TensorType["num_views", "h":2, "w":3, float],
-        TensorType["num_views", "null":1, "null":1, float],
-        torch.Tensor,
-    ]
+    transforms: (
+        TensorType["num_views", "h":2, "w":3, float]
+        | TensorType["num_views", "null":1, "null":1, float]
+        | torch.Tensor
+    )
     bbox: TensorType["seq_len", "num_views * xyhw", float]
     is_multiview: bool = True  # helps with downstream logic since isinstance fails on TypedDicts
 

@@ -238,7 +238,7 @@ class LitDaliWrapper(DALIGenericIterator):
         return self._dali_output_to_tensors(batch=batch)
 
 
-class PrepareDALI(object):
+class PrepareDALI:
     """All the DALI stuff in one place.
 
     Big picture: this will initialize the pipes and dataloaders for both training and prediction.

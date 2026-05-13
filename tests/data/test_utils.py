@@ -306,8 +306,6 @@ class TestGenerateHeatmaps:
         """Test that gradients flow through keypoints when keep_gradients=True."""
 
         # Create mock data
-        batch_size = 2
-        num_keypoints = 4
         im_height = 256
         im_width = 256
         output_height = 64
@@ -364,8 +362,6 @@ class TestGenerateHeatmaps:
         """Out-of-bounds keypoints are marked as NaN and filled with appropriate heatmaps."""
 
         # Create mock data with some out-of-bounds keypoints
-        batch_size = 2
-        num_keypoints = 4
         im_height = 256
         im_width = 256
         output_height = 64
@@ -661,7 +657,7 @@ def test_undo_affine_transform_batch():
     keypoints = []
     transforms = []
     keypoints_aug = []
-    for v, view in enumerate(range(n_views)):
+    for v, _view in enumerate(range(n_views)):
         torch.manual_seed(v)
         # create keypoints/transforms for this view
         keypoints_v = torch.normal(mean=torch.zeros((seq_len, n_keypoints, 2)))
@@ -689,7 +685,7 @@ def test_undo_affine_transform_batch():
     keypoints = []
     transforms = []
     keypoints_aug = []
-    for v, view in enumerate(range(n_views)):
+    for v, _view in enumerate(range(n_views)):
         torch.manual_seed(v)
         # create keypoints/transforms for this view
         keypoints_v = torch.normal(mean=torch.zeros((seq_len, n_keypoints, 2)))

@@ -37,7 +37,8 @@ def __get_package_version() -> str:
         import toml
 
         warnings.warn(
-            "lightning-pose not pip-installed, getting version from pyproject.toml."
+            "lightning-pose not pip-installed, getting version from pyproject.toml.",
+            stacklevel=2,
         )
 
         pyproject_toml_file = Path(__file__).parent.parent / "pyproject.toml"

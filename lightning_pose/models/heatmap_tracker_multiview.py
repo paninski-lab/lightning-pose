@@ -1,7 +1,7 @@
 """Models that produce heatmaps of keypoints from images on multiview datasets."""
 
 import math
-from typing import Any, Literal, Tuple
+from typing import Any, Literal
 
 import torch
 from omegaconf import DictConfig
@@ -313,7 +313,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         batch_dict: MultiviewHeatmapLabeledBatchDict | UnlabeledBatchDict,
         batch_idx: int,
         return_heatmaps: bool = False,
-    ) -> Tuple[torch.Tensor, torch.Tensor] | Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Predict heatmaps and keypoints for a batch of video frames.
 
         Assuming a DALI video loader is passed in

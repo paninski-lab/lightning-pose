@@ -32,17 +32,32 @@ After making changes in your fork,
 from your fork. Please read through the rest of this document before submitting the request.
 
 #### Linting
-Linters automatically find (and sometimes fix) formatting issues in the code. We use two, which
-are run from the command line in the Lightning Pose repo:
+We use [ruff](https://docs.astral.sh/ruff/) for formatting, import sorting, and linting.
+Run both commands before submitting a pull request:
 
-* `flake8`: warns of syntax errors, possible bugs, stylistic errors, etc. Please fix these!
 ```bash
-flake8 .
+ruff check --fix lightning_pose tests
 ```
 
-* `isort`: automatically sorts import statements
+To check without modifying files:
+
 ```bash
-isort .
+ruff check lightning_pose tests
+```
+
+If you set up the pre-commit hook (see below), ruff runs automatically on every commit.
+
+#### Pre-commit hook
+Install the pre-commit hook so ruff runs automatically before each commit:
+
+```bash
+pre-commit install
+```
+
+To run it manually against all files:
+
+```bash
+pre-commit run --all-files
 ```
 
 #### Testing

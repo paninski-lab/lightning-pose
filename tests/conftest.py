@@ -9,7 +9,7 @@ import copy
 import gc
 import os
 import subprocess
-from typing import Callable
+from collections.abc import Callable
 
 import cv2
 import imgaug.augmenters as iaa

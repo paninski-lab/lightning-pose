@@ -448,7 +448,7 @@ class Model:
         data_module_pred = _build_datamodule_pred(cfg_pred)
 
         preds_files = []
-        for i, view_name in enumerate(view_names):
+        for i, _view_name in enumerate(view_names):
             output_dir = self.image_preds_dir() / csv_file_per_view[i].name
             output_dir.mkdir(parents=True, exist_ok=True)
             preds_files.append(str(output_dir / "predictions.csv"))
@@ -461,7 +461,7 @@ class Model:
         if compute_metrics:
             metrics = {}
             for view_name, labels_file, _preds_file in zip(
-                view_names, csv_file_per_view, preds_files
+                view_names, csv_file_per_view, preds_files, strict=True
             ):
                 metrics[view_name] = compute_metrics_single(
                     cfg=self.cfg,
@@ -493,8 +493,8 @@ class Model:
                 predictions.
             generate_labeled_video (bool, optional): Whether to save a labeled video.
                 Defaults to False.
-            progress_file (Path, optional): Path to a file to save progress information for the App.
-                Defaults to None.
+            progress_file (Path, optional): Path to a file to save progress information for the
+                App. Defaults to None.
 
         Returns:
             PredictionResult: A PredictionResult object containing the predictions and metrics.
@@ -567,7 +567,8 @@ class Model:
                 predictions.
             generate_labeled_video (bool, optional): Whether to save a labeled video.
                 Defaults to False.
-            progress_file (Path, optional): Path to a file to save progress information for the App.
+            progress_file (Path, optional): Path to a file to save progress information for
+                the App.
 
         Returns:
             MultiviewPredictionResult: object containing the predictions and metrics for each view.
@@ -612,7 +613,7 @@ class Model:
             progress_file=progress_file,
         )
         if generate_labeled_video:
-            for video_file, preds_df in zip(video_file_per_view, df_list):
+            for video_file, preds_df in zip(video_file_per_view, df_list, strict=True):
                 labeled_mp4_file = str(
                     self.labeled_videos_dir() / f"{video_file.stem}_labeled.mp4"
                 )
@@ -627,7 +628,7 @@ class Model:
         data_module = _build_datamodule_pred(self.cfg)
         if compute_metrics:
             metrics = {}
-            for view_name, preds_file in zip(view_names, prediction_csv_file_list):
+            for view_name, preds_file in zip(view_names, prediction_csv_file_list, strict=True):
                 metrics[view_name] = compute_metrics_single(
                     cfg=self.cfg,
                     labels_file=None,
@@ -637,7 +638,7 @@ class Model:
         else:
             metrics = None
 
-        df_dict = {view_name: df for view_name, df in zip(view_names, df_list)}
+        df_dict = {view_name: df for view_name, df in zip(view_names, df_list, strict=True)}
 
         return MultiviewPredictionResult(predictions=df_dict, metrics=metrics)
 

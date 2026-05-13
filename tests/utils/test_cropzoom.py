@@ -2,7 +2,6 @@ import copy
 import filecmp
 import shutil
 from pathlib import Path
-from typing import Union
 
 from omegaconf import OmegaConf
 
@@ -15,7 +14,7 @@ from ..fetch_test_data import fetch_test_data_if_needed
 
 
 # TODO: Move to utils.
-def compare_directories(dir1: Path, dir2: Path) -> Union[int, dict]:
+def compare_directories(dir1: Path, dir2: Path) -> int | dict:
     """
     Compares files in two directories recursively.
 
