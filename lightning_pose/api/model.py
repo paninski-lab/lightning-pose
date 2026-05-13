@@ -493,8 +493,8 @@ class Model:
                 predictions.
             generate_labeled_video (bool, optional): Whether to save a labeled video.
                 Defaults to False.
-            progress_file (Path, optional): Path to a file to save progress information for the App.
-                Defaults to None.
+            progress_file (Path, optional): Path to a file to save progress information for the
+                App. Defaults to None.
 
         Returns:
             PredictionResult: A PredictionResult object containing the predictions and metrics.
@@ -567,7 +567,8 @@ class Model:
                 predictions.
             generate_labeled_video (bool, optional): Whether to save a labeled video.
                 Defaults to False.
-            progress_file (Path, optional): Path to a file to save progress information for the App.
+            progress_file (Path, optional): Path to a file to save progress information for
+                the App.
 
         Returns:
             MultiviewPredictionResult: object containing the predictions and metrics for each view.
