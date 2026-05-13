@@ -1,7 +1,7 @@
 """Test basic dataset functionality."""
 
 import copy
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import cv2
 import numpy as np
@@ -823,7 +823,7 @@ class TestApply3DTransforms:
         no_change(datadict)
 
         # Create data dict with insufficient keypoints only on a single view
-        view_name = multiview_heatmap_dataset.view_names[0]
+        # view_name = multiview_heatmap_dataset.view_names[0]
         datadict_1 = copy.deepcopy(valid_data_dict)
         datadict_1[view]["keypoints"].fill_(float("nan"))
         no_change(datadict_1)
@@ -848,9 +848,9 @@ class TestApply3DTransforms:
         RuntimeError inside _transform_images.
         """
 
-        num_kp_per_view = (
-            multiview_heatmap_dataset.num_keypoints // multiview_heatmap_dataset.num_views
-        )
+        # num_kp_per_view = (
+        #     multiview_heatmap_dataset.num_keypoints // multiview_heatmap_dataset.num_views
+        # )
         view_names = multiview_heatmap_dataset.view_names
 
         datadict = copy.deepcopy(valid_data_dict)

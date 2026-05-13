@@ -125,20 +125,22 @@ def _crop_images(bbox_df: pd.DataFrame, root_directory: Path, output_directory: 
     in the directory.
 
     Args:
-        bbox_df (pd.DataFrame): DataFrame containing bounding box information for cropping. The DataFrame
-            is expected to have an index representing image paths, and include columns `x`, `y`, `w`, and
-            `h` representing bounding box coordinates and dimensions.
-        root_directory (Path): Path to the directory containing the original images to be processed.
+        bbox_df (pd.DataFrame): DataFrame containing bounding box information for cropping. The
+            DataFrame is expected to have an index representing image paths, and include columns
+            `x`, `y`, `w`, and `h` representing bounding box coordinates and dimensions.
+        root_directory (Path): Path to the directory containing the original images to be
+            processed.
         output_directory (Path): Path to the directory where cropped images will be saved.
 
     Raises:
-        ValueError: Raised if invalid data is encountered in the bounding box DataFrame or if paths are
-            improperly specified.
+        ValueError: Raised if invalid data is encountered in the bounding box DataFrame or if paths
+            are improperly specified.
 
     Note:
-        - Multiprocessing is utilized for scaling the cropping operations across multiple CPU cores.
-        - User must ensure the validity and compatibility of paths and bounding box data prior to
-          execution.
+        - Multiprocessing is utilized for scaling the cropping operations across multiple
+            CPU cores.
+        - User must ensure the validity and compatibility of paths and bounding box data prior
+            to execution.
     """
 
     _file_cache: dict[Path, bool] = {}

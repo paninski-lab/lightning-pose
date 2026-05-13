@@ -566,7 +566,9 @@ class TestJSONTrainingProgressTracker:
     def test_on_train_end_finalizes_progress_epoch_mode(
         self, mock_trainer_epoch, mock_module, progress_filepath
     ):
-        """Test that on_train_end sets completed count equal to total epochs AND sets status to EVALUATING."""
+        """Test that on_train_end sets completed count equal to total epochs AND sets status
+        to EVALUATING.
+        """
         tracker = JSONTrainingProgressTracker(filepath=progress_filepath)
         tracker.on_train_start(mock_trainer_epoch, mock_module)
 
@@ -626,7 +628,9 @@ class TestJSONTrainingProgressTracker:
     def test_on_train_end_finalizes_progress_step_mode(
         self, mock_trainer_step, mock_module, progress_filepath
     ):
-        """Test that on_train_end sets completed count equal to total steps AND sets status to EVALUATING."""
+        """Test that on_train_end sets completed count equal to total steps AND sets status
+        to EVALUATING.
+        """
         tracker = JSONTrainingProgressTracker(filepath=progress_filepath)
         tracker.on_train_start(mock_trainer_step, mock_module)
 

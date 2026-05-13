@@ -23,7 +23,7 @@ def register_parser(subparsers):
         Predicts keypoints on videos or images.
 
           Video predictions are saved to::
-          
+
             <model_dir>/
             └── video_preds/
                 ├── <video_filename>.csv              (predictions)
@@ -32,7 +32,7 @@ def register_parser(subparsers):
                     └── <video_filename>_labeled.mp4
 
           Image predictions are saved to::
-          
+
             <model_dir>/
             └── image_preds/
                 └── <image_dirname | csv_filename | timestamp>/
@@ -54,10 +54,10 @@ def register_parser(subparsers):
         help=textwrap.dedent(
             """\
             one or more  video files, image files, CSV files, or directories to run prediction on
-            
+
             * directories: iterates over videos or images in the directory
-            * CSV file: must be formatted as a label file. predicts on the frames and computes pixel error
-                    against keypoint labels
+            * CSV file: must be formatted as a label file. predicts on the frames and computes
+                pixel error against keypoint labels
             """
         ),
     )
@@ -224,5 +224,6 @@ def _predict_multi_type_multi_view(
                 print(f"Skipping {path}: no videos found.")
     else:
         raise NotImplementedError(
-            "For multi view model predictions, either pass in multiple video views to be predicted, or a directory containing videos"
+            "For multi view model predictions, either pass in multiple video views to be "
+            "predicted, or a directory containing videos"
         )

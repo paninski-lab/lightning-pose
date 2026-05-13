@@ -33,13 +33,17 @@ def test_backbones_resnet():
         resnet_v = int(backbone.replace("resnet", ""))
         if resnet_v <= 34:  # last block is BasicBlock
             assert (
-                type(list(model.backbone.children())[-3][-1])
-                == torchvision.models.resnet.BasicBlock
+                isinstance(
+                    list(model.backbone.children())[-3][-1],
+                    torchvision.models.resnet.BasicBlock,
+                )
             )
         else:  # different arch; BottleneckBlock
             assert (
-                type(list(model.backbone.children())[-3][-1])
-                == torchvision.models.resnet.Bottleneck
+                isinstance(
+                    list(model.backbone.children())[-3][-1],
+                    torchvision.models.resnet.Bottleneck,
+                )
             )
         # remove model from gpu; then cache can be cleared
         del model
@@ -51,8 +55,10 @@ def test_backbones_efficientnet():
     for ind, backbone in enumerate(EFFICIENTNET_BACKBONES):
         model = BaseFeatureExtractor(backbone=backbone).to(_TORCH_DEVICE)
         assert (
-            type(list(model.backbone.children())[-1][-2][0])
-            == torchvision.models.efficientnet.MBConv
+            isinstance(
+                list(model.backbone.children())[-1][-2][0],
+                torchvision.models.efficientnet.MBConv,
+            )
         )
         # remove model from gpu; then cache can be cleared
         del model

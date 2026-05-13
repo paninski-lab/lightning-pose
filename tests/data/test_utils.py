@@ -306,8 +306,6 @@ class TestGenerateHeatmaps:
         """Test that gradients flow through keypoints when keep_gradients=True."""
 
         # Create mock data
-        batch_size = 2
-        num_keypoints = 4
         im_height = 256
         im_width = 256
         output_height = 64
@@ -364,8 +362,6 @@ class TestGenerateHeatmaps:
         """Out-of-bounds keypoints are marked as NaN and filled with appropriate heatmaps."""
 
         # Create mock data with some out-of-bounds keypoints
-        batch_size = 2
-        num_keypoints = 4
         im_height = 256
         im_width = 256
         output_height = 64

@@ -132,7 +132,8 @@ def ckpt_path_from_base_path(
             else:
                 # Could not determine which checkpoint to use
                 raise ValueError(
-                    f"Multiple checkpoint files found but cannot determine which to use: {latest_version_files}. "
+                    "Multiple checkpoint files found but cannot determine which "
+                    f"to use: {latest_version_files}. "
                     "None are marked as 'best' and cannot parse step counts to determine latest. "
                     "Please manually select the appropriate checkpoint."
                 )
@@ -457,15 +458,17 @@ def split_video_files_by_view(
     view_names: list[str],
 ) -> list[list[Path]]:
     """
-    For a list of videos from different sessions and views, split them up and return a list of lists
-    like `[[session0_view0.mp4, session0_view1.mp4, ...], [session1_view0.mp4, session1_view1.mp4, ...], ...]`
+    For a list of videos from different sessions and views, split them up and return a list of
+    lists like
+    `[[sess0_view0.mp4, sess0_view1.mp4, ...], [sess1_view0.mp4, sess1_view1.mp4, ...], ...]`
 
     Args:
         video_paths: List of paths to video files to split
         view_names: List of view names to find videos for
 
     Returns:
-        List for each session, each containing a sub-list with videos for each view for that session
+        List for each session, each containing a sub-list with videos for each view for
+        that session
     """
     # map of session -> view -> video
     session_view_video_map = collections.defaultdict(dict[str, Path])
@@ -495,15 +498,17 @@ def find_video_files_for_views(
     video_dir: str, view_names: list[str]
 ) -> list[list[Path]]:
     """
-    Search inside a folder to find a list of videos from different sessions and views, split them up and return a list of lists
-    like `[[session0_view0.mp4, session0_view1.mp4, ...], [session1_view0.mp4, session1_view1.mp4, ...], ...]`
+    Search inside a folder to find a list of videos from different sessions and views, split them
+    up and return a list of lists like
+    `[[sess0_view0.mp4, sess0_view1.mp4, ...], [sess1_view0.mp4, sess1_view1.mp4, ...], ...]`
 
     Args:
         video_dir: Directory containing video files
         view_names: List of view names to find videos for
 
     Returns:
-        List for each session, each containing a sub-list with videos for each view for that session
+        List for each session, each containing a sub-list with videos for each view for
+        that session
     """
     video_dir_path = Path(video_dir)
 
