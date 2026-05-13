@@ -70,12 +70,11 @@ litpose = "lightning_pose.cli.main:main"
 
 [project.optional-dependencies]
 dev = [
-    "autopep8",
-    "flake8",
-    "isort",
+    "pre-commit",
     "pytest",
     "pytest-html",
     "pytest-mock",
+    "ruff",
     "Sphinx",
     "sphinx-argparse",
     "sphinx-automodapi",
@@ -87,31 +86,26 @@ dev = [
 ]
 extra-models = ["lightning-bolts"]
 
-[tool.flake8]
-max-line-length = 99
-ignore = ["F821", "W503"]
-extend-ignore = ["E203"]
+[tool.ruff]
+line-length = 99
 exclude = [
     ".git",
     "__pycache__",
-    "__init__.py",
     "build",
     "dist",
-    "docs/",
-    "scripts/",
+    "docs",
+    "scripts",
 ]
 
-[tool.isort]
-line_length = 99
-profile = "black"
-src_paths = ["lightning_pose", "tests"]
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E203", "F821"]
 
-[tool.black]
-line-length = 99
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
 
-[tool.autopep8]
-line-length = 99
-ignore = ["E203", "W503", "F821"]
+[tool.ruff.lint.isort]
+known-first-party = ["lightning_pose"]
 
 [tool.pytest.ini_options]
 testpaths = "tests"
