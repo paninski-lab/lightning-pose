@@ -2,7 +2,7 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any
 
 import lightning.pytorch as pl
 import torch
@@ -255,7 +255,7 @@ class PatchMasker:
         images: torch.Tensor,
         training_step: int = 0,
         is_training: bool = True,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Apply random patch masking with curriculum learning."""
 
         # during training, apply masking
@@ -340,7 +340,7 @@ class PatchMasker:
         images: torch.Tensor,
         training_step: int = 0,
         is_training: bool = True,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Apply patch masking if enabled, otherwise return original images."""
         if self.use_patch_masking:
             return self.apply_patch_masking(images, training_step, is_training)
@@ -354,7 +354,7 @@ class PatchMasker:
     def get_training_schedule_info(
         self,
         current_step: int
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get information about current training schedule progress."""
         if self.use_patch_masking:
             if current_step < self.patch_init_step:

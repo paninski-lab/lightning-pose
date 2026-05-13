@@ -1,6 +1,6 @@
 """Models that produce (x, y) coordinates of keypoints from images."""
 
-from typing import Any, Tuple
+from typing import Any
 
 import torch
 from omegaconf import DictConfig
@@ -111,7 +111,7 @@ class RegressionTracker(BaseSupervisedTracker):
         batch_dict: BaseLabeledBatchDict | UnlabeledBatchDict,
         batch_idx: int,
         **kwargs: Any,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Predict keypoints for a batch of video frames.
 
         Assuming a DALI video loader is passed in

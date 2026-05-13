@@ -657,7 +657,7 @@ def test_undo_affine_transform_batch():
     keypoints = []
     transforms = []
     keypoints_aug = []
-    for v, view in enumerate(range(n_views)):
+    for v, _view in enumerate(range(n_views)):
         torch.manual_seed(v)
         # create keypoints/transforms for this view
         keypoints_v = torch.normal(mean=torch.zeros((seq_len, n_keypoints, 2)))
@@ -685,7 +685,7 @@ def test_undo_affine_transform_batch():
     keypoints = []
     transforms = []
     keypoints_aug = []
-    for v, view in enumerate(range(n_views)):
+    for v, _view in enumerate(range(n_views)):
         torch.manual_seed(v)
         # create keypoints/transforms for this view
         keypoints_v = torch.normal(mean=torch.zeros((seq_len, n_keypoints, 2)))

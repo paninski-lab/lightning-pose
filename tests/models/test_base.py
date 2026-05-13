@@ -28,7 +28,7 @@ VIT_BACKBONES = [
 
 def test_backbones_resnet():
 
-    for ind, backbone in enumerate(RESNET_BACKBONES):
+    for _ind, backbone in enumerate(RESNET_BACKBONES):
         model = BaseFeatureExtractor(backbone=backbone).to(_TORCH_DEVICE)
         resnet_v = int(backbone.replace("resnet", ""))
         if resnet_v <= 34:  # last block is BasicBlock
@@ -52,7 +52,7 @@ def test_backbones_resnet():
 
 
 def test_backbones_efficientnet():
-    for ind, backbone in enumerate(EFFICIENTNET_BACKBONES):
+    for _ind, backbone in enumerate(EFFICIENTNET_BACKBONES):
         model = BaseFeatureExtractor(backbone=backbone).to(_TORCH_DEVICE)
         assert (
             isinstance(
@@ -67,7 +67,7 @@ def test_backbones_efficientnet():
 
 
 def test_backbones_vit():
-    for ind, backbone in enumerate(VIT_BACKBONES):
+    for _ind, backbone in enumerate(VIT_BACKBONES):
         model = BaseFeatureExtractor(backbone=backbone).to(_TORCH_DEVICE)
         if backbone == "vitb_sam":
             from transformers.models.sam.modeling_sam import SamPatchEmbeddings
@@ -123,7 +123,7 @@ def test_representation_shapes_resnet():
         if _TORCH_DEVICE == "cuda":
             torch.cuda.empty_cache()
         model = BaseFeatureExtractor(backbone=backbone).to(_TORCH_DEVICE)
-        for height, width in zip(HEIGHTS, WIDTHS):
+        for height, width in zip(HEIGHTS, WIDTHS, strict=True):
             fake_image_batch = torch.rand(
                 size=(BATCH_SIZE, 3, height, width),
                 device=_TORCH_DEVICE,
@@ -166,7 +166,7 @@ def test_representation_shapes_efficientnet():
         if _TORCH_DEVICE == "cuda":
             torch.cuda.empty_cache()
         model = BaseFeatureExtractor(backbone=backbone).to(_TORCH_DEVICE)
-        for height, width in zip(HEIGHTS, WIDTHS):
+        for height, width in zip(HEIGHTS, WIDTHS, strict=True):
             fake_image_batch = torch.rand(
                 size=(BATCH_SIZE, 3, height, width),
                 device=_TORCH_DEVICE,

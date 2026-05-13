@@ -29,7 +29,7 @@ __all__ = [
 ]
 
 
-class KeypointPCA(object):
+class KeypointPCA:
     """Class to collect data from a dataloader and compute PCA params."""
 
     def __init__(
@@ -180,7 +180,8 @@ class KeypointPCA(object):
                 warnings.warn(
                     f"for {self.loss_type} loss, you specified {self.components_to_keep} "
                     f"components_to_keep, but we will instead keep {self._n_components_kept} "
-                    f"components"
+                    f"components",
+                    stacklevel=2,
                 )
         elif self.loss_type == "pca_singleview":
             if self.pca_object is not None:
@@ -626,16 +627,14 @@ class ComponentChooser:
 
 @typechecked
 def pca_prints(pca: PCA, condition: str, components_to_keep: int) -> None:
-    print("Results of running PCA ({}) on keypoints:".format(condition))
+    print(f"Results of running PCA ({condition}) on keypoints:")
     print(
-        "Kept {}/{} components, and found:".format(
-            components_to_keep, pca.n_components_
-        )
+        f"Kept {components_to_keep}/{pca.n_components_} components, and found:"
     )
     evr = np.round(pca.explained_variance_ratio_, 3)
-    print("Explained variance ratio: {}".format(evr))
+    print(f"Explained variance ratio: {evr}")
     tev = np.round(np.sum(pca.explained_variance_ratio_[:components_to_keep]), 3)
-    print("Variance explained by {} components: {}".format(components_to_keep, tev))
+    print(f"Variance explained by {components_to_keep} components: {tev}")
 
 
 # @typechecked

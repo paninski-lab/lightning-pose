@@ -498,7 +498,7 @@ class TestMultiviewHeatmapDataset:
         assert isinstance(result, np.ndarray)
 
         # check exact values
-        for idx_view, (view, example_dict) in enumerate(data_dict.items()):
+        for idx_view, (_view, example_dict) in enumerate(data_dict.items()):
             # create a copy to avoid modifying the original data
             keypoints_curr = example_dict["keypoints"].reshape(
                 num_keypoints // num_views, 2

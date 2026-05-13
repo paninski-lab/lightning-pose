@@ -1,6 +1,6 @@
 """Base class for backbone that acts as a feature extractor."""
 
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
 import torch
 from lightning.pytorch import LightningModule
@@ -46,16 +46,16 @@ DEFAULT_OPTIMIZER_PARAMS = OmegaConf.create(
 
 class LrNotImplementedError(NotImplementedError):
     def __init__(self, lr_scheduler: str):
-        super(LrNotImplementedError, self).__init__(
-            "'%s' is an invalid LR scheduler. Must be multisteplr." % lr_scheduler
+        super().__init__(
+            f"'{lr_scheduler}' is an invalid LR scheduler. Must be multisteplr."
         )
         self.lr_scheduler = lr_scheduler
 
 
 class OptimizerNotImplementedError(NotImplementedError):
     def __init__(self, optimizer: str):
-        super(LrNotImplementedError, self).__init__(
-            "'%s' is an invalid optimizer. Must be Adam or AdamW." % optimizer
+        super().__init__(
+            f"'{optimizer}' is an invalid optimizer. Must be Adam or AdamW."
         )
         self.optimizer = optimizer
 
@@ -91,15 +91,15 @@ def _apply_defaults_for_optimizer_params(
 
 
 def get_context_from_sequence(
-    img_seq: Union[
-        TensorType["seq_len", "RGB":3, "image_height", "image_width"],
-        TensorType["seq_len", "n_features", "rep_height", "rep_width"],
-    ],
+    img_seq: (
+        TensorType["seq_len", "RGB":3, "image_height", "image_width"]
+        | TensorType["seq_len", "n_features", "rep_height", "rep_width"]
+    ),
     context_length: int,
-) -> Union[
-        TensorType["seq_len", "context_length", "RGB": 3, "image_height", "image_width"],
-        TensorType["seq_len", "context_length", "n_features", "rep_height", "rep_width"],
-]:
+) -> (
+    TensorType["seq_len", "context_length", "RGB":3, "image_height", "image_width"]
+    | TensorType["seq_len", "context_length", "n_features", "rep_height", "rep_width"]
+):
     # our goal is to extract 5-frame sequences from this sequence
     img_shape = img_seq.shape[1:]  # e.g., (3, H, W)
     seq_len = img_seq.shape[0]  # how many images in batch
@@ -251,10 +251,10 @@ class BaseFeatureExtractor(LightningModule):
                     frames_batch_shape, channels, image_height, image_width,
                 )
                 outputs: TensorType[
-                    "batch*frames", "features", "rep_height", "rep_width"
+                    batch*frames, features, rep_height, rep_width
                 ] = self.backbone(images_batch_frames)
                 outputs: TensorType[
-                    "batch", "frames", "features", "rep_height", "rep_width"
+                    batch, frames, features, rep_height, rep_width
                 ] = outputs.reshape(
                     images.shape[0],
                     images.shape[1],
@@ -272,10 +272,10 @@ class BaseFeatureExtractor(LightningModule):
                     batch_views_shape, channels, image_height, image_width,
                 )
                 outputs: TensorType[
-                    "batch*views", "features", "rep_height", "rep_width"
+                    batch*views, features, rep_height, rep_width
                 ] = self.backbone(images_batch_views)
                 outputs: TensorType[
-                    "batch", "views", "features", "rep_height", "rep_width"
+                    batch, views, features, rep_height, rep_width
                 ] = outputs.reshape(
                     batch,
                     num_views,
@@ -285,7 +285,7 @@ class BaseFeatureExtractor(LightningModule):
                 )
                 # stack views across feature dimension
                 outputs: TensorType[
-                    "batch", "views * features", "rep_height", "rep_width"
+                    batch, views * features, rep_height, rep_width
                 ] = outputs.reshape(batch, -1, outputs.shape[-2], outputs.shape[-1])
 
                 # we need to tile the representations to make it into
@@ -307,7 +307,7 @@ class BaseFeatureExtractor(LightningModule):
                 # the output will be one representation per valid frame
                 sequence_length, channels, image_height, image_width = images.shape
                 representations: TensorType[
-                    "sequence_length", "features", "rep_height", "rep_width"
+                    sequence_length, features, rep_height, rep_width
                 ] = self.backbone(images)
                 # we need to tile the representations to make it into
                 # (num_valid_frames, features, rep_height, rep_width, num_context_frames)
@@ -323,7 +323,7 @@ class BaseFeatureExtractor(LightningModule):
             # for both types of batches, we reshape in the same way
             # context is in the last dimension for the linear layer.
             representations: TensorType[
-                "batch", "features", "rep_height", "rep_width", "frames"
+                batch, features, rep_height, rep_width, frames
             ] = torch.permute(outputs, (0, 2, 3, 4, 1))
         else:
             # incoming batch: singleview labeled/unlabeled, multiview labeled/unlabeled reshaped
@@ -334,15 +334,15 @@ class BaseFeatureExtractor(LightningModule):
 
     def forward(
         self,
-        images: Union[
-            TensorType["batch", "RGB":3, "image_height", "image_width"],
-            TensorType["batch", "seq_length", "RGB":3, "image_height", "image_width"],
-            TensorType["seq_length", "RGB":3, "image_height", "image_width"],
-        ],
-    ) -> Union[
-        TensorType["new_batch", "features", "rep_height", "rep_width"],
-        TensorType["new_batch", "features", "rep_height", "rep_width", "frames"],
-    ]:
+        images: (
+            TensorType["batch", "RGB":3, "image_height", "image_width"]
+            | TensorType["batch", "seq_length", "RGB":3, "image_height", "image_width"]
+            | TensorType["seq_length", "RGB":3, "image_height", "image_width"]
+        ),
+    ) -> (
+        TensorType["new_batch", "features", "rep_height", "rep_width"]
+        | TensorType["new_batch", "features", "rep_height", "rep_width", "frames"]
+    ):
         """Forward pass from images to representations.
 
         Wrapper around self.get_representations().
@@ -401,24 +401,24 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
 
     def get_loss_inputs_labeled(
         self,
-        batch_dict: Union[
-            BaseLabeledBatchDict,
-            HeatmapLabeledBatchDict,
-            MultiviewLabeledBatchDict,
-            MultiviewHeatmapLabeledBatchDict,
-        ],
+        batch_dict: (
+            BaseLabeledBatchDict
+            | HeatmapLabeledBatchDict
+            | MultiviewLabeledBatchDict
+            | MultiviewHeatmapLabeledBatchDict
+        ),
     ) -> dict:
         """Return predicted coordinates for a batch of data."""
         raise NotImplementedError
 
     def evaluate_labeled(
         self,
-        batch_dict: Union[
-            BaseLabeledBatchDict,
-            HeatmapLabeledBatchDict,
-            MultiviewLabeledBatchDict,
-            MultiviewHeatmapLabeledBatchDict,
-        ],
+        batch_dict: (
+            BaseLabeledBatchDict
+            | HeatmapLabeledBatchDict
+            | MultiviewLabeledBatchDict
+            | MultiviewHeatmapLabeledBatchDict
+        ),
         stage: Literal["train", "val", "test"] | None = None,
         anneal_weight: torch.Tensor | None = None,
     ) -> TensorType[(), float]:
@@ -453,12 +453,12 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
 
     def training_step(
         self,
-        batch_dict: Union[
-            BaseLabeledBatchDict,
-            HeatmapLabeledBatchDict,
-            MultiviewLabeledBatchDict,
-            MultiviewHeatmapLabeledBatchDict,
-        ],
+        batch_dict: (
+            BaseLabeledBatchDict
+            | HeatmapLabeledBatchDict
+            | MultiviewLabeledBatchDict
+            | MultiviewHeatmapLabeledBatchDict
+        ),
         batch_idx: int,
     ) -> dict[str, TensorType[(), float]]:
         """Base training step, a wrapper around the `evaluate_labeled` method."""
@@ -479,12 +479,12 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
 
     def validation_step(
         self,
-        batch_dict: Union[
-            BaseLabeledBatchDict,
-            HeatmapLabeledBatchDict,
-            MultiviewLabeledBatchDict,
-            MultiviewHeatmapLabeledBatchDict,
-        ],
+        batch_dict: (
+            BaseLabeledBatchDict
+            | HeatmapLabeledBatchDict
+            | MultiviewLabeledBatchDict
+            | MultiviewHeatmapLabeledBatchDict
+        ),
         batch_idx: int,
     ) -> None:
         """Base validation step, a wrapper around the `evaluate_labeled` method."""
@@ -492,12 +492,12 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
 
     def test_step(
         self,
-        batch_dict: Union[
-            BaseLabeledBatchDict,
-            HeatmapLabeledBatchDict,
-            MultiviewLabeledBatchDict,
-            MultiviewHeatmapLabeledBatchDict,
-        ],
+        batch_dict: (
+            BaseLabeledBatchDict
+            | HeatmapLabeledBatchDict
+            | MultiviewLabeledBatchDict
+            | MultiviewHeatmapLabeledBatchDict
+        ),
         batch_idx: int,
     ) -> None:
         """Base test step, a wrapper around the `evaluate_labeled` method."""
@@ -505,7 +505,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
 
 
 @typechecked
-class SemiSupervisedTrackerMixin(object):
+class SemiSupervisedTrackerMixin:
     """Mixin class providing training step function for semi-supervised models."""
 
     def get_loss_inputs_unlabeled(

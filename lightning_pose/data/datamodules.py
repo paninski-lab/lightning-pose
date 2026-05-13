@@ -134,14 +134,14 @@ class BaseDataModule(pl.LightningDataModule):
             if hasattr(self.val_dataset.dataset, "dataset"):
                 # this will get triggered for multiview datasets
                 print("val: updating children datasets with resize imgaug pipeline")
-                for view_name, dset in self.val_dataset.dataset.dataset.items():
+                for _view_name, dset in self.val_dataset.dataset.dataset.items():
                     dset.imgaug_transform = final_transform
 
             self.test_dataset.dataset.imgaug_transform = final_transform
             if hasattr(self.test_dataset.dataset, "dataset"):
                 # this will get triggered for multiview datasets
                 print("test: updating children datasets with resize imgaug pipeline")
-                for view_name, dset in self.test_dataset.dataset.dataset.items():
+                for _view_name, dset in self.test_dataset.dataset.dataset.items():
                     dset.imgaug_transform = final_transform
 
         # further subsample training data if desired

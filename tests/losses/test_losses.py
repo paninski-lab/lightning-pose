@@ -39,7 +39,7 @@ def test_heatmap_mse_loss():
     )
     assert loss.shape == torch.Size([])
     assert loss == 0.0
-    assert logs[0]["name"] == "%s_heatmap_mse_loss" % stage
+    assert logs[0]["name"] == f"{stage}_heatmap_mse_loss"
     assert logs[0]["value"] == loss
     assert logs[1]["name"] == "heatmap_mse_weight"
     assert logs[1]["value"] == heatmap_mse_loss.weight
@@ -71,7 +71,7 @@ def test_heatmap_kl_loss():
     )
     assert loss.shape == torch.Size([])
     assert np.isclose(loss.detach().cpu().numpy(), 0.0, rtol=1e-5)
-    assert logs[0]["name"] == "%s_heatmap_kl_loss" % stage
+    assert logs[0]["name"] == f"{stage}_heatmap_kl_loss"
     assert logs[0]["value"] == loss
     assert logs[1]["name"] == "heatmap_kl_weight"
     assert logs[1]["value"] == heatmap_loss.weight
@@ -101,7 +101,7 @@ def test_heatmap_js_loss():
     )
     assert loss.shape == torch.Size([])
     assert np.isclose(loss.detach().cpu().numpy(), 0.0, rtol=1e-5)
-    assert logs[0]["name"] == "%s_heatmap_js_loss" % stage
+    assert logs[0]["name"] == f"{stage}_heatmap_js_loss"
     assert logs[0]["value"] == loss
     assert logs[1]["name"] == "heatmap_js_weight"
     assert logs[1]["value"] == heatmap_loss.weight
@@ -130,11 +130,12 @@ def test_pca_singleview_loss(cfg, base_data_module, device):
     # ----------------------------
     # test pca loss on toy dataset
     # ----------------------------
-    keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets, device=device)
+    # scale to pixel coordinates so reprojection errors reliably exceed the empirical epsilon
+    keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets, device=device) * 50
     loss, logs = pca_loss(keypoints_pred, stage=stage)
     assert loss.shape == torch.Size([])
     assert loss > 0.0
-    assert logs[0]["name"] == "%s_pca_singleview_loss" % stage
+    assert logs[0]["name"] == f"{stage}_pca_singleview_loss"
     assert logs[0]["value"] == loss
     assert logs[1]["name"] == "pca_singleview_weight"
     assert logs[1]["value"] == pca_loss.weight
@@ -170,21 +171,21 @@ def test_pca_multiview_loss(cfg, base_data_module, device):
         mirrored_column_matches=cfg.data.mirrored_column_matches,
     )
     pre_reduction_loss = pca_loss.compute_loss(keypoints_pred)
-    # shape = (num_samples, num_keypoints, num_views)
-    pre_reduction_loss.shape == (
+    # shape = (num_samples, num_views)
+    assert pre_reduction_loss.shape == (
         keypoints_pred.shape[0],
-        len(cfg.data.mirrored_column_matches[0]),
         2,  # for 2 views in this toy dataset
     )
 
     # draw some numbers again, and reshape within the class
-    keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets, device=device)
+    # scale to pixel coordinates so reprojection errors reliably exceed the empirical epsilon
+    keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets, device=device) * 50
 
     loss, logs = pca_loss(keypoints_pred, stage=stage)
 
     assert loss.shape == torch.Size([])
     assert loss > 0.0
-    assert logs[0]["name"] == "%s_pca_multiview_loss" % stage
+    assert logs[0]["name"] == f"{stage}_pca_multiview_loss"
     assert logs[0]["value"] == loss
     assert logs[1]["name"] == "pca_multiview_weight"
     assert logs[1]["value"] == pca_loss.weight
@@ -237,7 +238,7 @@ def test_temporal_loss():
     loss, logs = temporal_loss(predicted_keypoints, stage=stage)
     assert loss.shape == torch.Size([])
     assert loss == 0.0
-    assert logs[0]["name"] == "%s_temporal_loss" % stage
+    assert logs[0]["name"] == f"{stage}_temporal_loss"
     assert logs[0]["value"] == loss
     assert logs[1]["name"] == "temporal_weight"
     assert logs[1]["value"] == temporal_loss.weight
@@ -339,7 +340,7 @@ def test_unimodal_mse_loss():
     )
     assert loss.shape == torch.Size([])
     assert loss > 0.0
-    assert logs[0]["name"] == "%s_unimodal_mse_loss" % stage
+    assert logs[0]["name"] == f"{stage}_unimodal_mse_loss"
     assert logs[0]["value"] == loss
     assert logs[1]["name"] == "unimodal_mse_weight"
     assert logs[1]["value"] == uni_loss.weight
@@ -379,7 +380,7 @@ def test_unimodal_kl_loss():
     )
     assert loss.shape == torch.Size([])
     assert loss > 0.0
-    assert logs[0]["name"] == "%s_unimodal_kl_loss" % stage
+    assert logs[0]["name"] == f"{stage}_unimodal_kl_loss"
     assert logs[0]["value"] == loss
     assert logs[1]["name"] == "unimodal_kl_weight"
     assert logs[1]["value"] == uni_loss.weight
@@ -419,7 +420,7 @@ def test_unimodal_js_loss():
     )
     assert loss.shape == torch.Size([])
     assert loss > 0.0
-    assert logs[0]["name"] == "%s_unimodal_js_loss" % stage
+    assert logs[0]["name"] == f"{stage}_unimodal_js_loss"
     assert logs[0]["value"] == loss
     assert logs[1]["name"] == "unimodal_js_weight"
     assert logs[1]["value"] == uni_loss.weight
@@ -434,7 +435,7 @@ def test_regression_mse_loss():
     loss, logs = mse_loss(true_keypoints, predicted_keypoints, stage=stage)
     assert loss.shape == torch.Size([])
     assert loss == 0.0
-    assert logs[0]["name"] == "%s_regression_loss" % stage
+    assert logs[0]["name"] == f"{stage}_regression_loss"
     assert logs[0]["value"] == loss
     assert logs[1]["name"] == "regression_weight"
     assert logs[1]["value"] == mse_loss.weight
@@ -463,7 +464,7 @@ class TestRegressionRMSELoss:
         loss, logs = rmse_loss(true_keypoints, predicted_keypoints, stage=stage)
         assert loss.shape == torch.Size([])
         assert loss == 0.0
-        assert logs[0]["name"] == "%s_rmse_loss" % stage
+        assert logs[0]["name"] == f"{stage}_rmse_loss"
         assert logs[0]["value"] == loss
         assert logs[1]["name"] == "rmse_weight"
         assert logs[1]["value"] == rmse_loss.weight
@@ -749,5 +750,5 @@ class TestReprojectionHeatmapLoss:
 
 def test_get_loss_classes():
     loss_classes = get_loss_classes()
-    for loss_name, loss_class in loss_classes.items():
+    for _loss_name, loss_class in loss_classes.items():
         assert issubclass(loss_class, Loss)

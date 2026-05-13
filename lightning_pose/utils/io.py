@@ -7,7 +7,6 @@ import os
 import re
 import warnings
 from pathlib import Path
-from typing import Tuple
 
 import numpy as np
 import pandas as pd
@@ -109,7 +108,10 @@ def ckpt_path_from_base_path(
         )
     else:
         # No 'best' checkpoint found
-        warnings.warn("No 'best' checkpoint found, falling back to latest checkpoint.")
+        warnings.warn(
+            "No 'best' checkpoint found, falling back to latest checkpoint.",
+            stacklevel=2,
+        )
         if len(latest_version_files) == 1:
             # Only one checkpoint file exists, return it
             return latest_version_files[0]
@@ -192,7 +194,7 @@ def get_keypoint_names(
             # self.keypoint_names = csv_data.columns.levels[1]
             keypoint_names = [b[1] for b in csv_data.columns if b[2] == "x"]
     else:
-        keypoint_names = ["bp_%i" % n for n in range(cfg.data.num_targets // 2)]
+        keypoint_names = [f"bp_{n}" for n in range(cfg.data.num_targets // 2)]
     return keypoint_names
 
 
@@ -216,14 +218,14 @@ def return_absolute_path(possibly_relative_path: str, n_dirs_back: int = 3) -> s
             desired_path_list = desired_path_list[:-1]
         abs_path = os.path.join(os.path.sep, *desired_path_list, possibly_relative_path)
     if not os.path.exists(abs_path):
-        raise IOError("%s is not a valid path" % abs_path)
+        raise OSError(f"{abs_path} is not a valid path")
     return abs_path
 
 
 @typechecked
 def return_absolute_data_paths(
     data_cfg: DictConfig, n_dirs_back: int = 3
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """Generate absolute path for our example toy data.
 
     @hydra.main decorator switches the cwd when executing the decorated function, e.g.,
@@ -295,7 +297,7 @@ def get_videos_in_dir(
         ]
 
     if len(video_files) == 0:
-        raise IOError("Did not find any valid video files in %s" % video_dir)
+        raise OSError(f"Did not find any valid video files in {video_dir}")
 
     return video_files
 

@@ -1,6 +1,6 @@
 """High-level loss class that orchestrates the individual losses."""
 
-from typing import Literal, Tuple
+from typing import Literal
 
 import lightning.pytorch as pl
 import torch
@@ -44,7 +44,7 @@ class LossFactory(pl.LightningModule):
         stage: Literal["train", "val", "test"] | None = None,
         anneal_weight: float | torch.Tensor = 1.0,
         **kwargs
-    ) -> Tuple[TensorType[()], list[dict]]:
+    ) -> tuple[TensorType[()], list[dict]]:
 
         # loop over losses, compute, sum, log
         # don't log if stage is None
@@ -75,7 +75,7 @@ class LossFactory(pl.LightningModule):
             # log weighted losses (unweighted losses auto-logged by loss instance)
             log_list += [
                 {
-                    "name": "%s_%s_loss_weighted" % (stage, loss_name),
+                    "name": f"{stage}_{loss_name}_loss_weighted",
                     "value": current_weighted_loss,
                 }
             ]

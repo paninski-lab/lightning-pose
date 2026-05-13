@@ -1,3 +1,6 @@
+default_stages: [pre-commit]
+files: ^(lightning_pose|tests)/
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -16,7 +19,7 @@ repos:
         args: [--fix=lf]
       - id: name-tests-test
         args: ["--pytest-test-first"]
-        exclude: ^tests/fixtures/
+        exclude: ^tests/fetch_test_data\.py$
       - id: requirements-txt-fixer
       - id: trailing-whitespace
   - repo: https://github.com/astral-sh/ruff-pre-commit

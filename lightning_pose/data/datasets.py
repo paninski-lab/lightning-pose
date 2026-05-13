@@ -1,8 +1,9 @@
 """Dataset objects store images, labels, and functions for manipulation."""
 
 import os
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Literal, Tuple, Union
+from typing import Literal
 
 import cv2
 import imgaug.augmenters as iaa
@@ -455,7 +456,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         self.keypoint_names = {}
         self.data_length = {}
         self.num_keypoints = {}
-        for view, csv_path, bbox_path in zip(view_names, csv_paths, self.bbox_paths):
+        for view, csv_path, bbox_path in zip(view_names, csv_paths, self.bbox_paths, strict=True):
             self.dataset[view] = HeatmapDataset(
                 root_directory=root_directory,
                 csv_path=csv_path,
@@ -533,7 +534,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         self.data_length = list(self.data_length.values())[0]
         for idx in range(self.data_length):
             img_file_names = set()
-            for view, heatmaps in self.dataset.items():
+            for _view, heatmaps in self.dataset.items():
                 img_file_names.add(Path(heatmaps.image_names[idx]).name)
                 if len(img_file_names) > 1:
                     raise ImportError(
@@ -622,7 +623,9 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         device = images[0].device
         images_transformed = []
 
-        for orig_img, kps_og, kps_aug, bbox in zip(images, keypoints_orig, keypoints_aug, bboxes):
+        for orig_img, kps_og, kps_aug, bbox in zip(
+            images, keypoints_orig, keypoints_aug, bboxes, strict=True
+        ):
 
             _, img_height, img_width = orig_img.shape
 
@@ -672,7 +675,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         clone: bool = True,
     ) -> np.ndarray:
         keypoints_2d = np.zeros((self.num_views, self.num_keypoints // self.num_views, 2))
-        for idx_view, (view, example_dict) in enumerate(data_dict.items()):
+        for idx_view, (_view, example_dict) in enumerate(data_dict.items()):
             if clone:
                 keypoints_curr = example_dict["keypoints"].reshape(
                     self.num_keypoints // self.num_views, 2
@@ -726,7 +729,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         keypoints_2d = self._get_2d_keypoints_from_example_dict_absolute_coords(data_dict)
         images = []
         bboxes = []
-        for idx_view, (view, example_dict) in enumerate(data_dict.items()):
+        for _idx_view, (_view, example_dict) in enumerate(data_dict.items()):
             images.append(example_dict["images"])
             bboxes.append(example_dict["bbox"])
 
@@ -734,7 +737,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             keypoints_3d_aug = np.nan * np.zeros((self.num_keypoints // self.num_views, 3))
             keypoints_2d_aug_resize = [
                 torch.tensor(
-                    np.nan * np.zeros((self.num_keypoints // self.num_views * 2)),
+                    np.nan * np.zeros(self.num_keypoints // self.num_views * 2),
                     dtype=example_dict["keypoints"].dtype,
                     device=example_dict["keypoints"].device,
                 )
@@ -807,11 +810,11 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         return data_dict_aug, torch.tensor(keypoints_3d_aug)
 
-    def fusion(self, datadict: dict) -> Tuple[
-        Union[
-            TensorType["num_views", "RGB":3, "image_height", "image_width", float],
-            TensorType["num_views", "frames", "RGB":3, "image_height", "image_width", float]
-        ],
+    def fusion(self, datadict: dict) -> tuple[
+        (
+            TensorType["num_views", "RGB":3, "image_height", "image_width", float]
+            | TensorType["num_views", "frames", "RGB":3, "image_height", "image_width", float]
+        ),
         TensorType["keypoints"],
         TensorType["num_views", "heatmap_height", "heatmap_width", float],
         TensorType["num_views * xyhw", float],

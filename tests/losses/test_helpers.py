@@ -36,6 +36,6 @@ def test_convert_dict_values_to_tensor():
         "param_c": 4,
     }
     test_dict_tensor = convert_dict_values_to_tensors(test_dict, device="cpu")
-    for key, val in test_dict_tensor.items():
+    for _, val in test_dict_tensor.items():
         assert isinstance(val, torch.Tensor)
         assert val.dtype == torch.float32

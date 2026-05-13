@@ -7,7 +7,7 @@ import gc
 import os
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Tuple, Type
+from typing import TYPE_CHECKING, Literal
 
 import cv2
 import lightning.pytorch as pl
@@ -47,12 +47,12 @@ def _get_cfg_file(cfg_file: str | DictConfig):
     """Load yaml configuration files."""
     if isinstance(cfg_file, str):
         # load configuration file
-        with open(cfg_file, "r") as f:
+        with open(cfg_file) as f:
             cfg = OmegaConf.load(f)
     elif isinstance(cfg_file, DictConfig):
         cfg = cfg_file
     else:
-        raise ValueError("cfg_file must be str or DictConfig, not %s!" % type(cfg_file))
+        raise ValueError(f"cfg_file must be str or DictConfig, not {type(cfg_file)}!")
     return cfg
 
 
@@ -105,14 +105,14 @@ class PredictionHandler:
     def unpack_preds(
         self,
         preds: list[
-            Tuple[
-                TensorType["batch", "two_times_num_keypoints"],
-                TensorType["batch", "num_keypoints"],
+            tuple[
+                TensorType[batch, two_times_num_keypoints],
+                TensorType[batch, num_keypoints],
             ]
         ],
-    ) -> Tuple[
-        TensorType["num_frames", "two_times_num_keypoints"],
-        TensorType["num_frames", "num_keypoints"],
+    ) -> tuple[
+        TensorType[num_frames, two_times_num_keypoints],
+        TensorType[num_frames, num_keypoints],
     ]:
         """unpack list of preds coming out from pl.trainer.predict, confs tuples into tensors.
         It still returns unnecessary final rows, which should be discarded at the dataframe stage.
@@ -235,9 +235,9 @@ class PredictionHandler:
     def __call__(
         self,
         preds: list[
-            Tuple[
-                TensorType["batch", "two_times_num_keypoints"],
-                TensorType["batch", "num_keypoints"],
+            tuple[
+                TensorType[batch, two_times_num_keypoints],
+                TensorType[batch, num_keypoints],
             ]
         ],
         is_multiview_video: bool = False,
@@ -353,7 +353,9 @@ def predict_dataset(
             # Check the order of labeled_preds_df keys matches the order of the views in the cfg.
             assert list(labeled_preds_df.keys()) == list(cfg.data.view_names)
 
-            for (view_name, df), _pred_file in zip(labeled_preds_df.items(), preds_file):
+            for (_view_name, df), _pred_file in zip(
+                labeled_preds_df.items(), preds_file, strict=True
+            ):
                 df.to_csv(_pred_file)
 
     else:
@@ -404,6 +406,7 @@ def predict_single_video(
     warnings.warn(
         "predict_single_video is deprecated. Use `predict_video` instead.",
         DeprecationWarning,
+        stacklevel=2,
     )
 
     cfg = _get_cfg_file(cfg_file=cfg_file).copy()  # copy because we update imgaug field below
@@ -475,14 +478,14 @@ def predict_single_video(
 def make_dlc_pandas_index(cfg: DictConfig, keypoint_names: list[str]) -> pd.MultiIndex:
     xyl_labels = ["x", "y", "likelihood"]
     pdindex = pd.MultiIndex.from_product(
-        [["%s_tracker" % cfg.model.model_type], keypoint_names, xyl_labels],
+        [[f"{cfg.model.model_type}_tracker"], keypoint_names, xyl_labels],
         names=["scorer", "bodyparts", "coords"],
     )
     return pdindex
 
 
 @typechecked
-def get_model_class(map_type: str, semi_supervised: bool) -> Type[ALLOWED_MODELS]:
+def get_model_class(map_type: str, semi_supervised: bool) -> type[ALLOWED_MODELS]:
     """[summary]
 
     Args:
@@ -809,6 +812,7 @@ def export_predictions_and_labeled_video(
         "export_predictions_and_labeled_video is deprecated. "
         "Use `predict_video` and `generate_labeled_video` instead.",
         DeprecationWarning,
+        stacklevel=2,
     )
     if ckpt_file is None and model is None:
         raise ValueError("either 'ckpt_file' or 'model' must be passed")
@@ -889,7 +893,7 @@ def predict_video(
         # sanity check 1-1 correspondence of video_file to cfg.data.view_names
         # important since PredictionHandler relies on correspondence to organize the outputted dict
         for single_video_file, view_name in zip(
-            video_file, model.config.cfg.data.view_names
+            video_file, model.config.cfg.data.view_names, strict=True
         ):
             assert (
                 view_name in Path(single_video_file).stem
@@ -948,7 +952,7 @@ def predict_video(
         # save the predictions to a csv; create directory if it doesn't exist
 
         if is_multiview:
-            for df, output_file in zip(preds_df, output_pred_file):
+            for df, output_file in zip(preds_df, output_pred_file, strict=True):
                 os.makedirs(os.path.dirname(output_file), exist_ok=True)
                 df.to_csv(output_file)
         else:

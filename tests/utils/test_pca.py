@@ -304,7 +304,7 @@ def test_nan_pca():
     data_for_pca_nans2 = np.copy(data_for_pca)
     rows = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     cols = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 8, 7, 6]
-    for r, c in zip(rows, cols):
+    for r, c in zip(rows, cols, strict=True):
         data_for_pca_nans2[r, c] = np.nan
 
     # fit our custom NaN-handling PCA

@@ -415,7 +415,7 @@ def progress_filepath(tmp_path) -> Path:
 class BaseTestProgressTracker:
     def _read_progress(self, filepath: Path | str):
         """Helper to read the JSON file content."""
-        with open(filepath, "r") as f:
+        with open(filepath) as f:
             return json.load(f)
 
 
@@ -502,7 +502,7 @@ class TestJSONTrainingProgressTracker:
 
     def _read_progress_train(self, filepath: Path | str):
         """Helper to read the JSON file content and extract progress and status."""
-        with open(filepath, "r") as f:
+        with open(filepath) as f:
             data = json.load(f)
         # Return the progress dict for easier checking, but also check status
         return data["progress"], data["status"]
