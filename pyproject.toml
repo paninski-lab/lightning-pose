@@ -117,6 +117,12 @@ ignore = ["B006", "E203", "F821"]
 [tool.ruff.lint.isort]
 known-first-party = ["lightning_pose"]
 
+[tool.coverage.run]
+# store paths relative to the repo root so that codecov can match coverage
+# data against source files in the github repo, regardless of where the tests
+# are run on the build machine.
+relative_files = true
+
 [tool.pytest.ini_options]
 testpaths = "tests"
 generate_report_on_test = "True"
