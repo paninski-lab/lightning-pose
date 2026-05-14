@@ -53,3 +53,4 @@ jobs:
           files: coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: paninski-lab/lightning-pose
+          override_commit: ${{ github.event.pull_request.head.sha || github.sha }}
