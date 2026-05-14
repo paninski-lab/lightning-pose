@@ -2,6 +2,9 @@
 name: Run tests
 
 on:
+  push:
+    branches:
+      - main
   pull_request_target:
     types: [opened, synchronize, reopened]
 
@@ -44,9 +47,20 @@ jobs:
         run: |
           scp -P 55 mw3323@axon-remote.rc.zi.columbia.edu:~/buildbot_lp/coverage.xml coverage.xml
 
+      - name: Fix coverage XML source tags
+        # coverage.py emits an empty <source/> alongside <source>.</source> when
+        # relative_files=true + source=["."], which causes Codecov to fail processing
+        run: |
+          python -c "
+          import re, pathlib
+          p = pathlib.Path('coverage.xml')
+          p.write_text(re.sub(r'<source></source>\s*', '', p.read_text()))
+          "
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
           files: coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: paninski-lab/lightning-pose
+          override_commit: ${{ github.event.pull_request.head.sha || github.sha }}

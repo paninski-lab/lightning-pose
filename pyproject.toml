@@ -120,8 +120,17 @@ known-first-party = ["lightning_pose"]
 [tool.coverage.run]
 # store paths relative to the repo root so that codecov can match coverage
 # data against source files in the github repo, regardless of where the tests
-# are run on the build machine.
+# are run on the build machine. omit non-source directories to keep the report
+# focused on lightning_pose/ only.
 relative_files = true
+omit = [
+    "data/*",
+    "docker/*",
+    "docs/*",
+    "htmlcov/*",
+    "scripts/*",
+    "tests/*",
+]
 
 [tool.pytest.ini_options]
 testpaths = "tests"
