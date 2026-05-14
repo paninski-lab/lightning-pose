@@ -72,6 +72,7 @@ litpose = "lightning_pose.cli.main:main"
 dev = [
     "pre-commit",
     "pytest",
+    "pytest-cov",
     "pytest-html",
     "pytest-mock",
     "ruff",

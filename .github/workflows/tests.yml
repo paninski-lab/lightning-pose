@@ -39,3 +39,12 @@ jobs:
         # -t flag is necessary to forward github cancellation event (SIGINT)
         run: |
           ssh -tt -p 55 mw3323@axon-remote.rc.zi.columbia.edu 'sh buildbot_lp/build_srun.sh ${{ github.event.pull_request.number }}'
+
+      - name: Copy coverage report from remote
+        run: |
+          scp -P 55 mw3323@axon-remote.rc.zi.columbia.edu:~/buildbot_lp/coverage.xml coverage.xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml

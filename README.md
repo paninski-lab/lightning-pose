@@ -3,6 +3,7 @@
 [![Discord](https://img.shields.io/discord/1103381776895856720)](https://discord.gg/tDUPdRj4BM)
 ![GitHub](https://img.shields.io/github/license/paninski-lab/lightning-pose)
 [![Documentation Status](https://readthedocs.org/projects/lightning-pose/badge/?version=latest)](https://lightning-pose.readthedocs.io/en/latest/?badge=latest)
+[![codecov](https://codecov.io/gh/paninski-lab/lightning-pose/branch/main/graph/badge.svg)](https://codecov.io/gh/paninski-lab/lightning-pose)
 ![PyPI](https://img.shields.io/pypi/v/lightning-pose)
 ![PyPI Downloads](https://static.pepy.tech/badge/lightning-pose/week)
 
