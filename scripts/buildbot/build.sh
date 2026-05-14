@@ -62,4 +62,4 @@ pip show lightning_pose
 python -c "import lightning_pose; print('LP location:', lightning_pose.__file__); print('LP import successful')"
 
 # Run with html reporting.
-pytest --html=report.html --self-contained-html --cov=lightning_pose --cov-report=xml:$HOME/buildbot_lp/coverage.xml tests/
+pytest --html=report.html --self-contained-html --cov=. --cov-report=xml:$HOME/buildbot_lp/coverage.xml tests/
