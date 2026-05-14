@@ -117,14 +117,11 @@ ignore = ["B006", "E203", "F821"]
 [tool.ruff.lint.isort]
 known-first-party = ["lightning_pose"]
 
-[tool.coverage.paths]
-# remap absolute paths from the remote build machine to relative paths so that
-# codecov can match coverage data against source files in the github repo.
-# the first entry is the canonical (relative) form; subsequent entries are
-# glob patterns matching where the code actually lives on the build machine.
-source =
-    lightning_pose/
-    /local/mw3323/builds/*/lightning_pose/
+[tool.coverage.run]
+# store paths relative to the repo root so that codecov can match coverage
+# data against source files in the github repo, regardless of where the tests
+# are run on the build machine.
+relative_files = true
 
 [tool.pytest.ini_options]
 testpaths = "tests"
