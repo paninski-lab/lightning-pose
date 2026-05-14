@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import cv2
 import numpy as np
+import pandas as pd
 import pytest
 import torch
 
@@ -913,6 +914,232 @@ class TestApply3DTransforms:
             assert datadict_aug[view]["images"].shape == (3, 256, 256)
             assert datadict_aug[view]["keypoints"].shape == (num_keypoints,)
             assert datadict_aug[view]["bbox"].shape == (4,)
+
+
+class TestLoadCamgroup:
+    """Test MultiviewHeatmapDataset._load_camgroup."""
+
+    def test_load_camgroup_returns_camgroup(self, multiview_heatmap_dataset):
+        """Loaded camgroup is returned when camera names match view_names."""
+        # Arrange
+        mock_camgroup = MagicMock()
+        mock_camgroup.get_names.return_value = np.array(multiview_heatmap_dataset.view_names)
+
+        # Act
+        with patch('lightning_pose.data.datasets.CameraGroup.load', return_value=mock_camgroup):
+            result = multiview_heatmap_dataset._load_camgroup('calibration.toml')
+
+        # Assert
+        assert result is mock_camgroup
+
+    def test_load_camgroup_name_mismatch_raises(self, multiview_heatmap_dataset):
+        """AssertionError raised when calibration camera names don't match view_names."""
+        # Arrange
+        mock_camgroup = MagicMock()
+        mock_camgroup.get_names.return_value = np.array(['wrong', 'names'])
+
+        # Act / Assert
+        with patch('lightning_pose.data.datasets.CameraGroup.load', return_value=mock_camgroup):
+            with pytest.raises(AssertionError, match='same camera order'):
+                multiview_heatmap_dataset._load_camgroup('calibration.toml')
+
+
+class TestLoadCamParamsFromCsv:
+    """Test MultiviewHeatmapDataset._load_cam_params_from_csv."""
+
+    @pytest.fixture
+    def cam_params_csv(self, multiview_heatmap_dataset, tmp_path):
+        """CSV mapping every frame to calibration.toml."""
+        view0 = multiview_heatmap_dataset.view_names[0]
+        image_names = multiview_heatmap_dataset.dataset[view0].image_names
+        calib_file = 'calibration.toml'
+        df = pd.DataFrame(
+            {'file': [calib_file] * len(image_names)},
+            index=[n.split('/')[-1] for n in image_names],
+        )
+        csv_path = tmp_path / 'cam_params.csv'
+        df.to_csv(csv_path)
+        return str(csv_path), calib_file, len(image_names)
+
+    def test_load_cam_params_from_csv_success(self, multiview_heatmap_dataset, cam_params_csv):
+        """Returns aligned DataFrame and camgroup dict for a valid CSV."""
+        # Arrange
+        csv_path, calib_file, n_frames = cam_params_csv
+        mock_camgroup = MagicMock()
+        mock_camgroup.get_names.return_value = np.array(multiview_heatmap_dataset.view_names)
+
+        # Act
+        with patch('lightning_pose.data.datasets.CameraGroup.load', return_value=mock_camgroup):
+            cam_params_df, cam_params_file_to_camgroup = (
+                multiview_heatmap_dataset._load_cam_params_from_csv(csv_path)
+            )
+
+        # Assert
+        assert len(cam_params_df) == n_frames
+        assert list(cam_params_df['file']) == [calib_file] * n_frames
+        assert cam_params_file_to_camgroup[calib_file] is mock_camgroup
+
+    def test_load_cam_params_from_csv_do_context_raises(
+        self, multiview_heatmap_dataset, cam_params_csv,
+    ):
+        """AssertionError raised when do_context=True."""
+        # Arrange
+        csv_path, _, _ = cam_params_csv
+        ds = copy.deepcopy(multiview_heatmap_dataset)
+        ds.do_context = True
+
+        # Act / Assert
+        with pytest.raises(AssertionError):
+            ds._load_cam_params_from_csv(csv_path)
+
+    def test_load_cam_params_from_csv_mismatched_names_raises(
+        self, multiview_heatmap_dataset, tmp_path,
+    ):
+        """AssertionError raised when CSV index doesn't align with image names."""
+        # Arrange
+        df = pd.DataFrame({'file': ['calibration.toml']}, index=['wrong_name.png'])
+        csv_path = tmp_path / 'cam_params.csv'
+        df.to_csv(csv_path)
+
+        # Act / Assert
+        with pytest.raises(AssertionError):
+            multiview_heatmap_dataset._load_cam_params_from_csv(str(csv_path))
+
+
+class TestDiscoverCamParamsFromImagePaths:
+    """Test MultiviewHeatmapDataset._discover_cam_params_from_image_paths."""
+
+    @pytest.fixture
+    def fake_ds(self, tmp_path):
+        """Minimal stand-in for MultiviewHeatmapDataset with two frames from session0."""
+        class _Stub:
+            pass
+
+        ds = _Stub()
+        ds.root_directory = str(tmp_path)
+        ds.view_names = ['top', 'bot']
+        ds.do_context = False
+        mock_view = MagicMock()
+        mock_view.image_names = [
+            'labeled-data/session0_top/img0000.png',
+            'labeled-data/session0_top/img0001.png',
+        ]
+        ds.dataset = {'top': mock_view, 'bot': MagicMock()}
+        ds._load_camgroup = MagicMock(return_value=MagicMock())
+        return ds
+
+    def _discover(self, ds):
+        return MultiviewHeatmapDataset._discover_cam_params_from_image_paths(ds)
+
+    def test_discover_session_specific_toml(self, fake_ds, tmp_path):
+        """Returns per-frame df when calibrations/<session>.toml exists."""
+        # Arrange
+        calib_dir = tmp_path / 'calibrations'
+        calib_dir.mkdir()
+        (calib_dir / 'session0.toml').write_text('')
+
+        # Act
+        cam_params_df, cam_params_file_to_camgroup = self._discover(fake_ds)
+
+        # Assert
+        assert cam_params_df is not None
+        assert list(cam_params_df['file']) == ['calibrations/session0.toml'] * 2
+        assert 'calibrations/session0.toml' in cam_params_file_to_camgroup
+
+    def test_discover_fallback_toml(self, fake_ds, tmp_path):
+        """Falls back to calibration.toml when no session-specific file exists."""
+        # Arrange
+        (tmp_path / 'calibration.toml').write_text('')
+
+        # Act
+        cam_params_df, cam_params_file_to_camgroup = self._discover(fake_ds)
+
+        # Assert
+        assert cam_params_df is not None
+        assert list(cam_params_df['file']) == ['calibration.toml'] * 2
+        assert 'calibration.toml' in cam_params_file_to_camgroup
+
+    def test_discover_no_calibration_returns_none(self, fake_ds):
+        """Returns (None, None) when no calibration file is found."""
+        # Act
+        cam_params_df, cam_params_file_to_camgroup = self._discover(fake_ds)
+
+        # Assert
+        assert cam_params_df is None
+        assert cam_params_file_to_camgroup is None
+
+    def test_discover_mixed_calibration_disables_3d(self, fake_ds, tmp_path, capsys):
+        """Returns (None, None) and prints a warning when only some frames have calibration."""
+        # Arrange: session0 has a toml, session1 does not
+        calib_dir = tmp_path / 'calibrations'
+        calib_dir.mkdir()
+        (calib_dir / 'session0.toml').write_text('')
+        fake_ds.dataset['top'].image_names = [
+            'labeled-data/session0_top/img0000.png',
+            'labeled-data/session1_top/img0001.png',
+        ]
+
+        # Act
+        cam_params_df, cam_params_file_to_camgroup = self._discover(fake_ds)
+
+        # Assert
+        assert cam_params_df is None
+        assert cam_params_file_to_camgroup is None
+        assert 'WARNING' in capsys.readouterr().out
+
+    def test_discover_multi_session(self, fake_ds, tmp_path):
+        """Each session is mapped to its own calibration file."""
+        # Arrange
+        calib_dir = tmp_path / 'calibrations'
+        calib_dir.mkdir()
+        (calib_dir / 'sessionA.toml').write_text('')
+        (calib_dir / 'sessionB.toml').write_text('')
+        fake_ds.dataset['top'].image_names = [
+            'labeled-data/sessionA_top/img0000.png',
+            'labeled-data/sessionB_top/img0001.png',
+        ]
+
+        # Act
+        cam_params_df, cam_params_file_to_camgroup = self._discover(fake_ds)
+
+        # Assert
+        assert list(cam_params_df['file']) == [
+            'calibrations/sessionA.toml',
+            'calibrations/sessionB.toml',
+        ]
+        assert 'calibrations/sessionA.toml' in cam_params_file_to_camgroup
+        assert 'calibrations/sessionB.toml' in cam_params_file_to_camgroup
+        assert fake_ds._load_camgroup.call_count == 2
+
+    def test_discover_path_without_labeled_data_raises(self, fake_ds):
+        """ValueError raised when image path doesn't contain labeled-data/."""
+        # Arrange
+        fake_ds.dataset['top'].image_names = ['some/other/path/img0000.png']
+
+        # Act / Assert
+        with pytest.raises(ValueError, match='labeled-data'):
+            self._discover(fake_ds)
+
+    def test_discover_folder_without_underscore_raises(self, fake_ds):
+        """ValueError raised when folder name has no underscore separating session and view."""
+        # Arrange
+        fake_ds.dataset['top'].image_names = ['labeled-data/sessiononly/img0000.png']
+
+        # Act / Assert
+        with pytest.raises(ValueError, match='expected pattern'):
+            self._discover(fake_ds)
+
+    def test_discover_do_context_raises_when_calibration_found(self, fake_ds, tmp_path):
+        """AssertionError raised when do_context=True and a calibration file is found."""
+        # Arrange
+        fake_ds.do_context = True
+        calib_dir = tmp_path / 'calibrations'
+        calib_dir.mkdir()
+        (calib_dir / 'session0.toml').write_text('')
+
+        # Act / Assert
+        with pytest.raises(AssertionError, match='context model'):
+            self._discover(fake_ds)
 
 
 def test_equal_return_sizes(base_dataset, heatmap_dataset):
