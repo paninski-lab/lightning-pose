@@ -1,0 +1,18 @@
+coverage:
+  status:
+    project:
+      default:
+        target: auto   # must not drop below current baseline
+        threshold: 1%  # allow up to 1% slack before failing
+    patch:
+      default:
+        target: 80%    # new code in a PR should be 80% covered
+
+ignore:
+  - "scripts/"
+  - "lightning_pose/migrations/"
+  - "docs/"
+
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
