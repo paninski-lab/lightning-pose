@@ -558,11 +558,11 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             parts = Path(img_name).parts
             try:
                 ld_idx = next(i for i, p in enumerate(parts) if p == 'labeled-data')
-            except StopIteration:
+            except StopIteration as err:
                 raise ValueError(
                     f"Image path '{img_name}' does not match expected pattern "
                     "labeled-data/<session>_<view>/img<frameidx>.ext"
-                )
+                ) from err
             folder_name = parts[ld_idx + 1]
             if '_' not in folder_name:
                 raise ValueError(

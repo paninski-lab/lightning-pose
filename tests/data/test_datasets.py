@@ -961,7 +961,9 @@ class TestLoadCamParamsFromCsv:
         df.to_csv(csv_path)
         return str(csv_path), calib_file, len(image_names)
 
-    def test_load_cam_params_from_csv_success(self, mocker, multiview_heatmap_dataset, cam_params_csv):
+    def test_load_cam_params_from_csv_success(
+        self, mocker, multiview_heatmap_dataset, cam_params_csv,
+    ):
         """Returns aligned DataFrame and camgroup dict for a valid CSV."""
         # Arrange
         csv_path, calib_file, n_frames = cam_params_csv
