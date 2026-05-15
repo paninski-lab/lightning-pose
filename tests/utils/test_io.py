@@ -18,8 +18,60 @@ from lightning_pose.utils.io import (
     find_video_files_for_views,
     get_context_img_paths,
     get_videos_in_dir,
+    return_absolute_path,
     split_video_files_by_view,
 )
+
+
+class TestReturnAbsolutePath:
+    """Test the return_absolute_path function."""
+
+    def test_returns_absolute_path_unchanged(self, tmp_path):
+        """Absolute paths that exist are returned as-is."""
+        result = return_absolute_path(str(tmp_path))
+        assert result == str(tmp_path)
+
+    def test_raises_for_nonexistent_absolute_path(self, tmp_path):
+        """Raises OSError when an absolute path does not exist."""
+        missing = str(tmp_path / 'does_not_exist')
+        with pytest.raises(OSError, match='is not a valid path'):
+            return_absolute_path(missing)
+
+    def test_relative_path_resolved_from_cwd(self, tmp_path, monkeypatch):
+        """Relative path is resolved n_dirs_back from cwd and returned when it exists."""
+        # build a fake cwd that is n_dirs_back=1 below tmp_path
+        fake_cwd = tmp_path / 'a'
+        fake_cwd.mkdir()
+        target = tmp_path / 'data'
+        target.mkdir()
+        monkeypatch.chdir(fake_cwd)
+
+        result = return_absolute_path('data', n_dirs_back=1)
+        assert result == str(target)
+
+    def test_relative_path_raises_when_resolved_path_missing(self, tmp_path, monkeypatch):
+        """Raises OSError when the resolved relative path does not exist."""
+        fake_cwd = tmp_path / 'a'
+        fake_cwd.mkdir()
+        monkeypatch.chdir(fake_cwd)
+
+        with pytest.raises(OSError, match='is not a valid path'):
+            return_absolute_path('nonexistent_dir', n_dirs_back=1)
+
+    def test_multirun_strips_extra_dir(self, tmp_path, monkeypatch):
+        """When the resolved parent directory is named 'multirun', one extra level is removed."""
+        # structure: tmp_path/multirun/run1  →  cwd
+        # with n_dirs_back=1, naive resolution → tmp_path/multirun
+        # but multirun stripping should give → tmp_path
+        multirun_dir = tmp_path / 'multirun'
+        run_dir = multirun_dir / 'run1'
+        run_dir.mkdir(parents=True)
+        target = tmp_path / 'data'
+        target.mkdir()
+        monkeypatch.chdir(run_dir)
+
+        result = return_absolute_path('data', n_dirs_back=1)
+        assert result == str(target)
 
 
 def test_ckpt_path_from_base_path_no_checkpoints(tmp_path: Path):

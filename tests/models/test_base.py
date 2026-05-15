@@ -2,10 +2,61 @@
 
 import gc
 
+import pytest
 import torch
 import torchvision
 
-from lightning_pose.models.base import BaseFeatureExtractor
+from lightning_pose.models.base import (
+    BaseFeatureExtractor,
+    LrNotImplementedError,
+    OptimizerNotImplementedError,
+)
+
+
+class TestLrNotImplementedError:
+    """Test the LrNotImplementedError exception."""
+
+    def test_is_not_implemented_error(self):
+        """Subclasses NotImplementedError."""
+        assert issubclass(LrNotImplementedError, NotImplementedError)
+
+    def test_message_contains_scheduler_name(self):
+        """Error message includes the invalid scheduler name."""
+        exc = LrNotImplementedError('cosine')
+        assert 'cosine' in str(exc)
+
+    def test_stores_lr_scheduler(self):
+        """lr_scheduler attribute holds the passed value."""
+        exc = LrNotImplementedError('cosine')
+        assert exc.lr_scheduler == 'cosine'
+
+    def test_can_be_raised_and_caught(self):
+        """Can be raised and caught as NotImplementedError."""
+        with pytest.raises(NotImplementedError):
+            raise LrNotImplementedError('cosine')
+
+
+class TestOptimizerNotImplementedError:
+    """Test the OptimizerNotImplementedError exception."""
+
+    def test_is_not_implemented_error(self):
+        """Subclasses NotImplementedError."""
+        assert issubclass(OptimizerNotImplementedError, NotImplementedError)
+
+    def test_message_contains_optimizer_name(self):
+        """Error message includes the invalid optimizer name."""
+        exc = OptimizerNotImplementedError('SGD')
+        assert 'SGD' in str(exc)
+
+    def test_stores_optimizer(self):
+        """optimizer attribute holds the passed value."""
+        exc = OptimizerNotImplementedError('SGD')
+        assert exc.optimizer == 'SGD'
+
+    def test_can_be_raised_and_caught(self):
+        """Can be raised and caught as NotImplementedError."""
+        with pytest.raises(NotImplementedError):
+            raise OptimizerNotImplementedError('SGD')
 
 _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 

@@ -3,14 +3,62 @@ import filecmp
 import shutil
 from pathlib import Path
 
+import numpy as np
 from omegaconf import OmegaConf
+from PIL import Image
 
 from lightning_pose.utils.cropzoom import (
+    _crop_image,
     generate_cropped_labeled_frames,
     generate_cropped_video,
 )
 
 from ..fetch_test_data import fetch_test_data_if_needed
+
+
+class TestCropImage:
+    """Test the _crop_image function."""
+
+    def _make_image(self, tmp_path: Path, size: tuple[int, int] = (100, 80)) -> Path:
+        """Save a solid-color RGB image and return its path."""
+        arr = np.zeros((size[1], size[0], 3), dtype=np.uint8)
+        arr[:, :] = [10, 20, 30]
+        img_path = tmp_path / 'source.png'
+        Image.fromarray(arr).save(img_path)
+        return img_path
+
+    def test_saves_cropped_image(self, tmp_path):
+        """Cropped image is written to the specified output path."""
+        img_path = self._make_image(tmp_path)
+        out_path = tmp_path / 'out' / 'cropped.png'
+        _crop_image(img_path, (10, 10, 50, 40), out_path)
+        assert out_path.exists()
+
+    def test_output_has_correct_size(self, tmp_path):
+        """Saved image dimensions match the bounding box."""
+        img_path = self._make_image(tmp_path)
+        bbox = (10, 5, 60, 45)  # width=50, height=40
+        out_path = tmp_path / 'cropped.png'
+        _crop_image(img_path, bbox, out_path)
+        result = Image.open(out_path)
+        assert result.size == (50, 40)
+
+    def test_creates_parent_directories(self, tmp_path):
+        """Parent directories of the output path are created automatically."""
+        img_path = self._make_image(tmp_path)
+        out_path = tmp_path / 'a' / 'b' / 'c' / 'cropped.png'
+        _crop_image(img_path, (0, 0, 10, 10), out_path)
+        assert out_path.exists()
+
+    def test_pixel_values_preserved(self, tmp_path):
+        """Pixels in the cropped region match the original image."""
+        img_path = self._make_image(tmp_path, size=(100, 100))
+        bbox = (20, 30, 70, 80)
+        out_path = tmp_path / 'cropped.png'
+        _crop_image(img_path, bbox, out_path)
+        original = np.array(Image.open(img_path).crop(bbox))
+        cropped = np.array(Image.open(out_path))
+        assert np.array_equal(original, cropped)
 
 
 # TODO: Move to utils.

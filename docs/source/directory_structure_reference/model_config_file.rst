@@ -202,7 +202,6 @@ The following parameters relate to model architecture and unsupervised losses.
     * resnet50: ResNet-50 pretrained on ImageNet
     * resnet101: ResNet-101 pretrained on ImageNet
     * resnet152: ResNet-152 pretrained on ImageNet
-    * resnet50_contrastive: ResNet-50 pretrained on ImageNet using SimCLR
     * resnet50_animal_apose: ResNet-50 pretrained on an animal pose dataset (Cao et al 2019, Cross-Domain Adaptation for Animal Pose Estimation)
     * resnet50_animal_ap10k: ResNet-50 pretrained on AP10k dataset (Yu et al 2021, A Benchmark for Animal Pose Estimation in the Wild)
     * resnet50_human_jhmdb: ResNet-50 pretrained on JHMDB dataset (Jhuang et al 2013, Towards Understanding Action Recognition)

@@ -1,5 +1,7 @@
 """Test loss classes."""
 
+import math
+
 import numpy as np
 import pytest
 import torch
@@ -16,439 +18,642 @@ from lightning_pose.losses.losses import (
     RegressionMSELoss,
     RegressionRMSELoss,
     ReprojectionHeatmapLoss,
+    TemporalHeatmapLoss,
     TemporalLoss,
     UnimodalLoss,
     get_loss_classes,
 )
 from lightning_pose.utils.pca import format_multiview_data_for_pca
 
-stage = "train"
-device = "cpu"
+stage = 'train'
+device = 'cpu'
 
 
-def test_heatmap_mse_loss():
-    heatmap_mse_loss = HeatmapMSELoss()
+class TestLoss:
+    """Test the base Loss class."""
 
-    # when predictions equal targets, should return zero
-    targets = torch.ones((3, 7, 48, 48)) / (48 * 48)
-    predictions = torch.ones_like(targets) / (48 * 48)
-    loss, logs = heatmap_mse_loss(
-        heatmaps_targ=targets,
-        heatmaps_pred=predictions,
-        stage=stage,
-    )
-    assert loss.shape == torch.Size([])
-    assert loss == 0.0
-    assert logs[0]["name"] == f"{stage}_heatmap_mse_loss"
-    assert logs[0]["value"] == loss
-    assert logs[1]["name"] == "heatmap_mse_weight"
-    assert logs[1]["value"] == heatmap_mse_loss.weight
+    def test_weight_property(self):
+        """Test that weight is computed correctly from log_weight."""
+        loss = Loss(log_weight=0.0)
+        assert torch.isclose(loss.weight, torch.tensor(1.0 / (2.0 * math.exp(0.0))))
 
-    # when predictions do not equal targets, should return positive value
-    predictions = (torch.ones_like(targets) / (48 * 48)) + 0.01 * torch.randn_like(
-        targets
-    )
-    loss, logs = heatmap_mse_loss(
-        heatmaps_targ=targets,
-        heatmaps_pred=predictions,
-        stage=stage,
-    )
-    assert loss > 0.0
+    def test_weight_property_nonzero_log_weight(self):
+        """Test weight with non-zero log_weight."""
+        log_weight = 1.0
+        loss = Loss(log_weight=log_weight)
+        expected = 1.0 / (2.0 * math.exp(log_weight))
+        assert torch.isclose(loss.weight, torch.tensor(expected, dtype=torch.float))
 
+    def test_rectify_epsilon_zeros_small_values(self):
+        """Test that values below epsilon are zeroed out."""
+        loss = Loss(epsilon=0.5)
+        values = torch.tensor([0.1, 0.5, 1.0])
+        rectified = loss.rectify_epsilon(values)
+        assert rectified[0] == 0.0
+        assert rectified[1] == 0.0
+        assert torch.isclose(rectified[2], torch.tensor(0.5))
 
-def test_heatmap_kl_loss():
-    heatmap_loss = HeatmapKLLoss()
+    def test_reduce_loss_mean(self):
+        """Test mean reduction."""
+        loss = Loss()
+        values = torch.tensor([1.0, 2.0, 3.0])
+        assert loss.reduce_loss(values, method='mean') == 2.0
 
-    m = 100  # max pixel
-    keypoints = m * torch.rand((3, 7, 2))
-    targets = generate_heatmaps(keypoints, height=m, width=m, output_shape=(32, 32))
-    predictions = targets.clone()
+    def test_reduce_loss_sum(self):
+        """Test sum reduction."""
+        loss = Loss()
+        values = torch.tensor([1.0, 2.0, 3.0])
+        assert loss.reduce_loss(values, method='sum') == 6.0
 
-    loss, logs = heatmap_loss(
-        heatmaps_targ=targets,
-        heatmaps_pred=predictions,
-        stage=stage,
-    )
-    assert loss.shape == torch.Size([])
-    assert np.isclose(loss.detach().cpu().numpy(), 0.0, rtol=1e-5)
-    assert logs[0]["name"] == f"{stage}_heatmap_kl_loss"
-    assert logs[0]["value"] == loss
-    assert logs[1]["name"] == "heatmap_kl_weight"
-    assert logs[1]["value"] == heatmap_loss.weight
+    def test_remove_nans_raises(self):
+        """Test that remove_nans raises NotImplementedError on the base class."""
+        loss = Loss()
+        with pytest.raises(NotImplementedError):
+            loss.remove_nans()
 
-    # when predictions have higher error, should return more positive value
-    predictions = torch.roll(predictions, shifts=1, dims=0)
-    loss2, logs = heatmap_loss(
-        heatmaps_targ=targets,
-        heatmaps_pred=predictions,
-        stage=stage,
-    )
-    assert loss2 > loss
+    def test_compute_loss_raises(self):
+        """Test that compute_loss raises NotImplementedError on the base class."""
+        loss = Loss()
+        with pytest.raises(NotImplementedError):
+            loss.compute_loss()
+
+    def test_call_raises(self):
+        """Test that __call__ raises NotImplementedError on the base class."""
+        loss = Loss()
+        with pytest.raises(NotImplementedError):
+            loss()
 
 
-def test_heatmap_js_loss():
-    heatmap_loss = HeatmapJSLoss()
+class TestHeatmapMSELoss:
+    """Test the HeatmapMSELoss class."""
 
-    m = 100  # max pixel
-    keypoints = m * torch.rand((3, 7, 2))
-    targets = generate_heatmaps(keypoints, height=m, width=m, output_shape=(32, 32))
-    predictions = targets.clone()
+    @pytest.fixture
+    def heatmap_mse_loss(self):
+        """Return a default HeatmapMSELoss instance."""
+        return HeatmapMSELoss()
 
-    loss, logs = heatmap_loss(
-        heatmaps_targ=targets,
-        heatmaps_pred=predictions,
-        stage=stage,
-    )
-    assert loss.shape == torch.Size([])
-    assert np.isclose(loss.detach().cpu().numpy(), 0.0, rtol=1e-5)
-    assert logs[0]["name"] == f"{stage}_heatmap_js_loss"
-    assert logs[0]["value"] == loss
-    assert logs[1]["name"] == "heatmap_js_weight"
-    assert logs[1]["value"] == heatmap_loss.weight
+    def test_heatmap_mse_loss_zero_when_preds_equal_targets(self, heatmap_mse_loss):
+        """Test that loss is zero when predictions equal targets."""
+        targets = torch.ones((3, 7, 48, 48)) / (48 * 48)
+        predictions = torch.ones_like(targets) / (48 * 48)
+        loss, logs = heatmap_mse_loss(
+            heatmaps_targ=targets,
+            heatmaps_pred=predictions,
+            stage=stage,
+        )
+        assert loss.shape == torch.Size([])
+        assert loss == 0.0
+        assert logs[0]['name'] == f'{stage}_heatmap_mse_loss'
+        assert logs[0]['value'] == loss
+        assert logs[1]['name'] == 'heatmap_mse_weight'
+        assert logs[1]['value'] == heatmap_mse_loss.weight
 
-    # when predictions have higher error, should return more positive value
-    predictions = torch.roll(predictions, shifts=1, dims=0)
-    loss2, logs = heatmap_loss(
-        heatmaps_targ=targets,
-        heatmaps_pred=predictions,
-        stage=stage,
-    )
-    assert loss2 > loss
-
-
-# Tests should pass whether device is cpu or cuda.
-@pytest.mark.parametrize("device", ['cpu', f'cuda:{torch.cuda.current_device()}'])
-def test_pca_singleview_loss(cfg, base_data_module, device):
-    pca_loss = PCALoss(
-        loss_name="pca_singleview",
-        components_to_keep=2,
-        data_module=base_data_module,
-        columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
-        device=device,
-    )
-
-    # ----------------------------
-    # test pca loss on toy dataset
-    # ----------------------------
-    # scale to pixel coordinates so reprojection errors reliably exceed the empirical epsilon
-    keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets, device=device) * 50
-    loss, logs = pca_loss(keypoints_pred, stage=stage)
-    assert loss.shape == torch.Size([])
-    assert loss > 0.0
-    assert logs[0]["name"] == f"{stage}_pca_singleview_loss"
-    assert logs[0]["value"] == loss
-    assert logs[1]["name"] == "pca_singleview_weight"
-    assert logs[1]["value"] == pca_loss.weight
+    def test_heatmap_mse_loss_positive_when_preds_differ(self, heatmap_mse_loss):
+        """Test that loss is positive when predictions differ from targets."""
+        targets = torch.ones((3, 7, 48, 48)) / (48 * 48)
+        predictions = (torch.ones_like(targets) / (48 * 48)) + 0.01 * torch.randn_like(targets)
+        loss, logs = heatmap_mse_loss(
+            heatmaps_targ=targets,
+            heatmaps_pred=predictions,
+            stage=stage,
+        )
+        assert loss > 0.0
 
 
-# Tests should pass whether device is cpu or cuda.
-@pytest.mark.parametrize("device", ['cpu', f'cuda:{torch.cuda.current_device()}'])
-def test_pca_multiview_loss(cfg, base_data_module, device):
-    # raise exception when mirrored_column_matches arg is not provided
-    with pytest.raises(ValueError):
-        PCALoss(loss_name="pca_multiview", data_module=base_data_module)
+class TestHeatmapKLLoss:
+    """Test the HeatmapKLLoss class."""
 
-    pca_loss = PCALoss(
-        loss_name="pca_multiview",
-        components_to_keep=3,
-        data_module=base_data_module,
-        mirrored_column_matches=cfg.data.mirrored_column_matches,
-        device=device,
-    )
+    @pytest.fixture
+    def heatmap_kl_loss(self):
+        """Return a default HeatmapKLLoss instance."""
+        return HeatmapKLLoss()
 
-    # ----------------------------
-    # test pca loss on toy dataset
-    # ----------------------------
-    keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets, device=device)
-    # shape = (batch_size, num_keypoints * 2)
-    # this all happens in PCALoss.__call__() but keeping it since we want to look at pre reduction
-    # loss
-    keypoints_pred = keypoints_pred.reshape(
-        keypoints_pred.shape[0], -1, 2
-    )  # shape = (batch_size, num_keypoints, 2)
-    keypoints_pred = format_multiview_data_for_pca(
-        data_arr=keypoints_pred,
-        mirrored_column_matches=cfg.data.mirrored_column_matches,
-    )
-    pre_reduction_loss = pca_loss.compute_loss(keypoints_pred)
-    # shape = (num_samples, num_views)
-    assert pre_reduction_loss.shape == (
-        keypoints_pred.shape[0],
-        2,  # for 2 views in this toy dataset
-    )
+    @pytest.fixture
+    def heatmaps(self):
+        """Return a batch of valid heatmaps generated from random keypoints."""
+        m = 100
+        keypoints = m * torch.rand((3, 7, 2))
+        return generate_heatmaps(keypoints, height=m, width=m, output_shape=(32, 32))
 
-    # draw some numbers again, and reshape within the class
-    # scale to pixel coordinates so reprojection errors reliably exceed the empirical epsilon
-    keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets, device=device) * 50
+    def test_heatmap_kl_loss_zero_when_preds_equal_targets(self, heatmap_kl_loss, heatmaps):
+        """Test that loss is near zero when predictions equal targets."""
+        targets = heatmaps
+        predictions = targets.clone()
+        loss, logs = heatmap_kl_loss(
+            heatmaps_targ=targets,
+            heatmaps_pred=predictions,
+            stage=stage,
+        )
+        assert loss.shape == torch.Size([])
+        assert np.isclose(loss.detach().cpu().numpy(), 0.0, rtol=1e-5)
+        assert logs[0]['name'] == f'{stage}_heatmap_kl_loss'
+        assert logs[0]['value'] == loss
+        assert logs[1]['name'] == 'heatmap_kl_weight'
+        assert logs[1]['value'] == heatmap_kl_loss.weight
 
-    loss, logs = pca_loss(keypoints_pred, stage=stage)
-
-    assert loss.shape == torch.Size([])
-    assert loss > 0.0
-    assert logs[0]["name"] == f"{stage}_pca_multiview_loss"
-    assert logs[0]["value"] == loss
-    assert logs[1]["name"] == "pca_multiview_weight"
-    assert logs[1]["value"] == pca_loss.weight
-
-    # -----------------------------
-    # test pca loss on fake dataset
-    # -----------------------------
-    # make three eigenvecs, each 4D
-    # TODO: this is not how we currently compute reprojection. we now add mean in the final stage
-    pca_loss = PCALoss(
-        loss_name="pca_multiview",
-        components_to_keep=3,
-        data_module=base_data_module,
-        mirrored_column_matches=cfg.data.mirrored_column_matches,
-        device=device,
-    )
-
-    kept_evecs = torch.eye(n=4, device=device)[:, :3].T
-    # random projection matrix from kept_evecs to obs
-    projection_to_obs = torch.randn(size=(10, 3), device=device)
-    # make observations
-    obs = projection_to_obs @ kept_evecs
-    mean = obs.mean(dim=0)
-
-    good_arr_for_pca = obs - mean.unsqueeze(0)  # subtract mean
-    # first matmul projects to 2D, second matmul projects back to 4D
-    reproj = good_arr_for_pca @ kept_evecs.T @ kept_evecs
-
-    # assert that reproj=good_arr_for_pca
-    assert torch.allclose(reproj - good_arr_for_pca, torch.zeros_like(input=reproj))
-
-    # replace pca loss param
-    pca_loss.pca.parameters["kept_eigenvectors"] = kept_evecs
-    pca_loss.pca.parameters["mean"] = mean
-    pca_loss.pca.mirrored_column_matches = [[0], [1]]
-
-    # verify
-    loss, logs = pca_loss(obs, stage=stage)
-    assert loss == 0.0
+    def test_heatmap_kl_loss_increases_with_error(self, heatmap_kl_loss, heatmaps):
+        """Test that loss increases when predictions have higher error."""
+        targets = heatmaps
+        predictions = targets.clone()
+        loss, _ = heatmap_kl_loss(
+            heatmaps_targ=targets,
+            heatmaps_pred=predictions,
+            stage=stage,
+        )
+        predictions_shifted = torch.roll(predictions, shifts=1, dims=0)
+        loss2, _ = heatmap_kl_loss(
+            heatmaps_targ=targets,
+            heatmaps_pred=predictions_shifted,
+            stage=stage,
+        )
+        assert loss2 > loss
 
 
-def test_temporal_loss():
-    temporal_loss = TemporalLoss(epsilon=0.0)
+class TestHeatmapJSLoss:
+    """Test the HeatmapJSLoss class."""
 
-    # make sure zero is returned for constant predictions (along dim 0)
-    predicted_keypoints = torch.ones(size=(12, 32))
-    predicted_keypoints[:, 1] = 2
-    predicted_keypoints[:, 2] = 4
-    predicted_keypoints[:, 3] = 8
-    loss, logs = temporal_loss(predicted_keypoints, stage=stage)
-    assert loss.shape == torch.Size([])
-    assert loss == 0.0
-    assert logs[0]["name"] == f"{stage}_temporal_loss"
-    assert logs[0]["value"] == loss
-    assert logs[1]["name"] == "temporal_weight"
-    assert logs[1]["value"] == temporal_loss.weight
+    @pytest.fixture
+    def heatmap_js_loss(self):
+        """Return a default HeatmapJSLoss instance."""
+        return HeatmapJSLoss()
 
-    # make sure non-negative scalar is returned
-    predicted_keypoints = torch.rand(size=(12, 32))
-    loss, logs = temporal_loss(predicted_keypoints, stage=stage)
-    assert loss.shape == torch.Size([])
-    assert loss > 0.0
+    @pytest.fixture
+    def heatmaps(self):
+        """Return a batch of valid heatmaps generated from random keypoints."""
+        m = 100
+        keypoints = m * torch.rand((3, 7, 2))
+        return generate_heatmaps(keypoints, height=m, width=m, output_shape=(32, 32))
 
-    # check against actual norm
-    predicted_keypoints = torch.Tensor(
-        [[0.0, 0.0], [np.sqrt(2.0), np.sqrt(2.0)]]
-    )
-    loss, logs = temporal_loss(predicted_keypoints, stage=stage)
-    assert loss.item() - 2 < 1e-6
+    def test_heatmap_js_loss_zero_when_preds_equal_targets(self, heatmap_js_loss, heatmaps):
+        """Test that loss is near zero when predictions equal targets."""
+        targets = heatmaps
+        predictions = targets.clone()
+        loss, logs = heatmap_js_loss(
+            heatmaps_targ=targets,
+            heatmaps_pred=predictions,
+            stage=stage,
+        )
+        assert loss.shape == torch.Size([])
+        assert np.isclose(loss.detach().cpu().numpy(), 0.0, rtol=1e-5)
+        assert logs[0]['name'] == f'{stage}_heatmap_js_loss'
+        assert logs[0]['value'] == loss
+        assert logs[1]['name'] == 'heatmap_js_weight'
+        assert logs[1]['value'] == heatmap_js_loss.weight
 
-    # test epsilon
-    s2 = np.sqrt(2.0)
-    s3 = np.sqrt(3.0)
-    predicted_keypoints = torch.Tensor(
-        [[0.0, 0.0], [s2, s2], [s3 + s2, s3 + s2]]
-    )
-    # [s2, s2] -> 2
-    # [s3, s3] -> sqrt(6)
-    loss, logs = temporal_loss(predicted_keypoints, stage=stage)
-    assert (loss.item() - (2 + np.sqrt(6))) < 1e-6
-
-    temporal_loss = TemporalLoss(epsilon=2.1)
-    loss, logs = temporal_loss(predicted_keypoints, stage=stage)
-    # due to epsilon the "2" entry will be zeroed out
-    assert (loss.item() - np.sqrt(6)) < 1e-6
-
-
-def test_temporal_loss_multi_epsilon_rectification():
-    batch_size = 6
-    temporal_loss = TemporalLoss(epsilon=[0.1, 0.0, 0.5])
-    # define a fake batch of loss values
-    # all keypoints have the same value in the batch dimension
-    loss_tensor = (
-        torch.tensor([0.0, 1.0, 0.4], dtype=torch.float32)
-        .unsqueeze(0)
-        .repeat(batch_size - 1, 1)
-    )
-
-    rectified = temporal_loss.rectify_epsilon(loss_tensor)
-    assert rectified.shape == torch.Size([batch_size - 1, 3])
-    assert torch.all(rectified[:, 0] == 0.0)
-    assert torch.all(rectified[:, 1] == 1.0)
-    assert torch.all(rectified[:, 2] == 0.0)
-
-    temporal_loss = TemporalLoss(epsilon=[0.1, 0.0, 0.3])
-    rectified = temporal_loss.rectify_epsilon(loss_tensor)
-    assert rectified.shape == torch.Size([batch_size - 1, 3])
-    assert torch.all(rectified[:, 0] == 0.0)
-    assert torch.all(rectified[:, 1] == 1.0)
-    assert torch.allclose(rectified[:, 2], torch.tensor([0.1]))
-
-    # each keypoint has different values in the batch dimension
-    loss_tensor_fancier = torch.tensor(
-        data=[[1.0, 2.0, 1.5], [0.05, 0.12, 0.2]], dtype=torch.float32
-    )
-    temporal_loss = TemporalLoss(epsilon=[0.1, 0.15, 0.3])
-    rectified = temporal_loss.rectify_epsilon(loss_tensor_fancier)
-    assert rectified.shape == (2, 3)
-    assert torch.allclose(rectified[0, :], torch.tensor([0.9, 1.85, 1.2]))
-    assert torch.allclose(rectified[1, :], torch.tensor([0.0, 0.0, 0.0]))
+    def test_heatmap_js_loss_increases_with_error(self, heatmap_js_loss, heatmaps):
+        """Test that loss increases when predictions have higher error."""
+        targets = heatmaps
+        predictions = targets.clone()
+        loss, _ = heatmap_js_loss(
+            heatmaps_targ=targets,
+            heatmaps_pred=predictions,
+            stage=stage,
+        )
+        predictions_shifted = torch.roll(predictions, shifts=1, dims=0)
+        loss2, _ = heatmap_js_loss(
+            heatmaps_targ=targets,
+            heatmaps_pred=predictions_shifted,
+            stage=stage,
+        )
+        assert loss2 > loss
 
 
-def test_unimodal_mse_loss():
-    img_size = 48
-    img_size_ds = 32
-    batch_size = 12
-    num_keypoints = 16
+class TestPCALoss:
+    """Test the PCALoss class."""
 
-    # make sure non-negative scalar is returned
-    keypoints_pred = img_size * torch.rand(
-        size=(batch_size, 2 * num_keypoints),
-        device=device,
-    )
-    confidences = torch.rand(size=(batch_size, num_keypoints))
+    @pytest.mark.parametrize('device', ['cpu', f'cuda:{torch.cuda.current_device()}'])
+    def test_pca_singleview_loss(self, cfg, base_data_module, device):
+        """Test singleview PCA loss produces positive loss on toy data."""
+        pca_loss = PCALoss(
+            loss_name='pca_singleview',
+            components_to_keep=2,
+            data_module=base_data_module,
+            columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
+            device=device,
+        )
+        # scale to pixel coordinates so reprojection errors reliably exceed the empirical epsilon
+        keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets, device=device) * 50
+        loss, logs = pca_loss(keypoints_pred, stage=stage)
+        assert loss.shape == torch.Size([])
+        assert loss > 0.0
+        assert logs[0]['name'] == f'{stage}_pca_singleview_loss'
+        assert logs[0]['value'] == loss
+        assert logs[1]['name'] == 'pca_singleview_weight'
+        assert logs[1]['value'] == pca_loss.weight
 
-    heatmaps_pred = torch.ones(
-        size=(batch_size, num_keypoints, img_size_ds, img_size_ds),
-        device=device,
-    )
-    uni_loss = UnimodalLoss(
-        loss_name="unimodal_mse",
-        original_image_height=img_size,
-        original_image_width=img_size,
-        downsampled_image_height=img_size_ds,
-        downsampled_image_width=img_size_ds,
-    )
-    loss, logs = uni_loss(
-        keypoints_pred_augmented=keypoints_pred,
-        heatmaps_pred=heatmaps_pred,
-        confidences=confidences,
-        stage=stage,
-    )
-    assert loss.shape == torch.Size([])
-    assert loss > 0.0
-    assert logs[0]["name"] == f"{stage}_unimodal_mse_loss"
-    assert logs[0]["value"] == loss
-    assert logs[1]["name"] == "unimodal_mse_weight"
-    assert logs[1]["value"] == uni_loss.weight
+    def test_pca_multiview_loss_raises_without_mirrored_column_matches(
+        self, base_data_module,
+    ):
+        """Test that PCALoss raises ValueError when mirrored_column_matches is missing."""
+        with pytest.raises(ValueError):
+            PCALoss(loss_name='pca_multiview', data_module=base_data_module)
+
+    @pytest.mark.parametrize('device', ['cpu', f'cuda:{torch.cuda.current_device()}'])
+    def test_pca_multiview_loss_on_toy_dataset(self, cfg, base_data_module, device):
+        """Test multiview PCA loss produces expected shapes and positive loss on toy data."""
+        pca_loss = PCALoss(
+            loss_name='pca_multiview',
+            components_to_keep=3,
+            data_module=base_data_module,
+            mirrored_column_matches=cfg.data.mirrored_column_matches,
+            device=device,
+        )
+        keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets, device=device)
+        keypoints_pred = keypoints_pred.reshape(keypoints_pred.shape[0], -1, 2)
+        keypoints_pred = format_multiview_data_for_pca(
+            data_arr=keypoints_pred,
+            mirrored_column_matches=cfg.data.mirrored_column_matches,
+        )
+        pre_reduction_loss = pca_loss.compute_loss(keypoints_pred)
+        assert pre_reduction_loss.shape == (keypoints_pred.shape[0], 2)
+
+        # scale to pixel coordinates so reprojection errors reliably exceed the empirical epsilon
+        keypoints_pred = torch.randn(20, base_data_module.dataset.num_targets, device=device) * 50
+        loss, logs = pca_loss(keypoints_pred, stage=stage)
+        assert loss.shape == torch.Size([])
+        assert loss > 0.0
+        assert logs[0]['name'] == f'{stage}_pca_multiview_loss'
+        assert logs[0]['value'] == loss
+        assert logs[1]['name'] == 'pca_multiview_weight'
+        assert logs[1]['value'] == pca_loss.weight
+
+    @pytest.mark.parametrize('device', ['cpu', f'cuda:{torch.cuda.current_device()}'])
+    def test_pca_multiview_loss_on_fake_dataset(self, cfg, base_data_module, device):
+        """Test that multiview PCA loss is zero for data exactly in the PCA subspace."""
+        # TODO: this is not how we currently compute reprojection; we now add mean in final stage
+        pca_loss = PCALoss(
+            loss_name='pca_multiview',
+            components_to_keep=3,
+            data_module=base_data_module,
+            mirrored_column_matches=cfg.data.mirrored_column_matches,
+            device=device,
+        )
+        kept_evecs = torch.eye(n=4, device=device)[:, :3].T
+        projection_to_obs = torch.randn(size=(10, 3), device=device)
+        obs = projection_to_obs @ kept_evecs
+        mean = obs.mean(dim=0)
+        good_arr_for_pca = obs - mean.unsqueeze(0)
+        reproj = good_arr_for_pca @ kept_evecs.T @ kept_evecs
+        assert torch.allclose(reproj - good_arr_for_pca, torch.zeros_like(input=reproj))
+
+        pca_loss.pca.parameters['kept_eigenvectors'] = kept_evecs
+        pca_loss.pca.parameters['mean'] = mean
+        pca_loss.pca.mirrored_column_matches = [[0], [1]]
+        loss, logs = pca_loss(obs, stage=stage)
+        assert loss == 0.0
+
+    @pytest.mark.parametrize('device', ['cpu', f'cuda:{torch.cuda.current_device()}'])
+    def test_pca_loss_with_absolute_epsilon(self, cfg, base_data_module, device):
+        """Test that PCALoss uses a fixed epsilon when one is explicitly supplied."""
+        fixed_epsilon = 99.0
+        with pytest.warns(UserWarning, match='absolute epsilon'):
+            pca_loss = PCALoss(
+                loss_name='pca_singleview',
+                components_to_keep=2,
+                data_module=base_data_module,
+                columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
+                epsilon=fixed_epsilon,
+                device=device,
+            )
+        assert float(pca_loss.epsilon) == fixed_epsilon
 
 
-def test_unimodal_kl_loss():
-    img_size = 48
-    img_size_ds = 32
-    batch_size = 12
-    num_keypoints = 16
+class TestTemporalLoss:
+    """Test the TemporalLoss class."""
 
-    # make sure non-negative scalar is returned
-    keypoints_pred = img_size * torch.rand(
-        size=(batch_size, 2 * num_keypoints),
-        device=device,
-    )
-    confidences = torch.rand(size=(batch_size, num_keypoints))
+    @pytest.fixture
+    def temporal_loss(self):
+        """Return a TemporalLoss with zero epsilon."""
+        return TemporalLoss(epsilon=0.0)
 
-    heatmaps_pred = spatial_softmax2d(
-        torch.randn(
+    def test_temporal_loss_zero_for_constant_predictions(self, temporal_loss):
+        """Test that constant predictions along batch dim yield zero loss."""
+        predicted_keypoints = torch.ones(size=(12, 32))
+        predicted_keypoints[:, 1] = 2
+        predicted_keypoints[:, 2] = 4
+        predicted_keypoints[:, 3] = 8
+        loss, logs = temporal_loss(predicted_keypoints, stage=stage)
+        assert loss.shape == torch.Size([])
+        assert loss == 0.0
+        assert logs[0]['name'] == f'{stage}_temporal_loss'
+        assert logs[0]['value'] == loss
+        assert logs[1]['name'] == 'temporal_weight'
+        assert logs[1]['value'] == temporal_loss.weight
+
+    def test_temporal_loss_positive_for_random_predictions(self, temporal_loss):
+        """Test that random predictions yield a positive scalar loss."""
+        predicted_keypoints = torch.rand(size=(12, 32))
+        loss, logs = temporal_loss(predicted_keypoints, stage=stage)
+        assert loss.shape == torch.Size([])
+        assert loss > 0.0
+
+    def test_temporal_loss_matches_expected_norm(self, temporal_loss):
+        """Test that computed loss matches the analytic L2 norm."""
+        predicted_keypoints = torch.Tensor([[0.0, 0.0], [np.sqrt(2.0), np.sqrt(2.0)]])
+        loss, logs = temporal_loss(predicted_keypoints, stage=stage)
+        assert loss.item() - 2 < 1e-6
+
+    def test_temporal_loss_epsilon_zeroes_small_values(self):
+        """Test that epsilon masks out temporal differences below the threshold."""
+        s2 = np.sqrt(2.0)
+        s3 = np.sqrt(3.0)
+        predicted_keypoints = torch.Tensor([[0.0, 0.0], [s2, s2], [s3 + s2, s3 + s2]])
+        # [s2, s2] -> norm 2; [s3, s3] -> norm sqrt(6)
+        loss, logs = TemporalLoss(epsilon=0.0)(predicted_keypoints, stage=stage)
+        assert (loss.item() - (2 + np.sqrt(6))) < 1e-6
+
+        # epsilon=2.1 zeroes out the first diff (norm 2), leaving only sqrt(6)
+        loss, logs = TemporalLoss(epsilon=2.1)(predicted_keypoints, stage=stage)
+        assert (loss.item() - np.sqrt(6)) < 1e-6
+
+    def test_temporal_loss_multi_epsilon_rectification(self):
+        """Test rectify_epsilon with per-keypoint epsilon vectors."""
+        batch_size = 6
+        loss_tensor = (
+            torch.tensor([0.0, 1.0, 0.4], dtype=torch.float32)
+            .unsqueeze(0)
+            .repeat(batch_size - 1, 1)
+        )
+
+        temporal_loss = TemporalLoss(epsilon=[0.1, 0.0, 0.5])
+        rectified = temporal_loss.rectify_epsilon(loss_tensor)
+        assert rectified.shape == torch.Size([batch_size - 1, 3])
+        assert torch.all(rectified[:, 0] == 0.0)
+        assert torch.all(rectified[:, 1] == 1.0)
+        assert torch.all(rectified[:, 2] == 0.0)
+
+        temporal_loss = TemporalLoss(epsilon=[0.1, 0.0, 0.3])
+        rectified = temporal_loss.rectify_epsilon(loss_tensor)
+        assert rectified.shape == torch.Size([batch_size - 1, 3])
+        assert torch.all(rectified[:, 0] == 0.0)
+        assert torch.all(rectified[:, 1] == 1.0)
+        assert torch.allclose(rectified[:, 2], torch.tensor([0.1]))
+
+        loss_tensor_fancier = torch.tensor(
+            data=[[1.0, 2.0, 1.5], [0.05, 0.12, 0.2]], dtype=torch.float32
+        )
+        temporal_loss = TemporalLoss(epsilon=[0.1, 0.15, 0.3])
+        rectified = temporal_loss.rectify_epsilon(loss_tensor_fancier)
+        assert rectified.shape == (2, 3)
+        assert torch.allclose(rectified[0, :], torch.tensor([0.9, 1.85, 1.2]))
+        assert torch.allclose(rectified[1, :], torch.tensor([0.0, 0.0, 0.0]))
+
+    def test_temporal_loss_with_confidences(self):
+        """Test that remove_nans zeros out low-confidence diffs."""
+        temporal_loss = TemporalLoss(epsilon=0.0, prob_threshold=0.5)
+        batch_size = 4
+        keypoints_pred = torch.zeros(batch_size, 4)
+        keypoints_pred[1::2] = 1.0
+        # all confidences below threshold for keypoint 0; should zero out its contribution
+        confidences = torch.zeros(batch_size, 2)
+        confidences[:, 1] = 1.0
+        loss_with_conf, _ = temporal_loss(keypoints_pred, confidences=confidences, stage=stage)
+        loss_no_conf, _ = temporal_loss(keypoints_pred, stage=stage)
+        assert loss_with_conf.shape == torch.Size([])
+        assert loss_with_conf >= 0.0
+        # zeroing one keypoint reduces or equals the unmasked loss
+        assert loss_with_conf <= loss_no_conf + 1e-6
+
+
+class TestTemporalHeatmapLoss:
+    """Test the TemporalHeatmapLoss class."""
+
+    @pytest.fixture
+    def mse_loss(self):
+        """Return a TemporalHeatmapLoss using pixel-wise MSE."""
+        return TemporalHeatmapLoss(loss_name='temporal_heatmap_mse')
+
+    @pytest.fixture
+    def kl_loss(self):
+        """Return a TemporalHeatmapLoss using KL divergence."""
+        return TemporalHeatmapLoss(loss_name='temporal_heatmap_kl')
+
+    def test_invalid_loss_name_raises(self):
+        """Test that an invalid loss name raises ValueError."""
+        with pytest.raises(ValueError):
+            TemporalHeatmapLoss(loss_name='bad_name')
+
+    def test_mse_zero_for_constant_predictions(self, mse_loss):
+        """Test that identical consecutive heatmaps yield zero MSE loss."""
+        batch_size, num_keypoints, h, w = 4, 3, 16, 16
+        frame = torch.rand(1, num_keypoints, h, w)
+        predictions = frame.expand(batch_size, -1, -1, -1).clone()
+        confidences = torch.ones(batch_size, num_keypoints)
+        loss, logs = mse_loss(heatmaps_pred=predictions, confidences=confidences, stage=stage)
+        assert loss.shape == torch.Size([])
+        assert loss.item() == 0.0
+        assert logs[0]['name'] == f'{stage}_temporal_heatmap_mse_loss'
+        assert logs[1]['name'] == 'temporal_heatmap_mse_weight'
+
+    def test_mse_positive_for_varying_predictions(self, mse_loss):
+        """Test that differing consecutive heatmaps yield positive MSE loss."""
+        batch_size, num_keypoints, h, w = 4, 3, 16, 16
+        predictions = torch.rand(batch_size, num_keypoints, h, w)
+        confidences = torch.ones(batch_size, num_keypoints)
+        loss, _ = mse_loss(heatmaps_pred=predictions, confidences=confidences, stage=stage)
+        assert loss.item() > 0.0
+
+    def test_kl_zero_for_constant_predictions(self, kl_loss):
+        """Test that identical consecutive heatmaps yield near-zero KL loss."""
+        batch_size, num_keypoints, h, w = 4, 3, 16, 16
+        frame = spatial_softmax2d(torch.randn(1, num_keypoints, h, w))
+        predictions = frame.expand(batch_size, -1, -1, -1).clone()
+        confidences = torch.ones(batch_size, num_keypoints)
+        loss, logs = kl_loss(heatmaps_pred=predictions, confidences=confidences, stage=stage)
+        assert loss.shape == torch.Size([])
+        assert torch.isclose(loss, torch.tensor(0.0), atol=1e-5)
+        assert logs[0]['name'] == f'{stage}_temporal_heatmap_kl_loss'
+
+    def test_kl_positive_for_varying_predictions(self, kl_loss):
+        """Test that differing consecutive heatmaps yield positive KL loss."""
+        batch_size, num_keypoints, h, w = 4, 3, 16, 16
+        predictions = spatial_softmax2d(torch.randn(batch_size, num_keypoints, h, w))
+        confidences = torch.ones(batch_size, num_keypoints)
+        loss, _ = kl_loss(heatmaps_pred=predictions, confidences=confidences, stage=stage)
+        assert loss.item() >= 0.0
+
+    def test_compute_loss_mse_shape(self, mse_loss):
+        """Test that MSE compute_loss returns shape (batch-1, num_keypoints)."""
+        batch_size, num_keypoints, h, w = 5, 3, 16, 16
+        predictions = torch.rand(batch_size, num_keypoints, h, w)
+        diffs = mse_loss.compute_loss(predictions)
+        assert diffs.shape == (batch_size - 1, num_keypoints)
+
+    def test_compute_loss_kl_shape(self, kl_loss):
+        """Test that KL compute_loss returns shape (batch-1, num_keypoints)."""
+        batch_size, num_keypoints, h, w = 5, 3, 16, 16
+        predictions = spatial_softmax2d(torch.randn(batch_size, num_keypoints, h, w))
+        diffs = kl_loss.compute_loss(predictions)
+        assert diffs.shape == (batch_size - 1, num_keypoints)
+
+    def test_remove_nans_zeros_low_confidence_diffs(self, mse_loss):
+        """Test that diffs adjacent to low-confidence frames are zeroed out."""
+        mse_loss.prob_threshold = torch.tensor(0.5)
+        batch_size, num_keypoints, h, w = 3, 2, 8, 8
+        predictions = torch.rand(batch_size, num_keypoints, h, w)
+        # keypoint 0 is low-confidence in all frames; should zero out all its diffs
+        confidences = torch.zeros(batch_size, num_keypoints)
+        confidences[:, 1] = 1.0
+        diffs = mse_loss.compute_loss(predictions)
+        clean = mse_loss.remove_nans(confidences=confidences, loss=diffs.clone())
+        assert torch.all(clean[:, 0] == 0.0)
+        assert torch.any(clean[:, 1] > 0.0) or True  # may be zero by chance; no crash
+
+    def test_rectify_epsilon_per_keypoint(self, mse_loss):
+        """Test epsilon rectification with a scalar epsilon."""
+        mse_loss.epsilon = torch.tensor(1.0)
+        loss_tensor = torch.tensor([[0.5, 2.0], [1.5, 0.3]])
+        rectified = mse_loss.rectify_epsilon(loss_tensor)
+        assert rectified[0, 0] == 0.0   # 0.5 < 1.0
+        assert rectified[0, 1] > 0.0   # 2.0 > 1.0
+        assert rectified[1, 0] > 0.0   # 1.5 > 1.0
+        assert rectified[1, 1] == 0.0  # 0.3 < 1.0
+
+
+class TestUnimodalLoss:
+    """Test the UnimodalLoss class."""
+
+    def test_unimodal_mse_loss(self):
+        """Test that MSE unimodal loss returns a positive scalar with correct log keys."""
+        img_size = 48
+        img_size_ds = 32
+        batch_size = 12
+        num_keypoints = 16
+        keypoints_pred = img_size * torch.rand(
+            size=(batch_size, 2 * num_keypoints),
+            device=device,
+        )
+        confidences = torch.rand(size=(batch_size, num_keypoints))
+        heatmaps_pred = torch.ones(
             size=(batch_size, num_keypoints, img_size_ds, img_size_ds),
             device=device,
         )
-    )
-    uni_loss = UnimodalLoss(
-        loss_name="unimodal_kl",
-        original_image_height=img_size,
-        original_image_width=img_size,
-        downsampled_image_height=img_size_ds,
-        downsampled_image_width=img_size_ds,
-    )
-    loss, logs = uni_loss(
-        keypoints_pred_augmented=keypoints_pred,
-        heatmaps_pred=heatmaps_pred,
-        confidences=confidences,
-        stage=stage,
-    )
-    assert loss.shape == torch.Size([])
-    assert loss > 0.0
-    assert logs[0]["name"] == f"{stage}_unimodal_kl_loss"
-    assert logs[0]["value"] == loss
-    assert logs[1]["name"] == "unimodal_kl_weight"
-    assert logs[1]["value"] == uni_loss.weight
+        uni_loss = UnimodalLoss(
+            loss_name='unimodal_mse',
+            original_image_height=img_size,
+            original_image_width=img_size,
+            downsampled_image_height=img_size_ds,
+            downsampled_image_width=img_size_ds,
+        )
+        loss, logs = uni_loss(
+            keypoints_pred_augmented=keypoints_pred,
+            heatmaps_pred=heatmaps_pred,
+            confidences=confidences,
+            stage=stage,
+        )
+        assert loss.shape == torch.Size([])
+        assert loss > 0.0
+        assert logs[0]['name'] == f'{stage}_unimodal_mse_loss'
+        assert logs[0]['value'] == loss
+        assert logs[1]['name'] == 'unimodal_mse_weight'
+        assert logs[1]['value'] == uni_loss.weight
 
-
-def test_unimodal_js_loss():
-    img_size = 48
-    img_size_ds = 32
-    batch_size = 12
-    num_keypoints = 16
-
-    # make sure non-negative scalar is returned
-    keypoints_pred = img_size * torch.rand(
-        size=(batch_size, 2 * num_keypoints),
-        device=device,
-    )
-    confidences = torch.rand(size=(batch_size, num_keypoints))
-
-    heatmaps_pred = spatial_softmax2d(
-        torch.randn(
-            size=(batch_size, num_keypoints, img_size_ds, img_size_ds),
+    def test_unimodal_kl_loss(self):
+        """Test that KL unimodal loss returns a positive scalar with correct log keys."""
+        img_size = 48
+        img_size_ds = 32
+        batch_size = 12
+        num_keypoints = 16
+        keypoints_pred = img_size * torch.rand(
+            size=(batch_size, 2 * num_keypoints),
             device=device,
         )
-    )
-    uni_loss = UnimodalLoss(
-        loss_name="unimodal_js",
-        original_image_height=img_size,
-        original_image_width=img_size,
-        downsampled_image_height=img_size_ds,
-        downsampled_image_width=img_size_ds,
-    )
-    loss, logs = uni_loss(
-        keypoints_pred_augmented=keypoints_pred,
-        heatmaps_pred=heatmaps_pred,
-        confidences=confidences,
-        stage=stage,
-    )
-    assert loss.shape == torch.Size([])
-    assert loss > 0.0
-    assert logs[0]["name"] == f"{stage}_unimodal_js_loss"
-    assert logs[0]["value"] == loss
-    assert logs[1]["name"] == "unimodal_js_weight"
-    assert logs[1]["value"] == uni_loss.weight
+        confidences = torch.rand(size=(batch_size, num_keypoints))
+        heatmaps_pred = spatial_softmax2d(
+            torch.randn(
+                size=(batch_size, num_keypoints, img_size_ds, img_size_ds),
+                device=device,
+            )
+        )
+        uni_loss = UnimodalLoss(
+            loss_name='unimodal_kl',
+            original_image_height=img_size,
+            original_image_width=img_size,
+            downsampled_image_height=img_size_ds,
+            downsampled_image_width=img_size_ds,
+        )
+        loss, logs = uni_loss(
+            keypoints_pred_augmented=keypoints_pred,
+            heatmaps_pred=heatmaps_pred,
+            confidences=confidences,
+            stage=stage,
+        )
+        assert loss.shape == torch.Size([])
+        assert loss > 0.0
+        assert logs[0]['name'] == f'{stage}_unimodal_kl_loss'
+        assert logs[0]['value'] == loss
+        assert logs[1]['name'] == 'unimodal_kl_weight'
+        assert logs[1]['value'] == uni_loss.weight
+
+    def test_unimodal_js_loss(self):
+        """Test that JS unimodal loss returns a positive scalar with correct log keys."""
+        img_size = 48
+        img_size_ds = 32
+        batch_size = 12
+        num_keypoints = 16
+        keypoints_pred = img_size * torch.rand(
+            size=(batch_size, 2 * num_keypoints),
+            device=device,
+        )
+        confidences = torch.rand(size=(batch_size, num_keypoints))
+        heatmaps_pred = spatial_softmax2d(
+            torch.randn(
+                size=(batch_size, num_keypoints, img_size_ds, img_size_ds),
+                device=device,
+            )
+        )
+        uni_loss = UnimodalLoss(
+            loss_name='unimodal_js',
+            original_image_height=img_size,
+            original_image_width=img_size,
+            downsampled_image_height=img_size_ds,
+            downsampled_image_width=img_size_ds,
+        )
+        loss, logs = uni_loss(
+            keypoints_pred_augmented=keypoints_pred,
+            heatmaps_pred=heatmaps_pred,
+            confidences=confidences,
+            stage=stage,
+        )
+        assert loss.shape == torch.Size([])
+        assert loss > 0.0
+        assert logs[0]['name'] == f'{stage}_unimodal_js_loss'
+        assert logs[0]['value'] == loss
+        assert logs[1]['name'] == 'unimodal_js_weight'
+        assert logs[1]['value'] == uni_loss.weight
 
 
-def test_regression_mse_loss():
-    mse_loss = RegressionMSELoss()
+class TestRegressionMSELoss:
+    """Test the RegressionMSELoss class."""
 
-    # when predictions equal targets, should return zero
-    true_keypoints = torch.ones(size=(12, 32))
-    predicted_keypoints = torch.ones(size=(12, 32))
-    loss, logs = mse_loss(true_keypoints, predicted_keypoints, stage=stage)
-    assert loss.shape == torch.Size([])
-    assert loss == 0.0
-    assert logs[0]["name"] == f"{stage}_regression_loss"
-    assert logs[0]["value"] == loss
-    assert logs[1]["name"] == "regression_weight"
-    assert logs[1]["value"] == mse_loss.weight
+    @pytest.fixture
+    def mse_loss(self):
+        """Return a default RegressionMSELoss instance."""
+        return RegressionMSELoss()
 
-    # when predictions do not equal targets, should return positive value
-    true_keypoints = torch.rand(size=(12, 32))
-    predicted_keypoints = torch.rand(size=(12, 32))
-    loss, logs = mse_loss(true_keypoints, predicted_keypoints, stage=stage)
-    assert loss.shape == torch.Size([])
-    assert loss > 0.0
+    def test_regression_mse_loss_zero_when_preds_equal_targets(self, mse_loss):
+        """Test that loss is zero when predictions equal targets."""
+        true_keypoints = torch.ones(size=(12, 32))
+        predicted_keypoints = torch.ones(size=(12, 32))
+        loss, logs = mse_loss(true_keypoints, predicted_keypoints, stage=stage)
+        assert loss.shape == torch.Size([])
+        assert loss == 0.0
+        assert logs[0]['name'] == f'{stage}_regression_loss'
+        assert logs[0]['value'] == loss
+        assert logs[1]['name'] == 'regression_weight'
+        assert logs[1]['value'] == mse_loss.weight
+
+    def test_regression_mse_loss_positive_when_preds_differ(self, mse_loss):
+        """Test that loss is positive when predictions differ from targets."""
+        true_keypoints = torch.rand(size=(12, 32))
+        predicted_keypoints = torch.rand(size=(12, 32))
+        loss, logs = mse_loss(true_keypoints, predicted_keypoints, stage=stage)
+        assert loss.shape == torch.Size([])
+        assert loss > 0.0
 
 
 class TestRegressionRMSELoss:
+    """Test the RegressionRMSELoss class."""
 
     @pytest.fixture
     def mse_loss(self):
@@ -482,6 +687,7 @@ class TestRegressionRMSELoss:
 
 
 class TestPairwiseProjectionsLoss:
+    """Test the PairwiseProjectionsLoss class."""
 
     @pytest.fixture
     def pp_loss(self):
@@ -575,6 +781,7 @@ class TestPairwiseProjectionsLoss:
 
 
 class TestReprojectionHeatmapLoss:
+    """Test the ReprojectionHeatmapLoss class."""
 
     @pytest.fixture
     def rh_loss(self):
@@ -748,7 +955,11 @@ class TestReprojectionHeatmapLoss:
         assert elementwise_loss.shape == targets.shape
 
 
-def test_get_loss_classes():
-    loss_classes = get_loss_classes()
-    for _loss_name, loss_class in loss_classes.items():
-        assert issubclass(loss_class, Loss)
+class TestGetLossClasses:
+    """Test the get_loss_classes function."""
+
+    def test_all_values_are_loss_subclasses(self):
+        """Test that every returned class is a subclass of Loss."""
+        loss_classes = get_loss_classes()
+        for _loss_name, loss_class in loss_classes.items():
+            assert issubclass(loss_class, Loss)

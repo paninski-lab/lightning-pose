@@ -42,7 +42,6 @@ __all__ = [
 ]
 
 
-@typechecked
 def _get_cfg_file(cfg_file: str | DictConfig):
     """Load yaml configuration files."""
     if isinstance(cfg_file, str):

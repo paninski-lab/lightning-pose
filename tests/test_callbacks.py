@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 import torch
@@ -129,6 +130,79 @@ class TestPatchMasking:
         assert schedule_info["curriculum_progress"] == "0.0%"
         assert schedule_info["steps_to_max_masking"] == 0
         assert schedule_info["steps_to_patch_masking"] == 0
+
+    def test_on_train_batch_start_disabled_does_not_modify_batch(
+        self, patch_masking_disabled,
+    ):
+        """Batch is not modified and current_patch_mask is not set when masking disabled."""
+        trainer = MagicMock()
+        trainer.global_step = 300
+        pl_module = MagicMock()
+        images = torch.ones(2, 2, 3, 64, 64)
+        batch = {'images': images.clone()}
+
+        patch_masking_disabled.on_train_batch_start(trainer, pl_module, batch, batch_idx=0)
+
+        assert torch.equal(batch['images'], images)
+
+    def test_on_train_batch_start_images_key_is_masked(self, patch_masking_enabled):
+        """Batch 'images' tensor is replaced with masked version and patch mask is stored."""
+        trainer = MagicMock()
+        trainer.global_step = 200  # past init_step=100 so masking is active
+        pl_module = MagicMock()
+        images = torch.ones(2, 2, 3, 64, 64)
+        batch = {'images': images.clone()}
+
+        patch_masking_enabled.on_train_batch_start(trainer, pl_module, batch, batch_idx=0)
+
+        assert not torch.equal(batch['images'], images)
+        assert pl_module.current_patch_mask is not None
+
+    def test_on_train_batch_start_frames_key_is_masked(self, patch_masking_enabled):
+        """Batch 'frames' tensor is replaced with masked version when 'images' key absent."""
+        trainer = MagicMock()
+        trainer.global_step = 200
+        pl_module = MagicMock()
+        frames = torch.ones(2, 2, 3, 64, 64)
+        batch = {'frames': frames.clone()}
+
+        patch_masking_enabled.on_train_batch_start(trainer, pl_module, batch, batch_idx=0)
+
+        assert not torch.equal(batch['frames'], frames)
+        assert pl_module.current_patch_mask is not None
+
+    def test_on_train_batch_start_no_valid_key_returns_early(self, patch_masking_enabled):
+        """Batch dict without 'images' or 'frames' key leaves pl_module unchanged."""
+        trainer = MagicMock()
+        trainer.global_step = 200
+        pl_module = MagicMock(spec=[])  # no attributes at all
+        batch = {'labels': torch.ones(2)}
+
+        patch_masking_enabled.on_train_batch_start(trainer, pl_module, batch, batch_idx=0)
+
+        assert not hasattr(pl_module, 'current_patch_mask')
+
+    def test_on_train_epoch_end_disabled_does_not_log(self, patch_masking_disabled):
+        """pl_module.log is not called when masking is disabled."""
+        trainer = MagicMock()
+        trainer.global_step = 300
+        pl_module = MagicMock()
+
+        patch_masking_disabled.on_train_epoch_end(trainer, pl_module)
+
+        pl_module.log.assert_not_called()
+
+    def test_on_train_epoch_end_logs_mask_ratio(self, patch_masking_enabled):
+        """pl_module.log is called with 'patch_mask_ratio' when masking is enabled."""
+        trainer = MagicMock()
+        trainer.global_step = 300
+        pl_module = MagicMock()
+
+        patch_masking_enabled.on_train_epoch_end(trainer, pl_module)
+
+        pl_module.log.assert_called_once()
+        call_args = pl_module.log.call_args
+        assert call_args[0][0] == 'patch_mask_ratio'
 
 
 class TestPatchMasker:
