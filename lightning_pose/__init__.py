@@ -28,7 +28,7 @@ def __get_package_version() -> str:
         # Try to get the version of the current package if
         # it is running from a distribution.
         __package_version = importlib.metadata.version("lightning-pose")
-    except importlib.metadata.PackageNotFoundError:
+    except importlib.metadata.PackageNotFoundError:  # pragma: no cover
         # Fall back on getting it from a local pyproject.toml.
         # This works in a development environment where the
         # package has not been installed from a distribution.

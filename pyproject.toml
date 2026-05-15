@@ -85,7 +85,6 @@ dev = [
     "sphinx_rtd_theme",
     "tbparse (<1.0.0)",
 ]
-extra-models = ["lightning-bolts"]
 
 [tool.ruff]
 line-length = 99
@@ -130,6 +129,12 @@ omit = [
     "htmlcov/*",
     "scripts/*",
     "tests/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
 ]
 
 [tool.pytest.ini_options]
