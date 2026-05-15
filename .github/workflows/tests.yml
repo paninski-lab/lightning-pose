@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - main
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize, reopened]
 
 # To cancel a currently running workflow from the same PR, branch or tag when a new workflow is triggered
@@ -61,6 +61,11 @@ jobs:
           text = text.replace('<source>.</source>', '<source>/home/runner/work/lightning-pose/lightning-pose</source>')
           p.write_text(text)
           "
+
+      - name: Checkout source for Codecov file network
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
