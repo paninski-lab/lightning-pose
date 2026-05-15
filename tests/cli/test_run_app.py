@@ -1,5 +1,21 @@
 """Test the run_app CLI command argument parsing."""
 
+import argparse
+
+from lightning_pose.cli.commands.run_app import get_parser
+
+
+class TestGetParser:
+    """Test the get_parser function."""
+
+    def test_returns_argument_parser(self):
+        """Returns an ArgumentParser instance."""
+        assert isinstance(get_parser(), argparse.ArgumentParser)
+
+    def test_prog_is_litpose_run_app(self):
+        """Returned parser has prog set to 'litpose run_app'."""
+        assert get_parser().prog == 'litpose run_app'
+
 
 class TestRunAppParser:
     """Test the run_app subcommand argument parsing."""

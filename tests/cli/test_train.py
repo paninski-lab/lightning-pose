@@ -1,6 +1,22 @@
 """Test the train CLI command argument parsing."""
 
+import argparse
+
 import pytest
+
+from lightning_pose.cli.commands.train import get_parser
+
+
+class TestGetParser:
+    """Test the get_parser function."""
+
+    def test_returns_argument_parser(self):
+        """Returns an ArgumentParser instance."""
+        assert isinstance(get_parser(), argparse.ArgumentParser)
+
+    def test_prog_is_litpose_train(self):
+        """Returned parser has prog set to 'litpose train'."""
+        assert get_parser().prog == 'litpose train'
 
 
 class TestTrainParser:

@@ -1,8 +1,23 @@
 """Test the remap CLI command argument parsing."""
 
+import argparse
 from pathlib import Path
 
 import pytest
+
+from lightning_pose.cli.commands.remap import get_parser
+
+
+class TestGetParser:
+    """Test the get_parser function."""
+
+    def test_returns_argument_parser(self):
+        """Returns an ArgumentParser instance."""
+        assert isinstance(get_parser(), argparse.ArgumentParser)
+
+    def test_prog_is_litpose_remap(self):
+        """Returned parser has prog set to 'litpose remap'."""
+        assert get_parser().prog == 'litpose remap'
 
 
 class TestRemapParser:

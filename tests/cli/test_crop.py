@@ -1,6 +1,22 @@
 """Test the crop CLI command argument parsing."""
 
+import argparse
+
 import pytest
+
+from lightning_pose.cli.commands.crop import get_parser
+
+
+class TestGetParser:
+    """Test the get_parser function."""
+
+    def test_returns_argument_parser(self):
+        """Returns an ArgumentParser instance."""
+        assert isinstance(get_parser(), argparse.ArgumentParser)
+
+    def test_prog_is_litpose_crop(self):
+        """Returned parser has prog set to 'litpose crop'."""
+        assert get_parser().prog == 'litpose crop'
 
 
 class TestCropParser:
