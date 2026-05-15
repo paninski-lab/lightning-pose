@@ -41,20 +41,25 @@ jobs:
       - name: Execute build script via SSH
         # -t flag is necessary to forward github cancellation event (SIGINT)
         run: |
-          ssh -tt -p 55 mw3323@axon-remote.rc.zi.columbia.edu 'sh buildbot_lp/build_srun.sh ${{ github.event.pull_request.number }}'
+          PR="${{ github.event.pull_request.number }}"
+          ssh -tt -p 55 mw3323@axon-remote.rc.zi.columbia.edu "sh buildbot_lp/build_srun.sh ${PR:-0}"
 
       - name: Copy coverage report from remote
         run: |
           scp -P 55 mw3323@axon-remote.rc.zi.columbia.edu:~/buildbot_lp/coverage.xml coverage.xml
 
       - name: Fix coverage XML source tags
-        # coverage.py emits an empty <source/> alongside <source>.</source> when
-        # relative_files=true + source=["."], which causes Codecov to fail processing
+        # coverage.py emits <source>.</source> (relative) when run on the remote server;
+        # replace it with the runner's absolute checkout path so Codecov can resolve filenames.
+        # Also strip any empty <source/> tags that coverage.py may emit alongside it.
         run: |
           python -c "
           import re, pathlib
           p = pathlib.Path('coverage.xml')
-          p.write_text(re.sub(r'<source></source>\s*', '', p.read_text()))
+          text = p.read_text()
+          text = re.sub(r'<source></source>\s*', '', text)
+          text = text.replace('<source>.</source>', '<source>/home/runner/work/lightning-pose/lightning-pose</source>')
+          p.write_text(text)
           "
 
       - name: Upload coverage to Codecov
