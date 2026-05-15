@@ -919,29 +919,29 @@ class TestApply3DTransforms:
 class TestLoadCamgroup:
     """Test MultiviewHeatmapDataset._load_camgroup."""
 
-    def test_load_camgroup_returns_camgroup(self, multiview_heatmap_dataset):
+    def test_load_camgroup_returns_camgroup(self, mocker, multiview_heatmap_dataset):
         """Loaded camgroup is returned when camera names match view_names."""
         # Arrange
-        mock_camgroup = MagicMock()
+        mock_camgroup = mocker.MagicMock()
         mock_camgroup.get_names.return_value = np.array(multiview_heatmap_dataset.view_names)
+        mocker.patch('lightning_pose.data.datasets.CameraGroup.load', return_value=mock_camgroup)
 
         # Act
-        with patch('lightning_pose.data.datasets.CameraGroup.load', return_value=mock_camgroup):
-            result = multiview_heatmap_dataset._load_camgroup('calibration.toml')
+        result = multiview_heatmap_dataset._load_camgroup('calibration.toml')
 
         # Assert
         assert result is mock_camgroup
 
-    def test_load_camgroup_name_mismatch_raises(self, multiview_heatmap_dataset):
+    def test_load_camgroup_name_mismatch_raises(self, mocker, multiview_heatmap_dataset):
         """AssertionError raised when calibration camera names don't match view_names."""
         # Arrange
-        mock_camgroup = MagicMock()
+        mock_camgroup = mocker.MagicMock()
         mock_camgroup.get_names.return_value = np.array(['wrong', 'names'])
+        mocker.patch('lightning_pose.data.datasets.CameraGroup.load', return_value=mock_camgroup)
 
         # Act / Assert
-        with patch('lightning_pose.data.datasets.CameraGroup.load', return_value=mock_camgroup):
-            with pytest.raises(AssertionError, match='same camera order'):
-                multiview_heatmap_dataset._load_camgroup('calibration.toml')
+        with pytest.raises(AssertionError, match='same camera order'):
+            multiview_heatmap_dataset._load_camgroup('calibration.toml')
 
 
 class TestLoadCamParamsFromCsv:
@@ -961,18 +961,18 @@ class TestLoadCamParamsFromCsv:
         df.to_csv(csv_path)
         return str(csv_path), calib_file, len(image_names)
 
-    def test_load_cam_params_from_csv_success(self, multiview_heatmap_dataset, cam_params_csv):
+    def test_load_cam_params_from_csv_success(self, mocker, multiview_heatmap_dataset, cam_params_csv):
         """Returns aligned DataFrame and camgroup dict for a valid CSV."""
         # Arrange
         csv_path, calib_file, n_frames = cam_params_csv
-        mock_camgroup = MagicMock()
+        mock_camgroup = mocker.MagicMock()
         mock_camgroup.get_names.return_value = np.array(multiview_heatmap_dataset.view_names)
+        mocker.patch('lightning_pose.data.datasets.CameraGroup.load', return_value=mock_camgroup)
 
         # Act
-        with patch('lightning_pose.data.datasets.CameraGroup.load', return_value=mock_camgroup):
-            cam_params_df, cam_params_file_to_camgroup = (
-                multiview_heatmap_dataset._load_cam_params_from_csv(csv_path)
-            )
+        cam_params_df, cam_params_file_to_camgroup = (
+            multiview_heatmap_dataset._load_cam_params_from_csv(csv_path)
+        )
 
         # Assert
         assert len(cam_params_df) == n_frames
@@ -1010,7 +1010,7 @@ class TestDiscoverCamParamsFromImagePaths:
     """Test MultiviewHeatmapDataset._discover_cam_params_from_image_paths."""
 
     @pytest.fixture
-    def fake_ds(self, tmp_path):
+    def fake_ds(self, mocker, tmp_path):
         """Minimal stand-in for MultiviewHeatmapDataset with two frames from session0."""
         class _Stub:
             pass
@@ -1019,13 +1019,13 @@ class TestDiscoverCamParamsFromImagePaths:
         ds.root_directory = str(tmp_path)
         ds.view_names = ['top', 'bot']
         ds.do_context = False
-        mock_view = MagicMock()
+        mock_view = mocker.MagicMock()
         mock_view.image_names = [
             'labeled-data/session0_top/img0000.png',
             'labeled-data/session0_top/img0001.png',
         ]
-        ds.dataset = {'top': mock_view, 'bot': MagicMock()}
-        ds._load_camgroup = MagicMock(return_value=MagicMock())
+        ds.dataset = {'top': mock_view, 'bot': mocker.MagicMock()}
+        ds._load_camgroup = mocker.MagicMock(return_value=mocker.MagicMock())
         return ds
 
     def _discover(self, ds):
