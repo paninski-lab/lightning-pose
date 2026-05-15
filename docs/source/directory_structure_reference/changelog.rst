@@ -10,7 +10,7 @@ over time.
    :depth: 2
 
 
-v2.1.0 | Unreleased
+v2.1.1 | May 15, 2026
 ------------------------------------
 
 * Calibration files are now auto-discovered from image paths for the CLI 3D loss —
