@@ -9,18 +9,30 @@ import copy
 import os
 from unittest.mock import Mock
 
+import lightning.pytorch as pl
 import numpy as np
 import pytest
+import torch
 from omegaconf import OmegaConf
 from omegaconf.errors import ValidationError
 from PIL import Image
 
+from lightning_pose.callbacks import (
+    AnnealWeight,
+    JSONTrainingProgressTracker,
+    PatchMasking,
+    UnfreezeBackbone,
+)
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import BaseTrackingDataset
 from lightning_pose.utils.scripts import (
     calculate_steps_per_epoch,
+    compute_metrics,
+    get_callbacks,
     get_data_module,
     get_imgaug_transform,
+    get_loss_factories,
+    get_model,
 )
 
 
@@ -372,3 +384,306 @@ class TestGetDataModule:
         cfg.dali.context.train.batch_size = 4
         with pytest.raises(ValidationError):
             get_data_module(cfg, heatmap_dataset, os.path.join(toy_data_dir, 'videos'))
+
+
+class TestGetLossFactories:
+    """Test the get_loss_factories function."""
+
+    def test_get_loss_factories_returns_supervised_and_unsupervised(self, cfg, base_data_module):
+        """Always returns a dict with 'supervised' and 'unsupervised' LossFactory keys."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        factories = get_loss_factories(cfg_tmp, data_module=base_data_module)
+        assert set(factories.keys()) == {'supervised', 'unsupervised'}
+        from lightning_pose.losses.factory import LossFactory
+        assert isinstance(factories['supervised'], LossFactory)
+        assert isinstance(factories['unsupervised'], LossFactory)
+
+    def test_get_loss_factories_heatmap_supervised_loss(self, cfg, base_data_module):
+        """Heatmap model_type builds a supervised factory keyed by heatmap_{loss_type}."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        cfg_tmp.model.model_type = 'heatmap'
+        cfg_tmp.model.heatmap_loss_type = 'mse'
+        factories = get_loss_factories(cfg_tmp, data_module=base_data_module)
+        assert 'heatmap_mse' in factories['supervised'].loss_instance_dict
+
+    def test_get_loss_factories_regression_supervised_loss(self, cfg, base_data_module):
+        """Regression model_type builds a supervised factory keyed by 'regression'."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        cfg_tmp.model.model_type = 'regression'
+        factories = get_loss_factories(cfg_tmp, data_module=base_data_module)
+        assert 'regression' in factories['supervised'].loss_instance_dict
+
+    def test_get_loss_factories_empty_unsupervised(self, cfg, base_data_module):
+        """losses_to_use=[] produces an unsupervised factory with no losses."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        factories = get_loss_factories(cfg_tmp, data_module=base_data_module)
+        assert len(factories['unsupervised'].loss_instance_dict) == 0
+
+    def test_get_loss_factories_temporal_unsupervised(self, cfg, base_data_module):
+        """temporal in losses_to_use populates the unsupervised factory with a TemporalLoss."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = ['temporal']
+        factories = get_loss_factories(cfg_tmp, data_module=base_data_module)
+        assert 'temporal' in factories['unsupervised'].loss_instance_dict
+
+    def test_get_loss_factories_pca_singleview(self, cfg, heatmap_data_module):
+        """pca_singleview in losses_to_use populates the unsupervised factory."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = ['pca_singleview']
+        factories = get_loss_factories(cfg_tmp, data_module=heatmap_data_module)
+        assert 'pca_singleview' in factories['unsupervised'].loss_instance_dict
+
+    def test_get_loss_factories_pca_multiview_mirrored(self, cfg, heatmap_data_module):
+        """pca_multiview with mirrored columns populates the unsupervised factory."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = ['pca_multiview']
+        factories = get_loss_factories(cfg_tmp, data_module=heatmap_data_module)
+        assert 'pca_multiview' in factories['unsupervised'].loss_instance_dict
+
+    def test_get_loss_factories_unimodal_raises(self, cfg, base_data_module):
+        """unimodal losses raise Exception due to deprecated image_resize_dims path."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = ['unimodal_mse']
+        cfg_tmp.losses.unimodal_mse = {'log_weight': 0.0}
+        with pytest.raises(Exception, match='deprecated'):
+            get_loss_factories(cfg_tmp, data_module=base_data_module)
+
+    def test_get_loss_factories_temporal_heatmap_raises(self, cfg, base_data_module):
+        """temporal_heatmap losses raise Exception due to deprecated image_resize_dims path."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = ['temporal_heatmap_mse']
+        cfg_tmp.losses.temporal_heatmap_mse = {'log_weight': 0.0}
+        with pytest.raises(Exception, match='deprecated'):
+            get_loss_factories(cfg_tmp, data_module=base_data_module)
+
+    def test_get_loss_factories_pca_singleview_raises_on_multiview(
+        self, cfg, base_data_module,
+    ):
+        """pca_singleview raises NotImplementedError when view_names has multiple entries."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = ['pca_singleview']
+        cfg_tmp.data.view_names = ['top', 'bot']
+        with pytest.raises(NotImplementedError):
+            get_loss_factories(cfg_tmp, data_module=base_data_module)
+
+
+class TestGetModel:
+    """Test the get_model function."""
+
+    def _make_regression_cfg(self, cfg):
+        """Return a minimal supervised regression cfg that avoids network downloads."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        cfg_tmp.model.model_type = 'regression'
+        cfg_tmp.model.backbone = 'resnet18'
+        cfg_tmp.model.backbone_pretrained = False
+        return cfg_tmp
+
+    def _build_model(self, cfg_tmp, base_dataset):
+        """Create a regression model from cfg and base_dataset."""
+        data_module = get_data_module(cfg_tmp, dataset=base_dataset, video_dir=None)
+        loss_factories = get_loss_factories(cfg_tmp, data_module=data_module)
+        return get_model(cfg_tmp, data_module=data_module, loss_factories=loss_factories)
+
+    def test_get_model_loads_checkpoint_from_ckpt_file(self, cfg, base_dataset, tmp_path):
+        """Loads weights from a .ckpt path directly into the model."""
+        cfg_tmp = self._make_regression_cfg(cfg)
+        model = self._build_model(cfg_tmp, base_dataset)
+
+        ckpt_path = str(tmp_path / 'model.ckpt')
+        torch.save({'state_dict': model.state_dict()}, ckpt_path)
+
+        cfg_tmp.model.checkpoint = ckpt_path
+        loaded = self._build_model(cfg_tmp, base_dataset)
+
+        for (k1, v1), (k2, v2) in zip(
+            model.state_dict().items(), loaded.state_dict().items(), strict=True,
+        ):
+            assert k1 == k2
+            assert torch.allclose(v1, v2)
+
+    def test_get_model_loads_checkpoint_from_directory(self, cfg, base_dataset, tmp_path):
+        """Globs for .ckpt inside a directory when checkpoint is a directory path."""
+        cfg_tmp = self._make_regression_cfg(cfg)
+        model = self._build_model(cfg_tmp, base_dataset)
+
+        ckpt_dir = tmp_path / 'checkpoints'
+        ckpt_dir.mkdir()
+        torch.save({'state_dict': model.state_dict()}, ckpt_dir / 'best.ckpt')
+
+        cfg_tmp.model.checkpoint = str(ckpt_dir)
+        loaded = self._build_model(cfg_tmp, base_dataset)
+
+        for (k1, v1), (k2, v2) in zip(
+            model.state_dict().items(), loaded.state_dict().items(), strict=True
+        ):
+            assert k1 == k2
+            assert torch.allclose(v1, v2)
+
+    def test_get_model_checkpoint_fallback_to_weights_only_false(
+        self, cfg, base_dataset, tmp_path, mocker,
+    ):
+        """Falls back to weights_only=False when the initial torch.load call raises."""
+        cfg_tmp = self._make_regression_cfg(cfg)
+        model = self._build_model(cfg_tmp, base_dataset)
+
+        ckpt_path = str(tmp_path / 'model.ckpt')
+        torch.save({'state_dict': model.state_dict()}, ckpt_path)
+        cfg_tmp.model.checkpoint = ckpt_path
+
+        calls = []
+        original_load = torch.load
+
+        def patched_load(*args, **kwargs):
+            calls.append(kwargs.get('weights_only'))
+            if len(calls) == 1:
+                raise Exception('cannot load')
+            return original_load(*args, **kwargs)
+
+        mocker.patch('lightning_pose.utils.scripts.torch.load', side_effect=patched_load)
+        self._build_model(cfg_tmp, base_dataset)
+        assert len(calls) == 2
+
+    def test_get_model_checkpoint_loads_backbone_only_on_head_mismatch(
+        self, cfg, base_dataset, tmp_path,
+    ):
+        """Falls back to backbone-only weights when load_state_dict raises RuntimeError."""
+        cfg_tmp = self._make_regression_cfg(cfg)
+        model = self._build_model(cfg_tmp, base_dataset)
+
+        state_dict = model.state_dict()
+        # corrupt one non-backbone key with a wrong shape to trigger RuntimeError
+        non_backbone_key = next(k for k in state_dict if 'backbone' not in k)
+        state_dict[non_backbone_key] = torch.zeros(1)
+
+        ckpt_path = str(tmp_path / 'model.ckpt')
+        torch.save({'state_dict': state_dict}, ckpt_path)
+        cfg_tmp.model.checkpoint = ckpt_path
+
+        # should succeed: RuntimeError triggers backbone-only fallback
+        loaded = self._build_model(cfg_tmp, base_dataset)
+
+        # backbone weights loaded from checkpoint must match
+        for k, v in model.state_dict().items():
+            if 'backbone' in k:
+                assert torch.allclose(loaded.state_dict()[k], v), f'backbone mismatch at {k}'
+
+
+class TestGetCallbacks:
+    """Test the get_callbacks function."""
+
+    def test_get_callbacks_default(self, cfg):
+        """Default args produce UnfreezeBackbone, LearningRateMonitor, and ModelCheckpoint."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        callbacks = get_callbacks(cfg_tmp)
+        types = [type(cb) for cb in callbacks]
+        assert UnfreezeBackbone in types
+        assert pl.callbacks.LearningRateMonitor in types
+        assert pl.callbacks.ModelCheckpoint in types
+
+    def test_get_callbacks_with_early_stopping(self, cfg):
+        """early_stopping=True adds an EarlyStopping callback."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        callbacks = get_callbacks(cfg_tmp, early_stopping=True)
+        types = [type(cb) for cb in callbacks]
+        assert pl.callbacks.EarlyStopping in types
+
+    def test_get_callbacks_without_backbone_unfreeze(self, cfg):
+        """backbone_unfreeze=False omits UnfreezeBackbone."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        callbacks = get_callbacks(cfg_tmp, backbone_unfreeze=False)
+        types = [type(cb) for cb in callbacks]
+        assert UnfreezeBackbone not in types
+
+    def test_get_callbacks_without_lr_monitor(self, cfg):
+        """lr_monitor=False omits LearningRateMonitor."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        callbacks = get_callbacks(cfg_tmp, lr_monitor=False)
+        types = [type(cb) for cb in callbacks]
+        assert pl.callbacks.LearningRateMonitor not in types
+
+    def test_get_callbacks_without_checkpointing(self, cfg):
+        """checkpointing=False omits the best-model ModelCheckpoint."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        callbacks = get_callbacks(cfg_tmp, checkpointing=False)
+        types = [type(cb) for cb in callbacks]
+        assert pl.callbacks.ModelCheckpoint not in types
+
+    def test_get_callbacks_with_ckpt_every_n_epochs(self, cfg):
+        """ckpt_every_n_epochs adds a second ModelCheckpoint that fires periodically."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        callbacks = get_callbacks(cfg_tmp, ckpt_every_n_epochs=5)
+        ckpt_callbacks = [cb for cb in callbacks if isinstance(cb, pl.callbacks.ModelCheckpoint)]
+        assert len(ckpt_callbacks) == 2
+
+    def test_get_callbacks_with_unsupervised_losses(self, cfg):
+        """Non-empty losses_to_use adds an AnnealWeight callback."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = ['temporal']
+        callbacks = get_callbacks(cfg_tmp)
+        types = [type(cb) for cb in callbacks]
+        assert AnnealWeight in types
+
+    def test_get_callbacks_with_status_file(self, cfg, tmp_path):
+        """Passing status_file adds a JSONTrainingProgressTracker callback."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        status_file = tmp_path / 'status.json'
+        callbacks = get_callbacks(cfg_tmp, status_file=status_file)
+        types = [type(cb) for cb in callbacks]
+        assert JSONTrainingProgressTracker in types
+
+    def test_get_callbacks_patch_masking(self, cfg):
+        """Patch masking is added for multiview transformer when final_ratio > 0."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        cfg_tmp.model.model_type = 'heatmap_multiview_transformer'
+        cfg_tmp.training.patch_mask = {'final_ratio': 0.5}
+        callbacks = get_callbacks(cfg_tmp)
+        types = [type(cb) for cb in callbacks]
+        assert PatchMasking in types
+
+
+class TestComputeMetrics:
+    """Test the compute_metrics function."""
+
+    def test_compute_metrics_single_view(self, cfg, tmp_path, mocker):
+        """Calls compute_metrics_single once when csv_file is a string."""
+        cfg_tmp = copy.deepcopy(cfg)
+        labels_csv = tmp_path / 'labels.csv'
+        labels_csv.write_text('')
+        cfg_tmp.data.csv_file = str(labels_csv)
+        preds_file = tmp_path / 'preds.csv'
+
+        mock_single = mocker.patch('lightning_pose.utils.scripts.compute_metrics_single')
+        compute_metrics(cfg_tmp, preds_file=str(preds_file))
+
+        mock_single.assert_called_once()
+        assert mock_single.call_args.kwargs['preds_file'] == str(preds_file)
+        assert mock_single.call_args.kwargs['labels_file'] == str(labels_csv)
+
+    def test_compute_metrics_multi_view(self, cfg, tmp_path, mocker):
+        """Calls compute_metrics_single once per view when csv_file is a list."""
+        cfg_tmp = copy.deepcopy(cfg)
+        label_files = [tmp_path / f'labels_{i}.csv' for i in range(2)]
+        preds_files = [str(tmp_path / f'preds_{i}.csv') for i in range(2)]
+        for f in label_files:
+            f.write_text('')
+        cfg_tmp.data.csv_file = [str(f) for f in label_files]
+
+        mock_single = mocker.patch('lightning_pose.utils.scripts.compute_metrics_single')
+        compute_metrics(cfg_tmp, preds_file=preds_files)
+
+        assert mock_single.call_count == 2
+        called_preds = [c.kwargs['preds_file'] for c in mock_single.call_args_list]
+        assert called_preds == preds_files
