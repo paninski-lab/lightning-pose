@@ -483,34 +483,120 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         self.num_targets = self.num_keypoints * 2
 
         if camera_params_path is not None:
-
-            assert not do_context, "3D augmentations for context model not yet supported"
-
-            cam_params_df = pd.read_csv(camera_params_path, index_col=0, header=[0])
-
-            # make sure image numbers at least match
-            img_idxs_labels = [
-                i.split('/')[-1] for i in self.dataset[self.view_names[0]].image_names
-            ]
-            img_idxs_calib = [i.split('/')[-1] for i in cam_params_df.index]
-            assert np.all(img_idxs_labels == img_idxs_calib)
-
-            cam_params_file_to_camgroup = {}
-            for cam_params_file in cam_params_df.file.unique():
-                camgroup = CameraGroup.load(os.path.join(root_directory, cam_params_file))
-                cam_names = camgroup.get_names()
-                assert np.all(cam_names == view_names), (
-                    "cfg.data.view_names must have same camera order as camera calibration file; "
-                    f"instead found {view_names} and {cam_names}."
-                )
-                cam_params_file_to_camgroup[cam_params_file] = camgroup
-
+            cam_params_df, cam_params_file_to_camgroup = self._load_cam_params_from_csv(
+                camera_params_path,
+            )
         else:
-            cam_params_df = None
-            cam_params_file_to_camgroup = None
-
+            cam_params_df, cam_params_file_to_camgroup = (
+                self._discover_cam_params_from_image_paths()
+            )
         self.cam_params_df = cam_params_df
         self.cam_params_file_to_camgroup = cam_params_file_to_camgroup
+
+    def _load_camgroup(self, calib_file: str) -> CameraGroup:
+        """Load and validate a CameraGroup from a calibration file.
+
+        Args:
+            calib_file: path to calibration toml, relative to self.root_directory
+
+        Returns:
+            loaded CameraGroup
+
+        Raises:
+            AssertionError: if camera names don't match self.view_names
+        """
+        camgroup = CameraGroup.load(os.path.join(self.root_directory, calib_file))
+        cam_names = camgroup.get_names()
+        assert np.all(cam_names == self.view_names), (
+            "cfg.data.view_names must have same camera order as camera calibration file; "
+            f"instead found {self.view_names} and {cam_names}."
+        )
+        return camgroup
+
+    def _load_cam_params_from_csv(
+        self,
+        camera_params_path: str,
+    ) -> tuple[pd.DataFrame, dict[str, CameraGroup]]:
+        """Load per-frame camera calibration parameters from a CSV file.
+
+        Args:
+            camera_params_path: path to CSV mapping each frame to a calibration toml file
+
+        Returns:
+            tuple of (cam_params_df, cam_params_file_to_camgroup)
+        """
+        assert not self.do_context, "3D augmentations for context model not yet supported"
+        cam_params_df = pd.read_csv(camera_params_path, index_col=0, header=[0])
+        img_idxs_labels = [
+            i.split('/')[-1] for i in self.dataset[self.view_names[0]].image_names
+        ]
+        img_idxs_calib = [i.split('/')[-1] for i in cam_params_df.index]
+        assert np.all(img_idxs_labels == img_idxs_calib)
+        cam_params_file_to_camgroup = {
+            f: self._load_camgroup(f) for f in cam_params_df.file.unique()
+        }
+        return cam_params_df, cam_params_file_to_camgroup
+
+    def _discover_cam_params_from_image_paths(
+        self,
+    ) -> tuple[pd.DataFrame | None, dict[str, CameraGroup] | None]:
+        """Derive per-frame calibration from image paths when no CSV is provided.
+
+        Expects each frame's path to follow labeled-data/<session>_<view>/img<frameidx>.ext.
+        Tries calibrations/<session>.toml first, then calibration.toml at root_directory.
+
+        Returns:
+            tuple of (cam_params_df, cam_params_file_to_camgroup); both None if no calibration
+            files are found
+        """
+        image_names = self.dataset[self.view_names[0]].image_names
+        cam_params_file_to_camgroup = {}
+        calib_files = []
+        all_found = True
+
+        for img_name in image_names:
+            parts = Path(img_name).parts
+            try:
+                ld_idx = next(i for i, p in enumerate(parts) if p == 'labeled-data')
+            except StopIteration as err:
+                raise ValueError(
+                    f"Image path '{img_name}' does not match expected pattern "
+                    "labeled-data/<session>_<view>/img<frameidx>.ext"
+                ) from err
+            folder_name = parts[ld_idx + 1]
+            if '_' not in folder_name:
+                raise ValueError(
+                    f"Folder '{folder_name}' in image path '{img_name}' does not match "
+                    "expected pattern <session>_<view>"
+                )
+            session_id = folder_name.rsplit('_', 1)[0]
+
+            calib_by_session = Path(self.root_directory) / 'calibrations' / f'{session_id}.toml'
+            calib_fallback = Path(self.root_directory) / 'calibration.toml'
+            if calib_by_session.exists():
+                calib_file = str(Path('calibrations') / f'{session_id}.toml')
+            elif calib_fallback.exists():
+                calib_file = 'calibration.toml'
+            else:
+                all_found = False
+                calib_files.append(None)
+                continue
+
+            calib_files.append(calib_file)
+            if calib_file not in cam_params_file_to_camgroup:
+                cam_params_file_to_camgroup[calib_file] = self._load_camgroup(calib_file)
+
+        if cam_params_file_to_camgroup and all_found:
+            assert not self.do_context, "3D augmentations for context model not yet supported"
+            cam_params_df = pd.DataFrame({'file': calib_files}, index=image_names)
+            return cam_params_df, cam_params_file_to_camgroup
+
+        if cam_params_file_to_camgroup and not all_found:
+            print(
+                "WARNING: calibration file not found for some frames; "
+                "disabling 3D for entire dataset"
+            )
+        return None, None
 
     def check_data_images_names(self):
         """Data checking

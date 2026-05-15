@@ -50,10 +50,22 @@ Example TOML calibration file:
 
 The number of camera sections must match the number of views specified in your configuration file.
 
-Calibrations index file
------------------------
+Calibrations index file (optional override)
+-------------------------------------------
 
-The ``calibrations.csv`` file maps each labeled image to its corresponding calibration file.
+By default, the CLI automatically discovers calibration files from image paths without
+any additional configuration. The session identifier is extracted from the frame's path:
+frames are expected to live under ``labeled-data/<session>_<view>/``, and the session is
+everything before the last ``_`` in that subfolder name. For example,
+``labeled-data/session0_view0/frame00001.png`` yields session ``session0``.
+
+Given the session, it looks for ``calibrations/<session>.toml`` first, then falls back to
+``calibration.toml`` at the project root. No ``camera_params_file`` config entry is needed
+for this to work.
+
+If you need per-frame control over which calibration file is used — for example, when
+frames from the same session use different calibrations — you can supply a
+``calibrations.csv`` that maps each labeled image to its calibration file explicitly.
 This file must have exactly two columns:
 
 * **First column** (no header): The relative path to each labeled image, **without view-specific subdirectories**. This should match the image paths that appear in your labeled data CSV files, but with any view-specific path components removed.
@@ -74,8 +86,7 @@ Example ``calibrations.csv`` format:
 Note that the first column uses the session name (e.g., ``session0``) rather than the
 view-specific directory names (e.g., ``session0_view0``, ``session0_view1``).
 
-You will also need to add the location of this file to your configuration file in order to use
-the 3D loss:
+To use this CSV instead of auto-discovery, point to it in your configuration file:
 
 .. code-block:: yaml
 
