@@ -10,6 +10,18 @@ over time.
    :depth: 2
 
 
+v2.1.0 | Unreleased
+------------------------------------
+
+* Calibration files are now auto-discovered from image paths for the CLI 3D loss —
+  no ``camera_params_file`` config entry is required. Frames must follow the path structure
+  ``labeled-data/<session>_<view>/<filename>.ext``; the session is extracted by stripping
+  the last ``_<view>`` suffix from the subfolder name (e.g.,
+  ``labeled-data/session0_view0/frame00001.png`` → session ``session0``). The CLI then
+  looks for ``calibrations/<session>.toml`` first, then falls back to
+  ``calibration.toml`` at the project root. The ``camera_params_file`` config field
+  remains supported as an explicit override for per-frame calibration control.
+
 v2.0.7.0 | Feb 26, 2026
 ------------------------------------
 

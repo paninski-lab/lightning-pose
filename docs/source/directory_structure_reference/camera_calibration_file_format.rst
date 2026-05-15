@@ -54,9 +54,14 @@ Calibrations index file (optional override)
 -------------------------------------------
 
 By default, the CLI automatically discovers calibration files from image paths without
-any additional configuration. For each frame, it looks for
-``calibrations/<session>.toml`` first, then falls back to ``calibration.toml`` at the
-project root. No ``camera_params_file`` config entry is needed for this to work.
+any additional configuration. The session identifier is extracted from the frame's path:
+frames are expected to live under ``labeled-data/<session>_<view>/``, and the session is
+everything before the last ``_`` in that subfolder name. For example,
+``labeled-data/session0_view0/frame00001.png`` yields session ``session0``.
+
+Given the session, it looks for ``calibrations/<session>.toml`` first, then falls back to
+``calibration.toml`` at the project root. No ``camera_params_file`` config entry is needed
+for this to work.
 
 If you need per-frame control over which calibration file is used — for example, when
 frames from the same session use different calibrations — you can supply a
