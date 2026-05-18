@@ -8,7 +8,6 @@ from omegaconf import DictConfig, OmegaConf
 from torch import optim
 from torch.optim.lr_scheduler import MultiStepLR
 from torchtyping import TensorType
-from typeguard import typechecked
 
 from lightning_pose.data.datatypes import (
     BaseLabeledBatchDict,
@@ -504,7 +503,6 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         self.evaluate_labeled(batch_dict, "test")
 
 
-@typechecked
 class SemiSupervisedTrackerMixin:
     """Mixin class providing training step function for semi-supervised models."""
 

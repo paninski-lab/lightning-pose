@@ -4,7 +4,6 @@ from typing import Any
 
 import imgaug.augmenters as iaa
 from omegaconf import DictConfig, ListConfig
-from typeguard import typechecked
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -12,7 +11,6 @@ __all__ = [
 ]
 
 
-@typechecked
 def imgaug_transform(params_dict: dict | DictConfig) -> iaa.Sequential:
     """Create simple and flexible data transform pipeline that augments images and keypoints.
 

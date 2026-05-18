@@ -11,7 +11,6 @@ from sklearn.decomposition._pca import _infer_dimension
 from sklearn.utils._array_api import _convert_to_numpy, get_namespace
 from sklearn.utils.extmath import stable_cumsum, svd_flip
 from torchtyping import TensorType
-from typeguard import typechecked
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import MultiviewHeatmapDataset
@@ -551,7 +550,6 @@ class NaNPCA(PCA):
         return X_transformed
 
 
-@typechecked
 class ComponentChooser:
     """Determine the number of PCA components to keep."""
 
@@ -625,7 +623,6 @@ class ComponentChooser:
             return self._find_first_threshold_cross()
 
 
-@typechecked
 def pca_prints(pca: PCA, condition: str, components_to_keep: int) -> None:
     print(f"Results of running PCA ({condition}) on keypoints:")
     print(
@@ -637,7 +634,6 @@ def pca_prints(pca: PCA, condition: str, components_to_keep: int) -> None:
     print(f"Variance explained by {components_to_keep} components: {tev}")
 
 
-# @typechecked
 def format_multiview_data_for_pca(
     data_arr: TensorType["batch", "num_keypoints", "2"],
     mirrored_column_matches: ListConfig | list,

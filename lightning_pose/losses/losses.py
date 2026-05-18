@@ -27,7 +27,6 @@ from kornia.losses import js_div_loss_2d, kl_div_loss_2d
 from omegaconf import ListConfig
 from torch.nn import functional as F
 from torchtyping import TensorType
-from typeguard import typechecked
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import generate_heatmaps
@@ -58,7 +57,6 @@ if torch.cuda.is_available():
     _DEFAULT_TORCH_DEVICE = f"cuda:{int(os.environ.get('LOCAL_RANK', '0'))}"
 
 
-# @typechecked
 class Loss:
     """Parent class for all losses."""
 
@@ -139,7 +137,6 @@ class Loss:
         raise NotImplementedError
 
 
-# @typechecked
 class HeatmapLoss(Loss):
     """Parent class for different heatmap losses (MSE, Wasserstein, etc)."""
 
@@ -197,7 +194,6 @@ class HeatmapLoss(Loss):
         return scalar_loss, logs
 
 
-# @typechecked
 class HeatmapMSELoss(HeatmapLoss):
     """MSE loss between heatmaps."""
 
@@ -231,7 +227,6 @@ class HeatmapMSELoss(HeatmapLoss):
         return loss
 
 
-# @typechecked
 class HeatmapKLLoss(HeatmapLoss):
     """Kullback-Leibler loss between heatmaps."""
 
@@ -267,7 +262,6 @@ class HeatmapKLLoss(HeatmapLoss):
         return loss[0]
 
 
-# @typechecked
 class HeatmapJSLoss(HeatmapLoss):
     """Jensen-Shannon loss between heatmaps."""
 
@@ -303,7 +297,6 @@ class HeatmapJSLoss(HeatmapLoss):
         return loss[0]
 
 
-# @typechecked
 class PCALoss(Loss):
     """Penalize predictions that fall outside a low-dimensional subspace."""
 
@@ -437,7 +430,6 @@ class PCALoss(Loss):
         return scalar_loss, logs
 
 
-# @typechecked
 class TemporalLoss(Loss):
     """Penalize temporal differences for each target.
 
@@ -541,7 +533,6 @@ class TemporalLoss(Loss):
         return scalar_loss, logs
 
 
-# @typechecked
 class TemporalHeatmapLoss(Loss):
     """Penalize temporal differences for each heatmap.
 
@@ -663,7 +654,6 @@ class TemporalHeatmapLoss(Loss):
         return scalar_loss, logs
 
 
-# @typechecked
 class UnimodalLoss(Loss):
     """Encourage heatmaps to be unimodal using various measures."""
 
@@ -817,7 +807,6 @@ class UnimodalLoss(Loss):
         return scalar_loss, logs
 
 
-# @typechecked
 class RegressionMSELoss(Loss):
     """MSE loss between ground truth and predicted coordinates."""
 
@@ -879,7 +868,6 @@ class RegressionMSELoss(Loss):
         return scalar_loss, logs
 
 
-# @typechecked
 class RegressionRMSELoss(RegressionMSELoss):
     """Root MSE loss between ground truth and predicted coordinates."""
 
@@ -1120,7 +1108,6 @@ class ReprojectionHeatmapLoss(Loss):
         return scalar_loss, logs
 
 
-@typechecked
 def get_loss_classes() -> dict[str, type[Loss]]:
     """Get a dict with all the loss classes.
 

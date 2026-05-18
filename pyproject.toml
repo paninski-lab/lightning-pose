@@ -51,7 +51,6 @@ dependencies = [
     "torch (<3.0.0)",
     "torchvision",
     "transformers>=4.57.5",
-    "typeguard",
     "nvidia-dali-cuda110",
 ]
 

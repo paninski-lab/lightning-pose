@@ -18,7 +18,6 @@ import torch
 from moviepy import VideoFileClip
 from omegaconf import DictConfig, OmegaConf
 from torchtyping import TensorType
-from typeguard import typechecked
 
 from lightning_pose.callbacks import JSONInferenceProgressTracker
 from lightning_pose.data.dali import PrepareDALI
@@ -296,7 +295,6 @@ class PredictionHandler:
         return retval
 
 
-@typechecked
 def predict_dataset(
     cfg: DictConfig,
     data_module: BaseDataModule,
@@ -371,7 +369,6 @@ def predict_dataset(
     return labeled_preds_df
 
 
-@typechecked
 def predict_single_video(
     cfg_file: str | DictConfig,
     video_file: str,
@@ -473,7 +470,6 @@ def predict_single_video(
     return preds_df
 
 
-@typechecked
 def make_dlc_pandas_index(cfg: DictConfig, keypoint_names: list[str]) -> pd.MultiIndex:
     xyl_labels = ["x", "y", "likelihood"]
     pdindex = pd.MultiIndex.from_product(
@@ -483,7 +479,6 @@ def make_dlc_pandas_index(cfg: DictConfig, keypoint_names: list[str]) -> pd.Mult
     return pdindex
 
 
-@typechecked
 def get_model_class(map_type: str, semi_supervised: bool) -> type[ALLOWED_MODELS]:
     """[summary]
 
@@ -531,7 +526,6 @@ def get_model_class(map_type: str, semi_supervised: bool) -> type[ALLOWED_MODELS
     return Model
 
 
-@typechecked
 def load_model_from_checkpoint(
     cfg: DictConfig,
     ckpt_file: str,
@@ -651,7 +645,6 @@ def load_model_from_checkpoint(
     return model
 
 
-@typechecked
 def _make_cmap(number_colors: int, cmap: str):
     color_class = plt.cm.ScalarMappable(cmap=cmap)
     C = color_class.to_rgba(np.linspace(0, 1, number_colors))
@@ -659,7 +652,6 @@ def _make_cmap(number_colors: int, cmap: str):
     return colors
 
 
-@typechecked
 def create_labeled_video(
     clip: VideoFileClip,
     xs_arr: np.ndarray,
@@ -793,7 +785,6 @@ def create_labeled_video(
     clip_marked.close()
 
 
-@typechecked
 def export_predictions_and_labeled_video(
     video_file: str,
     cfg: DictConfig,

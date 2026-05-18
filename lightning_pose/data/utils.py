@@ -7,7 +7,6 @@ import lightning.pytorch as pl
 import numpy as np
 import torch
 from torchtyping import TensorType
-from typeguard import typechecked
 
 from lightning_pose.data.datatypes import (
     HeatmapLabeledBatchDict,
@@ -212,7 +211,6 @@ class DataExtractor:
         return self.iterate_over_dataloader(loader)
 
 
-@typechecked
 def split_sizes_from_probabilities(
     total_number: int,
     train_probability: float,
@@ -270,7 +268,6 @@ def split_sizes_from_probabilities(
     return [train_number, val_number, test_number]
 
 
-@typechecked
 def clean_any_nans(data: torch.Tensor, dim: int) -> torch.Tensor:
     """Remove samples from a data array that contain nans."""
     # currently supports only 2D arrays
@@ -283,7 +280,6 @@ def clean_any_nans(data: torch.Tensor, dim: int) -> torch.Tensor:
         return data[~nan_bool]
 
 
-@typechecked
 def count_frames(video_file: str) -> int:
     """
     Simple function to count the number of frames in a video.
@@ -299,7 +295,6 @@ def count_frames(video_file: str) -> int:
     return num_frames
 
 
-@typechecked
 def compute_num_train_frames(
     len_train_dataset: int,
     train_frames: int | float | None = None,
@@ -338,7 +333,6 @@ def compute_num_train_frames(
     return n_train_frames
 
 
-# @typechecked
 def generate_heatmaps(
     keypoints: TensorType["batch", "num_keypoints", 2],
     height: int,
@@ -419,7 +413,6 @@ def generate_heatmaps(
     return heatmaps
 
 
-# @typechecked
 def evaluate_heatmaps_at_location(
     heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
     locs: TensorType["batch", "num_keypoints", 2],
@@ -463,7 +456,6 @@ def evaluate_heatmaps_at_location(
     return vals
 
 
-# @typechecked
 def undo_affine_transform(
     keypoints: TensorType["seq_len", "num_keypoints", 2],
     transform: TensorType["seq_len", 2, 3] | TensorType[2, 3],

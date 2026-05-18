@@ -15,7 +15,6 @@ import lightning.pytorch as pl
 import numpy as np
 import torch
 from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
-from typeguard import typechecked
 
 import lightning_pose
 from lightning_pose.api.model import Model
@@ -49,7 +48,6 @@ def chdir(dir: str | Path):
         os.chdir(pwd)
 
 
-@typechecked
 def train(cfg: DictConfig, model_dir: str | Path | None = None, skip_evaluation=False) -> Model:
     """
     Trains a model using the configuration `cfg`. Saves model to `model_dir`

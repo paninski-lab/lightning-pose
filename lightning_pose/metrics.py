@@ -1,6 +1,5 @@
 import numpy as np
 import torch
-from typeguard import typechecked
 
 from lightning_pose.utils.pca import KeypointPCA
 
@@ -13,7 +12,6 @@ __all__ = [
 ]
 
 
-@typechecked
 def pixel_error(keypoints_true: np.ndarray, keypoints_pred: np.ndarray) -> np.ndarray:
     """Root mean square error between true and predicted keypoints.
 
@@ -29,7 +27,6 @@ def pixel_error(keypoints_true: np.ndarray, keypoints_pred: np.ndarray) -> np.nd
     return error
 
 
-@typechecked
 def temporal_norm(keypoints_pred: np.ndarray | torch.Tensor) -> np.ndarray:
     """Norm of difference between keypoints on successive time bins.
 
@@ -60,7 +57,6 @@ def temporal_norm(keypoints_pred: np.ndarray | torch.Tensor) -> np.ndarray:
     return t_norm
 
 
-@typechecked
 def pca_singleview_reprojection_error(
     keypoints_pred: np.ndarray | torch.Tensor,
     pca: KeypointPCA,
@@ -103,7 +99,6 @@ def pca_singleview_reprojection_error(
     return error_all
 
 
-@typechecked
 def pca_multiview_reprojection_error(
     keypoints_pred: np.ndarray | torch.Tensor,
     pca: KeypointPCA,

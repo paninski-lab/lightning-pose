@@ -5,7 +5,6 @@ from typing import Any, Literal
 import torch
 from omegaconf import DictConfig
 from torchtyping import TensorType
-from typeguard import typechecked
 
 from lightning_pose.data.datatypes import (
     HeatmapLabeledBatchDict,
@@ -232,7 +231,6 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
         return params
 
 
-@typechecked
 class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrackerMHCRNN):
     """Model produces heatmaps of keypoints from labeled/unlabeled images."""
 

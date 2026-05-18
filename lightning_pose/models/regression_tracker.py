@@ -5,7 +5,6 @@ from typing import Any
 import torch
 from omegaconf import DictConfig
 from torchtyping import TensorType
-from typeguard import typechecked
 
 from lightning_pose.data.datatypes import BaseLabeledBatchDict, UnlabeledBatchDict
 from lightning_pose.data.utils import undo_affine_transform
@@ -139,7 +138,6 @@ class RegressionTracker(BaseSupervisedTracker):
         return params
 
 
-@typechecked
 class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTracker):
     """Model produces vectors of keypoints from labeled/unlabeled images."""
 

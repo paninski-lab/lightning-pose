@@ -13,7 +13,6 @@ import pandas as pd
 import torch
 from omegaconf import DictConfig, OmegaConf
 from omegaconf.errors import ValidationError
-from typeguard import typechecked
 
 from lightning_pose.callbacks import (
     AnnealWeight,
@@ -59,7 +58,6 @@ __all__ = [
 ]
 
 
-@typechecked
 def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
     """Create simple and flexible data transform pipeline that augments images and keypoints.
 
@@ -115,7 +113,6 @@ def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
     return imgaug_transform(params_dict)
 
 
-@typechecked
 def get_dataset(
     cfg: DictConfig,
     data_dir: str,
@@ -183,7 +180,6 @@ def get_dataset(
     return dataset
 
 
-@typechecked
 def get_data_module(
     cfg: DictConfig,
     dataset: BaseTrackingDataset | HeatmapDataset | MultiviewHeatmapDataset,
@@ -270,7 +266,6 @@ def get_data_module(
     return data_module
 
 
-@typechecked
 def get_loss_factories(
     cfg: DictConfig,
     data_module: BaseDataModule | UnlabeledDataModule,
@@ -403,7 +398,6 @@ def get_loss_factories(
     return {"supervised": loss_factory_sup, "unsupervised": loss_factory_unsup}
 
 
-@typechecked
 def get_model(
     cfg: DictConfig,
     data_module: BaseDataModule | UnlabeledDataModule | None,
@@ -610,7 +604,6 @@ def get_model(
     return model
 
 
-@typechecked
 def get_callbacks(
     cfg: DictConfig,
     early_stopping=False,
@@ -703,7 +696,6 @@ def calculate_steps_per_epoch(data_module: BaseDataModule):
     return steps_per_epoch
 
 
-@typechecked
 def compute_metrics(
     cfg: DictConfig,
     preds_file: str | list[str] | Path | list[Path],
@@ -749,7 +741,6 @@ def compute_metrics(
         )
 
 
-@typechecked
 def compute_metrics_single(
     cfg: DictConfig,
     labels_file: str | Path | None,
