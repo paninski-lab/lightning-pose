@@ -171,7 +171,7 @@ def get_keypoint_names(
     csv_file: str | None = None,
     header_rows: list | None = [0, 1, 2],
 ) -> list[str]:
-    if os.path.exists(csv_file):
+    if csv_file is not None and os.path.exists(csv_file):
         if header_rows is None:
             if "header_rows" in cfg.data:
                 header_rows = list(cfg.data.header_rows)
@@ -190,6 +190,7 @@ def get_keypoint_names(
             # self.keypoint_names = csv_data.columns.levels[1]
             keypoint_names = [b[1] for b in csv_data.columns if b[2] == "x"]
     else:
+        assert cfg is not None, 'cfg must be provided when csv_file is not given'
         keypoint_names = [f"bp_{n}" for n in range(cfg.data.num_targets // 2)]
     return keypoint_names
 
@@ -399,7 +400,7 @@ def fix_empty_first_row(df: pd.DataFrame) -> pd.DataFrame:
     """
     if df.index.name is not None:
         new_row = {col: np.nan for col in df.columns}
-        prepend_df = pd.DataFrame(
+        prepend_df = pd.DataFrame(  # type: ignore[arg-type]
             new_row, index=[df.index.name], columns=df.columns, dtype="float64"
         )
         fixed_df = pd.concat([prepend_df, df])

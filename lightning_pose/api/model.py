@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import cv2
 import numpy as np
@@ -309,7 +309,7 @@ class Model:
         else:
             # Regression model — get_loss_inputs_labeled does not call
             # convert_bbox_coords, so we apply the remap ourselves.
-            kp_pred = convert_bbox_coords(batch_dict, kp_pred, in_place=False)
+            kp_pred = convert_bbox_coords(batch_dict, kp_pred, in_place=False)  # type: ignore[arg-type]
             kp = kp_pred[0].cpu().numpy().reshape(-1, 2).astype(np.float32)
             conf = np.ones(num_kp, dtype=np.float32)
 
@@ -353,7 +353,7 @@ class Model:
         # Point predict_dataset to the csv_file and data_dir.
         # HACK: For true multi-view model, trick predict_dataset and compute_metrics
         # into thinking this is a single-view model.
-        cfg_overrides = {
+        cfg_overrides: dict[str, Any] = {
             "data": {
                 "data_dir": str(data_dir),
                 "csv_file": str(csv_file),
@@ -428,7 +428,7 @@ class Model:
             data_dir = self.config.cfg.data.data_dir
 
         # Point predict_dataset to the csv_file and data_dir.
-        cfg_overrides = {
+        cfg_overrides: dict[str, Any] = {
             "data": {
                 "data_dir": str(data_dir),
                 "csv_file": [str(p) for p in csv_file_per_view],

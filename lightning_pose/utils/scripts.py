@@ -103,10 +103,11 @@ def get_imgaug_transform(cfg: DictConfig | ListConfig) -> iaa.Sequential:
         if isinstance(params, DictConfig):
             # recursively convert Dict/ListConfigs to dicts/lists
             params_dict = OmegaConf.to_object(params)
+            assert isinstance(params_dict, dict)
         else:
             params_dict = params.copy()
         for transform, _val in params_dict.items():
-            assert getattr(iaa, transform), f"{transform} is not a valid imgaug transform"
+            assert getattr(iaa, str(transform)), f"{transform} is not a valid imgaug transform"
     else:
         raise TypeError(f"params is of type {type(params)}, must be str, dict, or DictConfig")
 
@@ -246,6 +247,7 @@ def get_data_module(
             },
         )
 
+        assert video_dir is not None, 'video_dir must be provided for semi-supervised training'
         view_names = cfg.data.get("view_names", None)
         view_names = list(view_names) if view_names is not None else None
         data_module = UnlabeledDataModule(
@@ -685,6 +687,7 @@ def get_callbacks(
 
 
 def calculate_steps_per_epoch(data_module: BaseDataModule):
+    assert data_module.train_dataset is not None
     train_dataset_length = len(data_module.train_dataset)
     steps_per_epoch = math.ceil(train_dataset_length / data_module.train_batch_size)
 
@@ -729,6 +732,8 @@ def compute_metrics(
             )
     else:
         assert isinstance(cfg.data.csv_file, str)
+        assert isinstance(preds_file, (str, Path)), \
+            'preds_file must be str or Path for single-view predictions'
         labels_file = Path(cfg.data.csv_file)
         if not labels_file.is_absolute():
             labels_file = Path(cfg.data.data_dir) / labels_file
@@ -798,13 +803,16 @@ def compute_metrics_single(
     # compute metrics; csv files will be saved to the same directory the prdictions are stored in
     if "pixel_error" in metrics_to_compute:
         # Read labeled data
+        assert labels_file is not None, '"pixel_error" metric requires labels_file'
         labels_df = pd.read_csv(labels_file, header=[0, 1, 2], index_col=0)
         labels_df = io_utils.fix_empty_first_row(labels_df)
         assert labels_df.index.equals(index)
 
         keypoints_true = labels_df.to_numpy().reshape(labels_df.shape[0], -1, 2)
         error_per_keypoint = pixel_error(keypoints_true, keypoints_pred)
-        error_df = pd.DataFrame(error_per_keypoint, index=index, columns=keypoint_names)
+        error_df = pd.DataFrame(  # type: ignore[arg-type]
+            error_per_keypoint, index=index, columns=keypoint_names
+        )
         # add train/val/test split
         if set is not None:
             error_df["set"] = set
@@ -815,7 +823,7 @@ def compute_metrics_single(
 
     if "temporal" in metrics_to_compute:
         temporal_norm_per_keypoint = temporal_norm(keypoints_pred)
-        temporal_norm_df = pd.DataFrame(
+        temporal_norm_df = pd.DataFrame(  # type: ignore[arg-type]
             temporal_norm_per_keypoint, index=index, columns=keypoint_names
         )
         # add train/val/test split
@@ -828,6 +836,7 @@ def compute_metrics_single(
     if "pca_singleview" in metrics_to_compute:
         try:
             # build pca object
+            assert data_module is not None
             pca = KeypointPCA(
                 loss_type="pca_singleview",
                 data_module=data_module,
@@ -841,7 +850,9 @@ def compute_metrics_single(
             pca()
             # compute reprojection error
             pcasv_error_per_keypoint = pca_singleview_reprojection_error(keypoints_pred, pca)
-            pcasv_df = pd.DataFrame(pcasv_error_per_keypoint, index=index, columns=keypoint_names)
+            pcasv_df = pd.DataFrame(  # type: ignore[arg-type]
+                pcasv_error_per_keypoint, index=index, columns=keypoint_names
+            )
             # add train/val/test split
             if set is not None:
                 pcasv_df["set"] = set
@@ -860,6 +871,7 @@ def compute_metrics_single(
 
     if "pca_multiview" in metrics_to_compute:
         # build pca object
+        assert data_module is not None
         pca = KeypointPCA(
             loss_type="pca_multiview",
             data_module=data_module,
@@ -872,7 +884,9 @@ def compute_metrics_single(
         pca()
         # compute reprojection error
         pcamv_error_per_keypoint = pca_multiview_reprojection_error(keypoints_pred, pca)
-        pcamv_df = pd.DataFrame(pcamv_error_per_keypoint, index=index, columns=keypoint_names)
+        pcamv_df = pd.DataFrame(  # type: ignore[arg-type]
+            pcamv_error_per_keypoint, index=index, columns=keypoint_names
+        )
         # add train/val/test split
         if set is not None:
             pcamv_df["set"] = set

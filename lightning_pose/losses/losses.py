@@ -110,7 +110,7 @@ class Loss:
     def log_loss(
         self,
         loss: torch.Tensor,
-        stage: Literal["train", "val", "test"],
+        stage: Literal["train", "val", "test"] | None,
     ) -> list[dict]:
         loss_dict = {
             "name": f"{stage}_{self.loss_name}_loss",
@@ -315,7 +315,7 @@ class PCALoss(Loss):
         columns_for_singleview_pca: ListConfig | list | None = None,
         data_module: BaseDataModule | UnlabeledDataModule | None = None,
         log_weight: float = 0.0,
-        device: Literal["cuda", "cpu"] | torch.device = _DEFAULT_TORCH_DEVICE,
+        device: str | torch.device = _DEFAULT_TORCH_DEVICE,
         centering_method: Literal["mean", "median"] | None = None,
         **kwargs,
     ) -> None:
@@ -366,6 +366,7 @@ class PCALoss(Loss):
         # initialize keypoint pca module
         # this module will fit pca on training data, and will define the error metric
         # and fuction to be used in model training.
+        assert data_module is not None, 'PCALoss requires a data_module to fit PCA'
         self.pca = KeypointPCA(
             loss_type=self.loss_name,
             data_module=data_module,

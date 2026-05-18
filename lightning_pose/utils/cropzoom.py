@@ -87,7 +87,7 @@ def _compute_bbox_df(
 
     index = pred_df.index
 
-    return pd.DataFrame(bboxes, index=index, columns=["x", "y", "h", "w"])
+    return pd.DataFrame(bboxes, index=index, columns=["x", "y", "h", "w"])  # type: ignore[arg-type]
 
 
 def _crop_image(img_path, bbox, cropped_img_path):
@@ -157,7 +157,7 @@ def _crop_images(bbox_df: pd.DataFrame, root_directory: Path, output_directory: 
         bbox_df.iterrows(), total=len(bbox_df), desc="Building crop tasks"
     ):
         # TODO Add unit tests for this logic.
-        center_img_path = Path(center_img_path)
+        center_img_path = Path(str(center_img_path))
         for img_path in io.get_context_img_paths(center_img_path):
             # If context frame:
             if img_path != center_img_path:

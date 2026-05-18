@@ -1,7 +1,5 @@
 """Helper functions for losses."""
 
-from typing import Literal
-
 import numpy as np
 import torch
 
@@ -35,9 +33,10 @@ class EmpiricalEpsilon:
 # @typechecked
 def convert_dict_values_to_tensors(
     param_dict: dict[str, np.ndarray | float],
-    device: Literal["cpu", "cuda"] | torch.device,
+    device: str | torch.device,
 ) -> dict[str, torch.Tensor]:
     # TODO: currently supporting just floats
-    for key, val in param_dict.items():
-        param_dict[key] = torch.tensor(val, dtype=torch.float, device=device)
-    return param_dict
+    return {
+        key: torch.tensor(val, dtype=torch.float, device=device)
+        for key, val in param_dict.items()
+    }

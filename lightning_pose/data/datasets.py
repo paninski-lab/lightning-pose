@@ -174,14 +174,14 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             image = Image.open(img_path).convert("RGB")
             if self.imgaug_transform is not None:
                 transformed_images, transformed_keypoints = self.imgaug_transform(
-                    images=np.expand_dims(image, axis=0),
+                    images=np.expand_dims(np.array(image), axis=0),
                     keypoints=np.expand_dims(keypoints_on_image, axis=0),
                 )  # expands add batch dim for imgaug
                 # get rid of the batch dim
                 transformed_images = transformed_images[0]
                 transformed_keypoints = transformed_keypoints[0].reshape(-1)
             else:
-                transformed_images = np.expand_dims(image, axis=0)
+                transformed_images = np.expand_dims(np.array(image), axis=0)
                 transformed_keypoints = np.expand_dims(keypoints_on_image, axis=0)
 
             transformed_images = self.pytorch_transform(transformed_images)

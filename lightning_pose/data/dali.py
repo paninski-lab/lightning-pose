@@ -113,7 +113,9 @@ def video_pipe(
             transform = fn.transforms.rotation(angle=angle, center=center)
             scale = fn.random.uniform(range=(0.8, 1.2), shape=2)
             transform = fn.transforms.scale(transform, scale=scale, center=center)
-            video = fn.warp_affine(video, matrix=transform, fill_value=0, inverse_map=False)
+            video = fn.warp_affine(  # type: ignore[arg-type]
+                video, matrix=transform, fill_value=0, inverse_map=False,
+            )
             # brightness contrast:
             contrast = fn.random.uniform(range=(0.75, 1.25))
             brightness = fn.random.uniform(range=(0.75, 1.25))
@@ -335,7 +337,7 @@ class PrepareDALI:
         gen_cfg = self.dali_config.get("general", {"seed": 123456})  # type: ignore[arg-type]
 
         # base (vanilla single-frame model), train pipe args
-        base_train_cfg = self.dali_config["base"]["train"]
+        base_train_cfg = self.dali_config["base"]["train"]  # type: ignore[arg-type]
         dict_args["train"]["base"] = {
             "filenames": filenames,
             "resize_dims": self.resize_dims,
@@ -351,7 +353,7 @@ class PrepareDALI:
         }
 
         # base (vanilla single-frame model), predict pipe args
-        base_pred_cfg = self.dali_config["base"]["predict"]
+        base_pred_cfg = self.dali_config["base"]["predict"]  # type: ignore[arg-type]
         dict_args["predict"]["base"] = {
             "filenames": filenames,
             "resize_dims": self.resize_dims,
@@ -369,7 +371,7 @@ class PrepareDALI:
         }
 
         # context (five-frame) model, predict pipe args
-        context_pred_cfg = self.dali_config["context"]["predict"]
+        context_pred_cfg = self.dali_config["context"]["predict"]  # type: ignore[index]
         dict_args["predict"]["context"] = {
             "filenames": filenames,
             "resize_dims": self.resize_dims,
@@ -391,7 +393,7 @@ class PrepareDALI:
         # grab a single sequence of frames, will resize into 5-frame chunks at the
         # representation level inside BaseFeatureExtractor
         # note: reusing the batch size argument
-        context_train_cfg = self.dali_config["context"]["train"]
+        context_train_cfg = self.dali_config["context"]["train"]  # type: ignore[index]
         dict_args["train"]["context"] = {
             "filenames": filenames,
             "resize_dims": self.resize_dims,

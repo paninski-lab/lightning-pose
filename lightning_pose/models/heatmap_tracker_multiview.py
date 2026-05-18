@@ -209,7 +209,9 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
 
     def forward(
         self,
-        batch_dict: MultiviewHeatmapLabeledBatchDict,
+        batch_dict: (
+            MultiviewHeatmapLabeledBatchDict | UnlabeledBatchDict | MultiviewUnlabeledBatchDict
+        ),
     ) -> Float[torch.Tensor, "num_valid_outputs num_keypoints heatmap_height heatmap_width"]:
         """Forward pass through the network.
 

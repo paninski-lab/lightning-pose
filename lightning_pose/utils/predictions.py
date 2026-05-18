@@ -7,7 +7,7 @@ import gc
 import os
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 import cv2
 import lightning.pytorch as pl
@@ -335,9 +335,13 @@ def predict_dataset(
         dataloaders=data_module.full_labeled_dataloader(),
         return_predictions=True,
     )
+    assert labeled_preds is not None
 
     pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
-    labeled_preds_df = pred_handler(preds=labeled_preds)
+    labeled_preds_typed = cast(
+        list[tuple[torch.Tensor, torch.Tensor]], labeled_preds
+    )
+    labeled_preds_df = pred_handler(preds=labeled_preds_typed)
     if isinstance(labeled_preds_df, dict):
         if isinstance(preds_file, str):
             # old logic used to save to <predictions>_<view_name>.csv
@@ -356,6 +360,7 @@ def predict_dataset(
                 df.to_csv(_pred_file)
 
     else:
+        assert isinstance(preds_file, str), 'preds_file must be a str for single-view predictions'
         labeled_preds_df.to_csv(preds_file)
 
     # clear up memory
@@ -451,9 +456,11 @@ def predict_single_video(
         dataloaders=predict_loader,
         return_predictions=True,
     )
+    assert preds is not None
 
     # call this instance on a single vid's preds
-    preds_df = pred_handler(preds=preds)
+    preds_typed = cast(list[tuple[torch.Tensor, torch.Tensor]], preds)
+    preds_df = pred_handler(preds=preds_typed)
     # save the predictions to a csv; create directory if it doesn't exist
     os.makedirs(os.path.dirname(preds_file), exist_ok=True)
     preds_df.to_csv(preds_file)
@@ -552,7 +559,12 @@ def load_model_from_checkpoint(
     Returns:
         model as a Lightning Module
 
+    Raises:
+        ValueError: if ckpt_file is None
+
     """
+    if ckpt_file is None:
+        raise ValueError('ckpt_file must be provided to load a model from checkpoint')
     from lightning_pose.utils.io import (
         check_if_semi_supervised,
         return_absolute_data_paths,
@@ -685,7 +697,7 @@ def create_labeled_video(
     n_frames, n_keypoints = xs_arr.shape
 
     # set colormap for each color
-    colors = _make_cmap(n_keypoints, cmap=colormap)
+    colors = _make_cmap(n_keypoints, cmap=colormap or "cool")
 
     # extract info from clip
     nx, ny = clip.size
@@ -932,6 +944,7 @@ def predict_video(
         dataloaders=predict_loader,
         return_predictions=True,
     )
+    assert preds is not None
 
     preds_df = pred_handler(preds=preds, is_multiview_video=is_multiview)
 

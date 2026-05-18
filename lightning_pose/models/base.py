@@ -1,6 +1,6 @@
 """Base class for backbone that acts as a feature extractor."""
 
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import torch
 from jaxtyping import Float
@@ -446,13 +446,14 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         # on each epoch, self.total_unsupervised_importance is modified by the
         # AnnealWeight callback
         if hasattr(self, "total_unsupervised_importance"):
+            unsup_importance = cast(torch.Tensor, self.total_unsupervised_importance)
             self.log(
                 "total_unsupervised_importance",
-                self.total_unsupervised_importance,
+                unsup_importance,
                 prog_bar=True,
                 # don't need to sync_dist because this is always the same across processes.
             )
-            anneal_weight = self.total_unsupervised_importance
+            anneal_weight = unsup_importance
         else:
             anneal_weight = None
         loss = self.evaluate_labeled(batch_dict, "train", anneal_weight=anneal_weight)
@@ -533,9 +534,10 @@ class SemiSupervisedTrackerMixin:
 
         # on each epoch, self.total_unsupervised_importance is modified by the
         # AnnealWeight callback
+        unsup_importance = cast(torch.Tensor, self.total_unsupervised_importance)
         self.log(
             "total_unsupervised_importance",
-            self.total_unsupervised_importance,
+            unsup_importance,
             prog_bar=True,
             # don't need to sync_dist because this is always the same across processes.
         )
@@ -548,7 +550,7 @@ class SemiSupervisedTrackerMixin:
         loss_super = self.evaluate_labeled(
             batch_dict=batch_dict["labeled"],
             stage="train",
-            anneal_weight=self.total_unsupervised_importance,
+            anneal_weight=unsup_importance,
         )
 
         # computes and logs unsupervised losses
@@ -557,7 +559,7 @@ class SemiSupervisedTrackerMixin:
         loss_unsuper = self.evaluate_unlabeled(
             batch_dict=batch_dict["unlabeled"],
             stage="train",
-            anneal_weight=self.total_unsupervised_importance,
+            anneal_weight=unsup_importance,
         )
 
         # log total loss
