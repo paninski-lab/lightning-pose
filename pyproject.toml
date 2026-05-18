@@ -47,7 +47,7 @@ dependencies = [
     "safetensors",
     "scikit-learn (>=1.5.0)",
     "tensorboard (<3.0.0)",
-    "torchtyping",
+    "jaxtyping",
     "torch (<3.0.0)",
     "torchvision",
     "transformers>=4.57.5",
@@ -107,11 +107,16 @@ select = [
     "B",   # flake8-bugbear (real bugs: mutable defaults, broad excepts, etc.)
     # "N",   # pep8-naming
 ]
-ignore = ["B006", "E203", "F821"]
+ignore = [
+    "B006",  # mutable default arguments are used intentionally in some places
+    "E203",  # whitespace before ':' conflicts with black-style slice formatting
+    "F722",  # jaxtyping dim strings (e.g. "batch channels") are not Python expressions
+    "F821",  # undefined names in __all__ are flagged incorrectly for re-exports
+]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"lightning_pose/data/datatypes.py" = ["UP037"]  # TensorType dim labels must stay as strings
+"lightning_pose/data/datatypes.py" = ["UP037"]  # jaxtyping dim labels must stay as strings
 
 [tool.ruff.lint.isort]
 known-first-party = ["lightning_pose"]

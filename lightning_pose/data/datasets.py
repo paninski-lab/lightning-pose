@@ -12,8 +12,8 @@ import kornia.geometry.transform as ktransform
 import numpy as np
 import pandas as pd
 import torch
+from jaxtyping import Float
 from PIL import Image
-from torchtyping import TensorType
 from torchvision import transforms
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
@@ -324,7 +324,7 @@ class HeatmapDataset(BaseTrackingDataset):
         self,
         example_dict: BaseLabeledExampleDict,
         ignore_nans: bool = False,
-    ) -> TensorType["num_keypoints", "heatmap_height", "heatmap_width"]:
+    ) -> Float[torch.Tensor, "num_keypoints heatmap_height heatmap_width"]:
         """Compute 2D heatmaps from arbitrary (x, y) coordinates."""
 
         # reshape
@@ -898,12 +898,12 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
     def fusion(self, datadict: dict) -> tuple[
         (
-            TensorType["num_views", "RGB":3, "image_height", "image_width", float]
-            | TensorType["num_views", "frames", "RGB":3, "image_height", "image_width", float]
+            Float[torch.Tensor, "num_views RGB image_height image_width"]
+            | Float[torch.Tensor, "num_views frames RGB image_height image_width"]
         ),
-        TensorType["keypoints"],
-        TensorType["num_views", "heatmap_height", "heatmap_width", float],
-        TensorType["num_views * xyhw", float],
+        Float[torch.Tensor, "keypoints"],
+        Float[torch.Tensor, "num_views heatmap_height heatmap_width"],
+        Float[torch.Tensor, "num_views_x_xyhw"],
         list,
     ]:
         """Merge images, heatmaps, keypoints, and bboxes across views.

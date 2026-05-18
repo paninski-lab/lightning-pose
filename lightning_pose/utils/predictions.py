@@ -15,9 +15,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
+from jaxtyping import Float
 from moviepy import VideoFileClip
 from omegaconf import DictConfig, OmegaConf
-from torchtyping import TensorType
 
 from lightning_pose.callbacks import JSONInferenceProgressTracker
 from lightning_pose.data.dali import PrepareDALI
@@ -104,13 +104,13 @@ class PredictionHandler:
         self,
         preds: list[
             tuple[
-                TensorType[batch, two_times_num_keypoints],
-                TensorType[batch, num_keypoints],
+                Float[torch.Tensor, "batch two_times_num_keypoints"],
+                Float[torch.Tensor, "batch num_keypoints"],
             ]
         ],
     ) -> tuple[
-        TensorType[num_frames, two_times_num_keypoints],
-        TensorType[num_frames, num_keypoints],
+        Float[torch.Tensor, "num_frames two_times_num_keypoints"],
+        Float[torch.Tensor, "num_frames num_keypoints"],
     ]:
         """unpack list of preds coming out from pl.trainer.predict, confs tuples into tensors.
         It still returns unnecessary final rows, which should be discarded at the dataframe stage.
@@ -150,7 +150,7 @@ class PredictionHandler:
         return stacked_preds, stacked_confs
 
     def fix_context_preds_confs(
-        self, stacked_preds: TensorType, zero_pad_confidence: bool = False
+        self, stacked_preds: torch.Tensor, zero_pad_confidence: bool = False
     ):
         """
         In the context model, ind=0 is associated with image[2], and ind=1 is associated with
@@ -234,8 +234,8 @@ class PredictionHandler:
         self,
         preds: list[
             tuple[
-                TensorType[batch, two_times_num_keypoints],
-                TensorType[batch, num_keypoints],
+                Float[torch.Tensor, "batch two_times_num_keypoints"],
+                Float[torch.Tensor, "batch num_keypoints"],
             ]
         ],
         is_multiview_video: bool = False,

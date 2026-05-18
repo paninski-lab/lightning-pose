@@ -4,9 +4,9 @@
 from typing import Literal
 
 import torch
+from jaxtyping import Float
 from kornia.geometry.subpix import spatial_softmax2d
 from torch import nn
-from torchtyping import TensorType
 
 from lightning_pose.models.heads import HeatmapHead
 from lightning_pose.models.heads.heatmap import run_subpixelmaxima
@@ -78,12 +78,12 @@ class HeatmapMHCRNNHead(nn.Module):
 
     def forward(
         self,
-        features: TensorType["batch", "features", "rep_height", "rep_width", "frames"],
+        features: Float[torch.Tensor, "batch features rep_height rep_width frames"],
         batch_shape: torch.tensor,
         is_multiview: bool,
     ) -> tuple[
-        TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
-        TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+        Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"],
+        Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"],
     ]:
         """Handle context frames then upsample to get final heatmaps.
 
@@ -255,8 +255,8 @@ class UpsamplingCRNN(nn.Module):
 
     def forward(
         self,
-        features: TensorType["frames", "batch", "features", "rep_height", "rep_width"]
-    ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
+        features: Float[torch.Tensor, "frames batch features rep_height rep_width"]
+    ) -> Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"]:
 
         # expand representations in spatial domain using pixel shuffle to create heatmaps
         if self.upsampling_factor == 2:
@@ -264,9 +264,9 @@ class UpsamplingCRNN(nn.Module):
             # need to reshape to push through convolution layers
             frames, batch, n_features, rep_height, rep_width = features.shape
             frames_batch_shape = batch * frames
-            representations_batch_frames: TensorType[
-                batch*frames, features, rep_height, rep_width
-            ] = features.reshape(frames_batch_shape, n_features, rep_height, rep_width)
+            representations_batch_frames = features.reshape(
+                frames_batch_shape, n_features, rep_height, rep_width,
+            )
             x_tensor = self.W_pre(self.pixel_shuffle(representations_batch_frames))
             x_tensor = x_tensor.reshape(
                 frames,

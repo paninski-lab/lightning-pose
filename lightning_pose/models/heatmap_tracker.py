@@ -3,8 +3,8 @@
 from typing import Any, Literal
 
 import torch
+from jaxtyping import Float
 from omegaconf import DictConfig
-from torchtyping import TensorType
 
 from lightning_pose.data.datatypes import (
     HeatmapLabeledBatchDict,
@@ -102,12 +102,10 @@ class HeatmapTracker(BaseSupervisedTracker):
     def forward(
         self,
         images: (
-            TensorType["batch", "channels":3, "image_height", "image_width"]
-            | TensorType["batch", "views", "channels":3, "image_height", "image_width"]
+            Float[torch.Tensor, "batch channels image_height image_width"]
+            | Float[torch.Tensor, "batch views channels image_height image_width"]
         ),
-    ) -> TensorType[
-        "num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"
-    ]:
+    ) -> Float[torch.Tensor, "num_valid_outputs num_keypoints heatmap_height heatmap_width"]:
         """Forward pass through the network."""
         # we get one representation for each desired output.
         shape = images.shape

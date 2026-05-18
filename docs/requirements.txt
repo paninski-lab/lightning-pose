@@ -20,7 +20,7 @@ pillow
 pytest
 scikit-learn
 tensorboard
-torchtyping
+jaxtyping
 torchvision
 transformers
 typing

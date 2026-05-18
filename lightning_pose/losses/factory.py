@@ -4,7 +4,7 @@ from typing import Literal
 
 import lightning.pytorch as pl
 import torch
-from torchtyping import TensorType
+from jaxtyping import Float
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.losses.losses import get_loss_classes
@@ -44,7 +44,7 @@ class LossFactory(pl.LightningModule):
         stage: Literal["train", "val", "test"] | None = None,
         anneal_weight: float | torch.Tensor = 1.0,
         **kwargs
-    ) -> tuple[TensorType[()], list[dict]]:
+    ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
 
         # loop over losses, compute, sum, log
         # don't log if stage is None

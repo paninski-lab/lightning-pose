@@ -2,11 +2,11 @@
 
 
 import torch
+from jaxtyping import Float
 from kornia.filters import filter2d
 from kornia.geometry.subpix import spatial_expectation2d, spatial_softmax2d
 from kornia.geometry.transform.pyramid import _get_pyramid_gaussian_kernel
 from torch import nn
-from torchtyping import TensorType
 
 from lightning_pose.data.utils import evaluate_heatmaps_at_location
 
@@ -69,8 +69,8 @@ def initialize_upsampling_layers(layers) -> None:
 
 
 def upsample(
-    inputs: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
-) -> TensorType["batch", "num_keypoints", "two_x_heatmap_height", "two_x_heatmap_width"]:
+    inputs: Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"],
+) -> Float[torch.Tensor, "batch num_keypoints two_x_heatmap_height two_x_heatmap_width"]:
     """Upsample batch of heatmaps by a factor of two using interpolation (no learned weights).
 
     This is a copy of kornia's pyrup function but with better defaults.
@@ -86,10 +86,10 @@ def upsample(
 
 
 def run_subpixelmaxima(
-    heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
+    heatmaps: Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"],
     downsample_factor: int,
     temperature: torch.tensor,
-) -> tuple[TensorType["batch", "num_targets"], TensorType["batch", "num_keypoints"]]:
+) -> tuple[Float[torch.Tensor, "batch num_targets"], Float[torch.Tensor, "batch num_keypoints"]]:
     """Use soft argmax on heatmaps.
 
     Args:
@@ -185,8 +185,8 @@ class HeatmapHead(nn.Module):
 
     def forward(
         self,
-        features: TensorType["batch", "features", "features_height", "features_width"],
-    ) -> TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"]:
+        features: Float[torch.Tensor, "batch features features_height features_width"],
+    ) -> Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"]:
         """Upsample representations and normalize to get final heatmaps."""
         heatmaps = self.upsampling_layers(features)
         if self.final_softmax:

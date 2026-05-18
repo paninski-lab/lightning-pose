@@ -3,11 +3,11 @@
 from typing import Any, Literal
 
 import torch
+from jaxtyping import Float
 from lightning.pytorch import LightningModule
 from omegaconf import DictConfig, OmegaConf
 from torch import optim
 from torch.optim.lr_scheduler import MultiStepLR
-from torchtyping import TensorType
 
 from lightning_pose.data.datatypes import (
     BaseLabeledBatchDict,
@@ -91,13 +91,13 @@ def _apply_defaults_for_optimizer_params(
 
 def get_context_from_sequence(
     img_seq: (
-        TensorType["seq_len", "RGB":3, "image_height", "image_width"]
-        | TensorType["seq_len", "n_features", "rep_height", "rep_width"]
+        Float[torch.Tensor, "seq_len RGB image_height image_width"]
+        | Float[torch.Tensor, "seq_len n_features rep_height rep_width"]
     ),
     context_length: int,
 ) -> (
-    TensorType["seq_len", "context_length", "RGB":3, "image_height", "image_width"]
-    | TensorType["seq_len", "context_length", "n_features", "rep_height", "rep_width"]
+    Float[torch.Tensor, "seq_len context_length RGB image_height image_width"]
+    | Float[torch.Tensor, "seq_len context_length n_features rep_height rep_width"]
 ):
     # our goal is to extract 5-frame sequences from this sequence
     img_shape = img_seq.shape[1:]  # e.g., (3, H, W)
@@ -182,20 +182,16 @@ class BaseFeatureExtractor(LightningModule):
     def get_representations(
         self,
         images: (
-            TensorType["batch", "channels":3, "image_height", "image_width"]
-            | TensorType["batch", "frames", "channels":3, "image_height", "image_width"]
-            | TensorType["seq_len", "channels":3, "image_height", "image_width"]
-            | TensorType[
-                "batch", "views", "frames", "channels":3, "image_height", "image_width"
-            ]
-            | TensorType[
-                "seq_len", "view", "frames", "channels":3, "image_height", "image_width"
-            ]
+            Float[torch.Tensor, "batch channels image_height image_width"]
+            | Float[torch.Tensor, "batch frames channels image_height image_width"]
+            | Float[torch.Tensor, "seq_len channels image_height image_width"]
+            | Float[torch.Tensor, "batch views frames channels image_height image_width"]
+            | Float[torch.Tensor, "seq_len view frames channels image_height image_width"]
         ),
         is_multiview: bool = False,
     ) -> (
-        TensorType["new_batch", "features", "rep_height", "rep_width"]
-        | TensorType["new_batch", "features", "rep_height", "rep_width", "frames"]
+        Float[torch.Tensor, "new_batch features rep_height rep_width"]
+        | Float[torch.Tensor, "new_batch features rep_height rep_width frames"]
     ):
         """Forward pass from images to feature maps.
 
@@ -204,19 +200,19 @@ class BaseFeatureExtractor(LightningModule):
 
         Batch options
         -------------
-        - TensorType["batch", "channels":3, "image_height", "image_width"]
+        - Float[torch.Tensor, "batch channels image_height image_width"]
           single view, labeled batch
 
-        - TensorType["batch", "frames", "channels":3, "image_height", "image_width"]
+        - Float[torch.Tensor, "batch frames channels image_height image_width"]
           single view, labeled context batch
 
-        - TensorType["seq_len", "channels":3, "image_height", "image_width"]
+        - Float[torch.Tensor, "seq_len channels image_height image_width"]
           single view, unlabeled batch from DALI
 
-        - TensorType["batch", "views", "frames", "channels":3, "image_height", "image_width"]
+        - Float[torch.Tensor, "batch views frames channels image_height image_width"]
           multivew, labeled context batch
 
-        - TensorType["seq_len", "views", "channels":3, "image_height", "image_width"]
+        - Float[torch.Tensor, "seq_len views channels image_height image_width"]
           multiview, unlabeled batch from DALI
 
         Args:
@@ -249,12 +245,8 @@ class BaseFeatureExtractor(LightningModule):
                 images_batch_frames = images.reshape(
                     frames_batch_shape, channels, image_height, image_width,
                 )
-                outputs: TensorType[
-                    batch*frames, features, rep_height, rep_width
-                ] = self.backbone(images_batch_frames)
-                outputs: TensorType[
-                    batch, frames, features, rep_height, rep_width
-                ] = outputs.reshape(
+                outputs = self.backbone(images_batch_frames)
+                outputs = outputs.reshape(
                     images.shape[0],
                     images.shape[1],
                     outputs.shape[1],
@@ -270,12 +262,8 @@ class BaseFeatureExtractor(LightningModule):
                 images_batch_views = images.reshape(
                     batch_views_shape, channels, image_height, image_width,
                 )
-                outputs: TensorType[
-                    batch*views, features, rep_height, rep_width
-                ] = self.backbone(images_batch_views)
-                outputs: TensorType[
-                    batch, views, features, rep_height, rep_width
-                ] = outputs.reshape(
+                outputs = self.backbone(images_batch_views)
+                outputs = outputs.reshape(
                     batch,
                     num_views,
                     outputs.shape[1],
@@ -283,9 +271,7 @@ class BaseFeatureExtractor(LightningModule):
                     outputs.shape[3],
                 )
                 # stack views across feature dimension
-                outputs: TensorType[
-                    batch, views * features, rep_height, rep_width
-                ] = outputs.reshape(batch, -1, outputs.shape[-2], outputs.shape[-1])
+                outputs = outputs.reshape(batch, -1, outputs.shape[-2], outputs.shape[-1])
 
                 # we need to tile the representations to make it into
                 # (num_valid_frames, features, rep_height, rep_width, num_context_frames)
@@ -305,9 +291,7 @@ class BaseFeatureExtractor(LightningModule):
                 # for now we discard the padded frames (first and last two)
                 # the output will be one representation per valid frame
                 sequence_length, channels, image_height, image_width = images.shape
-                representations: TensorType[
-                    sequence_length, features, rep_height, rep_width
-                ] = self.backbone(images)
+                representations = self.backbone(images)
                 # we need to tile the representations to make it into
                 # (num_valid_frames, features, rep_height, rep_width, num_context_frames)
                 # TODO: context frames should be configurable
@@ -321,9 +305,7 @@ class BaseFeatureExtractor(LightningModule):
 
             # for both types of batches, we reshape in the same way
             # context is in the last dimension for the linear layer.
-            representations: TensorType[
-                batch, features, rep_height, rep_width, frames
-            ] = torch.permute(outputs, (0, 2, 3, 4, 1))
+            representations = torch.permute(outputs, (0, 2, 3, 4, 1))
         else:
             # incoming batch: singleview labeled/unlabeled, multiview labeled/unlabeled reshaped
             # incoming shape: (batch, channels, height, width)
@@ -334,13 +316,13 @@ class BaseFeatureExtractor(LightningModule):
     def forward(
         self,
         images: (
-            TensorType["batch", "RGB":3, "image_height", "image_width"]
-            | TensorType["batch", "seq_length", "RGB":3, "image_height", "image_width"]
-            | TensorType["seq_length", "RGB":3, "image_height", "image_width"]
+            Float[torch.Tensor, "batch RGB image_height image_width"]
+            | Float[torch.Tensor, "batch seq_length RGB image_height image_width"]
+            | Float[torch.Tensor, "seq_length RGB image_height image_width"]
         ),
     ) -> (
-        TensorType["new_batch", "features", "rep_height", "rep_width"]
-        | TensorType["new_batch", "features", "rep_height", "rep_width", "frames"]
+        Float[torch.Tensor, "new_batch features rep_height rep_width"]
+        | Float[torch.Tensor, "new_batch features rep_height rep_width frames"]
     ):
         """Forward pass from images to representations.
 
@@ -420,7 +402,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         ),
         stage: Literal["train", "val", "test"] | None = None,
         anneal_weight: torch.Tensor | None = None,
-    ) -> TensorType[(), float]:
+    ) -> Float[torch.Tensor, ""]:
         """Compute and log the losses on a batch of labeled data."""
 
         # forward pass; collected true and predicted heatmaps, keypoints
@@ -459,7 +441,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
             | MultiviewHeatmapLabeledBatchDict
         ),
         batch_idx: int,
-    ) -> dict[str, TensorType[(), float]]:
+    ) -> dict[str, Float[torch.Tensor, ""]]:
         """Base training step, a wrapper around the `evaluate_labeled` method."""
         # on each epoch, self.total_unsupervised_importance is modified by the
         # AnnealWeight callback
@@ -518,7 +500,7 @@ class SemiSupervisedTrackerMixin:
         batch_dict: UnlabeledBatchDict | MultiviewUnlabeledBatchDict,
         stage: Literal["train", "val", "test"] | None = None,
         anneal_weight: float | torch.Tensor = 1.0,
-    ) -> TensorType[(), float]:
+    ) -> Float[torch.Tensor, ""]:
         """Compute and log the losses on a batch of unlabeled data (frames only)."""
 
         # forward pass: collect predicted heatmaps and keypoints
@@ -546,7 +528,7 @@ class SemiSupervisedTrackerMixin:
         self,
         batch_dict: SemiSupervisedBatchDict | SemiSupervisedHeatmapBatchDict,
         batch_idx: int,
-    ) -> dict[str, TensorType[(), float]]:
+    ) -> dict[str, Float[torch.Tensor, ""]]:
         """Training step computes and logs both supervised and unsupervised losses."""
 
         # on each epoch, self.total_unsupervised_importance is modified by the

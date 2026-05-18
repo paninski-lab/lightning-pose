@@ -1,7 +1,8 @@
 """Heads that produce (x, y) predictions for coordinate regression."""
 
+import torch
+from jaxtyping import Float
 from torch import nn
-from torchtyping import TensorType
 
 # to ignore imports for sphix-autoapidoc
 __all__ = []
@@ -20,8 +21,8 @@ class LinearRegressionHead(nn.Module):
 
     def forward(
         self,
-        features: TensorType["batch", "features", "height", "width"]
-    ) -> TensorType["batch", "coordinates"]:
+        features: Float[torch.Tensor, "batch features height width"]
+    ) -> Float[torch.Tensor, "batch coordinates"]:
         features_reshaped = features.reshape(features.shape[0], features.shape[1])
         coordinates = self.linear_layer(features_reshaped)
         return coordinates
