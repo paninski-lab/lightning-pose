@@ -10,6 +10,7 @@ import gc
 import os
 import subprocess
 from collections.abc import Callable, Generator
+from typing import cast
 
 import cv2
 import imgaug.augmenters as iaa
@@ -212,9 +213,9 @@ def base_dataset(cfg, imgaug_transform) -> Generator[BaseTrackingDataset, None, 
     # setup
     cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.model_type = "regression"
-    base_dataset = get_dataset(
+    base_dataset = cast(BaseTrackingDataset, get_dataset(
         cfg_tmp, data_dir=TOY_DATA_ROOT_DIR, imgaug_transform=imgaug_transform
-    )
+    ))
 
     # return to tests
     yield base_dataset
@@ -231,9 +232,9 @@ def heatmap_dataset(cfg, imgaug_transform) -> Generator[HeatmapDataset, None, No
     # setup
     cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.model_type = "heatmap"
-    heatmap_dataset = get_dataset(
+    heatmap_dataset = cast(HeatmapDataset, get_dataset(
         cfg_tmp, data_dir=TOY_DATA_ROOT_DIR, imgaug_transform=imgaug_transform
-    )
+    ))
 
     # return to tests
     yield heatmap_dataset
@@ -252,9 +253,9 @@ def multiview_heatmap_dataset(
     # setup
     cfg_tmp = copy.deepcopy(cfg_multiview)
     cfg_tmp.model.model_type = "heatmap"
-    multiview_heatmap_dataset = get_dataset(
+    multiview_heatmap_dataset = cast(MultiviewHeatmapDataset, get_dataset(
         cfg_tmp, data_dir=TOY_MDATA_ROOT_DIR, imgaug_transform=imgaug_transform
-    )
+    ))
 
     # return to tests
     yield multiview_heatmap_dataset
@@ -271,9 +272,9 @@ def heatmap_dataset_context(cfg, imgaug_transform) -> Generator[HeatmapDataset, 
     # setup
     cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.model_type = "heatmap_mhcrnn"
-    heatmap_dataset = get_dataset(
+    heatmap_dataset = cast(HeatmapDataset, get_dataset(
         cfg_tmp, data_dir=TOY_DATA_ROOT_DIR, imgaug_transform=imgaug_transform
-    )
+    ))
 
     # return to tests
     yield heatmap_dataset
@@ -293,9 +294,9 @@ def multiview_heatmap_dataset_context(
     # setup
     cfg_tmp = copy.deepcopy(cfg_multiview)
     cfg_tmp.model.model_type = "heatmap_mhcrnn"
-    heatmap_dataset = get_dataset(
+    heatmap_dataset = cast(HeatmapDataset, get_dataset(
         cfg_tmp, data_dir=TOY_MDATA_ROOT_DIR, imgaug_transform=imgaug_transform
-    )
+    ))
 
     # return to tests
     yield heatmap_dataset
@@ -413,6 +414,7 @@ def base_data_module_combined(cfg, base_dataset) -> Generator[UnlabeledDataModul
         dataset=base_dataset,
         video_dir=os.path.join(TOY_DATA_ROOT_DIR, "videos"),
     )
+    assert isinstance(data_module, UnlabeledDataModule)
 
     # return to tests
     yield data_module
@@ -437,6 +439,7 @@ def heatmap_data_module_combined(
         dataset=heatmap_dataset,
         video_dir=os.path.join(TOY_DATA_ROOT_DIR, "videos"),
     )
+    assert isinstance(data_module, UnlabeledDataModule)
 
     # return to tests
     yield data_module
@@ -461,6 +464,7 @@ def multiview_heatmap_data_module_combined(
         dataset=multiview_heatmap_dataset,
         video_dir=os.path.join(cfg_multiview.data.data_dir, "videos"),
     )
+    assert isinstance(data_module, UnlabeledDataModule)
 
     # return to tests
     yield data_module
@@ -485,6 +489,7 @@ def heatmap_data_module_combined_context(
         dataset=heatmap_dataset_context,
         video_dir=os.path.join(TOY_DATA_ROOT_DIR, "videos"),
     )
+    assert isinstance(data_module, UnlabeledDataModule)
     # data_module.setup()  # already done in UnlabeledDataModule constructor
 
     # return to tests
@@ -510,6 +515,7 @@ def multiview_heatmap_data_module_combined_context(
         dataset=multiview_heatmap_dataset_context,
         video_dir=os.path.join(cfg_multiview.data.data_dir, "videos"),
     )
+    assert isinstance(data_module, UnlabeledDataModule)
     # data_module.setup()  # already done in UnlabeledDataModule constructor
 
     # return to tests
