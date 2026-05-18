@@ -129,7 +129,9 @@ def create_multiview_dataset_if_not_exists() -> None:
     frames = os.listdir(src_dir_ld)
     for frame in frames:
         frame_file = os.path.join(src_dir_ld, frame)
-        img = cv2.cvtColor(cv2.imread(frame_file), cv2.COLOR_BGR2RGB)
+        img_raw = cv2.imread(frame_file)
+        assert img_raw is not None, f"failed to load image: {frame_file}"
+        img = cv2.cvtColor(img_raw, cv2.COLOR_BGR2RGB)
 
         # split views and save
         save_file = os.path.join(dst_dir_ld, "example_top", frame)

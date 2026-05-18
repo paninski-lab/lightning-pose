@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
+from typing import cast
 
 import cv2
 import numpy as np
@@ -392,7 +393,8 @@ class Model:
         else:
             metrics = None
 
-        return PredictionResult(predictions=df, metrics=metrics)  # type: ignore[arg-type]
+        assert isinstance(df, pd.DataFrame)
+        return PredictionResult(predictions=df, metrics=metrics)
 
     def predict_on_label_csv_multiview(
         self,
@@ -472,8 +474,9 @@ class Model:
         else:
             metrics = None
 
-        return MultiviewPredictionResult(  # type: ignore[arg-type]
-            predictions=view_to_df_dict, metrics=metrics,
+        return MultiviewPredictionResult(
+            predictions=cast(dict[str, pd.DataFrame], view_to_df_dict),
+            metrics=metrics,
         )
 
     def predict_on_video_file(

@@ -821,7 +821,9 @@ def test_convert_bbox_coords(heatmap_data_module, multiview_heatmap_data_module)
         ]),
         "num_views": torch.tensor([2, 2]),
     }
-    converted = convert_bbox_coords(batch_dict, batch_dict["predicted_keypoints"])
+    converted = convert_bbox_coords(
+        batch_dict, batch_dict["predicted_keypoints"],  # type: ignore[arg-type]
+    )
     assert converted[0, 0] == batch_dict["bbox"][0, 0]
     assert converted[0, 1] == batch_dict["bbox"][0, 1]
     assert converted[0, 2] == batch_dict["bbox"][0, 4]
@@ -850,7 +852,9 @@ def test_convert_bbox_coords(heatmap_data_module, multiview_heatmap_data_module)
         ]),
         "num_views": torch.tensor([2, 2, 2, 2, 2, 2]),
     }
-    converted = convert_bbox_coords(batch_dict, batch_dict["predicted_keypoints"])
+    converted = convert_bbox_coords(
+        batch_dict, batch_dict["predicted_keypoints"],  # type: ignore[arg-type]
+    )
     assert converted[0, 0] == batch_dict["bbox"][2, 0]
     assert converted[0, 1] == batch_dict["bbox"][2, 1]
     assert converted[0, 2] == batch_dict["bbox"][2, 4]
@@ -918,7 +922,9 @@ class TestConvertOriginalToModelCoords:
         ])
 
         # Convert to model coordinates
-        model_keypoints = convert_original_to_model_coords(batch_dict, original_keypoints)
+        model_keypoints = convert_original_to_model_coords(
+            batch_dict, original_keypoints,  # type: ignore[arg-type]
+        )
 
         # Check output shape
         assert model_keypoints.shape == (2, 2, 3, 2)
@@ -962,7 +968,9 @@ class TestConvertOriginalToModelCoords:
             ]
         ])
 
-        model_keypoints = convert_original_to_model_coords(batch_dict, original_keypoints)
+        model_keypoints = convert_original_to_model_coords(
+            batch_dict, original_keypoints,  # type: ignore[arg-type]
+        )
 
         # Check output shape: (batch=2, views=3, keypoints=2, xy=2)
         assert model_keypoints.shape == (2, 3, 2, 2)

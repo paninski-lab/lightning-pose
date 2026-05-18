@@ -256,7 +256,7 @@ def test_full_coordinate_pipeline_roundtrip(points_2d, intrinsics, extrinsics, d
 
     # STEP 1: Convert world coords to model coords (reverse of convert_bbox_coords)
     model_2d_coords = convert_original_to_model_coords(
-        batch_dict=mock_batch_dict,
+        batch_dict=mock_batch_dict,  # type: ignore[arg-type]
         original_keypoints=world_2d_original,
     )  # Output: (batch=1, num_views=3, num_keypoints=2, 2)
     print(f"model_2d_coords shape: {model_2d_coords.shape}")
@@ -270,7 +270,7 @@ def test_full_coordinate_pipeline_roundtrip(points_2d, intrinsics, extrinsics, d
 
     # STEP 2: Convert model coords back to world coords (convert_bbox_coords)
     pred_keypoints_world = convert_bbox_coords(
-        mock_batch_dict, pred_keypoints_flat, in_place=False,
+        mock_batch_dict, pred_keypoints_flat, in_place=False,  # type: ignore[arg-type]
     )
     # Output: (batch, num_targets) -> reshape to (batch, num_views, num_keypoints, 2)
     world_2d_recovered = pred_keypoints_world.reshape(batch_size, num_views, num_keypoints, 2)
@@ -308,7 +308,7 @@ def test_full_coordinate_pipeline_roundtrip(points_2d, intrinsics, extrinsics, d
 
     # STEP 5: Convert back to model coords for heatmap generation
     keypoints_pred_2d_reprojected_model = convert_original_to_model_coords(
-        batch_dict=mock_batch_dict,
+        batch_dict=mock_batch_dict,  # type: ignore[arg-type]
         original_keypoints=keypoints_pred_2d_reprojected_world,
         # (batch, num_views, num_keypoints, 2)
     )  # Output: (batch, num_views, num_keypoints, 2)

@@ -1,5 +1,7 @@
 """Test datamodule functionality."""
 
+from collections.abc import Sized
+
 import numpy as np
 import pytest
 from lightning.pytorch.utilities import CombinedLoader
@@ -191,7 +193,9 @@ def test_subsampling_of_training_frames(base_dataset):
     train_frames = 10  # integer
     heatmap_module = BaseDataModule(base_dataset, train_frames=train_frames)
     train_dataloader = heatmap_module.train_dataloader()
-    assert len(train_dataloader.dataset) == train_frames
+    dataset = train_dataloader.dataset
+    assert isinstance(dataset, Sized)
+    assert len(dataset) == train_frames
 
     train_frames = 1  # integer
     train_probability = 0.8
@@ -199,7 +203,9 @@ def test_subsampling_of_training_frames(base_dataset):
         base_dataset, train_frames=train_frames, train_probability=train_probability
     )
     train_dataloader = heatmap_module.train_dataloader()
-    assert len(train_dataloader.dataset) == int(train_probability * len_dataset)
+    dataset = train_dataloader.dataset
+    assert isinstance(dataset, Sized)
+    assert len(dataset) == int(train_probability * len_dataset)
 
     train_frames = 0.1  # fraction < 1
     train_probability = 0.8
@@ -207,9 +213,9 @@ def test_subsampling_of_training_frames(base_dataset):
         base_dataset, train_frames=train_frames, train_probability=train_probability
     )
     train_dataloader = heatmap_module.train_dataloader()
-    assert len(train_dataloader.dataset) == int(
-        train_frames * train_probability * len_dataset
-    )
+    dataset = train_dataloader.dataset
+    assert isinstance(dataset, Sized)
+    assert len(dataset) == int(train_frames * train_probability * len_dataset)
 
     train_frames = 1000000  # integer larger than number of labeled frames
     train_probability = 0.8
@@ -217,7 +223,9 @@ def test_subsampling_of_training_frames(base_dataset):
         base_dataset, train_frames=train_frames, train_probability=train_probability
     )
     train_dataloader = heatmap_module.train_dataloader()
-    assert len(train_dataloader.dataset) == int(train_probability * len_dataset)
+    dataset = train_dataloader.dataset
+    assert isinstance(dataset, Sized)
+    assert len(dataset) == int(train_probability * len_dataset)
 
     # raise exception when not a path
     with pytest.raises(ValueError):

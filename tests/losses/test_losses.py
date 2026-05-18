@@ -729,6 +729,7 @@ class TestPairwiseProjectionsLoss:
         loss, _ = pp_loss(keypoints_targ_3d, keypoints_pred_3d)
         assert loss.item() == 0.0
         loss.backward()
+        assert keypoints_pred_3d.grad is not None
         assert not torch.isnan(keypoints_pred_3d.grad).any(), "gradients contain NaN values"
 
     def test_predictions_all_nans(self, pp_loss):
@@ -743,6 +744,7 @@ class TestPairwiseProjectionsLoss:
         loss, _ = pp_loss(keypoints_targ_3d, keypoints_pred_3d)
         assert loss.item() == 0.0
         loss.backward()
+        assert keypoints_pred_3d.grad is not None
         assert not torch.isnan(keypoints_pred_3d.grad).any(), "gradients contain NaN values"
 
     def test_targets_partial_nans(self, pp_loss):
@@ -760,6 +762,7 @@ class TestPairwiseProjectionsLoss:
         expected_loss = torch.sqrt(torch.tensor(3.0))
         assert loss.isclose(expected_loss)
         loss.backward()
+        assert keypoints_pred_3d.grad is not None
         assert not torch.isnan(keypoints_pred_3d.grad).any(), "gradients contain NaN values"
 
     def test_predictions_partial_nans(self, pp_loss):
@@ -777,6 +780,7 @@ class TestPairwiseProjectionsLoss:
         expected_loss = torch.sqrt(torch.tensor(3.0))
         assert loss.isclose(expected_loss)
         loss.backward()
+        assert keypoints_pred_3d.grad is not None
         assert not torch.isnan(keypoints_pred_3d.grad).any(), "gradients contain NaN values"
 
 
@@ -847,6 +851,7 @@ class TestReprojectionHeatmapLoss:
         assert loss.item() == 0.0
         loss.backward()
         # Gradients should be well-behaved (not NaN)
+        assert keypoints_pred_2d.grad is not None
         assert not torch.isnan(keypoints_pred_2d.grad).any(), "gradients contain NaN values"
 
     def test_none_reprojected_keypoints_raises_error(self, rh_loss):
@@ -891,6 +896,7 @@ class TestReprojectionHeatmapLoss:
         # Loss should be positive for valid keypoints
         assert loss.item() > 0.0
         loss.backward()
+        assert keypoints_pred_2d.grad is not None
         assert not torch.isnan(keypoints_pred_2d.grad).any(), "gradients contain NaN values"
 
     def test_gradient_flow(self, rh_loss):
