@@ -53,7 +53,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
     def __init__(
         self,
-        root_directory: str,
+        root_directory: str | Path,
         csv_path: str,
         image_resize_height: int,
         image_resize_width: int,
@@ -252,7 +252,7 @@ class HeatmapDataset(BaseTrackingDataset):
 
     def __init__(
         self,
-        root_directory: str,
+        root_directory: str | Path,
         csv_path: str,
         image_resize_height: int,
         image_resize_width: int,
@@ -386,7 +386,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
     def __init__(
         self,
-        root_directory: str,
+        root_directory: str | Path,
         csv_paths: list[str],
         view_names: list[str],
         image_resize_height: int,

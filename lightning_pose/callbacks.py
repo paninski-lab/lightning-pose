@@ -435,7 +435,7 @@ class JSONInferenceProgressTracker(Callback):
         """Called when prediction starts."""
 
         # Calculate the total number of batches to predict
-        self.total_steps = trainer.num_predict_batches[0]  # Assumes one dataloader
+        self.total_steps = int(trainer.num_predict_batches[0])  # Assumes one dataloader
         self.current_step = 0
 
         # Save initial state

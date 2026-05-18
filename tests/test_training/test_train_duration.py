@@ -40,7 +40,7 @@ def test_epochs(cfg: DictConfig, tmp_path: Path):
     train(cfg, model_dir=tmp_path, skip_evaluation=True)
 
     reader = tbparse.SummaryReader(
-        tmp_path / "tb_logs" / "my_base_toy_model", pivot=True
+        str(tmp_path / "tb_logs" / "my_base_toy_model"), pivot=True
     )
     # this is the epoch at each step. 2 epochs, 4 steps
     assert reader.scalars["epoch"].tolist() == [0, 0, 1, 1]
@@ -75,7 +75,7 @@ def test_steps(cfg: DictConfig, tmp_path: Path):
     train(cfg, model_dir=tmp_path, skip_evaluation=True)
 
     reader = tbparse.SummaryReader(
-        tmp_path / "tb_logs" / "my_base_toy_model", pivot=True
+        str(tmp_path / "tb_logs" / "my_base_toy_model"), pivot=True
     )
     # this is the epoch at each step. only 3 steps total.
     assert reader.scalars["epoch"].tolist() == [0, 0, 1]

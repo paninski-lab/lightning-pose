@@ -46,7 +46,7 @@ def test_unfreeze_epoch(cfg: DictConfig, tmp_path: Path):
     train(cfg, model_dir=tmp_path, skip_evaluation=True)
 
     reader = tbparse.SummaryReader(
-        tmp_path / "tb_logs" / "my_base_toy_model", pivot=True
+        str(tmp_path / "tb_logs" / "my_base_toy_model"), pivot=True
     )
 
     # learning rate only gets logged per epoch.
@@ -103,7 +103,7 @@ def test_steps(cfg: DictConfig, tmp_path: Path):
     train(cfg, model_dir=tmp_path, skip_evaluation=True)
 
     reader = tbparse.SummaryReader(
-        tmp_path / "tb_logs" / "my_base_toy_model", pivot=True
+        str(tmp_path / "tb_logs" / "my_base_toy_model"), pivot=True
     )
 
     # learning rate only gets logged per epoch.
