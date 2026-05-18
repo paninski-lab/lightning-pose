@@ -17,7 +17,7 @@ import lightning.pytorch as pl
 import pandas as pd
 import pytest
 import torch
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 import lightning_pose as lp
 from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
@@ -63,7 +63,7 @@ def toy_mdata_dir() -> str:
 
 
 @pytest.fixture
-def cfg() -> dict:
+def cfg() -> DictConfig | ListConfig:
     """Load all toy data config file without hydra."""
     config_file = lp.LP_ROOT_PATH / "scripts" / "configs" / "config_mirror-mouse-example.yaml"
     cfg = OmegaConf.load(config_file)
@@ -80,7 +80,7 @@ def cfg() -> dict:
 
 
 @pytest.fixture
-def cfg_multiview() -> dict:
+def cfg_multiview() -> DictConfig | ListConfig:
     """Load all toy data config file without hydra."""
     config_file = lp.LP_ROOT_PATH / "scripts" / "configs" / "config_mirror-mouse-example.yaml"
     cfg = OmegaConf.load(config_file)

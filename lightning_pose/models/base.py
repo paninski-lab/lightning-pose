@@ -5,7 +5,7 @@ from typing import Any, Literal
 import torch
 from jaxtyping import Float
 from lightning.pytorch import LightningModule
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 from torch import optim
 from torch.optim.lr_scheduler import MultiStepLR
 
@@ -60,8 +60,8 @@ class OptimizerNotImplementedError(NotImplementedError):
 
 
 def _apply_defaults_for_lr_scheduler_params(
-    lr_scheduler: str, lr_scheduler_params: DictConfig | dict | None
-) -> DictConfig:
+    lr_scheduler: str, lr_scheduler_params: DictConfig | ListConfig | dict | None
+) -> DictConfig | ListConfig:
     if lr_scheduler not in ("multistep_lr", "multisteplr"):
         raise LrNotImplementedError(lr_scheduler)
 
@@ -76,8 +76,8 @@ def _apply_defaults_for_lr_scheduler_params(
 
 
 def _apply_defaults_for_optimizer_params(
-    optimizer: str, optimizer_params: DictConfig | dict | None
-) -> DictConfig:
+    optimizer: str, optimizer_params: DictConfig | ListConfig | dict | None
+) -> DictConfig | ListConfig:
     if optimizer not in ("Adam", "AdamW"):
         raise OptimizerNotImplementedError(optimizer)
 
@@ -124,9 +124,9 @@ class BaseFeatureExtractor(LightningModule):
         backbone: ALLOWED_BACKBONES = "resnet50",
         pretrained: bool = True,
         lr_scheduler: str = "multisteplr",
-        lr_scheduler_params: DictConfig | dict | None = None,
+        lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
         optimizer: str = "Adam",
-        optimizer_params: DictConfig | dict | None = None,
+        optimizer_params: DictConfig | ListConfig | dict | None = None,
         do_context: bool = False,
         image_size: int = 256,
         model_type: Literal["heatmap", "regression"] = "heatmap",

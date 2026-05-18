@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 import torch
 from jaxtyping import Float
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
 
 from lightning_pose.data.datatypes import (
     HeatmapLabeledBatchDict,
@@ -39,9 +39,9 @@ class HeatmapTracker(BaseSupervisedTracker):
         pretrained: bool = True,
         torch_seed: int = 123,
         optimizer: str = "Adam",
-        optimizer_params: DictConfig | dict | None = None,
+        optimizer_params: DictConfig | ListConfig | dict | None = None,
         lr_scheduler: str = "multisteplr",
-        lr_scheduler_params: DictConfig | dict | None = None,
+        lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize a heatmap-based pose estimation model with conv or transformer backbone.
@@ -206,9 +206,9 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         pretrained: bool = True,
         torch_seed: int = 123,
         optimizer: str = "Adam",
-        optimizer_params: DictConfig | dict | None = None,
+        optimizer_params: DictConfig | ListConfig | dict | None = None,
         lr_scheduler: str = "multisteplr",
-        lr_scheduler_params: DictConfig | dict | None = None,
+        lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
         **kwargs: Any,
     ) -> None:
         """

@@ -167,7 +167,7 @@ def check_if_semi_supervised(losses_to_use: ListConfig | list | None = None) -> 
 
 
 def get_keypoint_names(
-    cfg: DictConfig | None = None,
+    cfg: DictConfig | ListConfig | None = None,
     csv_file: str | None = None,
     header_rows: list | None = [0, 1, 2],
 ) -> list[str]:

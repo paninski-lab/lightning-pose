@@ -39,7 +39,7 @@ class TestGetCfgFile:
     def test_get_cfg_file_raises_for_invalid_type(self):
         """Raises ValueError when cfg_file is neither str nor DictConfig."""
         with pytest.raises(ValueError, match='cfg_file must be str or DictConfig'):
-            _get_cfg_file(42)
+            _get_cfg_file(42)  # type: ignore[arg-type]
 
 
 class TestGetModelClass:

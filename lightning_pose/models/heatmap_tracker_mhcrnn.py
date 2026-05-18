@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 import torch
 from jaxtyping import Float
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
 
 from lightning_pose.data.datatypes import (
     HeatmapLabeledBatchDict,
@@ -39,9 +39,9 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
         downsample_factor: Literal[1, 2, 3] = 2,
         torch_seed: int = 123,
         optimizer: str = "Adam",
-        optimizer_params: DictConfig | dict | None = None,
+        optimizer_params: DictConfig | ListConfig | dict | None = None,
         lr_scheduler: str = "multisteplr",
-        lr_scheduler_params: DictConfig | dict | None = None,
+        lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
         **kwargs: Any,
     ):
         """Initialize a DLC-like model with resnet backbone.
@@ -244,9 +244,9 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
         pretrained: bool = True,
         torch_seed: int = 123,
         optimizer: str = "Adam",
-        optimizer_params: DictConfig | dict | None = None,
+        optimizer_params: DictConfig | ListConfig | dict | None = None,
         lr_scheduler: str = "multisteplr",
-        lr_scheduler_params: DictConfig | dict | None = None,
+        lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
         **kwargs: Any,
     ):
         """

@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 import torch
 from jaxtyping import Float
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
 from torch import nn
 
 from lightning_pose.data.cameras import project_3d_to_2d, project_camera_pairs_to_3d
@@ -48,9 +48,9 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         downsample_factor: Literal[1, 2, 3] = 2,
         torch_seed: int = 123,
         optimizer: str = "Adam",
-        optimizer_params: DictConfig | dict | None = None,
+        optimizer_params: DictConfig | ListConfig | dict | None = None,
         lr_scheduler: str = "multisteplr",
-        lr_scheduler_params: DictConfig | dict | None = None,
+        lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
         image_size: int = 256,
         **kwargs: Any,
     ):
@@ -361,9 +361,9 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(
         downsample_factor: Literal[1, 2, 3] = 2,
         torch_seed: int = 123,
         optimizer: str = "Adam",
-        optimizer_params: DictConfig | dict | None = None,
+        optimizer_params: DictConfig | ListConfig | dict | None = None,
         lr_scheduler: str = "multisteplr",
-        lr_scheduler_params: DictConfig | dict | None = None,
+        lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
         image_size: int = 256,
         **kwargs: Any,
     ):

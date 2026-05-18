@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from omegaconf import DictConfig, OmegaConf, open_dict
+from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 
 __all__ = ["ModelConfig"]
 
@@ -17,7 +17,7 @@ class ModelConfig:
     def from_yaml_file(filepath):
         return ModelConfig(OmegaConf.load(filepath))
 
-    def __init__(self, cfg: DictConfig):
+    def __init__(self, cfg: DictConfig | ListConfig):
         # Patch keypoint_names with keypoints in case the user
         # is predicting on an LP App's model.
         # https://github.com/paninski-lab/lightning-pose/issues/268

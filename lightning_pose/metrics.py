@@ -118,6 +118,7 @@ def pca_multiview_reprojection_error(
         keypoints_pred = torch.tensor(keypoints_pred, device=pca.device, dtype=torch.float32)
     original_dims = keypoints_pred.shape
 
+    assert pca.mirrored_column_matches is not None
     mirrored_column_matches = list(pca.mirrored_column_matches)
 
     # reshape: loss class expects a single last dim with num_keypoints * 2

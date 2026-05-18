@@ -9,7 +9,7 @@ import nvidia.dali.types as types
 import torch
 from nvidia.dali import pipeline_def
 from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
 from lightning_pose.data.datatypes import (
@@ -251,7 +251,7 @@ class PrepareDALI:
         model_type: Literal["base", "context"],
         filenames: list[str] | list[list[str]],
         resize_dims: list[int],
-        dali_config: dict | DictConfig = None,
+        dali_config: dict | DictConfig | ListConfig | None = None,
         imgaug: str | None = "default",
         num_threads: int = 1,
     ) -> None:

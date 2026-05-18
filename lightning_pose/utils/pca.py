@@ -103,6 +103,7 @@ class KeypointPCA:
         # keypoints views from multiple views.
         data_arr = data_arr.reshape(data_arr.shape[0], data_arr.shape[1] // 2, 2)
         # shape = (batch_size, num_keypoints, 2)
+        assert self.mirrored_column_matches is not None
         data_arr = format_multiview_data_for_pca(
             data_arr=data_arr,
             mirrored_column_matches=self.mirrored_column_matches,

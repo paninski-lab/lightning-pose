@@ -48,7 +48,11 @@ def chdir(dir: str | Path):
         os.chdir(pwd)
 
 
-def train(cfg: DictConfig, model_dir: str | Path | None = None, skip_evaluation=False) -> Model:
+def train(
+    cfg: DictConfig | ListConfig,
+    model_dir: str | Path | None = None,
+    skip_evaluation=False,
+) -> Model:
     """
     Trains a model using the configuration `cfg`. Saves model to `model_dir`
     (defaults to cwd if unspecified).
@@ -204,7 +208,7 @@ def _predict_test_videos(model: Model):
                 )
 
 
-def _train(cfg: DictConfig, status_file: Path = None) -> Model:
+def _train(cfg: DictConfig | ListConfig, status_file: Path = None) -> Model:
     # reset all seeds
     seed = 0
     os.environ["PYTHONHASHSEED"] = str(seed)

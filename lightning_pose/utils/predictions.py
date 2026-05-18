@@ -17,7 +17,7 @@ import pandas as pd
 import torch
 from jaxtyping import Float
 from moviepy import VideoFileClip
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from lightning_pose.callbacks import JSONInferenceProgressTracker
 from lightning_pose.data.dali import PrepareDALI
@@ -41,7 +41,7 @@ __all__ = [
 ]
 
 
-def _get_cfg_file(cfg_file: str | DictConfig):
+def _get_cfg_file(cfg_file: str | DictConfig | ListConfig):
     """Load yaml configuration files."""
     if isinstance(cfg_file, str):
         # load configuration file
@@ -59,7 +59,7 @@ class PredictionHandler:
 
     def __init__(
         self,
-        cfg: DictConfig,
+        cfg: DictConfig | ListConfig,
         data_module: pl.LightningDataModule | None = None,
         video_file: str | None = None,
     ) -> None:
@@ -296,7 +296,7 @@ class PredictionHandler:
 
 
 def predict_dataset(
-    cfg: DictConfig,
+    cfg: DictConfig | ListConfig,
     data_module: BaseDataModule,
     preds_file: str | list[str],
     ckpt_file: str | None = None,
@@ -370,7 +370,7 @@ def predict_dataset(
 
 
 def predict_single_video(
-    cfg_file: str | DictConfig,
+    cfg_file: str | DictConfig | ListConfig,
     video_file: str,
     preds_file: str,
     data_module: BaseDataModule | UnlabeledDataModule | None = None,
@@ -470,7 +470,10 @@ def predict_single_video(
     return preds_df
 
 
-def make_dlc_pandas_index(cfg: DictConfig, keypoint_names: list[str]) -> pd.MultiIndex:
+def make_dlc_pandas_index(
+    cfg: DictConfig | ListConfig,
+    keypoint_names: list[str],
+) -> pd.MultiIndex:
     xyl_labels = ["x", "y", "likelihood"]
     pdindex = pd.MultiIndex.from_product(
         [[f"{cfg.model.model_type}_tracker"], keypoint_names, xyl_labels],
@@ -527,7 +530,7 @@ def get_model_class(map_type: str, semi_supervised: bool) -> type[ALLOWED_MODELS
 
 
 def load_model_from_checkpoint(
-    cfg: DictConfig,
+    cfg: DictConfig | ListConfig,
     ckpt_file: str,
     eval: bool = False,
     data_module: BaseDataModule | UnlabeledDataModule | None = None,
@@ -787,7 +790,7 @@ def create_labeled_video(
 
 def export_predictions_and_labeled_video(
     video_file: str,
-    cfg: DictConfig,
+    cfg: DictConfig | ListConfig,
     prediction_csv_file: str,
     ckpt_file: str | None = None,
     trainer: pl.Trainer | None = None,

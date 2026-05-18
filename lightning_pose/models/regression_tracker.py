@@ -4,7 +4,7 @@ from typing import Any
 
 import torch
 from jaxtyping import Float
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
 
 from lightning_pose.data.datatypes import BaseLabeledBatchDict, UnlabeledBatchDict
 from lightning_pose.data.utils import undo_affine_transform
@@ -29,9 +29,9 @@ class RegressionTracker(BaseSupervisedTracker):
         pretrained: bool = True,
         torch_seed: int = 123,
         optimizer: str = "Adam",
-        optimizer_params: DictConfig | dict | None = None,
+        optimizer_params: DictConfig | ListConfig | dict | None = None,
         lr_scheduler: str = "multisteplr",
-        lr_scheduler_params: DictConfig | dict | None = None,
+        lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
         **kwargs: Any,
     ) -> None:
         """Base model that produces (x, y) coordinates of keypoints from images.
@@ -150,9 +150,9 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         pretrained: bool = True,
         torch_seed: int = 123,
         optimizer: str = "Adam",
-        optimizer_params: DictConfig | dict | None = None,
+        optimizer_params: DictConfig | ListConfig | dict | None = None,
         lr_scheduler: str = "multisteplr",
-        lr_scheduler_params: DictConfig | dict | None = None,
+        lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
         **kwargs: Any,
     ) -> None:
         """

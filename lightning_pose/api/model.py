@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from lightning_pose.api.model_config import ModelConfig
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
@@ -77,7 +77,7 @@ class Model:
         self.config = config
 
     @property
-    def cfg(self) -> DictConfig:
+    def cfg(self) -> DictConfig | ListConfig:
         """The model configuration as an `omegaconf.DictConfig`."""
         return self.config.cfg
 
@@ -643,7 +643,7 @@ class Model:
         return MultiviewPredictionResult(predictions=df_dict, metrics=metrics)
 
 
-def _build_datamodule_pred(cfg: DictConfig):
+def _build_datamodule_pred(cfg: DictConfig | ListConfig):
     cfg_pred = copy.deepcopy(cfg)
     cfg_pred.training.imgaug = "default"
     imgaug_transform_pred = get_imgaug_transform(cfg=cfg_pred)

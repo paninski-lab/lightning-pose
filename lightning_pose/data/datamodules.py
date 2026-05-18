@@ -8,7 +8,7 @@ import imgaug.augmenters as iaa
 import lightning.pytorch as pl
 import torch
 from lightning.pytorch.utilities import CombinedLoader
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
 from torch.utils.data import DataLoader, Subset, random_split
 
 from lightning_pose.data.dali import PrepareDALI
@@ -200,7 +200,7 @@ class UnlabeledDataModule(BaseDataModule):
         self,
         dataset: torch.utils.data.Dataset,
         video_paths_list: list[str] | str,
-        dali_config: dict | DictConfig,
+        dali_config: dict | DictConfig | ListConfig,
         view_names: list[str] | None = None,
         train_batch_size: int = 16,
         val_batch_size: int = 16,

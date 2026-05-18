@@ -11,7 +11,7 @@ import lightning.pytorch as pl
 import numpy as np
 import pandas as pd
 import torch
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 from omegaconf.errors import ValidationError
 
 from lightning_pose.callbacks import (
@@ -58,7 +58,7 @@ __all__ = [
 ]
 
 
-def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
+def get_imgaug_transform(cfg: DictConfig | ListConfig) -> iaa.Sequential:
     """Create simple and flexible data transform pipeline that augments images and keypoints.
 
     Args:
@@ -110,11 +110,11 @@ def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
     else:
         raise TypeError(f"params is of type {type(params)}, must be str, dict, or DictConfig")
 
-    return imgaug_transform(params_dict)
+    return imgaug_transform(params_dict)  # type: ignore[arg-type]
 
 
 def get_dataset(
-    cfg: DictConfig,
+    cfg: DictConfig | ListConfig,
     data_dir: str,
     imgaug_transform: iaa.Sequential,
 ) -> BaseTrackingDataset | HeatmapDataset | MultiviewHeatmapDataset:
@@ -181,7 +181,7 @@ def get_dataset(
 
 
 def get_data_module(
-    cfg: DictConfig,
+    cfg: DictConfig | ListConfig,
     dataset: BaseTrackingDataset | HeatmapDataset | MultiviewHeatmapDataset,
     video_dir: str | None = None,
 ) -> BaseDataModule | UnlabeledDataModule:
@@ -267,7 +267,7 @@ def get_data_module(
 
 
 def get_loss_factories(
-    cfg: DictConfig,
+    cfg: DictConfig | ListConfig,
     data_module: BaseDataModule | UnlabeledDataModule,
 ) -> dict:
     """Create loss factory that orchestrates different losses during training."""
@@ -399,7 +399,7 @@ def get_loss_factories(
 
 
 def get_model(
-    cfg: DictConfig,
+    cfg: DictConfig | ListConfig,
     data_module: BaseDataModule | UnlabeledDataModule | None,
     loss_factories: dict[str, LossFactory] | dict[str, None]
 ) -> pl.LightningModule:
@@ -605,7 +605,7 @@ def get_model(
 
 
 def get_callbacks(
-    cfg: DictConfig,
+    cfg: DictConfig | ListConfig,
     early_stopping=False,
     checkpointing=True,
     lr_monitor=True,
@@ -697,7 +697,7 @@ def calculate_steps_per_epoch(data_module: BaseDataModule):
 
 
 def compute_metrics(
-    cfg: DictConfig,
+    cfg: DictConfig | ListConfig,
     preds_file: str | list[str] | Path | list[Path],
     data_module: BaseDataModule | UnlabeledDataModule | None = None,
 ) -> None:
@@ -742,7 +742,7 @@ def compute_metrics(
 
 
 def compute_metrics_single(
-    cfg: DictConfig,
+    cfg: DictConfig | ListConfig,
     labels_file: str | Path | None,
     preds_file: str | Path,
     data_module: BaseDataModule | UnlabeledDataModule | None = None,
