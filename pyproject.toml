@@ -47,11 +47,10 @@ dependencies = [
     "safetensors",
     "scikit-learn (>=1.5.0)",
     "tensorboard (<3.0.0)",
-    "torchtyping",
+    "jaxtyping",
     "torch (<3.0.0)",
     "torchvision",
     "transformers>=4.57.5",
-    "typeguard",
     "nvidia-dali-cuda110",
 ]
 
@@ -71,6 +70,7 @@ litpose = "lightning_pose.cli.main:main"
 [project.optional-dependencies]
 dev = [
     "pre-commit",
+    "pyright",
     "pytest",
     "pytest-cov",
     "pytest-html",
@@ -107,14 +107,28 @@ select = [
     "B",   # flake8-bugbear (real bugs: mutable defaults, broad excepts, etc.)
     # "N",   # pep8-naming
 ]
-ignore = ["B006", "E203", "F821"]
+ignore = [
+    "B006",  # mutable default arguments are used intentionally in some places
+    "E203",  # whitespace before ':' conflicts with black-style slice formatting
+    "F722",  # jaxtyping dim strings (e.g. "batch channels") are not Python expressions
+    "F821",  # undefined names in __all__ are flagged incorrectly for re-exports
+]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"lightning_pose/data/datatypes.py" = ["UP037"]  # TensorType dim labels must stay as strings
+"lightning_pose/data/datatypes.py" = ["UP037"]  # jaxtyping dim labels must stay as strings
 
 [tool.ruff.lint.isort]
 known-first-party = ["lightning_pose"]
+
+[tool.pyright]
+pythonVersion = "3.11"
+pythonPlatform = "Linux"
+typeCheckingMode = "basic"
+include = ["lightning_pose", "tests"]
+exclude = ["build", "configs", "data", "dist", "docs", "docker", "scripts"]
+# torch stubs don't re-export public functions at the top level (torch.tensor, torch.allclose, etc.)
+reportPrivateImportUsage = "none"
 
 [tool.coverage.run]
 # store paths relative to the repo root so that codecov can match coverage

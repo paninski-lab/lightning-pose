@@ -4,7 +4,6 @@ from typing import Literal
 
 import numpy as np
 import torch
-from torchtyping import TensorType
 
 # to ignore imports for sphix-autoapidoc
 __all__ = []
@@ -16,7 +15,7 @@ class EmpiricalEpsilon:
     def __init__(self, percentile: float) -> None:
         self.percentile = percentile
 
-    def __call__(self, loss: TensorType | np.ndarray) -> float:
+    def __call__(self, loss: torch.Tensor | np.ndarray) -> float:
         """Compute the percentile of some loss, to use an for epsilon-insensitive loss.
 
         Args:

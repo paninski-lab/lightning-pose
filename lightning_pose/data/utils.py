@@ -1,13 +1,12 @@
 """Dataset/data module utilities."""
 import os
-from typing import Any, Literal
+from typing import Literal
 
 import imgaug.augmenters as iaa
 import lightning.pytorch as pl
 import numpy as np
 import torch
-from torchtyping import TensorType
-from typeguard import typechecked
+from jaxtyping import Float, Shaped
 
 from lightning_pose.data.datatypes import (
     HeatmapLabeledBatchDict,
@@ -171,10 +170,10 @@ class DataExtractor:
     def iterate_over_dataloader(
         self, loader: torch.utils.data.DataLoader
     ) -> tuple[
-        TensorType["num_examples", Any],
+        Shaped[torch.Tensor, "num_examples"],
         (
-            TensorType["num_examples", 3, "image_width", "image_height"]
-            | TensorType["num_examples", "frames", 3, "image_width", "image_height"]
+            Float[torch.Tensor, "num_examples 3 image_width image_height"]
+            | Float[torch.Tensor, "num_examples frames 3 image_width image_height"]
             | None
         ),
     ]:
@@ -200,10 +199,10 @@ class DataExtractor:
     def __call__(
         self,
     ) -> tuple[
-        TensorType["num_examples", Any],
+        Shaped[torch.Tensor, "num_examples"],
         (
-            TensorType["num_examples", 3, "image_width", "image_height"]
-            | TensorType["num_examples", "frames", 3, "image_width", "image_height"]
+            Float[torch.Tensor, "num_examples 3 image_width image_height"]
+            | Float[torch.Tensor, "num_examples frames 3 image_width image_height"]
             | None
         ),
     ]:
@@ -212,7 +211,6 @@ class DataExtractor:
         return self.iterate_over_dataloader(loader)
 
 
-@typechecked
 def split_sizes_from_probabilities(
     total_number: int,
     train_probability: float,
@@ -270,7 +268,6 @@ def split_sizes_from_probabilities(
     return [train_number, val_number, test_number]
 
 
-@typechecked
 def clean_any_nans(data: torch.Tensor, dim: int) -> torch.Tensor:
     """Remove samples from a data array that contain nans."""
     # currently supports only 2D arrays
@@ -283,7 +280,6 @@ def clean_any_nans(data: torch.Tensor, dim: int) -> torch.Tensor:
         return data[~nan_bool]
 
 
-@typechecked
 def count_frames(video_file: str) -> int:
     """
     Simple function to count the number of frames in a video.
@@ -299,7 +295,6 @@ def count_frames(video_file: str) -> int:
     return num_frames
 
 
-@typechecked
 def compute_num_train_frames(
     len_train_dataset: int,
     train_frames: int | float | None = None,
@@ -338,16 +333,15 @@ def compute_num_train_frames(
     return n_train_frames
 
 
-# @typechecked
 def generate_heatmaps(
-    keypoints: TensorType["batch", "num_keypoints", 2],
+    keypoints: Float[torch.Tensor, "batch num_keypoints 2"],
     height: int,
     width: int,
     output_shape: tuple[int, int],
     sigma: float = 1.25,
     uniform_heatmaps: bool = False,
     keep_gradients: bool = False,
-) -> TensorType["batch", "num_keypoints", "height", "width"]:
+) -> Float[torch.Tensor, "batch num_keypoints height width"]:
     """Generate 2D Gaussian heatmaps from mean and sigma.
 
     Args:
@@ -419,13 +413,12 @@ def generate_heatmaps(
     return heatmaps
 
 
-# @typechecked
 def evaluate_heatmaps_at_location(
-    heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width"],
-    locs: TensorType["batch", "num_keypoints", 2],
+    heatmaps: Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"],
+    locs: Float[torch.Tensor, "batch num_keypoints 2"],
     sigma: float = 1.25,  # sigma used for generating heatmaps
     num_stds: int = 2,  # num standard deviations of pixels to compute confidence
-) -> TensorType["batch", "num_keypoints"]:
+) -> Float[torch.Tensor, "batch num_keypoints"]:
     """Evaluate 4D heatmaps using a 3D location tensor (last dim is x, y coords). Since
     the model outputs heatmaps with a standard deviation of sigma, confidence will be
     spread across neighboring pixels. To account for this, confidence is computed by
@@ -463,11 +456,10 @@ def evaluate_heatmaps_at_location(
     return vals
 
 
-# @typechecked
 def undo_affine_transform(
-    keypoints: TensorType["seq_len", "num_keypoints", 2],
-    transform: TensorType["seq_len", 2, 3] | TensorType[2, 3],
-) -> TensorType["seq_len", "num_keypoints", 2]:
+    keypoints: Float[torch.Tensor, "seq_len num_keypoints 2"],
+    transform: Float[torch.Tensor, "seq_len 2 3"] | Float[torch.Tensor, "2 3"],
+) -> Float[torch.Tensor, "seq_len num_keypoints 2"]:
     """Undo an affine transform given a tensor of keypoints and the tranform matrix."""
 
     # add 1s to get keypoints in projective geometry coords
@@ -517,17 +509,17 @@ def undo_affine_transform(
 
 
 def undo_affine_transform_batch(
-    keypoints_augmented: TensorType["seq_len", "num_keypointsx2"],
+    keypoints_augmented: Float[torch.Tensor, "seq_len num_keypointsx2"],
     transforms: (
-        TensorType["seq_len", "h":2, "w":3]
-        | TensorType["h":2, "w":3]
-        | TensorType["seq_len", "null":1]
-        | TensorType["null":1]
-        | TensorType["num_views", "h":2, "w":3]
-        | TensorType["num_views", "null":1, "null":1]
+        Float[torch.Tensor, "seq_len h w"]
+        | Float[torch.Tensor, "h w"]
+        | Float[torch.Tensor, "seq_len 1"]
+        | Float[torch.Tensor, "1"]
+        | Float[torch.Tensor, "num_views h w"]
+        | Float[torch.Tensor, "num_views 1 1"]
     ),
     is_multiview: bool = False,
-) -> TensorType["seq_len", "num_keypointsx2"]:
+) -> Float[torch.Tensor, "seq_len num_keypointsx2"]:
     """Potentially undo an affine transform given a tensor of keypoints and the tranform matrix."""
 
     # undo augmentation if needed
@@ -563,9 +555,9 @@ def undo_affine_transform_batch(
 
 
 def normalized_to_bbox(
-    keypoints: TensorType["batch", "num_keypoints", "xy":2],
-    bbox: TensorType["batch", "xyhw":4]
-) -> TensorType["batch", "num_keypoints", "xy":2]:
+    keypoints: Float[torch.Tensor, "batch num_keypoints xy"],
+    bbox: Float[torch.Tensor, "batch xyhw"]
+) -> Float[torch.Tensor, "batch num_keypoints xy"]:
     """Transform keypoints from normalized coordinates to bbox coordinates"""
     if keypoints.shape[0] == bbox.shape[0]:
         # normal batch
@@ -589,9 +581,9 @@ def convert_bbox_coords(
         | MultiviewUnlabeledBatchDict
         | UnlabeledBatchDict
     ),
-    predicted_keypoints: TensorType["batch", "num_targets"],
+    predicted_keypoints: Float[torch.Tensor, "batch num_targets"],
     in_place: bool = True,
-) -> TensorType["batch", "num_targets"]:
+) -> Float[torch.Tensor, "batch num_targets"]:
     """Transform keypoints from bbox coordinates to absolute frame coordinates."""
     num_targets = predicted_keypoints.shape[1]
     num_keypoints = num_targets // 2
@@ -645,8 +637,8 @@ def convert_bbox_coords(
 
 def convert_original_to_model_coords(
     batch_dict: MultiviewHeatmapLabeledBatchDict,
-    original_keypoints: TensorType["batch", "num_views", "num_keypoints", 2],
-) -> TensorType["batch", "num_views", "num_keypoints", 2]:
+    original_keypoints: Float[torch.Tensor, "batch num_views num_keypoints 2"],
+) -> Float[torch.Tensor, "batch num_views num_keypoints 2"]:
     """Transform keypoints from original frame coordinates to model input coordinates."""
 
     batch_size, num_views, num_keypoints, _ = original_keypoints.shape
@@ -673,11 +665,11 @@ def convert_original_to_model_coords(
 
 
 def original_to_model(
-    keypoints: TensorType["batch", "num_keypoints", 2],
-    bbox: TensorType["batch", 4],
+    keypoints: Float[torch.Tensor, "batch num_keypoints 2"],
+    bbox: Float[torch.Tensor, "batch 4"],
     model_width: float,
     model_height: float,
-) -> TensorType["batch", "num_keypoints", 2]:
+) -> Float[torch.Tensor, "batch num_keypoints 2"]:
     """Convert keypoints from original image coordinates to model input coordinates.
 
     This combines the transformations:

@@ -154,3 +154,4 @@ tb_logs
 tests/utils/test_cropzoom_data/
 tests/api/test_model_mirror_mouse/
 tests/api/test_model_mirror_mouse_multiview/
+scratch/

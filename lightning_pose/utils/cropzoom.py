@@ -8,7 +8,6 @@ import tqdm
 from moviepy import VideoFileClip
 from omegaconf import DictConfig
 from PIL import Image
-from typeguard import typechecked
 
 from lightning_pose.utils import io
 
@@ -19,7 +18,6 @@ __all__ = [
 ]
 
 
-@typechecked
 def _calculate_bbox_size(keypoints_per_frame: np.ndarray, crop_ratio: float = 1.0) -> np.ndarray:
     """Computes bounding box size for each frame.
 
@@ -54,7 +52,6 @@ def _calculate_bbox_size(keypoints_per_frame: np.ndarray, crop_ratio: float = 1.
     return bbox_sizes
 
 
-@typechecked
 def _compute_bbox_df(
     pred_df: pd.DataFrame, anchor_keypoints: list[str], crop_ratio: float = 1.0
 ) -> pd.DataFrame:
@@ -117,7 +114,6 @@ def _star_crop_image(args):
     return _crop_image(*args)
 
 
-@typechecked
 def _crop_images(bbox_df: pd.DataFrame, root_directory: Path, output_directory: Path) -> None:
     """
     Crops a directory of images based on bounding box data provided in a DataFrame and stores
@@ -189,7 +185,6 @@ def _crop_images(bbox_df: pd.DataFrame, root_directory: Path, output_directory: 
             pass
 
 
-@typechecked
 def _crop_video_moviepy(video_file: Path, bbox_df: pd.DataFrame, output_file: Path):
     """
     Crops a video using bounding box dimensions specified in a DataFrame and saves the
@@ -254,7 +249,6 @@ def _crop_video_moviepy(video_file: Path, bbox_df: pd.DataFrame, output_file: Pa
     cropped_clip.write_videofile(str(output_file), codec="libx264")
 
 
-@typechecked
 def generate_cropped_labeled_frames(
     input_data_dir: Path,
     input_csv_file: Path,
@@ -288,7 +282,6 @@ def generate_cropped_labeled_frames(
     )
 
 
-@typechecked
 def generate_cropped_video(
     input_video_file: Path,
     input_preds_file: Path,

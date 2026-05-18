@@ -3,9 +3,8 @@
 from typing import Any, Literal
 
 import torch
+from jaxtyping import Float
 from omegaconf import DictConfig
-from torchtyping import TensorType
-from typeguard import typechecked
 
 from lightning_pose.data.datatypes import (
     HeatmapLabeledBatchDict,
@@ -112,30 +111,30 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
     def forward(
         self,
         images: (
-            TensorType["batch", "frames", "channels":3, "image_height", "image_width"]
-            | TensorType["batch", "channels":3, "image_height", "image_width"]
-            | TensorType["batch", "view", "frames", "channels":3, "image_height", "image_width"]
-            | TensorType["batch", "view", "channels":3, "image_height", "image_width"]
+            Float[torch.Tensor, "batch frames channels image_height image_width"]
+            | Float[torch.Tensor, "batch channels image_height image_width"]
+            | Float[torch.Tensor, "batch view frames channels image_height image_width"]
+            | Float[torch.Tensor, "batch view channels image_height image_width"]
         ),
         is_multiview: bool = False,
     ) -> tuple[
-            TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"],
-            TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"],
+            Float[torch.Tensor, "num_valid_outputs num_keypoints heatmap_height heatmap_width"],
+            Float[torch.Tensor, "num_valid_outputs num_keypoints heatmap_height heatmap_width"],
     ]:
         """Forward pass through the network.
 
         Batch options
         -------------
-        - TensorType["batch", "frames", "channels":3, "image_height", "image_width"]
+        - Float[torch.Tensor, "batch frames channels image_height image_width"]
           single view, labeled context batch
 
-        - TensorType["batch", "channels":3, "image_height", "image_width"]
+        - Float[torch.Tensor, "batch channels image_height image_width"]
           single view, unlabeled batch from DALI
 
-        - TensorType["batch", "view", "frames", "channels":3, "image_height", "image_width"]
+        - Float[torch.Tensor, "batch view frames channels image_height image_width"]
           multivew, labeled context batch
 
-        - TensorType["batch", "view", "channels":3, "image_height", "image_width"]
+        - Float[torch.Tensor, "batch view channels image_height image_width"]
           multiview, unlabeled batch from DALI
 
         """
@@ -232,7 +231,6 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
         return params
 
 
-@typechecked
 class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrackerMHCRNN):
     """Model produces heatmaps of keypoints from labeled/unlabeled images."""
 

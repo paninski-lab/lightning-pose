@@ -3,9 +3,8 @@
 from typing import Any
 
 import torch
+from jaxtyping import Float
 from omegaconf import DictConfig
-from torchtyping import TensorType
-from typeguard import typechecked
 
 from lightning_pose.data.datatypes import BaseLabeledBatchDict, UnlabeledBatchDict
 from lightning_pose.data.utils import undo_affine_transform
@@ -88,8 +87,8 @@ class RegressionTracker(BaseSupervisedTracker):
 
     def forward(
         self,
-        images: TensorType["batch", "channels":3, "image_height", "image_width"]
-    ) -> TensorType["batch", "two_x_num_keypoints"]:
+        images: Float[torch.Tensor, "batch channels image_height image_width"]
+    ) -> Float[torch.Tensor, "batch two_x_num_keypoints"]:
         """Forward pass through the network."""
         # see input lines for shape of "images"
         representations = self.get_representations(images)
@@ -139,7 +138,6 @@ class RegressionTracker(BaseSupervisedTracker):
         return params
 
 
-@typechecked
 class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTracker):
     """Model produces vectors of keypoints from labeled/unlabeled images."""
 

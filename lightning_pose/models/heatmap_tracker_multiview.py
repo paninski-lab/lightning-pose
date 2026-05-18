@@ -4,9 +4,9 @@ import math
 from typing import Any, Literal
 
 import torch
+from jaxtyping import Float
 from omegaconf import DictConfig
 from torch import nn
-from torchtyping import TensorType
 
 from lightning_pose.data.cameras import project_3d_to_2d, project_camera_pairs_to_3d
 from lightning_pose.data.datatypes import (
@@ -135,7 +135,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
 
     def forward_vit(
         self,
-        images: TensorType["view * batch", "channels":3, "image_height", "image_width"],
+        images: Float[torch.Tensor, "view_x_batch channels image_height image_width"],
     ):
         """Override forward pass through the vision encoder to add view embeddings."""
 
@@ -210,12 +210,12 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
     def forward(
         self,
         batch_dict: MultiviewHeatmapLabeledBatchDict,
-    ) -> TensorType["num_valid_outputs", "num_keypoints", "heatmap_height", "heatmap_width"]:
+    ) -> Float[torch.Tensor, "num_valid_outputs num_keypoints heatmap_height heatmap_width"]:
         """Forward pass through the network.
 
         Batch options
         -------------
-        - TensorType["batch", "view", "channels":3, "image_height", "image_width"]
+        - Float[torch.Tensor, "batch view channels image_height image_width"]
           multiview labeled batch or unlabeled batch from DALI
 
         """

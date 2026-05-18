@@ -5,10 +5,10 @@ import cv2
 import numpy as np
 import torch
 from aniposelib.cameras import CameraGroup as CameraGroupAnipose
+from jaxtyping import Float
 from kornia.geometry.calibration import distort_points, undistort_points
 from kornia.geometry.camera import PinholeCamera
 from kornia.geometry.epipolar import triangulate_points
-from torchtyping import TensorType
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -19,11 +19,11 @@ __all__ = [
 
 
 def project_camera_pairs_to_3d(
-    points: TensorType["batch", "num_views", "num_keypoints", 2],
-    intrinsics: TensorType["batch", "num_views", 3, 3],
-    extrinsics: TensorType["batch", "num_views", 3, 4],
-    dist: TensorType["batch", "num_views", "num_params"],
-) -> TensorType["batch", "cam_pair", "num_keypoints", 3]:
+    points: Float[torch.Tensor, "batch num_views num_keypoints 2"],
+    intrinsics: Float[torch.Tensor, "batch num_views 3 3"],
+    extrinsics: Float[torch.Tensor, "batch num_views 3 4"],
+    dist: Float[torch.Tensor, "batch num_views num_params"],
+) -> Float[torch.Tensor, "batch cam_pair num_keypoints 3"]:
     """Project 2D keypoints from each pair of cameras into 3D world space."""
 
     num_batch, num_views, num_keypoints, _ = points.shape
@@ -83,11 +83,11 @@ def project_camera_pairs_to_3d(
 
 
 def project_3d_to_2d(
-    points_3d: TensorType["batch", "num_keypoints", 3],
-    intrinsics: TensorType["batch", "num_views", 3, 3],
-    extrinsics: TensorType["batch", "num_views", 3, 4],
-    dist: TensorType["batch", "num_views", "num_params"],
-) -> TensorType["batch", "num_views", "num_keypoints", 2]:
+    points_3d: Float[torch.Tensor, "batch num_keypoints 3"],
+    intrinsics: Float[torch.Tensor, "batch num_views 3 3"],
+    extrinsics: Float[torch.Tensor, "batch num_views 3 4"],
+    dist: Float[torch.Tensor, "batch num_views num_params"],
+) -> Float[torch.Tensor, "batch num_views num_keypoints 2"]:
     """Project 3D keypoints to 2D using camera parameters.
 
     Fully vectorized and differentiable implementation.

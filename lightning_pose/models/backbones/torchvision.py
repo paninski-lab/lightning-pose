@@ -2,7 +2,6 @@ from collections import OrderedDict
 
 import torch
 import torchvision.models as tvmodels
-from typeguard import typechecked
 
 from lightning_pose.models.backbones import ALLOWED_BACKBONES
 
@@ -10,7 +9,6 @@ from lightning_pose.models.backbones import ALLOWED_BACKBONES
 __all__ = []
 
 
-@typechecked
 def build_backbone(
     backbone_arch: ALLOWED_BACKBONES,
     pretrained: bool = True,
@@ -117,7 +115,6 @@ def build_backbone(
     return backbone, num_fc_input_features
 
 
-@typechecked
 def grab_layers_sequential(model, last_layer_ind: int) -> torch.nn.Sequential:
     """Package selected number of layers into a torch.nn.Sequential object.
 

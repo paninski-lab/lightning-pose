@@ -2,13 +2,11 @@ import math
 
 import safetensors
 import torch
-from typeguard import typechecked
 
 # to ignore imports for sphix-autoapidoc
 __all__ = []
 
 
-@typechecked
 def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
     """Load backbone weights for resnet models.
 

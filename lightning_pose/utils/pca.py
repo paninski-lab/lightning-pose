@@ -5,13 +5,12 @@ from typing import Literal
 
 import numpy as np
 import torch
+from jaxtyping import Float
 from omegaconf import ListConfig
 from sklearn.decomposition import PCA
 from sklearn.decomposition._pca import _infer_dimension
 from sklearn.utils._array_api import _convert_to_numpy, get_namespace
 from sklearn.utils.extmath import stable_cumsum, svd_flip
-from torchtyping import TensorType
-from typeguard import typechecked
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import MultiviewHeatmapDataset
@@ -96,8 +95,10 @@ class KeypointPCA:
         )()
 
     def _multiview_format(
-        self, data_arr: TensorType["num_original_samples", "num_original_dims"]
-    ) -> TensorType["num_original_samples_times_num_selected_keypoints", "two_times_num_views"]:
+        self, data_arr: Float[torch.Tensor, "num_original_samples num_original_dims"]
+    ) -> Float[
+        torch.Tensor, "num_original_samples_times_num_selected_keypoints two_times_num_views"
+    ]:
         # original shape = (batch, 2 * num_keypoints) where `num_keypoints` includes
         # keypoints views from multiple views.
         data_arr = data_arr.reshape(data_arr.shape[0], data_arr.shape[1] // 2, 2)
@@ -109,10 +110,10 @@ class KeypointPCA:
         return data_arr
 
     def _singleview_format(
-        self, data_arr: TensorType["num_original_samples", "num_original_dims"]
+        self, data_arr: Float[torch.Tensor, "num_original_samples num_original_dims"]
     ) -> (
-        TensorType["num_original_samples", "num_selected_dims"]
-        | TensorType["num_original_samples", "num_original_dims"]
+        Float[torch.Tensor, "num_original_samples num_selected_dims"]
+        | Float[torch.Tensor, "num_original_samples num_original_dims"]
     ):
         # original shape = (batch, 2 * num_keypoints)
         # reshape to (batch, num_keypoints, 2) to easily select columns
@@ -139,16 +140,13 @@ class KeypointPCA:
         return data_arr
 
     def _format_data(
-        self, data_arr: TensorType["num_original_samples", "num_original_dims"]
-    ) -> TensorType:
+        self, data_arr: Float[torch.Tensor, "num_original_samples num_original_dims"]
+    ) -> torch.Tensor:
         # Union[
-        #     TensorType["num_original_samples", "num_selected_dims"],  # singleview filtered
-        #     TensorType[
-        #         "num_original_samples", "num_original_dims"
-        #     ],  # singleview unfiltered
-        #     TensorType[
-        #         "num_original_samples_times_num_selected_keypoints", "two_times_num_views"
-        #     ]],  # multiview
+        #     Float[torch.Tensor, "num_original_samples num_selected_dims"],  # singleview filtered
+        #     Float[torch.Tensor, "num_original_samples num_original_dims"],  # unfiltered
+        #     Float[torch.Tensor,  # multiview
+        #         "num_original_samples_times_num_selected_keypoints two_times_num_views"]]
         if self.loss_type == "pca_multiview":
             return self._multiview_format(data_arr=data_arr)
         elif self.loss_type == "pca_singleview":
@@ -210,8 +208,8 @@ class KeypointPCA:
         )(loss=self.compute_reprojection_error())
 
     def reproject(
-        self, data_arr: TensorType["num_samples", "sample_dim"] | None = None
-    ) -> TensorType["num_samples", "sample_dim"]:
+        self, data_arr: Float[torch.Tensor, "num_samples sample_dim"] | None = None
+    ) -> Float[torch.Tensor, "num_samples sample_dim"]:
         """Reproject a data array using the fixed pca parameters.
 
         This transformation is implemented as in scikit-learn
@@ -240,8 +238,8 @@ class KeypointPCA:
         return reprojection
 
     def compute_reprojection_error(
-        self, data_arr: TensorType["num_samples", "sample_dim"] | None = None
-    ) -> TensorType["num_samples", "sample_dim_over_two"]:
+        self, data_arr: Float[torch.Tensor, "num_samples sample_dim"] | None = None
+    ) -> Float[torch.Tensor, "num_samples sample_dim_over_two"]:
         """returns error per 2D keypoint"""
         if data_arr is None:
             data_arr = self.data_arr.to(self.device)
@@ -551,7 +549,6 @@ class NaNPCA(PCA):
         return X_transformed
 
 
-@typechecked
 class ComponentChooser:
     """Determine the number of PCA components to keep."""
 
@@ -625,7 +622,6 @@ class ComponentChooser:
             return self._find_first_threshold_cross()
 
 
-@typechecked
 def pca_prints(pca: PCA, condition: str, components_to_keep: int) -> None:
     print(f"Results of running PCA ({condition}) on keypoints:")
     print(
@@ -637,11 +633,10 @@ def pca_prints(pca: PCA, condition: str, components_to_keep: int) -> None:
     print(f"Variance explained by {components_to_keep} components: {tev}")
 
 
-# @typechecked
 def format_multiview_data_for_pca(
-    data_arr: TensorType["batch", "num_keypoints", "2"],
+    data_arr: Float[torch.Tensor, "batch num_keypoints 2"],
     mirrored_column_matches: ListConfig | list,
-) -> TensorType["batch_times_num_selected_keypoints", "two_times_num_views"]:
+) -> Float[torch.Tensor, "batch_times_num_selected_keypoints two_times_num_views"]:
     """Reformat multiview data so each observation is a single body part across views.
 
     Args:

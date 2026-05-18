@@ -6,8 +6,8 @@ from typing import TypedDict
 
 import pandas as pd
 import torch
+from jaxtyping import Float, Int
 from nvidia.dali.plugin.pytorch import DALIGenericIterator
-from torchtyping import TensorType
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -56,38 +56,42 @@ class ComputeMetricsSingleResult:
 class BaseLabeledExampleDict(TypedDict):
     """Return type when calling __getitem__() on BaseTrackingDataset."""
     images: (
-        TensorType["RGB":3, "image_height", "image_width", float]
-        | TensorType["frames", "RGB":3, "image_height", "image_width", float]
+        Float[torch.Tensor, "RGB image_height image_width"]
+        | Float[torch.Tensor, "frames RGB image_height image_width"]
     )
-    keypoints: TensorType["num_targets", float]
-    bbox: TensorType["xyhw":4, float]
+    keypoints: Float[torch.Tensor, "num_targets"]
+    bbox: Float[torch.Tensor, "xyhw"]
     idxs: int
 
 
 class HeatmapLabeledExampleDict(BaseLabeledExampleDict):
     """Return type when calling __getitem__() on HeatmapTrackingDataset."""
-    heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width", float]
+    heatmaps: Float[torch.Tensor, "num_keypoints heatmap_height heatmap_width"]
 
 
 class MultiviewLabeledExampleDict(TypedDict):
     """Return type when calling __getitem__() on MultiviewDataset."""
     images: (
-        TensorType["num_views", "RGB":3, "image_height", "image_width", float]
-        | TensorType["num_views", "frames", "RGB":3, "image_height", "image_width", float]
+        Float[torch.Tensor, "num_views RGB image_height image_width"]
+        | Float[torch.Tensor, "num_views frames RGB image_height image_width"]
     )
-    keypoints: TensorType["num_targets", float]
-    bbox: TensorType["num_views", "xyhw":4, float]
+    keypoints: Float[torch.Tensor, "num_targets"]
+    bbox: Float[torch.Tensor, "num_views xyhw"]
     idxs: int
     num_views: int
     concat_order: list[str]
     view_names: list[str]
     # these attributes exist if camera calibration info is available
-    keypoints_3d: TensorType["num_keypoints", 3] | TensorType["null":1] | torch.Tensor
-    intrinsic_matrix: TensorType["num_views", 3, 3] | TensorType["null":1] | torch.Tensor
-    extrinsic_matrix: TensorType["num_views", 3, 4] | TensorType["null":1] | torch.Tensor
+    keypoints_3d: Float[torch.Tensor, "num_keypoints 3"] | Float[torch.Tensor, "1"] | torch.Tensor
+    intrinsic_matrix: (
+        Float[torch.Tensor, "num_views 3 3"] | Float[torch.Tensor, "1"] | torch.Tensor
+    )
+    extrinsic_matrix: (
+        Float[torch.Tensor, "num_views 3 4"] | Float[torch.Tensor, "1"] | torch.Tensor
+    )
     distortions: (
-        TensorType["num_views", "num_distortion_params"]
-        | TensorType["null":1]
+        Float[torch.Tensor, "num_views num_distortion_params"]
+        | Float[torch.Tensor, "1"]
         | torch.Tensor
     )
     # for distortion params info see
@@ -96,57 +100,60 @@ class MultiviewLabeledExampleDict(TypedDict):
 
 class MultiviewHeatmapLabeledExampleDict(MultiviewLabeledExampleDict):
     """Return type when calling __getitem__() on MultiviewHeatmapDataset."""
-    heatmaps: TensorType["num_keypoints", "heatmap_height", "heatmap_width", float]
+    heatmaps: Float[torch.Tensor, "num_keypoints heatmap_height heatmap_width"]
 
 
 class BaseLabeledBatchDict(TypedDict):
     """Batch type for base labeled data."""
     images: (
-        TensorType["batch", "RGB":3, "image_height", "image_width", float]
-        | TensorType["batch", "frames", "RGB":3, "image_height", "image_width", float]
+        Float[torch.Tensor, "batch RGB image_height image_width"]
+        | Float[torch.Tensor, "batch frames RGB image_height image_width"]
     )
-    keypoints: TensorType["batch", "num_targets", float]
-    bbox: TensorType["batch", "xyhw":4, float]
-    idxs: TensorType["batch", int]
+    keypoints: Float[torch.Tensor, "batch num_targets"]
+    bbox: Float[torch.Tensor, "batch xyhw"]
+    idxs: Int[torch.Tensor, "batch"]
 
 
 class HeatmapLabeledBatchDict(BaseLabeledBatchDict):
     """Batch type for heatmap labeled data."""
-    heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width", float]
+    heatmaps: Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"]
 
 
 class MultiviewLabeledBatchDict(TypedDict):
     """Batch type for multiview labeled data."""
     images: (
-        TensorType["batch", "num_views", "RGB":3, "image_height", "image_width", float]
-        | TensorType["batch", "num_views", "frames", "RGB":3, "image_height", "image_width", float]
+        Float[torch.Tensor, "batch num_views RGB image_height image_width"]
+        | Float[torch.Tensor, "batch num_views frames RGB image_height image_width"]
     )
-    keypoints: TensorType["batch", "num_targets", float]
-    bbox: TensorType["batch", "num_views * xyhw", float]
-    idxs: TensorType["batch", int]
-    num_views: TensorType["batch", int]
+    keypoints: Float[torch.Tensor, "batch num_targets"]
+    bbox: Float[torch.Tensor, "batch num_views_x_xyhw"]
+    idxs: Int[torch.Tensor, "batch"]
+    num_views: Int[torch.Tensor, "batch"]
     concat_order: list  # [Tuple[str]]
     view_names: list  # [Tuple[str]]
     # these attributes exist if camera calibration info is available
-    keypoints_3d: TensorType["batch", "num_keypoints", 3] | TensorType["batch", 1]
-    intrinsic_matrix: TensorType["batch", "num_views", 3, 3] | TensorType["batch", 1]
-    extrinsic_matrix: TensorType["batch", "num_views", 3, 4] | TensorType["batch", 1]
-    distortions: TensorType["batch", "num_views", "num_distortion_params"] | TensorType["batch", 1]
+    keypoints_3d: Float[torch.Tensor, "batch num_keypoints 3"] | Float[torch.Tensor, "batch 1"]
+    intrinsic_matrix: Float[torch.Tensor, "batch num_views 3 3"] | Float[torch.Tensor, "batch 1"]
+    extrinsic_matrix: Float[torch.Tensor, "batch num_views 3 4"] | Float[torch.Tensor, "batch 1"]
+    distortions: (
+        Float[torch.Tensor, "batch num_views num_distortion_params"]
+        | Float[torch.Tensor, "batch 1"]
+    )
 
 
 class MultiviewHeatmapLabeledBatchDict(MultiviewLabeledBatchDict):
     """Batch type for multiview heatmap labeled data."""
-    heatmaps: TensorType["batch", "num_keypoints", "heatmap_height", "heatmap_width", float]
+    heatmaps: Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"]
 
 
 class UnlabeledBatchDict(TypedDict):
     """Batch type for unlabeled data."""
-    frames: TensorType["seq_len", "RGB":3, "image_height", "image_width", float]
+    frames: Float[torch.Tensor, "seq_len RGB image_height image_width"]
     transforms: (
-        TensorType["seq_len", "h":2, "w":3, float]
-        | TensorType["h":2, "w":3, float]
-        | TensorType["seq_len", "null":1, float]
-        | TensorType["null":1, float]
+        Float[torch.Tensor, "seq_len h w"]
+        | Float[torch.Tensor, "h w"]
+        | Float[torch.Tensor, "seq_len 1"]
+        | Float[torch.Tensor, "1"]
         | torch.Tensor
     )
     # transforms shapes
@@ -156,19 +163,19 @@ class UnlabeledBatchDict(TypedDict):
     # (1,): no transforms
     # torch.Tensor: necessary, getting error about torch.AnnotatedAlias that I don't understand
 
-    bbox: TensorType["seq_len", "xyhw":4, float]
+    bbox: Float[torch.Tensor, "seq_len xyhw"]
     is_multiview: bool = False  # helps with downstream logic since isinstance fails on TypedDicts
 
 
 class MultiviewUnlabeledBatchDict(TypedDict):
     """Batch type for multiview unlabeled data."""
-    frames: TensorType["seq_len", "num_views", "RGB":3, "image_height", "image_width", float]
+    frames: Float[torch.Tensor, "seq_len num_views RGB image_height image_width"]
     transforms: (
-        TensorType["num_views", "h":2, "w":3, float]
-        | TensorType["num_views", "null":1, "null":1, float]
+        Float[torch.Tensor, "num_views h w"]
+        | Float[torch.Tensor, "num_views 1 1"]
         | torch.Tensor
     )
-    bbox: TensorType["seq_len", "num_views * xyhw", float]
+    bbox: Float[torch.Tensor, "seq_len num_views_x_xyhw"]
     is_multiview: bool = True  # helps with downstream logic since isinstance fails on TypedDicts
 
 

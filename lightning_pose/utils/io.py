@@ -11,7 +11,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from omegaconf import DictConfig, ListConfig
-from typeguard import typechecked
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -29,7 +28,6 @@ __all__ = [
 ]
 
 
-@typechecked
 def ckpt_path_from_base_path(
     base_path: str,
     model_name: str,
@@ -141,7 +139,6 @@ def ckpt_path_from_base_path(
                 )
 
 
-@typechecked
 def check_if_semi_supervised(losses_to_use: ListConfig | list | None = None) -> bool:
     """Use config file to determine if model is semi-supervised.
 
@@ -169,7 +166,6 @@ def check_if_semi_supervised(losses_to_use: ListConfig | list | None = None) -> 
     return semi_supervised
 
 
-@typechecked
 def get_keypoint_names(
     cfg: DictConfig | None = None,
     csv_file: str | None = None,
@@ -203,7 +199,6 @@ def get_keypoint_names(
 # --------------------------------------------------------------------------------------
 
 
-@typechecked
 def return_absolute_path(possibly_relative_path: str, n_dirs_back: int = 3) -> str:
     """Return absolute path from possibly relative path."""
     if os.path.isabs(possibly_relative_path):
@@ -222,7 +217,6 @@ def return_absolute_path(possibly_relative_path: str, n_dirs_back: int = 3) -> s
     return abs_path
 
 
-@typechecked
 def return_absolute_data_paths(
     data_cfg: DictConfig, n_dirs_back: int = 3
 ) -> tuple[str, str]:
@@ -250,7 +244,6 @@ def return_absolute_data_paths(
     return data_dir, video_dir
 
 
-@typechecked
 def get_videos_in_dir(
     video_dir: str, view_names: list[str] | None = None, return_mp4_only: bool = True
 ) -> list[str] | list[list[str]]:
@@ -302,7 +295,6 @@ def get_videos_in_dir(
     return video_files
 
 
-@typechecked
 def check_video_paths(
     video_paths: list[str] | str,
     view_names: list[str] | None = None,
@@ -360,7 +352,6 @@ def collect_video_files_by_view(
     return video_files_by_view
 
 
-@typechecked
 def get_context_img_paths(center_img_path: Path) -> list[Path]:
     """Given the path to a center image frame, return paths of 5 context frames
     (n-2, n-1, n, n+1, n+2).
