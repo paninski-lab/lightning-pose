@@ -135,7 +135,9 @@ def test_backbones_vit():
             from transformers.models.dinov2.modeling_dinov2 import Dinov2Embeddings
             assert isinstance(model.backbone.vision_encoder.embeddings, Dinov2Embeddings)
         elif backbone in ["vits_dinov3", "vitb_dinov3"]:
-            from transformers.models.dinov3_vit.modeling_dinov3_vit import Dinov3ViTEmbeddings
+            from transformers.models.dinov3_vit.modeling_dinov3_vit import (
+                Dinov3ViTEmbeddings,  # type: ignore[attr-defined]
+            )
             assert isinstance(model.backbone.vision_encoder.embeddings, Dinov3ViTEmbeddings)
         # remove model from gpu; then cache can be cleared
         del model

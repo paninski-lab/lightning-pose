@@ -1,6 +1,6 @@
 import math
 
-import safetensors
+import safetensors.torch
 import torch
 
 # to ignore imports for sphix-autoapidoc

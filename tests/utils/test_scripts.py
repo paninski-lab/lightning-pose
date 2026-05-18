@@ -9,10 +9,10 @@ import copy
 import os
 from unittest.mock import Mock
 
-import lightning.pytorch as pl
 import numpy as np
 import pytest
 import torch
+from lightning.pytorch.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
 from omegaconf import OmegaConf
 from omegaconf.errors import ValidationError
 from PIL import Image
@@ -622,8 +622,8 @@ class TestGetCallbacks:
         callbacks = get_callbacks(cfg_tmp)
         types = [type(cb) for cb in callbacks]
         assert UnfreezeBackbone in types
-        assert pl.callbacks.LearningRateMonitor in types
-        assert pl.callbacks.ModelCheckpoint in types
+        assert LearningRateMonitor in types
+        assert ModelCheckpoint in types
 
     def test_get_callbacks_with_early_stopping(self, cfg):
         """early_stopping=True adds an EarlyStopping callback."""
@@ -631,7 +631,7 @@ class TestGetCallbacks:
         cfg_tmp.model.losses_to_use = []
         callbacks = get_callbacks(cfg_tmp, early_stopping=True)
         types = [type(cb) for cb in callbacks]
-        assert pl.callbacks.EarlyStopping in types
+        assert EarlyStopping in types
 
     def test_get_callbacks_without_backbone_unfreeze(self, cfg):
         """backbone_unfreeze=False omits UnfreezeBackbone."""
@@ -647,7 +647,7 @@ class TestGetCallbacks:
         cfg_tmp.model.losses_to_use = []
         callbacks = get_callbacks(cfg_tmp, lr_monitor=False)
         types = [type(cb) for cb in callbacks]
-        assert pl.callbacks.LearningRateMonitor not in types
+        assert LearningRateMonitor not in types
 
     def test_get_callbacks_without_checkpointing(self, cfg):
         """checkpointing=False omits the best-model ModelCheckpoint."""
@@ -655,14 +655,14 @@ class TestGetCallbacks:
         cfg_tmp.model.losses_to_use = []
         callbacks = get_callbacks(cfg_tmp, checkpointing=False)
         types = [type(cb) for cb in callbacks]
-        assert pl.callbacks.ModelCheckpoint not in types
+        assert ModelCheckpoint not in types
 
     def test_get_callbacks_with_ckpt_every_n_epochs(self, cfg):
         """ckpt_every_n_epochs adds a second ModelCheckpoint that fires periodically."""
         cfg_tmp = copy.deepcopy(cfg)
         cfg_tmp.model.losses_to_use = []
         callbacks = get_callbacks(cfg_tmp, ckpt_every_n_epochs=5)
-        ckpt_callbacks = [cb for cb in callbacks if isinstance(cb, pl.callbacks.ModelCheckpoint)]
+        ckpt_callbacks = [cb for cb in callbacks if isinstance(cb, ModelCheckpoint)]
         assert len(ckpt_callbacks) == 2
 
     def test_get_callbacks_with_unsupervised_losses(self, cfg):

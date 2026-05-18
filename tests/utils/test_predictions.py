@@ -7,6 +7,7 @@ import os
 import lightning.pytorch as pl
 import pytest
 import torch
+from lightning.pytorch.callbacks import ModelCheckpoint
 from omegaconf import DictConfig, OmegaConf
 
 from lightning_pose.utils.predictions import (
@@ -127,7 +128,7 @@ def test_predict_dataset(cfg, heatmap_data_module, tmpdir):
     model = get_model(cfg=cfg_tmp, data_module=heatmap_data_module, loss_factories=loss_factories)
 
     # make a checkpoint callback so we know where model is saved
-    ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(dirpath=str(tmpdir))
+    ckpt_callback = ModelCheckpoint(dirpath=str(tmpdir))
 
     # train model for a couple epochs
     trainer = pl.Trainer(
@@ -196,7 +197,7 @@ def test_predict_single_video(cfg, heatmap_data_module, video_list, tmpdir):
     model = get_model(cfg=cfg_tmp, data_module=heatmap_data_module, loss_factories=loss_factories)
 
     # make a checkpoint callback so we know where model is saved
-    ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(dirpath=str(tmpdir))
+    ckpt_callback = ModelCheckpoint(dirpath=str(tmpdir))
 
     # train model for a couple epochs
     trainer = pl.Trainer(
@@ -276,7 +277,7 @@ def test_export_predictions_and_labeled_video(
     model = get_model(cfg=cfg_tmp, data_module=heatmap_data_module, loss_factories=loss_factories)
 
     # make a checkpoint callback so we know where model is saved
-    ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(dirpath=str(tmpdir))
+    ckpt_callback = ModelCheckpoint(dirpath=str(tmpdir))
 
     # train model for a couple epochs
     trainer = pl.Trainer(

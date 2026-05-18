@@ -7,10 +7,10 @@ from collections import OrderedDict
 from pathlib import Path
 
 import imgaug.augmenters as iaa
-import lightning.pytorch as pl
 import numpy as np
 import pandas as pd
 import torch
+from lightning.pytorch.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
 from omegaconf import DictConfig, ListConfig, OmegaConf
 from omegaconf.errors import ValidationError
 
@@ -620,7 +620,7 @@ def get_callbacks(
     callbacks = []
 
     if early_stopping:
-        early_stopping = pl.callbacks.EarlyStopping(
+        early_stopping = EarlyStopping(
             monitor="val_supervised_loss",
             patience=cfg.training.early_stop_patience,
             mode="min",
@@ -637,12 +637,12 @@ def get_callbacks(
 
     if lr_monitor:
         # this callback should be added after UnfreezeBackbone in order to log its learning rate
-        lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval="epoch")
+        lr_monitor = LearningRateMonitor(logging_interval="epoch")
         callbacks.append(lr_monitor)
 
     # always save out best model
     if checkpointing:
-        ckpt_best_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
+        ckpt_best_callback = ModelCheckpoint(
             monitor="val_supervised_loss",
             mode="min",
             filename="{epoch}-{step}-best",
@@ -651,7 +651,7 @@ def get_callbacks(
 
     if ckpt_every_n_epochs:
         # if ckpt_every_n_epochs is not None, save separate checkpoint files
-        ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
+        ckpt_callback = ModelCheckpoint(
             monitor=None,
             every_n_epochs=ckpt_every_n_epochs,
             save_top_k=-1,

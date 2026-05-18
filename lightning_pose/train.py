@@ -14,6 +14,7 @@ from pathlib import Path
 import lightning.pytorch as pl
 import numpy as np
 import torch
+from lightning.pytorch.loggers import TensorBoardLogger
 from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 
 import lightning_pose
@@ -302,7 +303,7 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
     # ----------------------------------------------------------------------------------
 
     # logger
-    logger = pl.loggers.TensorBoardLogger("tb_logs", name=cfg.model.model_name)
+    logger = TensorBoardLogger("tb_logs", name=cfg.model.model_name)
     # Log hydra config to tensorboard as helpful metadata.
     for key, value in cfg.items():
         logger.experiment.add_text(

@@ -507,10 +507,6 @@ def get_model_class(map_type: str, semi_supervised: bool) -> type[ALLOWED_MODELS
             from lightning_pose.models import HeatmapTracker as Model
         elif map_type == "heatmap_mhcrnn":
             from lightning_pose.models import HeatmapTrackerMHCRNN as Model
-        elif map_type == "heatmap_multiview":
-            from lightning_pose.models import HeatmapTrackerMultiview as Model
-        elif map_type == "heatmap_multiview_multihead":
-            from lightning_pose.models import HeatmapTrackerMultiviewMultihead as Model
         elif map_type == "heatmap_multiview_transformer":
             from lightning_pose.models import HeatmapTrackerMultiviewTransformer as Model
         else:
