@@ -26,7 +26,7 @@ class TestImgaugTransform:
         """Pipeline should not do anything if params_dict is empty"""
         params_dict = {}
         pipe = imgaug_transform(params_dict)
-        im_0, kps_0 = pipe(
+        im_0, kps_0 = pipe(  # type: ignore[misc]
             images=np.expand_dims(image, axis=0),
             keypoints=np.expand_dims(keypoints, axis=0),
         )
@@ -43,7 +43,7 @@ class TestImgaugTransform:
             "MultiplyAndAddToBrightness": {"p": 0., "kwargs": {"mul": (0.5, 1.5), "add": (-5, 5)}},
         }
         pipe = imgaug_transform(params_dict)
-        im_0, kps_0 = pipe(
+        im_0, kps_0 = pipe(  # type: ignore[misc]
             images=np.expand_dims(image, axis=0),
             keypoints=np.expand_dims(keypoints, axis=0),
         )
@@ -58,7 +58,7 @@ class TestImgaugTransform:
             "Resize": {"p": 1.0, "args": ({"height": 256, "width": 256},), "kwargs": {}}
         }
         pipe = imgaug_transform(params_dict)
-        im_0, kps_0 = pipe(
+        im_0, kps_0 = pipe(  # type: ignore[misc]
             images=np.expand_dims(image, axis=0),
             keypoints=np.expand_dims(keypoints, axis=0),
         )
@@ -72,13 +72,13 @@ class TestImgaugTransform:
             "Resize": {"p": 1.0, "args": ({"height": 256, "width": 256},), "kwargs": {}}
         }
         pipe = imgaug_transform(params_dict)
-        im_0, kps_0 = pipe(
+        im_0, kps_0 = pipe(  # type: ignore[misc]
             images=np.expand_dims(image, axis=0),
             keypoints=np.expand_dims(keypoints, axis=0),
         )
         im_0 = im_0[0]
 
-        im_1, kps_1 = pipe(
+        im_1, kps_1 = pipe(  # type: ignore[misc]
             images=np.expand_dims(image, axis=0),
             keypoints=np.expand_dims(keypoints, axis=0),
         )
@@ -91,7 +91,7 @@ class TestImgaugTransform:
         """Fliplr should flip both image and keypoints"""
         params_dict = {"Fliplr": {"p": 1.0, "kwargs": {"p": 1.0}}}
         pipe = imgaug_transform(params_dict)
-        im_0, kps_0 = pipe(
+        im_0, kps_0 = pipe(  # type: ignore[misc]
             images=np.expand_dims(image, axis=0),
             keypoints=np.expand_dims(keypoints, axis=0),
         )
@@ -106,7 +106,7 @@ class TestImgaugTransform:
         """Flipud should flip both image and keypoints"""
         params_dict = {"Flipud": {"p": 1.0, "kwargs": {"p": 1.0}}}
         pipe = imgaug_transform(params_dict)
-        im_0, kps_0 = pipe(
+        im_0, kps_0 = pipe(  # type: ignore[misc]
             images=np.expand_dims(image, axis=0),
             keypoints=np.expand_dims(keypoints, axis=0),
         )
@@ -121,7 +121,7 @@ class TestImgaugTransform:
         """MotionBlur should alter image but not keypoints"""
         params_dict = {"MotionBlur": {"p": 1.0, "kwargs": {"k": 5, "angle": (-90, 90)}}}
         pipe = imgaug_transform(params_dict)
-        im_0, kps_0 = pipe(
+        im_0, kps_0 = pipe(  # type: ignore[misc]
             images=np.expand_dims(image, axis=0),
             keypoints=np.expand_dims(keypoints, axis=0),
         )
@@ -134,7 +134,7 @@ class TestImgaugTransform:
         """CoarseSalt should alter image but not keypoints"""
         params_dict = {"CoarseSalt": {"p": 1.0, "kwargs": {"p": 0.1, "size_percent": (0.05, 1.0)}}}
         pipe = imgaug_transform(params_dict)
-        im_0, kps_0 = pipe(
+        im_0, kps_0 = pipe(  # type: ignore[misc]
             images=np.expand_dims(image, axis=0),
             keypoints=np.expand_dims(keypoints, axis=0),
         )
@@ -147,7 +147,7 @@ class TestImgaugTransform:
         """Affine should alter image and keypoints"""
         params_dict = {"Affine": {"p": 1.0, "kwargs": {"rotate": (-90, 90)}}}
         pipe = imgaug_transform(params_dict)
-        im_0, kps_0 = pipe(
+        im_0, kps_0 = pipe(  # type: ignore[misc]
             images=np.expand_dims(image, axis=0),
             keypoints=np.expand_dims(keypoints, axis=0),
         )

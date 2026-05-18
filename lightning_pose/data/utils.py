@@ -1,13 +1,16 @@
 """Dataset/data module utilities."""
+from __future__ import annotations
+
 import os
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import imgaug.augmenters as iaa
-import lightning.pytorch as pl
 import numpy as np
 import torch
 from jaxtyping import Float, Shaped
 
+if TYPE_CHECKING:
+    from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datatypes import (
     HeatmapLabeledBatchDict,
     MultiviewHeatmapLabeledBatchDict,
@@ -39,7 +42,7 @@ class DataExtractor:
 
     def __init__(
         self,
-        data_module: pl.LightningDataModule,
+        data_module: BaseDataModule | UnlabeledDataModule,
         cond: Literal["train", "test", "val"] = "train",
         extract_images: bool = False,
         remove_augmentations: bool = True,
@@ -49,19 +52,23 @@ class DataExtractor:
         self.remove_augmentations = remove_augmentations
 
         if self.remove_augmentations:
+            from lightning_pose.data.datasets import (
+                BaseTrackingDataset,
+                HeatmapDataset,
+                MultiviewHeatmapDataset,
+            )
+            assert isinstance(
+                data_module.dataset, (BaseTrackingDataset, HeatmapDataset, MultiviewHeatmapDataset)
+            )
             imgaug_curr = data_module.dataset.imgaug_transform
-            if len(imgaug_curr) == 1 and isinstance(imgaug_curr[0], iaa.Resize):
+            assert imgaug_curr is not None
+            if len(imgaug_curr) == 1 and isinstance(imgaug_curr[0], iaa.Resize):  # type: ignore[index]
                 # current augmentation just resizes; keep this
                 self.data_module = data_module
             else:
                 from lightning_pose.data.datamodules import (
                     BaseDataModule,
                     UnlabeledDataModule,
-                )
-                from lightning_pose.data.datasets import (
-                    BaseTrackingDataset,
-                    HeatmapDataset,
-                    MultiviewHeatmapDataset,
                 )
 
                 # Create a simple resize-only augmentation pipeline for PCA
@@ -73,14 +80,14 @@ class DataExtractor:
                     iaa.Resize({"height": image_resize_height, "width": image_resize_width})
                 ])
 
-                if isinstance(data_module.dataset, HeatmapDataset):
+                if isinstance(dataset_old, HeatmapDataset):
                     dataset_new = HeatmapDataset(
                         root_directory=dataset_old.root_directory,
                         csv_path=dataset_old.csv_path,
                         image_resize_height=dataset_old.image_resize_height,
                         image_resize_width=dataset_old.image_resize_width,
                         imgaug_transform=imgaug_new,
-                        downsample_factor=dataset_old.downsample_factor,
+                        downsample_factor=dataset_old.downsample_factor,  # type: ignore[arg-type]
                         do_context=dataset_old.do_context,
                     )
                 elif isinstance(dataset_old, BaseTrackingDataset):
@@ -149,11 +156,12 @@ class DataExtractor:
         self,
     ) -> torch.utils.data.DataLoader | SemiSupervisedDataLoaderDict:
         if self.cond == "train":
-            return self.data_module.train_dataloader()
+            return self.data_module.train_dataloader()  # type: ignore[return-value]
         if self.cond == "val":
-            return self.data_module.val_dataloader()
+            return self.data_module.val_dataloader()  # type: ignore[return-value]
         if self.cond == "test":
-            return self.data_module.test_dataloader()
+            return self.data_module.test_dataloader()  # type: ignore[return-value]
+        raise ValueError(f"cond must be 'train', 'val', or 'test', got {self.cond!r}")
 
     @staticmethod
     def verify_labeled_loader(
@@ -164,13 +172,13 @@ class DataExtractor:
         else:
             # if we have a dictionary of dataloaders, we take the loader called
             # "labeled" (the loader called "unlabeled" doesn't have keypoints)
-            labeled_loader = loader.iterables["labeled"]
+            labeled_loader = loader["labeled"]
         return labeled_loader
 
     def iterate_over_dataloader(
         self, loader: torch.utils.data.DataLoader
     ) -> tuple[
-        Shaped[torch.Tensor, "num_examples"],
+        Shaped[torch.Tensor, num_examples],
         (
             Float[torch.Tensor, "num_examples 3 image_width image_height"]
             | Float[torch.Tensor, "num_examples frames 3 image_width image_height"]
@@ -199,7 +207,7 @@ class DataExtractor:
     def __call__(
         self,
     ) -> tuple[
-        Shaped[torch.Tensor, "num_examples"],
+        Shaped[torch.Tensor, num_examples],
         (
             Float[torch.Tensor, "num_examples 3 image_width image_height"]
             | Float[torch.Tensor, "num_examples frames 3 image_width image_height"]
@@ -237,9 +245,11 @@ def split_sizes_from_probabilities(
         val_probability = round(remaining_probability / 2, 5)
         test_probability = round(remaining_probability / 2, 5)
     elif test_probability is None:
+        assert val_probability is not None
         test_probability = 1.0 - train_probability - val_probability
 
     # probabilities should add to one
+    assert val_probability is not None
     assert test_probability + train_probability + val_probability == 1.0
 
     # compute numbers from probabilities
@@ -278,6 +288,7 @@ def clean_any_nans(data: torch.Tensor, dim: int) -> torch.Tensor:
         return data[:, ~nan_bool]
     elif dim == 1:
         return data[~nan_bool]
+    raise ValueError(f"dim must be 0 or 1, got {dim}")
 
 
 def count_frames(video_file: str) -> int:
@@ -446,9 +457,9 @@ def evaluate_heatmaps_at_location(
     offsets = list(np.arange(-pix_to_consider, pix_to_consider + 1))
     vals_all = []
     for offset in offsets:
-        k_offset = k + offset
+        k_offset = k + int(offset)
         for offset_2 in offsets:
-            m_offset = m + offset_2
+            m_offset = m + int(offset_2)
             # get rid of singleton dims
             vals = heatmaps_padded[i, j, k_offset, m_offset].squeeze(-1).squeeze(-1)
             vals_all.append(vals)
@@ -469,7 +480,7 @@ def undo_affine_transform(
         device=keypoints.device,
         requires_grad=True,
     )
-    kps_aff = torch.concat([keypoints, ones], axis=2)
+    kps_aff = torch.cat([keypoints, ones], dim=2)
 
     mat = torch.clone(transform).detach()
     if len(transform.shape) == 2:
@@ -514,7 +525,7 @@ def undo_affine_transform_batch(
         Float[torch.Tensor, "seq_len h w"]
         | Float[torch.Tensor, "h w"]
         | Float[torch.Tensor, "seq_len 1"]
-        | Float[torch.Tensor, "1"]
+        | Float[torch.Tensor, 1]
         | Float[torch.Tensor, "num_views h w"]
         | Float[torch.Tensor, "num_views 1 1"]
     ),
@@ -594,20 +605,22 @@ def convert_bbox_coords(
         predicted_keypoints_ = predicted_keypoints.clone().reshape((-1, num_keypoints, 2))
     # divide by image dims to get 0-1 normalized coordinates
     if "images" in batch_dict.keys():
-        predicted_keypoints_[:, :, 0] /= batch_dict["images"].shape[-1]  # -1 dim is width "x"
-        predicted_keypoints_[:, :, 1] /= batch_dict["images"].shape[-2]  # -2 dim is height "y"
+        img = batch_dict["images"]  # type: ignore[typeddict-item]
+        predicted_keypoints_[:, :, 0] /= img.shape[-1]  # -1 dim is width "x"
+        predicted_keypoints_[:, :, 1] /= img.shape[-2]  # -2 dim is height "y"
     else:  # we have unlabeled dict, 'frames' instead of 'images'
-        predicted_keypoints_[:, :, 0] /= batch_dict["frames"].shape[-1]  # -1 dim is width "x"
-        predicted_keypoints_[:, :, 1] /= batch_dict["frames"].shape[-2]  # -2 dim is height "y"
+        frames = batch_dict["frames"]  # type: ignore[typeddict-item]
+        predicted_keypoints_[:, :, 0] /= frames.shape[-1]  # -1 dim is width "x"
+        predicted_keypoints_[:, :, 1] /= frames.shape[-2]  # -2 dim is height "y"
     # multiply and add by bbox dims (x,y,h,w)
     if (
-        ("num_views" in batch_dict.keys() and int(batch_dict["num_views"].max()) > 1)
+        ("num_views" in batch_dict.keys() and int(batch_dict["num_views"].max()) > 1)  # type: ignore[typeddict-item]
         or batch_dict.get("is_multiview", False)
     ):
         # the first check is for labeled batches while is_multiview is for unlabeled batches
         # For MultiviewUnlabeledBatchDict, we need to infer num_views from bbox shape
         if "num_views" in batch_dict.keys():
-            unique = batch_dict["num_views"].unique()
+            unique = batch_dict["num_views"].unique()  # type: ignore[typeddict-item]
             if len(unique) != 1:
                 raise ValueError(
                     f"each batch element must contain the same number of views; "
