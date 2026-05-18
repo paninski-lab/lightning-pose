@@ -946,7 +946,8 @@ def predict_video(
     )
     assert preds is not None
 
-    preds_df = pred_handler(preds=preds, is_multiview_video=is_multiview)
+    preds_typed = cast(list[tuple[torch.Tensor, torch.Tensor]], preds)
+    preds_df = pred_handler(preds=preds_typed, is_multiview_video=is_multiview)
 
     # Convert to a 1-1 correspondence list similar to video_files, for multiview.
     if isinstance(preds_df, dict):
@@ -962,6 +963,8 @@ def predict_video(
                 os.makedirs(os.path.dirname(output_file), exist_ok=True)
                 df.to_csv(output_file)
         else:
+            assert isinstance(preds_df, pd.DataFrame)
+            assert isinstance(output_pred_file, str)
             preds_df.to_csv(output_pred_file)
 
     # clear up memory

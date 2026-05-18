@@ -565,7 +565,7 @@ class TestApply3DTransforms:
 
             camera = Camera(
                 matrix=intrinsics[i].numpy(),
-                rvec=rvec,
+                rvec=rvec.astype(float),
                 tvec=extrinsics[i][:3, 3].numpy(),  # Translation vector (3,)
                 dist=distortions[i].numpy(),
             )
@@ -955,7 +955,7 @@ class TestLoadCamParamsFromCsv:
         calib_file = 'calibration.toml'
         df = pd.DataFrame(
             {'file': [calib_file] * len(image_names)},
-            index=[n.split('/')[-1] for n in image_names],
+            index=pd.Index([n.split('/')[-1] for n in image_names]),
         )
         csv_path = tmp_path / 'cam_params.csv'
         df.to_csv(csv_path)
@@ -999,7 +999,7 @@ class TestLoadCamParamsFromCsv:
     ):
         """AssertionError raised when CSV index doesn't align with image names."""
         # Arrange
-        df = pd.DataFrame({'file': ['calibration.toml']}, index=['wrong_name.png'])
+        df = pd.DataFrame({'file': ['calibration.toml']}, index=pd.Index(['wrong_name.png']))
         csv_path = tmp_path / 'cam_params.csv'
         df.to_csv(csv_path)
 

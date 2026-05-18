@@ -39,7 +39,7 @@ class KeypointPCA:
         empirical_epsilon_percentile: float = 99.0,
         mirrored_column_matches: ListConfig | list | None = None,
         columns_for_singleview_pca: ListConfig | list | None = None,
-        device: Literal["cuda", "cpu"] | torch.device = "cpu",
+        device: str | torch.device = "cpu",
         centering_method: Literal["mean", "median"] | None = None,
     ) -> None:
         """Initialize KeypointPCA.

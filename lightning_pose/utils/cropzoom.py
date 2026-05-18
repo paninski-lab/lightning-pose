@@ -87,7 +87,7 @@ def _compute_bbox_df(
 
     index = pred_df.index
 
-    return pd.DataFrame(bboxes, index=index, columns=["x", "y", "h", "w"])  # type: ignore[arg-type]
+    return pd.DataFrame(bboxes, index=pd.Index(index), columns=pd.Index(["x", "y", "h", "w"]))
 
 
 def _crop_image(img_path, bbox, cropped_img_path):

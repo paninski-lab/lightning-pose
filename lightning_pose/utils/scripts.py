@@ -810,8 +810,8 @@ def compute_metrics_single(
 
         keypoints_true = labels_df.to_numpy().reshape(labels_df.shape[0], -1, 2)
         error_per_keypoint = pixel_error(keypoints_true, keypoints_pred)
-        error_df = pd.DataFrame(  # type: ignore[arg-type]
-            error_per_keypoint, index=index, columns=keypoint_names
+        error_df = pd.DataFrame(
+            error_per_keypoint, index=pd.Index(index), columns=pd.Index(keypoint_names)
         )
         # add train/val/test split
         if set is not None:
@@ -823,8 +823,8 @@ def compute_metrics_single(
 
     if "temporal" in metrics_to_compute:
         temporal_norm_per_keypoint = temporal_norm(keypoints_pred)
-        temporal_norm_df = pd.DataFrame(  # type: ignore[arg-type]
-            temporal_norm_per_keypoint, index=index, columns=keypoint_names
+        temporal_norm_df = pd.DataFrame(
+            temporal_norm_per_keypoint, index=pd.Index(index), columns=pd.Index(keypoint_names)
         )
         # add train/val/test split
         if set is not None:
@@ -850,8 +850,8 @@ def compute_metrics_single(
             pca()
             # compute reprojection error
             pcasv_error_per_keypoint = pca_singleview_reprojection_error(keypoints_pred, pca)
-            pcasv_df = pd.DataFrame(  # type: ignore[arg-type]
-                pcasv_error_per_keypoint, index=index, columns=keypoint_names
+            pcasv_df = pd.DataFrame(
+                pcasv_error_per_keypoint, index=pd.Index(index), columns=pd.Index(keypoint_names)
             )
             # add train/val/test split
             if set is not None:
@@ -884,8 +884,8 @@ def compute_metrics_single(
         pca()
         # compute reprojection error
         pcamv_error_per_keypoint = pca_multiview_reprojection_error(keypoints_pred, pca)
-        pcamv_df = pd.DataFrame(  # type: ignore[arg-type]
-            pcamv_error_per_keypoint, index=index, columns=keypoint_names
+        pcamv_df = pd.DataFrame(
+            pcamv_error_per_keypoint, index=pd.Index(index), columns=pd.Index(keypoint_names)
         )
         # add train/val/test split
         if set is not None:

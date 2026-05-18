@@ -54,7 +54,7 @@ class SamVisionEncoder(nn.Module):
         # Disable relative positional encoding in SAM
         for layer in self.vision_encoder.layers:
             if hasattr(layer.attn, "use_rel_pos"):
-                layer.attn.use_rel_pos = False
+                layer.attn.use_rel_pos = False  # type: ignore[arg-type]
 
     def _bypass_size_check(self):
         """Completely bypass the size check in patch embedding"""

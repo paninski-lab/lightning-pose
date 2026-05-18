@@ -7,6 +7,7 @@ import os
 import re
 import warnings
 from pathlib import Path
+from typing import overload
 
 import numpy as np
 import pandas as pd
@@ -245,6 +246,22 @@ def return_absolute_data_paths(
     return data_dir, video_dir
 
 
+@overload
+def get_videos_in_dir(
+    video_dir: str,
+    view_names: None = None,
+    return_mp4_only: bool = True,
+) -> list[str]: ...
+
+
+@overload
+def get_videos_in_dir(
+    video_dir: str,
+    view_names: list[str],
+    return_mp4_only: bool = True,
+) -> list[list[str]]: ...
+
+
 def get_videos_in_dir(
     video_dir: str, view_names: list[str] | None = None, return_mp4_only: bool = True
 ) -> list[str] | list[list[str]]:
@@ -400,8 +417,11 @@ def fix_empty_first_row(df: pd.DataFrame) -> pd.DataFrame:
     """
     if df.index.name is not None:
         new_row = {col: np.nan for col in df.columns}
-        prepend_df = pd.DataFrame(  # type: ignore[arg-type]
-            new_row, index=[df.index.name], columns=df.columns, dtype="float64"
+        prepend_df = pd.DataFrame(
+            new_row,
+            index=pd.Index([df.index.name]),
+            columns=df.columns,
+            dtype="float64",
         )
         fixed_df = pd.concat([prepend_df, df])
         assert fixed_df.index.name is None

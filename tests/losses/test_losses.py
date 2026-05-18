@@ -1,6 +1,7 @@
 """Test loss classes."""
 
 import math
+from typing import Literal
 
 import numpy as np
 import pytest
@@ -25,7 +26,7 @@ from lightning_pose.losses.losses import (
 )
 from lightning_pose.utils.pca import format_multiview_data_for_pca
 
-stage = 'train'
+stage: Literal["train"] = 'train'
 device = 'cpu'
 
 
@@ -431,7 +432,7 @@ class TestTemporalHeatmapLoss:
     def test_invalid_loss_name_raises(self):
         """Test that an invalid loss name raises ValueError."""
         with pytest.raises(ValueError):
-            TemporalHeatmapLoss(loss_name='bad_name')
+            TemporalHeatmapLoss(loss_name='bad_name')  # type: ignore[arg-type]
 
     def test_mse_zero_for_constant_predictions(self, mse_loss):
         """Test that identical consecutive heatmaps yield zero MSE loss."""

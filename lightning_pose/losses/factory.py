@@ -21,7 +21,7 @@ class LossFactory(pl.LightningModule):
     def __init__(
         self,
         losses_params_dict: dict[str, dict],
-        data_module: BaseDataModule | UnlabeledDataModule,
+        data_module: BaseDataModule | UnlabeledDataModule | None,
     ) -> None:
 
         super().__init__()
