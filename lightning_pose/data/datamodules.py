@@ -9,7 +9,7 @@ import lightning.pytorch as pl
 import torch
 from lightning.pytorch.utilities import CombinedLoader
 from omegaconf import DictConfig
-from torch.utils.data import DataLoader, Subset, random_split
+from torch.utils.data import DataLoader, Subset, random_split, WeightedRandomSampler, RandomSampler
 
 from lightning_pose.data.dali import PrepareDALI
 from lightning_pose.data.datatypes import SemiSupervisedDataLoaderDict
@@ -41,6 +41,7 @@ class BaseDataModule(pl.LightningDataModule):
         test_probability: float | None = None,
         train_frames: float | int | None = None,
         torch_seed: int = 42,
+        enable_weighted_sampler: bool = True,
     ) -> None:
         """Data module splits a dataset into train, val, and test data loaders.
 
@@ -59,7 +60,8 @@ class BaseDataModule(pl.LightningDataModule):
                 (exclusive) and defines the fraction of the initially selected
                 train frames
             torch_seed: control data splits
-
+            enable_weighted_sampler: If True, use a WeightedRandomSampler
+            for the training dataloader to oversample examples with rarer keypoints.
         """
         super().__init__()
         self.dataset = dataset
@@ -83,8 +85,83 @@ class BaseDataModule(pl.LightningDataModule):
         self.val_dataset = None  # populated by self.setup()
         self.test_dataset = None  # populated by self.setup()
         self.torch_seed = torch_seed
+        self.enable_weighted_sampler = enable_weighted_sampler
+        self.train_sampler = None
         self._setup()
+        
+    def _calculate_train_sampler_weights(self, epsilon=1e-6):
+        """Calculates weights for WeightedRandomSampler based on keypoint presence."""
 
+        if not isinstance(self.train_dataset, Subset):
+            print("Warning: Sampler weight calculation expects self.train_dataset to be a Subset. Skipping.")
+            self.train_sampler = None
+            return
+
+        # Determine how to access keypoints based on dataset type
+        underlying_dataset = self.train_dataset.dataset
+        if hasattr(underlying_dataset, 'keypoints'): # BaseTrackingDataset or HeatmapDataset
+            all_keypoints = underlying_dataset.keypoints
+        elif hasattr(underlying_dataset, 'dataset') and isinstance(underlying_dataset.dataset, dict): # MultiviewHeatmapDataset
+            # Using the first view as reference
+            try:
+                first_view_key = list(underlying_dataset.dataset.keys())[0]
+                all_keypoints = underlying_dataset.dataset[first_view_key].keypoints
+                print(f"Calculating sampler weights based on '{first_view_key}' view's keypoints for multiview.")
+            except (IndexError, AttributeError):
+                 print("Warning: Could not access keypoints from the first view of Multiview dataset. Skipping sampler.")
+                 self.train_sampler = None
+                 return
+        else:
+            print("Warning: Could not find keypoints attribute for sampler weight calculation. Skipping.")
+            self.train_sampler = None
+            return
+
+        try:
+            train_indices = self.train_dataset.indices
+            # Ensure indices are valid for the keypoints tensor
+            if max(train_indices) >= len(all_keypoints):
+                 print(f"Warning: train_indices ({max(train_indices)}) out of bounds for all_keypoints ({len(all_keypoints)}). Skipping sampler.")
+                 self.train_sampler = None
+                 return
+            train_keypoints = all_keypoints[train_indices]
+        except IndexError as e:
+            print(f"Error indexing keypoints with train_indices: {e}. Skipping sampler.")
+            self.train_sampler = None
+            return
+        except Exception as e:
+            print(f"Unexpected error accessing train keypoints: {e}. Skipping sampler.")
+            self.train_sampler = None
+            return
+
+        # Check for NaNs (use x-coordinate)
+        is_present = ~torch.isnan(train_keypoints[:, :, 0]) # Shape: [num_train_samples, num_keypoints]
+
+        # Calculate frequency
+        keypoint_counts = torch.sum(is_present, dim=0).float()
+        num_train_samples = len(train_indices)
+        if num_train_samples == 0:
+            print("Warning: Zero samples in training set. Skipping sampler.")
+            self.train_sampler = None
+            return
+        keypoint_frequencies = keypoint_counts / num_train_samples
+
+        # Inverse frequency weights for keypoints
+        inverse_frequencies = 1.0 / (keypoint_frequencies + epsilon)
+
+        # Assign weight to each sample
+        sample_weights = torch.sum(is_present * inverse_frequencies.unsqueeze(0), dim=1)
+
+        # Handle cases where all keypoints might be NaN for a sample
+        sample_weights[sample_weights == 0] = epsilon # Assign a tiny weight instead of zero
+
+        # Create the sampler
+        self.train_sampler = WeightedRandomSampler(
+            weights=sample_weights,
+            num_samples=len(sample_weights),
+            replacement=True
+        )
+        print("Created WeightedRandomSampler for training data.")
+        
     def _setup(self) -> None:
 
         datalen = self.dataset.__len__()
@@ -153,6 +230,17 @@ class BaseDataModule(pl.LightningDataModule):
                 # train_frames
                 self.train_dataset.indices = self.train_dataset.indices[:n_frames]
 
+        if self.enable_weighted_sampler:
+            self._calculate_train_sampler_weights()
+        else:
+            self.train_sampler = None
+
+        # print sampler status
+        if self.train_sampler:
+            print("Training sampler: WeightedRandomSampler enabled.")
+        else:
+            print("Training sampler: Standard shuffling enabled.")
+            
         print(
             f"Dataset splits -- "
             f"train: {len(self.train_dataset)}, "
@@ -161,14 +249,42 @@ class BaseDataModule(pl.LightningDataModule):
         )
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
-        return DataLoader(
-            self.train_dataset,
+
+        if self.train_sampler is not None:
+            sampler_arg = self.train_sampler
+            shuffle_arg = None
+            generator_arg = None
+            print(f"DEBUG train_dataloader: Using sampler={type(sampler_arg)}")
+        else:
+            sampler_arg = None
+            shuffle_arg = True
+            generator_arg = torch.Generator().manual_seed(self.torch_seed)
+            print(f"DEBUG train_dataloader: Using shuffle={shuffle_arg}, sampler=None")
+
+        loader = DataLoader(
+            dataset=self.train_dataset,
             batch_size=self.train_batch_size,
             num_workers=self.num_workers,
             persistent_workers=True if self.num_workers > 0 else False,
-            shuffle=True,
-            generator=torch.Generator().manual_seed(self.torch_seed),
+            sampler=sampler_arg,
+            shuffle=shuffle_arg,
+            generator=generator_arg,
         )
+
+        # (Optional debug prints after creation)
+        print(f"DEBUG train_dataloader: DataLoader created.")
+        if hasattr(loader, 'batch_sampler') and loader.batch_sampler is not None:
+            print(f" -> batch_sampler type: {type(loader.batch_sampler)}")
+            if hasattr(loader.batch_sampler, 'sampler'):
+                print(f" -> underlying sampler type: {type(loader.batch_sampler.sampler)}")
+            else:
+                print(" -> batch_sampler has no 'sampler' attribute")
+        else:
+            print(f" -> No batch_sampler found on DataLoader.")
+        print(f" -> shuffle attribute (post-init): {getattr(loader, 'shuffle', 'N/A')}")
+
+        return loader
+
 
     def val_dataloader(self) -> torch.utils.data.DataLoader:
         return DataLoader(
