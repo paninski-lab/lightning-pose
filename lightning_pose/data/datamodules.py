@@ -74,7 +74,7 @@ class BaseDataModule(pl.LightningDataModule):
                 self.num_workers = int(slurm_cpus)
             else:
                 # Fallback to os.cpu_count()
-                self.num_workers = os.cpu_count()
+                self.num_workers = os.cpu_count() or 0
         self.train_probability = train_probability
         self.val_probability = val_probability
         self.test_probability = test_probability
@@ -111,14 +111,20 @@ class BaseDataModule(pl.LightningDataModule):
             # because the subsets actually point to the same underlying dataset, so we create
             # separate datasets here
             train_idxs, val_idxs, test_idxs = random_split(
-                range(len(self.dataset)),
+                range(len(self.dataset)),  # type: ignore[arg-type]
                 data_splits_list,
                 generator=torch.Generator().manual_seed(self.torch_seed),
             )
 
-            self.train_dataset = Subset(copy.deepcopy(self.dataset), indices=list(train_idxs))
-            self.val_dataset = Subset(copy.deepcopy(self.dataset), indices=list(val_idxs))
-            self.test_dataset = Subset(copy.deepcopy(self.dataset), indices=list(test_idxs))
+            self.train_dataset = Subset(
+                copy.deepcopy(self.dataset), indices=list(train_idxs),  # type: ignore[arg-type]
+            )
+            self.val_dataset = Subset(
+                copy.deepcopy(self.dataset), indices=list(val_idxs),  # type: ignore[arg-type]
+            )
+            self.test_dataset = Subset(
+                copy.deepcopy(self.dataset), indices=list(test_idxs),  # type: ignore[arg-type]
+            )
 
             # only use the final resize transform for the validation and test datasets
             if self.dataset.imgaug_transform[-1].__str__().find("Resize") == 0:
@@ -162,7 +168,7 @@ class BaseDataModule(pl.LightningDataModule):
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
         return DataLoader(
-            self.train_dataset,
+            self.train_dataset,  # type: ignore[arg-type]
             batch_size=self.train_batch_size,
             num_workers=self.num_workers,
             persistent_workers=True if self.num_workers > 0 else False,
@@ -172,7 +178,7 @@ class BaseDataModule(pl.LightningDataModule):
 
     def val_dataloader(self) -> torch.utils.data.DataLoader:
         return DataLoader(
-            self.val_dataset,
+            self.val_dataset,  # type: ignore[arg-type]
             batch_size=self.val_batch_size,
             num_workers=self.num_workers,
             persistent_workers=True if self.num_workers > 0 else False,
@@ -180,7 +186,7 @@ class BaseDataModule(pl.LightningDataModule):
 
     def test_dataloader(self) -> torch.utils.data.DataLoader:
         return DataLoader(
-            self.test_dataset,
+            self.test_dataset,  # type: ignore[arg-type]
             batch_size=self.test_batch_size,
             num_workers=self.num_workers,
         )
@@ -273,6 +279,7 @@ class UnlabeledDataModule(BaseDataModule):
         self.unlabeled_dataloader = dali_prep()
 
     def train_dataloader(self) -> CombinedLoader:
+        assert self.unlabeled_dataloader is not None
         loader = SemiSupervisedDataLoaderDict(
             labeled=super().train_dataloader(),
             unlabeled=self.unlabeled_dataloader,

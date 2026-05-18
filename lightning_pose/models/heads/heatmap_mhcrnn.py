@@ -239,19 +239,19 @@ class UpsamplingCRNN(nn.Module):
     def _initialize_layers(self):
         if self.upsampling_factor == 2:
             torch.nn.init.xavier_uniform_(self.W_pre.weight, gain=1.0)
-            torch.nn.init.zeros_(self.W_pre.bias)
+            torch.nn.init.zeros_(self.W_pre.bias)  # type: ignore[arg-type]
 
         torch.nn.init.xavier_uniform_(self.W_f.weight, gain=1.0)
-        torch.nn.init.zeros_(self.W_f.bias)
+        torch.nn.init.zeros_(self.W_f.bias)  # type: ignore[arg-type]
         for _index, layer in enumerate(self.H_f):
-            torch.nn.init.xavier_uniform_(layer.weight, gain=1.0)
-            torch.nn.init.zeros_(layer.bias)
+            torch.nn.init.xavier_uniform_(layer.weight, gain=1.0)  # type: ignore[arg-type]
+            torch.nn.init.zeros_(layer.bias)  # type: ignore[arg-type]
 
         torch.nn.init.xavier_uniform_(self.W_b.weight, gain=1.0)
-        torch.nn.init.zeros_(self.W_b.bias)
+        torch.nn.init.zeros_(self.W_b.bias)  # type: ignore[arg-type]
         for _index, layer in enumerate(self.H_b):
-            torch.nn.init.xavier_uniform_(layer.weight, gain=1.0)
-            torch.nn.init.zeros_(layer.bias)
+            torch.nn.init.xavier_uniform_(layer.weight, gain=1.0)  # type: ignore[arg-type]
+            torch.nn.init.zeros_(layer.bias)  # type: ignore[arg-type]
 
     def forward(
         self,

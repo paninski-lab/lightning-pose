@@ -62,7 +62,7 @@ def initialize_upsampling_layers(layers) -> None:
         if index > 0:  # we ignore the PixelShuffle
             if isinstance(layer, nn.ConvTranspose2d):
                 torch.nn.init.xavier_uniform_(layer.weight, gain=0.01)
-                torch.nn.init.zeros_(layer.bias)
+                torch.nn.init.zeros_(layer.bias)  # type: ignore[arg-type]
             elif isinstance(layer, nn.BatchNorm2d):
                 torch.nn.init.constant_(layer.weight, 1.0)
                 torch.nn.init.constant_(layer.bias, 0.0)

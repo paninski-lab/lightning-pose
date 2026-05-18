@@ -531,7 +531,7 @@ def get_model_class(map_type: str, semi_supervised: bool) -> type[ALLOWED_MODELS
 
 def load_model_from_checkpoint(
     cfg: DictConfig | ListConfig,
-    ckpt_file: str,
+    ckpt_file: str | None,
     eval: bool = False,
     data_module: BaseDataModule | UnlabeledDataModule | None = None,
     skip_data_module: bool = False,

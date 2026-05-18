@@ -149,7 +149,7 @@ class PatchMasking(Callback):
 
     def __init__(
         self,
-        patch_mask_config: dict = None,
+        patch_mask_config: dict | None = None,
         patch_seed: int = 0,
     ):
         super().__init__()

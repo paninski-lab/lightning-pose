@@ -515,7 +515,7 @@ class TemporalLoss(Loss):
     def __call__(
         self,
         keypoints_pred: Float[torch.Tensor, "batch two_x_num_keypoints"],
-        confidences: Float[torch.Tensor, "batch num_keypoints"] = None,
+        confidences: Float[torch.Tensor, "batch num_keypoints"] | None = None,
         stage: Literal["train", "val", "test"] | None = None,
         **kwargs,
     ) -> tuple[Float[torch.Tensor, ""], list[dict]]:

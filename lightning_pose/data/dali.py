@@ -102,9 +102,9 @@ def video_pipe(
             file_list_include_preceding_frame=True,  # to get rid of dali warnings
             skip_vfr_check=skip_vfr_check,
         )
-        orig_size = fn.shapes(video)
+        orig_size = fn.shapes(video)  # type: ignore[arg-type]
         if resize_dims:
-            video = fn.resize(video, size=resize_dims)
+            video = fn.resize(video, size=resize_dims)  # type: ignore[arg-type]
         if imgaug == "dlc" or imgaug == "dlc-top-down":
             size = (resize_dims[0] / 2, resize_dims[1] / 2)
             center = size  # / 2
@@ -320,9 +320,10 @@ class PrepareDALI:
     def _setup_pipe_dict(
         self,
         filenames: list[str] | list[list[str]],
-        imgaug: str,
+        imgaug: str | None,
     ) -> dict[str, dict]:
         """All of the pipeline args in one place."""
+        assert self.dali_config is not None
         # When running with multiple GPUs, the LOCAL_RANK variable correctly
         # contains the DDP Local Rank, which is also the cuda device index.
         device_id = int(os.environ.get("LOCAL_RANK", "0"))
@@ -331,7 +332,7 @@ class PrepareDALI:
             "predict": {"context": {}, "base": {}},
             "train": {"context": {}, "base": {}},
         }
-        gen_cfg = self.dali_config.get("general", {"seed": 123456})
+        gen_cfg = self.dali_config.get("general", {"seed": 123456})  # type: ignore[arg-type]
 
         # base (vanilla single-frame model), train pipe args
         base_train_cfg = self.dali_config["base"]["train"]

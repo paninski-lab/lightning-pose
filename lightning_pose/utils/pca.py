@@ -192,6 +192,7 @@ class KeypointPCA:
 
     def pca_prints(self) -> None:
         # call after we've fitted a pca object and selected how many components to keep
+        assert self.pca_object is not None
         pca_prints(self.pca_object, self.loss_type, self._n_components_kept)
 
     def _set_parameter_dict(self) -> None:
@@ -204,7 +205,7 @@ class KeypointPCA:
 
         self.parameters = convert_dict_values_to_tensors(self.parameters, self.device)
 
-        self.parameters["epsilon"] = EmpiricalEpsilon(
+        self.parameters["epsilon"] = EmpiricalEpsilon(  # type: ignore[arg-type]
             percentile=self.empirical_epsilon_percentile
         )(loss=self.compute_reprojection_error())
 

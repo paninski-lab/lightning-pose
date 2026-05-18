@@ -173,7 +173,8 @@ def _evaluate_on_training_dataset(model: Model, ood_mode=False):
         # Copy output files to model_dir for backward-compatibility.
         # New users should look up these files in image_preds.
         for p_file in (model.image_preds_dir() / csv_file.name).glob("predictions*.csv"):
-            metric_suffix = re.match(r"predictions(.*)\.csv", p_file.name)[1]
+            m = re.match(r"predictions(.*)\.csv", p_file.name)
+            metric_suffix = m[1] if m else ""
             out_file = "predictions"
             if len(csv_files) > 1:
                 out_file += "_" + view_name
@@ -208,7 +209,7 @@ def _predict_test_videos(model: Model):
                 )
 
 
-def _train(cfg: DictConfig | ListConfig, status_file: Path = None) -> Model:
+def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Model:
     # reset all seeds
     seed = 0
     os.environ["PYTHONHASHSEED"] = str(seed)

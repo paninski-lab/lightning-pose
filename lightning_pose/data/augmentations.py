@@ -75,7 +75,7 @@ def imgaug_transform(params_dict: dict | DictConfig) -> iaa.Sequential:
     data_transform = []
 
     for transform_str, args in params_dict.items():
-        transform = getattr(iaa, transform_str)
+        transform = getattr(iaa, str(transform_str))
         apply_prob = args.get("p", 0.5)
         transform_args = args.get("args", ())
         transform_kwargs = args.get("kwargs", {})

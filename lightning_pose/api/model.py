@@ -53,7 +53,7 @@ class Model:
         return Model.from_dir2(model_dir)
 
     @staticmethod
-    def from_dir2(model_dir: str | Path, hydra_overrides: list[str] = None):
+    def from_dir2(model_dir: str | Path, hydra_overrides: list[str] | None = None):
         """Internal version of from_dir that supports hydra_overrides. Not sure whether to
         promote this to public API yet."""
 
@@ -280,7 +280,7 @@ class Model:
         # --- Inference via get_loss_inputs_labeled ---
         self.model.eval()
         with torch.inference_mode():
-            result = self.model.get_loss_inputs_labeled(batch_dict)
+            result = self.model.get_loss_inputs_labeled(batch_dict)  # type: ignore[arg-type]
 
         # --- Extract predictions ---
         kp_pred = result["keypoints_pred"]
@@ -392,7 +392,7 @@ class Model:
         else:
             metrics = None
 
-        return PredictionResult(predictions=df, metrics=metrics)
+        return PredictionResult(predictions=df, metrics=metrics)  # type: ignore[arg-type]
 
     def predict_on_label_csv_multiview(
         self,
@@ -472,7 +472,9 @@ class Model:
         else:
             metrics = None
 
-        return MultiviewPredictionResult(predictions=view_to_df_dict, metrics=metrics)
+        return MultiviewPredictionResult(  # type: ignore[arg-type]
+            predictions=view_to_df_dict, metrics=metrics,
+        )
 
     def predict_on_video_file(
         self,
