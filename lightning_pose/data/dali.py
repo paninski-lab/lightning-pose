@@ -113,8 +113,9 @@ def video_pipe(
             transform = fn.transforms.rotation(angle=angle, center=center)
             scale = fn.random.uniform(range=(0.8, 1.2), shape=2)
             transform = fn.transforms.scale(transform, scale=scale, center=center)
-            video = fn.warp_affine(  # type: ignore[arg-type]
-                video, matrix=transform, fill_value=0, inverse_map=False,
+            video = fn.warp_affine(
+                video,  # type: ignore[arg-type]
+                matrix=transform, fill_value=0, inverse_map=False,
             )
             # brightness contrast:
             contrast = fn.random.uniform(range=(0.75, 1.25))

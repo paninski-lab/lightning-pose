@@ -112,7 +112,7 @@ def test_train_singleview_detector_outputs(cfg, tmp_path):
     pose_model_dir.mkdir()
     with chdir(pose_model_dir):
         # train model
-        train(cfg, detector_model)
+        train(cfg, detector_model)  # type: ignore[arg-type]
 
     # ensure labeled data was properly processed
     assert (pose_model_dir / "config.yaml").is_file()

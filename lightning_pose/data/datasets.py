@@ -185,6 +185,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 transformed_keypoints = np.expand_dims(keypoints_on_image, axis=0)
 
             transformed_images = self.pytorch_transform(transformed_images)
+            assert isinstance(transformed_images, torch.Tensor)
 
         else:
             context_img_paths = io_utils.get_context_img_paths(img_path)

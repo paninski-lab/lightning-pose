@@ -244,7 +244,7 @@ def test_nan_pca():
     assert pca_skl.noise_variance_ == pca_cust.noise_variance_
     assert pca_skl.n_samples_ == pca_cust.n_samples_
     assert pca_skl.n_components_ == pca_cust.n_components_
-    assert np.allclose(pca_skl.components_, pca_cust.components_, rtol=1e-10)
+    assert np.allclose(pca_skl.components_, pca_cust.components_, rtol=1e-10)  # type: ignore[arg-type]
     assert np.allclose(pca_skl.explained_variance_, pca_cust.explained_variance_, rtol=1e-10)
     assert np.allclose(
         pca_skl.explained_variance_ratio_, pca_cust.explained_variance_ratio_, rtol=1e-10)

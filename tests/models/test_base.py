@@ -6,6 +6,7 @@ import pytest
 import torch
 import torchvision
 
+from lightning_pose.models.backbones import ALLOWED_BACKBONES
 from lightning_pose.models.base import (
     BaseFeatureExtractor,
     LrNotImplementedError,
@@ -63,9 +64,13 @@ _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 2
 HEIGHTS = [128, 256, 384]  # standard numbers, not going to bigger images due to memory
 WIDTHS = [120, 246, 380]  # similar but not square
-RESNET_BACKBONES = ["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"]
-EFFICIENTNET_BACKBONES = ["efficientnet_b0", "efficientnet_b1", "efficientnet_b2"]
-VIT_BACKBONES = [
+RESNET_BACKBONES: list[ALLOWED_BACKBONES] = [
+    "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
+]
+EFFICIENTNET_BACKBONES: list[ALLOWED_BACKBONES] = [
+    "efficientnet_b0", "efficientnet_b1", "efficientnet_b2",
+]
+VIT_BACKBONES: list[ALLOWED_BACKBONES] = [
     "vits_dino",
     "vitb_dino",
     "vits_dinov2",

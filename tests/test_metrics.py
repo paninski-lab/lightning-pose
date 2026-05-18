@@ -94,6 +94,7 @@ def test_pca_multiview_reprojection_error(cfg, base_data_module):
     )
     kp_pca()
     pca_cols = np.zeros(base_data_module.dataset.num_keypoints, dtype=bool)
+    assert kp_pca.mirrored_column_matches is not None
     pca_cols[np.array(list(kp_pca.mirrored_column_matches)).flatten()] = True
 
     # compute pca error on a random matrix, make sure corrects cols are floats or nans

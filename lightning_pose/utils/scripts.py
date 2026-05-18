@@ -38,6 +38,7 @@ from lightning_pose.metrics import (
     pixel_error,
     temporal_norm,
 )
+from lightning_pose.models import ALLOWED_MODELS
 from lightning_pose.models.base import (
     _apply_defaults_for_lr_scheduler_params,
     _apply_defaults_for_optimizer_params,
@@ -403,8 +404,8 @@ def get_loss_factories(
 def get_model(
     cfg: DictConfig | ListConfig,
     data_module: BaseDataModule | UnlabeledDataModule | None,
-    loss_factories: dict[str, LossFactory] | dict[str, None]
-) -> pl.LightningModule:
+    loss_factories: dict[str, LossFactory] | dict[str, None],
+) -> ALLOWED_MODELS:
     """Create model: regression or heatmap based, supervised or semi-supervised."""
 
     optimizer = cfg.training.get("optimizer", "Adam")

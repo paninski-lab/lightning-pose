@@ -313,6 +313,20 @@ def get_videos_in_dir(
     return video_files
 
 
+@overload
+def check_video_paths(
+    video_paths: list[str] | str,
+    view_names: None = None,
+) -> list[str]: ...
+
+
+@overload
+def check_video_paths(
+    video_paths: list[str] | str,
+    view_names: list[str],
+) -> list[list[str]]: ...
+
+
 def check_video_paths(
     video_paths: list[str] | str,
     view_names: list[str] | None = None,

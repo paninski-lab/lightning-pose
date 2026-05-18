@@ -100,7 +100,7 @@ class TestGetImgaugTransform:
         cfg_tmp.training.imgaug = 'default'
         pipe = get_imgaug_transform(cfg_tmp)
         im_0, kps_0 = pipe(
-            images=np.expand_dims(image, axis=0),
+            images=np.expand_dims(np.array(image), axis=0),
             keypoints=np.expand_dims(keypoints_on_image, axis=0),
         )
         im_0 = im_0[0]
@@ -110,7 +110,7 @@ class TestGetImgaugTransform:
 
         # default pipeline: should be repeatable
         im_1, kps_1 = pipe(
-            images=np.expand_dims(image, axis=0),
+            images=np.expand_dims(np.array(image), axis=0),
             keypoints=np.expand_dims(keypoints_on_image, axis=0),
         )
         im_1 = im_1[0]
