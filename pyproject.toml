@@ -70,6 +70,7 @@ litpose = "lightning_pose.cli.main:main"
 [project.optional-dependencies]
 dev = [
     "pre-commit",
+    "pyright",
     "pytest",
     "pytest-cov",
     "pytest-html",
@@ -114,6 +115,15 @@ ignore = ["B006", "E203", "F821"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["lightning_pose"]
+
+[tool.pyright]
+pythonVersion = "3.11"
+pythonPlatform = "Linux"
+typeCheckingMode = "basic"
+include = ["lightning_pose", "tests"]
+exclude = ["build", "configs", "data", "dist", "docs", "docker", "scripts"]
+# torch stubs don't re-export public functions at the top level (torch.tensor, torch.allclose, etc.)
+reportPrivateImportUsage = "none"
 
 [tool.coverage.run]
 # store paths relative to the repo root so that codecov can match coverage
