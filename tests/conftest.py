@@ -9,7 +9,7 @@ import copy
 import gc
 import os
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 
 import cv2
 import imgaug.augmenters as iaa
@@ -206,7 +206,7 @@ def imgaug_transform(cfg) -> iaa.Sequential:
 
 
 @pytest.fixture
-def base_dataset(cfg, imgaug_transform) -> BaseTrackingDataset:
+def base_dataset(cfg, imgaug_transform) -> Generator[BaseTrackingDataset, None, None]:
     """Create a dataset for regression models from toy data."""
 
     # setup
@@ -225,7 +225,7 @@ def base_dataset(cfg, imgaug_transform) -> BaseTrackingDataset:
 
 
 @pytest.fixture
-def heatmap_dataset(cfg, imgaug_transform) -> HeatmapDataset:
+def heatmap_dataset(cfg, imgaug_transform) -> Generator[HeatmapDataset, None, None]:
     """Create a dataset for heatmap models from toy data."""
 
     # setup
@@ -244,7 +244,10 @@ def heatmap_dataset(cfg, imgaug_transform) -> HeatmapDataset:
 
 
 @pytest.fixture
-def multiview_heatmap_dataset(cfg_multiview, imgaug_transform) -> MultiviewHeatmapDataset:
+def multiview_heatmap_dataset(
+    cfg_multiview,
+    imgaug_transform,
+) -> Generator[MultiviewHeatmapDataset, None, None]:
     """Create a dataset for heatmap models from toy data."""
     # setup
     cfg_tmp = copy.deepcopy(cfg_multiview)
@@ -262,7 +265,7 @@ def multiview_heatmap_dataset(cfg_multiview, imgaug_transform) -> MultiviewHeatm
 
 
 @pytest.fixture
-def heatmap_dataset_context(cfg, imgaug_transform) -> HeatmapDataset:
+def heatmap_dataset_context(cfg, imgaug_transform) -> Generator[HeatmapDataset, None, None]:
     """Create a dataset for heatmap models from toy data."""
 
     # setup
@@ -281,7 +284,10 @@ def heatmap_dataset_context(cfg, imgaug_transform) -> HeatmapDataset:
 
 
 @pytest.fixture
-def multiview_heatmap_dataset_context(cfg_multiview, imgaug_transform) -> HeatmapDataset:
+def multiview_heatmap_dataset_context(
+    cfg_multiview,
+    imgaug_transform,
+) -> Generator[HeatmapDataset, None, None]:
     """Create a dataset for heatmap models from toy data."""
 
     # setup
@@ -300,7 +306,7 @@ def multiview_heatmap_dataset_context(cfg_multiview, imgaug_transform) -> Heatma
 
 
 @pytest.fixture
-def base_data_module(cfg, base_dataset) -> BaseDataModule:
+def base_data_module(cfg, base_dataset) -> Generator[BaseDataModule, None, None]:
     """Create a labeled data module for regression models."""
 
     # setup
@@ -317,7 +323,7 @@ def base_data_module(cfg, base_dataset) -> BaseDataModule:
 
 
 @pytest.fixture
-def heatmap_data_module(cfg, heatmap_dataset) -> BaseDataModule:
+def heatmap_data_module(cfg, heatmap_dataset) -> Generator[BaseDataModule, None, None]:
     """Create a labeled data module for heatmap models."""
 
     # setup
@@ -334,7 +340,10 @@ def heatmap_data_module(cfg, heatmap_dataset) -> BaseDataModule:
 
 
 @pytest.fixture
-def multiview_heatmap_data_module(cfg_multiview, multiview_heatmap_dataset) -> BaseDataModule:
+def multiview_heatmap_data_module(
+    cfg_multiview,
+    multiview_heatmap_dataset,
+) -> Generator[BaseDataModule, None, None]:
     """Create a labeled data module for heatmap models."""
 
     # setup
@@ -351,7 +360,10 @@ def multiview_heatmap_data_module(cfg_multiview, multiview_heatmap_dataset) -> B
 
 
 @pytest.fixture
-def heatmap_data_module_context(cfg, heatmap_dataset_context) -> BaseDataModule:
+def heatmap_data_module_context(
+    cfg,
+    heatmap_dataset_context,
+) -> Generator[BaseDataModule, None, None]:
     """Create a labeled data module for heatmap models."""
 
     # setup
@@ -371,7 +383,7 @@ def heatmap_data_module_context(cfg, heatmap_dataset_context) -> BaseDataModule:
 def multiview_heatmap_data_module_context(
     cfg_multiview,
     multiview_heatmap_dataset_context,
-) -> BaseDataModule:
+) -> Generator[BaseDataModule, None, None]:
     """Create a labeled data module for heatmap models."""
 
     # setup
@@ -390,7 +402,7 @@ def multiview_heatmap_data_module_context(
 
 
 @pytest.fixture
-def base_data_module_combined(cfg, base_dataset) -> UnlabeledDataModule:
+def base_data_module_combined(cfg, base_dataset) -> Generator[UnlabeledDataModule, None, None]:
     """Create a combined data module for regression models."""
 
     # setup
@@ -411,7 +423,10 @@ def base_data_module_combined(cfg, base_dataset) -> UnlabeledDataModule:
 
 
 @pytest.fixture
-def heatmap_data_module_combined(cfg, heatmap_dataset) -> UnlabeledDataModule:
+def heatmap_data_module_combined(
+    cfg,
+    heatmap_dataset,
+) -> Generator[UnlabeledDataModule, None, None]:
     """Create a combined data module for heatmap models."""
 
     # setup
@@ -434,8 +449,8 @@ def heatmap_data_module_combined(cfg, heatmap_dataset) -> UnlabeledDataModule:
 @pytest.fixture
 def multiview_heatmap_data_module_combined(
     cfg_multiview,
-    multiview_heatmap_dataset
-) -> UnlabeledDataModule:
+    multiview_heatmap_dataset,
+) -> Generator[UnlabeledDataModule, None, None]:
     """Create a combined data module for multiview heatmap models."""
 
     # setup
@@ -456,7 +471,10 @@ def multiview_heatmap_data_module_combined(
 
 
 @pytest.fixture
-def heatmap_data_module_combined_context(cfg, heatmap_dataset_context) -> UnlabeledDataModule:
+def heatmap_data_module_combined_context(
+    cfg,
+    heatmap_dataset_context,
+) -> Generator[UnlabeledDataModule, None, None]:
     """Create a combined data module for heatmap models."""
 
     # setup
@@ -481,7 +499,7 @@ def heatmap_data_module_combined_context(cfg, heatmap_dataset_context) -> Unlabe
 def multiview_heatmap_data_module_combined_context(
     cfg_multiview,
     multiview_heatmap_dataset_context,
-) -> UnlabeledDataModule:
+) -> Generator[UnlabeledDataModule, None, None]:
     """Create a combined data module for heatmap models."""
 
     # setup
@@ -503,7 +521,7 @@ def multiview_heatmap_data_module_combined_context(
 
 
 @pytest.fixture
-def video_dataloader(cfg, base_dataset, video_list) -> LitDaliWrapper:
+def video_dataloader(cfg, base_dataset, video_list) -> Generator[LitDaliWrapper, None, None]:
     """Create a prediction dataloader for a new video."""
 
     # setup
@@ -529,7 +547,7 @@ def video_dataloader_multiview(
     cfg_multiview,
     multiview_heatmap_dataset,
     video_list_multiview,
-) -> LitDaliWrapper:
+) -> Generator[LitDaliWrapper, None, None]:
     """Create a prediction dataloader for a new video."""
 
     # setup
