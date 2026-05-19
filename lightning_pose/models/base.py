@@ -650,3 +650,22 @@ class SemiSupervisedTrackerMixin(BaseSupervisedTracker if TYPE_CHECKING else obj
         self.log("total_loss", total_loss, prog_bar=True, sync_dist=True)
 
         return {"loss": total_loss}
+
+
+def check_if_semi_supervised(losses_to_use: ListConfig | list | None = None) -> bool:
+    """Determine from the losses config whether the model is semi-supervised.
+
+    Args:
+        losses_to_use: the cfg entry specifying unsupervised losses to use.
+
+    Returns:
+        True if the model is semi-supervised, False otherwise.
+
+    """
+    if losses_to_use is None:
+        return False
+    if len(losses_to_use) == 0:
+        return False
+    if len(losses_to_use) == 1 and losses_to_use[0] == '':
+        return False
+    return True

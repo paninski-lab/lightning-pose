@@ -23,6 +23,7 @@ from lightning_pose.api import Model, ModelConfig
 from lightning_pose.callbacks import get_callbacks
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.losses import get_loss_factories
+from lightning_pose.models import get_model
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
 from lightning_pose.utils.io import (
     return_absolute_data_paths,
@@ -31,7 +32,6 @@ from lightning_pose.utils.scripts import (
     get_data_module,
     get_dataset,
     get_imgaug_transform,
-    get_model,
 )
 
 # to ignore imports for sphinx-autoapidoc

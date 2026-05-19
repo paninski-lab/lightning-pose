@@ -8,8 +8,8 @@ import pytest
 from omegaconf import OmegaConf
 
 from lightning_pose.losses import get_loss_factories
+from lightning_pose.models import get_model
 from lightning_pose.utils.predictions import make_dlc_pandas_index, predict_dataset
-from lightning_pose.utils.scripts import get_model
 
 
 class TestMakeDlcPandasIndex:
