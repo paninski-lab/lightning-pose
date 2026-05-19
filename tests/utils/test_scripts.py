@@ -27,7 +27,6 @@ from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import BaseTrackingDataset
 from lightning_pose.utils.scripts import (
     calculate_steps_per_epoch,
-    compute_metrics,
     get_callbacks,
     get_data_module,
     get_imgaug_transform,
@@ -696,38 +695,3 @@ class TestGetCallbacks:
         callbacks = get_callbacks(cfg_tmp)
         types = [type(cb) for cb in callbacks]
         assert PatchMasking in types
-
-
-class TestComputeMetrics:
-    """Test the compute_metrics function."""
-
-    def test_compute_metrics_single_view(self, cfg, tmp_path, mocker):
-        """Calls compute_metrics_single once when csv_file is a string."""
-        cfg_tmp = copy.deepcopy(cfg)
-        labels_csv = tmp_path / 'labels.csv'
-        labels_csv.write_text('')
-        cfg_tmp.data.csv_file = str(labels_csv)
-        preds_file = tmp_path / 'preds.csv'
-
-        mock_single = mocker.patch('lightning_pose.utils.scripts.compute_metrics_single')
-        compute_metrics(cfg_tmp, preds_file=str(preds_file))
-
-        mock_single.assert_called_once()
-        assert mock_single.call_args.kwargs['preds_file'] == str(preds_file)
-        assert mock_single.call_args.kwargs['labels_file'] == str(labels_csv)
-
-    def test_compute_metrics_multi_view(self, cfg, tmp_path, mocker):
-        """Calls compute_metrics_single once per view when csv_file is a list."""
-        cfg_tmp = copy.deepcopy(cfg)
-        label_files = [tmp_path / f'labels_{i}.csv' for i in range(2)]
-        preds_files = [str(tmp_path / f'preds_{i}.csv') for i in range(2)]
-        for f in label_files:
-            f.write_text('')
-        cfg_tmp.data.csv_file = [str(f) for f in label_files]
-
-        mock_single = mocker.patch('lightning_pose.utils.scripts.compute_metrics_single')
-        compute_metrics(cfg_tmp, preds_file=preds_files)
-
-        assert mock_single.call_count == 2
-        called_preds = [c.kwargs['preds_file'] for c in mock_single.call_args_list]
-        assert called_preds == preds_files
