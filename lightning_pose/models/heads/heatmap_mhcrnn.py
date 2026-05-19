@@ -36,7 +36,7 @@ class HeatmapMHCRNNHead(nn.Module):
         deconv_out_channels: int | None = None,
         downsample_factor: int = 2,
         upsampling_factor: Literal[1, 2] = 2,
-    ):
+    ) -> None:
         """
 
         Args:
@@ -120,7 +120,10 @@ class HeatmapMHCRNNHead(nn.Module):
 
         return heatmaps_sf, heatmaps_mf
 
-    def run_subpixelmaxima(self, heatmaps):
+    def run_subpixelmaxima(
+        self,
+        heatmaps: Float[torch.Tensor, "batch num_keypoints height width"],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         return run_subpixelmaxima(heatmaps, self.downsample_factor, self.temperature)
 
 
@@ -236,7 +239,7 @@ class UpsamplingCRNN(nn.Module):
         else:
             self.layers = torch.nn.ModuleList([self.W_f, self.H_f, self.W_b, self.H_b])
 
-    def _initialize_layers(self):
+    def _initialize_layers(self) -> None:
         if self.upsampling_factor == 2:
             torch.nn.init.xavier_uniform_(self.W_pre.weight, gain=1.0)
             torch.nn.init.zeros_(self.W_pre.bias)  # type: ignore[arg-type]

@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 
 
-def needs_migration():
+def needs_migration() -> bool | None:
     """Checks if the time directory rename migration is needed."""
     outputs_path = Path("outputs")
     if not outputs_path.is_dir():
@@ -16,7 +16,7 @@ def needs_migration():
     return False
 
 
-def migrate():
+def migrate() -> bool:
     """Renames time directories."""
     print(
         "Fixing directory names (https://github.com/paninski-lab/lightning-pose/issues/278)..."

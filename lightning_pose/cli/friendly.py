@@ -1,10 +1,11 @@
 import argparse
 import shutil
 import sys
+from typing import Any
 
 
 class ArgumentParser(argparse.ArgumentParser):
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(
             formatter_class=_HelpFormatter,
             epilog="documentation: \n"
@@ -13,12 +14,12 @@ class ArgumentParser(argparse.ArgumentParser):
         )
         self.is_sub_parser = False
 
-    def print_help(self, with_welcome=True, **kwargs):
+    def print_help(self, with_welcome: bool = True, **kwargs: Any) -> None:
         if with_welcome and not self.is_sub_parser:
             print("Welcome to the lightning-pose CLI!\n")
         super().print_help(**kwargs)
 
-    def error(self, message):
+    def error(self, message: str) -> None:  # type: ignore[override]
         red = "\033[91m"
         end = "\033[0m"
 
@@ -31,7 +32,7 @@ class ArgumentParser(argparse.ArgumentParser):
 
 
 class ArgumentSubParser(ArgumentParser):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.is_sub_parser = True
 
@@ -58,6 +59,6 @@ class _HelpFormatter(argparse.HelpFormatter):
     def _fill_text(self, text: str, width: int, indent: str) -> str:
         return "\n".join(indent + line for line in self._split_lines(text, width - len(indent)))
 
-    def _format_action(self, *args, **kwargs):
+    def _format_action(self, *args: Any, **kwargs: Any) -> str:
         """Modified to add a newline after each argument, for better readability."""
         return super()._format_action(*args, **kwargs) + "\n"

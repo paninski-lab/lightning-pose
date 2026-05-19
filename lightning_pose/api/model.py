@@ -12,6 +12,7 @@ from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from lightning_pose.api.model_config import ModelConfig
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
+from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datatypes import MultiviewPredictionResult, PredictionResult
 from lightning_pose.data.utils import convert_bbox_coords
 from lightning_pose.models import ALLOWED_MODELS
@@ -49,12 +50,12 @@ class Model:
     UNSPECIFIED = "unspecified"
 
     @staticmethod
-    def from_dir(model_dir: str | Path):
+    def from_dir(model_dir: str | Path) -> Model:
         """Create a `Model` instance for a model stored at `model_dir`."""
         return Model.from_dir2(model_dir)
 
     @staticmethod
-    def from_dir2(model_dir: str | Path, hydra_overrides: list[str] | None = None):
+    def from_dir2(model_dir: str | Path, hydra_overrides: list[str] | None = None) -> Model:
         """Internal version of from_dir that supports hydra_overrides. Not sure whether to
         promote this to public API yet."""
 
@@ -73,7 +74,7 @@ class Model:
 
         return Model(model_dir, config)
 
-    def __init__(self, model_dir: str | Path, config: ModelConfig):
+    def __init__(self, model_dir: str | Path, config: ModelConfig) -> None:
         self.model_dir = Path(model_dir).absolute()
         self.config = config
 
@@ -82,7 +83,7 @@ class Model:
         """The model configuration as an `omegaconf.DictConfig`."""
         return self.config.cfg
 
-    def _load(self):
+    def _load(self) -> None:
         if self.model is None:
             ckpt_file = io_utils.ckpt_path_from_base_path(
                 base_path=str(self.model_dir), model_name=self.cfg.model.model_name
@@ -107,13 +108,13 @@ class Model:
     def labeled_videos_dir(self) -> Path:
         return self.model_dir / "video_preds" / "labeled_videos"
 
-    def cropped_data_dir(self):
+    def cropped_data_dir(self) -> Path:
         return self.model_dir / "cropped_images"
 
-    def cropped_videos_dir(self):
+    def cropped_videos_dir(self) -> Path:
         return self.model_dir / "cropped_videos"
 
-    def cropped_csv_file_path(self, csv_file_path: str | Path):
+    def cropped_csv_file_path(self, csv_file_path: str | Path) -> Path:
         csv_file_path = Path(csv_file_path)
         return (
             self.model_dir
@@ -236,7 +237,7 @@ class Model:
         mean = np.array(_IMAGENET_MEAN, dtype=np.float32)
         std = np.array(_IMAGENET_STD, dtype=np.float32)
 
-        def _preprocess_single(img):
+        def _preprocess_single(img: np.ndarray) -> np.ndarray:
             resized = cv2.resize(
                 img, (resize_w, resize_h), interpolation=cv2.INTER_LINEAR,
             )
@@ -649,7 +650,7 @@ class Model:
         return MultiviewPredictionResult(predictions=df_dict, metrics=metrics)
 
 
-def _build_datamodule_pred(cfg: DictConfig | ListConfig):
+def _build_datamodule_pred(cfg: DictConfig | ListConfig) -> BaseDataModule | UnlabeledDataModule:
     cfg_pred = copy.deepcopy(cfg)
     cfg_pred.training.imgaug = "default"
     imgaug_transform_pred = get_imgaug_transform(cfg=cfg_pred)

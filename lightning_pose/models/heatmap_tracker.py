@@ -185,7 +185,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         else:
             return predicted_keypoints, confidence
 
-    def get_parameters(self):
+    def get_parameters(self) -> list[dict]:
         params = [
             {"params": self.backbone.parameters(), "lr": 0, "name": "backbone"},
             {"params": self.head.parameters(), "name": "head"},

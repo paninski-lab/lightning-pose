@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from typing import Any
 
 import torch
 import torchvision.models as tvmodels
@@ -13,8 +14,8 @@ def build_backbone(
     backbone_arch: ALLOWED_BACKBONES,
     pretrained: bool = True,
     model_type: str = "heatmap",
-    **kwargs,
-) -> tuple:
+    **kwargs: Any,
+) -> tuple[torch.nn.Module, int]:
     """Load backbone weights for resnets, efficientnets, and other models from torchvision.
 
     Args:
@@ -115,7 +116,7 @@ def build_backbone(
     return backbone, num_fc_input_features
 
 
-def grab_layers_sequential(model, last_layer_ind: int) -> torch.nn.Sequential:
+def grab_layers_sequential(model: torch.nn.Module, last_layer_ind: int) -> torch.nn.Sequential:
     """Package selected number of layers into a torch.nn.Sequential object.
 
     Args:

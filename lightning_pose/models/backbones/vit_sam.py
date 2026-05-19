@@ -17,7 +17,7 @@ class SamVisionEncoder(nn.Module):
         model_name: str = "facebook/sam-vit-base",
         finetune_img_size: int = 1024,
         img_size: int = 1024,
-    ):
+    ) -> None:
         super().__init__()
 
         # Load the full SAM model and extract vision encoder
@@ -59,10 +59,10 @@ class SamVisionEncoder(nn.Module):
             if hasattr(layer.attn, "use_rel_pos"):
                 layer.attn.use_rel_pos = False  # type: ignore[arg-type]
 
-    def _bypass_size_check(self):
+    def _bypass_size_check(self) -> None:
         """Completely bypass the size check in patch embedding"""
 
-        def no_size_check_forward(pixel_values):
+        def no_size_check_forward(pixel_values: torch.Tensor) -> torch.Tensor:
             batch_size, num_channels, height, width = pixel_values.shape
 
             # Only check channel dimension
@@ -124,7 +124,7 @@ class SamVisionEncoder(nn.Module):
 
         return features
 
-    def _resize_pos_embed(self):
+    def _resize_pos_embed(self) -> None:
         """Resize positional embeddings for different input sizes"""
 
         if self.original_pos_embed is None:

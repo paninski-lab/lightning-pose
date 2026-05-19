@@ -610,23 +610,23 @@ def get_model(
 
 def get_callbacks(
     cfg: DictConfig | ListConfig,
-    early_stopping=False,
-    checkpointing=True,
-    lr_monitor=True,
-    ckpt_every_n_epochs=None,
-    backbone_unfreeze=True,
+    early_stopping: bool = False,
+    checkpointing: bool = True,
+    lr_monitor: bool = True,
+    ckpt_every_n_epochs: int | None = None,
+    backbone_unfreeze: bool = True,
     status_file: Path | None = None,
 ) -> list:
 
     callbacks = []
 
     if early_stopping:
-        early_stopping = EarlyStopping(
+        early_stopping_cb = EarlyStopping(
             monitor="val_supervised_loss",
             patience=cfg.training.early_stop_patience,
             mode="min",
         )
-        callbacks.append(early_stopping)
+        callbacks.append(early_stopping_cb)
 
     if backbone_unfreeze:
         unfreeze_step = cfg.training.get("unfreezing_step")
@@ -638,8 +638,8 @@ def get_callbacks(
 
     if lr_monitor:
         # this callback should be added after UnfreezeBackbone in order to log its learning rate
-        lr_monitor = LearningRateMonitor(logging_interval="epoch")
-        callbacks.append(lr_monitor)
+        lr_monitor_cb = LearningRateMonitor(logging_interval="epoch")
+        callbacks.append(lr_monitor_cb)
 
     # always save out best model
     if checkpointing:
@@ -688,7 +688,7 @@ def get_callbacks(
     return callbacks
 
 
-def calculate_steps_per_epoch(data_module: BaseDataModule):
+def calculate_steps_per_epoch(data_module: BaseDataModule) -> int:
     assert data_module.train_dataset is not None
     train_dataset_length = len(data_module.train_dataset)
     steps_per_epoch = math.ceil(train_dataset_length / data_module.train_batch_size)

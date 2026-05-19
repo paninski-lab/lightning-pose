@@ -1,7 +1,7 @@
 """Data pipelines based on efficient video reading by nvidia dali package."""
 
 import os
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 import nvidia.dali.fn as fn
@@ -155,11 +155,11 @@ class LitDaliWrapper(DALIGenericIterator):
 
     def __init__(
         self,
-        *args,
+        *args: Any,
         eval_mode: Literal["train", "predict"],
         num_iters: int = 1,
         do_context: bool = False,
-        **kwargs
+        **kwargs: Any,
     ) -> None:
         """Wrapper around DALIGenericIterator to get batches for pl.
 
@@ -419,7 +419,7 @@ class PrepareDALI:
 
         return dict_args
 
-    def _get_dali_pipe(self):
+    def _get_dali_pipe(self) -> Any:
         """
         Return a DALI pipe with predefined args.
         """

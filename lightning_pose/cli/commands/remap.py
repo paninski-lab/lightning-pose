@@ -1,10 +1,12 @@
 """Remap command for the lightning-pose CLI."""
 
+import argparse
 from pathlib import Path
 from textwrap import dedent
+from typing import Any
 
 
-def register_parser(subparsers):
+def register_parser(subparsers: Any) -> argparse.ArgumentParser:
     """Register the remap command parser."""
     # Choose documentation link depending on whether we're being imported by Sphinx
     import sys
@@ -39,16 +41,14 @@ def register_parser(subparsers):
     return remap_parser
 
 
-def get_parser():
+def get_parser() -> argparse.ArgumentParser:
     """Return an ArgumentParser for the `litpose remap` subcommand (for docs)."""
-    import argparse
-
     parser = argparse.ArgumentParser(prog="litpose")
     subparsers = parser.add_subparsers(dest="command")
     return register_parser(subparsers)
 
 
-def handle(args):
+def handle(args: argparse.Namespace) -> None:
     """Handle the remap command."""
     import lightning_pose.utils.cropzoom as cz
 

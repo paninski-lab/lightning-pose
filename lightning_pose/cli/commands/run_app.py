@@ -1,7 +1,10 @@
 """App command for the lightning-pose CLI."""
 
+import argparse
+from typing import Any
 
-def register_parser(subparsers):
+
+def register_parser(subparsers: Any) -> argparse.ArgumentParser:
     """Register the app command parser."""
     app_parser = subparsers.add_parser(
         "run_app",
@@ -23,16 +26,14 @@ def register_parser(subparsers):
     return app_parser
 
 
-def get_parser():
+def get_parser() -> argparse.ArgumentParser:
     """Return an ArgumentParser for the `litpose run_app` subcommand (for docs)."""
-    import argparse
-
     parser = argparse.ArgumentParser(prog="litpose")
     subparsers = parser.add_subparsers(dest="command")
     return register_parser(subparsers)
 
 
-def handle(args):
+def handle(args: argparse.Namespace) -> None:
     """Handle the app command."""
     import importlib.util
 

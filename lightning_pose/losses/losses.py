@@ -20,7 +20,7 @@ The general flow of each loss class is as follows:
 
 import os
 import warnings
-from typing import Literal
+from typing import Any, Literal
 
 import torch
 from jaxtyping import Float
@@ -67,7 +67,7 @@ class Loss:
         data_module: BaseDataModule | UnlabeledDataModule | None = None,
         epsilon: float | list[float] = 0.0,
         log_weight: float = 0.0,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """
 
@@ -94,11 +94,11 @@ class Loss:
         weight = 1.0 / (2.0 * torch.exp(self.log_weight))
         return weight
 
-    def remove_nans(self, **kwargs):
+    def remove_nans(self, **kwargs: Any) -> Any:
         # find nans in the targets, and do a masked_select operation
         raise NotImplementedError
 
-    def compute_loss(self, **kwargs):
+    def compute_loss(self, **kwargs: Any) -> torch.Tensor:
         raise NotImplementedError
 
     def rectify_epsilon(self, loss: torch.Tensor) -> torch.Tensor:
@@ -125,7 +125,11 @@ class Loss:
         }
         return [loss_dict, weight_dict]
 
-    def __call__(self, *args, **kwargs):
+    def __call__(
+        self,
+        *args: Any,
+        **kwargs: Any,
+    ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
         # give us the flow of operations, and we overwrite the methods, and determine
         # their arguments which are in buffer
 
@@ -146,7 +150,7 @@ class HeatmapLoss(Loss):
         self,
         data_module: BaseDataModule | UnlabeledDataModule | None = None,
         log_weight: float = 0.0,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize HeatmapLoss.
 
@@ -172,7 +176,7 @@ class HeatmapLoss(Loss):
 
         return targets[~idxs_ignore], predictions[~idxs_ignore]
 
-    def compute_loss(self, **kwargs):
+    def compute_loss(self, **kwargs: Any) -> torch.Tensor:
         raise NotImplementedError
 
     def __call__(
@@ -180,7 +184,7 @@ class HeatmapLoss(Loss):
         heatmaps_targ: Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"],
         heatmaps_pred: Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"],
         stage: Literal["train", "val", "test"] | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
         # give us the flow of operations, and we overwrite the methods, and determine
         # their arguments which are in buffer
@@ -205,7 +209,7 @@ class HeatmapMSELoss(HeatmapLoss):
         self,
         data_module: BaseDataModule | UnlabeledDataModule | None = None,
         log_weight: float = 0.0,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize HeatmapMSELoss.
 
@@ -238,7 +242,7 @@ class HeatmapKLLoss(HeatmapLoss):
         self,
         data_module: BaseDataModule | UnlabeledDataModule | None = None,
         log_weight: float = 0.0,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize HeatmapKLLoss.
 
@@ -273,7 +277,7 @@ class HeatmapJSLoss(HeatmapLoss):
         self,
         data_module: BaseDataModule | UnlabeledDataModule | None = None,
         log_weight: float = 0.0,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize HeatmapJSLoss.
 
@@ -319,7 +323,7 @@ class PCALoss(Loss):
         log_weight: float = 0.0,
         device: str | torch.device = _DEFAULT_TORCH_DEVICE,
         centering_method: Literal["mean", "median"] | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize PCALoss.
 
@@ -399,7 +403,7 @@ class PCALoss(Loss):
                 stacklevel=2,
             )
 
-    def remove_nans(self, **kwargs):
+    def remove_nans(self, **kwargs: Any) -> Any:
         # find nans in the targets, and do a masked_select operation
         pass
 
@@ -419,7 +423,7 @@ class PCALoss(Loss):
         self,
         keypoints_pred: torch.Tensor,
         stage: Literal["train", "val", "test"] | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
         assert keypoints_pred.device == torch.device(self.device), (
             keypoints_pred.device,
@@ -448,7 +452,7 @@ class TemporalLoss(Loss):
         epsilon: float | list[float] = 0.0,
         prob_threshold: float = 0.0,
         log_weight: float = 0.0,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize TemporalLoss.
 
@@ -520,7 +524,7 @@ class TemporalLoss(Loss):
         keypoints_pred: Float[torch.Tensor, "batch two_x_num_keypoints"],
         confidences: Float[torch.Tensor, "batch num_keypoints"] | None = None,
         stage: Literal["train", "val", "test"] | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
 
         elementwise_loss = self.compute_loss(predictions=keypoints_pred)
@@ -553,7 +557,7 @@ class TemporalHeatmapLoss(Loss):
         epsilon: float | list[float] = 0.0,
         prob_threshold: float = 0.0,
         log_weight: float = 0.0,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize TemporalHeatmapLoss.
 
@@ -645,7 +649,7 @@ class TemporalHeatmapLoss(Loss):
         heatmaps_pred: Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"],
         confidences: Float[torch.Tensor, "batch num_keypoints"],
         stage: Literal["train", "val", "test"] | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
 
         elementwise_loss = self.compute_loss(predictions=heatmaps_pred)
@@ -676,7 +680,7 @@ class UnimodalLoss(Loss):
         prob_threshold: float = 0.0,
         log_weight: float = 0.0,
         uniform_heatmaps: bool = False,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize UnimodalLoss.
 
@@ -779,7 +783,7 @@ class UnimodalLoss(Loss):
         heatmaps_pred: Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"],
         confidences: Float[torch.Tensor, "batch num_keypoints"],
         stage: Literal["train", "val", "test"] | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
         """Compute unimodal loss.
 
@@ -823,7 +827,7 @@ class RegressionMSELoss(Loss):
         data_module: BaseDataModule | UnlabeledDataModule | None = None,
         epsilon: float = 0.0,
         log_weight: float = 0.0,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize RegressionMSELoss.
 
@@ -862,7 +866,7 @@ class RegressionMSELoss(Loss):
         keypoints_targ: Float[torch.Tensor, "batch two_x_num_keypoints"],
         keypoints_pred: Float[torch.Tensor, "batch two_x_num_keypoints"],
         stage: Literal["train", "val", "test"] | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
 
         clean_targets, clean_predictions = self.remove_nans(
@@ -887,7 +891,7 @@ class RegressionRMSELoss(RegressionMSELoss):
         data_module: BaseDataModule | UnlabeledDataModule | None = None,
         epsilon: float = 0.0,
         log_weight: float = 0.0,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize RegressionRMSELoss.
 
@@ -916,7 +920,7 @@ class PairwiseProjectionsLoss(Loss):
 
     loss_name = "supervised_pairwise_projections"
 
-    def __init__(self, log_weight: float = 0.0, **kwargs) -> None:
+    def __init__(self, log_weight: float = 0.0, **kwargs: Any) -> None:
         """Initialize PairwiseProjectionsLoss.
 
         Args:
@@ -987,7 +991,7 @@ class PairwiseProjectionsLoss(Loss):
         keypoints_targ_3d: Float[torch.Tensor, "batch num_keypoints 3"],
         keypoints_pred_3d: Float[torch.Tensor, "batch cam_pairs num_keypoints 3"],
         stage: Literal["train", "val", "test"] | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
 
         # check if 3D keypoints are available
@@ -1023,7 +1027,7 @@ class ReprojectionHeatmapLoss(Loss):
         downsampled_image_width: int,
         log_weight: float = 0.0,
         uniform_heatmaps: bool = False,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize ReprojectionHeatmapLoss.
 
@@ -1087,7 +1091,7 @@ class ReprojectionHeatmapLoss(Loss):
         heatmaps_targ: Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"],
         keypoints_pred_2d_reprojected: Float[torch.Tensor, "batch num_keypoints 2"],
         stage: Literal["train", "val", "test"] | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
 
         # check if reprojected keypoints are available

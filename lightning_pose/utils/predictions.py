@@ -7,7 +7,7 @@ import gc
 import os
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, cast, overload
+from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
 import cv2
 import lightning.pytorch as pl
@@ -41,7 +41,7 @@ __all__ = [
 ]
 
 
-def _get_cfg_file(cfg_file: str | DictConfig | ListConfig):
+def _get_cfg_file(cfg_file: str | DictConfig | ListConfig) -> DictConfig | ListConfig:
     """Load yaml configuration files."""
     if isinstance(cfg_file, str):
         # load configuration file
@@ -91,11 +91,11 @@ class PredictionHandler:
             return len(self.data_module.dataset)  # type: ignore[arg-type]
 
     @property
-    def keypoint_names(self):
+    def keypoint_names(self) -> list[str]:
         return list(self.cfg.data.keypoint_names)
 
     @property
-    def do_context(self):
+    def do_context(self) -> bool:
         if self.data_module:
             return self.data_module.dataset.do_context  # type: ignore[union-attr]
         else:
@@ -152,7 +152,7 @@ class PredictionHandler:
 
     def fix_context_preds_confs(
         self, stacked_preds: torch.Tensor, zero_pad_confidence: bool = False
-    ):
+    ) -> torch.Tensor:
         """
         In the context model, ind=0 is associated with image[2], and ind=1 is associated with
         image[3], so we need to shift the predictions and confidences by two and eliminate the
@@ -688,7 +688,7 @@ def load_model_from_checkpoint(
     return model
 
 
-def _make_cmap(number_colors: int, cmap: str):
+def _make_cmap(number_colors: int, cmap: str) -> np.ndarray:
     color_class = plt.cm.ScalarMappable(cmap=cmap)
     C = color_class.to_rgba(np.linspace(0, 1, number_colors))
     colors = (C[:, :3] * 255).astype(np.uint8)
@@ -746,22 +746,22 @@ def create_labeled_video(
 
     print(f"Duration of video [s]: {np.round(dur, 2)}, recorded at {np.round(fps_og, 2)} fps!")
 
-    def seconds_to_hms(seconds):
+    def seconds_to_hms(seconds: float) -> str:
         # Convert seconds to a timedelta object
         td = datetime.timedelta(seconds=seconds)
 
         # Extract hours, minutes, and seconds from the timedelta object
         hours = td // datetime.timedelta(hours=1)
         minutes = (td // datetime.timedelta(minutes=1)) % 60
-        seconds = td % datetime.timedelta(minutes=1)
+        remainder = td % datetime.timedelta(minutes=1)
 
         # Format the hours, minutes, and seconds into a string
-        hms_str = f"{hours:02}:{minutes:02}:{seconds.seconds:02}"
+        hms_str = f"{hours:02}:{minutes:02}:{remainder.seconds:02}"
 
         return hms_str
 
     # add marker to each frame t, where t is in sec
-    def add_marker_and_timestamps(get_frame, t):
+    def add_marker_and_timestamps(get_frame: Any, t: float) -> np.ndarray:
         image = get_frame(t)
         # frame [ny x ny x 3]
         frame = image.copy()
@@ -879,7 +879,7 @@ def generate_labeled_video(
     output_mp4_file: str,
     confidence_thresh_for_vid: float,
     colormap: str,
-):
+) -> None:
     os.makedirs(os.path.dirname(output_mp4_file), exist_ok=True)
     # transform df to numpy array
     keypoints_arr = np.reshape(preds_df.to_numpy(), [preds_df.shape[0], -1, 3])

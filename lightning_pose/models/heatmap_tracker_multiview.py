@@ -53,7 +53,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
         image_size: int = 256,
         **kwargs: Any,
-    ):
+    ) -> None:
         """Initialize a multi-view model with transformer backbone.
         Args:
             num_keypoints: number of body parts
@@ -136,7 +136,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
     def forward_vit(
         self,
         images: Float[torch.Tensor, "view_x_batch channels image_height image_width"],
-    ):
+    ) -> Float[torch.Tensor, "view_x_batch embedding_dim height width"]:
         """Override forward pass through the vision encoder to add view embeddings."""
 
         # outputs = self.vision_encoder(
@@ -336,7 +336,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         else:
             return pred_keypoints, confidence
 
-    def get_parameters(self):
+    def get_parameters(self) -> list[dict]:
         params = [
             {"params": self.backbone.parameters(), "name": "backbone", "lr": 0.0},
             {"params": self.head.parameters(), "name": "head"},
@@ -369,7 +369,7 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(
         lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
         image_size: int = 256,
         **kwargs: Any,
-    ):
+    ) -> None:
         """Initialize a semi-supervised multi-view model with transformer backbone.
 
         Args:

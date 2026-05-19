@@ -1,6 +1,6 @@
 """High-level loss class that orchestrates the individual losses."""
 
-from typing import Literal
+from typing import Any, Literal
 
 import lightning.pytorch as pl
 import torch
@@ -31,7 +31,7 @@ class LossFactory(pl.LightningModule):
         # initialize loss classes
         self._initialize_loss_instances()
 
-    def _initialize_loss_instances(self):
+    def _initialize_loss_instances(self) -> None:
         self.loss_instance_dict = {}
         loss_classes_dict = get_loss_classes()
         for loss, params in self.losses_params_dict.items():
@@ -43,7 +43,7 @@ class LossFactory(pl.LightningModule):
         self,
         stage: Literal["train", "val", "test"] | None = None,
         anneal_weight: float | torch.Tensor | None = 1.0,
-        **kwargs
+        **kwargs: Any,
     ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
 
         # loop over losses, compute, sum, log

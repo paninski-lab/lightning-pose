@@ -1,3 +1,5 @@
+from omegaconf import DictConfig, ListConfig
+
 # to ignore imports for sphix-autoapidoc
 __all__ = [
     "pretty_print_str",
@@ -12,7 +14,7 @@ def pretty_print_str(string: str, symbol: str = "-") -> None:
     print(symbol * str_length)
 
 
-def pretty_print_cfg(cfg):
+def pretty_print_cfg(cfg: DictConfig | ListConfig) -> None:
 
     for key, val in cfg.items():
         if key == "eval":

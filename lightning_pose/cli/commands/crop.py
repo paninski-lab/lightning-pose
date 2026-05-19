@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from omegaconf import OmegaConf
 
@@ -14,7 +15,7 @@ if TYPE_CHECKING:
     from lightning_pose.api.model import Model  # noqa: F401
 
 
-def register_parser(subparsers):
+def register_parser(subparsers: Any) -> argparse.ArgumentParser:
     """Register the crop command parser."""
     # Choose documentation link depending on whether we're being imported by Sphinx
     import sys
@@ -83,16 +84,14 @@ def register_parser(subparsers):
     return crop_parser
 
 
-def get_parser():
+def get_parser() -> argparse.ArgumentParser:
     """Return an ArgumentParser for the `litpose crop` subcommand (for docs)."""
-    import argparse
-
     parser = argparse.ArgumentParser(prog="litpose")
     subparsers = parser.add_subparsers(dest="command")
     return register_parser(subparsers)
 
 
-def handle(args):
+def handle(args: argparse.Namespace) -> None:
     """Handle the crop command."""
     import lightning_pose.utils.cropzoom as cz  # noqa: F811
     from lightning_pose.api.model import Model  # noqa: F811

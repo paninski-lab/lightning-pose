@@ -1,7 +1,7 @@
 """PCA class to assist with computing PCA losses."""
 
 import warnings
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import numpy as np
 import torch
@@ -365,7 +365,13 @@ class NaNPCA(PCA):
         # Call fit for full SVD
         return self._fit_full(X, n_components, xp, is_array_api_compliant)
 
-    def _fit_full(self, X, n_components, xp, is_array_api_compliant):
+    def _fit_full(
+        self,
+        X: np.ndarray,
+        n_components: Any,
+        xp: Any,
+        is_array_api_compliant: bool,
+    ) -> tuple[Any, ...]:
         """Fit the model by computing full SVD on X.
 
         This is a modification of the sklearn function that now allows for NaNs in the inputs.
@@ -506,7 +512,7 @@ class NaNPCA(PCA):
 
         return U, S, Vt, X, x_is_centered, xp
 
-    def transform(self, X):
+    def transform(self, X: np.ndarray) -> np.ndarray:
         """Apply dimensionality reduction to X including missing data (Nans).
 
         X is projected on the first principal components previously extracted

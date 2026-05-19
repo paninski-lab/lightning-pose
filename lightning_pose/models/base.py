@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 if TYPE_CHECKING:
@@ -50,7 +51,7 @@ DEFAULT_OPTIMIZER_PARAMS = OmegaConf.create(
 
 
 class LrNotImplementedError(NotImplementedError):
-    def __init__(self, lr_scheduler: str):
+    def __init__(self, lr_scheduler: str) -> None:
         super().__init__(
             f"'{lr_scheduler}' is an invalid LR scheduler. Must be multisteplr."
         )
@@ -58,7 +59,7 @@ class LrNotImplementedError(NotImplementedError):
 
 
 class OptimizerNotImplementedError(NotImplementedError):
-    def __init__(self, optimizer: str):
+    def __init__(self, optimizer: str) -> None:
         super().__init__(
             f"'{optimizer}' is an invalid optimizer. Must be Adam or AdamW."
         )
@@ -344,7 +345,7 @@ class BaseFeatureExtractor(LightningModule):
         """
         return self.get_representations(images)
 
-    def get_scheduler(self, optimizer):
+    def get_scheduler(self, optimizer: torch.optim.Optimizer) -> MultiStepLR:
         if self.lr_scheduler not in ("multistep_lr", "multisteplr"):
             raise LrNotImplementedError(self.lr_scheduler)
         # define a scheduler that reduces the base learning rate
@@ -355,7 +356,7 @@ class BaseFeatureExtractor(LightningModule):
 
         return scheduler
 
-    def get_parameters(self):
+    def get_parameters(self) -> Iterator[torch.nn.Parameter]:
         params = filter(lambda p: p.requires_grad, self.parameters())
         return params
 

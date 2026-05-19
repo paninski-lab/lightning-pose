@@ -33,7 +33,7 @@ __all__ = [
 ]
 
 
-def _patched_prevent(axis_size, crop_start, crop_end):
+def _patched_prevent(axis_size: int, crop_start: int, crop_end: int) -> tuple[int, ...]:
     """Monkey patch to fix imaug 0.4.2 compatability issue with numpy 2.x"""
     result = _iaa_size._prevent_zero_sizes_after_crops_(
         np.array([axis_size], dtype=np.int32),
@@ -356,7 +356,7 @@ class HeatmapDataset(BaseTrackingDataset):
 
         return y_heatmap[0]
 
-    def compute_heatmaps(self):
+    def compute_heatmaps(self) -> torch.Tensor:
         """Compute initial 2D heatmaps for all labeled data. Note this will apply augmentations.
 
         original image dims e.g., (406, 396) ->

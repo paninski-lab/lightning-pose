@@ -130,7 +130,7 @@ class RegressionTracker(BaseSupervisedTracker):
         confidence = torch.zeros((predicted_keypoints.shape[0], predicted_keypoints.shape[1] // 2))
         return predicted_keypoints, confidence
 
-    def get_parameters(self):
+    def get_parameters(self) -> list[dict]:
         params = [
             {"params": self.backbone.parameters(), "lr": 0, "name": "backbone"},
             {"params": self.head.parameters(), "name": "head"},

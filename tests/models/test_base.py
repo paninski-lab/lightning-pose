@@ -127,18 +127,18 @@ def test_backbones_vit():
         model = BaseFeatureExtractor(backbone=backbone).to(_TORCH_DEVICE)
         if backbone == "vitb_sam":
             from transformers.models.sam.modeling_sam import SamPatchEmbeddings
-            assert isinstance(model.backbone.vision_encoder.patch_embed, SamPatchEmbeddings)
+            assert isinstance(model.backbone.vision_encoder.patch_embed, SamPatchEmbeddings)  # type: ignore[attr-defined]
         elif backbone in ["vits_dino", "vitb_dino", "vitb_imagenet"]:
             from transformers.models.vit.modeling_vit import ViTEmbeddings
-            assert isinstance(model.backbone.vision_encoder.embeddings, ViTEmbeddings)
+            assert isinstance(model.backbone.vision_encoder.embeddings, ViTEmbeddings)  # type: ignore[attr-defined]
         elif backbone in ["vits_dinov2", "vitb_dinov2"]:
             from transformers.models.dinov2.modeling_dinov2 import Dinov2Embeddings
-            assert isinstance(model.backbone.vision_encoder.embeddings, Dinov2Embeddings)
+            assert isinstance(model.backbone.vision_encoder.embeddings, Dinov2Embeddings)  # type: ignore[attr-defined]
         elif backbone in ["vits_dinov3", "vitb_dinov3"]:
             from transformers.models.dinov3_vit.modeling_dinov3_vit import (
                 Dinov3ViTEmbeddings,  # type: ignore[attr-defined]
             )
-            assert isinstance(model.backbone.vision_encoder.embeddings, Dinov3ViTEmbeddings)
+            assert isinstance(model.backbone.vision_encoder.embeddings, Dinov3ViTEmbeddings)  # type: ignore[attr-defined]
         # remove model from gpu; then cache can be cleared
         del model
         gc.collect()

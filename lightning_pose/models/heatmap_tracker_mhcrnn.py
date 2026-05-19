@@ -43,7 +43,7 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
         **kwargs: Any,
-    ):
+    ) -> None:
         """Initialize a DLC-like model with resnet backbone.
 
         Args:
@@ -223,7 +223,7 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
         else:
             return pred_keypoints_sf, confidence_sf
 
-    def get_parameters(self):
+    def get_parameters(self) -> list[dict]:
         params = [
             {"params": self.backbone.parameters(), "name": "backbone", "lr": 0.0},
             {"params": self.head.parameters(), "name": "head"},
@@ -248,7 +248,7 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
         **kwargs: Any,
-    ):
+    ) -> None:
         """
 
         Args:
