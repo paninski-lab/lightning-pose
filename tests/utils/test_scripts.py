@@ -27,60 +27,11 @@ from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import BaseTrackingDataset
 from lightning_pose.losses import get_loss_factories
 from lightning_pose.utils.scripts import (
-    calculate_steps_per_epoch,
     get_callbacks,
     get_data_module,
     get_imgaug_transform,
     get_model,
 )
-
-
-class TestCalculateStepsPerEpoch:
-    """Test the calculate_steps_per_epoch function."""
-
-    def test_calculate_steps_per_epoch_supervised(self, cfg, base_dataset):
-        """Test the computation of steps per epoch."""
-        cfg_tmp = copy.deepcopy(cfg)
-        cfg_tmp.model.losses_to_use = []
-
-        # Small number of train frames
-        cfg_tmp.training.train_frames = 3
-        cfg_tmp.training.train_batch_size = 2
-        base_data_module = get_data_module(cfg_tmp, dataset=base_dataset, video_dir=None)
-        n_batches = calculate_steps_per_epoch(base_data_module)
-        assert n_batches == 2
-
-        # Large number of frames
-        cfg_tmp.training.limit_train_batches = None
-        cfg_tmp.training.train_frames = 49
-        cfg_tmp.training.train_batch_size = 2
-        base_data_module = get_data_module(cfg_tmp, dataset=base_dataset, video_dir=None)
-        n_batches = calculate_steps_per_epoch(base_data_module)
-        assert n_batches == 25  # ceil (49 / 2)
-
-    def test_calculate_steps_per_epoch_unsupervised(self, cfg, base_dataset, toy_data_dir):
-        """Test the computation of steps per epoch."""
-        video_dir = os.path.join(toy_data_dir, 'videos')
-        cfg_tmp = copy.deepcopy(cfg)
-
-        # Small number of train frames - return minimum of 10
-        cfg_tmp.training.train_frames = 3
-        cfg_tmp.training.train_batch_size = 2
-        base_data_module_combined = get_data_module(
-            cfg_tmp, dataset=base_dataset, video_dir=video_dir,
-        )
-        n_batches = calculate_steps_per_epoch(base_data_module_combined)
-        assert n_batches == 10
-
-        # Large number of frames
-        cfg_tmp.training.limit_train_batches = None
-        cfg_tmp.training.train_frames = 49
-        cfg_tmp.training.train_batch_size = 2
-        base_data_module_combined = get_data_module(
-            cfg_tmp, dataset=base_dataset, video_dir=video_dir,
-        )
-        n_batches = calculate_steps_per_epoch(base_data_module_combined)
-        assert n_batches == 25  # ceil (49 / 2)
 
 
 class TestGetImgaugTransform:

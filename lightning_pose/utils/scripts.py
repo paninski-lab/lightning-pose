@@ -1,6 +1,5 @@
 """Helper functions to build pipeline components from config dictionary."""
 
-import math
 import os
 import warnings
 from collections import OrderedDict
@@ -43,7 +42,6 @@ __all__ = [
     "get_data_module",
     "get_model",
     "get_callbacks",
-    "calculate_steps_per_epoch",
 ]
 
 
@@ -555,27 +553,3 @@ def get_callbacks(
     if status_file is not None:
         callbacks.append(JSONTrainingProgressTracker(status_file))
     return callbacks
-
-
-def calculate_steps_per_epoch(data_module: BaseDataModule) -> int:
-    """Compute the number of optimizer steps per training epoch.
-
-    For semi-supervised (unlabeled) data modules a minimum of 10 steps per epoch is enforced
-    so that the model sees sufficient unlabeled data even when labeled data is scarce.
-
-    Args:
-        data_module: data module whose train dataset size and batch size are used.
-
-    Returns:
-        Integer number of steps per epoch.
-    """
-    assert data_module.train_dataset is not None
-    train_dataset_length = len(data_module.train_dataset)
-    steps_per_epoch = math.ceil(train_dataset_length / data_module.train_batch_size)
-
-    is_unsupervised = isinstance(data_module, UnlabeledDataModule)
-
-    # To understand why we do this, see 'max_size_cycle' in UnlabeledDataModule.
-    if is_unsupervised:
-        steps_per_epoch = max(10, steps_per_epoch)
-    return steps_per_epoch
