@@ -83,7 +83,22 @@ class Model:
 
     @staticmethod
     def from_dir(model_dir: str | Path) -> Model:
-        """Create a `Model` instance for a model stored at `model_dir`."""
+        """Create a `Model` instance for a model stored at `model_dir`.
+
+        Args:
+            model_dir: path to a model output directory containing ``config.yaml``
+                and a ``.ckpt`` checkpoint file.
+
+        Returns:
+            Model ready for inference. Weights are loaded lazily on the first
+            prediction call.
+
+        Examples:
+            >>> from lightning_pose.api import Model
+            >>> model = Model.from_dir("outputs/2024-01-01/12-00-00")
+            >>> model.config.is_multi_view()
+            False
+        """
         return Model.from_dir2(model_dir)
 
     @staticmethod
@@ -221,6 +236,16 @@ class Model:
             ValueError: If frame_rgb has wrong shape/dtype, bbox has non-positive
                 dimensions, bbox produces an empty crop, or a context model
                 receives single-frame input.
+
+        Examples:
+            >>> import numpy as np
+            >>> frame = np.zeros((256, 256, 3), dtype=np.uint8)
+            >>> result = model.predict_frame(frame)
+            >>> result["keypoints"].shape    # (num_keypoints, 2)
+            >>> result["confidence"].shape   # (num_keypoints,)
+
+            With a bounding-box crop (x, y, width, height):
+            >>> result = model.predict_frame(frame, bbox=(100, 50, 128, 128))
 
         """
         self._load()
@@ -401,6 +426,17 @@ class Model:
                 the `set` column to the prediction output.
         Returns:
             PredictionResult: A PredictionResult object containing the predictions and metrics.
+
+        Examples:
+            >>> result = model.predict_on_label_csv("path/to/CollectedData.csv")
+            >>> result.predictions           # pd.DataFrame with MultiIndex columns
+            >>> result.metrics.pixel_error   # mean pixel error per keypoint
+
+            Skip metric computation for faster inference:
+            >>> result = model.predict_on_label_csv(
+            ...     "path/to/CollectedData.csv",
+            ...     compute_metrics=False,
+            ... )
         """
         self._load()
         # Convert this to absolute, because if relative, downstream will
@@ -565,6 +601,16 @@ class Model:
 
         Returns:
             PredictionResult: A PredictionResult object containing the predictions and metrics.
+
+        Examples:
+            >>> result = model.predict_on_video_file("path/to/video.mp4")
+            >>> result.predictions   # pd.DataFrame, one row per frame
+
+            Save a keypoint-annotated video alongside the predictions CSV:
+            >>> result = model.predict_on_video_file(
+            ...     "path/to/video.mp4",
+            ...     generate_labeled_video=True,
+            ... )
 
         """
         self._load()
