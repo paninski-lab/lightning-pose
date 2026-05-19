@@ -99,7 +99,7 @@ class TestGetImgaugTransform:
         # default pipeline: resize only
         cfg_tmp.training.imgaug = 'default'
         pipe = get_imgaug_transform(cfg_tmp)
-        im_0, kps_0 = pipe(
+        im_0, kps_0 = pipe(  # type: ignore[misc]
             images=np.expand_dims(np.array(image), axis=0),
             keypoints=np.expand_dims(keypoints_on_image, axis=0),
         )
@@ -109,7 +109,7 @@ class TestGetImgaugTransform:
         assert im_0.shape[1] == image.size[0]
 
         # default pipeline: should be repeatable
-        im_1, kps_1 = pipe(
+        im_1, kps_1 = pipe(  # type: ignore[misc]
             images=np.expand_dims(np.array(image), axis=0),
             keypoints=np.expand_dims(keypoints_on_image, axis=0),
         )
@@ -331,6 +331,7 @@ class TestGetDataModule:
         data_module = get_data_module(
             cfg, heatmap_dataset, os.path.join(toy_data_dir, 'videos'),
         )
+        assert isinstance(data_module, UnlabeledDataModule)
 
         # batch size should be the ceiling of batch_size divided by num_gpus
         assert data_module.train_batch_size == int(
@@ -340,7 +341,7 @@ class TestGetDataModule:
             np.ceil(cfg.training.val_batch_size / cfg.training.num_gpus)
         )
         assert data_module.test_batch_size == cfg.training.test_batch_size
-        assert data_module.dali_config.base.train.sequence_length == int(
+        assert data_module.dali_config.base.train.sequence_length == int(  # type: ignore[union-attr]
             np.ceil(cfg.dali.base.train.sequence_length / cfg.training.num_gpus)
         )
         # context batch size is more nuanced, tested separately
@@ -357,28 +358,32 @@ class TestGetDataModule:
         data_module = get_data_module(
             cfg, heatmap_dataset, os.path.join(toy_data_dir, 'videos'),
         )
-        assert data_module.dali_config.context.train.batch_size == 5
+        assert isinstance(data_module, UnlabeledDataModule)
+        assert data_module.dali_config.context.train.batch_size == 5  # type: ignore[union-attr]
 
         # batch size of 5 -> effective 1 -> per-gpu effective 1 -> per-gpu 5
         cfg.dali.context.train.batch_size = 5
         data_module = get_data_module(
             cfg, heatmap_dataset, os.path.join(toy_data_dir, 'videos'),
         )
-        assert data_module.dali_config.context.train.batch_size == 5
+        assert isinstance(data_module, UnlabeledDataModule)
+        assert data_module.dali_config.context.train.batch_size == 5  # type: ignore[union-attr]
 
         # batch size of 28 -> effective 24 -> per-gpu effective 12 -> per-gpu 16
         cfg.dali.context.train.batch_size = 28
         data_module = get_data_module(
             cfg, heatmap_dataset, os.path.join(toy_data_dir, 'videos'),
         )
-        assert data_module.dali_config.context.train.batch_size == 16
+        assert isinstance(data_module, UnlabeledDataModule)
+        assert data_module.dali_config.context.train.batch_size == 16  # type: ignore[union-attr]
 
         # batch size of 27 -> effective 23 -> per-gpu effective 12 -> per-gpu 16
         cfg.dali.context.train.batch_size = 27
         data_module = get_data_module(
             cfg, heatmap_dataset, os.path.join(toy_data_dir, 'videos'),
         )
-        assert data_module.dali_config.context.train.batch_size == 16
+        assert isinstance(data_module, UnlabeledDataModule)
+        assert data_module.dali_config.context.train.batch_size == 16  # type: ignore[union-attr]
 
         # batch size of 4 -> effective 0 -> should throw an error
         cfg.dali.context.train.batch_size = 4

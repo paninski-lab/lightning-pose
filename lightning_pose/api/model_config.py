@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import cast
 
 from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 
@@ -40,9 +39,7 @@ class ModelConfig:
 
     def test_video_files_singleview(self) -> list[Path]:
         assert self.is_single_view(), "Use test_video_files_multiview for multi-view"
-        files = cast(list[str], check_video_paths(
-            return_absolute_path(self.cfg.eval.test_videos_directory)
-        ))
+        files = check_video_paths(return_absolute_path(self.cfg.eval.test_videos_directory))
         return [Path(f) for f in files]
 
     def test_video_files_multiview(self):

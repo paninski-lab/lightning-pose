@@ -164,6 +164,7 @@ class Model:
 
         """
         self._load()
+        assert self.model is not None
 
         # --- Input validation ---
         if frame_rgb.dtype != np.uint8:
@@ -422,7 +423,7 @@ class Model:
 
         # Convert this to absolute, because if relative, downstream will
         # assume its relative to the data_dir.
-        csv_file_per_view: list[Path] = [Path(f).absolute() for f in csv_file_per_view]
+        csv_file_per_view = [Path(f).absolute() for f in csv_file_per_view]
 
         if data_dir is None:
             data_dir = self.config.cfg.data.data_dir
@@ -519,12 +520,12 @@ class Model:
 
         prediction_csv_file = output_dir / f"{video_file.stem}.csv"
 
-        df: pd.DataFrame = predict_video(
+        df = cast(pd.DataFrame, predict_video(
             video_file=str(video_file),
             model=self,
             output_pred_file=str(prediction_csv_file),
             progress_file=progress_file,
-        )
+        ))
         if generate_labeled_video:
             labeled_mp4_file = str(self.labeled_videos_dir() / f"{video_file.stem}_labeled.mp4")
             generate_labeled_video_fn(
@@ -587,7 +588,7 @@ class Model:
             view_names
         ), f"{len(video_file_per_view)} != {len(view_names)}"
 
-        video_file_per_view: list[Path] = [Path(f) for f in video_file_per_view]
+        video_file_per_view = [Path(f) for f in video_file_per_view]
 
         if output_dir == self.__class__.UNSPECIFIED:
             output_dir = self.video_preds_dir()
@@ -602,7 +603,7 @@ class Model:
         _view_to_video_file: dict[str, Path] = io_utils.collect_video_files_by_view(
             video_file_per_view, view_names
         )
-        video_file_per_view: list[Path] = [
+        video_file_per_view = [
             _view_to_video_file[view_name] for view_name in view_names
         ]
 
@@ -611,12 +612,12 @@ class Model:
             for video_file in video_file_per_view
         ]
 
-        df_list: list[pd.DataFrame] = predict_video(
+        df_list = cast(list[pd.DataFrame], predict_video(
             video_file=list(map(str, video_file_per_view)),
             model=self,
             output_pred_file=prediction_csv_file_list,
             progress_file=progress_file,
-        )
+        ))
         if generate_labeled_video:
             for video_file, preds_df in zip(video_file_per_view, df_list, strict=True):
                 labeled_mp4_file = str(

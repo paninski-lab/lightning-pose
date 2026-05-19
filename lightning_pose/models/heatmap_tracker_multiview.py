@@ -151,12 +151,12 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
 
         # create patch embeddings and add position embeddings; remove CLS token
         try:
-            embedding_output = self.backbone.vision_encoder.embeddings(
+            embedding_output = self.backbone.vision_encoder.embeddings(  # type: ignore[operator]
                 images, bool_masked_pos=None, interpolate_pos_encoding=True,
             )[:, 1:]
         except TypeError:
             # DINOv3 doesn't have `interpolate_pos_encoding` arg, does this by default
-            embedding_output = self.backbone.vision_encoder.embeddings(
+            embedding_output = self.backbone.vision_encoder.embeddings(  # type: ignore[operator]
                 images, bool_masked_pos=None,
             )[:, 1:]
         # shape: (view * batch, num_patches, embedding_dim)
@@ -186,14 +186,14 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         )
 
         # push data through vit encoder
-        encoder_outputs = self.backbone.vision_encoder.encoder(
+        encoder_outputs = self.backbone.vision_encoder.encoder(  # type: ignore[operator]
             embedding_output,
             head_mask=None,
             output_hidden_states=False,
             return_dict=None,
         )
         sequence_output = encoder_outputs[0]
-        outputs = self.backbone.vision_encoder.layernorm(sequence_output)
+        outputs = self.backbone.vision_encoder.layernorm(sequence_output)  # type: ignore[operator]
         # shape: (batch, view * num_patches, embedding_dim)
 
         # reshape data to (view * batch, embedding_dim, height, width) for head processing
@@ -225,10 +225,10 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         # extract pixel data from batch
         if "images" in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
             # labeled image dataloaders
-            images = batch_dict["images"]
+            images = batch_dict["images"]  # type: ignore[typeddict-item]
         else:
             # unlabeled dali video dataloaders
-            images = batch_dict["frames"]
+            images = batch_dict["frames"]  # type: ignore[typeddict-item]
 
         batch_size, num_views, channels, img_height, img_width = images.shape
 
@@ -272,7 +272,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
                 )
                 keypoints_targ_3d = batch_dict["keypoints_3d"]
                 if "supervised_reprojection_heatmap_mse" in \
-                        self.loss_factory.loss_instance_dict.keys():
+                        self.loss_factory.loss_instance_dict.keys():  # type: ignore[union-attr]
                     # project from 3D back to 2D in original image coordinates
                     # print(f'intrinsics: {batch_dict["intrinsic_matrix"][0, 0]}')
                     keypoints_pred_2d_reprojected_original = project_3d_to_2d(

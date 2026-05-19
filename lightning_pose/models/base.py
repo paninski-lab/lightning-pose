@@ -409,10 +409,10 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         data_dict = self.get_loss_inputs_labeled(batch_dict=batch_dict)
 
         # compute and log loss on labeled data
-        loss, log_list = self.loss_factory(stage=stage, anneal_weight=anneal_weight, **data_dict)
+        loss, log_list = self.loss_factory(stage=stage, anneal_weight=anneal_weight, **data_dict)  # type: ignore[operator]
 
         # compute and log pixel_error loss on labeled data
-        loss_rmse, _ = self.rmse_loss(stage=stage, **data_dict)
+        loss_rmse, _ = self.rmse_loss(stage=stage, **data_dict)  # type: ignore[operator]
 
         if stage:
             # logging with sync_dist=True will average the metric across GPUs in
@@ -508,7 +508,7 @@ class SemiSupervisedTrackerMixin:
         data_dict = self.get_loss_inputs_unlabeled(batch_dict=batch_dict)
 
         # compute loss on unlabeled data
-        loss, log_list = self.loss_factory_unsup(
+        loss, log_list = self.loss_factory_unsup(  # type: ignore[attr-defined]
             stage=stage,
             anneal_weight=anneal_weight,
             **data_dict,
@@ -517,9 +517,9 @@ class SemiSupervisedTrackerMixin:
         if stage:
             # log individual unsupervised losses
             for log_dict in log_list:
-                self.log(
+                self.log(  # type: ignore[attr-defined]
                     log_dict['name'],
-                    log_dict['value'].to(self.device),
+                    log_dict['value'].to(self.device),  # type: ignore[attr-defined]
                     prog_bar=log_dict.get('prog_bar', False),
                     sync_dist=True)
 
@@ -534,8 +534,8 @@ class SemiSupervisedTrackerMixin:
 
         # on each epoch, self.total_unsupervised_importance is modified by the
         # AnnealWeight callback
-        unsup_importance = cast(torch.Tensor, self.total_unsupervised_importance)
-        self.log(
+        unsup_importance = cast(torch.Tensor, self.total_unsupervised_importance)  # type: ignore[attr-defined]
+        self.log(  # type: ignore[attr-defined]
             "total_unsupervised_importance",
             unsup_importance,
             prog_bar=True,
@@ -547,7 +547,7 @@ class SemiSupervisedTrackerMixin:
         # - images
         # - keypoints
         # - heatmaps
-        loss_super = self.evaluate_labeled(
+        loss_super = self.evaluate_labeled(  # type: ignore[attr-defined]
             batch_dict=batch_dict["labeled"],
             stage="train",
             anneal_weight=unsup_importance,
@@ -564,6 +564,6 @@ class SemiSupervisedTrackerMixin:
 
         # log total loss
         total_loss = loss_super + loss_unsuper
-        self.log("total_loss", total_loss, prog_bar=True, sync_dist=True)
+        self.log("total_loss", total_loss, prog_bar=True, sync_dist=True)  # type: ignore[attr-defined]
 
         return {"loss": total_loss}

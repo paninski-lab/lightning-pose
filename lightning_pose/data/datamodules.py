@@ -1,8 +1,17 @@
 """Data modules split a dataset into train, val, and test modules."""
 
+from __future__ import annotations
+
 import copy
 import os
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from lightning_pose.data.datasets import (
+        BaseTrackingDataset,
+        HeatmapDataset,
+        MultiviewHeatmapDataset,
+    )
 
 import imgaug.augmenters as iaa
 import lightning.pytorch as pl
@@ -31,7 +40,7 @@ class BaseDataModule(pl.LightningDataModule):
 
     def __init__(
         self,
-        dataset: torch.utils.data.Dataset,
+        dataset: BaseTrackingDataset | HeatmapDataset | MultiviewHeatmapDataset,
         train_batch_size: int = 16,
         val_batch_size: int = 16,
         test_batch_size: int = 1,
@@ -87,7 +96,7 @@ class BaseDataModule(pl.LightningDataModule):
 
     def _setup(self) -> None:
 
-        datalen = self.dataset.__len__()
+        datalen = len(self.dataset)
         print(f"Number of labeled images in the full dataset (train+val+test): {datalen}")
 
         # split data based on provided probabilities
@@ -98,7 +107,7 @@ class BaseDataModule(pl.LightningDataModule):
             test_probability=self.test_probability,
         )
 
-        if len(self.dataset.imgaug_transform) == 1:
+        if len(self.dataset.imgaug_transform) == 1:  # type: ignore[arg-type]
             # no augmentations in the pipeline; subsets can share same underlying dataset
             self.train_dataset, self.val_dataset, self.test_dataset = random_split(
                 self.dataset,
@@ -127,8 +136,8 @@ class BaseDataModule(pl.LightningDataModule):
             )
 
             # only use the final resize transform for the validation and test datasets
-            if self.dataset.imgaug_transform[-1].__str__().find("Resize") == 0:
-                final_transform = iaa.Sequential([self.dataset.imgaug_transform[-1]])
+            if self.dataset.imgaug_transform[-1].__str__().find("Resize") == 0:  # type: ignore[index]
+                final_transform = iaa.Sequential([self.dataset.imgaug_transform[-1]])  # type: ignore[index]
             else:
                 # if we're here it's because the dataset is a MultiviewHeatmapDataset that doesn't
                 # resize by default in the pipeline; we enforce resizing here on val/test batches
@@ -136,18 +145,18 @@ class BaseDataModule(pl.LightningDataModule):
                 width = self.dataset.width
                 final_transform = iaa.Sequential([iaa.Resize({"height": height, "width": width})])
 
-            self.val_dataset.dataset.imgaug_transform = final_transform
+            self.val_dataset.dataset.imgaug_transform = final_transform  # type: ignore[union-attr]
             if hasattr(self.val_dataset.dataset, "dataset"):
                 # this will get triggered for multiview datasets
                 print("val: updating children datasets with resize imgaug pipeline")
-                for _view_name, dset in self.val_dataset.dataset.dataset.items():
+                for _view_name, dset in self.val_dataset.dataset.dataset.items():  # type: ignore[union-attr]
                     dset.imgaug_transform = final_transform
 
-            self.test_dataset.dataset.imgaug_transform = final_transform
+            self.test_dataset.dataset.imgaug_transform = final_transform  # type: ignore[union-attr]
             if hasattr(self.test_dataset.dataset, "dataset"):
                 # this will get triggered for multiview datasets
                 print("test: updating children datasets with resize imgaug pipeline")
-                for _view_name, dset in self.test_dataset.dataset.dataset.items():
+                for _view_name, dset in self.test_dataset.dataset.dataset.items():  # type: ignore[union-attr]
                     dset.imgaug_transform = final_transform
 
         # further subsample training data if desired
@@ -204,7 +213,7 @@ class UnlabeledDataModule(BaseDataModule):
 
     def __init__(
         self,
-        dataset: torch.utils.data.Dataset,
+        dataset: BaseTrackingDataset | HeatmapDataset | MultiviewHeatmapDataset,
         video_paths_list: list[str] | str,
         dali_config: dict | DictConfig | ListConfig,
         view_names: list[str] | None = None,

@@ -1018,16 +1018,16 @@ class TestDiscoverCamParamsFromImagePaths:
             pass
 
         ds = _Stub()
-        ds.root_directory = str(tmp_path)
-        ds.view_names = ['top', 'bot']
-        ds.do_context = False
+        ds.root_directory = str(tmp_path)  # type: ignore[attr-defined]
+        ds.view_names = ['top', 'bot']  # type: ignore[attr-defined]
+        ds.do_context = False  # type: ignore[attr-defined]
         mock_view = mocker.MagicMock()
         mock_view.image_names = [
             'labeled-data/session0_top/img0000.png',
             'labeled-data/session0_top/img0001.png',
         ]
-        ds.dataset = {'top': mock_view, 'bot': mocker.MagicMock()}
-        ds._load_camgroup = mocker.MagicMock(return_value=mocker.MagicMock())
+        ds.dataset = {'top': mock_view, 'bot': mocker.MagicMock()}  # type: ignore[attr-defined]
+        ds._load_camgroup = mocker.MagicMock(return_value=mocker.MagicMock())  # type: ignore[attr-defined]
         return ds
 
     def _discover(self, ds):
@@ -1045,6 +1045,7 @@ class TestDiscoverCamParamsFromImagePaths:
 
         # Assert
         assert cam_params_df is not None
+        assert cam_params_file_to_camgroup is not None
         assert list(cam_params_df['file']) == ['calibrations/session0.toml'] * 2
         assert 'calibrations/session0.toml' in cam_params_file_to_camgroup
 
@@ -1058,6 +1059,7 @@ class TestDiscoverCamParamsFromImagePaths:
 
         # Assert
         assert cam_params_df is not None
+        assert cam_params_file_to_camgroup is not None
         assert list(cam_params_df['file']) == ['calibration.toml'] * 2
         assert 'calibration.toml' in cam_params_file_to_camgroup
 
@@ -1105,6 +1107,8 @@ class TestDiscoverCamParamsFromImagePaths:
         cam_params_df, cam_params_file_to_camgroup = self._discover(fake_ds)
 
         # Assert
+        assert cam_params_df is not None
+        assert cam_params_file_to_camgroup is not None
         assert list(cam_params_df['file']) == [
             'calibrations/sessionA.toml',
             'calibrations/sessionB.toml',

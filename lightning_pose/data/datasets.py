@@ -3,7 +3,7 @@
 import os
 from collections.abc import Callable
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 import cv2
 import imgaug.augmenters as iaa
@@ -101,6 +101,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         self.header_rows = header_rows
         self.do_context = do_context
         if resize:
+            assert imgaug_transform is not None
             imgaug_transform.add(iaa.Resize({
                 "height": image_resize_height,
                 "width": image_resize_width,
@@ -378,8 +379,8 @@ class HeatmapDataset(BaseTrackingDataset):
         # call base dataset to get an image and labels
         example_dict: BaseLabeledExampleDict = super().__getitem__(idx)
         # compute the corresponding heatmaps
-        example_dict["heatmaps"] = self.compute_heatmap(example_dict, ignore_nans)
-        return example_dict
+        example_dict["heatmaps"] = self.compute_heatmap(example_dict, ignore_nans)  # type: ignore[typeddict-unknown-key]
+        return example_dict  # type: ignore[return-value]
 
 
 class MultiviewHeatmapDataset(torch.utils.data.Dataset):
@@ -446,6 +447,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         # do this here so resizing doesn't get added multiple times when iterating over views
         if resize:
+            assert imgaug_transform is not None
             imgaug_transform.add(iaa.Resize({
                 "height": image_resize_height,
                 "width": image_resize_width,
@@ -638,7 +640,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         return self.image_resize_width
 
     def __len__(self) -> int:
-        return self.data_length
+        return self.data_length  # type: ignore[return-value]
 
     @property
     def output_shape(self) -> tuple:
@@ -761,15 +763,16 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         data_dict: dict,
         clone: bool = True,
     ) -> np.ndarray:
-        keypoints_2d = np.zeros((self.num_views, self.num_keypoints // self.num_views, 2))
+        num_keypoints = cast(int, self.num_keypoints)
+        keypoints_2d = np.zeros((self.num_views, num_keypoints // self.num_views, 2))
         for idx_view, (_view, example_dict) in enumerate(data_dict.items()):
             if clone:
                 keypoints_curr = example_dict["keypoints"].reshape(
-                    self.num_keypoints // self.num_views, 2
+                    num_keypoints // self.num_views, 2
                 ).clone()
             else:
                 keypoints_curr = example_dict["keypoints"].reshape(
-                    self.num_keypoints // self.num_views, 2
+                    num_keypoints // self.num_views, 2
                 )
             # transform keypoints from bbox coordinates to absolute frame coordinates
             # 1. divide by image dims to get 0-1 normalized coords
@@ -820,11 +823,12 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             images.append(example_dict["images"])
             bboxes.append(example_dict["bbox"])
 
+        num_keypoints = cast(int, self.num_keypoints)
         if np.all(np.isnan(keypoints_2d)):
-            keypoints_3d_aug = np.nan * np.zeros((self.num_keypoints // self.num_views, 3))
+            keypoints_3d_aug = np.nan * np.zeros((num_keypoints // self.num_views, 3))
             keypoints_2d_aug_resize = [
                 torch.tensor(
-                    np.nan * np.zeros(self.num_keypoints // self.num_views * 2),
+                    np.nan * np.zeros(num_keypoints // self.num_views * 2),
                     dtype=example_dict["keypoints"].dtype,
                     device=example_dict["keypoints"].device,
                 )
@@ -892,7 +896,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 bbox=data_dict[view]["bbox"],
                 idxs=data_dict[view]["idxs"],
             )
-            example_dict["heatmaps"] = self.dataset[view].compute_heatmap(example_dict)
+            example_dict["heatmaps"] = self.dataset[view].compute_heatmap(example_dict)  # type: ignore[typeddict-unknown-key]
             data_dict_aug[view] = example_dict
 
         return data_dict_aug, torch.tensor(keypoints_3d_aug)
@@ -960,6 +964,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         # always provide 3D keypoints when camera params are available
         if self.cam_params_file_to_camgroup:
             # select proper camera calibration parameters for this data point
+            assert self.cam_params_df is not None
             camgroup = self.cam_params_file_to_camgroup[self.cam_params_df.iloc[idx].file]
 
             # load camera parameters
@@ -986,7 +991,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 # triangulate keypoints (2D -> 3D) without augmentations
                 if np.all(np.isnan(keypoints_2d)):
                     keypoints_3d = torch.tensor(
-                        np.nan * np.zeros((self.num_keypoints // self.num_views, 3)),
+                        np.nan * np.zeros((cast(int, self.num_keypoints) // self.num_views, 3)),
                     )
                 else:
                     keypoints_3d = torch.tensor(

@@ -60,7 +60,7 @@ class PredictionHandler:
     def __init__(
         self,
         cfg: DictConfig | ListConfig,
-        data_module: pl.LightningDataModule | None = None,
+        data_module: BaseDataModule | UnlabeledDataModule | None = None,
         video_file: str | None = None,
     ) -> None:
         """
@@ -87,7 +87,8 @@ class PredictionHandler:
         if self.video_file is not None:
             return count_frames(self.video_file)
         else:
-            return len(self.data_module.dataset)
+            assert self.data_module is not None
+            return len(self.data_module.dataset)  # type: ignore[arg-type]
 
     @property
     def keypoint_names(self):
@@ -96,7 +97,7 @@ class PredictionHandler:
     @property
     def do_context(self):
         if self.data_module:
-            return self.data_module.dataset.do_context
+            return self.data_module.dataset.do_context  # type: ignore[union-attr]
         else:
             return self.cfg.model.model_type == "heatmap_mhcrnn"
 
@@ -184,9 +185,9 @@ class PredictionHandler:
 
     @staticmethod
     def make_pred_arr_undo_resize(
-        keypoints_np: np.array,
-        confidence_np: np.array,
-    ) -> np.array:
+        keypoints_np: np.ndarray,
+        confidence_np: np.ndarray,
+    ) -> np.ndarray:
         """Resize keypoints and add confidences into one numpy array.
 
         Args:
@@ -218,12 +219,13 @@ class PredictionHandler:
 
     def add_split_indices_to_df(self, df: pd.DataFrame) -> pd.DataFrame:
         """Add split indices to the dataframe."""
+        assert self.data_module is not None
         df["set"] = np.array(["unused"] * df.shape[0])
 
         dataset_split_indices = {
-            "train": self.data_module.train_dataset.indices,
-            "validation": self.data_module.val_dataset.indices,
-            "test": self.data_module.test_dataset.indices,
+            "train": self.data_module.train_dataset.indices,  # type: ignore[union-attr]
+            "validation": self.data_module.val_dataset.indices,  # type: ignore[union-attr]
+            "test": self.data_module.test_dataset.indices,  # type: ignore[union-attr]
         }
 
         for key, val in dataset_split_indices.items():
@@ -278,7 +280,9 @@ class PredictionHandler:
                 if self.video_file is None:
                     # specify which image is train/test/val/unused
                     df = self.add_split_indices_to_df(df)
-                    df.index = self.data_module.dataset.dataset[view_name].image_names
+                    assert self.data_module is not None
+                    view_dataset = self.data_module.dataset.dataset  # type: ignore[index]
+                    df.index = view_dataset[view_name].image_names
             retval = view_to_df
         else:
             pred_arr = self.make_pred_arr_undo_resize(
@@ -289,7 +293,8 @@ class PredictionHandler:
             if self.video_file is None:
                 # specify which image is train/test/val/unused
                 df = self.add_split_indices_to_df(df)
-                df.index = self.data_module.dataset.image_names
+                assert self.data_module is not None
+                df.index = self.data_module.dataset.image_names  # type: ignore[union-attr]
             retval = df
 
         return retval
@@ -460,7 +465,7 @@ def predict_single_video(
 
     # call this instance on a single vid's preds
     preds_typed = cast(list[tuple[torch.Tensor, torch.Tensor]], preds)
-    preds_df = pred_handler(preds=preds_typed)
+    preds_df = cast(pd.DataFrame, pred_handler(preds=preds_typed))
     # save the predictions to a csv; create directory if it doesn't exist
     os.makedirs(os.path.dirname(preds_file), exist_ok=True)
     preds_df.to_csv(preds_file)
@@ -709,7 +714,7 @@ def create_labeled_video(
         upsample_factor = 1
 
     if upsample_factor > 1:
-        clip = clip.resized((upsample_factor * nx, upsample_factor * ny))
+        clip = cast(VideoFileClip, clip.resized((upsample_factor * nx, upsample_factor * ny)))
         nx, ny = clip.size
 
     print(f"Duration of video [s]: {np.round(dur, 2)}, recorded at {np.round(fps_og, 2)} fps!")
