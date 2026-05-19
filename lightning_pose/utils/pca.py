@@ -14,7 +14,7 @@ from sklearn.utils.extmath import stable_cumsum, svd_flip
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import MultiviewHeatmapDataset
-from lightning_pose.data.utils import DataExtractor
+from lightning_pose.data.extractor import DataExtractor
 from lightning_pose.losses.helpers import (
     EmpiricalEpsilon,
     convert_dict_values_to_tensors,

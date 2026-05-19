@@ -2,26 +2,20 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Literal
 
-import imgaug.augmenters as iaa
 import numpy as np
 import torch
 from jaxtyping import Float
 
-if TYPE_CHECKING:
-    from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datatypes import (
     HeatmapLabeledBatchDict,
     MultiviewHeatmapLabeledBatchDict,
     MultiviewUnlabeledBatchDict,
-    SemiSupervisedDataLoaderDict,
     UnlabeledBatchDict,
 )
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
-    "DataExtractor",
     "split_sizes_from_probabilities",
     "clean_any_nans",
     "count_frames",
@@ -35,188 +29,6 @@ __all__ = [
     "convert_original_to_model_coords",
     "original_to_model",
 ]
-
-
-class DataExtractor:
-    """Helper class to extract all data from a data module."""
-
-    def __init__(
-        self,
-        data_module: BaseDataModule | UnlabeledDataModule,
-        cond: Literal["train", "test", "val"] = "train",
-        extract_images: bool = False,
-        remove_augmentations: bool = True,
-    ) -> None:
-        self.cond = cond
-        self.extract_images = extract_images
-        self.remove_augmentations = remove_augmentations
-
-        if self.remove_augmentations:
-            from lightning_pose.data.datasets import (
-                BaseTrackingDataset,
-                HeatmapDataset,
-                MultiviewHeatmapDataset,
-            )
-            assert isinstance(
-                data_module.dataset, (BaseTrackingDataset, HeatmapDataset, MultiviewHeatmapDataset)
-            )
-            imgaug_curr = data_module.dataset.imgaug_transform
-            assert imgaug_curr is not None
-            if len(imgaug_curr) == 1 and isinstance(imgaug_curr[0], iaa.Resize):  # type: ignore[index]
-                # current augmentation just resizes; keep this
-                self.data_module = data_module
-            else:
-                from lightning_pose.data.datamodules import (
-                    BaseDataModule,
-                    UnlabeledDataModule,
-                )
-
-                # Create a simple resize-only augmentation pipeline for PCA
-                # Use the same resize dimensions as the original dataset
-                dataset_old = data_module.dataset
-                image_resize_height = dataset_old.image_resize_height
-                image_resize_width = dataset_old.image_resize_width
-                imgaug_new = iaa.Sequential([
-                    iaa.Resize({"height": image_resize_height, "width": image_resize_width})
-                ])
-
-                if isinstance(dataset_old, HeatmapDataset):
-                    dataset_new = HeatmapDataset(
-                        root_directory=dataset_old.root_directory,
-                        csv_path=dataset_old.csv_path,
-                        image_resize_height=dataset_old.image_resize_height,
-                        image_resize_width=dataset_old.image_resize_width,
-                        imgaug_transform=imgaug_new,
-                        downsample_factor=dataset_old.downsample_factor,  # type: ignore[arg-type]
-                        do_context=dataset_old.do_context,
-                    )
-                elif isinstance(dataset_old, BaseTrackingDataset):
-                    dataset_new = BaseTrackingDataset(
-                        root_directory=dataset_old.root_directory,
-                        csv_path=dataset_old.csv_path,
-                        image_resize_height=dataset_old.image_resize_height,
-                        image_resize_width=dataset_old.image_resize_width,
-                        imgaug_transform=imgaug_new,
-                        do_context=dataset_old.do_context,
-                    )
-                elif isinstance(dataset_old, MultiviewHeatmapDataset):
-                    dataset_new = MultiviewHeatmapDataset(
-                        root_directory=dataset_old.root_directory,
-                        csv_paths=dataset_old.csv_paths,
-                        view_names=dataset_old.view_names,
-                        image_resize_height=dataset_old.image_resize_height,
-                        image_resize_width=dataset_old.image_resize_width,
-                        imgaug_transform=imgaug_new,
-                        do_context=dataset_old.do_context,
-                    )
-                else:
-                    raise NotImplementedError
-                # rebuild data_module with new dataset
-                if isinstance(data_module, UnlabeledDataModule):
-                    data_module_new = UnlabeledDataModule(
-                        dataset=dataset_new,
-                        video_paths_list=data_module.video_paths_list,
-                        train_batch_size=data_module.train_batch_size,
-                        val_batch_size=data_module.val_batch_size,
-                        test_batch_size=data_module.test_batch_size,
-                        num_workers=data_module.num_workers,
-                        train_probability=data_module.train_probability,
-                        val_probability=data_module.val_probability,
-                        train_frames=data_module.train_frames,
-                        dali_config=data_module.dali_config,
-                        torch_seed=data_module.torch_seed,
-                    )
-                    # data_module_new.setup() happens internally
-                elif isinstance(data_module, BaseDataModule):
-                    data_module_new = BaseDataModule(
-                        dataset=dataset_new,
-                        train_batch_size=data_module.train_batch_size,
-                        val_batch_size=data_module.val_batch_size,
-                        test_batch_size=data_module.test_batch_size,
-                        num_workers=data_module.num_workers,
-                        train_probability=data_module.train_probability,
-                        val_probability=data_module.val_probability,
-                        train_frames=data_module.train_frames,
-                        torch_seed=data_module.torch_seed,
-                    )
-                else:
-                    raise NotImplementedError
-
-                self.data_module = data_module_new
-
-        else:
-            self.data_module = data_module
-
-    @property
-    def dataset_length(self) -> int:
-        name = f"{self.cond}_dataset"
-        return len(getattr(self.data_module, name))
-
-    def get_loader(
-        self,
-    ) -> torch.utils.data.DataLoader | SemiSupervisedDataLoaderDict:
-        if self.cond == "train":
-            return self.data_module.train_dataloader()  # type: ignore[return-value]
-        if self.cond == "val":
-            return self.data_module.val_dataloader()  # type: ignore[return-value]
-        if self.cond == "test":
-            return self.data_module.test_dataloader()  # type: ignore[return-value]
-        raise ValueError(f"cond must be 'train', 'val', or 'test', got {self.cond!r}")
-
-    @staticmethod
-    def verify_labeled_loader(
-        loader: torch.utils.data.DataLoader | SemiSupervisedDataLoaderDict
-    ) -> torch.utils.data.DataLoader:
-        if isinstance(loader, torch.utils.data.DataLoader):
-            labeled_loader = loader
-        else:
-            # if we have a dictionary of dataloaders, we take the loader called
-            # "labeled" (the loader called "unlabeled" doesn't have keypoints)
-            labeled_loader = loader["labeled"]
-        return labeled_loader
-
-    def iterate_over_dataloader(
-        self, loader: torch.utils.data.DataLoader
-    ) -> tuple[
-        torch.Tensor,
-        (
-            Float[torch.Tensor, "num_examples 3 image_width image_height"]
-            | Float[torch.Tensor, "num_examples frames 3 image_width image_height"]
-            | None
-        ),
-    ]:
-        keypoints_list = []
-        images_list = []
-        for _ind, batch in enumerate(loader):
-            keypoints_list.append(batch["keypoints"])
-            if self.extract_images:
-                images_list.append(batch["images"])
-        concat_keypoints = torch.cat(keypoints_list, dim=0)
-        if self.extract_images:
-            concat_images = torch.cat(images_list, dim=0)
-        else:
-            concat_images = None
-        # assert that indeed the number of columns does not change after concatenation,
-        # and that the number of rows is the dataset length.
-        assert concat_keypoints.shape == (
-            self.dataset_length,
-            keypoints_list[0].shape[1],
-        )
-        return concat_keypoints, concat_images
-
-    def __call__(
-        self,
-    ) -> tuple[
-        torch.Tensor,
-        (
-            Float[torch.Tensor, "num_examples 3 image_width image_height"]
-            | Float[torch.Tensor, "num_examples frames 3 image_width image_height"]
-            | None
-        ),
-    ]:
-        loader = self.get_loader()
-        loader = self.verify_labeled_loader(loader)
-        return self.iterate_over_dataloader(loader)
 
 
 def split_sizes_from_probabilities(
