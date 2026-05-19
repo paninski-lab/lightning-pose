@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 from .. import types
 
 if TYPE_CHECKING:
-    from lightning_pose.api.model import Model  # noqa: F401
+    from lightning_pose.api import Model  # noqa: F401
     from lightning_pose.train import train  # noqa: F401
 
 
@@ -84,7 +84,7 @@ def handle(args: argparse.Namespace) -> None:
         cfg = hydra.compose(config_name=args.config_file.stem, overrides=args.overrides)
 
         # Delay this import because it's slow.
-        from lightning_pose.api.model import Model  # noqa: F811
+        from lightning_pose.api import Model  # noqa: F811
         from lightning_pose.train import train  # noqa: F811
 
         # TODO: Move some aspects of directory mgmt to the train function.

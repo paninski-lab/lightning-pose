@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from lightning_pose.api.model import Model
+from lightning_pose.api import Model
 from tests.fetch_test_data import fetch_test_data_if_needed
 
 

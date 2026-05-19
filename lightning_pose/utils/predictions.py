@@ -26,7 +26,7 @@ from lightning_pose.data.utils import count_frames
 from lightning_pose.models import ALLOWED_MODELS
 
 if TYPE_CHECKING:
-    from lightning_pose.api.model import Model
+    from lightning_pose.api import Model
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [

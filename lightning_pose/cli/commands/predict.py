@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 from .. import types
 
 if TYPE_CHECKING:
-    from lightning_pose.api.model import Model
+    from lightning_pose.api import Model
 
 
 def register_parser(subparsers: Any) -> argparse.ArgumentParser:
@@ -101,7 +101,7 @@ def get_parser() -> argparse.ArgumentParser:
 def handle(args: argparse.Namespace) -> None:
     """Handle the predict command."""
     # Delay this import because it's slow.
-    from lightning_pose.api.model import Model
+    from lightning_pose.api import Model
 
     model = Model.from_dir2(args.model_dir, hydra_overrides=args.overrides)
     input_paths = [Path(p) for p in args.input_path]

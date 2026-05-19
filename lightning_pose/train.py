@@ -19,8 +19,7 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 
 import lightning_pose
-from lightning_pose.api.model import Model
-from lightning_pose.api.model_config import ModelConfig
+from lightning_pose.api import Model, ModelConfig
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
 from lightning_pose.utils.io import (
     return_absolute_data_paths,

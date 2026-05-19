@@ -1,7 +1,7 @@
 import argparse
 import warnings
 
-from lightning_pose.api.model import Model
+from lightning_pose.api import Model
 
 # Issue deprecation warning
 warnings.warn(
