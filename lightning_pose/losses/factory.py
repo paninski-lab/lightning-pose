@@ -23,7 +23,14 @@ class LossFactory(pl.LightningModule):
         losses_params_dict: dict[str, dict],
         data_module: BaseDataModule | UnlabeledDataModule | None,
     ) -> None:
+        """Initialize LossFactory and create all specified loss instances.
 
+        Args:
+            losses_params_dict: mapping from loss name to a dict of keyword arguments that will
+                be passed to the corresponding loss class constructor.
+            data_module: data module passed to each loss; required for data-dependent losses such
+                as PCA.
+        """
         super().__init__()
         self.losses_params_dict = losses_params_dict
         self.data_module = data_module
@@ -32,6 +39,7 @@ class LossFactory(pl.LightningModule):
         self._initialize_loss_instances()
 
     def _initialize_loss_instances(self) -> None:
+        """Instantiate each loss class from ``self.losses_params_dict`` and store them."""
         self.loss_instance_dict = {}
         loss_classes_dict = get_loss_classes()
         for loss, params in self.losses_params_dict.items():
@@ -45,7 +53,21 @@ class LossFactory(pl.LightningModule):
         anneal_weight: float | torch.Tensor | None = 1.0,
         **kwargs: Any,
     ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
+        """Compute the total weighted loss and collect logging entries for all registered losses.
 
+        Args:
+            stage: training stage used for loss logging (``"train"``, ``"val"``, ``"test"``);
+                pass ``None`` to suppress logging.
+            anneal_weight: scalar multiplier applied to all non-heatmap losses; typically the
+                output of an ``AnnealWeight`` callback.
+            **kwargs: tensors forwarded to each individual loss (e.g., ``heatmaps_targ``,
+                ``keypoints_pred``).
+
+        Returns:
+            Tuple of:
+                - scalar total loss tensor.
+                - list of logging dicts with ``"name"`` and ``"value"`` keys.
+        """
         # loop over losses, compute, sum, log
         # don't log if stage is None
         tot_loss: Float[torch.Tensor, ""] = torch.tensor(0.0)

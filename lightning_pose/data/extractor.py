@@ -28,6 +28,15 @@ class DataExtractor:
         extract_images: bool = False,
         remove_augmentations: bool = True,
     ) -> None:
+        """Initialize DataExtractor.
+
+        Args:
+            data_module: data module containing the labeled dataset and splits.
+            cond: which data split to extract (``"train"``, ``"val"``, or ``"test"``).
+            extract_images: if True, also extract and return image tensors.
+            remove_augmentations: if True, rebuild the dataset with only resize augmentation
+                before extracting, to avoid contaminating PCA fits with augmented data.
+        """
         self.cond = cond
         self.extract_images = extract_images
         self.remove_augmentations = remove_augmentations
@@ -121,10 +130,23 @@ class DataExtractor:
 
     @property
     def dataset_length(self) -> int:
+        """Number of examples in the selected data split.
+
+        Returns:
+            Length of the ``train``, ``val``, or ``test`` dataset depending on ``self.cond``.
+        """
         name = f'{self.cond}_dataset'
         return len(getattr(self.data_module, name))
 
     def get_loader(self) -> torch.utils.data.DataLoader | CombinedLoader:
+        """Return the dataloader for the selected split.
+
+        Returns:
+            DataLoader or ``CombinedLoader`` corresponding to ``self.cond``.
+
+        Raises:
+            ValueError: if ``self.cond`` is not ``"train"``, ``"val"``, or ``"test"``.
+        """
         if self.cond == 'train':
             return self.data_module.train_dataloader()  # type: ignore[return-value]
         if self.cond == 'val':
@@ -137,6 +159,15 @@ class DataExtractor:
     def verify_labeled_loader(
         loader: torch.utils.data.DataLoader | CombinedLoader,
     ) -> torch.utils.data.DataLoader:
+        """Extract and return the labeled DataLoader from a potentially combined loader.
+
+        Args:
+            loader: either a plain ``DataLoader`` or a ``CombinedLoader`` containing labeled and
+                unlabeled sub-loaders.
+
+        Returns:
+            The labeled ``DataLoader``.
+        """
         if isinstance(loader, torch.utils.data.DataLoader):
             return loader
         # CombinedLoader wraps labeled + unlabeled; extract only the labeled one
@@ -152,6 +183,16 @@ class DataExtractor:
             | None
         ),
     ]:
+        """Iterate over a dataloader and collect keypoints (and optionally images).
+
+        Args:
+            loader: labeled dataloader to iterate over.
+
+        Returns:
+            Tuple of:
+                - concatenated keypoints tensor of shape ``(num_examples, num_targets)``.
+                - concatenated image tensor or ``None`` if ``self.extract_images`` is False.
+        """
         keypoints_list = []
         images_list = []
         for _ind, batch in enumerate(loader):
@@ -179,6 +220,13 @@ class DataExtractor:
             | None
         ),
     ]:
+        """Extract all keypoints (and optionally images) from the selected data split.
+
+        Returns:
+            Tuple of:
+                - concatenated keypoints tensor of shape ``(num_examples, num_targets)``.
+                - concatenated image tensor or ``None`` if ``self.extract_images`` is False.
+        """
         loader = self.get_loader()
         loader = self.verify_labeled_loader(loader)
         return self.iterate_over_dataloader(loader)

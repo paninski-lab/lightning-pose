@@ -1,3 +1,5 @@
+"""Backbone loader for torchvision ResNet and EfficientNet architectures."""
+
 from collections import OrderedDict
 from typing import Any
 

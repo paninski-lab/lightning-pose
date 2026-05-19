@@ -1,3 +1,5 @@
+"""Backbone architecture type definitions."""
+
 from typing import Literal
 
 ALLOWED_BACKBONES = Literal[

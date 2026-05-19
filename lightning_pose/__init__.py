@@ -1,3 +1,5 @@
+"""lightning-pose: pose estimation with supervised and semi-supervised losses."""
+
 import importlib.metadata
 from pathlib import Path
 from typing import Any

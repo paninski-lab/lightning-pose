@@ -1,5 +1,6 @@
 data:
   # resize dimensions to streamline model creation
+  # must each be a multiple of 128 (e.g., 128, 256, 384, 512)
   image_resize_dims:
     height: null
     width: null
@@ -8,20 +9,23 @@ data:
   # ABSOLUTE path to unlabeled videos' directory
   video_dir: /replace/with/your/path
   # location of labels; this should be relative to `data_dir` or an absolute path.
-  # replace {camn} with your camera names, add more rows as necessary
+  # replace cam0, cam1 with your actual camera names (e.g., "top", "side")
+  # these are literal names to substitute — not Hydra interpolation syntax
   csv_file:
-    - CollectedData_{cam0}.csv
-    - CollectedData_{cam1}.csv
-  # location of bboxes; this should be relative to `data_dir` or an absolute path.
-  # replace {camn} with your camera names, add more rows as necessary
-  # if no bounding boxes, delete all list entries and "bbox_file" entry
+    - CollectedData_cam0.csv
+    - CollectedData_cam1.csv
+  # location of bboxes; same order as csv_file above
+  # delete bbox_file entirely if you are not using bounding boxes
   bbox_file:
-    - bboxes_{cam0}.csv
-    - bboxes_{cam1}.csv
+    - bboxes_cam0.csv
+    - bboxes_cam1.csv
+  # camera names; must match the names used in csv_file and bbox_file above
+  # and must match the camera names in the calibration toml file if using camera_params_file
   view_names:
-    - {cam0}
-    - {cam1}
-  # location of csv file that points to camera parameter toml file
+    - cam0
+    - cam1
+  # path to a csv file mapping each frame to a camera calibration toml file
+  # see documentation for format; null disables 3D supervision and augmentation
   camera_params_file: null
   # total number of keypoints
   num_keypoints: null
@@ -41,10 +45,10 @@ training:
   # select from one of several predefined image/video augmentation pipelines
   # default: resizing only
   # dlc: imgaug pipeline implemented in DLC 2.0 package
-  # dlc-lr: dlc augmenation plus horizontal flips
+  # dlc-lr: dlc augmentation plus horizontal flips
   # dlc-top-down: dlc augmentations plus vertical and horizontal flips
   imgaug: dlc
-  # 3d augmentations require camera calibration
+  # apply 3D augmentations (scale/translate in 3D then reproject); requires camera_params_file
   imgaug_3d: true
   # batch size of labeled data during training
   train_batch_size: 16
@@ -57,59 +61,74 @@ training:
   # fraction of labeled data used for validation (remaining used for test)
   val_prob: 0.05
   # <=1 - fraction of total train frames (determined by `train_prob`) used for training
-  # >1 - number of total train frames used for training
+  #  >1 - absolute number of train frames to use
+  # note: 1 is treated as 1.0, meaning 100% of available train frames
   train_frames: 1
   # number of gpus to train a single model
   num_gpus: 1
   # epoch at which backbone network weights begin updating
-  # For counting in steps, replace `unfreezing_epoch` with `unfreezing_step`.
   unfreezing_epoch: 20
   # max training epochs; training may exit before due to early stopping
-  # For counting in steps, replace `min_epochs` with `min_steps`,
-  # and `max_epochs` with `max_steps`.
+  # min_epochs and max_epochs must both be set (or both absent for step-based mode)
   min_epochs: 300
   max_epochs: 300
   # frequency to log training metrics for tensorboard (one step is one batch)
   log_every_n_steps: 10
   # frequency to log validation metrics for tensorboard
-  # For counting in steps, replace `check_val_every_n_epoch` with `val_check_interval`
   check_val_every_n_epoch: 5
-  # save model weights every n epochs; must be divisible by check_val_every_n_epoch above
-  # if null, only best weights will be saved after training
+  # save model weights every n epochs
+  # must be divisible by check_val_every_n_epoch; if null, only best weights are saved
   ckpt_every_n_epochs: null
+  # perform early stopping based on validation loss
+  early_stopping: false
+  # number of validation checks with no improvement before stopping (requires early_stopping: true)
+  early_stop_patience: 3
   # rng seed for labeled batches
   rng_seed_data_pt: 0
   # rng seed for weight initialization
   rng_seed_model_pt: 0
-  # optimizer: Adam | AdamW.
-  # Recommended to use Adam for resnet backbones, and AdamW for ViT backbones.
+  # optimizer: Adam | AdamW
+  # recommended: Adam for resnet backbones, AdamW for ViT backbones
   optimizer: Adam
   optimizer_params:
     learning_rate: 5e-5
-  # learning rate scheduler
-  # multisteplr | [todo: reducelronplateau, cosine]
+  # learning rate scheduler: multisteplr | [todo: reducelronplateau, cosine]
   lr_scheduler: multisteplr
   lr_scheduler_params:
     multisteplr:
-      # Epochs at which to reduce learning rate by `gamma`.
-      # For counting in steps, replace `milestones` with `milestone_steps`
-      # caveat with `milestone_steps`: if not aligned with an epoch, it will round up to the next epoch.
+      # epochs at which to reduce learning rate by `gamma`
+      # values should be between unfreezing_epoch and max_epochs
       milestones: [150, 200, 250]
       gamma: 0.5
   # how to treat missing hand labels; false to drop, true to force uniform heatmaps
   # true will lead to better confidence values
   uniform_heatmaps_for_nan_keypoints: true
-  # randomly mask out patches during training to make model more robust to occlusions
-  # set `final_ratio: 0.0` to skip patch masking
+  # randomly mask out patches during training to improve robustness to occlusions
+  # set final_ratio: 0.0 to disable patch masking
   patch_mask:
     init_epoch: 40
     final_epoch: 300
     init_ratio: 0.0
     final_ratio: 0.5
 
+  # --- ALTERNATIVE: step-based training ---
+  # Replace the epoch-based fields above with these step-based equivalents.
+  # Use steps when dataset size varies and you want a fixed compute budget.
+  # You CANNOT mix step- and epoch-based fields; remove epoch fields entirely.
+  #
+  # unfreezing_step: 600         # replaces unfreezing_epoch
+  # min_steps: 9000             # replaces min_epochs
+  # max_steps: 9000             # replaces max_epochs
+  # lr_scheduler_params:
+  #   multisteplr:
+  #     milestone_steps: [4500, 6000, 7500]      # replaces milestones
+  #     gamma: 0.5
+
 model:
-  # list of unsupervised losses
-  # "pca_singleview" | "pca_multiview" | "temporal" | "unimodal_mse" | "unimodal_kl"
+  # list of unsupervised losses to use during training
+  # valid entries: "pca_singleview" | "pca_multiview" | "temporal" | "unimodal_mse" | "unimodal_kl"
+  # empty list trains a fully supervised model
+  # note: listing a loss here activates it; the `losses` section below only sets hyperparameters
   losses_to_use: []
   # backbone network:
   # resnet18 | resnet34 | resnet50 | resnet101 | resnet152
@@ -122,12 +141,11 @@ model:
   backbone: vits_dino
   # prediction mode: heatmap | heatmap_multiview_transformer
   model_type: heatmap_multiview_transformer
-  # which heatmap loss to use
-  # mse | kl | js
+  # which heatmap loss to use: mse | kl | js
   heatmap_loss_type: mse
-  # directory name for model saving
+  # label used when logging metrics; does not affect output directory path
   model_name: test
-  # load model from checkpoint
+  # path to a .ckpt file to resume training from a checkpoint; null to train from scratch
   checkpoint: null
 
 dali:
@@ -136,59 +154,61 @@ dali:
       sequence_length: 32
     predict:
       sequence_length: 96
-
   context:
     train:
       batch_size: 16
     predict:
       sequence_length: 96
 
+# hyperparameters for each loss type
+# these values are only used when a loss is listed in model.losses_to_use above
 losses:
   # loss = projection onto the discarded eigenvectors
   pca_multiview:
-    # weight in front of PCA loss
+    # actual weight = 1 / (2 * exp(log_weight)); higher values reduce the loss contribution
     log_weight: 5.0
     # predictions should lie within the low-d subspace spanned by these components
     components_to_keep: 3
-    # absolute error (in pixels) below which pca loss is zeroed out; if null, an empirical
-    # epsilon is computed using the labeled data
+    # absolute error (in pixels) below which pca loss is zeroed out
+    # if null, an empirical epsilon is computed from the labeled data
     epsilon: null
   # loss = projection onto the discarded eigenvectors
   pca_singleview:
-    # weight in front of PCA loss
+    # actual weight = 1 / (2 * exp(log_weight)); higher values reduce the loss contribution
     log_weight: 5.0
-    # predictions should lie within the low-d subspace spanned by components that describe this fraction of variance
+    # predictions should lie within the low-d subspace spanned by components
+    # that describe this fraction of variance (float in (0, 1)) or an integer count
     components_to_keep: 0.99
-    # absolute error (in pixels) below which pca loss is zeroed out; if null, an empirical
-    # epsilon is computed using the labeled data
+    # absolute error (in pixels) below which pca loss is zeroed out
+    # if null, an empirical epsilon is computed from the labeled data
     epsilon: null
   # loss = norm of distance between successive timepoints
   temporal:
-    # weight in front of temporal loss
+    # actual weight = 1 / (2 * exp(log_weight)); higher values reduce the loss contribution
     log_weight: 5.0
-    # for epsilon insensitive rectification
-    # (in pixels; diffs below this are not penalized)
+    # epsilon-insensitive threshold in pixels; frame-to-frame diffs below this are not penalized
+    # can be a single float or a list of floats (one per keypoint, in csv column order)
     epsilon: 20.0
-    # nan removal value.
-    # (in prob; heatmaps with max prob values are removed)
+    # heatmaps whose max probability is below this threshold are excluded from the loss
     prob_threshold: 0.05
-  # loss = error between predicted, reprojected 2d heatmaps and 2d ground truth heatmaps; requires camera calibration
+  # loss = error between predicted and reprojected 2D heatmaps; requires camera_params_file
   supervised_reprojection_heatmap_mse:
-    # weight in front of loss
-    log_weight: 3.0  # log_weight=0.0 corresponds to 0.5 * loss
+    # actual weight = 1 / (2 * exp(log_weight)); higher values reduce the loss contribution
+    # e.g., log_weight=0.0 → weight=0.5, log_weight=3.0 → weight≈0.025
+    log_weight: 3.0
 
 eval:
-  # predict? used in scripts/train_hydra.py
+  # run prediction on test_videos_directory after training completes
   predict_vids_after_training: true
-  # str with an absolute path to a directory containing videos for prediction.
+  # absolute path to directory containing videos for post-training prediction
   test_videos_directory: ${data.video_dir}
-  # save labeled .mp4? used in scripts/train_hydra.py and scripts/predict_new_vids.py
+  # save prediction-annotated .mp4 files after training
   save_vids_after_training: false
-  # matplotlib sequential or diverging colormap name for prediction visualization
-  # sequential options: viridis, plasma, magma, inferno, cool, etc.
-  # diverging options: RdBu, coolwarm, Spectral, etc.
+  # matplotlib colormap name for prediction visualization
+  # sequential: viridis, plasma, magma, inferno, cool, etc.
+  # diverging: RdBu, coolwarm, Spectral, etc.
   colormap: "cool"
-  # confidence threshold for plotting a vid
+  # keypoints below this confidence are not drawn in labeled videos
   confidence_thresh_for_vid: 0.90
 
 callbacks:

@@ -224,6 +224,12 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
             return pred_keypoints_sf, confidence_sf
 
     def get_parameters(self) -> list[dict]:
+        """Return per-parameter-group optimizer configuration for backbone and head.
+
+        Returns:
+            List of dicts with ``"params"``, ``"name"``, and optionally ``"lr"`` keys; the
+            backbone starts with learning rate 0 (frozen until unfreezing).
+        """
         params = [
             {"params": self.backbone.parameters(), "name": "backbone", "lr": 0.0},
             {"params": self.head.parameters(), "name": "head"},

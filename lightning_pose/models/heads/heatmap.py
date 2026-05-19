@@ -20,6 +20,18 @@ def make_upsampling_layers(
     int_channels: int,
     n_layers: int,
 ) -> torch.nn.Sequential:
+    """Build a sequential upsampling head composed of a PixelShuffle and ConvTranspose2d layers.
+
+    Args:
+        in_channels: number of input feature-map channels.
+        out_channels: number of output channels (i.e. number of keypoints).
+        int_channels: number of channels in each intermediate convolutional layer.
+        n_layers: total number of ConvTranspose2d layers after the PixelShuffle.
+
+    Returns:
+        ``nn.Sequential`` starting with a ``PixelShuffle(2)`` followed by ``n_layers``
+        ConvTranspose2d layers.
+    """
     # Note:
     # https://github.com/jgraving/DeepPoseKit/blob/
     # cecdb0c8c364ea049a3b705275ae71a2f366d4da/deepposekit/models/DeepLabCut.py#L131
@@ -198,4 +210,13 @@ class HeatmapHead(nn.Module):
         self,
         heatmaps: Float[torch.Tensor, "batch num_keypoints height width"],
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Apply soft argmax to heatmaps to obtain subpixel keypoint predictions.
+
+        Args:
+            heatmaps: predicted heatmaps of shape ``(batch, num_keypoints, height, width)``.
+
+        Returns:
+            Tuple of ``(keypoints, confidences)`` where keypoints has shape
+            ``(batch, num_targets)`` and confidences has shape ``(batch, num_keypoints)``.
+        """
         return run_subpixelmaxima(heatmaps, self.downsample_factor, self.temperature)

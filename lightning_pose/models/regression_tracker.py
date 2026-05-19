@@ -131,6 +131,12 @@ class RegressionTracker(BaseSupervisedTracker):
         return predicted_keypoints, confidence
 
     def get_parameters(self) -> list[dict]:
+        """Return per-parameter-group optimizer configuration for backbone and head.
+
+        Returns:
+            List of dicts with ``"params"``, ``"name"``, and optionally ``"lr"`` keys; the
+            backbone starts with learning rate 0 (frozen until unfreezing).
+        """
         params = [
             {"params": self.backbone.parameters(), "lr": 0, "name": "backbone"},
             {"params": self.head.parameters(), "name": "head"},

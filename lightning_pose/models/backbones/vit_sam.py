@@ -18,6 +18,17 @@ class SamVisionEncoder(nn.Module):
         finetune_img_size: int = 1024,
         img_size: int = 1024,
     ) -> None:
+        """Initialize SamVisionEncoder from a HuggingFace SAM checkpoint.
+
+        Loads the SAM vision encoder, optionally resizes positional embeddings if
+        ``finetune_img_size`` differs from the model's native ``img_size``, and bypasses
+        the patch-embedding size check so arbitrary input resolutions are accepted.
+
+        Args:
+            model_name: HuggingFace model identifier for the SAM checkpoint.
+            finetune_img_size: image resolution that will be used during fine-tuning/inference.
+            img_size: native image resolution of the pre-trained model.
+        """
         super().__init__()
 
         # Load the full SAM model and extract vision encoder
@@ -63,6 +74,7 @@ class SamVisionEncoder(nn.Module):
         """Completely bypass the size check in patch embedding"""
 
         def no_size_check_forward(pixel_values: torch.Tensor) -> torch.Tensor:
+            """Run patch-embedding projection without validating spatial dimensions."""
             batch_size, num_channels, height, width = pixel_values.shape
 
             # Only check channel dimension

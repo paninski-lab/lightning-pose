@@ -1,3 +1,5 @@
+"""Backbone loader for Vision Transformer (ViT) architectures including DINO and SAM."""
+
 from __future__ import annotations
 
 import math
@@ -72,6 +74,15 @@ def build_backbone(
 
 
 def load_vit_backbone_checkpoint(base: VisionEncoder, checkpoint: str) -> None:
+    """Load pre-trained ViT-MAE weights into a VisionEncoder backbone.
+
+    Supports both ``.safetensors`` and standard PyTorch checkpoint formats. Only layers
+    whose names and shapes match the encoder's state dict are loaded.
+
+    Args:
+        base: the ``VisionEncoder`` instance whose weights will be updated.
+        checkpoint: path to the checkpoint file.
+    """
     print(f"Loading VIT-MAE weights from {checkpoint}")
     # support loading safetensors
     if checkpoint.endswith(".safetensors"):
@@ -163,6 +174,11 @@ class VisionEncoder(torch.nn.Module):
     """Wrapper around generic ViT Encoder."""
 
     def __init__(self, model_name: str) -> None:
+        """Initialize VisionEncoder by loading a pre-trained ViT from HuggingFace.
+
+        Args:
+            model_name: HuggingFace model identifier (e.g., ``"facebook/dino-vitb16"``).
+        """
         super().__init__()
         from transformers import ViTModel
         self.vision_encoder = ViTModel.from_pretrained(model_name, add_pooling_layer=False)
@@ -199,6 +215,15 @@ class VisionEncoderDino(torch.nn.Module):
     """Wrapper around DINOv2/DINOv3 Encoder."""
 
     def __init__(self, model_name: str, pretrained_patch_size: int) -> None:
+        """Initialize VisionEncoderDino from a HuggingFace DINO model.
+
+        If ``pretrained_patch_size`` differs from 16, the patch-embedding projection weights are
+        resized via bicubic interpolation so that patch size 16 is used for all models.
+
+        Args:
+            model_name: HuggingFace model identifier (e.g., ``"facebook/dinov2-base"``).
+            pretrained_patch_size: the native patch size of the pre-trained checkpoint.
+        """
         super().__init__()
         from transformers import AutoModel
         self.vision_encoder = AutoModel.from_pretrained(model_name)
@@ -243,6 +268,7 @@ class VisionEncoderDino(torch.nn.Module):
         return outputs
 
     def _resize_patch_embedding_weights(self) -> None:
+        """Resize the patch-embedding projection to use patch size 16 via bicubic interpolation."""
 
         projection = self.vision_encoder.embeddings.patch_embeddings.projection
         out_channels, in_channels, old_h, old_w = projection.weight.shape

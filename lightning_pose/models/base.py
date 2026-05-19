@@ -52,6 +52,11 @@ DEFAULT_OPTIMIZER_PARAMS = OmegaConf.create(
 
 class LrNotImplementedError(NotImplementedError):
     def __init__(self, lr_scheduler: str) -> None:
+        """Initialize LrNotImplementedError.
+
+        Args:
+            lr_scheduler: the unsupported scheduler name that caused the error.
+        """
         super().__init__(
             f"'{lr_scheduler}' is an invalid LR scheduler. Must be multisteplr."
         )
@@ -60,6 +65,11 @@ class LrNotImplementedError(NotImplementedError):
 
 class OptimizerNotImplementedError(NotImplementedError):
     def __init__(self, optimizer: str) -> None:
+        """Initialize OptimizerNotImplementedError.
+
+        Args:
+            optimizer: the unsupported optimizer name that caused the error.
+        """
         super().__init__(
             f"'{optimizer}' is an invalid optimizer. Must be Adam or AdamW."
         )
@@ -69,6 +79,18 @@ class OptimizerNotImplementedError(NotImplementedError):
 def _apply_defaults_for_lr_scheduler_params(
     lr_scheduler: str, lr_scheduler_params: DictConfig | ListConfig | dict | None
 ) -> DictConfig | ListConfig:
+    """Merge user-supplied LR scheduler params with defaults.
+
+    Args:
+        lr_scheduler: name of the learning rate scheduler (currently only ``"multisteplr"``).
+        lr_scheduler_params: user-supplied parameter overrides, or ``None`` to use defaults.
+
+    Returns:
+        Merged ``DictConfig`` / ``ListConfig`` with all required scheduler parameters.
+
+    Raises:
+        LrNotImplementedError: if ``lr_scheduler`` is not a supported scheduler name.
+    """
     if lr_scheduler not in ("multistep_lr", "multisteplr"):
         raise LrNotImplementedError(lr_scheduler)
 
@@ -85,6 +107,18 @@ def _apply_defaults_for_lr_scheduler_params(
 def _apply_defaults_for_optimizer_params(
     optimizer: str, optimizer_params: DictConfig | ListConfig | dict | None
 ) -> DictConfig | ListConfig:
+    """Merge user-supplied optimizer params with defaults.
+
+    Args:
+        optimizer: optimizer name; currently ``"Adam"`` or ``"AdamW"``.
+        optimizer_params: user-supplied parameter overrides, or ``None`` to use defaults.
+
+    Returns:
+        Merged ``DictConfig`` / ``ListConfig`` with all required optimizer parameters.
+
+    Raises:
+        OptimizerNotImplementedError: if ``optimizer`` is not a supported optimizer name.
+    """
     if optimizer not in ("Adam", "AdamW"):
         raise OptimizerNotImplementedError(optimizer)
 
@@ -106,6 +140,19 @@ def get_context_from_sequence(
     Float[torch.Tensor, "seq_len context_length RGB image_height image_width"]
     | Float[torch.Tensor, "seq_len context_length n_features rep_height rep_width"]
 ):
+    """Build overlapping context windows from a sequence of frames or feature maps.
+
+    The sequence is padded at the start and end by repeating the first/last element so that
+    every original frame has a full ``context_length``-frame window centred on it.
+
+    Args:
+        img_seq: sequence tensor of shape ``(seq_len, ...)``.
+        context_length: number of frames in each context window (e.g., 5).
+
+    Returns:
+        Tensor of shape ``(seq_len, context_length, ...)`` where each row is the context window
+        centred on the corresponding input frame.
+    """
     # our goal is to extract 5-frame sequences from this sequence
     img_shape = img_seq.shape[1:]  # e.g., (3, H, W)
     seq_len = img_seq.shape[0]  # how many images in batch
@@ -346,6 +393,17 @@ class BaseFeatureExtractor(LightningModule):
         return self.get_representations(images)
 
     def get_scheduler(self, optimizer: torch.optim.Optimizer) -> MultiStepLR:
+        """Build and return the learning rate scheduler.
+
+        Args:
+            optimizer: the optimizer whose learning rate will be scheduled.
+
+        Returns:
+            ``MultiStepLR`` scheduler configured from ``self.lr_scheduler_params``.
+
+        Raises:
+            LrNotImplementedError: if ``self.lr_scheduler`` is not supported.
+        """
         if self.lr_scheduler not in ("multistep_lr", "multisteplr"):
             raise LrNotImplementedError(self.lr_scheduler)
         # define a scheduler that reduces the base learning rate
@@ -357,6 +415,11 @@ class BaseFeatureExtractor(LightningModule):
         return scheduler
 
     def get_parameters(self) -> Iterator[torch.nn.Parameter]:
+        """Return an iterator over trainable (requires_grad) model parameters.
+
+        Returns:
+            Iterator of ``torch.nn.Parameter`` objects that require gradients.
+        """
         params = filter(lambda p: p.requires_grad, self.parameters())
         return params
 

@@ -1,3 +1,5 @@
+"""Custom Lightning callbacks for training schedule, backbone unfreezing, and augmentation."""
+
 import json
 import os
 import time
@@ -28,6 +30,15 @@ class AnnealWeight(Callback):
         final_val: float = 1.0,
         freeze_until_epoch: int = 0,
     ) -> None:
+        """Initialize AnnealWeight callback.
+
+        Args:
+            attr_name: name of the attribute on the pl_module to update each epoch.
+            init_val: initial value of the weight.
+            increase_factor: amount to increase the weight per epoch after unfreezing.
+            final_val: maximum value the weight can reach.
+            freeze_until_epoch: epoch at which the weight begins to increase.
+        """
         super().__init__()
         self.init_val = init_val
         self.increase_factor = increase_factor
@@ -36,11 +47,13 @@ class AnnealWeight(Callback):
         self.attr_name = attr_name
 
     def on_train_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        """Set the annealed weight attribute to its initial value at training start."""
         # Dan: removed buffer; seems to complicate checkpoint loading
         # pl_module.register_buffer(self.attr_name, torch.tensor(self.init_val))
         setattr(pl_module, self.attr_name, torch.tensor(self.init_val))
 
     def on_train_epoch_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
+        """Increment the annealed weight attribute at the start of each training epoch."""
         if pl_module.current_epoch <= self.freeze_until_epoch:
             pass
         else:
@@ -73,6 +86,16 @@ class UnfreezeBackbone(Callback):
         initial_ratio: float = 0.1,
         warm_up_ratio: float = 1.5,
     ) -> None:
+        """Initialize UnfreezeBackbone callback.
+
+        Exactly one of ``unfreeze_epoch`` or ``unfreeze_step`` must be provided.
+
+        Args:
+            unfreeze_epoch: epoch at which to begin unfreezing the backbone.
+            unfreeze_step: global step at which to begin unfreezing the backbone.
+            initial_ratio: backbone LR starts at ``initial_ratio * upsampling_lr``.
+            warm_up_ratio: backbone LR is multiplied by this factor each epoch/step during warm-up.
+        """
         assert (unfreeze_epoch is None) != (
             unfreeze_step is None
         ), "Exactly one must be provided."
@@ -89,7 +112,7 @@ class UnfreezeBackbone(Callback):
         batch: Any,
         batch_idx: int,
     ) -> None:
-
+        """Adjust the backbone learning rate at the start of each training batch."""
         # Once backbone_lr warms up to upsampling_lr, this callback does nothing.
         # Control of backbone lr is then the sole job of the main lr scheduler.
         if self._warmed_up:
@@ -163,6 +186,13 @@ class PatchMasking(Callback):
         patch_mask_config: dict | None = None,
         patch_seed: int = 0,
     ) -> None:
+        """Initialize PatchMasking callback.
+
+        Args:
+            patch_mask_config: dictionary configuring the masking curriculum, with optional keys
+                ``init_step``, ``final_step``, ``init_ratio``, and ``final_ratio``.
+            patch_seed: seed for reproducible patch selection.
+        """
         super().__init__()
 
         # Initialize curriculum masking
@@ -418,6 +448,11 @@ class JSONInferenceProgressTracker(Callback):
     """
 
     def __init__(self, filepath: Path) -> None:
+        """Initialize JSONInferenceProgressTracker.
+
+        Args:
+            filepath: path to the JSON file where progress will be written.
+        """
         super().__init__()
         self.filepath = filepath
         self.current_step = 0
@@ -487,6 +522,11 @@ class JSONTrainingProgressTracker(Callback):
     steps_mode: bool
 
     def __init__(self, filepath: Path) -> None:
+        """Initialize JSONTrainingProgressTracker.
+
+        Args:
+            filepath: path to the JSON file where progress will be written.
+        """
         super().__init__()
         self.filepath = filepath
         self.current = 0

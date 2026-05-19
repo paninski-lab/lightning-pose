@@ -1,3 +1,5 @@
+"""Custom argparse type validators for CLI path arguments."""
+
 import argparse
 from pathlib import Path
 
@@ -21,11 +23,30 @@ def config_file(filepath: str) -> Path:
 
 
 def model_dir(filepath: str | Path) -> Path:
+    """Convert a filepath string or Path to a ``pathlib.Path`` for a model directory.
+
+    Args:
+        filepath: path string or Path object pointing to a model directory.
+
+    Returns:
+        ``pathlib.Path`` of the given filepath.
+    """
     path = Path(filepath)
     return path
 
 
 def existing_model_dir(filepath: str | Path) -> Path:
+    """Validate and return the path to an existing model directory.
+
+    Args:
+        filepath: path string or Path object pointing to an existing model directory.
+
+    Returns:
+        ``pathlib.Path`` of the directory.
+
+    Raises:
+        argparse.ArgumentTypeError: if the path does not point to an existing directory.
+    """
     path = model_dir(filepath)
     if not path.is_dir():
         raise argparse.ArgumentTypeError(

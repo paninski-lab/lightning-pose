@@ -88,6 +88,11 @@ class Loss:
 
     @property
     def weight(self) -> Float[torch.Tensor, ""]:
+        """Scalar loss weight computed as ``1 / (2 * exp(log_weight))``.
+
+        Returns:
+            Positive scalar weight tensor.
+        """
         # weight = \sigma where our trainable parameter is \log(\sigma^2).
         # i.e., we take the parameter as it is in the config and exponentiate it to
         # enforce positivity
@@ -95,18 +100,49 @@ class Loss:
         return weight
 
     def remove_nans(self, **kwargs: Any) -> Any:
+        """Remove NaN entries from inputs before computing the loss.
+
+        Subclasses must override this method to implement the appropriate NaN-masking strategy.
+
+        Raises:
+            NotImplementedError: always, unless overridden by a subclass.
+        """
         # find nans in the targets, and do a masked_select operation
         raise NotImplementedError
 
     def compute_loss(self, **kwargs: Any) -> torch.Tensor:
+        """Compute the element-wise loss between targets and predictions.
+
+        Subclasses must override this method.
+
+        Raises:
+            NotImplementedError: always, unless overridden by a subclass.
+        """
         raise NotImplementedError
 
     def rectify_epsilon(self, loss: torch.Tensor) -> torch.Tensor:
+        """Zero out loss values below the epsilon threshold (epsilon-insensitive loss).
+
+        Args:
+            loss: element-wise loss tensor.
+
+        Returns:
+            Loss tensor with values below ``self.epsilon`` set to zero via ReLU.
+        """
         # loss values below epsilon as masked to zero
         loss = F.relu(loss - self.epsilon)
         return loss
 
     def reduce_loss(self, loss: torch.Tensor, method: str = "mean") -> Float[torch.Tensor, ""]:
+        """Reduce an element-wise loss tensor to a scalar.
+
+        Args:
+            loss: element-wise loss tensor.
+            method: reduction method; currently ``"mean"`` or ``"sum"``.
+
+        Returns:
+            Scalar loss tensor.
+        """
         return self.reduce_methods_dict[method](loss)
 
     def log_loss(
@@ -114,6 +150,16 @@ class Loss:
         loss: torch.Tensor,
         stage: Literal["train", "val", "test"] | None,
     ) -> list[dict]:
+        """Build a list of logging dicts for the scalar loss and its weight.
+
+        Args:
+            loss: scalar loss value to log.
+            stage: training stage prefix for the log key, or ``None`` to skip stage prefixing.
+
+        Returns:
+            List of dicts with ``"name"`` and ``"value"`` keys, one for the loss and one for the
+            weight.
+        """
         loss_dict = {
             "name": f"{stage}_{self.loss_name}_loss",
             "value": loss,
@@ -130,6 +176,15 @@ class Loss:
         *args: Any,
         **kwargs: Any,
     ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
+        """Execute the full loss pipeline and return a scalar loss plus logging dicts.
+
+        The standard pipeline is:
+        remove_nans → compute_loss → rectify_epsilon → reduce_loss → log_loss.
+        Subclasses must override this method to supply the correct arguments to each step.
+
+        Raises:
+            NotImplementedError: always, unless overridden by a subclass.
+        """
         # give us the flow of operations, and we overwrite the methods, and determine
         # their arguments which are in buffer
 
@@ -170,13 +225,28 @@ class HeatmapLoss(Loss):
         Float[torch.Tensor, "num_valid_keypoints heatmap_height heatmap_width"],
         Float[torch.Tensor, "num_valid_keypoints heatmap_height heatmap_width"],
     ]:
+        """Remove heatmap entries where all target pixels are zero (NaN/unlabeled keypoints).
 
+        Args:
+            targets: ground-truth heatmaps.
+            predictions: predicted heatmaps.
+
+        Returns:
+            Tuple of ``(clean_targets, clean_predictions)`` with all-zero target rows removed.
+        """
         squeezed_targets = targets.reshape(targets.shape[0], targets.shape[1], -1)
         idxs_ignore = torch.all(squeezed_targets == 0.0, dim=-1)
 
         return targets[~idxs_ignore], predictions[~idxs_ignore]
 
     def compute_loss(self, **kwargs: Any) -> torch.Tensor:
+        """Compute element-wise divergence between target and predicted heatmaps.
+
+        Subclasses must override this method with the specific divergence measure.
+
+        Raises:
+            NotImplementedError: always, unless overridden by a subclass.
+        """
         raise NotImplementedError
 
     def __call__(
@@ -186,6 +256,17 @@ class HeatmapLoss(Loss):
         stage: Literal["train", "val", "test"] | None = None,
         **kwargs: Any,
     ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
+        """Compute the heatmap loss.
+
+        Args:
+            heatmaps_targ: ground-truth heatmaps.
+            heatmaps_pred: predicted heatmaps.
+            stage: training stage for logging.
+            **kwargs: ignored extra keyword arguments.
+
+        Returns:
+            Tuple of scalar loss and list of logging dicts.
+        """
         # give us the flow of operations, and we overwrite the methods, and determine
         # their arguments which are in buffer
         clean_targets, clean_predictions = self.remove_nans(
@@ -226,6 +307,18 @@ class HeatmapMSELoss(HeatmapLoss):
         targets: Float[torch.Tensor, "batch_x_num_keypoints heatmap_height heatmap_width"],
         predictions: Float[torch.Tensor, "batch_x_num_keypoints heatmap_height heatmap_width"],
     ) -> Float[torch.Tensor, "batch_x_num_keypoints heatmap_height heatmap_width"]:
+        """Compute pixel-wise MSE between target and predicted heatmaps.
+
+        Multiplies by the number of heatmap pixels (h * w) to keep the loss magnitude
+        consistent across different heatmap resolutions.
+
+        Args:
+            targets: ground-truth heatmaps.
+            predictions: model-predicted heatmaps.
+
+        Returns:
+            element-wise MSE scaled by heatmap area.
+        """
         h = targets.shape[1]
         w = targets.shape[2]
         # multiply by number of pixels in heatmap to standardize loss range
@@ -260,6 +353,15 @@ class HeatmapKLLoss(HeatmapLoss):
         targets: Float[torch.Tensor, "num_valid_keypoints heatmap_height heatmap_width"],
         predictions: Float[torch.Tensor, "num_valid_keypoints heatmap_height heatmap_width"],
     ) -> Float[torch.Tensor, "num_valid_keypoints"]:
+        """Compute per-keypoint KL divergence between target and predicted heatmaps.
+
+        Args:
+            targets: ground-truth heatmaps.
+            predictions: model-predicted heatmaps.
+
+        Returns:
+            per-keypoint KL divergence values.
+        """
         loss = self.loss(
             predictions.unsqueeze(0) + 1e-10,
             targets.unsqueeze(0) + 1e-10,
@@ -295,6 +397,15 @@ class HeatmapJSLoss(HeatmapLoss):
         targets: Float[torch.Tensor, "num_valid_keypoints heatmap_height heatmap_width"],
         predictions: Float[torch.Tensor, "num_valid_keypoints heatmap_height heatmap_width"],
     ) -> Float[torch.Tensor, "num_valid_keypoints"]:
+        """Compute per-keypoint Jensen-Shannon divergence between target and predicted heatmaps.
+
+        Args:
+            targets: ground-truth heatmaps.
+            predictions: model-predicted heatmaps.
+
+        Returns:
+            per-keypoint JS divergence values.
+        """
         loss = self.loss(
             predictions.unsqueeze(0) + 1e-10,
             targets.unsqueeze(0) + 1e-10,
@@ -404,6 +515,7 @@ class PCALoss(Loss):
             )
 
     def remove_nans(self, **kwargs: Any) -> Any:
+        """No-op for PCALoss; NaN handling is performed inside :meth:`compute_loss`."""
         # find nans in the targets, and do a masked_select operation
         pass
 
@@ -411,6 +523,14 @@ class PCALoss(Loss):
         self,
         predictions: Float[torch.Tensor, "num_samples sample_dim"],
     ) -> Float[torch.Tensor, "num_samples _"]:
+        """Compute per-sample PCA reprojection error.
+
+        Args:
+            predictions: predicted keypoint coordinates, shape ``(num_samples, sample_dim)``.
+
+        Returns:
+            Reprojection error per sample and keypoint.
+        """
         assert predictions.device == torch.device(self.device), (
             predictions.device,
             torch.device(self.device),
@@ -425,6 +545,16 @@ class PCALoss(Loss):
         stage: Literal["train", "val", "test"] | None = None,
         **kwargs: Any,
     ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
+        """Compute the PCA loss for a batch of predicted keypoints.
+
+        Args:
+            keypoints_pred: predicted keypoint coordinates.
+            stage: training stage for logging.
+            **kwargs: ignored extra keyword arguments.
+
+        Returns:
+            Tuple of scalar loss and list of logging dicts.
+        """
         assert keypoints_pred.device == torch.device(self.device), (
             keypoints_pred.device,
             torch.device(self.device),
@@ -486,6 +616,15 @@ class TemporalLoss(Loss):
         loss: Float[torch.Tensor, "batch_minus_one num_keypoints"],
         confidences: Float[torch.Tensor, "batch num_keypoints"],
     ) -> Float[torch.Tensor, "batch_minus_one num_keypoints"]:
+        """Zero out temporal difference losses where either neighboring frame is low-confidence.
+
+        Args:
+            loss: temporal difference losses of shape ``(batch-1, num_keypoints)``.
+            confidences: per-frame confidence scores of shape ``(batch, num_keypoints)``.
+
+        Returns:
+            Loss tensor with entries zeroed where confidence falls below ``self.prob_threshold``.
+        """
         # find nans in the targets, and do a masked_select operation
         # get rid of unsupervised targets with extremely uncertain predictions or likely occlusions
         idxs_ignore = confidences < self.prob_threshold
@@ -507,7 +646,14 @@ class TemporalLoss(Loss):
         self,
         predictions: Float[torch.Tensor, "batch two_x_num_keypoints"],
     ) -> Float[torch.Tensor, "batch_minus_one num_keypoints"]:
+        """Compute per-keypoint L2 temporal differences between consecutive frames.
 
+        Args:
+            predictions: predicted (x, y) keypoints of shape ``(batch, 2*num_keypoints)``.
+
+        Returns:
+            L2 norm of frame-to-frame differences, shape ``(batch-1, num_keypoints)``.
+        """
         #  return shape: (batch - 1, num_targets)
         diffs = torch.diff(predictions, dim=0)
 
@@ -526,7 +672,18 @@ class TemporalLoss(Loss):
         stage: Literal["train", "val", "test"] | None = None,
         **kwargs: Any,
     ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
+        """Compute the temporal loss for a batch of predicted keypoints.
 
+        Args:
+            keypoints_pred: predicted (x, y) keypoints of shape ``(batch, 2*num_keypoints)``.
+            confidences: per-frame confidence scores; if provided, low-confidence frames are
+                masked out.
+            stage: training stage for logging.
+            **kwargs: ignored extra keyword arguments.
+
+        Returns:
+            Tuple of scalar loss and list of logging dicts.
+        """
         elementwise_loss = self.compute_loss(predictions=keypoints_pred)
         # do remove nans with loss to remove temporal difference values
         clean_loss = (
@@ -605,6 +762,15 @@ class TemporalHeatmapLoss(Loss):
         confidences: Float[torch.Tensor, "batch num_keypoints"],
         loss: Float[torch.Tensor, "batch_minus_one num_keypoints"],
     ) -> Float[torch.Tensor, "batch_minus_one num_keypoints"]:
+        """Zero out heatmap temporal difference losses where adjacent frames are low-confidence.
+
+        Args:
+            confidences: per-frame confidence scores of shape ``(batch, num_keypoints)``.
+            loss: temporal difference losses of shape ``(batch-1, num_keypoints)``.
+
+        Returns:
+            Loss tensor with entries zeroed where confidence falls below ``self.prob_threshold``.
+        """
         # find nans in the targets, and do a masked_select operation
         # get rid of unsupervised targets with extremely uncertain predictions or likely occlusions
         idxs_ignore = confidences < self.prob_threshold
@@ -622,6 +788,15 @@ class TemporalHeatmapLoss(Loss):
         self,
         predictions: Float[torch.Tensor, "batch num_valid_keypoints heatmap_height heatmap_width"],
     ) -> Float[torch.Tensor, "batch_minus_one num_valid_keypoints"]:
+        """Compute per-keypoint temporal heatmap differences between consecutive frames.
+
+        Args:
+            predictions: predicted heatmaps of shape
+                ``(batch, num_keypoints, heatmap_height, heatmap_width)``.
+
+        Returns:
+            Per-keypoint temporal divergence of shape ``(batch-1, num_keypoints)``.
+        """
         # compute the differences between matching heatmaps for each keypoint
 
         diffs = torch.zeros(
@@ -651,7 +826,18 @@ class TemporalHeatmapLoss(Loss):
         stage: Literal["train", "val", "test"] | None = None,
         **kwargs: Any,
     ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
+        """Compute the temporal heatmap loss for a batch of predicted heatmaps.
 
+        Args:
+            heatmaps_pred: predicted heatmaps of shape
+                ``(batch, num_keypoints, heatmap_height, heatmap_width)``.
+            confidences: per-frame confidence scores of shape ``(batch, num_keypoints)``.
+            stage: training stage for logging.
+            **kwargs: ignored extra keyword arguments.
+
+        Returns:
+            Tuple of scalar loss and list of logging dicts.
+        """
         elementwise_loss = self.compute_loss(predictions=heatmaps_pred)
         # remove nan after loss is computed to get rid of diff vals with a bad heatmap
         clean_loss = self.remove_nans(confidences=confidences, loss=elementwise_loss)
@@ -757,7 +943,15 @@ class UnimodalLoss(Loss):
         targets: Float[torch.Tensor, "num_valid_keypoints heatmap_height heatmap_width"],
         predictions: Float[torch.Tensor, "num_valid_keypoints heatmap_height heatmap_width"],
     ) -> torch.Tensor:
+        """Compute per-element divergence between ideal unimodal targets and predicted heatmaps.
 
+        Args:
+            targets: ideal unimodal heatmaps derived from predicted keypoint coordinates.
+            predictions: predicted heatmaps from the network.
+
+        Returns:
+            Element-wise loss tensor.
+        """
         if self.loss_name == "unimodal_mse":
             return F.mse_loss(targets, predictions, reduction="none")
         elif self.loss_name == "unimodal_kl":
@@ -848,6 +1042,15 @@ class RegressionMSELoss(Loss):
         Float[torch.Tensor, "num_valid_keypoints"],
         Float[torch.Tensor, "num_valid_keypoints"],
     ]:
+        """Mask out NaN coordinate entries from targets and predictions.
+
+        Args:
+            targets: ground-truth (x, y) keypoints; NaN entries indicate unlabeled keypoints.
+            predictions: predicted (x, y) keypoints.
+
+        Returns:
+            Tuple of ``(clean_targets, clean_predictions)`` with NaN positions removed.
+        """
         mask = targets == targets  # keypoints is not none, bool
         targets_masked = torch.masked_select(targets, mask)
         predictions_masked = torch.masked_select(predictions, mask)
@@ -858,6 +1061,15 @@ class RegressionMSELoss(Loss):
         targets: Float[torch.Tensor, "batch_x_two_x_num_keypoints"],
         predictions: Float[torch.Tensor, "batch_x_two_x_num_keypoints"],
     ) -> Float[torch.Tensor, "batch_x_two_x_num_keypoints"]:
+        """Compute element-wise MSE between target and predicted coordinates.
+
+        Args:
+            targets: ground-truth coordinate values.
+            predictions: predicted coordinate values.
+
+        Returns:
+            Element-wise squared error tensor.
+        """
         loss = F.mse_loss(targets, predictions, reduction="none")
         return loss
 
@@ -868,7 +1080,17 @@ class RegressionMSELoss(Loss):
         stage: Literal["train", "val", "test"] | None = None,
         **kwargs: Any,
     ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
+        """Compute the regression MSE loss for a batch of predicted keypoints.
 
+        Args:
+            keypoints_targ: ground-truth (x, y) keypoints; NaN entries are ignored.
+            keypoints_pred: predicted (x, y) keypoints.
+            stage: training stage for logging.
+            **kwargs: ignored extra keyword arguments.
+
+        Returns:
+            Tuple of scalar loss and list of logging dicts.
+        """
         clean_targets, clean_predictions = self.remove_nans(
             targets=keypoints_targ, predictions=keypoints_pred
         )
@@ -909,6 +1131,15 @@ class RegressionRMSELoss(RegressionMSELoss):
         targets: Float[torch.Tensor, "batch_x_two_x_num_keypoints"],
         predictions: Float[torch.Tensor, "batch_x_two_x_num_keypoints"],
     ) -> Float[torch.Tensor, "batch_x_num_keypoints"]:
+        """Compute per-keypoint Euclidean distance between predicted and target coordinates.
+
+        Args:
+            targets: ground-truth (x, y) keypoint coordinates, flattened.
+            predictions: predicted (x, y) keypoint coordinates, flattened.
+
+        Returns:
+            per-keypoint RMSE (Euclidean pixel distance).
+        """
         targs = targets.reshape(-1, 2)
         preds = predictions.reshape(-1, 2)
         loss = torch.mean(F.mse_loss(targs, preds, reduction="none"), dim=1)
@@ -934,6 +1165,14 @@ class PairwiseProjectionsLoss(Loss):
         self,
         loss: Float[torch.Tensor, "batch cam_pairs num_keypoints"],
     ) -> Float[torch.Tensor, "valid_losses"]:
+        """Select only valid (non-NaN) loss entries.
+
+        Args:
+            loss: per-pair per-keypoint loss tensor; NaN indicates a missing keypoint.
+
+        Returns:
+            Flat tensor of valid loss values, or a zero scalar if none are valid.
+        """
         mask = ~torch.isnan(loss)
         valid_losses = torch.masked_select(loss, mask)
         if valid_losses.numel() == 0:
@@ -949,7 +1188,16 @@ class PairwiseProjectionsLoss(Loss):
         targets: Float[torch.Tensor, "batch num_keypoints 3"],
         predictions: Float[torch.Tensor, "batch cam_pairs num_keypoints 3"],
     ) -> Float[torch.Tensor, "batch cam_pairs num_keypoints"]:
+        """Compute L2 distance between 3D target and per-camera-pair predicted 3D keypoints.
 
+        Args:
+            targets: ground-truth 3D keypoints of shape ``(batch, num_keypoints, 3)``.
+            predictions: predicted 3D points from pairwise triangulation, shape
+                ``(batch, cam_pairs, num_keypoints, 3)``.
+
+        Returns:
+            Per-pair per-keypoint L2 distances; NaN where targets or predictions are missing.
+        """
         # Check for NaN targets AND predictions
         nan_targets = torch.isnan(targets).any(dim=-1)  # [batch, num_keypoints]
         nan_predictions = torch.isnan(predictions).any(dim=-1)  # [batch, cam_pairs, num_keypoints]
@@ -993,7 +1241,21 @@ class PairwiseProjectionsLoss(Loss):
         stage: Literal["train", "val", "test"] | None = None,
         **kwargs: Any,
     ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
+        """Compute the pairwise projections loss.
 
+        Args:
+            keypoints_targ_3d: ground-truth 3D keypoints of shape ``(batch, num_keypoints, 3)``.
+            keypoints_pred_3d: predicted 3D keypoints per camera pair, shape
+                ``(batch, cam_pairs, num_keypoints, 3)``.
+            stage: training stage for logging.
+            **kwargs: ignored extra keyword arguments.
+
+        Returns:
+            Tuple of scalar loss and list of logging dicts.
+
+        Raises:
+            ValueError: if either ``keypoints_targ_3d`` or ``keypoints_pred_3d`` is ``None``.
+        """
         # check if 3D keypoints are available
         if keypoints_targ_3d is None or keypoints_pred_3d is None:
             raise ValueError(
@@ -1058,6 +1320,15 @@ class ReprojectionHeatmapLoss(Loss):
         loss: Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"],
         targets: Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"],
     ) -> Float[torch.Tensor, "valid_losses"]:
+        """Select only valid (non-zero-target) loss entries.
+
+        Args:
+            loss: element-wise MSE loss tensor.
+            targets: ground-truth heatmaps; all-zero heatmaps indicate unlabeled keypoints.
+
+        Returns:
+            Flat tensor of valid loss values, or a zero scalar if none are valid.
+        """
         # Create mask for valid keypoints (non-zero targets)
         squeezed_targets = targets.reshape(targets.shape[0], targets.shape[1], -1)
         valid_keypoints = ~torch.all(squeezed_targets == 0.0, dim=-1)  # [batch, num_keypoints]
@@ -1080,6 +1351,15 @@ class ReprojectionHeatmapLoss(Loss):
         targets: Float[torch.Tensor, "batch_x_num_keypoints heatmap_height heatmap_width"],
         predictions: Float[torch.Tensor, "batch_x_num_keypoints heatmap_height heatmap_width"],
     ) -> Float[torch.Tensor, "batch_x_num_keypoints heatmap_height heatmap_width"]:
+        """Compute pixel-wise MSE between reprojected and ground-truth heatmaps.
+
+        Args:
+            targets: ground-truth heatmaps.
+            predictions: heatmaps generated from reprojected 2D keypoints.
+
+        Returns:
+            Element-wise MSE scaled by the number of heatmap pixels.
+        """
         h = targets.shape[1]
         w = targets.shape[2]
         # multiply by number of pixels in heatmap to standardize loss range
@@ -1093,7 +1373,21 @@ class ReprojectionHeatmapLoss(Loss):
         stage: Literal["train", "val", "test"] | None = None,
         **kwargs: Any,
     ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
+        """Compute the reprojection heatmap loss.
 
+        Args:
+            heatmaps_targ: ground-truth heatmaps.
+            keypoints_pred_2d_reprojected: 2D keypoints obtained by projecting triangulated 3D
+                predictions back into each camera, shape ``(batch, num_keypoints, 2)``.
+            stage: training stage for logging.
+            **kwargs: ignored extra keyword arguments.
+
+        Returns:
+            Tuple of scalar loss and list of logging dicts.
+
+        Raises:
+            ValueError: if ``keypoints_pred_2d_reprojected`` is ``None``.
+        """
         # check if reprojected keypoints are available
         if keypoints_pred_2d_reprojected is None:
             raise ValueError(

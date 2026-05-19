@@ -1,3 +1,5 @@
+"""Tools for cropping labeled frames and videos to bounding-box regions of interest."""
+
 import multiprocessing
 from pathlib import Path
 from typing import Any
@@ -56,6 +58,21 @@ def _calculate_bbox_size(keypoints_per_frame: np.ndarray, crop_ratio: float = 1.
 def _compute_bbox_df(
     pred_df: pd.DataFrame, anchor_keypoints: list[str], crop_ratio: float = 1.0
 ) -> pd.DataFrame:
+    """Compute a bounding-box DataFrame from predicted keypoint positions.
+
+    Each row corresponds to one frame and contains the top-left corner (x, y) and size (h, w)
+    of a square bounding box centred on the mean of the anchor keypoints.
+
+    Args:
+        pred_df: DataFrame of predictions with a MultiIndex column of ``(scorer, bodypart, coord)``
+            or equivalent; must contain x and y coordinate columns.
+        anchor_keypoints: list of keypoint names used to determine the bounding box centre and
+            size; pass an empty list to use all keypoints.
+        crop_ratio: scale factor applied to the bounding box size.
+
+    Returns:
+        DataFrame with columns ``["x", "y", "h", "w"]`` and the same index as ``pred_df``.
+    """
     # Get x,y columns for anchor_keypoints (or all keypoints if anchor_keypoints is empty)
     coord_mask = pred_df.columns.get_level_values("coords").isin(["x", "y"])
     if len(anchor_keypoints) > 0:
@@ -112,6 +129,14 @@ def _crop_image(img_path: Path, bbox: tuple[int, int, int, int], cropped_img_pat
 
 
 def _star_crop_image(args: tuple) -> None:
+    """Unpack a tuple of arguments and call ``_crop_image``.
+
+    This wrapper is used with multiprocessing ``Pool.map`` which requires a single-argument
+    callable.
+
+    Args:
+        args: tuple of ``(img_path, bbox, cropped_img_path)`` forwarded to ``_crop_image``.
+    """
     return _crop_image(*args)
 
 
@@ -143,6 +168,7 @@ def _crop_images(bbox_df: pd.DataFrame, root_directory: Path, output_directory: 
     _file_cache: dict[Path, bool] = {}
 
     def _file_exists(path: Path) -> bool:
+        """Return True if ``root_directory / path`` exists, with results cached."""
         # Cache path.exists() as an easy way to speed up.
         # TODO: This is still slow. Get all files in the dir and check if file is in the list.
         if path in _file_cache:
@@ -214,6 +240,7 @@ def _crop_video_moviepy(video_file: Path, bbox_df: pd.DataFrame, output_file: Pa
     w = round(w / 2) * 2
 
     def crop_frame(get_frame: Any, t: float) -> np.ndarray:
+        """Crop a single video frame at time ``t`` to the bounding box for that frame."""
         frame = get_frame(t)
 
         frame_index = int(t * clip.fps)  # Calculate frame index based on time

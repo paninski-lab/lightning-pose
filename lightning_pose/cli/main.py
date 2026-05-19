@@ -1,3 +1,5 @@
+"""Entry point for the litpose command-line interface."""
+
 from __future__ import annotations
 
 import sys
@@ -7,6 +9,11 @@ from .commands import COMMANDS
 
 
 def _build_parser() -> friendly.ArgumentParser:
+    """Build and return the top-level argument parser with all subcommands registered.
+
+    Returns:
+        Configured ``ArgumentParser`` with all CLI subcommands attached.
+    """
     parser = friendly.ArgumentParser()
     subparsers = parser.add_subparsers(
         dest="command",
@@ -23,6 +30,7 @@ def _build_parser() -> friendly.ArgumentParser:
 
 
 def main() -> None:
+    """Entry point for the litpose CLI; parse arguments and dispatch to the appropriate command."""
     parser = _build_parser()
 
     # If no commands provided, display the help message.

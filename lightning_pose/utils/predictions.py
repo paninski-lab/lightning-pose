@@ -26,7 +26,7 @@ from lightning_pose.data.utils import count_frames
 from lightning_pose.models import ALLOWED_MODELS
 
 if TYPE_CHECKING:
-    from lightning_pose.api.model import Model
+    from lightning_pose.api import Model
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -92,10 +92,20 @@ class PredictionHandler:
 
     @property
     def keypoint_names(self) -> list[str]:
+        """List of keypoint name strings from the config.
+
+        Returns:
+            List of keypoint names.
+        """
         return list(self.cfg.data.keypoint_names)
 
     @property
     def do_context(self) -> bool:
+        """Whether the model/loader uses 5-frame context.
+
+        Returns:
+            True if context frames are used, otherwise False.
+        """
         if self.data_module:
             return self.data_module.dataset.do_context  # type: ignore[union-attr]
         else:
@@ -213,6 +223,15 @@ class PredictionHandler:
         return predictions
 
     def make_dlc_pandas_index(self, keypoint_names: list | None = None) -> pd.MultiIndex:
+        """Build a DLC-style pandas MultiIndex for labelling prediction DataFrames.
+
+        Args:
+            keypoint_names: optional override for the list of keypoint names; defaults to
+                ``self.keypoint_names``.
+
+        Returns:
+            ``pd.MultiIndex`` with levels ``["scorer", "bodyparts", "coords"]``.
+        """
         return make_dlc_pandas_index(
             cfg=self.cfg, keypoint_names=keypoint_names or self.keypoint_names
         )
@@ -513,6 +532,16 @@ def make_dlc_pandas_index(
     cfg: DictConfig | ListConfig,
     keypoint_names: list[str],
 ) -> pd.MultiIndex:
+    """Create a DLC-style three-level pandas MultiIndex for prediction DataFrames.
+
+    Args:
+        cfg: hydra config used to obtain the model type for the scorer level.
+        keypoint_names: list of body-part names.
+
+    Returns:
+        ``pd.MultiIndex`` with levels ``["scorer", "bodyparts", "coords"]`` where coords are
+        ``["x", "y", "likelihood"]``.
+    """
     xyl_labels = ["x", "y", "likelihood"]
     pdindex = pd.MultiIndex.from_product(
         [[f"{cfg.model.model_type}_tracker"], keypoint_names, xyl_labels],
@@ -689,6 +718,15 @@ def load_model_from_checkpoint(
 
 
 def _make_cmap(number_colors: int, cmap: str) -> np.ndarray:
+    """Sample ``number_colors`` evenly spaced RGB colours from a matplotlib colormap.
+
+    Args:
+        number_colors: number of discrete colours to sample.
+        cmap: matplotlib colormap name (e.g., ``"cool"``).
+
+    Returns:
+        Uint8 array of shape ``(number_colors, 3)`` with RGB values in ``[0, 255]``.
+    """
     color_class = plt.cm.ScalarMappable(cmap=cmap)
     C = color_class.to_rgba(np.linspace(0, 1, number_colors))
     colors = (C[:, :3] * 255).astype(np.uint8)
@@ -747,6 +785,7 @@ def create_labeled_video(
     print(f"Duration of video [s]: {np.round(dur, 2)}, recorded at {np.round(fps_og, 2)} fps!")
 
     def seconds_to_hms(seconds: float) -> str:
+        """Format a duration in seconds as an ``HH:MM:SS`` string."""
         # Convert seconds to a timedelta object
         td = datetime.timedelta(seconds=seconds)
 
@@ -762,6 +801,7 @@ def create_labeled_video(
 
     # add marker to each frame t, where t is in sec
     def add_marker_and_timestamps(get_frame: Any, t: float) -> np.ndarray:
+        """Overlay keypoint markers and a timestamp on the frame at time ``t``."""
         image = get_frame(t)
         # frame [ny x ny x 3]
         frame = image.copy()
@@ -880,6 +920,16 @@ def generate_labeled_video(
     confidence_thresh_for_vid: float,
     colormap: str,
 ) -> None:
+    """Overlay keypoint markers on a video and write the result to disk.
+
+    Args:
+        video_file: path to the source video file.
+        preds_df: predictions DataFrame with columns indexed as
+            ``(scorer, bodypart, coord)`` where coord is x, y, or likelihood.
+        output_mp4_file: path where the labeled video will be saved.
+        confidence_thresh_for_vid: keypoints with confidence below this value are not plotted.
+        colormap: matplotlib colormap name used to colour each keypoint.
+    """
     os.makedirs(os.path.dirname(output_mp4_file), exist_ok=True)
     # transform df to numpy array
     keypoints_arr = np.reshape(preds_df.to_numpy(), [preds_df.shape[0], -1, 3])

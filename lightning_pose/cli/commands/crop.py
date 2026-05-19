@@ -12,7 +12,7 @@ from .. import types
 
 if TYPE_CHECKING:
     import lightning_pose.utils.cropzoom as cz  # noqa: F401
-    from lightning_pose.api.model import Model  # noqa: F401
+    from lightning_pose.api import Model  # noqa: F401
 
 
 def register_parser(subparsers: Any) -> argparse.ArgumentParser:
@@ -94,7 +94,7 @@ def get_parser() -> argparse.ArgumentParser:
 def handle(args: argparse.Namespace) -> None:
     """Handle the crop command."""
     import lightning_pose.utils.cropzoom as cz  # noqa: F811
-    from lightning_pose.api.model import Model  # noqa: F811
+    from lightning_pose.api import Model  # noqa: F811
 
     model_dir = args.model_dir
     model = Model.from_dir(model_dir)
