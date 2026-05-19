@@ -70,7 +70,9 @@ class LossFactory(pl.LightningModule):
                 anneal_weight_ = 1.0
             else:
                 anneal_weight_ = anneal_weight
-            tot_loss += anneal_weight_ * current_weighted_loss
+            scaled = anneal_weight_ * current_weighted_loss
+            # move accumulator to loss device on first iteration (losses run on GPU at train time)
+            tot_loss = tot_loss.to(scaled.device) + scaled
 
             # log weighted losses (unweighted losses auto-logged by loss instance)
             log_list += [
