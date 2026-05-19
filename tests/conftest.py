@@ -21,6 +21,7 @@ import torch
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
 import lightning_pose as lp
+from lightning_pose.callbacks import get_callbacks
 from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import (
@@ -32,7 +33,6 @@ from lightning_pose.losses import get_loss_factories
 from lightning_pose.utils.io import get_videos_in_dir
 from lightning_pose.utils.predictions import PredictionHandler
 from lightning_pose.utils.scripts import (
-    get_callbacks,
     get_data_module,
     get_dataset,
     get_imgaug_transform,

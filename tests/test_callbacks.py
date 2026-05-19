@@ -1,3 +1,4 @@
+import copy
 import json
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -5,13 +6,16 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 from lightning import LightningModule, Trainer
+from lightning.pytorch.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
 
 from lightning_pose.callbacks import (
+    AnnealWeight,
     JSONInferenceProgressTracker,
     JSONTrainingProgressTracker,
     PatchMasker,
     PatchMasking,
     UnfreezeBackbone,
+    get_callbacks,
 )
 
 
@@ -718,3 +722,84 @@ class TestJSONTrainingProgressTracker:
         assert progress_data["completed"] == 100
         assert progress_data["total"] == 100
         assert status == "EVALUATING"  # 100 == 100
+
+
+class TestGetCallbacks:
+    """Test the get_callbacks function."""
+
+    def test_get_callbacks_default(self, cfg):
+        """Default args produce UnfreezeBackbone, LearningRateMonitor, and ModelCheckpoint."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        callbacks = get_callbacks(cfg_tmp)
+        types = [type(cb) for cb in callbacks]
+        assert UnfreezeBackbone in types
+        assert LearningRateMonitor in types
+        assert ModelCheckpoint in types
+
+    def test_get_callbacks_with_early_stopping(self, cfg):
+        """early_stopping=True adds an EarlyStopping callback."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        callbacks = get_callbacks(cfg_tmp, early_stopping=True)
+        types = [type(cb) for cb in callbacks]
+        assert EarlyStopping in types
+
+    def test_get_callbacks_without_backbone_unfreeze(self, cfg):
+        """backbone_unfreeze=False omits UnfreezeBackbone."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        callbacks = get_callbacks(cfg_tmp, backbone_unfreeze=False)
+        types = [type(cb) for cb in callbacks]
+        assert UnfreezeBackbone not in types
+
+    def test_get_callbacks_without_lr_monitor(self, cfg):
+        """lr_monitor=False omits LearningRateMonitor."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        callbacks = get_callbacks(cfg_tmp, lr_monitor=False)
+        types = [type(cb) for cb in callbacks]
+        assert LearningRateMonitor not in types
+
+    def test_get_callbacks_without_checkpointing(self, cfg):
+        """checkpointing=False omits the best-model ModelCheckpoint."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        callbacks = get_callbacks(cfg_tmp, checkpointing=False)
+        types = [type(cb) for cb in callbacks]
+        assert ModelCheckpoint not in types
+
+    def test_get_callbacks_with_ckpt_every_n_epochs(self, cfg):
+        """ckpt_every_n_epochs adds a second ModelCheckpoint that fires periodically."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        callbacks = get_callbacks(cfg_tmp, ckpt_every_n_epochs=5)
+        ckpt_callbacks = [cb for cb in callbacks if isinstance(cb, ModelCheckpoint)]
+        assert len(ckpt_callbacks) == 2
+
+    def test_get_callbacks_with_unsupervised_losses(self, cfg):
+        """Non-empty losses_to_use adds an AnnealWeight callback."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = ['temporal']
+        callbacks = get_callbacks(cfg_tmp)
+        types = [type(cb) for cb in callbacks]
+        assert AnnealWeight in types
+
+    def test_get_callbacks_with_status_file(self, cfg, tmp_path):
+        """Passing status_file adds a JSONTrainingProgressTracker callback."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        status_file = tmp_path / 'status.json'
+        callbacks = get_callbacks(cfg_tmp, status_file=status_file)
+        types = [type(cb) for cb in callbacks]
+        assert JSONTrainingProgressTracker in types
+
+    def test_get_callbacks_patch_masking(self, cfg):
+        """Patch masking is added for multiview transformer when final_ratio > 0."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        cfg_tmp.model.model_type = 'heatmap_multiview_transformer'
+        cfg_tmp.training.patch_mask = {'final_ratio': 0.5}
+        callbacks = get_callbacks(cfg_tmp)
+        types = [type(cb) for cb in callbacks]
+        assert PatchMasking in types

@@ -3,21 +3,13 @@
 import os
 import warnings
 from collections import OrderedDict
-from pathlib import Path
 
 import imgaug.augmenters as iaa
 import numpy as np
 import torch
-from lightning.pytorch.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
 from omegaconf import DictConfig, ListConfig, OmegaConf
 from omegaconf.errors import ValidationError
 
-from lightning_pose.callbacks import (
-    AnnealWeight,
-    JSONTrainingProgressTracker,
-    PatchMasking,
-    UnfreezeBackbone,
-)
 from lightning_pose.data.augmentations import (
     expand_imgaug_str_to_dict,
     imgaug_transform,
@@ -41,7 +33,6 @@ __all__ = [
     "get_dataset",
     "get_data_module",
     "get_model",
-    "get_callbacks",
 ]
 
 
@@ -459,97 +450,3 @@ def get_model(
             model.load_state_dict(new_state_dict, strict=False)
 
     return model
-
-
-def get_callbacks(
-    cfg: DictConfig | ListConfig,
-    early_stopping: bool = False,
-    checkpointing: bool = True,
-    lr_monitor: bool = True,
-    ckpt_every_n_epochs: int | None = None,
-    backbone_unfreeze: bool = True,
-    status_file: Path | None = None,
-) -> list:
-    """Build and return the list of training callbacks based on the config.
-
-    Args:
-        cfg: hydra config containing training and callback parameters.
-        early_stopping: if True, add an ``EarlyStopping`` callback.
-        checkpointing: if True, add a ``ModelCheckpoint`` callback that saves the best model.
-        lr_monitor: if True, add a ``LearningRateMonitor`` callback.
-        ckpt_every_n_epochs: if not None, also save a checkpoint every this many epochs.
-        backbone_unfreeze: if True, add the ``UnfreezeBackbone`` callback.
-        status_file: if not None, add a ``JSONTrainingProgressTracker`` callback writing to this
-            path.
-
-    Returns:
-        List of callback objects ready to pass to a ``pl.Trainer``.
-    """
-    callbacks = []
-
-    if early_stopping:
-        early_stopping_cb = EarlyStopping(
-            monitor="val_supervised_loss",
-            patience=cfg.training.early_stop_patience,
-            mode="min",
-        )
-        callbacks.append(early_stopping_cb)
-
-    if backbone_unfreeze:
-        unfreeze_step = cfg.training.get("unfreezing_step")
-        unfreeze_epoch = cfg.training.get("unfreezing_epoch")
-        unfreeze_backbone_callback = UnfreezeBackbone(
-            unfreeze_step=unfreeze_step, unfreeze_epoch=unfreeze_epoch
-        )
-        callbacks.append(unfreeze_backbone_callback)
-
-    if lr_monitor:
-        # this callback should be added after UnfreezeBackbone in order to log its learning rate
-        lr_monitor_cb = LearningRateMonitor(logging_interval="epoch")
-        callbacks.append(lr_monitor_cb)
-
-    # always save out best model
-    if checkpointing:
-        ckpt_best_callback = ModelCheckpoint(
-            monitor="val_supervised_loss",
-            mode="min",
-            filename="{epoch}-{step}-best",
-        )
-        callbacks.append(ckpt_best_callback)
-
-    if ckpt_every_n_epochs:
-        # if ckpt_every_n_epochs is not None, save separate checkpoint files
-        ckpt_callback = ModelCheckpoint(
-            monitor=None,
-            every_n_epochs=ckpt_every_n_epochs,
-            save_top_k=-1,
-        )
-        callbacks.append(ckpt_callback)
-
-    # we need this callback for both supervised and unsupervised losses
-    has_supervised_loss = any(
-        loss_config.get("log_weight") is not None
-        for loss_name, loss_config in cfg.losses.items() if loss_name.startswith("supervised_")
-    )
-    if (
-        ((cfg.model.losses_to_use != []) and (cfg.model.losses_to_use is not None))
-        or has_supervised_loss
-    ):
-        anneal_weight_callback = AnnealWeight(**cfg.callbacks.anneal_weight)
-        callbacks.append(anneal_weight_callback)
-
-    # add patch masking callback for multiview transformer models if patch masking is enabled
-    if (
-        cfg.model.model_type == "heatmap_multiview_transformer"
-        and cfg.training.get("patch_mask", {}).get("final_ratio", 0.0) > 0.0
-    ):
-
-        patch_masking_callback = PatchMasking(
-            patch_mask_config=cfg.training.get("patch_mask", {}),
-            patch_seed=cfg.training.rng_seed_model_pt,
-        )
-        callbacks.append(patch_masking_callback)
-
-    if status_file is not None:
-        callbacks.append(JSONTrainingProgressTracker(status_file))
-    return callbacks
