@@ -1,5 +1,8 @@
 """Tests for ModelConfig.validate() and its sub-validation methods."""
 
+from pathlib import Path
+from unittest.mock import patch
+
 import pytest
 from omegaconf import OmegaConf
 
@@ -76,6 +79,88 @@ def _multiview_cfg_dict() -> dict:
 def _mc(d: dict) -> ModelConfig:
     """Wrap a plain dict in a ModelConfig."""
     return ModelConfig(OmegaConf.create(d))
+
+
+# ---------------------------------------------------------------------------
+# is_multi_view / is_single_view
+# ---------------------------------------------------------------------------
+
+class TestIsMultiView:
+    """Test ModelConfig.is_multi_view and is_single_view."""
+
+    def test_is_multi_view_no_view_names(self):
+        """Absent view_names → single-view."""
+        mc = _mc(_singleview_cfg_dict())
+        assert not mc.is_multi_view()
+        assert mc.is_single_view()
+
+    def test_is_multi_view_two_views(self):
+        """Two view_names → multi-view."""
+        mc = _mc(_multiview_cfg_dict())
+        assert mc.is_multi_view()
+        assert not mc.is_single_view()
+
+    def test_is_multi_view_single_entry_raises(self):
+        """Exactly one view_name → ValueError."""
+        cfg = _singleview_cfg_dict()
+        cfg['data']['view_names'] = ['only_one']
+        with pytest.raises(ValueError, match='should not be specified if there is only one view'):
+            _mc(cfg).is_multi_view()
+
+
+# ---------------------------------------------------------------------------
+# test_video_files_singleview
+# ---------------------------------------------------------------------------
+
+class TestTestVideoFilesSingleview:
+    """Test ModelConfig.test_video_files_singleview."""
+
+    def test_test_video_files_singleview_on_multiview_raises(self):
+        """AssertionError when called on a multi-view model."""
+        with pytest.raises(AssertionError):
+            _mc(_multiview_cfg_dict()).test_video_files_singleview()
+
+    def test_test_video_files_singleview_returns_paths(self):
+        """Returns list of Paths produced by check_video_paths."""
+        cfg = _singleview_cfg_dict()
+        cfg['eval'] = {'test_videos_directory': '/fake/videos'}
+        with (
+            patch(
+                'lightning_pose.api.model_config.return_absolute_path',
+                return_value='/fake/videos',
+            ),
+            patch(
+                'lightning_pose.api.model_config.check_video_paths',
+                return_value=['/fake/videos/a.mp4', '/fake/videos/b.mp4'],
+            ),
+        ):
+            result = _mc(cfg).test_video_files_singleview()
+        assert result == [Path('/fake/videos/a.mp4'), Path('/fake/videos/b.mp4')]
+
+
+# ---------------------------------------------------------------------------
+# test_video_files_multiview
+# ---------------------------------------------------------------------------
+
+class TestTestVideoFilesMultiview:
+    """Test ModelConfig.test_video_files_multiview."""
+
+    def test_test_video_files_multiview_on_singleview_raises(self):
+        """AssertionError when called on a single-view model."""
+        with pytest.raises(AssertionError):
+            _mc(_singleview_cfg_dict()).test_video_files_multiview()
+
+    def test_test_video_files_multiview_returns_grouped_paths(self):
+        """Returns the list of per-session path groups from find_video_files_for_views."""
+        cfg = _multiview_cfg_dict()
+        cfg['eval'] = {'test_videos_directory': '/fake/videos'}
+        fake_result = [[Path('/fake/videos/cam0.mp4'), Path('/fake/videos/cam1.mp4')]]
+        with patch(
+            'lightning_pose.api.model_config.find_video_files_for_views',
+            return_value=fake_result,
+        ):
+            result = _mc(cfg).test_video_files_multiview()
+        assert result == fake_result
 
 
 # ---------------------------------------------------------------------------
