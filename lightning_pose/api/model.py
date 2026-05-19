@@ -405,7 +405,8 @@ class Model:
 
         """
         self._load()
-        assert self.model is not None
+        if self.model is None:
+            raise RuntimeError('model failed to load; self.model is None after _load()')
 
         # --- Input validation ---
         if frame_rgb.dtype != np.uint8:
@@ -647,7 +648,8 @@ class Model:
         else:
             metrics = None
 
-        assert isinstance(df, pd.DataFrame)
+        if not isinstance(df, pd.DataFrame):
+            raise RuntimeError('expected a single-view DataFrame from predict_dataset')
         return PredictionResult(predictions=df, metrics=metrics)
 
     def predict_on_label_csv_multiview(
@@ -666,13 +668,16 @@ class Model:
             view of the same session. Order must match the `view_names` in the config file.
 
         See `predict_on_label_csv` docstring for other arguments."""
-        assert self.config.is_multi_view()
+        if not self.config.is_multi_view():
+            raise ValueError('predict_on_label_csv_multiview requires a multi-view model')
         self._load()
 
         view_names = self.config.cfg.data.view_names
-        assert len(csv_file_per_view) == len(
-            view_names
-        ), f"{len(csv_file_per_view)} != {len(view_names)}"
+        if len(csv_file_per_view) != len(view_names):
+            raise ValueError(
+                f'expected {len(view_names)} csv files (one per view), '
+                f'got {len(csv_file_per_view)}'
+            )
 
         # Convert this to absolute, because if relative, downstream will
         # assume its relative to the data_dir.
@@ -843,13 +848,16 @@ class Model:
             MultiviewPredictionResult: object containing the predictions and metrics for each view.
 
         """
-        assert self.config.is_multi_view()
+        if not self.config.is_multi_view():
+            raise ValueError('predict_on_video_file_multiview requires a multi-view model')
         self._load()
 
         view_names = self.config.cfg.data.view_names
-        assert len(video_file_per_view) == len(
-            view_names
-        ), f"{len(video_file_per_view)} != {len(view_names)}"
+        if len(video_file_per_view) != len(view_names):
+            raise ValueError(
+                f'expected {len(view_names)} video files (one per view), '
+                f'got {len(video_file_per_view)}'
+            )
 
         video_file_per_view = [Path(f) for f in video_file_per_view]
 

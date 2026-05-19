@@ -1,5 +1,6 @@
 import shutil
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -202,38 +203,78 @@ def test_predict_frame_with_bbox(tmp_path, request):
     assert np.all(kp[:, 1] <= 480 + 1)
 
 
-def test_predict_frame_errors(tmp_path, request):
-    """Error-path tests for predict_frame validation guards."""
-    model = _setup_test_model(tmp_path, request)
+class TestModelErrors:
+    """Test that Model public methods raise informative errors on bad inputs."""
 
-    # Wrong dtype (float32 instead of uint8)
-    float_frame = np.random.rand(256, 256, 3).astype(np.float32)
-    with pytest.raises(ValueError, match="must be uint8"):
-        model.predict_frame(float_frame)
+    @pytest.fixture()
+    def singleview_model(self, tmp_path, request):
+        """Singleview model, not yet loaded."""
+        return _setup_test_model(tmp_path, request, multiview=False)
 
-    # Wrong shape (grayscale -- missing channel dim)
-    gray_frame = np.random.randint(0, 255, (256, 256), dtype=np.uint8)
-    with pytest.raises(ValueError, match=r"must be \(H, W, 3\)"):
-        model.predict_frame(gray_frame)
+    @pytest.fixture()
+    def multiview_model(self, tmp_path, request):
+        """Multiview model, not yet loaded."""
+        return _setup_test_model(tmp_path, request, multiview=True)
 
-    # Wrong shape (RGBA -- 4 channels)
-    rgba_frame = np.random.randint(0, 255, (256, 256, 4), dtype=np.uint8)
-    with pytest.raises(ValueError, match=r"must be \(H, W, 3\)"):
-        model.predict_frame(rgba_frame)
+    def test_predict_frame_errors(self, singleview_model):
+        """predict_frame raises on bad inputs and when the model failed to load."""
+        model = singleview_model
 
-    frame = np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8)
+        # RuntimeError when _load() is a no-op and model.model stays None
+        with patch.object(model, '_load'):
+            with pytest.raises(RuntimeError, match='model failed to load'):
+                model.predict_frame(np.zeros((256, 256, 3), dtype=np.uint8))
 
-    # Negative bbox origin
-    with pytest.raises(ValueError, match="non-negative"):
-        model.predict_frame(frame, bbox=(-10, 0, 50, 50))
+        # Wrong dtype (float32 instead of uint8)
+        float_frame = np.random.rand(256, 256, 3).astype(np.float32)
+        with pytest.raises(ValueError, match='must be uint8'):
+            model.predict_frame(float_frame)
 
-    # Zero-width bbox
-    with pytest.raises(ValueError, match="must be positive"):
-        model.predict_frame(frame, bbox=(10, 10, 0, 50))
+        # Wrong shape (grayscale -- missing channel dim)
+        gray_frame = np.random.randint(0, 255, (256, 256), dtype=np.uint8)
+        with pytest.raises(ValueError, match=r'must be \(H, W, 3\)'):
+            model.predict_frame(gray_frame)
 
-    # Bbox completely off-frame (empty crop)
-    with pytest.raises(ValueError, match="empty crop"):
-        model.predict_frame(frame, bbox=(1000, 1000, 50, 50))
+        # Wrong shape (RGBA -- 4 channels)
+        rgba_frame = np.random.randint(0, 255, (256, 256, 4), dtype=np.uint8)
+        with pytest.raises(ValueError, match=r'must be \(H, W, 3\)'):
+            model.predict_frame(rgba_frame)
+
+        frame = np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8)
+
+        # Negative bbox origin
+        with pytest.raises(ValueError, match='non-negative'):
+            model.predict_frame(frame, bbox=(-10, 0, 50, 50))
+
+        # Zero-width bbox
+        with pytest.raises(ValueError, match='must be positive'):
+            model.predict_frame(frame, bbox=(10, 10, 0, 50))
+
+        # Bbox completely off-frame (empty crop)
+        with pytest.raises(ValueError, match='empty crop'):
+            model.predict_frame(frame, bbox=(1000, 1000, 50, 50))
+
+    def test_predict_on_label_csv_multiview_requires_multiview_model(self, singleview_model):
+        """Raises ValueError when called on a single-view model."""
+        with pytest.raises(ValueError, match='requires a multi-view model'):
+            singleview_model.predict_on_label_csv_multiview(['a.csv', 'b.csv'])
+
+    def test_predict_on_label_csv_multiview_wrong_csv_count(self, multiview_model):
+        """Raises ValueError when the number of csv files doesn't match the view count."""
+        with patch.object(multiview_model, '_load'):
+            with pytest.raises(ValueError, match='expected.*csv files'):
+                multiview_model.predict_on_label_csv_multiview(['only_one.csv'])
+
+    def test_predict_on_video_file_multiview_requires_multiview_model(self, singleview_model):
+        """Raises ValueError when called on a single-view model."""
+        with pytest.raises(ValueError, match='requires a multi-view model'):
+            singleview_model.predict_on_video_file_multiview(['a.mp4', 'b.mp4'])
+
+    def test_predict_on_video_file_multiview_wrong_video_count(self, multiview_model):
+        """Raises ValueError when the number of video files doesn't match the view count."""
+        with patch.object(multiview_model, '_load'):
+            with pytest.raises(ValueError, match='expected.*video files'):
+                multiview_model.predict_on_video_file_multiview(['only_one.mp4'])
 
 
 def test_predict_frame_bbox_clipping(tmp_path, request):
