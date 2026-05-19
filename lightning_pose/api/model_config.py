@@ -126,7 +126,129 @@ class ModelConfig:
         Raises:
             AssertionError: if any validation check fails.
         """
+        self._validate_data()
+        self._validate_training()
+        self._validate_model()
+
+    def _validate_data(self) -> None:
+        """Validate the ``data`` config section.
+
+        Checks:
+        - ``num_keypoints`` is set and positive.
+        - ``keypoint_names``, if set, has length equal to ``num_keypoints``.
+        - For multi-view models, ``view_names`` and ``csv_file`` have the same length.
+        - ``image_resize_dims`` height and width, if set, are multiples of 128.
+
+        Raises:
+            AssertionError: if any check fails.
+        """
+        assert self.cfg.data.num_keypoints is not None, \
+            'data.num_keypoints must be set'
+        assert self.cfg.data.num_keypoints > 0, \
+            f'data.num_keypoints must be positive, got {self.cfg.data.num_keypoints}'
+
+        if self.cfg.data.keypoint_names is not None:
+            n_names = len(self.cfg.data.keypoint_names)
+            n_kp = self.cfg.data.num_keypoints
+            assert n_names == n_kp, (
+                f'len(data.keypoint_names) ({n_names}) must equal '
+                f'data.num_keypoints ({n_kp})'
+            )
+
+        if self.is_multi_view():
+            n_views = len(self.cfg.data.view_names)
+            n_csv = len(self.cfg.data.csv_file)
+            assert n_views == n_csv, (
+                f'len(data.view_names) ({n_views}) must equal '
+                f'len(data.csv_file) ({n_csv})'
+            )
+
+        for dim in ('height', 'width'):
+            val = self.cfg.data.image_resize_dims.get(dim)
+            if val is not None:
+                assert val % 128 == 0, (
+                    f'data.image_resize_dims.{dim} ({val}) must be a multiple of 128'
+                )
+
+    def _validate_training(self) -> None:
+        """Validate the ``training`` config section.
+
+        Checks:
+        - ``train_prob + val_prob`` does not exceed 1.0.
+        - ``ckpt_every_n_epochs``, if set, is divisible by ``check_val_every_n_epoch``.
+        - LR scheduler milestones do not exceed ``max_epochs`` (or ``max_steps``).
+        - Step- and epoch-based fields are not mixed (delegates to
+          :meth:`_validate_steps_vs_epochs`).
+
+        Raises:
+            AssertionError: if any check fails.
+        """
+        train_prob = self.cfg.training.train_prob
+        val_prob = self.cfg.training.val_prob
+        assert train_prob + val_prob <= 1.0, (
+            f'training.train_prob ({train_prob}) + training.val_prob ({val_prob}) '
+            f'must be <= 1.0'
+        )
+
+        ckpt = self.cfg.training.get('ckpt_every_n_epochs')
+        if ckpt is not None:
+            check_val = self.cfg.training.check_val_every_n_epoch
+            assert ckpt % check_val == 0, (
+                f'training.ckpt_every_n_epochs ({ckpt}) must be divisible by '
+                f'training.check_val_every_n_epoch ({check_val})'
+            )
+
+        multisteplr = self.cfg.training.lr_scheduler_params.get('multisteplr')
+        if multisteplr is not None:
+            if 'milestones' in multisteplr:
+                max_val = self.cfg.training.max_epochs
+                assert all(m <= max_val for m in multisteplr.milestones), (
+                    f'all training.lr_scheduler_params.multisteplr.milestones must be '
+                    f'<= training.max_epochs ({max_val})'
+                )
+            elif 'milestone_steps' in multisteplr:
+                max_val = self.cfg.training.max_steps
+                assert all(m <= max_val for m in multisteplr.milestone_steps), (
+                    f'all training.lr_scheduler_params.multisteplr.milestone_steps must be '
+                    f'<= training.max_steps ({max_val})'
+                )
+
         self._validate_steps_vs_epochs()
+
+    def _validate_model(self) -> None:
+        """Validate the ``model`` config section.
+
+        Checks:
+        - ``model_type`` is a recognised value.
+        - Multi-view models use ``heatmap_multiview_transformer``.
+        - When ``losses.supervised_reprojection_heatmap_mse`` is active, ``training.imgaug``
+          must be ``"dlc"`` and ``training.imgaug_3d`` must be ``true``.
+
+        Raises:
+            AssertionError: if any check fails.
+        """
+        allowed = {'regression', 'heatmap', 'heatmap_mhcrnn', 'heatmap_multiview_transformer'}
+        model_type = self.cfg.model.model_type
+        assert model_type in allowed, (
+            f"model.model_type '{model_type}' is not one of {sorted(allowed)}"
+        )
+
+        if self.is_multi_view():
+            assert model_type == 'heatmap_multiview_transformer', (
+                f"multi-view models require model.model_type = 'heatmap_multiview_transformer', "
+                f"got '{model_type}'"
+            )
+
+            reprojection = self.cfg.losses.get('supervised_reprojection_heatmap_mse')
+            if reprojection is not None and reprojection.get('log_weight') is not None:
+                assert self.cfg.training.imgaug == 'dlc', (
+                    "training.imgaug must be 'dlc' when "
+                    "losses.supervised_reprojection_heatmap_mse is active"
+                )
+                assert self.cfg.training.get('imgaug_3d') is True, (
+                    "training.imgaug_3d must be true when "
+                    "losses.supervised_reprojection_heatmap_mse is active"
+                )
 
     def _validate_steps_vs_epochs(self) -> None:
         """Ensure the training schedule uses either steps or epochs, not a mix of both.
