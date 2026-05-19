@@ -29,7 +29,7 @@ __all__ = [
 # cannot typecheck due to way pipeline_def decorator consumes additional args
 @pipeline_def
 def video_pipe(
-    filenames: list[str] | str,
+    filenames: list[str] | str | list[list[str]],
     resize_dims: list[int] | None = None,
     random_shuffle: bool = False,
     sequence_length: int = 16,
@@ -78,8 +78,10 @@ def video_pipe(
     filenames_2d: list[list[str]]
     if isinstance(filenames, str):
         filenames_2d = [[filenames]]
+    elif isinstance(filenames[0], str):
+        filenames_2d = [filenames]  # type: ignore[list-item]
     else:
-        filenames_2d = [filenames]
+        filenames_2d = filenames  # type: ignore[assignment]
 
     # loop over views (can be only one)
     frames_list = []
