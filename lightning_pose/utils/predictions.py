@@ -503,10 +503,8 @@ def load_model_from_checkpoint(
     """
     if ckpt_file is None:
         raise ValueError('ckpt_file must be provided to load a model from checkpoint')
-    from lightning_pose.utils.io import (
-        check_if_semi_supervised,
-        return_absolute_data_paths,
-    )
+    from lightning_pose.models import check_if_semi_supervised
+    from lightning_pose.utils.io import return_absolute_data_paths
     from lightning_pose.utils.scripts import (
         get_data_module,
         get_dataset,

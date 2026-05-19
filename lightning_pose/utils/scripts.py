@@ -30,12 +30,11 @@ from lightning_pose.data.datasets import (
     MultiviewHeatmapDataset,
 )
 from lightning_pose.losses.factory import LossFactory
-from lightning_pose.models import ALLOWED_MODELS
+from lightning_pose.models import ALLOWED_MODELS, check_if_semi_supervised
 from lightning_pose.models.base import (
     _apply_defaults_for_lr_scheduler_params,
     _apply_defaults_for_optimizer_params,
 )
-from lightning_pose.utils import io as io_utils
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -195,7 +194,7 @@ def get_data_module(
     )
     val_batch_size = int(np.ceil(cfg.training.val_batch_size / cfg.training.num_gpus))
 
-    semi_supervised = io_utils.check_if_semi_supervised(cfg.model.losses_to_use)
+    semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
     if not semi_supervised:
         data_module = BaseDataModule(
             dataset=dataset,
@@ -411,7 +410,7 @@ def get_model(
         cfg.training.get("lr_scheduler_params", {}).get(f"{lr_scheduler}")
     )
 
-    semi_supervised = io_utils.check_if_semi_supervised(cfg.model.losses_to_use)
+    semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
     image_h = cfg.data.image_resize_dims.height
     image_w = cfg.data.image_resize_dims.width
     if "vit" in cfg.model.backbone:

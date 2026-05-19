@@ -16,7 +16,6 @@ from omegaconf import DictConfig, ListConfig
 # to ignore imports for sphix-autoapidoc
 __all__ = [
     "ckpt_path_from_base_path",
-    "check_if_semi_supervised",
     "get_keypoint_names",
     "return_absolute_path",
     "return_absolute_data_paths",
@@ -138,33 +137,6 @@ def ckpt_path_from_base_path(
                     "None are marked as 'best' and cannot parse step counts to determine latest. "
                     "Please manually select the appropriate checkpoint."
                 )
-
-
-def check_if_semi_supervised(losses_to_use: ListConfig | list | None = None) -> bool:
-    """Use config file to determine if model is semi-supervised.
-
-    Take the entry of the hydra cfg that specifies losses_to_use. If it contains
-    meaningful entries, infer that we want a semi_supervised model.
-
-    Args:
-        losses_to_use (ListConfig, list | None, optional): the cfg entry
-            specifying semisupervised losses to use. Defaults to None.
-
-    Returns:
-        bool: True if the model is semi_supervised. False otherwise.
-
-    """
-    if losses_to_use is None:  # null
-        semi_supervised = False
-    elif len(losses_to_use) == 0:  # empty list
-        semi_supervised = False
-    elif (
-        len(losses_to_use) == 1 and losses_to_use[0] == ""
-    ):  # list with an empty string
-        semi_supervised = False
-    else:
-        semi_supervised = True
-    return semi_supervised
 
 
 def get_keypoint_names(

@@ -2,6 +2,8 @@
 
 from typing import Union
 
+from omegaconf import ListConfig
+
 from lightning_pose.models.heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
@@ -29,6 +31,25 @@ SemiSupervisedHeatmapTrackerMultiviewTransformer.__module__ = "lightning_pose.mo
 RegressionTracker.__module__ = "lightning_pose.models"
 SemiSupervisedRegressionTracker.__module__ = "lightning_pose.models"
 
+def check_if_semi_supervised(losses_to_use: ListConfig | list | None = None) -> bool:
+    """Determine from the losses config whether the model is semi-supervised.
+
+    Args:
+        losses_to_use: the cfg entry specifying unsupervised losses to use.
+
+    Returns:
+        True if the model is semi-supervised, False otherwise.
+
+    """
+    if losses_to_use is None:
+        return False
+    if len(losses_to_use) == 0:
+        return False
+    if len(losses_to_use) == 1 and losses_to_use[0] == '':
+        return False
+    return True
+
+
 ALLOWED_MODELS = (
     HeatmapTracker
     | SemiSupervisedHeatmapTracker
@@ -42,6 +63,7 @@ ALLOWED_MODELS = (
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
+    "check_if_semi_supervised",
     "HeatmapTracker",
     "SemiSupervisedHeatmapTracker",
     "HeatmapTrackerMHCRNN",
