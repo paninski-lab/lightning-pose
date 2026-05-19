@@ -196,13 +196,13 @@ If your loss requires parameters from other parts of the config file (such as im
 from the ``data`` field) you can add those key-value pairs to the constructor input in the
 ``if/elif`` block (see other examples in that function).
 
-Step 4: update ``compute_metrics`` (optional)
----------------------------------------------
+Step 4: update ``compute_metrics_single`` (optional)
+-----------------------------------------------------
 Lightning pose will automatically compute a set of metrics on
 all labeled data and unlabeled videos upon training completion.
 To add your new metric to this operation, you must update
-:meth:`~lightning_pose.utils.scripts.compute_metrics`.
-In that fucntion you will see how other metrics such as pixel error, temporal norm, and pca
+:meth:`~lightning_pose.utils.scripts.compute_metrics_single`.
+In that function you will see how other metrics such as pixel error, temporal norm, and pca
 reprojection errors are included.
 This may require you to adapt your loss and include it in the :mod:`lightning_pose.metrics` module.
 
