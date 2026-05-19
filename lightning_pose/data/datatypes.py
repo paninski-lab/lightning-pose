@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TypedDict
+from typing import Any, TypedDict
 
+import numpy as np
 import pandas as pd
 import torch
 from jaxtyping import Float, Int
@@ -34,6 +35,43 @@ class PredictionResult:
     predictions: pd.DataFrame
     metrics: ComputeMetricsSingleResult | None = None
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return predictions and metrics as a flat dict of named numpy arrays.
+
+        All arrays have shape ``(n_frames, n_keypoints)`` and share the same row
+        order. Metric arrays are ``None`` when the metric was not computed.
+
+        Returns:
+            dict with keys:
+                - ``keypoint_names``: list of keypoint name strings.
+                - ``index``: list of frame identifiers (file paths or integer indices).
+                - ``x``: float array of predicted x coordinates.
+                - ``y``: float array of predicted y coordinates.
+                - ``confidence``: float array of per-keypoint likelihood in [0, 1].
+                - ``pixel_error``: float array or None.
+                - ``temporal_norm``: float array or None.
+                - ``pca_singleview_error``: float array or None.
+                - ``pca_multiview_error``: float array or None.
+        """
+        def _metric(df: pd.DataFrame | None) -> np.ndarray | None:
+            if df is None:
+                return None
+            cols = [c for c in df.columns if c != 'set']
+            return df[cols].to_numpy()
+
+        m = self.metrics
+        return {
+            'keypoint_names': list(self.predictions.columns.get_level_values(1).unique()),
+            'index': list(self.predictions.index),
+            'x': self.predictions.xs('x', level=2, axis=1).to_numpy(),
+            'y': self.predictions.xs('y', level=2, axis=1).to_numpy(),
+            'confidence': self.predictions.xs('likelihood', level=2, axis=1).to_numpy(),
+            'pixel_error': _metric(m.pixel_error_df) if m else None,
+            'temporal_norm': _metric(m.temporal_norm_df) if m else None,
+            'pca_singleview_error': _metric(m.pca_sv_df) if m else None,
+            'pca_multiview_error': _metric(m.pca_mv_df) if m else None,
+        }
+
 
 @dataclass
 class MultiviewPredictionResult:
@@ -41,6 +79,22 @@ class MultiviewPredictionResult:
 
     predictions: dict[str, pd.DataFrame]
     metrics: dict[str, ComputeMetricsSingleResult] | None = None
+
+    def to_dict(self) -> dict[str, dict[str, Any]]:
+        """Return predictions and metrics for each view as a flat dict of named numpy arrays.
+
+        Wraps :meth:`PredictionResult.to_dict` for each view.
+
+        Returns:
+            dict keyed by view name, where each value is the ``to_dict()`` output for that view.
+        """
+        return {
+            view: PredictionResult(
+                predictions=df,
+                metrics=self.metrics.get(view) if self.metrics else None,
+            ).to_dict()
+            for view, df in self.predictions.items()
+        }
 
 
 @dataclass
