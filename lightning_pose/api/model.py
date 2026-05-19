@@ -34,6 +34,36 @@ __all__ = ["Model"]
 
 
 class Model:
+    """High-level interface for inference with a trained lightning-pose model.
+
+    Load a saved model with `Model.from_dir`, then call prediction methods directly.
+    Model weights are loaded lazily on the first prediction call.
+
+    Attributes:
+        model_dir: absolute path to the directory the model is stored in.
+        config: the model configuration as a `ModelConfig` object.
+        model: the underlying PyTorch model; None until the first prediction call.
+
+    Examples:
+        >>> from lightning_pose.api import Model
+        >>> model = Model.from_dir("outputs/2024-01-01/12-00-00")
+
+        Single-frame inference (no file I/O):
+        >>> import numpy as np
+        >>> frame = np.zeros((256, 256, 3), dtype=np.uint8)
+        >>> result = model.predict_frame(frame)
+        >>> result["keypoints"].shape   # (num_keypoints, 2)
+        >>> result["confidence"].shape  # (num_keypoints,)
+
+        Predict on a video file:
+        >>> pred_result = model.predict_on_video_file("path/to/video.mp4")
+        >>> pred_result.predictions     # pd.DataFrame with MultiIndex columns
+        >>> pred_result.metrics         # ComputeMetricsSingleResult or None
+
+        Predict on a labeled CSV (also computes pixel error):
+        >>> pred_result = model.predict_on_label_csv("path/to/CollectedData.csv")
+    """
+
     model_dir: Path
     """Directory the model is stored in."""
 
@@ -75,6 +105,15 @@ class Model:
         return Model(model_dir, config)
 
     def __init__(self, model_dir: str | Path, config: ModelConfig) -> None:
+        """Initialize a Model from a directory and a pre-loaded config.
+
+        Prefer `Model.from_dir` for typical usage. Use this constructor when you
+        have already constructed a `ModelConfig` (e.g. after applying Hydra overrides).
+
+        Args:
+            model_dir: path to the model output directory.
+            config: the model configuration.
+        """
         self.model_dir = Path(model_dir).absolute()
         self.config = config
 
@@ -84,6 +123,11 @@ class Model:
         return self.config.cfg
 
     def _load(self) -> None:
+        """Load model weights from the checkpoint file on first call; no-op thereafter.
+
+        Raises:
+            FileNotFoundError: if no checkpoint file is found in `model_dir`.
+        """
         if self.model is None:
             ckpt_file = io_utils.ckpt_path_from_base_path(
                 base_path=str(self.model_dir), model_name=self.cfg.model.model_name
@@ -100,21 +144,34 @@ class Model:
             )
 
     def image_preds_dir(self) -> Path:
+        """Return the directory where image/CSV predictions are saved."""
         return self.model_dir / "image_preds"
 
     def video_preds_dir(self) -> Path:
+        """Return the directory where video predictions are saved."""
         return self.model_dir / "video_preds"
 
     def labeled_videos_dir(self) -> Path:
+        """Return the directory where prediction-annotated videos are saved."""
         return self.model_dir / "video_preds" / "labeled_videos"
 
     def cropped_data_dir(self) -> Path:
+        """Return the directory where cropzoom-cropped images are saved."""
         return self.model_dir / "cropped_images"
 
     def cropped_videos_dir(self) -> Path:
+        """Return the directory where cropzoom-cropped videos are saved."""
         return self.model_dir / "cropped_videos"
 
     def cropped_csv_file_path(self, csv_file_path: str | Path) -> Path:
+        """Return the path where a cropzoom-adjusted CSV file will be saved.
+
+        Args:
+            csv_file_path: path to the original labeled CSV file.
+
+        Returns:
+            path of the form ``{model_dir}/image_preds/{csv_name}/cropped_{csv_name}``.
+        """
         csv_file_path = Path(csv_file_path)
         return (
             self.model_dir
@@ -238,6 +295,7 @@ class Model:
         std = np.array(_IMAGENET_STD, dtype=np.float32)
 
         def _preprocess_single(img: np.ndarray) -> np.ndarray:
+            """Resize, normalize, and transpose a single HWC uint8 frame to CHW float32."""
             resized = cv2.resize(
                 img, (resize_w, resize_h), interpolation=cv2.INTER_LINEAR,
             )
@@ -651,6 +709,14 @@ class Model:
 
 
 def _build_datamodule_pred(cfg: DictConfig | ListConfig) -> BaseDataModule | UnlabeledDataModule:
+    """Build a data module configured for prediction (no augmentation).
+
+    Args:
+        cfg: model config; augmentation is overridden to ``"default"`` (resize only).
+
+    Returns:
+        data module ready for use with `predict_dataset`.
+    """
     cfg_pred = copy.deepcopy(cfg)
     cfg_pred.training.imgaug = "default"
     imgaug_transform_pred = get_imgaug_transform(cfg=cfg_pred)
