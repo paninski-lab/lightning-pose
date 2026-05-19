@@ -1,3 +1,5 @@
+"""Camera geometry utilities for multi-view 2D-to-3D projection and triangulation."""
+
 from __future__ import annotations
 
 import copy

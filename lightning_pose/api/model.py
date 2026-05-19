@@ -1,3 +1,5 @@
+"""High-level Model class for loading trained checkpoints and running inference."""
+
 from __future__ import annotations
 
 import copy

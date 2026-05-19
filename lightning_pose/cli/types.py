@@ -1,3 +1,5 @@
+"""Custom argparse type validators for CLI path arguments."""
+
 import argparse
 from pathlib import Path
 

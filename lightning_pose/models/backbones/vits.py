@@ -1,3 +1,5 @@
+"""Backbone loader for Vision Transformer (ViT) architectures including DINO and SAM."""
+
 from __future__ import annotations
 
 import math

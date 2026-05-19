@@ -1,3 +1,5 @@
+"""Evaluation metrics for assessing pose estimation model quality."""
+
 import numpy as np
 import torch
 

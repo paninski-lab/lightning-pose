@@ -1,3 +1,5 @@
+"""Tools for cropping labeled frames and videos to bounding-box regions of interest."""
+
 import multiprocessing
 from pathlib import Path
 from typing import Any

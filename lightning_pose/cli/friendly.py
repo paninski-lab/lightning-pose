@@ -1,3 +1,5 @@
+"""Customized argparse classes with improved help formatting for the litpose CLI."""
+
 import argparse
 import shutil
 import sys

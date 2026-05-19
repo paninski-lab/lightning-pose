@@ -1,3 +1,5 @@
+"""Custom Lightning callbacks for training schedule, backbone unfreezing, and augmentation."""
+
 import json
 import os
 import time

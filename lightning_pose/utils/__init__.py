@@ -1,3 +1,5 @@
+"""Utility functions for configuration display."""
+
 from omegaconf import DictConfig, ListConfig
 
 # to ignore imports for sphix-autoapidoc

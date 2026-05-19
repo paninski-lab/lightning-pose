@@ -1,3 +1,5 @@
+"""Pose estimation model classes, re-exported at the package level."""
+
 from typing import Union
 
 from lightning_pose.models.heatmap_tracker import (

@@ -1,3 +1,5 @@
+"""Migration runner that applies all pending data migrations in sequence."""
+
 from . import rename_time_directories
 
 MIGRATIONS = [

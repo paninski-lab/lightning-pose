@@ -1,3 +1,5 @@
+"""Data loading, preprocessing, and augmentation for pose estimation."""
+
 # statistics of imagenet dataset on which the resnet was trained
 # see https://pytorch.org/vision/stable/models.html
 _IMAGENET_MEAN = [0.485, 0.456, 0.406]
