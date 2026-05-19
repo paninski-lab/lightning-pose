@@ -164,7 +164,7 @@ class UnlabeledBatchDict(TypedDict):
     # torch.Tensor: necessary, getting error about torch.AnnotatedAlias that I don't understand
 
     bbox: Float[torch.Tensor, "seq_len xyhw"]
-    is_multiview: bool = False  # helps with downstream logic since isinstance fails on TypedDicts
+    is_multiview: bool  # always False for this type; isinstance fails on TypedDicts
 
 
 class MultiviewUnlabeledBatchDict(TypedDict):
@@ -176,7 +176,7 @@ class MultiviewUnlabeledBatchDict(TypedDict):
         | torch.Tensor
     )
     bbox: Float[torch.Tensor, "seq_len num_views_x_xyhw"]
-    is_multiview: bool = True  # helps with downstream logic since isinstance fails on TypedDicts
+    is_multiview: bool  # always True for this type; isinstance fails on TypedDicts
 
 
 class SemiSupervisedBatchDict(TypedDict):

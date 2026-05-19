@@ -79,7 +79,7 @@ class HeatmapMHCRNNHead(nn.Module):
     def forward(
         self,
         features: Float[torch.Tensor, "batch features rep_height rep_width frames"],
-        batch_shape: torch.tensor,
+        batch_shape: torch.Tensor,
         is_multiview: bool,
     ) -> tuple[
         Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"],
@@ -94,14 +94,14 @@ class HeatmapMHCRNNHead(nn.Module):
 
         """
 
-        num_frames = batch_shape[0]
+        num_frames = int(batch_shape[0])
 
         if len(batch_shape) == 5 and is_multiview:
             # put view info back in batch so we can properly extract heatmaps
             shape_r = features.shape
             num_frames -= 4  # we lose the first/last 2 frames of unlabeled batch due to context
             features = features.reshape(
-                num_frames * batch_shape[1], -1, shape_r[-3], shape_r[-2], shape_r[-1],
+                num_frames * int(batch_shape[1]), -1, shape_r[-3], shape_r[-2], shape_r[-1],
             )
 
         # permute to shape (frames, batch, features, rep_height, rep_width)

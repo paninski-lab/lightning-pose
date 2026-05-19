@@ -33,6 +33,7 @@ def test_data_extractor(base_data_module_combined, multiview_heatmap_data_module
     keypoint_tensor, images_tensor = DataExtractor(
         data_module=base_data_module_combined, cond="train", extract_images=True
     )()
+    assert images_tensor is not None
     assert images_tensor.shape == (num_frames, 3, 128, 128)
 
     # ---------------------------
@@ -218,7 +219,7 @@ class TestGenerateHeatmaps:
         im_width = cfg.data.image_resize_dims.width
 
         batch = heatmap_dataset.__getitem__(idx=0)
-        heatmap_gt = batch["heatmaps"].unsqueeze(0)
+        heatmap_gt = batch["heatmaps"].unsqueeze(0)  # type: ignore[typeddict-item]
         keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
 
         heatmap_uniform_torch = generate_heatmaps(
@@ -273,7 +274,7 @@ class TestGenerateHeatmaps:
 
         # now same test as `test_basic`
         batch = dataset.__getitem__(idx=0)
-        heatmap_gt = batch["heatmaps"].unsqueeze(0)
+        heatmap_gt = batch["heatmaps"].unsqueeze(0)  # type: ignore[typeddict-item]
         keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
         heatmap_torch = generate_heatmaps(
             keypts_gt,

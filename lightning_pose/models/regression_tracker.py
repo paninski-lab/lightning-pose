@@ -120,10 +120,10 @@ class RegressionTracker(BaseSupervisedTracker):
         """
         if "images" in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
             # labeled image dataloaders
-            images = batch_dict["images"]
+            images = batch_dict["images"]  # type: ignore[typeddict-item]
         else:
             # unlabeled dali video dataloaders
-            images = batch_dict["frames"]
+            images = batch_dict["frames"]  # type: ignore[typeddict-item]
         # images -> keypoints
         predicted_keypoints = self.forward(images)
         # regression model does not include a notion of confidence, set to all zeros
@@ -185,6 +185,7 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
             **kwargs,
         )
         self.loss_factory_unsup = loss_factory_unsupervised
+        assert loss_factory_unsupervised is not None
         loss_names = loss_factory_unsupervised.loss_instance_dict.keys()
         if "unimodal_mse" in loss_names or "unimodal_wasserstein" in loss_names:
             raise ValueError("cannot use unimodal loss in regression tracker")

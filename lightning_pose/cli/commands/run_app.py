@@ -46,6 +46,6 @@ def handle(args):
         sys.exit(1)
 
     # Import lightning_pose modules only when needed
-    from litpose_app.main import run_app
+    from litpose_app.main import run_app  # type: ignore[import-untyped]
 
     run_app(args.host, args.port)

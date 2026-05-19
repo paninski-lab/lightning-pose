@@ -1,6 +1,12 @@
 """Base class for backbone that acts as a feature extractor."""
 
-from typing import Any, Literal, cast
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Literal, cast
+
+if TYPE_CHECKING:
+    from lightning_pose.losses.factory import LossFactory
+    from lightning_pose.losses.losses import RegressionRMSELoss
 
 import torch
 from jaxtyping import Float
@@ -380,6 +386,9 @@ class BaseFeatureExtractor(LightningModule):
 class BaseSupervisedTracker(BaseFeatureExtractor):
     """Base class for supervised trackers."""
 
+    loss_factory: LossFactory | None
+    rmse_loss: RegressionRMSELoss
+
     def get_loss_inputs_labeled(
         self,
         batch_dict: (
@@ -409,10 +418,11 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         data_dict = self.get_loss_inputs_labeled(batch_dict=batch_dict)
 
         # compute and log loss on labeled data
-        loss, log_list = self.loss_factory(stage=stage, anneal_weight=anneal_weight, **data_dict)  # type: ignore[operator]
+        assert self.loss_factory is not None
+        loss, log_list = self.loss_factory(stage=stage, anneal_weight=anneal_weight, **data_dict)
 
         # compute and log pixel_error loss on labeled data
-        loss_rmse, _ = self.rmse_loss(stage=stage, **data_dict)  # type: ignore[operator]
+        loss_rmse, _ = self.rmse_loss(stage=stage, **data_dict)
 
         if stage:
             # logging with sync_dist=True will average the metric across GPUs in
@@ -486,8 +496,16 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         self.evaluate_labeled(batch_dict, "test")
 
 
-class SemiSupervisedTrackerMixin:
-    """Mixin class providing training step function for semi-supervised models."""
+class SemiSupervisedTrackerMixin(BaseSupervisedTracker if TYPE_CHECKING else object):
+    """Mixin class providing training step function for semi-supervised models.
+
+    Always mixed with BaseSupervisedTracker (which provides LightningModule methods).
+    The conditional inheritance from BaseSupervisedTracker at TYPE_CHECKING time gives
+    pyright visibility into log(), device, evaluate_labeled(), loss_factory, etc.
+    """
+
+    loss_factory_unsup: LossFactory | None
+    total_unsupervised_importance: torch.Tensor
 
     def get_loss_inputs_unlabeled(
         self,
@@ -508,7 +526,8 @@ class SemiSupervisedTrackerMixin:
         data_dict = self.get_loss_inputs_unlabeled(batch_dict=batch_dict)
 
         # compute loss on unlabeled data
-        loss, log_list = self.loss_factory_unsup(  # type: ignore[attr-defined]
+        assert self.loss_factory_unsup is not None
+        loss, log_list = self.loss_factory_unsup(
             stage=stage,
             anneal_weight=anneal_weight,
             **data_dict,
@@ -517,9 +536,9 @@ class SemiSupervisedTrackerMixin:
         if stage:
             # log individual unsupervised losses
             for log_dict in log_list:
-                self.log(  # type: ignore[attr-defined]
+                self.log(
                     log_dict['name'],
-                    log_dict['value'].to(self.device),  # type: ignore[attr-defined]
+                    log_dict['value'].to(self.device),
                     prog_bar=log_dict.get('prog_bar', False),
                     sync_dist=True)
 
@@ -534,8 +553,8 @@ class SemiSupervisedTrackerMixin:
 
         # on each epoch, self.total_unsupervised_importance is modified by the
         # AnnealWeight callback
-        unsup_importance = cast(torch.Tensor, self.total_unsupervised_importance)  # type: ignore[attr-defined]
-        self.log(  # type: ignore[attr-defined]
+        unsup_importance = self.total_unsupervised_importance
+        self.log(
             "total_unsupervised_importance",
             unsup_importance,
             prog_bar=True,
@@ -547,7 +566,7 @@ class SemiSupervisedTrackerMixin:
         # - images
         # - keypoints
         # - heatmaps
-        loss_super = self.evaluate_labeled(  # type: ignore[attr-defined]
+        loss_super = self.evaluate_labeled(
             batch_dict=batch_dict["labeled"],
             stage="train",
             anneal_weight=unsup_importance,
@@ -564,6 +583,6 @@ class SemiSupervisedTrackerMixin:
 
         # log total loss
         total_loss = loss_super + loss_unsuper
-        self.log("total_loss", total_loss, prog_bar=True, sync_dist=True)  # type: ignore[attr-defined]
+        self.log("total_loss", total_loss, prog_bar=True, sync_dist=True)
 
         return {"loss": total_loss}

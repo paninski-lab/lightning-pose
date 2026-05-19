@@ -15,7 +15,7 @@ class TestBuildParser:
         subparsers_action = next(
             a for a in parser._actions if hasattr(a, '_name_parser_map')
         )
-        assert set(subparsers_action._name_parser_map.keys()) == {
+        assert set(subparsers_action._name_parser_map.keys()) == {  # type: ignore[attr-defined]
             "train", "predict", "crop", "remap", "run_app",
         }
 

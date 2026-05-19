@@ -7,7 +7,7 @@ import gc
 import os
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Literal, cast, overload
 
 import cv2
 import lightning.pytorch as pl
@@ -222,15 +222,42 @@ class PredictionHandler:
         assert self.data_module is not None
         df["set"] = np.array(["unused"] * df.shape[0])
 
+        assert self.data_module.train_dataset is not None
+        assert self.data_module.val_dataset is not None
+        assert self.data_module.test_dataset is not None
         dataset_split_indices = {
-            "train": self.data_module.train_dataset.indices,  # type: ignore[union-attr]
-            "validation": self.data_module.val_dataset.indices,  # type: ignore[union-attr]
-            "test": self.data_module.test_dataset.indices,  # type: ignore[union-attr]
+            "train": self.data_module.train_dataset.indices,
+            "validation": self.data_module.val_dataset.indices,
+            "test": self.data_module.test_dataset.indices,
         }
 
         for key, val in dataset_split_indices.items():
             df.loc[val, ("set", "", "")] = np.repeat(key, len(val))
         return df
+
+    @overload
+    def __call__(
+        self,
+        preds: list[
+            tuple[
+                Float[torch.Tensor, "batch two_times_num_keypoints"],
+                Float[torch.Tensor, "batch num_keypoints"],
+            ]
+        ],
+        is_multiview_video: Literal[False] = ...,
+    ) -> pd.DataFrame: ...
+
+    @overload
+    def __call__(
+        self,
+        preds: list[
+            tuple[
+                Float[torch.Tensor, "batch two_times_num_keypoints"],
+                Float[torch.Tensor, "batch num_keypoints"],
+            ]
+        ],
+        is_multiview_video: Literal[True],
+    ) -> dict[str, pd.DataFrame]: ...
 
     def __call__(
         self,
@@ -465,7 +492,7 @@ def predict_single_video(
 
     # call this instance on a single vid's preds
     preds_typed = cast(list[tuple[torch.Tensor, torch.Tensor]], preds)
-    preds_df = cast(pd.DataFrame, pred_handler(preds=preds_typed))
+    preds_df = pred_handler(preds=preds_typed)
     # save the predictions to a csv; create directory if it doesn't exist
     os.makedirs(os.path.dirname(preds_file), exist_ok=True)
     preds_df.to_csv(preds_file)
@@ -869,6 +896,24 @@ def generate_labeled_video(
         output_video_path=output_mp4_file,
         colormap=colormap,
     )
+
+
+@overload
+def predict_video(
+    video_file: str,
+    model: Model,
+    output_pred_file: str | None = None,
+    progress_file: Path | None = None,
+) -> pd.DataFrame: ...
+
+
+@overload
+def predict_video(
+    video_file: list[str],
+    model: Model,
+    output_pred_file: list[str] | None = None,
+    progress_file: Path | None = None,
+) -> list[pd.DataFrame]: ...
 
 
 def predict_video(

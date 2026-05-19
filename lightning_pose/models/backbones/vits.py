@@ -82,7 +82,7 @@ def load_vit_backbone_checkpoint(base, checkpoint: str):
         ckpt_vit_pretrain = ckpt_vit_pretrain["state_dict"]
     # Create a filtered state dict for the VIT-MAE part only
     vit_mae_state_dict = {}
-    for key, value in ckpt_vit_pretrain.items():
+    for key, value in ckpt_vit_pretrain.items():  # type: ignore[union-attr]
         if key.startswith("vit_mae."):
             model_key = key.replace("vit_mae.vit.", "")
             # Check if shapes match before including in state dict
@@ -262,6 +262,7 @@ class VisionEncoderDino(torch.nn.Module):
         )
         new_projection.weight.data = new_weights
         if projection.bias is not None:
+            assert new_projection.bias is not None
             new_projection.bias.data = projection.bias.data
 
         self.vision_encoder.embeddings.patch_embeddings.projection = new_projection

@@ -174,6 +174,7 @@ def get_keypoint_names(
 ) -> list[str]:
     if csv_file is not None and os.path.exists(csv_file):
         if header_rows is None:
+            assert cfg is not None
             if "header_rows" in cfg.data:
                 header_rows = list(cfg.data.header_rows)
             else:

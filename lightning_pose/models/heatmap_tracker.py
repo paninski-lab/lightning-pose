@@ -170,10 +170,10 @@ class HeatmapTracker(BaseSupervisedTracker):
         """
         if "images" in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
             # labeled image dataloaders
-            images = batch_dict["images"]
+            images = batch_dict["images"]  # type: ignore[typeddict-item]
         else:
             # unlabeled dali video dataloaders
-            images = batch_dict["frames"]
+            images = batch_dict["frames"]  # type: ignore[typeddict-item]
         # images -> heatmaps
         predicted_heatmaps = self.forward(images)
         # heatmaps -> keypoints

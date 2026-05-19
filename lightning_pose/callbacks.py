@@ -90,6 +90,7 @@ class UnfreezeBackbone(Callback):
             return
 
         optimizer = pl_module.optimizers()
+        assert not isinstance(optimizer, list)
         # Check our assumptions about param group indices
         assert optimizer.param_groups[0]["name"] == "backbone"
 

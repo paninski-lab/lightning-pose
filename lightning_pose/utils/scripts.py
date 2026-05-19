@@ -276,6 +276,7 @@ def get_loss_factories(
     """Create loss factory that orchestrates different losses during training."""
 
     cfg_loss_dict = OmegaConf.to_object(cfg.losses)
+    assert cfg_loss_dict is not None
 
     loss_params_dict = {"supervised": {}, "unsupervised": {}}
 

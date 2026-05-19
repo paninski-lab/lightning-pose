@@ -60,6 +60,8 @@ if torch.cuda.is_available():
 class Loss:
     """Parent class for all losses."""
 
+    loss_name: str
+
     def __init__(
         self,
         data_module: BaseDataModule | UnlabeledDataModule | None = None,
@@ -629,6 +631,7 @@ class TemporalHeatmapLoss(Loss):
                 ).reshape(predictions.shape[1], -1)
                 diffs[i] = torch.mean(curr_mse, dim=-1)
             elif self.loss_name == "temporal_heatmap_kl":
+                assert self.hmloss is not None
                 diffs[i] = self.hmloss(
                     predictions[i].unsqueeze(0) + 1e-10,
                     predictions[i + 1].unsqueeze(0) + 1e-10,
@@ -754,12 +757,14 @@ class UnimodalLoss(Loss):
         if self.loss_name == "unimodal_mse":
             return F.mse_loss(targets, predictions, reduction="none")
         elif self.loss_name == "unimodal_kl":
+            assert self.loss is not None
             return self.loss(
                 predictions.unsqueeze(0) + 1e-10,
                 targets.unsqueeze(0) + 1e-10,
                 reduction="none",
             )
         elif self.loss_name == "unimodal_js":
+            assert self.loss is not None
             return self.loss(
                 predictions.unsqueeze(0) + 1e-10,
                 targets.unsqueeze(0) + 1e-10,

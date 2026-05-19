@@ -88,7 +88,7 @@ def upsample(
 def run_subpixelmaxima(
     heatmaps: Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"],
     downsample_factor: int,
-    temperature: torch.tensor,
+    temperature: torch.Tensor,
 ) -> tuple[Float[torch.Tensor, "batch num_targets"], Float[torch.Tensor, "batch num_keypoints"]]:
     """Use soft argmax on heatmaps.
 

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Literal
 import imgaug.augmenters as iaa
 import numpy as np
 import torch
-from jaxtyping import Float, Shaped
+from jaxtyping import Float
 
 if TYPE_CHECKING:
     from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
@@ -178,7 +178,7 @@ class DataExtractor:
     def iterate_over_dataloader(
         self, loader: torch.utils.data.DataLoader
     ) -> tuple[
-        Shaped[torch.Tensor, num_examples],
+        torch.Tensor,
         (
             Float[torch.Tensor, "num_examples 3 image_width image_height"]
             | Float[torch.Tensor, "num_examples frames 3 image_width image_height"]
@@ -207,7 +207,7 @@ class DataExtractor:
     def __call__(
         self,
     ) -> tuple[
-        Shaped[torch.Tensor, num_examples],
+        torch.Tensor,
         (
             Float[torch.Tensor, "num_examples 3 image_width image_height"]
             | Float[torch.Tensor, "num_examples frames 3 image_width image_height"]

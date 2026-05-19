@@ -108,7 +108,7 @@ def build_backbone(
     if "resnet" in backbone_arch:
         num_fc_input_features = base.fc.in_features
     elif "eff" in backbone_arch:
-        num_fc_input_features = base.classifier[-1].in_features
+        num_fc_input_features = base.classifier[-1].in_features  # type: ignore[index,attr-defined]
     else:
         raise NotImplementedError
 

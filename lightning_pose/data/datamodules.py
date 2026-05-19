@@ -88,9 +88,9 @@ class BaseDataModule(pl.LightningDataModule):
         self.val_probability = val_probability
         self.test_probability = test_probability
         self.train_frames = train_frames
-        self.train_dataset = None  # populated by self.setup()
-        self.val_dataset = None  # populated by self.setup()
-        self.test_dataset = None  # populated by self.setup()
+        self.train_dataset: Subset | None = None
+        self.val_dataset: Subset | None = None
+        self.test_dataset: Subset | None = None
         self.torch_seed = torch_seed
         self._setup()
 

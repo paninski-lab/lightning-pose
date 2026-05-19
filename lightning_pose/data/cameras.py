@@ -194,7 +194,7 @@ class CameraGroup(CameraGroupAnipose):
                 new_points[cnum] = cam.undistort_points(sub)
             points = new_points
 
-        n_cams, n_points, _ = points.shape
+        n_cams, n_points, _ = points.shape  # type: ignore[misc]
 
         cam_Rt_mats = np.array([cam.get_extrinsics_mat()[:3] for cam in self.cameras])
 

@@ -1,7 +1,7 @@
 """PCA class to assist with computing PCA losses."""
 
 import warnings
-from typing import Literal
+from typing import Literal, cast
 
 import numpy as np
 import torch
@@ -77,7 +77,7 @@ class KeypointPCA:
                     "mirrored view"
                 )
             num_views = len(data_module.dataset.view_names)
-            num_keypoints = data_module.dataset.num_keypoints / num_views  # keypoints per view
+            num_keypoints = cast(int, data_module.dataset.num_keypoints) / num_views
             mirrored_column_matches = [
                 (v * num_keypoints + np.array(mirrored_column_matches, dtype=int)).tolist()
                 for v in range(num_views)
@@ -196,6 +196,7 @@ class KeypointPCA:
         pca_prints(self.pca_object, self.loss_type, self._n_components_kept)
 
     def _set_parameter_dict(self) -> None:
+        assert self.pca_object is not None
 
         self.parameters = {  # dict with same keys as loss_param_dict
             "mean": self.pca_object.mean_,
@@ -470,7 +471,7 @@ class NaNPCA(PCA):
                 )
             else:
                 explained_variance_ratio_np = explained_variance_ratio_
-            ratio_cumsum = stable_cumsum(explained_variance_ratio_np)
+            ratio_cumsum = stable_cumsum(explained_variance_ratio_np)  # type: ignore[operator]
             n_components = np.searchsorted(ratio_cumsum, n_components, side="right") + 1
 
         # Compute noise covariance using Probabilistic PCA model
@@ -488,6 +489,7 @@ class NaNPCA(PCA):
         # - ensure that the kept components are allocated contiguously in
         #   memory to make the transform method faster by leveraging cache
         #   locality.
+        assert components_ is not None
         self.components_ = xp.asarray(components_[:n_components, :], copy=True)
 
         # We do the same for the other arrays for the sake of consistency.
@@ -622,6 +624,9 @@ class ComponentChooser:
         elif type(self.components_to_keep) is float:
             # find that integer that crosses the minimum explained variance
             return self._find_first_threshold_cross()
+        raise TypeError(
+            f'components_to_keep must be int or float, got {type(self.components_to_keep)}'
+        )
 
 
 def pca_prints(pca: PCA, condition: str, components_to_keep: int) -> None:

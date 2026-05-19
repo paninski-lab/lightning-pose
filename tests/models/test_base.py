@@ -90,14 +90,14 @@ def test_backbones_resnet():
         if resnet_v <= 34:  # last block is BasicBlock
             assert (
                 isinstance(
-                    list(model.backbone.children())[-3][-1],
+                    list(model.backbone.children())[-3][-1],  # type: ignore[index]
                     torchvision.models.resnet.BasicBlock,
                 )
             )
         else:  # different arch; BottleneckBlock
             assert (
                 isinstance(
-                    list(model.backbone.children())[-3][-1],
+                    list(model.backbone.children())[-3][-1],  # type: ignore[index]
                     torchvision.models.resnet.Bottleneck,
                 )
             )
@@ -112,7 +112,7 @@ def test_backbones_efficientnet():
         model = BaseFeatureExtractor(backbone=backbone).to(_TORCH_DEVICE)
         assert (
             isinstance(
-                list(model.backbone.children())[-1][-2][0],
+                list(model.backbone.children())[-1][-2][0],  # type: ignore[index]
                 torchvision.models.efficientnet.MBConv,
             )
         )

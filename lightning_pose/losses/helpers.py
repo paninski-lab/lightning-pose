@@ -24,10 +24,11 @@ class EmpiricalEpsilon:
             the percentile of the loss which we use as epsilon
 
         """
-        flattened_loss = loss.flatten()  # applies for both np arrays and torch tensors.
-        if type(loss) is torch.Tensor:
-            flattened_loss = flattened_loss.clone().detach().cpu().numpy()
-        return np.nanpercentile(flattened_loss, self.percentile, axis=0)
+        if isinstance(loss, torch.Tensor):
+            flattened_loss = loss.flatten().clone().detach().cpu().numpy()
+        else:
+            flattened_loss = loss.flatten()
+        return float(np.nanpercentile(flattened_loss, self.percentile, axis=0))
 
 
 # @typechecked

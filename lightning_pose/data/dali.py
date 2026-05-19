@@ -76,9 +76,9 @@ def video_pipe(
     # first list: over views (might only be one)
     # second list: over videos/sessions
     if isinstance(filenames, list) and isinstance(filenames[0], str):
-        filenames = [filenames]
+        filenames = [filenames]  # type: ignore[assignment]
     elif isinstance(filenames, str):
-        filenames = [[filenames]]
+        filenames = [[filenames]]  # type: ignore[assignment]
 
     assert isinstance(filenames, list) and isinstance(filenames[0], list)
 
@@ -106,6 +106,7 @@ def video_pipe(
         if resize_dims:
             video = fn.resize(video, size=resize_dims)  # type: ignore[arg-type]
         if imgaug == "dlc" or imgaug == "dlc-top-down":
+            assert resize_dims is not None
             size = (resize_dims[0] / 2, resize_dims[1] / 2)
             center = size  # / 2
             # rotate + scale
@@ -133,7 +134,7 @@ def video_pipe(
             transform = np.array([-1])
         # video pixel range is [0, 255]; transform it to [0, 1].
         # happens naturally in the torchvision transform to tensor.
-        video = video / 255.0
+        video = video / 255.0  # type: ignore[operator]
         # permute dimensions and normalize to imagenet statistics
         frames = fn.crop_mirror_normalize(
             video,
@@ -267,7 +268,7 @@ class PrepareDALI:
 
         # make sure `filenames` is a list of existing video files
         if isinstance(filenames, list) and isinstance(filenames[0], str):
-            filenames = [filenames]
+            filenames = [filenames]  # type: ignore[assignment]
         for view_list in filenames:
             for vid in view_list:
                 if not os.path.exists(vid) or not os.path.isfile(vid):
@@ -319,6 +320,8 @@ class PrepareDALI:
                 return num_iters
             else:
                 raise NotImplementedError
+        else:
+            raise ValueError(f'unknown model_type: {self.model_type}')
 
     def _setup_pipe_dict(
         self,

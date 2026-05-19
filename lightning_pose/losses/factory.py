@@ -42,13 +42,13 @@ class LossFactory(pl.LightningModule):
     def __call__(
         self,
         stage: Literal["train", "val", "test"] | None = None,
-        anneal_weight: float | torch.Tensor = 1.0,
+        anneal_weight: float | torch.Tensor | None = 1.0,
         **kwargs
     ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
 
         # loop over losses, compute, sum, log
         # don't log if stage is None
-        tot_loss = 0.0
+        tot_loss: Float[torch.Tensor, ""] = torch.tensor(0.0)
         log_list_all = []
         for loss_name, loss_instance in self.loss_instance_dict.items():
 
