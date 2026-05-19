@@ -5,6 +5,7 @@ from typing import Literal
 import imgaug.augmenters as iaa
 import torch
 from jaxtyping import Float
+from lightning.pytorch.utilities import CombinedLoader
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import (
@@ -12,7 +13,6 @@ from lightning_pose.data.datasets import (
     HeatmapDataset,
     MultiviewHeatmapDataset,
 )
-from lightning_pose.data.datatypes import SemiSupervisedDataLoaderDict
 
 # to ignore imports for sphix-autoapidoc
 __all__ = ["DataExtractor"]
@@ -124,28 +124,23 @@ class DataExtractor:
         name = f'{self.cond}_dataset'
         return len(getattr(self.data_module, name))
 
-    def get_loader(
-        self,
-    ) -> torch.utils.data.DataLoader | SemiSupervisedDataLoaderDict:
+    def get_loader(self) -> torch.utils.data.DataLoader | CombinedLoader:
         if self.cond == 'train':
             return self.data_module.train_dataloader()  # type: ignore[return-value]
         if self.cond == 'val':
-            return self.data_module.val_dataloader()  # type: ignore[return-value]
+            return self.data_module.val_dataloader()
         if self.cond == 'test':
-            return self.data_module.test_dataloader()  # type: ignore[return-value]
+            return self.data_module.test_dataloader()
         raise ValueError(f'cond must be "train", "val", or "test", got {self.cond!r}')
 
     @staticmethod
     def verify_labeled_loader(
-        loader: torch.utils.data.DataLoader | SemiSupervisedDataLoaderDict,
+        loader: torch.utils.data.DataLoader | CombinedLoader,
     ) -> torch.utils.data.DataLoader:
         if isinstance(loader, torch.utils.data.DataLoader):
-            labeled_loader = loader
-        else:
-            # if we have a dictionary of dataloaders, take the labeled one
-            # (the unlabeled loader doesn't have keypoints)
-            labeled_loader = loader['labeled']
-        return labeled_loader
+            return loader
+        # CombinedLoader wraps labeled + unlabeled; extract only the labeled one
+        return loader.iterables['labeled']  # type: ignore[index]
 
     def iterate_over_dataloader(
         self, loader: torch.utils.data.DataLoader
