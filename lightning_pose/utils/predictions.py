@@ -32,8 +32,6 @@ __all__ = [
     "PredictionHandler",
     "predict_dataset",
     "make_dlc_pandas_index",
-    "get_model_class",
-    "load_model_from_checkpoint",
     "generate_labeled_video",
 ]
 
@@ -355,6 +353,7 @@ def predict_dataset(
 
     delete_model = False
     if model is None:
+        from lightning_pose.api.model import load_model_from_checkpoint
         model = load_model_from_checkpoint(
             cfg=cfg, ckpt_file=ckpt_file, eval=True, data_module=data_module,
         )
@@ -429,171 +428,6 @@ def make_dlc_pandas_index(
         names=["scorer", "bodyparts", "coords"],
     )
     return pdindex
-
-
-def get_model_class(map_type: str, semi_supervised: bool) -> type[ALLOWED_MODELS]:
-    """[summary]
-
-    Args:
-        map_type (str): "regression" | "heatmap"
-        semi_supervised (bool): True if you want to use unlabeled videos
-
-    Returns:
-        a ptl model class to be initialized outside of this function.
-
-    """
-    if not semi_supervised:
-        if map_type == "regression":
-            from lightning_pose.models import RegressionTracker as Model
-        elif map_type == "heatmap":
-            from lightning_pose.models import HeatmapTracker as Model
-        elif map_type == "heatmap_mhcrnn":
-            from lightning_pose.models import HeatmapTrackerMHCRNN as Model
-        elif map_type == "heatmap_multiview_transformer":
-            from lightning_pose.models import HeatmapTrackerMultiviewTransformer as Model
-        else:
-            raise NotImplementedError(
-                f"{map_type} is an invalid model_type for a fully supervised model"
-            )
-    else:
-        if map_type == "regression":
-            from lightning_pose.models import SemiSupervisedRegressionTracker as Model
-        elif map_type == "heatmap":
-            from lightning_pose.models import SemiSupervisedHeatmapTracker as Model
-        elif map_type == "heatmap_mhcrnn":
-            from lightning_pose.models import SemiSupervisedHeatmapTrackerMHCRNN as Model
-        elif map_type == "heatmap_multiview_transformer":
-            from lightning_pose.models import (
-                SemiSupervisedHeatmapTrackerMultiviewTransformer as Model,
-            )
-        else:
-            raise NotImplementedError(
-                f"{map_type} is an invalid model_type for a semi-supervised model"
-            )
-
-    return Model
-
-
-def load_model_from_checkpoint(
-    cfg: DictConfig | ListConfig,
-    ckpt_file: str | None,
-    eval: bool = False,
-    data_module: BaseDataModule | UnlabeledDataModule | None = None,
-    skip_data_module: bool = False,
-) -> ALLOWED_MODELS:
-    """Load Lightning Pose model from checkpoint file.
-
-    Args:
-        cfg: model config
-        ckpt_file: absolute path to model checkpoint
-        eval: True for eval mode, False for train mode
-        data_module: used to initialize unsupervised losses
-        skip_data_module: if `data_module` is not None this is ignored.
-            If False and `data_module=None`, a data module is created from the config file and
-            unsupervised losses are accessible in the model.
-            If True and `data_module=None`, the unsupervised losses are not accessible in the
-            model; this is recommended for running inference on new videos
-
-    Returns:
-        model as a Lightning Module
-
-    Raises:
-        ValueError: if ckpt_file is None
-
-    """
-    if ckpt_file is None:
-        raise ValueError('ckpt_file must be provided to load a model from checkpoint')
-    from lightning_pose.models import check_if_semi_supervised
-    from lightning_pose.utils.io import return_absolute_data_paths
-    from lightning_pose.utils.scripts import (
-        get_data_module,
-        get_dataset,
-        get_imgaug_transform,
-        get_loss_factories,
-    )
-
-    # get loss factories
-    delete_extras = False
-    if not data_module and not skip_data_module:
-        # create data module if not provided as input
-        delete_extras = True
-        data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
-        imgaug_transform = get_imgaug_transform(cfg=cfg)
-        dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
-        data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
-    if not data_module:
-        loss_factories = {"supervised": None, "unsupervised": None}
-    else:
-        loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
-
-    # pick the right model class
-    semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
-    ModelClass = get_model_class(
-        map_type=cfg.model.model_type,
-        semi_supervised=semi_supervised,
-    )
-
-    # initialize a model instance, load weights from .ckpt file (fix state_dict keys if needed)
-    try:
-        checkpoint = torch.load(ckpt_file)
-    except Exception as e:
-        print(f"Warning: Failed to load checkpoint with default settings: {e}")
-        print("Attempting to load with weights_only=False...")
-        checkpoint = torch.load(ckpt_file, weights_only=False)
-    state_dict = checkpoint.get("state_dict", checkpoint)
-
-    # fix state dict key mismatch for upsampling layers
-    # old checkpoints may have 'upsampling_layers' without 'head.' prefix
-    keys_remapped = False
-    for key in list(state_dict.keys()):
-        if key.startswith("upsampling_layers."):
-            # Add 'head.' prefix if missing
-            new_key = "head." + key
-            state_dict[new_key] = state_dict.pop(key)
-            keys_remapped = True
-
-    if keys_remapped:
-        # save the fixed state dict back to checkpoint
-        checkpoint["state_dict"] = state_dict
-        # create a temporary file with the fixed checkpoint
-        import tempfile
-        with tempfile.NamedTemporaryFile(suffix='.ckpt', delete=False) as tmp_file:
-            torch.save(checkpoint, tmp_file.name)
-            fixed_ckpt_file = tmp_file.name
-    else:
-        fixed_ckpt_file = ckpt_file
-
-    if semi_supervised:
-        model = ModelClass.load_from_checkpoint(
-            fixed_ckpt_file,
-            loss_factory=loss_factories["supervised"],
-            loss_factory_unsupervised=loss_factories["unsupervised"],
-            strict=False,
-        )
-    else:
-        model = ModelClass.load_from_checkpoint(
-            fixed_ckpt_file,
-            loss_factory=loss_factories["supervised"],
-            strict=False,
-        )
-
-    # clean up temporary file if created
-    if keys_remapped:
-        import os
-        os.unlink(fixed_ckpt_file)
-
-    if eval:
-        model.eval()
-
-    # clear up memory
-    if delete_extras:
-        del imgaug_transform
-        del dataset
-        del data_module
-    del loss_factories
-    torch.cuda.empty_cache()
-
-    return model
 
 
 def _make_cmap(number_colors: int, cmap: str) -> np.ndarray:
