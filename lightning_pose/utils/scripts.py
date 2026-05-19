@@ -55,7 +55,6 @@ __all__ = [
     "get_model",
     "get_callbacks",
     "calculate_steps_per_epoch",
-    "compute_metrics",
 ]
 
 
@@ -724,53 +723,6 @@ def calculate_steps_per_epoch(data_module: BaseDataModule) -> int:
     if is_unsupervised:
         steps_per_epoch = max(10, steps_per_epoch)
     return steps_per_epoch
-
-
-def compute_metrics(
-    cfg: DictConfig | ListConfig,
-    preds_file: str | list[str] | Path | list[Path],
-    data_module: BaseDataModule | UnlabeledDataModule | None = None,
-) -> None:
-    """Compute various metrics on predictions csv file, potentially for multiple views.
-    Saves metrics to files next to predictions file, in the convention of:
-        {prediction_file_stem}_{metric_name}.csv
-
-    Args:
-        cfg: the config used to determine whether single or multiview and which metrics
-            to compute
-        preds_file: Path to model predictions used to compute metrics.
-            For multiview, a list of prediction files corresponding to the csv_files.
-        data_module: for computing PCA metrics
-
-    """
-    if not isinstance(cfg.data.csv_file, str):
-        assert isinstance(preds_file, list)
-        assert len(preds_file) == len(cfg.data.csv_file)
-        for csv_file, preds_file_ in zip(cfg.data.csv_file, preds_file, strict=True):
-            labels_file = Path(csv_file)
-            if not labels_file.is_absolute():
-                labels_file = Path(cfg.data.data_dir) / labels_file
-            labels_file = io_utils.return_absolute_path(str(labels_file))
-            compute_metrics_single(
-                cfg=cfg,
-                labels_file=labels_file,
-                preds_file=preds_file_,
-                data_module=data_module,
-            )
-    else:
-        assert isinstance(cfg.data.csv_file, str)
-        assert isinstance(preds_file, (str, Path)), \
-            'preds_file must be str or Path for single-view predictions'
-        labels_file = Path(cfg.data.csv_file)
-        if not labels_file.is_absolute():
-            labels_file = Path(cfg.data.data_dir) / labels_file
-        labels_file = io_utils.return_absolute_path(str(labels_file))
-        compute_metrics_single(
-            cfg=cfg,
-            labels_file=labels_file,
-            preds_file=preds_file,
-            data_module=data_module,
-        )
 
 
 def compute_metrics_single(
