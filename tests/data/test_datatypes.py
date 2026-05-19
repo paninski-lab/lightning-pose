@@ -33,7 +33,7 @@ def _make_predictions_df(
     return pd.DataFrame(
         data,
         columns=index,
-        index=[f'frame_{i}' for i in range(n_frames)],
+        index=pd.Index([f'frame_{i}' for i in range(n_frames)]),
     )
 
 
@@ -48,8 +48,8 @@ def _make_metric_df(
     data = rng.random((n_frames, len(keypoint_names)))
     df = pd.DataFrame(
         data,
-        columns=keypoint_names,
-        index=[f'frame_{i}' for i in range(n_frames)],
+        columns=pd.Index(keypoint_names),
+        index=pd.Index([f'frame_{i}' for i in range(n_frames)]),
     )
     if include_set:
         df['set'] = 'train'
