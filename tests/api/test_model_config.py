@@ -267,6 +267,53 @@ class TestValidateModel:
 
 
 # ---------------------------------------------------------------------------
+# _validate_losses
+# ---------------------------------------------------------------------------
+
+class TestValidateLosses:
+    """Test ModelConfig._validate_losses."""
+
+    def test_validate_losses_no_losses_to_use(self):
+        """Absent losses_to_use → passes without inspecting cfg.losses."""
+        _mc(_singleview_cfg_dict())._validate_losses()
+
+    def test_validate_losses_empty_list(self):
+        """Empty losses_to_use list → passes."""
+        cfg = _singleview_cfg_dict()
+        cfg['model']['losses_to_use'] = []
+        _mc(cfg)._validate_losses()
+
+    def test_validate_losses_valid_float_log_weight(self):
+        """A loss with a float log_weight passes."""
+        cfg = _singleview_cfg_dict()
+        cfg['model']['losses_to_use'] = ['temporal_norm']
+        cfg['losses']['temporal_norm'] = {'log_weight': 0.5}
+        _mc(cfg)._validate_losses()
+
+    def test_validate_losses_null_log_weight_skipped(self):
+        """log_weight=null means the loss is inactive; no assertion fires."""
+        cfg = _singleview_cfg_dict()
+        cfg['model']['losses_to_use'] = ['temporal_norm']
+        cfg['losses']['temporal_norm'] = {'log_weight': None}
+        _mc(cfg)._validate_losses()
+
+    def test_validate_losses_missing_loss_cfg_skipped(self):
+        """A loss in losses_to_use with no entry in cfg.losses is skipped."""
+        cfg = _singleview_cfg_dict()
+        cfg['model']['losses_to_use'] = ['temporal_norm']
+        # 'temporal_norm' is absent from cfg['losses']
+        _mc(cfg)._validate_losses()
+
+    def test_validate_losses_string_log_weight_raises(self):
+        """A string log_weight raises AssertionError."""
+        cfg = _singleview_cfg_dict()
+        cfg['model']['losses_to_use'] = ['temporal_norm']
+        cfg['losses']['temporal_norm'] = {'log_weight': '0.5'}
+        with pytest.raises(AssertionError, match='log_weight must be numeric'):
+            _mc(cfg)._validate_losses()
+
+
+# ---------------------------------------------------------------------------
 # validate (top-level)
 # ---------------------------------------------------------------------------
 
@@ -296,4 +343,11 @@ class TestValidate:
         cfg = _singleview_cfg_dict()
         cfg['model']['model_type'] = 'bad'
         with pytest.raises(AssertionError, match="model.model_type 'bad'"):
+            _mc(cfg).validate()
+
+    def test_validate_propagates_losses_error(self):
+        cfg = _singleview_cfg_dict()
+        cfg['model']['losses_to_use'] = ['temporal_norm']
+        cfg['losses']['temporal_norm'] = {'log_weight': 'bad'}
+        with pytest.raises(AssertionError, match='log_weight must be numeric'):
             _mc(cfg).validate()
