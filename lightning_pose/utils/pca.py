@@ -206,9 +206,12 @@ class KeypointPCA:
 
         self.parameters = convert_dict_values_to_tensors(self.parameters, self.device)
 
-        self.parameters["epsilon"] = EmpiricalEpsilon(  # type: ignore[arg-type]
+        epsilon_val = EmpiricalEpsilon(
             percentile=self.empirical_epsilon_percentile
         )(loss=self.compute_reprojection_error())
+        self.parameters["epsilon"] = torch.tensor(
+            epsilon_val, dtype=torch.float, device=self.device
+        )
 
     def reproject(
         self, data_arr: Float[torch.Tensor, "num_samples sample_dim"] | None = None

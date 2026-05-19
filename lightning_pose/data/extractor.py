@@ -58,7 +58,7 @@ class DataExtractor:
                         image_resize_height=dataset_old.image_resize_height,
                         image_resize_width=dataset_old.image_resize_width,
                         imgaug_transform=imgaug_new,
-                        downsample_factor=dataset_old.downsample_factor,  # type: ignore[arg-type]
+                        downsample_factor=dataset_old.downsample_factor,
                         do_context=dataset_old.do_context,
                     )
                 elif isinstance(dataset_old, BaseTrackingDataset):

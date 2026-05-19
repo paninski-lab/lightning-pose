@@ -271,8 +271,9 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
                     dist=batch_dict["distortions"].float(),
                 )
                 keypoints_targ_3d = batch_dict["keypoints_3d"]
+                assert self.loss_factory is not None
                 if "supervised_reprojection_heatmap_mse" in \
-                        self.loss_factory.loss_instance_dict.keys():  # type: ignore[union-attr]
+                        self.loss_factory.loss_instance_dict.keys():
                     # project from 3D back to 2D in original image coordinates
                     # print(f'intrinsics: {batch_dict["intrinsic_matrix"][0, 0]}')
                     keypoints_pred_2d_reprojected_original = project_3d_to_2d(

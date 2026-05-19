@@ -1,7 +1,6 @@
 """Dataset objects store images, labels, and functions for manipulation."""
 
 import os
-from collections.abc import Callable
 from pathlib import Path
 from typing import Literal, cast
 
@@ -58,7 +57,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         image_resize_height: int,
         image_resize_width: int,
         header_rows: list[int] | None = [0, 1, 2],
-        imgaug_transform: Callable | None = None,
+        imgaug_transform: iaa.Sequential | None = None,
         do_context: bool = False,
         resize: bool = True,
         bbox_path: str | None = None,
@@ -174,13 +173,13 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             # if 1 color channel, change to 3.
             image = Image.open(img_path).convert("RGB")
             if self.imgaug_transform is not None:
-                transformed_images, transformed_keypoints = self.imgaug_transform(
+                imgs_aug, kps_aug = self.imgaug_transform(  # type: ignore[misc]
                     images=np.expand_dims(np.array(image), axis=0),
                     keypoints=np.expand_dims(keypoints_on_image, axis=0),
                 )  # expands add batch dim for imgaug
                 # get rid of the batch dim
-                transformed_images = transformed_images[0]
-                transformed_keypoints = transformed_keypoints[0].reshape(-1)
+                transformed_images = imgs_aug[0]
+                transformed_keypoints = kps_aug[0].reshape(-1)
             else:
                 transformed_images = np.expand_dims(np.array(image), axis=0)
                 transformed_keypoints = np.expand_dims(keypoints_on_image, axis=0)
@@ -208,12 +207,12 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 transformed_images = []
                 for img in images:
                     self.imgaug_transform.seed_(seed)
-                    transformed_image, transformed_keypoints = self.imgaug_transform(
+                    img_aug, kps_aug = self.imgaug_transform(  # type: ignore[misc]
                         images=[img], keypoints=[keypoints_on_image.numpy()]
                     )
-                    transformed_images.append(transformed_image[0])
+                    transformed_images.append(img_aug[0])
                 transformed_images = np.asarray(transformed_images)
-                transformed_keypoints = transformed_keypoints[0].reshape(-1)
+                transformed_keypoints = kps_aug[0].reshape(-1)
             else:
                 transformed_images = np.asarray(images)
                 transformed_keypoints = keypoints_on_image.numpy().reshape(-1)
@@ -259,7 +258,7 @@ class HeatmapDataset(BaseTrackingDataset):
         image_resize_height: int,
         image_resize_width: int,
         header_rows: list[int] | None = [0, 1, 2],
-        imgaug_transform: Callable | None = None,
+        imgaug_transform: iaa.Sequential | None = None,
         downsample_factor: Literal[1, 2, 3] = 2,
         do_context: bool = False,
         resize: bool = True,
@@ -309,7 +308,7 @@ class HeatmapDataset(BaseTrackingDataset):
             print("current image dimensions after transformation are:")
             exit()
 
-        self.downsample_factor = downsample_factor
+        self.downsample_factor: Literal[1, 2, 3] = downsample_factor
         self.output_sigma = 1.25  # should be sigma/2 ^downsample factor
         self.uniform_heatmaps = uniform_heatmaps
         self.num_targets = torch.numel(self.keypoints[0])
@@ -394,7 +393,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         image_resize_height: int,
         image_resize_width: int,
         header_rows: list[int] | None = [0, 1, 2],
-        imgaug_transform: Callable | None = None,
+        imgaug_transform: iaa.Sequential | None = None,
         downsample_factor: Literal[1, 2, 3] = 2,
         do_context: bool = False,
         resize: bool = False,
@@ -454,11 +453,11 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             }))
         self.imgaug_transform = imgaug_transform
 
-        self.downsample_factor = downsample_factor
-        self.dataset = {}
-        self.keypoint_names = {}
-        self.data_length = {}
-        self.num_keypoints = {}
+        self.downsample_factor: Literal[1, 2, 3] = downsample_factor
+        self.dataset: dict[str, HeatmapDataset] = {}
+        self.keypoint_names: dict[str, list[str]] = {}
+        data_length_by_view: dict[str, int] = {}
+        num_keypoints_by_view: dict[str, int] = {}
         for view, csv_path, bbox_path in zip(view_names, csv_paths, self.bbox_paths, strict=True):
             self.dataset[view] = HeatmapDataset(
                 root_directory=root_directory,
@@ -474,14 +473,14 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 bbox_path=bbox_path,
             )
             self.keypoint_names[view] = self.dataset[view].keypoint_names
-            self.data_length[view] = len(self.dataset[view])
-            self.num_keypoints[view] = self.dataset[view].num_keypoints
+            data_length_by_view[view] = len(self.dataset[view])
+            num_keypoints_by_view[view] = self.dataset[view].num_keypoints
 
         # check if all csv files have the same number of columns
-        self.num_keypoints = sum(self.num_keypoints.values())
+        self.num_keypoints = sum(num_keypoints_by_view.values())
 
-        # check if all the data is in correct order, self.data_length changes here
-        self.check_data_images_names()
+        # check if all the data is in correct order; sets self.data_length
+        self.check_data_images_names(data_length_by_view)
 
         self.num_targets = self.num_keypoints * 2
 
@@ -591,7 +590,9 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         if cam_params_file_to_camgroup and all_found:
             assert not self.do_context, "3D augmentations for context model not yet supported"
-            cam_params_df = pd.DataFrame({'file': calib_files}, index=image_names)
+            cam_params_df = pd.DataFrame(
+                {'file': calib_files}, index=image_names,  # type: ignore[arg-type]
+            )
             return cam_params_df, cam_params_file_to_camgroup
 
         if cam_params_file_to_camgroup and not all_found:
@@ -601,16 +602,20 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             )
         return None, None
 
-    def check_data_images_names(self):
+    def check_data_images_names(self, data_length_by_view: dict[str, int]) -> None:
         """Data checking
         Each object in self.datasets will have the attribute image_names
         (i.e. self.datasets['top'].image_names) since each values is a
         HeatmapDataset. Include a check to make sure that the image names
         are the same across all views, so that when it loads element n from
         each individual view we know these are properly matched.
+
+        Args:
+            data_length_by_view: number of labeled frames per view
+
         """
         # check if all CSV files have the same number of rows
-        if len(set(list(self.data_length.values()))) != 1:
+        if len(set(data_length_by_view.values())) != 1:
             raise ImportError("the CSV files do not match in row numbers!")
 
         for key_num, keypoint in enumerate(self.keypoint_names[self.view_names[0]]):
@@ -620,7 +625,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                                       view: {self.view_names[0]} vs {view} | \
                                         {keypoint} != {keypointComp}")
 
-        self.data_length = list(self.data_length.values())[0]
+        self.data_length = list(data_length_by_view.values())[0]
         for idx in range(self.data_length):
             img_file_names = set()
             for _view, heatmaps in self.dataset.items():
@@ -640,7 +645,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         return self.image_resize_width
 
     def __len__(self) -> int:
-        return self.data_length  # type: ignore[return-value]
+        return self.data_length
 
     @property
     def output_shape(self) -> tuple:

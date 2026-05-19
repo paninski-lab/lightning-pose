@@ -75,18 +75,17 @@ def video_pipe(
     # turn all inputs into a list of list of strings to be most general
     # first list: over views (might only be one)
     # second list: over videos/sessions
-    if isinstance(filenames, list) and isinstance(filenames[0], str):
-        filenames = [filenames]  # type: ignore[assignment]
-    elif isinstance(filenames, str):
-        filenames = [[filenames]]  # type: ignore[assignment]
-
-    assert isinstance(filenames, list) and isinstance(filenames[0], list)
+    filenames_2d: list[list[str]]
+    if isinstance(filenames, str):
+        filenames_2d = [[filenames]]
+    else:
+        filenames_2d = [filenames]
 
     # loop over views (can be only one)
     frames_list = []
     transform_list = []
     orig_size_list = []
-    for f, filename_list in enumerate(filenames):
+    for f, filename_list in enumerate(filenames_2d):
         video = fn.readers.video(
             device="gpu",
             filenames=filename_list,
@@ -267,20 +266,23 @@ class PrepareDALI:
             self.multiview = False
 
         # make sure `filenames` is a list of existing video files
-        if isinstance(filenames, list) and isinstance(filenames[0], str):
-            filenames = [filenames]  # type: ignore[assignment]
-        for view_list in filenames:
+        filenames_2d: list[list[str]]
+        if isinstance(filenames[0], str):
+            filenames_2d = [filenames]  # type: ignore[list-item]
+        else:
+            filenames_2d = filenames  # type: ignore[assignment]
+        for view_list in filenames_2d:
             for vid in view_list:
                 if not os.path.exists(vid) or not os.path.isfile(vid):
                     raise FileNotFoundError(f"{vid} is not a video file!")
 
         self.train_stage = train_stage
         self.model_type = model_type
-        self.filenames = filenames
+        self.filenames = filenames_2d
         self.resize_dims = resize_dims
         self.dali_config = dali_config
         self.num_threads = num_threads
-        self.frame_count = sum(map(count_frames, filenames[0]))
+        self.frame_count = sum(map(count_frames, filenames_2d[0]))
         self._pipe_dict: dict = self._setup_pipe_dict(self.filenames, imgaug)
 
     @property
