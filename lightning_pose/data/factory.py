@@ -1,4 +1,4 @@
-"""Helper functions to build pipeline components from config dictionary."""
+"""Factory functions to build data pipeline components from config."""
 
 import warnings
 
@@ -19,7 +19,7 @@ from lightning_pose.data.datasets import (
 )
 from lightning_pose.models import check_if_semi_supervised
 
-# to ignore imports for sphix-autoapidoc
+# to ignore imports for sphinx-autoapidoc
 __all__ = [
     'get_imgaug_transform',
     'get_dataset',
@@ -53,20 +53,20 @@ def get_imgaug_transform(cfg: DictConfig | ListConfig) -> iaa.Sequential:
 
     """
 
-    params = cfg.training.get("imgaug", "default")
+    params = cfg.training.get('imgaug', 'default')
     if isinstance(params, str):
         # Check if user explicitly wants to use 3D augmentations for multiview models
-        imagug_3d = cfg.training.get("imgaug_3d", None)
+        imagug_3d = cfg.training.get('imgaug_3d', None)
 
         # enforce "dlc-mv" imgaug pipeline for multiview models (no 2D geometric transforms)
         # only if explicitly requested or if no preference is set and camera params exist
         if (
-            params not in ["default", "none"]
-            and cfg.model.model_type.find("multiview") > -1
-            and cfg.data.get("camera_params_file")
+            params not in ['default', 'none']
+            and cfg.model.model_type.find('multiview') > -1
+            and cfg.data.get('camera_params_file')
             and (imagug_3d is True or imagug_3d is None)
         ):
-            params = "dlc-mv"
+            params = 'dlc-mv'
         params_dict = expand_imgaug_str_to_dict(params)
     elif isinstance(params, dict) or isinstance(params, DictConfig):
         if isinstance(params, DictConfig):
@@ -76,9 +76,9 @@ def get_imgaug_transform(cfg: DictConfig | ListConfig) -> iaa.Sequential:
         else:
             params_dict = params.copy()
         for transform, _val in params_dict.items():
-            assert getattr(iaa, str(transform)), f"{transform} is not a valid imgaug transform"
+            assert getattr(iaa, str(transform)), f'{transform} is not a valid imgaug transform'
     else:
-        raise TypeError(f"params is of type {type(params)}, must be str, dict, or DictConfig")
+        raise TypeError(f'params is of type {type(params)}, must be str, dict, or DictConfig')
 
     return imgaug_transform(params_dict)  # type: ignore[arg-type]
 
@@ -90,9 +90,9 @@ def get_dataset(
 ) -> BaseTrackingDataset | HeatmapDataset | MultiviewHeatmapDataset:
     """Create a dataset that contains labeled data."""
 
-    if cfg.model.model_type == "regression":
-        if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
-            raise NotImplementedError("Multi-view support only available for heatmap-based models")
+    if cfg.model.model_type == 'regression':
+        if cfg.data.get('view_names', None) and len(cfg.data.view_names) > 1:
+            raise NotImplementedError('Multi-view support only available for heatmap-based models')
         else:
             dataset = BaseTrackingDataset(
                 root_directory=data_dir,
@@ -102,15 +102,15 @@ def get_dataset(
                 imgaug_transform=imgaug_transform,
                 do_context=False,  # no context for regression models
             )
-    elif cfg.model.model_type.find("heatmap") > -1:
-        if cfg.data.get("view_names", None) and len(cfg.data.view_names) > 1:
+    elif cfg.model.model_type.find('heatmap') > -1:
+        if cfg.data.get('view_names', None) and len(cfg.data.view_names) > 1:
             UserWarning(
-                "No precautions regarding the size of the images were considered here, "
-                "images will be resized accordingly to configs!"
+                'No precautions regarding the size of the images were considered here, '
+                'images will be resized accordingly to configs!'
             )
             if (
-                cfg.training.imgaug in ["default", "none"]
-                or not cfg.data.get("camera_params_file")
+                cfg.training.imgaug in ['default', 'none']
+                or not cfg.data.get('camera_params_file')
             ):
                 # we are either
                 # 1. running inference on un-augmented data, and need to make sure to resize
@@ -125,12 +125,12 @@ def get_dataset(
                 image_resize_height=cfg.data.image_resize_dims.height,
                 image_resize_width=cfg.data.image_resize_dims.width,
                 imgaug_transform=imgaug_transform,
-                downsample_factor=cfg.data.get("downsample_factor", 2),
-                do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
+                downsample_factor=cfg.data.get('downsample_factor', 2),
+                do_context=cfg.model.model_type == 'heatmap_mhcrnn',  # context only for mhcrnn
                 resize=resize,
-                uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
-                camera_params_path=cfg.data.get("camera_params_file", None),
-                bbox_paths=cfg.data.get("bbox_file", None),
+                uniform_heatmaps=cfg.training.get('uniform_heatmaps_for_nan_keypoints', False),
+                camera_params_path=cfg.data.get('camera_params_file', None),
+                bbox_paths=cfg.data.get('bbox_file', None),
             )
         else:
             dataset = HeatmapDataset(
@@ -139,13 +139,13 @@ def get_dataset(
                 image_resize_height=cfg.data.image_resize_dims.height,
                 image_resize_width=cfg.data.image_resize_dims.width,
                 imgaug_transform=imgaug_transform,
-                downsample_factor=cfg.data.get("downsample_factor", 2),
-                do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
-                uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
+                downsample_factor=cfg.data.get('downsample_factor', 2),
+                do_context=cfg.model.model_type == 'heatmap_mhcrnn',  # context only for mhcrnn
+                uniform_heatmaps=cfg.training.get('uniform_heatmaps_for_nan_keypoints', False),
             )
 
     else:
-        raise NotImplementedError(f"{cfg.model.model_type} is an invalid cfg.model.model_type")
+        raise NotImplementedError(f'{cfg.model.model_type} is an invalid cfg.model.model_type')
 
     return dataset
 
@@ -160,8 +160,8 @@ def get_data_module(
     # Old configs may have num_gpus: 0. We will remove support in a future release.
     if cfg.training.num_gpus == 0:
         warnings.warn(
-            "Config contains unsupported value num_gpus: 0. "
-            "Update num_gpus to 1 in your config.",
+            'Config contains unsupported value num_gpus: 0. '
+            'Update num_gpus to 1 in your config.',
             stacklevel=2,
         )
     cfg.training.num_gpus = max(cfg.training.num_gpus, 1)
@@ -180,7 +180,7 @@ def get_data_module(
             train_batch_size=train_batch_size,
             val_batch_size=val_batch_size,
             test_batch_size=cfg.training.test_batch_size,
-            num_workers=cfg.training.get("num_workers"),
+            num_workers=cfg.training.get('num_workers'),
             train_probability=cfg.training.train_prob,
             val_probability=cfg.training.val_prob,
             train_frames=cfg.training.train_frames,
@@ -201,23 +201,23 @@ def get_data_module(
             np.ceil(_effective_context_batch_size / cfg.training.num_gpus + 4)
         )
 
-        if cfg.model.model_type == "heatmap_mhcrnn" and context_batch_size < 5:
+        if cfg.model.model_type == 'heatmap_mhcrnn' and context_batch_size < 5:
             raise ValidationError(
-                "dali.context.train.batch_size must be >= 5 * num_gpus for "
-                "semi-supervised context models. "
-                "Found {cfg.dali.context.train.batch_size}"
+                'dali.context.train.batch_size must be >= 5 * num_gpus for '
+                'semi-supervised context models. '
+                'Found {cfg.dali.context.train.batch_size}'
             )
 
         dali_config = OmegaConf.merge(
             cfg.dali,
             {
-                "base": {"train": {"sequence_length": base_sequence_length}},
-                "context": {"train": {"batch_size": context_batch_size}},
+                'base': {'train': {'sequence_length': base_sequence_length}},
+                'context': {'train': {'batch_size': context_batch_size}},
             },
         )
 
         assert video_dir is not None, 'video_dir must be provided for semi-supervised training'
-        view_names = cfg.data.get("view_names", None)
+        view_names = cfg.data.get('view_names', None)
         view_names = list(view_names) if view_names is not None else None
         data_module = UnlabeledDataModule(
             dataset=dataset,
@@ -226,12 +226,12 @@ def get_data_module(
             train_batch_size=train_batch_size,
             val_batch_size=val_batch_size,
             test_batch_size=cfg.training.test_batch_size,
-            num_workers=cfg.training.get("num_workers"),
+            num_workers=cfg.training.get('num_workers'),
             train_probability=cfg.training.train_prob,
             val_probability=cfg.training.val_prob,
             train_frames=cfg.training.train_frames,
             dali_config=dali_config,
             torch_seed=cfg.training.rng_seed_data_pt,
-            imgaug=cfg.training.get("imgaug", "default"),
+            imgaug=cfg.training.get('imgaug', 'default'),
         )
     return data_module

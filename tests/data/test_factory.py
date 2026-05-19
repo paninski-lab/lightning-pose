@@ -1,9 +1,4 @@
-"""Test the scripts module.
-
-Note that many of the functions in the scripts module are explicitly used (and therefore implicitly
-tested) in conftest.py
-
-"""
+"""Test the data factory module."""
 
 import copy
 import os
@@ -15,12 +10,12 @@ from omegaconf import OmegaConf
 from omegaconf.errors import ValidationError
 from PIL import Image
 
-from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
-from lightning_pose.data.datasets import BaseTrackingDataset
-from lightning_pose.utils.scripts import (
+from lightning_pose.data import (
     get_data_module,
     get_imgaug_transform,
 )
+from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
+from lightning_pose.data.datasets import BaseTrackingDataset
 
 
 class TestGetImgaugTransform:

@@ -1,7 +1,6 @@
 """Provide pytest fixtures for the entire test suite.
 
-These fixtures create data and data modules that can be reused by other tests. Their
-construction relies heavily on the utility functions provided in `utils/scripts.py`.
+These fixtures create data and data modules that can be reused by other tests.
 
 """
 
@@ -22,6 +21,11 @@ from omegaconf import DictConfig, ListConfig, OmegaConf
 
 import lightning_pose as lp
 from lightning_pose.callbacks import get_callbacks
+from lightning_pose.data import (
+    get_data_module,
+    get_dataset,
+    get_imgaug_transform,
+)
 from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import (
@@ -33,11 +37,6 @@ from lightning_pose.losses import get_loss_factories
 from lightning_pose.models import get_model
 from lightning_pose.utils.io import get_videos_in_dir
 from lightning_pose.utils.predictions import PredictionHandler
-from lightning_pose.utils.scripts import (
-    get_data_module,
-    get_dataset,
-    get_imgaug_transform,
-)
 
 TOY_DATA_ROOT_DIR = str(lp.LP_ROOT_PATH / "data" / "mirror-mouse-example")
 TOY_MDATA_ROOT_DIR = str(lp.LP_ROOT_PATH / "data" / "mirror-mouse-example_split")

@@ -4,9 +4,9 @@ import copy
 
 import torch
 
+from lightning_pose.data import get_data_module
 from lightning_pose.losses import get_loss_factories
 from lightning_pose.models import get_model
-from lightning_pose.utils.scripts import get_data_module
 
 
 class TestGetModel:

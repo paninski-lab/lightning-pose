@@ -165,7 +165,7 @@ class TestGenerateHeatmaps:
 
     def test_uniform_heatmaps(self, cfg, toy_data_dir):
 
-        from lightning_pose.utils.scripts import get_dataset, get_imgaug_transform
+        from lightning_pose.data import get_dataset, get_imgaug_transform
 
         # update config
         cfg_tmp = copy.deepcopy(cfg)
@@ -219,7 +219,7 @@ class TestGenerateHeatmaps:
 
     def test_weird_shape(self, cfg, toy_data_dir):
 
-        from lightning_pose.utils.scripts import get_dataset, get_imgaug_transform
+        from lightning_pose.data import get_dataset, get_imgaug_transform
 
         img_shape = (384, 256)
 

@@ -7,8 +7,8 @@ import pytest
 import torch
 from omegaconf import OmegaConf, open_dict
 
+from lightning_pose.data import get_data_module
 from lightning_pose.train import calculate_steps_per_epoch, train
-from lightning_pose.utils.scripts import get_data_module
 
 
 # TODO: Replace with contextlib.chdir in python 3.11.

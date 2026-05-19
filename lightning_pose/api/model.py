@@ -13,7 +13,13 @@ import torch
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from lightning_pose.api.model_config import ModelConfig
-from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
+from lightning_pose.data import (
+    _IMAGENET_MEAN,
+    _IMAGENET_STD,
+    get_data_module,
+    get_dataset,
+    get_imgaug_transform,
+)
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datatypes import MultiviewPredictionResult, PredictionResult
 from lightning_pose.data.utils import convert_bbox_coords
@@ -24,11 +30,6 @@ from lightning_pose.utils.predictions import generate_labeled_video as generate_
 from lightning_pose.utils.predictions import (
     predict_dataset,
     predict_video,
-)
-from lightning_pose.utils.scripts import (
-    get_data_module,
-    get_dataset,
-    get_imgaug_transform,
 )
 
 __all__ = ["Model", "get_model_class", "load_model_from_checkpoint"]
@@ -109,14 +110,14 @@ def load_model_from_checkpoint(
     """
     if ckpt_file is None:
         raise ValueError('ckpt_file must be provided to load a model from checkpoint')
-    from lightning_pose.losses import get_loss_factories
-    from lightning_pose.models import check_if_semi_supervised
-    from lightning_pose.utils.io import return_absolute_data_paths
-    from lightning_pose.utils.scripts import (
+    from lightning_pose.data import (
         get_data_module,
         get_dataset,
         get_imgaug_transform,
     )
+    from lightning_pose.losses import get_loss_factories
+    from lightning_pose.models import check_if_semi_supervised
+    from lightning_pose.utils.io import return_absolute_data_paths
 
     delete_extras = False
     if not data_module and not skip_data_module:
