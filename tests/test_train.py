@@ -31,11 +31,11 @@ def _test_cfg(cfg):
     cfg_tmp.training.min_epochs = 2
     cfg_tmp.training.max_epochs = 2
     cfg_tmp.training.check_val_every_n_epoch = 1
+    cfg_tmp.training.lr_scheduler_params.multisteplr.milestones = [1, 2]
     cfg_tmp.training.log_every_n_steps = 1
     cfg_tmp.training.limit_train_batches = 2
 
     # train simple model
-    cfg_tmp.model.model_type = "heatmap"
     cfg_tmp.model.losses_to_use = []
 
     # predict on vid
@@ -47,6 +47,7 @@ def _test_cfg(cfg):
 
 def test_train_singleview(cfg, tmp_path):
     cfg = _test_cfg(cfg)
+    cfg.model.model_type = "heatmap"
 
     # temporarily change working directory to temp output directory
     with chdir(tmp_path):
@@ -126,6 +127,8 @@ def test_train_multiview(cfg_multiview, tmp_path):
     from lightning_pose.train import train
 
     cfg = _test_cfg(cfg_multiview)
+    cfg.model.model_type = "heatmap_multiview_transformer"
+    cfg.model.backbone = "vits_dino"
 
     # temporarily change working directory to temp output directory
     with chdir(tmp_path):
