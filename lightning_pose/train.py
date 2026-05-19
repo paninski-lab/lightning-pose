@@ -20,6 +20,7 @@ from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 
 import lightning_pose
 from lightning_pose.api import Model, ModelConfig
+from lightning_pose.losses import get_loss_factories
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
 from lightning_pose.utils.io import (
     return_absolute_data_paths,
@@ -30,7 +31,6 @@ from lightning_pose.utils.scripts import (
     get_data_module,
     get_dataset,
     get_imgaug_transform,
-    get_loss_factories,
     get_model,
 )
 

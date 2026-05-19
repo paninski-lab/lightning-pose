@@ -28,6 +28,7 @@ from lightning_pose.data.datasets import (
     HeatmapDataset,
     MultiviewHeatmapDataset,
 )
+from lightning_pose.losses import get_loss_factories
 from lightning_pose.utils.io import get_videos_in_dir
 from lightning_pose.utils.predictions import PredictionHandler
 from lightning_pose.utils.scripts import (
@@ -35,7 +36,6 @@ from lightning_pose.utils.scripts import (
     get_data_module,
     get_dataset,
     get_imgaug_transform,
-    get_loss_factories,
     get_model,
 )
 

@@ -47,7 +47,6 @@ __all__ = [
     "RegressionRMSELoss",
     "PairwiseProjectionsLoss",
     "ReprojectionHeatmapLoss",
-    "get_loss_classes",
 ]
 
 _DEFAULT_TORCH_DEVICE = "cpu"
@@ -1413,29 +1412,3 @@ class ReprojectionHeatmapLoss(Loss):
         logs = self.log_loss(loss=scalar_loss, stage=stage)
 
         return scalar_loss, logs
-
-
-def get_loss_classes() -> dict[str, type[Loss]]:
-    """Get a dict with all the loss classes.
-
-    Returns:
-        dict[str, Callable]: [description]
-
-    """
-    loss_dict = {
-        RegressionMSELoss.loss_name: RegressionMSELoss,
-        HeatmapMSELoss.loss_name: HeatmapMSELoss,
-        HeatmapKLLoss.loss_name: HeatmapKLLoss,
-        HeatmapJSLoss.loss_name: HeatmapJSLoss,
-        PCALoss.LOSS_NAME_MULTIVIEW: PCALoss,
-        PCALoss.LOSS_NAME_SINGLEVIEW: PCALoss,
-        TemporalLoss.loss_name: TemporalLoss,
-        TemporalHeatmapLoss.LOSS_NAME_MSE: TemporalHeatmapLoss,
-        TemporalHeatmapLoss.LOSS_NAME_KL: TemporalHeatmapLoss,
-        UnimodalLoss.LOSS_NAME_MSE: UnimodalLoss,
-        UnimodalLoss.LOSS_NAME_KL: UnimodalLoss,
-        UnimodalLoss.LOSS_NAME_JS: UnimodalLoss,
-        PairwiseProjectionsLoss.loss_name: PairwiseProjectionsLoss,
-        ReprojectionHeatmapLoss.loss_name: ReprojectionHeatmapLoss,
-    }
-    return loss_dict

@@ -25,12 +25,12 @@ from lightning_pose.callbacks import (
 )
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import BaseTrackingDataset
+from lightning_pose.losses import get_loss_factories
 from lightning_pose.utils.scripts import (
     calculate_steps_per_epoch,
     get_callbacks,
     get_data_module,
     get_imgaug_transform,
-    get_loss_factories,
     get_model,
 )
 
@@ -388,130 +388,6 @@ class TestGetDataModule:
         cfg.dali.context.train.batch_size = 4
         with pytest.raises(ValidationError):
             get_data_module(cfg, heatmap_dataset, os.path.join(toy_data_dir, 'videos'))
-
-
-class TestGetLossFactories:
-    """Test the get_loss_factories function."""
-
-    def test_get_loss_factories_returns_supervised_and_unsupervised(self, cfg, base_data_module):
-        """Always returns a dict with 'supervised' and 'unsupervised' LossFactory keys."""
-        cfg_tmp = copy.deepcopy(cfg)
-        cfg_tmp.model.losses_to_use = []
-        factories = get_loss_factories(cfg_tmp, data_module=base_data_module)
-        assert set(factories.keys()) == {'supervised', 'unsupervised'}
-        from lightning_pose.losses.factory import LossFactory
-        assert isinstance(factories['supervised'], LossFactory)
-        assert isinstance(factories['unsupervised'], LossFactory)
-
-    def test_get_loss_factories_heatmap_supervised_loss(self, cfg, base_data_module):
-        """Heatmap model_type builds a supervised factory keyed by heatmap_{loss_type}."""
-        cfg_tmp = copy.deepcopy(cfg)
-        cfg_tmp.model.losses_to_use = []
-        cfg_tmp.model.model_type = 'heatmap'
-        cfg_tmp.model.heatmap_loss_type = 'mse'
-        factories = get_loss_factories(cfg_tmp, data_module=base_data_module)
-        assert 'heatmap_mse' in factories['supervised'].loss_instance_dict
-
-    def test_get_loss_factories_regression_supervised_loss(self, cfg, base_data_module):
-        """Regression model_type builds a supervised factory keyed by 'regression'."""
-        cfg_tmp = copy.deepcopy(cfg)
-        cfg_tmp.model.losses_to_use = []
-        cfg_tmp.model.model_type = 'regression'
-        factories = get_loss_factories(cfg_tmp, data_module=base_data_module)
-        assert 'regression' in factories['supervised'].loss_instance_dict
-
-    def test_get_loss_factories_empty_unsupervised(self, cfg, base_data_module):
-        """losses_to_use=[] produces an unsupervised factory with no losses."""
-        cfg_tmp = copy.deepcopy(cfg)
-        cfg_tmp.model.losses_to_use = []
-        factories = get_loss_factories(cfg_tmp, data_module=base_data_module)
-        assert len(factories['unsupervised'].loss_instance_dict) == 0
-
-    def test_get_loss_factories_temporal_unsupervised(self, cfg, base_data_module):
-        """temporal in losses_to_use populates the unsupervised factory with a TemporalLoss."""
-        cfg_tmp = copy.deepcopy(cfg)
-        cfg_tmp.model.losses_to_use = ['temporal']
-        factories = get_loss_factories(cfg_tmp, data_module=base_data_module)
-        assert 'temporal' in factories['unsupervised'].loss_instance_dict
-
-    def test_get_loss_factories_pca_singleview(self, cfg, heatmap_data_module):
-        """pca_singleview in losses_to_use populates the unsupervised factory."""
-        cfg_tmp = copy.deepcopy(cfg)
-        cfg_tmp.model.losses_to_use = ['pca_singleview']
-        factories = get_loss_factories(cfg_tmp, data_module=heatmap_data_module)
-        assert 'pca_singleview' in factories['unsupervised'].loss_instance_dict
-
-    def test_get_loss_factories_pca_multiview_mirrored(self, cfg, heatmap_data_module):
-        """pca_multiview with mirrored columns populates the unsupervised factory."""
-        cfg_tmp = copy.deepcopy(cfg)
-        cfg_tmp.model.losses_to_use = ['pca_multiview']
-        factories = get_loss_factories(cfg_tmp, data_module=heatmap_data_module)
-        assert 'pca_multiview' in factories['unsupervised'].loss_instance_dict
-
-    def test_get_loss_factories_unimodal_raises(self, cfg, base_data_module):
-        """unimodal losses raise Exception due to deprecated image_resize_dims path."""
-        cfg_tmp = copy.deepcopy(cfg)
-        cfg_tmp.model.losses_to_use = ['unimodal_mse']
-        cfg_tmp.losses.unimodal_mse = {'log_weight': 0.0}
-        with pytest.raises(Exception, match='deprecated'):
-            get_loss_factories(cfg_tmp, data_module=base_data_module)
-
-    def test_get_loss_factories_temporal_heatmap_raises(self, cfg, base_data_module):
-        """temporal_heatmap losses raise Exception due to deprecated image_resize_dims path."""
-        cfg_tmp = copy.deepcopy(cfg)
-        cfg_tmp.model.losses_to_use = ['temporal_heatmap_mse']
-        cfg_tmp.losses.temporal_heatmap_mse = {'log_weight': 0.0}
-        with pytest.raises(Exception, match='deprecated'):
-            get_loss_factories(cfg_tmp, data_module=base_data_module)
-
-    def test_get_loss_factories_pca_singleview_raises_on_multiview(
-        self, cfg, base_data_module,
-    ):
-        """pca_singleview raises NotImplementedError when view_names has multiple entries."""
-        cfg_tmp = copy.deepcopy(cfg)
-        cfg_tmp.model.losses_to_use = ['pca_singleview']
-        cfg_tmp.data.view_names = ['top', 'bot']
-        with pytest.raises(NotImplementedError):
-            get_loss_factories(cfg_tmp, data_module=base_data_module)
-
-    def test_get_loss_factories_multiview_with_camera_params_no_optional_losses(
-        self, cfg_multiview, multiview_heatmap_data_module, tmp_path,
-    ):
-        """multiview model with camera_params_file but no optional losses only adds heatmap."""
-        cfg_tmp = copy.deepcopy(cfg_multiview)
-        cfg_tmp.model.model_type = 'heatmap_multiview_transformer'
-        cfg_tmp.model.losses_to_use = []
-        cfg_tmp.data.camera_params_file = str(tmp_path / 'camera_params.yaml')
-        factories = get_loss_factories(cfg_tmp, data_module=multiview_heatmap_data_module)
-        supervised_keys = set(factories['supervised'].loss_instance_dict.keys())
-        assert 'supervised_pairwise_projections' not in supervised_keys
-        assert 'supervised_reprojection_heatmap_mse' not in supervised_keys
-
-    def test_get_loss_factories_multiview_supervised_pairwise_projections(
-        self, cfg_multiview, multiview_heatmap_data_module, tmp_path,
-    ):
-        """supervised_pairwise_projections is added when log_weight is set and camera_params."""
-        cfg_tmp = copy.deepcopy(cfg_multiview)
-        cfg_tmp.model.model_type = 'heatmap_multiview_transformer'
-        cfg_tmp.model.losses_to_use = []
-        cfg_tmp.data.camera_params_file = str(tmp_path / 'camera_params.yaml')
-        cfg_tmp.losses.supervised_pairwise_projections = {'log_weight': 0.0}
-        factories = get_loss_factories(cfg_tmp, data_module=multiview_heatmap_data_module)
-        assert 'supervised_pairwise_projections' in factories['supervised'].loss_instance_dict
-
-    def test_get_loss_factories_multiview_supervised_reprojection_heatmap_mse(
-        self, cfg_multiview, multiview_heatmap_data_module, tmp_path,
-    ):
-        """supervised_reprojection_heatmap_mse added when log_weight is set and camera_params."""
-        cfg_tmp = copy.deepcopy(cfg_multiview)
-        cfg_tmp.model.model_type = 'heatmap_multiview_transformer'
-        cfg_tmp.model.losses_to_use = []
-        cfg_tmp.data.camera_params_file = str(tmp_path / 'camera_params.yaml')
-        cfg_tmp.losses.supervised_reprojection_heatmap_mse = {'log_weight': 0.0}
-        factories = get_loss_factories(cfg_tmp, data_module=multiview_heatmap_data_module)
-        assert (
-            'supervised_reprojection_heatmap_mse' in factories['supervised'].loss_instance_dict
-        )
 
 
 class TestGetModel:

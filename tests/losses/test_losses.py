@@ -22,7 +22,6 @@ from lightning_pose.losses.losses import (
     TemporalHeatmapLoss,
     TemporalLoss,
     UnimodalLoss,
-    get_loss_classes,
 )
 from lightning_pose.utils.pca import format_multiview_data_for_pca
 
@@ -960,13 +959,3 @@ class TestReprojectionHeatmapLoss:
         expected_loss = (predictions - targets) ** 2 * 32 * 32
         assert torch.allclose(elementwise_loss, expected_loss)
         assert elementwise_loss.shape == targets.shape
-
-
-class TestGetLossClasses:
-    """Test the get_loss_classes function."""
-
-    def test_all_values_are_loss_subclasses(self):
-        """Test that every returned class is a subclass of Loss."""
-        loss_classes = get_loss_classes()
-        for _loss_name, loss_class in loss_classes.items():
-            assert issubclass(loss_class, Loss)
