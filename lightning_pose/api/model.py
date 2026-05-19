@@ -634,7 +634,7 @@ class Model:
         preds_file = str(preds_file_path)
 
         df = predict_dataset(
-            cfg_pred, data_module_pred, model=self.model, preds_file=preds_file
+            model=self, data_module=data_module_pred, preds_file=preds_file, cfg=cfg_pred,
         )
 
         if compute_metrics:
@@ -711,7 +711,7 @@ class Model:
 
         # Outputs dict[str, pd.DataFrame] because inputs indicate multiview.
         view_to_df_dict = predict_dataset(
-            cfg_pred, data_module_pred, model=self.model, preds_file=preds_files
+            model=self, data_module=data_module_pred, preds_file=preds_files, cfg=cfg_pred,
         )
 
         if compute_metrics:

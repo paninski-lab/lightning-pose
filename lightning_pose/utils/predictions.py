@@ -22,7 +22,6 @@ from lightning_pose.callbacks import JSONInferenceProgressTracker
 from lightning_pose.data.dali import PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import count_frames
-from lightning_pose.models import ALLOWED_MODELS
 
 if TYPE_CHECKING:
     from lightning_pose.api import Model
@@ -31,6 +30,7 @@ if TYPE_CHECKING:
 __all__ = [
     "PredictionHandler",
     "predict_dataset",
+    "predict_video",
     "make_dlc_pandas_index",
     "generate_labeled_video",
 ]
@@ -329,49 +329,35 @@ class PredictionHandler:
 
 
 def predict_dataset(
-    cfg: DictConfig | ListConfig,
+    model: Model,
     data_module: BaseDataModule,
     preds_file: str | list[str],
-    ckpt_file: str | None = None,
-    trainer: pl.Trainer | None = None,
-    model: ALLOWED_MODELS | None = None,
+    cfg: DictConfig | ListConfig | None = None,
 ) -> pd.DataFrame | dict[str, pd.DataFrame]:
     """Save predicted keypoints for a labeled dataset.
 
     Args:
-        cfg: hydra config
-        data_module: data module that contains dataloaders for train, val, test splits
-        preds_file: path for the predictions .csv file
-        ckpt_file: absolute path to the checkpoint of your trained model; requires .ckpt suffix
-        trainer: pl.Trainer object
-        model: Lightning Module
+        model: API model wrapper; its underlying lightning module is used for inference.
+        data_module: data module that contains dataloaders for train, val, test splits.
+        preds_file: path for the predictions .csv file.
+        cfg: hydra config; if None, falls back to ``model.config.cfg``.
 
     Returns:
         pandas dataframe with predictions or dict with dataframe of predictions for each view
 
     """
+    cfg_eff = cfg if cfg is not None else model.config.cfg
 
-    delete_model = False
-    if model is None:
-        from lightning_pose.api.model import load_model_from_checkpoint
-        model = load_model_from_checkpoint(
-            cfg=cfg, ckpt_file=ckpt_file, eval=True, data_module=data_module,
-        )
-        delete_model = True
-
-    delete_trainer = False
-    if trainer is None:
-        trainer = pl.Trainer(devices=1, accelerator="auto", logger=False)
-        delete_trainer = True
+    trainer = pl.Trainer(devices=1, accelerator='gpu', logger=False)
 
     labeled_preds = trainer.predict(
-        model=model,
+        model=model.model,
         dataloaders=data_module.full_labeled_dataloader(),
         return_predictions=True,
     )
     assert labeled_preds is not None
 
-    pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
+    pred_handler = PredictionHandler(cfg=cfg_eff, data_module=data_module, video_file=None)
     labeled_preds_typed = cast(
         list[tuple[torch.Tensor, torch.Tensor]], labeled_preds
     )
@@ -398,14 +384,136 @@ def predict_dataset(
         labeled_preds_df.to_csv(preds_file)
 
     # clear up memory
-    if delete_model:
-        del model
-    if delete_trainer:
-        del trainer
+    del trainer
     gc.collect()
     torch.cuda.empty_cache()
 
     return labeled_preds_df
+
+
+@overload
+def predict_video(
+    video_file: str,
+    model: Model,
+    output_pred_file: str | None = None,
+    progress_file: Path | None = None,
+) -> pd.DataFrame: ...
+
+
+@overload
+def predict_video(
+    video_file: list[str],
+    model: Model,
+    output_pred_file: list[str] | None = None,
+    progress_file: Path | None = None,
+) -> list[pd.DataFrame]: ...
+
+
+def predict_video(
+    video_file: str | list[str],
+    model: Model,
+    output_pred_file: str | list[str] | None = None,
+    progress_file: Path | None = None,
+) -> pd.DataFrame | list[pd.DataFrame]:
+    """
+    Args:
+        video_file: Predict on a video, or for true multiview models, a list of videos
+            (order: 1-1 correspondence with cfg.data.view_names).
+        model: The model to predict with.
+        output_pred_file: (optional) File to save predictions in.
+            For multiview, a list of files (1-1 correspondance to cfg.data.view_names).
+    """
+
+    is_multiview = not isinstance(video_file, str)
+
+    if is_multiview:
+        # Validate output_pred_file is a list
+        if output_pred_file is not None and not isinstance(output_pred_file, list):
+            raise ValueError(
+                "for multiview prediction, 'output_pred_file' should be a list corresponding to "
+                "view_names"
+            )
+
+        # sanity check 1-1 correspondence of video_file to cfg.data.view_names
+        # important since PredictionHandler relies on correspondence to organize the outputted dict
+        for single_video_file, view_name in zip(
+            video_file, model.config.cfg.data.view_names, strict=True
+        ):
+            assert (
+                view_name in Path(single_video_file).stem
+            ), "expected video_file to correspond 1-1 with cfg.data.view_name"
+
+    trainer = pl.Trainer(
+        accelerator="gpu",
+        devices=1,
+        logger=False,
+        callbacks=(
+            [JSONInferenceProgressTracker(progress_file)] if progress_file is not None else None
+        ),
+    )
+    model_type: Literal["base", "context"] = (
+        "context" if model.config.cfg.model.model_type == "heatmap_mhcrnn" else "base"
+    )
+
+    filenames = [video_file] if not is_multiview else [[f] for f in video_file]
+    vid_pred_class = PrepareDALI(
+        train_stage="predict",
+        model_type=model_type,
+        dali_config=model.config.cfg.dali,
+        # Important: This will be a list of lists for multiview.
+        # This will trigger dali to return multiview batches to predict_step.
+        filenames=filenames,
+        resize_dims=[
+            model.config.cfg.data.image_resize_dims.height,
+            model.config.cfg.data.image_resize_dims.width,
+        ],
+    )
+    # get loader
+    predict_loader = vid_pred_class()
+
+    # initialize prediction handler class
+    pred_handler = PredictionHandler(
+        cfg=model.config.cfg,
+        video_file=video_file[0] if is_multiview else video_file,
+    )
+
+    # compute predictions
+    preds = trainer.predict(
+        model=model.model,
+        dataloaders=predict_loader,
+        return_predictions=True,
+    )
+    assert preds is not None
+
+    preds_typed = cast(list[tuple[torch.Tensor, torch.Tensor]], preds)
+    preds_df = pred_handler(preds=preds_typed, is_multiview_video=is_multiview)
+
+    # Convert to a 1-1 correspondence list similar to video_files, for multiview.
+    if isinstance(preds_df, dict):
+        preds_df = [
+            preds_df[view_name] for view_name in model.config.cfg.data.view_names
+        ]
+
+    if output_pred_file is not None:
+        # save the predictions to a csv; create directory if it doesn't exist
+
+        if is_multiview:
+            for df, output_file in zip(preds_df, output_pred_file, strict=True):
+                os.makedirs(os.path.dirname(output_file), exist_ok=True)
+                df.to_csv(output_file)
+        else:
+            assert isinstance(preds_df, pd.DataFrame)
+            assert isinstance(output_pred_file, str)
+            preds_df.to_csv(output_pred_file)
+
+    # clear up memory
+    del model
+    del trainer
+    del predict_loader
+    gc.collect()
+    torch.cuda.empty_cache()
+
+    return preds_df
 
 
 def make_dlc_pandas_index(
@@ -614,128 +722,3 @@ def generate_labeled_video(
         output_video_path=output_mp4_file,
         colormap=colormap,
     )
-
-
-@overload
-def predict_video(
-    video_file: str,
-    model: Model,
-    output_pred_file: str | None = None,
-    progress_file: Path | None = None,
-) -> pd.DataFrame: ...
-
-
-@overload
-def predict_video(
-    video_file: list[str],
-    model: Model,
-    output_pred_file: list[str] | None = None,
-    progress_file: Path | None = None,
-) -> list[pd.DataFrame]: ...
-
-
-def predict_video(
-    video_file: str | list[str],
-    model: Model,
-    output_pred_file: str | list[str] | None = None,
-    progress_file: Path | None = None,
-) -> pd.DataFrame | list[pd.DataFrame]:
-    """
-    Args:
-        video_file: Predict on a video, or for true multiview models, a list of videos
-            (order: 1-1 correspondence with cfg.data.view_names).
-        model: The model to predict with.
-        output_pred_file: (optional) File to save predictions in.
-            For multiview, a list of files (1-1 correspondance to cfg.data.view_names).
-    """
-
-    is_multiview = not isinstance(video_file, str)
-
-    if is_multiview:
-        # Validate output_pred_file is a list
-        if output_pred_file is not None and not isinstance(output_pred_file, list):
-            raise ValueError(
-                "for multiview prediction, 'output_pred_file' should be a list corresponding to "
-                "view_names"
-            )
-
-        # sanity check 1-1 correspondence of video_file to cfg.data.view_names
-        # important since PredictionHandler relies on correspondence to organize the outputted dict
-        for single_video_file, view_name in zip(
-            video_file, model.config.cfg.data.view_names, strict=True
-        ):
-            assert (
-                view_name in Path(single_video_file).stem
-            ), "expected video_file to correspond 1-1 with cfg.data.view_name"
-
-    trainer = pl.Trainer(
-        accelerator="gpu",
-        devices=1,
-        logger=False,
-        callbacks=(
-            [JSONInferenceProgressTracker(progress_file)] if progress_file is not None else None
-        ),
-    )
-    model_type: Literal["base", "context"] = (
-        "context" if model.config.cfg.model.model_type == "heatmap_mhcrnn" else "base"
-    )
-
-    filenames = [video_file] if not is_multiview else [[f] for f in video_file]
-    vid_pred_class = PrepareDALI(
-        train_stage="predict",
-        model_type=model_type,
-        dali_config=model.config.cfg.dali,
-        # Important: This will be a list of lists for multiview.
-        # This will trigger dali to return multiview batches to predict_step.
-        filenames=filenames,
-        resize_dims=[
-            model.config.cfg.data.image_resize_dims.height,
-            model.config.cfg.data.image_resize_dims.width,
-        ],
-    )
-    # get loader
-    predict_loader = vid_pred_class()
-
-    # initialize prediction handler class
-    pred_handler = PredictionHandler(
-        cfg=model.config.cfg,
-        video_file=video_file[0] if is_multiview else video_file,
-    )
-
-    # compute predictions
-    preds = trainer.predict(
-        model=model.model,
-        dataloaders=predict_loader,
-        return_predictions=True,
-    )
-    assert preds is not None
-
-    preds_typed = cast(list[tuple[torch.Tensor, torch.Tensor]], preds)
-    preds_df = pred_handler(preds=preds_typed, is_multiview_video=is_multiview)
-
-    # Convert to a 1-1 correspondence list similar to video_files, for multiview.
-    if isinstance(preds_df, dict):
-        preds_df = [
-            preds_df[view_name] for view_name in model.config.cfg.data.view_names
-        ]
-
-    if output_pred_file is not None:
-        # save the predictions to a csv; create directory if it doesn't exist
-
-        if is_multiview:
-            for df, output_file in zip(preds_df, output_pred_file, strict=True):
-                os.makedirs(os.path.dirname(output_file), exist_ok=True)
-                df.to_csv(output_file)
-        else:
-            assert isinstance(preds_df, pd.DataFrame)
-            assert isinstance(output_pred_file, str)
-            preds_df.to_csv(output_pred_file)
-
-    # clear up memory
-    del model
-    del trainer
-    del predict_loader
-    gc.collect()
-    torch.cuda.empty_cache()
-
-    return preds_df
