@@ -33,6 +33,7 @@ def test_epochs(cfg: DictConfig | ListConfig, tmp_path: Path):
             "training": {
                 "min_epochs": 2,
                 "max_epochs": 2,
+                "lr_scheduler_params": {"multisteplr": {"milestones": [1, 2]}},
             },
         },
     )
@@ -59,7 +60,7 @@ def test_steps(cfg: DictConfig | ListConfig, tmp_path: Path):
                 "unfreezing_step": 5,  # satisfy validation
                 "lr_scheduler_params": {
                     "multisteplr": {
-                        "milestone_steps": [100],  # satisfy validation
+                        "milestone_steps": [2],
                     }
                 },
             },
