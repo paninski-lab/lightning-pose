@@ -41,6 +41,14 @@ __all__ = ["train"]
 # TODO: Replace with contextlib.chdir in python 3.11.
 @contextlib.contextmanager
 def chdir(dir: str | Path) -> Generator[None, None, None]:
+    """Context manager that temporarily changes the working directory.
+
+    Args:
+        dir: directory to change into for the duration of the context.
+
+    Yields:
+        None; the current working directory is restored on exit.
+    """
     pwd = os.getcwd()
     os.chdir(dir)
     try:
@@ -88,6 +96,15 @@ def train(
 
 
 def _absolute_csv_file(csv_file: str | Path, data_dir: str | Path) -> Path:
+    """Return an absolute path to a CSV file, joining with data_dir if necessary.
+
+    Args:
+        csv_file: path to the CSV file; may be relative or absolute.
+        data_dir: base directory used to resolve relative paths.
+
+    Returns:
+        Absolute ``pathlib.Path`` to the CSV file.
+    """
     csv_file = Path(csv_file)
     if not csv_file.is_absolute():
         return Path(data_dir) / csv_file
@@ -190,6 +207,11 @@ def _evaluate_on_training_dataset(model: Model, ood_mode: bool = False) -> None:
 
 
 def _predict_test_videos(model: Model) -> None:
+    """Run video prediction on test videos specified in the config, if enabled.
+
+    Args:
+        model: trained model used for prediction.
+    """
     if model.config.cfg.eval.predict_vids_after_training:
         pretty_print_str("Predicting videos in cfg.eval.test_videos_directory...")
         # dealing with multiview
@@ -211,6 +233,15 @@ def _predict_test_videos(model: Model) -> None:
 
 
 def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Model:
+    """Build data/model objects, train, and return the trained model.
+
+    Args:
+        cfg: hydra config containing all training parameters.
+        status_file: optional path to a JSON file where training progress will be written.
+
+    Returns:
+        The trained ``Model`` instance.
+    """
     # reset all seeds
     seed = 0
     os.environ["PYTHONHASHSEED"] = str(seed)

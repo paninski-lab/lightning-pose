@@ -155,16 +155,27 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
     @property
     def height(self) -> int:
+        """Image height in pixels after resizing."""
         return self.image_resize_height
 
     @property
     def width(self) -> int:
+        """Image width in pixels after resizing."""
         return self.image_resize_width
 
     def __len__(self) -> int:
+        """Return the number of labeled examples in the dataset."""
         return self.data_length
 
     def __getitem__(self, idx: int) -> BaseLabeledExampleDict:
+        """Return one labeled example as a dictionary.
+
+        Args:
+            idx: index into the dataset.
+
+        Returns:
+            Dictionary with keys ``"images"``, ``"keypoints"``, ``"bbox"``, and ``"image_file"``.
+        """
         img_name = self.image_names[idx]
         keypoints_on_image = self.keypoints[idx]
         img_path = self.root_directory / img_name
@@ -316,6 +327,11 @@ class HeatmapDataset(BaseTrackingDataset):
 
     @property
     def output_shape(self) -> tuple:
+        """Spatial shape of the heatmap output (height, width) after downsampling.
+
+        Returns:
+            Tuple of ``(heatmap_height, heatmap_width)``.
+        """
         return (
             self.height // 2**self.downsample_factor,
             self.width // 2**self.downsample_factor,
@@ -638,17 +654,25 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
     @property
     def height(self) -> int:
+        """Image height in pixels after resizing."""
         return self.image_resize_height
 
     @property
     def width(self) -> int:
+        """Image width in pixels after resizing."""
         return self.image_resize_width
 
     def __len__(self) -> int:
+        """Return the number of labeled examples in the dataset."""
         return self.data_length
 
     @property
     def output_shape(self) -> tuple:
+        """Spatial shape of the heatmap output (height, width) after downsampling.
+
+        Returns:
+            Tuple of ``(heatmap_height, heatmap_width)``.
+        """
         return (
             self.height // 2 ** self.downsample_factor,
             self.width // 2 ** self.downsample_factor,
@@ -656,6 +680,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
     @property
     def num_views(self) -> int:
+        """Number of camera views in this multiview dataset."""
         return len(self.view_names)
 
     @staticmethod
@@ -768,6 +793,16 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         data_dict: dict,
         clone: bool = True,
     ) -> np.ndarray:
+        """Extract 2D keypoints from a per-view example dict in absolute frame coordinates.
+
+        Args:
+            data_dict: mapping from view name to its labeled example dictionary.
+            clone: if True, clone keypoint tensors before modification to avoid in-place changes.
+
+        Returns:
+            Array of shape ``(num_views, num_keypoints_per_view, 2)`` with (x, y) coordinates
+            in the original (un-cropped) frame coordinate system.
+        """
         num_keypoints = cast(int, self.num_keypoints)
         keypoints_2d = np.zeros((self.num_views, num_keypoints // self.num_views, 2))
         for idx_view, (_view, example_dict) in enumerate(data_dict.items()):

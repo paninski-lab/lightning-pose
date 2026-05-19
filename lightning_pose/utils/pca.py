@@ -89,6 +89,7 @@ class KeypointPCA:
         self.centering_method = centering_method
 
     def _get_data(self) -> None:
+        """Extract labeled keypoint data from the training split and store in ``self.data_arr``."""
         self.data_arr, _ = DataExtractor(
             data_module=self.data_module, cond="train", extract_images=False,
             remove_augmentations=True,
@@ -99,6 +100,17 @@ class KeypointPCA:
     ) -> Float[
         torch.Tensor, "num_original_samples_times_num_selected_keypoints two_times_num_views"
     ]:
+        """Reformat keypoint data for multiview PCA.
+
+        Each observation becomes a single body part across all views, with coordinates from
+        different views concatenated along the feature axis.
+
+        Args:
+            data_arr: raw keypoint array of shape ``(batch, 2*num_keypoints)``.
+
+        Returns:
+            Reformatted array of shape ``(batch * num_selected_keypoints, 2*num_views)``.
+        """
         # original shape = (batch, 2 * num_keypoints) where `num_keypoints` includes
         # keypoints views from multiple views.
         data_arr = data_arr.reshape(data_arr.shape[0], data_arr.shape[1] // 2, 2)
@@ -116,6 +128,17 @@ class KeypointPCA:
         Float[torch.Tensor, "num_original_samples num_selected_dims"]
         | Float[torch.Tensor, "num_original_samples num_original_dims"]
     ):
+        """Reformat keypoint data for singleview PCA, optionally selecting a subset of keypoints.
+
+        Also applies centring if ``self.centering_method`` is set.
+
+        Args:
+            data_arr: raw keypoint array of shape ``(batch, 2*num_keypoints)``.
+
+        Returns:
+            Reformatted array of shape ``(batch, 2*num_selected_keypoints)``; if
+            ``columns_for_singleview_pca`` is ``None``, all keypoints are retained.
+        """
         # original shape = (batch, 2 * num_keypoints)
         # reshape to (batch, num_keypoints, 2) to easily select columns
         # [1,2,3,4]
@@ -143,6 +166,18 @@ class KeypointPCA:
     def _format_data(
         self, data_arr: Float[torch.Tensor, "num_original_samples num_original_dims"]
     ) -> torch.Tensor:
+        """Dispatch to the appropriate data-formatting method based on ``self.loss_type``.
+
+        Args:
+            data_arr: raw keypoint array of shape ``(batch, 2*num_keypoints)``.
+
+        Returns:
+            Reformatted array suitable for PCA fitting.
+
+        Raises:
+            NotImplementedError: if ``self.loss_type`` is not ``"pca_singleview"`` or
+                ``"pca_multiview"``.
+        """
         # Union[
         #     Float[torch.Tensor, "num_original_samples num_selected_dims"],  # singleview filtered
         #     Float[torch.Tensor, "num_original_samples num_original_dims"],  # unfiltered
@@ -156,7 +191,11 @@ class KeypointPCA:
             raise NotImplementedError
 
     def _check_data(self) -> None:
+        """Validate that ``self.data_arr`` has more observations than dimensions.
 
+        Raises:
+            ValueError: if the number of samples is less than the number of observation dimensions.
+        """
         # ensure we have more rows than columns after doing nan filtering
         if self.data_arr.shape[0] < self.data_arr.shape[1]:
             raise ValueError(
@@ -165,12 +204,19 @@ class KeypointPCA:
             )
 
     def _fit_pca(self) -> None:
+        """Fit a ``NaNPCA`` model on ``self.data_arr`` and store it in ``self.pca_object``."""
         # fit PCA with the full number of comps on the cleaned-up data array.
         # note self.data_arr is a tensor but sklearn's PCA function is fine with it
         self.pca_object = NaNPCA(svd_solver="covariance_eigh")
         self.pca_object.fit(X=self.data_arr)
 
     def _choose_n_components(self) -> None:
+        """Determine and store the number of PCA components to retain in
+        ``self._n_components_kept``.
+
+        For multiview PCA this is always 3 (x, y, z). For singleview PCA the
+        :class:`ComponentChooser` is used with ``self.components_to_keep``.
+        """
         if self.loss_type == "pca_multiview":
             # all views can be explained by 3 (x,y,z) coords
             # ignore self.components_to_keep_argument
@@ -191,11 +237,16 @@ class KeypointPCA:
         assert isinstance(self._n_components_kept, int)
 
     def pca_prints(self) -> None:
+        """Print a summary of PCA results including explained variance.
+
+        Must be called after fitting PCA and choosing the number of components.
+        """
         # call after we've fitted a pca object and selected how many components to keep
         assert self.pca_object is not None
         pca_prints(self.pca_object, self.loss_type, self._n_components_kept)
 
     def _set_parameter_dict(self) -> None:
+        """Compute and store the PCA parameter dict (mean, eigenvectors, epsilon) as tensors."""
         assert self.pca_object is not None
 
         self.parameters = {  # dict with same keys as loss_param_dict
@@ -259,6 +310,7 @@ class KeypointPCA:
         return reprojection_loss
 
     def __call__(self) -> None:
+        """Run the full PCA pipeline: extract data, format, check, fit, and set parameters."""
 
         # save training data in self.data_arr
         self._get_data()
@@ -592,9 +644,21 @@ class ComponentChooser:
 
     @property
     def cumsum_explained_variance(self) -> np.ndarray:
+        """Cumulative sum of the explained variance ratios of the fitted PCA object.
+
+        Returns:
+            1-D array where index ``i`` is the fraction of variance explained by the first
+            ``i+1`` components.
+        """
         return np.cumsum(self.fitted_pca_object.explained_variance_ratio_)
 
     def _check_components_to_keep(self) -> None:
+        """Validate the ``components_to_keep`` argument.
+
+        Raises:
+            ValueError: if an integer exceeds the number of fitted components, or a float is
+                outside ``[0.0, 1.0]``.
+        """
         # if int, ensure it's not too big
         if type(self.components_to_keep) is int:
             if self.components_to_keep > self.fitted_pca_object.n_components_:
@@ -611,6 +675,12 @@ class ComponentChooser:
                 )
 
     def _find_first_threshold_cross(self) -> int:
+        """Return the minimum number of components needed to exceed the variance threshold.
+
+        Returns:
+            Integer number of components to keep to reach ``self.components_to_keep`` cumulative
+            explained variance.
+        """
         # find the index of the first element above a min_variance_explained threshold
         assert type(
             self.components_to_keep is float
@@ -627,6 +697,14 @@ class ComponentChooser:
             return len(self.fitted_pca_object.explained_variance_)
 
     def __call__(self) -> int:
+        """Return the number of PCA components to retain.
+
+        Returns:
+            Integer number of components.
+
+        Raises:
+            TypeError: if ``self.components_to_keep`` is neither ``int`` nor ``float``.
+        """
         if type(self.components_to_keep) is int:
             # return integer as is
             return self.components_to_keep
@@ -639,6 +717,13 @@ class ComponentChooser:
 
 
 def pca_prints(pca: PCA, condition: str, components_to_keep: int) -> None:
+    """Print a summary of PCA results to stdout.
+
+    Args:
+        pca: a fitted PCA or NaNPCA object.
+        condition: label describing the PCA type (e.g., ``"pca_singleview"``).
+        components_to_keep: number of components retained after dimensionality selection.
+    """
     print(f"Results of running PCA ({condition}) on keypoints:")
     print(
         f"Kept {components_to_keep}/{pca.n_components_} components, and found:"

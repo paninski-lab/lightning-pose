@@ -178,13 +178,22 @@ class LitDaliWrapper(DALIGenericIterator):
         super().__init__(*args, **kwargs)
 
     def __len__(self) -> int:
+        """Return the number of iterations (batches) in this dataloader."""
         return self.num_iters
 
     @staticmethod
     def _dali_output_to_tensors(
         batch: list
     ) -> UnlabeledBatchDict | MultiviewUnlabeledBatchDict:
+        """Convert a raw DALI batch output to a typed batch dictionary.
 
+        Args:
+            batch: raw output list from DALI's ``DALIGenericIterator.__next__``.
+
+        Returns:
+            An ``UnlabeledBatchDict`` for single-view pipelines or a
+            ``MultiviewUnlabeledBatchDict`` for multi-view pipelines.
+        """
         # always batch_size=1
 
         if len(batch[0].keys()) == 3:  # single view pipeline
@@ -239,6 +248,7 @@ class LitDaliWrapper(DALIGenericIterator):
             )
 
     def __next__(self) -> UnlabeledBatchDict | MultiviewUnlabeledBatchDict:
+        """Fetch the next batch and convert it to a typed batch dictionary."""
         batch = super().__next__()
         return self._dali_output_to_tensors(batch=batch)
 
@@ -260,7 +270,23 @@ class PrepareDALI:
         imgaug: str | None = "default",
         num_threads: int = 1,
     ) -> None:
+        """Initialize DALI pipelines and dataloaders for training or prediction.
 
+        Args:
+            train_stage: whether to set up pipelines for ``"train"`` or ``"predict"``.
+            model_type: ``"base"`` for standard single-frame models, ``"context"`` for
+                MHCRNN models that consume a temporal window.
+            filenames: for single-view models, a flat list of video file paths; for
+                multi-view models, a list of per-view lists of video file paths.
+            resize_dims: ``[height, width]`` to resize frames to before feeding the model.
+            dali_config: DALI-specific config dict; falls back to package defaults when None.
+            imgaug: name of the augmentation pipeline to apply during training (e.g.
+                ``"dlc"``); pass ``"default"`` for resize-only or ``None`` to disable.
+            num_threads: number of CPU threads used by DALI pipelines.
+
+        Raises:
+            FileNotFoundError: if any path in ``filenames`` does not exist or is not a file.
+        """
         # determine if we have a multiview pipeline
         if isinstance(filenames, list) and isinstance(filenames[0], list):
             self.multiview = True
@@ -289,6 +315,12 @@ class PrepareDALI:
 
     @property
     def num_iters(self) -> int:
+        """Number of dataloader iterations required to process all frames.
+
+        Returns:
+            Integer count of how many times the dataloader must be enumerated to exhaust all video
+            frames for the current ``train_stage`` and ``model_type`` configuration.
+        """
         # count frames
         # "how many times should we enumerate the data loader?"
         # sum across vids

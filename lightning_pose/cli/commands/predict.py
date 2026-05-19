@@ -124,6 +124,15 @@ def _predict_multi_type(
     skip_existing: bool,
     progress_file: Path | None = None,
 ) -> None:
+    """Run prediction on a single path, dispatching to video, CSV, or directory handling.
+
+    Args:
+        model: the model to run prediction with.
+        path: input file or directory to predict on.
+        skip_viz: if True, skip generating labeled visualization outputs.
+        skip_existing: if True, skip predictions for which an output CSV already exists.
+        progress_file: optional path to write prediction progress as JSON.
+    """
     if path.is_dir():
         image_files = [p for p in path.iterdir() if p.is_file() and p.suffix in [".png", ".jpg"]]
         video_files = [p for p in path.iterdir() if p.is_file() and p.suffix == ".mp4"]
@@ -170,6 +179,15 @@ def _predict_multi_type_multi_view(
     skip_existing: bool,
     progress_file: Path | None = None,
 ) -> None:
+    """Run multi-view prediction on a list of paths (videos or directories).
+
+    Args:
+        model: the multi-view model to run prediction with.
+        paths: list of input video files or directories to predict on.
+        skip_viz: if True, skip generating labeled visualization outputs.
+        skip_existing: if True, skip sessions for which output CSVs already exist.
+        progress_file: optional path to write prediction progress as JSON.
+    """
     # delay this import because it's slow
     from lightning_pose.utils.io import (
         extract_session_name_from_video,

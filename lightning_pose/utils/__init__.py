@@ -10,6 +10,12 @@ __all__ = [
 
 
 def pretty_print_str(string: str, symbol: str = "-") -> None:
+    """Print a string surrounded by a horizontal rule made of the given symbol.
+
+    Args:
+        string: the text to print.
+        symbol: single character used to draw the horizontal rule.
+    """
     str_length = len(string)
     print(symbol * str_length)
     print(string)
@@ -17,7 +23,11 @@ def pretty_print_str(string: str, symbol: str = "-") -> None:
 
 
 def pretty_print_cfg(cfg: DictConfig | ListConfig) -> None:
+    """Print a human-readable summary of the config, skipping the ``eval`` section.
 
+    Args:
+        cfg: hydra config to display.
+    """
     for key, val in cfg.items():
         if key == "eval":
             continue

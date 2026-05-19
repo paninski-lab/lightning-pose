@@ -172,6 +172,17 @@ def get_keypoint_names(
     csv_file: str | None = None,
     header_rows: list | None = [0, 1, 2],
 ) -> list[str]:
+    """Return keypoint names from a label CSV file or from the config.
+
+    Args:
+        cfg: hydra config; used as a fallback when ``csv_file`` is not provided or does not exist.
+        csv_file: path to a labeled CSV file in DLC format; takes precedence over ``cfg``.
+        header_rows: row indices in the CSV that form the MultiIndex header. Defaults to
+            ``[0, 1, 2]`` (DLC format with scorer/bodypart/coords rows).
+
+    Returns:
+        List of keypoint name strings.
+    """
     if csv_file is not None and os.path.exists(csv_file):
         if header_rows is None:
             assert cfg is not None
@@ -332,6 +343,23 @@ def check_video_paths(
     video_paths: list[str] | str,
     view_names: list[str] | None = None,
 ) -> list[str] | list[list[str]]:
+    """Validate and normalise video paths, returning a flat or nested list of mp4 paths.
+
+    Accepts a single file path, a list of file paths, or a directory and returns a flat list of
+    video paths for single-view models, or a nested list ``(views × sessions)`` for multi-view
+    models.
+
+    Args:
+        video_paths: single video file path, list of video file paths, or a directory.
+        view_names: if provided, organise the paths by view name for a multi-view model.
+
+    Returns:
+        For single-view: ``list[str]`` of mp4 file paths.
+        For multi-view: ``list[list[str]]`` where outer list indexes views.
+
+    Raises:
+        ValueError: if ``video_paths`` is not a valid file, list, or directory.
+    """
     # get input data
     if isinstance(video_paths, list):
         # presumably a list of files

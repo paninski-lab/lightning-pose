@@ -617,7 +617,21 @@ def get_callbacks(
     backbone_unfreeze: bool = True,
     status_file: Path | None = None,
 ) -> list:
+    """Build and return the list of training callbacks based on the config.
 
+    Args:
+        cfg: hydra config containing training and callback parameters.
+        early_stopping: if True, add an ``EarlyStopping`` callback.
+        checkpointing: if True, add a ``ModelCheckpoint`` callback that saves the best model.
+        lr_monitor: if True, add a ``LearningRateMonitor`` callback.
+        ckpt_every_n_epochs: if not None, also save a checkpoint every this many epochs.
+        backbone_unfreeze: if True, add the ``UnfreezeBackbone`` callback.
+        status_file: if not None, add a ``JSONTrainingProgressTracker`` callback writing to this
+            path.
+
+    Returns:
+        List of callback objects ready to pass to a ``pl.Trainer``.
+    """
     callbacks = []
 
     if early_stopping:
@@ -689,6 +703,17 @@ def get_callbacks(
 
 
 def calculate_steps_per_epoch(data_module: BaseDataModule) -> int:
+    """Compute the number of optimizer steps per training epoch.
+
+    For semi-supervised (unlabeled) data modules a minimum of 10 steps per epoch is enforced
+    so that the model sees sufficient unlabeled data even when labeled data is scarce.
+
+    Args:
+        data_module: data module whose train dataset size and batch size are used.
+
+    Returns:
+        Integer number of steps per epoch.
+    """
     assert data_module.train_dataset is not None
     train_dataset_length = len(data_module.train_dataset)
     steps_per_epoch = math.ceil(train_dataset_length / data_module.train_batch_size)

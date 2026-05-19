@@ -124,6 +124,15 @@ class HeatmapMHCRNNHead(nn.Module):
         self,
         heatmaps: Float[torch.Tensor, "batch num_keypoints height width"],
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Apply soft argmax to heatmaps to obtain subpixel keypoint predictions.
+
+        Args:
+            heatmaps: predicted heatmaps of shape ``(batch, num_keypoints, height, width)``.
+
+        Returns:
+            Tuple of ``(keypoints, confidences)`` where keypoints has shape
+            ``(batch, num_targets)`` and confidences has shape ``(batch, num_keypoints)``.
+        """
         return run_subpixelmaxima(heatmaps, self.downsample_factor, self.temperature)
 
 
@@ -240,6 +249,7 @@ class UpsamplingCRNN(nn.Module):
             self.layers = torch.nn.ModuleList([self.W_f, self.H_f, self.W_b, self.H_b])
 
     def _initialize_layers(self) -> None:
+        """Initialize all convolutional layer weights using Xavier uniform initialization."""
         if self.upsampling_factor == 2:
             torch.nn.init.xavier_uniform_(self.W_pre.weight, gain=1.0)
             torch.nn.init.zeros_(self.W_pre.bias)  # type: ignore[arg-type]
@@ -260,7 +270,16 @@ class UpsamplingCRNN(nn.Module):
         self,
         features: Float[torch.Tensor, "frames batch features rep_height rep_width"]
     ) -> Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"]:
+        """Run the bidirectional CRNN forward pass to produce normalized heatmaps.
 
+        Args:
+            features: context-frame feature maps of shape
+                ``(frames, batch, n_features, rep_height, rep_width)``.
+
+        Returns:
+            Normalized heatmaps of shape ``(batch, num_keypoints, heatmap_height, heatmap_width)``
+            averaged over the forward and backward RNN passes.
+        """
         # expand representations in spatial domain using pixel shuffle to create heatmaps
         if self.upsampling_factor == 2:
             # upsample once more before passing through RNN

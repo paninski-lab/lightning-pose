@@ -337,6 +337,12 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             return pred_keypoints, confidence
 
     def get_parameters(self) -> list[dict]:
+        """Return per-parameter-group optimizer configuration for backbone, head, and embeddings.
+
+        Returns:
+            List of dicts with ``"params"`` and ``"name"`` keys; the backbone starts with
+            learning rate 0 (frozen until unfreezing), and view embeddings are trained normally.
+        """
         params = [
             {"params": self.backbone.parameters(), "name": "backbone", "lr": 0.0},
             {"params": self.head.parameters(), "name": "head"},

@@ -95,6 +95,7 @@ class BaseDataModule(pl.LightningDataModule):
         self._setup()
 
     def _setup(self) -> None:
+        """Split the dataset into train, validation, and test subsets."""
 
         datalen = len(self.dataset)
         print(f"Number of labeled images in the full dataset (train+val+test): {datalen}")
@@ -176,6 +177,11 @@ class BaseDataModule(pl.LightningDataModule):
         )
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
+        """Return the training dataloader with shuffling enabled.
+
+        Returns:
+            DataLoader wrapping the training subset.
+        """
         return DataLoader(
             self.train_dataset,  # type: ignore[arg-type]
             batch_size=self.train_batch_size,
@@ -186,6 +192,11 @@ class BaseDataModule(pl.LightningDataModule):
         )
 
     def val_dataloader(self) -> torch.utils.data.DataLoader:
+        """Return the validation dataloader.
+
+        Returns:
+            DataLoader wrapping the validation subset.
+        """
         return DataLoader(
             self.val_dataset,  # type: ignore[arg-type]
             batch_size=self.val_batch_size,
@@ -194,6 +205,11 @@ class BaseDataModule(pl.LightningDataModule):
         )
 
     def test_dataloader(self) -> torch.utils.data.DataLoader:
+        """Return the test dataloader.
+
+        Returns:
+            DataLoader wrapping the test subset.
+        """
         return DataLoader(
             self.test_dataset,  # type: ignore[arg-type]
             batch_size=self.test_batch_size,
@@ -201,6 +217,11 @@ class BaseDataModule(pl.LightningDataModule):
         )
 
     def full_labeled_dataloader(self) -> torch.utils.data.DataLoader:
+        """Return a dataloader covering the entire labeled dataset (all splits combined).
+
+        Returns:
+            DataLoader over the full underlying dataset.
+        """
         return DataLoader(
             self.dataset,
             batch_size=self.val_batch_size,
@@ -288,6 +309,12 @@ class UnlabeledDataModule(BaseDataModule):
         self.unlabeled_dataloader = dali_prep()
 
     def train_dataloader(self) -> CombinedLoader:
+        """Return a combined dataloader pairing labeled and unlabeled training data.
+
+        Returns:
+            ``CombinedLoader`` in ``max_size_cycle`` mode that cycles through labeled and
+            unlabeled batches together.
+        """
         assert self.unlabeled_dataloader is not None
         loader = SemiSupervisedDataLoaderDict(
             labeled=super().train_dataloader(),

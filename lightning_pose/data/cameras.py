@@ -219,6 +219,11 @@ class CameraGroup(CameraGroupAnipose):
         return out
 
     def copy(self) -> CameraGroup:
+        """Return a shallow copy of this CameraGroup with copied cameras and metadata.
+
+        Returns:
+            A new ``CameraGroup`` instance with independent copies of all cameras and metadata.
+        """
         cameras = [cam.copy() for cam in self.cameras]
         metadata = copy.copy(self.metadata)
         return CameraGroup(cameras, metadata)
@@ -231,5 +236,13 @@ class CameraGroup(CameraGroupAnipose):
 
     @classmethod
     def load(cls, path: str | Path) -> CameraGroup:
+        """Load a CameraGroup from a file.
+
+        Args:
+            path: path to the serialized camera group file.
+
+        Returns:
+            A ``CameraGroup`` instance with the loaded camera parameters.
+        """
         parent_instance = super().load(path)  # type: ignore[arg-type]  # Load using parent class
         return cls(**vars(parent_instance))  # Return as CameraGroup

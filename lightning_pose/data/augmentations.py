@@ -109,6 +109,19 @@ def imgaug_transform(params_dict: dict | DictConfig) -> iaa.Sequential:
 
 
 def expand_imgaug_str_to_dict(params: str) -> dict[str, Any]:
+    """Expand a shorthand augmentation string to a full parameter dictionary.
+
+    Args:
+        params: augmentation preset string. One of ``"default"``, ``"none"``, ``"dlc"``,
+            ``"dlc-lr"``, ``"dlc-top-down"``, or ``"dlc-mv"``.
+
+    Returns:
+        Dictionary mapping augmentation transform names to their parameter dicts, suitable
+        for passing to :func:`imgaug_transform`.
+
+    Raises:
+        NotImplementedError: if ``params`` is not one of the allowed preset strings.
+    """
 
     _allowed_imgaug_strs = [
         "default",
