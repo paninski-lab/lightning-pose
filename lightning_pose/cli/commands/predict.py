@@ -6,7 +6,7 @@ import argparse
 import textwrap
 from pathlib import Path
 from pprint import pprint
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .. import types
 
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from lightning_pose.api.model import Model
 
 
-def register_parser(subparsers):
+def register_parser(subparsers: Any) -> argparse.ArgumentParser:
     """Register the predict command parser."""
     predict_parser = subparsers.add_parser(
         "predict",
@@ -91,16 +91,14 @@ def register_parser(subparsers):
     return predict_parser
 
 
-def get_parser():
+def get_parser() -> argparse.ArgumentParser:
     """Return an ArgumentParser for the `litpose predict` subcommand (for docs)."""
-    import argparse
-
     parser = argparse.ArgumentParser(prog="litpose")
     subparsers = parser.add_subparsers(dest="command")
     return register_parser(subparsers)
 
 
-def handle(args):
+def handle(args: argparse.Namespace) -> None:
     """Handle the predict command."""
     # Delay this import because it's slow.
     from lightning_pose.api.model import Model
@@ -125,7 +123,7 @@ def _predict_multi_type(
     skip_viz: bool,
     skip_existing: bool,
     progress_file: Path | None = None,
-):
+) -> None:
     if path.is_dir():
         image_files = [p for p in path.iterdir() if p.is_file() and p.suffix in [".png", ".jpg"]]
         video_files = [p for p in path.iterdir() if p.is_file() and p.suffix == ".mp4"]
@@ -171,7 +169,7 @@ def _predict_multi_type_multi_view(
     skip_viz: bool,
     skip_existing: bool,
     progress_file: Path | None = None,
-):
+) -> None:
     # delay this import because it's slow
     from lightning_pose.utils.io import (
         extract_session_name_from_video,

@@ -6,6 +6,7 @@ import pytest
 import torch
 import torchvision
 
+from lightning_pose.models.backbones import ALLOWED_BACKBONES
 from lightning_pose.models.base import (
     BaseFeatureExtractor,
     LrNotImplementedError,
@@ -63,9 +64,13 @@ _TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 2
 HEIGHTS = [128, 256, 384]  # standard numbers, not going to bigger images due to memory
 WIDTHS = [120, 246, 380]  # similar but not square
-RESNET_BACKBONES = ["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"]
-EFFICIENTNET_BACKBONES = ["efficientnet_b0", "efficientnet_b1", "efficientnet_b2"]
-VIT_BACKBONES = [
+RESNET_BACKBONES: list[ALLOWED_BACKBONES] = [
+    "resnet18", "resnet34", "resnet50", "resnet101", "resnet152",
+]
+EFFICIENTNET_BACKBONES: list[ALLOWED_BACKBONES] = [
+    "efficientnet_b0", "efficientnet_b1", "efficientnet_b2",
+]
+VIT_BACKBONES: list[ALLOWED_BACKBONES] = [
     "vits_dino",
     "vitb_dino",
     "vits_dinov2",
@@ -85,14 +90,14 @@ def test_backbones_resnet():
         if resnet_v <= 34:  # last block is BasicBlock
             assert (
                 isinstance(
-                    list(model.backbone.children())[-3][-1],
+                    list(model.backbone.children())[-3][-1],  # type: ignore[index]
                     torchvision.models.resnet.BasicBlock,
                 )
             )
         else:  # different arch; BottleneckBlock
             assert (
                 isinstance(
-                    list(model.backbone.children())[-3][-1],
+                    list(model.backbone.children())[-3][-1],  # type: ignore[index]
                     torchvision.models.resnet.Bottleneck,
                 )
             )
@@ -107,7 +112,7 @@ def test_backbones_efficientnet():
         model = BaseFeatureExtractor(backbone=backbone).to(_TORCH_DEVICE)
         assert (
             isinstance(
-                list(model.backbone.children())[-1][-2][0],
+                list(model.backbone.children())[-1][-2][0],  # type: ignore[index]
                 torchvision.models.efficientnet.MBConv,
             )
         )
@@ -122,16 +127,18 @@ def test_backbones_vit():
         model = BaseFeatureExtractor(backbone=backbone).to(_TORCH_DEVICE)
         if backbone == "vitb_sam":
             from transformers.models.sam.modeling_sam import SamPatchEmbeddings
-            assert isinstance(model.backbone.vision_encoder.patch_embed, SamPatchEmbeddings)
+            assert isinstance(model.backbone.vision_encoder.patch_embed, SamPatchEmbeddings)  # type: ignore[attr-defined]
         elif backbone in ["vits_dino", "vitb_dino", "vitb_imagenet"]:
             from transformers.models.vit.modeling_vit import ViTEmbeddings
-            assert isinstance(model.backbone.vision_encoder.embeddings, ViTEmbeddings)
+            assert isinstance(model.backbone.vision_encoder.embeddings, ViTEmbeddings)  # type: ignore[attr-defined]
         elif backbone in ["vits_dinov2", "vitb_dinov2"]:
             from transformers.models.dinov2.modeling_dinov2 import Dinov2Embeddings
-            assert isinstance(model.backbone.vision_encoder.embeddings, Dinov2Embeddings)
+            assert isinstance(model.backbone.vision_encoder.embeddings, Dinov2Embeddings)  # type: ignore[attr-defined]
         elif backbone in ["vits_dinov3", "vitb_dinov3"]:
-            from transformers.models.dinov3_vit.modeling_dinov3_vit import Dinov3ViTEmbeddings
-            assert isinstance(model.backbone.vision_encoder.embeddings, Dinov3ViTEmbeddings)
+            from transformers.models.dinov3_vit.modeling_dinov3_vit import (
+                Dinov3ViTEmbeddings,  # type: ignore[attr-defined]
+            )
+            assert isinstance(model.backbone.vision_encoder.embeddings, Dinov3ViTEmbeddings)  # type: ignore[attr-defined]
         # remove model from gpu; then cache can be cleared
         del model
         gc.collect()

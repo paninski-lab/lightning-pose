@@ -1,7 +1,7 @@
 """Data pipelines based on efficient video reading by nvidia dali package."""
 
 import os
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 import nvidia.dali.fn as fn
@@ -9,7 +9,7 @@ import nvidia.dali.types as types
 import torch
 from nvidia.dali import pipeline_def
 from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
 from lightning_pose.data.datatypes import (
@@ -29,7 +29,7 @@ __all__ = [
 # cannot typecheck due to way pipeline_def decorator consumes additional args
 @pipeline_def
 def video_pipe(
-    filenames: list[str] | str,
+    filenames: list[str] | str | list[list[str]],
     resize_dims: list[int] | None = None,
     random_shuffle: bool = False,
     sequence_length: int = 16,
@@ -75,18 +75,19 @@ def video_pipe(
     # turn all inputs into a list of list of strings to be most general
     # first list: over views (might only be one)
     # second list: over videos/sessions
-    if isinstance(filenames, list) and isinstance(filenames[0], str):
-        filenames = [filenames]
-    elif isinstance(filenames, str):
-        filenames = [[filenames]]
-
-    assert isinstance(filenames, list) and isinstance(filenames[0], list)
+    filenames_2d: list[list[str]]
+    if isinstance(filenames, str):
+        filenames_2d = [[filenames]]
+    elif isinstance(filenames[0], str):
+        filenames_2d = [filenames]  # type: ignore[list-item]
+    else:
+        filenames_2d = filenames  # type: ignore[assignment]
 
     # loop over views (can be only one)
     frames_list = []
     transform_list = []
     orig_size_list = []
-    for f, filename_list in enumerate(filenames):
+    for f, filename_list in enumerate(filenames_2d):
         video = fn.readers.video(
             device="gpu",
             filenames=filename_list,
@@ -102,10 +103,11 @@ def video_pipe(
             file_list_include_preceding_frame=True,  # to get rid of dali warnings
             skip_vfr_check=skip_vfr_check,
         )
-        orig_size = fn.shapes(video)
+        orig_size = fn.shapes(video)  # type: ignore[arg-type]
         if resize_dims:
-            video = fn.resize(video, size=resize_dims)
+            video = fn.resize(video, size=resize_dims)  # type: ignore[arg-type]
         if imgaug == "dlc" or imgaug == "dlc-top-down":
+            assert resize_dims is not None
             size = (resize_dims[0] / 2, resize_dims[1] / 2)
             center = size  # / 2
             # rotate + scale
@@ -113,7 +115,10 @@ def video_pipe(
             transform = fn.transforms.rotation(angle=angle, center=center)
             scale = fn.random.uniform(range=(0.8, 1.2), shape=2)
             transform = fn.transforms.scale(transform, scale=scale, center=center)
-            video = fn.warp_affine(video, matrix=transform, fill_value=0, inverse_map=False)
+            video = fn.warp_affine(
+                video,  # type: ignore[arg-type]
+                matrix=transform, fill_value=0, inverse_map=False,
+            )
             # brightness contrast:
             contrast = fn.random.uniform(range=(0.75, 1.25))
             brightness = fn.random.uniform(range=(0.75, 1.25))
@@ -130,7 +135,7 @@ def video_pipe(
             transform = np.array([-1])
         # video pixel range is [0, 255]; transform it to [0, 1].
         # happens naturally in the torchvision transform to tensor.
-        video = video / 255.0
+        video = video / 255.0  # type: ignore[operator]
         # permute dimensions and normalize to imagenet statistics
         frames = fn.crop_mirror_normalize(
             video,
@@ -150,11 +155,11 @@ class LitDaliWrapper(DALIGenericIterator):
 
     def __init__(
         self,
-        *args,
+        *args: Any,
         eval_mode: Literal["train", "predict"],
         num_iters: int = 1,
         do_context: bool = False,
-        **kwargs
+        **kwargs: Any,
     ) -> None:
         """Wrapper around DALIGenericIterator to get batches for pl.
 
@@ -251,7 +256,7 @@ class PrepareDALI:
         model_type: Literal["base", "context"],
         filenames: list[str] | list[list[str]],
         resize_dims: list[int],
-        dali_config: dict | DictConfig = None,
+        dali_config: dict | DictConfig | ListConfig | None = None,
         imgaug: str | None = "default",
         num_threads: int = 1,
     ) -> None:
@@ -263,20 +268,23 @@ class PrepareDALI:
             self.multiview = False
 
         # make sure `filenames` is a list of existing video files
-        if isinstance(filenames, list) and isinstance(filenames[0], str):
-            filenames = [filenames]
-        for view_list in filenames:
+        filenames_2d: list[list[str]]
+        if isinstance(filenames[0], str):
+            filenames_2d = [filenames]  # type: ignore[list-item]
+        else:
+            filenames_2d = filenames  # type: ignore[assignment]
+        for view_list in filenames_2d:
             for vid in view_list:
                 if not os.path.exists(vid) or not os.path.isfile(vid):
                     raise FileNotFoundError(f"{vid} is not a video file!")
 
         self.train_stage = train_stage
         self.model_type = model_type
-        self.filenames = filenames
+        self.filenames = filenames_2d
         self.resize_dims = resize_dims
         self.dali_config = dali_config
         self.num_threads = num_threads
-        self.frame_count = sum(map(count_frames, filenames[0]))
+        self.frame_count = sum(map(count_frames, filenames_2d[0]))
         self._pipe_dict: dict = self._setup_pipe_dict(self.filenames, imgaug)
 
     @property
@@ -316,13 +324,16 @@ class PrepareDALI:
                 return num_iters
             else:
                 raise NotImplementedError
+        else:
+            raise ValueError(f'unknown model_type: {self.model_type}')
 
     def _setup_pipe_dict(
         self,
         filenames: list[str] | list[list[str]],
-        imgaug: str,
+        imgaug: str | None,
     ) -> dict[str, dict]:
         """All of the pipeline args in one place."""
+        assert self.dali_config is not None
         # When running with multiple GPUs, the LOCAL_RANK variable correctly
         # contains the DDP Local Rank, which is also the cuda device index.
         device_id = int(os.environ.get("LOCAL_RANK", "0"))
@@ -331,10 +342,10 @@ class PrepareDALI:
             "predict": {"context": {}, "base": {}},
             "train": {"context": {}, "base": {}},
         }
-        gen_cfg = self.dali_config.get("general", {"seed": 123456})
+        gen_cfg = self.dali_config.get("general", {"seed": 123456})  # type: ignore[arg-type]
 
         # base (vanilla single-frame model), train pipe args
-        base_train_cfg = self.dali_config["base"]["train"]
+        base_train_cfg = self.dali_config["base"]["train"]  # type: ignore[arg-type]
         dict_args["train"]["base"] = {
             "filenames": filenames,
             "resize_dims": self.resize_dims,
@@ -350,7 +361,7 @@ class PrepareDALI:
         }
 
         # base (vanilla single-frame model), predict pipe args
-        base_pred_cfg = self.dali_config["base"]["predict"]
+        base_pred_cfg = self.dali_config["base"]["predict"]  # type: ignore[arg-type]
         dict_args["predict"]["base"] = {
             "filenames": filenames,
             "resize_dims": self.resize_dims,
@@ -368,7 +379,7 @@ class PrepareDALI:
         }
 
         # context (five-frame) model, predict pipe args
-        context_pred_cfg = self.dali_config["context"]["predict"]
+        context_pred_cfg = self.dali_config["context"]["predict"]  # type: ignore[index]
         dict_args["predict"]["context"] = {
             "filenames": filenames,
             "resize_dims": self.resize_dims,
@@ -390,7 +401,7 @@ class PrepareDALI:
         # grab a single sequence of frames, will resize into 5-frame chunks at the
         # representation level inside BaseFeatureExtractor
         # note: reusing the batch size argument
-        context_train_cfg = self.dali_config["context"]["train"]
+        context_train_cfg = self.dali_config["context"]["train"]  # type: ignore[index]
         dict_args["train"]["context"] = {
             "filenames": filenames,
             "resize_dims": self.resize_dims,
@@ -408,7 +419,7 @@ class PrepareDALI:
 
         return dict_args
 
-    def _get_dali_pipe(self):
+    def _get_dali_pipe(self) -> Any:
         """
         Return a DALI pipe with predefined args.
         """

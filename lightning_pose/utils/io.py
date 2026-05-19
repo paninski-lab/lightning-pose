@@ -7,6 +7,7 @@ import os
 import re
 import warnings
 from pathlib import Path
+from typing import overload
 
 import numpy as np
 import pandas as pd
@@ -167,12 +168,13 @@ def check_if_semi_supervised(losses_to_use: ListConfig | list | None = None) -> 
 
 
 def get_keypoint_names(
-    cfg: DictConfig | None = None,
+    cfg: DictConfig | ListConfig | None = None,
     csv_file: str | None = None,
     header_rows: list | None = [0, 1, 2],
 ) -> list[str]:
-    if os.path.exists(csv_file):
+    if csv_file is not None and os.path.exists(csv_file):
         if header_rows is None:
+            assert cfg is not None
             if "header_rows" in cfg.data:
                 header_rows = list(cfg.data.header_rows)
             else:
@@ -190,6 +192,7 @@ def get_keypoint_names(
             # self.keypoint_names = csv_data.columns.levels[1]
             keypoint_names = [b[1] for b in csv_data.columns if b[2] == "x"]
     else:
+        assert cfg is not None, 'cfg must be provided when csv_file is not given'
         keypoint_names = [f"bp_{n}" for n in range(cfg.data.num_targets // 2)]
     return keypoint_names
 
@@ -244,6 +247,22 @@ def return_absolute_data_paths(
     return data_dir, video_dir
 
 
+@overload
+def get_videos_in_dir(
+    video_dir: str,
+    view_names: None = None,
+    return_mp4_only: bool = True,
+) -> list[str]: ...
+
+
+@overload
+def get_videos_in_dir(
+    video_dir: str,
+    view_names: list[str],
+    return_mp4_only: bool = True,
+) -> list[list[str]]: ...
+
+
 def get_videos_in_dir(
     video_dir: str, view_names: list[str] | None = None, return_mp4_only: bool = True
 ) -> list[str] | list[list[str]]:
@@ -293,6 +312,20 @@ def get_videos_in_dir(
         raise OSError(f"Did not find any valid video files in {video_dir}")
 
     return video_files
+
+
+@overload
+def check_video_paths(
+    video_paths: list[str] | str,
+    view_names: None = None,
+) -> list[str]: ...
+
+
+@overload
+def check_video_paths(
+    video_paths: list[str] | str,
+    view_names: list[str],
+) -> list[list[str]]: ...
 
 
 def check_video_paths(
@@ -400,7 +433,10 @@ def fix_empty_first_row(df: pd.DataFrame) -> pd.DataFrame:
     if df.index.name is not None:
         new_row = {col: np.nan for col in df.columns}
         prepend_df = pd.DataFrame(
-            new_row, index=[df.index.name], columns=df.columns, dtype="float64"
+            new_row,
+            index=pd.Index([df.index.name]),
+            columns=df.columns,
+            dtype="float64",
         )
         fixed_df = pd.concat([prepend_df, df])
         assert fixed_df.index.name is None

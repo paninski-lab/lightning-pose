@@ -565,7 +565,7 @@ class TestApply3DTransforms:
 
             camera = Camera(
                 matrix=intrinsics[i].numpy(),
-                rvec=rvec,
+                rvec=rvec.astype(float),
                 tvec=extrinsics[i][:3, 3].numpy(),  # Translation vector (3,)
                 dist=distortions[i].numpy(),
             )
@@ -955,7 +955,7 @@ class TestLoadCamParamsFromCsv:
         calib_file = 'calibration.toml'
         df = pd.DataFrame(
             {'file': [calib_file] * len(image_names)},
-            index=[n.split('/')[-1] for n in image_names],
+            index=pd.Index([n.split('/')[-1] for n in image_names]),
         )
         csv_path = tmp_path / 'cam_params.csv'
         df.to_csv(csv_path)
@@ -999,7 +999,7 @@ class TestLoadCamParamsFromCsv:
     ):
         """AssertionError raised when CSV index doesn't align with image names."""
         # Arrange
-        df = pd.DataFrame({'file': ['calibration.toml']}, index=['wrong_name.png'])
+        df = pd.DataFrame({'file': ['calibration.toml']}, index=pd.Index(['wrong_name.png']))
         csv_path = tmp_path / 'cam_params.csv'
         df.to_csv(csv_path)
 
@@ -1018,16 +1018,16 @@ class TestDiscoverCamParamsFromImagePaths:
             pass
 
         ds = _Stub()
-        ds.root_directory = str(tmp_path)
-        ds.view_names = ['top', 'bot']
-        ds.do_context = False
+        ds.root_directory = str(tmp_path)  # type: ignore[attr-defined]
+        ds.view_names = ['top', 'bot']  # type: ignore[attr-defined]
+        ds.do_context = False  # type: ignore[attr-defined]
         mock_view = mocker.MagicMock()
         mock_view.image_names = [
             'labeled-data/session0_top/img0000.png',
             'labeled-data/session0_top/img0001.png',
         ]
-        ds.dataset = {'top': mock_view, 'bot': mocker.MagicMock()}
-        ds._load_camgroup = mocker.MagicMock(return_value=mocker.MagicMock())
+        ds.dataset = {'top': mock_view, 'bot': mocker.MagicMock()}  # type: ignore[attr-defined]
+        ds._load_camgroup = mocker.MagicMock(return_value=mocker.MagicMock())  # type: ignore[attr-defined]
         return ds
 
     def _discover(self, ds):
@@ -1045,6 +1045,7 @@ class TestDiscoverCamParamsFromImagePaths:
 
         # Assert
         assert cam_params_df is not None
+        assert cam_params_file_to_camgroup is not None
         assert list(cam_params_df['file']) == ['calibrations/session0.toml'] * 2
         assert 'calibrations/session0.toml' in cam_params_file_to_camgroup
 
@@ -1058,6 +1059,7 @@ class TestDiscoverCamParamsFromImagePaths:
 
         # Assert
         assert cam_params_df is not None
+        assert cam_params_file_to_camgroup is not None
         assert list(cam_params_df['file']) == ['calibration.toml'] * 2
         assert 'calibration.toml' in cam_params_file_to_camgroup
 
@@ -1105,6 +1107,8 @@ class TestDiscoverCamParamsFromImagePaths:
         cam_params_df, cam_params_file_to_camgroup = self._discover(fake_ds)
 
         # Assert
+        assert cam_params_df is not None
+        assert cam_params_file_to_camgroup is not None
         assert list(cam_params_df['file']) == [
             'calibrations/sessionA.toml',
             'calibrations/sessionB.toml',

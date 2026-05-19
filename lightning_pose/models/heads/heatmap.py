@@ -56,13 +56,13 @@ def make_upsampling_layers(
     return nn.Sequential(*upsampling_layers)
 
 
-def initialize_upsampling_layers(layers) -> None:
+def initialize_upsampling_layers(layers: nn.Sequential) -> None:
     """Intialize the Conv2DTranspose upsampling layers."""
     for index, layer in enumerate(layers):
         if index > 0:  # we ignore the PixelShuffle
             if isinstance(layer, nn.ConvTranspose2d):
                 torch.nn.init.xavier_uniform_(layer.weight, gain=0.01)
-                torch.nn.init.zeros_(layer.bias)
+                torch.nn.init.zeros_(layer.bias)  # type: ignore[arg-type]
             elif isinstance(layer, nn.BatchNorm2d):
                 torch.nn.init.constant_(layer.weight, 1.0)
                 torch.nn.init.constant_(layer.bias, 0.0)
@@ -88,7 +88,7 @@ def upsample(
 def run_subpixelmaxima(
     heatmaps: Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"],
     downsample_factor: int,
-    temperature: torch.tensor,
+    temperature: torch.Tensor,
 ) -> tuple[Float[torch.Tensor, "batch num_targets"], Float[torch.Tensor, "batch num_keypoints"]]:
     """Use soft argmax on heatmaps.
 
@@ -146,7 +146,7 @@ class HeatmapHead(nn.Module):
         deconv_out_channels: int | None = None,
         downsample_factor: int = 2,
         final_softmax: bool = True,
-    ):
+    ) -> None:
         """
 
         Args:
@@ -194,5 +194,8 @@ class HeatmapHead(nn.Module):
             heatmaps = spatial_softmax2d(heatmaps, temperature=torch.tensor([1.0]))
         return heatmaps
 
-    def run_subpixelmaxima(self, heatmaps):
+    def run_subpixelmaxima(
+        self,
+        heatmaps: Float[torch.Tensor, "batch num_keypoints height width"],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         return run_subpixelmaxima(heatmaps, self.downsample_factor, self.temperature)

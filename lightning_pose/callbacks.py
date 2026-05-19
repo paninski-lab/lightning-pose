@@ -35,7 +35,7 @@ class AnnealWeight(Callback):
         self.freeze_until_epoch = freeze_until_epoch
         self.attr_name = attr_name
 
-    def on_train_start(self, trainer, pl_module) -> None:
+    def on_train_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
         # Dan: removed buffer; seems to complicate checkpoint loading
         # pl_module.register_buffer(self.attr_name, torch.tensor(self.init_val))
         setattr(pl_module, self.attr_name, torch.tensor(self.init_val))
@@ -64,15 +64,15 @@ class UnfreezeBackbone(Callback):
     lightning-ai/pytorch-lightning#20340 for context.
     """
 
-    _initial_lr: int
+    _initial_lr: float
 
     def __init__(
         self,
         unfreeze_epoch: int | None = None,
         unfreeze_step: int | None = None,
-        initial_ratio=0.1,
-        warm_up_ratio=1.5,
-    ):
+        initial_ratio: float = 0.1,
+        warm_up_ratio: float = 1.5,
+    ) -> None:
         assert (unfreeze_epoch is None) != (
             unfreeze_step is None
         ), "Exactly one must be provided."
@@ -82,7 +82,13 @@ class UnfreezeBackbone(Callback):
         self.warm_up_ratio = warm_up_ratio
         self._warmed_up = False
 
-    def on_train_batch_start(self, trainer, pl_module, batch, batch_idx) -> None:
+    def on_train_batch_start(
+        self,
+        trainer: Trainer,
+        pl_module: LightningModule,
+        batch: Any,
+        batch_idx: int,
+    ) -> None:
 
         # Once backbone_lr warms up to upsampling_lr, this callback does nothing.
         # Control of backbone lr is then the sole job of the main lr scheduler.
@@ -90,6 +96,7 @@ class UnfreezeBackbone(Callback):
             return
 
         optimizer = pl_module.optimizers()
+        assert not isinstance(optimizer, list)
         # Check our assumptions about param group indices
         assert optimizer.param_groups[0]["name"] == "backbone"
 
@@ -99,7 +106,9 @@ class UnfreezeBackbone(Callback):
             pl_module.global_step, pl_module.current_epoch, head_lr
         )
 
-    def _get_backbone_lr(self, current_step, current_epoch, upsampling_lr):
+    def _get_backbone_lr(
+        self, current_step: int | None, current_epoch: int, upsampling_lr: float
+    ) -> float:
         """Returns what the backbone LR should be at this point in time.
 
         Args:
@@ -117,9 +126,11 @@ class UnfreezeBackbone(Callback):
         unfreeze_epoch = self.unfreeze_epoch
         if self.unfreeze_step is not None:
             unfreeze_epoch = self.unfreeze_step
+            assert current_step is not None
             current_epoch = current_step
         # After this point, use `unfreeze_epoch` instead of `self.unfreeze_[epoch|step]`.
         # Main logic begins:
+        assert unfreeze_epoch is not None
 
         # Before unfreeze, learning_rate is 0.
         if current_epoch < unfreeze_epoch:
@@ -134,7 +145,7 @@ class UnfreezeBackbone(Callback):
         # Warm up: compute inital_ratio * epoch_ratio ** epochs_since_thaw.
         # Use stored initial_ratio rather than recomputing it since
         # upsampling_lr is subject to change via the scheduler.
-        if current_epoch > unfreeze_epoch:
+        else:  # current_epoch > unfreeze_epoch
             epochs_since_thaw = current_epoch - unfreeze_epoch
             next_lr = min(
                 self._initial_lr * self.warm_up_ratio**epochs_since_thaw, upsampling_lr
@@ -149,9 +160,9 @@ class PatchMasking(Callback):
 
     def __init__(
         self,
-        patch_mask_config: dict = None,
+        patch_mask_config: dict | None = None,
         patch_seed: int = 0,
-    ):
+    ) -> None:
         super().__init__()
 
         # Initialize curriculum masking
@@ -160,7 +171,13 @@ class PatchMasking(Callback):
             patch_seed=patch_seed,
         )
 
-    def on_train_batch_start(self, trainer, pl_module, batch, batch_idx):
+    def on_train_batch_start(
+        self,
+        trainer: Trainer,
+        pl_module: LightningModule,
+        batch: Any,
+        batch_idx: int,
+    ) -> None:
         """Apply patch masking to the batch before it goes to the model."""
         if not self.curriculum_masking.use_patch_masking:
             return
@@ -197,7 +214,7 @@ class PatchMasking(Callback):
         # Store patch mask for potential use in loss computation
         pl_module.current_patch_mask = patch_mask
 
-    def on_train_epoch_end(self, trainer, pl_module) -> None:
+    def on_train_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
         """Log curriculum progress."""
         if not self.curriculum_masking.use_patch_masking:
             return
@@ -218,7 +235,7 @@ class PatchMasker:
         self,
         patch_mask_config: dict | None = None,
         patch_seed: int = 0,
-    ):
+    ) -> None:
         """Initialize curriculum masking parameters.
 
         Args:
@@ -400,7 +417,7 @@ class JSONInferenceProgressTracker(Callback):
     to a specified JSON file.
     """
 
-    def __init__(self, filepath: Path):
+    def __init__(self, filepath: Path) -> None:
         super().__init__()
         self.filepath = filepath
         self.current_step = 0
@@ -410,7 +427,7 @@ class JSONInferenceProgressTracker(Callback):
         os.makedirs(os.path.dirname(self.filepath) or ".", exist_ok=True)
         self._save_progress(0, 1)
 
-    def _save_progress(self, current: int, total: int):
+    def _save_progress(self, current: int, total: int) -> None:
         """Helper function to write the progress dictionary to the JSON file."""
         progress_data = {
             "completed": current,
@@ -435,7 +452,7 @@ class JSONInferenceProgressTracker(Callback):
         """Called when prediction starts."""
 
         # Calculate the total number of batches to predict
-        self.total_steps = trainer.num_predict_batches[0]  # Assumes one dataloader
+        self.total_steps = int(trainer.num_predict_batches[0])  # Assumes one dataloader
         self.current_step = 0
 
         # Save initial state
@@ -445,8 +462,8 @@ class JSONInferenceProgressTracker(Callback):
         self,
         trainer: Trainer,
         pl_module: LightningModule,
-        outputs,
-        batch,
+        outputs: Any,
+        batch: Any,
         batch_idx: int,
         dataloader_idx: int = 0,
     ) -> None:
@@ -469,7 +486,7 @@ class JSONTrainingProgressTracker(Callback):
 
     steps_mode: bool
 
-    def __init__(self, filepath: Path):
+    def __init__(self, filepath: Path) -> None:
         super().__init__()
         self.filepath = filepath
         self.current = 0
@@ -479,7 +496,7 @@ class JSONTrainingProgressTracker(Callback):
         # Initialize with a base state (0 completed out of 1 total placeholder)
         self._save_progress(0, 1)
 
-    def _save_progress(self, completed: int, total: int):
+    def _save_progress(self, completed: int, total: int) -> None:
         """Helper function to write the progress dictionary to the JSON file.
 
         Training is different from inference because the existing file has pid and status
@@ -530,7 +547,12 @@ class JSONTrainingProgressTracker(Callback):
         self._save_progress(self.current, self.total)
 
     def on_train_batch_end(
-        self, trainer: Trainer, pl_module: LightningModule, outputs, batch, batch_idx: int
+        self,
+        trainer: Trainer,
+        pl_module: LightningModule,
+        outputs: Any,
+        batch: Any,
+        batch_idx: int,
     ) -> None:
         """Called when a training batch ends, used for step mode."""
         if self.steps_mode and self.total > 0:

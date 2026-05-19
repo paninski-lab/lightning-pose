@@ -9,7 +9,8 @@ import copy
 import gc
 import os
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from typing import cast
 
 import cv2
 import imgaug.augmenters as iaa
@@ -17,7 +18,7 @@ import lightning.pytorch as pl
 import pandas as pd
 import pytest
 import torch
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 import lightning_pose as lp
 from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
@@ -63,7 +64,7 @@ def toy_mdata_dir() -> str:
 
 
 @pytest.fixture
-def cfg() -> dict:
+def cfg() -> DictConfig | ListConfig:
     """Load all toy data config file without hydra."""
     config_file = lp.LP_ROOT_PATH / "scripts" / "configs" / "config_mirror-mouse-example.yaml"
     cfg = OmegaConf.load(config_file)
@@ -80,7 +81,7 @@ def cfg() -> dict:
 
 
 @pytest.fixture
-def cfg_multiview() -> dict:
+def cfg_multiview() -> DictConfig | ListConfig:
     """Load all toy data config file without hydra."""
     config_file = lp.LP_ROOT_PATH / "scripts" / "configs" / "config_mirror-mouse-example.yaml"
     cfg = OmegaConf.load(config_file)
@@ -129,7 +130,9 @@ def create_multiview_dataset_if_not_exists() -> None:
     frames = os.listdir(src_dir_ld)
     for frame in frames:
         frame_file = os.path.join(src_dir_ld, frame)
-        img = cv2.cvtColor(cv2.imread(frame_file), cv2.COLOR_BGR2RGB)
+        img_raw = cv2.imread(frame_file)
+        assert img_raw is not None, f"failed to load image: {frame_file}"
+        img = cv2.cvtColor(img_raw, cv2.COLOR_BGR2RGB)
 
         # split views and save
         save_file = os.path.join(dst_dir_ld, "example_top", frame)
@@ -204,15 +207,15 @@ def imgaug_transform(cfg) -> iaa.Sequential:
 
 
 @pytest.fixture
-def base_dataset(cfg, imgaug_transform) -> BaseTrackingDataset:
+def base_dataset(cfg, imgaug_transform) -> Generator[BaseTrackingDataset, None, None]:
     """Create a dataset for regression models from toy data."""
 
     # setup
     cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.model_type = "regression"
-    base_dataset = get_dataset(
+    base_dataset = cast(BaseTrackingDataset, get_dataset(
         cfg_tmp, data_dir=TOY_DATA_ROOT_DIR, imgaug_transform=imgaug_transform
-    )
+    ))
 
     # return to tests
     yield base_dataset
@@ -223,15 +226,15 @@ def base_dataset(cfg, imgaug_transform) -> BaseTrackingDataset:
 
 
 @pytest.fixture
-def heatmap_dataset(cfg, imgaug_transform) -> HeatmapDataset:
+def heatmap_dataset(cfg, imgaug_transform) -> Generator[HeatmapDataset, None, None]:
     """Create a dataset for heatmap models from toy data."""
 
     # setup
     cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.model_type = "heatmap"
-    heatmap_dataset = get_dataset(
+    heatmap_dataset = cast(HeatmapDataset, get_dataset(
         cfg_tmp, data_dir=TOY_DATA_ROOT_DIR, imgaug_transform=imgaug_transform
-    )
+    ))
 
     # return to tests
     yield heatmap_dataset
@@ -242,14 +245,17 @@ def heatmap_dataset(cfg, imgaug_transform) -> HeatmapDataset:
 
 
 @pytest.fixture
-def multiview_heatmap_dataset(cfg_multiview, imgaug_transform) -> MultiviewHeatmapDataset:
+def multiview_heatmap_dataset(
+    cfg_multiview,
+    imgaug_transform,
+) -> Generator[MultiviewHeatmapDataset, None, None]:
     """Create a dataset for heatmap models from toy data."""
     # setup
     cfg_tmp = copy.deepcopy(cfg_multiview)
     cfg_tmp.model.model_type = "heatmap"
-    multiview_heatmap_dataset = get_dataset(
+    multiview_heatmap_dataset = cast(MultiviewHeatmapDataset, get_dataset(
         cfg_tmp, data_dir=TOY_MDATA_ROOT_DIR, imgaug_transform=imgaug_transform
-    )
+    ))
 
     # return to tests
     yield multiview_heatmap_dataset
@@ -260,15 +266,15 @@ def multiview_heatmap_dataset(cfg_multiview, imgaug_transform) -> MultiviewHeatm
 
 
 @pytest.fixture
-def heatmap_dataset_context(cfg, imgaug_transform) -> HeatmapDataset:
+def heatmap_dataset_context(cfg, imgaug_transform) -> Generator[HeatmapDataset, None, None]:
     """Create a dataset for heatmap models from toy data."""
 
     # setup
     cfg_tmp = copy.deepcopy(cfg)
     cfg_tmp.model.model_type = "heatmap_mhcrnn"
-    heatmap_dataset = get_dataset(
+    heatmap_dataset = cast(HeatmapDataset, get_dataset(
         cfg_tmp, data_dir=TOY_DATA_ROOT_DIR, imgaug_transform=imgaug_transform
-    )
+    ))
 
     # return to tests
     yield heatmap_dataset
@@ -279,15 +285,18 @@ def heatmap_dataset_context(cfg, imgaug_transform) -> HeatmapDataset:
 
 
 @pytest.fixture
-def multiview_heatmap_dataset_context(cfg_multiview, imgaug_transform) -> HeatmapDataset:
+def multiview_heatmap_dataset_context(
+    cfg_multiview,
+    imgaug_transform,
+) -> Generator[HeatmapDataset, None, None]:
     """Create a dataset for heatmap models from toy data."""
 
     # setup
     cfg_tmp = copy.deepcopy(cfg_multiview)
     cfg_tmp.model.model_type = "heatmap_mhcrnn"
-    heatmap_dataset = get_dataset(
+    heatmap_dataset = cast(HeatmapDataset, get_dataset(
         cfg_tmp, data_dir=TOY_MDATA_ROOT_DIR, imgaug_transform=imgaug_transform
-    )
+    ))
 
     # return to tests
     yield heatmap_dataset
@@ -298,7 +307,7 @@ def multiview_heatmap_dataset_context(cfg_multiview, imgaug_transform) -> Heatma
 
 
 @pytest.fixture
-def base_data_module(cfg, base_dataset) -> BaseDataModule:
+def base_data_module(cfg, base_dataset) -> Generator[BaseDataModule, None, None]:
     """Create a labeled data module for regression models."""
 
     # setup
@@ -315,7 +324,7 @@ def base_data_module(cfg, base_dataset) -> BaseDataModule:
 
 
 @pytest.fixture
-def heatmap_data_module(cfg, heatmap_dataset) -> BaseDataModule:
+def heatmap_data_module(cfg, heatmap_dataset) -> Generator[BaseDataModule, None, None]:
     """Create a labeled data module for heatmap models."""
 
     # setup
@@ -332,7 +341,10 @@ def heatmap_data_module(cfg, heatmap_dataset) -> BaseDataModule:
 
 
 @pytest.fixture
-def multiview_heatmap_data_module(cfg_multiview, multiview_heatmap_dataset) -> BaseDataModule:
+def multiview_heatmap_data_module(
+    cfg_multiview,
+    multiview_heatmap_dataset,
+) -> Generator[BaseDataModule, None, None]:
     """Create a labeled data module for heatmap models."""
 
     # setup
@@ -349,7 +361,10 @@ def multiview_heatmap_data_module(cfg_multiview, multiview_heatmap_dataset) -> B
 
 
 @pytest.fixture
-def heatmap_data_module_context(cfg, heatmap_dataset_context) -> BaseDataModule:
+def heatmap_data_module_context(
+    cfg,
+    heatmap_dataset_context,
+) -> Generator[BaseDataModule, None, None]:
     """Create a labeled data module for heatmap models."""
 
     # setup
@@ -369,7 +384,7 @@ def heatmap_data_module_context(cfg, heatmap_dataset_context) -> BaseDataModule:
 def multiview_heatmap_data_module_context(
     cfg_multiview,
     multiview_heatmap_dataset_context,
-) -> BaseDataModule:
+) -> Generator[BaseDataModule, None, None]:
     """Create a labeled data module for heatmap models."""
 
     # setup
@@ -388,7 +403,7 @@ def multiview_heatmap_data_module_context(
 
 
 @pytest.fixture
-def base_data_module_combined(cfg, base_dataset) -> UnlabeledDataModule:
+def base_data_module_combined(cfg, base_dataset) -> Generator[UnlabeledDataModule, None, None]:
     """Create a combined data module for regression models."""
 
     # setup
@@ -399,6 +414,7 @@ def base_data_module_combined(cfg, base_dataset) -> UnlabeledDataModule:
         dataset=base_dataset,
         video_dir=os.path.join(TOY_DATA_ROOT_DIR, "videos"),
     )
+    assert isinstance(data_module, UnlabeledDataModule)
 
     # return to tests
     yield data_module
@@ -409,7 +425,10 @@ def base_data_module_combined(cfg, base_dataset) -> UnlabeledDataModule:
 
 
 @pytest.fixture
-def heatmap_data_module_combined(cfg, heatmap_dataset) -> UnlabeledDataModule:
+def heatmap_data_module_combined(
+    cfg,
+    heatmap_dataset,
+) -> Generator[UnlabeledDataModule, None, None]:
     """Create a combined data module for heatmap models."""
 
     # setup
@@ -420,6 +439,7 @@ def heatmap_data_module_combined(cfg, heatmap_dataset) -> UnlabeledDataModule:
         dataset=heatmap_dataset,
         video_dir=os.path.join(TOY_DATA_ROOT_DIR, "videos"),
     )
+    assert isinstance(data_module, UnlabeledDataModule)
 
     # return to tests
     yield data_module
@@ -432,8 +452,8 @@ def heatmap_data_module_combined(cfg, heatmap_dataset) -> UnlabeledDataModule:
 @pytest.fixture
 def multiview_heatmap_data_module_combined(
     cfg_multiview,
-    multiview_heatmap_dataset
-) -> UnlabeledDataModule:
+    multiview_heatmap_dataset,
+) -> Generator[UnlabeledDataModule, None, None]:
     """Create a combined data module for multiview heatmap models."""
 
     # setup
@@ -444,6 +464,7 @@ def multiview_heatmap_data_module_combined(
         dataset=multiview_heatmap_dataset,
         video_dir=os.path.join(cfg_multiview.data.data_dir, "videos"),
     )
+    assert isinstance(data_module, UnlabeledDataModule)
 
     # return to tests
     yield data_module
@@ -454,7 +475,10 @@ def multiview_heatmap_data_module_combined(
 
 
 @pytest.fixture
-def heatmap_data_module_combined_context(cfg, heatmap_dataset_context) -> UnlabeledDataModule:
+def heatmap_data_module_combined_context(
+    cfg,
+    heatmap_dataset_context,
+) -> Generator[UnlabeledDataModule, None, None]:
     """Create a combined data module for heatmap models."""
 
     # setup
@@ -465,6 +489,7 @@ def heatmap_data_module_combined_context(cfg, heatmap_dataset_context) -> Unlabe
         dataset=heatmap_dataset_context,
         video_dir=os.path.join(TOY_DATA_ROOT_DIR, "videos"),
     )
+    assert isinstance(data_module, UnlabeledDataModule)
     # data_module.setup()  # already done in UnlabeledDataModule constructor
 
     # return to tests
@@ -479,7 +504,7 @@ def heatmap_data_module_combined_context(cfg, heatmap_dataset_context) -> Unlabe
 def multiview_heatmap_data_module_combined_context(
     cfg_multiview,
     multiview_heatmap_dataset_context,
-) -> UnlabeledDataModule:
+) -> Generator[UnlabeledDataModule, None, None]:
     """Create a combined data module for heatmap models."""
 
     # setup
@@ -490,6 +515,7 @@ def multiview_heatmap_data_module_combined_context(
         dataset=multiview_heatmap_dataset_context,
         video_dir=os.path.join(cfg_multiview.data.data_dir, "videos"),
     )
+    assert isinstance(data_module, UnlabeledDataModule)
     # data_module.setup()  # already done in UnlabeledDataModule constructor
 
     # return to tests
@@ -501,7 +527,7 @@ def multiview_heatmap_data_module_combined_context(
 
 
 @pytest.fixture
-def video_dataloader(cfg, base_dataset, video_list) -> LitDaliWrapper:
+def video_dataloader(cfg, base_dataset, video_list) -> Generator[LitDaliWrapper, None, None]:
     """Create a prediction dataloader for a new video."""
 
     # setup
@@ -527,7 +553,7 @@ def video_dataloader_multiview(
     cfg_multiview,
     multiview_heatmap_dataset,
     video_list_multiview,
-) -> LitDaliWrapper:
+) -> Generator[LitDaliWrapper, None, None]:
     """Create a prediction dataloader for a new video."""
 
     # setup

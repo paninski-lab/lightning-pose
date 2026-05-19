@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 import torch
 from jaxtyping import Float
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
 
 from lightning_pose.data.datatypes import (
     HeatmapLabeledBatchDict,
@@ -39,11 +39,11 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
         downsample_factor: Literal[1, 2, 3] = 2,
         torch_seed: int = 123,
         optimizer: str = "Adam",
-        optimizer_params: DictConfig | dict | None = None,
+        optimizer_params: DictConfig | ListConfig | dict | None = None,
         lr_scheduler: str = "multisteplr",
-        lr_scheduler_params: DictConfig | dict | None = None,
+        lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
         **kwargs: Any,
-    ):
+    ) -> None:
         """Initialize a DLC-like model with resnet backbone.
 
         Args:
@@ -189,10 +189,10 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
         """
         if "images" in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
             # labeled image dataloaders
-            images = batch_dict["images"]
+            images = batch_dict["images"]  # type: ignore[typeddict-item]
         else:
             # unlabeled dali video dataloaders
-            images = batch_dict["frames"]
+            images = batch_dict["frames"]  # type: ignore[typeddict-item]
 
         # images -> heatmaps
         pred_heatmaps_sf, pred_heatmaps_mf = self.forward(images)
@@ -223,7 +223,7 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
         else:
             return pred_keypoints_sf, confidence_sf
 
-    def get_parameters(self):
+    def get_parameters(self) -> list[dict]:
         params = [
             {"params": self.backbone.parameters(), "name": "backbone", "lr": 0.0},
             {"params": self.head.parameters(), "name": "head"},
@@ -244,11 +244,11 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
         pretrained: bool = True,
         torch_seed: int = 123,
         optimizer: str = "Adam",
-        optimizer_params: DictConfig | dict | None = None,
+        optimizer_params: DictConfig | ListConfig | dict | None = None,
         lr_scheduler: str = "multisteplr",
-        lr_scheduler_params: DictConfig | dict | None = None,
+        lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
         **kwargs: Any,
-    ):
+    ) -> None:
         """
 
         Args:

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import tbparse
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from lightning_pose.train import train
 
@@ -23,7 +23,7 @@ def _get_base_cfg(cfg):
     )
 
 
-def test_epochs(cfg: DictConfig, tmp_path: Path):
+def test_epochs(cfg: DictConfig | ListConfig, tmp_path: Path):
     # Setup so that it trains for 2 full epochs.
     # Then we'll assert that it actually trained that much.
     cfg = _get_base_cfg(cfg)
@@ -40,13 +40,13 @@ def test_epochs(cfg: DictConfig, tmp_path: Path):
     train(cfg, model_dir=tmp_path, skip_evaluation=True)
 
     reader = tbparse.SummaryReader(
-        tmp_path / "tb_logs" / "my_base_toy_model", pivot=True
+        str(tmp_path / "tb_logs" / "my_base_toy_model"), pivot=True
     )
     # this is the epoch at each step. 2 epochs, 4 steps
     assert reader.scalars["epoch"].tolist() == [0, 0, 1, 1]
 
 
-def test_steps(cfg: DictConfig, tmp_path: Path):
+def test_steps(cfg: DictConfig | ListConfig, tmp_path: Path):
     # Setup so that it trains for 3 steps (2nd epoch is partial).
     # Then we'll assert that it actually trained that much.
     cfg = _get_base_cfg(cfg)
@@ -75,7 +75,7 @@ def test_steps(cfg: DictConfig, tmp_path: Path):
     train(cfg, model_dir=tmp_path, skip_evaluation=True)
 
     reader = tbparse.SummaryReader(
-        tmp_path / "tb_logs" / "my_base_toy_model", pivot=True
+        str(tmp_path / "tb_logs" / "my_base_toy_model"), pivot=True
     )
     # this is the epoch at each step. only 3 steps total.
     assert reader.scalars["epoch"].tolist() == [0, 0, 1]

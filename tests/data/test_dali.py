@@ -171,7 +171,7 @@ def test_prepare_dali_multiview(cfg_multiview, video_list):
     for train_stage in ["train", "predict"]:
 
         vid_pred_class = PrepareDALI(
-            train_stage=train_stage,
+            train_stage=train_stage,  # type: ignore[arg-type]
             model_type="base",
             filenames=filenames,
             dali_config=cfg_multiview.dali,
@@ -203,7 +203,7 @@ def test_prepare_dali_multiview(cfg_multiview, video_list):
     for train_stage in ["train", "predict"]:
 
         vid_pred_class = PrepareDALI(
-            train_stage=train_stage,
+            train_stage=train_stage,  # type: ignore[arg-type]
             model_type="context",
             filenames=filenames,
             dali_config=cfg_multiview.dali,

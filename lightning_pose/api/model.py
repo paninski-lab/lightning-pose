@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
+from typing import Any, cast
 
 import cv2
 import numpy as np
 import pandas as pd
 import torch
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from lightning_pose.api.model_config import ModelConfig
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
+from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datatypes import MultiviewPredictionResult, PredictionResult
 from lightning_pose.data.utils import convert_bbox_coords
 from lightning_pose.models import ALLOWED_MODELS
@@ -48,12 +50,12 @@ class Model:
     UNSPECIFIED = "unspecified"
 
     @staticmethod
-    def from_dir(model_dir: str | Path):
+    def from_dir(model_dir: str | Path) -> Model:
         """Create a `Model` instance for a model stored at `model_dir`."""
         return Model.from_dir2(model_dir)
 
     @staticmethod
-    def from_dir2(model_dir: str | Path, hydra_overrides: list[str] = None):
+    def from_dir2(model_dir: str | Path, hydra_overrides: list[str] | None = None) -> Model:
         """Internal version of from_dir that supports hydra_overrides. Not sure whether to
         promote this to public API yet."""
 
@@ -72,16 +74,16 @@ class Model:
 
         return Model(model_dir, config)
 
-    def __init__(self, model_dir: str | Path, config: ModelConfig):
+    def __init__(self, model_dir: str | Path, config: ModelConfig) -> None:
         self.model_dir = Path(model_dir).absolute()
         self.config = config
 
     @property
-    def cfg(self) -> DictConfig:
+    def cfg(self) -> DictConfig | ListConfig:
         """The model configuration as an `omegaconf.DictConfig`."""
         return self.config.cfg
 
-    def _load(self):
+    def _load(self) -> None:
         if self.model is None:
             ckpt_file = io_utils.ckpt_path_from_base_path(
                 base_path=str(self.model_dir), model_name=self.cfg.model.model_name
@@ -106,13 +108,13 @@ class Model:
     def labeled_videos_dir(self) -> Path:
         return self.model_dir / "video_preds" / "labeled_videos"
 
-    def cropped_data_dir(self):
+    def cropped_data_dir(self) -> Path:
         return self.model_dir / "cropped_images"
 
-    def cropped_videos_dir(self):
+    def cropped_videos_dir(self) -> Path:
         return self.model_dir / "cropped_videos"
 
-    def cropped_csv_file_path(self, csv_file_path: str | Path):
+    def cropped_csv_file_path(self, csv_file_path: str | Path) -> Path:
         csv_file_path = Path(csv_file_path)
         return (
             self.model_dir
@@ -163,6 +165,7 @@ class Model:
 
         """
         self._load()
+        assert self.model is not None
 
         # --- Input validation ---
         if frame_rgb.dtype != np.uint8:
@@ -234,7 +237,7 @@ class Model:
         mean = np.array(_IMAGENET_MEAN, dtype=np.float32)
         std = np.array(_IMAGENET_STD, dtype=np.float32)
 
-        def _preprocess_single(img):
+        def _preprocess_single(img: np.ndarray) -> np.ndarray:
             resized = cv2.resize(
                 img, (resize_w, resize_h), interpolation=cv2.INTER_LINEAR,
             )
@@ -280,7 +283,7 @@ class Model:
         # --- Inference via get_loss_inputs_labeled ---
         self.model.eval()
         with torch.inference_mode():
-            result = self.model.get_loss_inputs_labeled(batch_dict)
+            result = self.model.get_loss_inputs_labeled(batch_dict)  # type: ignore[arg-type]
 
         # --- Extract predictions ---
         kp_pred = result["keypoints_pred"]
@@ -308,7 +311,7 @@ class Model:
         else:
             # Regression model — get_loss_inputs_labeled does not call
             # convert_bbox_coords, so we apply the remap ourselves.
-            kp_pred = convert_bbox_coords(batch_dict, kp_pred, in_place=False)
+            kp_pred = convert_bbox_coords(batch_dict, kp_pred, in_place=False)  # type: ignore[arg-type]
             kp = kp_pred[0].cpu().numpy().reshape(-1, 2).astype(np.float32)
             conf = np.ones(num_kp, dtype=np.float32)
 
@@ -352,7 +355,7 @@ class Model:
         # Point predict_dataset to the csv_file and data_dir.
         # HACK: For true multi-view model, trick predict_dataset and compute_metrics
         # into thinking this is a single-view model.
-        cfg_overrides = {
+        cfg_overrides: dict[str, Any] = {
             "data": {
                 "data_dir": str(data_dir),
                 "csv_file": str(csv_file),
@@ -392,6 +395,7 @@ class Model:
         else:
             metrics = None
 
+        assert isinstance(df, pd.DataFrame)
         return PredictionResult(predictions=df, metrics=metrics)
 
     def predict_on_label_csv_multiview(
@@ -420,13 +424,13 @@ class Model:
 
         # Convert this to absolute, because if relative, downstream will
         # assume its relative to the data_dir.
-        csv_file_per_view: list[Path] = [Path(f).absolute() for f in csv_file_per_view]
+        csv_file_per_view = [Path(f).absolute() for f in csv_file_per_view]
 
         if data_dir is None:
             data_dir = self.config.cfg.data.data_dir
 
         # Point predict_dataset to the csv_file and data_dir.
-        cfg_overrides = {
+        cfg_overrides: dict[str, Any] = {
             "data": {
                 "data_dir": str(data_dir),
                 "csv_file": [str(p) for p in csv_file_per_view],
@@ -472,7 +476,10 @@ class Model:
         else:
             metrics = None
 
-        return MultiviewPredictionResult(predictions=view_to_df_dict, metrics=metrics)
+        return MultiviewPredictionResult(
+            predictions=cast(dict[str, pd.DataFrame], view_to_df_dict),
+            metrics=metrics,
+        )
 
     def predict_on_video_file(
         self,
@@ -514,7 +521,7 @@ class Model:
 
         prediction_csv_file = output_dir / f"{video_file.stem}.csv"
 
-        df: pd.DataFrame = predict_video(
+        df = predict_video(
             video_file=str(video_file),
             model=self,
             output_pred_file=str(prediction_csv_file),
@@ -582,7 +589,7 @@ class Model:
             view_names
         ), f"{len(video_file_per_view)} != {len(view_names)}"
 
-        video_file_per_view: list[Path] = [Path(f) for f in video_file_per_view]
+        video_file_per_view = [Path(f) for f in video_file_per_view]
 
         if output_dir == self.__class__.UNSPECIFIED:
             output_dir = self.video_preds_dir()
@@ -597,7 +604,7 @@ class Model:
         _view_to_video_file: dict[str, Path] = io_utils.collect_video_files_by_view(
             video_file_per_view, view_names
         )
-        video_file_per_view: list[Path] = [
+        video_file_per_view = [
             _view_to_video_file[view_name] for view_name in view_names
         ]
 
@@ -606,7 +613,7 @@ class Model:
             for video_file in video_file_per_view
         ]
 
-        df_list: list[pd.DataFrame] = predict_video(
+        df_list = predict_video(
             video_file=list(map(str, video_file_per_view)),
             model=self,
             output_pred_file=prediction_csv_file_list,
@@ -643,7 +650,7 @@ class Model:
         return MultiviewPredictionResult(predictions=df_dict, metrics=metrics)
 
 
-def _build_datamodule_pred(cfg: DictConfig):
+def _build_datamodule_pred(cfg: DictConfig | ListConfig) -> BaseDataModule | UnlabeledDataModule:
     cfg_pred = copy.deepcopy(cfg)
     cfg_pred.training.imgaug = "default"
     imgaug_transform_pred = get_imgaug_transform(cfg=cfg_pred)

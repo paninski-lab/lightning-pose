@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 from pathlib import Path
 
-from omegaconf import DictConfig, OmegaConf, open_dict
+from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 
 __all__ = ["ModelConfig"]
 
@@ -14,10 +16,10 @@ from lightning_pose.utils.io import (
 class ModelConfig:
 
     @staticmethod
-    def from_yaml_file(filepath):
+    def from_yaml_file(filepath: str | Path) -> ModelConfig:
         return ModelConfig(OmegaConf.load(filepath))
 
-    def __init__(self, cfg: DictConfig):
+    def __init__(self, cfg: DictConfig | ListConfig) -> None:
         # Patch keypoint_names with keypoints in case the user
         # is predicting on an LP App's model.
         # https://github.com/paninski-lab/lightning-pose/issues/268
@@ -27,10 +29,10 @@ class ModelConfig:
                 del cfg.data.keypoints
         self.cfg = cfg
 
-    def is_single_view(self):
+    def is_single_view(self) -> bool:
         return not self.is_multi_view()
 
-    def is_multi_view(self):
+    def is_multi_view(self) -> bool:
         if self.cfg.data.get("view_names") is None:
             return False
         if len(self.cfg.data.view_names) == 1:
@@ -42,17 +44,17 @@ class ModelConfig:
         files = check_video_paths(return_absolute_path(self.cfg.eval.test_videos_directory))
         return [Path(f) for f in files]
 
-    def test_video_files_multiview(self):
+    def test_video_files_multiview(self) -> list[list[Path]]:
         assert self.is_multi_view()
         return find_video_files_for_views(
             video_dir=self.cfg.eval.test_videos_directory,
             view_names=self.cfg.data.view_names,
         )
 
-    def validate(self):
+    def validate(self) -> None:
         self._validate_steps_vs_epochs()
 
-    def _validate_steps_vs_epochs(self):
+    def _validate_steps_vs_epochs(self) -> None:
         if "min_steps" in self.cfg.training or "max_steps" in self.cfg.training:
             assert "min_steps" in self.cfg.training
             assert "max_steps" in self.cfg.training

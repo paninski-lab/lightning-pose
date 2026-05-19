@@ -1,5 +1,6 @@
 import multiprocessing
 from pathlib import Path
+from typing import Any
 
 import cv2
 import numpy as np
@@ -87,10 +88,10 @@ def _compute_bbox_df(
 
     index = pred_df.index
 
-    return pd.DataFrame(bboxes, index=index, columns=["x", "y", "h", "w"])
+    return pd.DataFrame(bboxes, index=pd.Index(index), columns=pd.Index(["x", "y", "h", "w"]))
 
 
-def _crop_image(img_path, bbox, cropped_img_path):
+def _crop_image(img_path: Path, bbox: tuple[int, int, int, int], cropped_img_path: Path) -> None:
     """
     Crops an image to the specified bounding box and saves the cropped image.
 
@@ -110,7 +111,7 @@ def _crop_image(img_path, bbox, cropped_img_path):
     img.save(cropped_img_path)
 
 
-def _star_crop_image(args):
+def _star_crop_image(args: tuple) -> None:
     return _crop_image(*args)
 
 
@@ -141,7 +142,7 @@ def _crop_images(bbox_df: pd.DataFrame, root_directory: Path, output_directory: 
 
     _file_cache: dict[Path, bool] = {}
 
-    def _file_exists(path):
+    def _file_exists(path: Path) -> bool:
         # Cache path.exists() as an easy way to speed up.
         # TODO: This is still slow. Get all files in the dir and check if file is in the list.
         if path in _file_cache:
@@ -157,7 +158,7 @@ def _crop_images(bbox_df: pd.DataFrame, root_directory: Path, output_directory: 
         bbox_df.iterrows(), total=len(bbox_df), desc="Building crop tasks"
     ):
         # TODO Add unit tests for this logic.
-        center_img_path = Path(center_img_path)
+        center_img_path = Path(str(center_img_path))
         for img_path in io.get_context_img_paths(center_img_path):
             # If context frame:
             if img_path != center_img_path:
@@ -185,7 +186,7 @@ def _crop_images(bbox_df: pd.DataFrame, root_directory: Path, output_directory: 
             pass
 
 
-def _crop_video_moviepy(video_file: Path, bbox_df: pd.DataFrame, output_file: Path):
+def _crop_video_moviepy(video_file: Path, bbox_df: pd.DataFrame, output_file: Path) -> None:
     """
     Crops a video using bounding box dimensions specified in a DataFrame and saves the
     output to a given file path.
@@ -212,7 +213,7 @@ def _crop_video_moviepy(video_file: Path, bbox_df: pd.DataFrame, output_file: Pa
     h = round(h / 2) * 2
     w = round(w / 2) * 2
 
-    def crop_frame(get_frame, t):
+    def crop_frame(get_frame: Any, t: float) -> np.ndarray:
         frame = get_frame(t)
 
         frame_index = int(t * clip.fps)  # Calculate frame index based on time
@@ -311,7 +312,7 @@ def generate_cropped_csv_file(
     input_bbox_file: str | Path,
     output_csv_file: str | Path,
     mode: str = "subtract",
-):
+) -> None:
     """
     Adjusts coordinates in the input CSV file either by adding or subtracting
     corresponding values from a bounding box CSV file. The resulting data is saved

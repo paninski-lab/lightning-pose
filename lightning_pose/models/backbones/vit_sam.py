@@ -17,7 +17,7 @@ class SamVisionEncoder(nn.Module):
         model_name: str = "facebook/sam-vit-base",
         finetune_img_size: int = 1024,
         img_size: int = 1024,
-    ):
+    ) -> None:
         super().__init__()
 
         # Load the full SAM model and extract vision encoder
@@ -28,11 +28,14 @@ class SamVisionEncoder(nn.Module):
         # Store size information
         self.img_size = img_size
         self.finetune_img_size = finetune_img_size
-        self.patch_size = full_model.config.vision_config.patch_size
+        self.patch_size = full_model.config.vision_config.patch_size  # type: ignore[union-attr]
 
         # Store original positional embeddings for potential resizing
         self.original_pos_embed = None
-        if hasattr(self.vision_encoder, 'pos_embed'):
+        if (
+            hasattr(self.vision_encoder, 'pos_embed')
+            and self.vision_encoder.pos_embed is not None
+        ):
             self.original_pos_embed = self.vision_encoder.pos_embed.clone()
 
         # Check if we need to resize positional embeddings
@@ -54,12 +57,12 @@ class SamVisionEncoder(nn.Module):
         # Disable relative positional encoding in SAM
         for layer in self.vision_encoder.layers:
             if hasattr(layer.attn, "use_rel_pos"):
-                layer.attn.use_rel_pos = False
+                layer.attn.use_rel_pos = False  # type: ignore[arg-type]
 
-    def _bypass_size_check(self):
+    def _bypass_size_check(self) -> None:
         """Completely bypass the size check in patch embedding"""
 
-        def no_size_check_forward(pixel_values):
+        def no_size_check_forward(pixel_values: torch.Tensor) -> torch.Tensor:
             batch_size, num_channels, height, width = pixel_values.shape
 
             # Only check channel dimension
@@ -121,7 +124,7 @@ class SamVisionEncoder(nn.Module):
 
         return features
 
-    def _resize_pos_embed(self):
+    def _resize_pos_embed(self) -> None:
         """Resize positional embeddings for different input sizes"""
 
         if self.original_pos_embed is None:

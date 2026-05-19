@@ -1,6 +1,6 @@
 """High-level loss class that orchestrates the individual losses."""
 
-from typing import Literal
+from typing import Any, Literal
 
 import lightning.pytorch as pl
 import torch
@@ -21,7 +21,7 @@ class LossFactory(pl.LightningModule):
     def __init__(
         self,
         losses_params_dict: dict[str, dict],
-        data_module: BaseDataModule | UnlabeledDataModule,
+        data_module: BaseDataModule | UnlabeledDataModule | None,
     ) -> None:
 
         super().__init__()
@@ -31,7 +31,7 @@ class LossFactory(pl.LightningModule):
         # initialize loss classes
         self._initialize_loss_instances()
 
-    def _initialize_loss_instances(self):
+    def _initialize_loss_instances(self) -> None:
         self.loss_instance_dict = {}
         loss_classes_dict = get_loss_classes()
         for loss, params in self.losses_params_dict.items():
@@ -42,13 +42,13 @@ class LossFactory(pl.LightningModule):
     def __call__(
         self,
         stage: Literal["train", "val", "test"] | None = None,
-        anneal_weight: float | torch.Tensor = 1.0,
-        **kwargs
+        anneal_weight: float | torch.Tensor | None = 1.0,
+        **kwargs: Any,
     ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
 
         # loop over losses, compute, sum, log
         # don't log if stage is None
-        tot_loss = 0.0
+        tot_loss: Float[torch.Tensor, ""] = torch.tensor(0.0)
         log_list_all = []
         for loss_name, loss_instance in self.loss_instance_dict.items():
 
@@ -70,7 +70,9 @@ class LossFactory(pl.LightningModule):
                 anneal_weight_ = 1.0
             else:
                 anneal_weight_ = anneal_weight
-            tot_loss += anneal_weight_ * current_weighted_loss
+            scaled = anneal_weight_ * current_weighted_loss
+            # move accumulator to loss device on first iteration (losses run on GPU at train time)
+            tot_loss = tot_loss.to(scaled.device) + scaled
 
             # log weighted losses (unweighted losses auto-logged by loss instance)
             log_list += [

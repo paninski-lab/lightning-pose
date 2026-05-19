@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import copy
 import itertools
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -173,7 +176,7 @@ def project_3d_to_2d(
 class CameraGroup(CameraGroupAnipose):
     """Inherit Anipose camera group and add new non-jitted triangulation method for dataloaders."""
 
-    def triangulate_fast(self, points, undistort=True):
+    def triangulate_fast(self, points: np.ndarray, undistort: bool = True) -> np.ndarray:
         """Given an CxNx2 array, this returns an Nx3 array of points,
         where N is the number of points and C is the number of cameras"""
 
@@ -194,7 +197,7 @@ class CameraGroup(CameraGroupAnipose):
                 new_points[cnum] = cam.undistort_points(sub)
             points = new_points
 
-        n_cams, n_points, _ = points.shape
+        n_cams, n_points, _ = points.shape  # type: ignore[misc]
 
         cam_Rt_mats = np.array([cam.get_extrinsics_mat()[:3] for cam in self.cameras])
 
@@ -213,18 +216,18 @@ class CameraGroup(CameraGroupAnipose):
 
         return out
 
-    def copy(self):
+    def copy(self) -> CameraGroup:
         cameras = [cam.copy() for cam in self.cameras]
         metadata = copy.copy(self.metadata)
         return CameraGroup(cameras, metadata)
 
-    def copy_with_new_cameras(self, cameras):
+    def copy_with_new_cameras(self, cameras: list) -> CameraGroup:
         """Create a new CameraGroup with the same properties but different cameras."""
         new_group = copy.deepcopy(self)
         new_group.cameras = cameras
         return new_group
 
     @classmethod
-    def load(cls, path):
-        parent_instance = super().load(path)  # Load using parent class
+    def load(cls, path: str | Path) -> CameraGroup:
+        parent_instance = super().load(path)  # type: ignore[arg-type]  # Load using parent class
         return cls(**vars(parent_instance))  # Return as CameraGroup

@@ -7,11 +7,11 @@ from collections import OrderedDict
 from pathlib import Path
 
 import imgaug.augmenters as iaa
-import lightning.pytorch as pl
 import numpy as np
 import pandas as pd
 import torch
-from omegaconf import DictConfig, OmegaConf
+from lightning.pytorch.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
+from omegaconf import DictConfig, ListConfig, OmegaConf
 from omegaconf.errors import ValidationError
 
 from lightning_pose.callbacks import (
@@ -38,6 +38,7 @@ from lightning_pose.metrics import (
     pixel_error,
     temporal_norm,
 )
+from lightning_pose.models import ALLOWED_MODELS
 from lightning_pose.models.base import (
     _apply_defaults_for_lr_scheduler_params,
     _apply_defaults_for_optimizer_params,
@@ -58,7 +59,7 @@ __all__ = [
 ]
 
 
-def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
+def get_imgaug_transform(cfg: DictConfig | ListConfig) -> iaa.Sequential:
     """Create simple and flexible data transform pipeline that augments images and keypoints.
 
     Args:
@@ -103,18 +104,19 @@ def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
         if isinstance(params, DictConfig):
             # recursively convert Dict/ListConfigs to dicts/lists
             params_dict = OmegaConf.to_object(params)
+            assert isinstance(params_dict, dict)
         else:
             params_dict = params.copy()
         for transform, _val in params_dict.items():
-            assert getattr(iaa, transform), f"{transform} is not a valid imgaug transform"
+            assert getattr(iaa, str(transform)), f"{transform} is not a valid imgaug transform"
     else:
         raise TypeError(f"params is of type {type(params)}, must be str, dict, or DictConfig")
 
-    return imgaug_transform(params_dict)
+    return imgaug_transform(params_dict)  # type: ignore[arg-type]
 
 
 def get_dataset(
-    cfg: DictConfig,
+    cfg: DictConfig | ListConfig,
     data_dir: str,
     imgaug_transform: iaa.Sequential,
 ) -> BaseTrackingDataset | HeatmapDataset | MultiviewHeatmapDataset:
@@ -181,7 +183,7 @@ def get_dataset(
 
 
 def get_data_module(
-    cfg: DictConfig,
+    cfg: DictConfig | ListConfig,
     dataset: BaseTrackingDataset | HeatmapDataset | MultiviewHeatmapDataset,
     video_dir: str | None = None,
 ) -> BaseDataModule | UnlabeledDataModule:
@@ -246,6 +248,7 @@ def get_data_module(
             },
         )
 
+        assert video_dir is not None, 'video_dir must be provided for semi-supervised training'
         view_names = cfg.data.get("view_names", None)
         view_names = list(view_names) if view_names is not None else None
         data_module = UnlabeledDataModule(
@@ -267,12 +270,13 @@ def get_data_module(
 
 
 def get_loss_factories(
-    cfg: DictConfig,
+    cfg: DictConfig | ListConfig,
     data_module: BaseDataModule | UnlabeledDataModule,
 ) -> dict:
     """Create loss factory that orchestrates different losses during training."""
 
     cfg_loss_dict = OmegaConf.to_object(cfg.losses)
+    assert cfg_loss_dict is not None
 
     loss_params_dict = {"supervised": {}, "unsupervised": {}}
 
@@ -399,10 +403,10 @@ def get_loss_factories(
 
 
 def get_model(
-    cfg: DictConfig,
+    cfg: DictConfig | ListConfig,
     data_module: BaseDataModule | UnlabeledDataModule | None,
-    loss_factories: dict[str, LossFactory] | dict[str, None]
-) -> pl.LightningModule:
+    loss_factories: dict[str, LossFactory] | dict[str, None],
+) -> ALLOWED_MODELS:
     """Create model: regression or heatmap based, supervised or semi-supervised."""
 
     optimizer = cfg.training.get("optimizer", "Adam")
@@ -605,24 +609,24 @@ def get_model(
 
 
 def get_callbacks(
-    cfg: DictConfig,
-    early_stopping=False,
-    checkpointing=True,
-    lr_monitor=True,
-    ckpt_every_n_epochs=None,
-    backbone_unfreeze=True,
+    cfg: DictConfig | ListConfig,
+    early_stopping: bool = False,
+    checkpointing: bool = True,
+    lr_monitor: bool = True,
+    ckpt_every_n_epochs: int | None = None,
+    backbone_unfreeze: bool = True,
     status_file: Path | None = None,
 ) -> list:
 
     callbacks = []
 
     if early_stopping:
-        early_stopping = pl.callbacks.EarlyStopping(
+        early_stopping_cb = EarlyStopping(
             monitor="val_supervised_loss",
             patience=cfg.training.early_stop_patience,
             mode="min",
         )
-        callbacks.append(early_stopping)
+        callbacks.append(early_stopping_cb)
 
     if backbone_unfreeze:
         unfreeze_step = cfg.training.get("unfreezing_step")
@@ -634,12 +638,12 @@ def get_callbacks(
 
     if lr_monitor:
         # this callback should be added after UnfreezeBackbone in order to log its learning rate
-        lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval="epoch")
-        callbacks.append(lr_monitor)
+        lr_monitor_cb = LearningRateMonitor(logging_interval="epoch")
+        callbacks.append(lr_monitor_cb)
 
     # always save out best model
     if checkpointing:
-        ckpt_best_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
+        ckpt_best_callback = ModelCheckpoint(
             monitor="val_supervised_loss",
             mode="min",
             filename="{epoch}-{step}-best",
@@ -648,7 +652,7 @@ def get_callbacks(
 
     if ckpt_every_n_epochs:
         # if ckpt_every_n_epochs is not None, save separate checkpoint files
-        ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
+        ckpt_callback = ModelCheckpoint(
             monitor=None,
             every_n_epochs=ckpt_every_n_epochs,
             save_top_k=-1,
@@ -684,7 +688,8 @@ def get_callbacks(
     return callbacks
 
 
-def calculate_steps_per_epoch(data_module: BaseDataModule):
+def calculate_steps_per_epoch(data_module: BaseDataModule) -> int:
+    assert data_module.train_dataset is not None
     train_dataset_length = len(data_module.train_dataset)
     steps_per_epoch = math.ceil(train_dataset_length / data_module.train_batch_size)
 
@@ -697,7 +702,7 @@ def calculate_steps_per_epoch(data_module: BaseDataModule):
 
 
 def compute_metrics(
-    cfg: DictConfig,
+    cfg: DictConfig | ListConfig,
     preds_file: str | list[str] | Path | list[Path],
     data_module: BaseDataModule | UnlabeledDataModule | None = None,
 ) -> None:
@@ -729,6 +734,8 @@ def compute_metrics(
             )
     else:
         assert isinstance(cfg.data.csv_file, str)
+        assert isinstance(preds_file, (str, Path)), \
+            'preds_file must be str or Path for single-view predictions'
         labels_file = Path(cfg.data.csv_file)
         if not labels_file.is_absolute():
             labels_file = Path(cfg.data.data_dir) / labels_file
@@ -742,7 +749,7 @@ def compute_metrics(
 
 
 def compute_metrics_single(
-    cfg: DictConfig,
+    cfg: DictConfig | ListConfig,
     labels_file: str | Path | None,
     preds_file: str | Path,
     data_module: BaseDataModule | UnlabeledDataModule | None = None,
@@ -798,13 +805,16 @@ def compute_metrics_single(
     # compute metrics; csv files will be saved to the same directory the prdictions are stored in
     if "pixel_error" in metrics_to_compute:
         # Read labeled data
+        assert labels_file is not None, '"pixel_error" metric requires labels_file'
         labels_df = pd.read_csv(labels_file, header=[0, 1, 2], index_col=0)
         labels_df = io_utils.fix_empty_first_row(labels_df)
         assert labels_df.index.equals(index)
 
         keypoints_true = labels_df.to_numpy().reshape(labels_df.shape[0], -1, 2)
         error_per_keypoint = pixel_error(keypoints_true, keypoints_pred)
-        error_df = pd.DataFrame(error_per_keypoint, index=index, columns=keypoint_names)
+        error_df = pd.DataFrame(
+            error_per_keypoint, index=pd.Index(index), columns=pd.Index(keypoint_names)
+        )
         # add train/val/test split
         if set is not None:
             error_df["set"] = set
@@ -816,7 +826,7 @@ def compute_metrics_single(
     if "temporal" in metrics_to_compute:
         temporal_norm_per_keypoint = temporal_norm(keypoints_pred)
         temporal_norm_df = pd.DataFrame(
-            temporal_norm_per_keypoint, index=index, columns=keypoint_names
+            temporal_norm_per_keypoint, index=pd.Index(index), columns=pd.Index(keypoint_names)
         )
         # add train/val/test split
         if set is not None:
@@ -828,6 +838,7 @@ def compute_metrics_single(
     if "pca_singleview" in metrics_to_compute:
         try:
             # build pca object
+            assert data_module is not None
             pca = KeypointPCA(
                 loss_type="pca_singleview",
                 data_module=data_module,
@@ -841,7 +852,9 @@ def compute_metrics_single(
             pca()
             # compute reprojection error
             pcasv_error_per_keypoint = pca_singleview_reprojection_error(keypoints_pred, pca)
-            pcasv_df = pd.DataFrame(pcasv_error_per_keypoint, index=index, columns=keypoint_names)
+            pcasv_df = pd.DataFrame(
+                pcasv_error_per_keypoint, index=pd.Index(index), columns=pd.Index(keypoint_names)
+            )
             # add train/val/test split
             if set is not None:
                 pcasv_df["set"] = set
@@ -860,6 +873,7 @@ def compute_metrics_single(
 
     if "pca_multiview" in metrics_to_compute:
         # build pca object
+        assert data_module is not None
         pca = KeypointPCA(
             loss_type="pca_multiview",
             data_module=data_module,
@@ -872,7 +886,9 @@ def compute_metrics_single(
         pca()
         # compute reprojection error
         pcamv_error_per_keypoint = pca_multiview_reprojection_error(keypoints_pred, pca)
-        pcamv_df = pd.DataFrame(pcamv_error_per_keypoint, index=index, columns=keypoint_names)
+        pcamv_df = pd.DataFrame(
+            pcamv_error_per_keypoint, index=pd.Index(index), columns=pd.Index(keypoint_names)
+        )
         # add train/val/test split
         if set is not None:
             pcamv_df["set"] = set

@@ -2,7 +2,7 @@ import argparse
 from pathlib import Path
 
 
-def config_file(filepath):
+def config_file(filepath: str) -> Path:
     """
     Custom argparse type for validating that a file exists and is a yaml file.
 
@@ -20,12 +20,12 @@ def config_file(filepath):
     return path
 
 
-def model_dir(filepath):
+def model_dir(filepath: str | Path) -> Path:
     path = Path(filepath)
     return path
 
 
-def existing_model_dir(filepath):
+def existing_model_dir(filepath: str | Path) -> Path:
     path = model_dir(filepath)
     if not path.is_dir():
         raise argparse.ArgumentTypeError(

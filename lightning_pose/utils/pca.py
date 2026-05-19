@@ -1,7 +1,7 @@
 """PCA class to assist with computing PCA losses."""
 
 import warnings
-from typing import Literal
+from typing import Any, Literal, cast
 
 import numpy as np
 import torch
@@ -14,7 +14,7 @@ from sklearn.utils.extmath import stable_cumsum, svd_flip
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import MultiviewHeatmapDataset
-from lightning_pose.data.utils import DataExtractor
+from lightning_pose.data.extractor import DataExtractor
 from lightning_pose.losses.helpers import (
     EmpiricalEpsilon,
     convert_dict_values_to_tensors,
@@ -39,7 +39,7 @@ class KeypointPCA:
         empirical_epsilon_percentile: float = 99.0,
         mirrored_column_matches: ListConfig | list | None = None,
         columns_for_singleview_pca: ListConfig | list | None = None,
-        device: Literal["cuda", "cpu"] | torch.device = "cpu",
+        device: str | torch.device = "cpu",
         centering_method: Literal["mean", "median"] | None = None,
     ) -> None:
         """Initialize KeypointPCA.
@@ -77,7 +77,7 @@ class KeypointPCA:
                     "mirrored view"
                 )
             num_views = len(data_module.dataset.view_names)
-            num_keypoints = data_module.dataset.num_keypoints / num_views  # keypoints per view
+            num_keypoints = cast(int, data_module.dataset.num_keypoints) / num_views
             mirrored_column_matches = [
                 (v * num_keypoints + np.array(mirrored_column_matches, dtype=int)).tolist()
                 for v in range(num_views)
@@ -103,6 +103,7 @@ class KeypointPCA:
         # keypoints views from multiple views.
         data_arr = data_arr.reshape(data_arr.shape[0], data_arr.shape[1] // 2, 2)
         # shape = (batch_size, num_keypoints, 2)
+        assert self.mirrored_column_matches is not None
         data_arr = format_multiview_data_for_pca(
             data_arr=data_arr,
             mirrored_column_matches=self.mirrored_column_matches,
@@ -191,9 +192,11 @@ class KeypointPCA:
 
     def pca_prints(self) -> None:
         # call after we've fitted a pca object and selected how many components to keep
+        assert self.pca_object is not None
         pca_prints(self.pca_object, self.loss_type, self._n_components_kept)
 
     def _set_parameter_dict(self) -> None:
+        assert self.pca_object is not None
 
         self.parameters = {  # dict with same keys as loss_param_dict
             "mean": self.pca_object.mean_,
@@ -203,9 +206,12 @@ class KeypointPCA:
 
         self.parameters = convert_dict_values_to_tensors(self.parameters, self.device)
 
-        self.parameters["epsilon"] = EmpiricalEpsilon(
+        epsilon_val = EmpiricalEpsilon(
             percentile=self.empirical_epsilon_percentile
         )(loss=self.compute_reprojection_error())
+        self.parameters["epsilon"] = torch.tensor(
+            epsilon_val, dtype=torch.float, device=self.device
+        )
 
     def reproject(
         self, data_arr: Float[torch.Tensor, "num_samples sample_dim"] | None = None
@@ -359,7 +365,13 @@ class NaNPCA(PCA):
         # Call fit for full SVD
         return self._fit_full(X, n_components, xp, is_array_api_compliant)
 
-    def _fit_full(self, X, n_components, xp, is_array_api_compliant):
+    def _fit_full(
+        self,
+        X: np.ndarray,
+        n_components: Any,
+        xp: Any,
+        is_array_api_compliant: bool,
+    ) -> tuple[Any, ...]:
         """Fit the model by computing full SVD on X.
 
         This is a modification of the sklearn function that now allows for NaNs in the inputs.
@@ -468,7 +480,7 @@ class NaNPCA(PCA):
                 )
             else:
                 explained_variance_ratio_np = explained_variance_ratio_
-            ratio_cumsum = stable_cumsum(explained_variance_ratio_np)
+            ratio_cumsum = stable_cumsum(explained_variance_ratio_np)  # type: ignore[operator]
             n_components = np.searchsorted(ratio_cumsum, n_components, side="right") + 1
 
         # Compute noise covariance using Probabilistic PCA model
@@ -486,6 +498,7 @@ class NaNPCA(PCA):
         # - ensure that the kept components are allocated contiguously in
         #   memory to make the transform method faster by leveraging cache
         #   locality.
+        assert components_ is not None
         self.components_ = xp.asarray(components_[:n_components, :], copy=True)
 
         # We do the same for the other arrays for the sake of consistency.
@@ -499,7 +512,7 @@ class NaNPCA(PCA):
 
         return U, S, Vt, X, x_is_centered, xp
 
-    def transform(self, X):
+    def transform(self, X: np.ndarray) -> np.ndarray:
         """Apply dimensionality reduction to X including missing data (Nans).
 
         X is projected on the first principal components previously extracted
@@ -620,6 +633,9 @@ class ComponentChooser:
         elif type(self.components_to_keep) is float:
             # find that integer that crosses the minimum explained variance
             return self._find_first_threshold_cross()
+        raise TypeError(
+            f'components_to_keep must be int or float, got {type(self.components_to_keep)}'
+        )
 
 
 def pca_prints(pca: PCA, condition: str, components_to_keep: int) -> None:

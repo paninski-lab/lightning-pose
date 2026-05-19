@@ -221,7 +221,7 @@ def test_nan_pca():
 
     # load non-nan example data
     diabetes = load_diabetes()
-    data_for_pca = diabetes.data
+    data_for_pca = diabetes.data  # type: ignore[union-attr]
 
     # no nan-handling needed here
     assert np.sum(np.isnan(data_for_pca)) == 0
@@ -244,7 +244,7 @@ def test_nan_pca():
     assert pca_skl.noise_variance_ == pca_cust.noise_variance_
     assert pca_skl.n_samples_ == pca_cust.n_samples_
     assert pca_skl.n_components_ == pca_cust.n_components_
-    assert np.allclose(pca_skl.components_, pca_cust.components_, rtol=1e-10)
+    assert np.allclose(pca_skl.components_, pca_cust.components_, rtol=1e-10)  # type: ignore[arg-type]
     assert np.allclose(pca_skl.explained_variance_, pca_cust.explained_variance_, rtol=1e-10)
     assert np.allclose(
         pca_skl.explained_variance_ratio_, pca_cust.explained_variance_ratio_, rtol=1e-10)
@@ -367,7 +367,7 @@ def test_component_chooser():
     from sklearn.decomposition import PCA
 
     diabetes = load_diabetes()
-    data_for_pca = diabetes.data
+    data_for_pca = diabetes.data  # type: ignore[union-attr]
     assert np.sum(np.isnan(data_for_pca)) == 0  # no nan-handling needed here
     assert data_for_pca.shape == (
         442,

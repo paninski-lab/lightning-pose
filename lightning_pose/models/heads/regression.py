@@ -15,7 +15,7 @@ class LinearRegressionHead(nn.Module):
         self,
         in_channels: int,
         num_targets: int,
-    ):
+    ) -> None:
         super().__init__()
         self.linear_layer = nn.Linear(in_channels, num_targets)
 

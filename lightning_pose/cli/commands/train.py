@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import argparse
 import datetime
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .. import types
 
@@ -14,7 +15,7 @@ if TYPE_CHECKING:
     from lightning_pose.train import train  # noqa: F401
 
 
-def register_parser(subparsers):
+def register_parser(subparsers: Any) -> argparse.ArgumentParser:
     """Register the train command parser."""
     train_parser = subparsers.add_parser(
         "train",
@@ -53,16 +54,14 @@ def register_parser(subparsers):
     return train_parser
 
 
-def get_parser():
+def get_parser() -> argparse.ArgumentParser:
     """Return an ArgumentParser for the `litpose train` subcommand (for docs)."""
-    import argparse
-
     parser = argparse.ArgumentParser(prog="litpose")
     subparsers = parser.add_subparsers(dest="command")
     return register_parser(subparsers)
 
 
-def handle(args):
+def handle(args: argparse.Namespace) -> None:
     """Handle the train command."""
     # Import lightning_pose modules only when needed
     import hydra

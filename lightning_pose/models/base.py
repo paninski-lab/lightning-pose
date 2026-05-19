@@ -1,11 +1,18 @@
 """Base class for backbone that acts as a feature extractor."""
 
-from typing import Any, Literal
+from __future__ import annotations
+
+from collections.abc import Iterator
+from typing import TYPE_CHECKING, Any, Literal, cast
+
+if TYPE_CHECKING:
+    from lightning_pose.losses.factory import LossFactory
+    from lightning_pose.losses.losses import RegressionRMSELoss
 
 import torch
 from jaxtyping import Float
 from lightning.pytorch import LightningModule
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 from torch import optim
 from torch.optim.lr_scheduler import MultiStepLR
 
@@ -44,7 +51,7 @@ DEFAULT_OPTIMIZER_PARAMS = OmegaConf.create(
 
 
 class LrNotImplementedError(NotImplementedError):
-    def __init__(self, lr_scheduler: str):
+    def __init__(self, lr_scheduler: str) -> None:
         super().__init__(
             f"'{lr_scheduler}' is an invalid LR scheduler. Must be multisteplr."
         )
@@ -52,7 +59,7 @@ class LrNotImplementedError(NotImplementedError):
 
 
 class OptimizerNotImplementedError(NotImplementedError):
-    def __init__(self, optimizer: str):
+    def __init__(self, optimizer: str) -> None:
         super().__init__(
             f"'{optimizer}' is an invalid optimizer. Must be Adam or AdamW."
         )
@@ -60,8 +67,8 @@ class OptimizerNotImplementedError(NotImplementedError):
 
 
 def _apply_defaults_for_lr_scheduler_params(
-    lr_scheduler: str, lr_scheduler_params: DictConfig | dict | None
-) -> DictConfig:
+    lr_scheduler: str, lr_scheduler_params: DictConfig | ListConfig | dict | None
+) -> DictConfig | ListConfig:
     if lr_scheduler not in ("multistep_lr", "multisteplr"):
         raise LrNotImplementedError(lr_scheduler)
 
@@ -76,8 +83,8 @@ def _apply_defaults_for_lr_scheduler_params(
 
 
 def _apply_defaults_for_optimizer_params(
-    optimizer: str, optimizer_params: DictConfig | dict | None
-) -> DictConfig:
+    optimizer: str, optimizer_params: DictConfig | ListConfig | dict | None
+) -> DictConfig | ListConfig:
     if optimizer not in ("Adam", "AdamW"):
         raise OptimizerNotImplementedError(optimizer)
 
@@ -124,9 +131,9 @@ class BaseFeatureExtractor(LightningModule):
         backbone: ALLOWED_BACKBONES = "resnet50",
         pretrained: bool = True,
         lr_scheduler: str = "multisteplr",
-        lr_scheduler_params: DictConfig | dict | None = None,
+        lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
         optimizer: str = "Adam",
-        optimizer_params: DictConfig | dict | None = None,
+        optimizer_params: DictConfig | ListConfig | dict | None = None,
         do_context: bool = False,
         image_size: int = 256,
         model_type: Literal["heatmap", "regression"] = "heatmap",
@@ -338,7 +345,7 @@ class BaseFeatureExtractor(LightningModule):
         """
         return self.get_representations(images)
 
-    def get_scheduler(self, optimizer):
+    def get_scheduler(self, optimizer: torch.optim.Optimizer) -> MultiStepLR:
         if self.lr_scheduler not in ("multistep_lr", "multisteplr"):
             raise LrNotImplementedError(self.lr_scheduler)
         # define a scheduler that reduces the base learning rate
@@ -349,7 +356,7 @@ class BaseFeatureExtractor(LightningModule):
 
         return scheduler
 
-    def get_parameters(self):
+    def get_parameters(self) -> Iterator[torch.nn.Parameter]:
         params = filter(lambda p: p.requires_grad, self.parameters())
         return params
 
@@ -380,6 +387,9 @@ class BaseFeatureExtractor(LightningModule):
 class BaseSupervisedTracker(BaseFeatureExtractor):
     """Base class for supervised trackers."""
 
+    loss_factory: LossFactory | None
+    rmse_loss: RegressionRMSELoss
+
     def get_loss_inputs_labeled(
         self,
         batch_dict: (
@@ -409,6 +419,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         data_dict = self.get_loss_inputs_labeled(batch_dict=batch_dict)
 
         # compute and log loss on labeled data
+        assert self.loss_factory is not None
         loss, log_list = self.loss_factory(stage=stage, anneal_weight=anneal_weight, **data_dict)
 
         # compute and log pixel_error loss on labeled data
@@ -446,13 +457,14 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         # on each epoch, self.total_unsupervised_importance is modified by the
         # AnnealWeight callback
         if hasattr(self, "total_unsupervised_importance"):
+            unsup_importance = cast(torch.Tensor, self.total_unsupervised_importance)
             self.log(
                 "total_unsupervised_importance",
-                self.total_unsupervised_importance,
+                unsup_importance,
                 prog_bar=True,
                 # don't need to sync_dist because this is always the same across processes.
             )
-            anneal_weight = self.total_unsupervised_importance
+            anneal_weight = unsup_importance
         else:
             anneal_weight = None
         loss = self.evaluate_labeled(batch_dict, "train", anneal_weight=anneal_weight)
@@ -485,8 +497,16 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         self.evaluate_labeled(batch_dict, "test")
 
 
-class SemiSupervisedTrackerMixin:
-    """Mixin class providing training step function for semi-supervised models."""
+class SemiSupervisedTrackerMixin(BaseSupervisedTracker if TYPE_CHECKING else object):
+    """Mixin class providing training step function for semi-supervised models.
+
+    Always mixed with BaseSupervisedTracker (which provides LightningModule methods).
+    The conditional inheritance from BaseSupervisedTracker at TYPE_CHECKING time gives
+    pyright visibility into log(), device, evaluate_labeled(), loss_factory, etc.
+    """
+
+    loss_factory_unsup: LossFactory | None
+    total_unsupervised_importance: torch.Tensor
 
     def get_loss_inputs_unlabeled(
         self,
@@ -507,6 +527,7 @@ class SemiSupervisedTrackerMixin:
         data_dict = self.get_loss_inputs_unlabeled(batch_dict=batch_dict)
 
         # compute loss on unlabeled data
+        assert self.loss_factory_unsup is not None
         loss, log_list = self.loss_factory_unsup(
             stage=stage,
             anneal_weight=anneal_weight,
@@ -533,9 +554,10 @@ class SemiSupervisedTrackerMixin:
 
         # on each epoch, self.total_unsupervised_importance is modified by the
         # AnnealWeight callback
+        unsup_importance = self.total_unsupervised_importance
         self.log(
             "total_unsupervised_importance",
-            self.total_unsupervised_importance,
+            unsup_importance,
             prog_bar=True,
             # don't need to sync_dist because this is always the same across processes.
         )
@@ -548,7 +570,7 @@ class SemiSupervisedTrackerMixin:
         loss_super = self.evaluate_labeled(
             batch_dict=batch_dict["labeled"],
             stage="train",
-            anneal_weight=self.total_unsupervised_importance,
+            anneal_weight=unsup_importance,
         )
 
         # computes and logs unsupervised losses
@@ -557,7 +579,7 @@ class SemiSupervisedTrackerMixin:
         loss_unsuper = self.evaluate_unlabeled(
             batch_dict=batch_dict["unlabeled"],
             stage="train",
-            anneal_weight=self.total_unsupervised_importance,
+            anneal_weight=unsup_importance,
         )
 
         # log total loss

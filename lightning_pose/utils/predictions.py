@@ -7,7 +7,7 @@ import gc
 import os
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
 import cv2
 import lightning.pytorch as pl
@@ -17,7 +17,7 @@ import pandas as pd
 import torch
 from jaxtyping import Float
 from moviepy import VideoFileClip
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from lightning_pose.callbacks import JSONInferenceProgressTracker
 from lightning_pose.data.dali import PrepareDALI
@@ -41,7 +41,7 @@ __all__ = [
 ]
 
 
-def _get_cfg_file(cfg_file: str | DictConfig):
+def _get_cfg_file(cfg_file: str | DictConfig | ListConfig) -> DictConfig | ListConfig:
     """Load yaml configuration files."""
     if isinstance(cfg_file, str):
         # load configuration file
@@ -59,8 +59,8 @@ class PredictionHandler:
 
     def __init__(
         self,
-        cfg: DictConfig,
-        data_module: pl.LightningDataModule | None = None,
+        cfg: DictConfig | ListConfig,
+        data_module: BaseDataModule | UnlabeledDataModule | None = None,
         video_file: str | None = None,
     ) -> None:
         """
@@ -87,16 +87,17 @@ class PredictionHandler:
         if self.video_file is not None:
             return count_frames(self.video_file)
         else:
-            return len(self.data_module.dataset)
+            assert self.data_module is not None
+            return len(self.data_module.dataset)  # type: ignore[arg-type]
 
     @property
-    def keypoint_names(self):
+    def keypoint_names(self) -> list[str]:
         return list(self.cfg.data.keypoint_names)
 
     @property
-    def do_context(self):
+    def do_context(self) -> bool:
         if self.data_module:
-            return self.data_module.dataset.do_context
+            return self.data_module.dataset.do_context  # type: ignore[union-attr]
         else:
             return self.cfg.model.model_type == "heatmap_mhcrnn"
 
@@ -151,7 +152,7 @@ class PredictionHandler:
 
     def fix_context_preds_confs(
         self, stacked_preds: torch.Tensor, zero_pad_confidence: bool = False
-    ):
+    ) -> torch.Tensor:
         """
         In the context model, ind=0 is associated with image[2], and ind=1 is associated with
         image[3], so we need to shift the predictions and confidences by two and eliminate the
@@ -184,9 +185,9 @@ class PredictionHandler:
 
     @staticmethod
     def make_pred_arr_undo_resize(
-        keypoints_np: np.array,
-        confidence_np: np.array,
-    ) -> np.array:
+        keypoints_np: np.ndarray,
+        confidence_np: np.ndarray,
+    ) -> np.ndarray:
         """Resize keypoints and add confidences into one numpy array.
 
         Args:
@@ -218,8 +219,12 @@ class PredictionHandler:
 
     def add_split_indices_to_df(self, df: pd.DataFrame) -> pd.DataFrame:
         """Add split indices to the dataframe."""
+        assert self.data_module is not None
         df["set"] = np.array(["unused"] * df.shape[0])
 
+        assert self.data_module.train_dataset is not None
+        assert self.data_module.val_dataset is not None
+        assert self.data_module.test_dataset is not None
         dataset_split_indices = {
             "train": self.data_module.train_dataset.indices,
             "validation": self.data_module.val_dataset.indices,
@@ -229,6 +234,30 @@ class PredictionHandler:
         for key, val in dataset_split_indices.items():
             df.loc[val, ("set", "", "")] = np.repeat(key, len(val))
         return df
+
+    @overload
+    def __call__(
+        self,
+        preds: list[
+            tuple[
+                Float[torch.Tensor, "batch two_times_num_keypoints"],
+                Float[torch.Tensor, "batch num_keypoints"],
+            ]
+        ],
+        is_multiview_video: Literal[False] = ...,
+    ) -> pd.DataFrame: ...
+
+    @overload
+    def __call__(
+        self,
+        preds: list[
+            tuple[
+                Float[torch.Tensor, "batch two_times_num_keypoints"],
+                Float[torch.Tensor, "batch num_keypoints"],
+            ]
+        ],
+        is_multiview_video: Literal[True],
+    ) -> dict[str, pd.DataFrame]: ...
 
     def __call__(
         self,
@@ -278,7 +307,9 @@ class PredictionHandler:
                 if self.video_file is None:
                     # specify which image is train/test/val/unused
                     df = self.add_split_indices_to_df(df)
-                    df.index = self.data_module.dataset.dataset[view_name].image_names
+                    assert self.data_module is not None
+                    view_dataset = self.data_module.dataset.dataset  # type: ignore[index]
+                    df.index = view_dataset[view_name].image_names
             retval = view_to_df
         else:
             pred_arr = self.make_pred_arr_undo_resize(
@@ -289,14 +320,15 @@ class PredictionHandler:
             if self.video_file is None:
                 # specify which image is train/test/val/unused
                 df = self.add_split_indices_to_df(df)
-                df.index = self.data_module.dataset.image_names
+                assert self.data_module is not None
+                df.index = self.data_module.dataset.image_names  # type: ignore[union-attr]
             retval = df
 
         return retval
 
 
 def predict_dataset(
-    cfg: DictConfig,
+    cfg: DictConfig | ListConfig,
     data_module: BaseDataModule,
     preds_file: str | list[str],
     ckpt_file: str | None = None,
@@ -335,9 +367,13 @@ def predict_dataset(
         dataloaders=data_module.full_labeled_dataloader(),
         return_predictions=True,
     )
+    assert labeled_preds is not None
 
     pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
-    labeled_preds_df = pred_handler(preds=labeled_preds)
+    labeled_preds_typed = cast(
+        list[tuple[torch.Tensor, torch.Tensor]], labeled_preds
+    )
+    labeled_preds_df = pred_handler(preds=labeled_preds_typed)
     if isinstance(labeled_preds_df, dict):
         if isinstance(preds_file, str):
             # old logic used to save to <predictions>_<view_name>.csv
@@ -356,6 +392,7 @@ def predict_dataset(
                 df.to_csv(_pred_file)
 
     else:
+        assert isinstance(preds_file, str), 'preds_file must be a str for single-view predictions'
         labeled_preds_df.to_csv(preds_file)
 
     # clear up memory
@@ -370,7 +407,7 @@ def predict_dataset(
 
 
 def predict_single_video(
-    cfg_file: str | DictConfig,
+    cfg_file: str | DictConfig | ListConfig,
     video_file: str,
     preds_file: str,
     data_module: BaseDataModule | UnlabeledDataModule | None = None,
@@ -451,9 +488,11 @@ def predict_single_video(
         dataloaders=predict_loader,
         return_predictions=True,
     )
+    assert preds is not None
 
     # call this instance on a single vid's preds
-    preds_df = pred_handler(preds=preds)
+    preds_typed = cast(list[tuple[torch.Tensor, torch.Tensor]], preds)
+    preds_df = pred_handler(preds=preds_typed)
     # save the predictions to a csv; create directory if it doesn't exist
     os.makedirs(os.path.dirname(preds_file), exist_ok=True)
     preds_df.to_csv(preds_file)
@@ -470,7 +509,10 @@ def predict_single_video(
     return preds_df
 
 
-def make_dlc_pandas_index(cfg: DictConfig, keypoint_names: list[str]) -> pd.MultiIndex:
+def make_dlc_pandas_index(
+    cfg: DictConfig | ListConfig,
+    keypoint_names: list[str],
+) -> pd.MultiIndex:
     xyl_labels = ["x", "y", "likelihood"]
     pdindex = pd.MultiIndex.from_product(
         [[f"{cfg.model.model_type}_tracker"], keypoint_names, xyl_labels],
@@ -497,10 +539,6 @@ def get_model_class(map_type: str, semi_supervised: bool) -> type[ALLOWED_MODELS
             from lightning_pose.models import HeatmapTracker as Model
         elif map_type == "heatmap_mhcrnn":
             from lightning_pose.models import HeatmapTrackerMHCRNN as Model
-        elif map_type == "heatmap_multiview":
-            from lightning_pose.models import HeatmapTrackerMultiview as Model
-        elif map_type == "heatmap_multiview_multihead":
-            from lightning_pose.models import HeatmapTrackerMultiviewMultihead as Model
         elif map_type == "heatmap_multiview_transformer":
             from lightning_pose.models import HeatmapTrackerMultiviewTransformer as Model
         else:
@@ -527,8 +565,8 @@ def get_model_class(map_type: str, semi_supervised: bool) -> type[ALLOWED_MODELS
 
 
 def load_model_from_checkpoint(
-    cfg: DictConfig,
-    ckpt_file: str,
+    cfg: DictConfig | ListConfig,
+    ckpt_file: str | None,
     eval: bool = False,
     data_module: BaseDataModule | UnlabeledDataModule | None = None,
     skip_data_module: bool = False,
@@ -549,7 +587,12 @@ def load_model_from_checkpoint(
     Returns:
         model as a Lightning Module
 
+    Raises:
+        ValueError: if ckpt_file is None
+
     """
+    if ckpt_file is None:
+        raise ValueError('ckpt_file must be provided to load a model from checkpoint')
     from lightning_pose.utils.io import (
         check_if_semi_supervised,
         return_absolute_data_paths,
@@ -645,7 +688,7 @@ def load_model_from_checkpoint(
     return model
 
 
-def _make_cmap(number_colors: int, cmap: str):
+def _make_cmap(number_colors: int, cmap: str) -> np.ndarray:
     color_class = plt.cm.ScalarMappable(cmap=cmap)
     C = color_class.to_rgba(np.linspace(0, 1, number_colors))
     colors = (C[:, :3] * 255).astype(np.uint8)
@@ -682,7 +725,7 @@ def create_labeled_video(
     n_frames, n_keypoints = xs_arr.shape
 
     # set colormap for each color
-    colors = _make_cmap(n_keypoints, cmap=colormap)
+    colors = _make_cmap(n_keypoints, cmap=colormap or "cool")
 
     # extract info from clip
     nx, ny = clip.size
@@ -698,27 +741,27 @@ def create_labeled_video(
         upsample_factor = 1
 
     if upsample_factor > 1:
-        clip = clip.resized((upsample_factor * nx, upsample_factor * ny))
+        clip = cast(VideoFileClip, clip.resized((upsample_factor * nx, upsample_factor * ny)))
         nx, ny = clip.size
 
     print(f"Duration of video [s]: {np.round(dur, 2)}, recorded at {np.round(fps_og, 2)} fps!")
 
-    def seconds_to_hms(seconds):
+    def seconds_to_hms(seconds: float) -> str:
         # Convert seconds to a timedelta object
         td = datetime.timedelta(seconds=seconds)
 
         # Extract hours, minutes, and seconds from the timedelta object
         hours = td // datetime.timedelta(hours=1)
         minutes = (td // datetime.timedelta(minutes=1)) % 60
-        seconds = td % datetime.timedelta(minutes=1)
+        remainder = td % datetime.timedelta(minutes=1)
 
         # Format the hours, minutes, and seconds into a string
-        hms_str = f"{hours:02}:{minutes:02}:{seconds.seconds:02}"
+        hms_str = f"{hours:02}:{minutes:02}:{remainder.seconds:02}"
 
         return hms_str
 
     # add marker to each frame t, where t is in sec
-    def add_marker_and_timestamps(get_frame, t):
+    def add_marker_and_timestamps(get_frame: Any, t: float) -> np.ndarray:
         image = get_frame(t)
         # frame [ny x ny x 3]
         frame = image.copy()
@@ -787,7 +830,7 @@ def create_labeled_video(
 
 def export_predictions_and_labeled_video(
     video_file: str,
-    cfg: DictConfig,
+    cfg: DictConfig | ListConfig,
     prediction_csv_file: str,
     ckpt_file: str | None = None,
     trainer: pl.Trainer | None = None,
@@ -836,7 +879,7 @@ def generate_labeled_video(
     output_mp4_file: str,
     confidence_thresh_for_vid: float,
     colormap: str,
-):
+) -> None:
     os.makedirs(os.path.dirname(output_mp4_file), exist_ok=True)
     # transform df to numpy array
     keypoints_arr = np.reshape(preds_df.to_numpy(), [preds_df.shape[0], -1, 3])
@@ -853,6 +896,24 @@ def generate_labeled_video(
         output_video_path=output_mp4_file,
         colormap=colormap,
     )
+
+
+@overload
+def predict_video(
+    video_file: str,
+    model: Model,
+    output_pred_file: str | None = None,
+    progress_file: Path | None = None,
+) -> pd.DataFrame: ...
+
+
+@overload
+def predict_video(
+    video_file: list[str],
+    model: Model,
+    output_pred_file: list[str] | None = None,
+    progress_file: Path | None = None,
+) -> list[pd.DataFrame]: ...
 
 
 def predict_video(
@@ -929,8 +990,10 @@ def predict_video(
         dataloaders=predict_loader,
         return_predictions=True,
     )
+    assert preds is not None
 
-    preds_df = pred_handler(preds=preds, is_multiview_video=is_multiview)
+    preds_typed = cast(list[tuple[torch.Tensor, torch.Tensor]], preds)
+    preds_df = pred_handler(preds=preds_typed, is_multiview_video=is_multiview)
 
     # Convert to a 1-1 correspondence list similar to video_files, for multiview.
     if isinstance(preds_df, dict):
@@ -946,6 +1009,8 @@ def predict_video(
                 os.makedirs(os.path.dirname(output_file), exist_ok=True)
                 df.to_csv(output_file)
         else:
+            assert isinstance(preds_df, pd.DataFrame)
+            assert isinstance(output_pred_file, str)
             preds_df.to_csv(output_pred_file)
 
     # clear up memory

@@ -35,8 +35,8 @@ class HeatmapMHCRNNHead(nn.Module):
         out_channels: int,
         deconv_out_channels: int | None = None,
         downsample_factor: int = 2,
-        upsampling_factor: int = 2,
-    ):
+        upsampling_factor: Literal[1, 2] = 2,
+    ) -> None:
         """
 
         Args:
@@ -79,7 +79,7 @@ class HeatmapMHCRNNHead(nn.Module):
     def forward(
         self,
         features: Float[torch.Tensor, "batch features rep_height rep_width frames"],
-        batch_shape: torch.tensor,
+        batch_shape: torch.Tensor,
         is_multiview: bool,
     ) -> tuple[
         Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"],
@@ -94,14 +94,14 @@ class HeatmapMHCRNNHead(nn.Module):
 
         """
 
-        num_frames = batch_shape[0]
+        num_frames = int(batch_shape[0])
 
         if len(batch_shape) == 5 and is_multiview:
             # put view info back in batch so we can properly extract heatmaps
             shape_r = features.shape
             num_frames -= 4  # we lose the first/last 2 frames of unlabeled batch due to context
             features = features.reshape(
-                num_frames * batch_shape[1], -1, shape_r[-3], shape_r[-2], shape_r[-1],
+                num_frames * int(batch_shape[1]), -1, shape_r[-3], shape_r[-2], shape_r[-1],
             )
 
         # permute to shape (frames, batch, features, rep_height, rep_width)
@@ -120,7 +120,10 @@ class HeatmapMHCRNNHead(nn.Module):
 
         return heatmaps_sf, heatmaps_mf
 
-    def run_subpixelmaxima(self, heatmaps):
+    def run_subpixelmaxima(
+        self,
+        heatmaps: Float[torch.Tensor, "batch num_keypoints height width"],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         return run_subpixelmaxima(heatmaps, self.downsample_factor, self.temperature)
 
 
@@ -236,22 +239,22 @@ class UpsamplingCRNN(nn.Module):
         else:
             self.layers = torch.nn.ModuleList([self.W_f, self.H_f, self.W_b, self.H_b])
 
-    def _initialize_layers(self):
+    def _initialize_layers(self) -> None:
         if self.upsampling_factor == 2:
             torch.nn.init.xavier_uniform_(self.W_pre.weight, gain=1.0)
-            torch.nn.init.zeros_(self.W_pre.bias)
+            torch.nn.init.zeros_(self.W_pre.bias)  # type: ignore[arg-type]
 
         torch.nn.init.xavier_uniform_(self.W_f.weight, gain=1.0)
-        torch.nn.init.zeros_(self.W_f.bias)
+        torch.nn.init.zeros_(self.W_f.bias)  # type: ignore[arg-type]
         for _index, layer in enumerate(self.H_f):
-            torch.nn.init.xavier_uniform_(layer.weight, gain=1.0)
-            torch.nn.init.zeros_(layer.bias)
+            torch.nn.init.xavier_uniform_(layer.weight, gain=1.0)  # type: ignore[arg-type]
+            torch.nn.init.zeros_(layer.bias)  # type: ignore[arg-type]
 
         torch.nn.init.xavier_uniform_(self.W_b.weight, gain=1.0)
-        torch.nn.init.zeros_(self.W_b.bias)
+        torch.nn.init.zeros_(self.W_b.bias)  # type: ignore[arg-type]
         for _index, layer in enumerate(self.H_b):
-            torch.nn.init.xavier_uniform_(layer.weight, gain=1.0)
-            torch.nn.init.zeros_(layer.bias)
+            torch.nn.init.xavier_uniform_(layer.weight, gain=1.0)  # type: ignore[arg-type]
+            torch.nn.init.zeros_(layer.bias)  # type: ignore[arg-type]
 
     def forward(
         self,

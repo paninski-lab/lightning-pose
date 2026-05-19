@@ -25,11 +25,7 @@ jobs:
         run: |
           # CPU-only torch is sufficient for type checking (avoids ~2GB CUDA download)
           pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-          # Install remaining project dependencies; DALI requires GPU hardware so it is
-          # skipped — the source handles its absence with a try/except already
-          pip install "lightning~=2.5" jaxtyping "numpy>=2.0.0" opencv-python-headless \
-          scikit-learn tensorboard transformers pandas pyyaml torchmetrics
-          pip install ruff pyright pytest
+          pip install -e ".[dev]"
 
       - name: Lint with ruff
         run: ruff check lightning_pose tests
@@ -48,16 +44,16 @@ jobs:
           echo "  ruff check lightning_pose tests"
           echo ""
 
-#      - name: Type check with pyright
-#        id: pyright
-#        run: pyright
-#
-#      - name: Show fix instructions if type checking failed
-#        if: always() && steps.pyright.outcome == 'failure'
-#        run: |
-#          echo ""
-#          echo "Type checking failed!"
-#          echo ""
-#          echo "To reproduce locally, run:"
-#          echo "  pyright"
-#          echo ""
+      - name: Type check with pyright
+        id: pyright
+        run: pyright
+
+      - name: Show fix instructions if type checking failed
+        if: always() && steps.pyright.outcome == 'failure'
+        run: |
+          echo ""
+          echo "Type checking failed!"
+          echo ""
+          echo "To reproduce locally, run:"
+          echo "  pyright"
+          echo ""

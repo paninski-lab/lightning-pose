@@ -6,7 +6,7 @@ from . import friendly
 from .commands import COMMANDS
 
 
-def _build_parser():
+def _build_parser() -> friendly.ArgumentParser:
     parser = friendly.ArgumentParser()
     subparsers = parser.add_subparsers(
         dest="command",
@@ -22,12 +22,12 @@ def _build_parser():
     return parser
 
 
-def main():
+def main() -> None:
     parser = _build_parser()
 
     # If no commands provided, display the help message.
     if len(sys.argv) == 1:
-        parser.print_help(sys.stderr)
+        parser.print_help(sys.stderr)  # type: ignore[arg-type]
         sys.exit(1)
 
     args = parser.parse_args()

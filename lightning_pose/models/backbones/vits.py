@@ -1,13 +1,20 @@
-import math
+from __future__ import annotations
 
-import safetensors
+import math
+from typing import Any
+
+import safetensors.torch
 import torch
 
 # to ignore imports for sphix-autoapidoc
 __all__ = []
 
 
-def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
+def build_backbone(
+    backbone_arch: str,
+    image_size: int = 256,
+    **kwargs: Any
+) -> tuple[torch.nn.Module, int]:
     """Load backbone weights for resnet models.
 
     Args:
@@ -64,7 +71,7 @@ def build_backbone(backbone_arch: str, image_size: int = 256, **kwargs):
     return base, num_fc_input_features
 
 
-def load_vit_backbone_checkpoint(base, checkpoint: str):
+def load_vit_backbone_checkpoint(base: VisionEncoder, checkpoint: str) -> None:
     print(f"Loading VIT-MAE weights from {checkpoint}")
     # support loading safetensors
     if checkpoint.endswith(".safetensors"):
@@ -82,7 +89,7 @@ def load_vit_backbone_checkpoint(base, checkpoint: str):
         ckpt_vit_pretrain = ckpt_vit_pretrain["state_dict"]
     # Create a filtered state dict for the VIT-MAE part only
     vit_mae_state_dict = {}
-    for key, value in ckpt_vit_pretrain.items():
+    for key, value in ckpt_vit_pretrain.items():  # type: ignore[union-attr]
         if key.startswith("vit_mae."):
             model_key = key.replace("vit_mae.vit.", "")
             # Check if shapes match before including in state dict
@@ -93,7 +100,7 @@ def load_vit_backbone_checkpoint(base, checkpoint: str):
     base.vision_encoder.load_state_dict(vit_mae_state_dict, strict=False)
 
 
-def _load_dinov3_with_auth_check(model_name: str, pretrained_patch_size: int):
+def _load_dinov3_with_auth_check(model_name: str, pretrained_patch_size: int) -> VisionEncoderDino:
     """Helper to load DINOv3 models with proper error handling for gated repos."""
 
     dinov3_access_help = """
@@ -155,7 +162,7 @@ def _load_dinov3_with_auth_check(model_name: str, pretrained_patch_size: int):
 class VisionEncoder(torch.nn.Module):
     """Wrapper around generic ViT Encoder."""
 
-    def __init__(self, model_name):
+    def __init__(self, model_name: str) -> None:
         super().__init__()
         from transformers import ViTModel
         self.vision_encoder = ViTModel.from_pretrained(model_name, add_pooling_layer=False)
@@ -191,7 +198,7 @@ class VisionEncoder(torch.nn.Module):
 class VisionEncoderDino(torch.nn.Module):
     """Wrapper around DINOv2/DINOv3 Encoder."""
 
-    def __init__(self, model_name, pretrained_patch_size):
+    def __init__(self, model_name: str, pretrained_patch_size: int) -> None:
         super().__init__()
         from transformers import AutoModel
         self.vision_encoder = AutoModel.from_pretrained(model_name)
@@ -235,7 +242,7 @@ class VisionEncoderDino(torch.nn.Module):
 
         return outputs
 
-    def _resize_patch_embedding_weights(self):
+    def _resize_patch_embedding_weights(self) -> None:
 
         projection = self.vision_encoder.embeddings.patch_embeddings.projection
         out_channels, in_channels, old_h, old_w = projection.weight.shape
@@ -262,6 +269,7 @@ class VisionEncoderDino(torch.nn.Module):
         )
         new_projection.weight.data = new_weights
         if projection.bias is not None:
+            assert new_projection.bias is not None
             new_projection.bias.data = projection.bias.data
 
         self.vision_encoder.embeddings.patch_embeddings.projection = new_projection

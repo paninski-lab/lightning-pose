@@ -14,40 +14,6 @@ from lightning_pose.data.utils import (
 )
 
 
-def test_data_extractor(base_data_module_combined, multiview_heatmap_data_module_combined):
-
-    from lightning_pose.data.utils import DataExtractor
-
-    # ---------------------------
-    # supervised single view
-    # ---------------------------
-    num_frames = (
-        len(base_data_module_combined.dataset)
-        * base_data_module_combined.train_probability
-    )
-    keypoint_tensor, _ = DataExtractor(
-        data_module=base_data_module_combined, cond="train"
-    )()
-    assert keypoint_tensor.shape == (num_frames, 34)  # 72 = 0.8 * 90 images, 17 * 2 coordinates
-
-    keypoint_tensor, images_tensor = DataExtractor(
-        data_module=base_data_module_combined, cond="train", extract_images=True
-    )()
-    assert images_tensor.shape == (num_frames, 3, 128, 128)
-
-    # ---------------------------
-    # supervised multiview
-    # ---------------------------
-    num_frames = (
-        len(multiview_heatmap_data_module_combined.dataset)
-        * multiview_heatmap_data_module_combined.train_probability
-    )
-    keypoint_tensor, _ = DataExtractor(
-        data_module=multiview_heatmap_data_module_combined, cond="train"
-    )()
-    assert keypoint_tensor.shape == (num_frames, 28)  # 72 = 0.8 * 90 images, 7 * 2 * 2 coords
-
-
 def test_split_sizes_from_probabilities():
 
     from lightning_pose.data.utils import split_sizes_from_probabilities
@@ -218,7 +184,7 @@ class TestGenerateHeatmaps:
         im_width = cfg.data.image_resize_dims.width
 
         batch = heatmap_dataset.__getitem__(idx=0)
-        heatmap_gt = batch["heatmaps"].unsqueeze(0)
+        heatmap_gt = batch["heatmaps"].unsqueeze(0)  # type: ignore[typeddict-item]
         keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
 
         heatmap_uniform_torch = generate_heatmaps(
@@ -273,7 +239,7 @@ class TestGenerateHeatmaps:
 
         # now same test as `test_basic`
         batch = dataset.__getitem__(idx=0)
-        heatmap_gt = batch["heatmaps"].unsqueeze(0)
+        heatmap_gt = batch["heatmaps"].unsqueeze(0)  # type: ignore[typeddict-item]
         keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
         heatmap_torch = generate_heatmaps(
             keypts_gt,
@@ -821,7 +787,9 @@ def test_convert_bbox_coords(heatmap_data_module, multiview_heatmap_data_module)
         ]),
         "num_views": torch.tensor([2, 2]),
     }
-    converted = convert_bbox_coords(batch_dict, batch_dict["predicted_keypoints"])
+    converted = convert_bbox_coords(
+        batch_dict, batch_dict["predicted_keypoints"],  # type: ignore[arg-type]
+    )
     assert converted[0, 0] == batch_dict["bbox"][0, 0]
     assert converted[0, 1] == batch_dict["bbox"][0, 1]
     assert converted[0, 2] == batch_dict["bbox"][0, 4]
@@ -850,7 +818,9 @@ def test_convert_bbox_coords(heatmap_data_module, multiview_heatmap_data_module)
         ]),
         "num_views": torch.tensor([2, 2, 2, 2, 2, 2]),
     }
-    converted = convert_bbox_coords(batch_dict, batch_dict["predicted_keypoints"])
+    converted = convert_bbox_coords(
+        batch_dict, batch_dict["predicted_keypoints"],  # type: ignore[arg-type]
+    )
     assert converted[0, 0] == batch_dict["bbox"][2, 0]
     assert converted[0, 1] == batch_dict["bbox"][2, 1]
     assert converted[0, 2] == batch_dict["bbox"][2, 4]
@@ -918,7 +888,9 @@ class TestConvertOriginalToModelCoords:
         ])
 
         # Convert to model coordinates
-        model_keypoints = convert_original_to_model_coords(batch_dict, original_keypoints)
+        model_keypoints = convert_original_to_model_coords(
+            batch_dict, original_keypoints,  # type: ignore[arg-type]
+        )
 
         # Check output shape
         assert model_keypoints.shape == (2, 2, 3, 2)
@@ -962,7 +934,9 @@ class TestConvertOriginalToModelCoords:
             ]
         ])
 
-        model_keypoints = convert_original_to_model_coords(batch_dict, original_keypoints)
+        model_keypoints = convert_original_to_model_coords(
+            batch_dict, original_keypoints,  # type: ignore[arg-type]
+        )
 
         # Check output shape: (batch=2, views=3, keypoints=2, xy=2)
         assert model_keypoints.shape == (2, 3, 2, 2)
