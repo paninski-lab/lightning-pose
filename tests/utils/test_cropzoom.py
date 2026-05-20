@@ -4,6 +4,8 @@ import shutil
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
+import pytest
 from omegaconf import OmegaConf
 from PIL import Image
 
@@ -120,82 +122,117 @@ def compare_directories(dir1: Path, dir2: Path) -> int | dict:
     return results
 
 
-def test_generate_cropped_labeled_frames(tmp_path, request):
-    # Fetch a dataset and a fully trained model's predictions on it.
-    fetch_test_data_if_needed(request.path.parent, "test_cropzoom_data")
+class TestGenerateCroppedLabeledFrames:
+    """Test the generate_cropped_labeled_frames function."""
 
-    # Copy the model predictions to a temporary model directory.
-    tmp_model_directory = tmp_path / "test_model"
-    shutil.copytree(
-        request.path.parent / "test_cropzoom_data" / "test_model_output",
-        tmp_model_directory,
-    )
-
-    # Run cropzoom on the test data in the temporary model directory.
-    root_directory = request.path.parent / "test_cropzoom_data" / "test_data"
-    detector_cfg = OmegaConf.create(
-        {"crop_ratio": 1.5, "anchor_keypoints": ["A_head", "D_tailtip"]}
-    )
-    generate_cropped_labeled_frames(
-        input_data_dir=root_directory,
-        input_csv_file=root_directory / "CollectedData.csv",
-        input_preds_file=tmp_model_directory / "predictions.csv",
-        detector_cfg=detector_cfg,
-        output_data_dir=tmp_model_directory / "cropped_images",
-        output_bbox_file=tmp_model_directory / "cropped_images" / "bbox.csv",
-        output_csv_file=tmp_model_directory / "cropped_images" / "cropped_labels.csv",
-    )
-
-    # Assert cropzoom output matches expected output.
-    comparison = compare_directories(
-        tmp_model_directory / "cropped_images",
-        request.path.parent
-        / "test_cropzoom_data"
-        / "expected_model_output"
-        / "cropped_images",
-    )
-    # Successfully compared 24 objects.
-    assert comparison == 24
-
-
-def test_generate_cropped_video(tmp_path, request):
-    # Fetch a dataset and a fully trained model's predictions on it.
-    fetch_test_data_if_needed(request.path.parent, "test_cropzoom_data")
-
-    # Copy the model predictions to a temporary model directory.
-    tmp_model_directory = tmp_path / "test_model"
-    shutil.copytree(
-        request.path.parent / "test_cropzoom_data" / "test_model_output",
-        tmp_model_directory,
-    )
-
-    # Run cropzoom on the test data in the temporary model directory.
-    video_directory = (
-        request.path.parent / "test_cropzoom_data" / "test_data" / "videos"
-    )
-    detector_cfg = OmegaConf.create(
-        {"crop_ratio": 1.5, "anchor_keypoints": ["A_head", "D_tailtip"]}
-    )
-    for video_path in video_directory.iterdir():
-        generate_cropped_video(
-            input_video_file=video_path,
-            input_preds_file=tmp_model_directory
-            / "video_preds"
-            / (video_path.stem + ".csv"),
-            detector_cfg=detector_cfg,
-            output_bbox_file=tmp_model_directory
-            / "cropped_videos"
-            / (video_path.stem + "_bbox.csv"),
-            output_file=tmp_model_directory / "cropped_videos" / video_path.name,
+    @pytest.fixture
+    def setup(self, tmp_path, request):
+        fetch_test_data_if_needed(request.path.parent, 'test_cropzoom_data')
+        tmp_model_dir = tmp_path / 'test_model'
+        shutil.copytree(
+            request.path.parent / 'test_cropzoom_data' / 'test_model_output',
+            tmp_model_dir,
         )
+        return tmp_model_dir, request.path.parent / 'test_cropzoom_data'
 
-    # Assert cropzoom output matches expected output.
-    comparison = compare_directories(
-        tmp_model_directory / "cropped_videos",
-        request.path.parent
-        / "test_cropzoom_data"
-        / "expected_model_output"
-        / "cropped_videos",
-    )
-    # Successfully compared 2 objects (need to skip mp4s)
-    assert comparison == 2
+    def test_generate_cropped_labeled_frames_crop_ratio(self, setup):
+        tmp_model_dir, test_data_dir = setup
+        root_dir = test_data_dir / 'test_data'
+        detector_cfg = OmegaConf.create({
+            'crop_ratio': 1.5,
+            'anchor_keypoints': ['A_head', 'D_tailtip'],
+        })
+        generate_cropped_labeled_frames(
+            input_data_dir=root_dir,
+            input_csv_file=root_dir / 'CollectedData.csv',
+            input_preds_file=tmp_model_dir / 'predictions.csv',
+            detector_cfg=detector_cfg,
+            output_data_dir=tmp_model_dir / 'cropped_images',
+            output_bbox_file=tmp_model_dir / 'cropped_images' / 'bbox.csv',
+            output_csv_file=tmp_model_dir / 'cropped_images' / 'cropped_labels.csv',
+        )
+        comparison = compare_directories(
+            tmp_model_dir / 'cropped_images',
+            test_data_dir / 'expected_model_output' / 'cropped_images',
+        )
+        assert comparison == 24  # 24 files compared successfully
+
+    def test_generate_cropped_labeled_frames_crop_size(self, setup):
+        tmp_model_dir, test_data_dir = setup
+        root_dir = test_data_dir / 'test_data'
+        crop_size = 100
+        detector_cfg = OmegaConf.create({
+            'crop_height': crop_size,
+            'crop_width': crop_size,
+            'anchor_keypoints': ['A_head', 'D_tailtip'],
+        })
+        bbox_file = tmp_model_dir / 'cropped_images' / 'bbox.csv'
+        generate_cropped_labeled_frames(
+            input_data_dir=root_dir,
+            input_csv_file=root_dir / 'CollectedData.csv',
+            input_preds_file=tmp_model_dir / 'predictions.csv',
+            detector_cfg=detector_cfg,
+            output_data_dir=tmp_model_dir / 'cropped_images',
+            output_bbox_file=bbox_file,
+            output_csv_file=tmp_model_dir / 'cropped_images' / 'cropped_labels.csv',
+        )
+        bbox_df = pd.read_csv(bbox_file, index_col=0)
+        assert (bbox_df['h'] == crop_size).all()
+        assert (bbox_df['w'] == crop_size).all()
+
+
+class TestGenerateCroppedVideo:
+    """Test the generate_cropped_video function."""
+
+    @pytest.fixture
+    def setup(self, tmp_path, request):
+        fetch_test_data_if_needed(request.path.parent, 'test_cropzoom_data')
+        tmp_model_dir = tmp_path / 'test_model'
+        shutil.copytree(
+            request.path.parent / 'test_cropzoom_data' / 'test_model_output',
+            tmp_model_dir,
+        )
+        video_dir = request.path.parent / 'test_cropzoom_data' / 'test_data' / 'videos'
+        return tmp_model_dir, request.path.parent / 'test_cropzoom_data', video_dir
+
+    def test_generate_cropped_video_crop_ratio(self, setup):
+        tmp_model_dir, test_data_dir, video_dir = setup
+        detector_cfg = OmegaConf.create({
+            'crop_ratio': 1.5,
+            'anchor_keypoints': ['A_head', 'D_tailtip'],
+        })
+        for video_path in video_dir.iterdir():
+            bbox_file = tmp_model_dir / 'cropped_videos' / (video_path.stem + '_bbox.csv')
+            generate_cropped_video(
+                input_video_file=video_path,
+                input_preds_file=tmp_model_dir / 'video_preds' / (video_path.stem + '.csv'),
+                detector_cfg=detector_cfg,
+                output_bbox_file=bbox_file,
+                output_file=tmp_model_dir / 'cropped_videos' / video_path.name,
+            )
+        comparison = compare_directories(
+            tmp_model_dir / 'cropped_videos',
+            test_data_dir / 'expected_model_output' / 'cropped_videos',
+        )
+        assert comparison == 2  # 2 files compared successfully (mp4s skipped)
+
+    def test_generate_cropped_video_crop_size(self, setup):
+        tmp_model_dir, test_data_dir, video_dir = setup
+        crop_size = 100
+        detector_cfg = OmegaConf.create({
+            'crop_height': crop_size,
+            'crop_width': crop_size,
+            'anchor_keypoints': ['A_head', 'D_tailtip'],
+        })
+        for video_path in video_dir.iterdir():
+            bbox_file = tmp_model_dir / 'cropped_videos' / (video_path.stem + '_bbox.csv')
+            generate_cropped_video(
+                input_video_file=video_path,
+                input_preds_file=tmp_model_dir / 'video_preds' / (video_path.stem + '.csv'),
+                detector_cfg=detector_cfg,
+                output_bbox_file=bbox_file,
+                output_file=tmp_model_dir / 'cropped_videos' / video_path.name,
+            )
+            bbox_df = pd.read_csv(bbox_file, index_col=0)
+            assert (bbox_df['h'] == crop_size).all()
+            assert (bbox_df['w'] == crop_size).all()
