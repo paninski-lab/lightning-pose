@@ -10,6 +10,7 @@ from omegaconf import OmegaConf
 from PIL import Image
 
 from lightning_pose.utils.cropzoom import (
+    _compute_bbox_df,
     _crop_image,
     generate_cropped_labeled_frames,
     generate_cropped_video,
@@ -61,6 +62,41 @@ class TestCropImage:
         original = np.array(Image.open(img_path).crop(bbox))
         cropped = np.array(Image.open(out_path))
         assert np.array_equal(original, cropped)
+
+
+class TestComputeBboxDf:
+    """Test the _compute_bbox_df function."""
+
+    @pytest.fixture
+    def pred_df(self) -> pd.DataFrame:
+        """Minimal two-keypoint, three-frame prediction DataFrame."""
+        columns = pd.MultiIndex.from_tuples(
+            [
+                ('scorer', 'kp0', 'x'),
+                ('scorer', 'kp0', 'y'),
+                ('scorer', 'kp0', 'likelihood'),
+                ('scorer', 'kp1', 'x'),
+                ('scorer', 'kp1', 'y'),
+                ('scorer', 'kp1', 'likelihood'),
+            ],
+            names=['scorer', 'bodyparts', 'coords'],
+        )
+        data = [
+            [10.0, 20.0, 0.9, 30.0, 40.0, 0.8],
+            [15.0, 25.0, 0.9, 35.0, 45.0, 0.8],
+            [20.0, 30.0, 0.9, 40.0, 50.0, 0.8],
+        ]
+        return pd.DataFrame(data, columns=columns)
+
+    def test_raises_when_both_modes_provided(self, pred_df):
+        """Raises ValueError when crop_ratio and crop_height/width are both given."""
+        with pytest.raises(ValueError, match='not both'):
+            _compute_bbox_df(pred_df, [], crop_ratio=2.0, crop_height=100, crop_width=100)
+
+    def test_raises_when_neither_mode_provided(self, pred_df):
+        """Raises ValueError when neither crop_ratio nor crop_height/width are given."""
+        with pytest.raises(ValueError, match='must be provided'):
+            _compute_bbox_df(pred_df, [])
 
 
 # TODO: Move to utils.
