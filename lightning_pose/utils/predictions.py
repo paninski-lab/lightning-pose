@@ -372,7 +372,7 @@ def predict_dataset(
             # this allows the caller to specify the output locations more flexibly.
 
             # Check the order of labeled_preds_df keys matches the order of the views in the cfg.
-            assert list(labeled_preds_df.keys()) == list(cfg.data.view_names)
+            assert list(labeled_preds_df.keys()) == list(cfg_eff.data.view_names)
 
             for (_view_name, df), _pred_file in zip(
                 labeled_preds_df.items(), preds_file, strict=True

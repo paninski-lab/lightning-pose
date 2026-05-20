@@ -14,6 +14,3 @@ lightning\_pose.utils
 
 .. automodapi:: lightning_pose.utils.predictions
    :no-inheritance-diagram:
-
-.. automodapi:: lightning_pose.utils.scripts
-   :no-inheritance-diagram:
