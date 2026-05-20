@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import torch
 
-from lightning_pose.utils.pca import KeypointPCA
+from lightning_pose.utils.pca import EmpiricalEpsilon, KeypointPCA
 
 
 def check_lists_equal(list_0: list, list_1: list) -> bool:
@@ -439,3 +439,38 @@ def test_format_multiview_data_for_pca():
     assert arr.shape == torch.Size(
         [n_batches * len(column_matches[0]), 2 * len(column_matches)]
     )
+
+
+class TestEmpiricalEpsilon:
+    """Test the class EmpiricalEpsilon."""
+
+    def test_empirical_epsilon_numpy(self):
+        ee = EmpiricalEpsilon(percentile=90)
+        loss = np.arange(101, dtype='float')
+        assert ee(loss) == 90
+
+    def test_empirical_epsilon_tensor(self):
+        ee = EmpiricalEpsilon(percentile=90)
+        loss = np.arange(101, dtype='float')
+        assert ee(torch.tensor(loss)) == 90
+
+    def test_empirical_epsilon_nans(self):
+        ee = EmpiricalEpsilon(percentile=90)
+        loss = np.arange(101, dtype='float')
+        loss[1::2] = np.nan
+        assert ee(loss) == 90
+
+
+def test_convert_dict_values_to_tensors():
+
+    from lightning_pose.utils.pca import convert_dict_values_to_tensors
+
+    test_dict = {
+        'param_a': 4.0,
+        'param_b': 10.1,
+        'param_c': 4,
+    }
+    test_dict_tensor = convert_dict_values_to_tensors(test_dict, device='cpu')
+    for _, val in test_dict_tensor.items():
+        assert isinstance(val, torch.Tensor)
+        assert val.dtype == torch.float32
