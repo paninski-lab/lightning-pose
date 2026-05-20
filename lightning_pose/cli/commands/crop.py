@@ -62,23 +62,38 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
     crop_parser = subparsers.add_parser(
         "crop",
         description=description_text,
-        usage="litpose crop <model_dir> <input_path:video|csv>... --crop_ratio=CROP_RATIO --anchor_keypoints=x,y,z",  # noqa
+        usage=(
+            "litpose crop <model_dir> <input_path:video|csv>..."
+            " [--crop_ratio=CROP_RATIO | --crop_size=CROP_SIZE]"
+            " [--anchor_keypoints=x,y,z]"
+        ),
     )
     crop_parser.add_argument(
         "model_dir", type=types.existing_model_dir, help="path to a model directory"
     )
-
     crop_parser.add_argument("input_path", type=Path, nargs="+", help="one or more files")
     crop_parser.add_argument(
         "--crop_ratio",
         type=float,
-        default=2.0,
-        help="Crop a bounding box this much larger than the animal. Default is 2.",
+        default=None,
+        help=(
+            "Crop a bounding box this much larger than the animal (default 2.0 when neither"
+            " --crop_ratio nor --crop_size is given). Mutually exclusive with --crop_size."
+        ),
+    )
+    crop_parser.add_argument(
+        "--crop_size",
+        type=int,
+        default=None,
+        help=(
+            "Fixed square bounding box side length in pixels, centred on the per-frame mean"
+            " of the anchor keypoints. Mutually exclusive with --crop_ratio."
+        ),
     )
     crop_parser.add_argument(
         "--anchor_keypoints",
         type=str,
-        default="",  # Or a reasonable default like "0,0,0" if appropriate
+        default="",
         help="Comma-separated list of anchor keypoint names, defaults to all keypoints",
     )
     return crop_parser
@@ -108,15 +123,32 @@ def handle(args: argparse.Namespace) -> None:
 
     input_paths = [Path(p) for p in args.input_path]
 
-    detector_cfg = OmegaConf.create(
-        {
-            "crop_ratio": args.crop_ratio,
-            "anchor_keypoints": (
-                args.anchor_keypoints.split(",") if args.anchor_keypoints else []
-            ),
-        }
-    )
-    assert detector_cfg.crop_ratio > 1
+    crop_ratio = args.crop_ratio
+    crop_size = args.crop_size
+
+    if crop_ratio is not None and crop_size is not None:
+        raise ValueError('--crop_ratio and --crop_size are mutually exclusive.')
+    if crop_ratio is None and crop_size is None:
+        crop_ratio = 2.0
+
+    anchor_keypoints = args.anchor_keypoints.split(",") if args.anchor_keypoints else []
+
+    if crop_size is not None:
+        if crop_size <= 0:
+            raise ValueError(f'--crop_size must be a positive integer, got {crop_size}.')
+        detector_cfg = OmegaConf.create({
+            'crop_height': crop_size,
+            'crop_width': crop_size,
+            'anchor_keypoints': anchor_keypoints,
+        })
+    else:
+        assert crop_ratio is not None
+        if crop_ratio <= 1:
+            raise ValueError(f'--crop_ratio must be greater than 1, got {crop_ratio}.')
+        detector_cfg = OmegaConf.create({
+            'crop_ratio': crop_ratio,
+            'anchor_keypoints': anchor_keypoints,
+        })
 
     for input_path in input_paths:
         if input_path.suffix == ".mp4":

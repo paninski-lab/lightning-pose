@@ -29,7 +29,8 @@ class TestCropParser:
         args = parser.parse_args(['crop', str(model_dir), str(video)])
         assert args.model_dir == model_dir
         assert args.input_path == [video]
-        assert args.crop_ratio == 2.0
+        assert args.crop_ratio is None
+        assert args.crop_size is None
         assert args.anchor_keypoints == ''
 
     def test_missing_model_dir_exits(self, parser, tmp_path):
@@ -51,6 +52,13 @@ class TestCropParser:
             ['crop', str(model_dir), 'video.mp4', '--anchor_keypoints', 'nose,tail']
         )
         assert args.anchor_keypoints == 'nose,tail'
+
+    def test_crop_size(self, parser, tmp_path):
+        model_dir = tmp_path / 'model'
+        model_dir.mkdir()
+        args = parser.parse_args(['crop', str(model_dir), 'video.mp4', '--crop_size', '100'])
+        assert args.crop_size == 100
+        assert args.crop_ratio is None
 
     def test_multiple_input_paths(self, parser, tmp_path):
         model_dir = tmp_path / 'model'

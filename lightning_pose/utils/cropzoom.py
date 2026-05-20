@@ -56,23 +56,46 @@ def _calculate_bbox_size(keypoints_per_frame: np.ndarray, crop_ratio: float = 1.
 
 
 def _compute_bbox_df(
-    pred_df: pd.DataFrame, anchor_keypoints: list[str], crop_ratio: float = 1.0
+    pred_df: pd.DataFrame,
+    anchor_keypoints: list[str],
+    crop_ratio: float | None = None,
+    crop_height: int | None = None,
+    crop_width: int | None = None,
 ) -> pd.DataFrame:
     """Compute a bounding-box DataFrame from predicted keypoint positions.
 
     Each row corresponds to one frame and contains the top-left corner (x, y) and size (h, w)
-    of a square bounding box centred on the mean of the anchor keypoints.
+    of a square bounding box. Exactly one of ``crop_ratio`` or the pair
+    ``(crop_height, crop_width)`` must be provided.
+
+    When ``crop_ratio`` is used, the box is centred on the per-frame mean of the anchor
+    keypoints and sized by scaling the keypoint span by ``crop_ratio``.
+
+    When ``crop_height``/``crop_width`` are used, the box is a fixed size centred on the
+    per-frame mean of the anchor keypoints.
 
     Args:
         pred_df: DataFrame of predictions with a MultiIndex column of ``(scorer, bodypart, coord)``
             or equivalent; must contain x and y coordinate columns.
         anchor_keypoints: list of keypoint names used to determine the bounding box centre and
             size; pass an empty list to use all keypoints.
-        crop_ratio: scale factor applied to the bounding box size.
+        crop_ratio: scale factor applied to the keypoint span to determine bbox size.
+        crop_height: fixed bbox height in pixels; must be provided together with ``crop_width``.
+        crop_width: fixed bbox width in pixels; must be provided together with ``crop_height``.
 
     Returns:
         DataFrame with columns ``["x", "y", "h", "w"]`` and the same index as ``pred_df``.
+
+    Raises:
+        ValueError: if both ``crop_ratio`` and ``crop_height``/``crop_width`` are provided, or
+            if neither is provided.
     """
+    fixed_size_mode = crop_height is not None and crop_width is not None
+    if fixed_size_mode and crop_ratio is not None:
+        raise ValueError('provide either crop_ratio or (crop_height, crop_width), not both.')
+    if not fixed_size_mode and crop_ratio is None:
+        raise ValueError('one of crop_ratio or (crop_height, crop_width) must be provided.')
+
     # Get x,y columns for anchor_keypoints (or all keypoints if anchor_keypoints is empty)
     coord_mask = pred_df.columns.get_level_values("coords").isin(["x", "y"])
     if len(anchor_keypoints) > 0:
@@ -89,15 +112,20 @@ def _compute_bbox_df(
     # Shape: (frames, keypoints, x|y)
     keypoints_per_frame = pred_df.loc[:, coord_mask].to_numpy().reshape(pred_df.shape[0], -1, 2)
 
-    bbox_sizes = _calculate_bbox_size(keypoints_per_frame, crop_ratio=crop_ratio)
+    if fixed_size_mode:
+        assert crop_height is not None and crop_width is not None
+        # round up to even dimensions for video-player compatibility
+        crop_height += crop_height % 2
+        crop_width += crop_width % 2
+        bbox_sizes = np.tile([crop_height, crop_width], (len(pred_df), 1))
+        centroids = keypoints_per_frame.mean(axis=1)
+    else:
+        assert crop_ratio is not None
+        bbox_sizes = _calculate_bbox_size(keypoints_per_frame, crop_ratio=crop_ratio)
+        centroids = keypoints_per_frame.mean(axis=1)
 
-    # Shape: (frames, keypoints, x|y) -> (frames, x|y)
-    centroids = keypoints_per_frame.mean(axis=1)
-
-    # Instead of storing centroid, we'll store bbox top-left.
     # Shape: (frames, x|y)
     bbox_toplefts = centroids - bbox_sizes // 2
-    # Floor and store ints.
     bbox_toplefts = np.int64(bbox_toplefts)
 
     # Shape: (frames, x|y) -> (frames, x|y|h|w)
@@ -295,7 +323,11 @@ def generate_cropped_labeled_frames(
 
     # compute and save bbox_df
     bbox_df = _compute_bbox_df(
-        pred_df, list(detector_cfg.anchor_keypoints), crop_ratio=detector_cfg.crop_ratio
+        pred_df,
+        list(detector_cfg.anchor_keypoints),
+        crop_ratio=detector_cfg.get('crop_ratio'),
+        crop_height=detector_cfg.get('crop_height'),
+        crop_width=detector_cfg.get('crop_width'),
     )
 
     output_bbox_file.parent.mkdir(parents=True, exist_ok=True)
@@ -325,7 +357,11 @@ def generate_cropped_video(
 
     # Save cropping bboxes
     bbox_df = _compute_bbox_df(
-        pred_df, list(detector_cfg.anchor_keypoints), crop_ratio=detector_cfg.crop_ratio
+        pred_df,
+        list(detector_cfg.anchor_keypoints),
+        crop_ratio=detector_cfg.get('crop_ratio'),
+        crop_height=detector_cfg.get('crop_height'),
+        crop_width=detector_cfg.get('crop_width'),
     )
     output_bbox_file.parent.mkdir(parents=True, exist_ok=True)
     bbox_df.to_csv(output_bbox_file)
