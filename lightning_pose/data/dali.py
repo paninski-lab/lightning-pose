@@ -103,7 +103,7 @@ def video_pipe(
             file_list_include_preceding_frame=True,  # to get rid of dali warnings
             skip_vfr_check=skip_vfr_check,
         )
-        orig_size = fn.shapes(video)  # type: ignore[arg-type]
+        orig_size = video.shape(device='gpu')  # type: ignore[union-attr]
         if resize_dims:
             video = fn.resize(video, size=resize_dims)  # type: ignore[arg-type]
         if imgaug == "dlc" or imgaug == "dlc-top-down":
