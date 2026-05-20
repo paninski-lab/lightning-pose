@@ -19,7 +19,6 @@ The general flow of each loss class is as follows:
 """
 
 import os
-import warnings
 from typing import Any, Literal
 
 import torch
@@ -497,20 +496,15 @@ class PCALoss(Loss):
         self.pca()
         # select epsilon based on constructor inputs
         if epsilon is not None:
-            warnings.warn(
-                f"Using absolute epsilon={epsilon:.2f} for pca loss; empirical epsilon ignored",
-                stacklevel=2,
-            )
             self.epsilon = torch.tensor(epsilon, dtype=torch.float, device=self.device)
+            print(f"Using absolute epsilon={epsilon:.2f} for pca loss; empirical epsilon ignored")
         else:
             # empirically compute epsilon, already converted to tensor
             self.epsilon = self.pca.parameters["epsilon"] * empirical_epsilon_multiplier
-
-            warnings.warn(
+            print(
                 f"Using empirical epsilon={float(self.pca.parameters['epsilon']):.3f}"
                 f" * multiplier={float(empirical_epsilon_multiplier):.3f}"
                 f" -> total={float(self.epsilon):.3f} for {self.loss_name} loss",
-                stacklevel=2,
             )
 
     def remove_nans(self, **kwargs: Any) -> Any:
