@@ -15,7 +15,7 @@ __all__ = []
 def build_backbone(
     backbone_arch: ALLOWED_BACKBONES,
     pretrained: bool = True,
-    model_type: str = "heatmap",
+    model_type: str = 'heatmap',
     **kwargs: Any,
 ) -> tuple[torch.nn.Module, int]:
     """Load backbone weights for resnets, efficientnets, and other models from torchvision.

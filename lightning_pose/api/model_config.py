@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import get_args
 
 from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 
 __all__ = ["ModelConfig"]
 
+from lightning_pose.models import ALLOWED_MODEL_TYPES
 from lightning_pose.utils.io import (
     check_video_paths,
     find_video_files_for_views,
@@ -228,7 +230,7 @@ class ModelConfig:
         Raises:
             AssertionError: if any check fails.
         """
-        allowed = {'regression', 'heatmap', 'heatmap_mhcrnn', 'heatmap_multiview_transformer'}
+        allowed = set(get_args(ALLOWED_MODEL_TYPES))
         model_type = self.cfg.model.model_type
         assert model_type in allowed, (
             f"model.model_type '{model_type}' is not one of {sorted(allowed)}"

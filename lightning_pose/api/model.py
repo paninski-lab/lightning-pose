@@ -24,7 +24,7 @@ from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datatypes import MultiviewPredictionResult, PredictionResult
 from lightning_pose.data.utils import convert_bbox_coords
 from lightning_pose.metrics import compute_metrics_single
-from lightning_pose.models import ALLOWED_MODELS
+from lightning_pose.models import ALLOWED_MODEL_TYPES, ALLOWED_MODELS
 from lightning_pose.utils import io as io_utils
 from lightning_pose.utils.predictions import generate_labeled_video as generate_labeled_video_fn
 from lightning_pose.utils.predictions import (
@@ -35,7 +35,7 @@ from lightning_pose.utils.predictions import (
 __all__ = ["Model", "get_model_class", "load_model_from_checkpoint"]
 
 
-def get_model_class(map_type: str, semi_supervised: bool) -> type[ALLOWED_MODELS]:
+def get_model_class(map_type: ALLOWED_MODEL_TYPES, semi_supervised: bool) -> type[ALLOWED_MODELS]:
     """Return the model class for the given model type and supervision mode.
 
     Args:

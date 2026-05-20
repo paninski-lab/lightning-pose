@@ -1,5 +1,7 @@
 """Pose estimation model classes, re-exported at the package level."""
 
+from typing import Literal
+
 from lightning_pose.models.base import check_if_semi_supervised
 from lightning_pose.models.factory import get_model
 from lightning_pose.models.heatmap_tracker import (
@@ -28,6 +30,13 @@ HeatmapTrackerMultiviewTransformer.__module__ = 'lightning_pose.models'
 SemiSupervisedHeatmapTrackerMultiviewTransformer.__module__ = 'lightning_pose.models'
 RegressionTracker.__module__ = 'lightning_pose.models'
 SemiSupervisedRegressionTracker.__module__ = 'lightning_pose.models'
+
+ALLOWED_MODEL_TYPES = Literal[
+    'regression',
+    'heatmap',
+    'heatmap_mhcrnn',
+    'heatmap_multiview_transformer',
+]
 
 ALLOWED_MODELS = (
     HeatmapTracker
