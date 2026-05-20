@@ -307,12 +307,9 @@ def undo_affine_transform(
             [mat_inv_, torch.matmul(-mat_inv_, mat[idx, :, -1, None])], dim=1
         )
         mats_inv_torch.append(
-            torch.tensor(
-                torch.transpose(mat_inv, 1, 0),
-                dtype=keypoints.dtype,
-                device=keypoints.device,
-                requires_grad=True,
-            )
+            torch.transpose(mat_inv, 1, 0).detach().clone().to(
+                dtype=keypoints.dtype, device=keypoints.device,
+            ).requires_grad_(True)
         )
 
     # make a single block of inverse matrices

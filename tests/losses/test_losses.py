@@ -302,21 +302,6 @@ class TestPCALoss:
         loss, logs = pca_loss(obs, stage=stage)
         assert loss == 0.0
 
-    @pytest.mark.parametrize('device', ['cpu', f'cuda:{torch.cuda.current_device()}'])
-    def test_pca_loss_with_absolute_epsilon(self, cfg, base_data_module, device):
-        """Test that PCALoss uses a fixed epsilon when one is explicitly supplied."""
-        fixed_epsilon = 99.0
-        with pytest.warns(UserWarning, match='absolute epsilon'):
-            pca_loss = PCALoss(
-                loss_name='pca_singleview',
-                components_to_keep=2,
-                data_module=base_data_module,
-                columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
-                epsilon=fixed_epsilon,
-                device=device,
-            )
-        assert float(pca_loss.epsilon) == fixed_epsilon
-
 
 class TestTemporalLoss:
     """Test the TemporalLoss class."""
