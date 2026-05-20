@@ -13,26 +13,183 @@ import torch
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from lightning_pose.api.model_config import ModelConfig
-from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
-from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
-from lightning_pose.data.datatypes import MultiviewPredictionResult, PredictionResult
-from lightning_pose.data.utils import convert_bbox_coords
-from lightning_pose.models import ALLOWED_MODELS
-from lightning_pose.utils import io as io_utils
-from lightning_pose.utils.predictions import generate_labeled_video as generate_labeled_video_fn
-from lightning_pose.utils.predictions import (
-    load_model_from_checkpoint,
-    predict_dataset,
-    predict_video,
-)
-from lightning_pose.utils.scripts import (
-    compute_metrics_single,
+from lightning_pose.data import (
+    _IMAGENET_MEAN,
+    _IMAGENET_STD,
     get_data_module,
     get_dataset,
     get_imgaug_transform,
 )
+from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
+from lightning_pose.data.datatypes import MultiviewPredictionResult, PredictionResult
+from lightning_pose.data.utils import convert_bbox_coords
+from lightning_pose.metrics import compute_metrics_single
+from lightning_pose.models import ALLOWED_MODEL_TYPES, ALLOWED_MODELS
+from lightning_pose.utils import io as io_utils
+from lightning_pose.utils.predictions import generate_labeled_video as generate_labeled_video_fn
+from lightning_pose.utils.predictions import (
+    predict_dataset,
+    predict_video,
+)
 
-__all__ = ["Model"]
+__all__ = ["Model", "get_model_class", "load_model_from_checkpoint"]
+
+
+def get_model_class(map_type: ALLOWED_MODEL_TYPES, semi_supervised: bool) -> type[ALLOWED_MODELS]:
+    """Return the model class for the given model type and supervision mode.
+
+    Args:
+        map_type: one of ``"regression"``, ``"heatmap"``, ``"heatmap_mhcrnn"``,
+            ``"heatmap_multiview_transformer"``.
+        semi_supervised: True to return the semi-supervised variant.
+
+    Returns:
+        model class (not an instance).
+
+    Raises:
+        NotImplementedError: if ``map_type`` is not recognised.
+
+    """
+    if not semi_supervised:
+        if map_type == 'regression':
+            from lightning_pose.models import RegressionTracker as ModelClass
+        elif map_type == 'heatmap':
+            from lightning_pose.models import HeatmapTracker as ModelClass
+        elif map_type == 'heatmap_mhcrnn':
+            from lightning_pose.models import HeatmapTrackerMHCRNN as ModelClass
+        elif map_type == 'heatmap_multiview_transformer':
+            from lightning_pose.models import HeatmapTrackerMultiviewTransformer as ModelClass
+        else:
+            raise NotImplementedError(
+                f'{map_type} is an invalid model_type for a fully supervised model'
+            )
+    else:
+        if map_type == 'regression':
+            from lightning_pose.models import SemiSupervisedRegressionTracker as ModelClass
+        elif map_type == 'heatmap':
+            from lightning_pose.models import SemiSupervisedHeatmapTracker as ModelClass
+        elif map_type == 'heatmap_mhcrnn':
+            from lightning_pose.models import SemiSupervisedHeatmapTrackerMHCRNN as ModelClass
+        elif map_type == 'heatmap_multiview_transformer':
+            from lightning_pose.models import (
+                SemiSupervisedHeatmapTrackerMultiviewTransformer as ModelClass,
+            )
+        else:
+            raise NotImplementedError(
+                f'{map_type} is an invalid model_type for a semi-supervised model'
+            )
+    return ModelClass
+
+
+def load_model_from_checkpoint(
+    cfg: DictConfig | ListConfig,
+    ckpt_file: str | None,
+    eval: bool = False,
+    data_module: BaseDataModule | UnlabeledDataModule | None = None,
+    skip_data_module: bool = False,
+) -> ALLOWED_MODELS:
+    """Load a Lightning Pose model from a checkpoint file.
+
+    Args:
+        cfg: model config
+        ckpt_file: absolute path to model checkpoint
+        eval: True for eval mode, False for train mode
+        data_module: used to initialise unsupervised losses
+        skip_data_module: if ``data_module`` is not None this is ignored.
+            If False and ``data_module=None``, a data module is created from the config file and
+            unsupervised losses are accessible in the model.
+            If True and ``data_module=None``, the unsupervised losses are not accessible in the
+            model; recommended for running inference on new videos.
+
+    Returns:
+        model as a Lightning Module
+
+    Raises:
+        ValueError: if ``ckpt_file`` is None
+
+    """
+    if ckpt_file is None:
+        raise ValueError('ckpt_file must be provided to load a model from checkpoint')
+    from lightning_pose.data import (
+        get_data_module,
+        get_dataset,
+        get_imgaug_transform,
+    )
+    from lightning_pose.losses import get_loss_factories
+    from lightning_pose.models import check_if_semi_supervised
+    from lightning_pose.utils.io import return_absolute_data_paths
+
+    delete_extras = False
+    if not data_module and not skip_data_module:
+        delete_extras = True
+        data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
+        imgaug_transform = get_imgaug_transform(cfg=cfg)
+        dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
+        data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
+    if not data_module:
+        loss_factories = {'supervised': None, 'unsupervised': None}
+    else:
+        loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
+
+    semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
+    ModelClass = get_model_class(
+        map_type=cfg.model.model_type,
+        semi_supervised=semi_supervised,
+    )
+
+    try:
+        checkpoint = torch.load(ckpt_file)
+    except Exception as e:
+        print(f'Warning: Failed to load checkpoint with default settings: {e}')
+        print('Attempting to load with weights_only=False...')
+        checkpoint = torch.load(ckpt_file, weights_only=False)
+    state_dict = checkpoint.get('state_dict', checkpoint)
+
+    # fix state dict key mismatch for upsampling layers in old checkpoints
+    keys_remapped = False
+    for key in list(state_dict.keys()):
+        if key.startswith('upsampling_layers.'):
+            state_dict['head.' + key] = state_dict.pop(key)
+            keys_remapped = True
+
+    if keys_remapped:
+        checkpoint['state_dict'] = state_dict
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.ckpt', delete=False) as tmp_file:
+            torch.save(checkpoint, tmp_file.name)
+            fixed_ckpt_file = tmp_file.name
+    else:
+        fixed_ckpt_file = ckpt_file
+
+    if semi_supervised:
+        model = ModelClass.load_from_checkpoint(
+            fixed_ckpt_file,
+            loss_factory=loss_factories['supervised'],
+            loss_factory_unsupervised=loss_factories['unsupervised'],
+            strict=False,
+        )
+    else:
+        model = ModelClass.load_from_checkpoint(
+            fixed_ckpt_file,
+            loss_factory=loss_factories['supervised'],
+            strict=False,
+        )
+
+    if keys_remapped:
+        import os
+        os.unlink(fixed_ckpt_file)
+
+    if eval:
+        model.eval()
+
+    if delete_extras:
+        del imgaug_transform
+        del dataset
+        del data_module
+    del loss_factories
+    torch.cuda.empty_cache()
+
+    return model
 
 
 class Model:
@@ -249,7 +406,8 @@ class Model:
 
         """
         self._load()
-        assert self.model is not None
+        if self.model is None:
+            raise RuntimeError('model failed to load; self.model is None after _load()')
 
         # --- Input validation ---
         if frame_rgb.dtype != np.uint8:
@@ -478,7 +636,7 @@ class Model:
         preds_file = str(preds_file_path)
 
         df = predict_dataset(
-            cfg_pred, data_module_pred, model=self.model, preds_file=preds_file
+            model=self, data_module=data_module_pred, preds_file=preds_file, cfg=cfg_pred,
         )
 
         if compute_metrics:
@@ -491,7 +649,8 @@ class Model:
         else:
             metrics = None
 
-        assert isinstance(df, pd.DataFrame)
+        if not isinstance(df, pd.DataFrame):
+            raise RuntimeError('expected a single-view DataFrame from predict_dataset')
         return PredictionResult(predictions=df, metrics=metrics)
 
     def predict_on_label_csv_multiview(
@@ -510,13 +669,16 @@ class Model:
             view of the same session. Order must match the `view_names` in the config file.
 
         See `predict_on_label_csv` docstring for other arguments."""
-        assert self.config.is_multi_view()
+        if not self.config.is_multi_view():
+            raise ValueError('predict_on_label_csv_multiview requires a multi-view model')
         self._load()
 
         view_names = self.config.cfg.data.view_names
-        assert len(csv_file_per_view) == len(
-            view_names
-        ), f"{len(csv_file_per_view)} != {len(view_names)}"
+        if len(csv_file_per_view) != len(view_names):
+            raise ValueError(
+                f'expected {len(view_names)} csv files (one per view), '
+                f'got {len(csv_file_per_view)}'
+            )
 
         # Convert this to absolute, because if relative, downstream will
         # assume its relative to the data_dir.
@@ -555,7 +717,7 @@ class Model:
 
         # Outputs dict[str, pd.DataFrame] because inputs indicate multiview.
         view_to_df_dict = predict_dataset(
-            cfg_pred, data_module_pred, model=self.model, preds_file=preds_files
+            model=self, data_module=data_module_pred, preds_file=preds_files, cfg=cfg_pred,
         )
 
         if compute_metrics:
@@ -687,13 +849,16 @@ class Model:
             MultiviewPredictionResult: object containing the predictions and metrics for each view.
 
         """
-        assert self.config.is_multi_view()
+        if not self.config.is_multi_view():
+            raise ValueError('predict_on_video_file_multiview requires a multi-view model')
         self._load()
 
         view_names = self.config.cfg.data.view_names
-        assert len(video_file_per_view) == len(
-            view_names
-        ), f"{len(video_file_per_view)} != {len(view_names)}"
+        if len(video_file_per_view) != len(view_names):
+            raise ValueError(
+                f'expected {len(view_names)} video files (one per view), '
+                f'got {len(video_file_per_view)}'
+            )
 
         video_file_per_view = [Path(f) for f in video_file_per_view]
 

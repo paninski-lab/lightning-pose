@@ -6,6 +6,9 @@ lightning\_pose.data
 .. automodapi:: lightning_pose.data.augmentations
    :no-inheritance-diagram:
 
+.. automodapi:: lightning_pose.data.cameras
+   :no-inheritance-diagram:
+
 .. automodapi:: lightning_pose.data.dali
    :no-inheritance-diagram:
 
@@ -16,6 +19,12 @@ lightning\_pose.data
    :no-inheritance-diagram:
 
 .. automodapi:: lightning_pose.data.datatypes
+   :no-inheritance-diagram:
+
+.. automodapi:: lightning_pose.data.extractor
+   :no-inheritance-diagram:
+
+.. automodapi:: lightning_pose.data.factory
    :no-inheritance-diagram:
 
 .. automodapi:: lightning_pose.data.utils

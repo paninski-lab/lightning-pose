@@ -6,6 +6,12 @@ lightning\_pose.models
 .. automodapi:: lightning_pose.models
    :no-inheritance-diagram:
 
+.. automodapi:: lightning_pose.models.base
+   :no-inheritance-diagram:
+
+.. automodapi:: lightning_pose.models.factory
+   :no-inheritance-diagram:
+
 Subpackages
 -----------
 

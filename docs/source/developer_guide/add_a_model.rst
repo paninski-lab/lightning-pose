@@ -185,7 +185,7 @@ Add your new model name to this list.
 Step 2: update ``get_dataset``
 ------------------------------
 The first helper function you need to update is
-:meth:`~lightning_pose.utils.scripts.get_dataset`,
+:meth:`~lightning_pose.data.factory.get_dataset`,
 which creates a torch Dataset object associated with your model.
 For example, the regression-based models do not need a dataset that returns heatmaps, whereas the
 heatmap-based models do.
@@ -196,20 +196,20 @@ Step 3: update ``get_loss_factories``
 -------------------------------------
 If your model requires heatmaps for training, in order to ensure the heatmap losses are properly
 logged you need to add your model to the first ``if/else`` statement in the function
-:meth:`~lightning_pose.utils.scripts.get_loss_factories`
+:meth:`~lightning_pose.losses.factory.get_loss_factories`
 (you will see "heatmap" and "heatmap_mhcrnn" models already represented there).
 Note that if your model uses heatmaps you will also be able to select from several heatmap losses
 in the config file using the ``model.heatmap_loss_type`` key.
 
 Step 4: update ``get_model``
 ----------------------------
-This next helper function - :meth:`~lightning_pose.utils.scripts.get_model` - is what translates
+This next helper function - :meth:`~lightning_pose.models.factory.get_model` - is what translates
 the key-value pairs from the config file to constructing the actual model.
 You will see examples of all other models in this function; include your model accordingly.
 
 Step 5: update ``get_model_class``
 ----------------------------------
-Finally, there is helper function :meth:`~lightning_pose.utils.predictions.get_model_class` which
+Finally, there is helper function :meth:`~lightning_pose.api.model.get_model_class` which
 is used to seamlessly load model parameters from checkpoint files.
 Again, there are various ``if/else`` statements where your model should be incorporated.
 

@@ -25,7 +25,7 @@ def test_multiview_transformer(
     cfg_tmp.model.losses_to_use = []
 
     # make mock dataset that returns fake camera parameters
-    from lightning_pose.utils.scripts import get_data_module
+    from lightning_pose.data import get_data_module
     data_module = get_data_module(
         cfg_tmp,
         dataset=MockCameraDatasetWrapper(
@@ -59,7 +59,7 @@ def test_semisupervised_multiview_transformer_temporal(
     cfg_tmp.model.losses_to_use = ["temporal"]
 
     # make mock dataset that returns fake camera parameters
-    from lightning_pose.utils.scripts import get_data_module
+    from lightning_pose.data import get_data_module
     data_module = get_data_module(
         cfg_tmp,
         dataset=MockCameraDatasetWrapper(

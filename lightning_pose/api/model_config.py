@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import get_args
 
 from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 
 __all__ = ["ModelConfig"]
 
+from lightning_pose.models import ALLOWED_MODEL_TYPES
 from lightning_pose.utils.io import (
     check_video_paths,
     find_video_files_for_views,
@@ -129,6 +131,7 @@ class ModelConfig:
         self._validate_data()
         self._validate_training()
         self._validate_model()
+        self._validate_losses()
 
     def _validate_data(self) -> None:
         """Validate the ``data`` config section.
@@ -227,7 +230,7 @@ class ModelConfig:
         Raises:
             AssertionError: if any check fails.
         """
-        allowed = {'regression', 'heatmap', 'heatmap_mhcrnn', 'heatmap_multiview_transformer'}
+        allowed = set(get_args(ALLOWED_MODEL_TYPES))
         model_type = self.cfg.model.model_type
         assert model_type in allowed, (
             f"model.model_type '{model_type}' is not one of {sorted(allowed)}"
@@ -248,6 +251,31 @@ class ModelConfig:
                 assert self.cfg.training.get('imgaug_3d') is True, (
                     "training.imgaug_3d must be true when "
                     "losses.supervised_reprojection_heatmap_mse is active"
+                )
+
+    def _validate_losses(self) -> None:
+        """Validate the ``losses`` config section.
+
+        Checks:
+        - For each loss listed in ``model.losses_to_use``, if a ``log_weight`` is
+          configured it must be a numeric value (int or float); a string or other type
+          would silently produce wrong training behaviour.
+
+        Raises:
+            AssertionError: if any check fails.
+        """
+        losses_to_use = self.cfg.model.get('losses_to_use') or []
+        for loss_name in losses_to_use:
+            if not loss_name:
+                continue
+            loss_cfg = self.cfg.losses.get(loss_name)
+            if loss_cfg is None:
+                continue
+            log_weight = loss_cfg.get('log_weight')
+            if log_weight is not None:
+                assert isinstance(log_weight, (int, float)), (
+                    f'losses.{loss_name}.log_weight must be numeric (int or float), '
+                    f'got {type(log_weight).__name__}: {log_weight!r}'
                 )
 
     def _validate_steps_vs_epochs(self) -> None:

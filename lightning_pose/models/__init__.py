@@ -1,7 +1,9 @@
 """Pose estimation model classes, re-exported at the package level."""
 
-from typing import Union
+from typing import Literal
 
+from lightning_pose.models.base import check_if_semi_supervised
+from lightning_pose.models.factory import get_model
 from lightning_pose.models.heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
@@ -20,14 +22,21 @@ from lightning_pose.models.regression_tracker import (
 )
 
 # reassign module to make classes appear to belong here
-HeatmapTracker.__module__ = "lightning_pose.models"
-SemiSupervisedHeatmapTracker.__module__ = "lightning_pose.models"
-HeatmapTrackerMHCRNN.__module__ = "lightning_pose.models"
-SemiSupervisedHeatmapTrackerMHCRNN.__module__ = "lightning_pose.models"
-HeatmapTrackerMultiviewTransformer.__module__ = "lightning_pose.models"
-SemiSupervisedHeatmapTrackerMultiviewTransformer.__module__ = "lightning_pose.models"
-RegressionTracker.__module__ = "lightning_pose.models"
-SemiSupervisedRegressionTracker.__module__ = "lightning_pose.models"
+HeatmapTracker.__module__ = 'lightning_pose.models'
+SemiSupervisedHeatmapTracker.__module__ = 'lightning_pose.models'
+HeatmapTrackerMHCRNN.__module__ = 'lightning_pose.models'
+SemiSupervisedHeatmapTrackerMHCRNN.__module__ = 'lightning_pose.models'
+HeatmapTrackerMultiviewTransformer.__module__ = 'lightning_pose.models'
+SemiSupervisedHeatmapTrackerMultiviewTransformer.__module__ = 'lightning_pose.models'
+RegressionTracker.__module__ = 'lightning_pose.models'
+SemiSupervisedRegressionTracker.__module__ = 'lightning_pose.models'
+
+ALLOWED_MODEL_TYPES = Literal[
+    'regression',
+    'heatmap',
+    'heatmap_mhcrnn',
+    'heatmap_multiview_transformer',
+]
 
 ALLOWED_MODELS = (
     HeatmapTracker
@@ -42,12 +51,14 @@ ALLOWED_MODELS = (
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
-    "HeatmapTracker",
-    "SemiSupervisedHeatmapTracker",
-    "HeatmapTrackerMHCRNN",
-    "SemiSupervisedHeatmapTrackerMHCRNN",
-    "HeatmapTrackerMultiviewTransformer",
-    "SemiSupervisedHeatmapTrackerMultiviewTransformer",
-    "RegressionTracker",
-    "SemiSupervisedRegressionTracker",
+    'check_if_semi_supervised',
+    'get_model',
+    'HeatmapTracker',
+    'SemiSupervisedHeatmapTracker',
+    'HeatmapTrackerMHCRNN',
+    'SemiSupervisedHeatmapTrackerMHCRNN',
+    'HeatmapTrackerMultiviewTransformer',
+    'SemiSupervisedHeatmapTrackerMultiviewTransformer',
+    'RegressionTracker',
+    'SemiSupervisedRegressionTracker',
 ]

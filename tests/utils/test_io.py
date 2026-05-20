@@ -10,7 +10,6 @@ import pytest
 
 from lightning_pose.utils import io as io_utils
 from lightning_pose.utils.io import (
-    check_if_semi_supervised,
     check_video_paths,
     ckpt_path_from_base_path,
     collect_video_files_by_view,
@@ -224,23 +223,6 @@ def test_ckpt_path_from_base_path_custom_logging_dir_name(tmp_path: Path):
 
     result = ckpt_path_from_base_path(str(base_path), model_name, logging_dir_name)
     assert result == str(expected_ckpt)
-
-
-def test_check_if_semisupervised():
-    flag = check_if_semi_supervised(losses_to_use=None)
-    assert not flag
-
-    flag = check_if_semi_supervised(losses_to_use=[])
-    assert not flag
-
-    flag = check_if_semi_supervised(losses_to_use=[""])
-    assert not flag
-
-    flag = check_if_semi_supervised(losses_to_use=["any_string"])
-    assert flag
-
-    flag = check_if_semi_supervised(losses_to_use=["loss1", "loss2"])
-    assert flag
 
 
 def test_get_videos_in_dir(toy_data_dir, tmpdir):

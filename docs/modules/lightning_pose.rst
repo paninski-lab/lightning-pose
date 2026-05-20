@@ -8,3 +8,6 @@ lightning\_pose
 
 .. automodapi:: lightning_pose.metrics
    :no-inheritance-diagram:
+
+.. automodapi:: lightning_pose.train
+   :no-inheritance-diagram:

@@ -30,11 +30,32 @@ from lightning_pose.models.backbones import ALLOWED_BACKBONES
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
-    "get_context_from_sequence",
-    "BaseFeatureExtractor",
-    "BaseSupervisedTracker",
-    "SemiSupervisedTrackerMixin",
+    'check_if_semi_supervised',
+    'get_context_from_sequence',
+    'BaseFeatureExtractor',
+    'BaseSupervisedTracker',
+    'SemiSupervisedTrackerMixin',
 ]
+
+
+def check_if_semi_supervised(losses_to_use: ListConfig | list | None = None) -> bool:
+    """Determine from the losses config whether the model is semi-supervised.
+
+    Args:
+        losses_to_use: the cfg entry specifying unsupervised losses to use.
+
+    Returns:
+        True if the model is semi-supervised, False otherwise.
+
+    """
+    if losses_to_use is None:
+        return False
+    if len(losses_to_use) == 0:
+        return False
+    if len(losses_to_use) == 1 and losses_to_use[0] == '':
+        return False
+    return True
+
 
 DEFAULT_LR_SCHEDULER_PARAMS = OmegaConf.create(
     {

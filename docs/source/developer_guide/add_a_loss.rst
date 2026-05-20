@@ -190,7 +190,7 @@ Add your new loss to the dictionary.
 Step 3: update ``get_loss_factories``
 -------------------------------------
 The next helper function you may need to update is
-:meth:`~lightning_pose.utils.scripts.get_loss_factories`,
+:meth:`~lightning_pose.losses.factory.get_loss_factories`,
 which creates the supervised and unsupervised loss factories from the config file.
 If your loss requires parameters from other parts of the config file (such as image dimensions
 from the ``data`` field) you can add those key-value pairs to the constructor input in the
@@ -201,7 +201,7 @@ Step 4: update ``compute_metrics_single`` (optional)
 Lightning pose will automatically compute a set of metrics on
 all labeled data and unlabeled videos upon training completion.
 To add your new metric to this operation, you must update
-:meth:`~lightning_pose.utils.scripts.compute_metrics_single`.
+:meth:`~lightning_pose.metrics.compute_metrics_single`.
 In that function you will see how other metrics such as pixel error, temporal norm, and pca
 reprojection errors are included.
 This may require you to adapt your loss and include it in the :mod:`lightning_pose.metrics` module.

@@ -7,7 +7,8 @@ import pytest
 import torch
 from omegaconf import OmegaConf, open_dict
 
-from lightning_pose.train import train
+from lightning_pose.data import get_data_module
+from lightning_pose.train import calculate_steps_per_epoch, train
 
 
 # TODO: Replace with contextlib.chdir in python 3.11.
@@ -215,3 +216,51 @@ def test_train_multi_gpu_unsupervised(cfg, tmp_path, pytestconfig):
     cfg.model.losses_to_use = ["pca_singleview", "pca_multiview", "temporal"]
 
     _execute_multi_gpu_test(cfg, tmp_path, pytestconfig)
+
+
+class TestCalculateStepsPerEpoch:
+    """Test the calculate_steps_per_epoch function."""
+
+    def test_calculate_steps_per_epoch_supervised(self, cfg, base_dataset):
+        """Test the computation of steps per epoch."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+
+        # Small number of train frames
+        cfg_tmp.training.train_frames = 3
+        cfg_tmp.training.train_batch_size = 2
+        base_data_module = get_data_module(cfg_tmp, dataset=base_dataset, video_dir=None)
+        n_batches = calculate_steps_per_epoch(base_data_module)
+        assert n_batches == 2
+
+        # Large number of frames
+        cfg_tmp.training.limit_train_batches = None
+        cfg_tmp.training.train_frames = 49
+        cfg_tmp.training.train_batch_size = 2
+        base_data_module = get_data_module(cfg_tmp, dataset=base_dataset, video_dir=None)
+        n_batches = calculate_steps_per_epoch(base_data_module)
+        assert n_batches == 25  # ceil (49 / 2)
+
+    def test_calculate_steps_per_epoch_unsupervised(self, cfg, base_dataset, toy_data_dir):
+        """Test the computation of steps per epoch."""
+        video_dir = os.path.join(toy_data_dir, 'videos')
+        cfg_tmp = copy.deepcopy(cfg)
+
+        # Small number of train frames - return minimum of 10
+        cfg_tmp.training.train_frames = 3
+        cfg_tmp.training.train_batch_size = 2
+        base_data_module_combined = get_data_module(
+            cfg_tmp, dataset=base_dataset, video_dir=video_dir,
+        )
+        n_batches = calculate_steps_per_epoch(base_data_module_combined)
+        assert n_batches == 10
+
+        # Large number of frames
+        cfg_tmp.training.limit_train_batches = None
+        cfg_tmp.training.train_frames = 49
+        cfg_tmp.training.train_batch_size = 2
+        base_data_module_combined = get_data_module(
+            cfg_tmp, dataset=base_dataset, video_dir=video_dir,
+        )
+        n_batches = calculate_steps_per_epoch(base_data_module_combined)
+        assert n_batches == 25  # ceil (49 / 2)

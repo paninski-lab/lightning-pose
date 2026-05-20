@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.abspath('../'))
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'lightning-pose'
-copyright = '2023, Dan Biderman, Matt Whiteway'
+copyright = '2026, Paninski Lab'
 author = 'Dan Biderman, Matt Whiteway'
 
 # -- General configuration ---------------------------------------------------

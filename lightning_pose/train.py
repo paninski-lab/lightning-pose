@@ -20,18 +20,18 @@ from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 
 import lightning_pose
 from lightning_pose.api import Model, ModelConfig
-from lightning_pose.utils import pretty_print_cfg, pretty_print_str
-from lightning_pose.utils.io import (
-    return_absolute_data_paths,
-)
-from lightning_pose.utils.scripts import (
-    calculate_steps_per_epoch,
-    get_callbacks,
+from lightning_pose.callbacks import get_callbacks
+from lightning_pose.data import (
     get_data_module,
     get_dataset,
     get_imgaug_transform,
-    get_loss_factories,
-    get_model,
+)
+from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
+from lightning_pose.losses import get_loss_factories
+from lightning_pose.models import get_model
+from lightning_pose.utils import pretty_print_cfg, pretty_print_str
+from lightning_pose.utils.io import (
+    return_absolute_data_paths,
 )
 
 # to ignore imports for sphinx-autoapidoc
@@ -55,6 +55,28 @@ def chdir(dir: str | Path) -> Generator[None, None, None]:
         yield
     finally:
         os.chdir(pwd)
+
+
+def calculate_steps_per_epoch(data_module: BaseDataModule) -> int:
+    """Compute the number of optimizer steps per training epoch.
+
+    For semi-supervised (unlabeled) data modules a minimum of 10 steps per epoch is enforced
+    so that the model sees sufficient unlabeled data even when labeled data is scarce.
+
+    Args:
+        data_module: data module whose train dataset size and batch size are used.
+
+    Returns:
+        Integer number of steps per epoch.
+    """
+    assert data_module.train_dataset is not None
+    train_dataset_length = len(data_module.train_dataset)
+    steps_per_epoch = math.ceil(train_dataset_length / data_module.train_batch_size)
+
+    # To understand why we do this, see 'max_size_cycle' in UnlabeledDataModule.
+    if isinstance(data_module, UnlabeledDataModule):
+        steps_per_epoch = max(10, steps_per_epoch)
+    return steps_per_epoch
 
 
 def train(
