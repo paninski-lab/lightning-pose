@@ -23,7 +23,8 @@ lightning pose model. We provide additional tools that help you compose these mo
 * ``litpose remap``: Given the pose model's predictions and the crop bounding boxes,
   remaps the predictions to the original coordinate space.
 
-For the full command-line reference for these tools, see the CLI page sections: :ref:`Crop <cli-crop>` and :ref:`Remap <cli-remap>`.
+For the full command-line reference for these tools, see the CLI page sections:
+:ref:`Crop <cli-crop>` and :ref:`Remap <cli-remap>`.
 
 Training
 --------
@@ -45,6 +46,30 @@ Inference involves:
 4. Remap the pose model's predictions to the original coordinate space.
 
 
+Bounding box sizing
+===================
+
+The ``litpose crop`` command supports two ways to size the bounding box around the animal.
+The two options are mutually exclusive; if neither is provided, ``--crop_ratio=2.0`` is used.
+
+``--crop_ratio`` (default)
+    Sizes the bounding box relative to the per-frame span of the detected keypoints.
+    A value of 2.0 (the default) produces a box twice as wide and tall as the spread of
+    keypoints. Use this when the animal's apparent size varies across frames.
+
+    .. code-block:: bash
+
+        litpose crop $MODEL_DIR/$DETECTOR_MODEL data/videos/test_vid.mp4 --crop_ratio=2.0
+
+``--crop_size``
+    Produces a fixed square bounding box of the given pixel size, centred on the
+    per-frame mean of the detected keypoints. Use this when the animal occupies a
+    roughly consistent region of the frame and you want uniform crop dimensions.
+
+    .. code-block:: bash
+
+        litpose crop $MODEL_DIR/$DETECTOR_MODEL data/videos/test_vid.mp4 --crop_size=200
+
 Example
 =======
 
@@ -57,6 +82,7 @@ making modifications to this such as:
    your detector model and pose model. This can be accomplished using
    different config files for the detector and pose model.
 2. Limiting ``train_frames`` and ``max_epochs`` for testing purposes.
+3. Choosing ``--crop_ratio`` or ``--crop_size`` to suit your data (see `Bounding box sizing`_ above).
 
 We'll use some bash variables to avoid repeating paths below:
 
@@ -77,6 +103,7 @@ Training script
     litpose train config.yaml --output_dir $MODEL_DIR/$DETECTOR_MODEL
 
     # Crop data for pose model training.
+    # Use --crop_ratio (default) or --crop_size to control bounding box size.
     litpose crop $MODEL_DIR/$DETECTOR_MODEL data/CollectedData.csv
 
     # Train the pose model.
