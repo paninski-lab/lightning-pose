@@ -4,7 +4,13 @@ import numpy as np
 import pytest
 import torch
 
-from lightning_pose.utils.pca import EmpiricalEpsilon, KeypointPCA
+from lightning_pose.utils.pca import (
+    ComponentChooser,
+    EmpiricalEpsilon,
+    KeypointPCA,
+    NaNPCA,
+    format_multiview_data_for_pca,
+)
 
 
 def check_lists_equal(list_0: list, list_1: list) -> bool:
@@ -191,233 +197,142 @@ class TestKeypointPCA:
         kp_pca_2()
 
 
-def test_nan_pca():
+class TestNaNPCA:
+    """Test the class NaNPCA."""
 
-    from sklearn.datasets import load_diabetes
-    from sklearn.decomposition import PCA
+    @pytest.fixture
+    def base_pca(self):
+        from sklearn.datasets import load_diabetes
+        from sklearn.decomposition import PCA
 
-    from lightning_pose.utils.pca import NaNPCA
+        diabetes = load_diabetes()
+        data = diabetes.data  # type: ignore[union-attr]
+        pca_skl = PCA(svd_solver="full")
+        pca_skl.fit(data)
+        pca_cust = NaNPCA()
+        pca_cust.fit(data)
+        xhat_cust = pca_cust.transform(data)
+        return data, pca_skl, pca_cust, xhat_cust
 
-    # load non-nan example data
-    diabetes = load_diabetes()
-    data_for_pca = diabetes.data  # type: ignore[union-attr]
+    def test_nan_pca_no_nans(self, base_pca):
 
-    # no nan-handling needed here
-    assert np.sum(np.isnan(data_for_pca)) == 0
-    # just to illustrate the dimensions of the data
-    assert data_for_pca.shape == (442, 10)
+        data, pca_skl, pca_cust, xhat_cust = base_pca
+        assert np.sum(np.isnan(data)) == 0
+        assert data.shape == (442, 10)
+        xhat_skl = pca_skl.transform(data)
+        assert pca_skl.noise_variance_ == pca_cust.noise_variance_
+        assert pca_skl.n_samples_ == pca_cust.n_samples_
+        assert pca_skl.n_components_ == pca_cust.n_components_
+        assert np.allclose(  # type: ignore[arg-type]
+            pca_skl.components_, pca_cust.components_, rtol=1e-10)
+        assert np.allclose(pca_skl.explained_variance_, pca_cust.explained_variance_, rtol=1e-10)
+        assert np.allclose(
+            pca_skl.explained_variance_ratio_, pca_cust.explained_variance_ratio_, rtol=1e-10)
+        assert np.allclose(pca_skl.singular_values_, pca_cust.singular_values_, rtol=1e-10)
+        assert np.allclose(xhat_skl, xhat_cust, rtol=1e-10)
 
-    # ------------------------------------------------------
-    # TEST 1: standard PCA vs our custom PCA with no NaNs
-    # ------------------------------------------------------
+    def test_nan_pca_single_nan(self, base_pca):
 
-    # fit standard pca
-    pca_skl = PCA(svd_solver="full")
-    pca_skl.fit(data_for_pca)
+        data, _, pca_cust, xhat_cust = base_pca
+        data_nans1 = np.copy(data)
+        data_nans1[0, 0] = np.nan
+        pca_cust_nan1 = NaNPCA()
+        pca_cust_nan1.fit(data_nans1)
 
-    # fit our custom NaN-handling PCA
-    pca_cust = NaNPCA()
-    pca_cust.fit(data_for_pca)
+        assert pca_cust.noise_variance_ == pca_cust_nan1.noise_variance_
+        assert pca_cust.n_samples_ == pca_cust_nan1.n_samples_
+        assert pca_cust.n_components_ == pca_cust_nan1.n_components_
 
-    # check outputs are the same
-    assert pca_skl.noise_variance_ == pca_cust.noise_variance_
-    assert pca_skl.n_samples_ == pca_cust.n_samples_
-    assert pca_skl.n_components_ == pca_cust.n_components_
-    assert np.allclose(pca_skl.components_, pca_cust.components_, rtol=1e-10)  # type: ignore[arg-type]
-    assert np.allclose(pca_skl.explained_variance_, pca_cust.explained_variance_, rtol=1e-10)
-    assert np.allclose(
-        pca_skl.explained_variance_ratio_, pca_cust.explained_variance_ratio_, rtol=1e-10)
-    assert np.allclose(pca_skl.singular_values_, pca_cust.singular_values_, rtol=1e-10)
+        # for components, we don't consider values close to zero, as these can change sign easily
+        mask = np.abs(pca_cust.components_) > 0.05
+        assert not np.allclose(
+            pca_cust.components_[mask], pca_cust_nan1.components_[mask], rtol=1e-10)
+        assert np.allclose(pca_cust.components_[mask], pca_cust_nan1.components_[mask], rtol=1e-1)
+        assert not np.allclose(
+            pca_cust.explained_variance_, pca_cust_nan1.explained_variance_, rtol=1e-10)
+        assert np.allclose(
+            pca_cust.explained_variance_, pca_cust_nan1.explained_variance_, rtol=1e-2)
+        assert not np.allclose(
+            pca_cust.explained_variance_ratio_,
+            pca_cust_nan1.explained_variance_ratio_,
+            rtol=1e-10,
+        )
+        assert np.allclose(
+            pca_cust.explained_variance_ratio_,
+            pca_cust_nan1.explained_variance_ratio_,
+            rtol=1e-2,
+        )
+        assert not np.allclose(
+            pca_cust.singular_values_, pca_cust_nan1.singular_values_, rtol=1e-10)
+        assert np.allclose(pca_cust.singular_values_, pca_cust_nan1.singular_values_, rtol=1e-2)
 
-    # test transform method
-    xhat_skl = pca_skl.transform(data_for_pca)
-    xhat_cust = pca_cust.transform(data_for_pca)
-    assert np.allclose(xhat_skl, xhat_cust, rtol=1e-10)
+        xhat_cust_nan1 = pca_cust_nan1.transform(data_nans1)
+        assert np.allclose(xhat_cust[1:], xhat_cust_nan1[1:], atol=1e-2)
 
-    # ------------------------------------------------------
-    # TEST 2: standard PCA vs custom PCA with a single NaN
-    # ------------------------------------------------------
+    def test_nan_pca_many_nans(self, base_pca):
 
-    # set a single value to NaN
-    data_for_pca_nans1 = np.copy(data_for_pca)
-    data_for_pca_nans1[0, 0] = np.nan
+        data, _, pca_cust, xhat_cust = base_pca
 
-    # fit our custom NaN-handling PCA
-    pca_cust_nan1 = NaNPCA()
-    pca_cust_nan1.fit(data_for_pca_nans1)
+        data_nans1 = np.copy(data)
+        data_nans1[0, 0] = np.nan
+        pca_cust_nan1 = NaNPCA()
+        pca_cust_nan1.fit(data_nans1)
 
-    # check deterministic attributes are the same
-    assert pca_cust.noise_variance_ == pca_cust_nan1.noise_variance_
-    assert pca_cust.n_samples_ == pca_cust_nan1.n_samples_
-    assert pca_cust.n_components_ == pca_cust_nan1.n_components_
+        rows = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        cols = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 8, 7, 6]
+        data_nans2 = np.copy(data)
+        for r, c in zip(rows, cols, strict=True):
+            data_nans2[r, c] = np.nan
+        pca_cust_nan2 = NaNPCA()
+        pca_cust_nan2.fit(data_nans2)
 
-    # check outputs are close, but not the same
-    # for components, we don't consider values close to zero, as these can change sign easily
-    mask = np.abs(pca_cust.components_) > 0.05
-    assert not np.allclose(
-        pca_cust.components_[mask], pca_cust_nan1.components_[mask], rtol=1e-10)
-    assert np.allclose(
-        pca_cust.components_[mask], pca_cust_nan1.components_[mask], rtol=1e-1)
-    assert not np.allclose(
-        pca_cust.explained_variance_, pca_cust_nan1.explained_variance_, rtol=1e-10)
-    assert np.allclose(
-        pca_cust.explained_variance_, pca_cust_nan1.explained_variance_, rtol=1e-2)
-    assert not np.allclose(
-        pca_cust.explained_variance_ratio_, pca_cust_nan1.explained_variance_ratio_, rtol=1e-10)
-    assert np.allclose(
-        pca_cust.explained_variance_ratio_, pca_cust_nan1.explained_variance_ratio_, rtol=1e-2)
-    assert not np.allclose(
-        pca_cust.singular_values_, pca_cust_nan1.singular_values_, rtol=1e-10)
-    assert np.allclose(
-        pca_cust.singular_values_, pca_cust_nan1.singular_values_, rtol=1e-2)
+        # for components, we don't consider values close to zero, as these can change sign easily
+        mask = np.abs(pca_cust.components_) > 0.05
+        assert not np.allclose(
+            pca_cust_nan1.components_[mask], pca_cust_nan2.components_[mask], rtol=1e-10)
+        assert np.allclose(
+            pca_cust_nan1.components_[mask], pca_cust_nan2.components_[mask], rtol=1e0)
+        # just look at the 'd' dims with highest variance
+        d = 7
+        assert not np.allclose(
+            pca_cust_nan1.explained_variance_[:d],
+            pca_cust_nan2.explained_variance_[:d],
+            rtol=1e-10,
+        )
+        assert np.allclose(
+            pca_cust_nan1.explained_variance_[:d],
+            pca_cust_nan2.explained_variance_[:d],
+            rtol=1e-2,
+        )
+        assert not np.allclose(
+            pca_cust_nan1.explained_variance_ratio_[:d],
+            pca_cust_nan2.explained_variance_ratio_[:d],
+            rtol=1e-10,
+        )
+        assert np.allclose(
+            pca_cust_nan1.explained_variance_ratio_[:d],
+            pca_cust_nan2.explained_variance_ratio_[:d],
+            rtol=1e-2,
+        )
+        assert not np.allclose(
+            pca_cust_nan1.singular_values_[:d], pca_cust_nan2.singular_values_[:d], rtol=1e-10)
+        assert np.allclose(
+            pca_cust_nan1.singular_values_[:d], pca_cust_nan2.singular_values_[:d], rtol=1e-2)
 
-    # test transform method
-    xhat_cust_nan1 = pca_cust_nan1.transform(data_for_pca_nans1)
-    # only check on unmodified rows
-    assert np.allclose(xhat_cust[1:], xhat_cust_nan1[1:], atol=1e-2)
+        xhat_cust_nan2 = pca_cust_nan2.transform(data_nans2)
+        assert np.allclose(xhat_cust[rows[-1] + 1:], xhat_cust_nan2[rows[-1] + 1:], atol=1e-2)
 
-    # ------------------------------------------------------
-    # TEST 3: custom PCA with single vs many NaNs
-    # ------------------------------------------------------
-    # set many values to NaN
-    data_for_pca_nans2 = np.copy(data_for_pca)
-    rows = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    cols = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 8, 7, 6]
-    for r, c in zip(rows, cols, strict=True):
-        data_for_pca_nans2[r, c] = np.nan
+    def test_nan_pca_whole_row_nan(self, base_pca):
 
-    # fit our custom NaN-handling PCA
-    pca_cust_nan2 = NaNPCA()
-    pca_cust_nan2.fit(data_for_pca_nans2)
+        data, _, _, xhat_cust = base_pca
+        data_nans3 = np.copy(data)
+        data_nans3[0, :] = np.nan
+        pca_cust_nan3 = NaNPCA()
+        pca_cust_nan3.fit(data_nans3)
 
-    # check outputs are close, but not the same
-    # for components, we don't consider values close to zero, as these can change sign easily
-    mask = np.abs(pca_cust.components_) > 0.05
-    assert not np.allclose(
-        pca_cust_nan1.components_[mask], pca_cust_nan2.components_[mask], rtol=1e-10)
-    assert np.allclose(
-        pca_cust_nan1.components_[mask], pca_cust_nan2.components_[mask], rtol=1e0)
-    # just look at the 'd' dims with highest variance
-    d = 7
-    assert not np.allclose(
-        pca_cust_nan1.explained_variance_[:d], pca_cust_nan2.explained_variance_[:d], rtol=1e-10)
-    assert np.allclose(
-        pca_cust_nan1.explained_variance_[:d], pca_cust_nan2.explained_variance_[:d], rtol=1e-2)
-    assert not np.allclose(
-        pca_cust_nan1.explained_variance_ratio_[:d], pca_cust_nan2.explained_variance_ratio_[:d],
-        rtol=1e-10,
-    )
-    assert np.allclose(
-        pca_cust_nan1.explained_variance_ratio_[:d], pca_cust_nan2.explained_variance_ratio_[:d],
-        rtol=1e-2,
-    )
-    assert not np.allclose(
-        pca_cust_nan1.singular_values_[:d], pca_cust_nan2.singular_values_[:d], rtol=1e-10)
-    assert np.allclose(
-        pca_cust_nan1.singular_values_[:d], pca_cust_nan2.singular_values_[:d], rtol=1e-2)
-
-    # test transform method
-    xhat_cust_nan2 = pca_cust_nan2.transform(data_for_pca_nans2)
-    # only check on unmodified rows
-    assert np.allclose(xhat_cust[rows[-1] + 1:], xhat_cust_nan2[rows[-1] + 1:], atol=1e-2)
-
-    # ------------------------------------------------------
-    # TEST 4: set whole row to NaN
-    # ------------------------------------------------------
-    data_for_pca_nans3 = np.copy(data_for_pca)
-    data_for_pca_nans3[0, :] = np.nan
-
-    # fit our custom NaN-handling PCA
-    pca_cust_nan3 = NaNPCA()
-    pca_cust_nan3.fit(data_for_pca_nans3)
-
-    # test transform method
-    xhat_cust_nan3 = pca_cust_nan3.transform(data_for_pca_nans3)
-    # only check on unmodified rows
-    assert np.allclose(xhat_cust[1:], xhat_cust_nan3[1:], atol=1e-2)
-    # test all-nan row was set to zeros
-    assert np.all(xhat_cust_nan3[0, :] == 0)
-
-
-def test_component_chooser():
-
-    # create fake data for PCA
-    from sklearn.datasets import load_diabetes
-    from sklearn.decomposition import PCA
-
-    diabetes = load_diabetes()
-    data_for_pca = diabetes.data  # type: ignore[union-attr]
-    assert np.sum(np.isnan(data_for_pca)) == 0  # no nan-handling needed here
-    assert data_for_pca.shape == (
-        442,
-        10,
-    )  # just to illustrate the dimensions of the data
-
-    # now fit pca
-    pca = PCA(svd_solver="full")
-    pca.fit(data_for_pca)
-
-    from lightning_pose.utils.pca import ComponentChooser
-
-    # regular integer behavior
-    comp_chooser_int = ComponentChooser(pca, 4)
-    assert comp_chooser_int() == 4
-
-    # can't keep more than 10 componets for diabetes data (obs dim = 10)
-    with pytest.raises(ValueError):
-        ComponentChooser(pca, 11)
-
-    # we return ints, so basically checking that 2 < 3
-    assert ComponentChooser(pca, 2)() < ComponentChooser(pca, 3)()
-
-    # can't explain more than 1.0 of the variance
-    with pytest.raises(ValueError):
-        ComponentChooser(pca, 1.04)
-
-    # no negative proportions
-    with pytest.raises(ValueError):
-        ComponentChooser(pca, -0.2)
-
-    # typical behavior
-    n_comps = ComponentChooser(pca, 0.95)()
-    assert (n_comps > 0) and (n_comps <= 10)
-
-    # for explaining exactly 1.0 of the variance, you should keep all 10 components
-    assert ComponentChooser(pca, 1.0)() == 10
-
-    # less explained variance -> less components kept
-    assert ComponentChooser(pca, 0.20)() < ComponentChooser(pca, 0.90)()
-
-
-def test_format_multiview_data_for_pca():
-
-    from lightning_pose.utils.pca import format_multiview_data_for_pca
-
-    n_batches = 12
-    n_keypoints = 20
-    keypoints = torch.rand(
-        size=(n_batches, n_keypoints, 2),
-        device="cpu",
-    )
-
-    # basic two-view functionality
-    column_matches = [[0, 1, 2, 3], [4, 5, 6, 7]]
-    arr = format_multiview_data_for_pca(keypoints, column_matches)
-    assert arr.shape == torch.Size(
-        [n_batches * len(column_matches[0]), 2 * len(column_matches)]
-    )
-
-    # basic error checking
-    column_matches = [[0, 1, 2, 3], [4, 5, 6]]
-    with pytest.raises(AssertionError):
-        format_multiview_data_for_pca(keypoints, column_matches)
-
-    # basic three-view functionality
-    column_matches = [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]]
-    arr = format_multiview_data_for_pca(keypoints, column_matches)
-    assert arr.shape == torch.Size(
-        [n_batches * len(column_matches[0]), 2 * len(column_matches)]
-    )
+        xhat_cust_nan3 = pca_cust_nan3.transform(data_nans3)
+        assert np.allclose(xhat_cust[1:], xhat_cust_nan3[1:], atol=1e-2)
+        assert np.all(xhat_cust_nan3[0, :] == 0)
 
 
 class TestEmpiricalEpsilon:
@@ -438,6 +353,74 @@ class TestEmpiricalEpsilon:
         loss = np.arange(101, dtype='float')
         loss[1::2] = np.nan
         assert ee(loss) == 90
+
+
+class TestComponentChooser:
+    """Test the class ComponentChooser."""
+
+    @pytest.fixture
+    def fitted_pca(self):
+        from sklearn.datasets import load_diabetes
+        from sklearn.decomposition import PCA
+
+        diabetes = load_diabetes()
+        data = diabetes.data  # type: ignore[union-attr]
+        pca = PCA(svd_solver="full")
+        pca.fit(data)
+        return pca
+
+    def test_component_chooser_integer(self, fitted_pca):
+        assert ComponentChooser(fitted_pca, 4)() == 4
+        assert ComponentChooser(fitted_pca, 2)() < ComponentChooser(fitted_pca, 3)()
+
+    def test_component_chooser_integer_invalid(self, fitted_pca):
+        # can't keep more than 10 components for diabetes data (obs dim = 10)
+        with pytest.raises(ValueError):
+            ComponentChooser(fitted_pca, 11)
+
+    def test_component_chooser_proportion(self, fitted_pca):
+        n_comps = ComponentChooser(fitted_pca, 0.95)()
+        assert (n_comps > 0) and (n_comps <= 10)
+        # explaining exactly 1.0 of the variance requires keeping all 10 components
+        assert ComponentChooser(fitted_pca, 1.0)() == 10
+        # less explained variance -> fewer components kept
+        assert ComponentChooser(fitted_pca, 0.20)() < ComponentChooser(fitted_pca, 0.90)()
+
+    def test_component_chooser_proportion_invalid(self, fitted_pca):
+        with pytest.raises(ValueError):
+            ComponentChooser(fitted_pca, 1.04)
+        with pytest.raises(ValueError):
+            ComponentChooser(fitted_pca, -0.2)
+
+
+class TestFormatMultiviewDataForPca:
+    """Test the function format_multiview_data_for_pca."""
+
+    @pytest.fixture
+    def keypoints(self):
+        return torch.rand(size=(12, 20, 2), device="cpu")
+
+    def test_format_multiview_two_views(self, keypoints):
+
+        column_matches = [[0, 1, 2, 3], [4, 5, 6, 7]]
+        arr = format_multiview_data_for_pca(keypoints, column_matches)
+        assert arr.shape == torch.Size(
+            [keypoints.shape[0] * len(column_matches[0]), 2 * len(column_matches)]
+        )
+
+    def test_format_multiview_mismatched_lengths(self, keypoints):
+
+        column_matches = [[0, 1, 2, 3], [4, 5, 6]]
+        with pytest.raises(AssertionError):
+            format_multiview_data_for_pca(keypoints, column_matches)
+
+    def test_format_multiview_three_views(self, keypoints):
+
+        column_matches = [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]]
+        arr = format_multiview_data_for_pca(keypoints, column_matches)
+        assert arr.shape == torch.Size(
+            [keypoints.shape[0] * len(column_matches[0]), 2 * len(column_matches)]
+        )
 
 
 def test_convert_dict_values_to_tensors():
