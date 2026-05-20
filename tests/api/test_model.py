@@ -335,7 +335,7 @@ class TestGetModelClass:
     def test_get_model_class_supervised_raises_for_unknown(self):
         """Raises NotImplementedError for an unrecognised supervised model_type."""
         with pytest.raises(NotImplementedError, match='invalid model_type for a fully supervised'):
-            get_model_class('unknown_type', semi_supervised=False)
+            get_model_class('unknown_type', semi_supervised=False)  # type: ignore[arg-type]
 
     def test_get_model_class_semi_supervised_regression(self):
         """Returns SemiSupervisedRegressionTracker for semi-supervised regression."""
@@ -370,4 +370,4 @@ class TestGetModelClass:
         with pytest.raises(
             NotImplementedError, match='invalid model_type for a semi-supervised',
         ):
-            get_model_class('unknown_type', semi_supervised=True)
+            get_model_class('unknown_type', semi_supervised=True)  # type: ignore[arg-type]

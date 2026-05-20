@@ -6,6 +6,7 @@ from typing import Any
 import torch
 import torchvision.models as tvmodels
 
+from lightning_pose.models import ALLOWED_MODEL_TYPES
 from lightning_pose.models.backbones import ALLOWED_BACKBONES
 
 # to ignore imports for sphix-autoapidoc
@@ -15,7 +16,7 @@ __all__ = []
 def build_backbone(
     backbone_arch: ALLOWED_BACKBONES,
     pretrained: bool = True,
-    model_type: str = 'heatmap',
+    model_type: ALLOWED_MODEL_TYPES = 'heatmap',
     **kwargs: Any,
 ) -> tuple[torch.nn.Module, int]:
     """Load backbone weights for resnets, efficientnets, and other models from torchvision.
