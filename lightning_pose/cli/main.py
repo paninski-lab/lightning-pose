@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from importlib.metadata import version
 
 from . import friendly
 from .commands import COMMANDS
@@ -15,6 +16,11 @@ def _build_parser() -> friendly.ArgumentParser:
         Configured ``ArgumentParser`` with all CLI subcommands attached.
     """
     parser = friendly.ArgumentParser()
+    parser.add_argument(
+        '--version',
+        action='version',
+        version=f'lightning-pose {version("lightning-pose")}',
+    )
     subparsers = parser.add_subparsers(
         dest="command",
         required=True,
