@@ -1,6 +1,7 @@
 """Test the main CLI entry point."""
 
 import sys
+from importlib.metadata import version
 
 import pytest
 
@@ -26,3 +27,23 @@ class TestBuildParser:
             sys.argv = ["litpose"]
             main()
         assert exc_info.value.code == 1
+
+
+class TestVersion:
+    """Test the --version flag."""
+
+    def test_version_flag_exits_zero(self):
+        from lightning_pose.cli.main import _build_parser
+
+        parser = _build_parser()
+        with pytest.raises(SystemExit) as exc_info:
+            parser.parse_args(['--version'])
+        assert exc_info.value.code == 0
+
+    def test_version_flag_prints_version(self, capsys):
+        from lightning_pose.cli.main import _build_parser
+
+        parser = _build_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args(['--version'])
+        assert version('lightning-pose') in capsys.readouterr().out
