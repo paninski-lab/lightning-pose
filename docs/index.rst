@@ -197,6 +197,7 @@ It covers the end-to-end workflow of labeling, training, and evaluation.
 
    source/installation_guide
    source/core_concepts
+   source/lightning_pose_3d
    source/naming_videofiles
    source/create_first_project
    source/importing_labeled_data
