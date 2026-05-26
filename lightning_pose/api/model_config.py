@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import get_args
 
@@ -237,10 +238,17 @@ class ModelConfig:
         )
 
         if self.is_multi_view():
-            assert model_type == 'heatmap_multiview_transformer', (
-                f"multi-view models require model.model_type = 'heatmap_multiview_transformer', "
-                f"got '{model_type}'"
-            )
+            # Too strict; doesn't allow single-view models to be trained on multi-view data
+            # assert model_type == 'heatmap_multiview_transformer', (
+            #     f"multi-view models require model.model_type = 'heatmap_multiview_transformer', "
+            #     f"got '{model_type}'"
+            # )
+            if model_type != 'heatmap_multiview_transformer':
+                warnings.warn(
+                    "multi-view models require "
+                    f"model.model_type = 'heatmap_multiview_transformer', got '{model_type}'",
+                    stacklevel=2,
+                )
 
             reprojection = self.cfg.losses.get('supervised_reprojection_heatmap_mse')
             if reprojection is not None and reprojection.get('log_weight') is not None:
