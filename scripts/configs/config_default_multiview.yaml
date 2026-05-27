@@ -24,9 +24,6 @@ data:
   view_names:
     - cam0
     - cam1
-  # path to a csv file mapping each frame to a camera calibration toml file
-  # see documentation for format; null disables 3D supervision and augmentation
-  camera_params_file: null
   # total number of keypoints
   num_keypoints: null
   # keypoint names; should be the same set of keypoints for each view
