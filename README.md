@@ -7,23 +7,25 @@
 ![PyPI](https://img.shields.io/pypi/v/lightning-pose)
 ![PyPI Downloads](https://static.pepy.tech/badge/lightning-pose/week)
 
-Lightning Pose is an end-to-end toolkit designed for robust multi-view and single-view animal
+Lightning Pose is an end-to-end package designed for robust multi-view and single-view animal
 pose estimation using advanced transformer architectures. It leverages Multi-View Transformers
-and patch-masking training to learn geometric relationships between views,
+and simulated occlusions to learn geometric relationships between views,
 resulting in strong performance on occlusions
-[Aharon, Whiteway et al. 2026](https://www.biorxiv.org/content/10.64898/2026.04.20.719731v1).
-For single-view datasets it leverages temporal context and learned plausibility constraints for
-strong performance in challenging scenarios [Biderman, Whiteway et al. 2024, Nature Methods](https://rdcu.be/dLP3z).
+([Aharon, Whiteway et al., 2026](https://www.biorxiv.org/content/10.64898/2026.04.20.719731v1)).
+For single-view datasets it leverages temporal context and unsupervised losses for
+strong performance in challenging scenarios ([Biderman, Whiteway et al. 2024, Nature Methods](https://rdcu.be/dLP3z)).
 It has a rich GUI that supports the end-to-end workflow: labeling, model management, and evaluation.
 
+Below is a quick start guide; see the full documentation [here](https://lightning-pose.readthedocs.io).
 
 ## Installation
 
-Lightning-pose requires a Linux or WSL environment with an NVIDIA GPU.
+Lightning Pose requires a Linux or WSL environment with an NVIDIA GPU. 
+It has been tested on Ubuntu 18.04, 22.04, and 24.04 with Python versions 3.10-3.12.
 
 For users without access to a local NVIDIA GPU, it is highly recommended to
-use the [Lightning AI](https://lightning.ai/) cloud environment, which provides
-persistent, browser-based "Studios" with on-demand access to powerful GPUs
+use the [Lightning AI cloud environment](https://lightning.ai/zuckerman-institute/templates/lightning-pose-3d-app), 
+which provides a persistent, browser-based "Studio" with on-demand access to powerful GPUs
 and pre-configured CUDA environments.
 
 Install dependencies:
@@ -41,7 +43,8 @@ In a clean python virtual environment (conda or other virtual environment manage
 pip install lightning-pose lightning-pose-app
 ```
 
-That's it! To run the app:
+That's it! Installation should take 5-10 minutes depending on your internet connection.
+To run the app:
 
 ```shell
 litpose run_app
@@ -55,7 +58,13 @@ in case of any hiccups.
 
 To get started with Lightning Pose, follow the guides on our documentation:
 * [Create your first project](https://lightning-pose.readthedocs.io/en/latest/source/create_first_project.html) using the app
-* or follow the CLI User Guides ([Singleview](https://lightning-pose.readthedocs.io/en/latest/source/user_guide_singleview/index.html), [Multiview](https://lightning-pose.readthedocs.io/en/latest/source/user_guide_multiview/index.html)).
+* Follow the CLI User Guides ([Singleview](https://lightning-pose.readthedocs.io/en/latest/source/user_guide_singleview/index.html), [Multiview](https://lightning-pose.readthedocs.io/en/latest/source/user_guide_multiview/index.html))
+* Test out the API in the [demo noteboook](scripts/litpose_training_demo.ipynb)
+
+Note that model training time will depend heavily on dataset size and GPU resources.
+Fitting a typical backbone (ResNet-50 or ViT-Small) on ~200 labeled frames will take about 20 minutes
+on a T4 GPU.
+See the publications linked above for more thorough benchmarking of training and inference times.
 
 ## Community
 
@@ -69,7 +78,8 @@ Lightning Pose is primarily maintained by
 [Matt Whiteway](https://themattinthehatt.github.io) (Columbia University).
 
 Lightning Pose is under active development and we welcome community contributions.
-Whether you want to implement some of your own ideas or help out with our [development roadmap](docs/roadmap.md), please get in touch with us on Discord (see contributing guidelines [here](CONTRIBUTING.md)).
+Whether you want to implement some of your own ideas or help out with our [development roadmap](docs/roadmap.md), 
+please get in touch with us on Discord (see contributing guidelines [here](CONTRIBUTING.md)).
 
 ## Funding
 

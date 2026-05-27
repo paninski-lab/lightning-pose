@@ -59,5 +59,7 @@ echo "Pip install exit code: $?"
 pip show lightning_pose
 python -c "import lightning_pose; print('LP location:', lightning_pose.__file__); print('LP import successful')"
 
-# Run with html reporting.
-pytest --html=report.html --self-contained-html --cov=. --cov-report=xml:$HOME/buildbot_lp/coverage.xml tests/
+# Run with html reporting (for github actions) and codecov reporting
+# Note the --basetemp, this puts the temporary pytest files/directories in an Axon path that is cleared daily
+mkdir -m 777 /local/$(whoami)/pytest-tmp
+pytest --html=report.html --self-contained-html --cov=. --cov-report=xml:$HOME/buildbot_lp/coverage.xml --basetemp="/local/$(whoami)/pytest-tmp/$(date '+%Y_%m_%d-%H_%M_%S')" tests/
