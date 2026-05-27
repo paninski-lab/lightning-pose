@@ -78,8 +78,7 @@ Required calibration files
 
 Your project directory must include calibration information. See the 
 :doc:`/source/directory_structure_reference/camera_calibration_file_format` for detailed 
-information on the file format and structure, including how to use the ``calibrations.csv`` 
-index file.
+information on the file format and structure.
 
 The following structure is typically used:
 
@@ -94,7 +93,6 @@ The following structure is typically used:
       │   └── session0_view1.mp4
       ├── view0.csv
       ├── view1.csv
-      ├── calibrations.csv          # NEW: calibration index file
       └── calibrations/             # NEW: directory with TOML files
           ├── session0.toml
           ├── session1.toml
@@ -130,7 +128,6 @@ Your project directory structure with bounding boxes:
       ├── view1.csv
       ├── bboxes_view0.csv          # NEW: bounding boxes for view0
       ├── bboxes_view1.csv          # NEW: bounding boxes for view1
-      ├── calibrations.csv
       └── calibrations/
           ├── session0.toml
           └── ...
