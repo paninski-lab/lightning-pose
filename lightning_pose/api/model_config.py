@@ -223,7 +223,7 @@ class ModelConfig:
 
         Checks:
         - ``model_type`` is a recognised value.
-        - Multi-view models use ``heatmap_multiview_transformer``.
+        - Multi-view models use a heatmap-based model_type.
         - When ``losses.supervised_reprojection_heatmap_mse`` is active, ``training.imgaug``
           must be ``"dlc"`` and ``training.imgaug_3d`` must be ``true``.
 
@@ -237,9 +237,8 @@ class ModelConfig:
         )
 
         if self.is_multi_view():
-            assert model_type == 'heatmap_multiview_transformer', (
-                f"multi-view models require model.model_type = 'heatmap_multiview_transformer', "
-                f"got '{model_type}'"
+            assert model_type in ('heatmap', 'heatmap_mhcrnn', 'heatmap_multiview_transformer'), (
+                f"multi-view models require a heatmap-based model_type, got '{model_type}'"
             )
 
             reprojection = self.cfg.losses.get('supervised_reprojection_heatmap_mse')
