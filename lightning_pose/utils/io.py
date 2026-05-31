@@ -278,7 +278,7 @@ def get_videos_in_dir(
             [vid_name.split(f"_{view_names[v]}")[0] for vid_name in video_files_]
             for v, video_files_ in enumerate(video_files)
         ]
-        for view, view_files in zip(view_names, video_files):
+        for view, view_files in zip(view_names, video_files, strict=True):
             if len(view_files) == 0:
                 raise OSError(
                     f"Did not find any video files for view '{view}' in {video_dir}. "
