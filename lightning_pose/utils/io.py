@@ -265,7 +265,9 @@ def get_videos_in_dir(
                 for f in all_video_files
                 if (
                     f.endswith(allowed_formats)
-                    and (f.split(".")[-2].endswith(view) or f"_{view}_" in f)
+                    and re.search(
+                        rf"(?<![0-9a-zA-Z]){re.escape(view)}(?![0-9a-zA-Z])", f
+                    )
                 )
             ]
             for view in view_names
@@ -276,6 +278,14 @@ def get_videos_in_dir(
             [vid_name.split(f"_{view_names[v]}")[0] for vid_name in video_files_]
             for v, video_files_ in enumerate(video_files)
         ]
+        for view, view_files in zip(view_names, video_files):
+            if len(view_files) == 0:
+                raise OSError(
+                    f"Did not find any video files for view '{view}' in {video_dir}. "
+                    "Video filenames must contain the view name delimited by "
+                    "non-alphanumeric characters, e.g. <vid_name>_<view_name>.mp4 "
+                    "or <vid_name>_<view_name>.short.mp4."
+                )
         for vids_view in vid_names:
             if set(vids_view) != set(vid_names[0]):
                 raise RuntimeError(
