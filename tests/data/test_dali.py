@@ -228,3 +228,61 @@ def test_prepare_dali_multiview(cfg_multiview, video_list):
         assert batch["frames"].shape == frame_shape
         assert batch["transforms"].shape == (num_views, 1, 1)
         assert batch["bbox"].shape == (batch_size, num_views * 4)  # num_views * xyhw
+
+
+def test_prepare_dali_multiview_synchronized(cfg_multiview, video_list, tmp_path, monkeypatch):
+
+    import shutil
+
+    from lightning_pose.data import dali as dali_module
+    from lightning_pose.data.dali import PrepareDALI
+
+    im_height = 256
+    im_width = 256
+
+    num_views = 3
+    filenames = [video_list] * num_views  # really just copies of the same video
+
+    vid_pred_class = PrepareDALI(
+        train_stage="train",  # random_shuffle is True for training
+        model_type="base",
+        filenames=filenames,
+        dali_config=cfg_multiview.dali,
+        resize_dims=[im_height, im_width],
+        imgaug="default",  # no per-view augmentation, so frames are directly comparable
+    )
+
+    # all per-view readers share the same seed, so under random_shuffle every view must read the
+    # exact same frames (same session + timepoints) on every batch
+    loader = vid_pred_class()
+    for _ in range(4):
+        batch = loader.__next__()
+        frames = batch["frames"].cpu().numpy()  # (batch, num_views, channels, height, width)
+        for view in range(1, num_views):
+            assert np.allclose(frames[:, 0], frames[:, view])
+        # sanity: a shuffled sequence still contains distinct frames (not a constant clip)
+        assert not np.allclose(frames[:, 0, 0], frames[:, 0, -1])
+
+    # error is thrown if views have a different number of sessions
+    vid = video_list[0]
+    with pytest.raises(ValueError, match="same number of sessions"):
+        PrepareDALI(
+            train_stage="train",
+            model_type="base",
+            filenames=[[vid, vid], [vid]],
+            dali_config=cfg_multiview.dali,
+            resize_dims=[im_height, im_width],
+        )
+
+    # error is thrown if a session has different frame counts across views
+    vid_copy = str(tmp_path / "view1_session0.mp4")
+    shutil.copy(vid, vid_copy)
+    monkeypatch.setattr(dali_module, "count_frames", lambda p: {vid: 100, vid_copy: 90}[p])
+    with pytest.raises(ValueError, match="frame counts across views"):
+        PrepareDALI(
+            train_stage="train",
+            model_type="base",
+            filenames=[[vid], [vid_copy]],
+            dali_config=cfg_multiview.dali,
+            resize_dims=[im_height, im_width],
+        )
