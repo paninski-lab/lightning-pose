@@ -1,3 +1,5 @@
+# Sample single-view Lightning Pose config with reasonable defaults.
+
 data:
   # resize dimensions to streamline model creation
   # must each be a multiple of 128 (e.g., 128, 256, 384, 512)
@@ -140,7 +142,7 @@ losses:
   # loss = projection onto the discarded eigenvectors
   pca_multiview:
     # actual weight = 1 / (2 * exp(log_weight)); higher values reduce the loss contribution
-    log_weight: 5.0
+    log_weight: 11.0
     # predictions should lie within the low-d subspace spanned by these components
     components_to_keep: 3
     # absolute error (in pixels) below which pca loss is zeroed out
@@ -149,7 +151,7 @@ losses:
   # loss = projection onto the discarded eigenvectors
   pca_singleview:
     # actual weight = 1 / (2 * exp(log_weight)); higher values reduce the loss contribution
-    log_weight: 5.0
+    log_weight: 11.0
     # predictions should lie within the low-d subspace spanned by components
     # that describe this fraction of variance (float in (0, 1)) or an integer count
     components_to_keep: 0.99
@@ -159,7 +161,7 @@ losses:
   # loss = norm of distance between successive timepoints
   temporal:
     # actual weight = 1 / (2 * exp(log_weight)); higher values reduce the loss contribution
-    log_weight: 5.0
+    log_weight: 11.0
     # epsilon-insensitive threshold in pixels; frame-to-frame diffs below this are not penalized
     # can be a single float or a list of floats (one per keypoint, in csv column order)
     epsilon: 20.0
