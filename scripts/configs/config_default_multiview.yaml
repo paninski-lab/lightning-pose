@@ -1,3 +1,5 @@
+# Sample multi-view Lightning Pose config with reasonable defaults.
+
 data:
   # resize dimensions to streamline model creation
   # must each be a multiple of 128 (e.g., 128, 256, 384, 512)

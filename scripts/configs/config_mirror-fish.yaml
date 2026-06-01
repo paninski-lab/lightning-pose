@@ -1,15 +1,14 @@
+# Config for mirror-fish dataset in original
+# Lightning Pose publication (Biderman, Whiteway et al., Nat Methods 2024).
+# For field descriptions see `config_default.yaml` in this directory.
+
 data:
-  # resize dimensions to streamline model creation
   image_resize_dims:
     height: 256
     width: 384
-  # ABSOLUTE path to data directory
   data_dir: /home/zeus/content/data/mirror-fish
-  # ABSOLUTE path to unlabeled videos' directory
   video_dir: /home/zeus/content/data/mirror-fish/videos
-  # location of labels; for example script, this should be relative to `data_dir`
   csv_file: "CollectedData.csv"
-  # total number of body parts
   num_keypoints: 51
   keypoint_names:
     - chin_tip_main
@@ -63,13 +62,6 @@ data:
     - dorsal_right
     - anal_right
     - fork_right
-  # for mirrored setups with all keypoints defined in same csv file, define matching
-  # columns for different keypoints (assumes x-y-x-y interleaving)
-  # each list corresponds to a single view, so in the example below there are 2 views
-  # keypoint 0 is from view 0 and matches up with keypoint 8 from view 2
-  # columns that correspond to keypoints only labeled in a single view are omitted
-  # TODO: what if a keypoint is labeled in more than 1 but not all views?
-  # this info is only used for the multiview pca loss
   mirrored_column_matches:
     - [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     - [17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33]
@@ -79,48 +71,25 @@ data:
     [4, 5, 6, 7, 8, 9, 14, 15, 16, 22, 23, 24, 38, 39, 40, 41, 42, 43, 48, 50]
 
 training:
-  # select from one of several predefined image/video augmentation pipelines
-  # default- resizing only
-  # dlc- imgaug pipeline implemented in DLC 2.0 package
-  # dlc-top-down- dlc augmentations plus vertical and horizontal flips
   imgaug: dlc
-  # batch size of labeled data during training
   train_batch_size: 8
-  # batch size of labeled data during validation
   val_batch_size: 48
-  # batch size of labeled data during test
   test_batch_size: 48
-  # fraction of labeled data used for training
   train_prob: 0.95
-  # fraction of labeled data used for validation (remaining used for test)
   val_prob: 0.05
-  # <=1 - fraction of total train frames (determined by `train_prob`) used for training
-  # >1 - number of total train frames used for training
   train_frames: 1
-  # number of gpus to train a single model
   num_gpus: 1
-  # epochs over which to assess validation metrics for early stopping
   early_stop_patience: 3
-  # epoch at which backbone network weights begin updating
   unfreezing_epoch: 20
-  # max training epochs; training may exit before due to early stopping
   min_epochs: 500
   max_epochs: 500
-  # frequency to log training metrics (one step is one batch)
   log_every_n_steps: 10
-  # frequency to log validation metrics
   check_val_every_n_epoch: 5
-  # rng seed for labeled batches
   rng_seed_data_pt: 0
-  # rng seed for weight initialization
   rng_seed_model_pt: 0
-  # optimizer: Adam | AdamW.
-  # Recommended to use Adam for resnet backbones, and AdamW for ViT backbones.
   optimizer: Adam
   optimizer_params:
     learning_rate: 1e-3
-  # learning rate scheduler
-  # multisteplr | [todo - reducelronplateau]
   lr_scheduler: multisteplr
   lr_scheduler_params:
     multisteplr:
@@ -128,68 +97,42 @@ training:
       gamma: 0.5
 
 model:
-  # list of unsupervised losses
   losses_to_use: []
-  # backbone network
-  backbone: resnet50  # DO NOT USE resnet50_animal_ap10k
-  # prediction mode: regression | heatmap | heatmap_mhcrnn (context)
+  backbone: resnet50
   model_type: heatmap
-  # which heatmap loss to use
   heatmap_loss_type: mse
-  # tt expt name
   model_name: rebuttal23a
 
 dali:
   base:
     train:
-      sequence_length: 16 # step = sequence_length by default. done internally
+      sequence_length: 16
     predict:
-      # (train_batch_size + base.train.sequence_length) * 2 -> round down to nearest pow of 2
-      sequence_length: 64 # step = sequence_length by default. done internally.
+      sequence_length: 64
   context:
-    train: # defaults: sequence_length=5, step=sequence_length
+    train:
       batch_size: 8
-    predict: # defaults: sequence_length=5, step=1
+    predict:
       sequence_length: 64
 
 losses:
-  # loss = projection onto the discarded eigenvectors
   pca_multiview:
-    # weight in front of PCA loss
     log_weight: 10.7
-    # predictions should lie within the low-d subspace spanned by these components
     components_to_keep: 3
-    # absolute error (in pixels) below which pca loss is zeroed out; if null, an empirical
-    # epsilon is computed using the labeled data
     epsilon: null
-  # loss = projection onto the discarded eigenvectors
   pca_singleview:
-    # weight in front of PCA loss
     log_weight: 10.7
-    # predictions should lie within the low-d subspace spanned by components that describe this fraction of variance
     components_to_keep: 0.99
-    # absolute error (in pixels) below which pca loss is zeroed out; if null, an empirical
-    # epsilon is computed using the labeled data
     epsilon: null
-  # loss = norm of distance between successive timepoints
   temporal:
-    # weight in front of temporal loss
     log_weight: 10.7
-    # for epsilon insensitive rectification
-    # (in pixels; diffs below this are not penalized)
     epsilon: 10.0
-    # nan removal value.
-    # (in prob; heatmaps with max prob values are removed)
     prob_threshold: 0.05
 
 eval:
-  # predict?
   predict_vids_after_training: true
-  # save .mp4?
   save_vids_after_training: false
-  # str with an absolute path to a directory containing videos for prediction.
-  test_videos_directory: /home/zeus/content/data/mirror-fish/videos_new
-  # confidence threshold for plotting a vid
+  test_videos_directory: ${data.video_dir}
   confidence_thresh_for_vid: 0.9
 
 callbacks:

@@ -1,65 +1,40 @@
+# Config for ibl-paw dataset in original
+# Lightning Pose publication (Biderman, Whiteway et al., Nat Methods 2024).
+# For field descriptions see `config_default.yaml` in this directory.
+
 data:
-  # resize dimensions to streamline model creation
   image_resize_dims:
     height: 128
     width: 128
-  # ABSOLUTE path to data directory
   data_dir: /home/zeus/content/data/ibl-paw
-  # ABSOLUTE path to unlabeled videos' directory
   video_dir: /home/zeus/content/data/ibl-paw/videos
-  # location of labels; for ex script, this should be relative to `data_dir`
   csv_file: CollectedData.csv
-  # total number of keypoints
   num_keypoints: 2
-  # keypoint names
   keypoint_names:
     - paw_l
     - paw_r
   columns_for_singleview_pca: [0, 1]
 
 training:
-  # select from one of several predefined image/video augmentation pipelines
-  # default- resizing only
-  # dlc- imgaug pipeline implemented in DLC 2.0 package
-  # dlc-top-down- dlc augmentations plus vertical and horizontal flips
   imgaug: dlc
-  # batch size of labeled data during training
   train_batch_size: 32
-  # batch size of labeled data during validation
   val_batch_size: 128
-  # batch size of labeled data during test
   test_batch_size: 128
-  # fraction of labeled data used for training
   train_prob: 0.8
-  # fraction of labeled data used for validation (remaining used for test)
   val_prob: 0.1
-  # <=1 - fraction of total train frames (determined by `train_prob`) used for training
-  # >1 - number of total train frames used for training
   train_frames: 1
-  # number of gpus to train a single model
   num_gpus: 1
-  # epochs over which to assess validation metrics for early stopping
   early_stop_patience: 3
-  # epoch at which backbone network weights begin updating
   unfreezing_epoch: 20
-  # max training epochs; training may exit before due to early stopping
   min_epochs: 300
   max_epochs: 750
-  # frequency to log training metrics (one step is one batch)
   log_every_n_steps: 10
-  # frequency to log validation metrics
   check_val_every_n_epoch: 5
-  # rng seed for labeled batches
   rng_seed_data_pt: 0
-  # rng seed for weight initialization
   rng_seed_model_pt: 0
-  # optimizer: Adam | AdamW.
-  # Recommended to use Adam for resnet backbones, and AdamW for ViT backbones.
   optimizer: Adam
   optimizer_params:
     learning_rate: 1e-3
-  # learning rate scheduler
-  # multisteplr | [todo - reducelronplateau]
   lr_scheduler: multisteplr
   lr_scheduler_params:
     multisteplr:
@@ -67,60 +42,38 @@ training:
       gamma: 0.5
 
 model:
-  # list of unsupervised losses
   losses_to_use: []
-  # backbone network
   backbone: resnet50_animal_ap10k
-  # prediction mode: regression | heatmap | heatmap_mhcrnn (context)
   model_type: heatmap
-  # which heatmap loss to use
   heatmap_loss_type: mse
-  # tt expt name
   model_name: rebuttal23a
 
 dali:
   base:
     train:
-      sequence_length: 64 # step = sequence_length by default. done internally
+      sequence_length: 64
     predict:
-      # (train_batch_size + base.train.sequence_length) * 2 -> round down to nearest pow of 2
-      sequence_length: 192 # step = sequence_length by default. done internally.
+      sequence_length: 192
   context:
-    train: # defaults: sequence_length=5, step=sequence_length
+    train:
       batch_size: 32
-    predict: # defaults: sequence_length=5, step=1
-      # (train_batch_size / 4 + context.train.batch_size) * 2 -> round down to nearest pow of 2
+    predict:
       sequence_length: 192
 
 losses:
-  # loss = projection onto the discarded eigenvectors
   pca_singleview:
-    # weight in front of PCA loss
     log_weight: 10.7
-    # predictions should lie within the low-d subspace spanned by components that describe this fraction of variance
     components_to_keep: 0.99
-    # absolute error (in pixels) below which pca loss is zeroed out; if null, an empirical
-    # epsilon is computed using the labeled data
     epsilon: null
-  # loss = norm of distance between successive timepoints
   temporal:
-    # weight in front of temporal loss
     log_weight: 10.7
-    # for epsilon insensitive rectification
-    # (in pixels; diffs below this are not penalized)
     epsilon: 10.0
-    # nan removal value.
-    # (in prob; heatmaps with max prob values are removed)
     prob_threshold: 0.05
 
 eval:
-  # predict?
   predict_vids_after_training: true
-  # save .mp4?
   save_vids_after_training: false
-  # str with an absolute path to a directory containing videos for prediction.
-  test_videos_directory: /home/zeus/content/data/ibl-paw/videos_new
-  # confidence threshold for plotting a vid
+  test_videos_directory: ${data.video_dir}
   confidence_thresh_for_vid: 0.9
 
 callbacks:
