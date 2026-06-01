@@ -1,7 +1,7 @@
 """Test the predictions module."""
 
 import copy
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
@@ -9,7 +9,7 @@ from omegaconf import OmegaConf
 
 from lightning_pose.losses import get_loss_factories
 from lightning_pose.models import get_model
-from lightning_pose.utils.predictions import make_dlc_pandas_index, predict_dataset
+from lightning_pose.utils.predictions import make_dlc_pandas_index, predict_dataset, predict_video
 
 
 class TestMakeDlcPandasIndex:
@@ -81,3 +81,82 @@ class TestPredictDataset:
             data_module=heatmap_data_module,
             preds_file=str(tmpdir.join('preds.csv')),
         )
+
+
+class TestPredictVideoBboxFile:
+    """Test bbox_file support in predict_video."""
+
+    @pytest.fixture
+    def mock_model(self):
+        """Minimal Model mock compatible with predict_video."""
+        model = MagicMock()
+        model.config.cfg.model.model_type = 'heatmap'
+        model.config.cfg.data.image_resize_dims.height = 256
+        model.config.cfg.data.image_resize_dims.width = 256
+        return model
+
+    @pytest.fixture
+    def bbox_csv(self, tmp_path):
+        """3-row bbox CSV; returns (path, dataframe)."""
+        df = pd.DataFrame({
+            'x': [0, 1, 2],
+            'y': [0, 1, 2],
+            'h': [10, 10, 10],
+            'w': [10, 10, 10],
+        })
+        path = tmp_path / 'bbox.csv'
+        df.to_csv(path)
+        return path, df
+
+    def test_bbox_df_forwarded_to_prepare_dali(self, tmp_path, mock_model, bbox_csv):
+        """PrepareDALI receives the loaded bbox_df when bbox_file is provided."""
+        bbox_file, _ = bbox_csv
+        mock_dali = MagicMock()
+
+        with (
+            patch('lightning_pose.utils.predictions.count_frames', return_value=3),
+            patch('lightning_pose.utils.predictions.PrepareDALI', mock_dali),
+            patch('lightning_pose.utils.predictions.pl.Trainer'),
+            patch('lightning_pose.utils.predictions.PredictionHandler'),
+        ):
+            predict_video(
+                video_file=str(tmp_path / 'vid.mp4'),
+                model=mock_model,
+                bbox_file=bbox_file,
+            )
+
+        call_kwargs = mock_dali.call_args.kwargs
+        assert call_kwargs['bbox_df'] is not None
+        assert list(call_kwargs['bbox_df'].columns) == ['x', 'y', 'h', 'w']
+        assert len(call_kwargs['bbox_df']) == 3
+
+    def test_none_bbox_df_when_bbox_file_not_provided(self, tmp_path, mock_model):
+        """PrepareDALI receives bbox_df=None when bbox_file is not provided."""
+        mock_dali = MagicMock()
+
+        with (
+            patch('lightning_pose.utils.predictions.PrepareDALI', mock_dali),
+            patch('lightning_pose.utils.predictions.pl.Trainer'),
+            patch('lightning_pose.utils.predictions.PredictionHandler'),
+        ):
+            predict_video(
+                video_file=str(tmp_path / 'vid.mp4'),
+                model=mock_model,
+            )
+
+        call_kwargs = mock_dali.call_args.kwargs
+        assert call_kwargs['bbox_df'] is None
+
+    def test_raises_on_frame_count_mismatch(self, tmp_path, mock_model, bbox_csv):
+        """ValueError is raised when bbox_file row count doesn't match video frame count."""
+        bbox_file, _ = bbox_csv  # 3 rows
+
+        with patch('lightning_pose.utils.predictions.count_frames', return_value=10):
+            with pytest.raises(
+                ValueError, match='bbox_file has 3 rows but video has 10 frames',
+            ):
+                predict_video(
+                    video_file=str(tmp_path / 'vid.mp4'),
+                    model=mock_model,
+                    bbox_file=bbox_file,
+                )
