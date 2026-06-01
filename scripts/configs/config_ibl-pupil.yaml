@@ -97,7 +97,7 @@ losses:
   # loss = projection onto the discarded eigenvectors
   pca_singleview:
     # weight in front of PCA loss
-    log_weight: 5.0
+    log_weight: 10.7
     # predictions should lie within the low-d subspace spanned by components that describe this fraction of variance
     components_to_keep: 0.99
     # absolute error (in pixels) below which pca loss is zeroed out; if null, an empirical
@@ -106,12 +106,11 @@ losses:
   # loss = norm of distance between successive timepoints
   temporal:
     # weight in front of temporal loss
-    log_weight: 5.0
+    log_weight: 10.7
     # for epsilon insensitive rectification
     # (in pixels; diffs below this are not penalized)
-    epsilon:
-      4.0 # used to be 10
-      # nan removal value.
+    epsilon: 4.0
+    # nan removal value.
     # (in prob; heatmaps with max prob values are removed)
     prob_threshold: 0.05
 
