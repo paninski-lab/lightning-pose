@@ -318,7 +318,7 @@ class TestValidateModel:
     def test_validate_model_multiview_wrong_model_type(self):
         cfg = _multiview_cfg_dict()
         cfg['model']['model_type'] = 'heatmap'
-        with pytest.raises(AssertionError, match='heatmap_multiview_transformer'):
+        with pytest.warns(UserWarning, match='heatmap_multiview_transformer'):
             _mc(cfg)._validate_model()
 
     def test_validate_model_reprojection_loss_wrong_imgaug(self):
