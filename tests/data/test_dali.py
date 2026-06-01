@@ -2,6 +2,7 @@
 
 import os
 import shutil
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
@@ -254,6 +255,56 @@ class TestPrepareDALI:
                 dali_config=cfg_multiview.dali,
                 resize_dims=[256, 256],
             )
+
+    def test_bbox_df_sets_none_resize_dims_in_predict_pipes(self, cfg, video_list):
+        """When bbox_df is provided, resize_dims is None in both predict pipe arg dicts."""
+        bbox_df = pd.DataFrame({'x': [0], 'y': [0], 'h': [100], 'w': [100]})
+        vid_pred_class = PrepareDALI(
+            train_stage='predict',
+            model_type='base',
+            filenames=video_list,
+            dali_config=cfg.dali,
+            resize_dims=[128, 128],
+            bbox_df=bbox_df,
+        )
+        assert vid_pred_class._pipe_dict['predict']['base']['resize_dims'] is None
+        assert vid_pred_class._pipe_dict['predict']['context']['resize_dims'] is None
+
+    def test_bbox_df_preserves_train_pipe_resize_dims(self, cfg, video_list):
+        """When bbox_df is provided, train pipe resize_dims is unchanged."""
+        resize_dims = [128, 128]
+        bbox_df = pd.DataFrame({'x': [0], 'y': [0], 'h': [100], 'w': [100]})
+        vid_pred_class = PrepareDALI(
+            train_stage='predict',
+            model_type='base',
+            filenames=video_list,
+            dali_config=cfg.dali,
+            resize_dims=resize_dims,
+            bbox_df=bbox_df,
+        )
+        assert vid_pred_class._pipe_dict['train']['base']['resize_dims'] == resize_dims
+        assert vid_pred_class._pipe_dict['train']['context']['resize_dims'] == resize_dims
+
+    def test_bbox_df_forwarded_to_lit_dali_wrapper(self, cfg, video_list):
+        """__call__ passes bbox_df and the original resize_dims to LitDaliWrapper."""
+        resize_dims = [128, 128]
+        bbox_df = pd.DataFrame({'x': [0], 'y': [0], 'h': [100], 'w': [100]})
+        vid_pred_class = PrepareDALI(
+            train_stage='predict',
+            model_type='base',
+            filenames=video_list,
+            dali_config=cfg.dali,
+            resize_dims=resize_dims,
+            bbox_df=bbox_df,
+        )
+        with (
+            patch.object(vid_pred_class, '_get_dali_pipe', return_value=MagicMock()),
+            patch('lightning_pose.data.dali.LitDaliWrapper') as MockWrapper,
+        ):
+            vid_pred_class()
+        call_kwargs = MockWrapper.call_args.kwargs
+        assert call_kwargs['bbox_df'] is bbox_df
+        assert call_kwargs['resize_dims'] == resize_dims
 
 
 class TestLitDaliWrapper:

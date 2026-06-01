@@ -340,6 +340,7 @@ class PrepareDALI:
         dali_config: dict | DictConfig | ListConfig | None = None,
         imgaug: str | None = "default",
         num_threads: int = 1,
+        bbox_df: pd.DataFrame | None = None,
     ) -> None:
         """Initialize DALI pipelines and dataloaders for training or prediction.
 
@@ -350,10 +351,15 @@ class PrepareDALI:
             filenames: for single-view models, a flat list of video file paths; for
                 multi-view models, a list of per-view lists of video file paths.
             resize_dims: ``[height, width]`` to resize frames to before feeding the model.
+                Also used as the post-crop resize target when ``bbox_df`` is provided.
             dali_config: DALI-specific config dict; falls back to package defaults when None.
             imgaug: name of the augmentation pipeline to apply during training (e.g.
                 ``"dlc"``); pass ``"default"`` for resize-only or ``None`` to disable.
             num_threads: number of CPU threads used by DALI pipelines.
+            bbox_df: optional DataFrame with columns ``["x", "y", "h", "w"]``, one row per
+                frame. When provided, the predict pipeline loads full-resolution frames
+                (DALI resize is disabled) and ``LitDaliWrapper`` crops each frame to its
+                bbox before resizing to ``resize_dims``.
 
         Raises:
             FileNotFoundError: if any path in ``filenames`` does not exist or is not a file.
@@ -416,6 +422,7 @@ class PrepareDALI:
         self.resize_dims = resize_dims
         self.dali_config = dali_config
         self.num_threads = num_threads
+        self.bbox_df = bbox_df
         self.frame_count = sum(view0_frame_counts)
         self._pipe_dict: dict = self._setup_pipe_dict(self.filenames, imgaug)
 
@@ -559,6 +566,12 @@ class PrepareDALI:
         }
         # our floor above should prevent us from getting to the very final batch.
 
+        # when per-frame bbox cropping is enabled, DALI must deliver full-resolution frames so
+        # that LitDaliWrapper can crop them; the post-crop resize happens in PyTorch instead
+        if self.bbox_df is not None:
+            dict_args['predict']['base']['resize_dims'] = None
+            dict_args['predict']['context']['resize_dims'] = None
+
         return dict_args
 
     def _get_dali_pipe(self) -> Any:
@@ -636,9 +649,11 @@ class PrepareDALI:
         return dict_args
 
     def __call__(self) -> LitDaliWrapper:
-        """
-        Returns a LightningWrapper object.
-        """
+        """Return a LitDaliWrapper configured for the current train stage and model type."""
         pipe = self._get_dali_pipe()
         args = self._setup_dali_iterator_args()
-        return LitDaliWrapper(pipe, **args[self.train_stage][self.model_type])
+        iterator_args = args[self.train_stage][self.model_type]
+        if self.bbox_df is not None:
+            iterator_args['bbox_df'] = self.bbox_df
+            iterator_args['resize_dims'] = self.resize_dims
+        return LitDaliWrapper(pipe, **iterator_args)
