@@ -80,9 +80,11 @@ def handle(args: argparse.Namespace) -> None:
     """Handle the smooth_bbox command."""
     import lightning_pose.utils.cropzoom as cz
 
+    print(f'Smoothing bboxes in {args.bbox_dir}')
     cz.smooth_bbox(
         input_bbox_dir=args.bbox_dir,
         output_dir=args.output_dir,
         method=args.method,
         window=args.window,
     )
+    print(f'Saved smoothed bboxes to {args.output_dir}')

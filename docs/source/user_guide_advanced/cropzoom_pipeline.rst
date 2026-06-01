@@ -70,7 +70,7 @@ animal.  The two options are mutually exclusive; if neither is provided,
 
     .. code-block:: bash
 
-        litpose create_bbox $MODEL_DIR/$DETECTOR_MODEL data/videos/test_vid.mp4 --crop_ratio=2.0
+        litpose create_bbox $MODEL_DIR/$DETECTOR_MODEL data/videos/test_vid.mp4 --crop_ratio 2.0
 
 ``--crop_size``
     Produces a fixed square bounding box of the given pixel size, centred on the
@@ -79,7 +79,7 @@ animal.  The two options are mutually exclusive; if neither is provided,
 
     .. code-block:: bash
 
-        litpose create_bbox $MODEL_DIR/$DETECTOR_MODEL data/videos/test_vid.mp4 --crop_size=200
+        litpose create_bbox $MODEL_DIR/$DETECTOR_MODEL data/videos/test_vid.mp4 --crop_size 200
 
 Bounding box smoothing
 ======================
@@ -157,7 +157,7 @@ Training script
 
     # Train the pose model.
     litpose train config.yaml --output_dir $MODEL_DIR/$POSE_MODEL \
-        --detector_model=$MODEL_DIR/$DETECTOR_MODEL
+        --detector_model $MODEL_DIR/$DETECTOR_MODEL
 
 For command-line options of the commands used above, see
 :ref:`Create bbox <cli-create-bbox>` and :ref:`Crop <cli-crop>`.

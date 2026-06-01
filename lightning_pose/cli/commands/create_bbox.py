@@ -68,7 +68,13 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
     parser.add_argument(
         'model_dir', type=types.existing_model_dir, help='path to a detector model directory'
     )
-    parser.add_argument('input_path', type=Path, nargs='+', help='one or more video or CSV files')
+    parser.add_argument(
+        'input_path',
+        type=Path,
+        nargs='+',
+        help='one or more video files, CSV files, or directories (directories are expanded to'
+        ' their contained *.mp4 files)',
+    )
     parser.add_argument(
         '--crop_ratio',
         type=float,
@@ -138,7 +144,16 @@ def handle(args: argparse.Namespace) -> None:
             'anchor_keypoints': anchor_keypoints,
         })
 
-    for input_path in [Path(p) for p in args.input_path]:
+    input_paths: list[Path] = []
+    for p in args.input_path:
+        p = Path(p)
+        if p.is_dir():
+            print(f'Processing directory {p}')
+            input_paths.extend(sorted(f for f in p.iterdir() if f.suffix == '.mp4'))
+        else:
+            input_paths.append(p)
+
+    for input_path in input_paths:
         if input_path.suffix == '.mp4':
             input_preds_file = model.video_preds_dir() / (input_path.stem + '.csv')
             output_bbox_file = model.video_preds_dir() / (input_path.stem + '_bbox.csv')
@@ -149,6 +164,7 @@ def handle(args: argparse.Namespace) -> None:
         else:
             raise NotImplementedError('only mp4 and csv files are supported.')
 
+        print(f'Creating bboxes for {input_path.name}')
         cz.generate_bbox(
             input_preds_file=input_preds_file,
             detector_cfg=detector_cfg,

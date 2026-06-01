@@ -70,7 +70,13 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
     crop_parser.add_argument(
         'model_dir', type=types.existing_model_dir, help='path to a model directory'
     )
-    crop_parser.add_argument('input_path', type=Path, nargs='+', help='one or more files')
+    crop_parser.add_argument(
+        'input_path',
+        type=Path,
+        nargs='+',
+        help='one or more video files, CSV files, or directories (directories are expanded to'
+        ' their contained *.mp4 files)',
+    )
     crop_parser.add_argument(
         '--bbox_dir',
         type=Path,
@@ -109,7 +115,16 @@ def handle(args: argparse.Namespace) -> None:
 
     bbox_dir = args.bbox_dir
 
-    for input_path in [Path(p) for p in args.input_path]:
+    input_paths: list[Path] = []
+    for p in args.input_path:
+        p = Path(p)
+        if p.is_dir():
+            print(f'Processing directory {p}')
+            input_paths.extend(sorted(f for f in p.iterdir() if f.suffix == '.mp4'))
+        else:
+            input_paths.append(p)
+
+    for input_path in input_paths:
         if input_path.suffix == '.mp4':
             if bbox_dir is not None:
                 input_bbox_file = bbox_dir / (input_path.stem + '_bbox.csv')
@@ -117,6 +132,7 @@ def handle(args: argparse.Namespace) -> None:
                 input_bbox_file = model.video_preds_dir() / (input_path.stem + '_bbox.csv')
             output_file = model.cropped_videos_dir() / ('cropped_' + input_path.name)
 
+            print(f'Cropping {input_path.name}')
             cz.crop_video(
                 input_video_file=input_path,
                 input_bbox_file=input_bbox_file,
@@ -133,6 +149,7 @@ def handle(args: argparse.Namespace) -> None:
                 input_bbox_file = preds_dir / 'bbox.csv'
             output_csv_file_path = preds_dir / ('cropped_' + input_path.name)
 
+            print(f'Cropping {input_path.name}')
             cz.crop_labeled_frames(
                 input_data_dir=input_data_dir,
                 input_csv_file=input_path,

@@ -132,3 +132,40 @@ class TestHandle:
             MockModel.from_dir.return_value = mock_model
             with pytest.raises(NotImplementedError):
                 handle(args)
+
+    def test_directory_input_expands_to_mp4s(self, tmp_path, mock_model):
+        """A directory input is expanded to the *.mp4 files it contains."""
+        video_dir = tmp_path / 'videos'
+        video_dir.mkdir()
+        (video_dir / 'a.mp4').touch()
+        (video_dir / 'b.mp4').touch()
+        (video_dir / 'notes.txt').touch()
+        args = argparse.Namespace(
+            model_dir=tmp_path / 'model',
+            input_path=[video_dir],
+            bbox_dir=None,
+        )
+        with (
+            patch('lightning_pose.api.Model') as MockModel,
+            patch('lightning_pose.utils.cropzoom.crop_video') as mock_crop,
+        ):
+            MockModel.from_dir.return_value = mock_model
+            handle(args)
+        assert mock_crop.call_count == 2
+
+    def test_empty_directory_calls_no_crop_video(self, tmp_path, mock_model):
+        """An empty directory (no mp4s) results in zero crop_video calls."""
+        video_dir = tmp_path / 'empty'
+        video_dir.mkdir()
+        args = argparse.Namespace(
+            model_dir=tmp_path / 'model',
+            input_path=[video_dir],
+            bbox_dir=None,
+        )
+        with (
+            patch('lightning_pose.api.Model') as MockModel,
+            patch('lightning_pose.utils.cropzoom.crop_video') as mock_crop,
+        ):
+            MockModel.from_dir.return_value = mock_model
+            handle(args)
+        mock_crop.assert_not_called()

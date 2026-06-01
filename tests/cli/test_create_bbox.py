@@ -204,3 +204,34 @@ class TestHandle:
             handle(args)
         output_path = mock_gen.call_args.kwargs['output_bbox_file']
         assert output_path.name == 'bbox.csv'
+
+    def test_directory_input_expands_to_mp4s(self, tmp_path, mock_model):
+        """A directory input is expanded to the *.mp4 files it contains."""
+        video_dir = tmp_path / 'videos'
+        video_dir.mkdir()
+        (video_dir / 'a.mp4').touch()
+        (video_dir / 'b.mp4').touch()
+        (video_dir / 'notes.txt').touch()
+        args = self._make_args(tmp_path, video_dir)
+        with (
+            patch('lightning_pose.api.Model') as MockModel,
+            patch('lightning_pose.utils.cropzoom.generate_bbox') as mock_gen,
+        ):
+            MockModel.from_dir.return_value = mock_model
+            handle(args)
+        assert mock_gen.call_count == 2
+        called_stems = {c.kwargs['output_bbox_file'].stem for c in mock_gen.call_args_list}
+        assert called_stems == {'a_bbox', 'b_bbox'}
+
+    def test_empty_directory_calls_no_generate_bbox(self, tmp_path, mock_model):
+        """An empty directory (no mp4s) results in zero generate_bbox calls."""
+        video_dir = tmp_path / 'empty'
+        video_dir.mkdir()
+        args = self._make_args(tmp_path, video_dir)
+        with (
+            patch('lightning_pose.api.Model') as MockModel,
+            patch('lightning_pose.utils.cropzoom.generate_bbox') as mock_gen,
+        ):
+            MockModel.from_dir.return_value = mock_model
+            handle(args)
+        mock_gen.assert_not_called()
