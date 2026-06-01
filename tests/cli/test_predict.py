@@ -1,11 +1,11 @@
 """Test the predict CLI command argument parsing."""
 
 import argparse
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from lightning_pose.cli.commands.predict import _predict_multi_type, get_parser
+from lightning_pose.cli.commands.predict import _predict_multi_type, get_parser, handle
 
 
 class TestGetParser:
@@ -125,3 +125,63 @@ class TestPredictMultiType:
         mock_model.predict_on_video_file.assert_called_once()
         call_kwargs = mock_model.predict_on_video_file.call_args.kwargs
         assert 'bbox_file' not in call_kwargs
+
+    def test_directory_input_with_bbox_dir_recurses_into_mp4s(self, tmp_path, mock_model):
+        """A directory input with bbox_dir passes through to each recursive mp4 call."""
+        video_dir = tmp_path / 'videos'
+        video_dir.mkdir()
+        (video_dir / 'a.mp4').touch()
+        bbox_dir = tmp_path / 'bboxes'
+        _predict_multi_type(
+            mock_model, video_dir, skip_viz=True, skip_existing=False, bbox_dir=bbox_dir,
+        )
+        mock_model.predict_on_video_file.assert_called_once()
+
+
+class TestHandle:
+    """Test the handle function."""
+
+    @pytest.fixture
+    def mock_model(self):
+        """Mock Model returned by Model.from_dir2."""
+        model = MagicMock()
+        model.config.is_multi_view.return_value = False
+        return model
+
+    def _make_args(self, tmp_path, video, bbox_dir=None):
+        return argparse.Namespace(
+            model_dir=tmp_path / 'model',
+            input_path=[video],
+            skip_viz=False,
+            overwrite=False,
+            overrides=None,
+            progress_file=None,
+            bbox_dir=bbox_dir,
+        )
+
+    def test_handle_threads_bbox_dir_to_predict_multi_type(self, tmp_path, mock_model):
+        """handle() forwards args.bbox_dir to _predict_multi_type."""
+        bbox_dir = tmp_path / 'bboxes'
+        args = self._make_args(tmp_path, tmp_path / 'vid.mp4', bbox_dir=bbox_dir)
+        with (
+            patch('lightning_pose.api.Model') as MockModel,
+            patch(
+                'lightning_pose.cli.commands.predict._predict_multi_type',
+            ) as mock_predict,
+        ):
+            MockModel.from_dir2.return_value = mock_model
+            handle(args)
+        assert mock_predict.call_args.kwargs['bbox_dir'] == bbox_dir
+
+    def test_handle_threads_none_bbox_dir_when_not_provided(self, tmp_path, mock_model):
+        """handle() passes bbox_dir=None to _predict_multi_type when not provided."""
+        args = self._make_args(tmp_path, tmp_path / 'vid.mp4', bbox_dir=None)
+        with (
+            patch('lightning_pose.api.Model') as MockModel,
+            patch(
+                'lightning_pose.cli.commands.predict._predict_multi_type',
+            ) as mock_predict,
+        ):
+            MockModel.from_dir2.return_value = mock_model
+            handle(args)
+        assert mock_predict.call_args.kwargs['bbox_dir'] is None

@@ -12,10 +12,11 @@ from PIL import Image
 
 from lightning_pose.data import (
     get_data_module,
+    get_dataset,
     get_imgaug_transform,
 )
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
-from lightning_pose.data.datasets import BaseTrackingDataset
+from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
 
 
 class TestGetImgaugTransform:
@@ -323,3 +324,58 @@ class TestGetDataModule:
         cfg.dali.context.train.batch_size = 4
         with pytest.raises(ValidationError):
             get_data_module(cfg, heatmap_dataset, os.path.join(toy_data_dir, 'videos'))
+
+
+class TestGetDataset:
+    """Test the get_dataset function."""
+
+    def test_heatmap_singleview_bbox_path_none_by_default(
+        self, cfg, toy_data_dir, imgaug_transform, mocker,
+    ):
+        """Single-view HeatmapDataset is constructed with bbox_path=None by default."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.model_type = 'heatmap'
+        mock_init = mocker.patch.object(HeatmapDataset, '__init__', return_value=None)
+        get_dataset(cfg_tmp, data_dir=toy_data_dir, imgaug_transform=imgaug_transform)
+        assert mock_init.call_args.kwargs.get('bbox_path') is None
+
+    def test_heatmap_singleview_bbox_path_forwarded_from_config(
+        self, cfg, toy_data_dir, imgaug_transform, mocker, tmp_path,
+    ):
+        """Single-view HeatmapDataset receives bbox_path from cfg.data.bbox_file."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.model_type = 'heatmap'
+        bbox_file = str(tmp_path / 'bbox.csv')
+        cfg_tmp.data.bbox_file = bbox_file
+        mock_init = mocker.patch.object(HeatmapDataset, '__init__', return_value=None)
+        get_dataset(cfg_tmp, data_dir=toy_data_dir, imgaug_transform=imgaug_transform)
+        assert mock_init.call_args.kwargs.get('bbox_path') == bbox_file
+
+    def test_regression_bbox_path_none_by_default(
+        self, cfg, toy_data_dir, imgaug_transform, mocker,
+    ):
+        """BaseTrackingDataset is constructed with bbox_path=None by default."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.model_type = 'regression'
+        mock_init = mocker.patch.object(BaseTrackingDataset, '__init__', return_value=None)
+        get_dataset(cfg_tmp, data_dir=toy_data_dir, imgaug_transform=imgaug_transform)
+        assert mock_init.call_args.kwargs.get('bbox_path') is None
+
+    def test_regression_bbox_path_forwarded_from_config(
+        self, cfg, toy_data_dir, imgaug_transform, mocker, tmp_path,
+    ):
+        """BaseTrackingDataset receives bbox_path from cfg.data.bbox_file."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.model_type = 'regression'
+        bbox_file = str(tmp_path / 'bbox.csv')
+        cfg_tmp.data.bbox_file = bbox_file
+        mock_init = mocker.patch.object(BaseTrackingDataset, '__init__', return_value=None)
+        get_dataset(cfg_tmp, data_dir=toy_data_dir, imgaug_transform=imgaug_transform)
+        assert mock_init.call_args.kwargs.get('bbox_path') == bbox_file
+
+    def test_invalid_model_type_raises(self, cfg, toy_data_dir, imgaug_transform):
+        """get_dataset raises NotImplementedError for an unrecognised model type."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.model_type = 'invalid_type'
+        with pytest.raises(NotImplementedError):
+            get_dataset(cfg_tmp, data_dir=toy_data_dir, imgaug_transform=imgaug_transform)
