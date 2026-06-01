@@ -100,6 +100,7 @@ def get_dataset(
                 image_resize_width=cfg.data.image_resize_dims.width,
                 imgaug_transform=imgaug_transform,
                 do_context=False,  # no context for regression models
+                bbox_path=cfg.data.get('bbox_file', None),
             )
     elif cfg.model.model_type.find('heatmap') > -1:
         if cfg.data.get('view_names', None) and len(cfg.data.view_names) > 1:
@@ -141,6 +142,7 @@ def get_dataset(
                 downsample_factor=cfg.data.get('downsample_factor', 2),
                 do_context=cfg.model.model_type == 'heatmap_mhcrnn',  # context only for mhcrnn
                 uniform_heatmaps=cfg.training.get('uniform_heatmaps_for_nan_keypoints', False),
+                bbox_path=cfg.data.get('bbox_file', None),
             )
 
     else:

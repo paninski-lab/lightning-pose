@@ -566,22 +566,22 @@ class Model:
         data_dir: str | Path | None = None,
         compute_metrics: bool = True,
         add_train_val_test_set: bool = False,
+        bbox_file: str | Path | None = None,
     ) -> PredictionResult:
         """Predicts on a labeled dataset and computes error/loss metrics if applicable.
 
         Args:
-            csv_file (str | Path): Path to the CSV file of images, keypoint locations.
-            data_dir (str | Path, optional): Root path for relative paths in the CSV file.
-                Defaults to the data_dir originally used when training.
-            compute_metrics (bool, optional): Whether to compute pixel error and loss metrics on
-                predictions.
-            generate_labeled_images (bool, optional): Whether to save labeled images.
-                Defaults to False.
-            output_dir (str | Path, optional): The directory to save outputs to.
-                Defaults to `{model_dir}/image_preds/{csv_file_name}`.
-                If set to None, outputs are not saved.
-            add_train_val_test_set (bool): When predicting on training dataset, set to true to add
-                the `set` column to the prediction output.
+            csv_file: path to the CSV file of images and keypoint locations.
+            data_dir: root path for relative image paths in the CSV file. Defaults to the
+                data_dir used during training.
+            compute_metrics: whether to compute pixel error and loss metrics on predictions.
+            add_train_val_test_set: set to True when predicting on the training dataset to
+                add a ``set`` column to the output.
+            bbox_file: optional path to a bbox CSV produced by ``litpose create_bbox`` (or
+                any compatible source). When provided, each frame is cropped to its bounding
+                box before being passed to the model, and predictions are returned in the
+                original (un-cropped) coordinate space.
+
         Returns:
             PredictionResult: A PredictionResult object containing the predictions and metrics.
 
@@ -613,6 +613,7 @@ class Model:
             "data": {
                 "data_dir": str(data_dir),
                 "csv_file": str(csv_file),
+                "bbox_file": str(bbox_file) if bbox_file is not None else None,
             }
         }
 

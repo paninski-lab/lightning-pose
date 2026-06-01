@@ -75,6 +75,19 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
         help="overwrite videos that already have prediction files",
     )
 
+    predict_parser.add_argument(
+        "--bbox_dir",
+        type=Path,
+        default=None,
+        help=(
+            "directory containing bbox CSV files produced by ``litpose create_bbox`` or a "
+            "compatible external source. For CSV inputs, looks for ``bbox.csv`` inside this "
+            "directory. When provided, each frame is cropped to its bounding box before "
+            "being passed to the model, and predictions are saved in the original coordinate "
+            "space. (Video support coming soon.)"
+        ),
+    )
+
     post_prediction_args = predict_parser.add_argument_group("post-prediction")
     post_prediction_args.add_argument(
         "--skip_viz",
@@ -113,7 +126,9 @@ def handle(args: argparse.Namespace) -> None:
     else:
         for p in input_paths:
             _predict_multi_type(
-                model, p, args.skip_viz, not args.overwrite, progress_file=args.progress_file
+                model, p, args.skip_viz, not args.overwrite,
+                progress_file=args.progress_file,
+                bbox_dir=args.bbox_dir,
             )
 
 
@@ -123,6 +138,7 @@ def _predict_multi_type(
     skip_viz: bool,
     skip_existing: bool,
     progress_file: Path | None = None,
+    bbox_dir: Path | None = None,
 ) -> None:
     """Run prediction on a single path, dispatching to video, CSV, or directory handling.
 
@@ -132,6 +148,9 @@ def _predict_multi_type(
         skip_viz: if True, skip generating labeled visualization outputs.
         skip_existing: if True, skip predictions for which an output CSV already exists.
         progress_file: optional path to write prediction progress as JSON.
+        bbox_dir: optional directory containing bbox CSV files. When provided and the input
+            is a CSV, ``bbox.csv`` inside this directory is used to crop frames before
+            passing them to the model.
     """
     if path.is_dir():
         image_files = [p for p in path.iterdir() if p.is_file() and p.suffix in [".png", ".jpg"]]
@@ -142,7 +161,11 @@ def _predict_multi_type(
 
         print(f"Processing directory {path}")
         for p in video_files:
-            _predict_multi_type(model, p, skip_viz, skip_existing, progress_file=progress_file)
+            _predict_multi_type(
+                model, p, skip_viz, skip_existing,
+                progress_file=progress_file,
+                bbox_dir=bbox_dir,
+            )
 
     elif path.suffix == ".mp4":
         # Check if prediction file already exists
@@ -165,6 +188,7 @@ def _predict_multi_type(
 
         model.predict_on_label_csv(
             csv_file=path,
+            bbox_file=bbox_dir / "bbox.csv" if bbox_dir is not None else None,
         )
     elif path.suffix in [".png", ".jpg"]:
         raise NotImplementedError("Not yet implemented: predicting on image files.")
