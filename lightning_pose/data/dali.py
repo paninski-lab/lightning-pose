@@ -42,6 +42,7 @@ def video_pipe(
     pad_last_batch: bool = False,
     imgaug: str = "default",
     skip_vfr_check: bool = True,
+    reader_seed: int = 123456,
     # arguments consumed by decorator:
     # batch_size,
     # num_threads,
@@ -65,6 +66,9 @@ def video_pipe(
         pad_last_batch:
         imgaug: string identifying which imgaug pipeline to use; "default", "dlc", "dlc-top-down"
         skip_vfr_check: don't check for variable frame rates, can throw errors with small diffs
+        reader_seed: seed shared by all per-view video readers. For multiview pipelines this must
+            be identical across views so that every reader shuffles to the same sequence, keeping
+            the views frame-synchronized (same session, same timepoint) within a batch.
 
     Returns:
         pipeline object to be fed to DALIGenericIterator
@@ -102,6 +106,9 @@ def video_pipe(
             pad_last_batch=pad_last_batch,  # Important for context loaders
             file_list_include_preceding_frame=True,  # to get rid of dali warnings
             skip_vfr_check=skip_vfr_check,
+            # explicit, identical seed across views keeps multiview readers synchronized;
+            # without it DALI auto-assigns a different seed per reader and the views desync
+            seed=reader_seed,
         )
         orig_size = video.shape(device='gpu')  # type: ignore[union-attr]
         if resize_dims:
@@ -286,6 +293,9 @@ class PrepareDALI:
 
         Raises:
             FileNotFoundError: if any path in ``filenames`` does not exist or is not a file.
+            ValueError: for multiview inputs, if views have differing numbers of sessions or if a
+                session has differing frame counts across views (which would desynchronize the
+                per-view readers).
         """
         # determine if we have a multiview pipeline
         if isinstance(filenames, list) and isinstance(filenames[0], list):
@@ -304,13 +314,45 @@ class PrepareDALI:
                 if not os.path.exists(vid) or not os.path.isfile(vid):
                     raise FileNotFoundError(f"{vid} is not a video file!")
 
+        # frame counts of view 0, per session; reused below for `self.frame_count`
+        view0_frame_counts = list(map(count_frames, filenames_2d[0]))
+
+        # For multiview, the per-view DALI readers share a seed so they shuffle to the same
+        # sequence index. That only keeps the views frame-synchronized if every session has the
+        # same number of frames across all views (and the same number of sessions per view).
+        # Otherwise the readers silently drift apart, so fail loudly here instead.
+        if self.multiview:
+            num_sessions = len(filenames_2d[0])
+            for view_idx, view_list in enumerate(filenames_2d):
+                if len(view_list) != num_sessions:
+                    raise ValueError(
+                        f"View {view_idx} has {len(view_list)} video(s) but view 0 has "
+                        f"{num_sessions}; all views must have the same number of sessions for "
+                        "synchronized multiview loading."
+                    )
+            for session_idx in range(num_sessions):
+                counts = [view0_frame_counts[session_idx]] + [
+                    count_frames(filenames_2d[view_idx][session_idx])
+                    for view_idx in range(1, len(filenames_2d))
+                ]
+                if len(set(counts)) != 1:
+                    details = ", ".join(
+                        f"{filenames_2d[view_idx][session_idx]}={counts[view_idx]}"
+                        for view_idx in range(len(filenames_2d))
+                    )
+                    raise ValueError(
+                        "Mismatched frame counts across views for the same session; multiview "
+                        "video readers would desynchronize. Frame counts: "
+                        f"{details}"
+                    )
+
         self.train_stage = train_stage
         self.model_type = model_type
         self.filenames = filenames_2d
         self.resize_dims = resize_dims
         self.dali_config = dali_config
         self.num_threads = num_threads
-        self.frame_count = sum(map(count_frames, filenames_2d[0]))
+        self.frame_count = sum(view0_frame_counts)
         self._pipe_dict: dict = self._setup_pipe_dict(self.filenames, imgaug)
 
     @property
@@ -375,6 +417,10 @@ class PrepareDALI:
             "train": {"context": {}, "base": {}},
         }
         gen_cfg = self.dali_config.get("general", {"seed": 123456})  # type: ignore[arg-type]
+        # Multi-GPU strategy is to have each GPU randomize differently. The same value seeds every
+        # per-view reader (`reader_seed`) so that multiview readers shuffle identically and stay
+        # frame-synchronized within a pipeline.
+        pipeline_seed = gen_cfg["seed"] + device_id
 
         # base (vanilla single-frame model), train pipe args
         base_train_cfg = self.dali_config["base"]["train"]  # type: ignore[arg-type]
@@ -384,8 +430,8 @@ class PrepareDALI:
             "sequence_length": base_train_cfg["sequence_length"],
             "step": base_train_cfg["sequence_length"],
             "batch_size": 1,
-            # Multi-GPU strategy is to have each GPU randomize differently.
-            "seed": gen_cfg["seed"] + device_id,
+            "seed": pipeline_seed,
+            "reader_seed": pipeline_seed,
             "num_threads": self.num_threads,
             "device_id": device_id,
             "random_shuffle": True,
@@ -400,8 +446,8 @@ class PrepareDALI:
             "sequence_length": base_pred_cfg["sequence_length"],
             "step": base_pred_cfg["sequence_length"],
             "batch_size": 1,
-            # Multi-GPU strategy is to have each GPU randomize differently.
-            "seed": gen_cfg["seed"] + device_id,
+            "seed": pipeline_seed,
+            "reader_seed": pipeline_seed,
             "num_threads": self.num_threads,
             "device_id": device_id,
             "random_shuffle": False,
@@ -422,8 +468,8 @@ class PrepareDALI:
             "device_id": device_id,
             "random_shuffle": False,
             "name": "reader",
-            # Multi-GPU strategy is to have each GPU randomize differently.
-            "seed": gen_cfg["seed"] + device_id,
+            "seed": pipeline_seed,
+            "reader_seed": pipeline_seed,
             "pad_sequences": True,
             # "pad_last_batch": True,
             "imgaug": "default",  # no imgaug when predicting
@@ -440,8 +486,8 @@ class PrepareDALI:
             "sequence_length": context_train_cfg["batch_size"],
             "step": context_train_cfg["batch_size"],
             "batch_size": 1,
-            # Multi-GPU strategy is to have each GPU randomize differently.
-            "seed": gen_cfg["seed"] + device_id,
+            "seed": pipeline_seed,
+            "reader_seed": pipeline_seed,
             "num_threads": self.num_threads,
             "device_id": device_id,
             "random_shuffle": True,
