@@ -1,5 +1,6 @@
 import copy
 import filecmp
+import json
 import shutil
 from pathlib import Path
 
@@ -12,8 +13,10 @@ from PIL import Image
 from lightning_pose.utils.cropzoom import (
     _compute_bbox_df,
     _crop_image,
-    generate_cropped_labeled_frames,
-    generate_cropped_video,
+    crop_labeled_frames,
+    crop_video,
+    generate_bbox,
+    smooth_bbox,
 )
 
 from ..fetch_test_data import fetch_test_data_if_needed
@@ -158,8 +161,8 @@ def compare_directories(dir1: Path, dir2: Path) -> int | dict:
     return results
 
 
-class TestGenerateCroppedLabeledFrames:
-    """Test the generate_cropped_labeled_frames function."""
+class TestGenerateBbox:
+    """Test the generate_bbox function."""
 
     @pytest.fixture
     def setup(self, tmp_path, request):
@@ -171,20 +174,90 @@ class TestGenerateCroppedLabeledFrames:
         )
         return tmp_model_dir, request.path.parent / 'test_cropzoom_data'
 
-    def test_generate_cropped_labeled_frames_crop_ratio(self, setup):
+    def test_generate_bbox_crop_ratio(self, setup):
+        """generate_bbox with crop_ratio writes a valid bbox CSV."""
+        tmp_model_dir, _ = setup
+        detector_cfg = OmegaConf.create({
+            'crop_ratio': 1.5,
+            'anchor_keypoints': ['A_head', 'D_tailtip'],
+        })
+        output_bbox_file = tmp_model_dir / 'bbox.csv'
+        generate_bbox(
+            input_preds_file=tmp_model_dir / 'predictions.csv',
+            detector_cfg=detector_cfg,
+            output_bbox_file=output_bbox_file,
+        )
+        assert output_bbox_file.exists()
+        bbox_df = pd.read_csv(output_bbox_file, index_col=0)
+        assert list(bbox_df.columns) == ['x', 'y', 'h', 'w']
+
+    def test_generate_bbox_crop_size(self, setup):
+        """generate_bbox with crop_size produces constant h/w values."""
+        tmp_model_dir, _ = setup
+        crop_size = 100
+        detector_cfg = OmegaConf.create({
+            'crop_height': crop_size,
+            'crop_width': crop_size,
+            'anchor_keypoints': ['A_head', 'D_tailtip'],
+        })
+        output_bbox_file = tmp_model_dir / 'bbox.csv'
+        generate_bbox(
+            input_preds_file=tmp_model_dir / 'predictions.csv',
+            detector_cfg=detector_cfg,
+            output_bbox_file=output_bbox_file,
+        )
+        bbox_df = pd.read_csv(output_bbox_file, index_col=0)
+        assert (bbox_df['h'] == crop_size).all()
+        assert (bbox_df['w'] == crop_size).all()
+
+    def test_generate_bbox_creates_parent_dirs(self, setup):
+        """generate_bbox creates missing parent directories."""
+        tmp_model_dir, _ = setup
+        detector_cfg = OmegaConf.create({
+            'crop_ratio': 2.0,
+            'anchor_keypoints': [],
+        })
+        output_bbox_file = tmp_model_dir / 'new_dir' / 'bbox.csv'
+        generate_bbox(
+            input_preds_file=tmp_model_dir / 'predictions.csv',
+            detector_cfg=detector_cfg,
+            output_bbox_file=output_bbox_file,
+        )
+        assert output_bbox_file.exists()
+
+
+class TestCropLabeledFrames:
+    """Test the crop_labeled_frames function."""
+
+    @pytest.fixture
+    def setup(self, tmp_path, request):
+        fetch_test_data_if_needed(request.path.parent, 'test_cropzoom_data')
+        tmp_model_dir = tmp_path / 'test_model'
+        shutil.copytree(
+            request.path.parent / 'test_cropzoom_data' / 'test_model_output',
+            tmp_model_dir,
+        )
+        return tmp_model_dir, request.path.parent / 'test_cropzoom_data'
+
+    def test_crop_labeled_frames_crop_ratio(self, setup):
+        """crop_labeled_frames output matches expected directory (crop_ratio mode)."""
         tmp_model_dir, test_data_dir = setup
         root_dir = test_data_dir / 'test_data'
         detector_cfg = OmegaConf.create({
             'crop_ratio': 1.5,
             'anchor_keypoints': ['A_head', 'D_tailtip'],
         })
-        generate_cropped_labeled_frames(
-            input_data_dir=root_dir,
-            input_csv_file=root_dir / 'CollectedData.csv',
+        bbox_file = tmp_model_dir / 'cropped_images' / 'bbox.csv'
+        generate_bbox(
             input_preds_file=tmp_model_dir / 'predictions.csv',
             detector_cfg=detector_cfg,
+            output_bbox_file=bbox_file,
+        )
+        crop_labeled_frames(
+            input_data_dir=root_dir,
+            input_csv_file=root_dir / 'CollectedData.csv',
+            input_bbox_file=bbox_file,
             output_data_dir=tmp_model_dir / 'cropped_images',
-            output_bbox_file=tmp_model_dir / 'cropped_images' / 'bbox.csv',
             output_csv_file=tmp_model_dir / 'cropped_images' / 'cropped_labels.csv',
         )
         comparison = compare_directories(
@@ -193,7 +266,8 @@ class TestGenerateCroppedLabeledFrames:
         )
         assert comparison == 24  # 24 files compared successfully
 
-    def test_generate_cropped_labeled_frames_crop_size(self, setup):
+    def test_crop_labeled_frames_crop_size(self, setup):
+        """crop_labeled_frames with crop_size: h/w in bbox match requested size."""
         tmp_model_dir, test_data_dir = setup
         root_dir = test_data_dir / 'test_data'
         crop_size = 100
@@ -203,13 +277,16 @@ class TestGenerateCroppedLabeledFrames:
             'anchor_keypoints': ['A_head', 'D_tailtip'],
         })
         bbox_file = tmp_model_dir / 'cropped_images' / 'bbox.csv'
-        generate_cropped_labeled_frames(
-            input_data_dir=root_dir,
-            input_csv_file=root_dir / 'CollectedData.csv',
+        generate_bbox(
             input_preds_file=tmp_model_dir / 'predictions.csv',
             detector_cfg=detector_cfg,
-            output_data_dir=tmp_model_dir / 'cropped_images',
             output_bbox_file=bbox_file,
+        )
+        crop_labeled_frames(
+            input_data_dir=root_dir,
+            input_csv_file=root_dir / 'CollectedData.csv',
+            input_bbox_file=bbox_file,
+            output_data_dir=tmp_model_dir / 'cropped_images',
             output_csv_file=tmp_model_dir / 'cropped_images' / 'cropped_labels.csv',
         )
         bbox_df = pd.read_csv(bbox_file, index_col=0)
@@ -217,8 +294,8 @@ class TestGenerateCroppedLabeledFrames:
         assert (bbox_df['w'] == crop_size).all()
 
 
-class TestGenerateCroppedVideo:
-    """Test the generate_cropped_video function."""
+class TestCropVideo:
+    """Test the crop_video function."""
 
     @pytest.fixture
     def setup(self, tmp_path, request):
@@ -231,7 +308,8 @@ class TestGenerateCroppedVideo:
         video_dir = request.path.parent / 'test_cropzoom_data' / 'test_data' / 'videos'
         return tmp_model_dir, request.path.parent / 'test_cropzoom_data', video_dir
 
-    def test_generate_cropped_video_crop_ratio(self, setup):
+    def test_crop_video_crop_ratio(self, setup):
+        """crop_video bbox CSVs match expected output (crop_ratio mode)."""
         tmp_model_dir, test_data_dir, video_dir = setup
         detector_cfg = OmegaConf.create({
             'crop_ratio': 1.5,
@@ -239,20 +317,24 @@ class TestGenerateCroppedVideo:
         })
         for video_path in video_dir.iterdir():
             bbox_file = tmp_model_dir / 'cropped_videos' / (video_path.stem + '_bbox.csv')
-            generate_cropped_video(
-                input_video_file=video_path,
+            generate_bbox(
                 input_preds_file=tmp_model_dir / 'video_preds' / (video_path.stem + '.csv'),
                 detector_cfg=detector_cfg,
                 output_bbox_file=bbox_file,
+            )
+            crop_video(
+                input_video_file=video_path,
+                input_bbox_file=bbox_file,
                 output_file=tmp_model_dir / 'cropped_videos' / video_path.name,
             )
         comparison = compare_directories(
             tmp_model_dir / 'cropped_videos',
             test_data_dir / 'expected_model_output' / 'cropped_videos',
         )
-        assert comparison == 2  # 2 files compared successfully (mp4s skipped)
+        assert comparison == 2  # 2 bbox CSVs compared successfully (mp4s skipped)
 
-    def test_generate_cropped_video_crop_size(self, setup):
+    def test_crop_video_crop_size(self, setup):
+        """crop_video with crop_size: h/w in bbox match requested size."""
         tmp_model_dir, test_data_dir, video_dir = setup
         crop_size = 100
         detector_cfg = OmegaConf.create({
@@ -262,13 +344,79 @@ class TestGenerateCroppedVideo:
         })
         for video_path in video_dir.iterdir():
             bbox_file = tmp_model_dir / 'cropped_videos' / (video_path.stem + '_bbox.csv')
-            generate_cropped_video(
-                input_video_file=video_path,
+            generate_bbox(
                 input_preds_file=tmp_model_dir / 'video_preds' / (video_path.stem + '.csv'),
                 detector_cfg=detector_cfg,
                 output_bbox_file=bbox_file,
+            )
+            crop_video(
+                input_video_file=video_path,
+                input_bbox_file=bbox_file,
                 output_file=tmp_model_dir / 'cropped_videos' / video_path.name,
             )
             bbox_df = pd.read_csv(bbox_file, index_col=0)
             assert (bbox_df['h'] == crop_size).all()
             assert (bbox_df['w'] == crop_size).all()
+
+
+class TestSmoothBbox:
+    """Test the smooth_bbox function."""
+
+    def _make_bbox_file(self, path: Path, n_frames: int = 10) -> None:
+        """Write a simple bbox CSV at ``path``."""
+        pd.DataFrame({
+            'x': range(n_frames),
+            'y': range(n_frames),
+            'h': [50] * n_frames,
+            'w': [50] * n_frames,
+        }).to_csv(path)
+
+    def test_creates_output_files(self, tmp_path):
+        """Smoothed bbox files are written for every input file."""
+        input_dir = tmp_path / 'raw'
+        input_dir.mkdir()
+        for i in range(3):
+            self._make_bbox_file(input_dir / f'vid{i}_bbox.csv')
+        output_dir = tmp_path / 'smooth'
+        smooth_bbox(input_dir, output_dir, method='median', window=3)
+        for i in range(3):
+            assert (output_dir / f'vid{i}_bbox.csv').exists()
+
+    def test_writes_metadata(self, tmp_path):
+        """metadata.json records method, window, and source."""
+        input_dir = tmp_path / 'raw'
+        input_dir.mkdir()
+        self._make_bbox_file(input_dir / 'vid_bbox.csv')
+        output_dir = tmp_path / 'smooth'
+        smooth_bbox(input_dir, output_dir, method='median', window=7)
+        meta = json.loads((output_dir / 'metadata.json').read_text())
+        assert meta['method'] == 'median'
+        assert meta['window'] == 7
+        assert str(input_dir.resolve()) == meta['source']
+
+    def test_output_has_integer_values(self, tmp_path):
+        """Smoothed values are cast to integers."""
+        input_dir = tmp_path / 'raw'
+        input_dir.mkdir()
+        self._make_bbox_file(input_dir / 'vid_bbox.csv', n_frames=9)
+        output_dir = tmp_path / 'smooth'
+        smooth_bbox(input_dir, output_dir, method='median', window=3)
+        result = pd.read_csv(output_dir / 'vid_bbox.csv', index_col=0)
+        for col in result.columns:
+            assert result[col].dtype == int
+
+    def test_raises_on_unknown_method(self, tmp_path):
+        """Raises ValueError for an unsupported smoothing method."""
+        input_dir = tmp_path / 'raw'
+        input_dir.mkdir()
+        output_dir = tmp_path / 'smooth'
+        with pytest.raises(ValueError, match='unsupported method'):
+            smooth_bbox(input_dir, output_dir, method='foo', window=5)
+
+    def test_raises_when_no_bbox_files(self, tmp_path):
+        """Raises ValueError when no *_bbox.csv files are found."""
+        input_dir = tmp_path / 'empty'
+        input_dir.mkdir()
+        output_dir = tmp_path / 'smooth'
+        with pytest.raises(ValueError, match=r'no \*_bbox\.csv files found'):
+            smooth_bbox(input_dir, output_dir, method='median', window=5)

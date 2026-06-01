@@ -30,9 +30,7 @@ class TestCropParser:
         args = parser.parse_args(['crop', str(model_dir), str(video)])
         assert args.model_dir == model_dir
         assert args.input_path == [video]
-        assert args.crop_ratio is None
-        assert args.crop_size is None
-        assert args.anchor_keypoints == ''
+        assert args.bbox_dir is None
 
     def test_missing_model_dir_exits(self, parser, tmp_path):
         with pytest.raises(SystemExit):
@@ -40,26 +38,14 @@ class TestCropParser:
                 ['crop', str(tmp_path / 'missing'), str(tmp_path / 'video.mp4')]
             )
 
-    def test_crop_ratio(self, parser, tmp_path):
+    def test_bbox_dir(self, parser, tmp_path):
         model_dir = tmp_path / 'model'
         model_dir.mkdir()
-        args = parser.parse_args(['crop', str(model_dir), 'video.mp4', '--crop_ratio', '3.5'])
-        assert args.crop_ratio == 3.5
-
-    def test_anchor_keypoints(self, parser, tmp_path):
-        model_dir = tmp_path / 'model'
-        model_dir.mkdir()
+        bbox_dir = tmp_path / 'bboxes'
         args = parser.parse_args(
-            ['crop', str(model_dir), 'video.mp4', '--anchor_keypoints', 'nose,tail']
+            ['crop', str(model_dir), 'video.mp4', '--bbox_dir', str(bbox_dir)]
         )
-        assert args.anchor_keypoints == 'nose,tail'
-
-    def test_crop_size(self, parser, tmp_path):
-        model_dir = tmp_path / 'model'
-        model_dir.mkdir()
-        args = parser.parse_args(['crop', str(model_dir), 'video.mp4', '--crop_size', '100'])
-        assert args.crop_size == 100
-        assert args.crop_ratio is None
+        assert args.bbox_dir == bbox_dir
 
     def test_multiple_input_paths(self, parser, tmp_path):
         model_dir = tmp_path / 'model'
@@ -80,97 +66,69 @@ class TestHandle:
         model.config.cfg.data.data_dir = str(tmp_path / 'data')
         return model
 
-    def _make_args(
-        self,
-        tmp_path,
-        input_path,
-        crop_ratio=None,
-        crop_size=None,
-        anchor_keypoints='',
-    ):
+    def _make_args(self, tmp_path, input_path, bbox_dir=None):
         return argparse.Namespace(
             model_dir=tmp_path / 'model',
             input_path=[input_path],
-            crop_ratio=crop_ratio,
-            crop_size=crop_size,
-            anchor_keypoints=anchor_keypoints,
+            bbox_dir=bbox_dir,
         )
 
-    def test_raises_when_both_crop_ratio_and_crop_size(self, tmp_path, mock_model):
-        """Raises ValueError when --crop_ratio and --crop_size are both provided."""
-        args = self._make_args(tmp_path, tmp_path / 'vid.mp4', crop_ratio=2.0, crop_size=100)
-        with patch('lightning_pose.api.Model') as MockModel:
-            MockModel.from_dir.return_value = mock_model
-            with pytest.raises(ValueError, match='mutually exclusive'):
-                handle(args)
-
-    def test_raises_when_crop_size_not_positive(self, tmp_path, mock_model):
-        """Raises ValueError when --crop_size is not a positive integer."""
-        args = self._make_args(tmp_path, tmp_path / 'vid.mp4', crop_size=0)
-        with patch('lightning_pose.api.Model') as MockModel:
-            MockModel.from_dir.return_value = mock_model
-            with pytest.raises(ValueError, match='positive integer'):
-                handle(args)
-
-    def test_raises_when_crop_ratio_not_greater_than_one(self, tmp_path, mock_model):
-        """Raises ValueError when --crop_ratio is <= 1."""
-        args = self._make_args(tmp_path, tmp_path / 'vid.mp4', crop_ratio=1.0)
-        with patch('lightning_pose.api.Model') as MockModel:
-            MockModel.from_dir.return_value = mock_model
-            with pytest.raises(ValueError, match='greater than 1'):
-                handle(args)
-
-    def test_default_crop_ratio_when_neither_given(self, tmp_path, mock_model):
-        """Defaults to crop_ratio=2.0 when neither flag is supplied."""
+    def test_mp4_calls_crop_video(self, tmp_path, mock_model):
+        """MP4 input triggers crop_video with default bbox path."""
         args = self._make_args(tmp_path, tmp_path / 'vid.mp4')
         with (
             patch('lightning_pose.api.Model') as MockModel,
-            patch('lightning_pose.utils.cropzoom.generate_cropped_video') as mock_gen,
+            patch('lightning_pose.utils.cropzoom.crop_video') as mock_crop,
         ):
             MockModel.from_dir.return_value = mock_model
             handle(args)
-        cfg = mock_gen.call_args.kwargs['detector_cfg']
-        assert cfg['crop_ratio'] == 2.0
-        assert 'crop_height' not in cfg
-        assert 'crop_width' not in cfg
+        mock_crop.assert_called_once()
+        call_kwargs = mock_crop.call_args.kwargs
+        assert call_kwargs['input_video_file'] == tmp_path / 'vid.mp4'
 
-    def test_crop_size_sets_detector_cfg(self, tmp_path, mock_model):
-        """crop_height and crop_width are set from --crop_size; crop_ratio is absent."""
-        args = self._make_args(tmp_path, tmp_path / 'vid.mp4', crop_size=100)
+    def test_mp4_with_bbox_dir(self, tmp_path, mock_model):
+        """MP4 input with --bbox_dir uses the provided directory for bbox lookup."""
+        bbox_dir = tmp_path / 'bboxes'
+        args = self._make_args(tmp_path, tmp_path / 'vid.mp4', bbox_dir=bbox_dir)
         with (
             patch('lightning_pose.api.Model') as MockModel,
-            patch('lightning_pose.utils.cropzoom.generate_cropped_video') as mock_gen,
+            patch('lightning_pose.utils.cropzoom.crop_video') as mock_crop,
         ):
             MockModel.from_dir.return_value = mock_model
             handle(args)
-        cfg = mock_gen.call_args.kwargs['detector_cfg']
-        assert cfg['crop_height'] == 100
-        assert cfg['crop_width'] == 100
-        assert 'crop_ratio' not in cfg
+        call_kwargs = mock_crop.call_args.kwargs
+        assert call_kwargs['input_bbox_file'] == bbox_dir / 'vid_bbox.csv'
 
-    def test_crop_ratio_sets_detector_cfg(self, tmp_path, mock_model):
-        """crop_ratio is passed through to detector_cfg."""
-        args = self._make_args(tmp_path, tmp_path / 'vid.mp4', crop_ratio=3.5)
+    def test_csv_calls_crop_labeled_frames(self, tmp_path, mock_model):
+        """CSV input triggers crop_labeled_frames."""
+        args = self._make_args(tmp_path, tmp_path / 'labels.csv')
         with (
             patch('lightning_pose.api.Model') as MockModel,
-            patch('lightning_pose.utils.cropzoom.generate_cropped_video') as mock_gen,
+            patch('lightning_pose.utils.cropzoom.crop_labeled_frames') as mock_crop,
         ):
             MockModel.from_dir.return_value = mock_model
             handle(args)
-        cfg = mock_gen.call_args.kwargs['detector_cfg']
-        assert cfg['crop_ratio'] == 3.5
-        assert 'crop_height' not in cfg
-        assert 'crop_width' not in cfg
+        mock_crop.assert_called_once()
 
-    def test_csv_input_calls_generate_cropped_labeled_frames(self, tmp_path, mock_model):
-        """CSV input triggers generate_cropped_labeled_frames with correct detector_cfg."""
-        args = self._make_args(tmp_path, tmp_path / 'labels.csv', crop_size=200)
+    def test_csv_with_bbox_dir(self, tmp_path, mock_model):
+        """CSV input with --bbox_dir looks for bbox.csv inside that directory."""
+        bbox_dir = tmp_path / 'bboxes'
+        args = self._make_args(tmp_path, tmp_path / 'labels.csv', bbox_dir=bbox_dir)
         with (
             patch('lightning_pose.api.Model') as MockModel,
-            patch('lightning_pose.utils.cropzoom.generate_cropped_labeled_frames') as mock_gen,
+            patch('lightning_pose.utils.cropzoom.crop_labeled_frames') as mock_crop,
         ):
             MockModel.from_dir.return_value = mock_model
             handle(args)
-        cfg = mock_gen.call_args.kwargs['detector_cfg']
-        assert cfg['crop_height'] == 200
-        assert cfg['crop_width'] == 200
+        call_kwargs = mock_crop.call_args.kwargs
+        assert call_kwargs['input_bbox_file'] == bbox_dir / 'bbox.csv'
+
+    def test_unsupported_extension_raises(self, tmp_path, mock_model):
+        """Unsupported file extension raises NotImplementedError."""
+        args = self._make_args(tmp_path, tmp_path / 'file.avi')
+        with (
+            patch('lightning_pose.api.Model') as MockModel,
+        ):
+            MockModel.from_dir.return_value = mock_model
+            with pytest.raises(NotImplementedError):
+                handle(args)

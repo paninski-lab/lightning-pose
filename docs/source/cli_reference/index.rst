@@ -6,6 +6,8 @@ Lightning Pose command-line interface (CLI)
 
    train
    predict
+   create_bbox
+   smooth_bbox
    crop
    remap
    run_app

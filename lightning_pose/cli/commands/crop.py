@@ -6,8 +6,6 @@ import argparse
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from omegaconf import OmegaConf
-
 from .. import types
 
 if TYPE_CHECKING:
@@ -17,42 +15,44 @@ if TYPE_CHECKING:
 
 def register_parser(subparsers: Any) -> argparse.ArgumentParser:
     """Register the crop command parser."""
-    # Choose documentation link depending on whether we're being imported by Sphinx
     import sys
     from textwrap import dedent
 
-    is_building_docs = "sphinx" in sys.modules
+    is_building_docs = 'sphinx' in sys.modules
     _doc_link = (
-        ":doc:`Cropzoom pipeline </source/user_guide_advanced/cropzoom_pipeline>`"
+        ':doc:`Cropzoom pipeline </source/user_guide_advanced/cropzoom_pipeline>`'
         if is_building_docs
-        else "https://lightning-pose.readthedocs.io/en/latest/source/user_guide_advanced/cropzoom_pipeline.html"
+        else (
+            'https://lightning-pose.readthedocs.io/en/latest'
+            '/source/user_guide_advanced/cropzoom_pipeline.html'
+        )
     )
 
     description_text = dedent(
         f"""\
-            Crops a video or labeled frames based on model predictions.
-            Requires model predictions to already have been generated using ``litpose predict``.
+            Crops a video or labeled frames using pre-computed bounding boxes.
+            Run ``litpose create_bbox`` (and optionally ``litpose smooth_bbox``) first.
 
             Cropped videos are saved to::
 
                 <model_dir>/
-                └── video_preds/
-                    ├── <video_filename>.csv              (predictions)
-                    ├── <video_filename>_bbox.csv         (bbox)
-                    └── remapped_<video_filename>.csv     (TODO move to remap command)
                 └── cropped_videos/
-                    └── cropped_<video_filename>.mp4      (cropped video)
+                    └── cropped_<video_filename>.mp4
 
-            Cropped images are saved to::
+            Cropped images and a remapped labels CSV are saved to::
 
+                <model_dir>/
+                └── cropped_images/
+                        └── a/b/c/<image_name>.png
                 <model_dir>/
                 └── image_preds/
                     └── <csv_file_name>/
-                        ├── predictions.csv
-                        ├── bbox.csv                      (bbox)
-                        └── cropped_<csv_file_name>.csv   (cropped labels)
-                └── cropped_images/
-                        └── a/b/c/<image_name>.png        (cropped images)
+                        └── cropped_<csv_file_name>.csv
+
+            When ``--bbox_dir`` is omitted, bbox files are read from the default
+            locations written by ``litpose create_bbox``.  Pass ``--bbox_dir`` to use
+            bboxes from a different source (e.g. output of ``litpose smooth_bbox`` or
+            bboxes produced by an external tool).
 
             For an end-to-end usage example of the Cropzoom workflow, see the user guide:
             {_doc_link}.
@@ -60,49 +60,35 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
     )
 
     crop_parser = subparsers.add_parser(
-        "crop",
+        'crop',
         description=description_text,
         usage=(
-            "litpose crop <model_dir> <input_path:video|csv>..."
-            " [--crop_ratio=CROP_RATIO | --crop_size=CROP_SIZE]"
-            " [--anchor_keypoints=x,y,z]"
+            'litpose crop <model_dir> <input_path:video|csv>...'
+            ' [--bbox_dir=BBOX_DIR]'
         ),
     )
     crop_parser.add_argument(
-        "model_dir", type=types.existing_model_dir, help="path to a model directory"
+        'model_dir', type=types.existing_model_dir, help='path to a model directory'
     )
-    crop_parser.add_argument("input_path", type=Path, nargs="+", help="one or more files")
+    crop_parser.add_argument('input_path', type=Path, nargs='+', help='one or more files')
     crop_parser.add_argument(
-        "--crop_ratio",
-        type=float,
+        '--bbox_dir',
+        type=Path,
         default=None,
         help=(
-            "Crop a bounding box this much larger than the animal (default 2.0 when neither"
-            " --crop_ratio nor --crop_size is given). Mutually exclusive with --crop_size."
+            'directory containing bbox CSV files to use for cropping. '
+            'For videos, looks for <bbox_dir>/<video_stem>_bbox.csv; '
+            'for CSV inputs, looks for <bbox_dir>/bbox.csv. '
+            'Defaults to the location written by litpose create_bbox.'
         ),
-    )
-    crop_parser.add_argument(
-        "--crop_size",
-        type=int,
-        default=None,
-        help=(
-            "Fixed square bounding box side length in pixels, centred on the per-frame mean"
-            " of the anchor keypoints. Mutually exclusive with --crop_ratio."
-        ),
-    )
-    crop_parser.add_argument(
-        "--anchor_keypoints",
-        type=str,
-        default="",
-        help="Comma-separated list of anchor keypoint names, defaults to all keypoints",
     )
     return crop_parser
 
 
 def get_parser() -> argparse.ArgumentParser:
     """Return an ArgumentParser for the `litpose crop` subcommand (for docs)."""
-    parser = argparse.ArgumentParser(prog="litpose")
-    subparsers = parser.add_subparsers(dest="command")
+    parser = argparse.ArgumentParser(prog='litpose')
+    subparsers = parser.add_subparsers(dest='command')
     return register_parser(subparsers)
 
 
@@ -121,64 +107,38 @@ def handle(args: argparse.Namespace) -> None:
     model.cropped_data_dir().mkdir(parents=True, exist_ok=True)
     model.cropped_videos_dir().mkdir(parents=True, exist_ok=True)
 
-    input_paths = [Path(p) for p in args.input_path]
+    bbox_dir = args.bbox_dir
 
-    crop_ratio = args.crop_ratio
-    crop_size = args.crop_size
+    for input_path in [Path(p) for p in args.input_path]:
+        if input_path.suffix == '.mp4':
+            if bbox_dir is not None:
+                input_bbox_file = bbox_dir / (input_path.stem + '_bbox.csv')
+            else:
+                input_bbox_file = model.video_preds_dir() / (input_path.stem + '_bbox.csv')
+            output_file = model.cropped_videos_dir() / ('cropped_' + input_path.name)
 
-    if crop_ratio is not None and crop_size is not None:
-        raise ValueError('--crop_ratio and --crop_size are mutually exclusive.')
-    if crop_ratio is None and crop_size is None:
-        crop_ratio = 2.0
-
-    anchor_keypoints = args.anchor_keypoints.split(",") if args.anchor_keypoints else []
-
-    if crop_size is not None:
-        if crop_size <= 0:
-            raise ValueError(f'--crop_size must be a positive integer, got {crop_size}.')
-        detector_cfg = OmegaConf.create({
-            'crop_height': crop_size,
-            'crop_width': crop_size,
-            'anchor_keypoints': anchor_keypoints,
-        })
-    else:
-        assert crop_ratio is not None
-        if crop_ratio <= 1:
-            raise ValueError(f'--crop_ratio must be greater than 1, got {crop_ratio}.')
-        detector_cfg = OmegaConf.create({
-            'crop_ratio': crop_ratio,
-            'anchor_keypoints': anchor_keypoints,
-        })
-
-    for input_path in input_paths:
-        if input_path.suffix == ".mp4":
-            input_preds_file = model.video_preds_dir() / (input_path.stem + ".csv")
-            output_bbox_file = model.video_preds_dir() / (input_path.stem + "_bbox.csv")
-            output_file = model.cropped_videos_dir() / ("cropped_" + input_path.name)
-
-            cz.generate_cropped_video(
+            cz.crop_video(
                 input_video_file=input_path,
-                input_preds_file=input_preds_file,
-                detector_cfg=detector_cfg,
-                output_bbox_file=output_bbox_file,
+                input_bbox_file=input_bbox_file,
                 output_file=output_file,
             )
-        elif input_path.suffix == ".csv":
+        elif input_path.suffix == '.csv':
             preds_dir = model.image_preds_dir() / input_path.name
             input_data_dir = Path(model.config.cfg.data.data_dir)
             cropped_data_dir = model.cropped_data_dir()
 
-            output_bbox_file = preds_dir / "bbox.csv"
-            output_csv_file_path = preds_dir / ("cropped_" + input_path.name)
-            input_preds_file = preds_dir / "predictions.csv"
-            cz.generate_cropped_labeled_frames(
+            if bbox_dir is not None:
+                input_bbox_file = bbox_dir / 'bbox.csv'
+            else:
+                input_bbox_file = preds_dir / 'bbox.csv'
+            output_csv_file_path = preds_dir / ('cropped_' + input_path.name)
+
+            cz.crop_labeled_frames(
                 input_data_dir=input_data_dir,
                 input_csv_file=input_path,
-                input_preds_file=input_preds_file,
-                detector_cfg=detector_cfg,
+                input_bbox_file=input_bbox_file,
                 output_data_dir=cropped_data_dir,
-                output_bbox_file=output_bbox_file,
                 output_csv_file=output_csv_file_path,
             )
         else:
-            raise NotImplementedError("Only mp4 and csv files are supported.")
+            raise NotImplementedError('only mp4 and csv files are supported.')

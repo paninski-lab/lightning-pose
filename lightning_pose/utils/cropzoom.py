@@ -1,5 +1,7 @@
 """Tools for cropping labeled frames and videos to bounding-box regions of interest."""
 
+import json
+import logging
 import multiprocessing
 from pathlib import Path
 from typing import Any
@@ -14,9 +16,13 @@ from PIL import Image
 
 from lightning_pose.utils import io
 
+logger = logging.getLogger(__name__)
+
 __all__ = [
-    "generate_cropped_labeled_frames",
-    "generate_cropped_video",
+    "generate_bbox",
+    "smooth_bbox",
+    "crop_video",
+    "crop_labeled_frames",
     "generate_cropped_csv_file",
 ]
 
@@ -305,23 +311,22 @@ def _crop_video_moviepy(video_file: Path, bbox_df: pd.DataFrame, output_file: Pa
     cropped_clip.write_videofile(str(output_file), codec="libx264")
 
 
-def generate_cropped_labeled_frames(
-    input_data_dir: Path,
-    input_csv_file: Path,
+def generate_bbox(
     input_preds_file: Path,
     detector_cfg: DictConfig,
-    output_data_dir: Path,
     output_bbox_file: Path,
-    output_csv_file: Path,
 ) -> None:
-    """Given model predictions, generates a bbox.csv, crops frames,
-    and a cropped csv file."""
-    # Use predictions rather than CollectedData.csv because collected data can sometimes have NaNs.
-    # load predictions
+    """Compute bounding boxes from model predictions and save to a CSV file.
+
+    Args:
+        input_preds_file: path to the predictions CSV produced by ``litpose predict``.
+        detector_cfg: OmegaConf config containing ``anchor_keypoints`` and either
+            ``crop_ratio`` or ``crop_height``/``crop_width``.
+        output_bbox_file: path where the bbox CSV will be written.
+    """
+    # use predictions rather than CollectedData.csv because collected data can have NaNs
     pred_df = pd.read_csv(input_preds_file, header=[0, 1, 2], index_col=0)
     pred_df = io.fix_empty_first_row(pred_df)
-
-    # compute and save bbox_df
     bbox_df = _compute_bbox_df(
         pred_df,
         list(detector_cfg.anchor_keypoints),
@@ -329,45 +334,103 @@ def generate_cropped_labeled_frames(
         crop_height=detector_cfg.get('crop_height'),
         crop_width=detector_cfg.get('crop_width'),
     )
-
     output_bbox_file.parent.mkdir(parents=True, exist_ok=True)
     bbox_df.to_csv(output_bbox_file)
 
-    _crop_images(bbox_df, input_data_dir, output_data_dir)
 
-    generate_cropped_csv_file(
-        input_csv_file=input_csv_file,
-        input_bbox_file=output_bbox_file,
-        output_csv_file=output_csv_file,
-    )
+def smooth_bbox(
+    input_bbox_dir: Path,
+    output_dir: Path,
+    method: str = 'median',
+    window: int = 5,
+) -> None:
+    """Smooth bbox CSV files in a directory and save the results to a new directory.
+
+    Reads every ``*_bbox.csv`` file in ``input_bbox_dir``, applies a rolling smoothing
+    operation over the ``x``, ``y``, ``h``, ``w`` columns, and writes the smoothed files
+    to ``output_dir`` alongside a ``metadata.json`` that records the smoothing parameters.
+
+    Args:
+        input_bbox_dir: directory containing raw ``*_bbox.csv`` files.
+        output_dir: directory where smoothed files and ``metadata.json`` will be written.
+        method: smoothing method; currently only ``'median'`` is supported.
+        window: window size (number of frames) for the rolling operation.
+
+    Raises:
+        ValueError: if ``method`` is not supported or no ``*_bbox.csv`` files are found.
+    """
+    supported_methods = ('median',)
+    if method not in supported_methods:
+        raise ValueError(
+            f'unsupported method {method!r}; choose one of {supported_methods}.'
+        )
+
+    bbox_files = sorted(input_bbox_dir.glob('*_bbox.csv'))
+    if not bbox_files:
+        raise ValueError(f'no *_bbox.csv files found in {input_bbox_dir}.')
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    for bbox_file in bbox_files:
+        bbox_df = pd.read_csv(bbox_file, index_col=0)
+        if method == 'median':
+            smoothed = bbox_df.rolling(window=window, center=True, min_periods=1).median()
+        smoothed = smoothed.round(0).astype(int)
+        smoothed.to_csv(output_dir / bbox_file.name)
+        logger.info(f'smoothed {bbox_file.name} → {output_dir / bbox_file.name}')
+
+    metadata = {
+        'method': method,
+        'window': window,
+        'source': str(input_bbox_dir.resolve()),
+    }
+    (output_dir / 'metadata.json').write_text(json.dumps(metadata, indent=2))
+    logger.info(f'wrote metadata to {output_dir / "metadata.json"}')
 
 
-def generate_cropped_video(
+def crop_video(
     input_video_file: Path,
-    input_preds_file: Path,
-    detector_cfg: DictConfig,
-    output_bbox_file: Path,
+    input_bbox_file: Path,
     output_file: Path,
 ) -> None:
-    """TODO make consistent with generate_cropped_labeled_frames"""
+    """Crop a video to per-frame bounding-box regions and save the result.
 
-    # Given the predictions, compute cropping bboxes
-    pred_df = pd.read_csv(input_preds_file, header=[0, 1, 2], index_col=0)
-    pred_df = io.fix_empty_first_row(pred_df)
-
-    # Save cropping bboxes
-    bbox_df = _compute_bbox_df(
-        pred_df,
-        list(detector_cfg.anchor_keypoints),
-        crop_ratio=detector_cfg.get('crop_ratio'),
-        crop_height=detector_cfg.get('crop_height'),
-        crop_width=detector_cfg.get('crop_width'),
-    )
-    output_bbox_file.parent.mkdir(parents=True, exist_ok=True)
-    bbox_df.to_csv(output_bbox_file)
-
-    # Generate a cropped video for debugging purposes.
+    Args:
+        input_video_file: path to the input video.
+        input_bbox_file: path to a bbox CSV produced by :func:`generate_bbox` or
+            :func:`smooth_bbox`.
+        output_file: path where the cropped video will be written.
+    """
+    bbox_df = pd.read_csv(input_bbox_file, index_col=0)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
     _crop_video_moviepy(input_video_file, bbox_df, output_file)
+
+
+def crop_labeled_frames(
+    input_data_dir: Path,
+    input_csv_file: Path,
+    input_bbox_file: Path,
+    output_data_dir: Path,
+    output_csv_file: Path,
+) -> None:
+    """Crop labeled frames to bounding-box regions and generate a remapped labels CSV.
+
+    Args:
+        input_data_dir: root directory containing the original images.
+        input_csv_file: path to the original labels CSV (e.g. ``CollectedData.csv``).
+        input_bbox_file: path to a bbox CSV produced by :func:`generate_bbox` or
+            :func:`smooth_bbox`.
+        output_data_dir: directory where cropped images will be saved.
+        output_csv_file: path where the remapped labels CSV will be written.
+    """
+    bbox_df = pd.read_csv(input_bbox_file, index_col=0)
+    output_data_dir.mkdir(parents=True, exist_ok=True)
+    _crop_images(bbox_df, input_data_dir, output_data_dir)
+    generate_cropped_csv_file(
+        input_csv_file=input_csv_file,
+        input_bbox_file=input_bbox_file,
+        output_csv_file=output_csv_file,
+    )
 
 
 def generate_cropped_csv_file(
