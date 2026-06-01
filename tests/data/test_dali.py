@@ -4,10 +4,13 @@ import os
 import shutil
 
 import numpy as np
+import pandas as pd
 import pytest
+import torch
 
 from lightning_pose.data import dali as dali_module
-from lightning_pose.data.dali import PrepareDALI, video_pipe
+from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI, video_pipe
+from lightning_pose.data.datatypes import UnlabeledBatchDict
 
 
 class TestVideoPipe:
@@ -251,3 +254,98 @@ class TestPrepareDALI:
                 dali_config=cfg_multiview.dali,
                 resize_dims=[256, 256],
             )
+
+
+class TestLitDaliWrapper:
+    """Test the LitDaliWrapper class."""
+
+    @pytest.fixture
+    def bbox_df(self):
+        """Sample bbox DataFrame with 10 rows."""
+        return pd.DataFrame({
+            'x': [10] * 10,
+            'y': [20] * 10,
+            'h': [50] * 10,
+            'w': [60] * 10,
+        })
+
+    def _make_wrapper(
+        self,
+        bbox_df: pd.DataFrame,
+        resize_dims: list[int],
+        do_context: bool = False,
+        frame_idx: int = 0,
+    ) -> LitDaliWrapper:
+        """Create a LitDaliWrapper without a real DALI pipeline."""
+        wrapper = object.__new__(LitDaliWrapper)
+        wrapper.do_context = do_context
+        wrapper.bbox_df = bbox_df
+        wrapper.resize_dims = resize_dims
+        wrapper._frame_idx = frame_idx
+        return wrapper
+
+    def _make_batch(self, seq_len: int, h: int = 100, w: int = 120) -> UnlabeledBatchDict:
+        """Create a fake single-view UnlabeledBatchDict with random frames."""
+        return UnlabeledBatchDict(
+            frames=torch.rand(seq_len, 3, h, w),
+            transforms=torch.zeros(seq_len, 1),
+            bbox=torch.zeros(seq_len, 4),
+            is_multiview=False,
+        )
+
+    def test_output_frames_shape(self, bbox_df):
+        """Cropped+resized frames have shape (seq_len, 3, *resize_dims)."""
+        resize_dims = [64, 64]
+        wrapper = self._make_wrapper(bbox_df, resize_dims)
+        batch = self._make_batch(seq_len=4)
+        result = wrapper._apply_bbox_crop(batch)
+        assert result['frames'].shape == (4, 3, 64, 64)
+
+    def test_bbox_tensor_values(self, bbox_df):
+        """Output bbox tensor contains [x, y, h, w] values from bbox_df."""
+        wrapper = self._make_wrapper(bbox_df, resize_dims=[64, 64])
+        batch = self._make_batch(seq_len=3)
+        result = wrapper._apply_bbox_crop(batch)
+        expected = torch.tensor([10, 20, 50, 60], dtype=torch.float32)
+        for i in range(3):
+            assert torch.allclose(result['bbox'][i], expected)
+
+    def test_advances_frame_idx_base(self, bbox_df):
+        """_frame_idx advances by seq_len for a base (non-context) model."""
+        wrapper = self._make_wrapper(bbox_df, resize_dims=[64, 64], do_context=False)
+        wrapper._apply_bbox_crop(self._make_batch(seq_len=4))
+        assert wrapper._frame_idx == 4
+
+    def test_advances_frame_idx_context(self, bbox_df):
+        """_frame_idx advances by seq_len - 4 for a context model."""
+        wrapper = self._make_wrapper(bbox_df, resize_dims=[64, 64], do_context=True)
+        wrapper._apply_bbox_crop(self._make_batch(seq_len=5))
+        assert wrapper._frame_idx == 1  # step = seq_len - 4 = 1
+
+    def test_pads_last_partial_batch(self):
+        """Last batch is padded with the final bbox row when fewer rows remain."""
+        two_row_df = pd.DataFrame({
+            'x': [10, 20],
+            'y': [10, 20],
+            'h': [50, 60],
+            'w': [50, 60],
+        })
+        wrapper = self._make_wrapper(two_row_df, resize_dims=[64, 64], frame_idx=1)
+        result = wrapper._apply_bbox_crop(self._make_batch(seq_len=4))
+        assert result['bbox'].shape == (4, 4)
+        expected_last = torch.tensor([20, 20, 60, 60], dtype=torch.float32)
+        for i in range(4):
+            assert torch.allclose(result['bbox'][i], expected_last)
+
+    def test_transforms_preserved(self, bbox_df):
+        """The transforms field from the original batch dict is passed through unchanged."""
+        wrapper = self._make_wrapper(bbox_df, resize_dims=[64, 64])
+        transforms = torch.tensor([[1.0], [2.0], [3.0]])
+        batch = UnlabeledBatchDict(
+            frames=torch.rand(3, 3, 100, 120),
+            transforms=transforms,
+            bbox=torch.zeros(3, 4),
+            is_multiview=False,
+        )
+        result = wrapper._apply_bbox_crop(batch)
+        assert torch.equal(result['transforms'], transforms)

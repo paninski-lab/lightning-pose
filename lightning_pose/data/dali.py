@@ -6,7 +6,9 @@ from typing import Any, Literal
 import numpy as np
 import nvidia.dali.fn as fn
 import nvidia.dali.types as types
+import pandas as pd
 import torch
+import torch.nn.functional as F
 from nvidia.dali import pipeline_def
 from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
 from omegaconf import DictConfig, ListConfig
@@ -166,21 +168,32 @@ class LitDaliWrapper(DALIGenericIterator):
         eval_mode: Literal["train", "predict"],
         num_iters: int = 1,
         do_context: bool = False,
+        bbox_df: pd.DataFrame | None = None,
+        resize_dims: list[int] | None = None,
         **kwargs: Any,
     ) -> None:
         """Wrapper around DALIGenericIterator to get batches for pl.
 
         Args:
-            eval_mode
+            eval_mode: ``"train"`` or ``"predict"``.
             num_iters: number of enumerations of dataloader (should be computed outside for now;
                 should be fixed by lightning/dali teams)
             do_context: whether model/loader use 5-frame context or not
+            bbox_df: optional DataFrame with columns ``["x", "y", "h", "w"]``, one row per
+                frame. When provided, each batch's frames are cropped per-frame and resized
+                to ``resize_dims`` before being returned, and the ``bbox`` field of the
+                batch dict is populated with the actual bbox coordinates.
+            resize_dims: target ``[height, width]`` for post-crop resize; required when
+                ``bbox_df`` is not None.
 
         """
         self.num_iters = num_iters
         self.do_context = do_context
         self.eval_mode = eval_mode
         self.batch_sampler = 1  # hack to get around DALI-ptl issue
+        self.bbox_df = bbox_df
+        self.resize_dims = resize_dims
+        self._frame_idx = 0
         # call parent
         super().__init__(*args, **kwargs)
 
@@ -254,10 +267,61 @@ class LitDaliWrapper(DALIGenericIterator):
                 frames=frames, transforms=transforms, bbox=bbox, is_multiview=True,
             )
 
+    def _apply_bbox_crop(self, batch_dict: UnlabeledBatchDict) -> UnlabeledBatchDict:
+        """Crop frames to per-frame bboxes and resize to the model's input dimensions.
+
+        Args:
+            batch_dict: single-view unlabeled batch with full-resolution frames from DALI.
+
+        Returns:
+            new UnlabeledBatchDict with cropped+resized frames and real bbox values.
+        """
+        frames = batch_dict['frames']  # (seq_len, 3, H, W)
+        seq_len = frames.shape[0]
+        step = seq_len - 4 if self.do_context else seq_len
+
+        # slice bbox rows for this batch; pad last partial batch with the final row
+        rows = self.bbox_df.iloc[self._frame_idx:self._frame_idx + seq_len]
+        if len(rows) < seq_len:
+            last_row = self.bbox_df.iloc[[-1]]
+            rows = pd.concat(
+                [rows] + [last_row] * (seq_len - len(rows)),
+                ignore_index=True,
+            )
+
+        cropped_frames = []
+        bboxes = []
+        for i in range(seq_len):
+            row = rows.iloc[i]
+            x, y, h, w = int(row['x']), int(row['y']), int(row['h']), int(row['w'])
+            frame_cropped = frames[i, :, y:y + h, x:x + w]
+            frame_resized = F.interpolate(
+                frame_cropped.unsqueeze(0),
+                size=self.resize_dims,
+                mode='bilinear',
+                align_corners=False,
+            ).squeeze(0)
+            cropped_frames.append(frame_resized)
+            bboxes.append(
+                torch.tensor([x, y, h, w], dtype=torch.float32, device=frames.device)
+            )
+
+        self._frame_idx += step
+
+        return UnlabeledBatchDict(
+            frames=torch.stack(cropped_frames),
+            transforms=batch_dict['transforms'],
+            bbox=torch.stack(bboxes),
+            is_multiview=False,
+        )
+
     def __next__(self) -> UnlabeledBatchDict | MultiviewUnlabeledBatchDict:
-        """Fetch the next batch and convert it to a typed batch dictionary."""
+        """Fetch the next batch, applying per-frame bbox crop+resize when configured."""
         batch = super().__next__()
-        return self._dali_output_to_tensors(batch=batch)
+        batch_dict = self._dali_output_to_tensors(batch=batch)
+        if self.bbox_df is not None and not batch_dict['is_multiview']:
+            return self._apply_bbox_crop(batch_dict)  # type: ignore[arg-type]
+        return batch_dict
 
 
 class PrepareDALI:
