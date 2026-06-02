@@ -1,8 +1,9 @@
 import shutil
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from lightning_pose.api import Model
@@ -116,6 +117,25 @@ class TestPredictOnVideoFile:
         assert (model.video_preds_dir() / "test_vid_top.csv").is_file()
         assert (model.video_preds_dir() / "test_vid_top_temporal_norm.csv").is_file()
         assert (model.labeled_videos_dir() / "test_vid_top_labeled.mp4").is_file()
+
+    def test_predict_on_video_file_bbox_file_forwarded(self, tmp_path):
+        """bbox_file is forwarded to predict_video when provided."""
+        model = Model(tmp_path, MagicMock())
+        bbox_file = tmp_path / 'vid_bbox.csv'
+
+        with (
+            patch.object(model, '_load'),
+            patch(
+                'lightning_pose.api.model.predict_video', return_value=pd.DataFrame(),
+            ) as mock_pv,
+        ):
+            model.predict_on_video_file(
+                video_file=tmp_path / 'vid.mp4',
+                compute_metrics=False,
+                bbox_file=bbox_file,
+            )
+
+        assert mock_pv.call_args.kwargs['bbox_file'] == bbox_file
 
     def test_predict_on_video_file_multiview(self, tmp_path, request, toy_mdata_dir):
         """predict_on_video_file_multiview writes predictions and labeled videos for all views."""

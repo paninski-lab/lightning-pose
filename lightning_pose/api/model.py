@@ -747,6 +747,7 @@ class Model:
         compute_metrics: bool = True,
         generate_labeled_video: bool = False,
         progress_file: Path | None = None,
+        bbox_file: str | Path | None = None,
     ) -> PredictionResult:
         """Predicts on a video file and computes unsupervised loss metrics if applicable.
 
@@ -761,6 +762,10 @@ class Model:
                 Defaults to False.
             progress_file (Path, optional): Path to a file to save progress information for the
                 App. Defaults to None.
+            bbox_file (str | Path, optional): Path to a per-frame bbox CSV (columns x, y, h, w;
+                one row per frame). When provided, each frame is cropped to its bounding box
+                before being passed to the model, and predictions are returned in the original
+                coordinate space. Single-view only. Defaults to None.
 
         Returns:
             PredictionResult: A PredictionResult object containing the predictions and metrics.
@@ -795,6 +800,7 @@ class Model:
             model=self,
             output_pred_file=str(prediction_csv_file),
             progress_file=progress_file,
+            bbox_file=bbox_file,
         )
         if generate_labeled_video:
             labeled_mp4_file = str(self.labeled_videos_dir() / f"{video_file.stem}_labeled.mp4")

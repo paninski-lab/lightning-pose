@@ -115,8 +115,8 @@ class TestPredictMultiType:
         call_kwargs = mock_model.predict_on_label_csv.call_args.kwargs
         assert call_kwargs['bbox_file'] is None
 
-    def test_mp4_does_not_use_bbox_dir(self, tmp_path, mock_model):
-        """MP4 input ignores bbox_dir (video sub-issue not yet implemented)."""
+    def test_mp4_passes_bbox_file_when_bbox_dir_given(self, tmp_path, mock_model):
+        """MP4 input with bbox_dir passes <bbox_dir>/<stem>_bbox.csv to predict_on_video_file."""
         bbox_dir = tmp_path / 'bboxes'
         video_path = tmp_path / 'vid.mp4'
         _predict_multi_type(
@@ -124,7 +124,16 @@ class TestPredictMultiType:
         )
         mock_model.predict_on_video_file.assert_called_once()
         call_kwargs = mock_model.predict_on_video_file.call_args.kwargs
-        assert 'bbox_file' not in call_kwargs
+        assert call_kwargs['bbox_file'] == bbox_dir / 'vid_bbox.csv'
+
+    def test_mp4_passes_none_bbox_file_when_no_bbox_dir(self, tmp_path, mock_model):
+        """MP4 input without bbox_dir passes bbox_file=None to predict_on_video_file."""
+        video_path = tmp_path / 'vid.mp4'
+        _predict_multi_type(
+            mock_model, video_path, skip_viz=True, skip_existing=False, bbox_dir=None,
+        )
+        call_kwargs = mock_model.predict_on_video_file.call_args.kwargs
+        assert call_kwargs['bbox_file'] is None
 
     def test_directory_input_with_bbox_dir_recurses_into_mp4s(self, tmp_path, mock_model):
         """A directory input with bbox_dir passes through to each recursive mp4 call."""
