@@ -330,6 +330,7 @@ class LitDaliWrapper(DALIGenericIterator):
             new ``UnlabeledBatchDict`` with cropped+resized frames and the actual bbox
             coordinates in the ``bbox`` field (shape ``(seq_len, 4)``, order x y h w).
         """
+        assert self.bbox_df is not None  # guarded by caller; assertion narrows type
         frames = batch_dict['frames']  # (seq_len, 3, H, W)
         seq_len = frames.shape[0]
         # context-model DALI reader uses step=seq_len-4 so consecutive windows overlap by 4
