@@ -152,9 +152,10 @@ class TestPredictVideoBboxFile:
         bbox_file, _ = bbox_csv
         mock_model.config.cfg.data.view_names = ['view0', 'view1']
 
+        video_files = [str(tmp_path / 'view0.mp4'), str(tmp_path / 'view1.mp4')]
         with pytest.raises(ValueError, match='bbox_file is not supported for multiview'):
             predict_video(
-                video_file=[str(tmp_path / 'view0.mp4'), str(tmp_path / 'view1.mp4')],
+                video_file=video_files,  # type: ignore[arg-type]
                 model=mock_model,
                 bbox_file=bbox_file,
             )
