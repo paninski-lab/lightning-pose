@@ -5,7 +5,17 @@ Cropzoom pipeline
 For setups where an animal is freely moving in a large arena,
 it's advantageous to crop around the animal before running pose estimation.
 Lightning Pose calls this technique "cropzoom". This document describes how
-to set up a such a pipeline.
+to set up such a pipeline.
+
+.. tip::
+
+   This pipeline works equally well with bounding boxes from any external source
+   (e.g., `idtracker.ai <https://idtracker.ai/latest/>`_,
+   `SAM3 <https://ai.meta.com/research/sam3/>`_, or your own custom detection scripts).
+   Wherever the examples below call ``litpose predict [detector_model]`` and
+   ``litpose create_bbox [detector_model]``, substitute your own scripts that produce
+   bbox CSV files in the required format (see `Using bboxes from an external source`_
+   below). All downstream steps are identical.
 
 Conceptual overview
 ===================
@@ -27,6 +37,9 @@ Lightning Pose model. We provide additional tools that help you compose these mo
   frame or video.
 * ``litpose remap``: Given the pose model's predictions and the crop bounding boxes,
   remaps the predictions to the original coordinate space.
+
+Alternatively, ``litpose predict --bbox_dir`` combines the crop, predict, and remap steps
+into a single command — see :ref:`prediction-on-videos` for details.
 
 For the full command-line reference for these tools, see the CLI page sections:
 :ref:`Create bbox <cli-create-bbox>`, :ref:`Smooth bbox <cli-smooth-bbox>`,
@@ -54,6 +67,11 @@ Inference involves:
 4. Crop the data using the bounding boxes.
 5. Predict on the cropped data using the "pose model".
 6. Remap the pose model's predictions to the original coordinate space.
+
+.. note::
+
+   Steps 4–6 can be replaced by a single ``litpose predict --bbox_dir`` call —
+   see :ref:`prediction-on-videos` in the example below.
 
 
 Bounding box sizing
@@ -90,7 +108,7 @@ which can improve pose estimation quality when the detector produces noisy predi
 
 Smoothed bboxes are written to a **new directory** alongside a ``metadata.json`` file
 that records the smoothing parameters.  You can then pass this directory to
-``litpose crop`` via ``--bbox_dir``.
+``litpose crop`` or ``litpose predict`` via ``--bbox_dir``.
 
 .. code-block:: bash
 
@@ -101,11 +119,12 @@ that records the smoothing parameters.  You can then pass this directory to
 Using bboxes from an external source
 =====================================
 
-Because ``litpose crop`` accepts a ``--bbox_dir`` argument, you can use bounding boxes
-produced by any external tool, not just ``litpose create_bbox``
-(e.g., `idtracker.ai <https://idtracker.ai/latest/>`_, `SAM3 <https://ai.meta.com/research/sam3/>`_, etc.).
+Because ``litpose crop`` and ``litpose predict`` both accept a ``--bbox_dir`` argument,
+you can use bounding boxes produced by any external tool, not just ``litpose create_bbox``
+(e.g., `idtracker.ai <https://idtracker.ai/latest/>`_,
+`SAM3 <https://ai.meta.com/research/sam3/>`_, etc.).
 Place your bbox CSV files in a directory following the naming convention below, then pass
-``--bbox_dir`` to ``litpose crop``:
+``--bbox_dir`` to either command:
 
 * **Videos**: ``<video_stem>_bbox.csv`` (one file per video)
 * **Labeled frames**: ``bbox.csv``
@@ -162,57 +181,86 @@ Training script
 For command-line options of the commands used above, see
 :ref:`Create bbox <cli-create-bbox>` and :ref:`Crop <cli-crop>`.
 
-Prediction on videos script
----------------------------
+.. _prediction-on-videos:
 
-.. code-block:: bash
+Prediction on videos
+--------------------
 
-    #!/bin/bash
+.. tab-set::
 
-    litpose predict $MODEL_DIR/$DETECTOR_MODEL data/videos/test_vid.short.mp4
+   .. tab-item:: Predict from cropped videos
 
-    litpose create_bbox $MODEL_DIR/$DETECTOR_MODEL data/videos/test_vid.short.mp4
+      **Pros**
 
-    # Optional: smooth bboxes before cropping.
-    litpose smooth_bbox $MODEL_DIR/$DETECTOR_MODEL/video_preds \
-        --output_dir $MODEL_DIR/$DETECTOR_MODEL/video_preds/bboxes_smooth
+      - Intermediate cropped videos are stored on disk, making it straightforward to
+        inspect each stage of the pipeline and diagnose potential issues in the detector
+        or pose estimator.
 
-    # Crop using raw bboxes (default):
-    litpose crop $MODEL_DIR/$DETECTOR_MODEL data/videos/test_vid.short.mp4
+      **Cons**
 
-    # Or crop using smoothed bboxes:
-    litpose crop $MODEL_DIR/$DETECTOR_MODEL data/videos/test_vid.short.mp4 \
-        --bbox_dir $MODEL_DIR/$DETECTOR_MODEL/video_preds/bboxes_smooth
+      - Cropped videos are written to disk, requiring additional storage and compute.
+      - An extra remap step is needed to convert predictions back to the original
+        coordinate space.
 
-    litpose predict $MODEL_DIR/$POSE_MODEL $MODEL_DIR/$DETECTOR_MODEL/cropped_videos/cropped_test_vid.short.mp4
+      .. code-block:: bash
 
-    litpose remap $MODEL_DIR/$POSE_MODEL/video_preds/cropped_TRQ177_200624_112234_lBack.short.csv \
-        $MODEL_DIR/$DETECTOR_MODEL/video_preds/test_vid.short_bbox.csv
+         #!/bin/bash
+
+         litpose predict $MODEL_DIR/$DETECTOR_MODEL data/videos/test_vid.mp4
+
+         litpose create_bbox $MODEL_DIR/$DETECTOR_MODEL data/videos/test_vid.mp4
+
+         # Optional: smooth bboxes before cropping.
+         litpose smooth_bbox $MODEL_DIR/$DETECTOR_MODEL/video_preds \
+             --output_dir $MODEL_DIR/$DETECTOR_MODEL/video_preds/bboxes_smooth
+
+         # Crop using raw bboxes (default):
+         litpose crop $MODEL_DIR/$DETECTOR_MODEL data/videos/test_vid.mp4
+
+         # Or crop using smoothed bboxes:
+         litpose crop $MODEL_DIR/$DETECTOR_MODEL data/videos/test_vid.mp4 \
+             --bbox_dir $MODEL_DIR/$DETECTOR_MODEL/video_preds/bboxes_smooth
+
+         litpose predict $MODEL_DIR/$POSE_MODEL \
+             $MODEL_DIR/$DETECTOR_MODEL/cropped_videos/cropped_test_vid.mp4
+
+         litpose remap $MODEL_DIR/$POSE_MODEL/video_preds/cropped_test_vid.csv \
+             $MODEL_DIR/$DETECTOR_MODEL/video_preds/test_vid_bbox.csv
+
+   .. tab-item:: Predict from original videos
+
+      **Pros**
+
+      - Runs entirely in memory — no intermediate cropped files are written to disk.
+      - Predictions are returned in the original coordinate space; no remap step is needed.
+
+      **Cons**
+
+      - Without intermediate cropped files, it is harder to inspect the detector output
+        or diagnose issues at each stage of the pipeline.
+
+      .. code-block:: bash
+
+         #!/bin/bash
+
+         litpose predict $MODEL_DIR/$DETECTOR_MODEL data/videos/test_vid.mp4
+
+         litpose create_bbox $MODEL_DIR/$DETECTOR_MODEL data/videos/test_vid.mp4
+
+         # Optional: smooth bboxes.
+         litpose smooth_bbox $MODEL_DIR/$DETECTOR_MODEL/video_preds \
+             --output_dir $MODEL_DIR/$DETECTOR_MODEL/video_preds/bboxes_smooth
+
+         # Predict using raw bboxes:
+         litpose predict $MODEL_DIR/$POSE_MODEL data/videos/test_vid.mp4 \
+             --bbox_dir $MODEL_DIR/$DETECTOR_MODEL/video_preds
+
+         # Or predict using smoothed bboxes:
+         litpose predict $MODEL_DIR/$POSE_MODEL data/videos/test_vid.mp4 \
+             --bbox_dir $MODEL_DIR/$DETECTOR_MODEL/video_preds/bboxes_smooth
 
 For detailed command-line options, see :ref:`Create bbox <cli-create-bbox>`,
 :ref:`Smooth bbox <cli-smooth-bbox>`, :ref:`Crop <cli-crop>`, and :ref:`Remap <cli-remap>`.
-
-Prediction on OOD Labeled Data
-------------------------------
-
-Say you have new labeled data for OoD animals, at `data/CollectedData_new.csv`,
-and you want to predict on these frames as well as compute pixel error.
-
-.. code-block:: bash
-
-    #!/bin/bash
-
-    litpose predict $MODEL_DIR/$DETECTOR_MODEL data/CollectedData_new.csv
-
-    litpose create_bbox $MODEL_DIR/$DETECTOR_MODEL data/CollectedData_new.csv
-
-    litpose crop $MODEL_DIR/$DETECTOR_MODEL data/CollectedData_new.csv
-
-    litpose predict $MODEL_DIR/$POSE_MODEL \
-      $MODEL_DIR/$DETECTOR_MODEL/image_preds/CollectedData_new.csv/cropped_CollectedData_new.csv
-
-    litpose remap $MODEL_DIR/$POSE_MODEL/image_preds/cropped_CollectedData_new.csv/predictions.csv \
-      $MODEL_DIR/$DETECTOR_MODEL/image_preds/CollectedData_new.csv/bbox.csv
 
 Limitations
 ===========
