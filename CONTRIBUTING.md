@@ -61,13 +61,22 @@ pre-commit run --all-files
 ```
 
 #### Testing
-We currently do not have a continuous integration (CI) setup for the Lightning Pose repo due to its
-reliance on GPUs (and the relative expense of CI services that provide GPU machines for testing).
-Therefore, it is imperative that you run the unit tests yourself and verify that all tests have
-passed before submitting your request (and upon each new push to that request).
 
 To run the tests locally, you must have access to a GPU. Navigate to the Lightning Pose directory
 and simply run
 ```bash
 pytest
 ```
+
+#### Building the docs
+
+Documentation is built automatically when a pull request is opened, so this step is not
+required. If you have changed the docs and want to preview the result locally before pushing,
+from the `lightning-pose` directory run:
+
+```bash
+cd docs
+make html
+```
+
+Then open `docs/_build/html/index.html` in your browser.

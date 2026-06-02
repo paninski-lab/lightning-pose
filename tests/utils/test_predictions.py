@@ -147,6 +147,18 @@ class TestPredictVideoBboxFile:
         call_kwargs = mock_dali.call_args.kwargs
         assert call_kwargs['bbox_df'] is None
 
+    def test_raises_when_bbox_file_given_for_multiview(self, tmp_path, mock_model, bbox_csv):
+        """ValueError is raised when bbox_file is provided alongside a multiview video list."""
+        bbox_file, _ = bbox_csv
+        mock_model.config.cfg.data.view_names = ['view0', 'view1']
+
+        with pytest.raises(ValueError, match='bbox_file is not supported for multiview'):
+            predict_video(
+                video_file=[str(tmp_path / 'view0.mp4'), str(tmp_path / 'view1.mp4')],
+                model=mock_model,
+                bbox_file=bbox_file,
+            )
+
     def test_raises_on_frame_count_mismatch(self, tmp_path, mock_model, bbox_csv):
         """ValueError is raised when bbox_file row count doesn't match video frame count."""
         bbox_file, _ = bbox_csv  # 3 rows

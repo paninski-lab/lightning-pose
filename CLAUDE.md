@@ -181,3 +181,37 @@ def function_name(
 - Keep branches focused and short-lived
 - Merge with pull requests
 - Delete merged branches
+
+## Architecture
+
+### DALI Pipeline (`lightning_pose/data/dali.py`)
+
+**`PrepareDALI`** — two-phase construction:
+- `__init__`: validates inputs and pre-computes pipe arguments for all four
+  `{train,predict}×{base,context}` combinations. Raises early so invalid configs are caught
+  before GPU allocation.
+- `__call__`: builds and returns the GPU pipeline as a `LitDaliWrapper`.
+
+**`LitDaliWrapper`** — wraps `DALIGenericIterator`; converts raw DALI batch dicts to
+`(frames, transforms)` tensors expected by the model. Manages `_frame_idx`, a cursor into
+`bbox_df` that advances by `seq_len` (base models) or `seq_len - 4` (context models, because
+consecutive DALI windows overlap by 4 frames to share context).
+
+### Bbox / Cropzoom (`docs/source/user_guide_advanced/cropzoom_pipeline.rst`)
+
+**CSV format**: columns `x`, `y`, `h`, `w` (top-left corner and size in pixels), one row per
+frame. The index column is ignored on read.
+
+**Naming convention**:
+- Videos: `{video_stem}_bbox.csv` (one file per video)
+- Labeled frames: `bbox.csv`
+
+**Two prediction modes** (selected by whether `bbox_df` is passed to `PrepareDALI`):
+- *Standard*: DALI resizes frames on GPU before passing them to the model. `resize_dims` is set.
+- *Bbox-crop*: DALI delivers full-resolution frames; `LitDaliWrapper._apply_bbox_crop` crops and
+  resizes each frame in PyTorch using per-frame rows from `bbox_df`. `resize_dims=None` in the
+  pipe dict for bbox predict entries.
+
+**Data flow**: `litpose predict --bbox_dir` → `_predict_multi_type` →
+`model.predict_on_video_file(bbox_file=...)` → `predict_video(bbox_file=...)` →
+`PrepareDALI(bbox_df=...)` → `LitDaliWrapper._apply_bbox_crop`.
