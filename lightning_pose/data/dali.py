@@ -345,12 +345,19 @@ class LitDaliWrapper(DALIGenericIterator):
                 ignore_index=True,
             )
 
+        frame_h, frame_w = frames.shape[2], frames.shape[3]
         cropped_frames = []
         bboxes = []
         for i in range(seq_len):
             row = rows.iloc[i]
-            x, y, h, w = int(row['x']), int(row['y']), int(row['h']), int(row['w'])
-            frame_cropped = frames[i, :, y:y + h, x:x + w]
+            # clamp to frame bounds: create_bbox can produce negative x/y for edge frames
+            # (centroid - bbox_size//2 < 0). negative pytorch slice indices count from the
+            # end rather than clamping, producing an empty crop.
+            x1 = max(0, int(row['x']))
+            y1 = max(0, int(row['y']))
+            x2 = max(x1 + 1, min(frame_w, int(row['x']) + int(row['w'])))
+            y2 = max(y1 + 1, min(frame_h, int(row['y']) + int(row['h'])))
+            frame_cropped = frames[i, :, y1:y2, x1:x2]
             frame_resized = F.interpolate(
                 frame_cropped.unsqueeze(0),
                 size=self.resize_dims,
@@ -359,7 +366,9 @@ class LitDaliWrapper(DALIGenericIterator):
             ).squeeze(0)
             cropped_frames.append(frame_resized)
             bboxes.append(
-                torch.tensor([x, y, h, w], dtype=torch.float32, device=frames.device)
+                torch.tensor(
+                    [x1, y1, y2 - y1, x2 - x1], dtype=torch.float32, device=frames.device,
+                )
             )
 
         self._frame_idx += step

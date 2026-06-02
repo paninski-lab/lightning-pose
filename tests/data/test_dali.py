@@ -400,3 +400,22 @@ class TestLitDaliWrapper:
         )
         result = wrapper._apply_bbox_crop(batch)
         assert torch.equal(result['transforms'], transforms)
+
+    def test_negative_xy_clamped(self):
+        """Negative x/y from edge-frame bbox are clamped to 0; stored bbox reflects actual crop.
+
+        create_bbox computes topleft = centroid - size//2, which goes negative for animals
+        near the frame edge. pytorch slice indices are not clamped — a negative start index
+        counts from the end of the tensor, producing an empty crop.
+        """
+        neg_df = pd.DataFrame({'x': [-10], 'y': [-5], 'h': [50], 'w': [60]})
+        wrapper = self._make_wrapper(neg_df, resize_dims=[64, 64])
+        # frame 100 tall x 120 wide
+        batch = self._make_batch(seq_len=1, h=100, w=120)
+        result = wrapper._apply_bbox_crop(batch)
+
+        # frame must be cropped+resized without error
+        assert result['frames'].shape == (1, 3, 64, 64)
+        # clamped: x1=0, y1=0, x2=min(120,-10+60)=50, y2=min(100,-5+50)=45 → [0,0,45,50]
+        expected_bbox = torch.tensor([0.0, 0.0, 45.0, 50.0])
+        assert torch.allclose(result['bbox'][0], expected_bbox)
