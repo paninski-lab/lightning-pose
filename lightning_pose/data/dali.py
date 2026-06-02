@@ -1,4 +1,28 @@
-"""Data pipelines based on efficient video reading by nvidia dali package."""
+"""Data pipelines based on efficient video reading by nvidia dali package.
+
+Architecture overview
+---------------------
+``PrepareDALI`` is the entry point. Its ``__init__`` validates inputs and pre-computes
+pipeline arguments for all four combinations of stage (``"train"``, ``"predict"``) and
+model type (``"base"``, ``"context"``). Calling the instance (``__call__``) builds the DALI
+pipe for the requested combination and returns a ready-to-iterate ``LitDaliWrapper``.
+
+``LitDaliWrapper`` extends ``DALIGenericIterator`` and converts raw DALI output into typed
+``UnlabeledBatchDict`` or ``MultiviewUnlabeledBatchDict`` instances on every ``__next__``.
+
+Two prediction modes
+--------------------
+Standard mode (no ``bbox_df``):
+    DALI resizes frames to ``resize_dims`` on the GPU. The ``bbox`` field of each returned
+    batch covers the full frame (x=0, y=0, h=H, w=W).
+
+Bbox-crop mode (``bbox_df`` supplied to ``PrepareDALI``):
+    DALI delivers full-resolution frames (``resize_dims=None`` in the predict pipe) so that
+    ``LitDaliWrapper._apply_bbox_crop`` can crop each frame to its per-frame bounding box
+    and resize to the original ``resize_dims`` using ``torch.nn.functional.interpolate``.
+    The ``bbox`` field of each batch contains the actual crop coordinates, so downstream
+    code can remap predictions back to the original coordinate space.
+"""
 
 import os
 from typing import Any, Literal
@@ -6,7 +30,9 @@ from typing import Any, Literal
 import numpy as np
 import nvidia.dali.fn as fn
 import nvidia.dali.types as types
+import pandas as pd
 import torch
+import torch.nn.functional as F
 from nvidia.dali import pipeline_def
 from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
 from omegaconf import DictConfig, ListConfig
@@ -158,7 +184,30 @@ def video_pipe(
 
 
 class LitDaliWrapper(DALIGenericIterator):
-    """wrapper around a DALI pipeline to get batches for ptl."""
+    """Typed wrapper around a DALI pipeline iterator for Lightning Pose models.
+
+    Converts the raw list-of-dicts that ``DALIGenericIterator`` yields into
+    ``UnlabeledBatchDict`` or ``MultiviewUnlabeledBatchDict`` instances.  When a
+    ``bbox_df`` is provided, each batch's frames are also cropped per-frame and resized
+    to the model's input dimensions before being returned.
+
+    ``_frame_idx`` tracks the iterator's position in the video (by frame number) so that
+    ``_apply_bbox_crop`` reads the correct rows from ``bbox_df``.  It advances by
+    ``seq_len`` for base models (non-overlapping windows) and by ``seq_len - 4`` for
+    context models, because the DALI reader for context prediction uses a step of
+    ``seq_len - 4`` so that consecutive 5-frame windows overlap by 4 frames.
+
+    Testing without a GPU
+    +++++++++++++++++++++
+    This class can be instantiated without a real DALI pipeline or GPU for unit tests
+    that only exercise the PyTorch post-processing logic (e.g. ``_apply_bbox_crop``)::
+
+        wrapper = object.__new__(LitDaliWrapper)
+        wrapper.do_context = False
+        wrapper.bbox_df = my_df
+        wrapper.resize_dims = [256, 256]
+        wrapper._frame_idx = 0
+    """
 
     def __init__(
         self,
@@ -166,21 +215,33 @@ class LitDaliWrapper(DALIGenericIterator):
         eval_mode: Literal["train", "predict"],
         num_iters: int = 1,
         do_context: bool = False,
+        bbox_df: pd.DataFrame | None = None,
+        resize_dims: list[int] | None = None,
         **kwargs: Any,
     ) -> None:
         """Wrapper around DALIGenericIterator to get batches for pl.
 
         Args:
-            eval_mode
+            eval_mode: ``"train"`` or ``"predict"``.
             num_iters: number of enumerations of dataloader (should be computed outside for now;
                 should be fixed by lightning/dali teams)
             do_context: whether model/loader use 5-frame context or not
+            bbox_df: optional DataFrame with columns ``["x", "y", "h", "w"]``, one row per
+                frame. When provided, each batch's frames are cropped per-frame and resized
+                to ``resize_dims`` before being returned, and the ``bbox`` field of the
+                batch dict is populated with the actual bbox coordinates.
+            resize_dims: target ``[height, width]`` for post-crop resize; required when
+                ``bbox_df`` is not None.
 
         """
         self.num_iters = num_iters
         self.do_context = do_context
         self.eval_mode = eval_mode
         self.batch_sampler = 1  # hack to get around DALI-ptl issue
+        self.bbox_df = bbox_df
+        self.resize_dims = resize_dims
+        # cursor into bbox_df; advances by seq_len (base) or seq_len-4 (context) per batch
+        self._frame_idx = 0
         # call parent
         super().__init__(*args, **kwargs)
 
@@ -254,17 +315,95 @@ class LitDaliWrapper(DALIGenericIterator):
                 frames=frames, transforms=transforms, bbox=bbox, is_multiview=True,
             )
 
+    def _apply_bbox_crop(self, batch_dict: UnlabeledBatchDict) -> UnlabeledBatchDict:
+        """Crop frames to per-frame bboxes and resize to the model's input dimensions.
+
+        Called only in bbox-crop mode (when ``bbox_df`` is not None). DALI has already
+        delivered full-resolution frames; this method crops each frame individually,
+        resizes to ``self.resize_dims``, and advances ``_frame_idx`` by the same step
+        that the DALI reader used, so the two cursors stay in sync.
+
+        Args:
+            batch_dict: single-view unlabeled batch with full-resolution frames from DALI.
+
+        Returns:
+            new ``UnlabeledBatchDict`` with cropped+resized frames and the actual bbox
+            coordinates in the ``bbox`` field (shape ``(seq_len, 4)``, order x y h w).
+        """
+        assert self.bbox_df is not None  # guarded by caller; assertion narrows type
+        frames = batch_dict['frames']  # (seq_len, 3, H, W)
+        seq_len = frames.shape[0]
+        # context-model DALI reader uses step=seq_len-4 so consecutive windows overlap by 4
+        # frames; _frame_idx must advance by the same amount to stay in sync with the reader
+        step = seq_len - 4 if self.do_context else seq_len
+
+        # slice bbox rows for this batch; pad last partial batch with the final row
+        rows = self.bbox_df.iloc[self._frame_idx:self._frame_idx + seq_len]
+        if len(rows) < seq_len:
+            last_row = self.bbox_df.iloc[[-1]]
+            rows = pd.concat(
+                [rows] + [last_row] * (seq_len - len(rows)),
+                ignore_index=True,
+            )
+
+        frame_h, frame_w = frames.shape[2], frames.shape[3]
+        cropped_frames = []
+        bboxes = []
+        for i in range(seq_len):
+            row = rows.iloc[i]
+            # clamp to frame bounds: create_bbox can produce negative x/y for edge frames
+            # (centroid - bbox_size//2 < 0). negative pytorch slice indices count from the
+            # end rather than clamping, producing an empty crop.
+            x1 = max(0, int(row['x']))
+            y1 = max(0, int(row['y']))
+            x2 = max(x1 + 1, min(frame_w, int(row['x']) + int(row['w'])))
+            y2 = max(y1 + 1, min(frame_h, int(row['y']) + int(row['h'])))
+            frame_cropped = frames[i, :, y1:y2, x1:x2]
+            frame_resized = F.interpolate(
+                frame_cropped.unsqueeze(0),
+                size=self.resize_dims,
+                mode='bilinear',
+                align_corners=False,
+            ).squeeze(0)
+            cropped_frames.append(frame_resized)
+            bboxes.append(
+                torch.tensor(
+                    [x1, y1, y2 - y1, x2 - x1], dtype=torch.float32, device=frames.device,
+                )
+            )
+
+        self._frame_idx += step
+
+        return UnlabeledBatchDict(
+            frames=torch.stack(cropped_frames),
+            transforms=batch_dict['transforms'],
+            bbox=torch.stack(bboxes),
+            is_multiview=False,
+        )
+
     def __next__(self) -> UnlabeledBatchDict | MultiviewUnlabeledBatchDict:
-        """Fetch the next batch and convert it to a typed batch dictionary."""
+        """Fetch the next batch, applying per-frame bbox crop+resize when configured."""
         batch = super().__next__()
-        return self._dali_output_to_tensors(batch=batch)
+        batch_dict = self._dali_output_to_tensors(batch=batch)
+        if self.bbox_df is not None and not batch_dict['is_multiview']:
+            return self._apply_bbox_crop(batch_dict)  # type: ignore[arg-type]
+        return batch_dict
 
 
 class PrepareDALI:
-    """All the DALI stuff in one place.
+    """Factory for DALI video-reading pipelines used during training and prediction.
 
-    Big picture: this will initialize the pipes and dataloaders for both training and prediction.
+    Construction is split into two phases:
 
+    1. ``__init__``: validates inputs (file existence, multiview frame-count consistency),
+       pre-computes pipe arguments for all four combinations of
+       ``{train, predict}`` × ``{base, context}``, and stores them in ``_pipe_dict``.
+    2. ``__call__``: builds the DALI pipe for the requested ``train_stage`` /
+       ``model_type`` combination and returns a ready-to-iterate ``LitDaliWrapper``.
+
+    Splitting validation from pipe-building lets callers inspect ``num_iters`` and other
+    properties before committing GPU memory, and makes it straightforward to call
+    ``__call__`` again with a different stage without repeating validation.
     """
 
     def __init__(
@@ -276,6 +415,7 @@ class PrepareDALI:
         dali_config: dict | DictConfig | ListConfig | None = None,
         imgaug: str | None = "default",
         num_threads: int = 1,
+        bbox_df: pd.DataFrame | None = None,
     ) -> None:
         """Initialize DALI pipelines and dataloaders for training or prediction.
 
@@ -286,10 +426,15 @@ class PrepareDALI:
             filenames: for single-view models, a flat list of video file paths; for
                 multi-view models, a list of per-view lists of video file paths.
             resize_dims: ``[height, width]`` to resize frames to before feeding the model.
+                Also used as the post-crop resize target when ``bbox_df`` is provided.
             dali_config: DALI-specific config dict; falls back to package defaults when None.
             imgaug: name of the augmentation pipeline to apply during training (e.g.
                 ``"dlc"``); pass ``"default"`` for resize-only or ``None`` to disable.
             num_threads: number of CPU threads used by DALI pipelines.
+            bbox_df: optional DataFrame with columns ``["x", "y", "h", "w"]``, one row per
+                frame. When provided, the predict pipeline loads full-resolution frames
+                (DALI resize is disabled) and ``LitDaliWrapper`` crops each frame to its
+                bbox before resizing to ``resize_dims``.
 
         Raises:
             FileNotFoundError: if any path in ``filenames`` does not exist or is not a file.
@@ -352,6 +497,7 @@ class PrepareDALI:
         self.resize_dims = resize_dims
         self.dali_config = dali_config
         self.num_threads = num_threads
+        self.bbox_df = bbox_df
         self.frame_count = sum(view0_frame_counts)
         self._pipe_dict: dict = self._setup_pipe_dict(self.filenames, imgaug)
 
@@ -406,7 +552,16 @@ class PrepareDALI:
         filenames: list[str] | list[list[str]],
         imgaug: str | None,
     ) -> dict[str, dict]:
-        """All of the pipeline args in one place."""
+        """Build DALI pipeline arguments for all stage/model-type combinations.
+
+        Returns a nested dict of shape ``{stage: {model_type: kwargs}}`` (stored as
+        ``self._pipe_dict``) that is consumed by ``_get_dali_pipe``.
+
+        When ``bbox_df`` is set, predict entries have ``resize_dims`` forced to ``None``
+        so DALI delivers full-resolution frames.  The per-frame resize happens in PyTorch
+        inside ``LitDaliWrapper._apply_bbox_crop`` after cropping, using the original
+        ``resize_dims`` stored on the wrapper.
+        """
         assert self.dali_config is not None
         # When running with multiple GPUs, the LOCAL_RANK variable correctly
         # contains the DDP Local Rank, which is also the cuda device index.
@@ -495,11 +650,19 @@ class PrepareDALI:
         }
         # our floor above should prevent us from getting to the very final batch.
 
+        # when per-frame bbox cropping is enabled, DALI must deliver full-resolution frames so
+        # that LitDaliWrapper can crop them; the post-crop resize happens in PyTorch instead
+        if self.bbox_df is not None:
+            dict_args['predict']['base']['resize_dims'] = None
+            dict_args['predict']['context']['resize_dims'] = None
+
         return dict_args
 
     def _get_dali_pipe(self) -> Any:
-        """
-        Return a DALI pipe with predefined args.
+        """Build and return a DALI pipeline for the current stage and model type.
+
+        Returns:
+            Compiled DALI pipeline ready to be passed to ``LitDaliWrapper``.
         """
 
         pipe_args = self._pipe_dict[self.train_stage][self.model_type]
@@ -507,11 +670,24 @@ class PrepareDALI:
         return pipe
 
     def _setup_dali_iterator_args(self) -> dict:
-        """Builds args for Lightning iterator.
+        """Build ``LitDaliWrapper`` constructor kwargs for all stage/model-type combinations.
 
-        If you want to extract more outputs from DALI, e.g., optical flow, you should also add
-        this in the "output_map" arg
+        Returns a nested dict of shape ``{stage: {model_type: kwargs}}`` mirroring
+        ``_pipe_dict``.  The kwargs are passed directly to ``LitDaliWrapper.__init__``
+        (via ``DALIGenericIterator``) in ``__call__``.
 
+        Key design choices:
+
+        - ``output_map`` lists the DALI output names in the order ``video_pipe`` returns
+          them: ``frames``, ``transforms``, ``frame_size`` (repeated per view for
+          multiview).  Adding new DALI outputs (e.g. optical flow) requires updating this
+          map as well as ``_dali_output_to_tensors``.
+        - Predict pipelines use ``LastBatchPolicy.FILL`` (repeat the last frame to
+          complete the final batch) rather than ``PARTIAL`` (drop the incomplete batch),
+          so ``PredictionHandler`` always receives a full-sized tensor and trims excess
+          frames itself.
+        - ``auto_reset=False`` for predict so the iterator raises ``StopIteration`` at
+          the end of the video rather than cycling back to the start.
         """
         dict_args = {
             "predict": {"context": {}, "base": {}},
@@ -572,9 +748,17 @@ class PrepareDALI:
         return dict_args
 
     def __call__(self) -> LitDaliWrapper:
-        """
-        Returns a LightningWrapper object.
+        """Build the DALI pipeline and return a ready-to-iterate ``LitDaliWrapper``.
+
+        Returns:
+            ``LitDaliWrapper`` configured for ``self.train_stage`` and ``self.model_type``.
         """
         pipe = self._get_dali_pipe()
         args = self._setup_dali_iterator_args()
-        return LitDaliWrapper(pipe, **args[self.train_stage][self.model_type])
+        iterator_args = args[self.train_stage][self.model_type]
+        # injected here rather than in _setup_dali_iterator_args so that the standard
+        # iterator arg dict remains self-contained for the non-bbox case
+        if self.bbox_df is not None:
+            iterator_args['bbox_df'] = self.bbox_df
+            iterator_args['resize_dims'] = self.resize_dims
+        return LitDaliWrapper(pipe, **iterator_args)

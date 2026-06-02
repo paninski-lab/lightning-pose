@@ -397,6 +397,7 @@ def predict_video(
     model: Model,
     output_pred_file: str | None = None,
     progress_file: Path | None = None,
+    bbox_file: str | Path | None = None,
 ) -> pd.DataFrame: ...
 
 
@@ -414,6 +415,7 @@ def predict_video(
     model: Model,
     output_pred_file: str | list[str] | None = None,
     progress_file: Path | None = None,
+    bbox_file: str | Path | None = None,
 ) -> pd.DataFrame | list[pd.DataFrame]:
     """
     Args:
@@ -422,6 +424,9 @@ def predict_video(
         model: The model to predict with.
         output_pred_file: (optional) File to save predictions in.
             For multiview, a list of files (1-1 correspondance to cfg.data.view_names).
+        bbox_file: (optional) path to a bbox CSV (columns x, y, h, w; one row per frame).
+            when provided, DALI delivers full-resolution frames and the wrapper crops each
+            frame to the bbox before resizing to the model's input dims. single-view only.
     """
 
     is_multiview = not isinstance(video_file, str)
@@ -442,6 +447,18 @@ def predict_video(
             assert (
                 view_name in Path(single_video_file).stem
             ), "expected video_file to correspond 1-1 with cfg.data.view_name"
+
+    bbox_df: pd.DataFrame | None = None
+    if bbox_file is not None:
+        if is_multiview:
+            raise ValueError('bbox_file is not supported for multiview prediction')
+        assert isinstance(video_file, str)
+        bbox_df = pd.read_csv(bbox_file, index_col=0)
+        frame_count = count_frames(video_file)
+        if len(bbox_df) != frame_count:
+            raise ValueError(
+                f'bbox_file has {len(bbox_df)} rows but video has {frame_count} frames'
+            )
 
     trainer = pl.Trainer(
         accelerator="gpu",
@@ -467,6 +484,7 @@ def predict_video(
             model.config.cfg.data.image_resize_dims.height,
             model.config.cfg.data.image_resize_dims.width,
         ],
+        bbox_df=bbox_df,
     )
     # get loader
     predict_loader = vid_pred_class()

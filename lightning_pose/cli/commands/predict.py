@@ -82,9 +82,10 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
         help=(
             "directory containing bbox CSV files produced by ``litpose create_bbox`` or a "
             "compatible external source. For CSV inputs, looks for ``bbox.csv`` inside this "
+            "directory. For video inputs, looks for ``<video_stem>_bbox.csv`` inside this "
             "directory. When provided, each frame is cropped to its bounding box before "
             "being passed to the model, and predictions are saved in the original coordinate "
-            "space. (Video support coming soon.)"
+            "space."
         ),
     )
 
@@ -148,9 +149,8 @@ def _predict_multi_type(
         skip_viz: if True, skip generating labeled visualization outputs.
         skip_existing: if True, skip predictions for which an output CSV already exists.
         progress_file: optional path to write prediction progress as JSON.
-        bbox_dir: optional directory containing bbox CSV files. When provided and the input
-            is a CSV, ``bbox.csv`` inside this directory is used to crop frames before
-            passing them to the model.
+        bbox_dir: optional directory containing bbox CSV files. For CSV inputs, ``bbox.csv``
+            inside this directory is used. For video inputs, ``<stem>_bbox.csv`` is used.
     """
     if path.is_dir():
         image_files = [p for p in path.iterdir() if p.is_file() and p.suffix in [".png", ".jpg"]]
@@ -178,6 +178,7 @@ def _predict_multi_type(
             video_file=path,
             generate_labeled_video=(not skip_viz),
             progress_file=progress_file,
+            bbox_file=bbox_dir / f'{path.stem}_bbox.csv' if bbox_dir is not None else None,
         )
     elif path.suffix == ".csv":
         # Check if prediction file already exists
