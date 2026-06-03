@@ -568,20 +568,15 @@ class NaNPCA(PCA):
     def transform(self, X: np.ndarray) -> np.ndarray:
         """Apply dimensionality reduction to X including missing data (Nans).
 
-        X is projected on the first principal components previously extracted
-        from a training set.
+        X is projected on the first principal components previously extracted from a training set.
 
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            New data, where `n_samples` is the number of samples
-            and `n_features` is the number of features.
+        Args:
+            X: array-like of shape (n_samples, n_features); new data where ``n_samples`` is the
+                number of samples and ``n_features`` is the number of features.
 
-        Returns
-        -------
-        X_new : array-like of shape (n_samples, n_components)
-            Projection of X in the first principal components, where `n_samples`
-            is the number of samples and `n_components` is the number of the components.
+        Returns:
+            array-like of shape (n_samples, n_components); projection of X onto the first
+            principal components.
         """
 
         # check_is_fitted(self)

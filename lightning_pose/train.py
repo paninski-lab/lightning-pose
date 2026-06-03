@@ -87,9 +87,15 @@ def train(
     model_dir: str | Path | None = None,
     skip_evaluation: bool = False,
 ) -> Model:
-    """
-    Trains a model using the configuration `cfg`. Saves model to `model_dir`
-    (defaults to cwd if unspecified).
+    """Train a model using the configuration ``cfg``, saving outputs to ``model_dir``.
+
+    Args:
+        cfg: hydra config object.
+        model_dir: directory to save model outputs; defaults to cwd if unspecified.
+        skip_evaluation: if True, skip post-training evaluation.
+
+    Returns:
+        trained Model instance.
     """
     # Default to cwd for backwards compatibility. Future: make model_dir required.
     model_dir = Path(model_dir or os.getcwd())

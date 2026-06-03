@@ -58,6 +58,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         **kwargs: Any,
     ) -> None:
         """Initialize a multi-view model with transformer backbone.
+
         Args:
             num_keypoints: number of body parts
             num_views: number of camera views

@@ -48,13 +48,12 @@ class PredictionHandler:
         data_module: BaseDataModule | UnlabeledDataModule | None = None,
         video_file: str | None = None,
     ) -> None:
-        """
+        """Initialize a PredictionHandler.
 
-        Args
-            cfg
-            data_module: Only required for prediction of CSV files.
-            video_file: For prediction on video, path to the video file.
-                Used to get frame_count.
+        Args:
+            cfg: hydra config object.
+            data_module: only required for prediction of CSV files.
+            video_file: for prediction on video, path to the video file; used to get frame_count.
         """
         if data_module is None and video_file is None:
             raise ValueError("must pass either data_module or video_file")
@@ -587,11 +586,12 @@ def _create_labeled_video(
     start_time: float = 0.0,
 ) -> None:
     """Helper function for creating annotated videos.
-    Args
-        clip
-        xs_arr: shape T x n_joints
-        ys_arr: shape T x n_joints
-        mask_array: shape T x n_joints; timepoints/joints with a False entry will not be plotted
+
+    Args:
+        clip: moviepy VideoFileClip to annotate.
+        xs_arr: x coordinates of keypoints, shape (T, n_joints)
+        ys_arr: y coordinates of keypoints, shape (T, n_joints)
+        mask_array: shape (T, n_joints); timepoints/joints with False will not be plotted
         dotsize: size of marker dot on labeled video
         colormap: matplotlib color map for markers
         fps: None to default to fps of original video

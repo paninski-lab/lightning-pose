@@ -30,12 +30,12 @@ __all__ = [
 def _calculate_bbox_size(keypoints_per_frame: np.ndarray, crop_ratio: float = 1.0) -> np.ndarray:
     """Computes bounding box size for each frame.
 
-    Arguments:
-        keypoints_per_frame: Numpy array, shape of (frame, keypoint, x|y).
-        crop_ratio: ratio to multiply max difference between x, y to get
+    Args:
+        keypoints_per_frame: numpy array, shape (frames, keypoints, 2).
+        crop_ratio: ratio to multiply the max x/y span by to determine bbox size.
 
     Returns:
-        numpy array:  Shape of (frame, 2 (h|w))
+        numpy array of shape (frames, 2) containing bbox height and width per frame.
     """
     # Extract x and y coordinates
     x_coords = keypoints_per_frame[:, :, 0]  # All rows, all columns, first element (x)

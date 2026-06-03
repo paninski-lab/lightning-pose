@@ -695,16 +695,13 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
     ) -> np.ndarray:
         """Apply scale and translation transforms to 3D keypoints.
 
-        Parameters
-        ----------
-        keypoints_3d: original keypoints, shape (num_keypoints, 3)
-        scale_params: (a, b) are (min, max) ratio of scaling
-        shift_param: max shift in each dimension, as a fraction of the range (kp_max - kp_min)
+        Args:
+            keypoints_3d: original keypoints, shape (num_keypoints, 3)
+            scale_params: (a, b) are (min, max) ratio of scaling
+            shift_param: max shift in each dimension, as a fraction of the range (kp_max - kp_min)
 
-        Returns
-        -------
-        np.ndarray: augmented keypoints, shape (num_keypoints, 3)
-
+        Returns:
+            augmented keypoints, shape (num_keypoints, 3)
         """
         # step 1: apply scaling
         scale_factor = np.random.uniform(*scale_params)  # scale scene up or down
@@ -729,18 +726,15 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
     ) -> list:
         """Apply 2D transformations based on keypoint matching.
 
-        Parameters
-        ----------
-        images: each element is a torch array of shape (3, height, width); h/w can be different for
-            different views
-        keypoints_orig: shape (num_views, num_keypoints, 2)
-        keypoints_aug: shape (num_views, num_keypoints, 2)
-        bboxes: shape (num_view, 4) -> x, y, h, w
+        Args:
+            images: each element is a torch array of shape (3, height, width); h/w can differ
+                across views
+            keypoints_orig: shape (num_views, num_keypoints, 2)
+            keypoints_aug: shape (num_views, num_keypoints, 2)
+            bboxes: shape (num_view, 4) -> x, y, h, w
 
-        Returns
-        -------
-        list: each element corresponds to an augmented version of the input images; same device
-
+        Returns:
+            each element corresponds to an augmented version of the input images; same device
         """
 
         device = images[0].device
