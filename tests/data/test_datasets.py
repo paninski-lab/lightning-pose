@@ -1072,8 +1072,10 @@ class TestDiscoverCamParamsFromImagePaths:
         assert cam_params_df is None
         assert cam_params_file_to_camgroup is None
 
-    def test_discover_mixed_calibration_disables_3d(self, fake_ds, tmp_path, capsys):
-        """Returns (None, None) and prints a warning when only some frames have calibration."""
+    def test_discover_mixed_calibration_disables_3d(self, fake_ds, tmp_path, caplog):
+        """Returns (None, None) and logs a warning when only some frames have calibration."""
+        import logging
+
         # Arrange: session0 has a toml, session1 does not
         calib_dir = tmp_path / 'calibrations'
         calib_dir.mkdir()
@@ -1084,12 +1086,17 @@ class TestDiscoverCamParamsFromImagePaths:
         ]
 
         # Act
-        cam_params_df, cam_params_file_to_camgroup = self._discover(fake_ds)
+        with caplog.at_level(logging.WARNING, logger='lightning_pose'):
+            cam_params_df, cam_params_file_to_camgroup = self._discover(fake_ds)
 
         # Assert
         assert cam_params_df is None
         assert cam_params_file_to_camgroup is None
-        assert 'WARNING' in capsys.readouterr().out
+        assert any(
+            'calibration file not found' in r.message
+            for r in caplog.records
+            if r.levelno == logging.WARNING
+        )
 
     def test_discover_multi_session(self, fake_ds, tmp_path):
         """Each session is mapped to its own calibration file."""
