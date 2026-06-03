@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def register_parser(subparsers: Any) -> argparse.ArgumentParser:
@@ -80,11 +83,11 @@ def handle(args: argparse.Namespace) -> None:
     """Handle the smooth_bbox command."""
     import lightning_pose.utils.cropzoom as cz
 
-    print(f'Smoothing bboxes in {args.bbox_dir}')
+    logger.info(f'smoothing bboxes in {args.bbox_dir}')
     cz.smooth_bbox(
         input_bbox_dir=args.bbox_dir,
         output_dir=args.output_dir,
         method=args.method,
         window=args.window,
     )
-    print(f'Saved smoothed bboxes to {args.output_dir}')
+    logger.info(f'saved smoothed bboxes to {args.output_dir}')

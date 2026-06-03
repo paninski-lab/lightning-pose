@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Any
 
 from .. import types
 
+logger = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
     from lightning_pose.api import Model  # noqa: F401
     from lightning_pose.train import train  # noqa: F401
@@ -74,9 +76,9 @@ def handle(args: argparse.Namespace) -> None:
             Path("outputs") / now.strftime("%Y-%m-%d") / now.strftime("%H-%M-%S")
         )
 
-    print(f"Output directory: {output_dir.absolute()}")
+    logger.info(f'output directory: {output_dir.absolute()}')
     if args.overrides:
-        print(f"Overrides: {args.overrides}")
+        logger.info(f'overrides: {args.overrides}')
 
     with hydra.initialize_config_dir(
         version_base="1.1", config_dir=str(args.config_file.parent.absolute())

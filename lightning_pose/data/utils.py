@@ -1,6 +1,7 @@
 """Dataset/data module utilities."""
 from __future__ import annotations
 
+import logging
 import os
 
 import numpy as np
@@ -13,6 +14,8 @@ from lightning_pose.data.datatypes import (
     MultiviewUnlabeledBatchDict,
     UnlabeledBatchDict,
 )
+
+logger = logging.getLogger(__name__)
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -139,7 +142,7 @@ def compute_num_train_frames(
     else:
         if train_frames >= len_train_dataset:
             # take max number of train frames
-            print("Warning! Requested training frames exceeds training set size; using all")
+            logger.warning('requested training frames exceeds training set size; using all')
             n_train_frames = len_train_dataset
         elif train_frames == 1:
             # assume this is a fraction; use full dataset

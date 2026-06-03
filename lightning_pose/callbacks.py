@@ -1,6 +1,7 @@
 """Custom Lightning callbacks for training schedule, backbone unfreezing, and augmentation."""
 
 import json
+import logging
 import os
 import time
 from pathlib import Path
@@ -16,6 +17,8 @@ from lightning.pytorch.callbacks import (
     ModelCheckpoint,
 )
 from omegaconf import DictConfig, ListConfig
+
+logger = logging.getLogger(__name__)
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -299,9 +302,9 @@ class PatchMasker:
 
         # Validate patch_seed is set for reproducibility
         if self.use_patch_masking and patch_seed is None:
-            print(
-                "Warning: patch_seed is None but patch masking is enabled. "
-                "Results may not be reproducible."
+            logger.warning(
+                'patch_seed is None but patch masking is enabled; '
+                'results may not be reproducible'
             )
 
     def apply_patch_masking(
@@ -486,7 +489,7 @@ class JSONInferenceProgressTracker(Callback):
             os.replace(temp_filepath, self.filepath)
         except Exception as e:
             # Handle potential file I/O errors gracefully
-            print(f"\n[Error saving progress to JSON]: {e}")
+            logger.error(f'error saving progress to JSON: {e}')
             if os.path.exists(temp_filepath):
                 os.remove(temp_filepath)
 
@@ -572,7 +575,7 @@ class JSONTrainingProgressTracker(Callback):
             os.replace(temp_filepath, self.filepath)
         except Exception as e:
             # Handle potential file I/O errors gracefully
-            print(f"\n[Error saving progress to JSON]: {e}")
+            logger.error(f'error saving progress to JSON: {e}')
             if os.path.exists(temp_filepath):
                 os.remove(temp_filepath)
 
@@ -619,10 +622,7 @@ class JSONTrainingProgressTracker(Callback):
         self.current = self.total  # Ensure completed == total
         self._save_progress(self.current, self.total)
 
-        print(
-            f"\n[JSONTrainingProgressTracker] Training finished. "
-            f"Final status saved to {self.filepath}"
-        )
+        logger.info(f'training finished; final status saved to {self.filepath}')
 
 
 def get_callbacks(

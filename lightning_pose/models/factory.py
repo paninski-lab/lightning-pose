@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import glob
+import logging
 import os
 from collections import OrderedDict
 from typing import TYPE_CHECKING
@@ -20,6 +21,8 @@ from lightning_pose.models.base import (
 if TYPE_CHECKING:
     from lightning_pose.losses.factory import LossFactory
     from lightning_pose.models import ALLOWED_MODELS
+
+logger = logging.getLogger(__name__)
 
 __all__ = ['get_model']
 
@@ -200,14 +203,14 @@ def get_model(
 
     if cfg.model.get('checkpoint', None):
         ckpt = cfg.model.checkpoint
-        print(f'Loading weights from {ckpt}')
+        logger.info(f'loading weights from {ckpt}')
         if not ckpt.endswith('.ckpt'):
             ckpt = glob.glob(os.path.join(ckpt, '**', '*.ckpt'), recursive=True)[0]
         try:
             state_dict = torch.load(ckpt)['state_dict']
         except Exception as e:
-            print(f'Warning: Failed to load checkpoint with default settings: {e}')
-            print('Attempting to load with weights_only=False...')
+            logger.warning(f'failed to load checkpoint with default settings: {e}')
+            logger.warning('attempting to load with weights_only=False...')
             state_dict = torch.load(ckpt, weights_only=False)['state_dict']
         try:
             model.load_state_dict(state_dict, strict=False)

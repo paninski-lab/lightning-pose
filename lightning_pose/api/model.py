@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 from pathlib import Path
 from typing import Any, cast
 
@@ -31,6 +32,8 @@ from lightning_pose.utils.predictions import (
     predict_dataset,
     predict_video,
 )
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["Model", "get_model_class", "load_model_from_checkpoint"]
 
@@ -140,8 +143,8 @@ def load_model_from_checkpoint(
     try:
         checkpoint = torch.load(ckpt_file)
     except Exception as e:
-        print(f'Warning: Failed to load checkpoint with default settings: {e}')
-        print('Attempting to load with weights_only=False...')
+        logger.warning(f'failed to load checkpoint with default settings: {e}')
+        logger.warning('attempting to load with weights_only=False...')
         checkpoint = torch.load(ckpt_file, weights_only=False)
     state_dict = checkpoint.get('state_dict', checkpoint)
 

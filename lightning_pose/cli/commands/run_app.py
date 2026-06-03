@@ -1,7 +1,10 @@
 """App command for the lightning-pose CLI."""
 
 import argparse
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def register_parser(subparsers: Any) -> argparse.ArgumentParser:
@@ -40,10 +43,7 @@ def handle(args: argparse.Namespace) -> None:
     if not importlib.util.find_spec("litpose_app"):
         import sys
 
-        print(
-            "❌ App not installed. To install the app:\n\n    pip install lightning-pose-app\n",
-            file=sys.stderr,
-        )
+        logger.error('app not installed; to install: pip install lightning-pose-app')
         sys.exit(1)
 
     # Import lightning_pose modules only when needed

@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .. import types
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     import lightning_pose.utils.cropzoom as cz  # noqa: F401
@@ -119,7 +122,7 @@ def handle(args: argparse.Namespace) -> None:
     for p in args.input_path:
         p = Path(p)
         if p.is_dir():
-            print(f'Processing directory {p}')
+            logger.info(f'processing directory {p}')
             input_paths.extend(sorted(f for f in p.iterdir() if f.suffix == '.mp4'))
         else:
             input_paths.append(p)
@@ -132,7 +135,7 @@ def handle(args: argparse.Namespace) -> None:
                 input_bbox_file = model.video_preds_dir() / (input_path.stem + '_bbox.csv')
             output_file = model.cropped_videos_dir() / ('cropped_' + input_path.name)
 
-            print(f'Cropping {input_path.name}')
+            logger.info(f'cropping {input_path.name}')
             cz.crop_video(
                 input_video_file=input_path,
                 input_bbox_file=input_bbox_file,
@@ -149,7 +152,7 @@ def handle(args: argparse.Namespace) -> None:
                 input_bbox_file = preds_dir / 'bbox.csv'
             output_csv_file_path = preds_dir / ('cropped_' + input_path.name)
 
-            print(f'Cropping {input_path.name}')
+            logger.info(f'cropping {input_path.name}')
             cz.crop_labeled_frames(
                 input_data_dir=input_data_dir,
                 input_csv_file=input_path,

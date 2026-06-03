@@ -1,5 +1,6 @@
 """PCA class to assist with computing PCA losses."""
 
+import logging
 import warnings
 from typing import Any, Literal, cast
 
@@ -15,6 +16,8 @@ from sklearn.utils.extmath import stable_cumsum, svd_flip
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import MultiviewHeatmapDataset
 from lightning_pose.data.extractor import DataExtractor
+
+logger = logging.getLogger(__name__)
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -750,14 +753,14 @@ def pca_prints(pca: PCA, condition: str, components_to_keep: int) -> None:
         condition: label describing the PCA type (e.g., ``"pca_singleview"``).
         components_to_keep: number of components retained after dimensionality selection.
     """
-    print(f"Results of running PCA ({condition}) on keypoints:")
-    print(
-        f"Kept {components_to_keep}/{pca.n_components_} components, and found:"
-    )
     evr = np.round(pca.explained_variance_ratio_, 3)
-    print(f"Explained variance ratio: {evr}")
     tev = np.round(np.sum(pca.explained_variance_ratio_[:components_to_keep]), 3)
-    print(f"Variance explained by {components_to_keep} components: {tev}")
+    logger.info(
+        f'results of running PCA ({condition}) on keypoints:\n'
+        f'kept {components_to_keep}/{pca.n_components_} components, and found:\n'
+        f'explained variance ratio: {evr}\n'
+        f'variance explained by {components_to_keep} components: {tev}'
+    )
 
 
 def format_multiview_data_for_pca(

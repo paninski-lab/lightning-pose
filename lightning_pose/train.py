@@ -2,6 +2,7 @@
 
 import contextlib
 import json
+import logging
 import math
 import os
 import random
@@ -33,6 +34,8 @@ from lightning_pose.utils import pretty_print_cfg, pretty_print_str
 from lightning_pose.utils.io import (
     return_absolute_data_paths,
 )
+
+logger = logging.getLogger(__name__)
 
 # to ignore imports for sphinx-autoapidoc
 __all__ = ["train"]
@@ -278,7 +281,7 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
         cfg.creation_datetime = datetime.now().isoformat()
         cfg.model.lightning_pose_version = lightning_pose.version
 
-    print("Config file:")
+    logger.info('config file:')
     pretty_print_cfg(cfg)
 
     ModelConfig(cfg).validate()
@@ -329,7 +332,7 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
     # ----------------------------------------------------------------------------------
     # Done before training; files will exist even if script dies prematurely.
     hydra_output_directory = os.getcwd()
-    print(f"Hydra output directory: {hydra_output_directory}")
+    logger.info(f'hydra output directory: {hydra_output_directory}')
 
     # save config file
     dest_config_file = Path(hydra_output_directory) / "config.yaml"
@@ -356,10 +359,10 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
     # ----------------------------------------------------------------------------------
 
     # logger
-    logger = TensorBoardLogger("tb_logs", name=cfg.model.model_name)
+    logger_tb = TensorBoardLogger("tb_logs", name=cfg.model.model_name)
     # Log hydra config to tensorboard as helpful metadata.
     for key, value in cfg.items():
-        logger.experiment.add_text(
+        logger_tb.experiment.add_text(
             f"hydra_config_{key}",
             f"```\n{value if isinstance(value, str) else OmegaConf.to_yaml(value)}```",
         )
@@ -401,7 +404,7 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
         val_check_interval=val_check_interval,
         log_every_n_steps=cfg.training.log_every_n_steps,
         callbacks=callbacks,
-        logger=logger,
+        logger=logger_tb,
         # To understand why we set this, see 'max_size_cycle' in UnlabeledDataModule.
         limit_train_batches=cfg.training.get("limit_train_batches") or steps_per_epoch,
         accumulate_grad_batches=cfg.training.get("accumulate_grad_batches", 1),

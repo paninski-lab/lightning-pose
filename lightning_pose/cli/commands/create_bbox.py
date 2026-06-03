@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from omegaconf import OmegaConf
 
 from .. import types
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     import lightning_pose.utils.cropzoom as cz  # noqa: F401
@@ -148,7 +151,7 @@ def handle(args: argparse.Namespace) -> None:
     for p in args.input_path:
         p = Path(p)
         if p.is_dir():
-            print(f'Processing directory {p}')
+            logger.info(f'processing directory {p}')
             input_paths.extend(sorted(f for f in p.iterdir() if f.suffix == '.mp4'))
         else:
             input_paths.append(p)
@@ -164,7 +167,7 @@ def handle(args: argparse.Namespace) -> None:
         else:
             raise NotImplementedError('only mp4 and csv files are supported.')
 
-        print(f'Creating bboxes for {input_path.name}')
+        logger.info(f'creating bboxes for {input_path.name}')
         cz.generate_bbox(
             input_preds_file=input_preds_file,
             detector_cfg=detector_cfg,

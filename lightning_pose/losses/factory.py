@@ -1,5 +1,6 @@
 """High-level loss class that orchestrates the individual losses."""
 
+import logging
 from typing import Any, Literal
 
 import lightning.pytorch as pl
@@ -22,6 +23,8 @@ from lightning_pose.losses.losses import (
     TemporalLoss,
     UnimodalLoss,
 )
+
+logger = logging.getLogger(__name__)
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -84,7 +87,7 @@ def get_loss_factories(
                 'supervised_pairwise_projections', {}
             ).get('log_weight')
             if log_weight_sp is not None:
-                print('Adding supervised pairwise projection loss')
+                logger.info('adding supervised pairwise projection loss')
                 loss_params_dict['supervised']['supervised_pairwise_projections'] = {
                     'log_weight': log_weight_sp
                 }
@@ -93,7 +96,7 @@ def get_loss_factories(
                 'supervised_reprojection_heatmap_mse', {}
             ).get('log_weight')
             if log_weight_hr is not None:
-                print('Adding supervised reprojection heatmap loss')
+                logger.info('adding supervised reprojection heatmap loss')
                 height_og = cfg.data.image_resize_dims.height
                 width_og = cfg.data.image_resize_dims.width
                 height_ds = int(height_og // (2 ** cfg.data.get('downsample_factor', 2)))

@@ -279,7 +279,7 @@ def _crop_video_moviepy(video_file: Path, bbox_df: pd.DataFrame, output_file: Pa
 
         frame_index = int(t * clip.fps)  # Calculate frame index based on time
         if frame_index >= len(bbox_df):
-            print(f"crop_frame: Skipped frame {frame_index}")
+            logger.debug(f'crop_frame: skipped frame {frame_index}')
             return np.zeros((h, w, frame.shape[2]), dtype=np.uint8)
 
         b = bbox_df.iloc[frame_index]
