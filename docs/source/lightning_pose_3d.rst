@@ -146,7 +146,77 @@ For inference via the CLI, see:
 
 Once per-view 2D predictions are available, 3D coordinates can be reconstructed across cameras.
 We recommend the
-`Ensemble Kalman Smoother (EKS) <https://github.com/paninski-lab/eks>`_ tool for this step.
+`Ensemble Kalman Smoother (EKS) <https://github.com/paninski-lab/eks>`_ tool for this step
+(`paper <https://rdcu.be/dLP3z>`_).
 EKS can operate on predictions from a single model or from an ensemble of models; ensembling
 improves accuracy and provides better-calibrated uncertainty estimates than the likelihood outputs
 of any single network.
+
+**Installation**
+
+.. code-block:: bash
+
+    git clone https://github.com/paninski-lab/eks
+    cd eks
+    pip install -e .
+
+Alternatively, install from PyPI (no bundled example data):
+
+.. code-block:: bash
+
+    pip install ensemble-kalman-smoother
+
+**Workflow**
+
+The recommended workflow is:
+
+1. Train several Lightning Pose models with different random seeds (3+ recommended).
+2. Run ``litpose predict`` with each model to produce per-view CSV files.
+3. Organise the CSVs into a directory following the layout described below.
+4. Run EKS to produce smoothed, ensembled predictions (and optionally 3D coordinates).
+
+**Input file layout**
+
+EKS expects Lightning Pose / DLC-format CSVs (three-row header: scorer, bodyparts, coords).
+For multi-camera setups with one CSV per view per seed, place all files in a single directory
+and include the camera name as a substring of each filename:
+
+.. code-block:: text
+
+    input_dir/
+      session_Cam-A_rng=0.csv
+      session_Cam-A_rng=1.csv
+      session_Cam-A_rng=2.csv
+      session_Cam-B_rng=0.csv
+      session_Cam-B_rng=1.csv
+      session_Cam-B_rng=2.csv
+      calibration.toml          # Anipose-format calibration file
+
+.. note::
+
+    Camera names must appear as substrings of the filenames, and no camera name may be a
+    substring of another camera name.
+
+**Running EKS**
+
+For calibrated multi-camera data (nonlinear EKS with 3D triangulation):
+
+.. code-block:: bash
+
+    eks multicam \
+        --input-dir /path/to/input_dir \
+        --camera-names Cam-A Cam-B \
+        --calibration /path/to/input_dir/calibration.toml \
+        --make-plot
+
+For multi-camera data without calibration (linear EKS, smoothing only):
+
+.. code-block:: bash
+
+    eks multicam \
+        --input-dir /path/to/input_dir \
+        --camera-names Cam-A Cam-B \
+        --make-plot
+
+See the `EKS documentation <https://github.com/paninski-lab/eks>`_ for the full list of
+subcommands and options, including specialised workflows for mirrored multi-camera setups.
