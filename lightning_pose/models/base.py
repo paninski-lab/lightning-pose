@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, Literal, cast
 
@@ -27,6 +28,8 @@ from lightning_pose.data.datatypes import (
     UnlabeledBatchDict,
 )
 from lightning_pose.models.backbones import ALLOWED_BACKBONES
+
+logger = logging.getLogger(__name__)
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -227,7 +230,7 @@ class BaseFeatureExtractor(LightningModule):
         """
         super().__init__()
         if self.local_rank == 0:
-            print(f"\nInitializing a {self._get_name()} instance with {backbone} backbone.")
+            logger.info(f'initializing a {self._get_name()} instance with {backbone} backbone')
 
         self.backbone_arch = backbone
 

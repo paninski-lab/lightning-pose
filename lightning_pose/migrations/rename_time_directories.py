@@ -5,9 +5,12 @@ used HH:MM:SS format (e.g., ``outputs/2024-01-01/12:00:00``) which is invalid on
 and causes issues with some tools. This migration renames them to HH-MM-SS format.
 """
 
+import logging
 import os
 import re
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def needs_migration() -> bool | None:
@@ -25,8 +28,8 @@ def needs_migration() -> bool | None:
 
 def migrate() -> bool:
     """Renames time directories."""
-    print(
-        "Fixing directory names (https://github.com/paninski-lab/lightning-pose/issues/278)..."
+    logger.info(
+        'fixing directory names (https://github.com/paninski-lab/lightning-pose/issues/278)...'
     )
     outputs_path = Path("outputs")
     migration_applied = False
@@ -38,8 +41,8 @@ def migrate() -> bool:
                     new_path = time_dir.parent / new_name
                     try:
                         os.rename(time_dir, new_path)
-                        print(f"Renamed: {time_dir} -> {new_path}")
+                        logger.info(f'renamed: {time_dir} -> {new_path}')
                         migration_applied = True
                     except OSError as e:
-                        print(f"Error renaming {time_dir}: {e}")
+                        logger.error(f'error renaming {time_dir}: {e}')
     return migration_applied

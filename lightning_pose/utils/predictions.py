@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import gc
+import logging
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast, overload
@@ -25,6 +26,8 @@ from lightning_pose.data.utils import count_frames
 
 if TYPE_CHECKING:
     from lightning_pose.api import Model
+
+logger = logging.getLogger(__name__)
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -621,7 +624,9 @@ def _create_labeled_video(
         clip = cast(VideoFileClip, clip.resized((upsample_factor * nx, upsample_factor * ny)))
         nx, ny = clip.size
 
-    print(f"Duration of video [s]: {np.round(dur, 2)}, recorded at {np.round(fps_og, 2)} fps!")
+    logger.info(
+        f'duration of video [s]: {np.round(dur, 2)}, recorded at {np.round(fps_og, 2)} fps'
+    )
 
     def seconds_to_hms(seconds: float) -> str:
         """Format a duration in seconds as an ``HH:MM:SS`` string."""
@@ -650,7 +655,7 @@ def _create_labeled_video(
         # markers
         # ----------------
         if index >= n_frames:
-            print(f"add_marker_and_timestamps: Skipped frame {index}")
+            logger.debug(f'add_marker_and_timestamps: skipped frame {index}')
         else:
             for bpindex in range(n_keypoints):
                 if mask_array[index, bpindex]:

@@ -1,5 +1,6 @@
 """Models that produce heatmaps of keypoints from images on multiview datasets."""
 
+import logging
 import math
 from typing import Any, Literal
 
@@ -29,6 +30,8 @@ from lightning_pose.models.base import (
 from lightning_pose.models.heads import (
     HeatmapHead,
 )
+
+logger = logging.getLogger(__name__)
 
 # to ignore imports for sphix-autoapidoc
 __all__ = []
@@ -291,7 +294,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
                     keypoints_pred_2d_reprojected = None
 
             except Exception as e:
-                print(f"Error in 3D projection: {e}")
+                logger.error(f'error in 3D projection: {e}')
                 keypoints_pred_3d = None
                 keypoints_targ_3d = None
                 keypoints_pred_2d_reprojected = None
@@ -445,9 +448,9 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(
 
         # Ensure transforms have the expected shape for multiview: [num_views, 2, 3]
         if batch_dict["is_multiview"] and len(transforms.shape) != 3:
-            print(
-                "WARNING: Expected transforms shape [num_views, 2, 3] for multiview, "
-                f"got {transforms.shape}"
+            logger.warning(
+                f'expected transforms shape [num_views, 2, 3] for multiview, '
+                f'got {transforms.shape}'
             )
 
         pred_keypoints = undo_affine_transform_batch(

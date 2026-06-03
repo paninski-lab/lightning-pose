@@ -1,9 +1,13 @@
 """Load vision encoder from Facebook SAM model using HuggingFace."""
 
+import logging
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from transformers import SamModel
+
+logger = logging.getLogger(__name__)
 
 # to ignore imports for sphix-autoapidoc
 __all__ = []
@@ -56,9 +60,9 @@ class SamVisionEncoder(nn.Module):
             and self.vision_encoder.pos_embed is not None
         ):
             # Resize positional embeddings if needed
-            print(
-                f"Finetune image size ({finetune_img_size}) does not match model size ({img_size})"
-                f" - recomputing position embeddings"
+            logger.info(
+                f'finetune image size ({finetune_img_size}) does not match model size ({img_size})'
+                f' - recomputing position embeddings'
             )
             self._resize_pos_embed()
 
@@ -92,7 +96,7 @@ class SamVisionEncoder(nn.Module):
 
         # Replace the forward method
         self.vision_encoder.patch_embed.forward = no_size_check_forward
-        print("Bypassed all size checking in patch_embed")
+        logger.debug('bypassed all size checking in patch_embed')
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the vision encoder.
@@ -149,7 +153,7 @@ class SamVisionEncoder(nn.Module):
         if old_size == new_size:
             return
 
-        print(f"Resizing pos_embed from {old_size}x{old_size} to {new_size}x{new_size}")
+        logger.info(f'resizing pos_embed from {old_size}x{old_size} to {new_size}x{new_size}')
 
         # HuggingFace stores pos_embed in spatial format [1, H, W, C]
         pos_embed = self.original_pos_embed  # [1, 64, 64, 768]

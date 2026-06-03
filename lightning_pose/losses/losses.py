@@ -18,6 +18,7 @@ The general flow of each loss class is as follows:
 
 """
 
+import logging
 import os
 from typing import Any, Literal
 
@@ -30,6 +31,8 @@ from torch.nn import functional as F
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import generate_heatmaps
 from lightning_pose.utils.pca import KeypointPCA
+
+logger = logging.getLogger(__name__)
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -497,14 +500,16 @@ class PCALoss(Loss):
         # select epsilon based on constructor inputs
         if epsilon is not None:
             self.epsilon = torch.tensor(epsilon, dtype=torch.float, device=self.device)
-            print(f"Using absolute epsilon={epsilon:.2f} for pca loss; empirical epsilon ignored")
+            logger.info(
+                f'using absolute epsilon={epsilon:.2f} for pca loss; empirical epsilon ignored'
+            )
         else:
             # empirically compute epsilon, already converted to tensor
             self.epsilon = self.pca.parameters["epsilon"] * empirical_epsilon_multiplier
-            print(
-                f"Using empirical epsilon={float(self.pca.parameters['epsilon']):.3f}"
-                f" * multiplier={float(empirical_epsilon_multiplier):.3f}"
-                f" -> total={float(self.epsilon):.3f} for {self.loss_name} loss",
+            logger.info(
+                f'using empirical epsilon={float(self.pca.parameters["epsilon"]):.3f}'
+                f' * multiplier={float(empirical_epsilon_multiplier):.3f}'
+                f' -> total={float(self.epsilon):.3f} for {self.loss_name} loss'
             )
 
     def remove_nans(self, **kwargs: Any) -> Any:

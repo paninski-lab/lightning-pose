@@ -1,5 +1,6 @@
 """Dataset objects store images, labels, and functions for manipulation."""
 
+import logging
 import os
 from pathlib import Path
 from typing import Literal, cast
@@ -24,6 +25,8 @@ from lightning_pose.data.datatypes import (
 )
 from lightning_pose.data.utils import generate_heatmaps, normalized_to_bbox
 from lightning_pose.utils import io as io_utils
+
+logger = logging.getLogger(__name__)
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -315,8 +318,10 @@ class HeatmapDataset(BaseTrackingDataset):
         )
 
         if self.height % 128 != 0 or self.height % 128 != 0:
-            print("image dimensions (after transformation) must be repeatably divisible by 2!")
-            print("current image dimensions after transformation are:")
+            logger.error(
+                'image dimensions (after transformation) must be repeatably divisible by 2; '
+                f'current dimensions: height={self.height}, width={self.width}'
+            )
             exit()
 
         self.downsample_factor: Literal[1, 2, 3] = downsample_factor
@@ -451,7 +456,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         if len(view_names) != len(csv_paths):
             raise ValueError("number of names does not match with the number of files!")
-        print("Using MultiviewHeatmapDataset")
+        logger.info('using MultiviewHeatmapDataset')
         self.root_directory = root_directory
         self.csv_paths = csv_paths
         self.bbox_paths = bbox_paths or [None] * len(view_names)
@@ -612,9 +617,8 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             return cam_params_df, cam_params_file_to_camgroup
 
         if cam_params_file_to_camgroup and not all_found:
-            print(
-                "WARNING: calibration file not found for some frames; "
-                "disabling 3D for entire dataset"
+            logger.warning(
+                'calibration file not found for some frames; disabling 3D for entire dataset'
             )
         return None, None
 

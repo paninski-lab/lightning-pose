@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Any
 
 import safetensors.torch
 import torch
+
+logger = logging.getLogger(__name__)
 
 # to ignore imports for sphix-autoapidoc
 __all__ = []
@@ -83,7 +86,7 @@ def load_vit_backbone_checkpoint(base: VisionEncoder, checkpoint: str) -> None:
         base: the ``VisionEncoder`` instance whose weights will be updated.
         checkpoint: path to the checkpoint file.
     """
-    print(f"Loading VIT-MAE weights from {checkpoint}")
+    logger.info(f'loading VIT-MAE weights from {checkpoint}')
     # support loading safetensors
     if checkpoint.endswith(".safetensors"):
         ckpt_vit_pretrain = safetensors.torch.load_file(checkpoint, device="cpu")
@@ -92,8 +95,8 @@ def load_vit_backbone_checkpoint(base: VisionEncoder, checkpoint: str) -> None:
         try:
             ckpt_vit_pretrain = torch.load(checkpoint, map_location="cpu")
         except Exception as e:
-            print(f"Warning: Failed to load checkpoint with default settings: {e}")
-            print("Attempting to load with weights_only=False...")
+            logger.warning(f'failed to load checkpoint with default settings: {e}')
+            logger.warning('attempting to load with weights_only=False...')
             ckpt_vit_pretrain = torch.load(checkpoint, map_location="cpu", weights_only=False)
     # extract state dict if checkpoint contains additional info
     if "state_dict" in ckpt_vit_pretrain:
@@ -161,7 +164,7 @@ def _load_dinov3_with_auth_check(model_name: str, pretrained_patch_size: int) ->
         )
     except OSError as e:
         if "gated repo" in str(e).lower():
-            print(dinov3_access_help)
+            logger.error(dinov3_access_help)
             raise RuntimeError(
                 "Cannot access DINOv3 model. Please follow the instructions above to "
                 "authenticate with HuggingFace."

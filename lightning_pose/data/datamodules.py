@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 import os
 from typing import TYPE_CHECKING, Literal
 
@@ -27,6 +28,8 @@ from lightning_pose.data.utils import (
     split_sizes_from_probabilities,
 )
 from lightning_pose.utils.io import check_video_paths
+
+logger = logging.getLogger(__name__)
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -98,7 +101,7 @@ class BaseDataModule(pl.LightningDataModule):
         """Split the dataset into train, validation, and test subsets."""
 
         datalen = len(self.dataset)
-        print(f"Number of labeled images in the full dataset (train+val+test): {datalen}")
+        logger.info(f'number of labeled images in the full dataset (train+val+test): {datalen}')
 
         # split data based on provided probabilities
         data_splits_list = split_sizes_from_probabilities(
@@ -149,14 +152,14 @@ class BaseDataModule(pl.LightningDataModule):
             self.val_dataset.dataset.imgaug_transform = final_transform  # type: ignore[union-attr]
             if hasattr(self.val_dataset.dataset, "dataset"):
                 # this will get triggered for multiview datasets
-                print("val: updating children datasets with resize imgaug pipeline")
+                logger.debug('val: updating children datasets with resize imgaug pipeline')
                 for _view_name, dset in self.val_dataset.dataset.dataset.items():  # type: ignore[union-attr]
                     dset.imgaug_transform = final_transform
 
             self.test_dataset.dataset.imgaug_transform = final_transform  # type: ignore[union-attr]
             if hasattr(self.test_dataset.dataset, "dataset"):
                 # this will get triggered for multiview datasets
-                print("test: updating children datasets with resize imgaug pipeline")
+                logger.debug('test: updating children datasets with resize imgaug pipeline')
                 for _view_name, dset in self.test_dataset.dataset.dataset.items():  # type: ignore[union-attr]
                     dset.imgaug_transform = final_transform
 
@@ -169,11 +172,11 @@ class BaseDataModule(pl.LightningDataModule):
                 # train_frames
                 self.train_dataset.indices = self.train_dataset.indices[:n_frames]
 
-        print(
-            f"Dataset splits -- "
-            f"train: {len(self.train_dataset)}, "
-            f"val: {len(self.val_dataset)}, "
-            f"test: {len(self.test_dataset)}"
+        logger.info(
+            f'dataset splits -- '
+            f'train: {len(self.train_dataset)}, '
+            f'val: {len(self.val_dataset)}, '
+            f'test: {len(self.test_dataset)}'
         )
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
