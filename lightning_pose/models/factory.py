@@ -118,6 +118,25 @@ def get_model(
                 image_size=image_h,
                 backbone_checkpoint=cfg.model.get('backbone_checkpoint'),
             )
+        elif cfg.model.model_type == 'heatmap_multiview_transformer_mhcrnn':
+            from lightning_pose.models import HeatmapTrackerMultiviewTransformerMHCRNN
+            model = HeatmapTrackerMultiviewTransformerMHCRNN(
+                num_keypoints=cfg.data.num_keypoints,
+                num_views=len(cfg.data.view_names),
+                loss_factory=loss_factories['supervised'],
+                backbone=cfg.model.backbone,
+                pretrained=backbone_pretrained,
+                head=cfg.model.get('head', 'heatmap_mhcrnn_multiview'),
+                downsample_factor=cfg.data.get('downsample_factor', 2),
+                torch_seed=cfg.training.rng_seed_model_pt,
+                optimizer=optimizer,
+                optimizer_params=optimizer_params,
+                lr_scheduler=lr_scheduler,
+                lr_scheduler_params=lr_scheduler_params,
+                image_size=image_h,
+                context_length=cfg.model.get('context_length', 5),
+                backbone_checkpoint=cfg.model.get('backbone_checkpoint'),
+            )
         else:
             raise NotImplementedError(
                 f'{cfg.model.model_type} is an invalid cfg.model.model_type for a fully '

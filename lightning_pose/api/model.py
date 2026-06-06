@@ -59,6 +59,8 @@ def get_model_class(map_type: ALLOWED_MODEL_TYPES, semi_supervised: bool) -> typ
             from lightning_pose.models import HeatmapTrackerMHCRNN as ModelClass
         elif map_type == 'heatmap_multiview_transformer':
             from lightning_pose.models import HeatmapTrackerMultiviewTransformer as ModelClass
+        elif map_type == 'heatmap_multiview_transformer_mhcrnn':
+            from lightning_pose.models import HeatmapTrackerMultiviewTransformerMHCRNN as ModelClass
         else:
             raise NotImplementedError(
                 f'{map_type} is an invalid model_type for a fully supervised model'

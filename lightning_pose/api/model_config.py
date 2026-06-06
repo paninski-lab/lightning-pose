@@ -237,7 +237,12 @@ class ModelConfig:
         )
 
         if self.is_multi_view():
-            assert model_type in ('heatmap', 'heatmap_mhcrnn', 'heatmap_multiview_transformer'), (
+            assert model_type in (
+                'heatmap',
+                'heatmap_mhcrnn',
+                'heatmap_multiview_transformer',
+                'heatmap_multiview_transformer_mhcrnn',
+            ), (
                 f"multi-view models require a heatmap-based model_type, got '{model_type}'"
             )
 

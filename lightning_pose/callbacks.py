@@ -312,6 +312,20 @@ class PatchMasker:
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Apply random patch masking with curriculum learning."""
 
+        # multiview context batch (batch, view, frame, channel, height, width): fold the temporal
+        # axis into the batch and mask each frame independently. masking neighbor frames differently
+        # also gives the temporal branch a job -- recover a masked center-frame patch from the
+        # frames where it is still visible.
+        if images.ndim == 6:
+            b, v, t = images.shape[:3]
+            frame_shape = images.shape[3:]
+            images_5d = images.permute(0, 2, 1, 3, 4, 5).reshape(b * t, v, *frame_shape)
+            masked_5d, patch_mask = self.apply_patch_masking(
+                images_5d, training_step=training_step, is_training=is_training,
+            )
+            masked_images = masked_5d.reshape(b, t, v, *frame_shape).permute(0, 2, 1, 3, 4, 5)
+            return masked_images, patch_mask
+
         # during training, apply masking
         batch_size, num_views, channels, height, width = images.shape
         device = images.device
@@ -701,7 +715,10 @@ def get_callbacks(
         callbacks.append(anneal_weight_callback)
 
     if (
-        cfg.model.model_type == 'heatmap_multiview_transformer'
+        cfg.model.model_type in (
+            'heatmap_multiview_transformer',
+            'heatmap_multiview_transformer_mhcrnn',
+        )
         and cfg.training.get('patch_mask', {}).get('final_ratio', 0.0) > 0.0
     ):
         patch_masking_callback = PatchMasking(

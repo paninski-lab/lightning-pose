@@ -16,6 +16,9 @@ from lightning_pose.models.heatmap_tracker_multiview import (
     HeatmapTrackerMultiviewTransformer,
     SemiSupervisedHeatmapTrackerMultiviewTransformer,
 )
+from lightning_pose.models.heatmap_tracker_multiview_mhcrnn import (
+    HeatmapTrackerMultiviewTransformerMHCRNN,
+)
 from lightning_pose.models.regression_tracker import (
     RegressionTracker,
     SemiSupervisedRegressionTracker,
@@ -28,6 +31,7 @@ HeatmapTrackerMHCRNN.__module__ = 'lightning_pose.models'
 SemiSupervisedHeatmapTrackerMHCRNN.__module__ = 'lightning_pose.models'
 HeatmapTrackerMultiviewTransformer.__module__ = 'lightning_pose.models'
 SemiSupervisedHeatmapTrackerMultiviewTransformer.__module__ = 'lightning_pose.models'
+HeatmapTrackerMultiviewTransformerMHCRNN.__module__ = 'lightning_pose.models'
 RegressionTracker.__module__ = 'lightning_pose.models'
 SemiSupervisedRegressionTracker.__module__ = 'lightning_pose.models'
 
@@ -36,6 +40,7 @@ ALLOWED_MODEL_TYPES = Literal[
     'heatmap',
     'heatmap_mhcrnn',
     'heatmap_multiview_transformer',
+    'heatmap_multiview_transformer_mhcrnn',
 ]
 
 ALLOWED_MODELS = (
@@ -45,6 +50,7 @@ ALLOWED_MODELS = (
     | SemiSupervisedHeatmapTrackerMHCRNN
     | HeatmapTrackerMultiviewTransformer
     | SemiSupervisedHeatmapTrackerMultiviewTransformer
+    | HeatmapTrackerMultiviewTransformerMHCRNN
     | RegressionTracker
     | SemiSupervisedRegressionTracker
 )
@@ -59,6 +65,7 @@ __all__ = [
     'SemiSupervisedHeatmapTrackerMHCRNN',
     'HeatmapTrackerMultiviewTransformer',
     'SemiSupervisedHeatmapTrackerMultiviewTransformer',
+    'HeatmapTrackerMultiviewTransformerMHCRNN',
     'RegressionTracker',
     'SemiSupervisedRegressionTracker',
 ]

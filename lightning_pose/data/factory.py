@@ -125,7 +125,11 @@ def get_dataset(
                 image_resize_width=cfg.data.image_resize_dims.width,
                 imgaug_transform=imgaug_transform,
                 downsample_factor=cfg.data.get('downsample_factor', 2),
-                do_context=cfg.model.model_type == 'heatmap_mhcrnn',  # context only for mhcrnn
+                # context for single-view mhcrnn and the multiview-transformer mhcrnn
+                do_context=cfg.model.model_type in (
+                    'heatmap_mhcrnn',
+                    'heatmap_multiview_transformer_mhcrnn',
+                ),
                 resize=resize,
                 uniform_heatmaps=cfg.training.get('uniform_heatmaps_for_nan_keypoints', False),
                 camera_params_path=cfg.data.get('camera_params_file', None),

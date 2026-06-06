@@ -543,7 +543,6 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         Returns:
             tuple of (cam_params_df, cam_params_file_to_camgroup)
         """
-        assert not self.do_context, "3D augmentations for context model not yet supported"
         cam_params_df = pd.read_csv(camera_params_path, index_col=0, header=[0])
         img_idxs_labels = [
             i.split('/')[-1] for i in self.dataset[self.view_names[0]].image_names
@@ -605,7 +604,6 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 cam_params_file_to_camgroup[calib_file] = self._load_camgroup(calib_file)
 
         if cam_params_file_to_camgroup and all_found:
-            assert not self.do_context, "3D augmentations for context model not yet supported"
             cam_params_df = pd.DataFrame(
                 {'file': calib_files}, index=image_names,  # type: ignore[arg-type]
             )
@@ -727,8 +725,8 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
 
         Parameters
         ----------
-        images: each element is a torch array of shape (3, height, width); h/w can be different for
-            different views
+        images: each element is a torch array of shape (3, height, width), or (frames, 3, height,
+            width) for context models; h/w can be different for different views
         keypoints_orig: shape (num_views, num_keypoints, 2)
         keypoints_aug: shape (num_views, num_keypoints, 2)
         bboxes: shape (num_view, 4) -> x, y, h, w
@@ -746,7 +744,11 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             images, keypoints_orig, keypoints_aug, bboxes, strict=True
         ):
 
-            _, img_height, img_width = orig_img.shape
+            # normalize to (frames, channels, height, width): context images already have a
+            # leading frames dim, single-frame images get a frames dim of 1. the same affine is
+            # applied to every frame so the temporal stack stays geometrically consistent.
+            frames = orig_img if orig_img.dim() == 4 else orig_img.unsqueeze(0)
+            num_frames, _, img_height, img_width = frames.shape
 
             # create a mask for valid keypoints (not NaN in either original or augmented)
             valid_mask = ~(np.isnan(kps_og).any(axis=1) | np.isnan(kps_aug).any(axis=1))
@@ -774,17 +776,17 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             # convert to tensor
             M_tensor = torch.tensor(M, dtype=torch.float32, device=device)
 
-            # apply affine transformation
+            # apply the same affine transformation to every frame
             # image has already been normalized, so pad with minimum value of image instead of 0s
             transformed_image = ktransform.warp_affine(
-                orig_img.unsqueeze(0),  # (C, H, W)
-                M_tensor.unsqueeze(0),  # (2, 3)
-                dsize=(img_height, img_width),  # Keep original size
+                frames,  # (frames, C, H, W)
+                M_tensor.unsqueeze(0).expand(num_frames, -1, -1),  # (frames, 2, 3)
+                dsize=(img_height, img_width),  # keep original size
                 padding_mode="fill",
-                fill_value=torch.ones(3, device=orig_img.device) * orig_img.min(),
+                fill_value=torch.ones(3, device=device) * frames.min(),
             )
 
-            images_transformed.append(transformed_image)
+            images_transformed.append(transformed_image)  # (frames, C, H, W)
 
         return images_transformed
 
@@ -863,6 +865,8 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             images.append(example_dict["images"])
             bboxes.append(example_dict["bbox"])
 
+        # context examples carry a leading frames dim per view: (frames, channels, h, w)
+        is_context = images[0].dim() == 4
         num_keypoints = cast(int, self.num_keypoints)
         if np.all(np.isnan(keypoints_2d)):
             keypoints_3d_aug = np.nan * np.zeros((num_keypoints // self.num_views, 3))
@@ -874,7 +878,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 )
                 for _, example_dict in data_dict.items()
             ]
-            images_aug = [im.unsqueeze(0) for im in images]
+            images_aug = [im if is_context else im.unsqueeze(0) for im in images]
         else:
 
             # triangulate keypoints (2D -> 3D)
@@ -893,7 +897,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 keypoints_2d_aug = keypoints_2d.copy()
 
                 # keep images the same
-                images_aug = [im.unsqueeze(0) for im in images]
+                images_aug = [im if is_context else im.unsqueeze(0) for im in images]
 
             else:
 
@@ -931,7 +935,12 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         data_dict_aug = {}
         for idx_view, view in enumerate(self.view_names):
             example_dict = BaseLabeledExampleDict(
-                images=images_aug_resize[idx_view][0],  # take image from view, ignore batch dim
+                # context keeps the frames dim (frames, C, H, W); else drop it to (C, H, W)
+                images=(
+                    images_aug_resize[idx_view]
+                    if is_context
+                    else images_aug_resize[idx_view][0]
+                ),
                 keypoints=keypoints_2d_aug_resize[idx_view],
                 bbox=data_dict[view]["bbox"],
                 idxs=data_dict[view]["idxs"],
