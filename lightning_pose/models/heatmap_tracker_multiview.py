@@ -190,13 +190,20 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         )
 
         # push data through vit encoder
-        encoder_outputs = self.backbone.vision_encoder.encoder(  # type: ignore[operator]
-            embedding_output,
-            head_mask=None,
-            output_hidden_states=False,
-            return_dict=None,
-        )
-        sequence_output = encoder_outputs[0]
+        # transformers <5.9 exposes a single callable .encoder; >=5.9 uses .layers (ModuleList)
+        vit = self.backbone.vision_encoder  # type: ignore[operator]
+        if hasattr(vit, 'encoder'):
+            sequence_output = vit.encoder(
+                embedding_output,
+                head_mask=None,
+                output_hidden_states=False,
+                return_dict=None,
+            )[0]
+        else:
+            hidden_states = embedding_output
+            for layer in vit.layers:
+                hidden_states = layer(hidden_states)[0]
+            sequence_output = hidden_states
         outputs = self.backbone.vision_encoder.layernorm(sequence_output)  # type: ignore[operator]
         # shape: (batch, view * num_patches, embedding_dim)
 
