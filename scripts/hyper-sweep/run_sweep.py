@@ -128,6 +128,15 @@ def main():
             print(f"\n{name}:\n  {cmd}")
         return
 
+    # pre-download each unique dataset before launching jobs to avoid a race
+    # condition where many jobs simultaneously attempt to populate an empty cache
+    from run_single_job import get_dataset
+    cache_dir = cfg["output"].get("dataset_cache_dir", "/teamspace/lightning_storage/datasets")
+    download_videos = any(len(l) > 0 for l in sweep.get("losses_to_use", [[]]))
+    predict_vids = sweep.get("predict_vids_after_training", False)
+    for dataset_repo in set(sweep["datasets"]):
+        get_dataset(dataset_repo, cache_dir, download_videos, predict_vids)
+
     from lightning_sdk import Job, Machine, Studio
 
     machine = getattr(Machine, li.get("machine", "T4_SMALL"))

@@ -30,6 +30,10 @@ Results are written to teamspace storage and persist after each job ends.
 
 ## Running on Lightning AI
 
+> **Note:** `run_sweep.py` must be run from the `hyper-sweep/` directory so it
+> can import `run_single_job.py`. If you need to run it from elsewhere, add
+> `hyper-sweep/` to your `PYTHONPATH` first.
+
 ### From within a studio
 
 ```bash
@@ -85,9 +89,11 @@ Edit `sweep_config.yaml` before running. Key fields:
 ### Dataset caching
 
 Downloaded datasets are cached in `output.dataset_cache_dir` (default:
-`/teamspace/lightning_storage/datasets`). On first use a dataset is downloaded
-there; subsequent jobs find the cache and skip the download entirely, avoiding
-HuggingFace rate limits during large sweeps.
+`/teamspace/lightning_storage/datasets`). Before launching any jobs,
+`run_sweep.py` pre-downloads each unique dataset into the cache. This means
+the download happens exactly once regardless of sweep size, and all jobs find
+the cache already populated — avoiding both HuggingFace rate limits and race
+conditions from simultaneous first-time downloads.
 
 For local runs, set `output.dataset_cache_dir` in `sweep_config.yaml` to a
 local path, or pass `--dataset_cache_dir /your/path` directly to
