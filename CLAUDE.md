@@ -215,3 +215,19 @@ frame. The index column is ignored on read.
 **Data flow**: `litpose predict --bbox_dir` → `_predict_multi_type` →
 `model.predict_on_video_file(bbox_file=...)` → `predict_video(bbox_file=...)` →
 `PrepareDALI(bbox_df=...)` → `LitDaliWrapper._apply_bbox_crop`.
+
+### Post-training evaluation (`lightning_pose/train.py`)
+
+After training, `train()` calls `_evaluate_on_training_dataset(model, suffix=...)` three times:
+
+1. `suffix=None` — runs inference on the base training CSV (`data.csv_file`). Passes
+   `add_train_val_test_set=True` so metrics are split by train/val/test set membership.
+2. `suffix='_new'` — looks for `{csv_stem}_new.csv`; intended for OOD labeled frames added after
+   training.
+3. `suffix='_test'` — looks for `{csv_stem}_test.csv`; intended for a held-out test set.
+
+Calls with a suffix are silently skipped when the suffixed file does not exist.
+
+**Output**: prediction CSVs are written under `image_preds/{csv_filename}/predictions*.csv` by
+`model.predict_on_label_csv`, then copied to `model_dir/predictions[_{view}][{metric_suffix}][{suffix}].csv`
+for backward compatibility.
