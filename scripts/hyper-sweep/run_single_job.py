@@ -74,6 +74,9 @@ def main():
         ignore_patterns=ignore_patterns,
     )
 
+    # LP asserts video_dir exists even when not using videos
+    Path(data_dir, "videos").mkdir(exist_ok=True)
+
     # -------------------------------------------------------------------------
     # 2. Build and run litpose train
     # -------------------------------------------------------------------------
