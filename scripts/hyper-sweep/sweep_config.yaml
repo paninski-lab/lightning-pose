@@ -11,6 +11,10 @@ sweep:
 
   backbones:
     - resnet50_animal_ap10k
+    # - vits_dino
+    # - vits_dinov2
+    # - vitb_dino
+    # - vitb_dinov2
 
   # Number of labeled frames used for training
   train_frames:
