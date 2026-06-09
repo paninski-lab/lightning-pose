@@ -109,7 +109,8 @@ def train(
 
     if not skip_evaluation:
         _evaluate_on_training_dataset(model)
-        _evaluate_on_training_dataset(model, ood_mode=True)
+        _evaluate_on_training_dataset(model, suffix='_new')
+        _evaluate_on_training_dataset(model, suffix='_test')
         _predict_test_videos(model)
 
     # Update status file to COMPLETED
@@ -142,30 +143,38 @@ def _absolute_csv_file(csv_file: str | Path, data_dir: str | Path) -> Path:
     return csv_file
 
 
-def _evaluate_on_training_dataset(model: Model, ood_mode: bool = False) -> None:
-    """Arguments:
-    ood_mode: look for "_new"-suffixed versions of the training csv file"""
+def _evaluate_on_training_dataset(model: Model, suffix: str | None = None) -> None:
+    """Run inference on a labeled CSV dataset after training.
+
+    Args:
+        model: trained model used for prediction.
+        suffix: if provided, appends this string to the training CSV stem before looking for the
+            file (e.g. ``'_new'`` or ``'_test'``). When ``None``, uses the original training CSV.
+            When a suffix is given the call is silently skipped if the file does not exist.
+    """
     if model.config.is_single_view():
         csv_file = _absolute_csv_file(
             model.config.cfg.data.csv_file, model.config.cfg.data.data_dir
         )
-        if ood_mode:
-            csv_file = csv_file.with_stem(csv_file.stem + "_new")
+        if suffix:
+            csv_file = csv_file.with_stem(csv_file.stem + suffix)
         csv_files = [csv_file]
     else:
         csv_files = []
         for csv_file in model.config.cfg.data.csv_file:
             csv_file = _absolute_csv_file(csv_file, model.config.cfg.data.data_dir)
-            if ood_mode:
-                csv_file = csv_file.with_stem(csv_file.stem + "_new")
+            if suffix:
+                csv_file = csv_file.with_stem(csv_file.stem + suffix)
             csv_files.append(csv_file)
         if model.config.cfg.data.get("camera_params_file"):
             camera_params_file = _absolute_csv_file(
                 model.config.cfg.data.camera_params_file,
                 model.config.cfg.data.data_dir,
             )
-            if ood_mode:
-                camera_params_file = camera_params_file.with_stem(camera_params_file.stem + "_new")
+            if suffix:
+                camera_params_file = camera_params_file.with_stem(
+                    camera_params_file.stem + suffix
+                )
         else:
             camera_params_file = None
 
@@ -180,19 +189,18 @@ def _evaluate_on_training_dataset(model: Model, ood_mode: bool = False) -> None:
         #     bbox_files = []
         #     for bbox_file in model.config.cfg.data.bbox_file:
         #         bbox_file = _absolute_csv_file(bbox_file, model.config.cfg.data.data_dir)
-        #         if ood_mode:
-        #             bbox_file = bbox_file.with_stem(bbox_file.stem + "_new")
+        #         if suffix:
+        #             bbox_file = bbox_file.with_stem(bbox_file.stem + suffix)
         #         bbox_files.append(bbox_file)
         # else:
         #     bbox_files = None
 
-    # ood mode: skip prediction when _new files don't exist.
-    if ood_mode and not csv_files[0].exists():
+    # skip silently when the suffixed file does not exist.
+    if suffix and not csv_files[0].exists():
         return
 
-    # Print a custom message when in OOD mode.
-    if ood_mode:
-        pretty_print_str("Predicting OOD images...")
+    if suffix:
+        pretty_print_str(f"Predicting {suffix.lstrip('_')} images...")
     else:
         pretty_print_str("Predicting train/val/test images...")
 
@@ -204,7 +212,7 @@ def _evaluate_on_training_dataset(model: Model, ood_mode: bool = False) -> None:
             camera_params_file=camera_params_file,
             data_dir=model.config.cfg.data.data_dir,
             compute_metrics=True,
-            add_train_val_test_set=(not ood_mode),
+            add_train_val_test_set=(suffix is None),
         )
     else:
         csv_file = csv_files[0]
@@ -212,7 +220,7 @@ def _evaluate_on_training_dataset(model: Model, ood_mode: bool = False) -> None:
             csv_file=csv_file,
             data_dir=model.config.cfg.data.data_dir,
             compute_metrics=True,
-            add_train_val_test_set=(not ood_mode),
+            add_train_val_test_set=(suffix is None),
         )
 
     # Copy prediction files to legacy location in model dir.
@@ -229,8 +237,8 @@ def _evaluate_on_training_dataset(model: Model, ood_mode: bool = False) -> None:
                 out_file += "_" + view_name
             if metric_suffix:
                 out_file += metric_suffix
-            if ood_mode:
-                out_file += "_new"
+            if suffix:
+                out_file += suffix
             out_file += ".csv"
             out_file = model.model_dir / out_file
 
