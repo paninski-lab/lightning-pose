@@ -191,7 +191,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
 
         # push data through vit encoder
         # transformers <5.9 exposes a single callable .encoder; >=5.9 uses .layers (ModuleList)
-        vit = self.backbone.vision_encoder  # type: ignore[operator]
+        vit: Any = self.backbone.vision_encoder
         if hasattr(vit, 'encoder'):
             sequence_output = vit.encoder(
                 embedding_output,
