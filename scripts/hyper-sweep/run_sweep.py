@@ -12,11 +12,15 @@ Output is written to:
 """
 
 import argparse
+import os
 import time
 from itertools import product
 from pathlib import Path
 
 import yaml
+
+# must be set before huggingface_hub is imported
+os.environ["HF_XET_HIGH_PERFORMANCE"] = "1"
 
 
 def load_config(path: str) -> dict:

@@ -130,10 +130,8 @@ To run a local sweep, call `run_single_job.py` in a loop or adapt
 lightning-pose    # must be installed; provides the litpose CLI
 lightning_sdk     # pip install lightning_sdk  (orchestrator only)
 huggingface_hub   # pip install huggingface_hub (worker)
-hf_transfer       # pip install hf_transfer    (worker; enables fast parallel downloads)
 pyyaml            # pip install pyyaml (orchestrator)
 ```
 
-`hf_transfer` is optional but strongly recommended — without it, HuggingFace downloads
-are sequential and can be 10–20× slower. It is enabled automatically by `run_single_job.py`
-via `os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"`; the package just needs to be installed.
+High-performance downloads are enabled automatically via `HF_XET_HIGH_PERFORMANCE=1`,
+set at the top of `run_single_job.py` before `huggingface_hub` is imported.

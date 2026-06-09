@@ -17,7 +17,7 @@ import subprocess
 from pathlib import Path
 
 # must be set before huggingface_hub is imported
-os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
+os.environ["HF_XET_HIGH_PERFORMANCE"] = "1"
 
 DEFAULT_DATASET_CACHE_DIR = "/teamspace/lightning_storage/datasets"
 
@@ -75,12 +75,24 @@ def get_dataset(dataset_repo, cache_dir, download_videos, predict_vids):
 
     print(f"Downloading {dataset_repo} -> {cache_path}")
     print(f"  ignore_patterns: {ignore_patterns}")
-    snapshot_download(
-        repo_id=dataset_repo,
-        repo_type="dataset",
-        local_dir=str(cache_path),
-        ignore_patterns=ignore_patterns,
-    )
+
+    import time
+    max_retries = 5
+    for attempt in range(1, max_retries + 1):
+        try:
+            snapshot_download(
+                repo_id=dataset_repo,
+                repo_type="dataset",
+                local_dir=str(cache_path),
+                ignore_patterns=ignore_patterns,
+            )
+            break
+        except Exception as e:
+            if attempt == max_retries:
+                raise
+            wait = 60 * attempt  # 60s, 120s, 180s, 240s
+            print(f"  Download attempt {attempt} failed ({e}); retrying in {wait}s...")
+            time.sleep(wait)
 
     # LP asserts video_dir exists even when not using videos
     (cache_path / "videos").mkdir(exist_ok=True)
