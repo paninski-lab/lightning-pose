@@ -82,6 +82,17 @@ Edit `sweep_config.yaml` before running. Key fields:
 | `output.base_dir` | Root path for results on teamspace storage |
 | `debug` | `true` for a 3-epoch smoke test |
 
+### Dataset caching
+
+Downloaded datasets are cached in `output.dataset_cache_dir` (default:
+`/teamspace/lightning_storage/datasets`). On first use a dataset is downloaded
+there; subsequent jobs find the cache and skip the download entirely, avoiding
+HuggingFace rate limits during large sweeps.
+
+For local runs, set `output.dataset_cache_dir` in `sweep_config.yaml` to a
+local path, or pass `--dataset_cache_dir /your/path` directly to
+`run_single_job.py`.
+
 ### Video download gating
 
 To avoid downloading large video files unnecessarily:

@@ -48,6 +48,8 @@ lightning:
 output:
   # Root directory on teamspace storage; <dataset-name> is appended automatically
   base_dir: /teamspace/lightning_storage/sweep-results
+  # Where downloaded datasets are cached; override for local runs
+  dataset_cache_dir: /teamspace/lightning_storage/datasets
 
 # =============================================================================
 # Misc

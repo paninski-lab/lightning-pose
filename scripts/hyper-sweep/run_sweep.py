@@ -69,6 +69,7 @@ def make_worker_command(combo, cfg, worker_script) -> str:
     parts = [
         "python", str(worker_script),
         f"--dataset_repo={dataset_repo}",
+        f"--dataset_cache_dir={cfg['output'].get('dataset_cache_dir', '/teamspace/lightning_storage/datasets')}",
         f"--backbone={backbone}",
         f"--train_frames={train_frames}",
         f"--seed={seed}",
