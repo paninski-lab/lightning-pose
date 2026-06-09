@@ -2,13 +2,15 @@ import contextlib
 import copy
 import os
 import subprocess
+from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 import torch
 from omegaconf import OmegaConf, open_dict
 
 from lightning_pose.data import get_data_module
-from lightning_pose.train import calculate_steps_per_epoch, train
+from lightning_pose.train import _evaluate_on_training_dataset, calculate_steps_per_epoch, train
 
 
 # TODO: Replace with contextlib.chdir in python 3.11.
@@ -216,6 +218,141 @@ def test_train_multi_gpu_unsupervised(cfg, tmp_path, pytestconfig):
     cfg.model.losses_to_use = ["pca_singleview", "pca_multiview", "temporal"]
 
     _execute_multi_gpu_test(cfg, tmp_path, pytestconfig)
+
+
+class TestEvaluateOnTrainingDataset:
+    """Test the _evaluate_on_training_dataset function."""
+
+    def _make_model(self, tmp_path: Path, csv_stem: str = 'CollectedData') -> MagicMock:
+        """Build a minimal single-view model mock."""
+        model = MagicMock()
+        model.config.is_single_view.return_value = True
+        model.config.is_multi_view.return_value = False
+        model.config.cfg.data.csv_file = f'{csv_stem}.csv'
+        model.config.cfg.data.data_dir = str(tmp_path)
+        model.model_dir = tmp_path
+        model.image_preds_dir.return_value = tmp_path / 'image_preds'
+        return model
+
+    def _make_model_multiview(self, tmp_path: Path, csv_stem: str = 'CollectedData') -> MagicMock:
+        """Build a minimal multi-view model mock."""
+        model = MagicMock()
+        model.config.is_single_view.return_value = False
+        model.config.is_multi_view.return_value = True
+        model.config.cfg.data.csv_file = [
+            f'{csv_stem}_top.csv',
+            f'{csv_stem}_bot.csv',
+        ]
+        model.config.cfg.data.data_dir = str(tmp_path)
+        model.config.cfg.data.view_names = ['top', 'bot']
+        model.config.cfg.data.get.return_value = None
+        model.model_dir = tmp_path
+        model.image_preds_dir.return_value = tmp_path / 'image_preds'
+        return model
+
+    def test_evaluate_on_training_dataset_no_suffix(self, tmp_path: Path) -> None:
+        """No suffix: calls predict on the base CSV and copies output files."""
+        model = self._make_model(tmp_path)
+        csv_file = tmp_path / 'CollectedData.csv'
+        csv_file.touch()
+        image_preds_dir = tmp_path / 'image_preds' / 'CollectedData.csv'
+        image_preds_dir.mkdir(parents=True)
+        pred_file = image_preds_dir / 'predictions.csv'
+        pred_file.write_text('data')
+
+        _evaluate_on_training_dataset(model)
+
+        model.predict_on_label_csv.assert_called_once_with(
+            csv_file=csv_file,
+            data_dir=str(tmp_path),
+            compute_metrics=True,
+            add_train_val_test_set=True,
+        )
+        assert (tmp_path / 'predictions.csv').exists()
+
+    def test_evaluate_on_training_dataset_suffix_new(self, tmp_path: Path) -> None:
+        """suffix='_new': calls predict on the _new CSV and copies with _new suffix."""
+        model = self._make_model(tmp_path)
+        csv_file = tmp_path / 'CollectedData_new.csv'
+        csv_file.touch()
+        image_preds_dir = tmp_path / 'image_preds' / 'CollectedData_new.csv'
+        image_preds_dir.mkdir(parents=True)
+        pred_file = image_preds_dir / 'predictions.csv'
+        pred_file.write_text('data')
+
+        _evaluate_on_training_dataset(model, suffix='_new')
+
+        model.predict_on_label_csv.assert_called_once_with(
+            csv_file=csv_file,
+            data_dir=str(tmp_path),
+            compute_metrics=True,
+            add_train_val_test_set=False,
+        )
+        assert (tmp_path / 'predictions_new.csv').exists()
+
+    def test_evaluate_on_training_dataset_suffix_test(self, tmp_path: Path) -> None:
+        """suffix='_test': calls predict on the _test CSV and copies with _test suffix."""
+        model = self._make_model(tmp_path)
+        csv_file = tmp_path / 'CollectedData_test.csv'
+        csv_file.touch()
+        image_preds_dir = tmp_path / 'image_preds' / 'CollectedData_test.csv'
+        image_preds_dir.mkdir(parents=True)
+        pred_file = image_preds_dir / 'predictions.csv'
+        pred_file.write_text('data')
+
+        _evaluate_on_training_dataset(model, suffix='_test')
+
+        model.predict_on_label_csv.assert_called_once_with(
+            csv_file=csv_file,
+            data_dir=str(tmp_path),
+            compute_metrics=True,
+            add_train_val_test_set=False,
+        )
+        assert (tmp_path / 'predictions_test.csv').exists()
+
+    def test_evaluate_on_training_dataset_suffix_missing_file(self, tmp_path: Path) -> None:
+        """suffix given but file absent: returns early without calling predict."""
+        model = self._make_model(tmp_path)
+        # do NOT create CollectedData_new.csv or CollectedData_test.csv
+
+        for suffix in ('_new', '_test'):
+            model.predict_on_label_csv.reset_mock()
+            _evaluate_on_training_dataset(model, suffix=suffix)
+            model.predict_on_label_csv.assert_not_called()
+
+    def test_evaluate_on_training_dataset_multiview_no_suffix(self, tmp_path: Path) -> None:
+        """Multi-view, no suffix: calls predict_on_label_csv_multiview."""
+        model = self._make_model_multiview(tmp_path)
+        for stem in ('CollectedData_top', 'CollectedData_bot'):
+            (tmp_path / f'{stem}.csv').touch()
+            preds_dir = tmp_path / 'image_preds' / f'{stem}.csv'
+            preds_dir.mkdir(parents=True)
+            (preds_dir / 'predictions.csv').write_text('data')
+
+        _evaluate_on_training_dataset(model)
+
+        model.predict_on_label_csv_multiview.assert_called_once()
+        call_kwargs = model.predict_on_label_csv_multiview.call_args.kwargs
+        assert call_kwargs['add_train_val_test_set'] is True
+        assert (tmp_path / 'predictions_top.csv').exists()
+        assert (tmp_path / 'predictions_bot.csv').exists()
+
+    def test_evaluate_on_training_dataset_multiview_suffix_test(self, tmp_path: Path) -> None:
+        """Multi-view, suffix='_test': uses _test CSV files and copies with _test suffix."""
+        model = self._make_model_multiview(tmp_path)
+        for stem in ('CollectedData_top_test', 'CollectedData_bot_test'):
+            (tmp_path / f'{stem}.csv').touch()
+            preds_dir = tmp_path / 'image_preds' / f'{stem}.csv'
+            preds_dir.mkdir(parents=True)
+            (preds_dir / 'predictions.csv').write_text('data')
+
+        _evaluate_on_training_dataset(model, suffix='_test')
+
+        model.predict_on_label_csv_multiview.assert_called_once()
+        call_kwargs = model.predict_on_label_csv_multiview.call_args.kwargs
+        assert call_kwargs['add_train_val_test_set'] is False
+        assert (tmp_path / 'predictions_top_test.csv').exists()
+        assert (tmp_path / 'predictions_bot_test.csv').exists()
 
 
 class TestCalculateStepsPerEpoch:
