@@ -6,6 +6,8 @@ sweep:
   # HuggingFace repo IDs (org/dataset-name)
   datasets:
     - paninski-lab/mirror-mouse-fused
+    # - paninski-lab/mirror-fish
+    # - paninski-lab/crim13
 
   backbones:
     - resnet50_animal_ap10k
