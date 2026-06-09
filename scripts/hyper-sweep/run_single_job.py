@@ -59,7 +59,7 @@ def main():
     from huggingface_hub import snapshot_download
 
     # videos-for-each-labeled-frame is only needed for post-hoc smoothing, never for training
-    ignore_patterns = ["videos-for-each-labeled-frame*"]
+    ignore_patterns = ["videos-for-each-labeled-frame/*"]
     if not args.download_videos:
         ignore_patterns.append("videos/*")
     if not args.predict_vids:
