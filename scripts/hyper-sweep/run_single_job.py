@@ -12,9 +12,13 @@ Can also be called directly for local sweeps (no Lightning AI required):
 """
 
 import argparse
+import os
 import shutil
 import subprocess
 from pathlib import Path
+
+# must be set before huggingface_hub is imported
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 
 
 def parse_args():
