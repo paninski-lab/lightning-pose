@@ -53,16 +53,58 @@ def parse_args():
     return p.parse_args()
 
 
-def get_dataset(dataset_repo, cache_dir, download_videos, predict_vids):
-    """Return path to dataset, downloading from HuggingFace only if not cached."""
+def _snapshot_worker(repo_id, repo_type, local_dir, ignore_patterns):
+    """Runs snapshot_download in a child process so it can be hard-killed on stall."""
     from huggingface_hub import snapshot_download
+    snapshot_download(
+        repo_id=repo_id,
+        repo_type=repo_type,
+        local_dir=local_dir,
+        ignore_patterns=ignore_patterns,
+    )
+
+
+def _watchdog(process, cache_path, stall_timeout, check_interval=30):
+    """Monitors download progress; terminates process if no bytes land for stall_timeout seconds."""
+    import time
+
+    def dir_size():
+        try:
+            return sum(f.stat().st_size for f in Path(cache_path).rglob("*") if f.is_file())
+        except Exception:
+            return 0
+
+    last_size = dir_size()
+    last_progress = time.time()
+
+    while process.is_alive():
+        time.sleep(check_interval)
+        size = dir_size()
+        if size > last_size:
+            last_size = size
+            last_progress = time.time()
+        elif time.time() - last_progress > stall_timeout:
+            print(f"  No download progress for {stall_timeout}s — terminating stalled download.")
+            process.terminate()
+            return
+
+
+def get_dataset(dataset_repo, cache_dir, download_videos, predict_vids):
+    """Return path to dataset, downloading from HuggingFace only if not cached.
+
+    Runs the download in a subprocess watched by a progress monitor. If no bytes
+    land for stall_timeout seconds the download is killed and retried, allowing
+    arbitrarily large/slow downloads while still catching rate-limit hangs.
+    """
+    import multiprocessing
+    import threading
+    import time
 
     dataset_name = dataset_repo.split("/")[-1]
     cache_path = Path(cache_dir) / dataset_name
 
     if cache_path.exists():
         print(f"Using cached dataset at {cache_path}")
-        # ensure videos/ exists even if it wasn't downloaded
         (cache_path / "videos").mkdir(exist_ok=True)
         return cache_path
 
@@ -76,23 +118,32 @@ def get_dataset(dataset_repo, cache_dir, download_videos, predict_vids):
     print(f"Downloading {dataset_repo} -> {cache_path}")
     print(f"  ignore_patterns: {ignore_patterns}")
 
-    import time
     max_retries = 5
+    stall_timeout = 5 * 60  # kill if no bytes received for 5 minutes
+    retry_wait = 90          # pause before retrying to let rate limit window reset
+
     for attempt in range(1, max_retries + 1):
-        try:
-            snapshot_download(
-                repo_id=dataset_repo,
-                repo_type="dataset",
-                local_dir=str(cache_path),
-                ignore_patterns=ignore_patterns,
-            )
-            break
-        except Exception as e:
-            if attempt == max_retries:
-                raise
-            wait = 60 * attempt  # 60s, 120s, 180s, 240s
-            print(f"  Download attempt {attempt} failed ({e}); retrying in {wait}s...")
-            time.sleep(wait)
+        p = multiprocessing.Process(
+            target=_snapshot_worker,
+            args=(dataset_repo, "dataset", str(cache_path), ignore_patterns),
+        )
+        p.start()
+
+        watcher = threading.Thread(
+            target=_watchdog, args=(p, cache_path, stall_timeout), daemon=True
+        )
+        watcher.start()
+        p.join()
+
+        if p.exitcode == 0:
+            break  # success
+
+        msg = "stalled" if not p.is_alive() else f"exited with code {p.exitcode}"
+        if attempt == max_retries:
+            raise RuntimeError(f"Failed to download {dataset_repo} after {max_retries} attempts ({msg})")
+
+        print(f"  Download attempt {attempt}/{max_retries} {msg}; retrying in {retry_wait}s...")
+        time.sleep(retry_wait)
 
     # LP asserts video_dir exists even when not using videos
     (cache_path / "videos").mkdir(exist_ok=True)
