@@ -115,6 +115,8 @@ def get_dataset(dataset_repo, cache_dir, download_videos, predict_vids):
     if not predict_vids:
         ignore_patterns.append("videos_test/*")
 
+    cache_path.mkdir(parents=True, exist_ok=True)
+
     print(f"Downloading {dataset_repo} -> {cache_path}")
     print(f"  ignore_patterns: {ignore_patterns}")
 
