@@ -2,7 +2,7 @@
 
 import logging
 from collections import OrderedDict
-from typing import Any
+from typing import Any, Literal, get_args
 
 import torch
 import torch.nn as nn
@@ -13,9 +13,56 @@ logger = logging.getLogger(__name__)
 # to ignore imports for sphix-autoapidoc
 __all__ = []
 
+ALLOWED_CONVNET_BACKBONES = Literal[
+    'resnet18',
+    'resnet34',
+    'resnet50',
+    'resnet101',
+    'resnet152',
+    'resnet50_animal_apose',
+    'resnet50_animal_ap10k',
+    'resnet50_human_jhmdb',
+    'resnet50_human_res_rle',
+    'resnet50_human_top_res',
+    'resnet50_human_hand',
+    'efficientnet_b0',
+    'efficientnet_b1',
+    'efficientnet_b2',
+]
+
+ALLOWED_TRANSFORMER_BACKBONES = Literal[
+    'vits_dino',
+    'vits_dinov2',
+    'vits_dinov3',
+    'vitb_dino',
+    'vitb_dinov2',
+    'vitb_dinov3',
+    'vitb_imagenet',
+    'vitb_sam',
+    'vitb_sam2',
+    'vits_sam2',
+    'vitt_sam2',
+]
+
+ALLOWED_TRANSFORMER_BACKBONES_MULTIVIEW = Literal[
+    'vits_dino',
+    'vits_dinov2',
+    'vits_dinov3',
+    'vitb_dino',
+    'vitb_dinov2',
+    'vitb_dinov3',
+    'vitb_imagenet',
+]
+
+ALLOWED_BACKBONES = ALLOWED_CONVNET_BACKBONES | ALLOWED_TRANSFORMER_BACKBONES
+
+_ALLOWED_BACKBONE_VALUES: frozenset[str] = frozenset(
+    get_args(ALLOWED_CONVNET_BACKBONES) + get_args(ALLOWED_TRANSFORMER_BACKBONES)
+)
+
 
 def build_backbone(
-    backbone_arch: str,
+    backbone_arch: ALLOWED_BACKBONES,
     pretrained: bool = True,
     model_type: str = 'heatmap',
     image_size: int = 256,
@@ -36,15 +83,23 @@ def build_backbone(
 
     Returns:
         tuple of (backbone module, number of output features)
+
+    Raises:
+        ValueError: if ``backbone_arch`` is not in ``ALLOWED_BACKBONES``.
     """
+    if backbone_arch not in _ALLOWED_BACKBONE_VALUES:
+        raise ValueError(
+            f'"{backbone_arch}" is not a valid backbone; '
+            f'allowed backbones: {sorted(_ALLOWED_BACKBONE_VALUES)}'
+        )
     if backbone_arch.startswith('vit'):
-        return _build_transformer_backbone(backbone_arch, image_size=image_size, **kwargs)
+        return _build_transformer_backbone(backbone_arch, image_size=image_size, **kwargs)  # type: ignore[arg-type]
     else:
-        return _build_convnet_backbone(backbone_arch, pretrained=pretrained, model_type=model_type)
+        return _build_convnet_backbone(backbone_arch, pretrained=pretrained, model_type=model_type)  # type: ignore[arg-type]
 
 
 def _build_transformer_backbone(
-    backbone_arch: str,
+    backbone_arch: ALLOWED_TRANSFORMER_BACKBONES,
     image_size: int = 256,
     **kwargs: Any,
 ) -> tuple[nn.Module, int]:
@@ -111,7 +166,7 @@ def _build_transformer_backbone(
 
 
 def _build_convnet_backbone(
-    backbone_arch: str,
+    backbone_arch: ALLOWED_CONVNET_BACKBONES,
     pretrained: bool = True,
     model_type: str = 'heatmap',
 ) -> tuple[nn.Module, int]:

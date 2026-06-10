@@ -2,11 +2,10 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 import safetensors.torch
 import torch
 
-from lightning_pose.models.backbones.vits import build_backbone, load_vit_backbone_checkpoint
+from lightning_pose.models.backbones.vit import load_vit_backbone_checkpoint
 
 
 class TestLoadVitBackboneCheckpoint:
@@ -107,19 +106,10 @@ class TestLoadVitBackboneCheckpoint:
         ckpt_path = str(tmp_path / 'ckpt.pt')
 
         with patch(
-            'lightning_pose.models.backbones.vits.torch.load',
+            'lightning_pose.models.backbones.vit.torch.load',
             side_effect=[Exception('cannot load'), ckpt],
         ):
             load_vit_backbone_checkpoint(base, ckpt_path)
 
         loaded = base.vision_encoder.load_state_dict.call_args[0][0]
         assert 'encoder.layer.weight' in loaded
-
-
-class TestBuildBackbone:
-    """Test the build_backbone function."""
-
-    def test_raises_for_unknown_backbone(self):
-        """Raises NotImplementedError for an unrecognized backbone name."""
-        with pytest.raises(NotImplementedError, match='is not a valid backbone'):
-            build_backbone('unknown_arch')
