@@ -79,6 +79,9 @@ VIT_BACKBONES: list[ALLOWED_BACKBONES] = [
     # "vitb_dinov3",
     "vitb_imagenet",
     "vitb_sam",
+    "vitt_sam2",
+    "vits_sam2",
+    "vitb_sam2",
 ]
 
 
@@ -128,6 +131,9 @@ def test_backbones_vit():
         if backbone == "vitb_sam":
             from transformers.models.sam.modeling_sam import SamPatchEmbeddings
             assert isinstance(model.backbone.vision_encoder.patch_embed, SamPatchEmbeddings)  # type: ignore[attr-defined]
+        elif backbone in ("vitb_sam2", "vits_sam2", "vitt_sam2"):
+            from transformers.models.sam2.modeling_sam2 import Sam2PatchEmbeddings
+            assert isinstance(model.backbone.vision_encoder.patch_embed, Sam2PatchEmbeddings)  # type: ignore[attr-defined]
         elif backbone in ["vits_dino", "vitb_dino", "vitb_imagenet"]:
             from transformers.models.vit.modeling_vit import ViTEmbeddings
             assert isinstance(model.backbone.vision_encoder.embeddings, ViTEmbeddings)  # type: ignore[attr-defined]
@@ -285,6 +291,21 @@ def test_representation_shapes_vit():
             128: torch.Size([BATCH_SIZE, 768, 8, 8]),
             256: torch.Size([BATCH_SIZE, 768, 16, 16]),
             384: torch.Size([BATCH_SIZE, 768, 24, 24]),
+        },
+        "vitt_sam2": {
+            128: torch.Size([BATCH_SIZE, 768, 4, 4]),
+            256: torch.Size([BATCH_SIZE, 768, 8, 8]),
+            384: torch.Size([BATCH_SIZE, 768, 12, 12]),
+        },
+        "vits_sam2": {
+            128: torch.Size([BATCH_SIZE, 768, 4, 4]),
+            256: torch.Size([BATCH_SIZE, 768, 8, 8]),
+            384: torch.Size([BATCH_SIZE, 768, 12, 12]),
+        },
+        "vitb_sam2": {
+            128: torch.Size([BATCH_SIZE, 896, 4, 4]),
+            256: torch.Size([BATCH_SIZE, 896, 8, 8]),
+            384: torch.Size([BATCH_SIZE, 896, 12, 12]),
         },
     }
 
