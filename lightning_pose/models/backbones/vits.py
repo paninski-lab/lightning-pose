@@ -41,18 +41,22 @@ def build_backbone(
         base = VisionEncoder(model_name="facebook/dino-vitb16")
         encoder_embed_dim = base.vision_encoder.config.hidden_size
     elif backbone_arch == "vits_dinov2":
+        from lightning_pose.models.backbones.vit_dino import VisionEncoderDino
         base = VisionEncoderDino(model_name="facebook/dinov2-small", pretrained_patch_size=14)
         encoder_embed_dim = base.vision_encoder.config.hidden_size
     elif backbone_arch == "vitb_dinov2":
+        from lightning_pose.models.backbones.vit_dino import VisionEncoderDino
         base = VisionEncoderDino(model_name="facebook/dinov2-base", pretrained_patch_size=14)
         encoder_embed_dim = base.vision_encoder.config.hidden_size
     elif backbone_arch == "vits_dinov3":
-        base = _load_dinov3_with_auth_check(
+        from lightning_pose.models.backbones.vit_dino import VisionEncoderDino
+        base = VisionEncoderDino(
             model_name="facebook/dinov3-vits16-pretrain-lvd1689m", pretrained_patch_size=16,
         )
         encoder_embed_dim = base.vision_encoder.config.hidden_size
     elif backbone_arch == "vitb_dinov3":
-        base = _load_dinov3_with_auth_check(
+        from lightning_pose.models.backbones.vit_dino import VisionEncoderDino
+        base = VisionEncoderDino(
             model_name="facebook/dinov3-vitb16-pretrain-lvd1689m", pretrained_patch_size=16,
         )
         encoder_embed_dim = base.vision_encoder.config.hidden_size
@@ -123,65 +127,6 @@ def load_vit_backbone_checkpoint(base: VisionEncoder, checkpoint: str) -> None:
     base.vision_encoder.load_state_dict(vit_mae_state_dict, strict=False)
 
 
-def _load_dinov3_with_auth_check(model_name: str, pretrained_patch_size: int) -> VisionEncoderDino:
-    """Helper to load DINOv3 models with proper error handling for gated repos."""
-
-    dinov3_access_help = """
-    ================================================================================
-    DINOv3 Model Access Required
-    ================================================================================
-
-    The DINOv3 models are gated on HuggingFace and require authentication.
-    Please follow these steps to gain access:
-
-    1. CREATE A HUGGINGFACE ACCOUNT (if you don't have one):
-       - Go to https://huggingface.co/join
-       - Sign up with your email
-
-    2. REQUEST ACCESS TO THE MODEL:
-       - Visit https://huggingface.co/facebook/dinov3-vits16-pretrain-lvd1689m
-       - Click "Agree and access repository"
-       - Accept the terms of use
-       - You should receive immediate access
-
-    3. CREATE AN ACCESS TOKEN:
-       - Go to https://huggingface.co/settings/tokens
-       - Click "New token"
-       - Give it a name (e.g., "lightning-pose-dinov3")
-       - Select "Read" permission (sufficient for downloading models)
-       - Click "Generate token"
-       - COPY THE TOKEN - you won't be able to see it again!
-
-    4. INSTALL/UPDATE HUGGINGFACE PACKAGES AND LOGIN FROM THE TERMINAL:
-       pip install -U transformers huggingface_hub
-       hf auth login
-
-       When prompted, paste your token and press Enter.
-
-    5. RE-RUN YOUR CODE
-
-    For more information, visit: https://huggingface.co/docs/hub/security-tokens
-
-    Note: Both vits_dinov3 and vitb_dinov3 backbones require this authentication.
-    ================================================================================
-    """
-
-    try:
-        return VisionEncoderDino(
-            model_name=model_name,
-            pretrained_patch_size=pretrained_patch_size,
-        )
-    except OSError as e:
-        if "gated repo" in str(e).lower():
-            logger.error(dinov3_access_help)
-            raise RuntimeError(
-                "Cannot access DINOv3 model. Please follow the instructions above to "
-                "authenticate with HuggingFace."
-            ) from e
-        else:
-            raise
-
-
 class VisionEncoder(torch.nn.Module):
     """Wrapper around generic ViT Encoder."""
 
@@ -221,93 +166,3 @@ class VisionEncoder(torch.nn.Module):
         outputs = outputs.reshape(N, H, W, -1).permute(0, 3, 1, 2)
 
         return outputs
-
-
-class VisionEncoderDino(torch.nn.Module):
-    """Wrapper around DINOv2/DINOv3 Encoder."""
-
-    def __init__(self, model_name: str, pretrained_patch_size: int) -> None:
-        """Initialize VisionEncoderDino from a HuggingFace DINO model.
-
-        If ``pretrained_patch_size`` differs from 16, the patch-embedding projection weights are
-        resized via bicubic interpolation so that patch size 16 is used for all models.
-
-        Args:
-            model_name: HuggingFace model identifier (e.g., ``"facebook/dinov2-base"``).
-            pretrained_patch_size: the native patch size of the pre-trained checkpoint.
-        """
-        super().__init__()
-        from transformers import AutoModel
-        self.vision_encoder = AutoModel.from_pretrained(model_name)
-        # self.vision_encoder is one of:
-        # - transformers.models.dinov2.modeling_dinov2.Dinov2Model
-        # - transformers.models.dinov3_vit.modeling_dinov3_vit.Dinov3ViTModel
-
-        if pretrained_patch_size != 16:
-            # use patch size of 16 for all models
-            patch_size = 16
-            self.patch_size = patch_size
-            self._resize_patch_embedding_weights()
-            self.vision_encoder.config.patch_size = patch_size
-            self.vision_encoder.embeddings.patch_size = patch_size
-            self.vision_encoder.embeddings.patch_embeddings.patch_size = patch_size
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass through the vision encoder.
-
-        Args:
-            x: Input tensor of shape (B, C, H, W)
-
-        Returns:
-            Encoded features
-        """
-
-        outputs = self.vision_encoder(
-            x,
-            output_hidden_states=False,
-        ).last_hidden_state
-
-        # v2/v3 each have 1 CLS token, v3 has 4 register tokens
-        num_prefix = 1 + getattr(self.vision_encoder.config, "num_register_tokens", 0)
-        # skip the cls+register token
-        outputs = outputs[:, num_prefix:, ...]  # [N, S, D]
-        # change the shape to [N, H, W, D] -> [N, D, H, W]
-        N, _, height, width = x.shape
-        patch_size = self.vision_encoder.config.patch_size
-        H, W = int(height / patch_size), int(width / patch_size)
-        outputs = outputs.reshape(N, H, W, -1).permute(0, 3, 1, 2)
-
-        return outputs
-
-    def _resize_patch_embedding_weights(self) -> None:
-        """Resize the patch-embedding projection to use patch size 16 via bicubic interpolation."""
-
-        projection = self.vision_encoder.embeddings.patch_embeddings.projection
-        out_channels, in_channels, old_h, old_w = projection.weight.shape
-        new_h, new_w = (self.patch_size, self.patch_size)
-
-        # Reshape to (out_channels * in_channels, 1, old_h, old_w) for interpolation
-        reshaped = projection.weight.data.view(out_channels * in_channels, 1, old_h, old_w)
-
-        # Use bicubic interpolation
-        resized = torch.nn.functional.interpolate(
-            reshaped,
-            size=(new_h, new_w),
-            mode='bicubic',
-            align_corners=True,
-            antialias=True,  # reduces aliasing artifacts
-        )
-
-        # Reshape back to original format
-        new_weights = resized.view(out_channels, in_channels, new_h, new_w)
-
-        new_projection = torch.nn.Conv2d(
-            in_channels, out_channels, kernel_size=new_h, stride=new_h,
-            bias=projection.bias is not None,
-        )
-        new_projection.weight.data = new_weights
-        if projection.bias is not None:
-            assert new_projection.bias is not None
-            new_projection.bias.data = projection.bias.data
-
-        self.vision_encoder.embeddings.patch_embeddings.projection = new_projection
