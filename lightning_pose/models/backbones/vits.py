@@ -68,6 +68,15 @@ def build_backbone(
             finetune_img_size=image_size,
         )
         encoder_embed_dim = base.vision_encoder.config.hidden_size
+    elif backbone_arch in ("vitb_sam2", "vits_sam2", "vitt_sam2"):
+        from lightning_pose.models.backbones.vit_sam2 import VisionEncoderSam2
+        _sam2_model_names = {
+            "vitb_sam2": "facebook/sam2.1-hiera-base-plus",
+            "vits_sam2": "facebook/sam2.1-hiera-small",
+            "vitt_sam2": "facebook/sam2.1-hiera-tiny",
+        }
+        base = VisionEncoderSam2(model_name=_sam2_model_names[backbone_arch])
+        encoder_embed_dim = base.vision_encoder.config.embed_dim_per_stage[-1]
     else:
         raise NotImplementedError(f"{backbone_arch} is not a valid backbone")
 
