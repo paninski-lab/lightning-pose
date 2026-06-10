@@ -71,7 +71,20 @@ python run_sweep.py --skip_existing
 
 ## Configuration
 
-Edit `sweep_config.yaml` before running. Key fields:
+Before editing, copy `sweep_config.yaml` outside the LP repo so your changes
+are not committed:
+
+```bash
+cp scripts/hyper-sweep/sweep_config.yaml /path/to/your/configs/sweep_config.yaml
+```
+
+Then pass your copy to the script:
+
+```bash
+python run_sweep.py --config /path/to/your/configs/sweep_config.yaml
+```
+
+Key fields:
 
 | Field | Description |
 |-------|-------------|
@@ -135,3 +148,24 @@ pyyaml            # pip install pyyaml (orchestrator)
 
 High-performance downloads are enabled automatically via `HF_XET_HIGH_PERFORMANCE=1`,
 set at the top of `run_single_job.py` before `huggingface_hub` is imported.
+
+## Plotting results
+
+`plot_results.ipynb` visualizes pixel error vs. ensemble std dev for a completed
+sweep. Before using it, **copy the notebook outside the LP repo** so that any
+edits (dataset selection, colors, axis limits) are not committed back to the
+repository:
+
+```bash
+cp scripts/hyper-sweep/plot_results.ipynb /path/to/your/notebooks/
+```
+
+Then install the one extra dependency:
+
+```bash
+pip install seaborn
+```
+
+Open the copy, edit the variables at the top of the configuration cell
+(`base_dir`, `dataset`, `backbones`, `losses`, `train_frames`, `seeds`), and
+run all cells.
