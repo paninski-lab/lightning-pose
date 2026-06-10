@@ -3,15 +3,17 @@
 from __future__ import annotations  # python 3.8 compatibility for sphinx
 
 import collections
+import logging
 import os
 import re
-import warnings
 from pathlib import Path
 from typing import overload
 
 import numpy as np
 import pandas as pd
 from omegaconf import DictConfig, ListConfig
+
+logger = logging.getLogger(__name__)
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -49,9 +51,6 @@ def ckpt_path_from_base_path(
 
     Returns:
         str: path to model checkpoint, or None if none found.
-
-    Raises:
-        ValueError: If multiple 'best' checkpoint files are found (e.g., from save_top_k > 1).
 
     """
     import glob
@@ -98,18 +97,21 @@ def ckpt_path_from_base_path(
         # Found exactly one 'best' checkpoint
         return best_ckpt_files[0]
     elif len(best_ckpt_files) > 1:
-        # Multiple 'best' checkpoints found (e.g., from save_top_k parameter)
-        raise ValueError(
-            f"Multiple 'best' checkpoint files found in {latest_version_files}. "
-            f"Found {len(best_ckpt_files)} files marked as 'best': {best_ckpt_files}. "
-            "Cannot automatically select from multiple 'best' checkpoints."
+        # Multiple 'best' checkpoints found (e.g., stale file on a network filesystem).
+        # Pick the one with the highest step count.
+        logger.warning(
+            f"Multiple 'best' checkpoint files found: {best_ckpt_files}. "
+            "Selecting the one with the highest step count."
         )
+        def _step(f):
+            m = re.search(r"step=(\d+)", f)
+            return int(m.group(1)) if m else -1
+
+        best_ckpt_files.sort(key=_step)
+        return best_ckpt_files[-1]
     else:
         # No 'best' checkpoint found
-        warnings.warn(
-            "No 'best' checkpoint found, falling back to latest checkpoint.",
-            stacklevel=2,
-        )
+        logger.warning("No 'best' checkpoint found, falling back to latest checkpoint.")
         if len(latest_version_files) == 1:
             # Only one checkpoint file exists, return it
             return latest_version_files[0]
