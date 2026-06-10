@@ -22,7 +22,7 @@ from lightning_pose.data.utils import (
 )
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
-from lightning_pose.models.backbones import ALLOWED_TRANSFORMER_BACKBONES
+from lightning_pose.models.backbones import ALLOWED_TRANSFORMER_BACKBONES_MULTIVIEW
 from lightning_pose.models.base import (
     BaseSupervisedTracker,
     SemiSupervisedTrackerMixin,
@@ -45,7 +45,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         num_keypoints: int,
         num_views: int,
         loss_factory: LossFactory | None = None,
-        backbone: ALLOWED_TRANSFORMER_BACKBONES = "vits_dino",
+        backbone: ALLOWED_TRANSFORMER_BACKBONES_MULTIVIEW = "vits_dino",
         pretrained: bool = True,
         head: Literal["heatmap_cnn"] = "heatmap_cnn",
         downsample_factor: Literal[1, 2, 3] = 2,
@@ -63,7 +63,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
             num_keypoints: number of body parts
             num_views: number of camera views
             loss_factory: object to orchestrate loss computation
-            backbone: transformer variant to be used; cannot use convnets with this model
+            backbone: transformer variant to be used; cannot use convnets or vitb_sam
             pretrained: True to load pretrained imagenet weights
             head: architecture used to project per-view information to 2D heatmaps
                 - heatmap_cnn
@@ -78,17 +78,24 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
 
         """
 
-        # for reproducible weight initialization
-        self.torch_seed = torch_seed
-        torch.manual_seed(torch_seed)
-
-        self.num_views = num_views
-
         # backwards compatibility
         if "do_context" in kwargs.keys():
             raise ValueError(
                 "HeatmapTrackerMultiviewTransformer does not currently support context frames"
             )
+
+        allowed = list(ALLOWED_TRANSFORMER_BACKBONES_MULTIVIEW.__args__)  # type: ignore[attr-defined]
+        if backbone not in allowed:
+            raise ValueError(
+                f'backbone "{backbone}" is not supported for multiview transformer models; '
+                f'allowed backbones: {allowed}'
+            )
+
+        # for reproducible weight initialization
+        self.torch_seed = torch_seed
+        torch.manual_seed(torch_seed)
+
+        self.num_views = num_views
 
         super().__init__(
             backbone=backbone,
@@ -375,7 +382,7 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(
         num_views: int,
         loss_factory: LossFactory | None = None,
         loss_factory_unsupervised: LossFactory | None = None,
-        backbone: ALLOWED_TRANSFORMER_BACKBONES = "vits_dino",
+        backbone: ALLOWED_TRANSFORMER_BACKBONES_MULTIVIEW = "vits_dino",
         pretrained: bool = True,
         head: Literal["heatmap_cnn"] = "heatmap_cnn",
         downsample_factor: Literal[1, 2, 3] = 2,
