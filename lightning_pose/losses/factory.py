@@ -1,4 +1,14 @@
-"""High-level loss class that orchestrates the individual losses."""
+"""Factory utilities for building and combining losses from a Hydra config.
+
+Three components work together:
+
+- :func:`get_loss_classes` — returns the registry mapping loss-name strings to classes.
+- :func:`get_loss_factories` — reads ``cfg.losses`` and ``cfg.model.losses_to_use``,
+  assembles per-loss parameter dicts, and returns a ``{'supervised': LossFactory,
+  'unsupervised': LossFactory}`` dict ready to be passed to a model constructor.
+- :class:`LossFactory` — a ``LightningModule`` that holds instantiated loss objects and
+  computes the total weighted loss in its ``__call__`` method.
+"""
 
 import logging
 from typing import Any, Literal
@@ -127,18 +137,21 @@ def get_loss_factories(
                     'need to update unimodal and/or temporal heatmap loss to not use '
                     'cfg.data.image_resize_dims, which has been deprecated.'
                 )
-                height_og = cfg.data.image_resize_dims.height
-                width_og = cfg.data.image_resize_dims.width
-                loss_params_dict['unsupervised'][loss_name]['original_image_height'] = height_og
-                loss_params_dict['unsupervised'][loss_name]['original_image_width'] = width_og
-                height_ds = int(height_og // (2 ** cfg.data.get('downsample_factor', 2)))
-                width_ds = int(width_og // (2 ** cfg.data.get('downsample_factor', 2)))
-                loss_params_dict['unsupervised'][loss_name]['downsampled_image_height'] = height_ds
-                loss_params_dict['unsupervised'][loss_name]['downsampled_image_width'] = width_ds
-                if loss_name[:8] == 'unimodal':
-                    loss_params_dict['unsupervised'][loss_name]['uniform_heatmaps'] = (
-                        cfg.training.get('uniform_heatmaps_for_nan_keypoints', False)
-                    )
+                # TODO: unreachable — remove or restore once image_resize_dims is updated
+                # height_og = cfg.data.image_resize_dims.height
+                # width_og = cfg.data.image_resize_dims.width
+                # loss_params_dict['unsupervised'][loss_name]['original_image_height'] = height_og
+                # loss_params_dict['unsupervised'][loss_name]['original_image_width'] = width_og
+                # height_ds = int(height_og // (2 ** cfg.data.get('downsample_factor', 2)))
+                # width_ds = int(width_og // (2 ** cfg.data.get('downsample_factor', 2)))
+                # loss_params_dict['unsupervised'][loss_name]['downsampled_image_height'] = (
+                #     height_ds
+                # )
+                # loss_params_dict['unsupervised'][loss_name]['downsampled_image_width'] = width_ds
+                # if loss_name[:8] == 'unimodal':
+                #     loss_params_dict['unsupervised'][loss_name]['uniform_heatmaps'] = (
+                #         cfg.training.get('uniform_heatmaps_for_nan_keypoints', False)
+                #     )
             elif loss_name == 'pca_multiview':
                 if cfg.data.get('view_names', None) and len(cfg.data.view_names) > 1:
                     num_keypoints = cfg.data.num_keypoints
