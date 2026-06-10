@@ -238,7 +238,7 @@ def _build_convnet_backbone(
         tuple of (backbone module, number of output features)
     """
     if 'resnet50_animal' in backbone_arch:
-        base = tvmodels.resnet50(weights=None)
+        base = tvmodels.resnet50(weights=None)  # type: ignore[call-arg]
         backbone_type = '_'.join(backbone_arch.split('_')[2:])
         if backbone_type == 'apose':
             ckpt_url = 'https://download.openmmlab.com/mmpose/animal/resnet/res50_animalpose_256x256-e1f30bff_20210426.pth'  # noqa: E501
@@ -252,7 +252,7 @@ def _build_convnet_backbone(
         base.load_state_dict(new_state_dict, strict=False)
 
     elif 'resnet50_human' in backbone_arch:
-        base = tvmodels.resnet50(weights=None)
+        base = tvmodels.resnet50(weights=None)  # type: ignore[call-arg]
         backbone_type = '_'.join(backbone_arch.split('_')[2:])
         if backbone_type == 'jhmdb':
             ckpt_url = 'https://download.openmmlab.com/mmpose/top_down/resnet/res50_jhmdb_sub3_256x256-c4ec1a0b_20201122.pth'  # noqa: E501
@@ -272,28 +272,34 @@ def _build_convnet_backbone(
     else:
         if pretrained:
             if backbone_arch == 'resnet18':
-                from torchvision.models import ResNet18_Weights
+                from torchvision.models import ResNet18_Weights  # type: ignore[attr-defined]
                 weights = ResNet18_Weights.IMAGENET1K_V1
             elif backbone_arch == 'resnet34':
-                from torchvision.models import ResNet34_Weights
+                from torchvision.models import ResNet34_Weights  # type: ignore[attr-defined]
                 weights = ResNet34_Weights.IMAGENET1K_V1
             elif backbone_arch == 'resnet50':
-                from torchvision.models import ResNet50_Weights
+                from torchvision.models import ResNet50_Weights  # type: ignore[attr-defined]
                 weights = ResNet50_Weights.IMAGENET1K_V2
             elif backbone_arch == 'resnet101':
-                from torchvision.models import ResNet101_Weights
+                from torchvision.models import ResNet101_Weights  # type: ignore[attr-defined]
                 weights = ResNet101_Weights.IMAGENET1K_V2
             elif backbone_arch == 'resnet152':
-                from torchvision.models import ResNet152_Weights
+                from torchvision.models import ResNet152_Weights  # type: ignore[attr-defined]
                 weights = ResNet152_Weights.IMAGENET1K_V2
             elif backbone_arch == 'efficientnet_b0':
-                from torchvision.models import EfficientNet_B0_Weights
+                from torchvision.models import (
+                    EfficientNet_B0_Weights,  # type: ignore[attr-defined]
+                )
                 weights = EfficientNet_B0_Weights.IMAGENET1K_V1
             elif backbone_arch == 'efficientnet_b1':
-                from torchvision.models import EfficientNet_B1_Weights
+                from torchvision.models import (
+                    EfficientNet_B1_Weights,  # type: ignore[attr-defined]
+                )
                 weights = EfficientNet_B1_Weights.IMAGENET1K_V2
             elif backbone_arch == 'efficientnet_b2':
-                from torchvision.models import EfficientNet_B2_Weights
+                from torchvision.models import (
+                    EfficientNet_B2_Weights,  # type: ignore[attr-defined]
+                )
                 weights = EfficientNet_B2_Weights.IMAGENET1K_V1
             else:
                 raise NotImplementedError(f'"{backbone_arch}" is not a valid convnet backbone')

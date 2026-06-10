@@ -214,7 +214,7 @@ def test_backbones_efficientnet(backbone):
     model = BaseFeatureExtractor(backbone=backbone).to(_TORCH_DEVICE)
     assert isinstance(
         list(model.backbone.children())[-1][-2][0],  # type: ignore[index]
-        torchvision.models.efficientnet.MBConv,
+        torchvision.models.efficientnet.MBConv,  # type: ignore[attr-defined]
     )
     del model
     gc.collect()
