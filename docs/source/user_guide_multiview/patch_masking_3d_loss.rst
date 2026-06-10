@@ -19,7 +19,7 @@ specified in the configuration file:
 
 The backbone can be any of the available backbones that start with the string "vit"
 (see options :ref:`here <config_file_model>`),
-indicating Vision Transformer.
+indicating Vision Transformer, with the exception of ``vitb_sam``.
 The "heatmap_multiview_transformer" will then use the specified backbone to process all camera
 view simultaneously.
 
