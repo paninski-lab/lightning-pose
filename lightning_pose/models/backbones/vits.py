@@ -62,8 +62,8 @@ def build_backbone(
         if kwargs.get("backbone_checkpoint"):
             load_vit_backbone_checkpoint(base, kwargs["backbone_checkpoint"])
     elif backbone_arch == "vitb_sam":
-        from lightning_pose.models.backbones.vit_sam import SamVisionEncoder
-        base = SamVisionEncoder(
+        from lightning_pose.models.backbones.vit_sam import VisionEncoderSam
+        base = VisionEncoderSam(
             model_name="facebook/sam-vit-base",
             finetune_img_size=image_size,
         )
