@@ -1,4 +1,26 @@
-"""Factory for constructing backbone networks."""
+"""Factory and type constants for backbone networks.
+
+This module is the single source of truth for backbone identifiers. It owns the
+three ``ALLOWED_*`` Literal type aliases and the ``build_backbone`` public entry point.
+
+**Type hierarchy**::
+
+    ALLOWED_BACKBONES = ALLOWED_CONVNET_BACKBONES | ALLOWED_TRANSFORMER_BACKBONES
+    ALLOWED_TRANSFORMER_BACKBONES_MULTIVIEW ⊂ ALLOWED_TRANSFORMER_BACKBONES
+        (excludes vitb_sam, vitb_sam2, vits_sam2, vitt_sam2 — SAM/SAM2 architectures
+        are incompatible with the multiview transformer cross-attention block because
+        they lack the standard ViT ``embeddings`` module and use NHWC tensor layout)
+
+**Dispatch**:  ``build_backbone`` validates the name then dispatches on the ``vit``
+prefix — ViT variants go to ``_build_transformer_backbone``, convnets to
+``_build_convnet_backbone``.
+
+**Lazy imports**: all ``lightning_pose`` backbone wrapper classes
+(``VisionEncoder``, ``VisionEncoderDino``, etc.) are imported *inside* the helper
+functions rather than at module level. This module is loaded during
+``lightning_pose.models.backbones.__init__`` initialisation, so a top-level import
+from anywhere else in ``lightning_pose`` would create a circular import.
+"""
 
 import logging
 from collections import OrderedDict
@@ -56,6 +78,8 @@ ALLOWED_TRANSFORMER_BACKBONES_MULTIVIEW = Literal[
 
 ALLOWED_BACKBONES = ALLOWED_CONVNET_BACKBONES | ALLOWED_TRANSFORMER_BACKBONES
 
+# frozenset for O(1) membership tests in the build_backbone guard; derived from the
+# Literal type args so it stays in sync with ALLOWED_BACKBONES automatically.
 _ALLOWED_BACKBONE_VALUES: frozenset[str] = frozenset(
     get_args(ALLOWED_CONVNET_BACKBONES) + get_args(ALLOWED_TRANSFORMER_BACKBONES)
 )
@@ -92,6 +116,7 @@ def build_backbone(
             f'"{backbone_arch}" is not a valid backbone; '
             f'allowed backbones: {sorted(_ALLOWED_BACKBONE_VALUES)}'
         )
+    # pyright cannot narrow a Literal union through .startswith(), so arg-type is suppressed
     if backbone_arch.startswith('vit'):
         return _build_transformer_backbone(backbone_arch, image_size=image_size, **kwargs)  # type: ignore[arg-type]
     else:
