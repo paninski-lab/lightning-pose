@@ -1,49 +1,28 @@
-"""Backbone architecture type definitions."""
+"""Public façade for the backbones package.
 
-from typing import Literal
+All backbone type constants and the ``build_backbone`` factory live in
+``factory.py``; this module re-exports them so callers can write::
 
-ALLOWED_BACKBONES = Literal[
-    "resnet18",
-    "resnet34",
-    "resnet50",
-    "resnet101",
-    "resnet152",
-    "resnet50_animal_apose",
-    "resnet50_animal_ap10k",
-    "resnet50_human_jhmdb",
-    "resnet50_human_res_rle",
-    "resnet50_human_top_res",
-    "resnet50_human_hand",
-    "efficientnet_b0",
-    "efficientnet_b1",
-    "efficientnet_b2",
-    "vits_dino",
-    "vits_dinov2",
-    "vits_dinov3",
-    "vitb_dino",
-    "vitb_dinov2",
-    "vitb_dinov3",
-    "vitb_imagenet",
-    "vitb_sam",
-]
+    from lightning_pose.models.backbones import build_backbone, ALLOWED_BACKBONES
 
-ALLOWED_TRANSFORMER_BACKBONES = Literal[
-    "vits_dino",
-    "vits_dinov2",
-    "vits_dinov3",
-    "vitb_dino",
-    "vitb_dinov2",
-    "vitb_dinov3",
-    "vitb_imagenet",
-    "vitb_sam",
-]
+Nothing should be defined here — add new symbols to ``factory.py`` and extend
+the import list below.
+"""
 
-ALLOWED_TRANSFORMER_BACKBONES_MULTIVIEW = Literal[
-    "vits_dino",
-    "vits_dinov2",
-    "vits_dinov3",
-    "vitb_dino",
-    "vitb_dinov2",
-    "vitb_dinov3",
-    "vitb_imagenet",
+from lightning_pose.models.backbones.factory import (
+    ALLOWED_BACKBONES,
+    ALLOWED_CONVNET_BACKBONES,
+    ALLOWED_TRANSFORMER_BACKBONES,
+    ALLOWED_TRANSFORMER_BACKBONES_MULTIVIEW,
+    BACKBONE_STRIDES,
+    build_backbone,
+)
+
+__all__ = [
+    'ALLOWED_BACKBONES',
+    'ALLOWED_CONVNET_BACKBONES',
+    'ALLOWED_TRANSFORMER_BACKBONES',
+    'ALLOWED_TRANSFORMER_BACKBONES_MULTIVIEW',
+    'BACKBONE_STRIDES',
+    'build_backbone',
 ]

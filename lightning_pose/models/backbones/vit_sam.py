@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 __all__ = []
 
 
-class SamVisionEncoder(nn.Module):
+class VisionEncoderSam(nn.Module):
     """Wrapper around HuggingFace's SAM Vision Encoder."""
 
     def __init__(

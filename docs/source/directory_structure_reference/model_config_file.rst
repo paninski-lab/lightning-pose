@@ -219,6 +219,9 @@ The following parameters relate to model architecture and unsupervised losses.
     * vitb_dinov3: Vision Transformer (Base) pretrained on ImageNet with DINOv3; note this is a gated repo and you will need a Hugging Face account
     * vitb_imagenet: Vision Transformer (Base) pretrained on ImageNet with MAE loss
     * vitb_sam: Segment Anything Model (Vision Transformer Base); not supported for ``heatmap_multiview_transformer``
+    * vitb_sam2: SAM 2.1 Hiera Base Plus; not supported for ``heatmap_multiview_transformer``
+    * vits_sam2: SAM 2.1 Hiera Small; not supported for ``heatmap_multiview_transformer``
+    * vitt_sam2: SAM 2.1 Hiera Tiny; not supported for ``heatmap_multiview_transformer``
 
   Note: the file size for a single ResNet-50 network is approximately 275 MB.
 

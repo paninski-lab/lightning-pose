@@ -1,4 +1,16 @@
-"""Factory functions to build data pipeline components from config."""
+"""Factory functions to build data pipeline components from a Hydra config.
+
+Three public functions, typically called in order:
+
+1. :func:`get_imgaug_transform` — builds an imgaug augmentation pipeline from
+   ``cfg.training.imgaug``.
+2. :func:`get_dataset` — wraps the labeled CSV data in the appropriate dataset class
+   (regression, single-view heatmap, or multiview heatmap).
+3. :func:`get_data_module` — wraps a dataset in a data module that handles train/val/test
+   splitting; selects :class:`~lightning_pose.data.datamodules.UnlabeledDataModule` for
+   semi-supervised training (adds DALI video loader) or
+   :class:`~lightning_pose.data.datamodules.BaseDataModule` for supervised-only training.
+"""
 
 import warnings
 
@@ -87,7 +99,32 @@ def get_dataset(
     data_dir: str,
     imgaug_transform: iaa.Sequential,
 ) -> BaseTrackingDataset | HeatmapDataset | MultiviewHeatmapDataset:
-    """Create a dataset that contains labeled data."""
+    """Build a labeled dataset from a Hydra config.
+
+    Dispatches on ``cfg.model.model_type``:
+    - ``'regression'``: returns a :class:`~lightning_pose.data.datasets.BaseTrackingDataset`.
+    - ``'heatmap*'`` with multiple views: returns a
+      :class:`~lightning_pose.data.datasets.MultiviewHeatmapDataset`; ``resize`` is set to
+      ``False`` only when imgaug is active *and* a camera-params file is provided (in that
+      case the augmentation pipeline already handles resizing).
+    - ``'heatmap*'`` single-view: returns a
+      :class:`~lightning_pose.data.datasets.HeatmapDataset`.
+
+    Args:
+        cfg: Hydra config. Relevant fields: ``cfg.model.model_type``,
+            ``cfg.data.csv_file``, ``cfg.data.image_resize_dims``,
+            ``cfg.data.view_names``, ``cfg.data.downsample_factor``,
+            ``cfg.data.camera_params_file``, ``cfg.data.bbox_file``.
+        data_dir: root directory that ``csv_path`` is resolved relative to.
+        imgaug_transform: augmentation pipeline produced by :func:`get_imgaug_transform`.
+
+    Returns:
+        dataset instance appropriate for the configured model type.
+
+    Raises:
+        NotImplementedError: if ``cfg.model.model_type`` is not a recognised value, or if
+            a multi-view regression model is requested.
+    """
 
     if cfg.model.model_type == 'regression':
         if cfg.data.get('view_names', None) and len(cfg.data.view_names) > 1:
@@ -156,7 +193,36 @@ def get_data_module(
     dataset: BaseTrackingDataset | HeatmapDataset | MultiviewHeatmapDataset,
     video_dir: str | None = None,
 ) -> BaseDataModule | UnlabeledDataModule:
-    """Create a data module that splits a dataset into train/val/test iterators."""
+    """Build a data module that wraps a dataset with train/val/test splitting.
+
+    For supervised models, returns a :class:`~lightning_pose.data.datamodules.BaseDataModule`.
+    For semi-supervised models, returns an
+    :class:`~lightning_pose.data.datamodules.UnlabeledDataModule` which adds a DALI-backed
+    video loader for unsupervised losses.
+
+    Batch sizes are divided by ``cfg.training.num_gpus`` so the effective per-step batch
+    size stays constant regardless of GPU count. Context models receive special treatment:
+    four frames are added back after dividing to preserve the two-frame context on each
+    side of the centre frame.
+
+    Args:
+        cfg: Hydra config. Relevant fields: ``cfg.training.num_gpus``,
+            ``cfg.training.train_batch_size``, ``cfg.training.val_batch_size``,
+            ``cfg.training.test_batch_size``, ``cfg.training.num_workers``,
+            ``cfg.training.train_prob``, ``cfg.training.val_prob``,
+            ``cfg.training.train_frames``, ``cfg.training.rng_seed_data_pt``,
+            ``cfg.model.losses_to_use``, ``cfg.dali``.
+        dataset: labeled dataset produced by :func:`get_dataset`.
+        video_dir: path to unlabeled video directory; required for semi-supervised training,
+            ignored otherwise.
+
+    Returns:
+        data module ready to be passed to the PyTorch Lightning ``Trainer``.
+
+    Raises:
+        ValidationError: if a context model is requested but
+            ``dali.context.train.batch_size < 5 * num_gpus``.
+    """
 
     # Old configs may have num_gpus: 0. We will remove support in a future release.
     if cfg.training.num_gpus == 0:

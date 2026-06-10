@@ -184,6 +184,40 @@ def function_name(
 
 ## Architecture
 
+### Backbone package (`lightning_pose/models/backbones/`)
+
+**Package layout**:
+- `__init__.py` — re-export façade only; defines nothing, imports everything from `factory.py`.
+- `factory.py` — single source of truth for type constants and dispatch logic. Contains all
+  `ALLOWED_*` Literal aliases, `_ALLOWED_BACKBONE_VALUES` frozenset, `build_backbone`,
+  `_build_transformer_backbone`, `_build_convnet_backbone`, and `grab_layers_sequential`.
+- `vit.py` — `VisionEncoder` (generic HuggingFace ViT wrapper) + `load_vit_backbone_checkpoint`.
+- `vit_dino.py` — `VisionEncoderDino` (DINOv2/v3 with patch-size re-interpolation and gated-repo
+  auth handling).
+- `vit_sam.py` — `VisionEncoderSam` (SAM ViT-B with pos-embed resize for arbitrary input sizes).
+- `vit_sam2.py` — `VisionEncoderSam2` (SAM2 Hiera backbone; pos-embed interpolated internally).
+
+**Type hierarchy**:
+```
+ALLOWED_BACKBONES = ALLOWED_CONVNET_BACKBONES | ALLOWED_TRANSFORMER_BACKBONES
+ALLOWED_TRANSFORMER_BACKBONES_MULTIVIEW ⊂ ALLOWED_TRANSFORMER_BACKBONES
+```
+SAM and SAM2 backbones (`vitb_sam`, `vitb_sam2`, `vits_sam2`, `vitt_sam2`) are present in
+`ALLOWED_TRANSFORMER_BACKBONES` but absent from `ALLOWED_TRANSFORMER_BACKBONES_MULTIVIEW`.
+They are blocked at construction time in `HeatmapTrackerMultiviewTransformer` with a
+`ValueError` because they are architecturally incompatible with the multiview cross-attention
+block (no `embeddings` module, NHWC tensor layout).
+
+**Adding a new backbone**: add its identifier to the appropriate `ALLOWED_*` constant(s) in
+`factory.py`, add an `elif` branch in `_build_transformer_backbone` or `_build_convnet_backbone`,
+and create a `vit_<name>.py` wrapper module if needed. The `_ALLOWED_BACKBONE_VALUES` frozenset
+and `ALLOWED_BACKBONES` union update automatically.
+
+**Lazy imports in `factory.py`**: all `lightning_pose` backbone wrapper classes are imported
+inside the helper functions, not at module level. `factory.py` is loaded during
+`backbones/__init__.py` initialisation, so a top-level `lightning_pose` import there would
+create a circular import.
+
 ### DALI Pipeline (`lightning_pose/data/dali.py`)
 
 **`PrepareDALI`** — two-phase construction:

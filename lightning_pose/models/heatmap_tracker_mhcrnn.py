@@ -15,7 +15,7 @@ from lightning_pose.data.datatypes import (
 from lightning_pose.data.utils import convert_bbox_coords, undo_affine_transform_batch
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
-from lightning_pose.models.backbones import ALLOWED_BACKBONES
+from lightning_pose.models.backbones import ALLOWED_BACKBONES, BACKBONE_STRIDES
 from lightning_pose.models.base import (
     BaseSupervisedTracker,
     SemiSupervisedTrackerMixin,
@@ -94,7 +94,7 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
             in_channels=self.num_fc_input_features,
             out_channels=self.num_keypoints,
             downsample_factor=self.downsample_factor,
-            upsampling_factor=1 if "vit" in backbone else 2,
+            upsampling_factor=1 if BACKBONE_STRIDES.get(backbone, 32) == 16 else 2,
         )
 
         self.loss_factory = loss_factory

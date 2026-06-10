@@ -1,4 +1,18 @@
-"""Factory function for creating pose estimation models from config."""
+"""Factory function for building pose estimation models from a Hydra config.
+
+The single public entry point is :func:`get_model`, which:
+
+1. Resolves optimizer / lr-scheduler defaults.
+2. Dispatches on ``cfg.model.model_type`` × ``semi_supervised`` to instantiate one of eight
+   model classes (four types × supervised/semi-supervised).
+3. Optionally loads weights from ``cfg.model.checkpoint`` after construction.
+
+All model class imports are deferred inside the function body to avoid circular imports
+(this module is loaded early in the call stack, before the model classes are fully defined).
+
+**Supported model types**: ``regression``, ``heatmap``, ``heatmap_mhcrnn``,
+``heatmap_multiview_transformer``.
+"""
 
 from __future__ import annotations
 
@@ -32,7 +46,36 @@ def get_model(
     data_module: BaseDataModule | UnlabeledDataModule | None,
     loss_factories: dict[str, LossFactory] | dict[str, None],
 ) -> ALLOWED_MODELS:
-    """Create model: regression or heatmap based, supervised or semi-supervised."""
+    """Build a pose estimation model from a Hydra config.
+
+    Resolves optimizer and lr-scheduler defaults, then dispatches on
+    ``cfg.model.model_type`` and whether unsupervised losses are present to instantiate
+    the appropriate model class. Optionally loads weights from ``cfg.model.checkpoint``
+    after construction (supports both ``.ckpt`` files and directories containing one).
+
+    Args:
+        cfg: Hydra config. Relevant fields:
+            - ``cfg.model.model_type``: one of ``'regression'``, ``'heatmap'``,
+              ``'heatmap_mhcrnn'``, ``'heatmap_multiview_transformer'``.
+            - ``cfg.model.backbone``: backbone identifier (see ``ALLOWED_BACKBONES``).
+            - ``cfg.model.losses_to_use``: list of unsupervised loss names; empty/None
+              selects the fully supervised branch.
+            - ``cfg.model.checkpoint``: optional path to a ``.ckpt`` file or directory
+              from which to load weights after construction.
+            - ``cfg.data.image_resize_dims``: ViT backbones require height == width.
+        data_module: data module used to infer ``num_targets`` for heatmap models;
+            may be ``None`` when building a model without a dataset (e.g. inference only).
+        loss_factories: dict with keys ``'supervised'`` and ``'unsupervised'``, each
+            mapping to a :class:`~lightning_pose.losses.factory.LossFactory` instance
+            (or ``None`` for stub construction in tests).
+
+    Returns:
+        instantiated model ready for training or inference.
+
+    Raises:
+        RuntimeError: if a ViT backbone is selected with non-square image dimensions.
+        NotImplementedError: if ``cfg.model.model_type`` is not a recognised value.
+    """
 
     optimizer = cfg.training.get('optimizer', 'Adam')
     optimizer_params = _apply_defaults_for_optimizer_params(
