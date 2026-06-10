@@ -1,6 +1,10 @@
-"""Backbone architecture type definitions."""
+"""Backbone architecture type definitions and public factory."""
 
 from typing import Literal
+
+from lightning_pose.models.backbones.factory import build_backbone
+
+__all__ = ['build_backbone']
 
 ALLOWED_BACKBONES = Literal[
     "resnet18",

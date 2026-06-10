@@ -27,7 +27,7 @@ from lightning_pose.data.datatypes import (
     SemiSupervisedHeatmapBatchDict,
     UnlabeledBatchDict,
 )
-from lightning_pose.models.backbones import ALLOWED_BACKBONES
+from lightning_pose.models.backbones import ALLOWED_BACKBONES, build_backbone
 
 logger = logging.getLogger(__name__)
 
@@ -233,11 +233,6 @@ class BaseFeatureExtractor(LightningModule):
             logger.info(f'initializing a {self._get_name()} instance with {backbone} backbone')
 
         self.backbone_arch = backbone
-
-        if self.backbone_arch.startswith("vit"):
-            from lightning_pose.models.backbones.vits import build_backbone
-        else:
-            from lightning_pose.models.backbones.torchvision import build_backbone
 
         self.backbone, self.num_fc_input_features = build_backbone(
             backbone_arch=self.backbone_arch,
