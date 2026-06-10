@@ -1,5 +1,6 @@
 """Test the io module."""
 
+import logging
 import os
 import shutil
 import textwrap
@@ -113,26 +114,29 @@ def test_ckpt_path_from_base_path_one_best_checkpoint(tmp_path: Path):
     assert result == str(expected_ckpt)
 
 
-def test_ckpt_path_from_base_path_multiple_best_checkpoints(tmp_path: Path):
+def test_ckpt_path_from_base_path_multiple_best_checkpoints(tmp_path: Path, caplog):
     """
     Test Case 3: Multiple "best" checkpoints found in the latest version.
-    Expects ValueError.
+    Expects the checkpoint with the highest step count to be returned.
     """
     base_path = tmp_path / "project"
     model_name = "my_model"
     logging_dir_name = "tb_logs"
 
-    # Create latest version checkpoints with multiple best
     latest_version_path = base_path / logging_dir_name / model_name / "version_1" / "checkpoints"
     latest_version_path.mkdir(parents=True)
     (latest_version_path / "epoch=5-step=50-best.ckpt").touch()
-    (latest_version_path / "epoch=12-step=120-best.ckpt").touch()
+    expected_ckpt = latest_version_path / "epoch=12-step=120-best.ckpt"
+    expected_ckpt.touch()
 
-    with pytest.raises(ValueError, match="Multiple 'best' checkpoint files found"):
-        ckpt_path_from_base_path(str(base_path), model_name, logging_dir_name)
+    with caplog.at_level(logging.WARNING):
+        result = ckpt_path_from_base_path(str(base_path), model_name, logging_dir_name)
+
+    assert result == str(expected_ckpt)
+    assert any("Multiple 'best' checkpoint files found" in r.message for r in caplog.records)
 
 
-def test_ckpt_path_from_base_path_highest_step_count(tmp_path: Path):
+def test_ckpt_path_from_base_path_highest_step_count(tmp_path: Path, caplog):
     """
     Test Case 4: No "best" checkpoint, but multiple checkpoints, pick the one with highest step
     count in latest version.
@@ -155,13 +159,13 @@ def test_ckpt_path_from_base_path_highest_step_count(tmp_path: Path):
     (latest_version_path / "epoch=12-step=120.ckpt").touch()
     (latest_version_path / "epoch=11-step=110.ckpt").touch()
 
-    # Capture warnings as "No 'best' checkpoint found" is expected
-    with pytest.warns(UserWarning, match="No 'best' checkpoint found"):
+    with caplog.at_level(logging.WARNING):
         result = ckpt_path_from_base_path(str(base_path), model_name, logging_dir_name)
     assert result == str(expected_ckpt)
+    assert any("No 'best' checkpoint found" in r.message for r in caplog.records)
 
 
-def test_ckpt_path_from_base_path_single_checkpoint_no_best(tmp_path: Path):
+def test_ckpt_path_from_base_path_single_checkpoint_no_best(tmp_path: Path, caplog):
     """
     Test Case 5: No "best" checkpoint, and only one checkpoint file in the latest version.
     Expects the path to that single checkpoint.
@@ -181,12 +185,13 @@ def test_ckpt_path_from_base_path_single_checkpoint_no_best(tmp_path: Path):
     expected_ckpt = latest_version_path / "epoch=5-step=50.ckpt"
     expected_ckpt.touch()
 
-    with pytest.warns(UserWarning, match="No 'best' checkpoint found"):
+    with caplog.at_level(logging.WARNING):
         result = ckpt_path_from_base_path(str(base_path), model_name, logging_dir_name)
     assert result == str(expected_ckpt)
+    assert any("No 'best' checkpoint found" in r.message for r in caplog.records)
 
 
-def test_ckpt_path_from_base_path_cannot_parse_step(tmp_path: Path):
+def test_ckpt_path_from_base_path_cannot_parse_step(tmp_path: Path, caplog):
     """
     Test Case 6: No "best" checkpoint, multiple checkpoints, but step count cannot be parsed.
     Expects ValueError.
@@ -201,9 +206,10 @@ def test_ckpt_path_from_base_path_cannot_parse_step(tmp_path: Path):
     (latest_version_path / "model_v1_A.ckpt").touch()
     (latest_version_path / "model_v1_B.ckpt").touch()
 
-    with pytest.raises(ValueError, match="cannot parse step counts to determine latest"):
-        with pytest.warns(UserWarning, match="No 'best' checkpoint found"):
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(ValueError, match="cannot parse step counts to determine latest"):
             ckpt_path_from_base_path(str(base_path), model_name, logging_dir_name)
+    assert any("No 'best' checkpoint found" in r.message for r in caplog.records)
 
 
 def test_ckpt_path_from_base_path_custom_logging_dir_name(tmp_path: Path):
