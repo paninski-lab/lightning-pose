@@ -30,16 +30,41 @@ Results are written to teamspace storage and persist after each job ends.
 
 ## Running on Lightning AI
 
+### Studio setup
+
+Create a new studio, then install Lightning Pose from source following
+[Option B in the installation guide](https://lightning-pose.readthedocs.io/en/latest/source/installation_guide.html#option-b-installation-from-source-development).
+Also install `ffmpeg` as described in the docs. No conda environment is needed —
+the studio is a self-contained environment.
+
+### Teamspace storage setup
+
+Sweep results and cached datasets are written to Lightning's managed teamspace
+storage. Create the required folders once before running any sweeps:
+
+1. In your teamspace, click the **Drive** tab (next to Studios)
+2. Click **New Folder** and create a folder named `datasets`
+3. Click **New Folder** again and create a folder named `sweep-results`
+
+These names match the default paths in `sweep_config.yaml`, so no config edits
+are needed.
+
+### From within a studio
+
 > **Note:** `run_sweep.py` must be run from the `hyper-sweep/` directory so it
 > can import `run_single_job.py`. If you need to run it from elsewhere, add
 > `hyper-sweep/` to your `PYTHONPATH` first.
-
-### From within a studio
 
 ```bash
 cd lightning-pose/scripts/hyper-sweep
 python run_sweep.py --config sweep_config.yaml
 ```
+
+### Monitoring jobs
+
+Once launched, each job appears in the **Jobs** panel. You can also click the
+🚀 widget on the right-hand side of the studio — it shows a count of running
+jobs and lets you inspect machine stats and logs for each one.
 
 ### From outside Lightning AI
 
@@ -136,18 +161,6 @@ python run_single_job.py \
 
 To run a local sweep, call `run_single_job.py` in a loop or adapt
 `run_sweep.py` to call it via `subprocess` instead of `Job.run()`.
-
-## Dependencies
-
-```
-lightning-pose    # must be installed; provides the litpose CLI
-lightning_sdk     # pip install lightning_sdk  (orchestrator only)
-huggingface_hub   # pip install huggingface_hub (worker)
-pyyaml            # pip install pyyaml (orchestrator)
-```
-
-High-performance downloads are enabled automatically via `HF_XET_HIGH_PERFORMANCE=1`,
-set at the top of `run_single_job.py` before `huggingface_hub` is imported.
 
 ## Plotting results
 
