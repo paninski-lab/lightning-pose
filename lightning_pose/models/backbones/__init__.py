@@ -37,3 +37,13 @@ ALLOWED_TRANSFORMER_BACKBONES = Literal[
     "vitb_imagenet",
     "vitb_sam",
 ]
+
+ALLOWED_TRANSFORMER_BACKBONES_MULTIVIEW = Literal[
+    "vits_dino",
+    "vits_dinov2",
+    "vits_dinov3",
+    "vitb_dino",
+    "vitb_dinov2",
+    "vitb_dinov3",
+    "vitb_imagenet",
+]

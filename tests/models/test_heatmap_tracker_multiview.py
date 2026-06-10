@@ -3,13 +3,14 @@
 import copy
 
 import numpy as np
+import pytest
 import torch
 
 from lightning_pose.data.datasets import MultiviewHeatmapDataset
 from lightning_pose.data.datatypes import MultiviewHeatmapLabeledExampleDict
 
 
-def test_multiview_transformer(
+def test_multiview_transformer_vits_dino(
     cfg_multiview,
     multiview_heatmap_dataset,
     video_dataloader_multiview,
@@ -41,6 +42,102 @@ def test_multiview_transformer(
         video_dataloader=video_dataloader_multiview,
         trainer=trainer,
     )
+
+
+def test_multiview_transformer_vits_dinov2(
+    cfg_multiview,
+    multiview_heatmap_dataset,
+    video_dataloader_multiview,
+    trainer,
+    run_model_test,
+):
+    """Test initialization and training of a multiview model with heatmap head."""
+
+    cfg_tmp = copy.deepcopy(cfg_multiview)
+    cfg_tmp.model.model_type = "heatmap_multiview_transformer"
+    cfg_tmp.model.backbone = "vits_dinov2"
+    cfg_tmp.model.head = "heatmap_cnn"
+    cfg_tmp.model.losses_to_use = []
+
+    # make mock dataset that returns fake camera parameters
+    from lightning_pose.data import get_data_module
+    data_module = get_data_module(
+        cfg_tmp,
+        dataset=MockCameraDatasetWrapper(
+            multiview_heatmap_dataset,
+            num_views=len(cfg_tmp.data.view_names),
+        ),
+        video_dir=None,
+    )
+
+    run_model_test(
+        cfg=cfg_tmp,
+        data_module=data_module,
+        video_dataloader=video_dataloader_multiview,
+        trainer=trainer,
+    )
+
+
+def test_multiview_transformer_vitb_imagenet(
+    cfg_multiview,
+    multiview_heatmap_dataset,
+    video_dataloader_multiview,
+    trainer,
+    run_model_test,
+):
+    """Test initialization and training of a multiview model with heatmap head."""
+
+    cfg_tmp = copy.deepcopy(cfg_multiview)
+    cfg_tmp.model.model_type = "heatmap_multiview_transformer"
+    cfg_tmp.model.backbone = "vitb_imagenet"
+    cfg_tmp.model.head = "heatmap_cnn"
+    cfg_tmp.model.losses_to_use = []
+
+    # make mock dataset that returns fake camera parameters
+    from lightning_pose.data import get_data_module
+    data_module = get_data_module(
+        cfg_tmp,
+        dataset=MockCameraDatasetWrapper(
+            multiview_heatmap_dataset,
+            num_views=len(cfg_tmp.data.view_names),
+        ),
+        video_dir=None,
+    )
+
+    run_model_test(
+        cfg=cfg_tmp,
+        data_module=data_module,
+        video_dataloader=video_dataloader_multiview,
+        trainer=trainer,
+    )
+
+
+def test_multiview_transformer_vitb_sam_raises(
+    cfg_multiview,
+    multiview_heatmap_dataset,
+):
+    """Test that vitb_sam backbone raises ValueError for multiview transformer models."""
+
+    from lightning_pose.data import get_data_module
+    from lightning_pose.models import get_model
+
+    cfg_tmp = copy.deepcopy(cfg_multiview)
+    cfg_tmp.model.model_type = "heatmap_multiview_transformer"
+    cfg_tmp.model.backbone = "vitb_sam"
+    cfg_tmp.model.head = "heatmap_cnn"
+    cfg_tmp.model.losses_to_use = []
+
+    data_module = get_data_module(
+        cfg_tmp,
+        dataset=MockCameraDatasetWrapper(
+            multiview_heatmap_dataset,
+            num_views=len(cfg_tmp.data.view_names),
+        ),
+        video_dir=None,
+    )
+
+    with pytest.raises(ValueError, match='vitb_sam'):
+        get_model(cfg=cfg_tmp, data_module=data_module, loss_factories={'supervised': None})
 
 
 def test_semisupervised_multiview_transformer_temporal(
