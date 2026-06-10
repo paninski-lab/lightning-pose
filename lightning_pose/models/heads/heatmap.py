@@ -1,6 +1,8 @@
 """Heads that produce heatmap predictions for heatmap regression."""
 
 
+import math
+
 import torch
 from jaxtyping import Float
 from kornia.filters import filter2d
@@ -9,6 +11,7 @@ from kornia.geometry.transform.pyramid import _get_pyramid_gaussian_kernel
 from torch import nn
 
 from lightning_pose.data.utils import evaluate_heatmaps_at_location
+from lightning_pose.models.backbones import BACKBONE_STRIDES
 
 # to ignore imports for sphix-autoapidoc
 __all__ = []
@@ -183,9 +186,11 @@ class HeatmapHead(nn.Module):
         # TODO: temp=1000 works for 64x64 heatmaps, need to generalize to other shapes
         self.temperature = torch.tensor(1000.0)  # soft argmax temp
 
-        n_layers = 4 - self.downsample_factor
-        if self.backbone_arch.startswith("vit"):
-            n_layers -= 1
+        # n_layers = log2(stride) - downsample_factor - 1, derived from the requirement that
+        # PixelShuffle(2) × ConvTranspose2d(stride=2)^n_layers must upsample the backbone
+        # feature map (at 1/stride of input) to the target heatmap (at 1/2^downsample_factor).
+        stride = BACKBONE_STRIDES.get(self.backbone_arch, 32)
+        n_layers = int(math.log2(stride)) - self.downsample_factor - 1
 
         self.upsampling_layers = make_upsampling_layers(
             in_channels=in_channels,

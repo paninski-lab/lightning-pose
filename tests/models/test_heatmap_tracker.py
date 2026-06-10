@@ -169,7 +169,7 @@ def test_supervised_heatmap_vits_dinov3(
         )
     else:
         # CI or no auth - should raise proper error
-        with pytest.raises(RuntimeError, match="Cannot access DINOv3 model"):
+        with pytest.raises(RuntimeError, match="Cannot access gated model"):
             run_model_test(
                 cfg=cfg_tmp,
                 data_module=heatmap_data_module,

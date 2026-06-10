@@ -14,6 +14,7 @@ from lightning_pose.models.backbones.factory import (
     ALLOWED_CONVNET_BACKBONES,
     ALLOWED_TRANSFORMER_BACKBONES,
     ALLOWED_TRANSFORMER_BACKBONES_MULTIVIEW,
+    BACKBONE_STRIDES,
     build_backbone,
 )
 
@@ -22,5 +23,6 @@ __all__ = [
     'ALLOWED_CONVNET_BACKBONES',
     'ALLOWED_TRANSFORMER_BACKBONES',
     'ALLOWED_TRANSFORMER_BACKBONES_MULTIVIEW',
+    'BACKBONE_STRIDES',
     'build_backbone',
 ]

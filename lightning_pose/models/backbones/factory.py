@@ -78,6 +78,38 @@ ALLOWED_TRANSFORMER_BACKBONES_MULTIVIEW = Literal[
 
 ALLOWED_BACKBONES = ALLOWED_CONVNET_BACKBONES | ALLOWED_TRANSFORMER_BACKBONES
 
+# Feature-map stride for each backbone (input_size / feature_map_size).
+# Used by HeatmapHead to determine how many upsampling layers are needed.
+# Convnets output at stride 32; standard ViTs (16×16 patch) at stride 16;
+# SAM2 Hiera (4× patch + 3 stages of 2× pooling) at stride 32.
+BACKBONE_STRIDES: dict[str, int] = {
+    'resnet18': 32,
+    'resnet34': 32,
+    'resnet50': 32,
+    'resnet101': 32,
+    'resnet152': 32,
+    'resnet50_animal_apose': 32,
+    'resnet50_animal_ap10k': 32,
+    'resnet50_human_jhmdb': 32,
+    'resnet50_human_res_rle': 32,
+    'resnet50_human_top_res': 32,
+    'resnet50_human_hand': 32,
+    'efficientnet_b0': 32,
+    'efficientnet_b1': 32,
+    'efficientnet_b2': 32,
+    'vits_dino': 16,
+    'vits_dinov2': 16,
+    'vits_dinov3': 16,
+    'vitb_dino': 16,
+    'vitb_dinov2': 16,
+    'vitb_dinov3': 16,
+    'vitb_imagenet': 16,
+    'vitb_sam': 16,
+    'vitb_sam2': 32,
+    'vits_sam2': 32,
+    'vitt_sam2': 32,
+}
+
 # frozenset for O(1) membership tests in the build_backbone guard; derived from the
 # Literal type args so it stays in sync with ALLOWED_BACKBONES automatically.
 _ALLOWED_BACKBONE_VALUES: frozenset[str] = frozenset(
