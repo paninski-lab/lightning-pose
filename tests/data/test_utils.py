@@ -434,6 +434,112 @@ class TestGenerateHeatmaps:
         assert torch.allclose(heatmaps[0, 2], expected_zero)  # extreme negative y
         assert torch.allclose(heatmaps[0, 3], expected_zero)  # extreme positive y
 
+    def test_generate_heatmaps_visibility_none_is_backward_compat(self):
+        """visibility=None produces identical output to the legacy path."""
+
+        # Arrange: one valid keypoint, one NaN keypoint (batch=1, K=2)
+        keypoints = torch.tensor([[[64.0, 64.0], [float('nan'), float('nan')]]])
+        kwargs = dict(height=128, width=128, output_shape=(32, 32))
+
+        # Act
+        legacy = generate_heatmaps(keypoints, **kwargs, uniform_heatmaps=False)
+        with_none = generate_heatmaps(keypoints, **kwargs, uniform_heatmaps=False, visibility=None)
+
+        # Assert
+        assert torch.allclose(legacy, with_none)
+
+    def test_generate_heatmaps_visibility_2_produces_gaussian(self):
+        """vis=2 keypoints get a Gaussian heatmap identical to the legacy valid-keypoint path."""
+
+        # Arrange
+        keypoints = torch.tensor([[[64.0, 64.0]]])
+        vis = torch.tensor([[2]])
+        kwargs = dict(height=128, width=128, output_shape=(32, 32))
+
+        # Act
+        expected = generate_heatmaps(keypoints, **kwargs)  # legacy path
+        result = generate_heatmaps(keypoints, **kwargs, visibility=vis)
+
+        # Assert
+        assert torch.allclose(result, expected)
+
+    def test_generate_heatmaps_visibility_1_produces_uniform(self):
+        """vis=1 keypoints get a uniform heatmap regardless of coordinate values."""
+
+        H, W = 32, 32
+        uniform_heatmap = torch.ones(H, W) / (H * W)
+
+        # Case 1: NaN coordinates with vis=1
+        keypoints_nan = torch.tensor([[[float('nan'), float('nan')]]])
+        vis = torch.tensor([[1]])
+        result_nan = generate_heatmaps(
+            keypoints_nan, height=128, width=128, output_shape=(H, W), visibility=vis,
+        )
+        assert torch.allclose(result_nan[0, 0], uniform_heatmap)
+
+        # Case 2: valid coordinates with vis=1 — coords are ignored, still uniform
+        keypoints_valid = torch.tensor([[[64.0, 64.0]]])
+        result_valid = generate_heatmaps(
+            keypoints_valid, height=128, width=128, output_shape=(H, W), visibility=vis,
+        )
+        assert torch.allclose(result_valid[0, 0], uniform_heatmap)
+
+    def test_generate_heatmaps_visibility_0_produces_zeros(self):
+        """vis=0 keypoints get an all-zero heatmap regardless of coordinate values."""
+
+        H, W = 32, 32
+        zero_heatmap = torch.zeros(H, W)
+
+        # Case 1: NaN coordinates with vis=0
+        keypoints_nan = torch.tensor([[[float('nan'), float('nan')]]])
+        vis = torch.tensor([[0]])
+        result_nan = generate_heatmaps(
+            keypoints_nan, height=128, width=128, output_shape=(H, W), visibility=vis,
+        )
+        assert torch.allclose(result_nan[0, 0], zero_heatmap)
+
+        # Case 2: valid coordinates with vis=0 — coords are ignored, still zeros
+        keypoints_valid = torch.tensor([[[64.0, 64.0]]])
+        result_valid = generate_heatmaps(
+            keypoints_valid, height=128, width=128, output_shape=(H, W), visibility=vis,
+        )
+        assert torch.allclose(result_valid[0, 0], zero_heatmap)
+
+    def test_generate_heatmaps_visibility_mixed(self):
+        """Mixed visibility flags produce per-keypoint correct heatmap types."""
+
+        H, W = 32, 32
+        # batch=1, K=3: vis=2 (visible), vis=1 (occluded), vis=0 (not labeled)
+        keypoints = torch.tensor([[[64.0, 64.0], [float('nan'), float('nan')], [10.0, 10.0]]])
+        vis = torch.tensor([[2, 1, 0]])
+
+        result = generate_heatmaps(
+            keypoints, height=128, width=128, output_shape=(H, W), visibility=vis,
+        )
+
+        zero_heatmap = torch.zeros(H, W)
+        uniform_heatmap = torch.ones(H, W) / (H * W)
+
+        # vis=2: Gaussian (non-zero, sums to 1)
+        assert not torch.allclose(result[0, 0], zero_heatmap)
+        assert torch.isclose(result[0, 0].sum(), torch.tensor(1.0))
+        # vis=1: uniform (every pixel equal, sums to 1)
+        assert torch.allclose(result[0, 1], uniform_heatmap)
+        # vis=0: zeros
+        assert torch.allclose(result[0, 2], zero_heatmap)
+
+    def test_generate_heatmaps_visibility_2_nan_coords_falls_back_to_zeros(self):
+        """vis=2 with NaN coordinates (invalid label) falls back to a zero heatmap."""
+
+        H, W = 32, 32
+        keypoints = torch.tensor([[[float('nan'), float('nan')]]])
+        vis = torch.tensor([[2]])
+
+        result = generate_heatmaps(
+            keypoints, height=128, width=128, output_shape=(H, W), visibility=vis,
+        )
+        assert torch.allclose(result[0, 0], torch.zeros(H, W))
+
 
 def test_evaluate_heatmaps_at_location():
 

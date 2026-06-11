@@ -124,9 +124,36 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             csv_file=csv_file, header_rows=header_rows,
         )
         self.image_names = list(csv_data.index)
-        self.keypoints = torch.tensor(csv_data.to_numpy(), dtype=torch.float32)
-        # convert to x,y coordinates
-        self.keypoints = self.keypoints.reshape(self.keypoints.shape[0], -1, 2)
+        has_vis = io_utils.has_visibility_column(csv_file, header_rows=header_rows)
+        if has_vis:
+            raw = torch.tensor(csv_data.to_numpy(), dtype=torch.float32)
+            # columns are ordered x, y, visible, x, y, visible, ...
+            raw = raw.reshape(raw.shape[0], -1, 3)
+            self.keypoints = raw[:, :, :2].contiguous()  # (N, K, 2)
+            vis_float = raw[:, :, 2]  # (N, K)
+            valid_vals = {0.0, 1.0, 2.0}
+            unique_vals = set(vis_float[~torch.isnan(vis_float)].unique().tolist())
+            invalid_vals = unique_vals - valid_vals
+            if invalid_vals:
+                raise ValueError(
+                    f'visibility column contains invalid values {invalid_vals}; '
+                    'expected values in {0, 1, 2}'
+                )
+            self.visibility: torch.Tensor | None = vis_float.long()  # (N, K)
+            occluded_with_coords = (
+                (self.visibility == 1) & ~torch.isnan(self.keypoints[:, :, 0])
+            )
+            if occluded_with_coords.any():
+                logger.warning(
+                    'found keypoints with visible=1 (occluded) that have non-NaN x,y '
+                    'coordinates; the visibility flag takes precedence and a uniform heatmap '
+                    'will be generated for these keypoints'
+                )
+        else:
+            self.keypoints = torch.tensor(csv_data.to_numpy(), dtype=torch.float32)
+            # convert to x,y coordinates
+            self.keypoints = self.keypoints.reshape(self.keypoints.shape[0], -1, 2)
+            self.visibility = None
 
         # send image to tensor and normalize
         pytorch_transform_list = [
@@ -366,6 +393,9 @@ class HeatmapDataset(BaseTrackingDataset):
             )
             keypoints[new_nans, :] = torch.nan
 
+        idx = example_dict["idxs"]
+        vis = self.visibility[idx].unsqueeze(0) if self.visibility is not None else None
+
         y_heatmap = generate_heatmaps(
             keypoints=keypoints.unsqueeze(0),  # add batch dim
             height=self.height,
@@ -373,6 +403,7 @@ class HeatmapDataset(BaseTrackingDataset):
             output_shape=self.output_shape,
             sigma=self.output_sigma,
             uniform_heatmaps=self.uniform_heatmaps,
+            visibility=vis,
         )
 
         return y_heatmap[0]

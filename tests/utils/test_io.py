@@ -587,3 +587,58 @@ def test_fix_empty_first_row(tmp_path):
     assert len(fixed_df) == 3
     assert fixed_df.index.name is None
     assert fixed_df.index[0] == "labeled-data/test1.png"
+
+
+class TestHasVisibilityColumn:
+    """Test the has_visibility_column function."""
+
+    @pytest.fixture
+    def visibility_csv(self, tmp_path) -> Path:
+        """Create a DLC-format CSV with a visible column per keypoint."""
+        content = (
+            'scorer,scorer,scorer,scorer,scorer,scorer,scorer\n'
+            'bodyparts,kp1,kp1,kp1,kp2,kp2,kp2\n'
+            'coords,x,y,visible,x,y,visible\n'
+            'labeled-data/img01.png,10.0,20.0,2,30.0,40.0,1\n'
+        )
+        p = tmp_path / 'visibility.csv'
+        p.write_text(content)
+        return p
+
+    @pytest.fixture
+    def standard_csv(self, tmp_path) -> Path:
+        """Create a standard DLC-format CSV without visibility columns."""
+        content = (
+            'scorer,scorer,scorer,scorer,scorer\n'
+            'bodyparts,kp1,kp1,kp2,kp2\n'
+            'coords,x,y,x,y\n'
+            'labeled-data/img01.png,10.0,20.0,30.0,40.0\n'
+        )
+        p = tmp_path / 'standard.csv'
+        p.write_text(content)
+        return p
+
+    def test_has_visibility_column_true(self, visibility_csv):
+        """Returns True for a CSV with visible columns."""
+        from lightning_pose.utils.io import has_visibility_column
+        assert has_visibility_column(str(visibility_csv), header_rows=[0, 1, 2])
+
+    def test_has_visibility_column_false_standard_csv(self, standard_csv):
+        """Returns False for a standard DLC CSV without visible column."""
+        from lightning_pose.utils.io import has_visibility_column
+        assert not has_visibility_column(str(standard_csv), header_rows=[0, 1, 2])
+
+    def test_has_visibility_column_false_wrong_header(self, visibility_csv):
+        """Returns False when header_rows is not [0, 1, 2]."""
+        from lightning_pose.utils.io import has_visibility_column
+        assert not has_visibility_column(str(visibility_csv), header_rows=[0, 1])
+
+    def test_has_visibility_column_false_nonexistent_file(self, tmp_path):
+        """Returns False for a path that does not exist."""
+        from lightning_pose.utils.io import has_visibility_column
+        assert not has_visibility_column(str(tmp_path / 'nonexistent.csv'), header_rows=[0, 1, 2])
+
+    def test_has_visibility_column_default_header_treated_as_dlc(self, visibility_csv):
+        """header_rows=None defaults to [0, 1, 2] and detects visible columns."""
+        from lightning_pose.utils.io import has_visibility_column
+        assert has_visibility_column(str(visibility_csv), header_rows=None)

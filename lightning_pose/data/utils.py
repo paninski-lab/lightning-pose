@@ -6,7 +6,7 @@ import os
 
 import numpy as np
 import torch
-from jaxtyping import Float
+from jaxtyping import Float, Int
 
 from lightning_pose.data.datatypes import (
     HeatmapLabeledBatchDict,
@@ -167,6 +167,7 @@ def generate_heatmaps(
     sigma: float = 1.25,
     uniform_heatmaps: bool = False,
     keep_gradients: bool = False,
+    visibility: Int[torch.Tensor, "batch num_keypoints"] | None = None,
 ) -> Float[torch.Tensor, "batch num_keypoints height width"]:
     """Generate 2D Gaussian heatmaps from mean and sigma.
 
@@ -176,8 +177,12 @@ def generate_heatmaps(
         width: width of reshaped image (pixels, e.g., 128, 256, 512...)
         output_shape: dimensions of downsampled heatmap, (height, width)
         sigma: control spread of gaussian
-        uniform_heatmaps: output uniform heatmaps if missing ground truth label, rather than skip
+        uniform_heatmaps: output uniform heatmaps if missing ground truth label, rather than skip;
+            ignored when ``visibility`` is provided
         keep_gradients: True to not detach gradients from keypoints before creating heatmaps
+        visibility: optional per-keypoint visibility flags with values 0 (not labeled → zero
+            heatmap), 1 (occluded → uniform heatmap), or 2 (visible → Gaussian heatmap). When
+            None, falls back to NaN detection combined with the ``uniform_heatmaps`` flag.
 
     Returns:
         batch of 2D heatmaps
@@ -226,16 +231,21 @@ def generate_heatmaps(
     heatmaps = torch.exp(heatmaps)
     # normalize all heatmaps to one
     heatmaps = heatmaps / torch.sum(heatmaps, dim=(2, 3), keepdim=True)
-    # replace nans with zeros heatmaps
-    # (all zeros heatmaps are ignored in the supervised heatmap loss)
-    if uniform_heatmaps:
-        filler_heatmap = torch.ones(
-            (out_height, out_width), device=keypoints.device
-        ) / (out_height * out_width)
-    else:
-        filler_heatmap = torch.zeros((out_height, out_width), device=keypoints.device)
+    zero_heatmap = torch.zeros((out_height, out_width), device=keypoints.device)
+    uniform_heatmap = torch.ones(
+        (out_height, out_width), device=keypoints.device
+    ) / (out_height * out_width)
 
-    heatmaps[nan_idxs] = filler_heatmap
+    if visibility is None:
+        # backward-compat: NaN/OOB keypoints get a uniform or zero filler based on the flag
+        # (all-zeros heatmaps are ignored in the supervised heatmap loss)
+        heatmaps[nan_idxs] = uniform_heatmap if uniform_heatmaps else zero_heatmap
+    else:
+        heatmaps[visibility == 0] = zero_heatmap    # not labeled: ignore in loss
+        heatmaps[visibility == 1] = uniform_heatmap  # occluded: encourage low confidence
+        # visible keypoints with NaN/OOB coords fall back to zero (defensive)
+        heatmaps[(visibility == 2) & nan_idxs] = zero_heatmap
+
     return heatmaps
 
 
