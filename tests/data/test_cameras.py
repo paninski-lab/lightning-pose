@@ -223,7 +223,7 @@ def test_camera_round_trip_accuracy(points_2d, intrinsics, extrinsics, distortio
 def test_full_coordinate_pipeline_roundtrip(points_2d, intrinsics, extrinsics, distortions):
     """Test the complete coordinate transformation pipeline used in training."""
 
-    from lightning_pose.data.utils import convert_bbox_coords, convert_original_to_model_coords
+    from lightning_pose.data.bboxes import frame_to_model_batch, model_to_frame_batch
 
     # Mock batch_dict with realistic values
     batch_size = 1
@@ -254,10 +254,10 @@ def test_full_coordinate_pipeline_roundtrip(points_2d, intrinsics, extrinsics, d
     print(f"world_2d_original shape: {world_2d_original.shape}")
     print(f"Original world coords: {world_2d_original[0, :, 0]}")  # First keypoint across views
 
-    # STEP 1: Convert world coords to model coords (reverse of convert_bbox_coords)
-    model_2d_coords = convert_original_to_model_coords(
+    # STEP 1: Convert world coords to model coords (reverse of model_to_frame_batch)
+    model_2d_coords = frame_to_model_batch(
         batch_dict=mock_batch_dict,  # type: ignore[arg-type]
-        original_keypoints=world_2d_original,
+        frame_keypoints=world_2d_original,
     )  # Output: (batch=1, num_views=3, num_keypoints=2, 2)
     print(f"model_2d_coords shape: {model_2d_coords.shape}")
     print(f"Original model coords: {model_2d_coords[0, :, 0]}")
@@ -268,8 +268,8 @@ def test_full_coordinate_pipeline_roundtrip(points_2d, intrinsics, extrinsics, d
     print(f"Flattened model coords shape: {pred_keypoints_flat.shape}")  # Should be (1, 12)
     print(f"0: Flattened model coords: {pred_keypoints_flat[0, :4]}")
 
-    # STEP 2: Convert model coords back to world coords (convert_bbox_coords)
-    pred_keypoints_world = convert_bbox_coords(
+    # STEP 2: Convert model coords back to world coords (model_to_frame_batch)
+    pred_keypoints_world = model_to_frame_batch(
         mock_batch_dict, pred_keypoints_flat, in_place=False,  # type: ignore[arg-type]
     )
     # Output: (batch, num_targets) -> reshape to (batch, num_views, num_keypoints, 2)
@@ -307,9 +307,9 @@ def test_full_coordinate_pipeline_roundtrip(points_2d, intrinsics, extrinsics, d
     print(f"3: Flattened model coords: {pred_keypoints_flat[0, :4]}")
 
     # STEP 5: Convert back to model coords for heatmap generation
-    keypoints_pred_2d_reprojected_model = convert_original_to_model_coords(
+    keypoints_pred_2d_reprojected_model = frame_to_model_batch(
         batch_dict=mock_batch_dict,  # type: ignore[arg-type]
-        original_keypoints=keypoints_pred_2d_reprojected_world,
+        frame_keypoints=keypoints_pred_2d_reprojected_world,
         # (batch, num_views, num_keypoints, 2)
     )  # Output: (batch, num_views, num_keypoints, 2)
     print(f"4: Flattened model coords: {pred_keypoints_flat[0, :4]}")

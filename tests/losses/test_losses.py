@@ -8,7 +8,7 @@ import pytest
 import torch
 from kornia.geometry.subpix import spatial_softmax2d
 
-from lightning_pose.data.utils import generate_heatmaps
+from lightning_pose.data.heatmaps import generate_heatmaps
 from lightning_pose.losses.losses import (
     HeatmapJSLoss,
     HeatmapKLLoss,

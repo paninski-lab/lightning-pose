@@ -21,9 +21,9 @@ from lightning_pose.data import (
     get_dataset,
     get_imgaug_transform,
 )
+from lightning_pose.data.bboxes import model_to_frame_batch
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datatypes import MultiviewPredictionResult, PredictionResult
-from lightning_pose.data.utils import convert_bbox_coords
 from lightning_pose.metrics import compute_metrics_single
 from lightning_pose.models import ALLOWED_MODEL_TYPES, ALLOWED_MODELS
 from lightning_pose.utils import io as io_utils
@@ -551,13 +551,13 @@ class Model:
             conf = conf_merged[0].cpu().numpy().astype(np.float32)
         elif has_confidence:
             # Heatmap model — keypoints already in original frame coords
-            # (get_loss_inputs_labeled calls convert_bbox_coords internally)
+            # (get_loss_inputs_labeled calls model_to_frame_batch internally)
             kp = kp_pred[0].cpu().numpy().reshape(-1, 2).astype(np.float32)
             conf = result["confidences"][0].cpu().numpy().astype(np.float32)
         else:
             # Regression model — get_loss_inputs_labeled does not call
-            # convert_bbox_coords, so we apply the remap ourselves.
-            kp_pred = convert_bbox_coords(batch_dict, kp_pred, in_place=False)  # type: ignore[arg-type]
+            # model_to_frame_batch, so we apply the remap ourselves.
+            kp_pred = model_to_frame_batch(batch_dict, kp_pred, in_place=False)  # type: ignore[arg-type]
             kp = kp_pred[0].cpu().numpy().reshape(-1, 2).astype(np.float32)
             conf = np.ones(num_kp, dtype=np.float32)
 

@@ -17,13 +17,14 @@ from PIL import Image
 from torchvision import transforms
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
+from lightning_pose.data.bboxes import norm_to_frame
 from lightning_pose.data.cameras import CameraGroup
 from lightning_pose.data.datatypes import (
     BaseLabeledExampleDict,
     HeatmapLabeledExampleDict,
     MultiviewHeatmapLabeledExampleDict,
 )
-from lightning_pose.data.utils import generate_heatmaps, normalized_to_bbox
+from lightning_pose.data.heatmaps import generate_heatmaps
 from lightning_pose.utils import io as io_utils
 
 logger = logging.getLogger(__name__)
@@ -845,7 +846,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             keypoints_curr[:, 0] = keypoints_curr[:, 0] / example_dict["images"].shape[-1]  # -1 x
             keypoints_curr[:, 1] = keypoints_curr[:, 1] / example_dict["images"].shape[-2]  # -2 y
             # 2. multiply and add by bbox dims
-            keypoints_2d[idx_view] = normalized_to_bbox(
+            keypoints_2d[idx_view] = norm_to_frame(
                 keypoints=keypoints_curr.unsqueeze(0),
                 bbox=example_dict["bbox"].unsqueeze(0),
             )[0].cpu().numpy()
