@@ -261,24 +261,34 @@ Label CSV files support an optional `visible` column after each `x, y` pair
 | 1 | occluded | uniform (encourages low-confidence output) |
 | 2 | visible | Gaussian (standard supervised target) |
 
-**Detection**: `io_utils.has_visibility_column(csv_file, header_rows)` returns `True` when
-the `coords` header row contains a `visible` entry. Only the `[0, 1, 2]` (DLC) header format
-is supported; all other formats return `False`.
+**Detection**: inline in `parse_label_csv` — the `coords` header row is checked for a `visible`
+entry. Only the `[0, 1, 2]` (DLC) header format is supported; all other formats are treated as
+having no visibility column.
 
 **Parsing** (`BaseTrackingDataset.__init__`): when detected, the raw CSV is reshaped to
 `(N, K, 3)` and split into `self.keypoints (N, K, 2)` (x, y) and
-`self.visibility (N, K)` `int64` tensor. When absent, `self.visibility = None` and the legacy
-`uniform_heatmaps_for_nan_keypoints` config flag governs behavior.
+`self.visibility (N, K)` `int64` tensor. When absent, `self.visibility = None`.
+
+**Synthesis** (`HeatmapDataset.__init__`): when `self.visibility is None` after the base class
+init, visibility is synthesized from NaN positions: NaN keypoints get `vis=1` (uniform) if the
+`uniform_heatmaps_for_nan_keypoints` config flag is set, else `vis=0` (zero); valid keypoints
+get `vis=2`. This ensures `self.visibility` is always populated before training.
+
+**`BaseLabeledExampleDict`**: always contains a `visibility` key. When
+`BaseTrackingDataset.visibility is None`, the value is an empty tensor
+`torch.zeros(0, dtype=torch.long)` (sentinel that collates cleanly); otherwise a `(K,)` int64
+tensor. `compute_heatmap` checks `numel() > 0` to distinguish the two cases.
 
 **Heatmap generation** (`generate_heatmaps` in `lightning_pose/data/utils.py`): accepts an
 optional `visibility: Int[Tensor, "batch K"]` parameter. The Gaussian computation and
-normalization are unchanged; only the 8-line filler block at the end branches on visibility.
-`visibility=None` is bit-for-bit identical to the legacy path.
+normalization are unchanged; only the filler block at the end branches on visibility.
+`visibility=None` → OOB/NaN keypoints produce zeros (safe for loss callers, which never pass
+NaN-coordinate predictions).
 
-**Propagation**: `HeatmapDataset.compute_heatmap` reads `example_dict["idxs"]` (already
-present in every batch dict) to index `self.visibility` and pass a `(1, K)` slice to
-`generate_heatmaps`. No changes to loss functions are needed — zero heatmaps are already
-filtered by `HeatmapLoss.remove_nans`, and uniform heatmaps are already included.
+**Propagation**: `HeatmapDataset.compute_heatmap` reads `example_dict["visibility"]` directly
+(set by `BaseTrackingDataset.__getitem__`) and passes it to `generate_heatmaps`. No changes to
+loss functions are needed — zero heatmaps are already filtered by `HeatmapLoss.remove_nans`,
+and uniform heatmaps are already included.
 
 **Warnings**: a `logger.warning` is emitted if vis=1 keypoints have non-NaN coordinates
 (the visibility flag wins; coordinates are ignored).

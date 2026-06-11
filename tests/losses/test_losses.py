@@ -781,7 +781,6 @@ class TestReprojectionHeatmapLoss:
             downsampled_image_height=64,
             downsampled_image_width=64,
             log_weight=np.log(0.5),  # set log_weight so weight=0.5
-            uniform_heatmaps=False,
         )
         return loss
 

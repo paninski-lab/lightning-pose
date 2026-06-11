@@ -167,6 +167,7 @@ class TestGenerateHeatmaps:
         """uniform_heatmaps=True: dataset heatmaps match generate_heatmaps with synthesized vis."""
 
         from lightning_pose.data import get_dataset, get_imgaug_transform
+        from lightning_pose.data.datasets import HeatmapDataset
 
         cfg_tmp = copy.deepcopy(cfg)
         cfg_tmp.model.model_type = "heatmap"
@@ -179,12 +180,14 @@ class TestGenerateHeatmaps:
             imgaug_transform=imgaug_transform,
         )
 
+        assert isinstance(heatmap_dataset, HeatmapDataset)
         im_height = cfg.data.image_resize_dims.height
         im_width = cfg.data.image_resize_dims.width
 
         batch = heatmap_dataset.__getitem__(idx=0)
         heatmap_gt = batch["heatmaps"].unsqueeze(0)  # type: ignore[typeddict-item]
         keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
+        assert heatmap_dataset.visibility is not None
         vis = heatmap_dataset.visibility[0].unsqueeze(0)  # (1, K) synthesized visibility
 
         heatmap_uniform_torch = generate_heatmaps(
@@ -306,8 +309,7 @@ class TestGenerateHeatmaps:
             keep_gradients=False,
         )
 
-        # Check that the heatmap doesn't require test_uniform_heatmapsgradients
-        # (computation graph is detached)
+        # Check that the heatmap doesn't require gradients (computation graph is detached)
         assert not heatmap_no_grad.requires_grad, \
             "Heatmap should not require gradients when keep_gradients=False"
 
@@ -343,10 +345,13 @@ class TestGenerateHeatmaps:
         zeros = torch.zeros(output_height, output_width)
         uniform = torch.ones(output_height, output_width) / (output_height * output_width)
 
-        kwargs = dict(height=im_height, width=im_width, output_shape=(output_height, output_width))
-
         # visibility=None: OOB and NaN → zeros; valid → Gaussian
-        heatmaps = generate_heatmaps(keypoints, **kwargs)
+        heatmaps = generate_heatmaps(
+            keypoints,
+            height=im_height,
+            width=im_width,
+            output_shape=(output_height, output_width),
+        )
         assert torch.allclose(heatmaps[0, 1], zeros)  # x OOB
         assert torch.allclose(heatmaps[0, 2], zeros)  # x OOB
         assert torch.allclose(heatmaps[0, 3], zeros)  # y OOB
@@ -358,19 +363,37 @@ class TestGenerateHeatmaps:
 
         # vis=1 (occluded): all keypoints → uniform, regardless of OOB or NaN
         vis1 = torch.ones(2, 4, dtype=torch.long)
-        heatmaps_v1 = generate_heatmaps(keypoints, **kwargs, visibility=vis1)
+        heatmaps_v1 = generate_heatmaps(
+            keypoints,
+            height=im_height,
+            width=im_width,
+            output_shape=(output_height, output_width),
+            visibility=vis1,
+        )
         assert torch.allclose(heatmaps_v1[0, 1], uniform)  # x OOB → uniform
         assert torch.allclose(heatmaps_v1[1, 2], uniform)  # NaN → uniform
 
         # vis=0 (not labeled): all keypoints → zeros, including valid ones
         vis0 = torch.zeros(2, 4, dtype=torch.long)
-        heatmaps_v0 = generate_heatmaps(keypoints, **kwargs, visibility=vis0)
+        heatmaps_v0 = generate_heatmaps(
+            keypoints,
+            height=im_height,
+            width=im_width,
+            output_shape=(output_height, output_width),
+            visibility=vis0,
+        )
         assert torch.allclose(heatmaps_v0[0, 0], zeros)  # valid kp → zeros when vis=0
         assert torch.allclose(heatmaps_v0[1, 1], zeros)  # valid kp → zeros when vis=0
 
         # vis=2 (visible) + OOB/NaN → zeros (defensive); vis=2 + valid → Gaussian
         vis2 = torch.full((2, 4), 2, dtype=torch.long)
-        heatmaps_v2 = generate_heatmaps(keypoints, **kwargs, visibility=vis2)
+        heatmaps_v2 = generate_heatmaps(
+            keypoints,
+            height=im_height,
+            width=im_width,
+            output_shape=(output_height, output_width),
+            visibility=vis2,
+        )
         assert torch.allclose(heatmaps_v2[0, 1], zeros)    # x OOB → zero despite vis=2
         assert torch.allclose(heatmaps_v2[1, 2], zeros)    # NaN → zero despite vis=2
         assert not torch.allclose(heatmaps_v2[0, 0], zeros)  # valid → Gaussian

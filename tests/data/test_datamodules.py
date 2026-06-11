@@ -250,7 +250,7 @@ def test_base_data_module_combined(cfg, base_data_module_combined):
     batch = batch[0] if isinstance(batch, tuple) else batch
     assert list(batch.keys())[0] == "labeled"
     assert list(batch.keys())[1] == "unlabeled"
-    assert list(batch["labeled"].keys()) == ["images", "keypoints", "idxs", "bbox"]
+    assert list(batch["labeled"].keys()) == ["images", "keypoints", "idxs", "bbox", "visibility"]
     assert list(batch["unlabeled"].keys()) == ["frames", "transforms", "bbox", "is_multiview"]
     assert batch["labeled"]["images"].shape == (train_size_labeled, 3, im_height, im_width)
     assert batch["labeled"]["keypoints"].shape == (train_size_labeled, num_targets)
@@ -288,7 +288,9 @@ def test_heatmap_data_module_combined(cfg, heatmap_data_module_combined):
     batch = batch[0] if isinstance(batch, tuple) else batch
     assert list(batch.keys())[0] == "labeled"
     assert list(batch.keys())[1] == "unlabeled"
-    assert list(batch["labeled"].keys()) == ["images", "keypoints", "idxs", "bbox", "heatmaps"]
+    assert list(batch["labeled"].keys()) == [
+        "images", "keypoints", "idxs", "bbox", "heatmaps", "visibility",
+    ]
     assert list(batch["unlabeled"].keys()) == ["frames", "transforms", "bbox", "is_multiview"]
     assert batch["labeled"]["images"].shape == (train_size_labeled, 3, im_height, im_width)
     assert batch["labeled"]["keypoints"].shape == (train_size_labeled, num_targets)
@@ -362,7 +364,9 @@ def test_heatmap_data_module_combined_context(cfg, heatmap_data_module_combined_
     batch = batch[0] if isinstance(batch, tuple) else batch
     assert list(batch.keys())[0] == "labeled"
     assert list(batch.keys())[1] == "unlabeled"
-    assert list(batch["labeled"].keys()) == ["images", "keypoints", "idxs", "bbox", "heatmaps"]
+    assert list(batch["labeled"].keys()) == [
+        "images", "keypoints", "idxs", "bbox", "heatmaps", "visibility",
+    ]
     assert list(batch["unlabeled"].keys()) == ["frames", "transforms", "bbox", "is_multiview"]
     assert batch["labeled"]["images"].shape == (
         train_size_labeled, num_context, 3, im_height, im_width,
