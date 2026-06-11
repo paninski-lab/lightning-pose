@@ -250,6 +250,41 @@ frame. The index column is ignored on read.
 `model.predict_on_video_file(bbox_file=...)` → `predict_video(bbox_file=...)` →
 `PrepareDALI(bbox_df=...)` → `LitDaliWrapper._apply_bbox_crop`.
 
+### Per-keypoint visibility (`lightning_pose/data/`)
+
+Label CSV files support an optional `visible` column after each `x, y` pair
+(`x, y, visible, x, y, visible, …`), following the COCO keypoint convention:
+
+| Value | Meaning | Heatmap target |
+|-------|---------|----------------|
+| 0 | not labeled | all-zeros (excluded from loss) |
+| 1 | occluded | uniform (encourages low-confidence output) |
+| 2 | visible | Gaussian (standard supervised target) |
+
+**Detection**: `io_utils.has_visibility_column(csv_file, header_rows)` returns `True` when
+the `coords` header row contains a `visible` entry. Only the `[0, 1, 2]` (DLC) header format
+is supported; all other formats return `False`.
+
+**Parsing** (`BaseTrackingDataset.__init__`): when detected, the raw CSV is reshaped to
+`(N, K, 3)` and split into `self.keypoints (N, K, 2)` (x, y) and
+`self.visibility (N, K)` `int64` tensor. When absent, `self.visibility = None` and the legacy
+`uniform_heatmaps_for_nan_keypoints` config flag governs behavior.
+
+**Heatmap generation** (`generate_heatmaps` in `lightning_pose/data/utils.py`): accepts an
+optional `visibility: Int[Tensor, "batch K"]` parameter. The Gaussian computation and
+normalization are unchanged; only the 8-line filler block at the end branches on visibility.
+`visibility=None` is bit-for-bit identical to the legacy path.
+
+**Propagation**: `HeatmapDataset.compute_heatmap` reads `example_dict["idxs"]` (already
+present in every batch dict) to index `self.visibility` and pass a `(1, K)` slice to
+`generate_heatmaps`. No changes to loss functions are needed — zero heatmaps are already
+filtered by `HeatmapLoss.remove_nans`, and uniform heatmaps are already included.
+
+**Warnings**: a `logger.warning` is emitted if vis=1 keypoints have non-NaN coordinates
+(the visibility flag wins; coordinates are ignored).
+
+**Validation**: raises `ValueError` if any visibility value is outside `{0, 1, 2}`.
+
 ### Post-training evaluation (`lightning_pose/train.py`)
 
 After training, `train()` calls `_evaluate_on_training_dataset(model, suffix=...)` three times:
