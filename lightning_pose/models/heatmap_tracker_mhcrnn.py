@@ -6,13 +6,14 @@ import torch
 from jaxtyping import Float
 from omegaconf import DictConfig, ListConfig
 
+from lightning_pose.data.bboxes import convert_bbox_coords
 from lightning_pose.data.datatypes import (
     HeatmapLabeledBatchDict,
     MultiviewHeatmapLabeledBatchDict,
     MultiviewUnlabeledBatchDict,
     UnlabeledBatchDict,
 )
-from lightning_pose.data.utils import convert_bbox_coords, undo_affine_transform_batch
+from lightning_pose.data.utils import undo_affine_transform_batch
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.backbones import ALLOWED_BACKBONES, BACKBONE_STRIDES

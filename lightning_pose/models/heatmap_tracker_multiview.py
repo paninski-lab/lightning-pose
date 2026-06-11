@@ -9,27 +9,19 @@ from jaxtyping import Float
 from omegaconf import DictConfig, ListConfig
 from torch import nn
 
+from lightning_pose.data.bboxes import convert_bbox_coords, convert_original_to_model_coords
 from lightning_pose.data.cameras import project_3d_to_2d, project_camera_pairs_to_3d
 from lightning_pose.data.datatypes import (
     MultiviewHeatmapLabeledBatchDict,
     MultiviewUnlabeledBatchDict,
     UnlabeledBatchDict,
 )
-from lightning_pose.data.utils import (
-    convert_bbox_coords,
-    convert_original_to_model_coords,
-    undo_affine_transform_batch,
-)
+from lightning_pose.data.utils import undo_affine_transform_batch
 from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.backbones import ALLOWED_TRANSFORMER_BACKBONES_MULTIVIEW
-from lightning_pose.models.base import (
-    BaseSupervisedTracker,
-    SemiSupervisedTrackerMixin,
-)
-from lightning_pose.models.heads import (
-    HeatmapHead,
-)
+from lightning_pose.models.base import BaseSupervisedTracker, SemiSupervisedTrackerMixin
+from lightning_pose.models.heads import HeatmapHead
 
 logger = logging.getLogger(__name__)
 

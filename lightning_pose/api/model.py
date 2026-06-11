@@ -21,9 +21,9 @@ from lightning_pose.data import (
     get_dataset,
     get_imgaug_transform,
 )
+from lightning_pose.data.bboxes import convert_bbox_coords
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datatypes import MultiviewPredictionResult, PredictionResult
-from lightning_pose.data.utils import convert_bbox_coords
 from lightning_pose.metrics import compute_metrics_single
 from lightning_pose.models import ALLOWED_MODEL_TYPES, ALLOWED_MODELS
 from lightning_pose.utils import io as io_utils

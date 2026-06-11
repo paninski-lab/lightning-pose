@@ -223,7 +223,7 @@ def test_camera_round_trip_accuracy(points_2d, intrinsics, extrinsics, distortio
 def test_full_coordinate_pipeline_roundtrip(points_2d, intrinsics, extrinsics, distortions):
     """Test the complete coordinate transformation pipeline used in training."""
 
-    from lightning_pose.data.utils import convert_bbox_coords, convert_original_to_model_coords
+    from lightning_pose.data.bboxes import convert_bbox_coords, convert_original_to_model_coords
 
     # Mock batch_dict with realistic values
     batch_size = 1
