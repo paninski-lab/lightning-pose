@@ -289,7 +289,7 @@ def test_heatmap_data_module_combined(cfg, heatmap_data_module_combined):
     assert list(batch.keys())[0] == "labeled"
     assert list(batch.keys())[1] == "unlabeled"
     assert list(batch["labeled"].keys()) == [
-        "images", "keypoints", "idxs", "bbox", "heatmaps", "visibility",
+        "images", "keypoints", "idxs", "bbox", "visibility", "heatmaps",
     ]
     assert list(batch["unlabeled"].keys()) == ["frames", "transforms", "bbox", "is_multiview"]
     assert batch["labeled"]["images"].shape == (train_size_labeled, 3, im_height, im_width)
@@ -365,7 +365,7 @@ def test_heatmap_data_module_combined_context(cfg, heatmap_data_module_combined_
     assert list(batch.keys())[0] == "labeled"
     assert list(batch.keys())[1] == "unlabeled"
     assert list(batch["labeled"].keys()) == [
-        "images", "keypoints", "idxs", "bbox", "heatmaps", "visibility",
+        "images", "keypoints", "idxs", "bbox", "visibility", "heatmaps",
     ]
     assert list(batch["unlabeled"].keys()) == ["frames", "transforms", "bbox", "is_multiview"]
     assert batch["labeled"]["images"].shape == (
