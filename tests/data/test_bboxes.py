@@ -6,9 +6,67 @@ import torch
 from lightning_pose.data.bboxes import (
     frame_to_model,
     frame_to_model_batch,
+    frame_to_norm,
+    model_to_frame,
     model_to_frame_batch,
+    model_to_norm,
     norm_to_frame,
+    norm_to_model,
 )
+
+
+class TestFrameToNorm:
+    """Test the function frame_to_norm."""
+
+    def test_frame_to_norm_normal_batch(self):
+        """Normal batch: bbox corners and center map to (0,0), (1,1), and (0.5,0.5)."""
+        bboxes = [
+            torch.tensor([0., 0., 100., 200.]),   # x, y, h, w
+            torch.tensor([20., 30., 100., 200.]),
+        ]
+        for bbox in bboxes:
+            x, y, h, w = bbox[0], bbox[1], bbox[2], bbox[3]
+            keypoints = torch.tensor([
+                [[x.item(), y.item()]],                               # top-left corner of bbox
+                [[x.item() + w.item(), y.item() + h.item()]],         # bottom-right corner
+                [[x.item() + w.item() / 2, y.item() + h.item() / 2]],  # center
+            ])
+            kps = frame_to_norm(keypoints.clone(), bbox.unsqueeze(0).repeat([3, 1]))
+            assert torch.isclose(kps[0, 0, 0], torch.tensor(0.0))
+            assert torch.isclose(kps[0, 0, 1], torch.tensor(0.0))
+            assert torch.isclose(kps[1, 0, 0], torch.tensor(1.0))
+            assert torch.isclose(kps[1, 0, 1], torch.tensor(1.0))
+            assert torch.isclose(kps[2, 0, 0], torch.tensor(0.5))
+            assert torch.isclose(kps[2, 0, 1], torch.tensor(0.5))
+
+    def test_frame_to_norm_context_batch(self):
+        """Context batch: edge bbox rows are ignored; middle rows govern conversion."""
+        bboxes = [
+            torch.tensor([0., 0., 100., 200.]),
+            torch.tensor([20., 30., 100., 200.]),
+        ]
+        for bbox in bboxes:
+            x, y, h, w = bbox[0], bbox[1], bbox[2], bbox[3]
+            keypoints = torch.tensor([
+                [[x.item(), y.item()]],
+                [[x.item() + w.item(), y.item() + h.item()]],
+                [[x.item() + w.item() / 2, y.item() + h.item() / 2]],
+            ])
+            kps = frame_to_norm(keypoints.clone(), bbox.unsqueeze(0).repeat([7, 1]))
+            assert torch.isclose(kps[0, 0, 0], torch.tensor(0.0))
+            assert torch.isclose(kps[0, 0, 1], torch.tensor(0.0))
+            assert torch.isclose(kps[1, 0, 0], torch.tensor(1.0))
+            assert torch.isclose(kps[1, 0, 1], torch.tensor(1.0))
+            assert torch.isclose(kps[2, 0, 0], torch.tensor(0.5))
+            assert torch.isclose(kps[2, 0, 1], torch.tensor(0.5))
+
+    def test_frame_to_norm_does_not_mutate_input(self):
+        """frame_to_norm clones before transforming; original tensor is unchanged."""
+        bbox = torch.tensor([10., 20., 100., 200.])
+        keypoints = torch.tensor([[[10., 20.]], [[210., 120.]], [[110., 70.]]])
+        keypoints_orig = keypoints.clone()
+        frame_to_norm(keypoints, bbox.unsqueeze(0).repeat([3, 1]))
+        assert torch.allclose(keypoints, keypoints_orig)
 
 
 class TestNormToFrame:
@@ -59,6 +117,63 @@ class TestNormToFrame:
             # (0.5, 0.5) should map to top left corner plus half the new height/width
             assert kps[2, 0, 0] == bbox[3] / 2 + bbox[0]
             assert kps[2, 0, 1] == bbox[2] / 2 + bbox[1]
+
+
+class TestNormToModel:
+    """Test the function norm_to_model."""
+
+    def test_norm_to_model_corners_and_center(self):
+        """Norm corners and center map to model corners/center for square and non-square dims."""
+        keypoints = torch.tensor([
+            [[0.0, 0.0]],
+            [[1.0, 1.0]],
+            [[0.5, 0.5]],
+        ])
+        for model_width, model_height in [(256., 256.), (128., 64.)]:
+            kps = norm_to_model(keypoints.clone(), model_width, model_height)
+            # (0, 0) -> (0, 0)
+            assert torch.isclose(kps[0, 0, 0], torch.tensor(0.0))
+            assert torch.isclose(kps[0, 0, 1], torch.tensor(0.0))
+            # (1, 1) -> (model_width, model_height)
+            assert torch.isclose(kps[1, 0, 0], torch.tensor(model_width))
+            assert torch.isclose(kps[1, 0, 1], torch.tensor(model_height))
+            # (0.5, 0.5) -> (model_width/2, model_height/2)
+            assert torch.isclose(kps[2, 0, 0], torch.tensor(model_width / 2))
+            assert torch.isclose(kps[2, 0, 1], torch.tensor(model_height / 2))
+
+    def test_norm_to_model_does_not_mutate_input(self):
+        """norm_to_model clones before transforming; original tensor is unchanged."""
+        keypoints = torch.tensor([[[0.5, 0.5]]])
+        keypoints_orig = keypoints.clone()
+        norm_to_model(keypoints, 256., 256.)
+        assert torch.allclose(keypoints, keypoints_orig)
+
+
+class TestModelToNorm:
+    """Test the function model_to_norm."""
+
+    def test_model_to_norm_corners_and_center(self):
+        """Model corners and center map to (0,0), (1,1), (0.5,0.5) in norm space."""
+        for model_width, model_height in [(256., 256.), (128., 64.)]:
+            keypoints = torch.tensor([
+                [[0.0, 0.0]],
+                [[model_width, model_height]],
+                [[model_width / 2, model_height / 2]],
+            ])
+            kps = model_to_norm(keypoints.clone(), model_width, model_height)
+            assert torch.isclose(kps[0, 0, 0], torch.tensor(0.0))
+            assert torch.isclose(kps[0, 0, 1], torch.tensor(0.0))
+            assert torch.isclose(kps[1, 0, 0], torch.tensor(1.0))
+            assert torch.isclose(kps[1, 0, 1], torch.tensor(1.0))
+            assert torch.isclose(kps[2, 0, 0], torch.tensor(0.5))
+            assert torch.isclose(kps[2, 0, 1], torch.tensor(0.5))
+
+    def test_model_to_norm_does_not_mutate_input(self):
+        """model_to_norm clones before transforming; original tensor is unchanged."""
+        keypoints = torch.tensor([[[128., 64.]]])
+        keypoints_orig = keypoints.clone()
+        model_to_norm(keypoints, 256., 128.)
+        assert torch.allclose(keypoints, keypoints_orig)
 
 
 class TestModelToFrameBatch:
@@ -370,3 +485,88 @@ class TestFrameToModel:
         # Center: (100-50)/100 * 128 = 64, (50-25)/50 * 64 = 32
         assert torch.isclose(kps[2, 0, 0], torch.tensor(64.0), atol=1e-6)
         assert torch.isclose(kps[2, 0, 1], torch.tensor(32.0), atol=1e-6)
+
+
+class TestModelToFrame:
+    """Test the function model_to_frame."""
+
+    def test_model_to_frame_basic(self):
+        """Model corners and center map back to frame corners and center."""
+        model_width = 256.
+        model_height = 256.
+
+        bboxes = [
+            torch.tensor([0., 0., 100., 200.]),
+            torch.tensor([50., 25., 100., 200.]),
+        ]
+
+        for bbox in bboxes:
+            x, y, h, w = bbox[0], bbox[1], bbox[2], bbox[3]
+            keypoints = torch.tensor([
+                [[0., 0.]],                             # model top-left → frame top-left of bbox
+                [[model_width, model_height]],           # model bottom-right → frame bottom-right
+                [[model_width / 2, model_height / 2]],  # model center → frame center of bbox
+            ])
+
+            kps = model_to_frame(
+                keypoints.clone(),
+                bbox.unsqueeze(0).repeat([3, 1]),
+                model_width,
+                model_height,
+            )
+
+            assert torch.isclose(kps[0, 0, 0], x, atol=1e-6)
+            assert torch.isclose(kps[0, 0, 1], y, atol=1e-6)
+            assert torch.isclose(kps[1, 0, 0], x + w, atol=1e-6)
+            assert torch.isclose(kps[1, 0, 1], y + h, atol=1e-6)
+            assert torch.isclose(kps[2, 0, 0], x + w / 2, atol=1e-6)
+            assert torch.isclose(kps[2, 0, 1], y + h / 2, atol=1e-6)
+
+    def test_model_to_frame_context_batch(self):
+        """Context batch: edge bbox rows are ignored; middle rows govern conversion."""
+        model_width = 256.
+        model_height = 256.
+
+        bboxes = [
+            torch.tensor([0., 0., 100., 200.]),
+            torch.tensor([50., 25., 100., 200.]),
+        ]
+
+        for bbox in bboxes:
+            x, y, h, w = bbox[0], bbox[1], bbox[2], bbox[3]
+            keypoints = torch.tensor([
+                [[0., 0.]],
+                [[model_width, model_height]],
+                [[model_width / 2, model_height / 2]],
+            ])
+
+            kps = model_to_frame(
+                keypoints.clone(),
+                bbox.unsqueeze(0).repeat([7, 1]),
+                model_width,
+                model_height,
+            )
+
+            assert torch.isclose(kps[0, 0, 0], x, atol=1e-6)
+            assert torch.isclose(kps[0, 0, 1], y, atol=1e-6)
+            assert torch.isclose(kps[1, 0, 0], x + w, atol=1e-6)
+            assert torch.isclose(kps[1, 0, 1], y + h, atol=1e-6)
+            assert torch.isclose(kps[2, 0, 0], x + w / 2, atol=1e-6)
+            assert torch.isclose(kps[2, 0, 1], y + h / 2, atol=1e-6)
+
+    def test_model_to_frame_roundtrip(self):
+        """frame_to_model followed by model_to_frame recovers the original keypoints."""
+        model_width = 128.
+        model_height = 64.
+        bbox = torch.tensor([50., 25., 50., 100.])  # x=50, y=25, h=50, w=100
+        keypoints = torch.tensor([
+            [[50., 25.]],
+            [[150., 75.]],
+            [[100., 50.]],
+        ])
+
+        bbox_batch = bbox.unsqueeze(0).repeat([3, 1])
+        model_kps = frame_to_model(keypoints.clone(), bbox_batch, model_width, model_height)
+        recovered = model_to_frame(model_kps, bbox_batch, model_width, model_height)
+
+        assert torch.allclose(recovered, keypoints, atol=1e-6)

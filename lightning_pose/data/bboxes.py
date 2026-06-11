@@ -11,8 +11,12 @@ Three coordinate spaces are used throughout this module:
 
 Tensor-level helpers (accept explicit keypoint + bbox tensors):
 
+- :func:`frame_to_norm`  — frame → norm
 - :func:`norm_to_frame`  — norm → frame
-- :func:`frame_to_model` — frame → model  (via norm internally)
+- :func:`norm_to_model`  — norm → model
+- :func:`model_to_norm`  — model → norm
+- :func:`frame_to_model` — frame → model  (= frame_to_norm ∘ norm_to_model)
+- :func:`model_to_frame` — model → frame  (= model_to_norm ∘ norm_to_frame)
 
 Batch-level wrappers (accept a ``batch_dict`` that carries ``bbox`` and image
 dimensions; handle both single-view and multi-view):
@@ -33,11 +37,44 @@ from lightning_pose.data.datatypes import (
 )
 
 __all__ = [
+    'frame_to_norm',
     'norm_to_frame',
+    'model_to_norm',
+    'norm_to_model',
     'frame_to_model',
+    'model_to_frame',
     'model_to_frame_batch',
     'frame_to_model_batch',
 ]
+
+
+def frame_to_norm(
+    keypoints: Float[torch.Tensor, 'batch num_keypoints 2'],
+    bbox: Float[torch.Tensor, 'batch 4'],
+) -> Float[torch.Tensor, 'batch num_keypoints 2']:
+    """Transform keypoints from frame coordinates to norm coordinates.
+
+    Args:
+        keypoints: keypoints in frame (pixel) coordinates, shape (batch, num_keypoints, 2)
+        bbox: bounding boxes in [x, y, h, w] format, shape (batch, 4)
+
+    Returns:
+        keypoints in norm coordinates, shape (batch, num_keypoints, 2)
+    """
+    kp = keypoints.clone()
+    if kp.shape[0] == bbox.shape[0]:
+        # normal batch
+        kp[:, :, 0] -= bbox[:, 0].unsqueeze(1)   # subtract bbox x offset
+        kp[:, :, 0] /= bbox[:, 3].unsqueeze(1)   # divide by bbox width
+        kp[:, :, 1] -= bbox[:, 1].unsqueeze(1)   # subtract bbox y offset
+        kp[:, :, 1] /= bbox[:, 2].unsqueeze(1)   # divide by bbox height
+    else:
+        # context batch; we don't have predictions for first/last two frames
+        kp[:, :, 0] -= bbox[2:-2, 0].unsqueeze(1)
+        kp[:, :, 0] /= bbox[2:-2, 3].unsqueeze(1)
+        kp[:, :, 1] -= bbox[2:-2, 1].unsqueeze(1)
+        kp[:, :, 1] /= bbox[2:-2, 2].unsqueeze(1)
+    return kp
 
 
 def norm_to_frame(
@@ -60,6 +97,92 @@ def norm_to_frame(
     return keypoints
 
 
+def model_to_norm(
+    keypoints: Float[torch.Tensor, 'batch num_keypoints 2'],
+    model_width: float,
+    model_height: float,
+) -> Float[torch.Tensor, 'batch num_keypoints 2']:
+    """Transform keypoints from model coordinates to norm coordinates.
+
+    Args:
+        keypoints: keypoints in model (pixel) coordinates, shape (batch, num_keypoints, 2)
+        model_width: width of the model's input image in pixels
+        model_height: height of the model's input image in pixels
+
+    Returns:
+        keypoints in norm coordinates, shape (batch, num_keypoints, 2)
+    """
+    kp = keypoints.clone()
+    kp[:, :, 0] /= model_width
+    kp[:, :, 1] /= model_height
+    return kp
+
+
+def norm_to_model(
+    keypoints: Float[torch.Tensor, 'batch num_keypoints 2'],
+    model_width: float,
+    model_height: float,
+) -> Float[torch.Tensor, 'batch num_keypoints 2']:
+    """Transform keypoints from norm coordinates to model coordinates.
+
+    Args:
+        keypoints: keypoints in norm coordinates, shape (batch, num_keypoints, 2)
+        model_width: width of the model's input image in pixels
+        model_height: height of the model's input image in pixels
+
+    Returns:
+        keypoints in model (pixel) coordinates, shape (batch, num_keypoints, 2)
+    """
+    kp = keypoints.clone()
+    kp[:, :, 0] *= model_width
+    kp[:, :, 1] *= model_height
+    return kp
+
+
+def frame_to_model(
+    keypoints: Float[torch.Tensor, 'batch num_keypoints 2'],
+    bbox: Float[torch.Tensor, 'batch 4'],
+    model_width: float,
+    model_height: float,
+) -> Float[torch.Tensor, 'batch num_keypoints 2']:
+    """Convert keypoints from frame coordinates to model coordinates.
+
+    Composes two transformations: frame → norm → model.
+
+    Args:
+        keypoints: keypoints in frame (pixel) coordinates, shape (batch, num_keypoints, 2)
+        bbox: bounding boxes in [x, y, h, w] format, shape (batch, 4)
+        model_width: width of the model's input image in pixels
+        model_height: height of the model's input image in pixels
+
+    Returns:
+        keypoints in model (pixel) coordinates, shape (batch, num_keypoints, 2)
+    """
+    return norm_to_model(frame_to_norm(keypoints, bbox), model_width, model_height)
+
+
+def model_to_frame(
+    keypoints: Float[torch.Tensor, 'batch num_keypoints 2'],
+    bbox: Float[torch.Tensor, 'batch 4'],
+    model_width: float,
+    model_height: float,
+) -> Float[torch.Tensor, 'batch num_keypoints 2']:
+    """Convert keypoints from model coordinates to frame coordinates.
+
+    Composes two transformations: model → norm → frame.
+
+    Args:
+        keypoints: keypoints in model (pixel) coordinates, shape (batch, num_keypoints, 2)
+        bbox: bounding boxes in [x, y, h, w] format, shape (batch, 4)
+        model_width: width of the model's input image in pixels
+        model_height: height of the model's input image in pixels
+
+    Returns:
+        keypoints in frame (pixel) coordinates, shape (batch, num_keypoints, 2)
+    """
+    return norm_to_frame(model_to_norm(keypoints, model_width, model_height), bbox)
+
+
 def model_to_frame_batch(
     batch_dict: (
         HeatmapLabeledBatchDict
@@ -67,7 +190,7 @@ def model_to_frame_batch(
         | MultiviewUnlabeledBatchDict
         | UnlabeledBatchDict
     ),
-    predicted_keypoints: Float[torch.Tensor, 'batch num_targets'],
+    model_keypoints: Float[torch.Tensor, 'batch num_targets'],
     in_place: bool = True,
 ) -> Float[torch.Tensor, 'batch num_targets']:
     """Transform keypoints from model coordinates to frame coordinates.
@@ -75,23 +198,26 @@ def model_to_frame_batch(
     Reads image dimensions and bbox from ``batch_dict``; handles single-view
     and multi-view batches.
     """
-    num_targets = predicted_keypoints.shape[1]
+    num_targets = model_keypoints.shape[1]
     num_keypoints = num_targets // 2
-    # reshape from (batch, n_targets) back to (batch, n_key, 2), in x,y order
+    # reshape from (batch, n_targets) to (batch, n_keypoints, 2), in x,y order
     if in_place:
-        predicted_keypoints_ = predicted_keypoints.reshape((-1, num_keypoints, 2))
+        model_keypoints_ = model_keypoints.reshape((-1, num_keypoints, 2))
     else:
-        predicted_keypoints_ = predicted_keypoints.clone().reshape((-1, num_keypoints, 2))
-    # divide by image dims to get norm coordinates
+        model_keypoints_ = model_keypoints.clone().reshape((-1, num_keypoints, 2))
+    # extract model image dimensions
     if 'images' in batch_dict.keys():
         img = batch_dict['images']  # type: ignore[typeddict-item]
-        predicted_keypoints_[:, :, 0] /= img.shape[-1]  # -1 dim is width "x"
-        predicted_keypoints_[:, :, 1] /= img.shape[-2]  # -2 dim is height "y"
+        model_width = img.shape[-1]   # -1 dim is width "x"
+        model_height = img.shape[-2]  # -2 dim is height "y"
     else:  # we have unlabeled dict, 'frames' instead of 'images'
         frames = batch_dict['frames']  # type: ignore[typeddict-item]
-        predicted_keypoints_[:, :, 0] /= frames.shape[-1]  # -1 dim is width "x"
-        predicted_keypoints_[:, :, 1] /= frames.shape[-2]  # -2 dim is height "y"
-    # multiply and add by bbox dims (x,y,h,w)
+        model_width = frames.shape[-1]   # -1 dim is width "x"
+        model_height = frames.shape[-2]  # -2 dim is height "y"
+    # divide by model dims to get norm coordinates (in-place)
+    model_keypoints_[:, :, 0] /= model_width
+    model_keypoints_[:, :, 1] /= model_height
+    # multiply and add by bbox dims to get frame coordinates, per view
     if (
         ('num_views' in batch_dict.keys() and int(batch_dict['num_views'].max()) > 1)  # type: ignore[typeddict-item]
         or batch_dict.get('is_multiview', False)
@@ -116,15 +242,14 @@ def model_to_frame_batch(
             idx_beg = num_keypoints_per_view * v
             idx_end = idx_beg + num_keypoints_per_view
             bbox_slice = batch_dict['bbox'][:, 4 * v:4 * (v + 1)]
-
-            predicted_keypoints_[:, idx_beg:idx_end, :] = norm_to_frame(
-                predicted_keypoints_[:, idx_beg:idx_end, :],
+            model_keypoints_[:, idx_beg:idx_end, :] = norm_to_frame(
+                model_keypoints_[:, idx_beg:idx_end, :],
                 bbox_slice,
             )
     else:
-        predicted_keypoints_ = norm_to_frame(predicted_keypoints_, batch_dict['bbox'])
+        model_keypoints_ = norm_to_frame(model_keypoints_, batch_dict['bbox'])
     # return new keypoints, reshaped to (batch, num_targets)
-    return predicted_keypoints_.reshape((-1, num_targets))
+    return model_keypoints_.reshape((-1, num_targets))
 
 
 def frame_to_model_batch(
@@ -151,42 +276,5 @@ def frame_to_model_batch(
             model_width,
             model_height,
         )
-
-    return model_keypoints
-
-
-def frame_to_model(
-    keypoints: Float[torch.Tensor, 'batch num_keypoints 2'],
-    bbox: Float[torch.Tensor, 'batch 4'],
-    model_width: float,
-    model_height: float,
-) -> Float[torch.Tensor, 'batch num_keypoints 2']:
-    """Convert keypoints from frame coordinates to model coordinates.
-
-    Combines two transformations:
-
-    1. frame → norm: subtract bbox offset, divide by bbox dimensions
-    2. norm → model: multiply by model dimensions
-
-    bbox format: [x, y, h, w] where x,y is top-left corner.
-    """
-    model_keypoints = keypoints.clone()
-
-    if keypoints.shape[0] == bbox.shape[0]:
-        # normal batch
-        model_keypoints[:, :, 0] -= bbox[:, 0].unsqueeze(1)
-        model_keypoints[:, :, 0] /= bbox[:, 3].unsqueeze(1)
-        model_keypoints[:, :, 1] -= bbox[:, 1].unsqueeze(1)
-        model_keypoints[:, :, 1] /= bbox[:, 2].unsqueeze(1)
-        model_keypoints[:, :, 0] *= model_width
-        model_keypoints[:, :, 1] *= model_height
-    else:
-        # context batch; we don't have predictions for first/last two frames
-        model_keypoints[:, :, 0] -= bbox[2:-2, 0].unsqueeze(1)
-        model_keypoints[:, :, 0] /= bbox[2:-2, 3].unsqueeze(1)
-        model_keypoints[:, :, 1] -= bbox[2:-2, 1].unsqueeze(1)
-        model_keypoints[:, :, 1] /= bbox[2:-2, 2].unsqueeze(1)
-        model_keypoints[:, :, 0] *= model_width
-        model_keypoints[:, :, 1] *= model_height
 
     return model_keypoints
