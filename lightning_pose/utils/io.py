@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "ckpt_path_from_base_path",
     "get_keypoint_names",
-
     "LabeledData",
     "parse_label_csv",
     "return_absolute_path",
@@ -186,7 +185,6 @@ def get_keypoint_names(
         assert cfg is not None, 'cfg must be provided when csv_file is not given'
         keypoint_names = [f"bp_{n}" for n in range(cfg.data.num_targets // 2)]
     return keypoint_names
-
 
 
 @dataclass

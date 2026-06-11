@@ -165,7 +165,6 @@ def generate_heatmaps(
     width: int,
     output_shape: tuple[int, int],
     sigma: float = 1.25,
-    uniform_heatmaps: bool = False,
     keep_gradients: bool = False,
     visibility: Int[torch.Tensor, "batch num_keypoints"] | None = None,
 ) -> Float[torch.Tensor, "batch num_keypoints height width"]:
@@ -177,12 +176,10 @@ def generate_heatmaps(
         width: width of reshaped image (pixels, e.g., 128, 256, 512...)
         output_shape: dimensions of downsampled heatmap, (height, width)
         sigma: control spread of gaussian
-        uniform_heatmaps: output uniform heatmaps if missing ground truth label, rather than skip;
-            ignored when ``visibility`` is provided
         keep_gradients: True to not detach gradients from keypoints before creating heatmaps
-        visibility: optional per-keypoint visibility flags with values 0 (not labeled → zero
-            heatmap), 1 (occluded → uniform heatmap), or 2 (visible → Gaussian heatmap). When
-            None, falls back to NaN detection combined with the ``uniform_heatmaps`` flag.
+        visibility: per-keypoint visibility flags with values 0 (not labeled → zero heatmap),
+            1 (occluded → uniform heatmap), or 2 (visible → Gaussian heatmap). When None,
+            NaN/out-of-bounds keypoints produce zero heatmaps.
 
     Returns:
         batch of 2D heatmaps
@@ -196,20 +193,15 @@ def generate_heatmaps(
     out_width = output_shape[1]
     keypoints[:, :, 1] *= out_height / height
     keypoints[:, :, 0] *= out_width / width
-    # nan_idxs = torch.isnan(keypoints)[:, :, 0]
-    # Mark as invalid: NaN keypoints OR out-of-bounds keypoints
     nan_idxs = (
-        torch.isnan(keypoints)[:, :, 0]  # Original NaN check
-        | (keypoints[:, :, 0] < -1)  # x < -1
-        | (keypoints[:, :, 0] > out_width + 1)  # x > width + 1
-        | (keypoints[:, :, 1] < -1)  # y < -1
-        | (keypoints[:, :, 1] > out_height + 1)  # y > height + 1
+        torch.isnan(keypoints)[:, :, 0]
+        | (keypoints[:, :, 0] < -1)
+        | (keypoints[:, :, 0] > out_width + 1)
+        | (keypoints[:, :, 1] < -1)
+        | (keypoints[:, :, 1] > out_height + 1)
     )
 
-    # Clamp keypoints to prevent extreme Gaussian computations
-    # Use a reasonable buffer around the image bounds
-    # keypoints[:, :, 0] = torch.clamp(keypoints[:, :, 0], -margin, out_width + margin)
-    # keypoints[:, :, 1] = torch.clamp(keypoints[:, :, 1], -margin, out_height + margin)
+    # clamp keypoints to prevent extreme Gaussian computations
     clamped_x = torch.clamp(keypoints[:, :, 0], -1, out_width + 1)
     clamped_y = torch.clamp(keypoints[:, :, 1], -1, out_height + 1)
     keypoints = torch.stack([clamped_x, clamped_y], dim=2)
@@ -237,13 +229,10 @@ def generate_heatmaps(
     ) / (out_height * out_width)
 
     if visibility is None:
-        # backward-compat: NaN/OOB keypoints get a uniform or zero filler based on the flag
-        # (all-zeros heatmaps are ignored in the supervised heatmap loss)
-        heatmaps[nan_idxs] = uniform_heatmap if uniform_heatmaps else zero_heatmap
+        heatmaps[nan_idxs] = zero_heatmap
     else:
-        heatmaps[visibility == 0] = zero_heatmap    # not labeled: ignore in loss
+        heatmaps[visibility == 0] = zero_heatmap     # not labeled; ignore in loss
         heatmaps[visibility == 1] = uniform_heatmap  # occluded: encourage low confidence
-        # visible keypoints with NaN/OOB coords fall back to zero (defensive)
         heatmaps[(visibility == 2) & nan_idxs] = zero_heatmap
 
     return heatmaps

@@ -164,15 +164,14 @@ class TestGenerateHeatmaps:
         torch.cuda.empty_cache()  # remove tensors from gpu
 
     def test_uniform_heatmaps(self, cfg, toy_data_dir):
+        """uniform_heatmaps=True: dataset heatmaps match generate_heatmaps with synthesized vis."""
 
         from lightning_pose.data import get_dataset, get_imgaug_transform
 
-        # update config
         cfg_tmp = copy.deepcopy(cfg)
         cfg_tmp.model.model_type = "heatmap"
         cfg_tmp.training.uniform_heatmaps_for_nan_keypoints = True
 
-        # build dataset with these new image dimensions
         imgaug_transform = get_imgaug_transform(cfg_tmp)
         heatmap_dataset = get_dataset(
             cfg_tmp,
@@ -186,36 +185,28 @@ class TestGenerateHeatmaps:
         batch = heatmap_dataset.__getitem__(idx=0)
         heatmap_gt = batch["heatmaps"].unsqueeze(0)  # type: ignore[typeddict-item]
         keypts_gt = batch["keypoints"].unsqueeze(0).reshape(1, -1, 2)
+        vis = heatmap_dataset.visibility[0].unsqueeze(0)  # (1, K) synthesized visibility
 
         heatmap_uniform_torch = generate_heatmaps(
             keypts_gt,
             height=im_height,
             width=im_width,
             output_shape=(heatmap_gt.shape[2], heatmap_gt.shape[3]),
-            uniform_heatmaps=True,
+            visibility=vis,
         )
 
-        # find soft argmax and confidence of ground truth heatmap
         softmaxes_gt = spatial_softmax2d(heatmap_gt, temperature=torch.tensor(100))
         preds_gt = spatial_expectation2d(softmaxes_gt, normalized_coordinates=False)
         confidences_gt = torch.amax(softmaxes_gt, dim=(2, 3))
 
-        # find soft argmax and confidence of generated heatmap
-        softmaxes_torch = spatial_softmax2d(
-            heatmap_uniform_torch, temperature=torch.tensor(100)
-        )
+        softmaxes_torch = spatial_softmax2d(heatmap_uniform_torch, temperature=torch.tensor(100))
         preds_torch = spatial_expectation2d(softmaxes_torch, normalized_coordinates=False)
         confidences_torch = torch.amax(softmaxes_torch, dim=(2, 3))
 
         assert (preds_gt == preds_torch).all()
         assert (confidences_gt == confidences_torch).all()
 
-        # cleanup
-        del batch
-        del heatmap_gt, keypts_gt
-        del softmaxes_gt, preds_gt, confidences_gt
-        del softmaxes_torch, preds_torch, confidences_torch
-        torch.cuda.empty_cache()  # remove tensors from gpu
+        torch.cuda.empty_cache()
 
     def test_weird_shape(self, cfg, toy_data_dir):
 
@@ -315,7 +306,8 @@ class TestGenerateHeatmaps:
             keep_gradients=False,
         )
 
-        # Check that the heatmap doesn't require gradients (computation graph is detached)
+        # Check that the heatmap doesn't require test_uniform_heatmapsgradients
+        # (computation graph is detached)
         assert not heatmap_no_grad.requires_grad, \
             "Heatmap should not require gradients when keep_gradients=False"
 
@@ -325,87 +317,84 @@ class TestGenerateHeatmaps:
         assert keypts_no_grad.grad is None, "Original keypoints should have no gradients yet"
 
     def test_out_of_bounds_nan_indices(self):
-        """Out-of-bounds keypoints are marked as NaN and filled with appropriate heatmaps."""
+        """OOB/NaN keypoints produce zero, uniform, or Gaussian heatmaps depending on vis."""
 
-        # Create mock data with some out-of-bounds keypoints
         im_height = 256
         im_width = 256
         output_height = 64
         output_width = 64
 
+        # batch=2, 4 keypoints each — mix of valid, OOB, and explicit NaN
         keypoints = torch.tensor([
             [
-                [32.0, 32.0],  # valid keypoint
-                [-10.0, 50.0],  # x out of bounds (< -1 after scaling)
-                [500.0, 32.0],  # x out of bounds (> width + 1 after scaling)
-                [32.0, 500.0]  # y out of bounds (> height + 1 after scaling)
+                [32.0, 32.0],    # valid
+                [-10.0, 50.0],   # x OOB (< -1 after scaling)
+                [500.0, 32.0],   # x OOB (> width + 1 after scaling)
+                [32.0, 500.0],   # y OOB (> height + 1 after scaling)
             ],
             [
-                [32.0, -10.0],  # y out of bounds (< -1 after scaling)
-                [64.0, 64.0],  # valid keypoint
+                [32.0, -10.0],   # y OOB (< -1 after scaling)
+                [64.0, 64.0],    # valid
                 [float('nan'), 32.0],  # explicit NaN
-                [128.0, 128.0]  # valid keypoint
-            ]
+                [128.0, 128.0],  # valid
+            ],
         ], dtype=torch.float32)
 
-        # Test with uniform_heatmaps=False (zeros for invalid)
-        heatmaps = generate_heatmaps(
-            keypoints,
-            height=im_height,
-            width=im_width,
-            output_shape=(output_height, output_width),
-            uniform_heatmaps=False,
-        )
+        zeros = torch.zeros(output_height, output_width)
+        uniform = torch.ones(output_height, output_width) / (output_height * output_width)
 
-        # Check that out-of-bounds keypoints result in zero heatmaps
-        zeros_heatmap = torch.zeros(output_height, output_width)
-        assert torch.allclose(heatmaps[0, 1], zeros_heatmap)  # x < -1
-        assert torch.allclose(heatmaps[0, 2], zeros_heatmap)  # x > width+1
-        assert torch.allclose(heatmaps[0, 3], zeros_heatmap)  # y > height+1
-        assert torch.allclose(heatmaps[1, 0], zeros_heatmap)  # y < -1
-        assert torch.allclose(heatmaps[1, 2], zeros_heatmap)  # explicit NaN
+        kwargs = dict(height=im_height, width=im_width, output_shape=(output_height, output_width))
 
-        # Check that valid keypoints result in non-zero heatmaps
-        assert not torch.allclose(heatmaps[0, 0], zeros_heatmap)  # valid
-        assert not torch.allclose(heatmaps[1, 1], zeros_heatmap)  # valid
-        assert not torch.allclose(heatmaps[1, 3], zeros_heatmap)  # valid
+        # visibility=None: OOB and NaN → zeros; valid → Gaussian
+        heatmaps = generate_heatmaps(keypoints, **kwargs)
+        assert torch.allclose(heatmaps[0, 1], zeros)  # x OOB
+        assert torch.allclose(heatmaps[0, 2], zeros)  # x OOB
+        assert torch.allclose(heatmaps[0, 3], zeros)  # y OOB
+        assert torch.allclose(heatmaps[1, 0], zeros)  # y OOB
+        assert torch.allclose(heatmaps[1, 2], zeros)  # explicit NaN
+        assert not torch.allclose(heatmaps[0, 0], zeros)  # valid
+        assert not torch.allclose(heatmaps[1, 1], zeros)  # valid
+        assert not torch.allclose(heatmaps[1, 3], zeros)  # valid
 
-        # Test with uniform_heatmaps=True
-        heatmaps_uniform = generate_heatmaps(
-            keypoints,
-            height=im_height,
-            width=im_width,
-            output_shape=(output_height, output_width),
-            uniform_heatmaps=True,
-        )
+        # vis=1 (occluded): all keypoints → uniform, regardless of OOB or NaN
+        vis1 = torch.ones(2, 4, dtype=torch.long)
+        heatmaps_v1 = generate_heatmaps(keypoints, **kwargs, visibility=vis1)
+        assert torch.allclose(heatmaps_v1[0, 1], uniform)  # x OOB → uniform
+        assert torch.allclose(heatmaps_v1[1, 2], uniform)  # NaN → uniform
 
-        # Check that out-of-bounds keypoints result in uniform heatmaps
-        uniform_heatmap = torch.ones(output_height, output_width) / (output_height * output_width)
-        assert torch.allclose(heatmaps_uniform[0, 1], uniform_heatmap)  # x < -1
-        assert torch.allclose(heatmaps_uniform[0, 2], uniform_heatmap)  # x > width+1
-        assert torch.allclose(heatmaps_uniform[1, 2], uniform_heatmap)  # explicit NaN
+        # vis=0 (not labeled): all keypoints → zeros, including valid ones
+        vis0 = torch.zeros(2, 4, dtype=torch.long)
+        heatmaps_v0 = generate_heatmaps(keypoints, **kwargs, visibility=vis0)
+        assert torch.allclose(heatmaps_v0[0, 0], zeros)  # valid kp → zeros when vis=0
+        assert torch.allclose(heatmaps_v0[1, 1], zeros)  # valid kp → zeros when vis=0
+
+        # vis=2 (visible) + OOB/NaN → zeros (defensive); vis=2 + valid → Gaussian
+        vis2 = torch.full((2, 4), 2, dtype=torch.long)
+        heatmaps_v2 = generate_heatmaps(keypoints, **kwargs, visibility=vis2)
+        assert torch.allclose(heatmaps_v2[0, 1], zeros)    # x OOB → zero despite vis=2
+        assert torch.allclose(heatmaps_v2[1, 2], zeros)    # NaN → zero despite vis=2
+        assert not torch.allclose(heatmaps_v2[0, 0], zeros)  # valid → Gaussian
+        assert not torch.allclose(heatmaps_v2[1, 1], zeros)  # valid → Gaussian
 
     def test_extreme_keypoint_clamping(self):
-        """Test that extreme keypoint values are clamped to prevent numerical issues."""
+        """Extreme OOB keypoints are clamped; visibility flags still control heatmap type."""
 
-        # Create keypoints with extreme values
-        batch_size = 1
-        num_keypoints = 4
         im_height = 256
         im_width = 256
         output_height = 64
         output_width = 64
 
+        # batch=1, four keypoints all with extreme (way OOB) coordinates
         extreme_keypoints = torch.tensor([
             [
-                [-100000000.0, 32.0],  # extremely negative x
-                [100000000.0, 32.0],  # extremely positive x
-                [32.0, -100000000.0],  # extremely negative y
-                [32.0, 100000000.0]  # extremely positive y
+                [-100000000.0, 32.0],   # extremely negative x
+                [100000000.0, 32.0],    # extremely positive x
+                [32.0, -100000000.0],   # extremely negative y
+                [32.0, 100000000.0],    # extremely positive y
             ]
         ], dtype=torch.float32, requires_grad=True)
 
-        # Function should not crash and should produce finite heatmaps
+        # --- gradients and finiteness (visibility=None path) ---
         heatmaps = generate_heatmaps(
             extreme_keypoints,
             height=im_height,
@@ -413,44 +402,58 @@ class TestGenerateHeatmaps:
             output_shape=(output_height, output_width),
             keep_gradients=True,
         )
-
-        # Check that all heatmaps are finite (no NaN or inf values from extreme computations)
-        assert torch.isfinite(heatmaps).all(), "Heatmaps contain NaN or inf values"
-
-        # Check that heatmaps have correct shape
-        assert heatmaps.shape == (batch_size, num_keypoints, output_height, output_width)
-
-        # Check that gradients can flow through (no numerical issues)
-        loss = torch.sum(heatmaps)
+        assert torch.isfinite(heatmaps).all()
+        assert heatmaps.shape == (1, 4, output_height, output_width)
+        loss = heatmaps.sum()
         loss.backward()
         assert extreme_keypoints.grad is not None
-        assert torch.isfinite(extreme_keypoints.grad).all(), "Gradients contain NaN or inf values"
+        assert torch.isfinite(extreme_keypoints.grad).all()
 
-        # Verify clamping behavior: extreme values should be treated as out-of-bounds
-        # and filled with zeros (since uniform_heatmaps=False by default)
-        expected_zero = torch.zeros(output_height, output_width)
-        assert torch.allclose(heatmaps[0, 0], expected_zero)  # extreme negative x
-        assert torch.allclose(heatmaps[0, 1], expected_zero)  # extreme positive x
-        assert torch.allclose(heatmaps[0, 2], expected_zero)  # extreme negative y
-        assert torch.allclose(heatmaps[0, 3], expected_zero)  # extreme positive y
+        # visibility=None: OOB → zeros
+        zero = torch.zeros(output_height, output_width)
+        assert torch.allclose(heatmaps[0, 0], zero)
+        assert torch.allclose(heatmaps[0, 1], zero)
+        assert torch.allclose(heatmaps[0, 2], zero)
+        assert torch.allclose(heatmaps[0, 3], zero)
 
-    def test_generate_heatmaps_visibility_none_is_backward_compat(self):
-        """visibility=None produces identical output to the legacy path."""
+        # vis=0: not labeled → zeros regardless of OOB
+        vis0 = torch.zeros(1, 4, dtype=torch.long)
+        heatmaps_v0 = generate_heatmaps(
+            extreme_keypoints.detach(),
+            height=im_height, width=im_width, output_shape=(output_height, output_width),
+            visibility=vis0,
+        )
+        assert torch.allclose(heatmaps_v0[0, 0], zero)
 
-        # Arrange: one valid keypoint, one NaN keypoint (batch=1, K=2)
+        # vis=1: occluded → uniform regardless of OOB
+        uniform = torch.ones(output_height, output_width) / (output_height * output_width)
+        vis1 = torch.ones(1, 4, dtype=torch.long)
+        heatmaps_v1 = generate_heatmaps(
+            extreme_keypoints.detach(),
+            height=im_height, width=im_width, output_shape=(output_height, output_width),
+            visibility=vis1,
+        )
+        assert torch.allclose(heatmaps_v1[0, 0], uniform)
+
+        # vis=2: visible but OOB → zero (defensive fallback)
+        vis2 = torch.full((1, 4), 2, dtype=torch.long)
+        heatmaps_v2 = generate_heatmaps(
+            extreme_keypoints.detach(),
+            height=im_height, width=im_width, output_shape=(output_height, output_width),
+            visibility=vis2,
+        )
+        assert torch.allclose(heatmaps_v2[0, 0], zero)
+
+    def test_generate_heatmaps_visibility_none_nan_produces_zeros(self):
+        """visibility=None: NaN keypoints produce zero heatmaps."""
+
         keypoints = torch.tensor([[[64.0, 64.0], [float('nan'), float('nan')]]])
 
-        # Act
-        legacy = generate_heatmaps(
-            keypoints, height=128, width=128, output_shape=(32, 32), uniform_heatmaps=False,
-        )
-        with_none = generate_heatmaps(
-            keypoints, height=128, width=128, output_shape=(32, 32), uniform_heatmaps=False,
-            visibility=None,
-        )
+        result = generate_heatmaps(keypoints, height=128, width=128, output_shape=(32, 32))
 
-        # Assert
-        assert torch.allclose(legacy, with_none)
+        zero_heatmap = torch.zeros(32, 32)
+        assert not torch.allclose(result[0, 0], zero_heatmap)  # valid keypoint → non-zero
+        assert torch.allclose(result[0, 1], zero_heatmap)       # NaN keypoint → zero
 
     def test_generate_heatmaps_visibility_2_produces_gaussian(self):
         """vis=2 keypoints get a Gaussian heatmap identical to the legacy valid-keypoint path."""

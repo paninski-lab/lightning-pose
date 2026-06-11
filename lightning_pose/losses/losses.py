@@ -863,7 +863,6 @@ class UnimodalLoss(Loss):
         data_module: BaseDataModule | UnlabeledDataModule | None = None,
         prob_threshold: float = 0.0,
         log_weight: float = 0.0,
-        uniform_heatmaps: bool = False,
         **kwargs: Any,
     ) -> None:
         """Initialize UnimodalLoss.
@@ -885,8 +884,6 @@ class UnimodalLoss(Loss):
                 the loss computation.
             log_weight: final weight in front of the loss term in the objective function is
                 computed as ``1.0 / (2.0 * exp(log_weight))``.
-            uniform_heatmaps: if ``True``, generate uniform (flat) target heatmaps for NaN
-                ground truth keypoints instead of ignoring them in the loss.
 
         """
 
@@ -900,7 +897,6 @@ class UnimodalLoss(Loss):
         self.original_image_width = original_image_width
         self.downsampled_image_height = downsampled_image_height
         self.downsampled_image_width = downsampled_image_width
-        self.uniform_heatmaps = uniform_heatmaps
 
         self.prob_threshold = torch.tensor(prob_threshold, dtype=torch.float)
 
@@ -992,7 +988,6 @@ class UnimodalLoss(Loss):
             height=self.original_image_height,
             width=self.original_image_width,
             output_shape=(self.downsampled_image_height, self.downsampled_image_width),
-            uniform_heatmaps=self.uniform_heatmaps,
         )
 
         # remove invisible keypoints according to confidences
@@ -1286,7 +1281,6 @@ class ReprojectionHeatmapLoss(Loss):
         downsampled_image_height: int,
         downsampled_image_width: int,
         log_weight: float = 0.0,
-        uniform_heatmaps: bool = False,
         **kwargs: Any,
     ) -> None:
         """Initialize ReprojectionHeatmapLoss.
@@ -1302,8 +1296,6 @@ class ReprojectionHeatmapLoss(Loss):
             downsampled_image_width: width of the heatmap output.
             log_weight: final weight in front of the loss term in the objective function is
                 computed as ``1.0 / (2.0 * exp(log_weight))``.
-            uniform_heatmaps: if ``True``, generate uniform (flat) target heatmaps for NaN
-                ground truth keypoints instead of ignoring them in the loss.
 
         """
         super().__init__(log_weight=log_weight)
@@ -1311,7 +1303,6 @@ class ReprojectionHeatmapLoss(Loss):
         self.original_image_width = original_image_width
         self.downsampled_image_height = downsampled_image_height
         self.downsampled_image_width = downsampled_image_width
-        self.uniform_heatmaps = uniform_heatmaps
 
     def remove_nans(
         self,
@@ -1400,7 +1391,6 @@ class ReprojectionHeatmapLoss(Loss):
             height=self.original_image_height,
             width=self.original_image_width,
             output_shape=(self.downsampled_image_height, self.downsampled_image_width),
-            uniform_heatmaps=self.uniform_heatmaps,
             keep_gradients=True,
         )
 

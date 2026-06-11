@@ -1300,7 +1300,7 @@ class TestBaseTrackingDatasetVisibility:
         assert torch.equal(ex1['visibility'], torch.tensor([2, 0], dtype=torch.long))
 
     def test_heatmap_dataset_getitem_no_visibility(self, standard_csv, tmp_path, imgaug):
-        """__getitem__ sets 'visibility' to an empty tensor for a CSV without a visible column."""
+        """HeatmapDataset synthesizes visibility=2 for all valid keypoints in a standard CSV."""
         import os
 
         from PIL import Image
@@ -1312,8 +1312,11 @@ class TestBaseTrackingDatasetVisibility:
             ).save(os.path.join(str(tmp_path), name))
 
         ds = self._make_heatmap_dataset(standard_csv, tmp_path, imgaug)
+        # standard CSV → synthesis sets vis=2 for all labeled (non-NaN) keypoints
+        assert ds.visibility is not None
+        assert (ds.visibility == 2).all()
         ex = BaseTrackingDataset.__getitem__(ds, 0)
-        assert ex['visibility'].numel() == 0
+        assert torch.equal(ex['visibility'], torch.tensor([2, 2], dtype=torch.long))
 
     def test_heatmap_dataset_compute_heatmap_uses_visibility(
         self, visibility_csv, tmp_path, imgaug,

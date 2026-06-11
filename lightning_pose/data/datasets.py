@@ -309,8 +309,11 @@ class HeatmapDataset(BaseTrackingDataset):
                 sophisticated augmentations before resizing (e.g. 3d augmentations). Note that when
                 this is False, it is up to the child class to perform this resizing on both images
                 and keypoints before returning a batch of data.
-            uniform_heatmaps: True to force the model to output uniform heatmaps for missing data;
-                False will output all-zero heatmaps
+            uniform_heatmaps: when the CSV has no ``visible`` column, controls the target
+                heatmap for NaN (unlabeled) keypoints. True generates a uniform heatmap
+                (visibility=1, encourages low-confidence predictions); False generates an
+                all-zero heatmap (visibility=0, excluded from loss). Ignored when the CSV
+                provides explicit visibility flags.
             bbox_path: path to csv file that contains bounding box information; rows must be in
                 same order as csv file
 
@@ -336,9 +339,18 @@ class HeatmapDataset(BaseTrackingDataset):
 
         self.downsample_factor: Literal[1, 2, 3] = downsample_factor
         self.output_sigma = 1.25  # should be sigma/2 ^downsample factor
-        self.uniform_heatmaps = uniform_heatmaps
         self.num_targets = torch.numel(self.keypoints[0])
         self.num_keypoints = self.num_targets // 2
+
+        # synthesize visibility for CSVs that don't provide a visible column
+        if self.visibility is None:
+            nan_mask = torch.isnan(self.keypoints[:, :, 0])
+            vis_for_nan = 1 if uniform_heatmaps else 0
+            self.visibility = torch.where(
+                nan_mask,
+                torch.full_like(nan_mask, vis_for_nan, dtype=torch.long),
+                torch.full_like(nan_mask, 2, dtype=torch.long),
+            )
 
     @property
     def output_shape(self) -> tuple:
@@ -388,7 +400,6 @@ class HeatmapDataset(BaseTrackingDataset):
             width=self.width,
             output_shape=self.output_shape,
             sigma=self.output_sigma,
-            uniform_heatmaps=self.uniform_heatmaps,
             visibility=vis,
         )
 
