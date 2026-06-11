@@ -4,17 +4,17 @@ import pytest
 import torch
 
 from lightning_pose.data.bboxes import (
-    convert_bbox_coords,
-    convert_original_to_model_coords,
-    normalized_to_bbox,
-    original_to_model,
+    frame_to_model,
+    frame_to_model_batch,
+    model_to_frame_batch,
+    norm_to_frame,
 )
 
 
-class TestNormalizedToBbox:
-    """Test the function normalized_to_bbox."""
+class TestNormToFrame:
+    """Test the function norm_to_frame."""
 
-    def test_normalized_to_bbox_normal_batch(self):
+    def test_norm_to_frame_normal_batch(self):
         """Normal batch: bbox-sized tensor maps corners and center correctly."""
         keypoints = torch.tensor([
             [[0.0, 0.0]],  # xy for 1 keypoint
@@ -26,7 +26,7 @@ class TestNormalizedToBbox:
             torch.tensor([20, 30, 100, 200]),
         ]
         for bbox in bboxes:
-            kps = normalized_to_bbox(keypoints.clone(), bbox.unsqueeze(0).repeat([3, 1]))
+            kps = norm_to_frame(keypoints.clone(), bbox.unsqueeze(0).repeat([3, 1]))
             # (0.0, 0.0) should map to top left corner
             assert kps[0, 0, 0] == bbox[0]
             assert kps[0, 0, 1] == bbox[1]
@@ -37,7 +37,7 @@ class TestNormalizedToBbox:
             assert kps[2, 0, 0] == bbox[3] / 2 + bbox[0]
             assert kps[2, 0, 1] == bbox[2] / 2 + bbox[1]
 
-    def test_normalized_to_bbox_context_batch(self):
+    def test_norm_to_frame_context_batch(self):
         """Context batch: extra bbox edge entries are ignored; middle entries are used."""
         keypoints = torch.tensor([
             [[0.0, 0.0]],
@@ -49,7 +49,7 @@ class TestNormalizedToBbox:
             torch.tensor([20, 30, 100, 200]),
         ]
         for bbox in bboxes:
-            kps = normalized_to_bbox(keypoints.clone(), bbox.unsqueeze(0).repeat([7, 1]))
+            kps = norm_to_frame(keypoints.clone(), bbox.unsqueeze(0).repeat([7, 1]))
             # (0.0, 0.0) should map to top left corner
             assert kps[0, 0, 0] == bbox[0]
             assert kps[0, 0, 1] == bbox[1]
@@ -61,10 +61,10 @@ class TestNormalizedToBbox:
             assert kps[2, 0, 1] == bbox[2] / 2 + bbox[1]
 
 
-class TestConvertBboxCoords:
-    """Test the function convert_bbox_coords."""
+class TestModelToFrameBatch:
+    """Test the function model_to_frame_batch."""
 
-    def test_convert_bbox_coords_single_view(self, heatmap_data_module):
+    def test_model_to_frame_batch_single_view(self, heatmap_data_module):
         """Single-view: cropping the image and adjusting bbox yields identical world coords."""
         # params
         x_crop = 25
@@ -72,7 +72,7 @@ class TestConvertBboxCoords:
 
         # get training batch
         batch_dict = next(iter(heatmap_data_module.train_dataloader()))
-        orig_converted = convert_bbox_coords(batch_dict, batch_dict['keypoints'])
+        orig_converted = model_to_frame_batch(batch_dict, batch_dict['keypoints'])
         old_image_dims = [batch_dict['images'].size(-2), batch_dict['images'].size(-1)]
         old_bbox = batch_dict['bbox']
         x_pix = x_crop * old_bbox[:, 3] / old_image_dims[1]
@@ -87,12 +87,12 @@ class TestConvertBboxCoords:
         new_dict['bbox'][:, 3] = new_dict['bbox'][:, 3] - 2 * x_pix
         new_dict['keypoints'][:, 0::2] += x_crop  # keypoints x,y shifted in image
         new_dict['keypoints'][:, 1::2] += y_crop
-        new_converted = convert_bbox_coords(new_dict, new_dict['keypoints'])
+        new_converted = model_to_frame_batch(new_dict, new_dict['keypoints'])
 
         # orig and new converted coordinates should be the same
         assert torch.allclose(orig_converted, new_converted, equal_nan=True)
 
-    def test_convert_bbox_coords_multiview(self):
+    def test_model_to_frame_batch_multiview(self):
         """Multi-view: each view's keypoints are mapped through their own bbox."""
         batch_dict = {
             'images': torch.tensor(np.random.randn(2, 2, 3, 10, 10)),  # batch, views, RGB, h, w
@@ -106,7 +106,7 @@ class TestConvertBboxCoords:
             ]),
             'num_views': torch.tensor([2, 2]),
         }
-        converted = convert_bbox_coords(
+        converted = model_to_frame_batch(
             batch_dict, batch_dict['predicted_keypoints'],  # type: ignore[arg-type]
         )
         assert converted[0, 0] == batch_dict['bbox'][0, 0]
@@ -118,7 +118,7 @@ class TestConvertBboxCoords:
         assert converted[1, 2] == batch_dict['bbox'][1, 7]
         assert converted[1, 3] == batch_dict['bbox'][1, 6]
 
-    def test_convert_bbox_coords_multiview_context(self):
+    def test_model_to_frame_batch_multiview_context(self):
         """Multi-view context: edge bbox rows are skipped; middle rows govern conversion."""
         batch_dict = {
             'images': torch.tensor(np.random.randn(2, 2, 3, 10, 10)),  # batch, views, RGB, h, w
@@ -136,7 +136,7 @@ class TestConvertBboxCoords:
             ]),
             'num_views': torch.tensor([2, 2, 2, 2, 2, 2]),
         }
-        converted = convert_bbox_coords(
+        converted = model_to_frame_batch(
             batch_dict, batch_dict['predicted_keypoints'],  # type: ignore[arg-type]
         )
         assert converted[0, 0] == batch_dict['bbox'][2, 0]
@@ -148,7 +148,7 @@ class TestConvertBboxCoords:
         assert converted[1, 2] == batch_dict['bbox'][3, 7]
         assert converted[1, 3] == batch_dict['bbox'][3, 6]
 
-    def test_convert_bbox_coords_mismatched_views_raises(self, multiview_heatmap_data_module):
+    def test_model_to_frame_batch_mismatched_views_raises(self, multiview_heatmap_data_module):
         """Batch elements with different view counts raise ValueError."""
         # get training batch
         batch_dict = next(iter(multiview_heatmap_data_module.train_dataloader()))
@@ -156,13 +156,13 @@ class TestConvertBboxCoords:
         batch_dict['num_views'][0] = 16
         # make sure code complains when batch elements have different numbers of views
         with pytest.raises(ValueError):
-            convert_bbox_coords(batch_dict, batch_dict['keypoints'])
+            model_to_frame_batch(batch_dict, batch_dict['keypoints'])
 
 
-class TestConvertOriginalToModelCoords:
+class TestFrameToModelBatch:
 
-    def test_convert_original_to_model_coords_basic(self):
-        """Test convert_original_to_model_coords with multiview setup."""
+    def test_frame_to_model_batch_basic(self):
+        """Test frame_to_model_batch with multiview setup."""
 
         # Create mock batch_dict
         batch_dict = {
@@ -204,7 +204,7 @@ class TestConvertOriginalToModelCoords:
             ]
         ])
 
-        model_keypoints = convert_original_to_model_coords(
+        model_keypoints = frame_to_model_batch(
             batch_dict, original_keypoints,  # type: ignore[arg-type]
         )
 
@@ -219,7 +219,7 @@ class TestConvertOriginalToModelCoords:
         # Centers should be (128, 128)
         assert torch.allclose(model_keypoints[:, :, 2, :], torch.full((2, 2, 2), 128.0), atol=1e-6)
 
-    def test_convert_original_to_model_coords_different_views(self):
+    def test_frame_to_model_batch_different_views(self):
         """Test with different number of views and keypoints."""
 
         batch_dict = {
@@ -246,7 +246,7 @@ class TestConvertOriginalToModelCoords:
             ]
         ])
 
-        model_keypoints = convert_original_to_model_coords(
+        model_keypoints = frame_to_model_batch(
             batch_dict, original_keypoints,  # type: ignore[arg-type]
         )
 
@@ -259,10 +259,10 @@ class TestConvertOriginalToModelCoords:
         assert torch.allclose(model_keypoints[:, :, 1, :], torch.full((2, 3, 2), 128.0), atol=1e-6)
 
 
-class TestOriginalToModel:
+class TestFrameToModel:
 
-    def test_original_to_model_basic(self):
-        """Test original_to_model with basic coordinate transformations."""
+    def test_frame_to_model_basic(self):
+        """Test frame_to_model with basic coordinate transformations."""
 
         model_width = 256.
         model_height = 256.
@@ -281,7 +281,7 @@ class TestOriginalToModel:
                 [[x.item() + w.item() / 2, y.item() + h.item() / 2]],  # center of bbox
             ])
 
-            kps = original_to_model(
+            kps = frame_to_model(
                 keypoints.clone(),
                 bbox.unsqueeze(0).repeat([3, 1]),
                 model_width,
@@ -300,8 +300,8 @@ class TestOriginalToModel:
             assert torch.isclose(kps[2, 0, 0], torch.tensor(model_width / 2), atol=1e-6)
             assert torch.isclose(kps[2, 0, 1], torch.tensor(model_height / 2), atol=1e-6)
 
-    def test_original_to_model_context_batch(self):
-        """Test original_to_model with context batch (extra bbox entries for edges)."""
+    def test_frame_to_model_context_batch(self):
+        """Test frame_to_model with context batch (extra bbox entries for edges)."""
 
         model_width = 256.
         model_height = 256.
@@ -323,7 +323,7 @@ class TestOriginalToModel:
             # 7-entry bbox tensor for context batch
             bbox_context = bbox.unsqueeze(0).repeat([7, 1])
 
-            kps = original_to_model(
+            kps = frame_to_model(
                 keypoints.clone(),
                 bbox_context,
                 model_width,
@@ -339,7 +339,7 @@ class TestOriginalToModel:
             assert torch.isclose(kps[2, 0, 0], torch.tensor(model_width / 2), atol=1e-6)
             assert torch.isclose(kps[2, 0, 1], torch.tensor(model_height / 2), atol=1e-6)
 
-    def test_original_to_model_different_dimensions(self):
+    def test_frame_to_model_different_dimensions(self):
         """Test with non-square model dimensions."""
 
         keypoints = torch.tensor([
@@ -352,7 +352,7 @@ class TestOriginalToModel:
         model_width = 128.
         model_height = 64.
 
-        kps = original_to_model(
+        kps = frame_to_model(
             keypoints,
             bbox.unsqueeze(0).repeat([3, 1]),
             model_width,

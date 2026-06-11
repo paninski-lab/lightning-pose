@@ -9,7 +9,7 @@ from jaxtyping import Float
 from omegaconf import DictConfig, ListConfig
 from torch import nn
 
-from lightning_pose.data.bboxes import convert_bbox_coords, convert_original_to_model_coords
+from lightning_pose.data.bboxes import frame_to_model_batch, model_to_frame_batch
 from lightning_pose.data.cameras import project_3d_to_2d, project_camera_pairs_to_3d
 from lightning_pose.data.datatypes import (
     MultiviewHeatmapLabeledBatchDict,
@@ -266,8 +266,8 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         # heatmaps -> keypoints
         pred_keypoints, confidence = self.head.run_subpixelmaxima(pred_heatmaps)
         # bounding box coords -> original image coords
-        target_keypoints = convert_bbox_coords(batch_dict, batch_dict["keypoints"])
-        pred_keypoints = convert_bbox_coords(batch_dict, pred_keypoints)
+        target_keypoints = model_to_frame_batch(batch_dict, batch_dict["keypoints"])
+        pred_keypoints = model_to_frame_batch(batch_dict, pred_keypoints)
         # project predictions from pairs of views into 3d if calibration data available
         if "keypoints_3d" in batch_dict and batch_dict["keypoints_3d"].shape[-1] == 3:
             num_views = batch_dict["images"].shape[1]
@@ -293,9 +293,9 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
                         dist=batch_dict["distortions"].float(),
                     )
                     # convert from original image coords to model-input coords for heatmaps
-                    keypoints_pred_2d_reprojected = convert_original_to_model_coords(
+                    keypoints_pred_2d_reprojected = frame_to_model_batch(
                         batch_dict=batch_dict,
-                        original_keypoints=keypoints_pred_2d_reprojected_original,
+                        frame_keypoints=keypoints_pred_2d_reprojected_original,
                     ).reshape(-1, num_views * num_keypoints, 2)
                 else:
                     keypoints_pred_2d_reprojected = None
@@ -339,7 +339,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         # heatmaps -> keypoints
         pred_keypoints, confidence = self.head.run_subpixelmaxima(pred_heatmaps)
         # bounding box coords -> original image coords
-        pred_keypoints = convert_bbox_coords(batch_dict, pred_keypoints)
+        pred_keypoints = model_to_frame_batch(batch_dict, pred_keypoints)
 
         if return_heatmaps:
             return pred_keypoints, confidence, pred_heatmaps
@@ -467,7 +467,7 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(
         )
 
         # keypoints -> original image coords keypoints
-        pred_keypoints = convert_bbox_coords(batch_dict, pred_keypoints)
+        pred_keypoints = model_to_frame_batch(batch_dict, pred_keypoints)
 
         result = {
             "heatmaps_pred": pred_heatmaps,  # if augmented, augmented heatmaps

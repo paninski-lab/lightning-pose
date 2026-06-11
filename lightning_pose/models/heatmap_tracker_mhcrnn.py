@@ -6,7 +6,7 @@ import torch
 from jaxtyping import Float
 from omegaconf import DictConfig, ListConfig
 
-from lightning_pose.data.bboxes import convert_bbox_coords
+from lightning_pose.data.bboxes import model_to_frame_batch
 from lightning_pose.data.datatypes import (
     HeatmapLabeledBatchDict,
     MultiviewHeatmapLabeledBatchDict,
@@ -162,9 +162,9 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
         pred_keypoints_sf, confidence_sf = self.head.run_subpixelmaxima(pred_heatmaps_sf)
         pred_keypoints_mf, confidence_mf = self.head.run_subpixelmaxima(pred_heatmaps_mf)
         # bounding box coords -> original image coords
-        target_keypoints = convert_bbox_coords(batch_dict, batch_dict["keypoints"])
-        pred_keypoints_sf = convert_bbox_coords(batch_dict, pred_keypoints_sf)
-        pred_keypoints_mf = convert_bbox_coords(batch_dict, pred_keypoints_mf)
+        target_keypoints = model_to_frame_batch(batch_dict, batch_dict["keypoints"])
+        pred_keypoints_sf = model_to_frame_batch(batch_dict, pred_keypoints_sf)
+        pred_keypoints_mf = model_to_frame_batch(batch_dict, pred_keypoints_mf)
         return {
             "heatmaps_targ": torch.cat([batch_dict["heatmaps"], batch_dict["heatmaps"]], dim=0),
             "heatmaps_pred": torch.cat([pred_heatmaps_sf, pred_heatmaps_mf], dim=0),
@@ -216,7 +216,7 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
         confidence_sf[mf_conf_gt] = confidence_mf[mf_conf_gt]
 
         # bounding box coords -> original image coords
-        pred_keypoints_sf = convert_bbox_coords(batch_dict, pred_keypoints_sf)
+        pred_keypoints_sf = model_to_frame_batch(batch_dict, pred_keypoints_sf)
 
         if return_heatmaps:
             pred_heatmaps_sf[mf_conf_gt] = pred_heatmaps_mf[mf_conf_gt]
@@ -322,8 +322,8 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
         )
 
         # keypoints -> original image coords keypoints
-        pred_keypoints_crnn = convert_bbox_coords(batch_dict, pred_keypoints_crnn)
-        pred_keypoints_sf = convert_bbox_coords(batch_dict, pred_keypoints_sf)
+        pred_keypoints_crnn = model_to_frame_batch(batch_dict, pred_keypoints_crnn)
+        pred_keypoints_sf = model_to_frame_batch(batch_dict, pred_keypoints_sf)
 
         return {
             "heatmaps_pred": torch.cat([pred_heatmaps_crnn, pred_heatmaps_sf], dim=0),

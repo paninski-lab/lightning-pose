@@ -6,7 +6,7 @@ import torch
 from jaxtyping import Float
 from omegaconf import DictConfig, ListConfig
 
-from lightning_pose.data.bboxes import convert_bbox_coords
+from lightning_pose.data.bboxes import model_to_frame_batch
 from lightning_pose.data.datatypes import (
     HeatmapLabeledBatchDict,
     MultiviewHeatmapLabeledBatchDict,
@@ -138,8 +138,8 @@ class HeatmapTracker(BaseSupervisedTracker):
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.head.run_subpixelmaxima(predicted_heatmaps)
         # bounding box coords -> original image coords
-        predicted_keypoints = convert_bbox_coords(batch_dict, predicted_keypoints)
-        target_keypoints = convert_bbox_coords(batch_dict, batch_dict["keypoints"])
+        predicted_keypoints = model_to_frame_batch(batch_dict, predicted_keypoints)
+        target_keypoints = model_to_frame_batch(batch_dict, batch_dict["keypoints"])
         return {
             "heatmaps_targ": batch_dict["heatmaps"],
             "heatmaps_pred": predicted_heatmaps,
@@ -180,7 +180,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         # heatmaps -> keypoints
         predicted_keypoints, confidence = self.head.run_subpixelmaxima(predicted_heatmaps)
         # bounding box coords -> original image coords
-        predicted_keypoints = convert_bbox_coords(batch_dict, predicted_keypoints)
+        predicted_keypoints = model_to_frame_batch(batch_dict, predicted_keypoints)
         if return_heatmaps:
             return predicted_keypoints, confidence, predicted_heatmaps
         else:
@@ -272,7 +272,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             is_multiview=batch_dict["is_multiview"],
         )
         # keypoints -> original image coords keypoints
-        pred_keypoints = convert_bbox_coords(batch_dict, pred_keypoints)
+        pred_keypoints = model_to_frame_batch(batch_dict, pred_keypoints)
         return {
             "heatmaps_pred": pred_heatmaps,  # if augmented, augmented heatmaps
             "keypoints_pred": pred_keypoints,  # if augmented, original keypoints

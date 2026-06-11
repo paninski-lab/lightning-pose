@@ -466,7 +466,7 @@ class TestMultiviewHeatmapDataset:
 
     def test_get_2d_keypoints_from_example_dict_absolute_coords(self, multiview_heatmap_dataset):
 
-        from lightning_pose.data.bboxes import normalized_to_bbox
+        from lightning_pose.data.bboxes import norm_to_frame
 
         # test data
         data_dict = {
@@ -509,7 +509,7 @@ class TestMultiviewHeatmapDataset:
             keypoints_curr[:, 0] /= example_dict["images"].shape[-1]  # -1 dim is "x"
             keypoints_curr[:, 1] /= example_dict["images"].shape[-2]  # -2 dim is "y"
             # 2. multiply and add by bbox dims
-            keypoints_curr = normalized_to_bbox(
+            keypoints_curr = norm_to_frame(
                 keypoints=keypoints_curr.unsqueeze(0),
                 bbox=example_dict["bbox"].unsqueeze(0),
             )[0].cpu().numpy()
