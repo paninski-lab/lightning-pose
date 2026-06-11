@@ -115,18 +115,23 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             csv_file = csv_path
         else:
             csv_file = os.path.join(root_directory, csv_path)
-        if not os.path.exists(csv_file):
-            raise FileNotFoundError(f"Could not find csv file at {csv_file}!")
 
-        csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
-        csv_data = io_utils.fix_empty_first_row(csv_data)
-        self.keypoint_names = io_utils.get_keypoint_names(
-            csv_file=csv_file, header_rows=header_rows,
-        )
-        self.image_names = list(csv_data.index)
-        self.keypoints = torch.tensor(csv_data.to_numpy(), dtype=torch.float32)
-        # convert to x,y coordinates
-        self.keypoints = self.keypoints.reshape(self.keypoints.shape[0], -1, 2)
+        labeled_data = io_utils.parse_label_csv(csv_file, header_rows=header_rows)
+        self.keypoint_names = labeled_data.keypoint_names
+        self.image_names = labeled_data.image_names
+        self.keypoints = labeled_data.keypoints
+        self.visibility: torch.Tensor | None = labeled_data.visibility
+
+        if self.visibility is not None:
+            occluded_with_coords = (
+                (self.visibility == 1) & ~torch.isnan(self.keypoints[:, :, 0])
+            )
+            if occluded_with_coords.any():
+                logger.warning(
+                    'found keypoints with visible=1 (occluded) that have non-NaN x,y '
+                    'coordinates; the visibility flag takes precedence and a uniform heatmap '
+                    'will be generated for these keypoints'
+                )
 
         # send image to tensor and normalize
         pytorch_transform_list = [
@@ -150,10 +155,10 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             if not os.path.exists(bbox_file):
                 raise FileNotFoundError(f"Could not find bbox file at {bbox_file}!")
             bboxes_df = pd.read_csv(bbox_file, header=[0], index_col=0)
-            assert bboxes_df.index.equals(csv_data.index)
+            assert bboxes_df.index.tolist() == self.image_names
             bboxes = bboxes_df.to_numpy()
         else:
-            bboxes = [None] * len(csv_data)
+            bboxes = [None] * len(self.image_names)
         self.bboxes = bboxes
 
     @property
@@ -258,6 +263,11 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             keypoints=torch.from_numpy(transformed_keypoints),  # shape (n_targets,)
             idxs=idx,
             bbox=bbox,
+            visibility=(
+                self.visibility[idx]
+                if self.visibility is not None
+                else torch.zeros(0, dtype=torch.long)
+            ),
         )
 
 
@@ -299,8 +309,11 @@ class HeatmapDataset(BaseTrackingDataset):
                 sophisticated augmentations before resizing (e.g. 3d augmentations). Note that when
                 this is False, it is up to the child class to perform this resizing on both images
                 and keypoints before returning a batch of data.
-            uniform_heatmaps: True to force the model to output uniform heatmaps for missing data;
-                False will output all-zero heatmaps
+            uniform_heatmaps: when the CSV has no ``visible`` column, controls the target
+                heatmap for NaN (unlabeled) keypoints. True generates a uniform heatmap
+                (visibility=1, encourages low-confidence predictions); False generates an
+                all-zero heatmap (visibility=0, excluded from loss). Ignored when the CSV
+                provides explicit visibility flags.
             bbox_path: path to csv file that contains bounding box information; rows must be in
                 same order as csv file
 
@@ -326,9 +339,18 @@ class HeatmapDataset(BaseTrackingDataset):
 
         self.downsample_factor: Literal[1, 2, 3] = downsample_factor
         self.output_sigma = 1.25  # should be sigma/2 ^downsample factor
-        self.uniform_heatmaps = uniform_heatmaps
         self.num_targets = torch.numel(self.keypoints[0])
         self.num_keypoints = self.num_targets // 2
+
+        # synthesize visibility for CSVs that don't provide a visible column
+        if self.visibility is None:
+            nan_mask = torch.isnan(self.keypoints[:, :, 0])
+            vis_for_nan = 1 if uniform_heatmaps else 0
+            self.visibility = torch.where(
+                nan_mask,
+                torch.full_like(nan_mask, vis_for_nan, dtype=torch.long),
+                torch.full_like(nan_mask, 2, dtype=torch.long),
+            )
 
     @property
     def output_shape(self) -> tuple:
@@ -366,13 +388,19 @@ class HeatmapDataset(BaseTrackingDataset):
             )
             keypoints[new_nans, :] = torch.nan
 
+        vis = (
+            example_dict["visibility"].unsqueeze(0)
+            if example_dict["visibility"].numel() > 0
+            else None
+        )
+
         y_heatmap = generate_heatmaps(
             keypoints=keypoints.unsqueeze(0),  # add batch dim
             height=self.height,
             width=self.width,
             output_shape=self.output_shape,
             sigma=self.output_sigma,
-            uniform_heatmaps=self.uniform_heatmaps,
+            visibility=vis,
         )
 
         return y_heatmap[0]
@@ -933,6 +961,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 keypoints=keypoints_2d_aug_resize[idx_view],
                 bbox=data_dict[view]["bbox"],
                 idxs=data_dict[view]["idxs"],
+                visibility=data_dict[view]["visibility"],
             )
             example_dict["heatmaps"] = self.dataset[view].compute_heatmap(example_dict)  # type: ignore[typeddict-unknown-key]
             data_dict_aug[view] = example_dict

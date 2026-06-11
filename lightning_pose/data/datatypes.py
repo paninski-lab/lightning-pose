@@ -116,6 +116,7 @@ class BaseLabeledExampleDict(TypedDict):
     keypoints: Float[torch.Tensor, "num_targets"]
     bbox: Float[torch.Tensor, "xyhw"]
     idxs: int
+    visibility: Int[torch.Tensor, "num_keypoints"]
 
 
 class HeatmapLabeledExampleDict(BaseLabeledExampleDict):

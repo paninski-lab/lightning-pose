@@ -1155,6 +1155,223 @@ class TestDiscoverCamParamsFromImagePaths:
             self._discover(fake_ds)
 
 
+class TestBaseTrackingDatasetVisibility:
+    """Test visibility column parsing in BaseTrackingDataset and HeatmapDataset."""
+
+    @pytest.fixture
+    def visibility_csv(self, tmp_path) -> str:
+        """DLC-format CSV with a visible column; two keypoints, two frames."""
+        content = (
+            'scorer,scorer,scorer,scorer,scorer,scorer,scorer\n'
+            'bodyparts,kp1,kp1,kp1,kp2,kp2,kp2\n'
+            'coords,x,y,visible,x,y,visible\n'
+            # frame 0: kp1 visible (2) with valid coords; kp2 occluded (1) with NaN coords
+            'img01.png,64.0,64.0,2,,,1\n'
+            # frame 1: kp1 visible (2); kp2 not labeled (0) with NaN coords
+            'img02.png,32.0,96.0,2,,,0\n'
+        )
+        p = tmp_path / 'labels.csv'
+        p.write_text(content)
+        return str(p)
+
+    @pytest.fixture
+    def standard_csv(self, tmp_path) -> str:
+        """Standard DLC-format CSV without visibility columns."""
+        content = (
+            'scorer,scorer,scorer,scorer,scorer\n'
+            'bodyparts,kp1,kp1,kp2,kp2\n'
+            'coords,x,y,x,y\n'
+            'img01.png,64.0,64.0,32.0,96.0\n'
+            'img02.png,10.0,20.0,30.0,40.0\n'
+        )
+        p = tmp_path / 'labels_standard.csv'
+        p.write_text(content)
+        return str(p)
+
+    @pytest.fixture
+    def imgaug(self):
+        import imgaug.augmenters as iaa
+        return iaa.Sequential([])
+
+    def _make_base_dataset(self, csv_path, tmp_path, imgaug):
+        from lightning_pose.data.datasets import BaseTrackingDataset
+        return BaseTrackingDataset(
+            root_directory=str(tmp_path),
+            csv_path=csv_path,
+            image_resize_height=128,
+            image_resize_width=128,
+            imgaug_transform=imgaug,
+        )
+
+    def _make_heatmap_dataset(self, csv_path, tmp_path, imgaug):
+        from lightning_pose.data.datasets import HeatmapDataset
+        return HeatmapDataset(
+            root_directory=str(tmp_path),
+            csv_path=csv_path,
+            image_resize_height=128,
+            image_resize_width=128,
+            imgaug_transform=imgaug,
+        )
+
+    def test_base_tracking_dataset_visibility_parsed(self, visibility_csv, tmp_path, imgaug):
+        """visibility tensor is populated with correct int values from the CSV."""
+        ds = self._make_base_dataset(visibility_csv, tmp_path, imgaug)
+
+        assert ds.visibility is not None
+        assert ds.visibility.shape == (2, 2)  # (N=2 frames, K=2 keypoints)
+        assert ds.visibility.dtype == torch.long
+        # frame 0: kp1=visible(2), kp2=occluded(1)
+        assert ds.visibility[0, 0] == 2
+        assert ds.visibility[0, 1] == 1
+        # frame 1: kp1=visible(2), kp2=not_labeled(0)
+        assert ds.visibility[1, 0] == 2
+        assert ds.visibility[1, 1] == 0
+
+    def test_base_tracking_dataset_no_visibility(self, standard_csv, tmp_path, imgaug):
+        """visibility is None for a standard CSV without visible column."""
+        ds = self._make_base_dataset(standard_csv, tmp_path, imgaug)
+        assert ds.visibility is None
+
+    def test_base_tracking_dataset_invalid_visibility_raises(self, tmp_path, imgaug):
+        """ValueError is raised when the visibility column contains values outside {0, 1, 2}."""
+        content = (
+            'scorer,scorer,scorer,scorer\n'
+            'bodyparts,kp1,kp1,kp1\n'
+            'coords,x,y,visible\n'
+            'img01.png,64.0,64.0,9\n'
+        )
+        bad_csv = tmp_path / 'bad.csv'
+        bad_csv.write_text(content)
+        with pytest.raises(ValueError, match='visibility column contains invalid values'):
+            from lightning_pose.data.datasets import BaseTrackingDataset
+            BaseTrackingDataset(
+                root_directory=str(tmp_path),
+                csv_path=str(bad_csv),
+                image_resize_height=128,
+                image_resize_width=128,
+                imgaug_transform=imgaug,
+            )
+
+    def test_base_tracking_dataset_occluded_with_coords_warns(
+        self, tmp_path, imgaug, caplog,
+    ):
+        """A warning is logged when vis=1 keypoints have non-NaN x,y coordinates."""
+        import logging
+        content = (
+            'scorer,scorer,scorer,scorer\n'
+            'bodyparts,kp1,kp1,kp1\n'
+            'coords,x,y,visible\n'
+            # kp1 has coordinates but is marked occluded (vis=1)
+            'img01.png,64.0,64.0,1\n'
+        )
+        p = tmp_path / 'occluded_with_coords.csv'
+        p.write_text(content)
+        with caplog.at_level(logging.WARNING, logger='lightning_pose.data.datasets'):
+            from lightning_pose.data.datasets import BaseTrackingDataset
+            BaseTrackingDataset(
+                root_directory=str(tmp_path),
+                csv_path=str(p),
+                image_resize_height=128,
+                image_resize_width=128,
+                imgaug_transform=imgaug,
+            )
+        assert any('visible=1' in record.message for record in caplog.records)
+
+    def test_heatmap_dataset_getitem_populates_visibility(self, visibility_csv, tmp_path, imgaug):
+        """__getitem__ populates the 'visibility' key from self.visibility[idx]."""
+        import os
+
+        from PIL import Image
+
+        from lightning_pose.data.datasets import BaseTrackingDataset
+        for name in ('img01.png', 'img02.png'):
+            Image.fromarray(
+                (128 * torch.ones(128, 128, 3)).byte().numpy()
+            ).save(os.path.join(str(tmp_path), name))
+
+        ds = self._make_heatmap_dataset(visibility_csv, tmp_path, imgaug)
+
+        ex0 = BaseTrackingDataset.__getitem__(ds, 0)
+        assert ex0['visibility'] is not None
+        assert torch.equal(ex0['visibility'], torch.tensor([2, 1], dtype=torch.long))
+
+        ex1 = BaseTrackingDataset.__getitem__(ds, 1)
+        assert ex1['visibility'] is not None
+        assert torch.equal(ex1['visibility'], torch.tensor([2, 0], dtype=torch.long))
+
+    def test_heatmap_dataset_getitem_no_visibility(self, standard_csv, tmp_path, imgaug):
+        """HeatmapDataset synthesizes visibility=2 for all valid keypoints in a standard CSV."""
+        import os
+
+        from PIL import Image
+
+        from lightning_pose.data.datasets import BaseTrackingDataset
+        for name in ('img01.png', 'img02.png'):
+            Image.fromarray(
+                (128 * torch.ones(128, 128, 3)).byte().numpy()
+            ).save(os.path.join(str(tmp_path), name))
+
+        ds = self._make_heatmap_dataset(standard_csv, tmp_path, imgaug)
+        # standard CSV → synthesis sets vis=2 for all labeled (non-NaN) keypoints
+        assert ds.visibility is not None
+        assert (ds.visibility == 2).all()
+        ex = BaseTrackingDataset.__getitem__(ds, 0)
+        assert torch.equal(ex['visibility'], torch.tensor([2, 2], dtype=torch.long))
+
+    def test_heatmap_dataset_compute_heatmap_uses_visibility(
+        self, visibility_csv, tmp_path, imgaug,
+    ):
+        """compute_heatmap reads visibility from example_dict, not self.visibility[idx]."""
+
+        ds = self._make_heatmap_dataset(visibility_csv, tmp_path, imgaug)
+        H, W = ds.output_shape
+
+        uniform_heatmap = torch.ones(H, W) / (H * W)
+        zero_heatmap = torch.zeros(H, W)
+
+        # Frame 0: kp1=vis2 with valid coords, kp2=vis1 with NaN coords
+        example_dict = {
+            'images': torch.zeros(3, 128, 128),
+            'keypoints': torch.tensor([64.0, 64.0, float('nan'), float('nan')]),
+            'bbox': torch.tensor([0, 0, 128, 128]),
+            'idxs': 0,
+            'visibility': torch.tensor([2, 1], dtype=torch.long),
+        }
+        heatmaps = ds.compute_heatmap(example_dict, ignore_nans=True)  # type: ignore[arg-type]
+
+        # kp1 (vis=2): Gaussian — non-zero, sums to ~1
+        assert not torch.allclose(heatmaps[0], zero_heatmap)
+        assert torch.isclose(heatmaps[0].sum(), torch.tensor(1.0))
+        # kp2 (vis=1): uniform
+        assert torch.allclose(heatmaps[1], uniform_heatmap)
+
+        # Frame 1: kp2=vis0 — zero heatmap; visibility from example_dict, not self.visibility[1]
+        example_dict_1 = {
+            'images': torch.zeros(3, 128, 128),
+            'keypoints': torch.tensor([32.0, 96.0, float('nan'), float('nan')]),
+            'bbox': torch.tensor([0, 0, 128, 128]),
+            'idxs': 1,
+            'visibility': torch.tensor([2, 0], dtype=torch.long),
+        }
+        heatmaps_1 = ds.compute_heatmap(example_dict_1, ignore_nans=True)  # type: ignore[arg-type]
+        assert torch.allclose(heatmaps_1[1], zero_heatmap)
+
+        # Verify compute_heatmap uses example_dict["visibility"], not self.visibility[idx]:
+        # pass a different visibility tensor than what self.visibility[0] would return
+        example_dict_override = {
+            'images': torch.zeros(3, 128, 128),
+            'keypoints': torch.tensor([64.0, 64.0, float('nan'), float('nan')]),
+            'bbox': torch.tensor([0, 0, 128, 128]),
+            'idxs': 0,
+            # override kp1 to vis=0 — should produce zero heatmap despite kp1 having coords
+            'visibility': torch.tensor([0, 1], dtype=torch.long),
+        }
+        heatmaps_override = ds.compute_heatmap(
+            example_dict_override, ignore_nans=True,  # type: ignore[arg-type]
+        )
+        assert torch.allclose(heatmaps_override[0], zero_heatmap)
+
+
 def test_equal_return_sizes(base_dataset, heatmap_dataset):
     # can only assert the batches are the same if not using imgaug pipeline
     assert base_dataset[0]["images"].shape == heatmap_dataset[0]["images"].shape

@@ -156,7 +156,7 @@ See the :ref:`FAQs <faq_oom>` for more information on memory management.
   rate; gamma: factor by which to multiply learning rate at each milestone
 
 * ``training.uniform_heatmaps_for_nan_keypoints`` (*bool, default: true*): how to treat missing
-  hand labels.
+  hand labels in CSVs that do **not** include a ``visible`` column.
   Setting this to true will encourage the model to output uniform heatmaps for keypoints that do
   not have ground truth labels; this will generally lead to low-confidence predictions when a
   keypoint is occluded.
@@ -164,6 +164,8 @@ See the :ref:`FAQs <faq_oom>` for more information on memory management.
   encouraging uniform heatmaps. This generally leads to high confidence predictions even when a
   keypoint is occluded. Using false may be preferrable if occulsions are brief in time and you want
   the network to guess where the keypoint should be (rather than signaling uncertainty).
+  This flag is ignored for any keypoint that has an explicit ``visible`` value in the CSV;
+  see :ref:`label_csv_file_format` for the per-keypoint visibility column format.
 
 * ``training.accumulate_grad_batches`` (*int, default: 1*): (experimental) number of batches to
   accumulate gradients for before updating weights. Simulates larger batch sizes with

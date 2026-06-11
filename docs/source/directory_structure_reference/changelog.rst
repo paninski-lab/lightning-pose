@@ -10,6 +10,18 @@ over time.
    :depth: 2
 
 
+v2.1.2 | June 11, 2026
+------------------------------------
+
+* Label CSV files now support an optional ``visible`` column after each ``x, y`` pair
+  (columns become ``x, y, visible, x, y, visible, …``).
+  Values: **0** = not labeled (exclude from loss), **1** = occluded (uniform heatmap target),
+  **2** = visible (Gaussian heatmap target).
+  This allows mixing visibility behaviors within a single dataset.
+  When the column is absent, behavior is unchanged and is controlled by
+  ``training.uniform_heatmaps_for_nan_keypoints``.
+  See :ref:`label_csv_file_format` for full details.
+
 v2.1.1 | May 15, 2026
 ------------------------------------
 

@@ -148,10 +148,6 @@ def get_loss_factories(
                 #     height_ds
                 # )
                 # loss_params_dict['unsupervised'][loss_name]['downsampled_image_width'] = width_ds
-                # if loss_name[:8] == 'unimodal':
-                #     loss_params_dict['unsupervised'][loss_name]['uniform_heatmaps'] = (
-                #         cfg.training.get('uniform_heatmaps_for_nan_keypoints', False)
-                #     )
             elif loss_name == 'pca_multiview':
                 if cfg.data.get('view_names', None) and len(cfg.data.view_names) > 1:
                     num_keypoints = cfg.data.num_keypoints
