@@ -6,11 +6,14 @@ import collections
 import logging
 import os
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import overload
 
 import numpy as np
 import pandas as pd
+import torch
+from jaxtyping import Float, Int
 from omegaconf import DictConfig, ListConfig
 
 logger = logging.getLogger(__name__)
@@ -20,6 +23,8 @@ __all__ = [
     "ckpt_path_from_base_path",
     "get_keypoint_names",
     "has_visibility_column",
+    "LabeledData",
+    "parse_label_csv",
     "return_absolute_path",
     "return_absolute_data_paths",
     "extract_session_name_from_video",
@@ -207,6 +212,98 @@ def has_visibility_column(
         return False
     csv_data = pd.read_csv(csv_file, header=header_rows, nrows=1)
     return any(b[2] == 'visible' for b in csv_data.columns)
+
+
+@dataclass
+class LabeledData:
+    """Result of parsing a label CSV file.
+
+    Attributes:
+        keypoint_names: ordered list of keypoint name strings
+        image_names: ordered list of image path strings (relative to the project root)
+        keypoints: ``(N, K, 2)`` float tensor of ``(x, y)`` coordinates; NaN where unlabeled
+        visibility: ``(N, K)`` int64 tensor of per-keypoint visibility flags (0, 1, or 2),
+            or ``None`` when the CSV does not contain a ``visible`` column
+    """
+
+    keypoint_names: list[str]
+    image_names: list[str]
+    keypoints: Float[torch.Tensor, 'num_frames num_keypoints 2']
+    visibility: Int[torch.Tensor, 'num_frames num_keypoints'] | None
+
+
+def parse_label_csv(
+    csv_file: str,
+    header_rows: list[int] | None = None,
+) -> LabeledData:
+    """Parse a label CSV file into a :class:`LabeledData` object in a single read.
+
+    Reads the file exactly once and returns keypoint names, image names, coordinates,
+    and per-keypoint visibility flags.  When the file contains a ``visible`` column per
+    keypoint (detected via :func:`has_visibility_column`), visibility flags are returned
+    as an int64 tensor; otherwise ``visibility`` is ``None``.
+
+    This function is the single entry point for reading label files.  A future
+    ``parse_label_json`` function for COCO ``.json`` format should return the same
+    :class:`LabeledData` type, allowing callers to remain format-agnostic.
+
+    Args:
+        csv_file: path to the label CSV file
+        header_rows: row indices that form the MultiIndex header; defaults to ``[0, 1, 2]``
+
+    Returns:
+        :class:`LabeledData` containing all label information
+
+    Raises:
+        FileNotFoundError: if ``csv_file`` does not exist
+        ValueError: if any visibility value is outside ``{0, 1, 2}``
+    """
+    if header_rows is None:
+        header_rows = [0, 1, 2]
+    if not os.path.exists(csv_file):
+        raise FileNotFoundError(f'could not find csv file at {csv_file}')
+
+    csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
+    csv_data = fix_empty_first_row(csv_data)
+
+    # extract keypoint names from the MultiIndex header
+    if header_rows in ([1, 2], [0, 1]):
+        keypoint_names = [b[0] for b in csv_data.columns if b[1] == 'x']
+    else:
+        keypoint_names = [b[1] for b in csv_data.columns if b[2] == 'x']
+
+    image_names = list(csv_data.index)
+
+    # detect visibility column and split raw data accordingly
+    has_vis = (
+        header_rows == [0, 1, 2]
+        and any(b[2] == 'visible' for b in csv_data.columns)
+    )
+    if has_vis:
+        raw = torch.tensor(csv_data.to_numpy(), dtype=torch.float32)
+        raw = raw.reshape(raw.shape[0], -1, 3)
+        keypoints = raw[:, :, :2].contiguous()
+        vis_float = raw[:, :, 2]
+        valid_vals = {0.0, 1.0, 2.0}
+        unique_vals = set(vis_float[~torch.isnan(vis_float)].unique().tolist())
+        invalid_vals = unique_vals - valid_vals
+        if invalid_vals:
+            raise ValueError(
+                f'visibility column contains invalid values {invalid_vals}; '
+                'expected values in {{0, 1, 2}}'
+            )
+        visibility: Int[torch.Tensor, 'num_frames num_keypoints'] | None = vis_float.long()
+    else:
+        raw = torch.tensor(csv_data.to_numpy(), dtype=torch.float32)
+        keypoints = raw.reshape(raw.shape[0], -1, 2)
+        visibility = None
+
+    return LabeledData(
+        keypoint_names=keypoint_names,
+        image_names=image_names,
+        keypoints=keypoints,
+        visibility=visibility,
+    )
 
 
 # --------------------------------------------------------------------------------------

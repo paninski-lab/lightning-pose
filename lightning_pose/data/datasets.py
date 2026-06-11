@@ -115,31 +115,14 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             csv_file = csv_path
         else:
             csv_file = os.path.join(root_directory, csv_path)
-        if not os.path.exists(csv_file):
-            raise FileNotFoundError(f"Could not find csv file at {csv_file}!")
 
-        csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
-        csv_data = io_utils.fix_empty_first_row(csv_data)
-        self.keypoint_names = io_utils.get_keypoint_names(
-            csv_file=csv_file, header_rows=header_rows,
-        )
-        self.image_names = list(csv_data.index)
-        has_vis = io_utils.has_visibility_column(csv_file, header_rows=header_rows)
-        if has_vis:
-            raw = torch.tensor(csv_data.to_numpy(), dtype=torch.float32)
-            # columns are ordered x, y, visible, x, y, visible, ...
-            raw = raw.reshape(raw.shape[0], -1, 3)
-            self.keypoints = raw[:, :, :2].contiguous()  # (N, K, 2)
-            vis_float = raw[:, :, 2]  # (N, K)
-            valid_vals = {0.0, 1.0, 2.0}
-            unique_vals = set(vis_float[~torch.isnan(vis_float)].unique().tolist())
-            invalid_vals = unique_vals - valid_vals
-            if invalid_vals:
-                raise ValueError(
-                    f'visibility column contains invalid values {invalid_vals}; '
-                    'expected values in {0, 1, 2}'
-                )
-            self.visibility: torch.Tensor | None = vis_float.long()  # (N, K)
+        labeled_data = io_utils.parse_label_csv(csv_file, header_rows=header_rows)
+        self.keypoint_names = labeled_data.keypoint_names
+        self.image_names = labeled_data.image_names
+        self.keypoints = labeled_data.keypoints
+        self.visibility: torch.Tensor | None = labeled_data.visibility
+
+        if self.visibility is not None:
             occluded_with_coords = (
                 (self.visibility == 1) & ~torch.isnan(self.keypoints[:, :, 0])
             )
@@ -149,11 +132,6 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                     'coordinates; the visibility flag takes precedence and a uniform heatmap '
                     'will be generated for these keypoints'
                 )
-        else:
-            self.keypoints = torch.tensor(csv_data.to_numpy(), dtype=torch.float32)
-            # convert to x,y coordinates
-            self.keypoints = self.keypoints.reshape(self.keypoints.shape[0], -1, 2)
-            self.visibility = None
 
         # send image to tensor and normalize
         pytorch_transform_list = [
@@ -177,10 +155,10 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             if not os.path.exists(bbox_file):
                 raise FileNotFoundError(f"Could not find bbox file at {bbox_file}!")
             bboxes_df = pd.read_csv(bbox_file, header=[0], index_col=0)
-            assert bboxes_df.index.equals(csv_data.index)
+            assert bboxes_df.index.tolist() == self.image_names
             bboxes = bboxes_df.to_numpy()
         else:
-            bboxes = [None] * len(csv_data)
+            bboxes = [None] * len(self.image_names)
         self.bboxes = bboxes
 
     @property

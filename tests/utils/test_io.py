@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+import torch
 
 from lightning_pose.utils import io as io_utils
 from lightning_pose.utils.io import (
@@ -642,3 +643,129 @@ class TestHasVisibilityColumn:
         """header_rows=None defaults to [0, 1, 2] and detects visible columns."""
         from lightning_pose.utils.io import has_visibility_column
         assert has_visibility_column(str(visibility_csv), header_rows=None)
+
+
+class TestParseLabelCsv:
+    """Test the parse_label_csv function."""
+
+    @pytest.fixture
+    def standard_csv(self, tmp_path) -> Path:
+        """Two-keypoint standard DLC CSV without visibility; frame 1 has one unlabeled kp."""
+        content = (
+            'scorer,scorer,scorer,scorer,scorer\n'
+            'bodyparts,kp1,kp1,kp2,kp2\n'
+            'coords,x,y,x,y\n'
+            'labeled-data/img01.png,10.0,20.0,30.0,40.0\n'
+            'labeled-data/img02.png,50.0,60.0,,\n'
+        )
+        p = tmp_path / 'standard.csv'
+        p.write_text(content)
+        return p
+
+    @pytest.fixture
+    def visibility_csv(self, tmp_path) -> Path:
+        """Two-keypoint CSV with visible column; kp1 visible, kp2 occluded/unlabeled."""
+        content = (
+            'scorer,scorer,scorer,scorer,scorer,scorer,scorer\n'
+            'bodyparts,kp1,kp1,kp1,kp2,kp2,kp2\n'
+            'coords,x,y,visible,x,y,visible\n'
+            'labeled-data/img01.png,10.0,20.0,2,30.0,40.0,1\n'
+            'labeled-data/img02.png,50.0,60.0,2,,,0\n'
+        )
+        p = tmp_path / 'visibility.csv'
+        p.write_text(content)
+        return p
+
+    def test_parse_label_csv_standard_keypoint_names(self, standard_csv):
+        """Keypoint names are extracted from the bodyparts row."""
+        from lightning_pose.utils.io import parse_label_csv
+        result = parse_label_csv(str(standard_csv))
+        assert result.keypoint_names == ['kp1', 'kp2']
+
+    def test_parse_label_csv_standard_image_names(self, standard_csv):
+        """Image names are read from the index column in order."""
+        from lightning_pose.utils.io import parse_label_csv
+        result = parse_label_csv(str(standard_csv))
+        assert result.image_names == ['labeled-data/img01.png', 'labeled-data/img02.png']
+
+    def test_parse_label_csv_standard_keypoints_shape(self, standard_csv):
+        """Keypoints tensor has shape (N, K, 2) for a standard CSV."""
+        from lightning_pose.utils.io import parse_label_csv
+        result = parse_label_csv(str(standard_csv))
+        assert result.keypoints.shape == (2, 2, 2)
+
+    def test_parse_label_csv_standard_keypoint_values(self, standard_csv):
+        """Labeled coordinates are parsed correctly; unlabeled become NaN."""
+        from lightning_pose.utils.io import parse_label_csv
+        result = parse_label_csv(str(standard_csv))
+        assert result.keypoints[0, 0, 0] == 10.0
+        assert result.keypoints[0, 0, 1] == 20.0
+        assert torch.isnan(result.keypoints[1, 1, 0])
+        assert torch.isnan(result.keypoints[1, 1, 1])
+
+    def test_parse_label_csv_standard_no_visibility(self, standard_csv):
+        """visibility is None for a standard CSV without a visible column."""
+        from lightning_pose.utils.io import parse_label_csv
+        result = parse_label_csv(str(standard_csv))
+        assert result.visibility is None
+
+    def test_parse_label_csv_visibility_tensor_shape(self, visibility_csv):
+        """visibility tensor has shape (N, K) and dtype int64 when column is present."""
+        from lightning_pose.utils.io import parse_label_csv
+        result = parse_label_csv(str(visibility_csv))
+        assert result.visibility is not None
+        assert result.visibility.shape == (2, 2)
+        assert result.visibility.dtype == torch.long
+
+    def test_parse_label_csv_visibility_values(self, visibility_csv):
+        """visibility values match the CSV contents."""
+        from lightning_pose.utils.io import parse_label_csv
+        result = parse_label_csv(str(visibility_csv))
+        assert result.visibility is not None
+        assert result.visibility[0, 0] == 2  # kp1 frame 0: visible
+        assert result.visibility[0, 1] == 1  # kp2 frame 0: occluded
+        assert result.visibility[1, 0] == 2  # kp1 frame 1: visible
+        assert result.visibility[1, 1] == 0  # kp2 frame 1: not labeled
+
+    def test_parse_label_csv_visibility_keypoints_shape(self, visibility_csv):
+        """keypoints tensor is (N, K, 2) — visibility column is stripped."""
+        from lightning_pose.utils.io import parse_label_csv
+        result = parse_label_csv(str(visibility_csv))
+        assert result.keypoints.shape == (2, 2, 2)
+
+    def test_parse_label_csv_nonexistent_file_raises(self, tmp_path):
+        """FileNotFoundError is raised for a path that does not exist."""
+        from lightning_pose.utils.io import parse_label_csv
+        with pytest.raises(FileNotFoundError):
+            parse_label_csv(str(tmp_path / 'nonexistent.csv'))
+
+    def test_parse_label_csv_invalid_visibility_raises(self, tmp_path):
+        """ValueError is raised when the visible column contains a value outside {0, 1, 2}."""
+        content = (
+            'scorer,scorer,scorer,scorer\n'
+            'bodyparts,kp1,kp1,kp1\n'
+            'coords,x,y,visible\n'
+            'labeled-data/img01.png,10.0,20.0,9\n'
+        )
+        p = tmp_path / 'bad.csv'
+        p.write_text(content)
+        from lightning_pose.utils.io import parse_label_csv
+        with pytest.raises(ValueError, match='invalid values'):
+            parse_label_csv(str(p))
+
+    def test_parse_label_csv_single_read(self, standard_csv, monkeypatch):
+        """The CSV file is read exactly once."""
+        import pandas as pd
+
+        from lightning_pose.utils.io import parse_label_csv
+        read_count = 0
+        original_read_csv = pd.read_csv
+
+        def counting_read_csv(*args, **kwargs):
+            nonlocal read_count
+            read_count += 1
+            return original_read_csv(*args, **kwargs)
+
+        monkeypatch.setattr(pd, 'read_csv', counting_read_csv)
+        parse_label_csv(str(standard_csv))
+        assert read_count == 1
