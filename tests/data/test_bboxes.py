@@ -119,6 +119,18 @@ class TestNormToFrame:
             assert kps[2, 0, 1] == bbox[2] / 2 + bbox[1]
 
 
+    def test_norm_to_frame_mutates_input(self):
+        """norm_to_frame modifies the input tensor in-place (unlike all other helpers)."""
+        keypoints = torch.tensor([[[0.5, 0.5]]])
+        bbox = torch.tensor([[10., 20., 100., 200.]])  # x=10, y=20, h=100, w=200
+        original_values = keypoints.clone()
+        norm_to_frame(keypoints, bbox)
+        # input should be mutated: (0.5*200+10, 0.5*100+20) = (110, 70)
+        assert not torch.allclose(keypoints, original_values)
+        assert torch.isclose(keypoints[0, 0, 0], torch.tensor(110.0))
+        assert torch.isclose(keypoints[0, 0, 1], torch.tensor(70.0))
+
+
 class TestNormToModel:
     """Test the function norm_to_model."""
 
@@ -262,6 +274,53 @@ class TestModelToFrameBatch:
         assert converted[1, 1] == batch_dict['bbox'][3, 2]
         assert converted[1, 2] == batch_dict['bbox'][3, 7]
         assert converted[1, 3] == batch_dict['bbox'][3, 6]
+
+    def test_model_to_frame_batch_unlabeled_dict(self):
+        """Uses 'frames' key (unlabeled dict) instead of 'images' to extract model dims."""
+        batch_dict = {
+            'frames': torch.zeros(2, 3, 10, 10),  # batch, channels, h, w; model dims: 10x10
+            'bbox': torch.tensor([
+                [5., 6., 100., 101.],
+                [0., 0., 123., 124.],
+            ]),
+        }
+        keypoints = torch.tensor([
+            [0., 0.],   # (0, 0) in model → bbox top-left in frame
+            [10., 10.],  # (model_w, model_h) in model → bbox bottom-right in frame
+        ])
+        converted = model_to_frame_batch(batch_dict, keypoints)  # type: ignore[arg-type]
+        # (0, 0) in model → top-left of bbox
+        assert converted[0, 0] == batch_dict['bbox'][0, 0]  # x
+        assert converted[0, 1] == batch_dict['bbox'][0, 1]  # y
+        # (model_w, model_h) in model → bottom-right of bbox: (x + w, y + h)
+        assert converted[1, 0] == batch_dict['bbox'][1, 3] + batch_dict['bbox'][1, 0]  # x + w
+        assert converted[1, 1] == batch_dict['bbox'][1, 2] + batch_dict['bbox'][1, 1]  # y + h
+
+    def test_model_to_frame_batch_is_multiview_infers_num_views(self):
+        """is_multiview=True path: num_views inferred from bbox shape, 'frames' key used."""
+        batch_dict = {
+            'frames': torch.zeros(2, 3, 10, 10),  # model dims: 10x10
+            'bbox': torch.tensor([
+                [5., 6., 100., 101., 10., 11., 102., 103.],  # xyhw x 2
+                [0., 0., 123., 124., 0., 0., 3., 4.],
+            ]),
+            'is_multiview': True,  # triggers multiview path; num_views inferred from bbox
+        }
+        keypoints = torch.tensor([
+            [0., 0., 0., 0.],   # xy, xy (2 keypoints, one per view)
+            [10., 10., 10., 10.],
+        ])
+        converted = model_to_frame_batch(batch_dict, keypoints)  # type: ignore[arg-type]
+        # batch 0: (0, 0) in model → view 0 and view 1 bbox top-left
+        assert converted[0, 0] == batch_dict['bbox'][0, 0]
+        assert converted[0, 1] == batch_dict['bbox'][0, 1]
+        assert converted[0, 2] == batch_dict['bbox'][0, 4]
+        assert converted[0, 3] == batch_dict['bbox'][0, 5]
+        # batch 1: (10, 10) = (model_w, model_h) → view 0 and view 1 bbox bottom-right
+        assert converted[1, 0] == batch_dict['bbox'][1, 3] + batch_dict['bbox'][1, 0]
+        assert converted[1, 1] == batch_dict['bbox'][1, 2] + batch_dict['bbox'][1, 1]
+        assert converted[1, 2] == batch_dict['bbox'][1, 7] + batch_dict['bbox'][1, 4]
+        assert converted[1, 3] == batch_dict['bbox'][1, 6] + batch_dict['bbox'][1, 5]
 
     def test_model_to_frame_batch_mismatched_views_raises(self, multiview_heatmap_data_module):
         """Batch elements with different view counts raise ValueError."""

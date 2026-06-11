@@ -24,7 +24,6 @@ dimensions; handle both single-view and multi-view):
 - :func:`model_to_frame_batch` — model → frame  (called after inference)
 - :func:`frame_to_model_batch` — frame → model  (called before loss computation)
 """
-from __future__ import annotations
 
 import torch
 from jaxtyping import Float
