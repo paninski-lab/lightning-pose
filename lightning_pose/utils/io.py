@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "ckpt_path_from_base_path",
     "get_keypoint_names",
-    "has_visibility_column",
+
     "LabeledData",
     "parse_label_csv",
     "return_absolute_path",
@@ -188,31 +188,6 @@ def get_keypoint_names(
     return keypoint_names
 
 
-def has_visibility_column(
-    csv_file: str,
-    header_rows: list[int] | None = None,
-) -> bool:
-    """Return True if the CSV has a ``visible`` column per keypoint in the coords row.
-
-    Only the standard DLC format (``header_rows=[0, 1, 2]``) is supported; all other
-    formats return False without reading the file.
-
-    Args:
-        csv_file: path to a labeled CSV file
-        header_rows: row indices that form the MultiIndex header; defaults to ``[0, 1, 2]``
-
-    Returns:
-        True if the CSV contains ``visible`` columns in the coords row, False otherwise
-    """
-    if header_rows is None:
-        header_rows = [0, 1, 2]
-    if header_rows != [0, 1, 2]:
-        return False
-    if not os.path.exists(csv_file):
-        return False
-    csv_data = pd.read_csv(csv_file, header=header_rows, nrows=1)
-    return any(b[2] == 'visible' for b in csv_data.columns)
-
 
 @dataclass
 class LabeledData:
@@ -240,8 +215,8 @@ def parse_label_csv(
 
     Reads the file exactly once and returns keypoint names, image names, coordinates,
     and per-keypoint visibility flags.  When the file contains a ``visible`` column per
-    keypoint (detected via :func:`has_visibility_column`), visibility flags are returned
-    as an int64 tensor; otherwise ``visibility`` is ``None``.
+    keypoint, visibility flags are returned as an int64 tensor; otherwise ``visibility``
+    is ``None``.
 
     This function is the single entry point for reading label files.  A future
     ``parse_label_json`` function for COCO ``.json`` format should return the same
