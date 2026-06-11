@@ -1189,7 +1189,7 @@ class TestBaseTrackingDatasetVisibility:
         return str(p)
 
     @pytest.fixture
-    def imgaug(self) -> 'iaa.Sequential':
+    def imgaug(self):
         import imgaug.augmenters as iaa
         return iaa.Sequential([])
 

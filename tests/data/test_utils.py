@@ -439,11 +439,15 @@ class TestGenerateHeatmaps:
 
         # Arrange: one valid keypoint, one NaN keypoint (batch=1, K=2)
         keypoints = torch.tensor([[[64.0, 64.0], [float('nan'), float('nan')]]])
-        kwargs = dict(height=128, width=128, output_shape=(32, 32))
 
         # Act
-        legacy = generate_heatmaps(keypoints, **kwargs, uniform_heatmaps=False)
-        with_none = generate_heatmaps(keypoints, **kwargs, uniform_heatmaps=False, visibility=None)
+        legacy = generate_heatmaps(
+            keypoints, height=128, width=128, output_shape=(32, 32), uniform_heatmaps=False,
+        )
+        with_none = generate_heatmaps(
+            keypoints, height=128, width=128, output_shape=(32, 32), uniform_heatmaps=False,
+            visibility=None,
+        )
 
         # Assert
         assert torch.allclose(legacy, with_none)
@@ -454,11 +458,12 @@ class TestGenerateHeatmaps:
         # Arrange
         keypoints = torch.tensor([[[64.0, 64.0]]])
         vis = torch.tensor([[2]])
-        kwargs = dict(height=128, width=128, output_shape=(32, 32))
 
         # Act
-        expected = generate_heatmaps(keypoints, **kwargs)  # legacy path
-        result = generate_heatmaps(keypoints, **kwargs, visibility=vis)
+        expected = generate_heatmaps(keypoints, height=128, width=128, output_shape=(32, 32))
+        result = generate_heatmaps(
+            keypoints, height=128, width=128, output_shape=(32, 32), visibility=vis,
+        )
 
         # Assert
         assert torch.allclose(result, expected)
