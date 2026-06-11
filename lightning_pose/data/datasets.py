@@ -263,6 +263,11 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             keypoints=torch.from_numpy(transformed_keypoints),  # shape (n_targets,)
             idxs=idx,
             bbox=bbox,
+            visibility=(
+                self.visibility[idx]
+                if self.visibility is not None
+                else torch.zeros(0, dtype=torch.long)
+            ),
         )
 
 
@@ -371,8 +376,11 @@ class HeatmapDataset(BaseTrackingDataset):
             )
             keypoints[new_nans, :] = torch.nan
 
-        idx = example_dict["idxs"]
-        vis = self.visibility[idx].unsqueeze(0) if self.visibility is not None else None
+        vis = (
+            example_dict["visibility"].unsqueeze(0)
+            if example_dict["visibility"].numel() > 0
+            else None
+        )
 
         y_heatmap = generate_heatmaps(
             keypoints=keypoints.unsqueeze(0),  # add batch dim
@@ -942,6 +950,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 keypoints=keypoints_2d_aug_resize[idx_view],
                 bbox=data_dict[view]["bbox"],
                 idxs=data_dict[view]["idxs"],
+                visibility=data_dict[view]["visibility"],
             )
             example_dict["heatmaps"] = self.dataset[view].compute_heatmap(example_dict)  # type: ignore[typeddict-unknown-key]
             data_dict_aug[view] = example_dict

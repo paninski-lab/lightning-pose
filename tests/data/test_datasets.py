@@ -1277,41 +1277,96 @@ class TestBaseTrackingDatasetVisibility:
             )
         assert any('visible=1' in record.message for record in caplog.records)
 
+    def test_heatmap_dataset_getitem_populates_visibility(self, visibility_csv, tmp_path, imgaug):
+        """__getitem__ populates the 'visibility' key from self.visibility[idx]."""
+        import os
+
+        from PIL import Image
+
+        from lightning_pose.data.datasets import BaseTrackingDataset
+        for name in ('img01.png', 'img02.png'):
+            Image.fromarray(
+                (128 * torch.ones(128, 128, 3)).byte().numpy()
+            ).save(os.path.join(str(tmp_path), name))
+
+        ds = self._make_heatmap_dataset(visibility_csv, tmp_path, imgaug)
+
+        ex0 = BaseTrackingDataset.__getitem__(ds, 0)
+        assert ex0['visibility'] is not None
+        assert torch.equal(ex0['visibility'], torch.tensor([2, 1], dtype=torch.long))
+
+        ex1 = BaseTrackingDataset.__getitem__(ds, 1)
+        assert ex1['visibility'] is not None
+        assert torch.equal(ex1['visibility'], torch.tensor([2, 0], dtype=torch.long))
+
+    def test_heatmap_dataset_getitem_no_visibility(self, standard_csv, tmp_path, imgaug):
+        """__getitem__ sets 'visibility' to an empty tensor for a CSV without a visible column."""
+        import os
+
+        from PIL import Image
+
+        from lightning_pose.data.datasets import BaseTrackingDataset
+        for name in ('img01.png', 'img02.png'):
+            Image.fromarray(
+                (128 * torch.ones(128, 128, 3)).byte().numpy()
+            ).save(os.path.join(str(tmp_path), name))
+
+        ds = self._make_heatmap_dataset(standard_csv, tmp_path, imgaug)
+        ex = BaseTrackingDataset.__getitem__(ds, 0)
+        assert ex['visibility'].numel() == 0
+
     def test_heatmap_dataset_compute_heatmap_uses_visibility(
         self, visibility_csv, tmp_path, imgaug,
     ):
-        """compute_heatmap produces zero heatmap for vis=0 and uniform for vis=1."""
+        """compute_heatmap reads visibility from example_dict, not self.visibility[idx]."""
 
         ds = self._make_heatmap_dataset(visibility_csv, tmp_path, imgaug)
         H, W = ds.output_shape
 
-        # Frame 0: kp1=vis2, kp2=vis1; supply kp1 at center, kp2 as NaN
+        uniform_heatmap = torch.ones(H, W) / (H * W)
+        zero_heatmap = torch.zeros(H, W)
+
+        # Frame 0: kp1=vis2 with valid coords, kp2=vis1 with NaN coords
         example_dict = {
             'images': torch.zeros(3, 128, 128),
             'keypoints': torch.tensor([64.0, 64.0, float('nan'), float('nan')]),
             'bbox': torch.tensor([0, 0, 128, 128]),
             'idxs': 0,
+            'visibility': torch.tensor([2, 1], dtype=torch.long),
         }
         heatmaps = ds.compute_heatmap(example_dict, ignore_nans=True)  # type: ignore[arg-type]
 
-        uniform_heatmap = torch.ones(H, W) / (H * W)
-        zero_heatmap = torch.zeros(H, W)
-
-        # kp1 (vis=2): Gaussian — non-zero, sums to 1
+        # kp1 (vis=2): Gaussian — non-zero, sums to ~1
         assert not torch.allclose(heatmaps[0], zero_heatmap)
         assert torch.isclose(heatmaps[0].sum(), torch.tensor(1.0))
         # kp2 (vis=1): uniform
         assert torch.allclose(heatmaps[1], uniform_heatmap)
 
-        # Frame 1: kp2=vis0 — zero heatmap
+        # Frame 1: kp2=vis0 — zero heatmap; visibility from example_dict, not self.visibility[1]
         example_dict_1 = {
             'images': torch.zeros(3, 128, 128),
             'keypoints': torch.tensor([32.0, 96.0, float('nan'), float('nan')]),
             'bbox': torch.tensor([0, 0, 128, 128]),
             'idxs': 1,
+            'visibility': torch.tensor([2, 0], dtype=torch.long),
         }
         heatmaps_1 = ds.compute_heatmap(example_dict_1, ignore_nans=True)  # type: ignore[arg-type]
         assert torch.allclose(heatmaps_1[1], zero_heatmap)
+
+        # Verify compute_heatmap uses example_dict["visibility"], not self.visibility[idx]:
+        # pass a different visibility tensor than what self.visibility[0] would return
+        example_dict_override = {
+            'images': torch.zeros(3, 128, 128),
+            'keypoints': torch.tensor([64.0, 64.0, float('nan'), float('nan')]),
+            'bbox': torch.tensor([0, 0, 128, 128]),
+            'idxs': 0,
+            # override kp1 to vis=0 — should produce zero heatmap despite kp1 having coords
+            'visibility': torch.tensor([0, 1], dtype=torch.long),
+        }
+        heatmaps_override = ds.compute_heatmap(
+            example_dict_override, ignore_nans=True,  # type: ignore[arg-type]
+        )
+        assert torch.allclose(heatmaps_override[0], zero_heatmap)
 
 
 def test_equal_return_sizes(base_dataset, heatmap_dataset):
