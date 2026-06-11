@@ -10,7 +10,7 @@ from kornia.geometry.subpix import spatial_expectation2d, spatial_softmax2d
 from kornia.geometry.transform.pyramid import _get_pyramid_gaussian_kernel
 from torch import nn
 
-from lightning_pose.data.utils import evaluate_heatmaps_at_location
+from lightning_pose.data.heatmaps import evaluate_heatmaps_at_location
 from lightning_pose.models.backbones import BACKBONE_STRIDES
 
 # to ignore imports for sphix-autoapidoc

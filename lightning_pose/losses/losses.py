@@ -29,7 +29,7 @@ from omegaconf import ListConfig
 from torch.nn import functional as F
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
-from lightning_pose.data.utils import generate_heatmaps
+from lightning_pose.data.heatmaps import generate_heatmaps
 from lightning_pose.utils.pca import KeypointPCA
 
 logger = logging.getLogger(__name__)

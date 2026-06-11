@@ -24,7 +24,7 @@ from lightning_pose.data.datatypes import (
     HeatmapLabeledExampleDict,
     MultiviewHeatmapLabeledExampleDict,
 )
-from lightning_pose.data.utils import generate_heatmaps
+from lightning_pose.data.heatmaps import generate_heatmaps
 from lightning_pose.utils import io as io_utils
 
 logger = logging.getLogger(__name__)
