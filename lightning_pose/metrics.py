@@ -1,4 +1,25 @@
-"""Evaluation metrics for assessing pose estimation model quality."""
+"""Evaluation metrics for assessing pose estimation model quality.
+
+CSV format conventions
+----------------------
+Labels CSV (DLC format, 3-row MultiIndex header: scorer / bodyparts / coords):
+  - coord values are ``x``, ``y``, and optionally ``visible``.
+  - ``visible`` encodes per-keypoint visibility: 2 = labeled, 1 = present but
+    unlabeled in this dataset, 0 = keypoint does not belong to this dataset.
+  - Functions that consume labels filter coords to ``x``/``y`` before any
+    reshape, so CSVs with a ``visible`` column are handled transparently.
+
+Predictions CSV (same 3-row MultiIndex header):
+  - coord values are ``x``, ``y``, ``likelihood``.
+  - An optional trailing column whose first MultiIndex level is ``'set'``
+    signals that the file comes from a labeled dataset (not a video).
+    Its presence sets ``is_video = False``, which triggers pixel-error
+    computation instead of temporal-norm computation in
+    ``compute_metrics_single``.
+  - ``get_keypoint_names`` identifies keypoints by finding columns whose
+    coord level equals ``'x'``, so the ``'set'`` column is automatically
+    excluded from the returned keypoint list.
+"""
 
 from pathlib import Path
 
