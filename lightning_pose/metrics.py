@@ -225,6 +225,8 @@ def compute_metrics_single(
         labels_df = pd.read_csv(labels_file, header=[0, 1, 2], index_col=0)
         labels_df = fix_empty_first_row(labels_df)
         assert labels_df.index.equals(index)
+        xy_mask = labels_df.columns.get_level_values('coords').isin(['x', 'y'])
+        labels_df = labels_df.loc[:, xy_mask]
 
         keypoints_true = labels_df.to_numpy().reshape(labels_df.shape[0], -1, 2)
         error_per_keypoint = pixel_error(keypoints_true, keypoints_pred)

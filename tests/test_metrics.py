@@ -1,11 +1,20 @@
 """Test metrics module."""
 
 import numpy as np
+import pandas as pd
+from omegaconf import OmegaConf
+
+from lightning_pose.metrics import (
+    compute_metrics_single,
+    pca_multiview_reprojection_error,
+    pca_singleview_reprojection_error,
+    pixel_error,
+    temporal_norm,
+)
+from lightning_pose.utils.pca import KeypointPCA
 
 
 def test_pixel_error():
-
-    from lightning_pose.metrics import pixel_error
 
     n_samples = 10
     n_keypoints = 5
@@ -23,8 +32,6 @@ def test_pixel_error():
 
 
 def test_temporal_norm():
-
-    from lightning_pose.metrics import temporal_norm
 
     # make sure zero is returned for constant predictions (along dim 0)
     n_samples = 10
@@ -52,10 +59,70 @@ def test_temporal_norm():
     assert norm_per_keypoint[1, 0] - 2 < 1e-6
 
 
-def test_pca_singleview_reprojection_error(cfg, base_data_module):
+def test_compute_metrics_single_with_visible_column(tmp_path):
+    """Labels CSV with a 'visible' coord column must not cause a reshape error.
 
-    from lightning_pose.metrics import pca_singleview_reprojection_error
-    from lightning_pose.utils.pca import KeypointPCA
+    Regression test for the fix in compute_metrics_single that strips 'visible'
+    coords before reshaping labels to (n_frames, n_keypoints, 2).
+    Without the fix, n_keypoints x 3 cols reshaped as (-1, 2) yields the wrong
+    keypoint count and raises: "operands could not be broadcast together".
+    """
+    n_frames = 4
+    n_keypoints = 3
+    keypoints = [f"kp{i}" for i in range(n_keypoints)]
+    frames = [f"labeled-data/session/frame{i:04d}.png" for i in range(n_frames)]
+    scorer = "scorer_test"
+
+    # Labels CSV: x, y, visible per keypoint
+    label_tuples = [
+        (scorer, kp, coord)
+        for kp in keypoints
+        for coord in ("x", "y", "visible")
+    ]
+    rng = np.random.default_rng(0)
+    label_data = {
+        t: (rng.random(n_frames) * 100 if t[2] in ("x", "y") else np.full(n_frames, 2.0))
+        for t in label_tuples
+    }
+    labels_df = pd.DataFrame(label_data, index=frames)
+    labels_df.columns = pd.MultiIndex.from_tuples(
+        label_tuples, names=["scorer", "bodyparts", "coords"]
+    )
+    labels_csv = tmp_path / "labels.csv"
+    labels_df.to_csv(labels_csv)
+
+    # Predictions CSV: x, y, likelihood per keypoint + 'set' column (triggers is_video=False)
+    pred_tuples = [
+        (scorer, kp, coord)
+        for kp in keypoints
+        for coord in ("x", "y", "likelihood")
+    ] + [("set", "set", "set")]
+    pred_data = {
+        t: (rng.random(n_frames) * 100 if t[2] in ("x", "y")
+            else (np.full(n_frames, 0.9) if t[2] == "likelihood"
+                  else np.full(n_frames, "train")))
+        for t in pred_tuples
+    }
+    preds_df = pd.DataFrame(pred_data, index=frames)
+    preds_df.columns = pd.MultiIndex.from_tuples(
+        pred_tuples, names=["scorer", "bodyparts", "coords"]
+    )
+    preds_csv = tmp_path / "predictions.csv"
+    preds_df.to_csv(preds_csv)
+
+    cfg = OmegaConf.create({
+        "data": {"columns_for_singleview_pca": [], "mirrored_column_matches": []}
+    })
+
+    result = compute_metrics_single(cfg=cfg, labels_file=labels_csv, preds_file=preds_csv)
+
+    assert result.pixel_error_df is not None
+    # shape is (n_frames, n_keypoints) plus the appended 'set' column
+    assert result.pixel_error_df.shape == (n_frames, n_keypoints + 1)
+    assert list(result.pixel_error_df.columns[:n_keypoints]) == keypoints
+
+
+def test_pca_singleview_reprojection_error(cfg, base_data_module):
 
     # initialize an instance
     kp_pca = KeypointPCA(
@@ -80,9 +147,6 @@ def test_pca_singleview_reprojection_error(cfg, base_data_module):
 
 
 def test_pca_multiview_reprojection_error(cfg, base_data_module):
-
-    from lightning_pose.metrics import pca_multiview_reprojection_error
-    from lightning_pose.utils.pca import KeypointPCA
 
     # initialize an instance
     kp_pca = KeypointPCA(
