@@ -1,9 +1,7 @@
 """Pose estimation model classes, re-exported at the package level."""
 
-from typing import Literal
-
 from lightning_pose.models.base import check_if_semi_supervised
-from lightning_pose.models.factory import get_model
+from lightning_pose.models.factory import ALLOWED_MODEL_TYPES, get_model, get_model_class
 from lightning_pose.models.heatmap_tracker import (
     HeatmapTracker,
     SemiSupervisedHeatmapTracker,
@@ -31,13 +29,6 @@ SemiSupervisedHeatmapTrackerMultiviewTransformer.__module__ = 'lightning_pose.mo
 RegressionTracker.__module__ = 'lightning_pose.models'
 SemiSupervisedRegressionTracker.__module__ = 'lightning_pose.models'
 
-ALLOWED_MODEL_TYPES = Literal[
-    'regression',
-    'heatmap',
-    'heatmap_mhcrnn',
-    'heatmap_multiview_transformer',
-]
-
 ALLOWED_MODELS = (
     HeatmapTracker
     | SemiSupervisedHeatmapTracker
@@ -51,8 +42,10 @@ ALLOWED_MODELS = (
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
+    'ALLOWED_MODEL_TYPES',
     'check_if_semi_supervised',
     'get_model',
+    'get_model_class',
     'HeatmapTracker',
     'SemiSupervisedHeatmapTracker',
     'HeatmapTrackerMHCRNN',

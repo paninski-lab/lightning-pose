@@ -240,7 +240,7 @@ def get_data_module(
     )
     val_batch_size = int(np.ceil(cfg.training.val_batch_size / cfg.training.num_gpus))
 
-    from lightning_pose.models.base import check_if_semi_supervised
+    from lightning_pose.models import check_if_semi_supervised
     semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
     if not semi_supervised:
         data_module = BaseDataModule(
