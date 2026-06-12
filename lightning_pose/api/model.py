@@ -35,7 +35,8 @@ from lightning_pose.utils.predictions import (
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["Model", "get_model_class", "load_model_from_checkpoint"]
+# to ignore imports for sphinx-autoapidoc
+__all__: list[str] = []
 
 
 def load_model_from_checkpoint(

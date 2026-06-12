@@ -57,16 +57,6 @@ from lightning_pose.models.regression_tracker import (
     SemiSupervisedRegressionTracker,
 )
 
-# reassign module to make classes appear to belong here
-HeatmapTracker.__module__ = 'lightning_pose.models'
-SemiSupervisedHeatmapTracker.__module__ = 'lightning_pose.models'
-HeatmapTrackerMHCRNN.__module__ = 'lightning_pose.models'
-SemiSupervisedHeatmapTrackerMHCRNN.__module__ = 'lightning_pose.models'
-HeatmapTrackerMultiviewTransformer.__module__ = 'lightning_pose.models'
-SemiSupervisedHeatmapTrackerMultiviewTransformer.__module__ = 'lightning_pose.models'
-RegressionTracker.__module__ = 'lightning_pose.models'
-SemiSupervisedRegressionTracker.__module__ = 'lightning_pose.models'
-
 ALLOWED_MODELS = (
     HeatmapTracker
     | SemiSupervisedHeatmapTracker
@@ -78,9 +68,8 @@ ALLOWED_MODELS = (
     | SemiSupervisedRegressionTracker
 )
 
-# to ignore imports for sphix-autoapidoc
+# to ignore imports for sphinx-autoapidoc
 __all__ = [
-    'ALLOWED_MODEL_TYPES',
     'check_if_semi_supervised',
     'get_model',
     'get_model_class',

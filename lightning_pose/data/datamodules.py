@@ -31,11 +31,8 @@ from lightning_pose.utils.io import check_video_paths
 
 logger = logging.getLogger(__name__)
 
-# to ignore imports for sphix-autoapidoc
-__all__ = [
-    "BaseDataModule",
-    "UnlabeledDataModule",
-]
+# to ignore imports for sphinx-autoapidoc
+__all__: list[str] = []
 
 
 class BaseDataModule(pl.LightningDataModule):

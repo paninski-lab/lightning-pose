@@ -184,6 +184,18 @@ def function_name(
 
 ## Architecture
 
+### Module docstring conventions
+
+Every subpackage that contains both an `__init__.py` and a `factory.py` observes a strict
+separation of concerns in their module docstrings:
+
+- **`__init__.py`** — user-facing package map: what classes/functions are exported, how they
+  relate, and where to find them.  No contributor recipes.
+- **`factory.py`** — contributor guide: describes the dispatch logic and includes an explicit
+  "Adding a new X" step-by-step recipe so extensions don't require reverse-engineering.
+
+This applies to `data/`, `losses/`, `models/`, and `models/backbones/`.
+
 ### Backbone package (`lightning_pose/models/backbones/`)
 
 **Package layout**:

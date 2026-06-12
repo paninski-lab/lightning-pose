@@ -46,7 +46,7 @@ import torchvision.models as tvmodels
 logger = logging.getLogger(__name__)
 
 # to ignore imports for sphix-autoapidoc
-__all__ = []
+__all__: list[str] = []
 
 ALLOWED_CONVNET_BACKBONES = Literal[
     'resnet18',

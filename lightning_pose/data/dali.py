@@ -44,12 +44,8 @@ from lightning_pose.data.datatypes import (
 )
 from lightning_pose.data.utils import count_frames
 
-# to ignore imports for sphix-autoapidoc
-__all__ = [
-    "video_pipe",
-    "LitDaliWrapper",
-    "PrepareDALI",
-]
+# to ignore imports for sphinx-autoapidoc
+__all__: list[str] = []
 
 
 # cannot typecheck due to way pipeline_def decorator consumes additional args

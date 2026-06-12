@@ -11,8 +11,8 @@ from torch import nn
 from lightning_pose.models.heads import HeatmapHead
 from lightning_pose.models.heads.heatmap import run_subpixelmaxima
 
-# to ignore imports for sphix-autoapidoc
-__all__ = []
+# to ignore imports for sphinx-autoapidoc
+__all__: list[str] = []
 
 
 class HeatmapMHCRNNHead(nn.Module):

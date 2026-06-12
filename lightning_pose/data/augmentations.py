@@ -5,10 +5,8 @@ from typing import Any
 import imgaug.augmenters as iaa
 from omegaconf import DictConfig, ListConfig
 
-# to ignore imports for sphix-autoapidoc
-__all__ = [
-    "imgaug_transform",
-]
+# to ignore imports for sphinx-autoapidoc
+__all__: list[str] = []
 
 
 def imgaug_transform(params_dict: dict | DictConfig) -> iaa.Sequential:

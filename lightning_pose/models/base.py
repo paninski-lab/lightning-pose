@@ -31,14 +31,8 @@ from lightning_pose.models.backbones import ALLOWED_BACKBONES, build_backbone
 
 logger = logging.getLogger(__name__)
 
-# to ignore imports for sphix-autoapidoc
-__all__ = [
-    'check_if_semi_supervised',
-    'get_context_from_sequence',
-    'BaseFeatureExtractor',
-    'BaseSupervisedTracker',
-    'SemiSupervisedTrackerMixin',
-]
+# to ignore imports for sphinx-autoapidoc
+__all__: list[str] = []
 
 
 def check_if_semi_supervised(losses_to_use: ListConfig | list | None = None) -> bool:

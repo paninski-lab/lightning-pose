@@ -36,16 +36,8 @@ from lightning_pose.data.datatypes import (
     UnlabeledBatchDict,
 )
 
-__all__ = [
-    'frame_to_norm',
-    'norm_to_frame',
-    'model_to_norm',
-    'norm_to_model',
-    'frame_to_model',
-    'model_to_frame',
-    'frame_to_model_batch',
-    'model_to_frame_batch',
-]
+# to ignore imports for sphinx-autoapidoc
+__all__: list[str] = []
 
 
 def frame_to_norm(

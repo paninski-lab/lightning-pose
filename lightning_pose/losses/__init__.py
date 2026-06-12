@@ -35,3 +35,9 @@ by :func:`get_loss_classes`; the names below are the strings used in config file
 """
 
 from lightning_pose.losses.factory import get_loss_classes, get_loss_factories
+
+# to ignore imports for sphinx-autoapidoc
+__all__ = [
+    "get_loss_classes",
+    "get_loss_factories",
+]

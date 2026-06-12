@@ -9,8 +9,8 @@ import torch.nn as nn
 
 logger = logging.getLogger(__name__)
 
-# to ignore imports for sphix-autoapidoc
-__all__ = []
+# to ignore imports for sphinx-autoapidoc
+__all__: list[str] = []
 
 
 class VisionEncoder(nn.Module):

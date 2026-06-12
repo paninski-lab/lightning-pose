@@ -1,4 +1,15 @@
-"""Utility functions for configuration display."""
+"""Utility helpers used across training, inference, and evaluation.
+
+**Submodules**:
+
+- ``utils.io`` — path handling and file I/O utilities.
+- ``utils.predictions`` — inference on labeled datasets and unlabeled videos; video annotation.
+- ``utils.pca`` — :class:`~lightning_pose.utils.pca.KeypointPCA` for PCA-based
+  unsupervised losses.
+- ``utils.cropzoom`` — crop/zoom pipeline: labeled-frame and video cropping to bounding-box ROIs.
+
+This module itself exports :func:`pretty_print_str` and :func:`pretty_print_cfg`.
+"""
 
 import logging
 

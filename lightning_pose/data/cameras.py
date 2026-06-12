@@ -15,12 +15,8 @@ from kornia.geometry.calibration import distort_points, undistort_points
 from kornia.geometry.camera import PinholeCamera
 from kornia.geometry.epipolar import triangulate_points
 
-# to ignore imports for sphix-autoapidoc
-__all__ = [
-    "project_camera_pairs_to_3d",
-    "project_3d_to_2d",
-    "CameraGroup",
-]
+# to ignore imports for sphinx-autoapidoc
+__all__: list[str] = []
 
 
 def project_camera_pairs_to_3d(

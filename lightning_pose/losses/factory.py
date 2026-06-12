@@ -49,11 +49,7 @@ from lightning_pose.losses.losses import (
 logger = logging.getLogger(__name__)
 
 # to ignore imports for sphix-autoapidoc
-__all__ = [
-    'LossFactory',
-    'get_loss_classes',
-    'get_loss_factories',
-]
+__all__: list[str] = []
 
 
 def get_loss_classes() -> dict[str, type[Loss]]:

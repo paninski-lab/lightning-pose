@@ -18,6 +18,7 @@ from lightning_pose.utils import io
 
 logger = logging.getLogger(__name__)
 
+# to ignore imports for sphix-autoapidoc
 __all__ = [
     "generate_bbox",
     "smooth_bbox",

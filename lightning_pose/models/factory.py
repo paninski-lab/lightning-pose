@@ -52,7 +52,7 @@ ALLOWED_MODEL_TYPES = Literal[
     'heatmap_multiview_transformer',
 ]
 
-__all__ = ['ALLOWED_MODEL_TYPES', 'get_model', 'get_model_class']
+__all__: list[str] = []
 
 
 def get_model_class(

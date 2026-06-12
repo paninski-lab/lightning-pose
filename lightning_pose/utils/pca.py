@@ -19,13 +19,11 @@ from lightning_pose.data.extractor import DataExtractor
 
 logger = logging.getLogger(__name__)
 
-# to ignore imports for sphix-autoapidoc
+# to ignore imports for sphinx-autoapidoc
 __all__ = [
     "ComponentChooser",
     "EmpiricalEpsilon",
     "KeypointPCA",
-    "convert_dict_values_to_tensors",
-    "format_multiview_data_for_pca",
 ]
 
 

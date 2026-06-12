@@ -41,11 +41,7 @@ from lightning_pose.data.datasets import (
 )
 
 # to ignore imports for sphinx-autoapidoc
-__all__ = [
-    'get_imgaug_transform',
-    'get_dataset',
-    'get_data_module',
-]
+__all__: list[str] = []
 
 
 def get_imgaug_transform(cfg: DictConfig | ListConfig) -> iaa.Sequential:
