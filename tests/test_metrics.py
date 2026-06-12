@@ -84,7 +84,7 @@ def test_compute_metrics_single_with_visible_column(tmp_path):
         t: (rng.random(n_frames) * 100 if t[2] in ("x", "y") else np.full(n_frames, 2.0))
         for t in label_tuples
     }
-    labels_df = pd.DataFrame(label_data, index=frames)
+    labels_df = pd.DataFrame(label_data, index=pd.Index(frames))
     labels_df.columns = pd.MultiIndex.from_tuples(
         label_tuples, names=["scorer", "bodyparts", "coords"]
     )
@@ -103,7 +103,7 @@ def test_compute_metrics_single_with_visible_column(tmp_path):
                   else np.full(n_frames, "train")))
         for t in pred_tuples
     }
-    preds_df = pd.DataFrame(pred_data, index=frames)
+    preds_df = pd.DataFrame(pred_data, index=pd.Index(frames))
     preds_df.columns = pd.MultiIndex.from_tuples(
         pred_tuples, names=["scorer", "bodyparts", "coords"]
     )
