@@ -14,8 +14,8 @@ from lightning_pose.data.datasets import (
     MultiviewHeatmapDataset,
 )
 
-# to ignore imports for sphix-autoapidoc
-__all__ = ["DataExtractor"]
+# to ignore imports for sphinx-autoapidoc
+__all__: list[str] = []
 
 
 class DataExtractor:

@@ -4,10 +4,8 @@ import numpy as np
 import torch
 from jaxtyping import Float, Int
 
-__all__ = [
-    'generate_heatmaps',
-    'evaluate_heatmaps_at_location',
-]
+# to ignore imports for sphinx-autoapidoc
+__all__: list[str] = []
 
 
 def generate_heatmaps(

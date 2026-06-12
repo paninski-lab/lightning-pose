@@ -14,8 +14,8 @@ from lightning_pose.models.backbones import ALLOWED_BACKBONES
 from lightning_pose.models.base import BaseSupervisedTracker, SemiSupervisedTrackerMixin
 from lightning_pose.models.heads import LinearRegressionHead
 
-# to ignore imports for sphix-autoapidoc
-__all__ = []
+# to ignore imports for sphinx-autoapidoc
+__all__: list[str] = []
 
 
 class RegressionTracker(BaseSupervisedTracker):

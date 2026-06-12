@@ -25,7 +25,7 @@ from lightning_pose.data.bboxes import model_to_frame_batch
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datatypes import MultiviewPredictionResult, PredictionResult
 from lightning_pose.metrics import compute_metrics_single
-from lightning_pose.models import ALLOWED_MODEL_TYPES, ALLOWED_MODELS
+from lightning_pose.models import ALLOWED_MODELS, get_model_class
 from lightning_pose.utils import io as io_utils
 from lightning_pose.utils.predictions import generate_labeled_video as generate_labeled_video_fn
 from lightning_pose.utils.predictions import (
@@ -35,53 +35,8 @@ from lightning_pose.utils.predictions import (
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["Model", "get_model_class", "load_model_from_checkpoint"]
-
-
-def get_model_class(map_type: ALLOWED_MODEL_TYPES, semi_supervised: bool) -> type[ALLOWED_MODELS]:
-    """Return the model class for the given model type and supervision mode.
-
-    Args:
-        map_type: one of ``"regression"``, ``"heatmap"``, ``"heatmap_mhcrnn"``,
-            ``"heatmap_multiview_transformer"``.
-        semi_supervised: True to return the semi-supervised variant.
-
-    Returns:
-        model class (not an instance).
-
-    Raises:
-        NotImplementedError: if ``map_type`` is not recognised.
-
-    """
-    if not semi_supervised:
-        if map_type == 'regression':
-            from lightning_pose.models import RegressionTracker as ModelClass
-        elif map_type == 'heatmap':
-            from lightning_pose.models import HeatmapTracker as ModelClass
-        elif map_type == 'heatmap_mhcrnn':
-            from lightning_pose.models import HeatmapTrackerMHCRNN as ModelClass
-        elif map_type == 'heatmap_multiview_transformer':
-            from lightning_pose.models import HeatmapTrackerMultiviewTransformer as ModelClass
-        else:
-            raise NotImplementedError(
-                f'{map_type} is an invalid model_type for a fully supervised model'
-            )
-    else:
-        if map_type == 'regression':
-            from lightning_pose.models import SemiSupervisedRegressionTracker as ModelClass
-        elif map_type == 'heatmap':
-            from lightning_pose.models import SemiSupervisedHeatmapTracker as ModelClass
-        elif map_type == 'heatmap_mhcrnn':
-            from lightning_pose.models import SemiSupervisedHeatmapTrackerMHCRNN as ModelClass
-        elif map_type == 'heatmap_multiview_transformer':
-            from lightning_pose.models import (
-                SemiSupervisedHeatmapTrackerMultiviewTransformer as ModelClass,
-            )
-        else:
-            raise NotImplementedError(
-                f'{map_type} is an invalid model_type for a semi-supervised model'
-            )
-    return ModelClass
+# to ignore imports for sphinx-autoapidoc
+__all__: list[str] = []
 
 
 def load_model_from_checkpoint(
@@ -136,7 +91,7 @@ def load_model_from_checkpoint(
 
     semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
     ModelClass = get_model_class(
-        map_type=cfg.model.model_type,
+        model_type=cfg.model.model_type,
         semi_supervised=semi_supervised,
     )
 

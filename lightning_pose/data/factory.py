@@ -10,6 +10,16 @@ Three public functions, typically called in order:
    splitting; selects :class:`~lightning_pose.data.datamodules.UnlabeledDataModule` for
    semi-supervised training (adds DALI video loader) or
    :class:`~lightning_pose.data.datamodules.BaseDataModule` for supervised-only training.
+
+**Adding a new model type** (data-side changes only — see ``models/factory.py`` for the
+model-side steps):
+
+1. If the new type can reuse an existing dataset class (e.g. it is a heatmap variant),
+   extend the appropriate ``elif`` branch in :func:`get_dataset` to match the new
+   ``cfg.model.model_type`` string.  If it needs a new dataset class, define that class
+   in ``datasets.py``, import it here, and add a new ``elif`` branch.
+2. If the new type needs a different :class:`~lightning_pose.data.datamodules.BaseDataModule`
+   subclass, add a branch in :func:`get_data_module`; otherwise no change is needed there.
 """
 
 import warnings
@@ -31,11 +41,7 @@ from lightning_pose.data.datasets import (
 )
 
 # to ignore imports for sphinx-autoapidoc
-__all__ = [
-    'get_imgaug_transform',
-    'get_dataset',
-    'get_data_module',
-]
+__all__: list[str] = []
 
 
 def get_imgaug_transform(cfg: DictConfig | ListConfig) -> iaa.Sequential:
@@ -240,7 +246,7 @@ def get_data_module(
     )
     val_batch_size = int(np.ceil(cfg.training.val_batch_size / cfg.training.num_gpus))
 
-    from lightning_pose.models.base import check_if_semi_supervised
+    from lightning_pose.models import check_if_semi_supervised
     semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
     if not semi_supervised:
         data_module = BaseDataModule(

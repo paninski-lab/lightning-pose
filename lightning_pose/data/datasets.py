@@ -29,12 +29,8 @@ from lightning_pose.utils import io as io_utils
 
 logger = logging.getLogger(__name__)
 
-# to ignore imports for sphix-autoapidoc
-__all__ = [
-    "BaseTrackingDataset",
-    "HeatmapDataset",
-    "MultiviewHeatmapDataset",
-]
+# to ignore imports for sphinx-autoapidoc
+__all__: list[str] = []
 
 
 def _patched_prevent(axis_size: int, crop_start: int, crop_end: int) -> tuple[int, ...]:

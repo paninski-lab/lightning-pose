@@ -29,12 +29,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# to ignore imports for sphix-autoapidoc
+# to ignore imports for sphinx-autoapidoc
 __all__ = [
-    "PredictionHandler",
     "predict_dataset",
     "predict_video",
-    "make_dlc_pandas_index",
     "generate_labeled_video",
 ]
 

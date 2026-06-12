@@ -13,8 +13,8 @@ from torch import nn
 from lightning_pose.data.heatmaps import evaluate_heatmaps_at_location
 from lightning_pose.models.backbones import BACKBONE_STRIDES
 
-# to ignore imports for sphix-autoapidoc
-__all__ = []
+# to ignore imports for sphinx-autoapidoc
+__all__: list[str] = []
 
 
 def make_upsampling_layers(

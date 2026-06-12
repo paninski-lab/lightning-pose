@@ -8,14 +8,15 @@ from typing import get_args
 
 from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 
-__all__ = ["ModelConfig"]
-
 from lightning_pose.models import ALLOWED_MODEL_TYPES
 from lightning_pose.utils.io import (
     check_video_paths,
     find_video_files_for_views,
     return_absolute_path,
 )
+
+# to ignore imports for sphinx-autoapidoc
+__all__: list[str] = []
 
 
 class ModelConfig:

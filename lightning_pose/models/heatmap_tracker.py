@@ -23,8 +23,8 @@ from lightning_pose.models.base import (
 )
 from lightning_pose.models.heads import HeatmapHead
 
-# to ignore imports for sphix-autoapidoc
-__all__ = []
+# to ignore imports for sphinx-autoapidoc
+__all__: list[str] = []
 
 
 class HeatmapTracker(BaseSupervisedTracker):

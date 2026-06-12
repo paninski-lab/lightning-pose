@@ -18,7 +18,7 @@ from omegaconf import DictConfig, ListConfig
 
 logger = logging.getLogger(__name__)
 
-# to ignore imports for sphix-autoapidoc
+# to ignore imports for sphinx-autoapidoc
 __all__ = [
     "ckpt_path_from_base_path",
     "get_keypoint_names",
