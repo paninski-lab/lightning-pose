@@ -8,6 +8,18 @@ Three components work together:
   'unsupervised': LossFactory}`` dict ready to be passed to a model constructor.
 - :class:`LossFactory` — a ``LightningModule`` that holds instantiated loss objects and
   computes the total weighted loss in its ``__call__`` method.
+
+**Adding a new loss**:
+
+1. Define the class in ``losses/losses.py``, inheriting from
+   :class:`~lightning_pose.losses.losses.Loss`.  Set a ``loss_name: str`` class attribute
+   (single name) or multiple ``LOSS_NAME_*: str`` class attributes when one class serves
+   several config strings (e.g. :class:`~lightning_pose.losses.losses.PCALoss`).
+2. Import the class at the top of this file and add one entry per name to the dict returned
+   by :func:`get_loss_classes`.
+3. If the loss requires parameters from ``cfg.losses`` (weight, epsilon, etc.), add a
+   corresponding block in :func:`get_loss_factories` that reads those values and adds them
+   to the ``params`` dict for that loss name.
 """
 
 import logging

@@ -20,6 +20,19 @@ prefix — ViT variants go to ``_build_transformer_backbone``, convnets to
 functions rather than at module level. This module is loaded during
 ``lightning_pose.models.backbones.__init__`` initialisation, so a top-level import
 from anywhere else in ``lightning_pose`` would create a circular import.
+
+**Adding a new backbone**:
+
+1. Add its identifier string to the appropriate ``ALLOWED_*`` Literal(s) in this file.
+   ViT variants belong in :data:`ALLOWED_TRANSFORMER_BACKBONES`; convnets in
+   :data:`ALLOWED_CONVNET_BACKBONES`. Add to :data:`ALLOWED_TRANSFORMER_BACKBONES_MULTIVIEW`
+   only if the backbone is compatible with the multiview cross-attention block (requires
+   a standard ``embeddings`` module and NCHW tensor layout).
+2. Add an ``elif`` branch inside :func:`_build_transformer_backbone` or
+   :func:`_build_convnet_backbone` that imports and instantiates the wrapper class.
+   Use a lazy import (inside the ``elif`` body) to avoid circular imports.
+3. If the backbone needs a new wrapper class, create ``vit_<name>.py`` in this package and
+   import it lazily inside the branch.  Add stride info to :data:`BACKBONE_STRIDES` if needed.
 """
 
 import logging

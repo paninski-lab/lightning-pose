@@ -10,6 +10,16 @@ Three public functions, typically called in order:
    splitting; selects :class:`~lightning_pose.data.datamodules.UnlabeledDataModule` for
    semi-supervised training (adds DALI video loader) or
    :class:`~lightning_pose.data.datamodules.BaseDataModule` for supervised-only training.
+
+**Adding a new model type** (data-side changes only — see ``models/factory.py`` for the
+model-side steps):
+
+1. If the new type can reuse an existing dataset class (e.g. it is a heatmap variant),
+   extend the appropriate ``elif`` branch in :func:`get_dataset` to match the new
+   ``cfg.model.model_type`` string.  If it needs a new dataset class, define that class
+   in ``datasets.py``, import it here, and add a new ``elif`` branch.
+2. If the new type needs a different :class:`~lightning_pose.data.datamodules.BaseDataModule`
+   subclass, add a branch in :func:`get_data_module`; otherwise no change is needed there.
 """
 
 import warnings
