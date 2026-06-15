@@ -317,6 +317,7 @@ class TestBuildDatamodulePred:
         cfg_copy.training.imgaug = 'dlc'
         data_module = _build_datamodule_pred(cfg_copy)
         # pipeline always has exactly one element: the final resize transform
+        assert data_module.dataset.imgaug_transform is not None
         assert len(data_module.dataset.imgaug_transform) == 1
 
     def test_build_datamodule_pred_imgaug_hflip_cleared(self, cfg):
