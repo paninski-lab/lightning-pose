@@ -31,9 +31,13 @@ training:
   # select from one of several predefined image/video augmentation pipelines
   # default: resizing only
   # dlc: imgaug pipeline implemented in DLC 2.0 package
-  # dlc-lr: dlc augmentation plus horizontal flips
-  # dlc-top-down: dlc augmentations plus vertical and horizontal flips
+  # dlc-lr: dlc augmentation plus 180 degree rotations
+  # dlc-top-down: dlc augmentations plus 90, 180, and 270 degree rotations
   imgaug: dlc
+  # apply a random horizontal flip with probability 0.5 after the standard imgaug pipeline;
+  # keypoints ending in _left/_right are swapped with their partner to preserve label identity;
+  # every _left keypoint must have a matching _right (and vice versa), else an error is raised;
+  imgaug_hflip: false
   # batch size of labeled data during training
   train_batch_size: 16
   # batch size of labeled data during validation

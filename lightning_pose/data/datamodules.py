@@ -108,7 +108,8 @@ class BaseDataModule(pl.LightningDataModule):
             test_probability=self.test_probability,
         )
 
-        if len(self.dataset.imgaug_transform) == 1:  # type: ignore[arg-type]
+        imgaug_hflip = getattr(self.dataset, 'imgaug_hflip', False)
+        if len(self.dataset.imgaug_transform) == 1 and not imgaug_hflip:  # type: ignore[arg-type]
             # no augmentations in the pipeline; subsets can share same underlying dataset
             self.train_dataset, self.val_dataset, self.test_dataset = random_split(
                 self.dataset,
@@ -147,18 +148,22 @@ class BaseDataModule(pl.LightningDataModule):
                 final_transform = iaa.Sequential([iaa.Resize({"height": height, "width": width})])
 
             self.val_dataset.dataset.imgaug_transform = final_transform  # type: ignore[union-attr]
+            self.val_dataset.dataset.imgaug_hflip = False  # type: ignore[union-attr]
             if hasattr(self.val_dataset.dataset, "dataset"):
                 # this will get triggered for multiview datasets
                 logger.debug('val: updating children datasets with resize imgaug pipeline')
                 for _view_name, dset in self.val_dataset.dataset.dataset.items():  # type: ignore[union-attr]
                     dset.imgaug_transform = final_transform
+                    dset.imgaug_hflip = False
 
             self.test_dataset.dataset.imgaug_transform = final_transform  # type: ignore[union-attr]
+            self.test_dataset.dataset.imgaug_hflip = False  # type: ignore[union-attr]
             if hasattr(self.test_dataset.dataset, "dataset"):
                 # this will get triggered for multiview datasets
                 logger.debug('test: updating children datasets with resize imgaug pipeline')
                 for _view_name, dset in self.test_dataset.dataset.dataset.items():  # type: ignore[union-attr]
                     dset.imgaug_transform = final_transform
+                    dset.imgaug_hflip = False
 
         # further subsample training data if desired
         if self.train_frames is not None:

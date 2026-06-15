@@ -49,6 +49,8 @@ training:
   imgaug: dlc
   # apply 3D augmentations (scale/translate in 3D then reproject); requires camera_params_file
   imgaug_3d: true
+  # imgaug_hflip is not supported for multiview models; setting to true will raise an error
+  imgaug_hflip: false
   # batch size of labeled data during training
   train_batch_size: 16
   # batch size of labeled data during validation
