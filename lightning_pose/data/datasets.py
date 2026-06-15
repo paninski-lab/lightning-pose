@@ -150,6 +150,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
         self.imgaug_hflip = imgaug_hflip
         if imgaug_hflip:
+            logger.info("applying horizontal flip")
             self._hflip_swap_indices = self._build_hflip_swap_indices(self.keypoint_names)
         else:
             self._hflip_swap_indices = np.arange(self.num_keypoints, dtype=np.intp)
@@ -349,7 +350,18 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
 # the only addition here, should be the heatmap creation method.
 class HeatmapDataset(BaseTrackingDataset):
-    """Heatmap dataset that contains the images and keypoints in 2D arrays."""
+    """Heatmap dataset that extends BaseTrackingDataset with 2D Gaussian heatmap targets.
+
+    Inherits all image loading, keypoint parsing, imgaug pipeline, and hflip logic from
+    :class:`BaseTrackingDataset`. The key addition is :meth:`compute_heatmap`, which converts
+    (x, y) keypoint coordinates into ``(K, H, W)`` heatmap tensors used as supervision targets.
+    Visibility synthesis also happens here: when the CSV lacks a ``visible`` column,
+    ``self.visibility`` is populated from NaN positions using the ``uniform_heatmaps`` flag (see
+    the visibility section of CLAUDE.md for the full mapping).
+
+    ``__getitem__`` calls ``super().__getitem__()`` to obtain the base dict, then appends
+    ``heatmaps`` and ``labeled_heatmaps`` keys before returning.
+    """
 
     def __init__(
         self,
@@ -511,7 +523,22 @@ class HeatmapDataset(BaseTrackingDataset):
 
 
 class MultiviewHeatmapDataset(torch.utils.data.Dataset):
-    """Heatmap dataset that contains the images and keypoints in 2D arrays from all the cameras."""
+    """Heatmap dataset that aggregates one :class:`HeatmapDataset` per camera view.
+
+    Internally stores a ``dict[str, HeatmapDataset]`` at ``self.dataset``, keyed by view name.
+    ``__getitem__`` calls each child dataset and stacks the results into a single
+    :class:`~lightning_pose.data.datatypes.MultiviewHeatmapLabeledExampleDict`.
+
+    The shared ``imgaug_transform`` and ``imgaug_hflip`` attributes on this class are replicated
+    to each child dataset so that the data module can update them in one place. ``imgaug_hflip``
+    is always ``False`` here (multiview hflip is not supported; setting it in the config raises a
+    ``ValueError`` in the factory). The data module checks ``hasattr(dataset, 'dataset')`` to
+    detect the multiview case and iterate over child datasets when stripping val/test
+    augmentations.
+
+    Does **not** inherit from :class:`BaseTrackingDataset`; augmentation routing is delegated
+    entirely to the child :class:`HeatmapDataset` instances.
+    """
 
     def __init__(
         self,

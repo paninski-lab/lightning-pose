@@ -891,6 +891,7 @@ def _build_datamodule_pred(cfg: DictConfig | ListConfig) -> BaseDataModule | Unl
     """
     cfg_pred = copy.deepcopy(cfg)
     cfg_pred.training.imgaug = "default"
+    cfg_pred.training.imgaug_hflip = False
     imgaug_transform_pred = get_imgaug_transform(cfg=cfg_pred)
     dataset_pred = get_dataset(
         cfg=cfg_pred,

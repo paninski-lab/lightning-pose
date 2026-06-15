@@ -230,6 +230,57 @@ inside the helper functions, not at module level. `factory.py` is loaded during
 `backbones/__init__.py` initialisation, so a top-level `lightning_pose` import there would
 create a circular import.
 
+### Dataset class hierarchy (`lightning_pose/data/datasets.py`)
+
+Three dataset classes, with a clear inheritance structure:
+
+- **`BaseTrackingDataset`** — base class. Loads images and (x, y) keypoints, applies the imgaug
+  pipeline, and handles `imgaug_hflip`. Returns a `BaseLabeledExampleDict`.
+- **`HeatmapDataset(BaseTrackingDataset)`** — adds `compute_heatmap` to convert keypoints to
+  `(K, H, W)` Gaussian heatmap targets, and synthesizes `self.visibility` from NaN positions when
+  the CSV has no `visible` column. Returns a `HeatmapLabeledExampleDict`.
+- **`MultiviewHeatmapDataset`** — does **not** inherit from `BaseTrackingDataset`. Holds a
+  `dict[str, HeatmapDataset]` at `self.dataset` (keyed by view name). `__getitem__` delegates to
+  each child and stacks results. Shares `imgaug_transform` and `imgaug_hflip` attributes with
+  child datasets so the data module can update them in one pass.
+
+**`__getitem__` branching**: both `BaseTrackingDataset` and `HeatmapDataset` branch on
+`self.do_context` at the top of `__getitem__`. The non-context branch loads a single PIL image;
+the context branch loads a sequence of frames. All augmentation logic (imgaug pipeline + hflip) is
+duplicated in both branches.
+
+**Adding an augmentation that affects keypoints**:
+
+1. Add any per-sample state (e.g. `do_hflip`) at the top of each branch in `__getitem__`, not
+   outside the branch, since the two paths are structurally independent.
+2. Apply the augmentation *after* the imgaug pipeline so keypoints are already in resized
+   coordinate space.
+3. For context mode, generate any random decision once before the per-frame loop and reuse it for
+   all frames so the same transform is applied consistently across the sequence.
+4. Set `self.imgaug_hflip = False` (or equivalent sentinel) on `MultiviewHeatmapDataset` so the
+   data module can safely reset it without `AttributeError`.
+5. Update the data module's `_setup` condition (see comment there) if the new augmentation must
+   also be disabled for val/test subsets.
+6. **Also set the flag to `False` in `_build_datamodule_pred`** (`lightning_pose/api/model.py`).
+   That function deep-copies the training config and overrides `cfg_pred.training.imgaug =
+   "default"`, but it does **not** automatically clear other training-only flags. Any augmentation
+   flag that is not cleared here will remain active during prediction, causing randomly-augmented
+   inference on labeled frames and silently wrong evaluation metrics. The fix pattern is:
+   ```python
+   cfg_pred.training.imgaug = "default"
+   cfg_pred.training.<your_flag> = False   # ← must be explicit
+   ```
+
+### Data module split logic (`lightning_pose/data/datamodules.py` → `BaseDataModule._setup`)
+
+The imgaug pipeline always contains at least one element: a final resize transform appended by
+`BaseTrackingDataset.__init__`. `len(imgaug_transform) == 1` therefore means "resize only, no
+augmentations." When this is true **and** `imgaug_hflip` is False, all three splits can share the
+same underlying dataset object (cheap path). Otherwise, three deep-copied datasets are created and
+the val/test copies have their pipeline replaced with resize-only and their `imgaug_hflip` reset to
+`False`. Any new augmentation applied outside the pipeline (like `imgaug_hflip`) must be added to
+this condition and explicitly stripped from val/test datasets in the `else` branch.
+
 ### DALI Pipeline (`lightning_pose/data/dali.py`)
 
 **`PrepareDALI`** — two-phase construction:

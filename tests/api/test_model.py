@@ -1,3 +1,4 @@
+import copy
 import shutil
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -7,6 +8,7 @@ import pandas as pd
 import pytest
 
 from lightning_pose.api import Model
+from lightning_pose.api.model import _build_datamodule_pred
 from tests.fetch_test_data import fetch_test_data_if_needed
 
 
@@ -304,3 +306,31 @@ class TestModelErrors:
         with patch.object(multiview_model, '_load'):
             with pytest.raises(ValueError, match='expected.*video files'):
                 multiview_model.predict_on_video_file_multiview(['only_one.mp4'])
+
+
+class TestBuildDatamodulePred:
+    """Test the _build_datamodule_pred helper."""
+
+    def test_build_datamodule_pred_imgaug_reset_to_default(self, cfg):
+        """imgaug pipeline is resize-only regardless of the training config."""
+        cfg_copy = copy.deepcopy(cfg)
+        cfg_copy.training.imgaug = 'dlc'
+        data_module = _build_datamodule_pred(cfg_copy)
+        # pipeline always has exactly one element: the final resize transform
+        assert len(data_module.dataset.imgaug_transform) == 1
+
+    def test_build_datamodule_pred_imgaug_hflip_cleared(self, cfg):
+        """imgaug_hflip is False on the prediction dataset even when True in the config."""
+        cfg_copy = copy.deepcopy(cfg)
+        cfg_copy.training.imgaug_hflip = True
+        data_module = _build_datamodule_pred(cfg_copy)
+        assert data_module.dataset.imgaug_hflip is False
+
+    def test_build_datamodule_pred_does_not_mutate_cfg(self, cfg):
+        """the original config object is not modified."""
+        cfg_copy = copy.deepcopy(cfg)
+        cfg_copy.training.imgaug = 'dlc'
+        cfg_copy.training.imgaug_hflip = True
+        _build_datamodule_pred(cfg_copy)
+        assert cfg_copy.training.imgaug == 'dlc'
+        assert cfg_copy.training.imgaug_hflip is True

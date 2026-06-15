@@ -109,6 +109,10 @@ class BaseDataModule(pl.LightningDataModule):
         )
 
         imgaug_hflip = getattr(self.dataset, 'imgaug_hflip', False)
+        # the imgaug pipeline always contains at least one element (the final resize transform);
+        # len == 1 therefore means "no augmentations" and subsets can safely share the same
+        # underlying dataset object. imgaug_hflip is checked separately because it is applied
+        # outside the pipeline in __getitem__ and must also be stripped from val/test.
         if len(self.dataset.imgaug_transform) == 1 and not imgaug_hflip:  # type: ignore[arg-type]
             # no augmentations in the pipeline; subsets can share same underlying dataset
             self.train_dataset, self.val_dataset, self.test_dataset = random_split(
