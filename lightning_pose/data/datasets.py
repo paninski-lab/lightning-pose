@@ -61,6 +61,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         do_context: bool = False,
         resize: bool = True,
         bbox_path: str | None = None,
+        imgaug_hflip: bool = False,
     ) -> None:
         """Initialize a dataset for regression (rather than heatmap) models.
 
@@ -90,6 +91,12 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 and keypoints before returning a batch of data.
             bbox_path: path to csv file that contains bounding box information; rows must be in
                 same order as csv file
+            imgaug_hflip: if True, apply a random horizontal flip with probability 0.5 after the
+                standard imgaug pipeline. All keypoint x-coordinates are mirrored; keypoints whose
+                names end in ``_left`` or ``_right`` are additionally swapped with their partner so
+                that label identity is preserved. Every ``_left`` keypoint must have a matching
+                ``_right`` keypoint and vice versa, or a ValueError is raised. Disabled
+                automatically for validation and test subsets by the data module.
 
         """
         self.root_directory = Path(root_directory)
@@ -141,6 +148,13 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         self.num_targets = self.keypoints.shape[1] * 2
         self.num_keypoints = self.keypoints.shape[1]
 
+        self.imgaug_hflip = imgaug_hflip
+        if imgaug_hflip:
+            logger.info("applying horizontal flip")
+            self._hflip_swap_indices = self._build_hflip_swap_indices(self.keypoint_names)
+        else:
+            self._hflip_swap_indices = np.arange(self.num_keypoints, dtype=np.intp)
+
         self.data_length = len(self.image_names)
 
         # load bounding box data
@@ -157,6 +171,51 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         else:
             bboxes = [None] * len(self.image_names)
         self.bboxes = bboxes
+
+    @staticmethod
+    def _build_hflip_swap_indices(keypoint_names: list[str]) -> np.ndarray:
+        """Build an index array that swaps lateralized (_left/_right) keypoint pairs.
+
+        Args:
+            keypoint_names: list of keypoint name strings from the label CSV.
+
+        Returns:
+            integer array of shape (num_keypoints,) where entry i gives the source keypoint
+            index that should fill position i after a horizontal flip. Non-lateralized keypoints
+            map to themselves; each _left/_right pair maps to its partner.
+
+        Raises:
+            ValueError: if any keypoint ending in _left has no matching _right partner,
+                or vice versa.
+        """
+        indices = list(range(len(keypoint_names)))
+        left_map = {
+            name[:-5]: i for i, name in enumerate(keypoint_names) if name.endswith('_left')
+        }
+        right_map = {
+            name[:-6]: i for i, name in enumerate(keypoint_names) if name.endswith('_right')
+        }
+
+        unmatched_left = sorted(f'{b}_left' for b in set(left_map) - set(right_map))
+        unmatched_right = sorted(f'{b}_right' for b in set(right_map) - set(left_map))
+        if unmatched_left:
+            raise ValueError(
+                f'imgaug_hflip requires matching _left/_right pairs, '
+                f'but found _left keypoints with no _right partner: {unmatched_left}'
+            )
+        if unmatched_right:
+            raise ValueError(
+                f'imgaug_hflip requires matching _left/_right pairs, '
+                f'but found _right keypoints with no _left partner: {unmatched_right}'
+            )
+
+        for base_name in left_map:
+            idx_left = left_map[base_name]
+            idx_right = right_map[base_name]
+            indices[idx_left] = idx_right
+            indices[idx_right] = idx_left
+
+        return np.array(indices, dtype=np.intp)
 
     @property
     def height(self) -> int:
@@ -185,6 +244,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         keypoints_on_image = self.keypoints[idx]
         img_path = self.root_directory / img_name
         if not self.do_context:
+            do_hflip = self.imgaug_hflip and np.random.random() < 0.5
             # read image from file and apply transformations (if any)
             # if 1 color channel, change to 3.
             image = Image.open(img_path).convert("RGB")
@@ -196,6 +256,13 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 # get rid of the batch dim
                 transformed_images = imgs_aug[0]
                 transformed_keypoints = kps_aug[0].reshape(-1)
+
+                if do_hflip:
+                    transformed_images = np.ascontiguousarray(np.fliplr(transformed_images))
+                    kps_2d = transformed_keypoints.reshape(self.num_keypoints, 2).copy()
+                    kps_2d[:, 0] = self.image_resize_width - kps_2d[:, 0]
+                    kps_2d = kps_2d[self._hflip_swap_indices]
+                    transformed_keypoints = kps_2d.reshape(-1)
             else:
                 transformed_images = np.expand_dims(np.array(image), axis=0)
                 transformed_keypoints = np.expand_dims(keypoints_on_image, axis=0)
@@ -216,6 +283,9 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 image = Image.open(path).convert("RGB")
                 images.append(np.asarray(image))
 
+            # decide flip once so all context frames get the same transformation
+            do_hflip = self.imgaug_hflip and np.random.random() < 0.5
+
             # apply data aug pipeline
             if self.imgaug_transform is not None:
                 # need to apply the same transform to all context frames
@@ -229,6 +299,13 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                     transformed_images.append(img_aug[0])
                 transformed_images = np.asarray(transformed_images)
                 transformed_keypoints = kps_aug[0].reshape(-1)
+
+                if do_hflip:
+                    transformed_images = np.stack([np.fliplr(im) for im in transformed_images])
+                    kps_2d = transformed_keypoints.reshape(self.num_keypoints, 2).copy()
+                    kps_2d[:, 0] = self.image_resize_width - kps_2d[:, 0]
+                    kps_2d = kps_2d[self._hflip_swap_indices]
+                    transformed_keypoints = kps_2d.reshape(-1)
             else:
                 transformed_images = np.asarray(images)
                 transformed_keypoints = keypoints_on_image.numpy().reshape(-1)
@@ -255,22 +332,36 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         else:
             bbox = torch.tensor([0, 0, image.height, image.width])
 
+        if self.visibility is not None:
+            vis = self.visibility[idx]
+            if do_hflip:
+                vis = vis[torch.from_numpy(self._hflip_swap_indices)]
+        else:
+            vis = torch.zeros(0, dtype=torch.long)
+
         return BaseLabeledExampleDict(
             images=transformed_images,  # shape (3, img_height, img_width) or (5, 3, H, W)
             keypoints=torch.from_numpy(transformed_keypoints),  # shape (n_targets,)
             idxs=idx,
             bbox=bbox,
-            visibility=(
-                self.visibility[idx]
-                if self.visibility is not None
-                else torch.zeros(0, dtype=torch.long)
-            ),
+            visibility=vis,
         )
 
 
 # the only addition here, should be the heatmap creation method.
 class HeatmapDataset(BaseTrackingDataset):
-    """Heatmap dataset that contains the images and keypoints in 2D arrays."""
+    """Heatmap dataset that extends BaseTrackingDataset with 2D Gaussian heatmap targets.
+
+    Inherits all image loading, keypoint parsing, imgaug pipeline, and hflip logic from
+    :class:`BaseTrackingDataset`. The key addition is :meth:`compute_heatmap`, which converts
+    (x, y) keypoint coordinates into ``(K, H, W)`` heatmap tensors used as supervision targets.
+    Visibility synthesis also happens here: when the CSV lacks a ``visible`` column,
+    ``self.visibility`` is populated from NaN positions using the ``uniform_heatmaps`` flag (see
+    the visibility section of CLAUDE.md for the full mapping).
+
+    ``__getitem__`` calls ``super().__getitem__()`` to obtain the base dict, then appends
+    ``heatmaps`` and ``labeled_heatmaps`` keys before returning.
+    """
 
     def __init__(
         self,
@@ -285,6 +376,7 @@ class HeatmapDataset(BaseTrackingDataset):
         resize: bool = True,
         uniform_heatmaps: bool = False,
         bbox_path: str | None = None,
+        imgaug_hflip: bool = False,
     ) -> None:
         """Initialize the Heatmap Dataset.
 
@@ -313,6 +405,7 @@ class HeatmapDataset(BaseTrackingDataset):
                 provides explicit visibility flags.
             bbox_path: path to csv file that contains bounding box information; rows must be in
                 same order as csv file
+            imgaug_hflip: see :class:`BaseTrackingDataset` for full documentation.
 
         """
         super().__init__(
@@ -325,6 +418,7 @@ class HeatmapDataset(BaseTrackingDataset):
             do_context=do_context,
             resize=resize,
             bbox_path=bbox_path,
+            imgaug_hflip=imgaug_hflip,
         )
 
         if self.height % 128 != 0 or self.height % 128 != 0:
@@ -429,7 +523,22 @@ class HeatmapDataset(BaseTrackingDataset):
 
 
 class MultiviewHeatmapDataset(torch.utils.data.Dataset):
-    """Heatmap dataset that contains the images and keypoints in 2D arrays from all the cameras."""
+    """Heatmap dataset that aggregates one :class:`HeatmapDataset` per camera view.
+
+    Internally stores a ``dict[str, HeatmapDataset]`` at ``self.dataset``, keyed by view name.
+    ``__getitem__`` calls each child dataset and stacks the results into a single
+    :class:`~lightning_pose.data.datatypes.MultiviewHeatmapLabeledExampleDict`.
+
+    The shared ``imgaug_transform`` and ``imgaug_hflip`` attributes on this class are replicated
+    to each child dataset so that the data module can update them in one place. ``imgaug_hflip``
+    is always ``False`` here (multiview hflip is not supported; setting it in the config raises a
+    ``ValueError`` in the factory). The data module checks ``hasattr(dataset, 'dataset')`` to
+    detect the multiview case and iterate over child datasets when stripping val/test
+    augmentations.
+
+    Does **not** inherit from :class:`BaseTrackingDataset`; augmentation routing is delegated
+    entirely to the child :class:`HeatmapDataset` instances.
+    """
 
     def __init__(
         self,
@@ -482,6 +591,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         if len(view_names) != len(csv_paths):
             raise ValueError("number of names does not match with the number of files!")
         logger.info('using MultiviewHeatmapDataset')
+        self.imgaug_hflip = False  # not supported for multiview; sentinel for data module
         self.root_directory = root_directory
         self.csv_paths = csv_paths
         self.bbox_paths = bbox_paths or [None] * len(view_names)

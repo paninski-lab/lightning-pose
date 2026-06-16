@@ -76,8 +76,8 @@ See the :ref:`FAQs <faq_oom>` for more information on memory management.
 
   * default: resizing only
   * dlc: imgaug pipeline implmented in DLC 2.0 package
-  * dlc-lr: dlc augmentations plus horizontal flips
-  * dlc-top-down: dlc augmentations plus additional vertical and horizontal flips
+  * dlc-lr: dlc augmentations plus 180 degree rotations
+  * dlc-top-down: dlc augmentations plus additional 90, 180, and 270 degree rotations
 
   You can also define custom augmentation pipelines following
   :ref:`these instructions <custom_imgaug_pipeline>`.

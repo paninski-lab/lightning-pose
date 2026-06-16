@@ -1,15 +1,27 @@
 """Test basic dataset functionality."""
 
 import copy
+import logging
+import os
 from unittest.mock import patch
 
 import cv2
+import imgaug.augmenters as iaa
 import numpy as np
 import pandas as pd
 import pytest
 import torch
+from aniposelib.cameras import Camera
+from PIL import Image
 
-from lightning_pose.data.datasets import MultiviewHeatmapDataset
+from lightning_pose.data.bboxes import norm_to_frame
+from lightning_pose.data.cameras import CameraGroup
+from lightning_pose.data.datamodules import BaseDataModule
+from lightning_pose.data.datasets import (
+    BaseTrackingDataset,
+    HeatmapDataset,
+    MultiviewHeatmapDataset,
+)
 
 
 def test_base_dataset(cfg, base_dataset):
@@ -466,8 +478,6 @@ class TestMultiviewHeatmapDataset:
 
     def test_get_2d_keypoints_from_example_dict_absolute_coords(self, multiview_heatmap_dataset):
 
-        from lightning_pose.data.bboxes import norm_to_frame
-
         # test data
         data_dict = {
             "view_0": {
@@ -527,10 +537,6 @@ class TestApply3DTransforms:
         # hard-coded values from anipose-fly example
         # (using aniposelib CameraGroup object)
         # ------------------------------------------
-
-        from aniposelib.cameras import Camera
-
-        from lightning_pose.data.cameras import CameraGroup
 
         intrinsics = torch.tensor(
             [[[1.4633e+04, 0.0000e+00, 4.1600e+02],
@@ -1074,8 +1080,6 @@ class TestDiscoverCamParamsFromImagePaths:
 
     def test_discover_mixed_calibration_disables_3d(self, fake_ds, tmp_path, caplog):
         """Returns (None, None) and logs a warning when only some frames have calibration."""
-        import logging
-
         # Arrange: session0 has a toml, session1 does not
         calib_dir = tmp_path / 'calibrations'
         calib_dir.mkdir()
@@ -1190,11 +1194,9 @@ class TestBaseTrackingDatasetVisibility:
 
     @pytest.fixture
     def imgaug(self):
-        import imgaug.augmenters as iaa
         return iaa.Sequential([])
 
     def _make_base_dataset(self, csv_path, tmp_path, imgaug):
-        from lightning_pose.data.datasets import BaseTrackingDataset
         return BaseTrackingDataset(
             root_directory=str(tmp_path),
             csv_path=csv_path,
@@ -1204,7 +1206,6 @@ class TestBaseTrackingDatasetVisibility:
         )
 
     def _make_heatmap_dataset(self, csv_path, tmp_path, imgaug):
-        from lightning_pose.data.datasets import HeatmapDataset
         return HeatmapDataset(
             root_directory=str(tmp_path),
             csv_path=csv_path,
@@ -1243,7 +1244,6 @@ class TestBaseTrackingDatasetVisibility:
         bad_csv = tmp_path / 'bad.csv'
         bad_csv.write_text(content)
         with pytest.raises(ValueError, match='visibility column contains invalid values'):
-            from lightning_pose.data.datasets import BaseTrackingDataset
             BaseTrackingDataset(
                 root_directory=str(tmp_path),
                 csv_path=str(bad_csv),
@@ -1256,7 +1256,6 @@ class TestBaseTrackingDatasetVisibility:
         self, tmp_path, imgaug, caplog,
     ):
         """A warning is logged when vis=1 keypoints have non-NaN x,y coordinates."""
-        import logging
         content = (
             'scorer,scorer,scorer,scorer\n'
             'bodyparts,kp1,kp1,kp1\n'
@@ -1267,7 +1266,6 @@ class TestBaseTrackingDatasetVisibility:
         p = tmp_path / 'occluded_with_coords.csv'
         p.write_text(content)
         with caplog.at_level(logging.WARNING, logger='lightning_pose.data.datasets'):
-            from lightning_pose.data.datasets import BaseTrackingDataset
             BaseTrackingDataset(
                 root_directory=str(tmp_path),
                 csv_path=str(p),
@@ -1279,11 +1277,6 @@ class TestBaseTrackingDatasetVisibility:
 
     def test_heatmap_dataset_getitem_populates_visibility(self, visibility_csv, tmp_path, imgaug):
         """__getitem__ populates the 'visibility' key from self.visibility[idx]."""
-        import os
-
-        from PIL import Image
-
-        from lightning_pose.data.datasets import BaseTrackingDataset
         for name in ('img01.png', 'img02.png'):
             Image.fromarray(
                 (128 * torch.ones(128, 128, 3)).byte().numpy()
@@ -1301,11 +1294,6 @@ class TestBaseTrackingDatasetVisibility:
 
     def test_heatmap_dataset_getitem_no_visibility(self, standard_csv, tmp_path, imgaug):
         """HeatmapDataset synthesizes visibility=2 for all valid keypoints in a standard CSV."""
-        import os
-
-        from PIL import Image
-
-        from lightning_pose.data.datasets import BaseTrackingDataset
         for name in ('img01.png', 'img02.png'):
             Image.fromarray(
                 (128 * torch.ones(128, 128, 3)).byte().numpy()
@@ -1375,3 +1363,249 @@ class TestBaseTrackingDatasetVisibility:
 def test_equal_return_sizes(base_dataset, heatmap_dataset):
     # can only assert the batches are the same if not using imgaug pipeline
     assert base_dataset[0]["images"].shape == heatmap_dataset[0]["images"].shape
+
+
+class TestBuildHflipSwapIndices:
+    """Test BaseTrackingDataset._build_hflip_swap_indices."""
+
+    def test_no_lateralized_keypoints_returns_identity(self):
+        """keypoints with no _left/_right suffix map to themselves."""
+        names = ['nose', 'tail', 'spine']
+        indices = BaseTrackingDataset._build_hflip_swap_indices(names)
+        assert list(indices) == [0, 1, 2]
+
+    def test_single_pair_swaps(self):
+        """a single _left/_right pair is correctly swapped."""
+        names = ['nose', 'ear_left', 'ear_right', 'tail']
+        indices = BaseTrackingDataset._build_hflip_swap_indices(names)
+        # ear_left (idx 1) <-> ear_right (idx 2); nose and tail stay
+        assert list(indices) == [0, 2, 1, 3]
+
+    def test_multiple_pairs_swap(self):
+        """multiple _left/_right pairs are all correctly swapped."""
+        names = ['ear_left', 'paw_left', 'nose', 'paw_right', 'ear_right']
+        indices = BaseTrackingDataset._build_hflip_swap_indices(names)
+        # ear_left(0)<->ear_right(4), paw_left(1)<->paw_right(3), nose(2) stays
+        assert list(indices) == [4, 3, 2, 1, 0]
+
+    def test_unmatched_left_raises(self):
+        """ValueError raised when a _left keypoint has no _right partner."""
+        with pytest.raises(ValueError, match='_left'):
+            BaseTrackingDataset._build_hflip_swap_indices(['ear_left', 'nose'])
+
+    def test_unmatched_right_raises(self):
+        """ValueError raised when a _right keypoint has no _left partner."""
+        with pytest.raises(ValueError, match='_right'):
+            BaseTrackingDataset._build_hflip_swap_indices(['ear_right', 'nose'])
+
+    def test_return_dtype_is_intp(self):
+        """returned array has dtype np.intp for safe indexing."""
+        indices = BaseTrackingDataset._build_hflip_swap_indices(['a_left', 'a_right'])
+        assert indices.dtype == np.intp
+
+
+class TestImgaugHflip:
+    """Test the imgaug_hflip augmentation in BaseTrackingDataset and HeatmapDataset."""
+
+    @pytest.fixture
+    def lateralized_csv(self, tmp_path) -> str:
+        """DLC-format CSV with _left/_right keypoints and one non-lateralized keypoint."""
+        # 5 keypoints: nose, ear_left, ear_right, paw_left, paw_right (x, y each)
+        bp = (
+            'nose,nose,ear_left,ear_left,ear_right,ear_right,'
+            'paw_left,paw_left,paw_right,paw_right'
+        )
+        content = (
+            'scorer,scorer,scorer,scorer,scorer,scorer,scorer,scorer,scorer,scorer,scorer\n'
+            f'bodyparts,{bp}\n'
+            'coords,x,y,x,y,x,y,x,y,x,y\n'
+            'img01.png,64.0,64.0,30.0,40.0,90.0,40.0,20.0,80.0,100.0,80.0\n'
+            'img02.png,64.0,64.0,35.0,45.0,85.0,45.0,25.0,75.0,95.0,75.0\n'
+        )
+        p = tmp_path / 'lateralized.csv'
+        p.write_text(content)
+        return str(p)
+
+    @pytest.fixture
+    def dummy_images(self, tmp_path):
+        """Write two dummy PNG images so __getitem__ can open them."""
+        for name in ('img01.png', 'img02.png'):
+            arr = np.zeros((128, 128, 3), dtype=np.uint8)
+            Image.fromarray(arr).save(tmp_path / name)
+
+    @pytest.fixture
+    def hflip_dataset(self, lateralized_csv, dummy_images, tmp_path):
+        """HeatmapDataset with imgaug_hflip=True."""
+        return HeatmapDataset(
+            root_directory=str(tmp_path),
+            csv_path=lateralized_csv,
+            image_resize_height=128,
+            image_resize_width=128,
+            imgaug_transform=iaa.Sequential([]),
+            imgaug_hflip=True,
+        )
+
+    def test_swap_indices_built_correctly(self, hflip_dataset):
+        """_hflip_swap_indices correctly maps lateralized pairs."""
+        # keypoints: nose(0), ear_left(1), ear_right(2), paw_left(3), paw_right(4)
+        expected = np.array([0, 2, 1, 4, 3], dtype=np.intp)
+        assert np.array_equal(hflip_dataset._hflip_swap_indices, expected)
+
+    def test_unmatched_left_raises_at_init(self, tmp_path):
+        """ValueError raised at dataset init when a _left has no _right partner."""
+        content = (
+            'scorer,scorer,scorer,scorer,scorer\n'
+            'bodyparts,ear_left,ear_left,nose,nose\n'
+            'coords,x,y,x,y\n'
+            'img01.png,30.0,40.0,64.0,64.0\n'
+        )
+        (tmp_path / 'bad.csv').write_text(content)
+        with pytest.raises(ValueError, match='_left'):
+            HeatmapDataset(
+                root_directory=str(tmp_path),
+                csv_path=str(tmp_path / 'bad.csv'),
+                image_resize_height=128,
+                image_resize_width=128,
+                imgaug_transform=iaa.Sequential([]),
+                imgaug_hflip=True,
+            )
+
+    def test_hflip_false_does_not_build_swap_indices(self, tmp_path):
+        """With imgaug_hflip=False, no validation is run and identity indices are stored."""
+        # CSV with unmatched _left — would raise if imgaug_hflip=True, but not with False
+        content = (
+            'scorer,scorer,scorer\n'
+            'bodyparts,ear_left,ear_left\n'
+            'coords,x,y\n'
+            'img01.png,30.0,40.0\n'
+        )
+        (tmp_path / 'unmatched.csv').write_text(content)
+        ds = HeatmapDataset(
+            root_directory=str(tmp_path),
+            csv_path=str(tmp_path / 'unmatched.csv'),
+            image_resize_height=128,
+            image_resize_width=128,
+            imgaug_transform=iaa.Sequential([]),
+            imgaug_hflip=False,
+        )
+        assert not ds.imgaug_hflip
+        assert np.array_equal(ds._hflip_swap_indices, np.arange(1, dtype=np.intp))
+
+    def test_hflip_mirrors_x_coordinates(self, hflip_dataset):
+        """After a forced hflip, all x-coordinates are mirrored and lateralized pairs swapped."""
+        width = hflip_dataset.image_resize_width
+        # original keypoints for frame 0: nose(64,64), ear_left(30,40), ear_right(90,40),
+        # paw_left(20,80), paw_right(100,80)
+        orig_kps = hflip_dataset.keypoints[0].numpy()  # (5, 2)
+
+        with patch('numpy.random.random', return_value=0.0):  # force flip (0.0 < 0.5)
+            batch = hflip_dataset[0]
+
+        kps = batch['keypoints'].numpy().reshape(5, 2)
+
+        # after flip and swap:
+        # position 0 (nose, non-lateral): x = 128 - 64 = 64
+        assert np.isclose(kps[0, 0], width - orig_kps[0, 0])
+        # position 1 gets ear_right's flipped x: 128 - 90 = 38
+        assert np.isclose(kps[1, 0], width - orig_kps[2, 0])
+        # position 2 gets ear_left's flipped x: 128 - 30 = 98
+        assert np.isclose(kps[2, 0], width - orig_kps[1, 0])
+        # y-coordinates are unchanged for both lateralized keypoints
+        assert np.isclose(kps[1, 1], orig_kps[2, 1])
+        assert np.isclose(kps[2, 1], orig_kps[1, 1])
+
+    def test_hflip_no_flip_when_random_above_half(self, hflip_dataset):
+        """When random >= 0.5, no flip is applied and keypoints are unchanged."""
+        orig_kps = hflip_dataset.keypoints[0].numpy()
+
+        with patch('numpy.random.random', return_value=0.9):  # force no flip
+            batch = hflip_dataset[0]
+
+        kps = batch['keypoints'].numpy().reshape(5, 2)
+        # after standard imgaug (empty pipeline + resize to 128x128), coords are unchanged
+        assert np.allclose(kps, orig_kps, equal_nan=True)
+
+    def test_hflip_swaps_visibility(self, tmp_path, dummy_images):
+        """After hflip, visibility values are swapped for lateralized pairs."""
+        content = (
+            'scorer,scorer,scorer,scorer,scorer,scorer,scorer\n'
+            'bodyparts,ear_left,ear_left,ear_left,ear_right,ear_right,ear_right\n'
+            'coords,x,y,visible,x,y,visible\n'
+            'img01.png,30.0,40.0,2,90.0,40.0,1\n'
+            'img02.png,30.0,40.0,1,90.0,40.0,2\n'
+        )
+        (tmp_path / 'vis.csv').write_text(content)
+        ds = HeatmapDataset(
+            root_directory=str(tmp_path),
+            csv_path=str(tmp_path / 'vis.csv'),
+            image_resize_height=128,
+            image_resize_width=128,
+            imgaug_transform=iaa.Sequential([]),
+            imgaug_hflip=True,
+        )
+        # frame 0: ear_left=vis2, ear_right=vis1; after hflip swap → pos0=vis1, pos1=vis2
+        with patch('numpy.random.random', return_value=0.0):
+            batch = ds[0]
+        assert batch['visibility'][0].item() == 1  # was ear_right
+        assert batch['visibility'][1].item() == 2  # was ear_left
+
+    def test_hflip_context_all_frames_flipped(self, lateralized_csv, tmp_path):
+        """In context mode, all frames receive the same horizontal flip."""
+        # create enough context frames: img01.png needs neighbours
+        for i in range(10):
+            arr = np.zeros((128, 128, 3), dtype=np.uint8)
+            arr[:, :64, 0] = 200  # left half red → right half after flip
+            Image.fromarray(arr).save(tmp_path / f'img{i:02d}.png')
+
+        # rewrite csv to use img05.png as center (has neighbours on both sides)
+        bp = (
+            'nose,nose,ear_left,ear_left,ear_right,ear_right,'
+            'paw_left,paw_left,paw_right,paw_right'
+        )
+        content = (
+            'scorer,scorer,scorer,scorer,scorer,scorer,scorer,scorer,scorer,scorer,scorer\n'
+            f'bodyparts,{bp}\n'
+            'coords,x,y,x,y,x,y,x,y,x,y\n'
+            'img05.png,64.0,64.0,30.0,40.0,90.0,40.0,20.0,80.0,100.0,80.0\n'
+        )
+        (tmp_path / 'ctx.csv').write_text(content)
+
+        ds = HeatmapDataset(
+            root_directory=str(tmp_path),
+            csv_path=str(tmp_path / 'ctx.csv'),
+            image_resize_height=128,
+            image_resize_width=128,
+            imgaug_transform=iaa.Sequential([]),
+            imgaug_hflip=True,
+            do_context=True,
+        )
+
+        with patch('numpy.random.random', return_value=0.0):
+            batch = ds[0]
+
+        # images tensor is (5, 3, H, W); after flip the right half should be brighter
+        images = batch['images']  # (5, 3, 128, 128)
+        assert images.shape == (5, 3, 128, 128)
+        for frame_idx in range(5):
+            left_mean = images[frame_idx, 0, :, :64].mean().item()
+            right_mean = images[frame_idx, 0, :, 64:].mean().item()
+            # original left half was red (high), so after flip right half should be higher
+            assert right_mean > left_mean, (
+                f'frame {frame_idx}: expected right > left after hflip'
+            )
+
+    def test_hflip_disabled_for_val_test_in_datamodule(
+        self, cfg, hflip_dataset,
+    ):
+        """datamodule resets imgaug_hflip=False on val and test subsets."""
+        dm = BaseDataModule(
+            dataset=hflip_dataset,
+            train_batch_size=2,
+            val_batch_size=2,
+            test_batch_size=2,
+            train_probability=0.6,
+            val_probability=0.2,
+        )
+        assert dm.train_dataset.dataset.imgaug_hflip is True  # type: ignore[union-attr]
+        assert dm.val_dataset.dataset.imgaug_hflip is False  # type: ignore[union-attr]
+        assert dm.test_dataset.dataset.imgaug_hflip is False  # type: ignore[union-attr]

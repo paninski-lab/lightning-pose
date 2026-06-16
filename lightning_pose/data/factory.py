@@ -132,6 +132,8 @@ def get_dataset(
             a multi-view regression model is requested.
     """
 
+    imgaug_hflip = bool(cfg.training.get('imgaug_hflip', False))
+
     if cfg.model.model_type == 'regression':
         if cfg.data.get('view_names', None) and len(cfg.data.view_names) > 1:
             raise NotImplementedError('Multi-view support only available for heatmap-based models')
@@ -144,9 +146,14 @@ def get_dataset(
                 imgaug_transform=imgaug_transform,
                 do_context=False,  # no context for regression models
                 bbox_path=cfg.data.get('bbox_file', None),
+                imgaug_hflip=imgaug_hflip,
             )
     elif cfg.model.model_type.find('heatmap') > -1:
         if cfg.data.get('view_names', None) and len(cfg.data.view_names) > 1:
+            if imgaug_hflip:
+                raise ValueError(
+                    'imgaug_hflip is not supported for multiview models'
+                )
             UserWarning(
                 'No precautions regarding the size of the images were considered here, '
                 'images will be resized accordingly to configs!'
@@ -186,6 +193,7 @@ def get_dataset(
                 do_context=cfg.model.model_type == 'heatmap_mhcrnn',  # context only for mhcrnn
                 uniform_heatmaps=cfg.training.get('uniform_heatmaps_for_nan_keypoints', False),
                 bbox_path=cfg.data.get('bbox_file', None),
+                imgaug_hflip=imgaug_hflip,
             )
 
     else:
