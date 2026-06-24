@@ -201,7 +201,8 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         else:
             hidden_states = embedding_output
             for layer in vit.layers:
-                hidden_states = layer(hidden_states)[0]
+                output = layer(hidden_states)
+                hidden_states = output[0] if isinstance(output, tuple) else output
             sequence_output = hidden_states
         outputs = self.backbone.vision_encoder.layernorm(sequence_output)  # type: ignore[operator]
         # shape: (batch, view * num_patches, embedding_dim)
