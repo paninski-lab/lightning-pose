@@ -112,7 +112,11 @@ def extract_labels_from_pkg_slp(file_path: str, base_output_dir: str | None) -> 
                         keypoints_flat = []
                         for kp in points:
                             x, y = kp['x'], kp['y']
-                            if np.isnan(x) or np.isnan(y):
+                            if (
+                                np.isnan(x) or np.isnan(y)
+                                or not kp['visible']
+                                or not kp['complete']
+                            ):
                                 x, y = None, None
                             keypoints_flat.extend([x, y])
 
