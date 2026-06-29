@@ -382,6 +382,7 @@ class TestCalculateStepsPerEpoch:
         n_batches = calculate_steps_per_epoch(base_data_module)
         assert n_batches == 25  # ceil (49 / 2)
 
+    @pytest.mark.gpu
     def test_calculate_steps_per_epoch_unsupervised(self, cfg, base_dataset, toy_data_dir):
         """Test the computation of steps per epoch."""
         video_dir = os.path.join(toy_data_dir, 'videos')

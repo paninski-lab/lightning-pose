@@ -117,7 +117,7 @@ class TestPredictVideoBboxFile:
 
         with (
             patch('lightning_pose.utils.predictions.count_frames', return_value=3),
-            patch('lightning_pose.utils.predictions.PrepareDALI', mock_dali),
+            patch('lightning_pose.data.dali.PrepareDALI', mock_dali),
             patch('lightning_pose.utils.predictions.pl.Trainer'),
             patch('lightning_pose.utils.predictions.PredictionHandler'),
         ):
@@ -137,7 +137,7 @@ class TestPredictVideoBboxFile:
         mock_dali = MagicMock()
 
         with (
-            patch('lightning_pose.utils.predictions.PrepareDALI', mock_dali),
+            patch('lightning_pose.data.dali.PrepareDALI', mock_dali),
             patch('lightning_pose.utils.predictions.pl.Trainer'),
             patch('lightning_pose.utils.predictions.PredictionHandler'),
         ):

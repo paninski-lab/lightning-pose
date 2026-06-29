@@ -320,6 +320,8 @@ class TestModelErrors:
 class TestBuildDatamodulePred:
     """Test the _build_datamodule_pred helper."""
 
+    pytestmark = pytest.mark.gpu
+
     def test_build_datamodule_pred_imgaug_reset_to_default(self, cfg):
         """imgaug pipeline is resize-only regardless of the training config."""
         cfg_copy = copy.deepcopy(cfg)
