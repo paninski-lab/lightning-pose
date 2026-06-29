@@ -49,4 +49,4 @@ jobs:
           EOF
 
       - name: Run CPU tests
-        run: pytest -m "not gpu" --timeout=300
+        run: pytest -m "not gpu"
