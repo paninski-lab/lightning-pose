@@ -110,6 +110,7 @@ class TestPredictVideoBboxFile:
         df.to_csv(path)
         return path, df
 
+    @pytest.mark.gpu
     def test_bbox_df_forwarded_to_prepare_dali(self, tmp_path, mock_model, bbox_csv):
         """PrepareDALI receives the loaded bbox_df when bbox_file is provided."""
         bbox_file, _ = bbox_csv
@@ -132,6 +133,7 @@ class TestPredictVideoBboxFile:
         assert list(call_kwargs['bbox_df'].columns) == ['x', 'y', 'h', 'w']
         assert len(call_kwargs['bbox_df']) == 3
 
+    @pytest.mark.gpu
     def test_none_bbox_df_when_bbox_file_not_provided(self, tmp_path, mock_model):
         """PrepareDALI receives bbox_df=None when bbox_file is not provided."""
         mock_dali = MagicMock()
