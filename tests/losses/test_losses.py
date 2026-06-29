@@ -223,7 +223,7 @@ class TestPCALoss:
 
     @pytest.mark.parametrize('device', [
         'cpu',
-        pytest.param(f'cuda:{torch.cuda.current_device()}', marks=pytest.mark.gpu),
+        pytest.param('cuda:0', marks=pytest.mark.gpu),
     ])
     def test_pca_singleview_loss(self, cfg, base_data_module, device):
         """Test singleview PCA loss produces positive loss on toy data."""
@@ -253,7 +253,7 @@ class TestPCALoss:
 
     @pytest.mark.parametrize('device', [
         'cpu',
-        pytest.param(f'cuda:{torch.cuda.current_device()}', marks=pytest.mark.gpu),
+        pytest.param('cuda:0', marks=pytest.mark.gpu),
     ])
     def test_pca_multiview_loss_on_toy_dataset(self, cfg, base_data_module, device):
         """Test multiview PCA loss produces expected shapes and positive loss on toy data."""
@@ -285,7 +285,7 @@ class TestPCALoss:
 
     @pytest.mark.parametrize('device', [
         'cpu',
-        pytest.param(f'cuda:{torch.cuda.current_device()}', marks=pytest.mark.gpu),
+        pytest.param('cuda:0', marks=pytest.mark.gpu),
     ])
     def test_pca_multiview_loss_on_fake_dataset(self, cfg, base_data_module, device):
         """Test that multiview PCA loss is zero for data exactly in the PCA subspace."""
