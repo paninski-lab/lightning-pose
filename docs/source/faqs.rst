@@ -2,6 +2,15 @@
 FAQs
 #############
 
+.. _faq_greyscale:
+
+.. dropdown:: Does Lightning Pose support greyscale (single-channel) images and videos?
+
+    Yes. Lightning Pose automatically converts single-channel (greyscale) images to
+    three-channel RGB by replicating the luminance channel, so no pre-processing is
+    required on your end. IR cameras, greyscale high-speed cameras, and similar rigs
+    are fully supported.
+
 .. _faq_video_formats:
 
 .. dropdown:: What video formats are supported by Lightning Pose?
@@ -55,6 +64,24 @@ FAQs
 
     Note that you can also run the ``ffmpeg`` command directly from the command line.
 
+
+.. _faq_image_resize_dims:
+
+.. dropdown:: How should I set ``image_resize_dims``?
+
+    ``image_resize_dims`` controls the resolution at which the model processes each frame.
+    The default of 256×256 works well for most datasets.
+
+    If your frames are large (more than ~1000 pixels per side), increasing to 384×384 may
+    improve accuracy.  However, this increases the number of model parameters and typically
+    requires more training data — we recommend at least 400–500 labeled frames before
+    trying a larger resolution.  We have not found any cases where increasing beyond
+    384×384 provides further benefit.
+
+    For very large images (1500–2000+ pixels per side) the best approach is the
+    :doc:`cropzoom pipeline </source/user_guide_advanced/cropzoom_pipeline>`, which
+    crops a tight region around the animal before resizing, preserving detail that would
+    otherwise be lost when downscaling a large frame to the model's input resolution.
 
 .. _faq_oom:
 

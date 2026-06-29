@@ -31,11 +31,12 @@ provided.
 
 * ``data.image_resize_dims.height/width`` (*int*): images (and videos) will be resized to the
   specified height and width before being processed by the network.
-  Supported values are {64, 128, 256, 384, 512}.
+  Supported values are {64, 128, 256, 384}.
   The height and width need not be identical.
   Some points to keep in mind when selecting these values:
   if the resized images are too small, you will lose resolution/details;
   if they are too large, the model takes longer to train and might not train as well.
+  See the :ref:`FAQs <faq_image_resize_dims>` for guidance on choosing this value.
 
 * ``data.data_dir/video_dir`` (*str*): update these to reflect your (absolute) local paths
 

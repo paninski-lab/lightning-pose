@@ -257,15 +257,28 @@ def _crop_video_moviepy(video_file: Path, bbox_df: pd.DataFrame, output_file: Pa
         bbox_df (pd.DataFrame): DataFrame containing bounding box information for frames.
             It must include the columns `x`, `y`, `w`, and `h` representing the top-left
             corner coordinates, width, and height of the bounding box, respectively.
+            The DataFrame must be *dense*: row ``i`` must correspond to video frame ``i``
+            with no gaps. Passing a sparse CSV (e.g. one that skips untracked frames)
+            will silently misalign every row after the first gap.
         output_file (Path): Path to save the cropped output video file.
 
     Raises:
         KeyError: If the DataFrame does not contain required bounding box columns (`x`,
             `y`, `w`, and `h`).
-        ValueError: If the input video file cannot be read or if the bounding box
-            dimensions result in invalid operations.
+        ValueError: If the input video file cannot be read, if the bounding box
+            dimensions result in invalid operations, or if the number of bbox rows does
+            not match the number of video frames.
     """
     clip = VideoFileClip(str(video_file))
+
+    n_frames = int(round(clip.duration * clip.fps))
+    if len(bbox_df) != n_frames:
+        raise ValueError(
+            f'{video_file.name}: bbox CSV has {len(bbox_df)} rows but video has {n_frames} '
+            f'frames. The video bbox CSV must be dense: exactly one row per frame with no '
+            f'gaps. If your tracking has missing frames, carry the last known bbox forward '
+            f'to fill the gap.'
+        )
 
     h = bbox_df["h"].median()
     w = bbox_df["w"].median()
