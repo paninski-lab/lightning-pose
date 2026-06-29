@@ -21,7 +21,6 @@ from lightning.pytorch.utilities import CombinedLoader
 from omegaconf import DictConfig, ListConfig
 from torch.utils.data import DataLoader, Subset, random_split
 
-from lightning_pose.data.dali import PrepareDALI
 from lightning_pose.data.datatypes import SemiSupervisedDataLoaderDict
 from lightning_pose.data.utils import (
     compute_num_train_frames,
@@ -305,6 +304,7 @@ class UnlabeledDataModule(BaseDataModule):
 
     def setup_unlabeled(self) -> None:
         """Sets up the unlabeled data loader."""
+        from lightning_pose.data.dali import PrepareDALI  # avoids ImportError on cpu-only installs
         dali_prep = PrepareDALI(
             train_stage="train",
             model_type="context" if self.dataset.do_context else "base",

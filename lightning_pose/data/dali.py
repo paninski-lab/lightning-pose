@@ -1,5 +1,16 @@
 """Data pipelines based on efficient video reading by nvidia dali package.
 
+Import warning
+--------------
+``nvidia-dali-cuda110`` is not installed on CPU-only machines (macOS, GPU-less Linux), so
+importing this module at the top level of any other module will raise ``ImportError`` on those
+platforms and break ``import lightning_pose`` entirely. Always import from this module lazily,
+inside the function or method body that uses it::
+
+    def my_function(...):
+        from lightning_pose.data.dali import PrepareDALI  # lazy: avoids ImportError on cpu-only
+        ...
+
 Architecture overview
 ---------------------
 ``PrepareDALI`` is the entry point. Its ``__init__`` validates inputs and pre-computes
@@ -28,14 +39,21 @@ import os
 from typing import Any, Literal
 
 import numpy as np
-import nvidia.dali.fn as fn
-import nvidia.dali.types as types
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from nvidia.dali import pipeline_def
-from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
 from omegaconf import DictConfig, ListConfig
+
+try:
+    import nvidia.dali.fn as fn
+    import nvidia.dali.types as types
+    from nvidia.dali import pipeline_def
+    from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
+except ImportError as e:
+    raise ImportError(
+        'nvidia-dali is required for video inference. '
+        'Install it with: pip install nvidia-dali-cuda110'
+    ) from e
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
 from lightning_pose.data.datatypes import (

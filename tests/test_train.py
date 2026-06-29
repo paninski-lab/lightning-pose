@@ -48,6 +48,7 @@ def _test_cfg(cfg):
     return cfg_tmp
 
 
+@pytest.mark.gpu
 def test_train_singleview(cfg, tmp_path):
     cfg = _test_cfg(cfg)
     cfg.model.model_type = "heatmap"
@@ -126,6 +127,7 @@ def test_train_singleview_detector_outputs(cfg, tmp_path):
     assert (image_pred_dir / "predictions_pixel_error.csv").is_file()
 
 
+@pytest.mark.gpu
 def test_train_multiview(cfg_multiview, tmp_path):
     from lightning_pose.train import train
 
@@ -193,6 +195,7 @@ def _execute_multi_gpu_test(cfg, tmp_path, pytestconfig):
     assert process.returncode == 0
 
 
+@pytest.mark.gpu
 @pytest.mark.multigpu  # allow running only multi_gpu tests with `pytest -m multigpu`
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="Multiple GPUs required.")
 def test_train_multi_gpu_supervised(cfg, tmp_path, pytestconfig):
@@ -205,6 +208,7 @@ def test_train_multi_gpu_supervised(cfg, tmp_path, pytestconfig):
     _execute_multi_gpu_test(cfg, tmp_path, pytestconfig)
 
 
+@pytest.mark.gpu
 @pytest.mark.multigpu  # allow running only multi_gpu tests with `pytest -m multigpu`
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="Multiple GPUs required.")
 def test_train_multi_gpu_unsupervised(cfg, tmp_path, pytestconfig):
@@ -378,6 +382,7 @@ class TestCalculateStepsPerEpoch:
         n_batches = calculate_steps_per_epoch(base_data_module)
         assert n_batches == 25  # ceil (49 / 2)
 
+    @pytest.mark.gpu
     def test_calculate_steps_per_epoch_unsupervised(self, cfg, base_dataset, toy_data_dir):
         """Test the computation of steps per epoch."""
         video_dir = os.path.join(toy_data_dir, 'videos')

@@ -135,7 +135,15 @@ def compare_directories(dir1: Path, dir2: Path) -> int | dict:
         # fails on mp4s because metadata is different, no quick fix
         if common_file.find('.mp4') > -1:
             continue
-        if filecmp.cmp(dir1 / common_file, dir2 / common_file, shallow=False):
+        # PNG byte output can differ across platforms (zlib compression level / metadata);
+        # compare pixel arrays instead of raw bytes
+        if common_file.endswith('.png'):
+            arr1 = np.array(Image.open(dir1 / common_file))
+            arr2 = np.array(Image.open(dir2 / common_file))
+            match = arr1.shape == arr2.shape and np.array_equal(arr1, arr2)
+        else:
+            match = filecmp.cmp(dir1 / common_file, dir2 / common_file, shallow=False)
+        if match:
             num_matches += 1
         else:
             results["mismatch"].append(common_file)

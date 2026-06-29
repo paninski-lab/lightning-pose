@@ -233,6 +233,7 @@ def test_subsampling_of_training_frames(base_dataset):
         BaseDataModule(base_dataset, train_frames=train_frames)
 
 
+@pytest.mark.gpu
 def test_base_data_module_combined(cfg, base_data_module_combined):
 
     im_height = cfg.data.image_resize_dims.height
@@ -272,6 +273,7 @@ def test_base_data_module_combined(cfg, base_data_module_combined):
     assert image_counter == dataset_length
 
 
+@pytest.mark.gpu
 def test_heatmap_data_module_combined(cfg, heatmap_data_module_combined):
 
     im_height = cfg.data.image_resize_dims.height
@@ -300,6 +302,7 @@ def test_heatmap_data_module_combined(cfg, heatmap_data_module_combined):
     assert batch["unlabeled"]["frames"].shape == (train_size_unlabel, 3, im_height, im_width)
 
 
+@pytest.mark.gpu
 def test_multiview_heatmap_data_module_combined(
     cfg_multiview,
     multiview_heatmap_data_module_combined,
@@ -346,6 +349,7 @@ def test_multiview_heatmap_data_module_combined(
     assert batch["unlabeled"]["bbox"].shape == (train_size_unlabeled, num_views * 4)
 
 
+@pytest.mark.gpu
 def test_heatmap_data_module_combined_context(cfg, heatmap_data_module_combined_context):
 
     im_height = cfg.data.image_resize_dims.height
@@ -378,6 +382,7 @@ def test_heatmap_data_module_combined_context(cfg, heatmap_data_module_combined_
     assert batch["unlabeled"]["frames"].shape == (train_size_unlabel, 3, im_height, im_width)
 
 
+@pytest.mark.gpu
 def test_multiview_heatmap_data_module_combined_context(
     cfg_multiview,
     multiview_heatmap_data_module_combined_context,

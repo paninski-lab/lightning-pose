@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "lightning-pose"
-version = "2.2.1"
+version = "2.3.0"
 description = "Semi-supervised pose estimation using pytorch lightning"
 license = "MIT"
 readme = "README.md"
@@ -51,7 +51,7 @@ dependencies = [
     "torch (<3.0.0)",
     "torchvision",
     "transformers>=4.57.5",
-    "nvidia-dali-cuda110",
+    "nvidia-dali-cuda110; sys_platform == 'linux' and platform_machine == 'x86_64'",
 ]
 
 [project.urls]
@@ -154,4 +154,4 @@ exclude_lines = [
 [tool.pytest.ini_options]
 testpaths = "tests"
 generate_report_on_test = "True"
-markers = ["multigpu"]
+markers = ["multigpu", "gpu"]

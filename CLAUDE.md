@@ -82,6 +82,20 @@ class Test<function_name>:
 - Mock at the boundary of your system
 - Use dependency injection when possible
 
+### GPU test markers
+Two pytest marks gate hardware-dependent tests:
+
+- `@pytest.mark.gpu` — test requires a CUDA GPU (uses a GPU trainer, DALI pipeline, or
+  moves tensors to CUDA). The CPU CI workflow runs `pytest -m "not gpu"` and will skip
+  these. **Any new test that needs a GPU must carry this mark.**
+- `@pytest.mark.multigpu` — test additionally requires two or more GPUs. Always paired
+  with `@pytest.mark.gpu` and `@pytest.mark.skipif(torch.cuda.device_count() < 2, ...)`.
+
+For files where every test needs a GPU, use a module-level `pytestmark = pytest.mark.gpu`
+instead of decorating each function individually. For parametrized tests with both CPU and
+GPU variants, apply the mark only to the GPU parameter via
+`pytest.param(..., marks=pytest.mark.gpu)` so the CPU variant still runs in CPU CI.
+
 ## Documentation
 
 ### Docstrings
@@ -167,6 +181,14 @@ def function_name(
 - Use semantic versioning
 - Update version in pyproject.toml
 - Tag releases appropriately
+
+### DALI imports
+`nvidia-dali-cuda110` is not installed on CPU-only machines (macOS, GPU-less Linux).
+Any import of `lightning_pose.data.dali` or `nvidia.dali` **must be done lazily** —
+inside the function or method body that uses it, not at the top of the file.
+The inline comment `# lazy: avoids ImportError on cpu-only installs` marks these sites.
+Adding a new top-level import from `dali.py` anywhere in the package or tests will break
+`import lightning_pose` on CPU machines.
 
 ## Git Workflow
 

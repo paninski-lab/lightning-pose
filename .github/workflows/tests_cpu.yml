@@ -1,0 +1,52 @@
+name: Run CPU tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-cpu:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ffmpeg (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y ffmpeg
+
+      - name: Install ffmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+
+      - name: Install dependencies (no DALI)
+        run: |
+          pip install -e ".[dev]" --no-deps
+          python - <<'EOF'
+          import subprocess, tomllib
+          with open('pyproject.toml', 'rb') as f:
+              cfg = tomllib.load(f)
+          deps = (
+              cfg['project']['dependencies']
+              + cfg['project']['optional-dependencies']['dev']
+          )
+          deps = [d for d in deps if not d.startswith('nvidia-dali')]
+          subprocess.run(['pip', 'install'] + deps, check=True)
+          EOF
+
+      - name: Run CPU tests
+        run: pytest -m "not gpu"

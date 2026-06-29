@@ -9,6 +9,8 @@ import pandas as pd
 import pytest
 import torch
 
+pytest.importorskip('nvidia.dali', reason='nvidia-dali not installed')
+
 from lightning_pose.data import dali as dali_module
 from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI, video_pipe
 from lightning_pose.data.datatypes import UnlabeledBatchDict
@@ -17,6 +19,7 @@ from lightning_pose.data.datatypes import UnlabeledBatchDict
 class TestVideoPipe:
     """Test the video_pipe function."""
 
+    @pytest.mark.gpu
     def test_single_view(self, video_list):
         """Single-view pipeline yields (frames, transforms, frame_size) tuples of correct shape."""
         batch_size = 2
@@ -42,6 +45,7 @@ class TestVideoPipe:
 
         del pipe
 
+    @pytest.mark.gpu
     def test_multiview(self, video_list):
         """Multi-view pipeline yields per-view tuples; identical videos produce matching frames."""
         batch_size = 2
@@ -77,6 +81,7 @@ class TestVideoPipe:
 class TestPrepareDALI:
     """Test the PrepareDALI class."""
 
+    @pytest.mark.gpu
     def test_single_view_base_predict(self, cfg, video_list):
         """Base model predict loader yields batches of the configured sequence length and dims."""
         im_height = 256
@@ -103,6 +108,7 @@ class TestPrepareDALI:
             batch_idx += 1
         assert batch_idx == num_iters - 1
 
+    @pytest.mark.gpu
     def test_single_view_context_predict(self, cfg, video_list):
         """Context model predict loader yields batches of the context sequence length and dims."""
         im_height = 256
@@ -151,6 +157,7 @@ class TestPrepareDALI:
                 resize_dims=[256, 256],
             )
 
+    @pytest.mark.gpu
     def test_multiview_base_train_and_predict(self, cfg_multiview, video_list):
         """Multi-view base model batches have correct shape for train and predict stages."""
         im_height = 256
@@ -177,6 +184,7 @@ class TestPrepareDALI:
             assert batch['transforms'].shape == (num_views, 1, 1)
             assert batch['bbox'].shape == (batch_size, num_views * 4)
 
+    @pytest.mark.gpu
     def test_multiview_context_train_and_predict(self, cfg_multiview, video_list):
         """Multi-view context model batches have correct shape for train and predict stages."""
         im_height = 256
@@ -203,6 +211,7 @@ class TestPrepareDALI:
             assert batch['transforms'].shape == (num_views, 1, 1)
             assert batch['bbox'].shape == (batch_size, num_views * 4)
 
+    @pytest.mark.gpu
     def test_multiview_synchronized_frames(self, cfg_multiview, video_list):
         """Shared reader seed keeps per-view frames synchronized under random shuffle."""
         num_views = 3

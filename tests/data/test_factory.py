@@ -251,6 +251,7 @@ class TestGetDataModule:
                 == cfg.dali.base.train.sequence_length / cfg.training.num_gpus)
         # context batch size is more nuanced, tested separately
 
+    @pytest.mark.gpu
     def test_get_data_module_multi_gpu_batch_size_adjustment_ceiling(
         self, cfg, heatmap_dataset, toy_data_dir,
     ):
@@ -281,6 +282,7 @@ class TestGetDataModule:
         )
         # context batch size is more nuanced, tested separately
 
+    @pytest.mark.gpu
     def test_get_data_module_multi_gpu_context_batch_size_adjustment(
         self, cfg, heatmap_dataset, toy_data_dir,
     ):

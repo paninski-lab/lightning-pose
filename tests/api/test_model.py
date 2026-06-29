@@ -44,6 +44,8 @@ def _setup_test_model(tmp_path, request, multiview=False) -> Model:
 class TestPredictOnLabelCsv:
     """Test the predict_on_label_csv method."""
 
+    pytestmark = pytest.mark.gpu
+
     def test_predict_on_label_csv_singleview(self, tmp_path, request, toy_data_dir):
         """Singleview model writes predictions and per-metric error CSVs."""
         model = _setup_test_model(tmp_path, request)
@@ -89,6 +91,7 @@ class TestPredictOnLabelCsv:
 class TestPredictOnVideoFile:
     """Test the predict_on_video_file method."""
 
+    @pytest.mark.gpu
     def test_predict_on_video_file_singleview(self, tmp_path, request, toy_data_dir):
         """Singleview model writes prediction CSVs and optionally a labeled video."""
         model = _setup_test_model(tmp_path, request)
@@ -106,6 +109,7 @@ class TestPredictOnVideoFile:
         )
         assert (model.labeled_videos_dir() / "test_vid_labeled.mp4").is_file()
 
+    @pytest.mark.gpu
     def test_predict_on_video_file_with_multiview_model(self, tmp_path, request, toy_mdata_dir):
         """Multiview model can predict on a single video file."""
         model = _setup_test_model(tmp_path, request, multiview=True)
@@ -138,6 +142,7 @@ class TestPredictOnVideoFile:
 
         assert mock_pv.call_args.kwargs['bbox_file'] == bbox_file
 
+    @pytest.mark.gpu
     def test_predict_on_video_file_multiview(self, tmp_path, request, toy_mdata_dir):
         """predict_on_video_file_multiview writes predictions and labeled videos for all views."""
         model = _setup_test_model(tmp_path, request, multiview=True)
@@ -160,6 +165,8 @@ class TestPredictOnVideoFile:
 
 class TestPredictFrame:
     """Test the predict_frame method."""
+
+    pytestmark = pytest.mark.gpu
 
     def test_predict_frame_basic(self, tmp_path, request):
         """predict_frame returns keypoints and confidences for a synthetic RGB frame."""
@@ -237,6 +244,8 @@ class TestPredictFrame:
 class TestModelErrors:
     """Test that Model public methods raise informative errors on bad inputs."""
 
+    pytestmark = pytest.mark.gpu
+
     @pytest.fixture()
     def singleview_model(self, tmp_path, request):
         """Singleview model, not yet loaded."""
@@ -310,6 +319,8 @@ class TestModelErrors:
 
 class TestBuildDatamodulePred:
     """Test the _build_datamodule_pred helper."""
+
+    pytestmark = pytest.mark.gpu
 
     def test_build_datamodule_pred_imgaug_reset_to_default(self, cfg):
         """imgaug pipeline is resize-only regardless of the training config."""

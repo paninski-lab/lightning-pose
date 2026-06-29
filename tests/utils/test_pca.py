@@ -20,17 +20,17 @@ def check_lists_equal(list_0: list, list_1: list) -> bool:
 class TestKeypointPCA:
     """Test the class KeypointPCA."""
 
-    def test_keypoint_pca_singleview(self, cfg, base_data_module_combined):
+    def test_keypoint_pca_singleview(self, cfg, base_data_module):
         num_train_ims = int(
-            len(base_data_module_combined.dataset)
-            * base_data_module_combined.train_probability
+            len(base_data_module.dataset)
+            * base_data_module.train_probability
         )
-        num_keypoints = base_data_module_combined.dataset.num_keypoints
+        num_keypoints = base_data_module.dataset.num_keypoints
         num_keypoints_for_pca = len(cfg.data.columns_for_singleview_pca)
 
         kp_pca = KeypointPCA(
             loss_type="pca_singleview",
-            data_module=base_data_module_combined,
+            data_module=base_data_module,
             components_to_keep=0.99,
             empirical_epsilon_percentile=1.0,
             columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
@@ -63,7 +63,7 @@ class TestKeypointPCA:
         pred_keypoints = torch.rand(size=(n_batches, n_keypoints * 2), device="cpu")
         singleview_pca = KeypointPCA(
             loss_type="pca_singleview",
-            data_module=base_data_module_combined,
+            data_module=base_data_module,
             components_to_keep=6,
             empirical_epsilon_percentile=1.0,
             columns_for_singleview_pca=cfg.data.columns_for_singleview_pca,
@@ -77,10 +77,10 @@ class TestKeypointPCA:
         err = singleview_pca.compute_reprojection_error(data_arr=data_arr)
         assert err.shape == (n_batches, 14)
 
-    def test_keypoint_pca_median_centering(self, cfg, base_data_module_combined):
+    def test_keypoint_pca_median_centering(self, cfg, base_data_module):
         kp_pca = KeypointPCA(
             loss_type="pca_singleview",
-            data_module=base_data_module_combined,
+            data_module=base_data_module,
             components_to_keep=0.99,
             empirical_epsilon_percentile=1.0,
             columns_for_singleview_pca=[0, 1, 2],
@@ -110,10 +110,10 @@ class TestKeypointPCA:
             ),
         )
 
-    def test_keypoint_pca_mean_centering(self, cfg, base_data_module_combined):
+    def test_keypoint_pca_mean_centering(self, cfg, base_data_module):
         kp_pca = KeypointPCA(
             loss_type="pca_singleview",
-            data_module=base_data_module_combined,
+            data_module=base_data_module,
             components_to_keep=0.99,
             empirical_epsilon_percentile=1.0,
             columns_for_singleview_pca=[0, 1, 2],
@@ -146,20 +146,20 @@ class TestKeypointPCA:
     def test_keypoint_pca_multiview(
         self,
         cfg,
-        base_data_module_combined,
+        base_data_module,
         cfg_multiview,
-        multiview_heatmap_data_module_combined,
+        multiview_heatmap_data_module,
     ):
         num_train_ims = (
-            len(base_data_module_combined.dataset)
-            * base_data_module_combined.train_probability
+            len(base_data_module.dataset)
+            * base_data_module.train_probability
         )
-        num_keypoints = base_data_module_combined.dataset.num_keypoints
+        num_keypoints = base_data_module.dataset.num_keypoints
         num_keypoints_both_views = 7
 
         kp_pca = KeypointPCA(
             loss_type="pca_multiview",
-            data_module=base_data_module_combined,
+            data_module=base_data_module,
             components_to_keep=3,
             empirical_epsilon_percentile=0.3,
             mirrored_column_matches=cfg.data.mirrored_column_matches,
@@ -189,7 +189,7 @@ class TestKeypointPCA:
         # make sure we don't get errors when using a true multiview dataset
         kp_pca_2 = KeypointPCA(
             loss_type="pca_multiview",
-            data_module=multiview_heatmap_data_module_combined,
+            data_module=multiview_heatmap_data_module,
             components_to_keep=3,
             empirical_epsilon_percentile=0.3,
             mirrored_column_matches=cfg_multiview.data.mirrored_column_matches,

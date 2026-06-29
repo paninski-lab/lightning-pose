@@ -1,10 +1,13 @@
 import math
 from pathlib import Path
 
+import pytest
 import tbparse
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from lightning_pose.train import train
+
+pytestmark = pytest.mark.gpu
 
 
 def _get_base_cfg(cfg):
