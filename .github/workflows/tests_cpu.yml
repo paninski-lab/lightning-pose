@@ -25,6 +25,14 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install ffmpeg (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y ffmpeg
+
+      - name: Install ffmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+
       - name: Install dependencies (no DALI)
         run: |
           pip install -e ".[dev]" --no-deps
