@@ -1,5 +1,16 @@
 """Data pipelines based on efficient video reading by nvidia dali package.
 
+Import warning
+--------------
+``nvidia-dali-cuda110`` is not installed on CPU-only machines (macOS, GPU-less Linux), so
+importing this module at the top level of any other module will raise ``ImportError`` on those
+platforms and break ``import lightning_pose`` entirely. Always import from this module lazily,
+inside the function or method body that uses it::
+
+    def my_function(...):
+        from lightning_pose.data.dali import PrepareDALI  # lazy: avoids ImportError on cpu-only
+        ...
+
 Architecture overview
 ---------------------
 ``PrepareDALI`` is the entry point. Its ``__init__`` validates inputs and pre-computes
