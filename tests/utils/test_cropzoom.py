@@ -3,6 +3,7 @@ import filecmp
 import json
 import shutil
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
@@ -365,6 +366,53 @@ class TestCropVideo:
             bbox_df = pd.read_csv(bbox_file, index_col=0)
             assert (bbox_df['h'] == crop_size).all()
             assert (bbox_df['w'] == crop_size).all()
+
+
+class TestCropVideoBboxValidation:
+    """Test that crop_video validates bbox CSV row count against video frame count."""
+
+    def _make_bbox_csv(self, path: Path, n_rows: int) -> Path:
+        """Write a minimal bbox CSV with ``n_rows`` rows."""
+        pd.DataFrame({
+            'x': [10] * n_rows,
+            'y': [10] * n_rows,
+            'h': [50] * n_rows,
+            'w': [50] * n_rows,
+        }).to_csv(path)
+        return path
+
+    def _mock_clip(self, n_frames: int, fps: float = 10.0) -> MagicMock:
+        """Return a mock VideoFileClip with the given frame count."""
+        clip = MagicMock()
+        clip.fps = fps
+        clip.duration = n_frames / fps
+        return clip
+
+    def test_crop_video_raises_when_bbox_has_too_few_rows(self, tmp_path):
+        """Raises ValueError when bbox CSV has fewer rows than video frames."""
+        bbox_file = self._make_bbox_csv(tmp_path / 'vid_bbox.csv', n_rows=30)
+        with patch(
+            'lightning_pose.utils.cropzoom.VideoFileClip', return_value=self._mock_clip(50)
+        ):
+            with pytest.raises(ValueError, match='bbox CSV has 30 rows but video has 50 frames'):
+                crop_video(
+                    input_video_file=tmp_path / 'dummy.mp4',
+                    input_bbox_file=bbox_file,
+                    output_file=tmp_path / 'out.mp4',
+                )
+
+    def test_crop_video_raises_when_bbox_has_too_many_rows(self, tmp_path):
+        """Raises ValueError when bbox CSV has more rows than video frames."""
+        bbox_file = self._make_bbox_csv(tmp_path / 'vid_bbox.csv', n_rows=100)
+        with patch(
+            'lightning_pose.utils.cropzoom.VideoFileClip', return_value=self._mock_clip(50)
+        ):
+            with pytest.raises(ValueError, match='bbox CSV has 100 rows but video has 50 frames'):
+                crop_video(
+                    input_video_file=tmp_path / 'dummy.mp4',
+                    input_bbox_file=bbox_file,
+                    output_file=tmp_path / 'out.mp4',
+                )
 
 
 class TestSmoothBbox:
