@@ -527,7 +527,7 @@ def multiview_heatmap_data_module_combined_context(
 @pytest.fixture
 def video_dataloader(cfg, base_dataset, video_list):
     """Create a prediction dataloader for a new video."""
-    from lightning_pose.data.dali import PrepareDALI
+    from lightning_pose.data.dali import PrepareDALI  # avoids ImportError on cpu-only installs
 
     # setup
     vid_pred_class = PrepareDALI(
@@ -554,7 +554,7 @@ def video_dataloader_multiview(
     video_list_multiview,
 ):
     """Create a prediction dataloader for a new video."""
-    from lightning_pose.data.dali import PrepareDALI
+    from lightning_pose.data.dali import PrepareDALI  # avoids ImportError on cpu-only installs
 
     # setup
     vid_pred_class = PrepareDALI(

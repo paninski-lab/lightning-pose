@@ -20,7 +20,6 @@ from moviepy import VideoFileClip
 from omegaconf import DictConfig, ListConfig
 
 from lightning_pose.callbacks import JSONInferenceProgressTracker
-from lightning_pose.data.dali import PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import count_frames
 
@@ -473,6 +472,7 @@ def predict_video(
     )
 
     filenames = [video_file] if not is_multiview else [[f] for f in video_file]
+    from lightning_pose.data.dali import PrepareDALI  # avoids ImportError on cpu-only installs
     vid_pred_class = PrepareDALI(
         train_stage="predict",
         model_type=model_type,
