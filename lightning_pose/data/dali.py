@@ -28,14 +28,21 @@ import os
 from typing import Any, Literal
 
 import numpy as np
-import nvidia.dali.fn as fn
-import nvidia.dali.types as types
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from nvidia.dali import pipeline_def
-from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
 from omegaconf import DictConfig, ListConfig
+
+try:
+    import nvidia.dali.fn as fn
+    import nvidia.dali.types as types
+    from nvidia.dali import pipeline_def
+    from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
+except ImportError as e:
+    raise ImportError(
+        'nvidia-dali is required for video inference. '
+        'Install it with: pip install nvidia-dali-cuda110'
+    ) from e
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
 from lightning_pose.data.datatypes import (

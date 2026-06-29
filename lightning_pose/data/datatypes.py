@@ -2,13 +2,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 import numpy as np
 import pandas as pd
 import torch
 from jaxtyping import Float, Int
-from nvidia.dali.plugin.pytorch import DALIGenericIterator
+
+if TYPE_CHECKING:
+    from nvidia.dali.plugin.pytorch import DALIGenericIterator
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [

@@ -4,6 +4,8 @@ import copy
 
 import pytest
 
+pytestmark = pytest.mark.gpu
+
 
 def test_supervised_heatmap(
     cfg,

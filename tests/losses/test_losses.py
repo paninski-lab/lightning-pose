@@ -221,7 +221,10 @@ class TestHeatmapJSLoss:
 class TestPCALoss:
     """Test the PCALoss class."""
 
-    @pytest.mark.parametrize('device', ['cpu', f'cuda:{torch.cuda.current_device()}'])
+    @pytest.mark.parametrize('device', [
+        'cpu',
+        pytest.param(f'cuda:{torch.cuda.current_device()}', marks=pytest.mark.gpu),
+    ])
     def test_pca_singleview_loss(self, cfg, base_data_module, device):
         """Test singleview PCA loss produces positive loss on toy data."""
         pca_loss = PCALoss(
@@ -248,7 +251,10 @@ class TestPCALoss:
         with pytest.raises(ValueError):
             PCALoss(loss_name='pca_multiview', data_module=base_data_module)
 
-    @pytest.mark.parametrize('device', ['cpu', f'cuda:{torch.cuda.current_device()}'])
+    @pytest.mark.parametrize('device', [
+        'cpu',
+        pytest.param(f'cuda:{torch.cuda.current_device()}', marks=pytest.mark.gpu),
+    ])
     def test_pca_multiview_loss_on_toy_dataset(self, cfg, base_data_module, device):
         """Test multiview PCA loss produces expected shapes and positive loss on toy data."""
         pca_loss = PCALoss(
@@ -277,7 +283,10 @@ class TestPCALoss:
         assert logs[1]['name'] == 'pca_multiview_weight'
         assert logs[1]['value'] == pca_loss.weight
 
-    @pytest.mark.parametrize('device', ['cpu', f'cuda:{torch.cuda.current_device()}'])
+    @pytest.mark.parametrize('device', [
+        'cpu',
+        pytest.param(f'cuda:{torch.cuda.current_device()}', marks=pytest.mark.gpu),
+    ])
     def test_pca_multiview_loss_on_fake_dataset(self, cfg, base_data_module, device):
         """Test that multiview PCA loss is zero for data exactly in the PCA subspace."""
         # TODO: this is not how we currently compute reprojection; we now add mean in final stage

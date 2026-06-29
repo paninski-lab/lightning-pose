@@ -65,6 +65,7 @@ class TestPredictDataset:
         mock.config.cfg = cfg_tmp
         return mock
 
+    @pytest.mark.gpu
     def test_predict_dataset_explicit_cfg(self, mock_model, cfg, heatmap_data_module, tmpdir):
         """Predictions are written when cfg is passed explicitly."""
         predict_dataset(
@@ -74,6 +75,7 @@ class TestPredictDataset:
             cfg=cfg,
         )
 
+    @pytest.mark.gpu
     def test_predict_dataset_cfg_fallback(self, mock_model, heatmap_data_module, tmpdir):
         """Predictions are written when cfg falls back to model.config.cfg."""
         predict_dataset(

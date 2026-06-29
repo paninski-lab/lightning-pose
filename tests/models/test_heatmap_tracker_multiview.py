@@ -10,6 +10,7 @@ from lightning_pose.data.datasets import MultiviewHeatmapDataset
 from lightning_pose.data.datatypes import MultiviewHeatmapLabeledExampleDict
 
 
+@pytest.mark.gpu
 def test_multiview_transformer_vits_dino(
     cfg_multiview,
     multiview_heatmap_dataset,
@@ -44,6 +45,7 @@ def test_multiview_transformer_vits_dino(
     )
 
 
+@pytest.mark.gpu
 def test_multiview_transformer_vits_dinov2(
     cfg_multiview,
     multiview_heatmap_dataset,
@@ -78,6 +80,7 @@ def test_multiview_transformer_vits_dinov2(
     )
 
 
+@pytest.mark.gpu
 def test_multiview_transformer_vitb_imagenet(
     cfg_multiview,
     multiview_heatmap_dataset,
@@ -140,6 +143,7 @@ def test_multiview_transformer_vitb_sam_raises(
         get_model(cfg=cfg_tmp, data_module=data_module, loss_factories={'supervised': None})
 
 
+@pytest.mark.gpu
 def test_semisupervised_multiview_transformer_temporal(
     cfg_multiview,
     multiview_heatmap_dataset,

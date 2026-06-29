@@ -26,7 +26,6 @@ from lightning_pose.data import (
     get_dataset,
     get_imgaug_transform,
 )
-from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datasets import (
     BaseTrackingDataset,
@@ -526,8 +525,9 @@ def multiview_heatmap_data_module_combined_context(
 
 
 @pytest.fixture
-def video_dataloader(cfg, base_dataset, video_list) -> Generator[LitDaliWrapper, None, None]:
+def video_dataloader(cfg, base_dataset, video_list):
     """Create a prediction dataloader for a new video."""
+    from lightning_pose.data.dali import PrepareDALI
 
     # setup
     vid_pred_class = PrepareDALI(
@@ -552,8 +552,9 @@ def video_dataloader_multiview(
     cfg_multiview,
     multiview_heatmap_dataset,
     video_list_multiview,
-) -> Generator[LitDaliWrapper, None, None]:
+):
     """Create a prediction dataloader for a new video."""
+    from lightning_pose.data.dali import PrepareDALI
 
     # setup
     vid_pred_class = PrepareDALI(
