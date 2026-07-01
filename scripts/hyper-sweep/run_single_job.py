@@ -55,11 +55,19 @@ def parse_args():
 
 def _snapshot_worker(repo_id, repo_type, local_dir, ignore_patterns):
     """Runs snapshot_download in a child process so it can be hard-killed on stall."""
+    import tempfile
     from huggingface_hub import snapshot_download
+
+    # keep .incomplete temp files on local disk; teamspace storage drops them
+    # before shutil.move can complete, causing FileNotFoundError
+    hf_cache = Path(tempfile.gettempdir()) / "hf_cache"
+    hf_cache.mkdir(parents=True, exist_ok=True)
+
     snapshot_download(
         repo_id=repo_id,
         repo_type=repo_type,
         local_dir=local_dir,
+        cache_dir=str(hf_cache),
         ignore_patterns=ignore_patterns,
     )
 
