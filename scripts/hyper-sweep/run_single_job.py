@@ -68,7 +68,7 @@ def _snapshot_worker(repo_id, repo_type, local_dir, ignore_patterns, tmp_dir):
         local_dir=str(tmp_dir),
         ignore_patterns=ignore_patterns,
     )
-    print(f"  Copying dataset from {tmp_dir} to {local_dir}...")
+    print(f"  Copying dataset from {tmp_dir} to {local_dir}...", flush=True)
     shutil.copytree(str(tmp_dir), str(local_dir), dirs_exist_ok=True)
     shutil.rmtree(str(tmp_dir), ignore_errors=True)
 
@@ -93,7 +93,7 @@ def _watchdog(process, cache_path, stall_timeout, check_interval=30):
             last_size = size
             last_progress = time.time()
         elif time.time() - last_progress > stall_timeout:
-            print(f"  No download progress for {stall_timeout}s — terminating stalled download.")
+            print(f"  No download progress for {stall_timeout}s — terminating stalled download.", flush=True)
             process.terminate()
             return
 
@@ -112,20 +112,25 @@ def _wait_for_filesystem_sync(cache_path, check_interval=15, timeout=300):
         except Exception:
             return 0
 
-    print("Waiting for dataset to become fully accessible on teamspace filesystem...")
+    print("Waiting for dataset to become fully accessible on teamspace filesystem...", flush=True)
     prev_count = -1
-    deadline = time.time() + timeout
+    start = time.time()
+    deadline = start + timeout
 
     while True:
         count = count_files()
+        elapsed = int(time.time() - start)
         if count > 0 and count == prev_count:
-            print(f"  Filesystem sync complete: {count} files accessible.")
+            print(f"  Filesystem sync complete after {elapsed}s: {count} files accessible.", flush=True)
             return
         prev_count = count
         if time.time() >= deadline:
-            print(f"  Warning: filesystem may not be fully synced after {timeout}s; proceeding anyway.")
+            print(
+                f"  Warning: filesystem may not be fully synced after {timeout}s; proceeding anyway.",
+                flush=True,
+            )
             return
-        print(f"  {count} files accessible so far; rechecking in {check_interval}s...")
+        print(f"  [{elapsed}s elapsed] {count} files accessible so far; rechecking in {check_interval}s...", flush=True)
         time.sleep(check_interval)
 
 
@@ -144,7 +149,7 @@ def get_dataset(dataset_repo, cache_dir, download_videos, predict_vids):
     cache_path = Path(cache_dir) / dataset_name
 
     if cache_path.exists():
-        print(f"Using cached dataset at {cache_path}")
+        print(f"Using cached dataset at {cache_path}", flush=True)
         (cache_path / "videos").mkdir(exist_ok=True)
         return cache_path
 
@@ -161,8 +166,8 @@ def get_dataset(dataset_repo, cache_dir, download_videos, predict_vids):
     tmp_dir = Path("/tmp") / f"hf_download_{dataset_name}"
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Downloading {dataset_repo} -> {cache_path}")
-    print(f"  ignore_patterns: {ignore_patterns}")
+    print(f"Downloading {dataset_repo} -> {cache_path}", flush=True)
+    print(f"  ignore_patterns: {ignore_patterns}", flush=True)
 
     max_retries = 5
     stall_timeout = 5 * 60  # kill if no bytes received for 5 minutes
@@ -188,7 +193,7 @@ def get_dataset(dataset_repo, cache_dir, download_videos, predict_vids):
         if attempt == max_retries:
             raise RuntimeError(f"Failed to download {dataset_repo} after {max_retries} attempts ({msg})")
 
-        print(f"  Download attempt {attempt}/{max_retries} {msg}; retrying in {retry_wait}s...")
+        print(f"  Download attempt {attempt}/{max_retries} {msg}; retrying in {retry_wait}s...", flush=True)
         time.sleep(retry_wait)
 
     # LP asserts video_dir exists even when not using videos
@@ -243,7 +248,7 @@ def main():
         ]
 
     cmd = ["litpose", "train", config_file, "--output_dir", args.output_dir, "--overrides"] + overrides
-    print("Running:", " ".join(cmd))
+    print("Running:", " ".join(cmd), flush=True)
     subprocess.run(cmd, check=True)
 
     # -------------------------------------------------------------------------
@@ -253,8 +258,8 @@ def main():
     for ckpt in Path(args.output_dir).rglob("*.ckpt"):
         ckpt.unlink()
         n_deleted += 1
-    print(f"Deleted {n_deleted} checkpoint file(s)")
-    print(f"Done. Results at {args.output_dir}")
+    print(f"Deleted {n_deleted} checkpoint file(s)", flush=True)
+    print(f"Done. Results at {args.output_dir}", flush=True)
 
 
 if __name__ == "__main__":
