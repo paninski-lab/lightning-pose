@@ -129,7 +129,13 @@ Key fields:
 
 Downloaded datasets are cached in `output.dataset_cache_dir` (default:
 `/teamspace/lightning_storage/datasets`), avoiding HuggingFace rate limits and
-race conditions from simultaneous first-time downloads.
+race conditions from simultaneous first-time downloads. A `.download_complete`
+sentinel file is written only after the dataset is fully copied to the cache
+directory. If a download fails partway through (e.g. after exhausting all
+retries), the sentinel is absent and rerunning the sweep will resume the
+download rather than skipping it. In-progress files are staged in
+`/tmp/hf_download_<dataset>` and reused across runs, so HuggingFace will pick
+up from where it left off rather than starting over.
 
 For local runs, set `output.dataset_cache_dir` in `sweep_config.yaml` to a
 local path, or pass `--dataset_cache_dir /your/path` directly to

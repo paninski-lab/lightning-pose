@@ -143,8 +143,9 @@ def get_dataset(dataset_repo, cache_dir, download_videos, predict_vids):
 
     dataset_name = dataset_repo.split("/")[-1]
     cache_path = Path(cache_dir) / dataset_name
+    sentinel = cache_path / ".download_complete"
 
-    if cache_path.exists():
+    if sentinel.exists():
         print(f"Using cached dataset at {cache_path}", flush=True)
         (cache_path / "videos").mkdir(exist_ok=True)
         return cache_path
@@ -196,6 +197,7 @@ def get_dataset(dataset_repo, cache_dir, download_videos, predict_vids):
     print(f"  Copying dataset from {tmp_dir} to {cache_path}...", flush=True)
     shutil.copytree(str(tmp_dir), str(cache_path), dirs_exist_ok=True)
     shutil.rmtree(str(tmp_dir), ignore_errors=True)
+    sentinel.touch()
 
     # LP asserts video_dir exists even when not using videos
     (cache_path / "videos").mkdir(exist_ok=True)
