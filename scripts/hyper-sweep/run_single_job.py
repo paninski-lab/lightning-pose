@@ -53,13 +53,18 @@ def parse_args():
     return p.parse_args()
 
 
-def _snapshot_worker(repo_id, repo_type, local_dir, ignore_patterns):
-    """Runs snapshot_download in a child process so it can be hard-killed on stall."""
+def _snapshot_worker(repo_id, repo_type, local_dir, ignore_patterns, tmp_dir):
+    """Runs snapshot_download in a child process so it can be hard-killed on stall.
+
+    Downloads to local disk (tmp_dir) only. The copy to local_dir happens in the
+    parent process after this worker exits, so the watchdog does not kill it.
+    """
     from huggingface_hub import snapshot_download
+
     snapshot_download(
         repo_id=repo_id,
         repo_type=repo_type,
-        local_dir=local_dir,
+        local_dir=str(tmp_dir),
         ignore_patterns=ignore_patterns,
     )
 
@@ -84,9 +89,45 @@ def _watchdog(process, cache_path, stall_timeout, check_interval=30):
             last_size = size
             last_progress = time.time()
         elif time.time() - last_progress > stall_timeout:
-            print(f"  No download progress for {stall_timeout}s — terminating stalled download.")
+            print(f"  No download progress for {stall_timeout}s — terminating stalled download.", flush=True)
             process.terminate()
             return
+
+
+def _wait_for_filesystem_sync(cache_path, check_interval=15, timeout=300):
+    """Poll until the file count in cache_path stabilizes across two consecutive checks.
+
+    shutil.copytree can return before all writes are committed on distributed/network
+    filesystems. Polling is more reliable than a fixed sleep.
+    """
+    import time
+
+    def count_files():
+        try:
+            return sum(1 for f in cache_path.rglob("*") if f.is_file())
+        except Exception:
+            return 0
+
+    print("Waiting for dataset to become fully accessible on teamspace filesystem...", flush=True)
+    prev_count = -1
+    start = time.time()
+    deadline = start + timeout
+
+    while True:
+        count = count_files()
+        elapsed = int(time.time() - start)
+        if count > 0 and count == prev_count:
+            print(f"  Filesystem sync complete after {elapsed}s: {count} files accessible.", flush=True)
+            return
+        prev_count = count
+        if time.time() >= deadline:
+            print(
+                f"  Warning: filesystem may not be fully synced after {timeout}s; proceeding anyway.",
+                flush=True,
+            )
+            return
+        print(f"  [{elapsed}s elapsed] {count} files accessible so far; rechecking in {check_interval}s...", flush=True)
+        time.sleep(check_interval)
 
 
 def get_dataset(dataset_repo, cache_dir, download_videos, predict_vids):
@@ -102,9 +143,10 @@ def get_dataset(dataset_repo, cache_dir, download_videos, predict_vids):
 
     dataset_name = dataset_repo.split("/")[-1]
     cache_path = Path(cache_dir) / dataset_name
+    sentinel = cache_path / ".download_complete"
 
-    if cache_path.exists():
-        print(f"Using cached dataset at {cache_path}")
+    if sentinel.exists():
+        print(f"Using cached dataset at {cache_path}", flush=True)
         (cache_path / "videos").mkdir(exist_ok=True)
         return cache_path
 
@@ -117,8 +159,12 @@ def get_dataset(dataset_repo, cache_dir, download_videos, predict_vids):
 
     cache_path.mkdir(parents=True, exist_ok=True)
 
-    print(f"Downloading {dataset_repo} -> {cache_path}")
-    print(f"  ignore_patterns: {ignore_patterns}")
+    # download to local disk; .incomplete temp files on network storage cause FileNotFoundError
+    tmp_dir = Path("/tmp") / f"hf_download_{dataset_name}"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"Downloading {dataset_repo} -> {cache_path}", flush=True)
+    print(f"  ignore_patterns: {ignore_patterns}", flush=True)
 
     max_retries = 5
     stall_timeout = 5 * 60  # kill if no bytes received for 5 minutes
@@ -127,28 +173,36 @@ def get_dataset(dataset_repo, cache_dir, download_videos, predict_vids):
     for attempt in range(1, max_retries + 1):
         p = multiprocessing.Process(
             target=_snapshot_worker,
-            args=(dataset_repo, "dataset", str(cache_path), ignore_patterns),
+            args=(dataset_repo, "dataset", str(cache_path), ignore_patterns, str(tmp_dir)),
         )
         p.start()
 
         watcher = threading.Thread(
-            target=_watchdog, args=(p, cache_path, stall_timeout), daemon=True
+            target=_watchdog, args=(p, tmp_dir, stall_timeout), daemon=True
         )
         watcher.start()
         p.join()
 
         if p.exitcode == 0:
-            break  # success
+            break  # watchdog has exited; safe to copy now
 
         msg = "stalled" if not p.is_alive() else f"exited with code {p.exitcode}"
         if attempt == max_retries:
             raise RuntimeError(f"Failed to download {dataset_repo} after {max_retries} attempts ({msg})")
 
-        print(f"  Download attempt {attempt}/{max_retries} {msg}; retrying in {retry_wait}s...")
+        print(f"  Download attempt {attempt}/{max_retries} {msg}; retrying in {retry_wait}s...", flush=True)
         time.sleep(retry_wait)
+
+    import shutil
+    print(f"  Copying dataset from {tmp_dir} to {cache_path}...", flush=True)
+    shutil.copytree(str(tmp_dir), str(cache_path), dirs_exist_ok=True)
+    shutil.rmtree(str(tmp_dir), ignore_errors=True)
+    sentinel.touch()
 
     # LP asserts video_dir exists even when not using videos
     (cache_path / "videos").mkdir(exist_ok=True)
+
+    _wait_for_filesystem_sync(cache_path)
 
     return cache_path
 
@@ -197,7 +251,7 @@ def main():
         ]
 
     cmd = ["litpose", "train", config_file, "--output_dir", args.output_dir, "--overrides"] + overrides
-    print("Running:", " ".join(cmd))
+    print("Running:", " ".join(cmd), flush=True)
     subprocess.run(cmd, check=True)
 
     # -------------------------------------------------------------------------
@@ -207,8 +261,8 @@ def main():
     for ckpt in Path(args.output_dir).rglob("*.ckpt"):
         ckpt.unlink()
         n_deleted += 1
-    print(f"Deleted {n_deleted} checkpoint file(s)")
-    print(f"Done. Results at {args.output_dir}")
+    print(f"Deleted {n_deleted} checkpoint file(s)", flush=True)
+    print(f"Done. Results at {args.output_dir}", flush=True)
 
 
 if __name__ == "__main__":
