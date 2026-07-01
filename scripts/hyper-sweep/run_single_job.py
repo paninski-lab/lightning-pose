@@ -53,23 +53,24 @@ def parse_args():
     return p.parse_args()
 
 
-def _snapshot_worker(repo_id, repo_type, local_dir, ignore_patterns):
-    """Runs snapshot_download in a child process so it can be hard-killed on stall."""
-    import tempfile
-    from huggingface_hub import snapshot_download
+def _snapshot_worker(repo_id, repo_type, local_dir, ignore_patterns, tmp_dir):
+    """Runs snapshot_download in a child process so it can be hard-killed on stall.
 
-    # keep .incomplete temp files on local disk; teamspace storage drops them
-    # before shutil.move can complete, causing FileNotFoundError
-    hf_cache = Path(tempfile.gettempdir()) / "hf_cache"
-    hf_cache.mkdir(parents=True, exist_ok=True)
+    Downloads to local disk (tmp_dir) first to avoid .incomplete file issues on
+    network/distributed filesystems, then copies to the final local_dir.
+    """
+    import shutil
+    from huggingface_hub import snapshot_download
 
     snapshot_download(
         repo_id=repo_id,
         repo_type=repo_type,
-        local_dir=local_dir,
-        cache_dir=str(hf_cache),
+        local_dir=str(tmp_dir),
         ignore_patterns=ignore_patterns,
     )
+    print(f"  Copying dataset from {tmp_dir} to {local_dir}...")
+    shutil.copytree(str(tmp_dir), str(local_dir), dirs_exist_ok=True)
+    shutil.rmtree(str(tmp_dir), ignore_errors=True)
 
 
 def _watchdog(process, cache_path, stall_timeout, check_interval=30):
@@ -95,6 +96,37 @@ def _watchdog(process, cache_path, stall_timeout, check_interval=30):
             print(f"  No download progress for {stall_timeout}s — terminating stalled download.")
             process.terminate()
             return
+
+
+def _wait_for_filesystem_sync(cache_path, check_interval=15, timeout=300):
+    """Poll until the file count in cache_path stabilizes across two consecutive checks.
+
+    shutil.copytree can return before all writes are committed on distributed/network
+    filesystems. Polling is more reliable than a fixed sleep.
+    """
+    import time
+
+    def count_files():
+        try:
+            return sum(1 for f in cache_path.rglob("*") if f.is_file())
+        except Exception:
+            return 0
+
+    print("Waiting for dataset to become fully accessible on teamspace filesystem...")
+    prev_count = -1
+    deadline = time.time() + timeout
+
+    while True:
+        count = count_files()
+        if count > 0 and count == prev_count:
+            print(f"  Filesystem sync complete: {count} files accessible.")
+            return
+        prev_count = count
+        if time.time() >= deadline:
+            print(f"  Warning: filesystem may not be fully synced after {timeout}s; proceeding anyway.")
+            return
+        print(f"  {count} files accessible so far; rechecking in {check_interval}s...")
+        time.sleep(check_interval)
 
 
 def get_dataset(dataset_repo, cache_dir, download_videos, predict_vids):
@@ -125,6 +157,10 @@ def get_dataset(dataset_repo, cache_dir, download_videos, predict_vids):
 
     cache_path.mkdir(parents=True, exist_ok=True)
 
+    # download to local disk; .incomplete temp files on network storage cause FileNotFoundError
+    tmp_dir = Path("/tmp") / f"hf_download_{dataset_name}"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+
     print(f"Downloading {dataset_repo} -> {cache_path}")
     print(f"  ignore_patterns: {ignore_patterns}")
 
@@ -135,12 +171,12 @@ def get_dataset(dataset_repo, cache_dir, download_videos, predict_vids):
     for attempt in range(1, max_retries + 1):
         p = multiprocessing.Process(
             target=_snapshot_worker,
-            args=(dataset_repo, "dataset", str(cache_path), ignore_patterns),
+            args=(dataset_repo, "dataset", str(cache_path), ignore_patterns, str(tmp_dir)),
         )
         p.start()
 
         watcher = threading.Thread(
-            target=_watchdog, args=(p, cache_path, stall_timeout), daemon=True
+            target=_watchdog, args=(p, tmp_dir, stall_timeout), daemon=True
         )
         watcher.start()
         p.join()
@@ -157,6 +193,8 @@ def get_dataset(dataset_repo, cache_dir, download_videos, predict_vids):
 
     # LP asserts video_dir exists even when not using videos
     (cache_path / "videos").mkdir(exist_ok=True)
+
+    _wait_for_filesystem_sync(cache_path)
 
     return cache_path
 
