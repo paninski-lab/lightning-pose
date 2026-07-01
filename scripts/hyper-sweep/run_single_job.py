@@ -56,10 +56,9 @@ def parse_args():
 def _snapshot_worker(repo_id, repo_type, local_dir, ignore_patterns, tmp_dir):
     """Runs snapshot_download in a child process so it can be hard-killed on stall.
 
-    Downloads to local disk (tmp_dir) first to avoid .incomplete file issues on
-    network/distributed filesystems, then copies to the final local_dir.
+    Downloads to local disk (tmp_dir) only. The copy to local_dir happens in the
+    parent process after this worker exits, so the watchdog does not kill it.
     """
-    import shutil
     from huggingface_hub import snapshot_download
 
     snapshot_download(
@@ -68,9 +67,6 @@ def _snapshot_worker(repo_id, repo_type, local_dir, ignore_patterns, tmp_dir):
         local_dir=str(tmp_dir),
         ignore_patterns=ignore_patterns,
     )
-    print(f"  Copying dataset from {tmp_dir} to {local_dir}...", flush=True)
-    shutil.copytree(str(tmp_dir), str(local_dir), dirs_exist_ok=True)
-    shutil.rmtree(str(tmp_dir), ignore_errors=True)
 
 
 def _watchdog(process, cache_path, stall_timeout, check_interval=30):
@@ -187,7 +183,7 @@ def get_dataset(dataset_repo, cache_dir, download_videos, predict_vids):
         p.join()
 
         if p.exitcode == 0:
-            break  # success
+            break  # watchdog has exited; safe to copy now
 
         msg = "stalled" if not p.is_alive() else f"exited with code {p.exitcode}"
         if attempt == max_retries:
@@ -195,6 +191,11 @@ def get_dataset(dataset_repo, cache_dir, download_videos, predict_vids):
 
         print(f"  Download attempt {attempt}/{max_retries} {msg}; retrying in {retry_wait}s...", flush=True)
         time.sleep(retry_wait)
+
+    import shutil
+    print(f"  Copying dataset from {tmp_dir} to {cache_path}...", flush=True)
+    shutil.copytree(str(tmp_dir), str(cache_path), dirs_exist_ok=True)
+    shutil.rmtree(str(tmp_dir), ignore_errors=True)
 
     # LP asserts video_dir exists even when not using videos
     (cache_path / "videos").mkdir(exist_ok=True)
