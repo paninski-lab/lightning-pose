@@ -6,13 +6,14 @@ Scripts for running parallel Lightning Pose training sweeps, either on
 ## How it works
 
 `run_sweep.py` builds the cartesian product of all sweep dimensions defined in
-`sweep_config.yaml` and launches one Lightning AI Job per combination.
-Each job runs `run_single_job.py`, which:
+`sweep_config.yaml`. Before launching any jobs, it pre-downloads each unique
+dataset into a shared teamspace cache — so the download happens exactly once,
+regardless of how many jobs share that dataset. It then launches one Lightning AI
+Job per combination. Each job runs `run_single_job.py`, which:
 
-1. Downloads the dataset from HuggingFace (selectively — videos only when needed)
+1. Uses the pre-cached dataset on teamspace (skips downloading if already present)
 2. Calls `litpose train` with the appropriate config and overrides
 3. Deletes model weights (`.ckpt`) to save storage
-4. Cleans up the downloaded dataset
 
 Results are written to teamspace storage and persist after each job ends.
 
@@ -127,11 +128,8 @@ Key fields:
 ### Dataset caching
 
 Downloaded datasets are cached in `output.dataset_cache_dir` (default:
-`/teamspace/lightning_storage/datasets`). Before launching any jobs,
-`run_sweep.py` pre-downloads each unique dataset into the cache. This means
-the download happens exactly once regardless of sweep size, and all jobs find
-the cache already populated — avoiding both HuggingFace rate limits and race
-conditions from simultaneous first-time downloads.
+`/teamspace/lightning_storage/datasets`), avoiding HuggingFace rate limits and
+race conditions from simultaneous first-time downloads.
 
 For local runs, set `output.dataset_cache_dir` in `sweep_config.yaml` to a
 local path, or pass `--dataset_cache_dir /your/path` directly to
