@@ -79,8 +79,8 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             csv_path: path to CSV file (within root_directory). CSV file should be in the form
                 (image_path, bodypart_1_x, bodypart_1_y, ..., bodypart_n_y)
                 Note: image_path is relative to the given root_directory
-            resize_height: height to resize images before sending to network
-            resize_width: height to resize images before sending to network
+            image_resize_height: height to resize images before sending to network
+            image_resize_width: width to resize images before sending to network
             header_rows: which rows in the csv are header rows
             imgaug_transform: imgaug transform pipeline to apply to images
             do_context: include additional frames of context if possible.
