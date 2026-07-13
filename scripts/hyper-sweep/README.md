@@ -6,16 +6,23 @@ Scripts for running parallel Lightning Pose training sweeps, either on
 ## How it works
 
 `run_sweep.py` builds the cartesian product of all sweep dimensions defined in
-`sweep_config.yaml`. Before launching any jobs, it pre-downloads each unique
-dataset into a shared teamspace cache — so the download happens exactly once,
-regardless of how many jobs share that dataset. It then launches one Lightning AI
-Job per combination. Each job runs `run_single_job.py`, which:
+`sweep_config.yaml` and launches one Lightning AI Job per combination. Each job
+runs `run_single_job.py`, which:
 
-1. Uses the pre-cached dataset on teamspace (skips downloading if already present)
+1. Downloads a single zip archive of the dataset from HuggingFace and extracts
+   it to local (ephemeral) disk on the studio the job is running in
 2. Calls `litpose train` with the appropriate config and overrides
 3. Deletes model weights (`.ckpt`) to save storage
 
 Results are written to teamspace storage and persist after each job ends.
+
+Every job downloads its own copy of the dataset independently — there is no
+shared cache. This trades a small amount of duplicate downloading (each job
+fetches the same zip) for reliability: a single-file download is fast and
+immune to the HuggingFace rate limits and distributed-filesystem sync issues
+that come from downloading thousands of individual files onto shared teamspace
+storage. See [Dataset zip archives](#dataset-zip-archives) for how to prepare
+the zip file each dataset needs.
 
 ## Output structure
 
@@ -40,15 +47,16 @@ the studio is a self-contained environment.
 
 ### Teamspace storage setup
 
-Sweep results and cached datasets are written to Lightning's managed teamspace
-storage. Create the required folders once before running any sweeps:
+Sweep results are written to Lightning's managed teamspace storage. Create the
+required folder once before running any sweeps:
 
 1. In your teamspace, click the **Drive** tab (next to Studios)
-2. Click **New Folder** and create a folder named `datasets`
-3. Click **New Folder** again and create a folder named `sweep-results`
+2. Click **New Folder** and create a folder named `sweep-results`
 
-These names match the default paths in `sweep_config.yaml`, so no config edits
-are needed.
+This name matches the default `output.base_dir` in `sweep_config.yaml`, so no
+config edits are needed. Datasets are no longer cached on teamspace storage —
+each job downloads its own copy to local disk (see
+[Dataset zip archives](#dataset-zip-archives)).
 
 ### From within a studio
 
@@ -123,32 +131,49 @@ Key fields:
 | `sweep.predict_vids_after_training` | Run video prediction after training |
 | `lightning.machine` | GPU type (`T4_SMALL`, `T4`, `A10G`, `A100`) |
 | `output.base_dir` | Root path for results on teamspace storage |
+| `output.local_data_dir` | Local (ephemeral) dir each job extracts its dataset(s) into |
 | `debug` | `true` for a 3-epoch smoke test |
 
-### Dataset caching
+## Dataset zip archives
 
-Downloaded datasets are cached in `output.dataset_cache_dir` (default:
-`/teamspace/lightning_storage/datasets`), avoiding HuggingFace rate limits and
-race conditions from simultaneous first-time downloads. A `.download_complete`
-sentinel file is written only after the dataset is fully copied to the cache
-directory. If a download fails partway through (e.g. after exhausting all
-retries), the sentinel is absent and rerunning the sweep will resume the
-download rather than skipping it. In-progress files are staged in
-`/tmp/hf_download_<dataset>` and reused across runs, so HuggingFace will pick
-up from where it left off rather than starting over.
+Each job downloads a single zip file, named `<dataset_name>.zip` (e.g.
+`mirror-mouse-fused.zip`), from the root of the dataset's HuggingFace repo. It
+is extracted to `<output.local_data_dir>/<dataset_name>` (default
+`/tmp/lp_data/<dataset_name>`) on the studio the job is running in — local
+disk, not teamspace storage. Because extraction is namespaced by dataset name,
+multiple datasets can coexist under the same `local_data_dir` without
+colliding (useful for local runs that sweep over several datasets). No cleanup
+of the extracted data is needed on Lightning AI: each Job runs in its own
+fresh container, so the disk is reclaimed automatically when the job ends.
 
-For local runs, set `output.dataset_cache_dir` in `sweep_config.yaml` to a
-local path, or pass `--dataset_cache_dir /your/path` directly to
-`run_single_job.py`.
+**This zip file is not created automatically** — it must be prepared and
+uploaded to each dataset's HuggingFace repo once, before running a sweep
+against that dataset. Since these published datasets are largely static, this
+is a one-time (or rare) step per dataset, not something the sweep pipeline
+does for you.
 
-### Video download gating
+To prepare it, zip the *contents* of the dataset directory (not the directory
+itself, so the zip has no wrapping folder — files like
+`config_<dataset>.yaml` should sit at the top level of the archive):
 
-To avoid downloading large video files unnecessarily:
+```bash
+cd /path/to/local/copy/of/mirror-mouse-fused
+zip -r mirror-mouse-fused.zip .
+```
 
-- `videos/` (InD) — only downloaded when `losses_to_use` contains at least one
-  unsupervised loss (i.e., any non-empty entry in the list)
-- `videos_test/` (OOD) — only downloaded when `predict_vids_after_training: true`
-- `videos-for-each-labeled-frame/` — never downloaded (used for post-hoc smoothing only)
+Then upload it to the dataset's HuggingFace repo, e.g. with the
+`huggingface_hub` Python API:
+
+```python
+from huggingface_hub import upload_file
+
+upload_file(
+    path_or_fileobj="mirror-mouse-fused.zip",
+    path_in_repo="mirror-mouse-fused.zip",
+    repo_id="paninski-lab/mirror-mouse-fused",
+    repo_type="dataset",
+)
+```
 
 ## Running locally (no Lightning AI)
 
