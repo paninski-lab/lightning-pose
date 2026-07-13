@@ -132,6 +132,7 @@ def main():
 
     overrides = [
         f"data.data_dir={data_dir}",
+        f"data.video_dir={data_dir}/videos",
         f"model.model_type={args.model_type}",
         f"model.backbone={args.backbone}",
         f"model.losses_to_use={losses_hydra}",
