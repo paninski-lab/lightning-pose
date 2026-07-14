@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from lightning_pose.api.model import _Precision
 
 # Friendly CLI names -> PyTorch Lightning precision strings used internally.
-_PRECISION_CHOICES: dict[str, "_Precision"] = {
+_PRECISION_CHOICES: dict[str, _Precision] = {
     "fp32": "32-true",
     "fp16": "16-mixed",
     "bf16": "bf16-mixed",
