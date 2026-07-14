@@ -68,12 +68,11 @@ def make_worker_command(combo, cfg, worker_script) -> str:
         cfg["output"]["base_dir"], dataset_repo, backbone, train_frames, seed, losses
     )
     predict_vids = cfg["sweep"].get("predict_vids_after_training", False)
-    download_videos = len(losses) > 0
 
     parts = [
         "python", str(worker_script),
         f"--dataset_repo={dataset_repo}",
-        f"--dataset_cache_dir={cfg['output'].get('dataset_cache_dir', '/teamspace/lightning_storage/datasets')}",
+        f"--local_data_dir={cfg['output'].get('local_data_dir', '/tmp/lp_data')}",
         f"--backbone={backbone}",
         f"--train_frames={train_frames}",
         f"--seed={seed}",
@@ -81,8 +80,6 @@ def make_worker_command(combo, cfg, worker_script) -> str:
         f"--model_type={cfg['sweep'].get('model_type', 'heatmap')}",
         f"--output_dir={out_dir}",
     ]
-    if download_videos:
-        parts.append("--download_videos")
     if predict_vids:
         parts.append("--predict_vids")
     if cfg.get("debug", False):
@@ -131,15 +128,6 @@ def main():
             cmd = make_worker_command(combo, cfg, worker_script)
             print(f"\n{name}:\n  {cmd}")
         return
-
-    # pre-download each unique dataset before launching jobs to avoid a race
-    # condition where many jobs simultaneously attempt to populate an empty cache
-    from run_single_job import get_dataset
-    cache_dir = cfg["output"].get("dataset_cache_dir", "/teamspace/lightning_storage/datasets")
-    download_videos = any(len(l) > 0 for l in sweep.get("losses_to_use", [[]]))
-    predict_vids = sweep.get("predict_vids_after_training", False)
-    for dataset_repo in set(sweep["datasets"]):
-        get_dataset(dataset_repo, cache_dir, download_videos, predict_vids)
 
     from lightning_sdk import Job, Machine, Studio
 

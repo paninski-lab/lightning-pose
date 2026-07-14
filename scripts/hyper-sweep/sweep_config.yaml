@@ -6,8 +6,10 @@ sweep:
   # HuggingFace repo IDs (org/dataset-name)
   datasets:
     - paninski-lab/mirror-mouse-fused
-    # - paninski-lab/mirror-fish
+    # - paninski-lab/facemap
     # - paninski-lab/crim13
+    # - paninski-lab/mirror-fish
+    # - paninski-lab/marmoset3k
 
   backbones:
     - resnet50_animal_ap10k
@@ -34,7 +36,7 @@ sweep:
     # - [temporal]
     # - [pca_singleview, temporal]
 
-  # heatmap | context | regression
+  # heatmap | heatmap_mhcrnn | heatmap_multiview_transformer
   model_type: heatmap
 
   # Run LP video prediction after training.
@@ -54,8 +56,11 @@ lightning:
 output:
   # Root directory on teamspace storage; <dataset-name> is appended automatically
   base_dir: /teamspace/lightning_storage/sweep-results
-  # Where downloaded datasets are cached; override for local runs
-  dataset_cache_dir: /teamspace/lightning_storage/datasets
+  # Local (ephemeral) directory each job downloads and extracts its dataset zip into;
+  # each dataset gets its own <local_data_dir>/<dataset_name> subdirectory, so multiple
+  # datasets can coexist here (e.g. for local runs). Each dataset's zip is expected to
+  # be named <dataset_name>.zip in the root of its HuggingFace repo.
+  local_data_dir: /tmp/lp_data
 
 # =============================================================================
 # Misc
