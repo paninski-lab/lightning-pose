@@ -38,18 +38,30 @@ logger = logging.getLogger(__name__)
 # to ignore imports for sphinx-autoapidoc
 __all__: list[str] = []
 
-# The precision strings we actually support. Narrower than PyTorch Lightning's
-# own _PRECISION_INPUT (which also allows ints, "64-true", "transformer-engine",
-# etc.) but every value here IS a valid PL precision string, so passing a
-# Model.precision value straight into pl.Trainer(precision=...) type-checks.
-_Precision = Literal["32-true", "16-mixed", "bf16-mixed"]
+# User-facing precision strings for both the CLI (--precision) and this API
+# (Model.from_dir(precision=...)). Kept identical across CLI and API so a value
+# can be passed straight through without a separate lookup table at the CLI layer.
+_Precision = Literal["fp32", "fp16", "bf16"]
 
-# Maps PyTorch Lightning precision strings to the torch dtype used for
-# ``torch.autocast`` in code paths that don't go through a ``pl.Trainer``
-# (e.g. ``Model.predict_frame``). "32-true" needs no entry -- no autocast.
+# The subset of PyTorch Lightning's own _PRECISION_INPUT that we actually use.
+# Narrower than plain str so a value returned from here type-checks directly
+# against pl.Trainer(precision=...).
+_PLPrecision = Literal["32-true", "16-mixed", "bf16-mixed"]
+
+# Internal-only: maps our user-facing precision strings to the strings
+# PyTorch Lightning's Trainer(precision=...) actually expects.
+_PRECISION_TO_PL: dict[_Precision, _PLPrecision] = {
+    "fp32": "32-true",
+    "fp16": "16-mixed",
+    "bf16": "bf16-mixed",
+}
+
+# Maps our precision strings to the torch dtype used for ``torch.autocast`` in
+# code paths that don't go through a ``pl.Trainer`` (e.g. ``Model.predict_frame``).
+# "fp32" needs no entry -- no autocast.
 _PRECISION_TO_AUTOCAST_DTYPE: dict[_Precision, torch.dtype] = {
-    "16-mixed": torch.float16,
-    "bf16-mixed": torch.bfloat16,
+    "fp16": torch.float16,
+    "bf16": torch.bfloat16,
 }
 
 
@@ -206,23 +218,25 @@ class Model:
 
     model: ALLOWED_MODELS | None = None
 
-    precision: _Precision = "32-true"
-    """Precision used for inference: ``"32-true"``, ``"16-mixed"``, or
-    ``"bf16-mixed"``. Does not affect the checkpoint on disk."""
+    precision: _Precision = "fp32"
+    """Precision used for inference: ``"fp32"``, ``"fp16"``, or ``"bf16"``
+    (same strings as the ``litpose predict --precision`` CLI flag). Does not
+    affect the checkpoint on disk."""
 
     # Just a constant we can use as a default value for kwargs,
     # to differentiate between user omitting a kwarg, vs explicitly passing None.
     UNSPECIFIED = "unspecified"
 
     @staticmethod
-    def from_dir(model_dir: str | Path, precision: _Precision = "32-true") -> Model:
+    def from_dir(model_dir: str | Path, precision: _Precision = "fp32") -> Model:
         """Create a `Model` instance for a model stored at `model_dir`.
 
         Args:
             model_dir: path to a model output directory containing ``config.yaml``
                 and a ``.ckpt`` checkpoint file.
-            precision: precision to run inference at. One of ``"32-true"``
-                (default), ``"16-mixed"``, or ``"bf16-mixed"``. Does not affect
+            precision: precision to run inference at. One of ``"fp32"``
+                (default), ``"fp16"``, or ``"bf16"`` -- same strings as the
+                ``litpose predict --precision`` CLI flag. Does not affect
                 the checkpoint itself -- weights stay fp32 on disk; this only
                 controls the precision used during the forward pass.
 
@@ -237,7 +251,7 @@ class Model:
             False
 
             Run inference in FP16:
-            >>> model = Model.from_dir("outputs/2024-01-01/12-00-00", precision="16-mixed")
+            >>> model = Model.from_dir("outputs/2024-01-01/12-00-00", precision="fp16")
         """
         return Model.from_dir2(model_dir, precision=precision)
 
@@ -245,7 +259,7 @@ class Model:
     def from_dir2(
         model_dir: str | Path,
         hydra_overrides: list[str] | None = None,
-        precision: _Precision = "32-true",
+        precision: _Precision = "fp32",
     ) -> Model:
         """Internal version of from_dir that supports hydra_overrides. Not sure whether to
         promote this to public API yet."""
@@ -266,7 +280,7 @@ class Model:
         return Model(model_dir, config, precision=precision)
 
     def __init__(
-        self, model_dir: str | Path, config: ModelConfig, precision: _Precision = "32-true"
+        self, model_dir: str | Path, config: ModelConfig, precision: _Precision = "fp32"
     ) -> None:
         """Initialize a Model from a directory and a pre-loaded config.
 
@@ -276,8 +290,8 @@ class Model:
         Args:
             model_dir: path to the model output directory.
             config: the model configuration.
-            precision: precision to run inference at. One of ``"32-true"``
-                (default), ``"16-mixed"``, or ``"bf16-mixed"``.
+            precision: precision to run inference at. One of ``"fp32"``
+                (default), ``"fp16"``, or ``"bf16"``.
         """
         self.model_dir = Path(model_dir).absolute()
         self.config = config
@@ -287,6 +301,16 @@ class Model:
     def cfg(self) -> DictConfig | ListConfig:
         """The model configuration as an `omegaconf.DictConfig`."""
         return self.config.cfg
+
+    @property
+    def pl_precision(self) -> _PLPrecision:
+        """PyTorch Lightning ``Trainer`` precision string for ``self.precision``.
+
+        Internal plumbing for the two ``pl.Trainer`` construction sites in
+        ``lightning_pose.utils.predictions``. User-facing code should read/set
+        ``self.precision`` (``"fp32"``/``"fp16"``/``"bf16"``) instead.
+        """
+        return _PRECISION_TO_PL[self.precision]
 
     def _load(self) -> None:
         """Load model weights from the checkpoint file on first call; no-op thereafter.

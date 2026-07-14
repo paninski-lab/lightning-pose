@@ -15,14 +15,12 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from lightning_pose.api import Model
-    from lightning_pose.api.model import _Precision
 
-# Friendly CLI names -> PyTorch Lightning precision strings used internally.
-_PRECISION_CHOICES: dict[str, _Precision] = {
-    "fp32": "32-true",
-    "fp16": "16-mixed",
-    "bf16": "bf16-mixed",
-}
+# Precision strings accepted by --precision. Same strings the Model API takes
+# (Model.from_dir(precision=...)) -- passed straight through with no CLI-side
+# lookup table; lightning_pose.api.model.Model maps them internally to the
+# strings PyTorch Lightning's Trainer actually expects.
+_PRECISION_CHOICES = ("fp32", "fp16", "bf16")
 
 
 def register_parser(subparsers: Any) -> argparse.ArgumentParser:
@@ -82,7 +80,7 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
 
     predict_parser.add_argument(
         "--precision",
-        choices=sorted(_PRECISION_CHOICES.keys()),
+        choices=sorted(_PRECISION_CHOICES),
         default="fp32",
         help=(
             "precision to run inference at. Does not affect the checkpoint "
@@ -142,7 +140,7 @@ def handle(args: argparse.Namespace) -> None:
     model = Model.from_dir2(
         args.model_dir,
         hydra_overrides=args.overrides,
-        precision=_PRECISION_CHOICES[args.precision],
+        precision=args.precision,
     )
     input_paths = [Path(p) for p in args.input_path]
 

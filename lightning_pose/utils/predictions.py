@@ -347,7 +347,7 @@ def predict_dataset(
     """
     cfg_eff = cfg if cfg is not None else model.config.cfg
 
-    trainer = pl.Trainer(devices=1, accelerator='gpu', logger=False, precision=model.precision)
+    trainer = pl.Trainer(devices=1, accelerator='gpu', logger=False, precision=model.pl_precision)
 
     labeled_preds = trainer.predict(
         model=model.model,
@@ -463,7 +463,7 @@ def predict_video(
         accelerator="gpu",
         devices=1,
         logger=False,
-        precision=model.precision,
+        precision=model.pl_precision,
         callbacks=(
             [JSONInferenceProgressTracker(progress_file)] if progress_file is not None else None
         ),

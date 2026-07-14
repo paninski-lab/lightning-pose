@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pandas as pd
 import pytest
+import torch
 
 from lightning_pose.api import Model
 from lightning_pose.api.model import _build_datamodule_pred
@@ -13,7 +14,7 @@ from tests.fetch_test_data import fetch_test_data_if_needed
 
 
 def _setup_test_model(
-    tmp_path, request, multiview=False, precision="32-true"
+    tmp_path, request, multiview=False, precision="fp32"
 ) -> Model:
     # get the trained model for testing
     dataset_name = (
@@ -196,17 +197,36 @@ class TestPredictFrame:
         assert np.all(kp[:, 1] <= 256 + 1)
 
     def test_predict_frame_fp16_precision(self, tmp_path, request):
-        """predict_frame runs the torch.autocast branch when precision is fp16/bf16."""
-        model = _setup_test_model(tmp_path, request, precision="16-mixed")
+        """predict_frame actually enters torch.autocast(dtype=torch.float16) for fp16.
+
+        Spies on torch.autocast (wraps the real implementation, so the forward
+        pass still runs normally) to confirm the context manager is engaged with
+        the correct dtype -- not just that the fp16 code path runs without error.
+        """
+        model = _setup_test_model(tmp_path, request, precision="fp16")
 
         frame = np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8)
-        result = model.predict_frame(frame)
+        with patch("torch.autocast", wraps=torch.autocast) as mock_autocast:
+            result = model.predict_frame(frame)
+
+        mock_autocast.assert_called_once()
+        assert mock_autocast.call_args.kwargs["dtype"] == torch.float16
 
         assert "keypoints" in result
         assert "confidence" in result
         assert result["keypoints"].dtype == np.float32
         assert result["confidence"].dtype == np.float32
         assert result["keypoints"].shape[0] > 0
+
+    def test_predict_frame_fp32_precision_skips_autocast(self, tmp_path, request):
+        """predict_frame does NOT enter torch.autocast for the default fp32 precision."""
+        model = _setup_test_model(tmp_path, request)  # default precision="fp32"
+
+        frame = np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8)
+        with patch("torch.autocast", wraps=torch.autocast) as mock_autocast:
+            model.predict_frame(frame)
+
+        mock_autocast.assert_not_called()
 
     def test_predict_frame_with_bbox(self, tmp_path, request):
         """predict_frame with bbox remaps keypoints to original frame coordinates."""
