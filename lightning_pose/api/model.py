@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import logging
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import cv2
 import numpy as np
@@ -38,10 +38,16 @@ logger = logging.getLogger(__name__)
 # to ignore imports for sphinx-autoapidoc
 __all__: list[str] = []
 
+# The precision strings we actually support. Narrower than PyTorch Lightning's
+# own _PRECISION_INPUT (which also allows ints, "64-true", "transformer-engine",
+# etc.) but every value here IS a valid PL precision string, so passing a
+# Model.precision value straight into pl.Trainer(precision=...) type-checks.
+_Precision = Literal["32-true", "16-mixed", "bf16-mixed"]
+
 # Maps PyTorch Lightning precision strings to the torch dtype used for
 # ``torch.autocast`` in code paths that don't go through a ``pl.Trainer``
 # (e.g. ``Model.predict_frame``). "32-true" needs no entry -- no autocast.
-_PRECISION_TO_AUTOCAST_DTYPE: dict[str, torch.dtype] = {
+_PRECISION_TO_AUTOCAST_DTYPE: dict[_Precision, torch.dtype] = {
     "16-mixed": torch.float16,
     "bf16-mixed": torch.bfloat16,
 }
@@ -200,7 +206,7 @@ class Model:
 
     model: ALLOWED_MODELS | None = None
 
-    precision: str = "32-true"
+    precision: _Precision = "32-true"
     """Precision used for inference: ``"32-true"``, ``"16-mixed"``, or
     ``"bf16-mixed"``. Does not affect the checkpoint on disk."""
 
@@ -209,7 +215,7 @@ class Model:
     UNSPECIFIED = "unspecified"
 
     @staticmethod
-    def from_dir(model_dir: str | Path, precision: str = "32-true") -> Model:
+    def from_dir(model_dir: str | Path, precision: _Precision = "32-true") -> Model:
         """Create a `Model` instance for a model stored at `model_dir`.
 
         Args:
@@ -239,7 +245,7 @@ class Model:
     def from_dir2(
         model_dir: str | Path,
         hydra_overrides: list[str] | None = None,
-        precision: str = "32-true",
+        precision: _Precision = "32-true",
     ) -> Model:
         """Internal version of from_dir that supports hydra_overrides. Not sure whether to
         promote this to public API yet."""
@@ -260,7 +266,7 @@ class Model:
         return Model(model_dir, config, precision=precision)
 
     def __init__(
-        self, model_dir: str | Path, config: ModelConfig, precision: str = "32-true"
+        self, model_dir: str | Path, config: ModelConfig, precision: _Precision = "32-true"
     ) -> None:
         """Initialize a Model from a directory and a pre-loaded config.
 

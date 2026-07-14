@@ -12,7 +12,9 @@ from lightning_pose.api.model import _build_datamodule_pred
 from tests.fetch_test_data import fetch_test_data_if_needed
 
 
-def _setup_test_model(tmp_path, request, multiview=False) -> Model:
+def _setup_test_model(
+    tmp_path, request, multiview=False, precision="32-true"
+) -> Model:
     # get the trained model for testing
     dataset_name = (
         "test_model_mirror_mouse"
@@ -24,7 +26,7 @@ def _setup_test_model(tmp_path, request, multiview=False) -> Model:
     tmp_model_dir = tmp_path / dataset_name
     shutil.copytree(request.path.parent / dataset_name, tmp_model_dir)
 
-    model = Model.from_dir(tmp_model_dir)
+    model = Model.from_dir(tmp_model_dir, precision=precision)
 
     assert model.model_dir == tmp_model_dir
     assert model.image_preds_dir() == tmp_model_dir / "image_preds"
@@ -192,6 +194,19 @@ class TestPredictFrame:
         # tolerance for subpixel overshoot at frame boundary
         assert np.all(kp[:, 0] <= 256 + 1)
         assert np.all(kp[:, 1] <= 256 + 1)
+
+    def test_predict_frame_fp16_precision(self, tmp_path, request):
+        """predict_frame runs the torch.autocast branch when precision is fp16/bf16."""
+        model = _setup_test_model(tmp_path, request, precision="16-mixed")
+
+        frame = np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8)
+        result = model.predict_frame(frame)
+
+        assert "keypoints" in result
+        assert "confidence" in result
+        assert result["keypoints"].dtype == np.float32
+        assert result["confidence"].dtype == np.float32
+        assert result["keypoints"].shape[0] > 0
 
     def test_predict_frame_with_bbox(self, tmp_path, request):
         """predict_frame with bbox remaps keypoints to original frame coordinates."""
