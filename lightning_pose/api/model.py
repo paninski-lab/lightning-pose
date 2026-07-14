@@ -38,6 +38,14 @@ logger = logging.getLogger(__name__)
 # to ignore imports for sphinx-autoapidoc
 __all__: list[str] = []
 
+# Maps PyTorch Lightning precision strings to the torch dtype used for
+# ``torch.autocast`` in code paths that don't go through a ``pl.Trainer``
+# (e.g. ``Model.predict_frame``). "32-true" needs no entry -- no autocast.
+_PRECISION_TO_AUTOCAST_DTYPE: dict[str, torch.dtype] = {
+    "16-mixed": torch.float16,
+    "bf16-mixed": torch.bfloat16,
+}
+
 
 def load_model_from_checkpoint(
     cfg: DictConfig | ListConfig,
@@ -192,17 +200,25 @@ class Model:
 
     model: ALLOWED_MODELS | None = None
 
+    precision: str = "32-true"
+    """Precision used for inference: ``"32-true"``, ``"16-mixed"``, or
+    ``"bf16-mixed"``. Does not affect the checkpoint on disk."""
+
     # Just a constant we can use as a default value for kwargs,
     # to differentiate between user omitting a kwarg, vs explicitly passing None.
     UNSPECIFIED = "unspecified"
 
     @staticmethod
-    def from_dir(model_dir: str | Path) -> Model:
+    def from_dir(model_dir: str | Path, precision: str = "32-true") -> Model:
         """Create a `Model` instance for a model stored at `model_dir`.
 
         Args:
             model_dir: path to a model output directory containing ``config.yaml``
                 and a ``.ckpt`` checkpoint file.
+            precision: precision to run inference at. One of ``"32-true"``
+                (default), ``"16-mixed"``, or ``"bf16-mixed"``. Does not affect
+                the checkpoint itself -- weights stay fp32 on disk; this only
+                controls the precision used during the forward pass.
 
         Returns:
             Model ready for inference. Weights are loaded lazily on the first
@@ -213,11 +229,18 @@ class Model:
             >>> model = Model.from_dir("outputs/2024-01-01/12-00-00")
             >>> model.config.is_multi_view()
             False
+
+            Run inference in FP16:
+            >>> model = Model.from_dir("outputs/2024-01-01/12-00-00", precision="16-mixed")
         """
-        return Model.from_dir2(model_dir)
+        return Model.from_dir2(model_dir, precision=precision)
 
     @staticmethod
-    def from_dir2(model_dir: str | Path, hydra_overrides: list[str] | None = None) -> Model:
+    def from_dir2(
+        model_dir: str | Path,
+        hydra_overrides: list[str] | None = None,
+        precision: str = "32-true",
+    ) -> Model:
         """Internal version of from_dir that supports hydra_overrides. Not sure whether to
         promote this to public API yet."""
 
@@ -234,9 +257,11 @@ class Model:
         else:
             config = ModelConfig.from_yaml_file(model_dir / "config.yaml")
 
-        return Model(model_dir, config)
+        return Model(model_dir, config, precision=precision)
 
-    def __init__(self, model_dir: str | Path, config: ModelConfig) -> None:
+    def __init__(
+        self, model_dir: str | Path, config: ModelConfig, precision: str = "32-true"
+    ) -> None:
         """Initialize a Model from a directory and a pre-loaded config.
 
         Prefer `Model.from_dir` for typical usage. Use this constructor when you
@@ -245,9 +270,12 @@ class Model:
         Args:
             model_dir: path to the model output directory.
             config: the model configuration.
+            precision: precision to run inference at. One of ``"32-true"``
+                (default), ``"16-mixed"``, or ``"bf16-mixed"``.
         """
         self.model_dir = Path(model_dir).absolute()
         self.config = config
+        self.precision = precision
 
     @property
     def cfg(self) -> DictConfig | ListConfig:
@@ -483,8 +511,13 @@ class Model:
 
         # --- Inference via get_loss_inputs_labeled ---
         self.model.eval()
+        autocast_dtype = _PRECISION_TO_AUTOCAST_DTYPE.get(self.precision)
         with torch.inference_mode():
-            result = self.model.get_loss_inputs_labeled(batch_dict)  # type: ignore[arg-type]
+            if autocast_dtype is not None:
+                with torch.autocast(device_type=device.type, dtype=autocast_dtype):
+                    result = self.model.get_loss_inputs_labeled(batch_dict)  # type: ignore[arg-type]
+            else:
+                result = self.model.get_loss_inputs_labeled(batch_dict)  # type: ignore[arg-type]
 
         # --- Extract predictions ---
         kp_pred = result["keypoints_pred"]
