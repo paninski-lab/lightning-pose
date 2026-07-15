@@ -63,6 +63,7 @@ class TestPredictDataset:
         mock = MagicMock()
         mock.model = lightning_model
         mock.config.cfg = cfg_tmp
+        mock.pl_precision = '32-true'
         return mock
 
     @pytest.mark.gpu

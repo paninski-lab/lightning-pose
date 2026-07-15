@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import logging
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import cv2
 import numpy as np
@@ -37,6 +37,32 @@ logger = logging.getLogger(__name__)
 
 # to ignore imports for sphinx-autoapidoc
 __all__: list[str] = []
+
+# User-facing precision strings for both the CLI (--precision) and this API
+# (Model.from_dir(precision=...)). Kept identical across CLI and API so a value
+# can be passed straight through without a separate lookup table at the CLI layer.
+_Precision = Literal["fp32", "fp16", "bf16"]
+
+# The subset of PyTorch Lightning's own _PRECISION_INPUT that we actually use.
+# Narrower than plain str so a value returned from here type-checks directly
+# against pl.Trainer(precision=...).
+_PLPrecision = Literal["32-true", "16-mixed", "bf16-mixed"]
+
+# Internal-only: maps our user-facing precision strings to the strings
+# PyTorch Lightning's Trainer(precision=...) actually expects.
+_PRECISION_TO_PL: dict[_Precision, _PLPrecision] = {
+    "fp32": "32-true",
+    "fp16": "16-mixed",
+    "bf16": "bf16-mixed",
+}
+
+# Maps our precision strings to the torch dtype used for ``torch.autocast`` in
+# code paths that don't go through a ``pl.Trainer`` (e.g. ``Model.predict_frame``).
+# "fp32" needs no entry -- no autocast.
+_PRECISION_TO_AUTOCAST_DTYPE: dict[_Precision, torch.dtype] = {
+    "fp16": torch.float16,
+    "bf16": torch.bfloat16,
+}
 
 
 def load_model_from_checkpoint(
@@ -192,17 +218,27 @@ class Model:
 
     model: ALLOWED_MODELS | None = None
 
+    precision: _Precision = "fp32"
+    """Precision used for inference: ``"fp32"``, ``"fp16"``, or ``"bf16"``
+    (same strings as the ``litpose predict --precision`` CLI flag). Does not
+    affect the checkpoint on disk."""
+
     # Just a constant we can use as a default value for kwargs,
     # to differentiate between user omitting a kwarg, vs explicitly passing None.
     UNSPECIFIED = "unspecified"
 
     @staticmethod
-    def from_dir(model_dir: str | Path) -> Model:
+    def from_dir(model_dir: str | Path, precision: _Precision = "fp32") -> Model:
         """Create a `Model` instance for a model stored at `model_dir`.
 
         Args:
             model_dir: path to a model output directory containing ``config.yaml``
                 and a ``.ckpt`` checkpoint file.
+            precision: precision to run inference at. One of ``"fp32"``
+                (default), ``"fp16"``, or ``"bf16"`` -- same strings as the
+                ``litpose predict --precision`` CLI flag. Does not affect
+                the checkpoint itself -- weights stay fp32 on disk; this only
+                controls the precision used during the forward pass.
 
         Returns:
             Model ready for inference. Weights are loaded lazily on the first
@@ -213,11 +249,18 @@ class Model:
             >>> model = Model.from_dir("outputs/2024-01-01/12-00-00")
             >>> model.config.is_multi_view()
             False
+
+            Run inference in FP16:
+            >>> model = Model.from_dir("outputs/2024-01-01/12-00-00", precision="fp16")
         """
-        return Model.from_dir2(model_dir)
+        return Model.from_dir2(model_dir, precision=precision)
 
     @staticmethod
-    def from_dir2(model_dir: str | Path, hydra_overrides: list[str] | None = None) -> Model:
+    def from_dir2(
+        model_dir: str | Path,
+        hydra_overrides: list[str] | None = None,
+        precision: _Precision = "fp32",
+    ) -> Model:
         """Internal version of from_dir that supports hydra_overrides. Not sure whether to
         promote this to public API yet."""
 
@@ -234,9 +277,11 @@ class Model:
         else:
             config = ModelConfig.from_yaml_file(model_dir / "config.yaml")
 
-        return Model(model_dir, config)
+        return Model(model_dir, config, precision=precision)
 
-    def __init__(self, model_dir: str | Path, config: ModelConfig) -> None:
+    def __init__(
+        self, model_dir: str | Path, config: ModelConfig, precision: _Precision = "fp32"
+    ) -> None:
         """Initialize a Model from a directory and a pre-loaded config.
 
         Prefer `Model.from_dir` for typical usage. Use this constructor when you
@@ -245,14 +290,27 @@ class Model:
         Args:
             model_dir: path to the model output directory.
             config: the model configuration.
+            precision: precision to run inference at. One of ``"fp32"``
+                (default), ``"fp16"``, or ``"bf16"``.
         """
         self.model_dir = Path(model_dir).absolute()
         self.config = config
+        self.precision = precision
 
     @property
     def cfg(self) -> DictConfig | ListConfig:
         """The model configuration as an `omegaconf.DictConfig`."""
         return self.config.cfg
+
+    @property
+    def pl_precision(self) -> _PLPrecision:
+        """PyTorch Lightning ``Trainer`` precision string for ``self.precision``.
+
+        Internal plumbing for the two ``pl.Trainer`` construction sites in
+        ``lightning_pose.utils.predictions``. User-facing code should read/set
+        ``self.precision`` (``"fp32"``/``"fp16"``/``"bf16"``) instead.
+        """
+        return _PRECISION_TO_PL[self.precision]
 
     def _load(self) -> None:
         """Load model weights from the checkpoint file on first call; no-op thereafter.
@@ -483,8 +541,13 @@ class Model:
 
         # --- Inference via get_loss_inputs_labeled ---
         self.model.eval()
+        autocast_dtype = _PRECISION_TO_AUTOCAST_DTYPE.get(self.precision)
         with torch.inference_mode():
-            result = self.model.get_loss_inputs_labeled(batch_dict)  # type: ignore[arg-type]
+            if autocast_dtype is not None:
+                with torch.autocast(device_type=device.type, dtype=autocast_dtype):
+                    result = self.model.get_loss_inputs_labeled(batch_dict)  # type: ignore[arg-type]
+            else:
+                result = self.model.get_loss_inputs_labeled(batch_dict)  # type: ignore[arg-type]
 
         # --- Extract predictions ---
         kp_pred = result["keypoints_pred"]

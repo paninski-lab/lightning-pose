@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from lightning_pose.api import Model
 
+# Precision strings accepted by --precision. Same strings the Model API takes
+# (Model.from_dir(precision=...)) -- passed straight through with no CLI-side
+# lookup table; lightning_pose.api.model.Model maps them internally to the
+# strings PyTorch Lightning's Trainer actually expects.
+_PRECISION_CHOICES = ("fp32", "fp16", "bf16")
+
 
 def register_parser(subparsers: Any) -> argparse.ArgumentParser:
     """Register the predict command parser."""
@@ -73,6 +79,17 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
     )
 
     predict_parser.add_argument(
+        "--precision",
+        choices=sorted(_PRECISION_CHOICES),
+        default="fp32",
+        help=(
+            "precision to run inference at. Does not affect the checkpoint "
+            "on disk -- weights stay fp32; this only controls precision during "
+            "the forward pass. Default: fp32."
+        ),
+    )
+
+    predict_parser.add_argument(
         "--overwrite",
         action="store_true",
         help="overwrite videos that already have prediction files",
@@ -120,7 +137,11 @@ def handle(args: argparse.Namespace) -> None:
     # Delay this import because it's slow.
     from lightning_pose.api import Model
 
-    model = Model.from_dir2(args.model_dir, hydra_overrides=args.overrides)
+    model = Model.from_dir2(
+        args.model_dir,
+        hydra_overrides=args.overrides,
+        precision=args.precision,
+    )
     input_paths = [Path(p) for p in args.input_path]
 
     if model.config.is_multi_view():

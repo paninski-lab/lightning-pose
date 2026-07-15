@@ -166,6 +166,7 @@ class TestHandle:
             overrides=None,
             progress_file=None,
             bbox_dir=bbox_dir,
+            precision='fp32',
         )
 
     def test_handle_threads_bbox_dir_to_predict_multi_type(self, tmp_path, mock_model):

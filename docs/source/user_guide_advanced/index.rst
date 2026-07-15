@@ -16,3 +16,4 @@ For each feature, we point out necessary modifications and useful information re
    multi_gpu_training
    cropzoom_pipeline
    custom_imgaug_pipeline
+   mixed_precision
