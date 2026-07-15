@@ -9,12 +9,12 @@ import pytest
 import torch
 
 from lightning_pose.api import Model
-from lightning_pose.api.model import _build_datamodule_pred
+from lightning_pose.api.model import _build_datamodule_pred, _Precision
 from tests.fetch_test_data import fetch_test_data_if_needed
 
 
 def _setup_test_model(
-    tmp_path, request, multiview=False, precision="fp32"
+    tmp_path, request, multiview=False, precision: _Precision = "fp32"
 ) -> Model:
     # get the trained model for testing
     dataset_name = (
