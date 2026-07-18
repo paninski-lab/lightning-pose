@@ -52,8 +52,12 @@ Results: accuracy
 
 Two separate questions matter here: does the precision used *during training* affect
 accuracy, and does the precision used *during inference* (independent of training precision)
-affect accuracy? Both experiments below use ``resnet50_animal_ap10k``, 100 train frames, and
-report mean pixel error ± SEM (standard deviation across 3 seeds, divided by :math:`\sqrt{3}`).
+affect accuracy? Single-view results below use ``resnet50_animal_ap10k``; multi-view results
+use ``heatmap_multiview_transformer`` with a ``vits_dinov2`` backbone, since the single-view
+architecture has no cross-view attention mechanism. Both use 100 train frames and report mean
+pixel error ± SEM (standard deviation across 3 seeds, divided by :math:`\sqrt{3}`) -- for
+multi-view datasets, error is averaged across camera views within each seed before computing
+the across-seed mean/SEM.
 
 **Training precision.** Training a model at reduced precision and evaluating at that same
 precision:
@@ -66,6 +70,10 @@ precision:
      - FP32 train / eval
      - FP16 train / eval
      - BF16 train / eval
+   * - **Single-view**
+     -
+     -
+     -
    * - `mirror-mouse-fused <https://huggingface.co/datasets/paninski-lab/mirror-mouse-fused>`_
      - 7.11 ± 0.11 px
      - 6.40 ± 0.23 px
@@ -86,13 +94,26 @@ precision:
      - 37.41 ± 0.61 px
      - 37.27 ± 0.12 px
      - 37.25 ± 0.75 px
+   * - **Multi-view**
+     -
+     -
+     -
+   * - `mirror-mouse-separate <https://huggingface.co/datasets/paninski-lab/mirror-mouse-separate>`_ (2 views)
+     - 5.23 ± 0.65 px
+     - 5.23 ± 0.36 px
+     - 5.03 ± 0.37 px
+   * - `fly-anipose <https://huggingface.co/datasets/paninski-lab/fly-anipose>`_ (6 views)
+     - 9.34 ± 0.02 px
+     - 9.24 ± 0.09 px
+     - 9.29 ± 0.10 px
 
 Differences between precisions are small relative to the SEM in most cases -- e.g. facemap's
 FP16 mean is nominally higher than FP32, but both are within ~1 SEM of each other. The
-clearest gap is mirror-mouse-fused, where FP16 training is about 0.7px lower than FP32; even
-there the effect is modest. Overall: mixed-precision training does not cause a systematic
-accuracy loss across the datasets tested, though the direction and size of any effect is
-dataset-dependent.
+clearest single-view gap is mirror-mouse-fused, where FP16 training is about 0.7px lower than
+FP32; even there the effect is modest. The multi-view datasets show an even cleaner null
+result -- no dataset's FP16/BF16 mean clears its own FP32 SEM bar. Overall: mixed-precision
+training does not cause a systematic accuracy loss across any dataset tested, single- or
+multi-view, though the direction and size of any effect is dataset-dependent.
 
 **Inference precision.** Independent of training precision, changing the precision used
 *only at inference time* (model trained at FP32, evaluated at FP16/BF16) has essentially no
@@ -106,6 +127,10 @@ effect on accuracy, across every dataset tested:
      - FP32 eval
      - FP16 eval
      - BF16 eval
+   * - **Single-view**
+     -
+     -
+     -
    * - `mirror-mouse-fused <https://huggingface.co/datasets/paninski-lab/mirror-mouse-fused>`_
      - 7.11 ± 0.11 px
      - 7.11 ± 0.11 px
@@ -126,10 +151,23 @@ effect on accuracy, across every dataset tested:
      - 37.41 ± 0.61 px
      - 37.41 ± 0.61 px
      - 37.44 ± 0.60 px
+   * - **Multi-view**
+     -
+     -
+     -
+   * - `mirror-mouse-separate <https://huggingface.co/datasets/paninski-lab/mirror-mouse-separate>`_ (2 views)
+     - 5.23 ± 0.65 px
+     - 4.96 ± 0.39 px
+     - 4.95 ± 0.38 px
+   * - `fly-anipose <https://huggingface.co/datasets/paninski-lab/fly-anipose>`_ (6 views)
+     - 9.34 ± 0.02 px
+     - 9.34 ± 0.02 px
+     - 9.34 ± 0.02 px
 
-Deltas are well under 0.01px in every case -- far below seed-to-seed variation (SEM). In
-short: **it is safe to run inference at reduced precision regardless of what precision the
-model was trained at.**
+Deltas are well under 0.01px in every case, single- or multi-view -- far below seed-to-seed
+variation (SEM). In short: **it is safe to run inference at reduced precision regardless of
+what precision the model was trained at, and this holds for multi-view cross-view-attention
+models as well as single-view ones.**
 
 Results: speed
 ================
@@ -137,9 +175,11 @@ Results: speed
 Reduced precision can speed up the model's forward pass, but the effect depends heavily on
 batch size and architecture. The numbers below isolate the forward pass only (synthetic
 inputs already on the GPU, no data loading) on an A100-SXM4-80GB, measured relative to a true
-FP32 baseline (TF32 disabled for both matmul and cuDNN):
+FP32 baseline (TF32 disabled for both matmul and cuDNN). These use the single-view
+architectures (ResNet50, ViT-S DINOv2) at 256x256 input (ViT-S snapped to 252x252 to divide
+evenly by its 14px patch size):
 
-.. list-table:: Forward-pass speedup vs. FP32, by batch size
+.. list-table:: Forward-pass speedup vs. FP32, by batch size (single-view, 256px input)
    :widths: 20 15 15 15
    :header-rows: 1
 
@@ -185,8 +225,42 @@ with little compute to amortize it against. The crossover point is around batch 
 by batch size 32 both architectures see a substantial speedup (roughly 3x for ResNet50, 4.4x
 for ViT-S). FP16 and BF16 perform similarly to each other on A100.
 
-**Important caveat:** these numbers measure the GPU forward pass in isolation. End-to-end
-video inference (via ``litpose predict``) did not show a measurable speedup from reduced
-precision on a T4 GPU -- video preprocessing (DALI) dominates total runtime, not the model's
-forward pass. Whether reduced precision speeds up your end-to-end workflow depends on your
-bottleneck: batch size, GPU, and video decoding overhead all matter.
+**Important caveat:** these numbers measure the GPU forward pass in isolation on a
+single-view architecture. End-to-end video inference (via ``litpose predict``) on a T4 GPU
+did not show a measurable speedup from reduced precision for single-view models either --
+video preprocessing (DALI) dominates total runtime, not the model's forward pass. Whether
+reduced precision speeds up your end-to-end workflow depends on your bottleneck: batch
+size, GPU, and video decoding overhead all matter.
+
+**Multi-view end-to-end speed.** The forward-pass benchmark above uses single-view
+architectures; multi-view models (``heatmap_multiview_transformer`` + ``vits_dinov2``)
+process every camera view simultaneously each forward pass, so we also measured end-to-end
+``litpose predict`` speed directly, 7 repeats per precision, on an A100-SXM4-80GB, 256x256
+input per view. Both datasets use the same DALI ``sequence_length`` (64), so the two rows
+below are directly comparable to each other, not just within each row:
+
+.. list-table:: End-to-end inference speed, multi-view models (A100 GPU, seq_len=64)
+   :widths: 25 20 20 20
+   :header-rows: 1
+
+   * - Dataset
+     - FP32
+     - FP16
+     - BF16
+   * - mirror-mouse-separate (2 views)
+     - 79.6s
+     - 79.8s (+0.2%)
+     - 80.0s (+0.5%)
+   * - fly-anipose (6 views)
+     - 27.2s
+     - 27.0s (-0.6%)
+     - 27.1s (-0.1%)
+
+Both datasets are flat across precisions (well under 1% spread) -- the same
+DALI/video-I/O-bound pattern seen in the single-view benchmarks. Notably, on an earlier T4
+run at a smaller, memory-constrained sequence length (16), fly-anipose showed a small but
+real slowdown at BF16 (+5.2%); that slowdown disappears here at sequence length 64 on an
+A100, consistent with our hypothesis that it was a batch-size artifact (the forward-pass
+microbenchmark above shows reduced precision is actually slower than FP32 at small batch
+sizes, crossing over to a speedup only around batch 8) rather than a fundamental property of
+multi-view models.
