@@ -225,12 +225,42 @@ with little compute to amortize it against. The crossover point is around batch 
 by batch size 32 both architectures see a substantial speedup (roughly 3x for ResNet50, 4.4x
 for ViT-S). FP16 and BF16 perform similarly to each other on A100.
 
-**Important caveat:** these numbers measure the GPU forward pass in isolation on a
-single-view architecture. End-to-end video inference (via ``litpose predict``) on a T4 GPU
-did not show a measurable speedup from reduced precision for single-view models either --
-video preprocessing (DALI) dominates total runtime, not the model's forward pass. Whether
-reduced precision speeds up your end-to-end workflow depends on your bottleneck: batch
-size, GPU, and video decoding overhead all matter.
+The same isolated-forward-pass experiment on the multi-view architecture
+(``heatmap_multiview_transformer`` + ``vits_dinov2``, 6 camera views, A100, true FP32
+baseline) shows a comparable speedup, reached at a smaller nominal batch size since each
+view multiplies the effective batch fed to the backbone:
+
+.. list-table:: Forward-pass speedup vs. FP32, by batch size (multi-view, 6 views, 256px input per view)
+   :widths: 30 15 15
+   :header-rows: 1
+
+   * - Batch size (effective ViT batch = batch x 6 views)
+     - FP16
+     - BF16
+   * - 1 (6)
+     - 1.08x
+     - 1.07x
+   * - 2 (12)
+     - 1.49x
+     - 1.63x
+   * - 4 (24)
+     - 2.89x
+     - 2.91x
+   * - 8 (48)
+     - 4.29x
+     - 4.11x
+   * - 16 (96)
+     - 4.56x
+     - 4.55x
+
+**Important caveat -- applies to both single- and multi-view:** these tables measure the
+GPU forward pass in isolation. End-to-end video inference (via ``litpose predict``) did not
+show a measurable speedup from reduced precision for either single-view models (T4 GPU) or
+multi-view models (A100 GPU, see the end-to-end table below) -- despite the multi-view
+forward pass accounting for the large majority of end-to-end wall time in a separate
+profiling pass. This is a genuine open question we haven't resolved yet: why an isolated
+forward-pass speedup this large doesn't show up end-to-end. We'll expand this section if and
+when we track down the discrepancy.
 
 **Multi-view end-to-end speed.** The forward-pass benchmark above uses single-view
 architectures; multi-view models (``heatmap_multiview_transformer`` + ``vits_dinov2``)
