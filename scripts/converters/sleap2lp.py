@@ -57,7 +57,8 @@ def extract_frames_from_pkg_slp(file_path: str, base_output_dir: str) -> None:
                 video_data = hdf_file[f'{video_group}/video'][:]
                 frame_numbers = hdf_file[f'{video_group}/frame_numbers'][:]
                 frame_names = []
-                for i, (img_bytes, frame_number) in enumerate(zip(video_data, frame_numbers)):
+                zipped = zip(video_data, frame_numbers, strict=True)
+                for _i, (img_bytes, frame_number) in enumerate(zipped):
                     img = Image.open(io.BytesIO(np.array(img_bytes, dtype=np.uint8)))
                     frame_name = f"img{str(frame_number).zfill(8)}.png"
                     img.save(f"{output_dir}/{frame_name}")

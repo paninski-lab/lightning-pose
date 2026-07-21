@@ -24,7 +24,8 @@ def train_model(cfg: DictConfig):
     To train a model on your own dataset, overwrite the default config_path and config_name args:
 
     ```
-    python scripts/train_hydra.py --config-path=<PATH/TO/YOUR/CONFIGS/DIR> --config-name=<CONFIG_NAME.yaml>  # noqa
+    python scripts/train_hydra.py \
+        --config-path=<PATH/TO/YOUR/CONFIGS/DIR> --config-name=<CONFIG_NAME.yaml>
     ```
 
     For more information on training models, see the docs at

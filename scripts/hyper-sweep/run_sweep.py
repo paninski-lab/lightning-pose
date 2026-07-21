@@ -109,7 +109,7 @@ def main():
         sweep["backbones"],
         sweep["train_frames"],
         sweep["seeds"],
-        [tuple(l) for l in sweep.get("losses_to_use", [[]])],
+        [tuple(losses) for losses in sweep.get("losses_to_use", [[]])],
     ))
     print(f"Total jobs: {len(combos)}")
 

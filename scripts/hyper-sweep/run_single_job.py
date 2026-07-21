@@ -124,7 +124,7 @@ def main():
     # -------------------------------------------------------------------------
     config_file = str(data_dir / f"config_{dataset_name}.yaml")
 
-    losses = [l for l in args.losses_to_use.split(",") if l]
+    losses = [loss for loss in args.losses_to_use.split(",") if loss]
     losses_hydra = f"[{','.join(losses)}]"
 
     # ViT backbones need a lower learning rate
@@ -157,7 +157,10 @@ def main():
             "training.lr_scheduler_params.multisteplr.milestones=[1,2]",
         ]
 
-    cmd = ["litpose", "train", config_file, "--output_dir", args.output_dir, "--overrides"] + overrides
+    cmd = (
+        ["litpose", "train", config_file, "--output_dir", args.output_dir, "--overrides"]
+        + overrides
+    )
     print("Running:", " ".join(cmd), flush=True)
     subprocess.run(cmd, check=True)
 
