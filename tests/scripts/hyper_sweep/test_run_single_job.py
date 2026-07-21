@@ -8,6 +8,10 @@ works end to end. Hits the real HuggingFace repo on every run; no mocking.
 
 import sys
 
+import pytest
+
+pytestmark = pytest.mark.gpu
+
 
 class TestMain:
     """Test the main function against the real paninski-lab/mirror-mouse-tiny dataset."""
