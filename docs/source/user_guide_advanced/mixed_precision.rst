@@ -18,9 +18,12 @@ itself.
   **it is safe to run inference at a different precision than the model was trained at** --
   deltas are under 0.01px in every case tested.
 - **Speed:** reduced precision speeds up the model's forward pass substantially at larger batch
-  sizes (up to ~3x for ResNet50, ~4.7x for ViT-S at batch 64 on an A100). It does **not**
-  measurably speed up end-to-end ``litpose predict`` on a T4 GPU -- video preprocessing (DALI)
-  dominates total runtime there, not the forward pass.
+  sizes (up to ~3x for ResNet50, ~4.7x for ViT-S at batch 64 on an A100). End-to-end
+  ``litpose predict`` speed depends on GPU generation and dataset: on a **T4** GPU (no native
+  BF16 tensor cores), **FP16 gives large, reliable end-to-end speedups (1.4-2.5x)** while BF16
+  is consistently *slower* than FP32. On an **A100** (native support for both), FP16 and BF16
+  track each other closely, and the end-to-end speedup ranges from roughly flat (single-view
+  ResNet50, likely decode-bound) to a strong 1.6x (2-view multi-view model).
 
 This page will grow over time as we benchmark more architectures, datasets, and hardware.
 
@@ -55,7 +58,7 @@ accuracy, and does the precision used *during inference* (independent of trainin
 affect accuracy? Single-view results below use ``resnet50_animal_ap10k``; multi-view results
 use ``heatmap_multiview_transformer`` with a ``vits_dinov2`` backbone, since the single-view
 architecture has no cross-view attention mechanism. Both use 100 train frames and report mean
-pixel error ± SEM (standard deviation across 3 seeds, divided by :math:`\sqrt{3}`) -- for
+pixel error ± SEM (3 seeds) -- for
 multi-view datasets, error is averaged across camera views within each seed before computing
 the across-seed mean/SEM.
 
@@ -253,44 +256,76 @@ view multiplies the effective batch fed to the backbone:
      - 4.56x
      - 4.55x
 
-**Important caveat -- applies to both single- and multi-view:** these tables measure the
-GPU forward pass in isolation. End-to-end video inference (via ``litpose predict``) did not
-show a measurable speedup from reduced precision for either single-view models (T4 GPU) or
-multi-view models (A100 GPU, see the end-to-end table below) -- despite the multi-view
-forward pass accounting for the large majority of end-to-end wall time in a separate
-profiling pass. This is a genuine open question we haven't resolved yet: why an isolated
-forward-pass speedup this large doesn't show up end-to-end. We'll expand this section if and
-when we track down the discrepancy.
+**End-to-end speed.** The forward-pass numbers above isolate GPU compute; real-world
+``litpose predict`` speed also includes video decoding/preprocessing (DALI) and
+postprocessing, so end-to-end speedups differ from the isolated forward-pass numbers. We
+benchmarked end-to-end speed on both a T4 and an A100 GPU, 7 repeats per precision.
+Single-view uses ResNet50 on one 469-frame video; multi-view uses
+``heatmap_multiview_transformer`` + ``vits_dinov2`` on both multi-view datasets. DALI
+``sequence_length`` is 64 throughout, except fly-anipose on T4, which used 16 -- forced by a
+GPU memory limit when decoding 6 simultaneous camera views at the default length.
 
-**Multi-view end-to-end speed.** The forward-pass benchmark above uses single-view
-architectures; multi-view models (``heatmap_multiview_transformer`` + ``vits_dinov2``)
-process every camera view simultaneously each forward pass, so we also measured end-to-end
-``litpose predict`` speed directly, 7 repeats per precision, on an A100-SXM4-80GB, 256x256
-input per view. Both datasets use the same DALI ``sequence_length`` (64), so the two rows
-below are directly comparable to each other, not just within each row:
-
-.. list-table:: End-to-end inference speed, multi-view models (A100 GPU, seq_len=64)
-   :widths: 25 20 20 20
+.. list-table:: End-to-end inference speed, single-view (ResNet50, 1 view, 256px input, seq_len=64)
+   :widths: 20 20 20 20
    :header-rows: 1
 
-   * - Dataset
+   * - GPU
      - FP32
      - FP16
      - BF16
-   * - mirror-mouse-separate (2 views)
-     - 79.6s
-     - 79.8s (+0.2%)
-     - 80.0s (+0.5%)
-   * - fly-anipose (6 views)
-     - 27.2s
-     - 27.0s (-0.6%)
-     - 27.1s (-0.1%)
+   * - T4
+     - 165.2s
+     - 110.0s (1.50x)
+     - 352.2s (0.47x -- slower)
+   * - A100
+     - 52.2s
+     - 51.8s (1.01x)
+     - 51.9s (1.01x)
 
-Both datasets are flat across precisions (well under 1% spread) -- the same
-DALI/video-I/O-bound pattern seen in the single-view benchmarks. Notably, on an earlier T4
-run at a smaller, memory-constrained sequence length (16), fly-anipose showed a small but
-real slowdown at BF16 (+5.2%); that slowdown disappears here at sequence length 64 on an
-A100, consistent with our hypothesis that it was a batch-size artifact (the forward-pass
-microbenchmark above shows reduced precision is actually slower than FP32 at small batch
-sizes, crossing over to a speedup only around batch 8) rather than a fundamental property of
-multi-view models.
+.. list-table:: End-to-end inference speed, multi-view models (256px input per view)
+   :widths: 30 15 20 20 20
+   :header-rows: 1
+
+   * - Dataset
+     - GPU
+     - FP32
+     - FP16
+     - BF16
+   * - mirror-mouse-separate (2 views, seq_len=64)
+     - T4
+     - 330.2s
+     - 134.6s (2.45x)
+     - 468.4s (0.70x -- slower)
+   * - mirror-mouse-separate (2 views, seq_len=64)
+     - A100
+     - 76.8s
+     - 48.6s (1.58x)
+     - 48.7s (1.58x)
+   * - fly-anipose (6 views, seq_len=16)
+     - T4
+     - 50.9s
+     - 35.4s (1.44x)
+     - 69.2s (0.74x -- slower)
+   * - fly-anipose (6 views, seq_len=64)
+     - A100
+     - 24.7s
+     - 22.8s (1.08x)
+     - 21.8s (1.13x)
+
+Two patterns are consistent across every benchmark above. First, **GPU generation matters as
+much as dataset**: the T4 (Turing generation) lacks native BF16 tensor-core support --
+that hardware support was introduced with Ampere, e.g. the A100 -- so BF16 is consistently
+*slower* than FP32 end-to-end on every T4 benchmark here, while FP16, which T4 does support
+natively, gives substantial, reliable speedups (1.4-2.5x). On the A100, FP16 and BF16 perform
+similarly to each other, as expected from equivalent hardware support. Second, even
+restricting to the A100, **the size of the end-to-end speedup is dataset-dependent**:
+single-view ResNet50 is essentially flat, consistent with video decoding dominating wall time
+for that benchmark, while the multi-view models see real speedups that vary by dataset --
+1.58x for the 2-view mirror-mouse-separate model, a more modest 1.08-1.13x for the 6-view
+fly-anipose model, which decodes more simultaneous video streams and where DALI likely
+occupies a larger share of total time. End-to-end speedups are smaller than the isolated
+forward-pass numbers above in every case, which is expected: end-to-end time also includes
+DALI decode and postprocessing work that does not get faster with reduced precision.
+fly-anipose's T4 row used a smaller sequence length (16, forced by the 6-view memory limit)
+than its A100 row (64), so that comparison is valid within each GPU but not directly
+comparable across GPUs to the same degree as mirror-mouse-separate.
