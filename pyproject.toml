@@ -94,7 +94,7 @@ exclude = [
     "build",
     "dist",
     "docs",
-    "scripts",
+    "*.ipynb",
 ]
 
 [tool.ruff.lint]

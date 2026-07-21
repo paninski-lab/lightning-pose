@@ -62,7 +62,7 @@ if __name__ == "__main__":
                 imgs = df_tmp.loc[
                     :, ("Unnamed: 2_level_0", "Unnamed: 2_level_1", "Unnamed: 2_level_2")
                 ]
-                new_col = [f"labeled-data/{v}/{i}" for v, i in zip(vids, imgs)]
+                new_col = [f"labeled-data/{v}/{i}" for v, i in zip(vids, imgs, strict=True)]
                 df_tmp1 = df_tmp.drop(
                     ("Unnamed: 1_level_0", "Unnamed: 1_level_1", "Unnamed: 1_level_2"),
                     axis=1,
@@ -83,7 +83,9 @@ if __name__ == "__main__":
                     # new DLC labeling scheme that splits video/image in different cells
                     imgs = [i[2] for i in df_tmp.index]
                     vids = [df_tmp.index[0][1] for _ in imgs]
-                    new_col = [f"labeled-data/{v}/{i}" for v, i in zip(vids, imgs)]
+                    new_col = [
+                        f"labeled-data/{v}/{i}" for v, i in zip(vids, imgs, strict=True)
+                    ]
                     df_tmp1 = (
                         df_tmp.reset_index()
                         .drop(columns="level_0")
