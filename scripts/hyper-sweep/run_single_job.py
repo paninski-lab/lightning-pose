@@ -152,6 +152,9 @@ def main():
             "training.max_epochs=3",
             "training.unfreezing_epoch=1",
             "eval.predict_vids_after_training=false",
+            "+model.backbone_pretrained=false",
+            # multisteplr milestones must be <= max_epochs
+            "training.lr_scheduler_params.multisteplr.milestones=[1,2]",
         ]
 
     cmd = ["litpose", "train", config_file, "--output_dir", args.output_dir, "--overrides"] + overrides

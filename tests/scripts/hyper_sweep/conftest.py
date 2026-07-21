@@ -28,3 +28,8 @@ def _load_module(name: str, path: Path) -> ModuleType:
 @pytest.fixture(scope='module')
 def run_sweep() -> ModuleType:
     return _load_module('run_sweep', HYPER_SWEEP_DIR / 'run_sweep.py')
+
+
+@pytest.fixture(scope='module')
+def run_single_job() -> ModuleType:
+    return _load_module('run_single_job', HYPER_SWEEP_DIR / 'run_single_job.py')
