@@ -419,6 +419,7 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
         val_check_interval=val_check_interval,
         log_every_n_steps=cfg.training.log_every_n_steps,
         callbacks=callbacks,
+	precision="16-mixed",
         logger=logger_tb,
         # To understand why we set this, see 'max_size_cycle' in UnlabeledDataModule.
         limit_train_batches=cfg.training.get("limit_train_batches") or steps_per_epoch,
