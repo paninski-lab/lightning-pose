@@ -17,3 +17,4 @@ For each feature, we point out necessary modifications and useful information re
    cropzoom_pipeline
    custom_imgaug_pipeline
    mixed_precision
+   increasing_inference_speed

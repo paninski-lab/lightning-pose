@@ -129,3 +129,11 @@ FAQs
     The model will therefore not try to guess where the occluded keypoint is located.
     This approach requires a set of training frames that include both visible and occluded examples
     of the keypoint in question.
+
+.. _faq_inference_speed:
+
+.. dropdown:: How can I increase inference speed?
+
+    See :ref:`Increasing Inference Speed <increasing_inference_speed>`, which covers four
+    ways to speed up inference beyond standard FP32: eager FP16/BF16, ``torch.compile()``,
+    ONNX Runtime, and TensorRT -- along with benchmarked speedups and a tutorial for each.
