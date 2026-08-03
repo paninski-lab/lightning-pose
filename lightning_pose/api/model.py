@@ -373,7 +373,10 @@ class Model:
         self._load()
         if self.model is None:
             raise RuntimeError('model failed to load; self.model is None after _load()')
-        self.model.forward = torch.compile(self.model.forward)
+        # `self.model` is a union of model classes whose `forward` signatures differ, so
+        # the compiled callable's inferred union type isn't assignable to any single
+        # class's `forward`. The rebind itself is intentional and behaviorally safe.
+        self.model.forward = torch.compile(self.model.forward)  # type: ignore[method-assign]
         self._compiled = True
 
     def _load(self) -> None:

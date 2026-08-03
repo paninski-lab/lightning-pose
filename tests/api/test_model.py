@@ -465,6 +465,7 @@ class TestCompile:
             model.image_preds_dir() / "CollectedData.csv" / "predictions.csv"
         ).is_file()
         assert result.predictions.shape[0] > 0
+        assert model.model is not None
         xy_cols = [c for c in result.predictions.columns if c[-1] in ("x", "y")]
         assert len(xy_cols) == 2 * model.model.num_keypoints
 
