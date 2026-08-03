@@ -139,35 +139,40 @@ The tutorials below assume you've already trained a model with ``litpose train``
 torch.compile
 -------------
 
-``torch.compile()`` compiles a callable, so to make sure it's actually used everywhere
-Lightning Pose's prediction methods call into the model (some of which call
-``get_loss_inputs_labeled`` directly rather than the module's ``__call__``), compile the
-``forward`` method itself and assign it back onto the model, rather than wrapping the whole
-module:
+``Model.compile()`` compiles the model's forward pass in place. Call it after loading the
+model and before running prediction:
 
 .. code-block:: python
 
-    import torch
     from lightning_pose.api import Model
 
     model = Model.from_dir("path/to/model_dir")
-    model.model.forward = torch.compile(model.model.forward)
+    model.compile()
 
     # use as normal -- the compiled graph is now used internally
     result = model.predict_on_video_file("path/to/video.mp4")
 
-The first call triggers compilation (can take tens of seconds); subsequent calls with the
-same input shape reuse the compiled graph. Changing batch size or input resolution triggers a
-new compilation automatically.
+The same thing is available from the CLI with the ``--compile`` flag:
+
+.. code-block:: console
+
+    litpose predict /path/to/model_dir /path/to/video.mp4 --compile
+
+The first prediction after compiling triggers compilation and is therefore *slower* than an
+uncompiled run -- expect tens of seconds of one-time overhead. This is expected. Subsequent
+calls with the same input shape reuse the compiled graph. Changing batch size or input
+resolution triggers a new compilation automatically. Calling ``compile()`` more than once is
+a no-op.
 
 .. note::
-   Wrapping the whole module (``model.model = torch.compile(model.model)``) also works if
-   you're calling ``model.model(images)`` directly in your own code. It does **not** reliably
-   engage the compiled graph when going through ``predict_on_video_file`` / ``predict_frame``
-   / ``predict_on_label_csv``, because those call ``get_loss_inputs_labeled`` rather than
-   ``forward`` -- and calling anything other than ``forward``/``__call__`` on a compiled module
-   silently falls back to the *original*, uncompiled submodule. Compiling ``forward`` directly
-   (as above) avoids this trap.
+   ``compile()`` compiles the model's ``forward`` method and assigns it back onto the model,
+   rather than wrapping the whole module. Wrapping the module (``model.model =
+   torch.compile(model.model)``) works if you call ``model.model(images)`` directly in your
+   own code, but does **not** reliably engage the compiled graph when going through
+   ``predict_on_video_file`` / ``predict_frame`` / ``predict_on_label_csv``, because those
+   call ``get_loss_inputs_labeled`` rather than ``forward`` -- and calling anything other
+   than ``forward``/``__call__`` on a compiled module silently falls back to the *original*,
+   uncompiled submodule.
 
 .. _usage_onnx_runtime:
 
