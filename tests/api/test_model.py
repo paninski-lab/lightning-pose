@@ -413,7 +413,10 @@ class TestCompile:
         """compile() loads the checkpoint, so it can be called before any prediction."""
         model = _setup_test_model(tmp_path, request)
         assert model.model is None
-        model.compile()
+        # Capability is mocked so this runs on any GPU: compilation is lazy, so no
+        # Triton kernels are generated here -- only the forward-pass wrapping.
+        with patch("torch.cuda.get_device_capability", return_value=(7, 5)):
+            model.compile()
         assert model.model is not None
         assert model._compiled
 
@@ -425,7 +428,10 @@ class TestCompile:
         than double-wrapping the already-compiled forward.
         """
         model = _setup_test_model(tmp_path, request)
-        with patch("torch.compile", wraps=torch.compile) as mock_compile:
+        with (
+            patch("torch.cuda.get_device_capability", return_value=(7, 5)),
+            patch("torch.compile", wraps=torch.compile) as mock_compile,
+        ):
             model.compile()
             model.compile()
         mock_compile.assert_called_once()
