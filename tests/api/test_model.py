@@ -431,6 +431,24 @@ class TestCompile:
         mock_compile.assert_called_once()
         assert model._compiled
 
+    def test_compile_raises_on_old_gpu(self, tmp_path, request):
+        """compile() fails fast with a readable error on pre-Volta GPUs.
+
+        Mocked rather than skipped, so the check itself is covered on any machine.
+        """
+        model = _setup_test_model(tmp_path, request)
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("torch.cuda.get_device_capability", return_value=(6, 1)),
+            patch(
+                "torch.cuda.get_device_name",
+                return_value="NVIDIA GeForce GTX 1080 Ti",
+            ),
+            pytest.raises(RuntimeError, match="CUDA compute capability"),
+        ):
+            model.compile()
+        assert not model._compiled
+
     @requires_torch_compile
     def test_compile_then_predict_on_label_csv(self, tmp_path, request, toy_data_dir):
         """A compiled model predicts on a labeled CSV and writes the usual outputs."""

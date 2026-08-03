@@ -177,8 +177,9 @@ a no-op.
 .. note::
    ``torch.compile()`` uses the TorchInductor backend, which generates Triton kernels and
    therefore requires a GPU of CUDA compute capability **7.0 or higher** (Volta and newer).
-   On older GPUs -- for example the GTX 10-series (capability 6.x) -- the first prediction
-   after calling ``compile()`` raises ``BackendCompilerFailed``. Check your device with
+   On older GPUs -- for example the GTX 10-series (capability 6.x) -- ``compile()`` raises
+   a ``RuntimeError`` immediately, rather than failing partway through the first
+   prediction. Check your device with
    ``python -c "import torch; print(torch.cuda.get_device_capability())"``.
 
 .. _usage_onnx_runtime:

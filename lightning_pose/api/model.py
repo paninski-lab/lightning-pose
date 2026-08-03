@@ -65,6 +65,36 @@ _PRECISION_TO_AUTOCAST_DTYPE: dict[_Precision, torch.dtype] = {
 }
 
 
+# torch.compile's inductor backend emits Triton kernels, which need Volta or newer.
+_TORCH_COMPILE_MIN_CUDA_CAPABILITY = (7, 0)
+
+
+def _check_torch_compile_supported() -> None:
+    """Raise if ``torch.compile``'s inductor backend cannot run on the available GPU.
+
+    Without this check the failure surfaces as a ``BackendCompilerFailed`` traceback
+    partway through the first prediction, long after ``compile()`` returned. CPU
+    inference is unaffected -- inductor has a separate C++ backend that does not
+    require Triton.
+
+    Raises:
+        RuntimeError: if a CUDA device is available but its compute capability is
+            below 7.0.
+    """
+    if not torch.cuda.is_available():
+        return
+    capability = torch.cuda.get_device_capability()
+    if capability >= _TORCH_COMPILE_MIN_CUDA_CAPABILITY:
+        return
+    raise RuntimeError(
+        f"torch.compile() requires a GPU of CUDA compute capability "
+        f"{_TORCH_COMPILE_MIN_CUDA_CAPABILITY[0]}.{_TORCH_COMPILE_MIN_CUDA_CAPABILITY[1]} "
+        f"or higher, but {torch.cuda.get_device_name()} has capability "
+        f"{capability[0]}.{capability[1]}. Run without compilation (omit --compile, or "
+        f"do not call Model.compile()) to use this GPU."
+    )
+
+
 def load_model_from_checkpoint(
     cfg: DictConfig | ListConfig,
     ckpt_file: str | None,
@@ -328,6 +358,10 @@ class Model:
 
         Calling this more than once is a no-op.
 
+        Raises:
+            RuntimeError: if a CUDA device is available but too old for the inductor
+                backend (compute capability below 7.0).
+
         Examples:
             >>> model = Model.from_dir("outputs/2024-01-01/12-00-00")
             >>> model.compile()
@@ -335,6 +369,7 @@ class Model:
         """
         if self._compiled:
             return
+        _check_torch_compile_supported()
         self._load()
         if self.model is None:
             raise RuntimeError('model failed to load; self.model is None after _load()')
