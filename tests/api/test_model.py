@@ -383,6 +383,27 @@ class TestBuildDatamodulePred:
         assert cfg_copy.training.imgaug_hflip is True
 
 
+def _torch_compile_supported() -> bool:
+    """Whether torch.compile's inductor backend can actually run on this machine.
+
+    Inductor generates Triton kernels, which require a GPU of CUDA compute
+    capability >= 7.0 (Volta and newer).
+    """
+    if not torch.cuda.is_available():
+        return False
+    return torch.cuda.get_device_capability() >= (7, 0)
+
+
+requires_torch_compile = pytest.mark.skipif(
+    not _torch_compile_supported(),
+    reason=(
+        "torch.compile's inductor backend requires a GPU of CUDA capability >= 7.0 "
+        "(Triton). Compilation is lazy, so only tests that run inference on a "
+        "compiled model are affected."
+    ),
+)
+
+
 class TestCompile:
     """Test the compile method."""
 
@@ -410,6 +431,7 @@ class TestCompile:
         mock_compile.assert_called_once()
         assert model._compiled
 
+    @requires_torch_compile
     def test_compile_then_predict_on_label_csv(self, tmp_path, request, toy_data_dir):
         """A compiled model predicts on a labeled CSV and writes the usual outputs."""
         model = _setup_test_model(tmp_path, request)
@@ -422,6 +444,7 @@ class TestCompile:
         xy_cols = [c for c in result.predictions.columns if c[-1] in ("x", "y")]
         assert len(xy_cols) == 2 * model.model.num_keypoints
 
+    @requires_torch_compile
     def test_compile_then_predict_on_video_file(self, tmp_path, request, toy_data_dir):
         """A compiled model predicts on a video file."""
         model = _setup_test_model(tmp_path, request)
@@ -429,6 +452,7 @@ class TestCompile:
         model.predict_on_video_file(Path(toy_data_dir) / "videos" / "test_vid.mp4")
         assert (model.video_preds_dir() / "test_vid.csv").is_file()
 
+    @requires_torch_compile
     def test_compile_matches_eager_predictions(self, tmp_path, request, toy_data_dir):
         """Compiled predictions match eager ones to well under a pixel.
 
@@ -453,6 +477,7 @@ class TestCompile:
         max_deviation = np.nanmax(deviation)
         assert max_deviation < 0.1, f"max pixel deviation {max_deviation:.4f} >= 0.1"
 
+    @requires_torch_compile
     def test_compile_handles_changing_input_shape(self, tmp_path, request, toy_data_dir):
         """Changing batch size after compiling triggers recompilation, not an error."""
         model = _setup_test_model(tmp_path, request)
