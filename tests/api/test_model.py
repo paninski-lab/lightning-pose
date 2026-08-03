@@ -381,3 +381,84 @@ class TestBuildDatamodulePred:
         _build_datamodule_pred(cfg_copy)
         assert cfg_copy.training.imgaug == 'dlc'
         assert cfg_copy.training.imgaug_hflip is True
+
+
+class TestCompile:
+    """Test the compile method."""
+
+    pytestmark = pytest.mark.gpu
+
+    def test_compile_loads_model(self, tmp_path, request):
+        """compile() loads the checkpoint, so it can be called before any prediction."""
+        model = _setup_test_model(tmp_path, request)
+        assert model.model is None
+        model.compile()
+        assert model.model is not None
+        assert model._compiled
+
+    def test_compile_is_idempotent(self, tmp_path, request):
+        """Calling compile() twice wraps forward only once.
+
+        Spies on torch.compile (wrapping the real implementation, so the model is
+        still genuinely compiled) to confirm the second call is a no-op rather
+        than double-wrapping the already-compiled forward.
+        """
+        model = _setup_test_model(tmp_path, request)
+        with patch("torch.compile", wraps=torch.compile) as mock_compile:
+            model.compile()
+            model.compile()
+        mock_compile.assert_called_once()
+        assert model._compiled
+
+    def test_compile_then_predict_on_label_csv(self, tmp_path, request, toy_data_dir):
+        """A compiled model predicts on a labeled CSV and writes the usual outputs."""
+        model = _setup_test_model(tmp_path, request)
+        model.compile()
+        result = model.predict_on_label_csv(Path(toy_data_dir) / "CollectedData.csv")
+        assert (
+            model.image_preds_dir() / "CollectedData.csv" / "predictions.csv"
+        ).is_file()
+        assert result.predictions.shape[0] > 0
+        xy_cols = [c for c in result.predictions.columns if c[-1] in ("x", "y")]
+        assert len(xy_cols) == 2 * model.model.num_keypoints
+
+    def test_compile_then_predict_on_video_file(self, tmp_path, request, toy_data_dir):
+        """A compiled model predicts on a video file."""
+        model = _setup_test_model(tmp_path, request)
+        model.compile()
+        model.predict_on_video_file(Path(toy_data_dir) / "videos" / "test_vid.mp4")
+        assert (model.video_preds_dir() / "test_vid.csv").is_file()
+
+    def test_compile_matches_eager_predictions(self, tmp_path, request, toy_data_dir):
+        """Compiled predictions match eager ones to well under a pixel.
+
+        Guards against a future PyTorch release changing compile behavior in a way
+        that actually moves keypoints. Separate tmp_path subdirectories because
+        _setup_test_model copies the model tree and asserts no prediction outputs
+        exist yet.
+        """
+        csv_file = Path(toy_data_dir) / "CollectedData.csv"
+        eager_model = _setup_test_model(tmp_path / "eager", request)
+        compiled_model = _setup_test_model(tmp_path / "compiled", request)
+        compiled_model.compile()
+
+        eager_preds = eager_model.predict_on_label_csv(csv_file).predictions
+        compiled_preds = compiled_model.predict_on_label_csv(csv_file).predictions
+
+        xy_cols = [c for c in eager_preds.columns if c[-1] in ("x", "y")]
+        deviation = np.abs(
+            eager_preds[xy_cols].to_numpy(dtype=float)
+            - compiled_preds[xy_cols].to_numpy(dtype=float)
+        )
+        max_deviation = np.nanmax(deviation)
+        assert max_deviation < 0.1, f"max pixel deviation {max_deviation:.4f} >= 0.1"
+
+    def test_compile_handles_changing_input_shape(self, tmp_path, request, toy_data_dir):
+        """Changing batch size after compiling triggers recompilation, not an error."""
+        model = _setup_test_model(tmp_path, request)
+        model.compile()
+        # predict_frame runs a batch of 1 ...
+        frame = np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8)
+        model.predict_frame(frame)
+        # ... and predict_on_label_csv runs the configured batch size.
+        model.predict_on_label_csv(Path(toy_data_dir) / "CollectedData.csv")

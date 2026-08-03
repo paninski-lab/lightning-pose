@@ -59,6 +59,18 @@ class TestPredictParser:
         args = parser.parse_args(['predict', str(model_dir), 'video.mp4', '--overwrite'])
         assert args.overwrite
 
+    def test_compile_flag(self, parser, tmp_path):
+        model_dir = tmp_path / 'model'
+        model_dir.mkdir()
+        args = parser.parse_args(['predict', str(model_dir), 'video.mp4', '--compile'])
+        assert args.compile
+
+    def test_compile_default_is_false(self, parser, tmp_path):
+        model_dir = tmp_path / 'model'
+        model_dir.mkdir()
+        args = parser.parse_args(['predict', str(model_dir), 'video.mp4'])
+        assert not args.compile
+
     def test_overrides(self, parser, tmp_path):
         model_dir = tmp_path / 'model'
         model_dir.mkdir()
@@ -167,6 +179,7 @@ class TestHandle:
             progress_file=None,
             bbox_dir=bbox_dir,
             precision='fp32',
+            compile=False,
         )
 
     def test_handle_threads_bbox_dir_to_predict_multi_type(self, tmp_path, mock_model):
@@ -195,3 +208,41 @@ class TestHandle:
             MockModel.from_dir2.return_value = mock_model
             handle(args)
         assert mock_predict.call_args.kwargs['bbox_dir'] is None
+
+    def test_handle_compiles_model_when_flag_set(self, tmp_path, mock_model):
+        """handle() calls model.compile() when --compile is passed."""
+        args = self._make_args(tmp_path, tmp_path / 'vid.mp4')
+        args.compile = True
+        with (
+            patch('lightning_pose.api.Model') as MockModel,
+            patch('lightning_pose.cli.commands.predict._predict_multi_type'),
+        ):
+            MockModel.from_dir2.return_value = mock_model
+            handle(args)
+        mock_model.compile.assert_called_once_with()
+
+    def test_handle_does_not_compile_by_default(self, tmp_path, mock_model):
+        """handle() leaves the model uncompiled when --compile is not passed."""
+        args = self._make_args(tmp_path, tmp_path / 'vid.mp4')
+        with (
+            patch('lightning_pose.api.Model') as MockModel,
+            patch('lightning_pose.cli.commands.predict._predict_multi_type'),
+        ):
+            MockModel.from_dir2.return_value = mock_model
+            handle(args)
+        mock_model.compile.assert_not_called()
+
+    def test_handle_compiles_multiview_model(self, tmp_path, mock_model):
+        """--compile is applied before the multiview branch, so it covers both paths."""
+        mock_model.config.is_multi_view.return_value = True
+        args = self._make_args(tmp_path, tmp_path / 'vid.mp4')
+        args.compile = True
+        with (
+            patch('lightning_pose.api.Model') as MockModel,
+            patch(
+                'lightning_pose.cli.commands.predict._predict_multi_type_multi_view',
+            ),
+        ):
+            MockModel.from_dir2.return_value = mock_model
+            handle(args)
+        mock_model.compile.assert_called_once_with()
