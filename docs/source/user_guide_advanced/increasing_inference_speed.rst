@@ -5,10 +5,12 @@ Increasing Inference Speed
 ##########################
 
 In addition to :ref:`running inference at reduced precision <mixed_precision>`, Lightning Pose
-models can be accelerated further with three additional techniques: ``torch.compile()``,
-ONNX Runtime, and TensorRT. This page benchmarks all four options together (including eager
-FP16 for reference) and walks through how to use each one, assuming you've already trained a
-model with ``litpose train``.
+models can be accelerated further with three additional techniques:
+`torch.compile() <https://pytorch.org/docs/stable/generated/torch.compile.html>`_,
+`ONNX Runtime <https://onnxruntime.ai/>`_, and
+`TensorRT <https://developer.nvidia.com/tensorrt>`_. This page benchmarks all four options
+together (including eager FP16 for reference) and walks through how to use each one, assuming
+you've already trained a model with ``litpose train``.
 
 **TL;DR**
 
@@ -20,10 +22,11 @@ model with ``litpose train``.
 - **None of these techniques change the model's predictions.** We compared final keypoint
   predictions against the eager FP32 baseline on real video frames for all three methods --
   max deviation was under 0.08px in every case, consistent with ordinary floating-point kernel
-  differences and far below any dataset's typical pixel error (see Accuracy check below).
+  differences and far below any dataset's typical pixel error (see
+  :ref:`Accuracy check <accuracy_check>` below).
 - **These numbers are isolated forward-pass speedups** (no data loading), same methodology as
-  the mixed-precision speed numbers. See the caveat at the bottom of this page about the gap
-  between forward-pass and end-to-end ``litpose predict`` speed.
+  the mixed-precision speed numbers. See the :ref:`caveat <caveats>` at the bottom of this page
+  about the gap between forward-pass and end-to-end ``litpose predict`` speed.
 
 Overview
 ========
@@ -32,11 +35,14 @@ Overview
   :ref:`Mixed Precision Training & Inference <mixed_precision>`. Included in the table below
   for reference.
 - **torch.compile()** -- a single-line PyTorch feature that JIT-compiles the model's forward
-  pass into fused GPU kernels. No export step, no new dependencies.
+  pass into fused GPU kernels. No export step, no new dependencies. See
+  :ref:`Usage: torch.compile() <usage_torch_compile>`.
 - **ONNX Runtime** -- export the model to the ONNX format, then run inference through
   ``onnxruntime``'s ``CUDAExecutionProvider``. Lets you deploy without a full PyTorch install.
+  See :ref:`Usage: ONNX Runtime <usage_onnx_runtime>`.
 - **TensorRT** -- same ONNX export, but run through onnxruntime's ``TensorrtExecutionProvider``,
-  which builds an autotuned, hardware-specific inference engine. Most setup, biggest gains.
+  which builds an autotuned, hardware-specific inference engine. Most setup, biggest gains. See
+  :ref:`Usage: TensorRT <usage_tensorrt>`.
 
 Results
 =======
@@ -87,6 +93,8 @@ ViT batch 96 across 6 views -- for the multiview transformer):
 TensorRT wins in every case, sometimes by a wide margin -- particularly on the multiview model,
 where more compute per forward pass gives it more to work with.
 
+.. _accuracy_check:
+
 Accuracy check
 ==============
 
@@ -126,6 +134,8 @@ Usage
 The tutorials below assume you've already trained a model with ``litpose train`` and have a
 ``model_dir`` containing ``config.yaml`` and a checkpoint.
 
+.. _usage_torch_compile:
+
 torch.compile
 -------------
 
@@ -159,6 +169,8 @@ new compilation automatically.
    silently falls back to the *original*, uncompiled submodule. Compiling ``forward`` directly
    (as above) avoids this trap.
 
+.. _usage_onnx_runtime:
+
 ONNX Runtime
 ------------
 
@@ -181,14 +193,14 @@ the ONNX session back in as the model's forward pass the same way as above:
     dummy = torch.randn(1, 3, resize_h, resize_w, device="cuda")
 
     torch.onnx.export(
-        real_module, dummy, "model.onnx",
+        real_module, dummy, "/path/to/model.onnx",
         input_names=["images"], output_names=["heatmaps"],
         dynamic_axes={"images": {0: "batch"}, "heatmaps": {0: "batch"}},
         opset_version=17, do_constant_folding=True,
     )
 
     session = ort.InferenceSession(
-        "model.onnx", providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
+        "/path/to/model.onnx", providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
     )
 
     def onnx_forward(images):
@@ -210,6 +222,8 @@ install. Pip's default ``onnxruntime-gpu`` build may target a newer CUDA major v
 your PyTorch install uses; check Microsoft's ``onnxruntime-cuda-12`` package index if you're on
 CUDA 12.
 
+.. _usage_tensorrt:
+
 TensorRT
 --------
 
@@ -221,14 +235,14 @@ above):
 
     trt_options = {
         "trt_engine_cache_enable": True,
-        "trt_engine_cache_path": "trt_cache",
-        "trt_fp16_enable": False,  # set True to also reduce precision
+        "trt_engine_cache_path": "/path/to/trt_cache",
+        "trt_fp16_enable": True,  # set False to retain FP32 precision
         "trt_profile_min_shapes": f"images:1x3x{resize_h}x{resize_w}",
         "trt_profile_opt_shapes": f"images:1x3x{resize_h}x{resize_w}",
         "trt_profile_max_shapes": f"images:1x3x{resize_h}x{resize_w}",
     }
     session = ort.InferenceSession(
-        "model.onnx",
+        "/path/to/model.onnx",
         providers=[
             ("TensorrtExecutionProvider", trt_options),
             "CUDAExecutionProvider",
@@ -262,15 +276,14 @@ library versions:
   ``CUDAExecutionProvider`` rather than raising an error -- your code will still run and
   produce plausible-looking numbers, just not the ones you think.
 
+.. _caveats:
+
 Caveats
 =======
 
 - **These are isolated forward-pass numbers, not end-to-end** ``litpose predict`` **timings.**
-  Real inference also includes data loading (DALI) and postprocessing. This gap has mattered
-  before: an end-to-end benchmark script previously had a bug that caused precision to show
-  no measured effect on real inference for weeks, until it was found and fixed (see the
-  :ref:`mixed precision <mixed_precision>` page). These forward-pass gains aren't guaranteed
-  to translate 1:1 into end-to-end speedups as-is.
+  Real inference also includes data loading (DALI) and postprocessing. These forward-pass
+  gains aren't guaranteed to translate 1:1 into end-to-end speedups as-is.
 - **cuDNN TF32 was left on for the ResNet50 eager-FP32 baseline** (only matmul TF32 was
   disabled), so it's not a fully strict FP32 number -- doesn't change the direction of any
   result here.
