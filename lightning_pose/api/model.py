@@ -223,6 +223,10 @@ class Model:
     (same strings as the ``litpose predict --precision`` CLI flag). Does not
     affect the checkpoint on disk."""
 
+    _compiled: bool = False
+    """Whether ``compile()`` has been called. Guards against double-wrapping
+    ``forward`` on repeat calls."""
+
     # Just a constant we can use as a default value for kwargs,
     # to differentiate between user omitting a kwarg, vs explicitly passing None.
     UNSPECIFIED = "unspecified"
@@ -311,6 +315,31 @@ class Model:
         ``self.precision`` (``"fp32"``/``"fp16"``/``"bf16"``) instead.
         """
         return _PRECISION_TO_PL[self.precision]
+
+    def compile(self) -> None:
+        """Compile the model's forward pass with ``torch.compile()`` for faster inference.
+
+        Loads the checkpoint if it hasn't been loaded yet, so this can be called
+        immediately after ``Model.from_dir``. Compilation itself is lazy: it is
+        triggered on the first inference call and can take tens of seconds.
+        Subsequent calls with the same input shape reuse the compiled graph;
+        changing batch size or input resolution triggers a new compilation
+        automatically.
+
+        Calling this more than once is a no-op.
+
+        Examples:
+            >>> model = Model.from_dir("outputs/2024-01-01/12-00-00")
+            >>> model.compile()
+            >>> result = model.predict_on_video_file("path/to/video.mp4")
+        """
+        if self._compiled:
+            return
+        self._load()
+        if self.model is None:
+            raise RuntimeError('model failed to load; self.model is None after _load()')
+        self.model.forward = torch.compile(self.model.forward)
+        self._compiled = True
 
     def _load(self) -> None:
         """Load model weights from the checkpoint file on first call; no-op thereafter.

@@ -109,6 +109,14 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
         ),
     )
 
+    predict_parser.add_argument(
+        "--compile",
+        action="store_true",
+        default=False,
+        help="compile the model with torch.compile() for faster inference. The first "
+        "prediction after compiling is slower due to compilation overhead.",
+    )
+
     post_prediction_args = predict_parser.add_argument_group("post-prediction")
     post_prediction_args.add_argument(
         "--skip_viz",
@@ -143,6 +151,9 @@ def handle(args: argparse.Namespace) -> None:
         precision=args.precision,
     )
     input_paths = [Path(p) for p in args.input_path]
+
+    if args.compile:
+        model.compile()
 
     if model.config.is_multi_view():
         _predict_multi_type_multi_view(
