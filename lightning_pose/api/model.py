@@ -65,6 +65,36 @@ _PRECISION_TO_AUTOCAST_DTYPE: dict[_Precision, torch.dtype] = {
 }
 
 
+# torch.compile's inductor backend emits Triton kernels, which need Volta or newer.
+_TORCH_COMPILE_MIN_CUDA_CAPABILITY = (7, 0)
+
+
+def _check_torch_compile_supported() -> None:
+    """Raise if ``torch.compile``'s inductor backend cannot run on the available GPU.
+
+    Without this check the failure surfaces as a ``BackendCompilerFailed`` traceback
+    partway through the first prediction, long after ``compile()`` returned. CPU
+    inference is unaffected -- inductor has a separate C++ backend that does not
+    require Triton.
+
+    Raises:
+        RuntimeError: if a CUDA device is available but its compute capability is
+            below 7.0.
+    """
+    if not torch.cuda.is_available():
+        return
+    capability = torch.cuda.get_device_capability()
+    if capability >= _TORCH_COMPILE_MIN_CUDA_CAPABILITY:
+        return
+    raise RuntimeError(
+        f"torch.compile() requires a GPU of CUDA compute capability "
+        f"{_TORCH_COMPILE_MIN_CUDA_CAPABILITY[0]}.{_TORCH_COMPILE_MIN_CUDA_CAPABILITY[1]} "
+        f"or higher, but {torch.cuda.get_device_name()} has capability "
+        f"{capability[0]}.{capability[1]}. Run without compilation (omit --compile, or "
+        f"do not call Model.compile()) to use this GPU."
+    )
+
+
 def load_model_from_checkpoint(
     cfg: DictConfig | ListConfig,
     ckpt_file: str | None,
@@ -223,6 +253,10 @@ class Model:
     (same strings as the ``litpose predict --precision`` CLI flag). Does not
     affect the checkpoint on disk."""
 
+    _compiled: bool = False
+    """Whether ``compile()`` has been called. Guards against double-wrapping
+    ``forward`` on repeat calls."""
+
     # Just a constant we can use as a default value for kwargs,
     # to differentiate between user omitting a kwarg, vs explicitly passing None.
     UNSPECIFIED = "unspecified"
@@ -311,6 +345,39 @@ class Model:
         ``self.precision`` (``"fp32"``/``"fp16"``/``"bf16"``) instead.
         """
         return _PRECISION_TO_PL[self.precision]
+
+    def compile(self) -> None:
+        """Compile the model's forward pass with ``torch.compile()`` for faster inference.
+
+        Loads the checkpoint if it hasn't been loaded yet, so this can be called
+        immediately after ``Model.from_dir``. Compilation itself is lazy: it is
+        triggered on the first inference call and can take tens of seconds.
+        Subsequent calls with the same input shape reuse the compiled graph;
+        changing batch size or input resolution triggers a new compilation
+        automatically.
+
+        Calling this more than once is a no-op.
+
+        Raises:
+            RuntimeError: if a CUDA device is available but too old for the inductor
+                backend (compute capability below 7.0).
+
+        Examples:
+            >>> model = Model.from_dir("outputs/2024-01-01/12-00-00")
+            >>> model.compile()
+            >>> result = model.predict_on_video_file("path/to/video.mp4")
+        """
+        if self._compiled:
+            return
+        _check_torch_compile_supported()
+        self._load()
+        if self.model is None:
+            raise RuntimeError('model failed to load; self.model is None after _load()')
+        # `self.model` is a union of model classes whose `forward` signatures differ, so
+        # the compiled callable's inferred union type isn't assignable to any single
+        # class's `forward`. The rebind itself is intentional and behaviorally safe.
+        self.model.forward = torch.compile(self.model.forward)  # type: ignore[method-assign]
+        self._compiled = True
 
     def _load(self) -> None:
         """Load model weights from the checkpoint file on first call; no-op thereafter.
