@@ -518,7 +518,7 @@ class TestCompile:
 def _onnxruntime_available() -> bool:
     """Whether the optional onnxruntime dependency is importable."""
     try:
-        import onnxruntime  # noqa: F401
+        import onnxruntime  # noqa: F401  # type: ignore[import-not-found]
     except ImportError:
         return False
     return True
@@ -549,7 +549,7 @@ class TestExport:
         """export() rejects bf16, which ONNX export does not support."""
         model = _setup_test_model(tmp_path, request)
         with pytest.raises(ValueError, match="Unsupported onnx_precision"):
-            model.export("onnx", onnx_precision="bf16")
+            model.export("onnx", onnx_precision="bf16")  # type: ignore[arg-type]
         assert model.model is None
 
     @requires_onnxruntime
@@ -838,7 +838,7 @@ class TestExportUnit:
         model = _make_mock_model(tmp_path, **kwargs)
         with patch("torch.onnx.export") as mock_export:
             model.export("onnx", onnx_precision="fp32")
-        dummy = mock_export.call_args.args[1]
+        dummy = mock_export.call_args.args[1][0]
         assert tuple(dummy.shape) == expected_shape
 
     def test_export_returns_path_under_exports_onnx_dir(self, tmp_path, mock_ckpt):
@@ -856,7 +856,7 @@ class TestExportUnit:
         with patch("torch.onnx.export") as mock_export:
             model.export("onnx", onnx_precision="fp16")
         traced = mock_export.call_args.args[0]
-        dummy = mock_export.call_args.args[1]
+        dummy = mock_export.call_args.args[1][0]
         assert dummy.dtype == torch.float16
         assert traced is not original
         assert model.model is original
@@ -867,7 +867,7 @@ class TestExportUnit:
         with patch("torch.onnx.export") as mock_export:
             model.export("onnx", onnx_precision="fp32")
         assert mock_export.call_args.args[0] is model.model
-        assert mock_export.call_args.args[1].dtype == torch.float32
+        assert mock_export.call_args.args[1][0].dtype == torch.float32
 
     def test_export_raises_when_model_fails_to_load(self, tmp_path, mock_ckpt):
         """A model that stays None after _load() raises rather than crashing later."""
@@ -934,6 +934,7 @@ class TestOnnxRuntimeUnit:
         """Successful attach marks _runtime and replaces forward."""
         model = _make_mock_model(tmp_path)
         self._prepare_export(model)
+        assert model.model is not None
         original_forward = model.model.forward
         fake_module, _ = _fake_ort()
         with patch.dict(sys.modules, {"onnxruntime": fake_module}):
@@ -949,7 +950,8 @@ class TestOnnxRuntimeUnit:
         with patch.dict(sys.modules, {"onnxruntime": fake_module}):
             model._attach_onnx_runtime(None)
 
-        result = model.model.forward(torch.randn(1, 3, 128, 128))
+        assert model.model is not None
+        result = model.model.forward(torch.randn(1, 3, 128, 128))  # type: ignore[arg-type]
         session.run.assert_called_once()
         assert isinstance(result, torch.Tensor)
         assert result.shape == (1, 2, 4, 4)
@@ -965,7 +967,8 @@ class TestOnnxRuntimeUnit:
         with patch.dict(sys.modules, {"onnxruntime": fake_module}):
             model._attach_onnx_runtime(None)
 
-        model.model.forward(torch.randn(1, 3, 128, 128))
+        assert model.model is not None
+        model.model.forward(torch.randn(1, 3, 128, 128))  # type: ignore[arg-type]
         fed = session.run.call_args.args[1]["images"]
         assert fed.dtype == np.float16
 

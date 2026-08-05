@@ -511,7 +511,7 @@ class Model:
         # Imported lazily: onnxruntime is an optional dependency, and a
         # module-level import would make it mandatory for every eager user.
         try:
-            import onnxruntime as ort
+            import onnxruntime as ort  # type: ignore[import-not-found]
         except ImportError as e:
             raise ImportError(
                 "onnxruntime is required for runtime='onnx' but is not installed. "
@@ -673,7 +673,7 @@ class Model:
         module_to_export.eval()
         torch.onnx.export(
             module_to_export,
-            dummy,
+            (dummy,),
             str(onnx_path),
             input_names=["images"],
             output_names=["heatmaps"],
