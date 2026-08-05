@@ -1,5 +1,6 @@
 import copy
 import shutil
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -688,6 +689,22 @@ class TestOnnxRuntime:
             patch("onnxruntime.InferenceSession", return_value=fake_session),
             patch("torch.cuda.is_available", return_value=True),
             pytest.raises(RuntimeError, match="CUDAExecutionProvider"),
+        ):
+            Model.from_dir(model.model_dir, runtime="onnx")
+
+    def test_missing_onnxruntime_raises_install_hint(self, tmp_path, request):
+        """A missing optional dependency explains how to install it.
+
+        Simulated rather than skipped, so the message is covered on machines
+        that do have onnxruntime.
+        """
+        model = _setup_test_model(tmp_path, request)
+        model.exports_onnx_dir().mkdir(parents=True, exist_ok=True)
+        (model.exports_onnx_dir() / f"{model._ckpt_stem()}_fp16.onnx").touch()
+
+        with (
+            patch.dict(sys.modules, {"onnxruntime": None}),
+            pytest.raises(ImportError, match="pip install onnxruntime-gpu"),
         ):
             Model.from_dir(model.model_dir, runtime="onnx")
 

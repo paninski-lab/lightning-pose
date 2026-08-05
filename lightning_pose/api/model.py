@@ -480,14 +480,10 @@ class Model:
             RuntimeError: if the model fails to load, or if ONNX Runtime silently
                 fell back to CPU on a CUDA machine.
         """
-        # Imported lazily: onnxruntime is an optional dependency, and a
-        # module-level import would make it mandatory for every eager user.
-        import onnxruntime as ort
-
-        self._load()
-        if self.model is None:
-            raise RuntimeError('model failed to load; self.model is None after _load()')
-
+        # Export discovery happens before importing onnxruntime or loading
+        # weights: a user who forgot to run export() should get that message
+        # regardless of whether the optional dependency is installed, and
+        # there's no reason to pay for _load() on a path that can't succeed.
         stem = self._ckpt_stem()
         export_dir = self.exports_onnx_dir()
         pattern = (
@@ -511,6 +507,23 @@ class Model:
             )
 
         onnx_path = candidates[0]
+
+        # Imported lazily: onnxruntime is an optional dependency, and a
+        # module-level import would make it mandatory for every eager user.
+        try:
+            import onnxruntime as ort
+        except ImportError as e:
+            raise ImportError(
+                "onnxruntime is required for runtime='onnx' but is not installed. "
+                "Install it with `pip install onnxruntime-gpu`, matching the CUDA "
+                "version your PyTorch build uses -- see the installation section of "
+                "docs/source/user_guide_advanced/increasing_inference_speed.rst."
+            ) from e
+
+        self._load()
+        if self.model is None:
+            raise RuntimeError('model failed to load; self.model is None after _load()')
+
         session = ort.InferenceSession(
             str(onnx_path), providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
         )
