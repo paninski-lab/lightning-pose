@@ -743,3 +743,238 @@ class TestOnnxRuntime:
         )
         max_deviation = np.nanmax(deviation)
         assert max_deviation < 0.1, f"max pixel deviation {max_deviation:.4f} >= 0.1"
+
+
+def _make_mock_model(tmp_path, *, multiview=False, context=False, num_views=2):
+    """A Model with mocked config and weights, usable without a GPU or onnxruntime.
+
+    ``model`` is set directly so ``_load()`` short-circuits, letting the export
+    and runtime code paths be exercised without a real checkpoint.
+    """
+    config = MagicMock()
+    config.is_multi_view.return_value = multiview
+    config.cfg.data.image_resize_dims.height = 128
+    config.cfg.data.image_resize_dims.width = 128
+    config.cfg.data.view_names = [f"view{i}" for i in range(num_views)]
+    config.cfg.model.model_name = "test_model"
+
+    model = Model(tmp_path, config)
+    model.model = MagicMock()
+    model.model.device = torch.device("cpu")
+    model.model.do_context = context
+    return model
+
+
+def _fake_ort(providers=("CUDAExecutionProvider", "CPUExecutionProvider"),
+              input_type="tensor(float)", output=None):
+    """Stand-in onnxruntime module whose InferenceSession returns a MagicMock.
+
+    Lets the ONNX runtime code path be tested on machines without onnxruntime
+    installed -- which includes CI, where the real dependency is absent and the
+    @requires_onnxruntime tests above are skipped.
+    """
+    session = MagicMock()
+    session.get_providers.return_value = list(providers)
+
+    inp = MagicMock()
+    inp.name = "images"
+    inp.type = input_type
+    session.get_inputs.return_value = [inp]
+
+    out = MagicMock()
+    out.name = "heatmaps"
+    session.get_outputs.return_value = [out]
+
+    if output is None:
+        output = np.zeros((1, 2, 4, 4), dtype=np.float32)
+    session.run.return_value = [output]
+
+    module = MagicMock()
+    module.InferenceSession.return_value = session
+    return module, session
+
+
+@pytest.fixture()
+def mock_ckpt():
+    """Pin checkpoint resolution to a fixed stem without touching the filesystem."""
+    with patch(
+        "lightning_pose.api.model.io_utils.ckpt_path_from_base_path",
+        return_value="/some/dir/epoch=1-step=2-best.ckpt",
+    ):
+        yield
+
+
+class TestExportUnit:
+    """Export tests that need neither a GPU nor onnxruntime.
+
+    The @requires_onnxruntime tests above are skipped wherever the optional
+    dependency isn't installed, which leaves export() uncovered on CI. These
+    mock torch.onnx.export instead so the logic around it stays covered.
+    """
+
+    def test_ckpt_stem_raises_when_no_checkpoint(self, tmp_path):
+        """An untrained model directory gets a clear error, not a TypeError."""
+        model = _make_mock_model(tmp_path)
+        with (
+            patch(
+                "lightning_pose.api.model.io_utils.ckpt_path_from_base_path",
+                return_value=None,
+            ),
+            pytest.raises(FileNotFoundError, match="Checkpoint file not found"),
+        ):
+            model._ckpt_stem()
+
+    @pytest.mark.parametrize(
+        "kwargs,expected_shape",
+        [
+            ({}, (1, 3, 128, 128)),
+            ({"multiview": True}, (1, 2, 3, 128, 128)),
+            ({"context": True}, (1, 5, 3, 128, 128)),
+        ],
+        ids=["singleview", "multiview", "context"],
+    )
+    def test_export_dummy_input_shape(self, tmp_path, mock_ckpt, kwargs, expected_shape):
+        """Dummy input shape differs across singleview, multiview and context models."""
+        model = _make_mock_model(tmp_path, **kwargs)
+        with patch("torch.onnx.export") as mock_export:
+            model.export("onnx", onnx_precision="fp32")
+        dummy = mock_export.call_args.args[1]
+        assert tuple(dummy.shape) == expected_shape
+
+    def test_export_returns_path_under_exports_onnx_dir(self, tmp_path, mock_ckpt):
+        """The returned path is {ckpt_stem}_{onnx_precision}.onnx inside exports_onnx/."""
+        model = _make_mock_model(tmp_path)
+        with patch("torch.onnx.export"):
+            output_path = model.export("onnx", onnx_precision="fp32")
+        assert output_path == model.exports_onnx_dir() / "epoch=1-step=2-best_fp32.onnx"
+        assert model.exports_onnx_dir().is_dir()
+
+    def test_export_fp16_traces_a_copy_not_the_live_model(self, tmp_path, mock_ckpt):
+        """fp16 export halves a deepcopy, leaving the in-memory model alone."""
+        model = _make_mock_model(tmp_path)
+        original = model.model
+        with patch("torch.onnx.export") as mock_export:
+            model.export("onnx", onnx_precision="fp16")
+        traced = mock_export.call_args.args[0]
+        dummy = mock_export.call_args.args[1]
+        assert dummy.dtype == torch.float16
+        assert traced is not original
+        assert model.model is original
+
+    def test_export_fp32_traces_the_live_model(self, tmp_path, mock_ckpt):
+        """fp32 export needs no copy, so it traces the module directly."""
+        model = _make_mock_model(tmp_path)
+        with patch("torch.onnx.export") as mock_export:
+            model.export("onnx", onnx_precision="fp32")
+        assert mock_export.call_args.args[0] is model.model
+        assert mock_export.call_args.args[1].dtype == torch.float32
+
+    def test_export_raises_when_model_fails_to_load(self, tmp_path, mock_ckpt):
+        """A model that stays None after _load() raises rather than crashing later."""
+        model = _make_mock_model(tmp_path)
+        model.model = None
+        with (
+            patch.object(model, "_load"),
+            pytest.raises(RuntimeError, match="model failed to load"),
+        ):
+            model.export("onnx")
+
+
+class TestOnnxRuntimeUnit:
+    """Runtime-attach tests using a fake onnxruntime module.
+
+    Same rationale as TestExportUnit: keeps _attach_onnx_runtime covered where
+    the real dependency isn't installed.
+    """
+
+    def _prepare_export(self, model, precision="fp16"):
+        """Create a stub .onnx file matching the mocked checkpoint stem."""
+        model.exports_onnx_dir().mkdir(parents=True, exist_ok=True)
+        path = model.exports_onnx_dir() / f"epoch=1-step=2-best_{precision}.onnx"
+        path.touch()
+        return path
+
+    def test_attach_raises_when_no_export(self, tmp_path, mock_ckpt):
+        """Missing export points at export(), without importing onnxruntime."""
+        model = _make_mock_model(tmp_path)
+        with pytest.raises(FileNotFoundError, match=r"Run model\.export\('onnx'\) first"):
+            model._attach_onnx_runtime(None)
+
+    def test_attach_raises_when_multiple_exports(self, tmp_path, mock_ckpt):
+        """Ambiguous exports raise instead of picking one arbitrarily."""
+        model = _make_mock_model(tmp_path)
+        self._prepare_export(model, "fp16")
+        self._prepare_export(model, "fp32")
+        with pytest.raises(ValueError, match="Multiple ONNX exports found"):
+            model._attach_onnx_runtime(None)
+
+    def test_attach_missing_dependency_explains_install(self, tmp_path, mock_ckpt):
+        """A missing optional dependency explains how to install it."""
+        model = _make_mock_model(tmp_path)
+        self._prepare_export(model)
+        with (
+            patch.dict(sys.modules, {"onnxruntime": None}),
+            pytest.raises(ImportError, match="pip install onnxruntime-gpu"),
+        ):
+            model._attach_onnx_runtime(None)
+
+    def test_attach_provider_guard_fires_on_cpu_fallback(self, tmp_path, mock_ckpt):
+        """Losing CUDAExecutionProvider on a CUDA machine raises, not silently CPU."""
+        model = _make_mock_model(tmp_path)
+        self._prepare_export(model)
+        fake_module, _ = _fake_ort(providers=["CPUExecutionProvider"])
+        with (
+            patch.dict(sys.modules, {"onnxruntime": fake_module}),
+            patch("torch.cuda.is_available", return_value=True),
+            pytest.raises(RuntimeError, match="CUDAExecutionProvider"),
+        ):
+            model._attach_onnx_runtime(None)
+
+    def test_attach_sets_runtime_and_rebinds_forward(self, tmp_path, mock_ckpt):
+        """Successful attach marks _runtime and replaces forward."""
+        model = _make_mock_model(tmp_path)
+        self._prepare_export(model)
+        original_forward = model.model.forward
+        fake_module, _ = _fake_ort()
+        with patch.dict(sys.modules, {"onnxruntime": fake_module}):
+            model._attach_onnx_runtime(None)
+        assert model._runtime == "onnx"
+        assert model.model.forward is not original_forward
+
+    def test_onnx_forward_runs_through_session(self, tmp_path, mock_ckpt):
+        """The rebound forward feeds the session and returns a tensor."""
+        model = _make_mock_model(tmp_path)
+        self._prepare_export(model)
+        fake_module, session = _fake_ort()
+        with patch.dict(sys.modules, {"onnxruntime": fake_module}):
+            model._attach_onnx_runtime(None)
+
+        result = model.model.forward(torch.randn(1, 3, 128, 128))
+        session.run.assert_called_once()
+        assert isinstance(result, torch.Tensor)
+        assert result.shape == (1, 2, 4, 4)
+
+    def test_onnx_forward_casts_input_to_export_dtype(self, tmp_path, mock_ckpt):
+        """An fp16 export receives fp16 buffers, not hardcoded fp32."""
+        model = _make_mock_model(tmp_path)
+        self._prepare_export(model)
+        fake_module, session = _fake_ort(
+            input_type="tensor(float16)",
+            output=np.zeros((1, 2, 4, 4), dtype=np.float16),
+        )
+        with patch.dict(sys.modules, {"onnxruntime": fake_module}):
+            model._attach_onnx_runtime(None)
+
+        model.model.forward(torch.randn(1, 3, 128, 128))
+        fed = session.run.call_args.args[1]["images"]
+        assert fed.dtype == np.float16
+
+    def test_attach_selects_requested_precision(self, tmp_path, mock_ckpt):
+        """onnx_precision picks a specific file when several exist."""
+        model = _make_mock_model(tmp_path)
+        self._prepare_export(model, "fp16")
+        fp32_path = self._prepare_export(model, "fp32")
+        fake_module, _ = _fake_ort()
+        with patch.dict(sys.modules, {"onnxruntime": fake_module}):
+            model._attach_onnx_runtime("fp32")
+        assert fake_module.InferenceSession.call_args.args[0] == str(fp32_path)
