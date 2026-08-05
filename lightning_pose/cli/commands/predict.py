@@ -22,6 +22,15 @@ if TYPE_CHECKING:
 # strings PyTorch Lightning's Trainer actually expects.
 _PRECISION_CHOICES = ("fp32", "fp16", "bf16")
 
+# Inference backends accepted by --runtime. "eager" runs the loaded PyTorch
+# checkpoint; "onnx" runs an ONNX Runtime session previously built with
+# `litpose export`.
+_RUNTIME_CHOICES = ("eager", "onnx")
+
+# Selects which exported file --runtime onnx loads. Distinct from --precision:
+# this is the precision baked into the .onnx file, not autocast precision.
+_ONNX_PRECISION_CHOICES = ("fp32", "fp16")
+
 
 def register_parser(subparsers: Any) -> argparse.ArgumentParser:
     """Register the predict command parser."""
@@ -110,6 +119,29 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
     )
 
     predict_parser.add_argument(
+        "--runtime",
+        choices=sorted(_RUNTIME_CHOICES),
+        default="eager",
+        help=(
+            "inference backend. 'eager' (default) runs the trained checkpoint. "
+            "'onnx' runs an ONNX Runtime session, which must have been built "
+            "first with `litpose export`. With --runtime onnx, --precision is "
+            "ignored -- the exported file's own precision is what runs."
+        ),
+    )
+
+    predict_parser.add_argument(
+        "--onnx-precision",
+        choices=sorted(_ONNX_PRECISION_CHOICES),
+        default=None,
+        help=(
+            "which ONNX export to load. Only used with --runtime onnx. If "
+            "omitted and exactly one export exists, it is used automatically; "
+            "if several exist, pass this to disambiguate."
+        ),
+    )
+
+    predict_parser.add_argument(
         "--compile",
         action="store_true",
         default=False,
@@ -145,10 +177,22 @@ def handle(args: argparse.Namespace) -> None:
     # Delay this import because it's slow.
     from lightning_pose.api import Model
 
+    # Checked before constructing the model so the user gets this message rather
+    # than the equivalent RuntimeError from Model.compile(), which would surface
+    # as a raw traceback well after the ONNX session had already been built.
+    if args.compile and args.runtime != "eager":
+        raise ValueError(
+            f"--compile is only supported with --runtime eager, but --runtime "
+            f"{args.runtime} was given. torch.compile() has no effect on an "
+            f"ONNX Runtime session."
+        )
+
     model = Model.from_dir2(
         args.model_dir,
         hydra_overrides=args.overrides,
         precision=args.precision,
+        runtime=args.runtime,
+        onnx_precision=args.onnx_precision,
     )
     input_paths = [Path(p) for p in args.input_path]
 
