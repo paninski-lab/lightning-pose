@@ -512,3 +512,217 @@ class TestCompile:
         model.predict_frame(frame)
         # ... and predict_on_label_csv runs the configured batch size.
         model.predict_on_label_csv(Path(toy_data_dir) / "CollectedData.csv")
+
+
+def _onnxruntime_available() -> bool:
+    """Whether the optional onnxruntime dependency is importable."""
+    try:
+        import onnxruntime  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+requires_onnxruntime = pytest.mark.skipif(
+    not _onnxruntime_available(),
+    reason=(
+        "onnxruntime is an optional dependency. Export and runtime tests need it "
+        "installed; see docs/source/user_guide_advanced/increasing_inference_speed.rst."
+    ),
+)
+
+
+class TestExport:
+    """Test the export method."""
+
+    pytestmark = pytest.mark.gpu
+
+    def test_export_rejects_unknown_runtime(self, tmp_path, request):
+        """export() rejects a runtime other than 'onnx' before loading anything."""
+        model = _setup_test_model(tmp_path, request)
+        with pytest.raises(ValueError, match="Unsupported export runtime"):
+            model.export("tensorrt")
+        assert model.model is None
+
+    def test_export_rejects_unknown_onnx_precision(self, tmp_path, request):
+        """export() rejects bf16, which ONNX export does not support."""
+        model = _setup_test_model(tmp_path, request)
+        with pytest.raises(ValueError, match="Unsupported onnx_precision"):
+            model.export("onnx", onnx_precision="bf16")
+        assert model.model is None
+
+    @requires_onnxruntime
+    @pytest.mark.parametrize("onnx_precision", ["fp32", "fp16"])
+    def test_export_writes_expected_path(self, tmp_path, request, onnx_precision):
+        """export() writes {ckpt_stem}_{onnx_precision}.onnx into exports_onnx/."""
+        model = _setup_test_model(tmp_path, request)
+        output_path = model.export("onnx", onnx_precision=onnx_precision)
+
+        assert output_path.is_file()
+        assert output_path.parent == model.exports_onnx_dir()
+        assert output_path.parent == model.model_dir / "exports_onnx"
+        assert output_path.name == f"{model._ckpt_stem()}_{onnx_precision}.onnx"
+        assert output_path.stat().st_size > 0
+
+    @requires_onnxruntime
+    def test_export_loads_model_lazily(self, tmp_path, request):
+        """export() loads the checkpoint itself, so it works before any prediction."""
+        model = _setup_test_model(tmp_path, request)
+        assert model.model is None
+        model.export("onnx", onnx_precision="fp32")
+        assert model.model is not None
+
+    @requires_onnxruntime
+    def test_export_works_when_weights_already_loaded(self, tmp_path, request):
+        """export() is unaffected by whether _load() already ran (lazy-load interaction)."""
+        model = _setup_test_model(tmp_path, request)
+        model._load()
+        assert model.model is not None
+        output_path = model.export("onnx", onnx_precision="fp32")
+        assert output_path.is_file()
+
+    @requires_onnxruntime
+    def test_fp16_export_leaves_live_model_in_fp32(self, tmp_path, request):
+        """An fp16 export must not half() the in-memory model.
+
+        torch's .half() mutates in place and returns self, so tracing the live
+        module would silently leave every subsequent eager call running in half
+        precision. export() traces a copy instead.
+        """
+        model = _setup_test_model(tmp_path, request)
+        model.export("onnx", onnx_precision="fp16")
+
+        assert model.model is not None
+        dtypes = {p.dtype for p in model.model.parameters()}
+        assert dtypes == {torch.float32}, f"live model was mutated to {dtypes}"
+
+    @requires_onnxruntime
+    def test_export_multiview(self, tmp_path, request):
+        """A multiview model exports with its per-view dummy input shape."""
+        model = _setup_test_model(tmp_path, request, multiview=True)
+        output_path = model.export("onnx", onnx_precision="fp32")
+        assert output_path.is_file()
+        assert output_path.stat().st_size > 0
+
+
+class TestOnnxRuntime:
+    """Test loading a model with runtime='onnx'."""
+
+    pytestmark = pytest.mark.gpu
+
+    def test_from_dir_rejects_unknown_runtime(self, tmp_path, request):
+        """from_dir() rejects a runtime other than 'eager' or 'onnx'."""
+        model = _setup_test_model(tmp_path, request)
+        with pytest.raises(ValueError, match="Unsupported runtime"):
+            Model.from_dir(model.model_dir, runtime="tensorrt")
+
+    def test_from_dir_raises_when_no_export_exists(self, tmp_path, request):
+        """runtime='onnx' with no export points the user at export()."""
+        model = _setup_test_model(tmp_path, request)
+        with pytest.raises(FileNotFoundError, match=r"Run model\.export\('onnx'\) first"):
+            Model.from_dir(model.model_dir, runtime="onnx")
+
+    @requires_onnxruntime
+    def test_from_dir_auto_selects_sole_export(self, tmp_path, request):
+        """onnx_precision may be omitted when exactly one export exists."""
+        model = _setup_test_model(tmp_path, request)
+        model.export("onnx", onnx_precision="fp32")
+
+        onnx_model = Model.from_dir(model.model_dir, runtime="onnx")
+        assert onnx_model._runtime == "onnx"
+
+    @requires_onnxruntime
+    def test_from_dir_raises_when_multiple_exports_exist(self, tmp_path, request):
+        """Ambiguous exports raise rather than picking one arbitrarily."""
+        model = _setup_test_model(tmp_path, request)
+        model.export("onnx", onnx_precision="fp32")
+        model.export("onnx", onnx_precision="fp16")
+
+        with pytest.raises(ValueError, match="Multiple ONNX exports found"):
+            Model.from_dir(model.model_dir, runtime="onnx")
+
+    @requires_onnxruntime
+    def test_from_dir_selects_requested_precision(self, tmp_path, request):
+        """onnx_precision disambiguates when several exports exist."""
+        model = _setup_test_model(tmp_path, request)
+        model.export("onnx", onnx_precision="fp32")
+        model.export("onnx", onnx_precision="fp16")
+
+        onnx_model = Model.from_dir(
+            model.model_dir, runtime="onnx", onnx_precision="fp16"
+        )
+        assert onnx_model._runtime == "onnx"
+
+    @requires_onnxruntime
+    def test_export_and_load_agree_on_checkpoint(self, tmp_path, request):
+        """Loading finds exactly the file exporting produced.
+
+        Both sides resolve the checkpoint through io_utils.ckpt_path_from_base_path
+        via _ckpt_stem(); this pins that they cannot drift apart.
+        """
+        model = _setup_test_model(tmp_path, request)
+        exported = model.export("onnx", onnx_precision="fp32")
+
+        loaded = Model.from_dir(model.model_dir, runtime="onnx")
+        found = sorted(loaded.exports_onnx_dir().glob(f"{loaded._ckpt_stem()}_*.onnx"))
+        assert found == [exported]
+
+    def test_provider_guard_raises_on_silent_cpu_fallback(self, tmp_path, request):
+        """A CUDA machine that loses CUDAExecutionProvider must fail loudly.
+
+        onnxruntime falls back to CPU without raising, which "works" but is
+        drastically slower with no indication why. Mocked rather than skipped so
+        the guard is covered even where CUDA is genuinely available.
+        """
+        pytest.importorskip("onnxruntime")
+        model = _setup_test_model(tmp_path, request)
+
+        # A stub export file is enough -- the session is mocked out below.
+        model.exports_onnx_dir().mkdir(parents=True, exist_ok=True)
+        (model.exports_onnx_dir() / f"{model._ckpt_stem()}_fp16.onnx").touch()
+
+        fake_session = MagicMock()
+        fake_session.get_providers.return_value = ["CPUExecutionProvider"]
+
+        with (
+            patch("onnxruntime.InferenceSession", return_value=fake_session),
+            patch("torch.cuda.is_available", return_value=True),
+            pytest.raises(RuntimeError, match="CUDAExecutionProvider"),
+        ):
+            Model.from_dir(model.model_dir, runtime="onnx")
+
+    @requires_onnxruntime
+    def test_compile_raises_on_onnx_runtime(self, tmp_path, request):
+        """compile() is rejected on an ONNX-backed model rather than silently no-op."""
+        model = _setup_test_model(tmp_path, request)
+        model.export("onnx", onnx_precision="fp32")
+
+        onnx_model = Model.from_dir(model.model_dir, runtime="onnx")
+        with pytest.raises(RuntimeError, match="only supported for runtime='eager'"):
+            onnx_model.compile()
+        assert not onnx_model._compiled
+
+    @requires_onnxruntime
+    def test_onnx_matches_eager_predictions(self, tmp_path, request, toy_data_dir):
+        """fp32 ONNX predictions match eager ones to well under a pixel.
+
+        Separate tmp_path subdirectories because _setup_test_model copies the
+        model tree and asserts no prediction outputs exist yet.
+        """
+        csv_file = Path(toy_data_dir) / "CollectedData.csv"
+
+        eager_model = _setup_test_model(tmp_path / "eager", request)
+        onnx_source = _setup_test_model(tmp_path / "onnx", request)
+        onnx_source.export("onnx", onnx_precision="fp32")
+        onnx_model = Model.from_dir(onnx_source.model_dir, runtime="onnx")
+
+        eager_preds = eager_model.predict_on_label_csv(csv_file).predictions
+        onnx_preds = onnx_model.predict_on_label_csv(csv_file).predictions
+
+        xy_cols = [c for c in eager_preds.columns if c[-1] in ("x", "y")]
+        deviation = np.abs(
+            eager_preds[xy_cols].to_numpy(dtype=float)
+            - onnx_preds[xy_cols].to_numpy(dtype=float)
+        )
+        max_deviation = np.nanmax(deviation)
+        assert max_deviation < 0.1, f"max pixel deviation {max_deviation:.4f} >= 0.1"

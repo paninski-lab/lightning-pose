@@ -65,11 +65,57 @@ class TestPredictParser:
         args = parser.parse_args(['predict', str(model_dir), 'video.mp4', '--compile'])
         assert args.compile
 
-    def test_compile_default_is_false(self, parser, tmp_path):
+
+    def test_runtime_default_is_eager(self, parser, tmp_path):
+        """--runtime defaults to eager."""
         model_dir = tmp_path / 'model'
         model_dir.mkdir()
         args = parser.parse_args(['predict', str(model_dir), 'video.mp4'])
-        assert not args.compile
+        assert args.runtime == 'eager'
+
+    def test_runtime_onnx(self, parser, tmp_path):
+        """--runtime onnx is parsed."""
+        model_dir = tmp_path / 'model'
+        model_dir.mkdir()
+        args = parser.parse_args(
+            ['predict', str(model_dir), 'video.mp4', '--runtime', 'onnx']
+        )
+        assert args.runtime == 'onnx'
+
+    def test_runtime_rejects_unknown_value(self, parser, tmp_path):
+        """--runtime tensorrt exits; TensorRT is a planned follow-up, not supported."""
+        model_dir = tmp_path / 'model'
+        model_dir.mkdir()
+        with pytest.raises(SystemExit):
+            parser.parse_args(
+                ['predict', str(model_dir), 'video.mp4', '--runtime', 'tensorrt']
+            )
+
+    def test_onnx_precision_default_is_none(self, parser, tmp_path):
+        """--onnx-precision defaults to None so a sole export is auto-selected."""
+        model_dir = tmp_path / 'model'
+        model_dir.mkdir()
+        args = parser.parse_args(['predict', str(model_dir), 'video.mp4'])
+        assert args.onnx_precision is None
+
+    def test_onnx_precision_arg(self, parser, tmp_path):
+        """--onnx-precision is parsed into onnx_precision."""
+        model_dir = tmp_path / 'model'
+        model_dir.mkdir()
+        args = parser.parse_args([
+            'predict', str(model_dir), 'video.mp4',
+            '--runtime', 'onnx', '--onnx-precision', 'fp16',
+        ])
+        assert args.onnx_precision == 'fp16'
+
+    def test_onnx_precision_rejects_bf16(self, parser, tmp_path):
+        """bf16 is valid for --precision but not for --onnx-precision."""
+        model_dir = tmp_path / 'model'
+        model_dir.mkdir()
+        with pytest.raises(SystemExit):
+            parser.parse_args([
+                'predict', str(model_dir), 'video.mp4', '--onnx-precision', 'bf16',
+            ])
 
     def test_overrides(self, parser, tmp_path):
         model_dir = tmp_path / 'model'
@@ -180,6 +226,8 @@ class TestHandle:
             bbox_dir=bbox_dir,
             precision='fp32',
             compile=False,
+            runtime='eager',
+            onnx_precision=None,
         )
 
     def test_handle_threads_bbox_dir_to_predict_multi_type(self, tmp_path, mock_model):
@@ -246,3 +294,50 @@ class TestHandle:
             MockModel.from_dir2.return_value = mock_model
             handle(args)
         mock_model.compile.assert_called_once_with()
+
+    def test_handle_threads_runtime_to_from_dir2(self, tmp_path, mock_model):
+        """handle() forwards --runtime and --onnx-precision to Model.from_dir2."""
+        args = self._make_args(tmp_path, tmp_path / 'vid.mp4')
+        args.runtime = 'onnx'
+        args.onnx_precision = 'fp16'
+        with (
+            patch('lightning_pose.api.Model') as MockModel,
+            patch('lightning_pose.cli.commands.predict._predict_multi_type'),
+        ):
+            MockModel.from_dir2.return_value = mock_model
+            handle(args)
+        call_kwargs = MockModel.from_dir2.call_args.kwargs
+        assert call_kwargs['runtime'] == 'onnx'
+        assert call_kwargs['onnx_precision'] == 'fp16'
+
+    def test_handle_defaults_to_eager_runtime(self, tmp_path, mock_model):
+        """handle() passes runtime='eager' and onnx_precision=None by default."""
+        args = self._make_args(tmp_path, tmp_path / 'vid.mp4')
+        with (
+            patch('lightning_pose.api.Model') as MockModel,
+            patch('lightning_pose.cli.commands.predict._predict_multi_type'),
+        ):
+            MockModel.from_dir2.return_value = mock_model
+            handle(args)
+        call_kwargs = MockModel.from_dir2.call_args.kwargs
+        assert call_kwargs['runtime'] == 'eager'
+        assert call_kwargs['onnx_precision'] is None
+
+    def test_handle_rejects_compile_with_onnx_runtime(self, tmp_path, mock_model):
+        """--compile with --runtime onnx fails before the model is constructed.
+
+        Checked in the CLI so the user sees this message rather than the
+        equivalent RuntimeError from Model.compile(), which would surface as a
+        raw traceback after the ONNX session had already been built.
+        """
+        args = self._make_args(tmp_path, tmp_path / 'vid.mp4')
+        args.compile = True
+        args.runtime = 'onnx'
+        with (
+            patch('lightning_pose.api.Model') as MockModel,
+            patch('lightning_pose.cli.commands.predict._predict_multi_type'),
+        ):
+            MockModel.from_dir2.return_value = mock_model
+            with pytest.raises(ValueError, match='only supported with --runtime eager'):
+                handle(args)
+        MockModel.from_dir2.assert_not_called()
