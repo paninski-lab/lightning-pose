@@ -653,6 +653,10 @@ class Model:
         # Dummy input shape depends on model type. Context models take a temporal
         # stack and multiview models take a per-view stack; see predict_frame and
         # predict_on_video_file_multiview for the corresponding runtime shapes.
+        # The two cases are mutually exclusive rather than composable:
+        # HeatmapTrackerMultiviewTransformer raises on a do_context kwarg and
+        # hardcodes do_context=False, so a true-multiview model never reports
+        # do_context=True.
         if self.config.is_multi_view():
             num_views = len(self.cfg.data.view_names)
             shape = (1, num_views, 3, resize_h, resize_w)
