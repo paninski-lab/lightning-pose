@@ -187,41 +187,21 @@ a no-op.
 ONNX Runtime
 ------------
 
+.. _onnx_installation:
+
 Installation
 ~~~~~~~~~~~~
 
-ONNX Runtime is an optional dependency:
-
-.. code-block:: console
-
-    pip install onnxruntime-gpu
-
-``onnxruntime-gpu`` wheels are built against a specific CUDA major version at build time --
-currently CUDA 12.x/13.x for the default PyPI package. The wheel does **not** detect or adapt
-to whatever CUDA you already have, so check what your PyTorch install is using and match it:
+ONNX Runtime is an optional dependency. ``onnxruntime-gpu`` wheels are built against a specific
+CUDA major version at build time, and the wheel does **not** detect or adapt to whatever CUDA
+you already have -- so check what your PyTorch install is using first:
 
 .. code-block:: console
 
     python -c "import torch; print(torch.version.cuda)"
 
-If that prints a version outside ``onnxruntime-gpu``'s default -- for example CUDA 11.x, which
-is no longer published to PyPI under the default package name -- use ONNX Runtime's
-`installation selector <https://onnxruntime.ai/getting-started>`_ to get the right command for
-your setup.
-
-You do **not** normally need a separate system CUDA toolkit. ``onnxruntime-gpu`` can reuse the
-CUDA and cuDNN libraries that PyTorch already bundles, provided ``torch`` is imported first --
-which it always is here, since ``lightning_pose.api.Model`` imports ``torch`` at module level.
-On a working PyTorch + CUDA setup, ``pip install onnxruntime-gpu`` is usually all you need.
-
-.. note::
-
-   If the CUDA major versions don't match, ``onnxruntime`` does not raise. It silently drops
-   ``CUDAExecutionProvider`` and runs on CPU instead, which "works" but is drastically slower
-   with no indication why. Lightning Pose checks for this and raises a ``RuntimeError`` when a
-   CUDA device is available but ``CUDAExecutionProvider`` failed to load. If you hit that
-   error, re-check ``torch.version.cuda`` against your installed ``onnxruntime-gpu`` build and
-   reinstall the matching one.
+Then use that CUDA version to select the proper installation option from ONNX Runtime's
+`installation selector <https://onnxruntime.ai/getting-started>`_.
 
 Usage
 ~~~~~

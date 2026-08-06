@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import logging
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal, cast, get_args
 
 import cv2
 import numpy as np
@@ -72,6 +72,11 @@ _CONTEXT_SEQUENCE_LENGTH = 5
 # _Precision -- this is the precision baked into the .onnx file itself, not the
 # autocast precision used for eager inference.
 _OnnxPrecision = Literal["fp32", "fp16"]
+
+# Inference runtimes accepted by Model.from_dir(runtime=...). "tensorrt" is a
+# planned addition that will consume the same exported .onnx file through a
+# different execution provider.
+_Runtime = Literal["eager", "onnx"]
 
 # Maps onnxruntime's tensor type strings to numpy dtypes. Used to bind input
 # buffers at whatever precision the exported file actually expects, rather than
@@ -274,7 +279,7 @@ class Model:
     """Whether ``compile()`` has been called. Guards against double-wrapping
     ``forward`` on repeat calls."""
 
-    _runtime: str = "eager"
+    _runtime: _Runtime = "eager"
     """Which inference runtime backs ``forward``: ``"eager"`` (the loaded
     PyTorch checkpoint) or ``"onnx"`` (an ONNX Runtime session). Set by
     ``from_dir(runtime=...)``; not user-assignable after construction."""
@@ -287,7 +292,7 @@ class Model:
     def from_dir(
         model_dir: str | Path,
         precision: _Precision = "fp32",
-        runtime: str = "eager",
+        runtime: _Runtime = "eager",
         onnx_precision: _OnnxPrecision | None = None,
     ) -> Model:
         """Create a `Model` instance for a model stored at `model_dir`.
@@ -336,7 +341,7 @@ class Model:
         model_dir: str | Path,
         hydra_overrides: list[str] | None = None,
         precision: _Precision = "fp32",
-        runtime: str = "eager",
+        runtime: _Runtime = "eager",
         onnx_precision: _OnnxPrecision | None = None,
     ) -> Model:
         """Internal version of from_dir that supports hydra_overrides. Not sure whether to
@@ -363,8 +368,9 @@ class Model:
             model._attach_onnx_runtime(onnx_precision)
             return model
         else:
+            supported = ", ".join(repr(r) for r in get_args(_Runtime))
             raise ValueError(
-                f"Unsupported runtime: '{runtime}'. Use 'eager' or 'onnx'."
+                f"Unsupported runtime: '{runtime}'. Use one of {supported}."
             )
 
     def __init__(
@@ -515,9 +521,9 @@ class Model:
         except ImportError as e:
             raise ImportError(
                 "onnxruntime is required for runtime='onnx' but is not installed. "
-                "Install it with `pip install onnxruntime-gpu`, matching the CUDA "
-                "version your PyTorch build uses -- see the installation section of "
-                "docs/source/user_guide_advanced/increasing_inference_speed.rst."
+                "See https://lightning-pose.readthedocs.io/en/latest/source/"
+                "user_guide_advanced/increasing_inference_speed.html#onnx-installation "
+                "for installation instructions."
             ) from e
 
         self._load()
@@ -537,11 +543,15 @@ class Model:
         if torch.cuda.is_available() and "CUDAExecutionProvider" not in providers:
             raise RuntimeError(
                 "ONNX Runtime failed to load CUDAExecutionProvider even though a CUDA "
-                "device is available -- inference would silently run on CPU instead. "
-                "This is usually a CUDA/cuDNN major version mismatch between "
-                "onnxruntime-gpu and your installed PyTorch. See the installation "
-                "section of docs/source/user_guide_advanced/increasing_inference_speed.rst "
-                "for how to check and fix this."
+                "device is available -- inference would silently run on CPU instead, "
+                "which works but is drastically slower with no indication why. This is "
+                "usually a CUDA major version mismatch between onnxruntime-gpu and your "
+                "installed PyTorch: onnxruntime-gpu wheels are built against a specific "
+                "CUDA version and do not adapt to the one you have. Check yours with "
+                "`python -c \"import torch; print(torch.version.cuda)\"` and reinstall "
+                "the matching build -- see "
+                "https://lightning-pose.readthedocs.io/en/latest/source/"
+                "user_guide_advanced/increasing_inference_speed.html#onnx-installation"
             )
 
         # Bind at the precision the exported graph declares, not a hardcoded

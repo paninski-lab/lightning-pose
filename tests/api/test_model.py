@@ -615,7 +615,7 @@ class TestOnnxRuntime:
         """from_dir() rejects a runtime other than 'eager' or 'onnx'."""
         model = _setup_test_model(tmp_path, request)
         with pytest.raises(ValueError, match="Unsupported runtime"):
-            Model.from_dir(model.model_dir, runtime="tensorrt")
+            Model.from_dir(model.model_dir, runtime="tensorrt")  # type: ignore[arg-type]
 
     def test_from_dir_raises_when_no_export_exists(self, tmp_path, request):
         """runtime='onnx' with no export points the user at export()."""
@@ -704,7 +704,7 @@ class TestOnnxRuntime:
 
         with (
             patch.dict(sys.modules, {"onnxruntime": None}),
-            pytest.raises(ImportError, match="pip install onnxruntime-gpu"),
+            pytest.raises(ImportError, match="increasing_inference_speed"),
         ):
             Model.from_dir(model.model_dir, runtime="onnx")
 
@@ -914,7 +914,7 @@ class TestOnnxRuntimeUnit:
         self._prepare_export(model)
         with (
             patch.dict(sys.modules, {"onnxruntime": None}),
-            pytest.raises(ImportError, match="pip install onnxruntime-gpu"),
+            pytest.raises(ImportError, match="increasing_inference_speed"),
         ):
             model._attach_onnx_runtime(None)
 
