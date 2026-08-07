@@ -187,64 +187,121 @@ a no-op.
 ONNX Runtime
 ------------
 
-Export the model's forward pass to ONNX, then run inference through ``onnxruntime``, plugging
-the ONNX session back in as the model's forward pass the same way as above:
+.. _onnx_installation:
+
+Installation
+~~~~~~~~~~~~
+
+ONNX Runtime is an optional dependency. ``onnxruntime-gpu`` wheels are built against a specific
+CUDA major version at build time, and the wheel does **not** detect or adapt to whatever CUDA
+you already have -- so check what your PyTorch install is using first:
+
+.. code-block:: console
+
+    python -c "import torch; print(torch.version.cuda)"
+
+Then use that CUDA version to select the proper installation option from ONNX Runtime's
+`installation selector <https://onnxruntime.ai/getting-started>`_.
+
+Exporting additionally requires the ``onnx`` package, which ``onnxruntime-gpu`` does not pull
+in as a dependency:
+
+.. code-block:: console
+
+    pip install onnx
+
+Only ``Model.export()`` needs it. A machine that just runs an already-exported ``.onnx`` file
+needs ``onnxruntime-gpu`` alone.
+
+Usage
+~~~~~
+
+Exporting and loading are separate steps. Export once, then load with ``runtime="onnx"`` for
+every subsequent prediction run:
 
 .. code-block:: python
 
-    import numpy as np
-    import onnxruntime as ort
-    import torch
     from lightning_pose.api import Model
 
+    # export once
     model = Model.from_dir("path/to/model_dir")
-    real_module = model.model
+    model.export("onnx", onnx_precision="fp16")
 
-    resize_h = model.cfg.data.image_resize_dims.height
-    resize_w = model.cfg.data.image_resize_dims.width
-    # shape is (1, num_views, 3, H, W) instead for a multi-view model
-    dummy = torch.randn(1, 3, resize_h, resize_w, device="cuda")
-
-    torch.onnx.export(
-        real_module, dummy, "/path/to/model.onnx",
-        input_names=["images"], output_names=["heatmaps"],
-        dynamic_axes={"images": {0: "batch"}, "heatmaps": {0: "batch"}},
-        opset_version=17, do_constant_folding=True,
+    # load through ONNX Runtime and predict as normal
+    onnx_model = Model.from_dir(
+        "path/to/model_dir", runtime="onnx", onnx_precision="fp16"
     )
+    result = onnx_model.predict_on_video_file("path/to/video.mp4")
 
-    session = ort.InferenceSession(
-        "/path/to/model.onnx", providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
-    )
+The same two steps from the CLI:
 
-    def onnx_forward(images):
-        io_binding = session.io_binding()
-        io_binding.bind_input(
-            name="images", device_type="cuda", device_id=0,
-            element_type=np.float32, shape=tuple(images.shape),
-            buffer_ptr=images.contiguous().data_ptr(),
-        )
-        io_binding.bind_output(name="heatmaps", device_type="cuda", device_id=0)
-        session.run_with_iobinding(io_binding)
-        return torch.from_numpy(io_binding.copy_outputs_to_cpu()[0]).to(images.device)
+.. code-block:: console
 
-    real_module.forward = onnx_forward
-    result = model.predict_on_video_file("path/to/video.mp4")
+    litpose export /path/to/model_dir --runtime onnx --onnx-precision fp16
+    litpose predict /path/to/model_dir /path/to/video.mp4 --runtime onnx --onnx-precision fp16
 
-Requires ``pip install onnxruntime-gpu`` -- make sure the CUDA version matches your PyTorch
-install. Pip's default ``onnxruntime-gpu`` build may target a newer CUDA major version than
-your PyTorch install uses; check Microsoft's ``onnxruntime-cuda-12`` package index if you're on
-CUDA 12.
+Exports are written to a fixed location inside the model directory:
+
+.. code-block:: text
+
+    model_dir/
+    ├── config.yaml
+    ├── tb_logs/.../checkpoints/epoch=214-step=12685-best.ckpt
+    └── exports_onnx/
+        ├── epoch=214-step=12685-best_fp16.onnx
+        └── epoch=214-step=12685-best_fp32.onnx   # only if exported
+
+You never pass export paths yourself -- ``export()`` always writes here and
+``from_dir(runtime="onnx")`` always reads from here. The filename is the checkpoint's own stem
+plus the export precision, so it stays unambiguous which checkpoint an export came from if a
+model directory ever holds exports alongside an updated checkpoint. ``onnx_precision`` may be
+omitted when exactly one export exists for the checkpoint, and is required to disambiguate when
+several do.
+
+.. note::
+
+   ``precision`` and ``onnx_precision`` are different settings.
+
+   * ``precision`` (``"fp32"``/``"fp16"``/``"bf16"``, also ``litpose predict --precision``)
+     controls the autocast precision of an **eager** forward pass. It leaves the weights on
+     disk untouched.
+   * ``onnx_precision`` (``"fp32"``/``"fp16"``, also ``--onnx-precision``) is the weight
+     precision **baked into the exported** ``.onnx`` **file itself**.
+
+   With ``runtime="onnx"``, ``precision`` is ignored -- the exported file's own precision is
+   what runs.
+
+.. note::
+
+   ``runtime="onnx"`` rebinds the model's ``forward`` method to the ONNX session rather than
+   wrapping the module, for the same reason described in the ``torch.compile()`` note above.
+
+.. note::
+
+   ``torch.compile()`` has no effect on an ONNX Runtime session. Combining ``--compile`` with
+   ``--runtime onnx``, or calling ``compile()`` on a model loaded with ``runtime="onnx"``,
+   raises rather than silently doing nothing.
 
 .. _usage_tensorrt:
 
 TensorRT
 --------
 
-TensorRT engines are built through the same ONNX file, using onnxruntime's
-``TensorrtExecutionProvider`` instead of ``CUDAExecutionProvider`` (continuing the snippet
-above):
+TensorRT engines are built from the same ``.onnx`` file that ``model.export("onnx")``
+produces, using onnxruntime's ``TensorrtExecutionProvider`` instead of
+``CUDAExecutionProvider``. There is no ``runtime="tensorrt"`` yet, so the session is built
+by hand:
 
 .. code-block:: python
+
+    import onnxruntime as ort
+
+    from lightning_pose.api import Model
+
+    model = Model.from_dir("path/to/model_dir")
+    onnx_path = model.export("onnx", onnx_precision="fp32")
+    resize_h = model.cfg.data.image_resize_dims.height
+    resize_w = model.cfg.data.image_resize_dims.width
 
     trt_options = {
         "trt_engine_cache_enable": True,
@@ -255,7 +312,7 @@ above):
         "trt_profile_max_shapes": f"images:1x3x{resize_h}x{resize_w}",
     }
     session = ort.InferenceSession(
-        "/path/to/model.onnx",
+        str(onnx_path),
         providers=[
             ("TensorrtExecutionProvider", trt_options),
             "CUDAExecutionProvider",

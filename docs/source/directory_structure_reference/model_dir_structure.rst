@@ -13,6 +13,8 @@ Model Directory Structure
    ├── predictions_view1.csv
    |
    ├── tb_logs/ ...
+   ├── exports_onnx/
+   │   └── epoch=214-step=12685-best_fp16.onnx
    ├── video_preds/
    │   ├── session0_view0.mp4/
    │   |   └── predictions.csv
@@ -26,6 +28,7 @@ Detailed descriptions
 -----------------------
 
 * ``tb_logs/``: model weights
+* ``exports_onnx/``: ONNX exports produced by ``litpose export`` or ``Model.export("onnx", ...)``, one file per exported checkpoint and precision, named ``<checkpoint_stem>_<onnx_precision>.onnx``. Read back by ``litpose predict --runtime onnx`` or ``Model.from_dir(..., runtime="onnx")``. See :ref:`Increasing Inference Speed <usage_onnx_runtime>`.
 * ``video_preds/``: predictions and metrics from videos. The config field ``eval.test_videos_directory`` points to a directory of videos; if ``eval.predict_vids_after_training`` is set to ``true``, all videos in the indicated direcotry will be run through the model upon training completion and results stored here.
 * ``video_preds/labeled_videos/``: labeled mp4s. The config field ``eval.test_videos_directory`` points to a directory of videos; if ``eval.save_vids_after_training`` is set to ``true``, all videos in the indicated direcotry will be run through the model upon training completion and results stored here.
 * ``predictions.csv``: predictions on labeled data. The right-most column records the train/val/test split that each example belongs to.
