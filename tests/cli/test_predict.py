@@ -82,13 +82,22 @@ class TestPredictParser:
         )
         assert args.runtime == 'onnx'
 
+    def test_runtime_tensorrt(self, parser, tmp_path):
+        """--runtime tensorrt is parsed."""
+        model_dir = tmp_path / 'model'
+        model_dir.mkdir()
+        args = parser.parse_args(
+            ['predict', str(model_dir), 'video.mp4', '--runtime', 'tensorrt']
+        )
+        assert args.runtime == 'tensorrt'
+
     def test_runtime_rejects_unknown_value(self, parser, tmp_path):
-        """--runtime tensorrt exits; TensorRT is a planned follow-up, not supported."""
+        """A runtime other than eager/onnx/tensorrt exits."""
         model_dir = tmp_path / 'model'
         model_dir.mkdir()
         with pytest.raises(SystemExit):
             parser.parse_args(
-                ['predict', str(model_dir), 'video.mp4', '--runtime', 'tensorrt']
+                ['predict', str(model_dir), 'video.mp4', '--runtime', 'coreml']
             )
 
     def test_onnx_precision_default_is_none(self, parser, tmp_path):
@@ -341,3 +350,32 @@ class TestHandle:
             with pytest.raises(ValueError, match='only supported with --runtime eager'):
                 handle(args)
         MockModel.from_dir2.assert_not_called()
+
+    def test_handle_rejects_compile_with_tensorrt_runtime(self, tmp_path, mock_model):
+        """--compile with --runtime tensorrt fails the same way as --runtime onnx."""
+        args = self._make_args(tmp_path, tmp_path / 'vid.mp4')
+        args.compile = True
+        args.runtime = 'tensorrt'
+        with (
+            patch('lightning_pose.api.Model') as MockModel,
+            patch('lightning_pose.cli.commands.predict._predict_multi_type'),
+        ):
+            MockModel.from_dir2.return_value = mock_model
+            with pytest.raises(ValueError, match='only supported with --runtime eager'):
+                handle(args)
+        MockModel.from_dir2.assert_not_called()
+
+    def test_handle_threads_tensorrt_runtime_to_from_dir2(self, tmp_path, mock_model):
+        """handle() forwards --runtime tensorrt to Model.from_dir2 same as onnx."""
+        args = self._make_args(tmp_path, tmp_path / 'vid.mp4')
+        args.runtime = 'tensorrt'
+        args.onnx_precision = 'fp16'
+        with (
+            patch('lightning_pose.api.Model') as MockModel,
+            patch('lightning_pose.cli.commands.predict._predict_multi_type'),
+        ):
+            MockModel.from_dir2.return_value = mock_model
+            handle(args)
+        call_kwargs = MockModel.from_dir2.call_args.kwargs
+        assert call_kwargs['runtime'] == 'tensorrt'
+        assert call_kwargs['onnx_precision'] == 'fp16'
