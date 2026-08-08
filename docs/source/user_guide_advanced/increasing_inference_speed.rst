@@ -287,64 +287,114 @@ several do.
 TensorRT
 --------
 
-TensorRT engines are built from the same ``.onnx`` file that ``model.export("onnx")``
-produces, using onnxruntime's ``TensorrtExecutionProvider`` instead of
-``CUDAExecutionProvider``. There is no ``runtime="tensorrt"`` yet, so the session is built
-by hand:
+.. _tensorrt_installation:
+
+Installation
+~~~~~~~~~~~~~
+
+TensorRT and ``onnxruntime-gpu`` need matching major versions, and ``pip install
+tensorrt`` / ``pip install onnxruntime-gpu`` each default independently to whatever is
+newest -- so they don't necessarily agree with each other, or with your PyTorch install's
+CUDA version. Check what onnxruntime expects before installing TensorRT:
+
+.. code-block:: console
+
+    python -c "import onnxruntime; print(onnxruntime.__version__)"
+
+The combination we verified working is ``onnxruntime-gpu`` 1.28.0 with
+``pip install "tensorrt-cu12<11"`` (lands on TensorRT 10.16.1.11, providing
+``libnvinfer.so.10``). A newer, unpinned ``pip install tensorrt`` can land on TensorRT
+11.x (``libnvinfer.so.11``) instead, which fails at session-creation time with a
+missing-symbol error rather than a clear version-mismatch message.
+
+TensorRT's shared libraries also need to be on ``LD_LIBRARY_PATH`` at runtime:
+
+.. code-block:: bash
+
+    export LD_LIBRARY_PATH=/path/to/site-packages/tensorrt_libs:$LD_LIBRARY_PATH
+
+Building a TensorRT engine starts from the ``.onnx`` file produced by ``model.export(
+"onnx", ...)`` -- the ``onnx`` package is needed to create that file, but not to build
+the engine from it afterward. A machine that only builds/runs TensorRT engines from an
+already-exported ``.onnx`` file needs ``onnxruntime-gpu`` and ``tensorrt`` alone.
+
+Usage
+~~~~~
+
+TensorRT builds its engine from an existing ONNX export, so export to ONNX first if you
+haven't already:
 
 .. code-block:: python
-
-    import onnxruntime as ort
 
     from lightning_pose.api import Model
 
     model = Model.from_dir("path/to/model_dir")
-    onnx_path = model.export("onnx", onnx_precision="fp32")
-    resize_h = model.cfg.data.image_resize_dims.height
-    resize_w = model.cfg.data.image_resize_dims.width
+    model.export("onnx", onnx_precision="fp16")
+    model.export("tensorrt", onnx_precision="fp16", max_batch_size=8)
 
-    trt_options = {
-        "trt_engine_cache_enable": True,
-        "trt_engine_cache_path": "/path/to/trt_cache",
-        "trt_fp16_enable": True,  # set False to retain FP32 precision
-        "trt_profile_min_shapes": f"images:1x3x{resize_h}x{resize_w}",
-        "trt_profile_opt_shapes": f"images:1x3x{resize_h}x{resize_w}",
-        "trt_profile_max_shapes": f"images:1x3x{resize_h}x{resize_w}",
-    }
-    session = ort.InferenceSession(
-        str(onnx_path),
-        providers=[
-            ("TensorrtExecutionProvider", trt_options),
-            "CUDAExecutionProvider",
-            "CPUExecutionProvider",
-        ],
+    trt_model = Model.from_dir(
+        "path/to/model_dir", runtime="tensorrt", onnx_precision="fp16"
     )
-    # Always confirm TensorRT actually engaged -- onnxruntime silently falls back to
-    # CUDAExecutionProvider if TensorRT can't be used, e.g. a missing library.
-    assert "TensorrtExecutionProvider" in session.get_providers()
+    result = trt_model.predict_on_video_file("path/to/video.mp4")
 
-The first inference call builds and autotunes an engine for the shapes in the profile above,
-which can take anywhere from several seconds to a few minutes depending on the model. The
-engine is cached to ``trt_engine_cache_path`` and reused on subsequent runs with the same
-shapes.
+The same from the CLI:
 
-Getting TensorRT installed and working took some real trial and error, mostly around matching
-library versions:
+.. code-block:: console
 
-- ``pip install tensorrt`` and ``pip install onnxruntime-gpu`` can each default to newer
-  CUDA/TensorRT major versions that don't match each other or your PyTorch install. We needed
-  ``pip install "tensorrt-cu12<11"`` (landing on TensorRT 10.16.1.11) to match onnxruntime
-  1.28.0's expected ``libnvinfer.so.10``.
-- TensorRT's shared libraries need to be on ``LD_LIBRARY_PATH`` at runtime, e.g.:
+    litpose export /path/to/model_dir --runtime onnx --onnx-precision fp16
+    litpose export /path/to/model_dir --runtime tensorrt --onnx-precision fp16 --max-batch-size 8
+    litpose predict /path/to/model_dir /path/to/video.mp4 --runtime tensorrt --onnx-precision fp16
 
-  .. code-block:: bash
+``max_batch_size`` sets the upper end of the dynamic-shape batch profile the engine is
+built for -- inference at a larger batch size fails. ``opt_batch_size`` (defaults to
+``max_batch_size``) is the batch size the engine is tuned to run fastest at; correctness
+holds for any batch size in ``[1, max_batch_size]``, but performance is best near
+``opt_batch_size``.
 
-      export LD_LIBRARY_PATH=/path/to/site-packages/tensorrt_libs:$LD_LIBRARY_PATH
+The engine cache is written alongside the ONNX exports:
 
-- Always check ``session.get_providers()`` after creating the session. If TensorRT can't
-  load (e.g. a missing library), onnxruntime silently falls back to
-  ``CUDAExecutionProvider`` rather than raising an error -- your code will still run and
-  produce plausible-looking numbers, just not the ones you think.
+.. code-block:: text
+
+    model_dir/
+    ├── config.yaml
+    ├── tb_logs/.../checkpoints/epoch=214-step=12685-best.ckpt
+    ├── exports_onnx/
+    │   └── epoch=214-step=12685-best_fp16.onnx
+    └── exports_trt/
+        └── epoch=214-step=12685-best_fp16/
+            ├── trt_metadata.json
+            └── ...                          # engine cache files (managed by onnxruntime)
+
+The first call to ``model.export("tensorrt", ...)`` builds and autotunes the engine, which
+can take anywhere from several seconds to a few minutes. ``trt_metadata.json`` records the
+GPU name, TensorRT/onnxruntime versions, and batch profile the engine was built with --
+``Model.from_dir(..., runtime="tensorrt")`` reads this back and warns if the current GPU
+doesn't match, since (unlike an ``.onnx`` file) a built engine is tied to the exact GPU
+architecture it was built on and is not portable across machines.
+
+.. note::
+
+   Building always requires a real GPU with a working TensorRT/onnxruntime install --
+   there is no CPU fallback tier for ``runtime="tensorrt"``. If
+   ``TensorrtExecutionProvider`` can't load, this raises rather than silently running on
+   ``CUDAExecutionProvider`` or CPU (unlike plain ONNX Runtime, which does have a CPU
+   tier -- see the note in the ONNX Runtime section above about checking
+   ``session.get_providers()``).
+
+.. note::
+
+   The accuracy check earlier on this page used TensorRT at FP32. At FP16, quantization
+   can shift the heatmap's predicted peak by a few pixels on keypoints the model has no
+   real opinion about -- a near-uniform heatmap, likelihood near the noise floor -- a
+   "peak-flipping" effect that happens under any precision or kernel change (it
+   reproduces on the already-merged ONNX FP16 path too, given a real dataset rather than
+   a handful of hand-picked frames) and isn't specific to TensorRT. On
+   confidently-tracked keypoints it stays small: repeated FP16 engine builds during
+   testing measured mean deviation around 0.2-0.3px, though TensorRT's own build-time
+   autotuning adds some run-to-run variance on top -- engine builds aren't perfectly
+   deterministic, so don't expect bit-identical predictions from two separately-built
+   engines either.
+
 
 .. _caveats:
 
