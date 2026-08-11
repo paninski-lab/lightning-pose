@@ -307,10 +307,14 @@ The combination we verified working is ``onnxruntime-gpu`` 1.28.0 with
 11.x (``libnvinfer.so.11``) instead, which fails at session-creation time with a
 missing-symbol error rather than a clear version-mismatch message.
 
+For the full installation matrix (which TensorRT version pairs with which CUDA/cuDNN), see NVIDIA's `TensorRT install guide <https://docs.nvidia.com/deeplearning/tensorrt/latest/installing-tensorrt/installing.html>`_. The ``<11`` pin above matches what onnxruntime-gpu's TensorRT execution provider currently requires. If your onnxruntime-gpu version differs from the one this doc was written against, check onnxruntime's own `TensorRT EP requirements table <https://onnxruntime.ai/docs/execution-providers/TensorRT-ExecutionProvider.html#requirements>`_ first -- it's the maintained source of truth for onnxruntime-gpu <-> TensorRT <-> CUDA compatibility, including versions released after this page was written.
+
 TensorRT's shared libraries also need to be on ``LD_LIBRARY_PATH`` at runtime:
 
 .. code-block:: bash
 
+    # find your site-packages path:
+    #   python -c "import tensorrt_libs, os; print(os.path.dirname(tensorrt_libs.__file__))"
     export LD_LIBRARY_PATH=/path/to/site-packages/tensorrt_libs:$LD_LIBRARY_PATH
 
 Building a TensorRT engine starts from the ``.onnx`` file produced by ``model.export(
@@ -330,7 +334,7 @@ haven't already:
 
     model = Model.from_dir("path/to/model_dir")
     model.export("onnx", onnx_precision="fp16")
-    model.export("tensorrt", onnx_precision="fp16", max_batch_size=8)
+    model.export("tensorrt", onnx_precision="fp16", max_batch_size=32)
 
     trt_model = Model.from_dir(
         "path/to/model_dir", runtime="tensorrt", onnx_precision="fp16"
@@ -342,7 +346,7 @@ The same from the CLI:
 .. code-block:: console
 
     litpose export /path/to/model_dir --runtime onnx --onnx-precision fp16
-    litpose export /path/to/model_dir --runtime tensorrt --onnx-precision fp16 --max-batch-size 8
+    litpose export /path/to/model_dir --runtime tensorrt --onnx-precision fp16 --max-batch-size 32
     litpose predict /path/to/model_dir /path/to/video.mp4 --runtime tensorrt --onnx-precision fp16
 
 ``max_batch_size`` sets the upper end of the dynamic-shape batch profile the engine is

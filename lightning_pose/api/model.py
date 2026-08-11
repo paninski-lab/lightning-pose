@@ -75,9 +75,7 @@ _CONTEXT_SEQUENCE_LENGTH = 5
 # autocast precision used for eager inference.
 _OnnxPrecision = Literal["fp32", "fp16"]
 
-# Inference runtimes accepted by Model.from_dir(runtime=...). "tensorrt" is a
-# planned addition that will consume the same exported .onnx file through a
-# different execution provider.
+# Inference runtimes accepted by Model.from_dir(runtime=...).
 _Runtime = Literal["eager", "onnx", "tensorrt"]
 
 # Maps onnxruntime's tensor type strings to numpy dtypes. Used to bind input
