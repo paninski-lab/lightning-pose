@@ -77,6 +77,10 @@ _OnnxPrecision = Literal["fp32", "fp16"]
 # planned addition that will consume the same exported .onnx file through a
 # different execution provider.
 _Runtime = Literal["eager", "onnx"]
+# Video-decoding backends accepted by predict_on_video_file(_multiview)'s decoder=
+# kwarg. Independent of _Runtime -- decoder controls video ingestion, _Runtime
+# controls model execution.
+_Decoder = Literal["dali", "pynvvc"]
 
 # Maps onnxruntime's tensor type strings to numpy dtypes. Used to bind input
 # buffers at whatever precision the exported file actually expects, rather than
@@ -1143,6 +1147,7 @@ class Model:
         compute_metrics: bool = True,
         generate_labeled_video: bool = False,
         progress_file: Path | None = None,
+        decoder: _Decoder | None = None,
         bbox_file: str | Path | None = None,
     ) -> PredictionResult:
         """Predicts on a video file and computes unsupervised loss metrics if applicable.
@@ -1158,6 +1163,10 @@ class Model:
                 Defaults to False.
             progress_file (Path, optional): Path to a file to save progress information for the
                 App. Defaults to None.
+            decoder (optional): which video-decoding backend to use, "dali" or "pynvvc".
+                None (default) auto-selects pynvvc if it's usable on this machine for this
+                video, else falls back to dali. Independent of the model's runtime
+                (eager/onnx) and torch.compile -- this only controls video ingestion.
             bbox_file (str | Path, optional): Path to a per-frame bbox CSV (columns x, y, h, w;
                 one row per frame). When provided, each frame is cropped to its bounding box
                 before being passed to the model, and predictions are returned in the original
@@ -1196,6 +1205,7 @@ class Model:
             model=self,
             output_pred_file=str(prediction_csv_file),
             progress_file=progress_file,
+            decoder=decoder,
             bbox_file=bbox_file,
         )
         if generate_labeled_video:
@@ -1229,6 +1239,7 @@ class Model:
         compute_metrics: bool = True,
         generate_labeled_video: bool = False,
         progress_file: Path | None = None,
+        decoder: _Decoder | None = None,
     ) -> MultiviewPredictionResult:
         """Version of ``predict_on_video_file`` that accesses multiple camera views of each frame.
 
@@ -1241,6 +1252,9 @@ class Model:
             compute_metrics: whether to compute pixel error and loss metrics on predictions.
             generate_labeled_video: whether to save a labeled video.
             progress_file: path to a file to save progress information for the App.
+            decoder: which video-decoding backend to use, "dali" or "pynvvc". None (default)
+                auto-selects pynvvc if it's usable on this machine for this video, else falls
+                back to dali.
 
         Returns:
             object containing the predictions and metrics for each view.
@@ -1285,6 +1299,7 @@ class Model:
             model=self,
             output_pred_file=prediction_csv_file_list,
             progress_file=progress_file,
+            decoder=decoder,
         )
         if generate_labeled_video:
             for video_file, preds_df in zip(video_file_per_view, df_list, strict=True):

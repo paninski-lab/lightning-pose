@@ -41,7 +41,6 @@ from typing import Any, Literal
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn.functional as F
 from omegaconf import DictConfig, ListConfig
 
 try:
@@ -56,6 +55,7 @@ except ImportError as e:
     ) from e
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
+from lightning_pose.data.bboxes import crop_and_resize_frames
 from lightning_pose.data.datatypes import (
     MultiviewUnlabeledBatchDict,
     UnlabeledBatchDict,
@@ -360,38 +360,14 @@ class LitDaliWrapper(DALIGenericIterator):
                 ignore_index=True,
             )
 
-        frame_h, frame_w = frames.shape[2], frames.shape[3]
-        cropped_frames = []
-        bboxes = []
-        for i in range(seq_len):
-            row = rows.iloc[i]
-            # clamp to frame bounds: create_bbox can produce negative x/y for edge frames
-            # (centroid - bbox_size//2 < 0). negative pytorch slice indices count from the
-            # end rather than clamping, producing an empty crop.
-            x1 = max(0, int(row['x']))
-            y1 = max(0, int(row['y']))
-            x2 = max(x1 + 1, min(frame_w, int(row['x']) + int(row['w'])))
-            y2 = max(y1 + 1, min(frame_h, int(row['y']) + int(row['h'])))
-            frame_cropped = frames[i, :, y1:y2, x1:x2]
-            frame_resized = F.interpolate(
-                frame_cropped.unsqueeze(0),
-                size=self.resize_dims,
-                mode='bilinear',
-                align_corners=False,
-            ).squeeze(0)
-            cropped_frames.append(frame_resized)
-            bboxes.append(
-                torch.tensor(
-                    [x1, y1, y2 - y1, x2 - x1], dtype=torch.float32, device=frames.device,
-                )
-            )
-
+        assert self.resize_dims is not None  # required when bbox_df set, see docstring
+        cropped_frames, bboxes = crop_and_resize_frames(frames, rows, self.resize_dims)
         self._frame_idx += step
 
         return UnlabeledBatchDict(
-            frames=torch.stack(cropped_frames),
+            frames=cropped_frames,
             transforms=batch_dict['transforms'],
-            bbox=torch.stack(bboxes),
+            bbox=bboxes,
             is_multiview=False,
         )
 

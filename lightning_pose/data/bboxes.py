@@ -26,7 +26,9 @@ dimensions; handle both single-view and multi-view):
 - :func:`model_to_frame_batch` — model → frame  (called after inference)
 """
 
+import pandas as pd
 import torch
+import torch.nn.functional as F
 from jaxtyping import Float
 
 from lightning_pose.data.datatypes import (
@@ -284,3 +286,58 @@ def model_to_frame_batch(
         model_keypoints_ = norm_to_frame(model_keypoints_, batch_dict['bbox'])
     # return new keypoints, reshaped to (batch, num_targets)
     return model_keypoints_.reshape((-1, num_targets))
+
+
+def crop_and_resize_frames(
+    frames: Float[torch.Tensor, "seq_len rgb h w"],
+    bbox_rows: pd.DataFrame,
+    resize_dims: list[int],
+) -> tuple[
+    Float[torch.Tensor, "seq_len rgb h_out w_out"],
+    Float[torch.Tensor, "seq_len xyhw"],
+]:
+    """Crop each frame to its per-frame bounding box and resize to a common size.
+
+    Shared by the DALI and pynvvc video-decoding backends: both hand this function a
+    full-resolution ``frames`` tensor plus one already-sliced-and-padded bbox row per
+    frame (cursor/step bookkeeping to select those rows lives in each backend's own
+    wrapper, not here — see ``LitDaliWrapper._apply_bbox_crop``).
+
+    Args:
+        frames: full-resolution frames, shape (seq_len, 3, H, W).
+        bbox_rows: DataFrame with columns ``["x", "y", "h", "w"]``, exactly ``seq_len``
+            rows, one per frame (already sliced/padded by the caller).
+        resize_dims: target ``[height, width]`` to resize each crop to.
+
+    Returns:
+        Tuple of (cropped+resized frames, actual bbox coordinates used per frame).
+        Bbox coordinates are clamped to frame bounds and may differ from the raw
+        ``bbox_rows`` values for edge frames (see negative x/y handling below).
+    """
+    seq_len = frames.shape[0]
+    frame_h, frame_w = frames.shape[2], frames.shape[3]
+    cropped_frames = []
+    bboxes = []
+    for i in range(seq_len):
+        row = bbox_rows.iloc[i]
+        # clamp to frame bounds: create_bbox can produce negative x/y for edge frames
+        # (centroid - bbox_size//2 < 0). negative pytorch slice indices count from the
+        # end rather than clamping, producing an empty crop.
+        x1 = max(0, int(row['x']))
+        y1 = max(0, int(row['y']))
+        x2 = max(x1 + 1, min(frame_w, int(row['x']) + int(row['w'])))
+        y2 = max(y1 + 1, min(frame_h, int(row['y']) + int(row['h'])))
+        frame_cropped = frames[i, :, y1:y2, x1:x2]
+        frame_resized = F.interpolate(
+            frame_cropped.unsqueeze(0),
+            size=resize_dims,
+            mode='bilinear',
+            align_corners=False,
+        ).squeeze(0)
+        cropped_frames.append(frame_resized)
+        bboxes.append(
+            torch.tensor(
+                [x1, y1, y2 - y1, x2 - x1], dtype=torch.float32, device=frames.device,
+            )
+        )
+    return torch.stack(cropped_frames), torch.stack(bboxes)

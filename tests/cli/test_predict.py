@@ -228,6 +228,7 @@ class TestHandle:
             compile=False,
             runtime='eager',
             onnx_precision=None,
+            decoder=None,
         )
 
     def test_handle_threads_bbox_dir_to_predict_multi_type(self, tmp_path, mock_model):
