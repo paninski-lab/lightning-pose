@@ -413,6 +413,60 @@ just a quieter/slower run. Explicitly requesting ``--decoder pynvvc`` on a machi
 isn't usable raises a clear error instead of silently falling back, so you know your run isn't
 using the backend you asked for.
 
+Decode speed: L4 and A100, single- and multi-view
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Decode-only throughput (no model), 7 timed runs each, 64-frame batches:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Config
+     - GPU
+     - DALI
+     - PyNvVideoCodec
+     - Speedup
+   * - Single-view (``mirror-mouse-fused``, 1 view)
+     - L4
+     - 1516 fps
+     - 4442 fps
+     - **2.93x**
+   * - Single-view (``mirror-mouse-fused``, 1 view)
+     - A100
+     - 1113 fps
+     - 3249 fps
+     - **2.92x**
+   * - Multi-view (``fly-anipose``, 6 views)
+     - L4
+     - 5347 fps
+     - 3674 fps
+     - 0.69x (slower)
+   * - Multi-view (``fly-anipose``, 6 views)
+     - A100
+     - 4487 fps
+     - 2684 fps
+     - 0.60x (slower)
+
+.. note::
+
+   The multi-view result reverses direction from single-view: PyNvVideoCodec is
+   clearly faster for a single video, but *slower* than DALI once 6 views are
+   involved. The current implementation reads each view's decoder sequentially in
+   a loop (one ``get_batch_frames()`` call after another, not concurrently) --
+   which is also exactly what ``--decoder pynvvc`` does in production for
+   multiview, so this is a real characteristic of the current implementation, not
+   a benchmark artifact. DALI's pipeline appears to handle multiple video streams
+   more efficiently under its own internal scheduling. For single-view video,
+   ``--decoder pynvvc`` is a clear win; for multiview, it's currently a net loss on
+   raw decode speed even though the model's forward pass itself still speeds up
+   with reduced precision (see the multiview forward-pass numbers above) --
+   something worth revisiting if concurrent per-view decoding is added later.
+
+   Separately, single-view decode speedup is notably lower on L4/A100 here
+   (~2.9x) than the T4 number above (8.76x) -- not yet investigated further, but
+   worth keeping in mind that the T4 number shouldn't be assumed to generalize to
+   newer GPUs.
+
 .. _caveats:
 
 Caveats
