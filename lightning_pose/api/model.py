@@ -78,7 +78,7 @@ _OnnxPrecision = Literal["fp32", "fp16"]
 # Inference runtimes accepted by Model.from_dir(runtime=...). "tensorrt" is a
 # planned addition that will consume the same exported .onnx file through a
 # different execution provider.
-_Runtime = Literal["eager", "onnx"]
+_Runtime = Literal["eager", "onnx", "tensorrt"]
 # Video-decoding backends accepted by predict_on_video_file(_multiview)'s decoder=
 # kwarg. Independent of _Runtime -- decoder controls video ingestion, _Runtime
 # controls model execution.
