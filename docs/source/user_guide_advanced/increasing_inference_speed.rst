@@ -364,6 +364,18 @@ end-to-end ``litpose predict`` speedup -- how much it moves the needle overall d
 much of your pipeline's time is spent decoding vs. running the model (see the data-loading
 caveat below).
 
+.. note::
+
+   ``PreparePynvvc`` (the class backing ``--decoder pynvvc``) reads its window size from
+   the existing ``cfg.dali`` config section --
+   ``dali.base.predict.sequence_length`` / ``dali.context.predict.sequence_length`` --
+   rather than a separate ``cfg.pynvvc`` section. The name is a little confusing, since
+   this setting also governs how many frames PyNvVideoCodec reads per batch, but the
+   windowing semantics (frames per iteration, overlap for context/MHCRNN models) are
+   identical between the two decoder backends, so one config value covers both rather
+   than keeping two in sync. If you only ever use ``--decoder pynvvc`` and never DALI,
+   you still configure the window size via ``dali.*.predict.sequence_length``.
+
 Installation
 ~~~~~~~~~~~~
 
