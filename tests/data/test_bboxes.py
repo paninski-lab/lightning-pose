@@ -1,9 +1,11 @@
 """Tests for bbox coordinate transformation utilities."""
 import numpy as np
+import pandas as pd
 import pytest
 import torch
 
 from lightning_pose.data.bboxes import (
+    crop_and_resize_frames,
     frame_to_model,
     frame_to_model_batch,
     frame_to_norm,
@@ -629,3 +631,64 @@ class TestModelToFrame:
         recovered = model_to_frame(model_kps, bbox_batch, model_width, model_height)
 
         assert torch.allclose(recovered, keypoints, atol=1e-6)
+
+
+class TestCropAndResizeFrames:
+    """Test the function crop_and_resize_frames."""
+
+    def test_basic_crop_and_resize_shape(self):
+        """In-bounds bbox: output shapes match resize_dims, bbox values are unclamped."""
+        seq_len = 2
+        frames = torch.rand(seq_len, 3, 50, 50)
+        bbox_rows = pd.DataFrame({
+            'x': [10, 10], 'y': [10, 10], 'h': [20, 20], 'w': [20, 20],
+        })
+        cropped, bboxes = crop_and_resize_frames(frames, bbox_rows, [64, 64])
+        assert cropped.shape == (seq_len, 3, 64, 64)
+        assert bboxes.shape == (seq_len, 4)
+        for i in range(seq_len):
+            assert torch.equal(bboxes[i], torch.tensor([10., 10., 20., 20.]))
+
+    def test_negative_xy_clamped_to_zero(self):
+        """A bbox origin outside the frame (negative x/y) is clamped to 0, shrinking w/h."""
+        frames = torch.rand(1, 3, 50, 50)
+        bbox_rows = pd.DataFrame({'x': [-5], 'y': [-5], 'h': [20], 'w': [20]})
+        _, bboxes = crop_and_resize_frames(frames, bbox_rows, [32, 32])
+        # x1 = max(0, -5) = 0; x2 = max(1, min(50, -5+20)) = 15 -> returned w = 15 - 0 = 15
+        assert bboxes[0, 0] == 0.0
+        assert bboxes[0, 1] == 0.0
+        assert bboxes[0, 2] == 15.0
+        assert bboxes[0, 3] == 15.0
+
+    def test_bbox_exceeds_frame_bounds_clamped(self):
+        """A bbox extending past the frame's far edge is clamped to the frame size."""
+        frames = torch.rand(1, 3, 50, 50)
+        bbox_rows = pd.DataFrame({'x': [40], 'y': [40], 'h': [30], 'w': [30]})
+        _, bboxes = crop_and_resize_frames(frames, bbox_rows, [32, 32])
+        # x2 = max(41, min(50, 40+30)) = 50 -> returned w = 50 - 40 = 10
+        assert bboxes[0, 0] == 40.0
+        assert bboxes[0, 1] == 40.0
+        assert bboxes[0, 2] == 10.0
+        assert bboxes[0, 3] == 10.0
+
+    def test_per_frame_bbox_rows_used_independently(self):
+        """Each frame in the sequence is cropped with its own bbox row, not a shared one."""
+        seq_len = 3
+        frames = torch.rand(seq_len, 3, 50, 50)
+        bbox_rows = pd.DataFrame({
+            'x': [0, 10, 20], 'y': [0, 10, 20], 'h': [10, 10, 10], 'w': [10, 10, 10],
+        })
+        _, bboxes = crop_and_resize_frames(frames, bbox_rows, [16, 16])
+        assert torch.equal(bboxes[0], torch.tensor([0., 0., 10., 10.]))
+        assert torch.equal(bboxes[1], torch.tensor([10., 10., 10., 10.]))
+        assert torch.equal(bboxes[2], torch.tensor([20., 20., 10., 10.]))
+
+    def test_resize_normalizes_differently_sized_crops(self):
+        """Crops of different pixel sizes across frames still stack, because each is
+        resized to the same resize_dims before stacking."""
+        frames = torch.rand(2, 3, 50, 50)
+        bbox_rows = pd.DataFrame({
+            'x': [0, 0], 'y': [0, 0], 'h': [10, 40], 'w': [10, 40],
+        })
+        cropped, _ = crop_and_resize_frames(frames, bbox_rows, [24, 24])
+        assert cropped.shape == (2, 3, 24, 24)

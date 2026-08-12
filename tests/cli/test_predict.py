@@ -100,6 +100,40 @@ class TestPredictParser:
                 ['predict', str(model_dir), 'video.mp4', '--runtime', 'coreml']
             )
 
+    def test_decoder_default_is_none(self, parser, tmp_path):
+        """--decoder defaults to None so predict_video() auto-selects."""
+        model_dir = tmp_path / 'model'
+        model_dir.mkdir()
+        args = parser.parse_args(['predict', str(model_dir), 'video.mp4'])
+        assert args.decoder is None
+
+    def test_decoder_pynvvc(self, parser, tmp_path):
+        """--decoder pynvvc is parsed."""
+        model_dir = tmp_path / 'model'
+        model_dir.mkdir()
+        args = parser.parse_args(
+            ['predict', str(model_dir), 'video.mp4', '--decoder', 'pynvvc']
+        )
+        assert args.decoder == 'pynvvc'
+
+    def test_decoder_dali(self, parser, tmp_path):
+        """--decoder dali is parsed."""
+        model_dir = tmp_path / 'model'
+        model_dir.mkdir()
+        args = parser.parse_args(
+            ['predict', str(model_dir), 'video.mp4', '--decoder', 'dali']
+        )
+        assert args.decoder == 'dali'
+
+    def test_decoder_rejects_unknown_value(self, parser, tmp_path):
+        """--decoder nvdec exits; only dali/pynvvc are valid."""
+        model_dir = tmp_path / 'model'
+        model_dir.mkdir()
+        with pytest.raises(SystemExit):
+            parser.parse_args(
+                ['predict', str(model_dir), 'video.mp4', '--decoder', 'nvdec']
+            )
+
     def test_onnx_precision_default_is_none(self, parser, tmp_path):
         """--onnx-precision defaults to None so a sole export is auto-selected."""
         model_dir = tmp_path / 'model'
@@ -237,6 +271,7 @@ class TestHandle:
             compile=False,
             runtime='eager',
             onnx_precision=None,
+            decoder=None,
         )
 
     def test_handle_threads_bbox_dir_to_predict_multi_type(self, tmp_path, mock_model):
