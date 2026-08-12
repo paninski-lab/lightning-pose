@@ -346,6 +346,61 @@ library versions:
   ``CUDAExecutionProvider`` rather than raising an error -- your code will still run and
   produce plausible-looking numbers, just not the ones you think.
 
+.. _pynvvc_decoding:
+
+PyNvVideoCodec (Video Decoding)
+--------------------------------
+
+Everything above speeds up the *model's forward pass*. This section covers a separate,
+complementary axis: how the video frames themselves get decoded off disk before they ever
+reach the model. By default, ``litpose predict`` decodes video with DALI's GPU video reader.
+PyNvVideoCodec (direct NVIDIA Video Codec SDK / NVDEC bindings) is an alternative decoder
+backend that talks to the hardware decoder more directly, skipping DALI's pipeline/graph
+framework overhead.
+
+On a T4, decoding the same video with PyNvVideoCodec measured **8.76x faster** than DALI's GPU
+reader (3735.7 vs 426.5 fps, 7 timed runs). This is a decode-throughput-only number, not an
+end-to-end ``litpose predict`` speedup -- how much it moves the needle overall depends on how
+much of your pipeline's time is spent decoding vs. running the model (see the data-loading
+caveat below).
+
+Installation
+~~~~~~~~~~~~
+
+.. code-block:: bash
+
+    pip install PyNvVideoCodec
+
+Requires an NVIDIA GPU from the Turing generation or newer (Turing/Ampere/Ada/Hopper/Blackwell)
+and driver version 530.41.03 or newer on Linux. If PyNvVideoCodec can't decode a given video on
+the current machine (unsupported GPU generation, driver too old, package not installed, or an
+unsupported video format), ``litpose predict`` automatically falls back to DALI rather than
+erroring -- see below.
+
+Usage
+~~~~~
+
+``--decoder`` is independent of ``--runtime``/``--compile`` above -- it only controls how video
+frames are read, not how the model runs on them. From the CLI:
+
+.. code-block:: console
+
+    litpose predict /path/to/model_dir /path/to/video.mp4 --decoder pynvvc
+    litpose predict /path/to/model_dir /path/to/video.mp4 --decoder dali
+
+Or from the API:
+
+.. code-block:: python
+
+    model = Model.from_dir("path/to/model_dir")
+    result = model.predict_on_video_file("path/to/video.mp4", decoder="pynvvc")
+
+Omitting ``--decoder`` (or passing ``decoder=None``) auto-selects PyNvVideoCodec when it's
+usable on the current machine for the given video, falling back to DALI otherwise -- no error,
+just a quieter/slower run. Explicitly requesting ``--decoder pynvvc`` on a machine where it
+isn't usable raises a clear error instead of silently falling back, so you know your run isn't
+using the backend you asked for.
+
 .. _caveats:
 
 Caveats
@@ -353,7 +408,7 @@ Caveats
 
 - **These are isolated forward-pass numbers, not end-to-end** ``litpose predict`` **timings.**
   Real inference also includes data loading (DALI) and postprocessing. These forward-pass
-  gains aren't guaranteed to translate 1:1 into end-to-end speedups as-is.
+  gains aren't guaranteed to translate 1:1 into end-to-end speedups as-is. See :ref:`PyNvVideoCodec <pynvvc_decoding>` above for a way to speed up the data-loading half of that gap.
 - **cuDNN TF32 was left on for the ResNet50 eager-FP32 baseline** (only matmul TF32 was
   disabled), so it's not a fully strict FP32 number -- doesn't change the direction of any
   result here.
