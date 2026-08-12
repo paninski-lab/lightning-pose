@@ -5,12 +5,14 @@ Increasing Inference Speed
 ##########################
 
 In addition to :ref:`running inference at reduced precision <mixed_precision>`, Lightning Pose
-models can be accelerated further with three additional techniques:
+models can be accelerated further with additional techniques that speed up model processing --
 `torch.compile() <https://pytorch.org/docs/stable/generated/torch.compile.html>`_,
 `ONNX Runtime <https://onnxruntime.ai/>`_, and
-`TensorRT <https://developer.nvidia.com/tensorrt>`_. This page benchmarks all four options
-together (including eager FP16 for reference) and walks through how to use each one, assuming
-you've already trained a model with ``litpose train``.
+`TensorRT <https://developer.nvidia.com/tensorrt>`_ -- and with hardware-accelerated video
+decoding -- :ref:`PyNvVideoCodec <pynvvc_decoding>`. This page benchmarks the model-processing
+techniques together (including eager FP16 for reference) and walks through how to use each one,
+assuming you've already trained a model with ``litpose train``; see the
+:ref:`PyNvVideoCodec section <pynvvc_decoding>` below for the video-decoding benchmarks and usage.
 
 **TL;DR**
 
@@ -24,10 +26,6 @@ you've already trained a model with ``litpose train``.
   max deviation was under 0.08px in every case, consistent with ordinary floating-point kernel
   differences and far below any dataset's typical pixel error (see
   :ref:`Accuracy check <accuracy_check>` below).
-- **These numbers are isolated forward-pass speedups** (no data loading), same methodology as
-  the mixed-precision speed numbers. See the :ref:`caveat <caveats>` at the bottom of this page
-  about the gap between forward-pass and end-to-end ``litpose predict`` speed.
-
 Overview
 ========
 
@@ -43,6 +41,13 @@ Overview
 - **TensorRT** -- same ONNX export, but run through onnxruntime's ``TensorrtExecutionProvider``,
   which builds an autotuned, hardware-specific inference engine. Most setup, biggest gains. See
   :ref:`Usage: TensorRT <usage_tensorrt>`.
+- **PyNvVideoCodec** -- hardware-accelerated video *decoding* via direct NVIDIA Video Codec SDK
+  bindings, as an alternative to DALI's video reader. Independent of the model-processing
+  techniques above -- see :ref:`PyNvVideoCodec (Video Decoding) <pynvvc_decoding>`.
+- **These techniques are complementary and can be combined** -- e.g. torch.compile() or
+  TensorRT for the model together with PyNvVideoCodec for decoding -- for the best end-to-end
+  throughput. Not yet benchmarked together on this page; a combined benchmark is planned for a
+  follow-up PR.
 
 Results
 =======

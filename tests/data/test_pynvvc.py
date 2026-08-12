@@ -176,6 +176,54 @@ class TestPreparePynvvc:
         assert wrapper.multiview is False
         assert wrapper.num_iters == prep.num_iters
 
+    def test_multiview_synchronized_frames(self, cfg_multiview, video_list, monkeypatch):
+        """Every view's decoder is read from the same shared cursor each iteration
+        (see LitPynvvcWrapper.__next__), so per-view frame content stays
+        synchronized across the whole video -- the pynvvc analogue of
+        test_dali.py's TestPrepareDALI.test_multiview_synchronized_frames.
+
+        Unlike DALI (independent per-view readers kept in lockstep only via a
+        shared reader seed under random shuffle), pynvvc uses a single shared
+        self._cursor for every decoder, so synchronization holds by construction
+        today -- this test is a regression guard in case a future change ever
+        gives each view its own cursor.
+
+        Each mocked SimpleDecoder returns frames whose content encodes the frame
+        index (not real decoded pixels), so cross-view content equality actually
+        proves matching windows, not just matching shape.
+        """
+        monkeypatch.setattr(pynvvc_module, 'count_frames', lambda p: 100)
+        num_views = 3
+        vid = video_list[0]
+        filenames = [[vid]] * num_views
+        total_frames = 100
+        cfg_multiview.dali.base.predict.sequence_length = 4
+
+        def make_fake_decoder(*args, **kwargs):
+            return [torch.full((3, 8, 8), float(k)) for k in range(total_frames)]
+
+        mock_nvc = MagicMock()
+        mock_nvc.SimpleDecoder.side_effect = make_fake_decoder
+
+        prep = PreparePynvvc(
+            model_type='base',
+            filenames=filenames,
+            resize_dims=[8, 8],
+            dali_config=cfg_multiview.dali,
+        )
+        with patch.dict(sys.modules, {'PyNvVideoCodec': mock_nvc}):
+            wrapper = prep()
+
+        with patch('torch.cuda.current_stream'):
+            for _ in range(4):
+                batch = next(wrapper)
+                frames = batch['frames']  # (seq_len, num_views, C, H, W)
+                for view in range(1, num_views):
+                    assert torch.equal(frames[:, 0], frames[:, view])
+                # sanity: frames within a window are still distinct, not a
+                # degenerate constant-value fake that would pass trivially
+                assert not torch.equal(frames[0, 0], frames[-1, 0])
+
 
 def _make_fake_decoder(total_frames: int, h: int = 100, w: int = 120) -> list[torch.Tensor]:
     """Fake decoder: a plain list of CHW CPU tensors, slice-indexable like SimpleDecoder.

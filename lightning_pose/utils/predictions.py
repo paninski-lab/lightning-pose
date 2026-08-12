@@ -25,6 +25,7 @@ from lightning_pose.data.utils import count_frames
 
 if TYPE_CHECKING:
     from lightning_pose.api import Model
+    from lightning_pose.api.model import _Decoder
 
 logger = logging.getLogger(__name__)
 
@@ -396,7 +397,7 @@ def predict_video(
     model: Model,
     output_pred_file: str | None = None,
     progress_file: Path | None = None,
-    decoder: Literal["dali", "pynvvc"] | None = None,
+    decoder: _Decoder | None = None,
     bbox_file: str | Path | None = None,
 ) -> pd.DataFrame: ...
 
@@ -407,7 +408,7 @@ def predict_video(
     model: Model,
     output_pred_file: list[str] | None = None,
     progress_file: Path | None = None,
-    decoder: Literal["dali", "pynvvc"] | None = None,
+    decoder: _Decoder | None = None,
 ) -> list[pd.DataFrame]: ...
 
 
@@ -416,7 +417,7 @@ def predict_video(
     model: Model,
     output_pred_file: str | list[str] | None = None,
     progress_file: Path | None = None,
-    decoder: Literal["dali", "pynvvc"] | None = None,
+    decoder: _Decoder | None = None,
     bbox_file: str | Path | None = None,
 ) -> pd.DataFrame | list[pd.DataFrame]:
     """
@@ -525,9 +526,9 @@ def predict_video(
         )
         vid_pred_class = PreparePynvvc(
             model_type=model_type,
+            dali_config=model.config.cfg.dali,
             filenames=filenames,
             resize_dims=resize_dims,
-            dali_config=model.config.cfg.dali,
             bbox_df=bbox_df,
         )
     # get loader
