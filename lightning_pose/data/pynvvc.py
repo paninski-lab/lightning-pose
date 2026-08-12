@@ -65,7 +65,10 @@ from lightning_pose.data.datatypes import (
 from lightning_pose.data.utils import count_frames
 
 if TYPE_CHECKING:
-    import PyNvVideoCodec as nvc
+    # PyNvVideoCodec is NVIDIA's proprietary decoder package -- not on a
+    # CI-reachable index, so pyright can never resolve it here (see module
+    # docstring for the runtime lazy-import discipline this mirrors).
+    import PyNvVideoCodec as nvc  # pyright: ignore[reportMissingImports]
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +97,10 @@ def is_pynvvc_available(video_path: str, gpu_id: int = 0) -> bool:
         failure mode here should fall back to DALI rather than propagate.
     """
     try:
-        import PyNvVideoCodec as nvc  # lazy: avoids ImportError on cpu-only installs
+        # Same reason as the module-level TYPE_CHECKING import above -- not on a
+        # CI-reachable index. Also lazy at runtime to avoid ImportError on cpu-only
+        # installs.
+        import PyNvVideoCodec as nvc  # pyright: ignore[reportMissingImports]
 
         decoder = nvc.SimpleDecoder(video_path, gpu_id=gpu_id, use_device_memory=True)
         del decoder
@@ -153,7 +159,10 @@ class LitPynvvcWrapper:
                 view only (enforced upstream in ``predict_video``).
             gpu_id: CUDA device index to decode on.
         """
-        import PyNvVideoCodec as nvc  # lazy: avoids ImportError on cpu-only installs
+        # Same reason as the module-level TYPE_CHECKING import above -- not on a
+        # CI-reachable index. Also lazy at runtime to avoid ImportError on cpu-only
+        # installs.
+        import PyNvVideoCodec as nvc  # pyright: ignore[reportMissingImports]
 
         self.resize_dims = resize_dims
         self.decode_resize_dims = decode_resize_dims
