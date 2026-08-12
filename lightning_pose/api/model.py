@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import copy
+import json
 import logging
+import warnings
 from pathlib import Path
 from typing import Any, Literal, cast, get_args
 
@@ -232,6 +234,76 @@ def load_model_from_checkpoint(
     return model
 
 
+def _tensorrt_version() -> str | None:
+    """Return the installed ``tensorrt`` package version, or None if absent."""
+    try:
+        import tensorrt  # type: ignore[import-not-found]
+
+        return tensorrt.__version__
+    except ImportError:
+        return None
+
+
+def _onnxruntime_version() -> str | None:
+    """Return the installed ``onnxruntime`` package version, or None if absent."""
+    try:
+        import onnxruntime  # type: ignore[import-not-found]
+
+        return onnxruntime.__version__
+    except ImportError:
+        return None
+
+
+def _build_onnx_forward(session: Any) -> Any:
+    """Build a forward-replacement closure that runs inference through an ONNX
+    Runtime session, regardless of which execution provider backs it.
+
+    Shared by ``Model._attach_onnx_runtime()`` and
+    ``Model._attach_tensorrt_runtime()`` -- the session-driven forward pass
+    (io_binding setup, dtype detection, CPU/GPU branching) is identical for
+    both; only the ``providers`` passed to ``InferenceSession`` differs. The
+    returned callable is assigned directly to ``self.model.forward`` (rather
+    than wrapping the module) so every existing prediction path keeps working,
+    including those that call ``get_loss_inputs_labeled`` directly instead of
+    going through ``__call__``. Because ``Model.model``'s type is a union of
+    several model classes with genuinely different ``forward`` signatures,
+    callers assign this with a ``# type: ignore[method-assign]``.
+    """
+    providers = session.get_providers()
+    input_meta = session.get_inputs()[0]
+    input_name = input_meta.name
+    output_name = session.get_outputs()[0].name
+    input_np_dtype = _ORT_TYPE_TO_NUMPY[input_meta.type]
+    input_torch_dtype = torch.from_numpy(np.empty(0, dtype=input_np_dtype)).dtype
+    cuda_available = (
+        "CUDAExecutionProvider" in providers or "TensorrtExecutionProvider" in providers
+    )
+
+    def onnx_forward(images: torch.Tensor) -> torch.Tensor:
+        images = images.to(input_torch_dtype).contiguous()
+        if cuda_available and images.is_cuda:
+            io_binding = session.io_binding()
+            device_id = images.device.index or 0
+            io_binding.bind_input(
+                name=input_name,
+                device_type="cuda",
+                device_id=device_id,
+                element_type=input_np_dtype,
+                shape=tuple(images.shape),
+                buffer_ptr=images.data_ptr(),
+            )
+            io_binding.bind_output(
+                name=output_name, device_type="cuda", device_id=device_id
+            )
+            session.run_with_iobinding(io_binding)
+            output = io_binding.copy_outputs_to_cpu()[0]
+        else:
+            output = session.run([output_name], {input_name: images.cpu().numpy()})[0]
+        return torch.from_numpy(output).to(images.device)
+
+    return onnx_forward
+
+
 class Model:
     """High-level interface for inference with a trained lightning-pose model.
 
@@ -312,13 +384,18 @@ class Model:
             runtime: inference backend. ``"eager"`` (default) loads the trained
                 checkpoint as usual. ``"onnx"`` loads an ONNX Runtime session
                 from ``exports_onnx_dir()``, which must have been built with
-                ``model.export("onnx", ...)`` beforehand; ``precision`` is
-                ignored in that mode, since the exported file's own precision
-                is what runs.
-            onnx_precision: only used when ``runtime="onnx"``. Selects which
-                exported file to load. If omitted and exactly one export exists
-                for this checkpoint, it is used automatically; if more than one
-                exists, raises.
+                ``model.export("onnx", ...)`` beforehand. ``"tensorrt"`` loads
+                a TensorRT engine from ``exports_trt_dir()``, built with
+                ``model.export("tensorrt", ...)`` beforehand (which itself
+                requires an existing ``"onnx"`` export for the same
+                ``onnx_precision``). ``precision`` is ignored in both
+                non-eager modes, since the exported file's own precision is
+                what runs.
+            onnx_precision: only used when ``runtime="onnx"`` or
+                ``runtime="tensorrt"``. Selects which exported file (or, for
+                tensorrt, which engine cache) to load. If omitted and exactly
+                one export exists for this checkpoint, it is used
+                automatically; if more than one exists, raises.
 
         Returns:
             Model ready for inference. Weights are loaded lazily on the first
@@ -370,6 +447,9 @@ class Model:
             return model
         elif runtime == "onnx":
             model._attach_onnx_runtime(onnx_precision)
+            return model
+        elif runtime == "tensorrt":
+            model._attach_tensorrt_runtime(onnx_precision)
             return model
         else:
             supported = ", ".join(repr(r) for r in get_args(_Runtime))
@@ -470,6 +550,39 @@ class Model:
                 skip_data_module=True,
             )
 
+    def _find_onnx_export(self, onnx_precision: _OnnxPrecision | None) -> Path:
+        """Locate the ONNX export for this checkpoint, disambiguating by precision.
+
+        Shared by ``_attach_onnx_runtime()`` and ``_export_tensorrt()``, which
+        builds its engine from an existing ONNX export rather than re-tracing
+        the model.
+
+        Raises:
+            FileNotFoundError: if no matching export exists.
+            ValueError: if multiple exports exist and ``onnx_precision`` is None.
+        """
+        stem = self._ckpt_stem()
+        export_dir = self.exports_onnx_dir()
+        pattern = (
+            f"{stem}_{onnx_precision}.onnx"
+            if onnx_precision is not None
+            else f"{stem}_*.onnx"
+        )
+        candidates = sorted(export_dir.glob(pattern))
+        if len(candidates) == 0:
+            raise FileNotFoundError(
+                f"No ONNX export found for checkpoint '{stem}'"
+                + (f" with onnx_precision='{onnx_precision}'" if onnx_precision else "")
+                + f" in {export_dir}. Run model.export('onnx') first."
+            )
+        if len(candidates) > 1:
+            found = [c.name for c in candidates]
+            raise ValueError(
+                f"Multiple ONNX exports found: {found}. "
+                "Pass onnx_precision= to disambiguate."
+            )
+        return candidates[0]
+
     def _attach_onnx_runtime(self, onnx_precision: _OnnxPrecision | None) -> None:
         """Replace the model's forward pass with an ONNX Runtime session.
 
@@ -494,29 +607,7 @@ class Model:
         # weights: a user who forgot to run export() should get that message
         # regardless of whether the optional dependency is installed, and
         # there's no reason to pay for _load() on a path that can't succeed.
-        stem = self._ckpt_stem()
-        export_dir = self.exports_onnx_dir()
-        pattern = (
-            f"{stem}_{onnx_precision}.onnx"
-            if onnx_precision is not None
-            else f"{stem}_*.onnx"
-        )
-        candidates = sorted(export_dir.glob(pattern))
-
-        if len(candidates) == 0:
-            raise FileNotFoundError(
-                f"No ONNX export found for checkpoint '{stem}'"
-                + (f" with onnx_precision='{onnx_precision}'" if onnx_precision else "")
-                + f" in {export_dir}. Run model.export('onnx') first."
-            )
-        if len(candidates) > 1:
-            found = [c.name for c in candidates]
-            raise ValueError(
-                f"Multiple ONNX exports found: {found}. "
-                "Pass onnx_precision= to disambiguate."
-            )
-
-        onnx_path = candidates[0]
+        onnx_path = self._find_onnx_export(onnx_precision)
 
         # Imported lazily: onnxruntime is an optional dependency, and a
         # module-level import would make it mandatory for every eager user.
@@ -558,44 +649,117 @@ class Model:
                 "user_guide_advanced/increasing_inference_speed.html#onnx-installation"
             )
 
-        # Bind at the precision the exported graph declares, not a hardcoded
-        # fp32 -- an fp16 export rejects fp32 input buffers.
-        input_meta = session.get_inputs()[0]
-        input_name = input_meta.name
-        output_name = session.get_outputs()[0].name
-        input_np_dtype = _ORT_TYPE_TO_NUMPY[input_meta.type]
-        input_torch_dtype = torch.from_numpy(np.empty(0, dtype=input_np_dtype)).dtype
-        cuda_available = "CUDAExecutionProvider" in providers
-
-        def onnx_forward(images: torch.Tensor) -> torch.Tensor:
-            images = images.to(input_torch_dtype).contiguous()
-            if cuda_available and images.is_cuda:
-                # Zero-copy path: hand ORT the tensor's existing device pointer.
-                io_binding = session.io_binding()
-                device_id = images.device.index or 0
-                io_binding.bind_input(
-                    name=input_name,
-                    device_type="cuda",
-                    device_id=device_id,
-                    element_type=input_np_dtype,
-                    shape=tuple(images.shape),
-                    buffer_ptr=images.data_ptr(),
-                )
-                io_binding.bind_output(
-                    name=output_name, device_type="cuda", device_id=device_id
-                )
-                session.run_with_iobinding(io_binding)
-                output = io_binding.copy_outputs_to_cpu()[0]
-            else:
-                # CPU session, or a CPU input tensor on a CUDA-capable session.
-                output = session.run([output_name], {input_name: images.cpu().numpy()})[0]
-            return torch.from_numpy(output).to(images.device)
-
-        # Same rebinding pattern as compile(); see the note there on why the
-        # union-typed forward signature needs the ignore.
-        self.model.forward = onnx_forward  # type: ignore[method-assign]
+        self.model.forward = _build_onnx_forward(session)  # type: ignore[method-assign]
         self._runtime = "onnx"
         logger.info(f'loaded ONNX runtime session from {onnx_path}')
+
+    def _find_trt_cache(self, onnx_precision: _OnnxPrecision | None) -> Path:
+        """Locate the TensorRT engine cache directory for this checkpoint.
+
+        Analogous to ``_find_onnx_export()``.
+
+        Raises:
+            FileNotFoundError: if no matching cache exists.
+            ValueError: if multiple caches exist and ``onnx_precision`` is None.
+        """
+        stem = self._ckpt_stem()
+        trt_dir = self.exports_trt_dir()
+        pattern = f"{stem}_{onnx_precision}" if onnx_precision is not None else f"{stem}_*"
+        candidates = sorted(p for p in trt_dir.glob(pattern) if p.is_dir())
+        if len(candidates) == 0:
+            raise FileNotFoundError(
+                f"No TensorRT export found for checkpoint '{stem}'"
+                + (f" with onnx_precision='{onnx_precision}'" if onnx_precision else "")
+                + f" in {trt_dir}. Run model.export('tensorrt', ...) first."
+            )
+        if len(candidates) > 1:
+            found = [c.name for c in candidates]
+            raise ValueError(
+                f"Multiple TensorRT exports found: {found}. "
+                "Pass onnx_precision= to disambiguate."
+            )
+        return candidates[0]
+
+    def _attach_tensorrt_runtime(self, onnx_precision: _OnnxPrecision | None) -> None:
+        """Replace the model's forward pass with a TensorRT-backed ONNX Runtime session.
+
+        Stricter than ``_attach_onnx_runtime()``: TensorRT has no CPU execution
+        path, so this raises immediately if no CUDA device is available. It
+        also raises (rather than warns, unlike ONNX's CPU fallback) if the
+        session falls back to CUDAExecutionProvider instead of engaging
+        TensorRT -- landing on plain CUDA here silently defeats the entire
+        reason the caller asked for ``runtime="tensorrt"``.
+
+        Raises:
+            FileNotFoundError: if no matching engine cache exists.
+            ValueError: if multiple caches exist and ``onnx_precision`` is None.
+            RuntimeError: if no CUDA device is available, if the session fails
+                to load TensorrtExecutionProvider, or if the model fails to load.
+        """
+        if not torch.cuda.is_available():
+            raise RuntimeError(
+                "runtime='tensorrt' requires a CUDA-capable GPU; none is "
+                "available. TensorRT has no CPU execution path -- use "
+                "runtime='onnx' or runtime='eager' instead."
+            )
+
+        cache_dir = self._find_trt_cache(onnx_precision)
+        metadata_path = cache_dir / "trt_metadata.json"
+        resolved_onnx_precision = onnx_precision
+        if metadata_path.exists():
+            metadata = json.loads(metadata_path.read_text())
+            current_gpu = torch.cuda.get_device_name(0)
+            recorded_gpu = metadata.get("gpu_name")
+            if recorded_gpu is not None and recorded_gpu != current_gpu:
+                warnings.warn(
+                    f"TensorRT engine at {cache_dir} was built on "
+                    f"'{recorded_gpu}' but is running on '{current_gpu}'. "
+                    "onnxruntime will rebuild the engine on first inference, "
+                    "which can take several minutes.",
+                    stacklevel=2,
+                )
+            if resolved_onnx_precision is None:
+                resolved_onnx_precision = metadata.get("onnx_precision")
+
+        onnx_path = self._find_onnx_export(resolved_onnx_precision)
+
+        try:
+            import onnxruntime as ort  # type: ignore[import-not-found]
+        except ImportError as e:
+            raise ImportError(
+                "onnxruntime is required for runtime='tensorrt' but is not "
+                "installed. See https://lightning-pose.readthedocs.io/en/latest/"
+                "source/user_guide_advanced/increasing_inference_speed.html"
+                "#onnx-installation for installation instructions."
+            ) from e
+
+        trt_options = {
+            "trt_engine_cache_enable": True,
+            "trt_engine_cache_path": str(cache_dir),
+            "trt_fp16_enable": resolved_onnx_precision == "fp16",
+        }
+        session = ort.InferenceSession(
+            str(onnx_path),
+            providers=[("TensorrtExecutionProvider", trt_options), "CUDAExecutionProvider"],
+        )
+        if "TensorrtExecutionProvider" not in session.get_providers():
+            raise RuntimeError(
+                "ONNX Runtime failed to load TensorrtExecutionProvider -- "
+                "inference would silently run on CUDAExecutionProvider instead, "
+                "without the TensorRT speedup you asked for. This is usually a "
+                "missing/mismatched TensorRT install or a missing "
+                "LD_LIBRARY_PATH entry. See "
+                "https://lightning-pose.readthedocs.io/en/latest/source/"
+                "user_guide_advanced/increasing_inference_speed.html"
+                "#tensorrt-installation"
+            )
+
+        self._load()
+        if self.model is None:
+            raise RuntimeError('model failed to load; self.model is None after _load()')
+        self.model.forward = _build_onnx_forward(session)  # type: ignore[method-assign]
+        self._runtime = "tensorrt"
+        logger.info(f'loaded TensorRT engine session from {cache_dir}')
 
     def _ckpt_stem(self) -> str:
         """Return the filename stem of this model's checkpoint.
@@ -616,17 +780,34 @@ class Model:
             )
         return Path(ckpt_file).stem
 
-    def export(self, runtime: str, onnx_precision: _OnnxPrecision = "fp16") -> Path:
+    def export(
+        self,
+        runtime: str,
+        onnx_precision: _OnnxPrecision = "fp16",
+        max_batch_size: int = 8,
+        opt_batch_size: int | None = None,
+    ) -> Path:
         """Export the model to an optimized inference format.
 
-        Currently supports ``runtime="onnx"``. Writes to a fixed location inside
+        Supports ``runtime="onnx"`` and ``runtime="tensorrt"``. Writes to a fixed location inside
         the model directory (``exports_onnx_dir() / "{ckpt_stem}_{onnx_precision}.onnx"``)
         and returns the path to the exported file. Export paths are not
         user-configurable by design -- ``from_dir(runtime="onnx")`` reads from
         this same location.
 
         Args:
-            runtime: export target. Only ``"onnx"`` is currently supported.
+            runtime: export target, ``"onnx"`` or ``"tensorrt"``. TensorRT
+                builds its engine from an existing ONNX export rather than
+                re-tracing the model -- run ``export("onnx", ...)`` first for
+                the same ``onnx_precision``.
+            max_batch_size: only used for ``runtime="tensorrt"``. Upper bound
+                of the dynamic-shape batch profile the engine is built for;
+                inference at a batch size above this fails. Default 8.
+            opt_batch_size: only used for ``runtime="tensorrt"``. Batch size
+                the engine is optimized for; defaults to ``max_batch_size``.
+                Correctness holds for any batch size in
+                ``[1, max_batch_size]``, but performance is best near this
+                value.
             onnx_precision: weight precision baked into the exported file, either
                 ``"fp32"`` or ``"fp16"``. Distinct from ``self.precision``, which
                 controls autocast precision for eager inference only.
@@ -636,23 +817,26 @@ class Model:
 
         Raises:
             ValueError: if ``runtime`` or ``onnx_precision`` is unsupported.
-            FileNotFoundError: if no checkpoint file is found in ``model_dir``.
+            FileNotFoundError: if no checkpoint file is found in
+                ``model_dir`` (``runtime="onnx"``), or if the required ONNX
+                export doesn't exist yet (``runtime="tensorrt"``).
             RuntimeError: if the model fails to load.
 
         Examples:
             >>> model = Model.from_dir("outputs/2024-01-01/12-00-00")
             >>> model.export("onnx", onnx_precision="fp16")
+            >>> model.export("tensorrt", onnx_precision="fp16", max_batch_size=16)
         """
-        if runtime != "onnx":
+        if runtime not in ("onnx", "tensorrt"):
             raise ValueError(
-                f"Unsupported export runtime: '{runtime}'. "
-                "Only 'onnx' is currently supported."
+                f"Unsupported export runtime: '{runtime}'. Use 'onnx' or 'tensorrt'."
             )
         if onnx_precision not in ("fp32", "fp16"):
             raise ValueError(
                 f"Unsupported onnx_precision: '{onnx_precision}'. Use 'fp32' or 'fp16'."
             )
-
+        if runtime == "tensorrt":
+            return self._export_tensorrt(onnx_precision, max_batch_size, opt_batch_size)
         # Weights are lazy-loaded; tracing needs a real forward pass.
         self._load()
         if self.model is None:
@@ -707,6 +891,119 @@ class Model:
         logger.info(f'exported {onnx_precision} ONNX model to {onnx_path}')
         return onnx_path
 
+    def _export_tensorrt(
+        self,
+        onnx_precision: _OnnxPrecision,
+        max_batch_size: int,
+        opt_batch_size: int | None,
+    ) -> Path:
+        """Build a TensorRT engine cache from an existing ONNX export.
+
+        Unlike ONNX export, this does not call ``self._load()`` or touch the
+        trained torch weights at all -- verified empirically (T4, 2026-08-06)
+        that onnxruntime's TensorrtExecutionProvider builds the engine purely
+        from the ``.onnx`` file, which already has the weights baked in. The
+        input shape needed for the dynamic-shape batch profile is read
+        directly off the ONNX graph's own input metadata, rather than
+        re-deriving it from ``self.cfg``/``self.model.do_context`` the way the
+        ONNX export branch above does -- this avoids reimplementing the
+        singleview/multiview/context shape branching a second time.
+
+        Raises:
+            FileNotFoundError: if the matching ONNX export doesn't exist yet.
+            RuntimeError: if the build doesn't engage TensorrtExecutionProvider.
+        """
+        try:
+            onnx_path = self._find_onnx_export(onnx_precision)
+        except FileNotFoundError as e:
+            raise FileNotFoundError(
+                f"No ONNX export found for onnx_precision='{onnx_precision}'. "
+                f"Run model.export('onnx', onnx_precision='{onnx_precision}') "
+                "first."
+            ) from e
+
+        try:
+            import onnxruntime as ort  # type: ignore[import-not-found]
+        except ImportError as e:
+            raise ImportError(
+                "onnxruntime is required to build a TensorRT engine but is not "
+                "installed. See https://lightning-pose.readthedocs.io/en/latest/"
+                "source/user_guide_advanced/increasing_inference_speed.html"
+                "#onnx-installation for installation instructions."
+            ) from e
+
+        opt_batch_size = opt_batch_size or max_batch_size
+        stem = self._ckpt_stem()
+        cache_dir = self.exports_trt_dir() / f"{stem}_{onnx_precision}"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        # Read the input shape straight off the ONNX graph rather than
+        # recomputing it from self.cfg -- see docstring above.
+        probe_session = ort.InferenceSession(
+            str(onnx_path), providers=["CPUExecutionProvider"]
+        )
+        input_meta = probe_session.get_inputs()[0]
+        input_name = input_meta.name
+        shape_suffix = "x".join(str(d) for d in input_meta.shape[1:])
+        del probe_session
+
+        trt_options = {
+            "trt_engine_cache_enable": True,
+            "trt_engine_cache_path": str(cache_dir),
+            "trt_fp16_enable": onnx_precision == "fp16",
+            "trt_profile_min_shapes": f"{input_name}:1x{shape_suffix}",
+            "trt_profile_opt_shapes": f"{input_name}:{opt_batch_size}x{shape_suffix}",
+            "trt_profile_max_shapes": f"{input_name}:{max_batch_size}x{shape_suffix}",
+        }
+        session = ort.InferenceSession(
+            str(onnx_path),
+            providers=[("TensorrtExecutionProvider", trt_options), "CUDAExecutionProvider"],
+        )
+        if "TensorrtExecutionProvider" not in session.get_providers():
+            raise RuntimeError(
+                "TensorRT engine build failed to use TensorrtExecutionProvider. "
+                "This usually means a missing/mismatched TensorRT install. See "
+                "https://lightning-pose.readthedocs.io/en/latest/source/"
+                "user_guide_advanced/increasing_inference_speed.html"
+                "#tensorrt-installation"
+            )
+        del session
+
+        self._write_trt_metadata(cache_dir, onnx_precision, max_batch_size, opt_batch_size)
+        logger.info(f'built TensorRT engine cache at {cache_dir}')
+        return cache_dir
+
+    def _write_trt_metadata(
+        self,
+        cache_dir: Path,
+        onnx_precision: _OnnxPrecision,
+        max_batch_size: int,
+        opt_batch_size: int,
+    ) -> None:
+        """Write a sidecar recording the exact environment a TensorRT engine was built in.
+
+        Unlike the ``.onnx`` file, a TensorRT engine cache is tied to the exact
+        GPU architecture, TensorRT version, and batch profile it was built
+        with -- it is not portable across machines. ``_attach_tensorrt_runtime()``
+        reads this back and warns on a GPU-name mismatch, so a mismatch
+        produces a clear message instead of a confusing onnxruntime failure or
+        an unexpected silent rebuild.
+        """
+        import datetime
+
+        metadata = {
+            "gpu_name": (
+                torch.cuda.get_device_name(0) if torch.cuda.is_available() else None
+            ),
+            "tensorrt_version": _tensorrt_version(),
+            "onnxruntime_version": _onnxruntime_version(),
+            "onnx_precision": onnx_precision,
+            "max_batch_size": max_batch_size,
+            "opt_batch_size": opt_batch_size,
+            "built_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+        (cache_dir / "trt_metadata.json").write_text(json.dumps(metadata, indent=2))
+
     def image_preds_dir(self) -> Path:
         """Return the directory where image/CSV predictions are saved."""
         return self.model_dir / "image_preds"
@@ -730,6 +1027,10 @@ class Model:
     def exports_onnx_dir(self) -> Path:
         """Return the directory where ONNX exports are saved."""
         return self.model_dir / "exports_onnx"
+
+    def exports_trt_dir(self) -> Path:
+        """Return the directory where TensorRT engine caches are saved."""
+        return self.model_dir / "exports_trt"
 
     def cropped_csv_file_path(self, csv_file_path: str | Path) -> Path:
         """Return the path where a cropzoom-adjusted CSV file will be saved.

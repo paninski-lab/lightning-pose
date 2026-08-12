@@ -23,9 +23,9 @@ if TYPE_CHECKING:
 _PRECISION_CHOICES = ("fp32", "fp16", "bf16")
 
 # Inference backends accepted by --runtime. "eager" runs the loaded PyTorch
-# checkpoint; "onnx" runs an ONNX Runtime session previously built with
-# `litpose export`.
-_RUNTIME_CHOICES = ("eager", "onnx")
+# checkpoint; "onnx" and "tensorrt" run a session previously built with
+# `litpose export --runtime onnx` / `--runtime tensorrt`.
+_RUNTIME_CHOICES = ("eager", "onnx", "tensorrt")
 
 # Video-decoding backend accepted by --decoder. Independent of --runtime: decoder
 # controls video ingestion (DALI vs PyNvVideoCodec), while --runtime controls model
@@ -131,9 +131,10 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
         default="eager",
         help=(
             "inference backend. 'eager' (default) runs the trained checkpoint. "
-            "'onnx' runs an ONNX Runtime session, which must have been built "
-            "first with `litpose export`. With --runtime onnx, --precision is "
-            "ignored -- the exported file's own precision is what runs."
+            "'onnx' and 'tensorrt' run a session previously built with "
+            "`litpose export --runtime onnx` / `--runtime tensorrt`. With "
+            "--runtime onnx or --runtime tensorrt, --precision is ignored -- "
+            "the exported file's own precision is what runs."
         ),
     )
 
@@ -142,9 +143,10 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
         choices=sorted(_ONNX_PRECISION_CHOICES),
         default=None,
         help=(
-            "which ONNX export to load. Only used with --runtime onnx. If "
-            "omitted and exactly one export exists, it is used automatically; "
-            "if several exist, pass this to disambiguate."
+            "which ONNX export to load (or, for --runtime tensorrt, which "
+            "engine cache). Only used with --runtime onnx or --runtime "
+            "tensorrt. If omitted and exactly one export exists, it is used "
+            "automatically; if several exist, pass this to disambiguate."
         ),
     )
 
@@ -204,7 +206,7 @@ def handle(args: argparse.Namespace) -> None:
         raise ValueError(
             f"--compile is only supported with --runtime eager, but --runtime "
             f"{args.runtime} was given. torch.compile() has no effect on an "
-            f"ONNX Runtime session."
+            f"ONNX Runtime or TensorRT session."
         )
 
     model = Model.from_dir2(
