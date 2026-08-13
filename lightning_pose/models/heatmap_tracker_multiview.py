@@ -234,7 +234,13 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         """
 
         # extract pixel data from batch
-        if "images" in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
+        if isinstance(batch_dict, torch.Tensor):
+            # ONNX/TensorRT export tracing (Model.export() in api/model.py) calls
+            # forward() with a raw images tensor, not a TypedDict batch -- the same
+            # contract the singleview model's forward() already expects. Handle that
+            # directly rather than a dict lookup.
+            images = batch_dict
+        elif "images" in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
             # labeled image dataloaders
             images = batch_dict["images"]  # type: ignore[typeddict-item]
         else:
