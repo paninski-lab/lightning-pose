@@ -341,8 +341,19 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         > predictions = trainer.predict(model, data_loader)
 
         """
+        # Unwrap to a raw images tensor before calling forward(), mirroring
+        # HeatmapTracker.predict_step() (singleview). Matters because
+        # Model._attach_onnx_runtime()/_attach_tensorrt_runtime() monkey-patch
+        # self.forward directly to a raw-tensor-only closure (_build_onnx_forward in
+        # api/model.py) -- passing the dict straight through works for the real
+        # nn.Module (which unwraps internally) but breaks the onnx/tensorrt runtimes
+        # with AttributeError: 'dict' object has no attribute 'to'.
+        if "images" in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
+            images = batch_dict["images"]  # type: ignore[typeddict-item]
+        else:
+            images = batch_dict["frames"]  # type: ignore[typeddict-item]
         # images -> heatmaps
-        pred_heatmaps = self.forward(batch_dict)
+        pred_heatmaps = self.forward(images)
         # heatmaps -> keypoints
         pred_keypoints, confidence = self.head.run_subpixelmaxima(pred_heatmaps)
         # bounding box coords -> original image coords
