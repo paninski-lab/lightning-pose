@@ -431,7 +431,44 @@ Installation
 
 Requires an NVIDIA GPU from the Turing generation or newer (Turing/Ampere/Ada/Hopper/Blackwell)
 and driver version 530.41.03 or newer on Linux. If PyNvVideoCodec can't decode a given video on
-the current machine (unsupported GPU multi-view diverge in which decoder wins. PyNvVideoCodec is a clear win
+the current machine (unsupported GPU generation, driver too old, package not installed, or an
+unsupported video format), ``litpose predict`` automatically falls back to DALI rather than
+erroring -- see below.
+
+Usage
+~~~~~
+
+``--decoder`` is independent of ``--runtime``/``--compile`` above -- it only controls how video
+frames are read, not how the model runs on them. From the CLI:
+
+.. code-block:: console
+
+    litpose predict /path/to/model_dir /path/to/video.mp4 --decoder pynvvc
+    litpose predict /path/to/model_dir /path/to/video.mp4 --decoder dali
+
+Or from the API:
+
+.. code-block:: python
+
+    model = Model.from_dir("path/to/model_dir")
+    result = model.predict_on_video_file("path/to/video.mp4", decoder="pynvvc")
+
+Omitting ``--decoder`` (or passing ``decoder=None``) auto-selects PyNvVideoCodec when it's
+usable on the current machine for the given video, falling back to DALI otherwise -- no error,
+just a quieter/slower run. Explicitly requesting ``--decoder pynvvc`` on a machine where it
+isn't usable raises a clear error instead of silently falling back, so you know your run isn't
+using the backend you asked for.
+
+Decode speed: L4 and A100, single- and multi-view
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Decoder choice (DALI vs. PyNvVideoCodec) is one of the axes crossed in the unified end-to-end
+benchmark figure in the Results section above -- see that figure for decode speed's effect on
+real ``litpose predict`` timing across models, GPUs, and precision/runtime techniques.
+
+.. note::
+
+   Single-view and multi-view diverge in which decoder wins. PyNvVideoCodec is a clear win
    for single-view video. For multi-view, it's currently a net loss: the current
    implementation reads each view's decoder sequentially in a loop (one
    ``get_batch_frames()`` call after another, not concurrently) -- which is also exactly
