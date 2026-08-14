@@ -624,7 +624,11 @@ class Model:
             raise RuntimeError('model failed to load; self.model is None after _load()')
 
         session = ort.InferenceSession(
-            str(onnx_path), providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
+            str(onnx_path),
+            providers=[
+                ("CUDAExecutionProvider", {"arena_extend_strategy": "kSameAsRequested"}),
+                "CPUExecutionProvider",
+            ],
         )
 
         # Guard against a silent fallback to CPU. onnxruntime does not raise if
@@ -648,6 +652,12 @@ class Model:
             )
 
         self.model.forward = _build_onnx_forward(session)  # type: ignore[method-assign]
+        # Free the eager backbone's GPU memory -- the ONNX graph already has the
+        # trained weights baked in, and self.backbone is never called again from
+        # any inference path once forward() is replaced above (only from
+        # get_parameters(), which is training-only). Without this, the eager
+        # weights and the ONNX Runtime session are both resident on GPU at once.
+        self.model.backbone.to("cpu")
         self._runtime = "onnx"
         logger.info(f'loaded ONNX runtime session from {onnx_path}')
 
@@ -738,7 +748,10 @@ class Model:
         }
         session = ort.InferenceSession(
             str(onnx_path),
-            providers=[("TensorrtExecutionProvider", trt_options), "CUDAExecutionProvider"],
+            providers=[
+                ("TensorrtExecutionProvider", trt_options),
+                ("CUDAExecutionProvider", {"arena_extend_strategy": "kSameAsRequested"}),
+            ],
         )
         if "TensorrtExecutionProvider" not in session.get_providers():
             raise RuntimeError(
@@ -756,6 +769,8 @@ class Model:
         if self.model is None:
             raise RuntimeError('model failed to load; self.model is None after _load()')
         self.model.forward = _build_onnx_forward(session)  # type: ignore[method-assign]
+        # See the matching comment in _attach_onnx_runtime() -- same fix, same reason.
+        self.model.backbone.to("cpu")
         self._runtime = "tensorrt"
         logger.info(f'loaded TensorRT engine session from {cache_dir}')
 
