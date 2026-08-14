@@ -112,6 +112,21 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
     )
 
     predict_parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=None,
+        help=(
+            "override the batch size used during inference. For video inputs, sets "
+            "dali.base.predict.sequence_length (or dali.context.predict.sequence_length "
+            "for context models) -- the number of frames DALI loads per batch. For "
+            "CSV/image inputs, sets training.val_batch_size. Lower this if inference "
+            "runs out of GPU memory; raise it to speed up inference on a GPU with "
+            "memory to spare. Equivalent to passing the corresponding --overrides "
+            "KEY=VALUE by hand."
+        ),
+    )
+
+    predict_parser.add_argument(
         "--bbox_dir",
         type=Path,
         default=None,
@@ -209,9 +224,17 @@ def handle(args: argparse.Namespace) -> None:
             f"ONNX Runtime or TensorRT session."
         )
 
+    hydra_overrides = list(args.overrides) if args.overrides else []
+    if args.batch_size is not None:
+        hydra_overrides += [
+            f"training.val_batch_size={args.batch_size}",
+            f"dali.base.predict.sequence_length={args.batch_size}",
+            f"dali.context.predict.sequence_length={args.batch_size}",
+        ]
+
     model = Model.from_dir2(
         args.model_dir,
-        hydra_overrides=args.overrides,
+        hydra_overrides=hydra_overrides or None,
         precision=args.precision,
         runtime=args.runtime,
         onnx_precision=args.onnx_precision,
