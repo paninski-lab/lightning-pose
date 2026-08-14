@@ -85,6 +85,13 @@ Caveats
   simpler but can leave some performance on the table at batch sizes far from the profile's
   optimum -- for example, multiview-FP32-on-L4 was roughly flat (0.91-1.07x) across batch sizes
   rather than showing a clear win.
+- **ONNX Runtime FP16 + DALI is missing for the 6-view multiview model on L4** -- this
+  combination hits ``CUDA out of memory`` on the very first predict batch (L4 has 22GB VRAM;
+  the ONNX Runtime session plus DALI's 6-view decode pipeline for a long video already uses
+  ~20GB before that batch runs). The same combination completes without issue on A100 (80GB),
+  and every other technique/decoder pairing completes on L4 -- this looks like a genuine
+  memory ceiling for this specific combination rather than a bug, so the corresponding bar is
+  omitted from the figure above.
 
 .. _accuracy_check:
 
