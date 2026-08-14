@@ -220,33 +220,14 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
 
     def forward(
         self,
-        batch_dict: (
-            MultiviewHeatmapLabeledBatchDict | UnlabeledBatchDict | MultiviewUnlabeledBatchDict
-        ),
+        images: Float[torch.Tensor, "batch views channels image_height image_width"],
     ) -> Float[torch.Tensor, "num_valid_outputs num_keypoints heatmap_height heatmap_width"]:
         """Forward pass through the network.
 
-        Batch options
-        -------------
-        - Float[torch.Tensor, "batch view channels image_height image_width"]
-          multiview labeled batch or unlabeled batch from DALI
+        Args:
+            images: batch of multiview images
 
         """
-
-        # extract pixel data from batch
-        if isinstance(batch_dict, torch.Tensor):
-            # ONNX/TensorRT export tracing (Model.export() in api/model.py) calls
-            # forward() with a raw images tensor, not a TypedDict batch -- the same
-            # contract the singleview model's forward() already expects. Handle that
-            # directly rather than a dict lookup.
-            images = batch_dict
-        elif "images" in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
-            # labeled image dataloaders
-            images = batch_dict["images"]  # type: ignore[typeddict-item]
-        else:
-            # unlabeled dali video dataloaders
-            images = batch_dict["frames"]  # type: ignore[typeddict-item]
-
         batch_size, num_views, channels, img_height, img_width = images.shape
 
         images_flat = images.reshape(-1, channels, img_height, img_width)
@@ -269,7 +250,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
 
         # images -> heatmaps
-        pred_heatmaps = self.forward(batch_dict)
+        pred_heatmaps = self.forward(batch_dict["images"])
         # heatmaps -> keypoints
         pred_keypoints, confidence = self.head.run_subpixelmaxima(pred_heatmaps)
         # bounding box coords -> original image coords
@@ -342,12 +323,12 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
 
         """
         # Unwrap to a raw images tensor before calling forward(), mirroring
-        # HeatmapTracker.predict_step() (singleview). Matters because
-        # Model._attach_onnx_runtime()/_attach_tensorrt_runtime() monkey-patch
-        # self.forward directly to a raw-tensor-only closure (_build_onnx_forward in
-        # api/model.py) -- passing the dict straight through works for the real
-        # nn.Module (which unwraps internally) but breaks the onnx/tensorrt runtimes
-        # with AttributeError: 'dict' object has no attribute 'to'.
+        # HeatmapTracker.predict_step() (singleview). forward() only accepts a raw
+        # images tensor (see its signature above) -- passing the dict straight
+        # through raises AttributeError under eager execution and under the
+        # ONNX/TensorRT runtimes alike, since Model._attach_onnx_runtime()/
+        # _attach_tensorrt_runtime() (api/model.py) also rebind forward() to a
+        # raw-tensor-only closure.
         if "images" in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
             images = batch_dict["images"]  # type: ignore[typeddict-item]
         else:
@@ -454,7 +435,7 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(
         """
 
         # images -> heatmaps
-        pred_heatmaps = self.forward(batch_dict)
+        pred_heatmaps = self.forward(batch_dict["frames"])
         # heatmaps -> keypoints
         pred_keypoints_augmented, confidence = self.head.run_subpixelmaxima(pred_heatmaps)
 
