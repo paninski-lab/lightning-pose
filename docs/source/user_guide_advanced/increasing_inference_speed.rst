@@ -20,7 +20,8 @@ assuming you've already trained a model with ``litpose train``; see the
   is a one-line change and gives solid gains. ONNX Runtime requires an export step but is the
   simplest option to deploy without a full Python/PyTorch runtime. TensorRT requires the most
   setup (matching CUDA/TensorRT library versions) but wins across every model and GPU tested,
-  up to **8.32x** on the 6-view multiview transformer on an A100.
+  up to **[TODO: update from new end-to-end benchmark]x** on the 6-view multiview transformer
+  on an A100.
 - **None of these techniques change the model's predictions.** We compared final keypoint
   predictions against the eager FP32 baseline on real video frames for all three methods --
   max deviation was under 0.08px in every case, consistent with ordinary floating-point kernel
@@ -46,57 +47,44 @@ Overview
   techniques above -- see :ref:`PyNvVideoCodec (Video Decoding) <pynvvc_decoding>`.
 - **These techniques are complementary and can be combined** -- e.g. torch.compile() or
   TensorRT for the model together with PyNvVideoCodec for decoding -- for the best end-to-end
-  throughput. Not yet benchmarked together on this page; a combined benchmark is planned for a
-  follow-up PR.
+  throughput. The Results figure below crosses every technique with both decoders, so its
+  numbers already reflect these combinations rather than the model-processing and decoding
+  axes in isolation.
 
 Results
 =======
 
-Best-case speedup vs. eager FP32, FP16, isolated forward pass (10 warmup + 100 timed passes,
-largest batch size tested per model/GPU: batch 64 for ResNet50/ViT-S, batch 16 -- effective
-ViT batch 96 across 6 views -- for the multiview transformer):
+The figure below benchmarks every combination of model architecture, precision/runtime
+technique, video decoder, and GPU on real end-to-end ``litpose predict`` calls -- not an
+isolated forward pass. Each bar is the mean of 10 timed repeats (1 discarded warmup run);
+error bars show standard error of the mean.
 
-.. list-table::
-   :header-rows: 1
+.. figure:: [TODO: path to predict_speed_matrix.png once generated]
+   :alt: Grouped bar chart of end-to-end predict speed across models, techniques, and GPUs
 
-   * - Model / GPU
-     - Eager FP16
-     - torch.compile + FP16
-     - ONNX Runtime FP16
-     - TensorRT FP16
-   * - ResNet50 -- L4
-     - 1.96x
-     - 2.82x
-     - 1.98x
-     - **4.73x**
-   * - ResNet50 -- A100
-     - 1.57x
-     - 2.41x
-     - 1.48x
-     - **4.51x**
-   * - ViT-S (single-view) -- L4
-     - 3.17x
-     - 4.10x
-     - 2.36x
-     - **5.43x**
-   * - ViT-S (single-view) -- A100
-     - 4.69x
-     - 6.18x
-     - 3.13x
-     - **7.82x**
-   * - Multiview (6-view) -- L4
-     - 3.24x
-     - 4.14x
-     - 1.74x
-     - **5.27x**
-   * - Multiview (6-view) -- A100
-     - 4.56x
-     - 6.33x
-     - 3.12x
-     - **8.32x**
+   End-to-end ``litpose predict`` timing for ResNet50 (single-view), ViT-S (single-view), and
+   ViT-S (6-view multiview). Each row shows 5 technique groups (eager FP32, eager FP16,
+   torch.compile + FP16, ONNX Runtime FP16, TensorRT FP16), each with 4 bars: L4 + DALI,
+   L4 + PyNvVideoCodec, A100 + DALI, A100 + PyNvVideoCodec.
 
-TensorRT wins in every case, sometimes by a wide margin -- particularly on the multiview model,
-where more compute per forward pass gives it more to work with.
+[TODO: 1-2 sentence takeaway once final numbers are in -- e.g. which technique/decoder
+combination wins overall, and whether PyNvVideoCodec's multiview slowdown (see below) shows
+up in the end-to-end numbers too.]
+
+.. _caveats:
+
+Caveats
+=======
+
+- **cuDNN TF32 was left on for the ResNet50 eager-FP32 baseline** (only matmul TF32 was
+  disabled), so it's not a fully strict FP32 number -- doesn't change the direction of any
+  result here. [TODO: confirm whether this still applies to the new end-to-end benchmark
+  methodology, or should be removed/reworded.]
+- A single dynamic-shape TensorRT profile was used per (model, GPU, precision), covering the
+  full batch-size range tested, rather than a separate engine per exact batch size. This is
+  simpler but can leave some performance on the table at batch sizes far from the profile's
+  optimum -- for example, multiview-FP32-on-L4 was roughly flat (0.91-1.07x) across batch sizes
+  rather than showing a clear win.
 
 .. _accuracy_check:
 
@@ -418,10 +406,9 @@ backend that talks to the hardware decoder more directly, skipping DALI's pipeli
 framework overhead.
 
 On a T4, decoding the same video with PyNvVideoCodec measured **8.76x faster** than DALI's GPU
-reader (3735.7 vs 426.5 fps, 7 timed runs). This is a decode-throughput-only number, not an
-end-to-end ``litpose predict`` speedup -- how much it moves the needle overall depends on how
-much of your pipeline's time is spent decoding vs. running the model (see the data-loading
-caveat below).
+reader (3735.7 vs 426.5 fps, 7 timed runs). This is a decode-throughput-only number on a GPU
+not otherwise covered below -- for decode speed's effect on real end-to-end ``litpose predict``
+timing on L4/A100, see the unified Results figure above, which already includes both decoders.
 
 .. note::
 
@@ -444,101 +431,14 @@ Installation
 
 Requires an NVIDIA GPU from the Turing generation or newer (Turing/Ampere/Ada/Hopper/Blackwell)
 and driver version 530.41.03 or newer on Linux. If PyNvVideoCodec can't decode a given video on
-the current machine (unsupported GPU generation, driver too old, package not installed, or an
-unsupported video format), ``litpose predict`` automatically falls back to DALI rather than
-erroring -- see below.
-
-Usage
-~~~~~
-
-``--decoder`` is independent of ``--runtime``/``--compile`` above -- it only controls how video
-frames are read, not how the model runs on them. From the CLI:
-
-.. code-block:: console
-
-    litpose predict /path/to/model_dir /path/to/video.mp4 --decoder pynvvc
-    litpose predict /path/to/model_dir /path/to/video.mp4 --decoder dali
-
-Or from the API:
-
-.. code-block:: python
-
-    model = Model.from_dir("path/to/model_dir")
-    result = model.predict_on_video_file("path/to/video.mp4", decoder="pynvvc")
-
-Omitting ``--decoder`` (or passing ``decoder=None``) auto-selects PyNvVideoCodec when it's
-usable on the current machine for the given video, falling back to DALI otherwise -- no error,
-just a quieter/slower run. Explicitly requesting ``--decoder pynvvc`` on a machine where it
-isn't usable raises a clear error instead of silently falling back, so you know your run isn't
-using the backend you asked for.
-
-Decode speed: L4 and A100, single- and multi-view
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Decode-only throughput (no model), 7 timed runs each, 64-frame batches:
-
-.. list-table::
-   :header-rows: 1
-
-   * - Config
-     - GPU
-     - DALI
-     - PyNvVideoCodec
-     - Speedup
-   * - Single-view (``mirror-mouse-fused``, 1 view)
-     - L4
-     - 1516 fps
-     - 4442 fps
-     - **2.93x**
-   * - Single-view (``mirror-mouse-fused``, 1 view)
-     - A100
-     - 1113 fps
-     - 3249 fps
-     - **2.92x**
-   * - Multi-view (``fly-anipose``, 6 views)
-     - L4
-     - 5347 fps
-     - 3674 fps
-     - 0.69x (slower)
-   * - Multi-view (``fly-anipose``, 6 views)
-     - A100
-     - 4487 fps
-     - 2684 fps
-     - 0.60x (slower)
-
-.. note::
-
-   The multi-view result reverses direction from single-view: PyNvVideoCodec is
-   clearly faster for a single video, but *slower* than DALI once 6 views are
-   involved. The current implementation reads each view's decoder sequentially in
-   a loop (one ``get_batch_frames()`` call after another, not concurrently) --
-   which is also exactly what ``--decoder pynvvc`` does in production for
-   multiview, so this is a real characteristic of the current implementation, not
-   a benchmark artifact. DALI's pipeline appears to handle multiple video streams
-   more efficiently under its own internal scheduling. For single-view video,
-   ``--decoder pynvvc`` is a clear win; for multiview, it's currently a net loss on
-   raw decode speed even though the model's forward pass itself still speeds up
-   with reduced precision (see the multiview forward-pass numbers above) --
-   something worth revisiting if concurrent per-view decoding is added later.
-
-   Separately, single-view decode speedup is notably lower on L4/A100 here
-   (~2.9x) than the T4 number above (8.76x) -- not yet investigated further, but
-   worth keeping in mind that the T4 number shouldn't be assumed to generalize to
-   newer GPUs.
-
-.. _caveats:
-
-Caveats
-=======
-
-- **These are isolated forward-pass numbers, not end-to-end** ``litpose predict`` **timings.**
-  Real inference also includes data loading (DALI) and postprocessing. These forward-pass
-  gains aren't guaranteed to translate 1:1 into end-to-end speedups as-is. See :ref:`PyNvVideoCodec <pynvvc_decoding>` above for a way to speed up the data-loading half of that gap.
-- **cuDNN TF32 was left on for the ResNet50 eager-FP32 baseline** (only matmul TF32 was
-  disabled), so it's not a fully strict FP32 number -- doesn't change the direction of any
-  result here.
-- A single dynamic-shape TensorRT profile was used per (model, GPU, precision), covering the
-  full batch-size range tested, rather than a separate engine per exact batch size. This is
-  simpler but can leave some performance on the table at batch sizes far from the profile's
-  optimum -- for example, multiview-FP32-on-L4 was roughly flat (0.91-1.07x) across batch sizes
-  rather than showing a clear win.
+the current machine (unsupported GPU multi-view diverge in which decoder wins. PyNvVideoCodec is a clear win
+   for single-view video. For multi-view, it's currently a net loss: the current
+   implementation reads each view's decoder sequentially in a loop (one
+   ``get_batch_frames()`` call after another, not concurrently) -- which is also exactly
+   what ``--decoder pynvvc`` does in production for multiview, so this is a real
+   characteristic of the current implementation, not a benchmark artifact. This holds even
+   on long videos (confirmed on ~30,000-frame multiview sessions, not just short clips),
+   ruling out per-call setup overhead as the explanation -- DALI's pipeline appears to
+   handle multiple concurrent video streams more efficiently under its own internal
+   scheduling. Something worth revisiting if concurrent per-view decoding is added to
+   PyNvVideoCodec later.
