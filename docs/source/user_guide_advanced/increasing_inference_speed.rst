@@ -82,10 +82,13 @@ substantially larger on A100 (44-53% slower) than on L4 (6-19% slower).
 Caveats
 =======
 
-- **cuDNN TF32 was left on for the ResNet50 eager-FP32 baseline** (only matmul TF32 was
-  disabled), so it's not a fully strict FP32 number -- doesn't change the direction of any
-  result here. [TODO: confirm whether this still applies to the new end-to-end benchmark
-  methodology, or should be removed/reworded.]
+- **cuDNN TF32 was left on for the ResNet50 eager-FP32 baseline** (matmul TF32 is off by
+  PyTorch's own default; ``predict_speed_matrix_benchmark.py`` sets neither flag explicitly,
+  so both follow PyTorch's defaults). This means the eager-FP32 numbers in the figure above
+  are not a fully strict FP32 baseline either -- doesn't change the direction of any result
+  here, since TensorRT/ONNX Runtime FP16 still win by a wide margin, but it does mean the
+  eager-FP32 bars are a few percent faster than a true FP32 baseline would be for
+  convolution-heavy models like ResNet50.
 - A single dynamic-shape TensorRT profile was used per (model, GPU, precision), covering the
   full batch-size range tested, rather than a separate engine per exact batch size. This is
   simpler but can leave some performance on the table at batch sizes far from the profile's
