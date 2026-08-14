@@ -289,9 +289,16 @@ duplicated in both branches.
    flag that is not cleared here will remain active during prediction, causing randomly-augmented
    inference on labeled frames and silently wrong evaluation metrics. The fix pattern is:
    ```python
-   cfg_pred.training.imgaug = "default"
-   cfg_pred.training.<your_flag> = False   # ← must be explicit
+   with open_dict(cfg_pred.training):
+       cfg_pred.training.imgaug = "default"
+       cfg_pred.training.<your_flag> = False   # ← must be explicit
    ```
+   The `open_dict` wrapper is required, not optional: `cfg` may be struct-mode (e.g. composed via
+   `Model.from_dir2`'s `hydra_overrides`), and configs saved by older LP versions won't have your
+   new flag as a key at all, so a plain assignment raises `ConfigAttributeError`. The same applies
+   anywhere else a new/renamed config key is merged or assigned onto a loaded model's `cfg` (see
+   `predict_on_label_csv` and `predict_on_label_csv_multiview`, which wrap their
+   `OmegaConf.merge(self.cfg, cfg_overrides)` calls the same way).
 
 ### Data module split logic (`lightning_pose/data/datamodules.py` → `BaseDataModule._setup`)
 
