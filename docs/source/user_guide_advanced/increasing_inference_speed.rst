@@ -57,7 +57,7 @@ technique, video decoder, and GPU on real end-to-end ``litpose predict`` calls -
 isolated forward pass. Each bar is the mean of 10 timed repeats (1 discarded warmup run);
 error bars show standard error of the mean.
 
-.. figure:: https://i.imgur.com/RuJ6xcK.png
+.. figure:: https://i.imgur.com/INWfgoi.png
    :alt: Grouped bar chart of end-to-end predict speed across models, techniques, and GPUs
 
    End-to-end ``litpose predict`` timing for ResNet50 (single-view), ViT-S (single-view), and
