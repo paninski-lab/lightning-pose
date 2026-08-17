@@ -200,7 +200,9 @@ class TestPreparePynvvc:
         cfg_multiview.dali.base.predict.sequence_length = 4
 
         def make_fake_decoder(*args, **kwargs):
-            return [torch.full((3, 8, 8), float(k)) for k in range(total_frames)]
+            return _FakeSimpleDecoder(
+                [torch.full((3, 8, 8), float(k)) for k in range(total_frames)]
+            )
 
         mock_nvc = MagicMock()
         mock_nvc.SimpleDecoder.side_effect = make_fake_decoder
@@ -225,15 +227,39 @@ class TestPreparePynvvc:
                 assert not torch.equal(frames[0, 0], frames[-1, 0])
 
 
-def _make_fake_decoder(total_frames: int, h: int = 100, w: int = 120) -> list[torch.Tensor]:
-    """Fake decoder: a plain list of CHW CPU tensors, slice-indexable like SimpleDecoder.
+class _FakeSimpleDecoder:
+    """Minimal fake matching the PyNvVideoCodec 2.1.0 access API."""
+
+    def __init__(self, frames: list[torch.Tensor]) -> None:
+        self.frames = frames
+
+    def __len__(self) -> int:
+        return len(self.frames)
+
+    def __getitem__(self, index: int) -> torch.Tensor:
+        if not isinstance(index, int):
+            raise TypeError("SimpleDecoder batch reads require get_batch_frames_by_index()")
+        return self.frames[index]
+
+    def get_batch_frames_by_index(self, indices: list[int]) -> list[torch.Tensor]:
+        return [self.frames[index] for index in indices]
+
+
+def _make_fake_decoder(
+    total_frames: int,
+    h: int = 100,
+    w: int = 120,
+) -> _FakeSimpleDecoder:
+    """Build a decoder with CHW CPU tensors that support DLPack conversion.
 
     torch.from_dlpack() accepts anything implementing __dlpack__, which torch.Tensor
     already does (including CPU tensors) -- so _read_window's real
     `torch.from_dlpack(f)` call works unmodified against this fake, no mocking needed
     for that part.
     """
-    return [torch.rand(3, h, w) for _ in range(total_frames)]
+    return _FakeSimpleDecoder(
+        [torch.rand(3, h, w) for _ in range(total_frames)]
+    )
 
 
 class TestLitPynvvcWrapper:
