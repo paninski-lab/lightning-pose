@@ -26,10 +26,22 @@ However, if you look more closely up the logs and see this line:
 
 It means the error did not occur during training, but in the inference that
 automatically occurs after training. In this case, you need to reduce the **inference** batch size.
-The fix is currently manual, and the topic of this doc.
 
-For an existing model
------------------------
+For an existing model, from the CLI
+-------------------------------------
+
+Pass ``--batch_size`` to ``litpose predict`` to override the inference batch size for a single
+run, without editing the model's config.yaml:
+
+.. code-block::
+
+    litpose predict DATA_DIR/models/MODEL_NAME DATA_DIR/videos --batch_size 32
+
+This sets ``dali.base.predict.sequence_length`` (or ``dali.context.predict.sequence_length``
+for context models) for video inputs, and ``training.val_batch_size`` for CSV/image inputs.
+
+For an existing model, by editing the config
+-----------------------------------------------
 
 1. Locate the model's directory and config.yaml file (``DATA_DIR/models/MODEL_NAME/config.yaml``)
 2. Open it in a text editor and edit the value of the dali -> base -> predict -> sequence_length from 96 to 32

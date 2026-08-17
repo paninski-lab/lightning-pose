@@ -184,6 +184,22 @@ class TestPredictParser:
         ])
         assert args.bbox_dir == bbox_dir
 
+    def test_batch_size_default_is_none(self, parser, tmp_path):
+        """--batch_size defaults to None when not provided."""
+        model_dir = tmp_path / 'model'
+        model_dir.mkdir()
+        args = parser.parse_args(['predict', str(model_dir), 'video.mp4'])
+        assert args.batch_size is None
+
+    def test_batch_size_arg(self, parser, tmp_path):
+        """--batch_size is parsed as an int."""
+        model_dir = tmp_path / 'model'
+        model_dir.mkdir()
+        args = parser.parse_args(
+            ['predict', str(model_dir), 'video.mp4', '--batch_size', '8']
+        )
+        assert args.batch_size == 8
+
 
 class TestPredictMultiType:
     """Test _predict_multi_type bbox threading."""
@@ -272,6 +288,7 @@ class TestHandle:
             runtime='eager',
             onnx_precision=None,
             decoder=None,
+            batch_size=None,
         )
 
     def test_handle_threads_bbox_dir_to_predict_multi_type(self, tmp_path, mock_model):
@@ -399,6 +416,54 @@ class TestHandle:
             with pytest.raises(ValueError, match='only supported with --runtime eager'):
                 handle(args)
         MockModel.from_dir2.assert_not_called()
+
+    def test_handle_builds_overrides_from_batch_size(self, tmp_path, mock_model):
+        """--batch_size expands into the three relevant hydra overrides."""
+        args = self._make_args(tmp_path, tmp_path / 'vid.mp4')
+        args.batch_size = 8
+        with (
+            patch('lightning_pose.api.Model') as MockModel,
+            patch('lightning_pose.cli.commands.predict._predict_multi_type'),
+        ):
+            MockModel.from_dir2.return_value = mock_model
+            handle(args)
+        call_kwargs = MockModel.from_dir2.call_args.kwargs
+        assert call_kwargs['hydra_overrides'] == [
+            'training.val_batch_size=8',
+            'dali.base.predict.sequence_length=8',
+            'dali.context.predict.sequence_length=8',
+        ]
+
+    def test_handle_combines_batch_size_with_explicit_overrides(self, tmp_path, mock_model):
+        """--batch_size overrides are appended after any --overrides the user passed."""
+        args = self._make_args(tmp_path, tmp_path / 'vid.mp4')
+        args.overrides = ['model.model_type=heatmap']
+        args.batch_size = 4
+        with (
+            patch('lightning_pose.api.Model') as MockModel,
+            patch('lightning_pose.cli.commands.predict._predict_multi_type'),
+        ):
+            MockModel.from_dir2.return_value = mock_model
+            handle(args)
+        call_kwargs = MockModel.from_dir2.call_args.kwargs
+        assert call_kwargs['hydra_overrides'] == [
+            'model.model_type=heatmap',
+            'training.val_batch_size=4',
+            'dali.base.predict.sequence_length=4',
+            'dali.context.predict.sequence_length=4',
+        ]
+
+    def test_handle_passes_none_overrides_when_batch_size_not_set(self, tmp_path, mock_model):
+        """hydra_overrides stays None when neither --overrides nor --batch_size is given."""
+        args = self._make_args(tmp_path, tmp_path / 'vid.mp4')
+        with (
+            patch('lightning_pose.api.Model') as MockModel,
+            patch('lightning_pose.cli.commands.predict._predict_multi_type'),
+        ):
+            MockModel.from_dir2.return_value = mock_model
+            handle(args)
+        call_kwargs = MockModel.from_dir2.call_args.kwargs
+        assert call_kwargs['hydra_overrides'] is None
 
     def test_handle_threads_tensorrt_runtime_to_from_dir2(self, tmp_path, mock_model):
         """handle() forwards --runtime tensorrt to Model.from_dir2 same as onnx."""

@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import torch
+from omegaconf import OmegaConf
 
 from lightning_pose.api import Model
 from lightning_pose.api.model import _build_datamodule_pred, _Precision
@@ -91,6 +92,29 @@ class TestPredictOnLabelCsv:
         assert (model.image_preds_dir() / "top.csv" / "predictions_pixel_error.csv").is_file()
         assert (model.image_preds_dir() / "bot.csv" / "predictions.csv").is_file()
         assert (model.image_preds_dir() / "bot.csv" / "predictions_pixel_error.csv").is_file()
+
+    def test_predict_on_label_csv_struct_mode_missing_bbox_file(
+        self, tmp_path, request, toy_data_dir
+    ):
+        """Reproduces a real crash report: the test fixture's config.yaml predates the
+        data.bbox_file key (added for the bbox/cropzoom feature). Model.from_dir2 with
+        hydra_overrides set (even an empty list, as `litpose predict --overrides` with no
+        values produces) puts the loaded cfg in struct mode via hydra.compose. Merging in
+        cfg_overrides, which always sets data.bbox_file, then raised ConfigAttributeError
+        before predict_on_label_csv's OmegaConf.merge was wrapped in open_dict.
+        """
+        dataset_name = "test_model_mirror_mouse"
+        fetch_test_data_if_needed(request.path.parent, dataset_name)
+        tmp_model_dir = tmp_path / dataset_name
+        shutil.copytree(request.path.parent / dataset_name, tmp_model_dir)
+        assert "bbox_file" not in Model.from_dir(tmp_model_dir).cfg.data
+
+        model = Model.from_dir2(tmp_model_dir, hydra_overrides=[])
+        assert OmegaConf.is_struct(model.cfg)
+
+        model.predict_on_label_csv(Path(toy_data_dir) / "CollectedData.csv")
+
+        assert (model.image_preds_dir() / "CollectedData.csv" / "predictions.csv").is_file()
 
 
 class TestPredictOnVideoFile:
@@ -383,6 +407,19 @@ class TestBuildDatamodulePred:
         _build_datamodule_pred(cfg_copy)
         assert cfg_copy.training.imgaug == 'dlc'
         assert cfg_copy.training.imgaug_hflip is True
+
+    def test_build_datamodule_pred_struct_mode_missing_imgaug_hflip(self, cfg):
+        """Reproduces a real crash: an older model's config.yaml predates the
+        training.imgaug_hflip key (config_mirror-mouse-example.yaml, loaded by the `cfg`
+        fixture, is one such config), and the loaded cfg is struct-mode (e.g. because it
+        was composed via Model.from_dir2's hydra_overrides). Without open_dict, setting
+        cfg_pred.training.imgaug_hflip raised ConfigAttributeError.
+        """
+        cfg_copy = copy.deepcopy(cfg)
+        assert 'imgaug_hflip' not in cfg_copy.training
+        OmegaConf.set_struct(cfg_copy, True)
+        data_module = _build_datamodule_pred(cfg_copy)
+        assert data_module.dataset.imgaug_hflip is False
 
 
 def _torch_compile_supported() -> bool:

@@ -13,7 +13,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
-from omegaconf import DictConfig, ListConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 
 from lightning_pose.api.model_config import ModelConfig
 from lightning_pose.data import (
@@ -1319,7 +1319,12 @@ class Model:
         if not add_train_val_test_set:
             cfg_overrides.update({"train_prob": 1, "val_prob": 0, "train_frames": 1})
 
-        cfg_pred = OmegaConf.merge(self.cfg, cfg_overrides)
+        # open_dict: cfg_overrides may introduce keys (e.g. data.bbox_file) that are
+        # absent from configs saved by older LP versions -- merging those into a
+        # struct-mode cfg (e.g. one composed via Model.from_dir2's hydra_overrides)
+        # would otherwise raise ConfigAttributeError.
+        with open_dict(self.cfg):
+            cfg_pred = OmegaConf.merge(self.cfg, cfg_overrides)
 
         # HACK: For true multi-view model, trick predict_dataset and compute_metrics
         # into thinking this is a single-view model.
@@ -1405,7 +1410,10 @@ class Model:
         if not add_train_val_test_set:
             cfg_overrides.update({"train_prob": 1, "val_prob": 0, "train_frames": 1})
 
-        cfg_pred = OmegaConf.merge(self.cfg, cfg_overrides)
+        # open_dict: see predict_on_label_csv for why this guards against struct-mode
+        # ConfigAttributeError on configs saved by older LP versions.
+        with open_dict(self.cfg):
+            cfg_pred = OmegaConf.merge(self.cfg, cfg_overrides)
 
         data_module_pred = _build_datamodule_pred(cfg_pred)
 
@@ -1641,8 +1649,12 @@ def _build_datamodule_pred(cfg: DictConfig | ListConfig) -> BaseDataModule | Unl
         data module ready for use with `predict_dataset`.
     """
     cfg_pred = copy.deepcopy(cfg)
-    cfg_pred.training.imgaug = "default"
-    cfg_pred.training.imgaug_hflip = False
+    # open_dict: imgaug_hflip (and any future prediction-only flag added here) may be
+    # absent from configs saved by older LP versions; plain assignment would raise
+    # ConfigAttributeError if cfg is struct-mode (e.g. composed via hydra_overrides).
+    with open_dict(cfg_pred.training):
+        cfg_pred.training.imgaug = "default"
+        cfg_pred.training.imgaug_hflip = False
     imgaug_transform_pred = get_imgaug_transform(cfg=cfg_pred)
     dataset_pred = get_dataset(
         cfg=cfg_pred,
