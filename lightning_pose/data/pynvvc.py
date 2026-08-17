@@ -208,22 +208,20 @@ class LitPynvvcWrapper:
         behavior) -- this matters for torch.compile, which would otherwise eat a
         recompilation stall on the last, oddly-shaped batch of every video.
 
-        NOTE: the fully-out-of-bounds branch (cursor already >= total_frames) is
-        untested against the real SimpleDecoder API -- verify with a short test video
-        before trusting this on an edge case video whose frame count doesn't divide
-        evenly by (sequence_length, step).
+        Uses ``get_batch_frames_by_index`` rather than slice indexing because
+        PyNvVideoCodec 2.1.0's ``SimpleDecoder.__getitem__`` does not support
+        ordinary Python slices whose step is omitted.
         """
-        end = self._cursor + self.sequence_length
-        if end <= self._total_frames:
-            frames = list(decoder[self._cursor:end])
-        else:
-            frames = list(decoder[self._cursor:self._total_frames])
-            n_missing = end - self._total_frames
-            if len(frames) == 0:
-                frames = [decoder[self._total_frames - 1]]
-                n_missing -= 1
-            if n_missing > 0:
-                frames = frames + [frames[-1]] * n_missing
+        end = min(self._cursor + self.sequence_length, self._total_frames)
+        indices = list(range(self._cursor, end))
+        frames = list(decoder.get_batch_frames_by_index(indices)) if indices else []
+
+        n_missing = self.sequence_length - len(frames)
+        if len(frames) == 0:
+            frames = [decoder[self._total_frames - 1]]
+            n_missing -= 1
+        if n_missing > 0:
+            frames = frames + [frames[-1]] * n_missing
         return torch.stack([torch.from_dlpack(f) for f in frames])  # (seq_len, C, H, W)
 
     def _resize_normalize(self, frames: torch.Tensor) -> torch.Tensor:
