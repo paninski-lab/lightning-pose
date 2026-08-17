@@ -164,6 +164,7 @@ def get_dataset(
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
                 camera_params_path=cfg.data.get("camera_params_file", None),
                 bbox_paths=cfg.data.get("bbox_file", None),
+                animal_names=cfg.data.get("animal_names", None),
             )
         else:
             dataset = HeatmapDataset(
@@ -206,6 +207,18 @@ def get_data_module(
     )
     val_batch_size = int(np.ceil(cfg.training.val_batch_size / cfg.training.num_gpus))
 
+    # A per-animal dataset must get a frame-grouped split: its rows come in sets
+    # that share a frame, so splitting those apart puts the same scene in train and
+    # val. Fail loudly rather than quietly train against a leaking split.
+    group_ids = getattr(dataset, "group_ids", None)
+    if cfg.data.get("animal_names", None) and group_ids is None:
+        raise ValueError(
+            "cfg.data.animal_names is set but the dataset exposes no group_ids, so "
+            "one animal could land in train and the other -- the same frame from the "
+            "same cameras -- in val. Build the dataset with get_dataset() so "
+            "animal_names reaches it."
+        )
+
     semi_supervised = io_utils.check_if_semi_supervised(cfg.model.losses_to_use)
     if not semi_supervised:
         data_module = BaseDataModule(
@@ -218,6 +231,7 @@ def get_data_module(
             val_probability=cfg.training.val_prob,
             train_frames=cfg.training.train_frames,
             torch_seed=cfg.training.rng_seed_data_pt,
+            group_ids=group_ids,
         )
     else:
         # Divide config batch_size by num_gpus to maintain the same effective batch
@@ -265,6 +279,7 @@ def get_data_module(
             dali_config=dali_config,
             torch_seed=cfg.training.rng_seed_data_pt,
             imgaug=cfg.training.get("imgaug", "default"),
+            group_ids=group_ids,
         )
     return data_module
 

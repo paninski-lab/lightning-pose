@@ -1,7 +1,7 @@
 """Dataset objects store images, labels, and functions for manipulation."""
 
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Callable, Literal, Tuple, Union
 
 import cv2
@@ -365,6 +365,26 @@ class HeatmapDataset(BaseTrackingDataset):
         return example_dict
 
 
+def _strip_animal_from_path(img_path: str, animal_names: list[str]) -> str:
+    """Identify the frame a per-animal row came from.
+
+    ``labeled-data/sess_Camera0_black/img0.png`` -> ``labeled-data/sess_Camera0/img0.png``
+
+    The animal lives in the directory rather than the filename, so anything that
+    parses a frame index out of the filename keeps working. Longer animal names
+    are matched first, so ``["black", "black_mouse"]`` cannot mis-split.
+    """
+    p = PurePosixPath(img_path)
+    parent = p.parent.name
+    for animal in sorted(animal_names, key=len, reverse=True):
+        if parent.endswith(f"_{animal}"):
+            return str(p.parent.with_name(parent[: -len(animal) - 1]) / p.name)
+    raise ValueError(
+        f"Directory '{parent}' in '{img_path}' carries none of animal_names="
+        f"{animal_names}; every row of a per-animal dataset must name its animal."
+    )
+
+
 class MultiviewHeatmapDataset(torch.utils.data.Dataset):
     """Heatmap dataset that contains the images and keypoints in 2D arrays from all the cameras."""
 
@@ -383,6 +403,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         uniform_heatmaps: bool = False,
         camera_params_path: str | None = None,
         bbox_paths: list[str] | None = None,
+        animal_names: list[str] | None = None,
     ) -> None:
         """Initialize the MultiViewHeatmap Dataset.
 
@@ -413,6 +434,13 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
                 (image_path, x, h, height, width)
                 where (x, y) correspond to upper left corner of bbox.
                 These files should be in the same view order as the csv paths
+            animal_names: for a multi-animal dataset whose rows are per-animal,
+                the animal names appearing as a suffix on each session directory
+                (``labeled-data/<session>_<animal>/<image>``). Setting this makes
+                the dataset expose ``group_ids``, which keeps every animal of a
+                frame in the same train/val/test split -- without it, one animal
+                can land in train and the other, the same scene from the same
+                cameras, in val.
 
         """
 
@@ -465,6 +493,16 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         self.check_data_images_names()
 
         self.num_targets = self.num_keypoints * 2
+
+        # Rows of a per-animal dataset are not independent: the animals of one
+        # frame share a scene. group_ids marks which rows must stay together.
+        self.animal_names = list(animal_names) if animal_names else None
+        self.group_ids: list[str] | None = None
+        if self.animal_names is not None:
+            self.group_ids = [
+                _strip_animal_from_path(str(name), self.animal_names)
+                for name in self.dataset[self.view_names[0]].image_names
+            ]
 
         if camera_params_path is not None:
 

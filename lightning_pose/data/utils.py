@@ -21,6 +21,7 @@ from lightning_pose.data.datatypes import (
 __all__ = [
     "DataExtractor",
     "split_sizes_from_probabilities",
+    "split_indices_by_group",
     "clean_any_nans",
     "count_frames",
     "compute_num_train_frames",
@@ -268,6 +269,70 @@ def split_sizes_from_probabilities(
     assert train_number + test_number + val_number == total_number
 
     return [train_number, val_number, test_number]
+
+
+def split_indices_by_group(
+    group_ids: list,
+    data_splits_list: list[int],
+    generator: torch.Generator,
+) -> list[list[int]]:
+    """Split dataset indices into train/val/test without breaking up a group.
+
+    Needed when several rows describe the same underlying frame, as in a
+    multi-animal dataset where each animal contributes its own row and its own
+    crop of the same time-point. Split those rows independently and the same
+    scene, from the same cameras, lands on both sides of the split: validation
+    then measures memorisation, and reported error falls for the wrong reason.
+
+    Whole groups are assigned to splits, so realised sizes differ from
+    ``data_splits_list`` whenever group sizes do not divide it evenly. Splits
+    asked for zero rows are skipped rather than filled, and the last non-empty
+    split absorbs the remainder.
+
+    Args:
+        group_ids: one entry per dataset row; rows sharing a value form a group.
+        data_splits_list: desired [train, val, test] sizes **in rows**, from
+            :func:`split_sizes_from_probabilities`.
+        generator: seeded, so splits are reproducible.
+
+    Returns:
+        [train_idxs, val_idxs, test_idxs], each a list of row indices.
+
+    """
+    if len(group_ids) == 0:
+        raise ValueError("group_ids is empty; nothing to split")
+
+    groups: dict = {}
+    for row, gid in enumerate(group_ids):
+        groups.setdefault(gid, []).append(row)
+
+    keys = list(groups.keys())
+    order = torch.randperm(len(keys), generator=generator).tolist()
+
+    targets = list(data_splits_list)
+    splits: list[list[int]] = [[], [], []]
+    fillable = [i for i, t in enumerate(targets) if t > 0]
+    if not fillable:
+        raise ValueError(f"All split sizes are zero: {data_splits_list}")
+
+    pos = 0
+    for key_idx in order:
+        rows = groups[keys[key_idx]]
+        while (
+            pos < len(fillable) - 1
+            and len(splits[fillable[pos]]) >= targets[fillable[pos]]
+        ):
+            pos += 1
+        splits[fillable[pos]].extend(rows)
+
+    if len(splits[1]) == 0:
+        raise ValueError(
+            f"Grouped split produced an empty validation set from {len(keys)} "
+            f"groups and target sizes {data_splits_list}. Lower train_prob or "
+            f"label more frames."
+        )
+
+    return splits
 
 
 @typechecked

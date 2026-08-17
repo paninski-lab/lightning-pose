@@ -1,5 +1,6 @@
 """Data modules split a dataset into train, val, and test modules."""
 
+import collections
 import copy
 import os
 from typing import Literal
@@ -15,6 +16,7 @@ from lightning_pose.data.dali import PrepareDALI
 from lightning_pose.data.datatypes import SemiSupervisedDataLoaderDict
 from lightning_pose.data.utils import (
     compute_num_train_frames,
+    split_indices_by_group,
     split_sizes_from_probabilities,
 )
 from lightning_pose.utils.io import check_video_paths
@@ -41,6 +43,7 @@ class BaseDataModule(pl.LightningDataModule):
         test_probability: float | None = None,
         train_frames: float | int | None = None,
         torch_seed: int = 42,
+        group_ids: list | None = None,
     ) -> None:
         """Data module splits a dataset into train, val, and test data loaders.
 
@@ -59,6 +62,12 @@ class BaseDataModule(pl.LightningDataModule):
                 (exclusive) and defines the fraction of the initially selected
                 train frames
             torch_seed: control data splits
+            group_ids: optional, one entry per dataset row; rows sharing a value
+                are kept in the same split. Use for a multi-animal dataset, where
+                every animal of a frame contributes a row -- splitting those apart
+                puts the same scene in train and val. Realised split sizes may
+                deviate slightly from the requested fractions, since a group
+                cannot be divided.
 
         """
         super().__init__()
@@ -83,6 +92,12 @@ class BaseDataModule(pl.LightningDataModule):
         self.val_dataset = None  # populated by self.setup()
         self.test_dataset = None  # populated by self.setup()
         self.torch_seed = torch_seed
+        self.group_ids = group_ids
+        if group_ids is not None and len(group_ids) != len(dataset):
+            raise ValueError(
+                f"group_ids has {len(group_ids)} entries but the dataset has "
+                f"{len(dataset)} rows; one entry per row is required."
+            )
         self._setup()
 
     def _setup(self) -> None:
@@ -98,24 +113,38 @@ class BaseDataModule(pl.LightningDataModule):
             test_probability=self.test_probability,
         )
 
-        if len(self.dataset.imgaug_transform) == 1:
-            # no augmentations in the pipeline; subsets can share same underlying dataset
-            self.train_dataset, self.val_dataset, self.test_dataset = random_split(
-                self.dataset,
+        if self.group_ids is not None:
+            train_idxs, val_idxs, test_idxs = split_indices_by_group(
+                self.group_ids,
                 data_splits_list,
                 generator=torch.Generator().manual_seed(self.torch_seed),
             )
+            print(
+                f"Grouped splits over {len(set(self.group_ids))} groups -- "
+                f"requested rows {data_splits_list}, got "
+                f"[{len(train_idxs)}, {len(val_idxs)}, {len(test_idxs)}]"
+            )
+        else:
+            # Splitting `range(n)` rather than the dataset gives the same permutation
+            # for a given seed, so existing splits are unchanged.
+            train_idxs, val_idxs, test_idxs = (
+                list(subset) for subset in random_split(
+                    range(len(self.dataset)),
+                    data_splits_list,
+                    generator=torch.Generator().manual_seed(self.torch_seed),
+                )
+            )
+
+        if len(self.dataset.imgaug_transform) == 1:
+            # no augmentations in the pipeline; subsets can share same underlying dataset
+            self.train_dataset = Subset(self.dataset, indices=list(train_idxs))
+            self.val_dataset = Subset(self.dataset, indices=list(val_idxs))
+            self.test_dataset = Subset(self.dataset, indices=list(test_idxs))
         else:
             # augmentations in the pipeline; we want validation and test datasets that only resize
             # we can't simply change the imgaug pipeline in the datasets after they've been split
             # because the subsets actually point to the same underlying dataset, so we create
             # separate datasets here
-            train_idxs, val_idxs, test_idxs = random_split(
-                range(len(self.dataset)),
-                data_splits_list,
-                generator=torch.Generator().manual_seed(self.torch_seed),
-            )
-
             self.train_dataset = Subset(copy.deepcopy(self.dataset), indices=list(train_idxs))
             self.val_dataset = Subset(copy.deepcopy(self.dataset), indices=list(val_idxs))
             self.test_dataset = Subset(copy.deepcopy(self.dataset), indices=list(test_idxs))
@@ -151,7 +180,19 @@ class BaseDataModule(pl.LightningDataModule):
             if n_frames < len(self.train_dataset):
                 # split the data a second time to reflect further subsampling from
                 # train_frames
-                self.train_dataset.indices = self.train_dataset.indices[:n_frames]
+                indices = self.train_dataset.indices[:n_frames]
+                if self.group_ids is not None:
+                    # Drop back to the last complete group, so subsampling cannot
+                    # leave one animal of a frame without the other.
+                    sizes = collections.Counter(self.group_ids)
+                    kept = collections.Counter(self.group_ids[i] for i in indices)
+                    full = {g for g, c in kept.items() if c == sizes[g]}
+                    indices = [i for i in indices if self.group_ids[i] in full]
+                    print(
+                        f"train_frames={self.train_frames}: kept {len(indices)} rows "
+                        f"({len(full)} complete groups) of the requested {n_frames}"
+                    )
+                self.train_dataset.indices = indices
 
         print(
             f"Dataset splits -- "
@@ -212,6 +253,7 @@ class UnlabeledDataModule(BaseDataModule):
         train_frames: float | None = None,
         torch_seed: int = 42,
         imgaug: Literal["default", "dlc", "dlc-top-down"] = "default",
+        group_ids: list | None = None,
     ) -> None:
         """Data module that contains labeled and unlabeled data loaders.
 
@@ -249,6 +291,7 @@ class UnlabeledDataModule(BaseDataModule):
             test_probability=test_probability,
             train_frames=train_frames,
             torch_seed=torch_seed,
+            group_ids=group_ids,
         )
         self.video_paths_list = video_paths_list
         self.filenames = check_video_paths(self.video_paths_list, view_names=view_names)
