@@ -147,6 +147,7 @@ def get_dataset(
                 do_context=False,  # no context for regression models
                 bbox_path=cfg.data.get('bbox_file', None),
                 imgaug_hflip=imgaug_hflip,
+                dataset_names=cfg.data.get('dataset_names', None),
             )
     elif cfg.model.model_type.find('heatmap') > -1:
         if cfg.data.get('view_names', None) and len(cfg.data.view_names) > 1:
@@ -194,6 +195,7 @@ def get_dataset(
                 uniform_heatmaps=cfg.training.get('uniform_heatmaps_for_nan_keypoints', False),
                 bbox_path=cfg.data.get('bbox_file', None),
                 imgaug_hflip=imgaug_hflip,
+                dataset_names=cfg.data.get('dataset_names', None),
             )
 
     else:

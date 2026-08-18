@@ -62,6 +62,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         resize: bool = True,
         bbox_path: str | None = None,
         imgaug_hflip: bool = False,
+        dataset_names: list[str] | None = None,
     ) -> None:
         """Initialize a dataset for regression (rather than heatmap) models.
 
@@ -97,6 +98,14 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 that label identity is preserved. Every ``_left`` keypoint must have a matching
                 ``_right`` keypoint and vice versa, or a ValueError is raised. Disabled
                 automatically for validation and test subsets by the data module.
+            dataset_names: explicit ordered registry of source-dataset names for corpora merged
+                from multiple labeled datasets. When provided, every image path must have the
+                form ``labeled-data/<dataset>/<session>/<frame>`` with ``<dataset>`` present in
+                this list; ``dataset_ids`` / ``session_ids`` are parsed from the paths, and each
+                example returned by ``__getitem__`` carries a ``dataset_id`` (the name's index in
+                this list — ids are never assigned from CSV appearance order). When None
+                (default), behavior is identical to stock Lightning Pose and no per-example
+                ``dataset_id`` is emitted.
 
         """
         self.root_directory = Path(root_directory)
@@ -157,6 +166,16 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
         self.data_length = len(self.image_names)
 
+        # parse per-example dataset/session identity from image paths (multi-dataset corpora)
+        self.dataset_names = list(dataset_names) if dataset_names is not None else None
+        if self.dataset_names is not None:
+            self.dataset_ids, self.session_ids = self._parse_dataset_metadata(
+                self.image_names, self.dataset_names,
+            )
+        else:
+            self.dataset_ids: torch.Tensor | None = None
+            self.session_ids: list[str] | None = None
+
         # load bounding box data
         if bbox_path:
             if os.path.isfile(bbox_path):
@@ -216,6 +235,48 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             indices[idx_right] = idx_left
 
         return np.array(indices, dtype=np.intp)
+
+    @staticmethod
+    def _parse_dataset_metadata(
+        image_names: list[str],
+        dataset_names: list[str],
+    ) -> tuple[torch.Tensor, list[str]]:
+        """Parse per-example dataset and session identity from labeled-data image paths.
+
+        Args:
+            image_names: image paths from the label CSV, expected to have the form
+                ``labeled-data/<dataset>/<session>/<frame>``.
+            dataset_names: explicit ordered registry of allowed dataset names; a path's
+                dataset id is its name's index in this list.
+
+        Returns:
+            tuple of (dataset_ids, session_ids): a long tensor of shape (num_examples,)
+            and a list of ``<dataset>/<session>`` strings aligned with dataset indices.
+
+        Raises:
+            ValueError: if any path does not match the expected structure, or names a
+                dataset absent from ``dataset_names``.
+        """
+        name_to_id = {name: i for i, name in enumerate(dataset_names)}
+        dataset_ids = torch.empty(len(image_names), dtype=torch.long)
+        session_ids: list[str] = []
+        for i, img_name in enumerate(image_names):
+            parts = Path(img_name).parts
+            if len(parts) < 4 or parts[0] != 'labeled-data':
+                raise ValueError(
+                    f'cannot parse dataset identity from image path "{img_name}"; expected '
+                    f'"labeled-data/<dataset>/<session>/<frame>" when dataset_names is set'
+                )
+            dataset, session = parts[1], parts[2]
+            if dataset not in name_to_id:
+                raise ValueError(
+                    f'image path "{img_name}" names dataset "{dataset}", which is not in '
+                    f'dataset_names {dataset_names}; ids are never assigned from appearance '
+                    f'order, so every dataset in the CSV must be declared explicitly'
+                )
+            dataset_ids[i] = name_to_id[dataset]
+            session_ids.append(f'{dataset}/{session}')
+        return dataset_ids, session_ids
 
     @property
     def height(self) -> int:
@@ -339,13 +400,18 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         else:
             vis = torch.zeros(0, dtype=torch.long)
 
-        return BaseLabeledExampleDict(
+        example = BaseLabeledExampleDict(
             images=transformed_images,  # shape (3, img_height, img_width) or (5, 3, H, W)
             keypoints=torch.from_numpy(transformed_keypoints),  # shape (n_targets,)
             idxs=idx,
             bbox=bbox,
             visibility=vis,
         )
+        # only emitted in multi-dataset mode so that stock (dataset_names=None) examples
+        # are field-for-field identical to upstream Lightning Pose
+        if self.dataset_ids is not None:
+            example['dataset_id'] = int(self.dataset_ids[idx])
+        return example
 
 
 # the only addition here, should be the heatmap creation method.
@@ -377,6 +443,7 @@ class HeatmapDataset(BaseTrackingDataset):
         uniform_heatmaps: bool = False,
         bbox_path: str | None = None,
         imgaug_hflip: bool = False,
+        dataset_names: list[str] | None = None,
     ) -> None:
         """Initialize the Heatmap Dataset.
 
@@ -406,6 +473,7 @@ class HeatmapDataset(BaseTrackingDataset):
             bbox_path: path to csv file that contains bounding box information; rows must be in
                 same order as csv file
             imgaug_hflip: see :class:`BaseTrackingDataset` for full documentation.
+            dataset_names: see :class:`BaseTrackingDataset` for full documentation.
 
         """
         super().__init__(
@@ -419,6 +487,7 @@ class HeatmapDataset(BaseTrackingDataset):
             resize=resize,
             bbox_path=bbox_path,
             imgaug_hflip=imgaug_hflip,
+            dataset_names=dataset_names,
         )
 
         if self.height % 128 != 0 or self.height % 128 != 0:
