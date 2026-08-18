@@ -200,6 +200,157 @@ class HeatmapTracker(BaseSupervisedTracker):
         return params
 
 
+class MultiHeadHeatmapTracker(HeatmapTracker):
+    """Heatmap tracker with one complete head per source dataset, routed by dataset id.
+
+    The backbone is the only shared component: every dataset in ``dataset_names`` owns a
+    full :class:`~lightning_pose.models.heads.HeatmapHead` (all ``num_keypoints`` output
+    channels, identical shape across heads). A mixed batch is routed by grouping rows on
+    their ``dataset_id``, running each group through its own head, and scattering the
+    results back into one ``(batch, num_keypoints, H, W)`` tensor in original batch
+    order — so loss, metric, and prediction-export shapes are unchanged from the shared
+    model. Channels a dataset never labels receive no gradient (their all-zero targets
+    are dropped by the loss) and remain at initialization; they must be masked out of
+    evaluation rather than read as predictions.
+
+    Supervised training and labeled-frame prediction only. Prediction on unlabeled
+    video (no per-frame dataset id) and dataset-blind head combination are not
+    implemented here.
+    """
+
+    def __init__(
+        self,
+        dataset_names: list[str],
+        **kwargs: Any,
+    ) -> None:
+        """Initialize a multi-head heatmap tracker.
+
+        Args:
+            dataset_names: ordered source-dataset registry; head ``i`` belongs to
+                ``dataset_names[i]``, matching the ids parsed from image paths.
+            **kwargs: passed through to :class:`HeatmapTracker`.
+        """
+        super().__init__(**kwargs)
+        if not dataset_names:
+            raise ValueError('dataset_names must be a non-empty ordered registry')
+        self.dataset_names = list(dataset_names)
+
+        # replace the single shared head with one complete head per dataset; heads are
+        # built after the parent's seeded init, so initialization stays deterministic
+        # given torch_seed (but differs across heads, as it would across seeds)
+        del self.head
+        self.heads = torch.nn.ModuleList([
+            HeatmapHead(
+                backbone_arch=kwargs.get('backbone', 'resnet50'),
+                in_channels=self.num_fc_input_features,
+                out_channels=self.num_keypoints,
+                downsample_factor=self.downsample_factor,
+            )
+            for _ in self.dataset_names
+        ])
+
+    def forward(self, images: torch.Tensor) -> torch.Tensor:
+        """Raise: a routed forward needs per-frame dataset ids.
+
+        Raises:
+            NotImplementedError: always; use :meth:`forward_routed`. Dataset-blind
+                combination across heads is a separate inference mode, not a silent
+                fallback.
+        """
+        raise NotImplementedError(
+            'MultiHeadHeatmapTracker has no dataset-agnostic forward; use '
+            'forward_routed(images, dataset_ids). Blind head combination is a separate '
+            'inference path.'
+        )
+
+    def forward_routed(
+        self,
+        images: Float[torch.Tensor, 'batch channels image_height image_width'],
+        dataset_ids: Float[torch.Tensor, 'batch'],
+    ) -> Float[torch.Tensor, 'batch num_keypoints heatmap_height heatmap_width']:
+        """Compute backbone features once, then route each row through its dataset's head.
+
+        Args:
+            images: batch of frames.
+            dataset_ids: per-row source-dataset id (index into ``dataset_names``).
+
+        Returns:
+            heatmaps scattered back into original batch order.
+        """
+        representations = self.get_representations(images)
+        heatmaps = None
+        for dataset_id in torch.unique(dataset_ids):
+            mask = dataset_ids == dataset_id
+            heatmaps_group = self.heads[int(dataset_id)](representations[mask])
+            if heatmaps is None:
+                heatmaps = heatmaps_group.new_zeros(
+                    representations.shape[0], *heatmaps_group.shape[1:],
+                )
+            heatmaps[mask] = heatmaps_group
+        return heatmaps
+
+    def get_loss_inputs_labeled(self, batch_dict: HeatmapLabeledBatchDict) -> dict:
+        """Return predicted heatmaps and keypoints, routing rows by dataset id."""
+        if 'dataset_id' not in batch_dict:
+            raise ValueError(
+                'per-dataset heads require dataset_id in each labeled batch; set '
+                'data.dataset_names so the dataset parses ids from image paths'
+            )
+        predicted_heatmaps = self.forward_routed(
+            batch_dict['images'], batch_dict['dataset_id'],
+        )
+        # all heads share downsample factor and softmax temperature, so head 0's
+        # subpixel refinement applies to the scattered tensor as a whole
+        predicted_keypoints, confidence = self.heads[0].run_subpixelmaxima(predicted_heatmaps)
+        predicted_keypoints = model_to_frame_batch(batch_dict, predicted_keypoints)
+        target_keypoints = model_to_frame_batch(batch_dict, batch_dict['keypoints'])
+        return {
+            'heatmaps_targ': batch_dict['heatmaps'],
+            'heatmaps_pred': predicted_heatmaps,
+            'keypoints_targ': target_keypoints,
+            'keypoints_pred': predicted_keypoints,
+            'confidences': confidence,
+        }
+
+    def predict_step(
+        self,
+        batch_dict: HeatmapLabeledBatchDict | UnlabeledBatchDict,
+        batch_idx: int,
+        return_heatmaps: bool | None = False,
+    ) -> (
+        tuple[torch.Tensor, torch.Tensor]
+        | tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+    ):
+        """Predict on labeled frames, selecting each row's head from its dataset id."""
+        if 'images' not in batch_dict.keys() or 'dataset_id' not in batch_dict.keys():
+            raise NotImplementedError(
+                'MultiHeadHeatmapTracker prediction requires labeled batches carrying '
+                'dataset_id (oracle routing); video/unlabeled prediction needs an '
+                'explicit dataset name or blind head combination, not implemented here'
+            )
+        predicted_heatmaps = self.forward_routed(
+            batch_dict['images'], batch_dict['dataset_id'],  # type: ignore[typeddict-item]
+        )
+        predicted_keypoints, confidence = self.heads[0].run_subpixelmaxima(predicted_heatmaps)
+        predicted_keypoints = model_to_frame_batch(batch_dict, predicted_keypoints)
+        if return_heatmaps:
+            return predicted_keypoints, confidence, predicted_heatmaps
+        else:
+            return predicted_keypoints, confidence
+
+    def get_parameters(self) -> list[dict]:
+        """Keep the two-group layout (0=backbone, 1=head) with every head in group 1.
+
+        Callbacks treat parameter group 0 as backbone and group 1 as head for
+        unfreezing, so all per-dataset heads share the single 'head' group.
+        """
+        params = [
+            {'params': self.backbone.parameters(), 'lr': 0, 'name': 'backbone'},
+            {'params': self.heads.parameters(), 'name': 'head'},
+        ]
+        return params
+
+
 class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
     """Model produces heatmaps of keypoints from labeled/unlabeled images."""
 

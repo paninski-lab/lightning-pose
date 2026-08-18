@@ -6,7 +6,8 @@
 - ``regression`` — direct (x, y) coordinate regression.
   ``RegressionTracker`` / ``SemiSupervisedRegressionTracker`` → ``regression_tracker.py``
 - ``heatmap`` — per-keypoint 2-D Gaussian heatmaps.
-  ``HeatmapTracker`` / ``SemiSupervisedHeatmapTracker`` → ``heatmap_tracker.py``
+  ``HeatmapTracker`` / ``MultiHeadHeatmapTracker`` / ``SemiSupervisedHeatmapTracker`` →
+  ``heatmap_tracker.py``
 - ``heatmap_mhcrnn`` — heatmaps with temporal context via a recurrent head (MHCRNN).
   ``HeatmapTrackerMHCRNN`` / ``SemiSupervisedHeatmapTrackerMHCRNN``
   → ``heatmap_tracker_mhcrnn.py``
@@ -42,6 +43,7 @@ from lightning_pose.models.base import check_if_semi_supervised
 from lightning_pose.models.factory import ALLOWED_MODEL_TYPES, get_model, get_model_class
 from lightning_pose.models.heatmap_tracker import (
     HeatmapTracker,
+    MultiHeadHeatmapTracker,
     SemiSupervisedHeatmapTracker,
 )
 from lightning_pose.models.heatmap_tracker_mhcrnn import (
