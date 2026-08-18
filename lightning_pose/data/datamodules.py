@@ -22,6 +22,7 @@ from omegaconf import DictConfig, ListConfig
 from torch.utils.data import DataLoader, Subset, random_split
 
 from lightning_pose.data.datatypes import SemiSupervisedDataLoaderDict
+from lightning_pose.data.samplers import TemperatureSampler
 from lightning_pose.data.utils import (
     compute_num_train_frames,
     split_sizes_from_probabilities,
@@ -49,6 +50,7 @@ class BaseDataModule(pl.LightningDataModule):
         test_probability: float | None = None,
         train_frames: float | int | None = None,
         torch_seed: int = 42,
+        sampling_temperature: float | None = None,
     ) -> None:
         """Data module splits a dataset into train, val, and test data loaders.
 
@@ -67,6 +69,10 @@ class BaseDataModule(pl.LightningDataModule):
                 (exclusive) and defines the fraction of the initially selected
                 train frames
             torch_seed: control data splits
+            sampling_temperature: multi-dataset sampling temperature over supervision
+                mass (see :class:`~lightning_pose.data.samplers.TemperatureSampler`).
+                None or 1 keeps the stock shuffled loader; values > 1 require the
+                dataset to carry ``dataset_ids`` (i.e. ``data.dataset_names`` set).
 
         """
         super().__init__()
@@ -91,7 +97,10 @@ class BaseDataModule(pl.LightningDataModule):
         self.val_dataset: Subset | None = None
         self.test_dataset: Subset | None = None
         self.torch_seed = torch_seed
+        self.sampling_temperature = sampling_temperature
+        self.train_sampler = None
         self._setup()
+        self._setup_train_sampler()
 
     def _setup(self) -> None:
         """Split the dataset into train, validation, and test subsets."""
@@ -225,6 +234,53 @@ class BaseDataModule(pl.LightningDataModule):
         train_idxs = [train_idxs[i] for i in order]
         return train_idxs, val_idxs, test_idxs
 
+    def _setup_train_sampler(self) -> None:
+        """Install a temperature sampler over the training subset when configured.
+
+        No sampler is constructed for ``sampling_temperature`` None or 1: T=1 is
+        frame-proportional sampling, which the stock ``shuffle=True`` loader already
+        implements — leaving that path untouched keeps the T=1 cell of a temperature
+        sweep exactly identical to a stock run rather than merely equivalent.
+        """
+        T = self.sampling_temperature
+        if T is None or T == 1:
+            return
+
+        dataset_ids = getattr(self.dataset, 'dataset_ids', None)
+        if dataset_ids is None:
+            raise ValueError(
+                f'sampling_temperature={T} requires a multi-dataset corpus: set '
+                f'data.dataset_names so per-example dataset ids are available'
+            )
+
+        train_idxs = list(self.train_dataset.indices)
+        train_ids = dataset_ids[train_idxs]
+
+        # kbar_d: mean labeled (visible==2) keypoints per frame, from the train split only —
+        # deriving it from the full CSV would leak validation composition into the sampler
+        visibility = getattr(self.dataset, 'visibility', None)
+        if visibility is not None:
+            labeled_per_frame = (visibility[train_idxs] == 2).sum(dim=1).double()
+        else:
+            labeled_per_frame = (
+                ~torch.isnan(self.dataset.keypoints[train_idxs, :, 0])
+            ).sum(dim=1).double()
+
+        num_datasets = len(self.dataset.dataset_names)  # type: ignore[union-attr]
+        kbar = torch.zeros(num_datasets, dtype=torch.double)
+        for d in range(num_datasets):
+            mask = train_ids == d
+            if mask.any():
+                kbar[d] = labeled_per_frame[mask].mean()
+
+        # yields positions within train_dataset (the Subset resolves them to full-dataset rows)
+        self.train_sampler = TemperatureSampler(
+            dataset_ids=train_ids,
+            kbar=kbar,
+            temperature=float(T),
+            seed=self.torch_seed,
+        )
+
     def split_manifest(self) -> dict | None:
         """Reproducibility manifest for multi-dataset runs; None in stock mode.
 
@@ -262,6 +318,16 @@ class BaseDataModule(pl.LightningDataModule):
         Returns:
             DataLoader wrapping the training subset.
         """
+        if self.train_sampler is not None:
+            # temperature sampling: the sampler owns example order (shuffle must be False);
+            # it yields positions within train_dataset, whose indices the Subset resolves
+            return DataLoader(
+                self.train_dataset,  # type: ignore[arg-type]
+                batch_size=self.train_batch_size,
+                num_workers=self.num_workers,
+                persistent_workers=True if self.num_workers > 0 else False,
+                sampler=self.train_sampler,
+            )
         return DataLoader(
             self.train_dataset,  # type: ignore[arg-type]
             batch_size=self.train_batch_size,
