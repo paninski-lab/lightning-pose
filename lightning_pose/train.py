@@ -353,6 +353,14 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
     dest_config_file = Path(hydra_output_directory) / "config.yaml"
     OmegaConf.save(config=cfg, f=dest_config_file, resolve=False)
 
+    # save train/val split manifest for multi-dataset runs; downstream consumers
+    # (temperature sampler, evaluation) must be reproducible from this file alone
+    split_manifest = getattr(data_module, 'split_manifest', lambda: None)()
+    if split_manifest is not None:
+        dest_manifest_file = Path(hydra_output_directory) / 'split_manifest.json'
+        dest_manifest_file.write_text(json.dumps(split_manifest, indent=2) + '\n')
+        logger.info(f'saved multi-dataset split manifest: {dest_manifest_file}')
+
     # save labeled data file(s)
     if isinstance(cfg.data.csv_file, str):
         # single view

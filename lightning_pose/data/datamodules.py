@@ -99,13 +99,8 @@ class BaseDataModule(pl.LightningDataModule):
         datalen = len(self.dataset)
         logger.info(f'number of labeled images in the full dataset (train+val+test): {datalen}')
 
-        # split data based on provided probabilities
-        data_splits_list = split_sizes_from_probabilities(
-            datalen,
-            train_probability=self.train_probability,
-            val_probability=self.val_probability,
-            test_probability=self.test_probability,
-        )
+        # select indices for each split; stratified by source dataset in multi-dataset mode
+        train_idxs, val_idxs, test_idxs = self._split_indices()
 
         imgaug_hflip = getattr(self.dataset, 'imgaug_hflip', False)
         # the imgaug pipeline always contains at least one element (the final resize transform);
@@ -114,31 +109,17 @@ class BaseDataModule(pl.LightningDataModule):
         # outside the pipeline in __getitem__ and must also be stripped from val/test.
         if len(self.dataset.imgaug_transform) == 1 and not imgaug_hflip:  # type: ignore[arg-type]
             # no augmentations in the pipeline; subsets can share same underlying dataset
-            self.train_dataset, self.val_dataset, self.test_dataset = random_split(
-                self.dataset,
-                data_splits_list,
-                generator=torch.Generator().manual_seed(self.torch_seed),
-            )
+            self.train_dataset = Subset(self.dataset, indices=train_idxs)
+            self.val_dataset = Subset(self.dataset, indices=val_idxs)
+            self.test_dataset = Subset(self.dataset, indices=test_idxs)
         else:
             # augmentations in the pipeline; we want validation and test datasets that only resize
             # we can't simply change the imgaug pipeline in the datasets after they've been split
             # because the subsets actually point to the same underlying dataset, so we create
             # separate datasets here
-            train_idxs, val_idxs, test_idxs = random_split(
-                range(len(self.dataset)),  # type: ignore[arg-type]
-                data_splits_list,
-                generator=torch.Generator().manual_seed(self.torch_seed),
-            )
-
-            self.train_dataset = Subset(
-                copy.deepcopy(self.dataset), indices=list(train_idxs),  # type: ignore[arg-type]
-            )
-            self.val_dataset = Subset(
-                copy.deepcopy(self.dataset), indices=list(val_idxs),  # type: ignore[arg-type]
-            )
-            self.test_dataset = Subset(
-                copy.deepcopy(self.dataset), indices=list(test_idxs),  # type: ignore[arg-type]
-            )
+            self.train_dataset = Subset(copy.deepcopy(self.dataset), indices=train_idxs)
+            self.val_dataset = Subset(copy.deepcopy(self.dataset), indices=val_idxs)
+            self.test_dataset = Subset(copy.deepcopy(self.dataset), indices=test_idxs)
 
             # only use the final resize transform for the validation and test datasets
             if self.dataset.imgaug_transform[-1].__str__().find("Resize") == 0:  # type: ignore[index]
@@ -183,6 +164,97 @@ class BaseDataModule(pl.LightningDataModule):
             f'val: {len(self.val_dataset)}, '
             f'test: {len(self.test_dataset)}'
         )
+
+    def _split_indices(self) -> tuple[list[int], list[int], list[int]]:
+        """Select train/val/test indices, stratified by source dataset when available.
+
+        When the underlying dataset carries no ``dataset_ids`` (stock Lightning Pose),
+        this reproduces the historical global ``random_split`` exactly, including its
+        use of a generator seeded with ``torch_seed`` — existing splits are unchanged.
+
+        In multi-dataset mode, the split probabilities are instead applied within each
+        source dataset (in registry-id order, deterministically), so every source is
+        represented in train and val at the same proportions regardless of size. The
+        concatenated train list is then reshuffled so that positional subsampling
+        (``train_frames``) draws uniformly across sources rather than from whichever
+        dataset happens to come first.
+
+        Returns:
+            tuple of (train, val, test) index lists into the full dataset.
+        """
+        generator = torch.Generator().manual_seed(self.torch_seed)
+        dataset_ids = getattr(self.dataset, 'dataset_ids', None)
+
+        if dataset_ids is None:
+            data_splits_list = split_sizes_from_probabilities(
+                len(self.dataset),
+                train_probability=self.train_probability,
+                val_probability=self.val_probability,
+                test_probability=self.test_probability,
+            )
+            splits = random_split(
+                range(len(self.dataset)),  # type: ignore[arg-type]
+                data_splits_list,
+                generator=generator,
+            )
+            return tuple(list(s) for s in splits)  # type: ignore[return-value]
+
+        train_idxs: list[int] = []
+        val_idxs: list[int] = []
+        test_idxs: list[int] = []
+        for dataset_id in torch.unique(dataset_ids, sorted=True):
+            idxs = torch.nonzero(dataset_ids == dataset_id).flatten()
+            perm = idxs[torch.randperm(len(idxs), generator=generator)]
+            n_train, n_val, _n_test = split_sizes_from_probabilities(
+                len(idxs),
+                train_probability=self.train_probability,
+                val_probability=self.val_probability,
+                test_probability=self.test_probability,
+            )
+            train_idxs += perm[:n_train].tolist()
+            val_idxs += perm[n_train:n_train + n_val].tolist()
+            test_idxs += perm[n_train + n_val:].tolist()
+            name = self.dataset.dataset_names[int(dataset_id)]  # type: ignore[index]
+            logger.info(
+                f'stratified split -- {name}: '
+                f'train {n_train}, val {n_val}, test {len(idxs) - n_train - n_val}'
+            )
+
+        # reshuffle so positional subsampling (train_frames) is not biased by source order
+        order = torch.randperm(len(train_idxs), generator=generator)
+        train_idxs = [train_idxs[i] for i in order]
+        return train_idxs, val_idxs, test_idxs
+
+    def split_manifest(self) -> dict | None:
+        """Reproducibility manifest for multi-dataset runs; None in stock mode.
+
+        Records the split seed, the registry, per-split per-dataset counts, and the
+        exact image names in each split. Downstream consumers (the temperature
+        sampler's ``k̄_d``, evaluation) must be reproducible from this manifest alone.
+        """
+        dataset_ids = getattr(self.dataset, 'dataset_ids', None)
+        if dataset_ids is None:
+            return None
+
+        names = self.dataset.image_names
+        dataset_names = self.dataset.dataset_names  # type: ignore[union-attr]
+
+        def entry(subset: Subset) -> dict:
+            idxs = list(subset.indices)
+            counts = torch.bincount(dataset_ids[idxs], minlength=len(dataset_names))
+            return {
+                'n': len(idxs),
+                'per_dataset': {n: int(c) for n, c in zip(dataset_names, counts)},
+                'image_names': [names[i] for i in idxs],
+            }
+
+        return {
+            'torch_seed': self.torch_seed,
+            'dataset_names': list(dataset_names),
+            'train': entry(self.train_dataset),
+            'val': entry(self.val_dataset),
+            'test': entry(self.test_dataset),
+        }
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
         """Return the training dataloader with shuffling enabled.
