@@ -187,6 +187,26 @@ def get_model(
             downsample_factor=cfg.data.get('downsample_factor', 2),
             backbone_checkpoint=cfg.model.get('backbone_checkpoint'),
         )
+        head_mode = cfg.model.get('head_mode', 'shared')
+        if head_mode not in ('shared', 'per_dataset'):
+            raise ValueError(
+                f"model.head_mode must be 'shared' or 'per_dataset', got '{head_mode}'"
+            )
+        if head_mode == 'per_dataset':
+            if semi_supervised:
+                raise NotImplementedError(
+                    'model.head_mode=per_dataset is not supported with unsupervised '
+                    'losses: unlabeled video frames carry no dataset id to route by'
+                )
+            dataset_names = cfg.data.get('dataset_names', None)
+            if not dataset_names:
+                raise ValueError(
+                    'model.head_mode=per_dataset requires data.dataset_names so batches '
+                    'carry per-example dataset ids'
+                )
+            from lightning_pose.models import MultiHeadHeatmapTracker
+            ModelClass = MultiHeadHeatmapTracker
+            extra['dataset_names'] = list(dataset_names)
     elif cfg.model.model_type == 'heatmap_mhcrnn':
         extra = dict(
             downsample_factor=cfg.data.get('downsample_factor', 2),
