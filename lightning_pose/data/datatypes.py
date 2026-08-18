@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
 
 import numpy as np
 import pandas as pd
@@ -119,6 +119,8 @@ class BaseLabeledExampleDict(TypedDict):
     bbox: Float[torch.Tensor, "xyhw"]
     idxs: int
     visibility: Int[torch.Tensor, "num_keypoints"]
+    # only present in multi-dataset mode (dataset_names provided to the dataset)
+    dataset_id: NotRequired[int]
 
 
 class HeatmapLabeledExampleDict(BaseLabeledExampleDict):
@@ -169,6 +171,8 @@ class BaseLabeledBatchDict(TypedDict):
     keypoints: Float[torch.Tensor, "batch num_targets"]
     bbox: Float[torch.Tensor, "batch xyhw"]
     idxs: Int[torch.Tensor, "batch"]
+    # only present in multi-dataset mode (dataset_names provided to the dataset)
+    dataset_id: NotRequired[Int[torch.Tensor, "batch"]]
 
 
 class HeatmapLabeledBatchDict(BaseLabeledBatchDict):
