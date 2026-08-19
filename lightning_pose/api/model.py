@@ -59,7 +59,7 @@ _PRECISION_TO_AUTOCAST_DTYPE: dict[_Precision, torch.dtype] = {
 }
 
 
-class Model(_RuntimeMixin):
+class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
     """High-level interface for inference with a trained lightning-pose model.
 
     Load a saved model with `Model.from_dir`, then call prediction methods directly.

@@ -257,7 +257,7 @@ def _build_onnx_forward(session: Any) -> Any:
     return onnx_forward
 
 
-class _RuntimeMixin(Model if TYPE_CHECKING else object):
+class _RuntimeMixin(Model if TYPE_CHECKING else object): # pyright: ignore[reportGeneralTypeIssues]
     """Mixin providing `Model`'s execution-backend methods.
 
     Always mixed into `lightning_pose.api.model.Model`, which supplies

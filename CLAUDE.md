@@ -421,6 +421,19 @@ visibility into `Model`'s attributes (`model_dir`, `cfg`, `model`, `precision`, 
 without a real circular import at runtime — `model.py` imports `_RuntimeMixin`, so the reverse
 can't be a real base class.
 
+Unlike `SemiSupervisedTrackerMixin` (whose TYPE_CHECKING base, `BaseSupervisedTracker`, is a
+distinct ancestor of the class it's mixed into), `_RuntimeMixin` is mixed into `Model` directly
+with no class in between — so pyright sees `Model -> _RuntimeMixin -> Model` and flags it as a
+cyclic class definition (`reportGeneralTypeIssues`). **Both** class statements that close the
+cycle carry an inline `# pyright: ignore[reportGeneralTypeIssues]`: `_RuntimeMixin`'s own
+definition in `model_runtime.py`, and `class Model(_RuntimeMixin)` in `model.py`. Which one
+diagnoses the cycle is not stable — it depends on file traversal order (checking `model.py` +
+`model_runtime.py` in isolation flags the former; a full `pyright` run over the whole package
+flags the latter) — so both need the comment even though only one fires in a given run. Pyright
+still resolves attributes against `Model` normally in both cases, since the TYPE_CHECKING base
+is otherwise unchanged. If you copy this pattern for a new single-class mixin (one that's never
+combined with any other class), you'll hit the same cycle and need the same two ignore comments.
+
 **Adding a method**: put it in `model.py` if it decides *what* to run inference on (a new
 `predict_*` variant); put it in `model_runtime.py` if it changes *how* the loaded model executes
 (a new export target, a new compilation mode).
