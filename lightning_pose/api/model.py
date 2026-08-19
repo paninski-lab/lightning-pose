@@ -172,6 +172,18 @@ def load_model_from_checkpoint(
         model_type=cfg.model.model_type,
         semi_supervised=semi_supervised,
     )
+    # get_model_class dispatches on (model_type, semi_supervised) only; multi-head
+    # models need their own class here, otherwise load_from_checkpoint builds a shared
+    # HeatmapTracker and strict=False silently drops every heads.* weight — the model
+    # then predicts with a randomly initialized head while looking fully loaded
+    head_mode = cfg.model.get('head_mode', 'shared')
+    if (
+        head_mode == 'per_dataset'
+        and cfg.model.model_type == 'heatmap'
+        and not semi_supervised
+    ):
+        from lightning_pose.models import MultiHeadHeatmapTracker
+        ModelClass = MultiHeadHeatmapTracker
 
     try:
         checkpoint = torch.load(ckpt_file)
@@ -214,6 +226,35 @@ def load_model_from_checkpoint(
     if keys_remapped:
         import os
         os.unlink(fixed_ckpt_file)
+
+    # strict=False is needed for old-checkpoint key remapping, but it also means a class
+    # mismatch loads "successfully" with untrained parameters. Verify every parameter the
+    # model expects was actually present in the checkpoint (non-persistent buffers are
+    # excluded from state_dict and never checked).
+    keys_missing = [k for k in model.state_dict() if k not in state_dict]
+    if keys_missing:
+        raise RuntimeError(
+            f'checkpoint {ckpt_file} is missing {len(keys_missing)} parameter(s) the '
+            f'model requires (e.g. {keys_missing[:3]}); the loaded model would silently '
+            f'run with untrained weights'
+        )
+
+    # the multi-head supporting-set mask is a non-persistent buffer recomputed from
+    # training data; without a data module it stays all-True, which breaks blind mode
+    from lightning_pose.models import MultiHeadHeatmapTracker as _MultiHead
+    if isinstance(model, _MultiHead):
+        if data_module is not None and getattr(data_module.dataset, 'visibility', None) is not None:
+            model.set_head_keypoint_mask(
+                visibility=data_module.dataset.visibility,
+                dataset_ids=data_module.dataset.dataset_ids,
+                keypoint_names=data_module.dataset.keypoint_names,
+                hflip=bool(cfg.training.get('imgaug_hflip', False)),
+            )
+        else:
+            logger.warning(
+                'multi-head model loaded without a data module: head_keypoint_mask stays '
+                'all-True, so blind-mode combination would let unsupported heads vote'
+            )
 
     if eval:
         model.eval()
