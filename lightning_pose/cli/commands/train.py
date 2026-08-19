@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from .. import types
+from lightning_pose.cli import types
 
 logger = logging.getLogger(__name__)
 

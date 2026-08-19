@@ -9,9 +9,8 @@ from pathlib import Path
 from pprint import pformat
 from typing import TYPE_CHECKING, Any, get_args
 
+from lightning_pose.cli import types
 from lightning_pose.utils.inference_types import _OnnxPrecision, _Precision, _Reader, _Runtime
-
-from .. import types
 
 logger = logging.getLogger(__name__)
 
