@@ -636,6 +636,13 @@ def get_callbacks(
 ) -> list:
     """Build and return the list of training callbacks based on the config.
 
+    Note on ``AnnealWeight``: ``cfg.callbacks.anneal_weight`` always sets
+    ``attr_name: total_unsupervised_importance`` in shipped configs, so this callback is the
+    concrete mechanism that anneals
+    :attr:`~lightning_pose.models.base.SemiSupervisedTrackerMixin.total_unsupervised_importance`
+    over training. ``AnnealWeight`` itself is attribute-name-agnostic; this wiring only exists
+    here, in how it's constructed.
+
     Args:
         cfg: hydra config containing training and callback parameters.
         early_stopping: if True, add an ``EarlyStopping`` callback.

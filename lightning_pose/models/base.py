@@ -597,6 +597,9 @@ class SemiSupervisedTrackerMixin(BaseSupervisedTracker if TYPE_CHECKING else obj
     """
 
     loss_factory_unsup: LossFactory | None
+    # set externally, once per epoch, by the AnnealWeight callback (see
+    # callbacks.py:get_callbacks, wired via cfg.callbacks.anneal_weight.attr_name); if that
+    # callback isn't attached, this stays at its __init__ value for the whole training run.
     total_unsupervised_importance: torch.Tensor
 
     def get_loss_inputs_unlabeled(
