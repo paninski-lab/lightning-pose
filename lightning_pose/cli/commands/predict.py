@@ -7,7 +7,9 @@ import logging
 import textwrap
 from pathlib import Path
 from pprint import pformat
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, get_args
+
+from lightning_pose.utils.inference_types import _Decoder, _OnnxPrecision, _Precision, _Runtime
 
 from .. import types
 
@@ -16,27 +18,12 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from lightning_pose.api import Model
 
-# Precision strings accepted by --precision. Same strings the Model API takes
-# (Model.from_dir(precision=...)) -- passed straight through with no CLI-side
-# lookup table; lightning_pose.api.model.Model maps them internally to the
-# strings PyTorch Lightning's Trainer actually expects.
-_PRECISION_CHOICES = ("fp32", "fp16", "bf16")
-
-# Inference backends accepted by --runtime. "eager" runs the loaded PyTorch
-# checkpoint; "onnx" and "tensorrt" run a session previously built with
-# `litpose export --runtime onnx` / `--runtime tensorrt`.
-_RUNTIME_CHOICES = ("eager", "onnx", "tensorrt")
-
-# Video-decoding backend accepted by --decoder. Independent of --runtime: decoder
-# controls video ingestion (DALI vs PyNvVideoCodec), while --runtime controls model
-# execution (eager vs onnx). Only applies to video inputs, not CSV/image predictions.
-_DECODER_CHOICES = ("dali", "pynvvc")
-
-_Decoder = Literal["dali", "pynvvc"]
-
-# Selects which exported file --runtime onnx loads. Distinct from --precision:
-# this is the precision baked into the .onnx file, not autocast precision.
-_ONNX_PRECISION_CHOICES = ("fp32", "fp16")
+# --precision, --runtime, --decoder, and --onnx-precision choices are each
+# derived from the corresponding lightning_pose.utils.inference_types alias
+_PRECISION_CHOICES = get_args(_Precision)
+_RUNTIME_CHOICES = get_args(_Runtime)
+_DECODER_CHOICES = get_args(_Decoder)
+_ONNX_PRECISION_CHOICES = get_args(_OnnxPrecision)
 
 
 def register_parser(subparsers: Any) -> argparse.ArgumentParser:

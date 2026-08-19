@@ -14,7 +14,7 @@ import json
 import logging
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, get_args
 
 import numpy as np
 import torch
@@ -23,6 +23,7 @@ from omegaconf import DictConfig, ListConfig
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.models import ALLOWED_MODELS, get_model_class
 from lightning_pose.utils import io as io_utils
+from lightning_pose.utils.inference_types import _ExportRuntime, _OnnxPrecision
 
 if TYPE_CHECKING:
     from lightning_pose.api.model import Model
@@ -35,11 +36,6 @@ __all__: list[str] = []
 # Temporal context length used when tracing a context (MHCRNN) model for export.
 # Matches the (T, H, W, 3) convention documented in Model.predict_frame.
 _CONTEXT_SEQUENCE_LENGTH = 5
-
-# Weight precisions supported for ONNX export. Deliberately narrower than
-# lightning_pose.api.model._Precision -- this is the precision baked into the
-# .onnx file itself, not the autocast precision used for eager inference.
-_OnnxPrecision = Literal["fp32", "fp16"]
 
 # Maps onnxruntime's tensor type strings to numpy dtypes. Used to bind input
 # buffers at whatever precision the exported file actually expects, rather than
@@ -579,7 +575,7 @@ class _RuntimeMixin(Model if TYPE_CHECKING else object):
 
     def export(
         self,
-        runtime: str,
+        runtime: _ExportRuntime,
         onnx_precision: _OnnxPrecision = "fp16",
         max_batch_size: int = 8,
         opt_batch_size: int | None = None,
@@ -624,13 +620,15 @@ class _RuntimeMixin(Model if TYPE_CHECKING else object):
             >>> model.export("onnx", onnx_precision="fp16")
             >>> model.export("tensorrt", onnx_precision="fp16", max_batch_size=16)
         """
-        if runtime not in ("onnx", "tensorrt"):
+        if runtime not in get_args(_ExportRuntime):
+            supported = ", ".join(repr(r) for r in get_args(_ExportRuntime))
             raise ValueError(
-                f"Unsupported export runtime: '{runtime}'. Use 'onnx' or 'tensorrt'."
+                f"Unsupported export runtime: '{runtime}'. Use one of {supported}."
             )
-        if onnx_precision not in ("fp32", "fp16"):
+        if onnx_precision not in get_args(_OnnxPrecision):
+            supported = ", ".join(repr(p) for p in get_args(_OnnxPrecision))
             raise ValueError(
-                f"Unsupported onnx_precision: '{onnx_precision}'. Use 'fp32' or 'fp16'."
+                f"Unsupported onnx_precision: '{onnx_precision}'. Use one of {supported}."
             )
         if runtime == "tensorrt":
             return self._export_tensorrt(onnx_precision, max_batch_size, opt_batch_size)

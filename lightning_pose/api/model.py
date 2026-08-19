@@ -27,6 +27,7 @@ from lightning_pose.data.datatypes import MultiviewPredictionResult, PredictionR
 from lightning_pose.metrics import compute_metrics_single
 from lightning_pose.models import ALLOWED_MODELS
 from lightning_pose.utils import io as io_utils
+from lightning_pose.utils.inference_types import _Decoder, _Precision, _Runtime
 from lightning_pose.utils.predictions import generate_labeled_video as generate_labeled_video_fn
 from lightning_pose.utils.predictions import (
     predict_dataset,
@@ -35,11 +36,6 @@ from lightning_pose.utils.predictions import (
 
 # to ignore imports for sphinx-autoapidoc
 __all__: list[str] = []
-
-# User-facing precision strings for both the CLI (--precision) and this API
-# (Model.from_dir(precision=...)). Kept identical across CLI and API so a value
-# can be passed straight through without a separate lookup table at the CLI layer.
-_Precision = Literal["fp32", "fp16", "bf16"]
 
 # The subset of PyTorch Lightning's own _PRECISION_INPUT that we actually use.
 # Narrower than plain str so a value returned from here type-checks directly
@@ -61,13 +57,6 @@ _PRECISION_TO_AUTOCAST_DTYPE: dict[_Precision, torch.dtype] = {
     "fp16": torch.float16,
     "bf16": torch.bfloat16,
 }
-
-# Inference runtimes accepted by Model.from_dir(runtime=...).
-_Runtime = Literal["eager", "onnx", "tensorrt"]
-# Video-decoding backends accepted by predict_on_video_file(_multiview)'s decoder=
-# kwarg. Independent of _Runtime -- decoder controls video ingestion, _Runtime
-# controls model execution.
-_Decoder = Literal["dali", "pynvvc"]
 
 
 class Model(_RuntimeMixin):
