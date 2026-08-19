@@ -106,7 +106,7 @@ training:
 
 model:
   # list of unsupervised losses to use during training
-  # valid entries: "pca_singleview" | "pca_multiview" | "temporal" | "unimodal_mse" | "unimodal_kl"
+  # valid entries: "pca_singleview" | "pca_multiview" | "temporal"
   # empty list trains a fully supervised model
   # note: listing a loss here activates it; the `losses` section below only sets hyperparameters
   losses_to_use: []

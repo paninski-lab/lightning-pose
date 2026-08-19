@@ -199,10 +199,6 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
             **kwargs,
         )
         self.loss_factory_unsup = loss_factory_unsupervised
-        assert loss_factory_unsupervised is not None
-        loss_names = loss_factory_unsupervised.loss_instance_dict.keys()
-        if "unimodal_mse" in loss_names or "unimodal_wasserstein" in loss_names:
-            raise ValueError("cannot use unimodal loss in regression tracker")
 
         # this attribute will be modified by AnnealWeight callback during training
         self.total_unsupervised_importance = torch.tensor(1.0)

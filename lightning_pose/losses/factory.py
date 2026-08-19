@@ -62,7 +62,6 @@ from lightning_pose.losses.losses import (
     ReprojectionHeatmapLoss,
     TemporalHeatmapLoss,
     TemporalLoss,
-    UnimodalLoss,
 )
 
 logger = logging.getLogger(__name__)
@@ -87,9 +86,6 @@ def get_loss_classes() -> dict[str, type[Loss]]:
         TemporalLoss.loss_name: TemporalLoss,
         TemporalHeatmapLoss.LOSS_NAME_MSE: TemporalHeatmapLoss,
         TemporalHeatmapLoss.LOSS_NAME_KL: TemporalHeatmapLoss,
-        UnimodalLoss.LOSS_NAME_MSE: UnimodalLoss,
-        UnimodalLoss.LOSS_NAME_KL: UnimodalLoss,
-        UnimodalLoss.LOSS_NAME_JS: UnimodalLoss,
         PairwiseProjectionsLoss.loss_name: PairwiseProjectionsLoss,
         ReprojectionHeatmapLoss.loss_name: ReprojectionHeatmapLoss,
     }

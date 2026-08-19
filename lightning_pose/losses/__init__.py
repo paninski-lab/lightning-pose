@@ -30,8 +30,6 @@ by :func:`get_loss_classes`; the names below are the strings used in config file
 - ``temporal_heatmap_mse``, ``temporal_heatmap_kl`` — both served by
   :class:`~lightning_pose.losses.losses.TemporalHeatmapLoss`; heatmap-level temporal
   smoothness.
-- ``unimodal_mse``, ``unimodal_kl``, ``unimodal_js`` — all served by
-  :class:`~lightning_pose.losses.losses.UnimodalLoss`; encourage single-peaked heatmaps.
 """
 
 from lightning_pose.losses.factory import get_loss_classes, get_loss_factories
