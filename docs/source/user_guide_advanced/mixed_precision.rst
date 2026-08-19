@@ -1,7 +1,7 @@
 .. _mixed_precision:
 
 #####################################
-Mixed Precision Training & Inference
+Mixed precision training & inference
 #####################################
 
 Lightning Pose supports running inference at reduced numerical precision (FP16 or BF16

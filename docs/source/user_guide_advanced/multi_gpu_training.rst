@@ -1,7 +1,7 @@
 .. _multi_gpu_training:
 
 ###################
-Multi-GPU Training
+Multi-GPU training
 ###################
 
 Multi-GPU training allows you to distribute the load of model training across GPUs.

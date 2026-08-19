@@ -1,5 +1,5 @@
 ######################
-Advanced Topics
+Advanced topics
 ######################
 
 This part of the CLI user guide addresses some of the more advanced features of Lightning Pose.

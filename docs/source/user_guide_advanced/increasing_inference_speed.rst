@@ -1,7 +1,7 @@
 .. _increasing_inference_speed:
 
 ##########################
-Increasing Inference Speed
+Increasing inference speed
 ##########################
 
 In addition to :ref:`running inference at reduced precision <mixed_precision>`, Lightning Pose
@@ -207,14 +207,14 @@ you already have -- so check what your PyTorch install is using first:
 Then use that CUDA version to select the proper installation option from ONNX Runtime's
 `installation selector <https://onnxruntime.ai/getting-started>`_.
 
-Exporting additionally requires the ``onnx`` package, which ``onnxruntime-gpu`` does not pull
-in as a dependency:
+Exporting additionally requires the ``onnx`` and ``onnxscripts`` packages, which
+``onnxruntime-gpu`` does not pull in as a dependency:
 
 .. code-block:: console
 
-    pip install onnx
+    pip install onnx onnxscripts
 
-Only ``Model.export()`` needs it. A machine that just runs an already-exported ``.onnx`` file
+Only ``Model.export()`` need them; a machine that just runs an already-exported ``.onnx`` file
 needs ``onnxruntime-gpu`` alone.
 
 Usage
