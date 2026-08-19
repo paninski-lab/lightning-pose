@@ -289,8 +289,6 @@ def get_model(
             downsample_factor=cfg.data.get('downsample_factor', 2),
             backbone_checkpoint=cfg.model.get('backbone_checkpoint'),
         )
-        if semi_supervised:
-            extra['patch_mask_config'] = cfg.training.get('patch_mask', {})
     else:
         raise NotImplementedError(
             f'{cfg.model.model_type} is an invalid cfg.model.model_type'

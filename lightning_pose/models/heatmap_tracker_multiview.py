@@ -355,6 +355,8 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
         Returns:
             List of dicts with ``"params"`` and ``"name"`` keys; the backbone starts with
             learning rate 0 (frozen until unfreezing), and view embeddings are trained normally.
+            Order matters: ``UnfreezeBackbone`` requires group 0 to be backbone and group 1 to
+            be head; extra groups (like ``view_embeddings``) may follow.
         """
         params = [
             {"params": self.backbone.parameters(), "name": "backbone", "lr": 0.0},

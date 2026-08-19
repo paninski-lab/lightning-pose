@@ -142,7 +142,8 @@ class RegressionTracker(BaseSupervisedTracker):
 
         Returns:
             List of dicts with ``"params"``, ``"name"``, and optionally ``"lr"`` keys; the
-            backbone starts with learning rate 0 (frozen until unfreezing).
+            backbone starts with learning rate 0 (frozen until unfreezing). Order matters:
+            ``UnfreezeBackbone`` requires group 0 to be backbone and group 1 to be head.
         """
         params = [
             {"params": self.backbone.parameters(), "lr": 0, "name": "backbone"},

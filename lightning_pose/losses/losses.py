@@ -1106,7 +1106,14 @@ class RegressionMSELoss(Loss):
 
 
 class RegressionRMSELoss(RegressionMSELoss):
-    """Root MSE loss between ground truth and predicted coordinates."""
+    """Root MSE loss between ground truth and predicted coordinates.
+
+    Deliberately absent from :func:`~lightning_pose.losses.factory.get_loss_classes`'s
+    registry -- it is not a user-selectable loss via ``cfg.losses``/``losses_to_use``.
+    Every tracker's ``__init__`` hardcodes an instance of this class as ``self.rmse_loss``,
+    an always-on pixel-error diagnostic logged alongside the training loss, not something a
+    config chooses. See ``BaseSupervisedTracker.rmse_loss`` and its use in ``evaluate_labeled``.
+    """
 
     loss_name = "rmse"
 

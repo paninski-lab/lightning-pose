@@ -1,4 +1,19 @@
-"""Data modules split a dataset into train, val, and test modules."""
+"""Data modules split a dataset into train, val, and test modules.
+
+:class:`BaseDataModule` wraps a labeled dataset and splits it via ``_setup``.
+:class:`UnlabeledDataModule` (extends ``BaseDataModule``) additionally builds a DALI video
+dataloader for semi-supervised training.
+
+**Split logic** (``BaseDataModule._setup``): the imgaug pipeline always contains at least one
+element (a final resize transform appended by ``BaseTrackingDataset.__init__``), so
+``len(imgaug_transform) == 1`` means "resize only, no augmentations." When that's true *and*
+``imgaug_hflip`` is False, all three splits share one underlying dataset object (cheap path).
+Otherwise three deep-copied datasets are created, with the val/test copies' pipelines reset to
+resize-only and ``imgaug_hflip`` reset to False. Any new augmentation applied outside the
+imgaug pipeline (like ``imgaug_hflip``) must be added to this condition and explicitly
+stripped from val/test in the ``else`` branch -- see ``datasets.py``'s module docstring for the
+full "adding a keypoint-affecting augmentation" recipe.
+"""
 
 from __future__ import annotations
 
