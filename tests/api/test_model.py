@@ -571,6 +571,34 @@ requires_onnxruntime = pytest.mark.skipif(
 )
 
 
+def _tensorrt_available() -> bool:
+    """Whether the optional tensorrt dependency is importable.
+
+    onnxruntime-gpu always reports "TensorrtExecutionProvider" from
+    ``get_available_providers()`` -- that only means onnxruntime was *compiled*
+    with TensorRT support, not that the TensorRT libraries are actually on this
+    machine. Building an engine without them fails with a RuntimeError instead
+    of skipping, so tests need a real availability check, not just
+    ``requires_onnxruntime``. The ``tensorrt`` package import mirrors
+    ``_tensorrt_version()`` in ``lightning_pose/api/model.py``, which uses the
+    same signal to record the installed version in export metadata.
+    """
+    try:
+        import tensorrt  # noqa: F401  # type: ignore[import-not-found]
+    except ImportError:
+        return False
+    return True
+
+
+requires_tensorrt = pytest.mark.skipif(
+    not _tensorrt_available(),
+    reason=(
+        "tensorrt is an optional dependency. Engine-build tests need it installed; "
+        "see docs/source/user_guide_advanced/increasing_inference_speed.rst."
+    ),
+)
+
+
 class TestExport:
     """Test the export method."""
 
@@ -655,6 +683,7 @@ class TestTensorRTExport:
         with pytest.raises(FileNotFoundError, match=r"Run model\.export\('onnx'"):
             model.export("tensorrt", onnx_precision="fp16")
 
+    @requires_tensorrt
     @requires_onnxruntime
     def test_export_tensorrt_writes_expected_path(self, tmp_path, request):
         """export('tensorrt') writes exports_trt/{ckpt_stem}_{onnx_precision}/."""
@@ -667,6 +696,7 @@ class TestTensorRTExport:
         assert cache_dir.name == f"{model._ckpt_stem()}_fp16"
         assert (cache_dir / "trt_metadata.json").is_file()
 
+    @requires_tensorrt
     @requires_onnxruntime
     def test_export_tensorrt_metadata_contents(self, tmp_path, request):
         """trt_metadata.json records exactly what the build used."""
@@ -684,6 +714,7 @@ class TestTensorRTExport:
         assert metadata["onnxruntime_version"]
         assert metadata["built_at"]
 
+    @requires_tensorrt
     @requires_onnxruntime
     def test_export_tensorrt_opt_batch_size_defaults_to_max(self, tmp_path, request):
         """opt_batch_size defaults to max_batch_size when not given separately."""
@@ -693,6 +724,7 @@ class TestTensorRTExport:
         metadata = json.loads((cache_dir / "trt_metadata.json").read_text())
         assert metadata["opt_batch_size"] == 4
 
+    @requires_tensorrt
     @requires_onnxruntime
     def test_export_tensorrt_does_not_load_torch_weights(self, tmp_path, request):
         """export('tensorrt') builds purely from the .onnx file.
@@ -710,6 +742,7 @@ class TestTensorRTExport:
         trt_model.export("tensorrt", onnx_precision="fp16", max_batch_size=4)
         assert trt_model.model is None
 
+    @requires_tensorrt
     @requires_onnxruntime
     def test_export_tensorrt_multiview(self, tmp_path, request):
         """A multiview model builds a TensorRT engine from its per-view ONNX export."""
@@ -880,6 +913,7 @@ class TestTensorRTRuntime:
         ):
             Model.from_dir(model.model_dir, runtime="tensorrt")
 
+    @requires_tensorrt
     @requires_onnxruntime
     def test_from_dir_tensorrt_sets_runtime(self, tmp_path, request):
         """A real end-to-end export + load correctly marks _runtime."""
@@ -891,6 +925,7 @@ class TestTensorRTRuntime:
         )
         assert trt_model._runtime == "tensorrt"
 
+    @requires_tensorrt
     @requires_onnxruntime
     def test_compile_raises_on_tensorrt_runtime(self, tmp_path, request):
         """compile() is rejected on a TensorRT-backed model rather than silently no-op."""
@@ -904,6 +939,7 @@ class TestTensorRTRuntime:
             trt_model.compile()
         assert not trt_model._compiled
 
+    @requires_tensorrt
     @requires_onnxruntime
     def test_tensorrt_fp32_matches_eager_predictions(
         self, tmp_path, request, toy_data_dir
@@ -932,6 +968,7 @@ class TestTensorRTRuntime:
         max_deviation = np.nanmax(deviation)
         assert max_deviation < 0.01, f"max pixel deviation {max_deviation:.4f} >= 0.01"
 
+    @requires_tensorrt
     @requires_onnxruntime
     def test_tensorrt_fp16_matches_eager_predictions(
         self, tmp_path, request, toy_data_dir
