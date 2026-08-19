@@ -12,14 +12,33 @@ Three components work together:
 **Adding a new loss**:
 
 1. Define the class in ``losses/losses.py``, inheriting from
-   :class:`~lightning_pose.losses.losses.Loss`.  Set a ``loss_name: str`` class attribute
-   (single name) or multiple ``LOSS_NAME_*: str`` class attributes when one class serves
-   several config strings (e.g. :class:`~lightning_pose.losses.losses.PCALoss`).
+   :class:`~lightning_pose.losses.losses.Loss`. For a heatmap-based loss (operating on
+   ``heatmaps_targ``/``heatmaps_pred``), inherit from
+   :class:`~lightning_pose.losses.losses.HeatmapLoss` instead — it already provides NaN
+   handling and the ``__call__`` pipeline, so only ``compute_loss`` needs overriding. Set a
+   ``loss_name: str`` class attribute (single name) or multiple ``LOSS_NAME_*: str`` class
+   attributes when one class serves several config strings (e.g.
+   :class:`~lightning_pose.losses.losses.PCALoss`).
 2. Import the class at the top of this file and add one entry per name to the dict returned
    by :func:`get_loss_classes`.
-3. If the loss requires parameters from ``cfg.losses`` (weight, epsilon, etc.), add a
-   corresponding block in :func:`get_loss_factories` that reads those values and adds them
-   to the ``params`` dict for that loss name.
+3. Parameter wiring in :func:`get_loss_factories`; only needed in two cases:
+
+   - **Unsupervised loss, param derived from ``cfg.data``/``cfg.model``** (not a literal
+     ``cfg.losses.<loss_name>`` key — literal keys are forwarded automatically): add an
+     ``elif`` branch, e.g.::
+
+         elif loss_name == 'my_new_loss':
+             loss_params_dict['unsupervised'][loss_name]['my_param'] = cfg.data.some_field
+
+   - **Supervised loss** (any ``supervised_*`` name): never auto-forwarded — add an
+     explicit block reading each param you need, e.g.::
+
+         log_weight = cfg.losses.get('my_new_loss', {}).get('log_weight')
+         if log_weight is not None:
+             loss_params_dict['supervised']['my_new_loss'] = {'log_weight': log_weight}
+
+   Skipping this step when it's actually required doesn't raise a ``KeyError`` — the loss
+   is simply never added to ``loss_params_dict``, so it silently never runs.
 """
 
 import logging
@@ -43,7 +62,6 @@ from lightning_pose.losses.losses import (
     ReprojectionHeatmapLoss,
     TemporalHeatmapLoss,
     TemporalLoss,
-    UnimodalLoss,
 )
 
 logger = logging.getLogger(__name__)
@@ -68,9 +86,6 @@ def get_loss_classes() -> dict[str, type[Loss]]:
         TemporalLoss.loss_name: TemporalLoss,
         TemporalHeatmapLoss.LOSS_NAME_MSE: TemporalHeatmapLoss,
         TemporalHeatmapLoss.LOSS_NAME_KL: TemporalHeatmapLoss,
-        UnimodalLoss.LOSS_NAME_MSE: UnimodalLoss,
-        UnimodalLoss.LOSS_NAME_KL: UnimodalLoss,
-        UnimodalLoss.LOSS_NAME_JS: UnimodalLoss,
         PairwiseProjectionsLoss.loss_name: PairwiseProjectionsLoss,
         ReprojectionHeatmapLoss.loss_name: ReprojectionHeatmapLoss,
     }
@@ -135,28 +150,7 @@ def get_loss_factories(
         for loss_name in cfg.model.losses_to_use:
             loss_params_dict['unsupervised'][loss_name] = cfg_loss_dict[loss_name]
             loss_params_dict['unsupervised'][loss_name]['loss_name'] = loss_name
-            if loss_name[:8] == 'unimodal' or loss_name[:16] == 'temporal_heatmap':
-                if cfg.model.model_type == 'regression':
-                    raise NotImplementedError(
-                        'unimodal loss can only be used with classes inheriting from '
-                        'HeatmapTracker. \nYou specified a RegressionTracker model.'
-                    )
-                raise Exception(
-                    'need to update unimodal and/or temporal heatmap loss to not use '
-                    'cfg.data.image_resize_dims, which has been deprecated.'
-                )
-                # TODO: unreachable — remove or restore once image_resize_dims is updated
-                # height_og = cfg.data.image_resize_dims.height
-                # width_og = cfg.data.image_resize_dims.width
-                # loss_params_dict['unsupervised'][loss_name]['original_image_height'] = height_og
-                # loss_params_dict['unsupervised'][loss_name]['original_image_width'] = width_og
-                # height_ds = int(height_og // (2 ** cfg.data.get('downsample_factor', 2)))
-                # width_ds = int(width_og // (2 ** cfg.data.get('downsample_factor', 2)))
-                # loss_params_dict['unsupervised'][loss_name]['downsampled_image_height'] = (
-                #     height_ds
-                # )
-                # loss_params_dict['unsupervised'][loss_name]['downsampled_image_width'] = width_ds
-            elif loss_name == 'pca_multiview':
+            if loss_name == 'pca_multiview':
                 if cfg.data.get('view_names', None) and len(cfg.data.view_names) > 1:
                     num_keypoints = cfg.data.num_keypoints
                     num_views = len(cfg.data.view_names)

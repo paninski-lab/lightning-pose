@@ -21,6 +21,10 @@ from lightning_pose.models.base import (
     BaseSupervisedTracker,
     SemiSupervisedTrackerMixin,
 )
+from lightning_pose.models.datatypes import (
+    HeatmapTrackerLabeledOutputsDict,
+    HeatmapTrackerMHCRNNUnlabeledOutputsDict,
+)
 from lightning_pose.models.heads import HeatmapMHCRNNHead
 
 # to ignore imports for sphinx-autoapidoc
@@ -154,7 +158,7 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
     def get_loss_inputs_labeled(
         self,
         batch_dict: HeatmapLabeledBatchDict | MultiviewHeatmapLabeledBatchDict,
-    ) -> dict:
+    ) -> HeatmapTrackerLabeledOutputsDict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
         pred_heatmaps_sf, pred_heatmaps_mf = self.forward(batch_dict["images"])
@@ -229,7 +233,8 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
 
         Returns:
             List of dicts with ``"params"``, ``"name"``, and optionally ``"lr"`` keys; the
-            backbone starts with learning rate 0 (frozen until unfreezing).
+            backbone starts with learning rate 0 (frozen until unfreezing). Order matters:
+            ``UnfreezeBackbone`` requires group 0 to be backbone and group 1 to be head.
         """
         params = [
             {"params": self.backbone.parameters(), "name": "backbone", "lr": 0.0},
@@ -297,7 +302,7 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
     def get_loss_inputs_unlabeled(
         self,
         batch_dict: UnlabeledBatchDict | MultiviewUnlabeledBatchDict
-    ) -> dict:
+    ) -> HeatmapTrackerMHCRNNUnlabeledOutputsDict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)"""
 
         # images -> heatmaps

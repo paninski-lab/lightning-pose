@@ -85,6 +85,14 @@ class UnfreezeBackbone(Callback):
 
     Use instead of pl.callbacks.BackboneFinetuning in order to use multi-GPU (DDP). See
     lightning-ai/pytorch-lightning#20340 for context.
+
+    Requires the optimizer's param groups to be ordered ``[backbone, head, ...]``, with
+    ``param_groups[0]["name"] == "backbone"``: this callback reads ``param_groups[1]["lr"]``
+    as the head LR and overwrites ``param_groups[0]["lr"]`` with the ramped backbone LR. Every
+    tracker's ``get_parameters()`` must return groups in this order -- see e.g.
+    ``RegressionTracker.get_parameters``, ``HeatmapTracker.get_parameters``. A model whose
+    ``get_parameters()`` doesn't follow this ordering will silently ramp the wrong group's LR
+    (group 0's name is asserted; group 1 being the head is not checked at all).
     """
 
     _initial_lr: float
@@ -635,6 +643,13 @@ def get_callbacks(
     status_file: Path | None = None,
 ) -> list:
     """Build and return the list of training callbacks based on the config.
+
+    Note on ``AnnealWeight``: ``cfg.callbacks.anneal_weight`` always sets
+    ``attr_name: total_unsupervised_importance`` in shipped configs, so this callback is the
+    concrete mechanism that anneals
+    :attr:`~lightning_pose.models.base.SemiSupervisedTrackerMixin.total_unsupervised_importance`
+    over training. ``AnnealWeight`` itself is attribute-name-agnostic; this wiring only exists
+    here, in how it's constructed.
 
     Args:
         cfg: hydra config containing training and callback parameters.

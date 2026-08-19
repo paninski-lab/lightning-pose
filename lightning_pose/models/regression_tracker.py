@@ -12,6 +12,10 @@ from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.backbones import ALLOWED_BACKBONES
 from lightning_pose.models.base import BaseSupervisedTracker, SemiSupervisedTrackerMixin
+from lightning_pose.models.datatypes import (
+    RegressionTrackerLabeledOutputsDict,
+    RegressionTrackerUnlabeledOutputsDict,
+)
 from lightning_pose.models.heads import LinearRegressionHead
 
 # to ignore imports for sphinx-autoapidoc
@@ -97,7 +101,10 @@ class RegressionTracker(BaseSupervisedTracker):
         # "out" is shape (batch, 2 * num_keypoints)
         return out
 
-    def get_loss_inputs_labeled(self, batch_dict: BaseLabeledBatchDict) -> dict:
+    def get_loss_inputs_labeled(
+        self,
+        batch_dict: BaseLabeledBatchDict,
+    ) -> RegressionTrackerLabeledOutputsDict:
         """Return predicted coordinates for a batch of data."""
         predicted_keypoints = self.forward(batch_dict["images"])
         return {
@@ -135,7 +142,8 @@ class RegressionTracker(BaseSupervisedTracker):
 
         Returns:
             List of dicts with ``"params"``, ``"name"``, and optionally ``"lr"`` keys; the
-            backbone starts with learning rate 0 (frozen until unfreezing).
+            backbone starts with learning rate 0 (frozen until unfreezing). Order matters:
+            ``UnfreezeBackbone`` requires group 0 to be backbone and group 1 to be head.
         """
         params = [
             {"params": self.backbone.parameters(), "lr": 0, "name": "backbone"},
@@ -191,15 +199,14 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
             **kwargs,
         )
         self.loss_factory_unsup = loss_factory_unsupervised
-        assert loss_factory_unsupervised is not None
-        loss_names = loss_factory_unsupervised.loss_instance_dict.keys()
-        if "unimodal_mse" in loss_names or "unimodal_wasserstein" in loss_names:
-            raise ValueError("cannot use unimodal loss in regression tracker")
 
         # this attribute will be modified by AnnealWeight callback during training
         self.total_unsupervised_importance = torch.tensor(1.0)
 
-    def get_loss_inputs_unlabeled(self, batch_dict: UnlabeledBatchDict) -> dict:
+    def get_loss_inputs_unlabeled(
+        self,
+        batch_dict: UnlabeledBatchDict,
+    ) -> RegressionTrackerUnlabeledOutputsDict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         predicted_keypoints = self.forward(batch_dict["frames"])
         # undo augmentation if needed

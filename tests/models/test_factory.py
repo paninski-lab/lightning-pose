@@ -7,8 +7,15 @@ import torch
 
 from lightning_pose.data import get_data_module
 from lightning_pose.losses import get_loss_factories
-from lightning_pose.models import get_model
-from lightning_pose.models.factory import get_model_class
+from lightning_pose.losses.factory import LossFactory
+from lightning_pose.losses.losses import HeatmapMSELoss, RegressionMSELoss, TemporalLoss
+from lightning_pose.models import HeatmapTracker, RegressionTracker, get_model
+from lightning_pose.models.factory import (
+    _loss_required_keys,
+    _tracker_output_keys,
+    _validate_loss_model_compatibility,
+    get_model_class,
+)
 
 
 class TestGetModel:
@@ -111,6 +118,67 @@ class TestGetModel:
         for k, v in model.state_dict().items():
             if 'backbone' in k:
                 assert torch.allclose(loaded.state_dict()[k], v), f'backbone mismatch at {k}'
+
+
+class TestLossRequiredKeys:
+    """Test the _loss_required_keys function."""
+
+    def test_loss_required_keys_regression(self):
+        """RegressionMSELoss requires keypoints_targ and keypoints_pred."""
+        assert _loss_required_keys(RegressionMSELoss) == {'keypoints_targ', 'keypoints_pred'}
+
+    def test_loss_required_keys_heatmap(self):
+        """HeatmapMSELoss requires heatmaps_targ and heatmaps_pred."""
+        assert _loss_required_keys(HeatmapMSELoss) == {'heatmaps_targ', 'heatmaps_pred'}
+
+    def test_loss_required_keys_excludes_optional_params(self):
+        """TemporalLoss's optional confidences param is not treated as required."""
+        assert _loss_required_keys(TemporalLoss) == {'keypoints_pred'}
+
+
+class TestTrackerOutputKeys:
+    """Test the _tracker_output_keys function."""
+
+    def test_tracker_output_keys_regression_labeled(self):
+        """RegressionTracker.get_loss_inputs_labeled() produces targ/pred keypoints only."""
+        keys = _tracker_output_keys(RegressionTracker, 'get_loss_inputs_labeled')
+        assert keys == {'keypoints_targ', 'keypoints_pred'}
+
+    def test_tracker_output_keys_heatmap_labeled(self):
+        """HeatmapTracker.get_loss_inputs_labeled() produces heatmap and keypoint keys."""
+        keys = _tracker_output_keys(HeatmapTracker, 'get_loss_inputs_labeled')
+        assert keys == {
+            'heatmaps_targ', 'heatmaps_pred', 'keypoints_targ', 'keypoints_pred', 'confidences',
+        }
+
+
+class TestValidateLossModelCompatibility:
+    """Test the _validate_loss_model_compatibility function."""
+
+    def test_validate_loss_model_compatibility_raises_on_mismatch(self):
+        """Raises ValueError when a heatmap loss is paired with a regression tracker."""
+        loss_factory = LossFactory(
+            losses_params_dict={'heatmap_mse': {}},
+            data_module=None,
+        )
+        with pytest.raises(ValueError, match="loss 'heatmap_mse' requires"):
+            _validate_loss_model_compatibility(
+                RegressionTracker,
+                {'supervised': loss_factory},
+                semi_supervised=False,
+            )
+
+    def test_validate_loss_model_compatibility_passes_on_match(self):
+        """Does not raise when the loss's required keys are a subset of the model's outputs."""
+        loss_factory = LossFactory(
+            losses_params_dict={'regression': {}},
+            data_module=None,
+        )
+        _validate_loss_model_compatibility(
+            RegressionTracker,
+            {'supervised': loss_factory},
+            semi_supervised=False,
+        )
 
 
 class TestGetModelClass:

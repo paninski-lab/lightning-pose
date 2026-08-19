@@ -28,6 +28,14 @@ from lightning_pose.data.datatypes import (
     UnlabeledBatchDict,
 )
 from lightning_pose.models.backbones import ALLOWED_BACKBONES, build_backbone
+from lightning_pose.models.datatypes import (
+    HeatmapTrackerLabeledOutputsDict,
+    HeatmapTrackerMHCRNNUnlabeledOutputsDict,
+    HeatmapTrackerMultiviewTransformerLabeledOutputsDict,
+    HeatmapTrackerUnlabeledOutputsDict,
+    RegressionTrackerLabeledOutputsDict,
+    RegressionTrackerUnlabeledOutputsDict,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -265,22 +273,33 @@ class BaseFeatureExtractor(LightningModule):
         Wrapper around the backbone's feature_extractor() method for typechecking purposes.
         See tests/models/test_base.py for example shapes.
 
-        Batch options
-        -------------
-        - Float[torch.Tensor, "batch channels image_height image_width"]
-          single view, labeled batch
+        ``do_context`` is fixed per model class, not chosen per call -- see each tracker's
+        ``__init__``: forced ``True`` for ``HeatmapTrackerMHCRNN``; forced ``False`` (with a
+        raised ``ValueError`` if passed) for ``HeatmapTrackerMultiviewTransformer``, which also
+        never calls this method at all, doing its own multiview fusion in ``forward_vit()``
+        instead; and silently stripped/ignored (always ``False``) for ``RegressionTracker``.
+        Branch taken, keyed on ``(do_context, images.ndim, is_multiview)``:
 
-        - Float[torch.Tensor, "batch frames channels image_height image_width"]
-          single view, labeled context batch
+        - ``(False, 4, *)`` -- direct ``self.backbone(images)`` call.
+          ``RegressionTracker`` (any batch) and ``HeatmapTracker`` (singleview
+          labeled/unlabeled batches).
 
-        - Float[torch.Tensor, "seq_len channels image_height image_width"]
-          single view, unlabeled batch from DALI
+        - ``(True, 4, *)`` -- singleview unlabeled sequence from DALI, shape
+          ``(seq_len, channels, height, width)``.
+          ``SemiSupervisedHeatmapTrackerMHCRNN`` unlabeled batches.
 
-        - Float[torch.Tensor, "batch views frames channels image_height image_width"]
-          multivew, labeled context batch
+        - ``(True, 5, False)`` -- singleview labeled context batch, shape
+          ``(batch, frames, channels, height, width)``.
+          ``HeatmapTrackerMHCRNN`` labeled batches.
 
-        - Float[torch.Tensor, "seq_len views channels image_height image_width"]
-          multiview, unlabeled batch from DALI
+        - ``(True, 5, True)`` -- multiview unlabeled batch from DALI, shape
+          ``(seq_len, views, channels, height, width)``.
+          ``SemiSupervisedHeatmapTrackerMHCRNN`` unlabeled batches.
+
+        - ``(True, 6, *)`` -- multiview labeled context batch, shape
+          ``(batch, views, frames, channels, height, width)``, reshaped to the
+          ``(True, 5, False)`` case above and handled identically.
+          ``HeatmapTrackerMHCRNN`` labeled batches (multiview).
 
         Args:
             images: a batch of images
@@ -474,7 +493,11 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
             | MultiviewLabeledBatchDict
             | MultiviewHeatmapLabeledBatchDict
         ),
-    ) -> dict:
+    ) -> (
+        RegressionTrackerLabeledOutputsDict
+        | HeatmapTrackerLabeledOutputsDict
+        | HeatmapTrackerMultiviewTransformerLabeledOutputsDict
+    ):
         """Return predicted coordinates for a batch of data."""
         raise NotImplementedError
 
@@ -492,7 +515,10 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         """Compute and log the losses on a batch of labeled data."""
 
         # forward pass; collected true and predicted heatmaps, keypoints
-        data_dict = self.get_loss_inputs_labeled(batch_dict=batch_dict)
+        # each concrete get_loss_inputs_labeled() override returns a precisely-typed
+        # TypedDict (see models/datatypes.py); the union collapses to Any here since this
+        # call site is polymorphic over all tracker types
+        data_dict = cast(dict[str, Any], self.get_loss_inputs_labeled(batch_dict=batch_dict))
 
         # compute and log loss on labeled data
         assert self.loss_factory is not None
@@ -582,12 +608,19 @@ class SemiSupervisedTrackerMixin(BaseSupervisedTracker if TYPE_CHECKING else obj
     """
 
     loss_factory_unsup: LossFactory | None
+    # set externally, once per epoch, by the AnnealWeight callback (see
+    # callbacks.py:get_callbacks, wired via cfg.callbacks.anneal_weight.attr_name); if that
+    # callback isn't attached, this stays at its __init__ value for the whole training run.
     total_unsupervised_importance: torch.Tensor
 
     def get_loss_inputs_unlabeled(
         self,
         batch_dict: UnlabeledBatchDict | MultiviewUnlabeledBatchDict,
-    ) -> dict:
+    ) -> (
+        RegressionTrackerUnlabeledOutputsDict
+        | HeatmapTrackerUnlabeledOutputsDict
+        | HeatmapTrackerMHCRNNUnlabeledOutputsDict
+    ):
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         raise NotImplementedError
 
@@ -600,7 +633,10 @@ class SemiSupervisedTrackerMixin(BaseSupervisedTracker if TYPE_CHECKING else obj
         """Compute and log the losses on a batch of unlabeled data (frames only)."""
 
         # forward pass: collect predicted heatmaps and keypoints
-        data_dict = self.get_loss_inputs_unlabeled(batch_dict=batch_dict)
+        # each concrete get_loss_inputs_unlabeled() override returns a precisely-typed
+        # TypedDict (see models/datatypes.py); the union collapses to Any here since this
+        # call site is polymorphic over all tracker types
+        data_dict = cast(dict[str, Any], self.get_loss_inputs_unlabeled(batch_dict=batch_dict))
 
         # compute loss on unlabeled data
         assert self.loss_factory_unsup is not None

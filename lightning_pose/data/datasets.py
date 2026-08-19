@@ -1,4 +1,32 @@
-"""Dataset objects store images, labels, and functions for manipulation."""
+"""Dataset objects store images, labels, and functions for manipulation.
+
+Three classes, in a hierarchy:
+
+- :class:`BaseTrackingDataset` -- base class. Loads images and (x, y) keypoints, applies the
+  imgaug pipeline, and handles ``imgaug_hflip``. Returns a ``BaseLabeledExampleDict``.
+- :class:`HeatmapDataset` (extends ``BaseTrackingDataset``) -- adds ``compute_heatmap`` to
+  convert keypoints to ``(K, H, W)`` Gaussian heatmap targets, and synthesizes
+  ``self.visibility`` from NaN positions when the CSV has no ``visible`` column. Returns a
+  ``HeatmapLabeledExampleDict``.
+- :class:`MultiviewHeatmapDataset` -- does **not** inherit from ``BaseTrackingDataset``. Holds
+  a ``dict[str, HeatmapDataset]`` at ``self.dataset`` (keyed by view name); ``__getitem__``
+  delegates to each child and stacks results. Shares ``imgaug_transform``/``imgaug_hflip``
+  attributes with child datasets so the data module can update them in one pass.
+
+``__getitem__`` branching: both ``BaseTrackingDataset`` and ``HeatmapDataset`` branch on
+``self.do_context`` at the top of ``__getitem__`` -- the non-context branch loads a single PIL
+image, the context branch loads a sequence of frames -- and all augmentation logic (imgaug
+pipeline + hflip) is duplicated in both branches, so a change to one must be mirrored in the
+other.
+
+**Adding a keypoint-affecting augmentation**: add any per-sample random state at the top of
+each ``__getitem__`` branch (not outside them, since the two paths are structurally
+independent); apply it *after* the imgaug pipeline so keypoints are already in resized
+coordinate space; for context mode, draw the random decision once and reuse it for every frame
+in the sequence. See CLAUDE.md's "Adding an augmentation that affects keypoints" section for
+the full step-by-step, including the ``imgaug_hflip``-reset requirements in
+``datamodules.py``'s ``_setup`` and in ``api/model.py``'s ``_build_datamodule_pred``.
+"""
 
 import logging
 import os

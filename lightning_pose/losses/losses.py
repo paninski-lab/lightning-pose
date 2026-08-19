@@ -44,7 +44,6 @@ __all__ = [
     "PCALoss",
     "TemporalLoss",
     "TemporalHeatmapLoss",
-    "UnimodalLoss",
     "RegressionMSELoss",
     "RegressionRMSELoss",
     "PairwiseProjectionsLoss",
@@ -200,7 +199,16 @@ class Loss:
 
 
 class HeatmapLoss(Loss):
-    """Parent class for different heatmap losses (MSE, Wasserstein, etc)."""
+    """Parent class for heatmap-shaped losses (MSE, KL, JS divergence, etc).
+
+    Provides the shared pipeline that every heatmap loss needs: ``__call__`` runs
+    ``remove_nans`` (drops all-zero heatmap rows, i.e. unlabeled keypoints) then
+    ``compute_loss`` then ``reduce_loss``/``log_loss``. Subclasses only need to override
+    ``compute_loss`` with their specific divergence measure -- see ``HeatmapMSELoss``,
+    ``HeatmapKLLoss``, ``HeatmapJSLoss`` below. New losses that operate on
+    ``(heatmaps_targ, heatmaps_pred)`` tensors should inherit from this class rather than
+    from ``Loss`` directly, to avoid reimplementing NaN handling and the call pipeline.
+    """
 
     def __init__(
         self,
@@ -846,164 +854,6 @@ class TemporalHeatmapLoss(Loss):
         return scalar_loss, logs
 
 
-class UnimodalLoss(Loss):
-    """Encourage heatmaps to be unimodal using various measures."""
-
-    LOSS_NAME_MSE = "unimodal_mse"
-    LOSS_NAME_KL = "unimodal_kl"
-    LOSS_NAME_JS = "unimodal_js"
-
-    def __init__(
-        self,
-        loss_name: Literal["unimodal_mse", "unimodal_kl", "unimodal_js"],
-        original_image_height: int,
-        original_image_width: int,
-        downsampled_image_height: int,
-        downsampled_image_width: int,
-        data_module: BaseDataModule | UnlabeledDataModule | None = None,
-        prob_threshold: float = 0.0,
-        log_weight: float = 0.0,
-        **kwargs: Any,
-    ) -> None:
-        """Initialize UnimodalLoss.
-
-        Generates an ideal unimodal heatmap from each predicted keypoint coordinate and
-        penalizes the difference between that ideal heatmap and the network's predicted heatmap.
-
-        Args:
-            loss_name: divergence measure to use. ``"unimodal_mse"`` uses pixel-wise MSE;
-                ``"unimodal_kl"`` uses KL divergence; ``"unimodal_js"`` uses Jensen-Shannon
-                divergence.
-            original_image_height: height of the full-resolution input image in pixels, used
-                when generating ideal heatmaps.
-            original_image_width: width of the full-resolution input image in pixels.
-            downsampled_image_height: height of the heatmap output (after backbone downsampling).
-            downsampled_image_width: width of the heatmap output.
-            data_module: data module providing access to datasets; passed to the parent class.
-            prob_threshold: predictions whose confidence is below this value are excluded from
-                the loss computation.
-            log_weight: final weight in front of the loss term in the objective function is
-                computed as ``1.0 / (2.0 * exp(log_weight))``.
-
-        """
-
-        super().__init__(data_module=data_module, log_weight=log_weight)
-
-        if loss_name not in (self.LOSS_NAME_MSE, self.LOSS_NAME_KL, self.LOSS_NAME_JS):
-            raise ValueError(f"Invalid loss_name: {loss_name}")
-        self.loss_name = loss_name
-
-        self.original_image_height = original_image_height
-        self.original_image_width = original_image_width
-        self.downsampled_image_height = downsampled_image_height
-        self.downsampled_image_width = downsampled_image_width
-
-        self.prob_threshold = torch.tensor(prob_threshold, dtype=torch.float)
-
-        if self.loss_name == "unimodal_mse":
-            self.loss = None
-        elif self.loss_name == "unimodal_kl":
-            self.loss = kl_div_loss_2d
-        elif self.loss_name == "unimodal_js":
-            self.loss = js_div_loss_2d
-        else:
-            raise NotImplementedError
-
-    def remove_nans(
-        self,
-        targets: Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"],
-        predictions: Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"],
-        confidences: Float[torch.Tensor, "batch num_keypoints"],
-    ) -> tuple[
-        Float[torch.Tensor, "num_valid_keypoints heatmap_height heatmap_width"],
-        Float[torch.Tensor, "num_valid_keypoints heatmap_height heatmap_width"],
-    ]:
-        """Remove nans from targets and predictions.
-        Args:
-            targets: (batch, num_keypoints, heatmap_height, heatmap_width)
-            predictions: (batch, num_keypoints, heatmap_height, heatmap_width)
-            confidences: (batch, num_keypoints)
-        Returns:
-            clean targets: concatenated across different images and keypoints
-            clean predictions: concatenated across different images and keypoints
-        """
-        # use confidences to get rid of unsupervised targets with likely occlusions
-        idxs_ignore = confidences < self.prob_threshold
-
-        return targets[~idxs_ignore], predictions[~idxs_ignore]
-
-    def compute_loss(
-        self,
-        targets: Float[torch.Tensor, "num_valid_keypoints heatmap_height heatmap_width"],
-        predictions: Float[torch.Tensor, "num_valid_keypoints heatmap_height heatmap_width"],
-    ) -> torch.Tensor:
-        """Compute per-element divergence between ideal unimodal targets and predicted heatmaps.
-
-        Args:
-            targets: ideal unimodal heatmaps derived from predicted keypoint coordinates.
-            predictions: predicted heatmaps from the network.
-
-        Returns:
-            Element-wise loss tensor.
-        """
-        if self.loss_name == "unimodal_mse":
-            return F.mse_loss(targets, predictions, reduction="none")
-        elif self.loss_name == "unimodal_kl":
-            assert self.loss is not None
-            return self.loss(
-                predictions.unsqueeze(0) + 1e-10,
-                targets.unsqueeze(0) + 1e-10,
-                reduction="none",
-            )
-        elif self.loss_name == "unimodal_js":
-            assert self.loss is not None
-            return self.loss(
-                predictions.unsqueeze(0) + 1e-10,
-                targets.unsqueeze(0) + 1e-10,
-                reduction="none",
-            )
-        else:
-            raise NotImplementedError
-
-    def __call__(
-        self,
-        keypoints_pred_augmented: Float[torch.Tensor, "batch two_x_num_keypoints"],
-        heatmaps_pred: Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"],
-        confidences: Float[torch.Tensor, "batch num_keypoints"],
-        stage: Literal["train", "val", "test"] | None = None,
-        **kwargs: Any,
-    ) -> tuple[Float[torch.Tensor, ""], list[dict]]:
-        """Compute unimodal loss.
-
-        Args:
-            keypoints_pred_augmented: these are in the augmented image space
-            heatmaps_pred: also in the augmented space, matching the keypoints_pred_augmented
-
-        """
-
-        # turn keypoint predictions into unimodal heatmaps
-        keypoints_pred = keypoints_pred_augmented.reshape(keypoints_pred_augmented.shape[0], -1, 2)
-        heatmaps_ideal = generate_heatmaps(  # this process doesn't compute gradients
-            keypoints=keypoints_pred,
-            height=self.original_image_height,
-            width=self.original_image_width,
-            output_shape=(self.downsampled_image_height, self.downsampled_image_width),
-        )
-
-        # remove invisible keypoints according to confidences
-        clean_targets, clean_predictions = self.remove_nans(
-            targets=heatmaps_ideal, predictions=heatmaps_pred, confidences=confidences
-        )
-        # compute loss just on the valid heatmaps
-        elementwise_loss = self.compute_loss(
-            targets=clean_targets, predictions=clean_predictions
-        )
-        scalar_loss = self.reduce_loss(elementwise_loss, method="mean")
-        logs = self.log_loss(loss=scalar_loss, stage=stage)
-
-        return scalar_loss, logs
-
-
 class RegressionMSELoss(Loss):
     """MSE loss between ground truth and predicted coordinates."""
 
@@ -1097,7 +947,14 @@ class RegressionMSELoss(Loss):
 
 
 class RegressionRMSELoss(RegressionMSELoss):
-    """Root MSE loss between ground truth and predicted coordinates."""
+    """Root MSE loss between ground truth and predicted coordinates.
+
+    Deliberately absent from :func:`~lightning_pose.losses.factory.get_loss_classes`'s
+    registry -- it is not a user-selectable loss via ``cfg.losses``/``losses_to_use``.
+    Every tracker's ``__init__`` hardcodes an instance of this class as ``self.rmse_loss``,
+    an always-on pixel-error diagnostic logged alongside the training loss, not something a
+    config chooses. See ``BaseSupervisedTracker.rmse_loss`` and its use in ``evaluate_labeled``.
+    """
 
     loss_name = "rmse"
 

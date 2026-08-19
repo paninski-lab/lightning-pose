@@ -6,8 +6,8 @@ import logging
 import sys
 from importlib.metadata import version
 
-from . import friendly
-from .commands import COMMANDS
+from lightning_pose.cli import friendly
+from lightning_pose.cli.commands import COMMANDS
 
 
 def _setup_logging(debug: bool = False) -> None:

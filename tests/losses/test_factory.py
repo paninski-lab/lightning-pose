@@ -79,22 +79,6 @@ class TestGetLossFactories:
         factories = get_loss_factories(cfg_tmp, data_module=heatmap_data_module)
         assert 'pca_multiview' in factories['unsupervised'].loss_instance_dict
 
-    def test_get_loss_factories_unimodal_raises(self, cfg, base_data_module):
-        """unimodal losses raise Exception due to deprecated image_resize_dims path."""
-        cfg_tmp = copy.deepcopy(cfg)
-        cfg_tmp.model.losses_to_use = ['unimodal_mse']
-        cfg_tmp.losses.unimodal_mse = {'log_weight': 0.0}
-        with pytest.raises(Exception, match='deprecated'):
-            get_loss_factories(cfg_tmp, data_module=base_data_module)
-
-    def test_get_loss_factories_temporal_heatmap_raises(self, cfg, base_data_module):
-        """temporal_heatmap losses raise Exception due to deprecated image_resize_dims path."""
-        cfg_tmp = copy.deepcopy(cfg)
-        cfg_tmp.model.losses_to_use = ['temporal_heatmap_mse']
-        cfg_tmp.losses.temporal_heatmap_mse = {'log_weight': 0.0}
-        with pytest.raises(Exception, match='deprecated'):
-            get_loss_factories(cfg_tmp, data_module=base_data_module)
-
     def test_get_loss_factories_pca_singleview_raises_on_multiview(
         self, cfg, base_data_module,
     ):

@@ -21,7 +21,6 @@ from lightning_pose.losses.losses import (
     ReprojectionHeatmapLoss,
     TemporalHeatmapLoss,
     TemporalLoss,
-    UnimodalLoss,
 )
 from lightning_pose.utils.pca import format_multiview_data_for_pca
 
@@ -502,119 +501,6 @@ class TestTemporalHeatmapLoss:
         assert rectified[0, 1] > 0.0   # 2.0 > 1.0
         assert rectified[1, 0] > 0.0   # 1.5 > 1.0
         assert rectified[1, 1] == 0.0  # 0.3 < 1.0
-
-
-class TestUnimodalLoss:
-    """Test the UnimodalLoss class."""
-
-    def test_unimodal_mse_loss(self):
-        """Test that MSE unimodal loss returns a positive scalar with correct log keys."""
-        img_size = 48
-        img_size_ds = 32
-        batch_size = 12
-        num_keypoints = 16
-        keypoints_pred = img_size * torch.rand(
-            size=(batch_size, 2 * num_keypoints),
-            device=device,
-        )
-        confidences = torch.rand(size=(batch_size, num_keypoints))
-        heatmaps_pred = torch.ones(
-            size=(batch_size, num_keypoints, img_size_ds, img_size_ds),
-            device=device,
-        )
-        uni_loss = UnimodalLoss(
-            loss_name='unimodal_mse',
-            original_image_height=img_size,
-            original_image_width=img_size,
-            downsampled_image_height=img_size_ds,
-            downsampled_image_width=img_size_ds,
-        )
-        loss, logs = uni_loss(
-            keypoints_pred_augmented=keypoints_pred,
-            heatmaps_pred=heatmaps_pred,
-            confidences=confidences,
-            stage=stage,
-        )
-        assert loss.shape == torch.Size([])
-        assert loss > 0.0
-        assert logs[0]['name'] == f'{stage}_unimodal_mse_loss'
-        assert logs[0]['value'] == loss
-        assert logs[1]['name'] == 'unimodal_mse_weight'
-        assert logs[1]['value'] == uni_loss.weight
-
-    def test_unimodal_kl_loss(self):
-        """Test that KL unimodal loss returns a positive scalar with correct log keys."""
-        img_size = 48
-        img_size_ds = 32
-        batch_size = 12
-        num_keypoints = 16
-        keypoints_pred = img_size * torch.rand(
-            size=(batch_size, 2 * num_keypoints),
-            device=device,
-        )
-        confidences = torch.rand(size=(batch_size, num_keypoints))
-        heatmaps_pred = spatial_softmax2d(
-            torch.randn(
-                size=(batch_size, num_keypoints, img_size_ds, img_size_ds),
-                device=device,
-            )
-        )
-        uni_loss = UnimodalLoss(
-            loss_name='unimodal_kl',
-            original_image_height=img_size,
-            original_image_width=img_size,
-            downsampled_image_height=img_size_ds,
-            downsampled_image_width=img_size_ds,
-        )
-        loss, logs = uni_loss(
-            keypoints_pred_augmented=keypoints_pred,
-            heatmaps_pred=heatmaps_pred,
-            confidences=confidences,
-            stage=stage,
-        )
-        assert loss.shape == torch.Size([])
-        assert loss > 0.0
-        assert logs[0]['name'] == f'{stage}_unimodal_kl_loss'
-        assert logs[0]['value'] == loss
-        assert logs[1]['name'] == 'unimodal_kl_weight'
-        assert logs[1]['value'] == uni_loss.weight
-
-    def test_unimodal_js_loss(self):
-        """Test that JS unimodal loss returns a positive scalar with correct log keys."""
-        img_size = 48
-        img_size_ds = 32
-        batch_size = 12
-        num_keypoints = 16
-        keypoints_pred = img_size * torch.rand(
-            size=(batch_size, 2 * num_keypoints),
-            device=device,
-        )
-        confidences = torch.rand(size=(batch_size, num_keypoints))
-        heatmaps_pred = spatial_softmax2d(
-            torch.randn(
-                size=(batch_size, num_keypoints, img_size_ds, img_size_ds),
-                device=device,
-            )
-        )
-        uni_loss = UnimodalLoss(
-            loss_name='unimodal_js',
-            original_image_height=img_size,
-            original_image_width=img_size,
-            downsampled_image_height=img_size_ds,
-            downsampled_image_width=img_size_ds,
-        )
-        loss, logs = uni_loss(
-            keypoints_pred_augmented=keypoints_pred,
-            heatmaps_pred=heatmaps_pred,
-            confidences=confidences,
-            stage=stage,
-        )
-        assert loss.shape == torch.Size([])
-        assert loss > 0.0
-        assert logs[0]['name'] == f'{stage}_unimodal_js_loss'
-        assert logs[0]['value'] == loss
-        assert logs[1]['name'] == 'unimodal_js_weight'
-        assert logs[1]['value'] == uni_loss.weight
 
 
 class TestRegressionMSELoss:

@@ -7,9 +7,8 @@ import logging
 import textwrap
 from typing import Any, get_args
 
+from lightning_pose.cli import types
 from lightning_pose.utils.inference_types import _ExportRuntime, _OnnxPrecision
-
-from .. import types
 
 logger = logging.getLogger(__name__)
 
