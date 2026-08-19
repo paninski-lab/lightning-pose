@@ -17,9 +17,24 @@ Three components work together:
    several config strings (e.g. :class:`~lightning_pose.losses.losses.PCALoss`).
 2. Import the class at the top of this file and add one entry per name to the dict returned
    by :func:`get_loss_classes`.
-3. If the loss requires parameters from ``cfg.losses`` (weight, epsilon, etc.), add a
-   corresponding block in :func:`get_loss_factories` that reads those values and adds them
-   to the ``params`` dict for that loss name.
+3. Parameter wiring in :func:`get_loss_factories`; only needed in two cases:
+
+   - **Unsupervised loss, param derived from ``cfg.data``/``cfg.model``** (not a literal
+     ``cfg.losses.<loss_name>`` key — literal keys are forwarded automatically): add an
+     ``elif`` branch, e.g.::
+
+         elif loss_name == 'my_new_loss':
+             loss_params_dict['unsupervised'][loss_name]['my_param'] = cfg.data.some_field
+
+   - **Supervised loss** (any ``supervised_*`` name): never auto-forwarded — add an
+     explicit block reading each param you need, e.g.::
+
+         log_weight = cfg.losses.get('my_new_loss', {}).get('log_weight')
+         if log_weight is not None:
+             loss_params_dict['supervised']['my_new_loss'] = {'log_weight': log_weight}
+
+   Skipping this step when it's actually required doesn't raise a ``KeyError`` — the loss
+   is simply never added to ``loss_params_dict``, so it silently never runs.
 """
 
 import logging
