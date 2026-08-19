@@ -12,9 +12,13 @@ Three components work together:
 **Adding a new loss**:
 
 1. Define the class in ``losses/losses.py``, inheriting from
-   :class:`~lightning_pose.losses.losses.Loss`.  Set a ``loss_name: str`` class attribute
-   (single name) or multiple ``LOSS_NAME_*: str`` class attributes when one class serves
-   several config strings (e.g. :class:`~lightning_pose.losses.losses.PCALoss`).
+   :class:`~lightning_pose.losses.losses.Loss`. For a heatmap-based loss (operating on
+   ``heatmaps_targ``/``heatmaps_pred``), inherit from
+   :class:`~lightning_pose.losses.losses.HeatmapLoss` instead — it already provides NaN
+   handling and the ``__call__`` pipeline, so only ``compute_loss`` needs overriding. Set a
+   ``loss_name: str`` class attribute (single name) or multiple ``LOSS_NAME_*: str`` class
+   attributes when one class serves several config strings (e.g.
+   :class:`~lightning_pose.losses.losses.PCALoss`).
 2. Import the class at the top of this file and add one entry per name to the dict returned
    by :func:`get_loss_classes`.
 3. Parameter wiring in :func:`get_loss_factories`; only needed in two cases:

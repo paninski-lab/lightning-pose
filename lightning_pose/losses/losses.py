@@ -200,7 +200,16 @@ class Loss:
 
 
 class HeatmapLoss(Loss):
-    """Parent class for different heatmap losses (MSE, Wasserstein, etc)."""
+    """Parent class for heatmap-shaped losses (MSE, KL, JS divergence, etc).
+
+    Provides the shared pipeline that every heatmap loss needs: ``__call__`` runs
+    ``remove_nans`` (drops all-zero heatmap rows, i.e. unlabeled keypoints) then
+    ``compute_loss`` then ``reduce_loss``/``log_loss``. Subclasses only need to override
+    ``compute_loss`` with their specific divergence measure -- see ``HeatmapMSELoss``,
+    ``HeatmapKLLoss``, ``HeatmapJSLoss`` below. New losses that operate on
+    ``(heatmaps_targ, heatmaps_pred)`` tensors should inherit from this class rather than
+    from ``Loss`` directly, to avoid reimplementing NaN handling and the call pipeline.
+    """
 
     def __init__(
         self,
