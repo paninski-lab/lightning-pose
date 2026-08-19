@@ -254,22 +254,7 @@ create a circular import.
 
 ### Dataset class hierarchy (`lightning_pose/data/datasets.py`)
 
-Three dataset classes, with a clear inheritance structure:
-
-- **`BaseTrackingDataset`** — base class. Loads images and (x, y) keypoints, applies the imgaug
-  pipeline, and handles `imgaug_hflip`. Returns a `BaseLabeledExampleDict`.
-- **`HeatmapDataset(BaseTrackingDataset)`** — adds `compute_heatmap` to convert keypoints to
-  `(K, H, W)` Gaussian heatmap targets, and synthesizes `self.visibility` from NaN positions when
-  the CSV has no `visible` column. Returns a `HeatmapLabeledExampleDict`.
-- **`MultiviewHeatmapDataset`** — does **not** inherit from `BaseTrackingDataset`. Holds a
-  `dict[str, HeatmapDataset]` at `self.dataset` (keyed by view name). `__getitem__` delegates to
-  each child and stacks results. Shares `imgaug_transform` and `imgaug_hflip` attributes with
-  child datasets so the data module can update them in one pass.
-
-**`__getitem__` branching**: both `BaseTrackingDataset` and `HeatmapDataset` branch on
-`self.do_context` at the top of `__getitem__`. The non-context branch loads a single PIL image;
-the context branch loads a sequence of frames. All augmentation logic (imgaug pipeline + hflip) is
-duplicated in both branches.
+Three dataset classes, with a clear inheritance structure; see module docstring.
 
 **Adding an augmentation that affects keypoints**:
 
@@ -299,16 +284,6 @@ duplicated in both branches.
    anywhere else a new/renamed config key is merged or assigned onto a loaded model's `cfg` (see
    `predict_on_label_csv` and `predict_on_label_csv_multiview`, which wrap their
    `OmegaConf.merge(self.cfg, cfg_overrides)` calls the same way).
-
-### Data module split logic (`lightning_pose/data/datamodules.py` → `BaseDataModule._setup`)
-
-The imgaug pipeline always contains at least one element: a final resize transform appended by
-`BaseTrackingDataset.__init__`. `len(imgaug_transform) == 1` therefore means "resize only, no
-augmentations." When this is true **and** `imgaug_hflip` is False, all three splits can share the
-same underlying dataset object (cheap path). Otherwise, three deep-copied datasets are created and
-the val/test copies have their pipeline replaced with resize-only and their `imgaug_hflip` reset to
-`False`. Any new augmentation applied outside the pipeline (like `imgaug_hflip`) must be added to
-this condition and explicitly stripped from val/test datasets in the `else` branch.
 
 ### DALI Pipeline (`lightning_pose/data/dali.py`)
 
