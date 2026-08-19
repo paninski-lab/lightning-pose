@@ -1024,7 +1024,7 @@ class TestTensorRTRuntime:
         deviations = _confident_keypoint_deviations(eager_preds, trt_preds)
         assert len(deviations) > 0, "no confidently-tracked keypoints in toy data"
         mean_deviation = np.nanmean(deviations)
-        assert mean_deviation < 1.0, f"mean pixel deviation {max_deviation:.4f} >= 1.0"
+        assert mean_deviation < 1.0, f"mean pixel deviation {mean_deviation:.4f} >= 1.0"
 
 
 def _make_mock_model(tmp_path, *, multiview=False, context=False, num_views=2):
