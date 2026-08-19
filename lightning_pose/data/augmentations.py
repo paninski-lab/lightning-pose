@@ -1,4 +1,17 @@
-"""Functions to build augmentation pipeline."""
+"""Functions to build augmentation pipelines from imgaug transform names or preset strings.
+
+:func:`imgaug_transform` builds an ``iaa.Sequential`` pipeline from a params dict (transform
+name -> {p, args, kwargs}); see its docstring for the dict format.
+
+:func:`expand_imgaug_str_to_dict` expands a shorthand preset string (``"dlc"``, ``"dlc-mv"``,
+etc.) into that same params-dict format.
+
+**Adding a new preset**: add its string to ``_allowed_imgaug_strs`` and a branch in
+:func:`expand_imgaug_str_to_dict` that builds ``params_dict`` the same way the existing
+``"dlc"`` branches do -- one ``params_dict[<TransformName>] = {"p": ..., "kwargs": {...}}``
+entry per imgaug transform, using ``if not params.endswith("mv")`` to skip transforms that
+don't make sense for multiview data (e.g. per-view crop/rotation).
+"""
 
 from typing import Any
 
