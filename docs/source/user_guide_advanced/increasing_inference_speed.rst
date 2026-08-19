@@ -92,21 +92,10 @@ Caveats
   simpler but can leave some performance on the table at batch sizes far from the profile's
   optimum -- for example, multi-view-FP32-on-L4 was roughly flat (0.91-1.07x) across batch sizes
   rather than showing a clear win.
-- **ONNX Runtime FP16 + DALI is missing from the figure for the 6-view multi-view model on L4** --
-  not because a single real ``litpose predict`` call runs out of memory (a fresh single call
-  completes cleanly in ~479s on this exact combination), but because of a benchmark-harness
-  limitation: DALI keeps every ``Pipeline`` object it creates registered for the life of the
-  process (for its own at-exit cleanup), so its GPU memory pool is never released between the
-  warmup and timed repeats that ``predict_speed_matrix_benchmark.py`` runs back-to-back in one
-  process. On L4's 22GB, that's enough to exhaust available memory by the second call for this
-  specific model/decoder/GPU combination; the same combination has enough headroom to absorb it
-  on A100 (80GB). There's no supported way to release DALI's pool mid-process -- the only hook
-  that does it is a private ``Pipeline._shutdown()``, and calling it directly mid-process causes
-  a CUDA-level crash rather than a clean release, since it's meant only for the interpreter's own
-  at-exit handler. Getting a multi-repeat number for this combination would need a benchmark that
-  runs each repeat in its own process; a single-run measurement (**478.8s**) exists but isn't
-  comparable to the 10-repeat means shown elsewhere, so it's omitted here rather than shown
-  without error bars.
+- **ONNX Runtime FP16 + DALI is missing from the figure for the 6-view multi-view model on L4**,
+  likely due to a race condition between DALI's CUDA stream and the ONNX Runtime 
+  ``CUDAExecutionProvider`` on L4 GPUs -- 
+  see issue `483 <https://github.com/paninski-lab/lightning-pose/issues/483>`_.
 
 .. _accuracy_check:
 
