@@ -273,22 +273,33 @@ class BaseFeatureExtractor(LightningModule):
         Wrapper around the backbone's feature_extractor() method for typechecking purposes.
         See tests/models/test_base.py for example shapes.
 
-        Batch options
-        -------------
-        - Float[torch.Tensor, "batch channels image_height image_width"]
-          single view, labeled batch
+        ``do_context`` is fixed per model class, not chosen per call -- see each tracker's
+        ``__init__``: forced ``True`` for ``HeatmapTrackerMHCRNN``; forced ``False`` (with a
+        raised ``ValueError`` if passed) for ``HeatmapTrackerMultiviewTransformer``, which also
+        never calls this method at all, doing its own multiview fusion in ``forward_vit()``
+        instead; and silently stripped/ignored (always ``False``) for ``RegressionTracker``.
+        Branch taken, keyed on ``(do_context, images.ndim, is_multiview)``:
 
-        - Float[torch.Tensor, "batch frames channels image_height image_width"]
-          single view, labeled context batch
+        - ``(False, 4, *)`` -- direct ``self.backbone(images)`` call.
+          ``RegressionTracker`` (any batch) and ``HeatmapTracker`` (singleview
+          labeled/unlabeled batches).
 
-        - Float[torch.Tensor, "seq_len channels image_height image_width"]
-          single view, unlabeled batch from DALI
+        - ``(True, 4, *)`` -- singleview unlabeled sequence from DALI, shape
+          ``(seq_len, channels, height, width)``.
+          ``SemiSupervisedHeatmapTrackerMHCRNN`` unlabeled batches.
 
-        - Float[torch.Tensor, "batch views frames channels image_height image_width"]
-          multivew, labeled context batch
+        - ``(True, 5, False)`` -- singleview labeled context batch, shape
+          ``(batch, frames, channels, height, width)``.
+          ``HeatmapTrackerMHCRNN`` labeled batches.
 
-        - Float[torch.Tensor, "seq_len views channels image_height image_width"]
-          multiview, unlabeled batch from DALI
+        - ``(True, 5, True)`` -- multiview unlabeled batch from DALI, shape
+          ``(seq_len, views, channels, height, width)``.
+          ``SemiSupervisedHeatmapTrackerMHCRNN`` unlabeled batches.
+
+        - ``(True, 6, *)`` -- multiview labeled context batch, shape
+          ``(batch, views, frames, channels, height, width)``, reshaped to the
+          ``(True, 5, False)`` case above and handled identically.
+          ``HeatmapTrackerMHCRNN`` labeled batches (multiview).
 
         Args:
             images: a batch of images
