@@ -10,11 +10,11 @@
 - [ ] support training across multiple datasets; see [#284](https://github.com/paninski-lab/lightning-pose/pull/284)
 
 ## Inference enhancements
-- [x] support for inference with mixed precision [#458](https://github.com/paninski-lab/lightning-pose/pull/458)
-- [ ] support for `torch.compile()` to improve inference speed
-- [ ] support for [ONNX runtime](https://onnxruntime.ai/) to improve inference speed
-- [ ] support for [TensorRT runtime](https://docs.nvidia.com/deeplearning/tensorrt/latest/index.html) to improve inference speed
-- [ ] look into using [pynvvideocodec](https://developer.nvidia.com/pynvvideocodec) for accelerated inference and Windows support
+- [x] inference with mixed precision [#458](https://github.com/paninski-lab/lightning-pose/pull/458)
+- [x] `torch.compile()` to improve inference speed [#469](https://github.com/paninski-lab/lightning-pose/pull/469)
+- [x] [ONNX runtime](https://onnxruntime.ai/) to improve inference speed [#471](https://github.com/paninski-lab/lightning-pose/pull/471)
+- [x] [TensorRT runtime](https://docs.nvidia.com/deeplearning/tensorrt/latest/index.html) to improve inference speed [#475](https://github.com/paninski-lab/lightning-pose/pull/475)
+- [x] [pynvvideocodec](https://developer.nvidia.com/pynvvideocodec) to improve inference speed [#477](https://github.com/paninski-lab/lightning-pose/pull/477)
 - [ ] add OpenCV video reader option for inference for native Windows compatability
 
 ## Losses and backbones
