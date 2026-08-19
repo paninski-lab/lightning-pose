@@ -438,8 +438,8 @@ combined with any other class), you'll hit the same cycle and need the same two 
 `predict_*` variant); put it in `model_runtime.py` if it changes *how* the loaded model executes
 (a new export target, a new compilation mode).
 
-**Precision/runtime/decoder type aliases live in `lightning_pose/utils/inference_types.py`**,
-not in `api/model.py` or the CLI — `_Precision`, `_Runtime`, `_ExportRuntime`, `_Decoder`, and
+**Precision/runtime/reader type aliases live in `lightning_pose/utils/inference_types.py`**,
+not in `api/model.py` or the CLI — `_Precision`, `_Runtime`, `_ExportRuntime`, `_Reader`, and
 `_OnnxPrecision` are each defined exactly once there and imported everywhere else (`api/model.py`,
 `api/model_runtime.py`, `cli/commands/predict.py`, `cli/commands/export.py`). The CLI derives its
 argparse `choices=` tuples via `typing.get_args()` on the imported alias rather than

@@ -25,7 +25,7 @@ from lightning_pose.data.utils import count_frames
 
 if TYPE_CHECKING:
     from lightning_pose.api import Model
-    from lightning_pose.api.model import _Decoder
+    from lightning_pose.api.model import _Reader
 
 logger = logging.getLogger(__name__)
 
@@ -397,7 +397,7 @@ def predict_video(
     model: Model,
     output_pred_file: str | None = None,
     progress_file: Path | None = None,
-    decoder: _Decoder | None = None,
+    reader: _Reader | None = None,
     bbox_file: str | Path | None = None,
 ) -> pd.DataFrame: ...
 
@@ -408,7 +408,7 @@ def predict_video(
     model: Model,
     output_pred_file: list[str] | None = None,
     progress_file: Path | None = None,
-    decoder: _Decoder | None = None,
+    reader: _Reader | None = None,
 ) -> list[pd.DataFrame]: ...
 
 
@@ -417,7 +417,7 @@ def predict_video(
     model: Model,
     output_pred_file: str | list[str] | None = None,
     progress_file: Path | None = None,
-    decoder: _Decoder | None = None,
+    reader: _Reader | None = None,
     bbox_file: str | Path | None = None,
 ) -> pd.DataFrame | list[pd.DataFrame]:
     """
@@ -430,7 +430,7 @@ def predict_video(
         bbox_file: (optional) path to a bbox CSV (columns x, y, h, w; one row per frame).
             when provided, DALI delivers full-resolution frames and the wrapper crops each
             frame to the bbox before resizing to the model's input dims. single-view only.
-        decoder: (optional) which video-decoding backend to use: "dali" or "pynvvc".
+        reader: (optional) which video-reading backend to use: "dali" or "pynvvc".
             None (default) auto-selects pynvvc if it's usable on this machine for this
             video, else falls back to dali. Independent of the model's runtime
             (eager/onnx) and --compile -- this only controls video ingestion.
@@ -486,7 +486,7 @@ def predict_video(
         model.config.cfg.data.image_resize_dims.width,
     ]
 
-    # Decide which decoder backend to use: explicit choice, or auto-select pynvvc if
+    # Decide which reader backend to use: explicit choice, or auto-select pynvvc if
     # it's actually usable (installed + this GPU/driver + this video decode
     # successfully), else fall back to dali. Probed against the first view's video
     # since is_pynvvc_available needs a real file to construct a trial decoder.
@@ -494,21 +494,21 @@ def predict_video(
     # direct Model API/notebook use) gets the same fail-fast behavior and log line for
     # free -- same rationale as the backend log line below.
     probe_video = video_file[0] if is_multiview else video_file
-    if decoder is None:
+    if reader is None:
         from lightning_pose.data.pynvvc import is_pynvvc_available
-        decoder = "pynvvc" if is_pynvvc_available(probe_video) else "dali"
-    elif decoder == "pynvvc":
+        reader = "pynvvc" if is_pynvvc_available(probe_video) else "dali"
+    elif reader == "pynvvc":
         from lightning_pose.data.pynvvc import is_pynvvc_available
         if not is_pynvvc_available(probe_video):
             raise RuntimeError(
-                "decoder='pynvvc' was requested but PyNvVideoCodec can't decode "
+                "reader='pynvvc' was requested but PyNvVideoCodec can't decode "
                 f"{probe_video!r} on this machine (unsupported GPU generation, driver "
                 "too old, pynvvideocodec not installed, or an unsupported video "
-                "format). Pass decoder='dali' or omit decoder to auto-select."
+                "format). Pass reader='dali' or omit reader to auto-select."
             )
-    logger.info(f"predict_video: using '{decoder}' decoder backend")
+    logger.info(f"predict_video: using '{reader}' reader backend")
 
-    if decoder == "dali":
+    if reader == "dali":
         from lightning_pose.data.dali import PrepareDALI  # avoids ImportError on cpu-only installs
         vid_pred_class = PrepareDALI(
             train_stage="predict",

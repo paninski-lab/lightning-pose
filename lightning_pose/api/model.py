@@ -27,7 +27,7 @@ from lightning_pose.data.datatypes import MultiviewPredictionResult, PredictionR
 from lightning_pose.metrics import compute_metrics_single
 from lightning_pose.models import ALLOWED_MODELS
 from lightning_pose.utils import io as io_utils
-from lightning_pose.utils.inference_types import _Decoder, _Precision, _Runtime
+from lightning_pose.utils.inference_types import _Precision, _Reader, _Runtime
 from lightning_pose.utils.predictions import generate_labeled_video as generate_labeled_video_fn
 from lightning_pose.utils.predictions import (
     predict_dataset,
@@ -702,7 +702,7 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
         compute_metrics: bool = True,
         generate_labeled_video: bool = False,
         progress_file: Path | None = None,
-        decoder: _Decoder | None = None,
+        reader: _Reader | None = None,
         bbox_file: str | Path | None = None,
     ) -> PredictionResult:
         """Predicts on a video file and computes unsupervised loss metrics if applicable.
@@ -718,7 +718,7 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
                 Defaults to False.
             progress_file (Path, optional): Path to a file to save progress information for the
                 App. Defaults to None.
-            decoder (optional): which video-decoding backend to use, "dali" or "pynvvc".
+            reader (optional): which video-reading backend to use, "dali" or "pynvvc".
                 None (default) auto-selects pynvvc if it's usable on this machine for this
                 video, else falls back to dali. Independent of the model's runtime
                 (eager/onnx) and torch.compile -- this only controls video ingestion.
@@ -760,7 +760,7 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
             model=self,
             output_pred_file=str(prediction_csv_file),
             progress_file=progress_file,
-            decoder=decoder,
+            reader=reader,
             bbox_file=bbox_file,
         )
         if generate_labeled_video:
@@ -794,7 +794,7 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
         compute_metrics: bool = True,
         generate_labeled_video: bool = False,
         progress_file: Path | None = None,
-        decoder: _Decoder | None = None,
+        reader: _Reader | None = None,
     ) -> MultiviewPredictionResult:
         """Version of ``predict_on_video_file`` that accesses multiple camera views of each frame.
 
@@ -807,7 +807,7 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
             compute_metrics: whether to compute pixel error and loss metrics on predictions.
             generate_labeled_video: whether to save a labeled video.
             progress_file: path to a file to save progress information for the App.
-            decoder: which video-decoding backend to use, "dali" or "pynvvc". None (default)
+            reader: which video-reading backend to use, "dali" or "pynvvc". None (default)
                 auto-selects pynvvc if it's usable on this machine for this video, else falls
                 back to dali.
 
@@ -854,7 +854,7 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
             model=self,
             output_pred_file=prediction_csv_file_list,
             progress_file=progress_file,
-            decoder=decoder,
+            reader=reader,
         )
         if generate_labeled_video:
             for video_file, preds_df in zip(video_file_per_view, df_list, strict=True):

@@ -463,14 +463,14 @@ framework overhead.
 
 .. note::
 
-   ``PreparePynvvc`` (the class backing ``--decoder pynvvc``) reads its window size from
+   ``PreparePynvvc`` (the class backing ``--reader pynvvc``) reads its window size from
    the existing ``cfg.dali`` config section --
    ``dali.base.predict.sequence_length`` / ``dali.context.predict.sequence_length`` --
    rather than a separate ``cfg.pynvvc`` section. The name is a little confusing, since
    this setting also governs how many frames PyNvVideoCodec reads per batch, but the
    windowing semantics (frames per iteration, overlap for context/MHCRNN models) are
-   identical between the two decoder backends, so one config value covers both rather
-   than keeping two in sync. If you only ever use ``--decoder pynvvc`` and never DALI,
+   identical between the two reader backends, so one config value covers both rather
+   than keeping two in sync. If you only ever use ``--reader pynvvc`` and never DALI,
    you still configure the window size via ``dali.*.predict.sequence_length``.
 
 Installation
@@ -489,23 +489,23 @@ erroring -- see below.
 Usage
 ~~~~~
 
-``--decoder`` is independent of ``--runtime``/``--compile`` above -- it only controls how video
+``--reader`` is independent of ``--runtime``/``--compile`` above -- it only controls how video
 frames are read, not how the model runs on them. From the CLI:
 
 .. code-block:: console
 
-    litpose predict /path/to/model_dir /path/to/video.mp4 --decoder pynvvc
-    litpose predict /path/to/model_dir /path/to/video.mp4 --decoder dali
+    litpose predict /path/to/model_dir /path/to/video.mp4 --reader pynvvc
+    litpose predict /path/to/model_dir /path/to/video.mp4 --reader dali
 
 Or from the API:
 
 .. code-block:: python
 
     model = Model.from_dir("path/to/model_dir")
-    result = model.predict_on_video_file("path/to/video.mp4", decoder="pynvvc")
+    result = model.predict_on_video_file("path/to/video.mp4", reader="pynvvc")
 
-Omitting ``--decoder`` (or passing ``decoder=None``) auto-selects PyNvVideoCodec when it's
+Omitting ``--reader`` (or passing ``reader=None``) auto-selects PyNvVideoCodec when it's
 usable on the current machine for the given video, falling back to DALI otherwise -- no error,
-just a quieter/slower run. Explicitly requesting ``--decoder pynvvc`` on a machine where it
+just a quieter/slower run. Explicitly requesting ``--reader pynvvc`` on a machine where it
 isn't usable raises a clear error instead of silently falling back, so you know your run isn't
 using the backend you asked for.

@@ -100,38 +100,38 @@ class TestPredictParser:
                 ['predict', str(model_dir), 'video.mp4', '--runtime', 'coreml']
             )
 
-    def test_decoder_default_is_none(self, parser, tmp_path):
-        """--decoder defaults to None so predict_video() auto-selects."""
+    def test_reader_default_is_none(self, parser, tmp_path):
+        """--reader defaults to None so predict_video() auto-selects."""
         model_dir = tmp_path / 'model'
         model_dir.mkdir()
         args = parser.parse_args(['predict', str(model_dir), 'video.mp4'])
-        assert args.decoder is None
+        assert args.reader is None
 
-    def test_decoder_pynvvc(self, parser, tmp_path):
-        """--decoder pynvvc is parsed."""
+    def test_reader_pynvvc(self, parser, tmp_path):
+        """--reader pynvvc is parsed."""
         model_dir = tmp_path / 'model'
         model_dir.mkdir()
         args = parser.parse_args(
-            ['predict', str(model_dir), 'video.mp4', '--decoder', 'pynvvc']
+            ['predict', str(model_dir), 'video.mp4', '--reader', 'pynvvc']
         )
-        assert args.decoder == 'pynvvc'
+        assert args.reader == 'pynvvc'
 
-    def test_decoder_dali(self, parser, tmp_path):
-        """--decoder dali is parsed."""
+    def test_reader_dali(self, parser, tmp_path):
+        """--reader dali is parsed."""
         model_dir = tmp_path / 'model'
         model_dir.mkdir()
         args = parser.parse_args(
-            ['predict', str(model_dir), 'video.mp4', '--decoder', 'dali']
+            ['predict', str(model_dir), 'video.mp4', '--reader', 'dali']
         )
-        assert args.decoder == 'dali'
+        assert args.reader == 'dali'
 
-    def test_decoder_rejects_unknown_value(self, parser, tmp_path):
-        """--decoder nvdec exits; only dali/pynvvc are valid."""
+    def test_reader_rejects_unknown_value(self, parser, tmp_path):
+        """--reader nvdec exits; only dali/pynvvc are valid."""
         model_dir = tmp_path / 'model'
         model_dir.mkdir()
         with pytest.raises(SystemExit):
             parser.parse_args(
-                ['predict', str(model_dir), 'video.mp4', '--decoder', 'nvdec']
+                ['predict', str(model_dir), 'video.mp4', '--reader', 'nvdec']
             )
 
     def test_onnx_precision_default_is_none(self, parser, tmp_path):
@@ -287,7 +287,7 @@ class TestHandle:
             compile=False,
             runtime='eager',
             onnx_precision=None,
-            decoder=None,
+            reader=None,
             batch_size=None,
         )
 

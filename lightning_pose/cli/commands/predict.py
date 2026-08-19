@@ -9,7 +9,7 @@ from pathlib import Path
 from pprint import pformat
 from typing import TYPE_CHECKING, Any, get_args
 
-from lightning_pose.utils.inference_types import _Decoder, _OnnxPrecision, _Precision, _Runtime
+from lightning_pose.utils.inference_types import _OnnxPrecision, _Precision, _Reader, _Runtime
 
 from .. import types
 
@@ -18,11 +18,11 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from lightning_pose.api import Model
 
-# --precision, --runtime, --decoder, and --onnx-precision choices are each
+# --precision, --runtime, --reader, and --onnx-precision choices are each
 # derived from the corresponding lightning_pose.utils.inference_types alias
 _PRECISION_CHOICES = get_args(_Precision)
 _RUNTIME_CHOICES = get_args(_Runtime)
-_DECODER_CHOICES = get_args(_Decoder)
+_READER_CHOICES = get_args(_Reader)
 _ONNX_PRECISION_CHOICES = get_args(_OnnxPrecision)
 
 
@@ -153,11 +153,11 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
     )
 
     predict_parser.add_argument(
-        "--decoder",
-        choices=sorted(_DECODER_CHOICES),
+        "--reader",
+        choices=sorted(_READER_CHOICES),
         default=None,
         help=(
-            "video-decoding backend for video inputs. 'dali' or 'pynvvc'. If omitted "
+            "video-reading backend for video inputs. 'dali' or 'pynvvc'. If omitted "
             "(default), auto-selects 'pynvvc' when it's usable on this machine for the "
             "given video, else falls back to 'dali'. Independent of --runtime/--compile "
             "-- this only controls video ingestion, not model execution. Ignored for "
@@ -234,7 +234,7 @@ def handle(args: argparse.Namespace) -> None:
     if model.config.is_multi_view():
         _predict_multi_type_multi_view(
             model, input_paths, args.skip_viz, not args.overwrite,
-            progress_file=args.progress_file, decoder=args.decoder,
+            progress_file=args.progress_file, reader=args.reader,
         )
     else:
         for p in input_paths:
@@ -242,7 +242,7 @@ def handle(args: argparse.Namespace) -> None:
                 model, p, args.skip_viz, not args.overwrite,
                 progress_file=args.progress_file,
                 bbox_dir=args.bbox_dir,
-                decoder=args.decoder,
+                reader=args.reader,
             )
 
 
@@ -253,7 +253,7 @@ def _predict_multi_type(
     skip_existing: bool,
     progress_file: Path | None = None,
     bbox_dir: Path | None = None,
-    decoder: _Decoder | None = None,
+    reader: _Reader | None = None,
 ) -> None:
     """Run prediction on a single path, dispatching to video, CSV, or directory handling.
 
@@ -279,7 +279,7 @@ def _predict_multi_type(
                 model, p, skip_viz, skip_existing,
                 progress_file=progress_file,
                 bbox_dir=bbox_dir,
-                decoder=decoder,
+                reader=reader,
             )
 
     elif path.suffix == ".mp4":
@@ -294,7 +294,7 @@ def _predict_multi_type(
             generate_labeled_video=(not skip_viz),
             progress_file=progress_file,
             bbox_file=bbox_dir / f'{path.stem}_bbox.csv' if bbox_dir is not None else None,
-            decoder=decoder,
+            reader=reader,
         )
     elif path.suffix == ".csv":
         # Check if prediction file already exists
@@ -319,7 +319,7 @@ def _predict_multi_type_multi_view(
     skip_viz: bool,
     skip_existing: bool,
     progress_file: Path | None = None,
-    decoder: _Decoder | None = None,
+    reader: _Reader | None = None,
 ) -> None:
     """Run multi-view prediction on a list of paths (videos or directories).
 
@@ -366,7 +366,7 @@ def _predict_multi_type_multi_view(
                 video_file_per_view,
                 generate_labeled_video=not skip_viz,
                 progress_file=progress_file,
-                decoder=decoder,
+                reader=reader,
             )
     # if we have a list of directories, we process the videos in each separately
     elif all(path.is_dir() for path in paths):
@@ -379,7 +379,7 @@ def _predict_multi_type_multi_view(
 
                 _predict_multi_type_multi_view(
                     model, video_files, skip_viz, skip_existing,
-                    progress_file=progress_file, decoder=decoder,
+                    progress_file=progress_file, reader=reader,
                 )
             else:
                 logger.info(f'skipping {path}: no videos found')
