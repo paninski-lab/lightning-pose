@@ -235,6 +235,27 @@ class MultiHeadHeatmapTracker(HeatmapTracker):
             raise ValueError('dataset_names must be a non-empty ordered registry')
         self.dataset_names = list(dataset_names)
 
+        # supporting-set mask for blind combination: mask[d, k] is True when head d
+        # received training signal for keypoint k (direct visible=2 labels, or the hflip
+        # partner of one when hflip augmentation is active). Non-persistent: the factory
+        # recomputes it from training data at every construction, so checkpoints saved
+        # before this buffer existed load cleanly.
+        self.register_buffer(
+            'head_keypoint_mask',
+            torch.ones(len(self.dataset_names), self.num_keypoints, dtype=torch.bool),
+            persistent=False,
+        )
+
+        # inference behavior, set post-construction by evaluation code:
+        # 'oracle' routes each labeled row through its dataset's head (default);
+        # 'blind' combines all supporting heads by confidence-weighted coordinates.
+        # predict_dataset names the head for data with no per-row dataset id (videos).
+        self.predict_mode: str = 'oracle'
+        self.predict_dataset: str | None = None
+        # blind-combination knobs; record alongside any reported blind numbers
+        self.blind_gamma: float = 2.0
+        self.blind_conf_floor: float = 0.0
+
         # replace the single shared head with one complete head per dataset; heads are
         # built after the parent's seeded init, so initialization stays deterministic
         # given torch_seed (but differs across heads, as it would across seeds)
@@ -289,6 +310,108 @@ class MultiHeadHeatmapTracker(HeatmapTracker):
             heatmaps[mask] = heatmaps_group
         return heatmaps
 
+    def set_head_keypoint_mask(
+        self,
+        visibility: torch.Tensor,
+        dataset_ids: torch.Tensor,
+        keypoint_names: list[str],
+        hflip: bool,
+    ) -> None:
+        """Fill the supporting-set mask from training-data visibility.
+
+        Args:
+            visibility: (num_frames, num_keypoints) int tensor of {0, 1, 2} flags.
+            dataset_ids: (num_frames,) source-dataset id per frame.
+            keypoint_names: canonical keypoint names, for hflip partner resolution.
+            hflip: True when horizontal-flip augmentation is active, in which case the
+                _left/_right partner of a directly-labeled keypoint also receives
+                training signal and joins the supporting set.
+        """
+        direct = torch.zeros(len(self.dataset_names), self.num_keypoints, dtype=torch.bool)
+        for dataset_id in range(len(self.dataset_names)):
+            rows = dataset_ids == dataset_id
+            if rows.any():
+                direct[dataset_id] = (visibility[rows] == 2).any(dim=0)
+        mask = direct.clone()
+        if hflip:
+            idx_by_name = {name: i for i, name in enumerate(keypoint_names)}
+            for i, name in enumerate(keypoint_names):
+                if name.endswith('_left'):
+                    partner = f'{name[:-5]}_right'
+                elif name.endswith('_right'):
+                    partner = f'{name[:-6]}_left'
+                else:
+                    continue
+                if partner in idx_by_name:
+                    mask[:, idx_by_name[partner]] |= direct[:, i]
+        self.head_keypoint_mask.copy_(mask)
+        logger_counts = mask.sum(dim=1).tolist()
+        import logging
+        logging.getLogger(__name__).info(
+            f'head_keypoint_mask set: trainable keypoints per head = '
+            f'{dict(zip(self.dataset_names, logger_counts))}'
+        )
+
+    def forward_blind(
+        self,
+        images: Float[torch.Tensor, 'batch channels image_height image_width'],
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Combine all supporting heads without dataset identity (blind / zero-shot).
+
+        Every head runs on the shared backbone features; per keypoint, only heads whose
+        supporting-set mask covers that keypoint vote, with weights
+        ``w_h ∝ conf_h ** blind_gamma`` and heads below ``blind_conf_floor`` dropped.
+        Combination happens in coordinate space, not heatmap space: averaging softmaxed
+        heatmaps from disagreeing heads yields a bimodal map whose soft-argmax lands
+        between the modes — a location no head predicted. If every supporting head falls
+        below the floor, the single most confident supporting head is used as-is, so the
+        output carries its genuinely low confidence rather than a fabricated one.
+
+        Returns:
+            tuple of (keypoints (batch, 2 * num_keypoints), confidences
+            (batch, num_keypoints), inter-head spread (batch, num_keypoints) — the
+            weighted RMS distance of head predictions from the combined coordinate,
+            a per-model uncertainty signal).
+        """
+        representations = self.get_representations(images)
+        coords_heads = []
+        conf_heads = []
+        for head in self.heads:
+            heatmaps = head(representations)
+            keypoints, confidence = head.run_subpixelmaxima(heatmaps)
+            coords_heads.append(keypoints.reshape(keypoints.shape[0], -1, 2))
+            conf_heads.append(confidence)
+        coords = torch.stack(coords_heads)  # (num_heads, batch, K, 2)
+        conf = torch.stack(conf_heads)      # (num_heads, batch, K)
+
+        mask = self.head_keypoint_mask[:, None, :]                      # (num_heads, 1, K)
+        weights = conf.clamp_min(0) ** self.blind_gamma
+        weights = weights * mask
+        weights = torch.where(conf >= self.blind_conf_floor, weights, torch.zeros_like(weights))
+        weights_sum = weights.sum(dim=0)                                # (batch, K)
+
+        norm = weights / weights_sum.clamp_min(1e-12)
+        combined_coords = (norm[..., None] * coords).sum(dim=0)         # (batch, K, 2)
+        combined_conf = (norm * conf).sum(dim=0)                        # (batch, K)
+        spread = torch.sqrt(
+            (norm * ((coords - combined_coords) ** 2).sum(dim=-1)).sum(dim=0)
+        )
+
+        # abstention fallback: keypoints where no supporting head cleared the floor take
+        # the most confident supporting head verbatim (confidence included)
+        masked_conf = torch.where(mask.expand_as(conf), conf, conf.new_full((), -torch.inf))
+        idx_best = masked_conf.argmax(dim=0)                            # (batch, K)
+        fallback_coords = coords.gather(
+            0, idx_best[None, ..., None].expand(1, *idx_best.shape, 2),
+        )[0]
+        fallback_conf = conf.gather(0, idx_best[None])[0]
+        no_vote = weights_sum <= 0
+        combined_coords = torch.where(no_vote[..., None], fallback_coords, combined_coords)
+        combined_conf = torch.where(no_vote, fallback_conf, combined_conf)
+        spread = torch.where(no_vote, torch.zeros_like(spread), spread)
+
+        return combined_coords.reshape(coords.shape[1], -1), combined_conf, spread
+
     def get_loss_inputs_labeled(self, batch_dict: HeatmapLabeledBatchDict) -> dict:
         """Return predicted heatmaps and keypoints, routing rows by dataset id."""
         if 'dataset_id' not in batch_dict:
@@ -321,16 +444,54 @@ class MultiHeadHeatmapTracker(HeatmapTracker):
         tuple[torch.Tensor, torch.Tensor]
         | tuple[torch.Tensor, torch.Tensor, torch.Tensor]
     ):
-        """Predict on labeled frames, selecting each row's head from its dataset id."""
-        if 'images' not in batch_dict.keys() or 'dataset_id' not in batch_dict.keys():
-            raise NotImplementedError(
-                'MultiHeadHeatmapTracker prediction requires labeled batches carrying '
-                'dataset_id (oracle routing); video/unlabeled prediction needs an '
-                'explicit dataset name or blind head combination, not implemented here'
+        """Predict keypoints using the configured inference mode.
+
+        Modes (``self.predict_mode``, set post-construction by evaluation code):
+
+        - ``'oracle'`` (default): each row runs through its own dataset's head. The
+          dataset id comes from the batch (labeled CSVs whose paths encode the dataset)
+          or, when absent — videos, external frames — from ``self.predict_dataset``.
+        - ``'blind'``: no dataset identity is used; all supporting heads vote via
+          :meth:`forward_blind`. This is also the zero-shot path for unseen datasets.
+          Heatmaps cannot be returned in this mode (combination is in coordinate space).
+        """
+        if 'images' in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
+            images = batch_dict['images']  # type: ignore[typeddict-item]
+        else:
+            images = batch_dict['frames']  # type: ignore[typeddict-item]
+
+        if self.predict_mode == 'blind':
+            predicted_keypoints, confidence, _spread = self.forward_blind(images)
+            predicted_keypoints = model_to_frame_batch(batch_dict, predicted_keypoints)
+            if return_heatmaps:
+                raise NotImplementedError(
+                    'blind mode combines coordinates across heads; there is no single '
+                    'heatmap tensor to return'
+                )
+            return predicted_keypoints, confidence
+
+        if self.predict_mode != 'oracle':
+            raise ValueError(f"predict_mode must be 'oracle' or 'blind', got '{self.predict_mode}'")
+
+        if 'dataset_id' in batch_dict.keys():
+            dataset_ids = batch_dict['dataset_id']  # type: ignore[typeddict-item]
+        elif self.predict_dataset is not None:
+            if self.predict_dataset not in self.dataset_names:
+                raise ValueError(
+                    f"predict_dataset '{self.predict_dataset}' is not in the registry "
+                    f'{self.dataset_names}'
+                )
+            dataset_ids = torch.full(
+                (images.shape[0],), self.dataset_names.index(self.predict_dataset),
+                dtype=torch.long, device=images.device,
             )
-        predicted_heatmaps = self.forward_routed(
-            batch_dict['images'], batch_dict['dataset_id'],  # type: ignore[typeddict-item]
-        )
+        else:
+            raise ValueError(
+                'oracle prediction needs a dataset identity: the batch carries none and '
+                'predict_dataset is unset. For unseen data use predict_mode="blind".'
+            )
+
+        predicted_heatmaps = self.forward_routed(images, dataset_ids)
         predicted_keypoints, confidence = self.heads[0].run_subpixelmaxima(predicted_heatmaps)
         predicted_keypoints = model_to_frame_batch(batch_dict, predicted_keypoints)
         if return_heatmaps:

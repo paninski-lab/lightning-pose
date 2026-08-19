@@ -228,6 +228,21 @@ def get_model(
 
     model = ModelClass(**common, **extra)
 
+    # fill the multi-head supporting-set mask from training-data visibility; the buffer
+    # is non-persistent, so this runs at every construction (training and inference both
+    # have a data module carrying the labeled dataset)
+    if cfg.model.get('head_mode', 'shared') == 'per_dataset' and data_module is not None:
+        dataset = data_module.dataset
+        if getattr(dataset, 'visibility', None) is not None and dataset.dataset_ids is not None:
+            model.set_head_keypoint_mask(
+                visibility=dataset.visibility,
+                dataset_ids=dataset.dataset_ids,
+                keypoint_names=dataset.keypoint_names,
+                hflip=bool(cfg.training.get('imgaug_hflip', False)),
+            )
+        model.blind_gamma = float(cfg.model.get('blind_gamma', 2.0))
+        model.blind_conf_floor = float(cfg.model.get('blind_conf_floor', 0.0))
+
     if cfg.model.get('checkpoint', None):
         ckpt = cfg.model.checkpoint
         logger.info(f'loading weights from {ckpt}')
