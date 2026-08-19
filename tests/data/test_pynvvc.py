@@ -8,9 +8,24 @@ import pandas as pd
 import pytest
 import torch
 
+import lightning_pose as lp
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
 from lightning_pose.data import pynvvc as pynvvc_module
 from lightning_pose.data.pynvvc import LitPynvvcWrapper, PreparePynvvc, is_pynvvc_available
+
+# real toy video used to gate the real-decoder tests below -- a plain `import
+# PyNvVideoCodec` succeeds regardless of GPU generation/driver age (see
+# lightning_pose/data/pynvvc.py module docstring), so the gate has to attempt an actual
+# decoder construction via is_pynvvc_available() rather than just checking the import.
+_TOY_VIDEO = str(lp.LP_ROOT_PATH / "data" / "mirror-mouse-example" / "videos" / "test_vid.mp4")
+
+requires_pynvvc = pytest.mark.skipif(
+    not is_pynvvc_available(_TOY_VIDEO),
+    reason=(
+        "PyNvVideoCodec is an optional dependency, or this GPU/driver doesn't support "
+        "NVDEC decoding; see docs/source/user_guide_advanced/increasing_inference_speed.rst."
+    ),
+)
 
 
 class TestIsPynvvcAvailable:
@@ -468,3 +483,118 @@ class TestLitPynvvcWrapper:
             next(wrapper)
         mock_stream.assert_called_once()
         mock_stream.return_value.synchronize.assert_called_once()
+
+
+@requires_pynvvc
+@pytest.mark.gpu
+class TestPynvvcRealDecoder:
+    """Real, unmocked PyNvVideoCodec decode tests.
+
+    Every test above mocks PyNvVideoCodec out of sys.modules (see TestIsPynvvcAvailable's
+    docstring), so none of them exercise the real nvc.SimpleDecoder construction, frame
+    reads, or DLPack conversion in _read_window/_resize_normalize. These do, against the
+    real toy video -- skipped wherever PyNvVideoCodec can't actually decode (see
+    requires_pynvvc above), same convention as tests/data/test_dali.py's
+    ``pytest.importorskip('nvidia.dali')`` gate.
+    """
+
+    def test_single_view_base_real_decode(self, cfg, video_list):
+        """Base model predict loader yields correctly-shaped, finite batches from a real
+        decoder, exercising every batch including the padded final one."""
+        im_height, im_width = 256, 256
+        prep = PreparePynvvc(
+            model_type='base',
+            filenames=video_list,
+            resize_dims=[im_height, im_width],
+            dali_config=cfg.dali,
+        )
+        loader = prep()
+        num_iters = prep.num_iters
+
+        batch_idx = -1
+        for batch in loader:
+            assert batch['frames'].shape == (
+                cfg.dali.base.predict.sequence_length, 3, im_height, im_width,
+            )
+            assert torch.isfinite(batch['frames']).all()
+            batch_idx += 1
+        assert batch_idx == num_iters - 1
+
+    def test_single_view_context_real_decode(self, cfg, video_list):
+        """Context model predict loader handles the overlapping-window step (see
+        PreparePynvvc.step / LitPynvvcWrapper._read_window docstrings) correctly against
+        a real decoder -- the trickiest indexing path in this module, previously only
+        covered by mocks."""
+        im_height, im_width = 256, 256
+        prep = PreparePynvvc(
+            model_type='context',
+            filenames=video_list,
+            resize_dims=[im_height, im_width],
+            dali_config=cfg.dali,
+        )
+        loader = prep()
+        num_iters = prep.num_iters
+
+        batch_idx = -1
+        for batch in loader:
+            assert batch['frames'].shape == (
+                cfg.dali.context.predict.sequence_length, 3, im_height, im_width,
+            )
+            batch_idx += 1
+        assert batch_idx == num_iters - 1
+
+    def test_matches_dali_decode(self, cfg, video_list):
+        """pynvvc's decode + resize + normalize output roughly matches DALI's on the same
+        real video -- catches a wrong color order (RGBP), a wrong normalization
+        order/scale, or an off-by-one in the frame-index window that a shape-only check
+        would miss.
+
+        Two independent decoders + two independent resize kernels legitimately disagree
+        at hard edges (verified empirically 2026-08-19: mean deviation ~0.013 normalized
+        units across the whole batch, but a handful of edge pixels -- 7 out of 12.6M --
+        exceed 0.8, dragging a max-based assertion up past 1.0). Swapping R/B channels
+        or shifting the frame index by +-1 both make the deviation far worse (0.22 and
+        0.12 mean, respectively), which is what actually rules out a color-order or
+        off-by-one bug here rather than a max-deviation threshold -- so this asserts on
+        the mean, the same way test_tensorrt_fp16_matches_eager_predictions in
+        tests/api/test_model.py does for the same reason. The max is still checked, but
+        loosely, as a backstop against a real broken decode rather than a precision claim.
+        """
+        pytest.importorskip('nvidia.dali', reason='nvidia-dali not installed')
+        from lightning_pose.data.dali import PrepareDALI
+
+        im_height, im_width = 256, 256
+
+        pynvvc_prep = PreparePynvvc(
+            model_type='base',
+            filenames=video_list,
+            resize_dims=[im_height, im_width],
+            dali_config=cfg.dali,
+        )
+        pynvvc_batch = next(iter(pynvvc_prep()))
+
+        dali_prep = PrepareDALI(
+            train_stage='predict',
+            model_type='base',
+            filenames=video_list,
+            dali_config=cfg.dali,
+            resize_dims=[im_height, im_width],
+        )
+        dali_batch = next(iter(dali_prep()))
+
+        pynvvc_frames = pynvvc_batch['frames'].cpu()
+        dali_frames = dali_batch['frames'].cpu()
+        assert pynvvc_frames.shape == dali_frames.shape
+        deviation = (pynvvc_frames - dali_frames).abs()
+        mean_deviation = deviation.mean().item()
+        assert mean_deviation < 0.05, (
+            f"pynvvc decode deviates from DALI decode by a mean of {mean_deviation:.4f} "
+            "(normalized units) -- check RGBP color order and resize/normalize order in "
+            "LitPynvvcWrapper._resize_normalize"
+        )
+        max_deviation = deviation.max().item()
+        assert max_deviation < 3.0, (
+            f"pynvvc decode deviates from DALI decode by up to {max_deviation:.4f} "
+            "(normalized units) even after allowing for per-pixel edge disagreement -- "
+            "this is large enough to suggest a real decode bug, not resize-kernel noise"
+        )
