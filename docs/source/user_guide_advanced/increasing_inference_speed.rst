@@ -296,35 +296,80 @@ TensorRT
 Installation
 ~~~~~~~~~~~~~
 
-TensorRT and ``onnxruntime-gpu`` need matching major versions, and ``pip install
-tensorrt`` / ``pip install onnxruntime-gpu`` each default independently to whatever is
-newest -- so they don't necessarily agree with each other, or with your PyTorch install's
-CUDA version. Check what onnxruntime expects before installing TensorRT:
+TensorRT and ``onnxruntime-gpu`` need matching major versions, and ``pip install tensorrt`` /
+``pip install onnxruntime-gpu`` each default independently to whatever is newest -- so they
+don't necessarily agree with each other, or with your PyTorch install's CUDA version. Two
+checks catch this before you ever call ``export("tensorrt", ...)``:
+
+**1. Find out what onnxruntime actually needs.** Rather than trusting an external
+compatibility table that may lag your installed ``onnxruntime-gpu`` version, inspect the
+provider library it ships directly:
 
 .. code-block:: console
 
-    python -c "import onnxruntime; print(onnxruntime.__version__)"
+    ldd "$(python -c "import onnxruntime, os; print(os.path.join(os.path.dirname(onnxruntime.__file__), 'capi', 'libonnxruntime_providers_tensorrt.so'))")" | grep libnvinfer
 
-The combination we verified working is ``onnxruntime-gpu`` 1.28.0 with
-``pip install "tensorrt-cu12<11"`` (lands on TensorRT 10.16.1.11, providing
-``libnvinfer.so.10``). A newer, unpinned ``pip install tensorrt`` can land on TensorRT
-11.x (``libnvinfer.so.11``) instead, which fails at session-creation time with a
-missing-symbol error rather than a clear version-mismatch message.
+This prints the exact ``libnvinfer.so.<N>`` onnxruntime is linked against -- ``<N>`` is the
+TensorRT **major** version you need (e.g. ``libnvinfer.so.10`` means TensorRT 10.x; a newer
+TensorRT 11.x, which ``pip install tensorrt`` may give you by default, will not load).
 
-For the full installation matrix (which TensorRT version pairs with which CUDA/cuDNN), see NVIDIA's `TensorRT install guide <https://docs.nvidia.com/deeplearning/tensorrt/latest/installing-tensorrt/installing.html>`_. The ``<11`` pin above matches what onnxruntime-gpu's TensorRT execution provider currently requires. If your onnxruntime-gpu version differs from the one this doc was written against, check onnxruntime's own `TensorRT EP requirements table <https://onnxruntime.ai/docs/execution-providers/TensorRT-ExecutionProvider.html#requirements>`_ first -- it's the maintained source of truth for onnxruntime-gpu <-> TensorRT <-> CUDA compatibility, including versions released after this page was written.
+**2. Check what's currently installed, and fix it if the major version doesn't match:**
 
-TensorRT's shared libraries also need to be on ``LD_LIBRARY_PATH`` at runtime:
+.. code-block:: console
 
-.. code-block:: bash
+    python -c "import tensorrt; print(tensorrt.__version__)"
 
-    # find your site-packages path:
-    #   python -c "import tensorrt_libs, os; print(os.path.dirname(tensorrt_libs.__file__))"
-    export LD_LIBRARY_PATH=/path/to/site-packages/tensorrt_libs:$LD_LIBRARY_PATH
+Install using the ``tensorrt-cu11``/``tensorrt-cu12``/``tensorrt-cu13`` package matching your
+PyTorch CUDA version (``python -c "import torch; print(torch.version.cuda)"``), with an upper
+bound of (required major + 1) so pip picks the newest release of that major without jumping to
+the next one -- e.g. if step 1 printed ``libnvinfer.so.10``:
 
-Building a TensorRT engine starts from the ``.onnx`` file produced by ``model.export(
-"onnx", ...)`` -- the ``onnx`` package is needed to create that file, but not to build
-the engine from it afterward. A machine that only builds/runs TensorRT engines from an
-already-exported ``.onnx`` file needs ``onnxruntime-gpu`` and ``tensorrt`` alone.
+.. code-block:: console
+
+    pip install "tensorrt-cu13<11"
+
+For the full CUDA/cuDNN/TensorRT installation matrix, see NVIDIA's
+`TensorRT install guide <https://docs.nvidia.com/deeplearning/tensorrt/latest/installing-tensorrt/install-pip.html>`_.
+
+**3. Put the installed libraries on the loader's search path.** pip installs TensorRT's
+``.so`` files into ``site-packages/tensorrt_libs``, which the system linker does not search by
+default. ``onnxruntime`` loads them with a raw ``dlopen``, not through the ``tensorrt`` Python
+package -- so importing ``tensorrt`` first does not help. TensorRT's own libraries in turn
+``dlopen`` *their* CUDA runtime dependencies (cuBLAS, cuDNN) the same raw way; if those were
+pip-installed as separate packages (as PyTorch's CUDA wheels do), those directories need to be
+on the path too.
+
+.. code-block:: console
+
+    export LD_LIBRARY_PATH="$(python -c "import tensorrt_libs, os; print(os.path.dirname(tensorrt_libs.__file__))"):$LD_LIBRARY_PATH"
+    export LD_LIBRARY_PATH="$(dirname "$(find "$(python -c 'import site; print(site.getsitepackages()[0])')/nvidia" -name 'libcublas.so.*' | head -1)"):$LD_LIBRARY_PATH"
+    export LD_LIBRARY_PATH="$(dirname "$(find "$(python -c 'import site; print(site.getsitepackages()[0])')/nvidia" -name 'libcudnn.so.*' | head -1)"):$LD_LIBRARY_PATH"
+
+cuBLAS and cuDNN are the two runtime libraries this needed beyond TensorRT's own on a typical
+pip install; step 4 below will name any other missing library by its exact filename if your
+setup needs more -- repeat the ``find``-based pattern above, swapping in that filename, for
+each one it reports.
+
+Add all of these to your shell profile (or the conda env's ``activate.d`` script) so they
+persist across sessions rather than needing to be re-exported every time.
+
+**4. Verify the install.** First, sanity-check that the ``tensorrt`` package itself loads its
+own bundled libraries:
+
+.. code-block:: console
+
+    python -c "import tensorrt as trt; assert trt.Builder(trt.Logger())"
+
+This alone is not sufficient -- it says nothing about whether ``onnxruntime``'s *independent*
+``dlopen`` of the same libraries will succeed, since ``onnxruntime`` never goes through the
+``tensorrt`` Python package to load them. Test that separately:
+
+.. code-block:: console
+
+    python -c "import ctypes, onnxruntime, os; path = os.path.join(os.path.dirname(onnxruntime.__file__), 'capi', 'libonnxruntime_providers_tensorrt.so'); ctypes.CDLL(path); print('OK')"
+
+If this raises ``OSError: libnvinfer.so.<N>: cannot open shared object file``, either step 2
+installed the wrong major version or ``LD_LIBRARY_PATH`` isn't set in this shell.
 
 Usage
 ~~~~~
