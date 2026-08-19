@@ -12,6 +12,10 @@ from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.backbones import ALLOWED_BACKBONES
 from lightning_pose.models.base import BaseSupervisedTracker, SemiSupervisedTrackerMixin
+from lightning_pose.models.datatypes import (
+    RegressionTrackerLabeledOutputsDict,
+    RegressionTrackerUnlabeledOutputsDict,
+)
 from lightning_pose.models.heads import LinearRegressionHead
 
 # to ignore imports for sphinx-autoapidoc
@@ -97,7 +101,10 @@ class RegressionTracker(BaseSupervisedTracker):
         # "out" is shape (batch, 2 * num_keypoints)
         return out
 
-    def get_loss_inputs_labeled(self, batch_dict: BaseLabeledBatchDict) -> dict:
+    def get_loss_inputs_labeled(
+        self,
+        batch_dict: BaseLabeledBatchDict,
+    ) -> RegressionTrackerLabeledOutputsDict:
         """Return predicted coordinates for a batch of data."""
         predicted_keypoints = self.forward(batch_dict["images"])
         return {
@@ -199,7 +206,10 @@ class SemiSupervisedRegressionTracker(SemiSupervisedTrackerMixin, RegressionTrac
         # this attribute will be modified by AnnealWeight callback during training
         self.total_unsupervised_importance = torch.tensor(1.0)
 
-    def get_loss_inputs_unlabeled(self, batch_dict: UnlabeledBatchDict) -> dict:
+    def get_loss_inputs_unlabeled(
+        self,
+        batch_dict: UnlabeledBatchDict,
+    ) -> RegressionTrackerUnlabeledOutputsDict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         predicted_keypoints = self.forward(batch_dict["frames"])
         # undo augmentation if needed

@@ -21,6 +21,10 @@ from lightning_pose.models.base import (
     BaseSupervisedTracker,
     SemiSupervisedTrackerMixin,
 )
+from lightning_pose.models.datatypes import (
+    HeatmapTrackerLabeledOutputsDict,
+    HeatmapTrackerMHCRNNUnlabeledOutputsDict,
+)
 from lightning_pose.models.heads import HeatmapMHCRNNHead
 
 # to ignore imports for sphinx-autoapidoc
@@ -154,7 +158,7 @@ class HeatmapTrackerMHCRNN(BaseSupervisedTracker):
     def get_loss_inputs_labeled(
         self,
         batch_dict: HeatmapLabeledBatchDict | MultiviewHeatmapLabeledBatchDict,
-    ) -> dict:
+    ) -> HeatmapTrackerLabeledOutputsDict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
         pred_heatmaps_sf, pred_heatmaps_mf = self.forward(batch_dict["images"])
@@ -297,7 +301,7 @@ class SemiSupervisedHeatmapTrackerMHCRNN(SemiSupervisedTrackerMixin, HeatmapTrac
     def get_loss_inputs_unlabeled(
         self,
         batch_dict: UnlabeledBatchDict | MultiviewUnlabeledBatchDict
-    ) -> dict:
+    ) -> HeatmapTrackerMHCRNNUnlabeledOutputsDict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)"""
 
         # images -> heatmaps

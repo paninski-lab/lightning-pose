@@ -21,6 +21,10 @@ from lightning_pose.losses.factory import LossFactory
 from lightning_pose.losses.losses import RegressionRMSELoss
 from lightning_pose.models.backbones import ALLOWED_TRANSFORMER_BACKBONES_MULTIVIEW
 from lightning_pose.models.base import BaseSupervisedTracker, SemiSupervisedTrackerMixin
+from lightning_pose.models.datatypes import (
+    HeatmapTrackerMultiviewTransformerLabeledOutputsDict,
+    HeatmapTrackerUnlabeledOutputsDict,
+)
 from lightning_pose.models.heads import HeatmapHead
 
 logger = logging.getLogger(__name__)
@@ -246,7 +250,7 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
     def get_loss_inputs_labeled(
         self,
         batch_dict: MultiviewHeatmapLabeledBatchDict,
-    ) -> dict:
+    ) -> HeatmapTrackerMultiviewTransformerLabeledOutputsDict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
 
         # images -> heatmaps
@@ -428,7 +432,7 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(
     def get_loss_inputs_unlabeled(
         self,
         batch_dict: UnlabeledBatchDict | MultiviewUnlabeledBatchDict,
-    ) -> dict:
+    ) -> HeatmapTrackerUnlabeledOutputsDict:
         """
         Return predicted heatmaps and keypoints for unlabeled data
         (required by SemiSupervisedTrackerMixin).
@@ -468,7 +472,7 @@ class SemiSupervisedHeatmapTrackerMultiviewTransformer(
         # keypoints -> original image coords keypoints
         pred_keypoints = model_to_frame_batch(batch_dict, pred_keypoints)
 
-        result = {
+        result: HeatmapTrackerUnlabeledOutputsDict = {
             "heatmaps_pred": pred_heatmaps,  # if augmented, augmented heatmaps
             "keypoints_pred": pred_keypoints,  # if augmented, original keypoints
             "keypoints_pred_augmented": pred_keypoints_augmented,  # match pred_heatmaps

@@ -483,8 +483,10 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
             n = kp_pred.shape[0] // 2
             kp_sf = kp_pred[:n].reshape(n, -1, 2)
             kp_mf = kp_pred[n:].reshape(n, -1, 2)
-            conf_sf = result["confidences"][:n]
-            conf_mf = result["confidences"][n:]
+            # RegressionTracker.__init__ strips do_context, so is_context_model here always
+            # implies a heatmap MHCRNN tracker, whose loss inputs always include confidences.
+            conf_sf = result["confidences"][:n]  # type: ignore[typeddict-item]
+            conf_mf = result["confidences"][n:]  # type: ignore[typeddict-item]
             # Merge: pick higher-confidence prediction per keypoint
             mf_better = conf_mf > conf_sf
             kp_sf[mf_better] = kp_mf[mf_better]

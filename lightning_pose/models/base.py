@@ -28,6 +28,14 @@ from lightning_pose.data.datatypes import (
     UnlabeledBatchDict,
 )
 from lightning_pose.models.backbones import ALLOWED_BACKBONES, build_backbone
+from lightning_pose.models.datatypes import (
+    HeatmapTrackerLabeledOutputsDict,
+    HeatmapTrackerMHCRNNUnlabeledOutputsDict,
+    HeatmapTrackerMultiviewTransformerLabeledOutputsDict,
+    HeatmapTrackerUnlabeledOutputsDict,
+    RegressionTrackerLabeledOutputsDict,
+    RegressionTrackerUnlabeledOutputsDict,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -474,7 +482,11 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
             | MultiviewLabeledBatchDict
             | MultiviewHeatmapLabeledBatchDict
         ),
-    ) -> dict:
+    ) -> (
+        RegressionTrackerLabeledOutputsDict
+        | HeatmapTrackerLabeledOutputsDict
+        | HeatmapTrackerMultiviewTransformerLabeledOutputsDict
+    ):
         """Return predicted coordinates for a batch of data."""
         raise NotImplementedError
 
@@ -492,7 +504,10 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         """Compute and log the losses on a batch of labeled data."""
 
         # forward pass; collected true and predicted heatmaps, keypoints
-        data_dict = self.get_loss_inputs_labeled(batch_dict=batch_dict)
+        # each concrete get_loss_inputs_labeled() override returns a precisely-typed
+        # TypedDict (see models/datatypes.py); the union collapses to Any here since this
+        # call site is polymorphic over all tracker types
+        data_dict = cast(dict[str, Any], self.get_loss_inputs_labeled(batch_dict=batch_dict))
 
         # compute and log loss on labeled data
         assert self.loss_factory is not None
@@ -587,7 +602,11 @@ class SemiSupervisedTrackerMixin(BaseSupervisedTracker if TYPE_CHECKING else obj
     def get_loss_inputs_unlabeled(
         self,
         batch_dict: UnlabeledBatchDict | MultiviewUnlabeledBatchDict,
-    ) -> dict:
+    ) -> (
+        RegressionTrackerUnlabeledOutputsDict
+        | HeatmapTrackerUnlabeledOutputsDict
+        | HeatmapTrackerMHCRNNUnlabeledOutputsDict
+    ):
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         raise NotImplementedError
 
@@ -600,7 +619,10 @@ class SemiSupervisedTrackerMixin(BaseSupervisedTracker if TYPE_CHECKING else obj
         """Compute and log the losses on a batch of unlabeled data (frames only)."""
 
         # forward pass: collect predicted heatmaps and keypoints
-        data_dict = self.get_loss_inputs_unlabeled(batch_dict=batch_dict)
+        # each concrete get_loss_inputs_unlabeled() override returns a precisely-typed
+        # TypedDict (see models/datatypes.py); the union collapses to Any here since this
+        # call site is polymorphic over all tracker types
+        data_dict = cast(dict[str, Any], self.get_loss_inputs_unlabeled(batch_dict=batch_dict))
 
         # compute loss on unlabeled data
         assert self.loss_factory_unsup is not None
