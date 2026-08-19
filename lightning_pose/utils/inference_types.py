@@ -1,5 +1,5 @@
 """Shared type aliases for inference-time configuration: precision, execution
-runtime, export target, and video decoder.
+runtime, export target, and video reader.
 
 Kept in a standalone module with no heavy dependencies (no torch/cv2/pandas) so
 `lightning_pose.cli` can import these values eagerly, at argument-parser
@@ -29,10 +29,10 @@ _Runtime = Literal["eager", "onnx", "tensorrt"]
 # inference just runs the checkpoint directly with no export step.
 _ExportRuntime = Literal["onnx", "tensorrt"]
 
-# Video-decoding backends accepted by predict_on_video_file(_multiview)'s decoder=
-# kwarg / `litpose predict --decoder`. Independent of _Runtime -- decoder controls
+# Video-reading backends accepted by predict_on_video_file(_multiview)'s reader=
+# kwarg / `litpose predict --reader`. Independent of _Runtime -- reader controls
 # video ingestion, _Runtime controls model execution.
-_Decoder = Literal["dali", "pynvvc"]
+_Reader = Literal["dali", "pynvvc"]
 
 # Weight precisions supported for ONNX export, accepted by Model.export(
 # onnx_precision=...) / `litpose export --onnx-precision`. Deliberately narrower
