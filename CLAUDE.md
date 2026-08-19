@@ -402,3 +402,45 @@ Calls with a suffix are silently skipped when the suffixed file does not exist.
 **Output**: prediction CSVs are written under `image_preds/{csv_filename}/predictions*.csv` by
 `model.predict_on_label_csv`, then copied to `model_dir/predictions[_{view}][{metric_suffix}][{suffix}].csv`
 for backward compatibility.
+
+### Model API package (`lightning_pose/api/`)
+
+**File split**: `model.py` and `model_runtime.py` split by concern, not by decoupling —
+both still operate on the same `Model` instance state.
+
+- `model.py` — `Model` construction (`from_dir`/`from_dir2`/`__init__`), dir-path helpers, and
+  the `predict_*` methods: *what* to run the model on.
+- `model_runtime.py` — `_RuntimeMixin`, mixed into `Model`, owns *how* the model executes: eager
+  checkpoint loading (`_load`, `load_model_from_checkpoint`), `compile()`, and ONNX/TensorRT
+  export + runtime attachment (`export`, `_attach_onnx_runtime`, `_attach_tensorrt_runtime`).
+
+`_RuntimeMixin` uses the same conditional-inheritance trick as
+`lightning_pose.models.base.SemiSupervisedTrackerMixin`:
+`class _RuntimeMixin(Model if TYPE_CHECKING else object)`. This gives the type checker
+visibility into `Model`'s attributes (`model_dir`, `cfg`, `model`, `precision`, `_runtime`, ...)
+without a real circular import at runtime — `model.py` imports `_RuntimeMixin`, so the reverse
+can't be a real base class.
+
+Unlike `SemiSupervisedTrackerMixin` (whose TYPE_CHECKING base, `BaseSupervisedTracker`, is a
+distinct ancestor of the class it's mixed into), `_RuntimeMixin` is mixed into `Model` directly
+with no class in between — so pyright sees `Model -> _RuntimeMixin -> Model` and flags it as a
+cyclic class definition (`reportGeneralTypeIssues`). **Both** class statements that close the
+cycle carry an inline `# pyright: ignore[reportGeneralTypeIssues]`: `_RuntimeMixin`'s own
+definition in `model_runtime.py`, and `class Model(_RuntimeMixin)` in `model.py`. Which one
+diagnoses the cycle is not stable — it depends on file traversal order (checking `model.py` +
+`model_runtime.py` in isolation flags the former; a full `pyright` run over the whole package
+flags the latter) — so both need the comment even though only one fires in a given run. Pyright
+still resolves attributes against `Model` normally in both cases, since the TYPE_CHECKING base
+is otherwise unchanged. If you copy this pattern for a new single-class mixin (one that's never
+combined with any other class), you'll hit the same cycle and need the same two ignore comments.
+
+**Adding a method**: put it in `model.py` if it decides *what* to run inference on (a new
+`predict_*` variant); put it in `model_runtime.py` if it changes *how* the loaded model executes
+(a new export target, a new compilation mode).
+
+**Precision/runtime/decoder type aliases live in `lightning_pose/utils/inference_types.py`**,
+not in `api/model.py` or the CLI — `_Precision`, `_Runtime`, `_ExportRuntime`, `_Decoder`, and
+`_OnnxPrecision` are each defined exactly once there and imported everywhere else (`api/model.py`,
+`api/model_runtime.py`, `cli/commands/predict.py`, `cli/commands/export.py`). The CLI derives its
+argparse `choices=` tuples via `typing.get_args()` on the imported alias rather than
+hand-duplicating a parallel tuple of strings.

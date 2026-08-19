@@ -19,7 +19,7 @@ repos:
         args: [--fix=lf]
       - id: name-tests-test
         args: ["--pytest-test-first"]
-        exclude: ^tests/fetch_test_data\.py$
+        exclude: ^tests/(fetch_test_data|api/model_helpers)\.py$
       - id: requirements-txt-fixer
       - id: trailing-whitespace
   - repo: https://github.com/astral-sh/ruff-pre-commit

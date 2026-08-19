@@ -5,21 +5,18 @@ from __future__ import annotations
 import argparse
 import logging
 import textwrap
-from typing import Any
+from typing import Any, get_args
+
+from lightning_pose.utils.inference_types import _ExportRuntime, _OnnxPrecision
 
 from .. import types
 
 logger = logging.getLogger(__name__)
 
-# Export targets. TensorRT builds its engine from the same .onnx artifact
-# "onnx" produces, through a different execution provider.
-_RUNTIME_CHOICES = ("onnx", "tensorrt")
-
-# Weight precisions the exporter supports. Deliberately narrower than
-# --precision on `litpose predict`: this is the precision baked into the
-# exported file, not the autocast precision used for eager inference. For
-# --runtime tensorrt, this selects which existing ONNX export to build from.
-_ONNX_PRECISION_CHOICES = ("fp32", "fp16")
+# --runtime and --onnx-precision choices are derived from the corresponding
+# lightning_pose.utils.inference_types alias
+_RUNTIME_CHOICES = get_args(_ExportRuntime)
+_ONNX_PRECISION_CHOICES = get_args(_OnnxPrecision)
 
 
 def register_parser(subparsers: Any) -> argparse.ArgumentParser:
