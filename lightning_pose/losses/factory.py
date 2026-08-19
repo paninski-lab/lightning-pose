@@ -135,28 +135,7 @@ def get_loss_factories(
         for loss_name in cfg.model.losses_to_use:
             loss_params_dict['unsupervised'][loss_name] = cfg_loss_dict[loss_name]
             loss_params_dict['unsupervised'][loss_name]['loss_name'] = loss_name
-            if loss_name[:8] == 'unimodal' or loss_name[:16] == 'temporal_heatmap':
-                if cfg.model.model_type == 'regression':
-                    raise NotImplementedError(
-                        'unimodal loss can only be used with classes inheriting from '
-                        'HeatmapTracker. \nYou specified a RegressionTracker model.'
-                    )
-                raise Exception(
-                    'need to update unimodal and/or temporal heatmap loss to not use '
-                    'cfg.data.image_resize_dims, which has been deprecated.'
-                )
-                # TODO: unreachable — remove or restore once image_resize_dims is updated
-                # height_og = cfg.data.image_resize_dims.height
-                # width_og = cfg.data.image_resize_dims.width
-                # loss_params_dict['unsupervised'][loss_name]['original_image_height'] = height_og
-                # loss_params_dict['unsupervised'][loss_name]['original_image_width'] = width_og
-                # height_ds = int(height_og // (2 ** cfg.data.get('downsample_factor', 2)))
-                # width_ds = int(width_og // (2 ** cfg.data.get('downsample_factor', 2)))
-                # loss_params_dict['unsupervised'][loss_name]['downsampled_image_height'] = (
-                #     height_ds
-                # )
-                # loss_params_dict['unsupervised'][loss_name]['downsampled_image_width'] = width_ds
-            elif loss_name == 'pca_multiview':
+            if loss_name == 'pca_multiview':
                 if cfg.data.get('view_names', None) and len(cfg.data.view_names) > 1:
                     num_keypoints = cfg.data.num_keypoints
                     num_views = len(cfg.data.view_names)
