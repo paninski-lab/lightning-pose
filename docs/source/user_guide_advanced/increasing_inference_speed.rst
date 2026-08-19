@@ -20,7 +20,8 @@ assuming you've already trained a model with ``litpose train``; see the
   is a one-line change and gives solid gains. ONNX Runtime requires an export step but is the
   simplest option to deploy without a full Python/PyTorch runtime. TensorRT requires the most
   setup (matching CUDA/TensorRT library versions) but wins across every model and GPU tested,
-  up to **8.32x** on the 6-view multiview transformer on an A100.
+  up to **2.93x** on the 6-view multi-view transformer on an L4 (TensorRT FP16 + DALI vs. eager
+  FP32).
 - **None of these techniques change the model's predictions.** We compared final keypoint
   predictions against the eager FP32 baseline on real video frames for all three methods --
   max deviation was under 0.08px in every case, consistent with ordinary floating-point kernel
@@ -38,65 +39,63 @@ Overview
 - **ONNX Runtime** -- export the model to the ONNX format, then run inference through
   ``onnxruntime``'s ``CUDAExecutionProvider``. Lets you deploy without a full PyTorch install.
   See :ref:`Usage: ONNX Runtime <usage_onnx_runtime>`.
-- **TensorRT** -- same ONNX export, but run through onnxruntime's ``TensorrtExecutionProvider``,
+- **TensorRT** -- same ONNX export, but run through ``onnxruntime``'s ``TensorrtExecutionProvider``,
   which builds an autotuned, hardware-specific inference engine. Most setup, biggest gains. See
   :ref:`Usage: TensorRT <usage_tensorrt>`.
 - **PyNvVideoCodec** -- hardware-accelerated video *decoding* via direct NVIDIA Video Codec SDK
   bindings, as an alternative to DALI's video reader. Independent of the model-processing
-  techniques above -- see :ref:`PyNvVideoCodec (Video Decoding) <pynvvc_decoding>`.
+  techniques above -- see :ref:`Usage: PyNvVideoCodec <pynvvc_decoding>`.
 - **These techniques are complementary and can be combined** -- e.g. torch.compile() or
   TensorRT for the model together with PyNvVideoCodec for decoding -- for the best end-to-end
-  throughput. Not yet benchmarked together on this page; a combined benchmark is planned for a
-  follow-up PR.
+  throughput. See the figure in the following section.
 
 Results
 =======
 
-Best-case speedup vs. eager FP32, FP16, isolated forward pass (10 warmup + 100 timed passes,
-largest batch size tested per model/GPU: batch 64 for ResNet50/ViT-S, batch 16 -- effective
-ViT batch 96 across 6 views -- for the multiview transformer):
+The figure below benchmarks every combination of model architecture, precision/runtime
+technique, video decoder, and GPU on real end-to-end ``litpose predict`` calls -- not an
+isolated forward pass. Each bar is the mean of 10 timed repeats (1 discarded warmup run);
+error bars show standard error of the mean.
 
-.. list-table::
-   :header-rows: 1
+.. figure:: https://i.imgur.com/INWfgoi.png
+   :alt: Grouped bar chart of end-to-end predict speed across models, techniques, and GPUs
 
-   * - Model / GPU
-     - Eager FP16
-     - torch.compile + FP16
-     - ONNX Runtime FP16
-     - TensorRT FP16
-   * - ResNet50 -- L4
-     - 1.96x
-     - 2.82x
-     - 1.98x
-     - **4.73x**
-   * - ResNet50 -- A100
-     - 1.57x
-     - 2.41x
-     - 1.48x
-     - **4.51x**
-   * - ViT-S (single-view) -- L4
-     - 3.17x
-     - 4.10x
-     - 2.36x
-     - **5.43x**
-   * - ViT-S (single-view) -- A100
-     - 4.69x
-     - 6.18x
-     - 3.13x
-     - **7.82x**
-   * - Multiview (6-view) -- L4
-     - 3.24x
-     - 4.14x
-     - 1.74x
-     - **5.27x**
-   * - Multiview (6-view) -- A100
-     - 4.56x
-     - 6.33x
-     - 3.12x
-     - **8.32x**
+   End-to-end ``litpose predict`` timing for ResNet50 (single-view), ViT-S (single-view), and
+   ViT-S (6-view multi-view). Each row shows 5 technique groups (eager FP32, eager FP16,
+   torch.compile + FP16, ONNX Runtime FP16, TensorRT FP16), each with 4 bars: L4 + DALI,
+   L4 + PyNvVideoCodec, A100 + DALI, A100 + PyNvVideoCodec.
 
-TensorRT wins in every case, sometimes by a wide margin -- particularly on the multiview model,
-where more compute per forward pass gives it more to work with.
+TensorRT FP16 wins overall across every model and GPU, with the largest end-to-end gain
+(2.93x) on the 6-view multi-view transformer on L4 -- notably larger than the same technique's
+gain on A100, since A100's much faster eager-FP32 baseline leaves less relative headroom to
+close. Decoder choice diverges sharply by model: for the single-view models, PyNvVideoCodec is
+often the *faster* decoder on A100 once any model-acceleration technique is applied (9-25%
+faster than DALI), though it trails DALI somewhat on L4. For the 6-view multi-view model, DALI
+wins outright across every technique and GPU -- confirming the multi-view PyNvVideoCodec
+slowdown documented below carries through to full end-to-end timing, and the gap is
+substantially larger on A100 (44-53% slower) than on L4 (6-19% slower).
+
+.. _caveats:
+
+Caveats
+=======
+
+- **cuDNN TF32 was left on for the ResNet50 eager-FP32 baseline** (matmul TF32 is off by
+  PyTorch's own default; ``predict_speed_matrix_benchmark.py`` sets neither flag explicitly,
+  so both follow PyTorch's defaults). This means the eager-FP32 numbers in the figure above
+  are not a fully strict FP32 baseline either -- doesn't change the direction of any result
+  here, since TensorRT/ONNX Runtime FP16 still win by a wide margin, but it does mean the
+  eager-FP32 bars are a few percent faster than a true FP32 baseline would be for
+  convolution-heavy models like ResNet50.
+- A single dynamic-shape TensorRT profile was used per (model, GPU, precision), covering the
+  full batch-size range tested, rather than a separate engine per exact batch size. This is
+  simpler but can leave some performance on the table at batch sizes far from the profile's
+  optimum -- for example, multi-view-FP32-on-L4 was roughly flat (0.91-1.07x) across batch sizes
+  rather than showing a clear win.
+- **ONNX Runtime FP16 + DALI is missing from the figure for the 6-view multi-view model on L4**,
+  likely due to a race condition between DALI's CUDA stream and the ONNX Runtime 
+  ``CUDAExecutionProvider`` on L4 GPUs -- 
+  see issue `483 <https://github.com/paninski-lab/lightning-pose/issues/483>`_.
 
 .. _accuracy_check:
 
@@ -417,12 +416,6 @@ PyNvVideoCodec (direct NVIDIA Video Codec SDK / NVDEC bindings) is an alternativ
 backend that talks to the hardware decoder more directly, skipping DALI's pipeline/graph
 framework overhead.
 
-On a T4, decoding the same video with PyNvVideoCodec measured **8.76x faster** than DALI's GPU
-reader (3735.7 vs 426.5 fps, 7 timed runs). This is a decode-throughput-only number, not an
-end-to-end ``litpose predict`` speedup -- how much it moves the needle overall depends on how
-much of your pipeline's time is spent decoding vs. running the model (see the data-loading
-caveat below).
-
 .. note::
 
    ``PreparePynvvc`` (the class backing ``--decoder pynvvc``) reads its window size from
@@ -471,74 +464,3 @@ usable on the current machine for the given video, falling back to DALI otherwis
 just a quieter/slower run. Explicitly requesting ``--decoder pynvvc`` on a machine where it
 isn't usable raises a clear error instead of silently falling back, so you know your run isn't
 using the backend you asked for.
-
-Decode speed: L4 and A100, single- and multi-view
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Decode-only throughput (no model), 7 timed runs each, 64-frame batches:
-
-.. list-table::
-   :header-rows: 1
-
-   * - Config
-     - GPU
-     - DALI
-     - PyNvVideoCodec
-     - Speedup
-   * - Single-view (``mirror-mouse-fused``, 1 view)
-     - L4
-     - 1516 fps
-     - 4442 fps
-     - **2.93x**
-   * - Single-view (``mirror-mouse-fused``, 1 view)
-     - A100
-     - 1113 fps
-     - 3249 fps
-     - **2.92x**
-   * - Multi-view (``fly-anipose``, 6 views)
-     - L4
-     - 5347 fps
-     - 3674 fps
-     - 0.69x (slower)
-   * - Multi-view (``fly-anipose``, 6 views)
-     - A100
-     - 4487 fps
-     - 2684 fps
-     - 0.60x (slower)
-
-.. note::
-
-   The multi-view result reverses direction from single-view: PyNvVideoCodec is
-   clearly faster for a single video, but *slower* than DALI once 6 views are
-   involved. The current implementation reads each view's decoder sequentially in
-   a loop (one ``get_batch_frames()`` call after another, not concurrently) --
-   which is also exactly what ``--decoder pynvvc`` does in production for
-   multiview, so this is a real characteristic of the current implementation, not
-   a benchmark artifact. DALI's pipeline appears to handle multiple video streams
-   more efficiently under its own internal scheduling. For single-view video,
-   ``--decoder pynvvc`` is a clear win; for multiview, it's currently a net loss on
-   raw decode speed even though the model's forward pass itself still speeds up
-   with reduced precision (see the multiview forward-pass numbers above) --
-   something worth revisiting if concurrent per-view decoding is added later.
-
-   Separately, single-view decode speedup is notably lower on L4/A100 here
-   (~2.9x) than the T4 number above (8.76x) -- not yet investigated further, but
-   worth keeping in mind that the T4 number shouldn't be assumed to generalize to
-   newer GPUs.
-
-.. _caveats:
-
-Caveats
-=======
-
-- **These are isolated forward-pass numbers, not end-to-end** ``litpose predict`` **timings.**
-  Real inference also includes data loading (DALI) and postprocessing. These forward-pass
-  gains aren't guaranteed to translate 1:1 into end-to-end speedups as-is. See :ref:`PyNvVideoCodec <pynvvc_decoding>` above for a way to speed up the data-loading half of that gap.
-- **cuDNN TF32 was left on for the ResNet50 eager-FP32 baseline** (only matmul TF32 was
-  disabled), so it's not a fully strict FP32 number -- doesn't change the direction of any
-  result here.
-- A single dynamic-shape TensorRT profile was used per (model, GPU, precision), covering the
-  full batch-size range tested, rather than a separate engine per exact batch size. This is
-  simpler but can leave some performance on the table at batch sizes far from the profile's
-  optimum -- for example, multiview-FP32-on-L4 was roughly flat (0.91-1.07x) across batch sizes
-  rather than showing a clear win.
