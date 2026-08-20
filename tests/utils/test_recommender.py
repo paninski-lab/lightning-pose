@@ -8,6 +8,7 @@ from PIL import Image
 from lightning_pose.utils.recommender import (
     DatasetAnalysis,
     GpuInfo,
+    _apply_min_iterations_floor,
     _derive_view_names,
     _recommend_resize_dim,
     _select_batch_size,
@@ -121,6 +122,28 @@ class TestSelectBatchSize:
         assert _select_batch_size(gpu, 256) == 4
 
 
+class TestApplyMinIterationsFloor:
+    """Test the function _apply_min_iterations_floor."""
+
+    def test_rounds_down_to_multiple_of_8(self):
+        # plenty of frames so the iteration-count loop doesn't also kick in
+        assert _apply_min_iterations_floor(12, n_frames=100_000) == 8
+
+    def test_already_a_multiple_of_8_is_unchanged_when_iterations_suffice(self):
+        assert _apply_min_iterations_floor(32, n_frames=100_000) == 32
+
+    def test_shrinks_further_when_too_few_iterations(self):
+        # n_train = 200*0.95 = 190; at bs=40, 190/40=4.75 < 10 -> shrink to 32: 190/32=5.9 < 10
+        # -> shrink to 24: 190/24=7.9 < 10 -> shrink to 16: 190/16=11.9 >= 10 -> stop
+        assert _apply_min_iterations_floor(40, n_frames=200) == 16
+
+    def test_never_goes_below_8(self):
+        assert _apply_min_iterations_floor(16, n_frames=1) == 8
+
+    def test_small_suggestion_floors_up_to_8(self):
+        assert _apply_min_iterations_floor(4, n_frames=100_000) == 8
+
+
 class TestAnalyzeDataset:
     """Test the function analyze_dataset."""
 
@@ -224,12 +247,17 @@ class TestRecommend:
         assert rec.optimizer == 'AdamW'
 
     def test_no_gpu_batch_size(self):
+        # _NO_GPU_BATCH_SIZE=4 is floored up to the _MIN_TRAIN_BATCH_SIZE=8 minimum
         rec = recommend(self._analysis(), gpu=None)
-        assert rec.train_batch_size == 4
+        assert rec.train_batch_size == 8
 
     def test_gpu_batch_size(self):
+        # n_frames large enough that the min-iterations floor doesn't kick in, so this
+        # isolates the gpu-vram x image-size table lookup (see TestApplyMinIterationsFloor
+        # for the floor behavior itself)
         gpu = GpuInfo(name='A100', vram_gb=40.0)
-        rec = recommend(self._analysis(image_height=150, image_width=200), gpu=gpu)
+        analysis = self._analysis(image_height=150, image_width=200, n_frames=3000)
+        rec = recommend(analysis, gpu=gpu)
         assert rec.train_batch_size == 232
 
     def test_max_epochs_default(self):
@@ -277,24 +305,32 @@ class TestRecommend:
         assert rec.losses_to_use == []
 
     def test_multiview_batch_size_divided_by_num_views(self):
+        # 232 // 2 views = 116, floored to a multiple of 8 -> 112
         gpu = GpuInfo(name='A100', vram_gb=40.0)
         analysis = self._analysis(
             view_names=['cam0', 'cam1'],
             csv_paths=[Path('/data/a.csv'), Path('/data/b.csv')],
             image_height=200,
             image_width=200,
+            n_frames=3000,
         )
         rec = recommend(analysis, gpu=gpu)
-        assert rec.train_batch_size == 232 // 2
+        assert rec.train_batch_size == 112
 
     def test_semi_supervised_halves_batch_and_sets_dali_sequence_length(self):
+        # 232 // 2 = 116 for both train_batch_size and dali_train_sequence_length, but the
+        # final min-iterations floor only touches train_batch_size (116 -> 112)
         gpu = GpuInfo(name='A100', vram_gb=40.0)
         analysis = self._analysis(
-            has_videos=True, n_frames=200, num_keypoints=5, image_height=200, image_width=200,
+            has_videos=True,
+            n_frames=1500,
+            num_keypoints=5,
+            image_height=200,
+            image_width=200,
         )
         rec = recommend(analysis, gpu=gpu)
-        assert rec.train_batch_size == 232 // 2
-        assert rec.dali_train_sequence_length == 232 // 2
+        assert rec.train_batch_size == 112
+        assert rec.dali_train_sequence_length == 116
 
     def test_fully_supervised_has_no_dali_sequence_length(self):
         rec = recommend(self._analysis(has_videos=False), gpu=None)
@@ -369,6 +405,13 @@ class TestBuildConfig:
         assert cfg.model.model_type == 'heatmap_multiview_transformer'
         assert cfg.training.imgaug_3d is True
         assert 'supervised_reprojection_heatmap_mse' in cfg.losses
+
+    def test_val_and_test_batch_size_are_2x_train_batch_size(self):
+        analysis = self._analysis()
+        rec = recommend(analysis, gpu=None)
+        cfg = build_config(rec, analysis)
+        assert cfg.training.val_batch_size == 2 * rec.train_batch_size
+        assert cfg.training.test_batch_size == 2 * rec.train_batch_size
 
     def test_semi_supervised_sets_dali_base_sequence_length(self):
         gpu = GpuInfo(name='A100', vram_gb=40.0)

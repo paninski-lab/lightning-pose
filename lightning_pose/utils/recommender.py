@@ -67,6 +67,19 @@ _CONTEXT_BATCH_SIZE_DIVISOR = 5
 _SEMI_SUPERVISED_BATCH_SIZE_DIVISOR = 2
 _CONTEXT_SEQUENCE_LENGTH_MULTIPLIER = 4
 
+# final guardrail applied to train_batch_size only (dali sequence lengths are left as
+# computed above): a large GPU can recommend a batch size that swallows an entire modest
+# dataset in 1-2 iterations/epoch, which starves the lr scheduler and per-step logging. round
+# down to a multiple of this...
+_BATCH_SIZE_ROUND_TO = 8
+# ...never go below this...
+_MIN_TRAIN_BATCH_SIZE = 8
+# ...and keep shrinking (by _BATCH_SIZE_ROUND_TO) until the train split clears this many
+# iterations/epoch, or until _MIN_TRAIN_BATCH_SIZE is hit
+_MIN_TRAIN_ITERS_PER_EPOCH = 10
+# train_prob default from config_default.yaml / config_default_multiview.yaml
+_DEFAULT_TRAIN_PROB = 0.95
+
 _DALI_DEFAULTS = {
     'base': {
         'train': {'sequence_length': 32},
@@ -333,6 +346,23 @@ def _select_batch_size(gpu: GpuInfo | None, resize_dim: int) -> int:
     return _NO_GPU_BATCH_SIZE
 
 
+def _apply_min_iterations_floor(train_batch_size: int, n_frames: int) -> int:
+    """round `train_batch_size` down to a multiple of `_BATCH_SIZE_ROUND_TO`, then keep
+    shrinking it by that amount (never below `_MIN_TRAIN_BATCH_SIZE`) until the labeled train
+    split clears `_MIN_TRAIN_ITERS_PER_EPOCH` iterations/epoch.
+    """
+    batch_size = max(
+        _MIN_TRAIN_BATCH_SIZE, (train_batch_size // _BATCH_SIZE_ROUND_TO) * _BATCH_SIZE_ROUND_TO
+    )
+    n_train_frames = n_frames * _DEFAULT_TRAIN_PROB
+    while (
+        batch_size > _MIN_TRAIN_BATCH_SIZE
+        and n_train_frames / batch_size < _MIN_TRAIN_ITERS_PER_EPOCH
+    ):
+        batch_size -= _BATCH_SIZE_ROUND_TO
+    return batch_size
+
+
 def recommend(
     analysis: DatasetAnalysis,
     gpu: GpuInfo | None,
@@ -472,6 +502,18 @@ def recommend(
         )
     else:
         train_batch_size = full_batch_size
+
+    # final guardrail: shrink train_batch_size (never dali_train_sequence_length) so a large
+    # GPU doesn't reduce a modest dataset to a couple of iterations per epoch
+    floored_batch_size = _apply_min_iterations_floor(train_batch_size, analysis.n_frames)
+    if floored_batch_size != train_batch_size:
+        batch_size_rationale += (
+            f'; rounded to a multiple of {_BATCH_SIZE_ROUND_TO} and reduced to '
+            f'{floored_batch_size} (minimum {_MIN_TRAIN_BATCH_SIZE}) so the '
+            f'{analysis.n_frames} labeled frames (x {_DEFAULT_TRAIN_PROB} train split) clear '
+            f'{_MIN_TRAIN_ITERS_PER_EPOCH} training iterations per epoch'
+        )
+    train_batch_size = floored_batch_size
     rationale['train_batch_size'] = batch_size_rationale
 
     optimizer = 'AdamW' if backbone.startswith('vit') else 'Adam'
@@ -534,9 +576,9 @@ def build_config(rec: ConfigRecommendation, analysis: DatasetAnalysis) -> DictCo
         'imgaug': rec.imgaug,
         'imgaug_hflip': False,
         'train_batch_size': rec.train_batch_size,
-        'val_batch_size': 32,
-        'test_batch_size': 32,
-        'train_prob': 0.95,
+        'val_batch_size': 2 * rec.train_batch_size,
+        'test_batch_size': 2 * rec.train_batch_size,
+        'train_prob': _DEFAULT_TRAIN_PROB,
         'val_prob': 0.05,
         'train_frames': 1,
         'num_gpus': 1,
