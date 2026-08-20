@@ -26,9 +26,15 @@ from lightning_pose.utils.io import parse_label_csv
 
 logger = logging.getLogger(__name__)
 
-# image_resize_dims must be a multiple of this value, capped at _RESIZE_CAP
-_RESIZE_MULTIPLE = 128
-_RESIZE_CAP = 384
+# per-side image_resize_dims recommendation: 256 by default; 128 for a short side (< the
+# small-side threshold); 384 only for a long side (> the large-side threshold) that also has
+# enough labeled frames (> the large-side frame threshold) to justify the extra resolution
+_RESIZE_SMALL = 128
+_RESIZE_DEFAULT = 256
+_RESIZE_LARGE = 384
+_RESIZE_SMALL_SIDE_THRESHOLD_PX = 192
+_RESIZE_LARGE_SIDE_THRESHOLD_PX = 1024
+_RESIZE_LARGE_SIDE_THRESHOLD_FRAMES = 500
 
 # train_batch_size lookup: {min gpu vram (gb): {max image size tier (px): batch size}}
 _BATCH_SIZE_TABLE = {
@@ -272,10 +278,21 @@ def get_gpu_info() -> GpuInfo | None:
     return GpuInfo(name=props.name, vram_gb=props.total_memory / (1024 ** 3))
 
 
-def _round_resize_dim(size: int) -> int:
-    """round a pixel dimension up to the nearest multiple of `_RESIZE_MULTIPLE`, capped"""
-    rounded = ((size + _RESIZE_MULTIPLE - 1) // _RESIZE_MULTIPLE) * _RESIZE_MULTIPLE
-    return max(_RESIZE_MULTIPLE, min(_RESIZE_CAP, rounded))
+def _recommend_resize_dim(side_px: int, n_frames: int) -> int:
+    """recommend a resize dimension for one side of the image
+
+    256 by default; 128 if the side is shorter than `_RESIZE_SMALL_SIDE_THRESHOLD_PX`; 384
+    only if the side is longer than `_RESIZE_LARGE_SIDE_THRESHOLD_PX` and there are more than
+    `_RESIZE_LARGE_SIDE_THRESHOLD_FRAMES` labeled frames to justify the extra resolution.
+    """
+    if side_px < _RESIZE_SMALL_SIDE_THRESHOLD_PX:
+        return _RESIZE_SMALL
+    if (
+        side_px > _RESIZE_LARGE_SIDE_THRESHOLD_PX
+        and n_frames > _RESIZE_LARGE_SIDE_THRESHOLD_FRAMES
+    ):
+        return _RESIZE_LARGE
+    return _RESIZE_DEFAULT
 
 
 def _select_batch_size(gpu: GpuInfo | None, resize_dim: int) -> int:
@@ -319,11 +336,14 @@ def recommend(
     backbone = 'vits_dino'
     rationale['backbone'] = 'vits_dino is a strong default across dataset sizes'
 
-    image_resize_height = _round_resize_dim(analysis.image_height)
-    image_resize_width = _round_resize_dim(analysis.image_width)
+    image_resize_height = _recommend_resize_dim(analysis.image_height, analysis.n_frames)
+    image_resize_width = _recommend_resize_dim(analysis.image_width, analysis.n_frames)
     rationale['image_resize_dims'] = (
-        f'source images are {analysis.image_width}x{analysis.image_height}px, rounded up to a '
-        f'multiple of {_RESIZE_MULTIPLE} and capped at {_RESIZE_CAP}'
+        f'source images are {analysis.image_width}x{analysis.image_height}px '
+        f'({analysis.n_frames} labeled frames); {_RESIZE_DEFAULT}px by default per side, '
+        f'{_RESIZE_SMALL}px for a side under {_RESIZE_SMALL_SIDE_THRESHOLD_PX}px, '
+        f'{_RESIZE_LARGE}px for a side over {_RESIZE_LARGE_SIDE_THRESHOLD_PX}px with more than '
+        f'{_RESIZE_LARGE_SIDE_THRESHOLD_FRAMES} labeled frames'
     )
 
     train_batch_size = _select_batch_size(gpu, max(image_resize_height, image_resize_width))

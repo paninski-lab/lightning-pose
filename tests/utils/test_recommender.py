@@ -9,7 +9,7 @@ from lightning_pose.utils.recommender import (
     DatasetAnalysis,
     GpuInfo,
     _derive_view_names,
-    _round_resize_dim,
+    _recommend_resize_dim,
     _select_batch_size,
     analyze_dataset,
     build_config,
@@ -76,20 +76,26 @@ class TestDeriveViewNames:
         assert _derive_view_names(paths) == ['top', 'side']
 
 
-class TestRoundResizeDim:
-    """Test the function _round_resize_dim."""
+class TestRecommendResizeDim:
+    """Test the function _recommend_resize_dim."""
 
-    def test_rounds_up_to_multiple_of_128(self):
-        assert _round_resize_dim(200) == 256
+    def test_default_is_256(self):
+        assert _recommend_resize_dim(500, n_frames=10) == 256
 
-    def test_exact_multiple_unchanged(self):
-        assert _round_resize_dim(256) == 256
+    def test_short_side_is_128(self):
+        assert _recommend_resize_dim(191, n_frames=10) == 128
 
-    def test_caps_at_384(self):
-        assert _round_resize_dim(1000) == 384
+    def test_at_small_threshold_is_default(self):
+        assert _recommend_resize_dim(192, n_frames=10) == 256
 
-    def test_floors_at_128(self):
-        assert _round_resize_dim(50) == 128
+    def test_long_side_with_enough_frames_is_384(self):
+        assert _recommend_resize_dim(1025, n_frames=501) == 384
+
+    def test_long_side_without_enough_frames_falls_back_to_default(self):
+        assert _recommend_resize_dim(1025, n_frames=500) == 256
+
+    def test_at_large_threshold_is_default(self):
+        assert _recommend_resize_dim(1024, n_frames=1000) == 256
 
 
 class TestSelectBatchSize:
