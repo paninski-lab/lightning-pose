@@ -106,15 +106,15 @@ class TestSelectBatchSize:
 
     def test_24gb_gpu_256px(self):
         gpu = GpuInfo(name='A100', vram_gb=40.0)
-        assert _select_batch_size(gpu, 256) == 32
+        assert _select_batch_size(gpu, 256) == 232
 
     def test_24gb_gpu_384px(self):
         gpu = GpuInfo(name='A100', vram_gb=24.0)
-        assert _select_batch_size(gpu, 384) == 16
+        assert _select_batch_size(gpu, 384) == 100
 
     def test_8gb_gpu_384px(self):
         gpu = GpuInfo(name='RTX 2070', vram_gb=8.0)
-        assert _select_batch_size(gpu, 384) == 4
+        assert _select_batch_size(gpu, 384) == 32
 
     def test_below_smallest_tier_falls_back_to_default(self):
         gpu = GpuInfo(name='GTX 1050', vram_gb=4.0)
@@ -230,7 +230,7 @@ class TestRecommend:
     def test_gpu_batch_size(self):
         gpu = GpuInfo(name='A100', vram_gb=40.0)
         rec = recommend(self._analysis(image_height=150, image_width=200), gpu=gpu)
-        assert rec.train_batch_size == 32
+        assert rec.train_batch_size == 232
 
     def test_max_epochs_default(self):
         rec = recommend(self._analysis(n_frames=200), gpu=None)
@@ -275,6 +275,37 @@ class TestRecommend:
         )
         rec = recommend(analysis, gpu=None)
         assert rec.losses_to_use == []
+
+    def test_multiview_batch_size_divided_by_num_views(self):
+        gpu = GpuInfo(name='A100', vram_gb=40.0)
+        analysis = self._analysis(
+            view_names=['cam0', 'cam1'],
+            csv_paths=[Path('/data/a.csv'), Path('/data/b.csv')],
+            image_height=200,
+            image_width=200,
+        )
+        rec = recommend(analysis, gpu=gpu)
+        assert rec.train_batch_size == 232 // 2
+
+    def test_semi_supervised_halves_batch_and_sets_dali_sequence_length(self):
+        gpu = GpuInfo(name='A100', vram_gb=40.0)
+        analysis = self._analysis(
+            has_videos=True, n_frames=200, num_keypoints=5, image_height=200, image_width=200,
+        )
+        rec = recommend(analysis, gpu=gpu)
+        assert rec.train_batch_size == 232 // 2
+        assert rec.dali_train_sequence_length == 232 // 2
+
+    def test_fully_supervised_has_no_dali_sequence_length(self):
+        rec = recommend(self._analysis(has_videos=False), gpu=None)
+        assert rec.dali_train_sequence_length is None
+
+    def test_square_resize_dims_for_vit_backbone(self):
+        # height rounds to 128 (<192), width rounds to 256 (192-1024); vits_dino requires
+        # square input, so both should end up at the larger value
+        analysis = self._analysis(image_height=150, image_width=200)
+        rec = recommend(analysis, gpu=None)
+        assert rec.image_resize_height == rec.image_resize_width == 256
 
     def test_rationale_covers_all_fields(self):
         rec = recommend(self._analysis(), gpu=None)
@@ -338,6 +369,21 @@ class TestBuildConfig:
         assert cfg.model.model_type == 'heatmap_multiview_transformer'
         assert cfg.training.imgaug_3d is True
         assert 'supervised_reprojection_heatmap_mse' in cfg.losses
+
+    def test_semi_supervised_sets_dali_base_sequence_length(self):
+        gpu = GpuInfo(name='A100', vram_gb=40.0)
+        analysis = self._analysis(has_videos=True, n_frames=200, num_keypoints=2)
+        rec = recommend(analysis, gpu=gpu)
+        cfg = build_config(rec, analysis)
+        assert cfg.dali.base.train.sequence_length == rec.dali_train_sequence_length
+
+    def test_fully_supervised_leaves_dali_defaults_untouched(self):
+        rec = recommend(self._analysis(has_videos=False), gpu=None)
+        cfg = build_config(rec, analysis=self._analysis(has_videos=False))
+        assert cfg.dali.base.train.sequence_length == 32
+        # module-level default must not have been mutated by a previous build_config() call
+        from lightning_pose.utils.recommender import _DALI_DEFAULTS
+        assert _DALI_DEFAULTS['base']['train']['sequence_length'] == 32
 
 
 class TestFormatReport:

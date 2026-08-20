@@ -13,6 +13,7 @@ complete config YAML or a printable report, respectively.
 
 from __future__ import annotations
 
+import copy
 import logging
 import re
 from dataclasses import dataclass, field
@@ -36,13 +37,35 @@ _RESIZE_SMALL_SIDE_THRESHOLD_PX = 192
 _RESIZE_LARGE_SIDE_THRESHOLD_PX = 1024
 _RESIZE_LARGE_SIDE_THRESHOLD_FRAMES = 500
 
-# train_batch_size lookup: {min gpu vram (gb): {max image size tier (px): batch size}}
+# train_batch_size lookup for the base (single-view, fully-supervised, non-context) vits_dino
+# heatmap model: {min gpu vram (gb): {max image size tier (px): batch size}}. measured
+# empirically (not guessed): forward + backward + AdamW optimizer.step() peak memory was
+# swept over several batch sizes at each resolution with the backbone fully unfrozen (the
+# worst-case memory state, reached once training passes `unfreezing_epoch`), fit to a linear
+# model in batch size (R^2 fit residual < 1% at every point), then extrapolated to each vram
+# budget at a 90% safety margin and rounded down to a multiple of 4. context and multiview
+# models divide this base number further -- see `_CONTEXT_BATCH_SIZE_DIVISOR` and the
+# per-num-views division in `recommend()`.
 _BATCH_SIZE_TABLE = {
-    24: {256: 32, 384: 16},
-    16: {256: 16, 384: 8},
-    8: {256: 8, 384: 4},
+    24: {256: 232, 384: 100},
+    16: {256: 156, 384: 68},
+    8: {256: 76, 384: 32},
 }
 _NO_GPU_BATCH_SIZE = 4
+
+# a context (temporal, e.g. heatmap_mhcrnn) model stacks 5 frames per sample, which multiplies
+# per-sample activation memory roughly 5x relative to the base model (fixed weight memory
+# aside); divide the base train_batch_size recommendation by this factor for context models
+_CONTEXT_BATCH_SIZE_DIVISOR = 5
+
+# semi-supervised training (temporal/pca losses over unlabeled video) loads a DALI batch of
+# unlabeled frames alongside each labeled batch; halve the labeled train_batch_size to make
+# room for it, then use that halved number as the unlabeled dali sequence length. context
+# models process their whole unlabeled sequence window in one pass rather than a 5x-stacked
+# per-sample volume, so their memory scales ~1x per frame instead of ~5x and can afford a
+# longer sequence -- `_CONTEXT_SEQUENCE_LENGTH_MULTIPLIER` widens it accordingly
+_SEMI_SUPERVISED_BATCH_SIZE_DIVISOR = 2
+_CONTEXT_SEQUENCE_LENGTH_MULTIPLIER = 4
 
 _DALI_DEFAULTS = {
     'base': {
@@ -146,6 +169,9 @@ class ConfigRecommendation:
         optimizer: `Adam` | `AdamW`
         imgaug: `dlc` | `dlc-top-down`
         losses_to_use: recommended `model.losses_to_use`
+        dali_train_sequence_length: recommended unlabeled-frame batch size for semi-supervised
+            training (`dali.base.train.sequence_length`, or `dali.context.train.batch_size`
+            for a context model), or `None` when `losses_to_use` is empty
         rationale: field name -> one-line explanation of the recommendation
     """
 
@@ -158,6 +184,7 @@ class ConfigRecommendation:
     optimizer: str
     imgaug: str
     losses_to_use: list[str]
+    dali_train_sequence_length: int | None = None
     rationale: dict[str, str] = field(default_factory=dict)
 
 
@@ -338,21 +365,49 @@ def recommend(
 
     image_resize_height = _recommend_resize_dim(analysis.image_height, analysis.n_frames)
     image_resize_width = _recommend_resize_dim(analysis.image_width, analysis.n_frames)
-    rationale['image_resize_dims'] = (
+    resize_rationale = (
         f'source images are {analysis.image_width}x{analysis.image_height}px '
         f'({analysis.n_frames} labeled frames); {_RESIZE_DEFAULT}px by default per side, '
         f'{_RESIZE_SMALL}px for a side under {_RESIZE_SMALL_SIDE_THRESHOLD_PX}px, '
         f'{_RESIZE_LARGE}px for a side over {_RESIZE_LARGE_SIDE_THRESHOLD_PX}px with more than '
         f'{_RESIZE_LARGE_SIDE_THRESHOLD_FRAMES} labeled frames'
     )
+    if backbone.startswith('vit') and image_resize_height != image_resize_width:
+        # ViT backbones require square input; the larger of the two independently-computed
+        # sides wins so neither side ends up smaller than what its own rule recommended
+        square_dim = max(image_resize_height, image_resize_width)
+        resize_rationale += (
+            f'; height/width computed independently gave {image_resize_width}x'
+            f'{image_resize_height}, but vits_dino requires a square input, so both are set '
+            f'to {square_dim}'
+        )
+        image_resize_height = square_dim
+        image_resize_width = square_dim
+    rationale['image_resize_dims'] = resize_rationale
 
-    train_batch_size = _select_batch_size(gpu, max(image_resize_height, image_resize_width))
-    rationale['train_batch_size'] = (
-        f'sized for {gpu.name} ({gpu.vram_gb:.1f} GB) at '
+    is_context = model_type == 'heatmap_mhcrnn'  # never auto-recommended today, kept for
+    # correctness in case a caller overrides model_type before re-deriving batch size
+
+    full_batch_size = _select_batch_size(gpu, max(image_resize_height, image_resize_width))
+    batch_size_rationale = (
+        f'base vits_dino model sized for {gpu.name} ({gpu.vram_gb:.1f} GB) at '
         f'{image_resize_width}x{image_resize_height}px'
         if gpu is not None
         else 'no GPU detected, using a conservative default'
     )
+    if is_context:
+        full_batch_size = max(1, full_batch_size // _CONTEXT_BATCH_SIZE_DIVISOR)
+        batch_size_rationale += (
+            f'; divided by {_CONTEXT_BATCH_SIZE_DIVISOR} for the context model, whose '
+            'per-sample activation memory is roughly that much higher than the base model'
+        )
+    elif is_multiview:
+        num_views = len(analysis.view_names)
+        full_batch_size = max(1, full_batch_size // num_views)
+        batch_size_rationale += (
+            f'; divided by {num_views} views, since each training step pushes '
+            'batch_size * num_views images through the backbone'
+        )
 
     imgaug = 'dlc-top-down' if top_down_freely_moving else 'dlc'
     rationale['imgaug'] = (
@@ -403,6 +458,22 @@ def recommend(
     else:
         rationale['losses_to_use'] = 'no unlabeled videos found -> fully supervised training'
 
+    dali_train_sequence_length: int | None = None
+    if losses_to_use:
+        train_batch_size = max(1, full_batch_size // _SEMI_SUPERVISED_BATCH_SIZE_DIVISOR)
+        if is_context:
+            dali_train_sequence_length = _CONTEXT_SEQUENCE_LENGTH_MULTIPLIER * train_batch_size
+        else:
+            dali_train_sequence_length = train_batch_size
+        batch_size_rationale += (
+            f'; halved to {train_batch_size} to leave room for the unlabeled DALI batch '
+            'loaded alongside it each training step (dali_train_sequence_length='
+            f'{dali_train_sequence_length})'
+        )
+    else:
+        train_batch_size = full_batch_size
+    rationale['train_batch_size'] = batch_size_rationale
+
     optimizer = 'AdamW' if backbone.startswith('vit') else 'Adam'
     rationale['optimizer'] = (
         'AdamW is recommended for ViT backbones'
@@ -420,6 +491,7 @@ def recommend(
         optimizer=optimizer,
         imgaug=imgaug,
         losses_to_use=losses_to_use,
+        dali_train_sequence_length=dali_train_sequence_length,
         rationale=rationale,
     )
 
@@ -508,6 +580,13 @@ def build_config(rec: ConfigRecommendation, analysis: DatasetAnalysis) -> DictCo
     if is_multiview:
         losses['supervised_reprojection_heatmap_mse'] = {'log_weight': 3.0}
 
+    dali_cfg = copy.deepcopy(_DALI_DEFAULTS)
+    if rec.dali_train_sequence_length is not None:
+        if rec.model_type == 'heatmap_mhcrnn':
+            dali_cfg['context']['train']['batch_size'] = rec.dali_train_sequence_length
+        else:
+            dali_cfg['base']['train']['sequence_length'] = rec.dali_train_sequence_length
+
     eval_cfg = {
         'predict_vids_after_training': True,
         'test_videos_directory': '${data.video_dir}',
@@ -520,7 +599,7 @@ def build_config(rec: ConfigRecommendation, analysis: DatasetAnalysis) -> DictCo
         'data': data,
         'training': training,
         'model': model,
-        'dali': _DALI_DEFAULTS,
+        'dali': dali_cfg,
         'losses': losses,
         'eval': eval_cfg,
         'callbacks': _CALLBACKS_DEFAULTS,
@@ -576,5 +655,7 @@ def format_report(
         lines.append(f'  {name}: {value}')
         if name in rec.rationale:
             lines.append(f'    -> {rec.rationale[name]}')
+    if rec.dali_train_sequence_length is not None:
+        lines.append(f'  dali_train_sequence_length: {rec.dali_train_sequence_length}')
 
     return '\n'.join(lines)
