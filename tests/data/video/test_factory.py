@@ -8,6 +8,23 @@ import pytest
 from lightning_pose.data.video.factory import build_video_reader
 
 
+def _fake_dali_module(prepare_dali: MagicMock) -> MagicMock:
+    """A stand-in for the real lightning_pose.data.video.dali module.
+
+    Installed into sys.modules (rather than patching PrepareDALI via
+    unittest.mock.patch's dotted-path target) so these tests don't require
+    nvidia-dali to actually be importable in the test environment --
+    unittest.mock.patch('lightning_pose.data.video.dali.PrepareDALI', ...) has to
+    import the real module to resolve that target, which fails outright on a
+    machine without nvidia-dali installed (its own top-level import re-raises).
+    Mirrors the sys.modules-substitution trick test_pynvvc.py's TestIsPynvvcAvailable
+    already uses for PyNvVideoCodec, for the same reason.
+    """
+    fake_module = MagicMock()
+    fake_module.PrepareDALI = prepare_dali
+    return fake_module
+
+
 class TestBuildVideoReader:
     """Test the build_video_reader function.
 
@@ -39,9 +56,10 @@ class TestBuildVideoReader:
 
     def test_auto_select_falls_back_to_dali_when_pynvvc_unavailable(self, dali_config):
         mock_prep = MagicMock()
+        fake_module = {'lightning_pose.data.video.dali': _fake_dali_module(mock_prep)}
         with (
             patch('lightning_pose.data.video.pynvvc.is_pynvvc_available', return_value=False),
-            patch('lightning_pose.data.video.dali.PrepareDALI', mock_prep),
+            patch.dict(sys.modules, fake_module),
         ):
             build_video_reader(
                 None, '/fake/video.mp4', 'base', dali_config, ['/fake/video.mp4'], [64, 64], None,
@@ -74,7 +92,8 @@ class TestBuildVideoReader:
 
     def test_explicit_dali_succeeds_when_installed(self, dali_config):
         mock_prep = MagicMock()
-        with patch('lightning_pose.data.video.dali.PrepareDALI', mock_prep):
+        fake_module = {'lightning_pose.data.video.dali': _fake_dali_module(mock_prep)}
+        with patch.dict(sys.modules, fake_module):
             build_video_reader(
                 'dali', '/fake/video.mp4', 'base', dali_config,
                 ['/fake/video.mp4'], [64, 64], None,
