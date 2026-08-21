@@ -34,6 +34,16 @@ logger = logging.getLogger(__name__)
 # look like a multi-view one
 _IGNORED_CSV_SUFFIXES = ('_full', '_new', '_test')
 
+# App-managed project config (see docs/source/directory_structure_reference/
+# project_yaml_file_format.rst), stored at `DATA_DIR/project.yaml`. When present, its
+# `view_names` key is the source of truth for single- vs multi-view -- see
+# `_read_project_yaml_view_names`.
+_PROJECT_YAML_FILENAME = 'project.yaml'
+# label CSVs written by the App follow `<LabelFileKey>_<View>.csv`, with LabelFileKey
+# "CollectedData" identifying the default training label file (just "CollectedData.csv",
+# no view suffix, for a single-view project)
+_DEFAULT_LABEL_FILE_KEY = 'CollectedData'
+
 # per-side image_resize_dims recommendation: 256 by default; 128 for a short side (< the
 # small-side threshold); 384 only for a long side (> the large-side threshold) that also has
 # enough labeled frames (> the large-side frame threshold) to justify the extra resolution
@@ -245,46 +255,120 @@ def _derive_view_names(csv_paths: list[Path]) -> list[str]:
     return view_names
 
 
+def _read_project_yaml_view_names(data_dir: Path) -> list[str] | None:
+    """read `view_names` from `data_dir/project.yaml`, the App-managed project config, if
+    present.
+
+    Returns `None` if the file doesn't exist, can't be parsed, or lacks a `view_names` key --
+    in each of these cases the caller should fall back to inspecting the label CSVs directly.
+    Otherwise returns the (possibly empty) list of view name strings. Per the App's schema,
+    `view_names: []` means single-view and is authoritative even if multiple label CSVs sit
+    in `data_dir` (e.g. an old `CollectedData_v1.csv` kept alongside the current
+    `CollectedData.csv`) -- this is the whole reason to prefer `project.yaml` when it exists.
+    """
+    project_yaml_path = data_dir / _PROJECT_YAML_FILENAME
+    if not project_yaml_path.is_file():
+        return None
+    try:
+        project_cfg = OmegaConf.load(project_yaml_path)
+    except Exception as e:
+        logger.warning(f'failed to parse {project_yaml_path}, ignoring it: {e}')
+        return None
+    if 'view_names' not in project_cfg:
+        logger.warning(f'{project_yaml_path} has no view_names key, ignoring it')
+        return None
+    view_names = OmegaConf.to_object(project_cfg.view_names)
+    if not isinstance(view_names, list):
+        logger.warning(
+            f'{project_yaml_path} view_names is not a list ({view_names!r}), ignoring it'
+        )
+        return None
+    return [str(v) for v in view_names]
+
+
+def _discover_csv_paths(data_dir: Path) -> tuple[list[Path], list[str] | None]:
+    """discover label CSV(s) for a dataset directory and determine single- vs multi-view.
+
+    `data_dir/project.yaml`, when present and well-formed, is the source of truth (see
+    :func:`_read_project_yaml_view_names`): view names come from it directly, and the
+    corresponding `CollectedData[_<view>].csv` file(s) are required to exist. Without a usable
+    `project.yaml`, falls back to globbing `*.csv`, dropping auxiliary label files (see
+    `_IGNORED_CSV_SUFFIXES`), and deriving view names from filenames when more than one CSV
+    remains (see :func:`_derive_view_names`).
+
+    Raises:
+        FileNotFoundError: if `project.yaml` names a view (or the single-view default) whose
+            label CSV is missing from `data_dir`.
+    """
+    project_yaml_path = data_dir / _PROJECT_YAML_FILENAME
+    project_view_names = _read_project_yaml_view_names(data_dir)
+    if project_view_names is not None:
+        if not project_view_names:
+            csv_path = data_dir / f'{_DEFAULT_LABEL_FILE_KEY}.csv'
+            if not csv_path.exists():
+                raise FileNotFoundError(
+                    f'{project_yaml_path} declares a single-view project (view_names: []) '
+                    f'but {csv_path.name} was not found in {data_dir}'
+                )
+            return [csv_path], None
+
+        csv_paths = [
+            data_dir / f'{_DEFAULT_LABEL_FILE_KEY}_{view}.csv' for view in project_view_names
+        ]
+        missing = [p.name for p in csv_paths if not p.exists()]
+        if missing:
+            raise FileNotFoundError(
+                f'{project_yaml_path} declares view_names={project_view_names!r} but the '
+                f'following label CSVs are missing from {data_dir}: {", ".join(missing)}'
+            )
+        return csv_paths, list(project_view_names)
+
+    all_csv_paths = sorted(data_dir.glob('*.csv'))
+    csv_paths = [p for p in all_csv_paths if not p.stem.endswith(_IGNORED_CSV_SUFFIXES)]
+    ignored = [p for p in all_csv_paths if p not in csv_paths]
+    if ignored:
+        logger.info(
+            f'ignoring auxiliary label CSVs (suffix in {_IGNORED_CSV_SUFFIXES}): '
+            f'{", ".join(p.name for p in ignored)}'
+        )
+    view_names = _derive_view_names(csv_paths) if len(csv_paths) > 1 else None
+    return csv_paths, view_names
+
+
 def analyze_dataset(dataset_path: Path) -> DatasetAnalysis:
     """Analyze a lightning-pose dataset directory or CSV file.
 
     Args:
-        dataset_path: a directory containing one or more DLC-format label CSVs (auto-discovered,
-            multiple CSVs are treated as a multi-view dataset), or a single label CSV file.
-            CSVs whose stem ends in `_full`, `_new`, or `_test` (see `_IGNORED_CSV_SUFFIXES`)
-            are treated as auxiliary label files, not distinct views, and are ignored during
-            directory auto-discovery (a directly-passed CSV file is never ignored).
+        dataset_path: a directory or a single label CSV file. For a directory, `project.yaml`
+            (see :func:`_discover_csv_paths`) is checked first and, when present, is the
+            source of truth for single- vs multi-view; otherwise CSVs are auto-discovered by
+            globbing, multiple CSVs are treated as a multi-view dataset, and CSVs whose stem
+            ends in `_full`, `_new`, or `_test` (see `_IGNORED_CSV_SUFFIXES`) are treated as
+            auxiliary label files, not distinct views. A directly-passed CSV file is always
+            used as-is (single-view, `project.yaml` and auxiliary-suffix filtering don't
+            apply).
 
     Returns:
         :class:`DatasetAnalysis` summarizing the dataset.
 
     Raises:
-        FileNotFoundError: if `dataset_path` does not exist, contains no CSV files, or the
-            first labeled image referenced by the CSV cannot be found.
+        FileNotFoundError: if `dataset_path` does not exist, contains no CSV files, a
+            `project.yaml`-declared view's label CSV is missing, or the first labeled image
+            referenced by the CSV cannot be found.
     """
     dataset_path = Path(dataset_path)
     if dataset_path.is_file():
         csv_paths = [dataset_path]
+        view_names: list[str] | None = None
         data_dir = dataset_path.parent
     elif dataset_path.is_dir():
-        all_csv_paths = sorted(dataset_path.glob('*.csv'))
-        csv_paths = [
-            p for p in all_csv_paths if not p.stem.endswith(_IGNORED_CSV_SUFFIXES)
-        ]
-        ignored = [p for p in all_csv_paths if p not in csv_paths]
-        if ignored:
-            logger.info(
-                f'ignoring auxiliary label CSVs (suffix in {_IGNORED_CSV_SUFFIXES}): '
-                f'{", ".join(p.name for p in ignored)}'
-            )
         data_dir = dataset_path
+        csv_paths, view_names = _discover_csv_paths(data_dir)
     else:
         raise FileNotFoundError(f'dataset path does not exist: {dataset_path}')
 
     if not csv_paths:
         raise FileNotFoundError(f'no label CSV files found in {dataset_path}')
-
-    view_names = _derive_view_names(csv_paths) if len(csv_paths) > 1 else None
 
     labeled_data = [parse_label_csv(str(p)) for p in csv_paths]
     keypoint_names = labeled_data[0].keypoint_names

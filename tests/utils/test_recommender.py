@@ -231,6 +231,92 @@ class TestAnalyzeDataset:
         with pytest.raises(FileNotFoundError, match='no label CSV files'):
             analyze_dataset(data_dir)
 
+    def test_project_yaml_forces_single_view_despite_extra_csv(self, tmp_path):
+        # a kept-aside CollectedData_v1.csv isn't one of the ignored auxiliary suffixes, so
+        # without project.yaml this directory would look multi-view; project.yaml (view_names:
+        # []) must override that and pin the analysis to CollectedData.csv only
+        data_dir = _make_dataset(tmp_path, n_frames=5, n_keypoints=2)
+        keypoint_names = [f'kp{i}' for i in range(2)]
+        image_names = [f'labeled-data/sess0/img{i:03d}.png' for i in range(5)]
+        _write_label_csv(data_dir / 'CollectedData_v1.csv', keypoint_names, image_names)
+        (data_dir / 'project.yaml').write_text('view_names: []\nkeypoint_names: [kp0, kp1]\n')
+
+        analysis = analyze_dataset(data_dir)
+        assert analysis.view_names is None
+        assert analysis.csv_paths == [data_dir / 'CollectedData.csv']
+
+    def test_project_yaml_multiview_source_of_truth(self, tmp_path):
+        data_dir = tmp_path / 'dataset'
+        (data_dir / 'labeled-data' / 'sess0').mkdir(parents=True)
+        keypoint_names = ['kp0', 'kp1']
+        image_names = []
+        for i in range(4):
+            rel_path = f'labeled-data/sess0/img{i:03d}.png'
+            image_names.append(rel_path)
+            Image.new('RGB', (128, 128)).save(data_dir / rel_path)
+        _write_label_csv(data_dir / 'CollectedData_cam0.csv', keypoint_names, image_names)
+        _write_label_csv(data_dir / 'CollectedData_cam1.csv', keypoint_names, image_names)
+        # a stray extra csv that glob-based discovery would otherwise pick up
+        _write_label_csv(data_dir / 'CollectedData_v1.csv', keypoint_names, image_names)
+        (data_dir / 'project.yaml').write_text('view_names: [cam0, cam1]\n')
+
+        analysis = analyze_dataset(data_dir)
+        assert analysis.view_names == ['cam0', 'cam1']
+        assert analysis.csv_paths == [
+            data_dir / 'CollectedData_cam0.csv', data_dir / 'CollectedData_cam1.csv',
+        ]
+
+    def test_project_yaml_multiview_missing_csv_raises(self, tmp_path):
+        data_dir = tmp_path / 'dataset'
+        data_dir.mkdir()
+        _write_label_csv(data_dir / 'CollectedData_cam0.csv', ['kp0'], ['img0.png'])
+        (data_dir / 'project.yaml').write_text('view_names: [cam0, cam1]\n')
+
+        with pytest.raises(FileNotFoundError, match='CollectedData_cam1.csv'):
+            analyze_dataset(data_dir)
+
+    def test_project_yaml_single_view_missing_default_csv_raises(self, tmp_path):
+        data_dir = tmp_path / 'dataset'
+        data_dir.mkdir()
+        _write_label_csv(data_dir / 'CollectedData_v1.csv', ['kp0'], ['img0.png'])
+        (data_dir / 'project.yaml').write_text('view_names: []\n')
+
+        with pytest.raises(FileNotFoundError, match='CollectedData.csv'):
+            analyze_dataset(data_dir)
+
+    def test_project_yaml_without_view_names_key_falls_back(self, tmp_path):
+        data_dir = _make_dataset(tmp_path, n_frames=5, n_keypoints=2)
+        (data_dir / 'project.yaml').write_text('keypoint_names: [kp0, kp1]\n')
+
+        analysis = analyze_dataset(data_dir)
+        assert analysis.view_names is None
+        assert analysis.csv_paths == [data_dir / 'CollectedData.csv']
+
+    def test_project_yaml_malformed_falls_back(self, tmp_path):
+        data_dir = _make_dataset(tmp_path, n_frames=5, n_keypoints=2)
+        (data_dir / 'project.yaml').write_text(': not valid yaml : [\n')
+
+        analysis = analyze_dataset(data_dir)
+        assert analysis.view_names is None
+        assert analysis.csv_paths == [data_dir / 'CollectedData.csv']
+
+    def test_directly_passed_csv_ignores_project_yaml(self, tmp_path):
+        data_dir = tmp_path / 'dataset'
+        (data_dir / 'labeled-data' / 'sess0').mkdir(parents=True)
+        keypoint_names = ['kp0', 'kp1']
+        image_names = []
+        for i in range(4):
+            rel_path = f'labeled-data/sess0/img{i:03d}.png'
+            image_names.append(rel_path)
+            Image.new('RGB', (128, 128)).save(data_dir / rel_path)
+        _write_label_csv(data_dir / 'CollectedData_cam0.csv', keypoint_names, image_names)
+        _write_label_csv(data_dir / 'CollectedData_cam1.csv', keypoint_names, image_names)
+        (data_dir / 'project.yaml').write_text('view_names: [cam0, cam1]\n')
+
+        analysis = analyze_dataset(data_dir / 'CollectedData_cam0.csv')
+        assert analysis.view_names is None
+        assert analysis.csv_paths == [data_dir / 'CollectedData_cam0.csv']
+
     def test_missing_path_raises(self, tmp_path):
         with pytest.raises(FileNotFoundError):
             analyze_dataset(tmp_path / 'does_not_exist')
