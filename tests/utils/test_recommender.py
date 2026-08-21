@@ -187,6 +187,50 @@ class TestAnalyzeDataset:
         assert analysis.view_names == ['cam0', 'cam1']
         assert len(analysis.csv_paths) == 2
 
+    def test_ignores_auxiliary_csv_suffixes_in_single_view_dir(self, tmp_path):
+        # a lone CollectedData.csv plus _full/_new/_test siblings must stay single-view,
+        # not get mistaken for a 4-view dataset
+        data_dir = _make_dataset(tmp_path, n_frames=10, n_keypoints=3)
+        keypoint_names = [f'kp{i}' for i in range(3)]
+        image_names = [f'labeled-data/sess0/img{i:03d}.png' for i in range(10)]
+        for suffix in ('_full', '_new', '_test'):
+            _write_label_csv(
+                data_dir / f'CollectedData{suffix}.csv', keypoint_names, image_names
+            )
+
+        analysis = analyze_dataset(data_dir)
+        assert analysis.view_names is None
+        assert analysis.csv_paths == [data_dir / 'CollectedData.csv']
+
+    def test_ignores_auxiliary_csv_suffixes_in_multiview_dir(self, tmp_path):
+        data_dir = tmp_path / 'dataset'
+        (data_dir / 'labeled-data' / 'sess0').mkdir(parents=True)
+        keypoint_names = ['kp0', 'kp1']
+        image_names = []
+        for i in range(4):
+            rel_path = f'labeled-data/sess0/img{i:03d}.png'
+            image_names.append(rel_path)
+            Image.new('RGB', (128, 128)).save(data_dir / rel_path)
+        _write_label_csv(data_dir / 'CollectedData_cam0.csv', keypoint_names, image_names)
+        _write_label_csv(data_dir / 'CollectedData_cam1.csv', keypoint_names, image_names)
+        _write_label_csv(data_dir / 'CollectedData_cam0_new.csv', keypoint_names, image_names)
+
+        analysis = analyze_dataset(data_dir)
+        assert analysis.view_names == ['cam0', 'cam1']
+        assert len(analysis.csv_paths) == 2
+
+    def test_directly_passed_ignored_suffix_csv_is_not_ignored(self, tmp_path):
+        data_dir = _make_dataset(tmp_path, csv_name='CollectedData_new.csv')
+        analysis = analyze_dataset(data_dir / 'CollectedData_new.csv')
+        assert analysis.csv_paths == [data_dir / 'CollectedData_new.csv']
+
+    def test_all_csvs_ignored_raises(self, tmp_path):
+        data_dir = tmp_path / 'dataset'
+        data_dir.mkdir()
+        _write_label_csv(data_dir / 'CollectedData_new.csv', ['kp0'], ['img0.png'])
+        with pytest.raises(FileNotFoundError, match='no label CSV files'):
+            analyze_dataset(data_dir)
+
     def test_missing_path_raises(self, tmp_path):
         with pytest.raises(FileNotFoundError):
             analyze_dataset(tmp_path / 'does_not_exist')

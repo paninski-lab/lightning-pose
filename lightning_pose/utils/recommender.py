@@ -27,6 +27,13 @@ from lightning_pose.utils.io import parse_label_csv
 
 logger = logging.getLogger(__name__)
 
+# csv stems ending in one of these suffixes are auxiliary label files (e.g. a held-out OOD
+# set written as `{csv_stem}_new.csv` / `{csv_stem}_test.csv` by train.py's post-training
+# evaluation, or a hand-maintained `{csv_stem}_full.csv`) rather than a distinct camera view,
+# and are excluded from directory auto-discovery so they don't make a single-view project
+# look like a multi-view one
+_IGNORED_CSV_SUFFIXES = ('_full', '_new', '_test')
+
 # per-side image_resize_dims recommendation: 256 by default; 128 for a short side (< the
 # small-side threshold); 384 only for a long side (> the large-side threshold) that also has
 # enough labeled frames (> the large-side frame threshold) to justify the extra resolution
@@ -244,6 +251,9 @@ def analyze_dataset(dataset_path: Path) -> DatasetAnalysis:
     Args:
         dataset_path: a directory containing one or more DLC-format label CSVs (auto-discovered,
             multiple CSVs are treated as a multi-view dataset), or a single label CSV file.
+            CSVs whose stem ends in `_full`, `_new`, or `_test` (see `_IGNORED_CSV_SUFFIXES`)
+            are treated as auxiliary label files, not distinct views, and are ignored during
+            directory auto-discovery (a directly-passed CSV file is never ignored).
 
     Returns:
         :class:`DatasetAnalysis` summarizing the dataset.
@@ -257,7 +267,16 @@ def analyze_dataset(dataset_path: Path) -> DatasetAnalysis:
         csv_paths = [dataset_path]
         data_dir = dataset_path.parent
     elif dataset_path.is_dir():
-        csv_paths = sorted(dataset_path.glob('*.csv'))
+        all_csv_paths = sorted(dataset_path.glob('*.csv'))
+        csv_paths = [
+            p for p in all_csv_paths if not p.stem.endswith(_IGNORED_CSV_SUFFIXES)
+        ]
+        ignored = [p for p in all_csv_paths if p not in csv_paths]
+        if ignored:
+            logger.info(
+                f'ignoring auxiliary label CSVs (suffix in {_IGNORED_CSV_SUFFIXES}): '
+                f'{", ".join(p.name for p in ignored)}'
+            )
         data_dir = dataset_path
     else:
         raise FileNotFoundError(f'dataset path does not exist: {dataset_path}')
