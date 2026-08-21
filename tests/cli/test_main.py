@@ -24,8 +24,16 @@ class TestBuildParser:
             a for a in parser._actions if hasattr(a, '_name_parser_map')
         )
         assert set(subparsers_action._name_parser_map.keys()) == {  # type: ignore[attr-defined]
-            'train', 'predict', 'export', 'create_bbox', 'smooth_bbox', 'crop', 'remap',
-            'run_app', 'recommend',
+            'convert',
+            'create_bbox',
+            'crop',
+            'export',
+            'predict',
+            'recommend',
+            'remap',
+            'run_app',
+            'smooth_bbox',
+            'train',
         }
 
     def test_build_parser_has_debug_flag(self):

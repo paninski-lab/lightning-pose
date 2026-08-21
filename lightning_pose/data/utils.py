@@ -139,7 +139,6 @@ def compute_num_train_frames(
     return n_train_frames
 
 
-
 def undo_affine_transform(
     keypoints: Float[torch.Tensor, "seq_len num_keypoints 2"],
     transform: Float[torch.Tensor, "seq_len 2 3"] | Float[torch.Tensor, "2 3"],
