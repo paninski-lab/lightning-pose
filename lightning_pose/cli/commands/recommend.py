@@ -21,14 +21,15 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
             Analyzes a lightning-pose dataset and prints config recommendations.
 
             Unlabeled videos are assumed to live in ``<dataset_path>/videos``.  A complete,
-            ready-to-use config YAML is always written; use ``--output`` to control where.
+            ready-to-use config YAML is always written; use ``--output`` to control where, or
+            ``--print_only`` to skip writing a file entirely.
             """
     )
 
     recommend_parser = subparsers.add_parser(
         'recommend',
         description=description_text,
-        usage='litpose recommend <dataset_path> [--output OUTPUT]',
+        usage='litpose recommend <dataset_path> [--output OUTPUT | --print_only]',
     )
     recommend_parser.add_argument(
         'dataset_path',
@@ -36,13 +37,19 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
         help='directory containing one or more label CSV files (auto-discovered; multiple '
         'CSVs are treated as a multi-view dataset), or a single label CSV file',
     )
-    recommend_parser.add_argument(
+    output_group = recommend_parser.add_mutually_exclusive_group()
+    output_group.add_argument(
         '--output',
         type=Path,
         default=None,
         help='path to write the recommended config YAML. a directory writes config.yaml '
         'inside it. defaults to <dataset_path>/config.yaml, or a timestamped filename if '
         'that already exists.',
+    )
+    output_group.add_argument(
+        '--print_only',
+        action='store_true',
+        help='print the recommendation report only; do not write a config YAML.',
     )
     return recommend_parser
 
@@ -92,6 +99,9 @@ def handle(args: argparse.Namespace) -> None:
     rec = recommender.recommend(analysis, gpu, top_down_freely_moving=top_down_freely_moving)
 
     logger.info(recommender.format_report(rec, analysis, gpu))
+
+    if args.print_only:
+        return
 
     output_path = _resolve_output_path(args.dataset_path, args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
