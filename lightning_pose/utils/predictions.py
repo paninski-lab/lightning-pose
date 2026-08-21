@@ -430,10 +430,11 @@ def predict_video(
         bbox_file: (optional) path to a bbox CSV (columns x, y, h, w; one row per frame).
             when provided, DALI delivers full-resolution frames and the wrapper crops each
             frame to the bbox before resizing to the model's input dims. single-view only.
-        reader: (optional) which video-reading backend to use: "dali" or "pynvvc".
-            None (default) auto-selects pynvvc if it's usable on this machine for this
-            video, else falls back to dali. Independent of the model's runtime
-            (eager/onnx) and --compile -- this only controls video ingestion.
+        reader: (optional) which video-reading backend to use: "dali", "pynvvc", or
+            "opencv". None (default) auto-selects pynvvc if it's usable on this machine
+            for this video, else dali if it's installed, else opencv (the portable
+            fallback, always available). Independent of the model's runtime (eager/onnx)
+            and --compile -- this only controls video ingestion.
     """
 
     is_multiview = not isinstance(video_file, str)
@@ -486,17 +487,38 @@ def predict_video(
         model.config.cfg.data.image_resize_dims.width,
     ]
 
-    # Decide which reader backend to use: explicit choice, or auto-select pynvvc if
-    # it's actually usable (installed + this GPU/driver + this video decode
-    # successfully), else fall back to dali. Probed against the first view's video
-    # since is_pynvvc_available needs a real file to construct a trial decoder.
-    # Deliberately placed here rather than in the CLI handler, so every caller (CLI,
-    # direct Model API/notebook use) gets the same fail-fast behavior and log line for
-    # free -- same rationale as the backend log line below.
+    # Decide which reader backend to use: explicit choice, or auto-select the best
+    # backend usable on this machine for this video -- pynvvc if it's actually usable
+    # (installed + this GPU/driver + this video decode successfully), else dali if
+    # it's installed (nvidia-dali-cuda110 is platform-gated to Linux x86_64, so it's
+    # simply absent on macOS/Windows/other architectures), else opencv, an
+    # unconditional cross-platform dependency and thus the guaranteed final rung.
+    # Probed against the first view's video since is_pynvvc_available/
+    # is_opencv_available need a real file. Deliberately placed here rather than in
+    # the CLI handler, so every caller (CLI, direct Model API/notebook use) gets the
+    # same fail-fast behavior and log line for free -- same rationale as the backend
+    # log line below.
     probe_video = video_file[0] if is_multiview else video_file
     if reader is None:
         from lightning_pose.data.video.pynvvc import is_pynvvc_available
-        reader = "pynvvc" if is_pynvvc_available(probe_video) else "dali"
+        if is_pynvvc_available(probe_video):
+            reader = "pynvvc"
+        else:
+            try:
+                import lightning_pose.data.video.dali  # noqa: F401  probe importability
+                reader = "dali"
+            except ImportError:
+                reader = "opencv"
+    elif reader == "dali":
+        try:
+            import lightning_pose.data.video.dali  # noqa: F401  probe importability
+        except ImportError as e:
+            raise RuntimeError(
+                "reader='dali' was requested but nvidia-dali isn't installed on this "
+                "machine (it's platform-gated to Linux x86_64, so it's simply absent on "
+                "macOS/Windows/other architectures). Pass reader='pynvvc'/'opencv' or "
+                "omit reader to auto-select."
+            ) from e
     elif reader == "pynvvc":
         from lightning_pose.data.video.pynvvc import is_pynvvc_available
         if not is_pynvvc_available(probe_video):
@@ -504,7 +526,15 @@ def predict_video(
                 "reader='pynvvc' was requested but PyNvVideoCodec can't decode "
                 f"{probe_video!r} on this machine (unsupported GPU generation, driver "
                 "too old, pynvvideocodec not installed, or an unsupported video "
-                "format). Pass reader='dali' or omit reader to auto-select."
+                "format). Pass reader='dali'/'opencv' or omit reader to auto-select."
+            )
+    elif reader == "opencv":
+        from lightning_pose.data.video.opencv import is_opencv_available
+        if not is_opencv_available(probe_video):
+            raise RuntimeError(
+                f"reader='opencv' was requested but OpenCV can't open {probe_video!r} "
+                "(corrupt file or unsupported codec/container). Pass a different "
+                "reader or omit reader to auto-select."
             )
     logger.info(f"predict_video: using '{reader}' reader backend")
 
@@ -520,11 +550,20 @@ def predict_video(
             resize_dims=resize_dims,
             bbox_df=bbox_df,
         )
-    else:  # pynvvc
+    elif reader == "pynvvc":
         from lightning_pose.data.video.pynvvc import (
             PreparePynvvc,  # avoids ImportError on cpu-only installs
         )
         vid_pred_class = PreparePynvvc(
+            model_type=model_type,
+            dali_config=model.config.cfg.dali,
+            filenames=filenames,
+            resize_dims=resize_dims,
+            bbox_df=bbox_df,
+        )
+    else:  # opencv
+        from lightning_pose.data.video.opencv import PrepareOpenCV
+        vid_pred_class = PrepareOpenCV(
             model_type=model_type,
             dali_config=model.config.cfg.dali,
             filenames=filenames,

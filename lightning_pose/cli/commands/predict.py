@@ -156,9 +156,10 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
         choices=sorted(_READER_CHOICES),
         default=None,
         help=(
-            "video-reading backend for video inputs. 'dali' or 'pynvvc'. If omitted "
-            "(default), auto-selects 'pynvvc' when it's usable on this machine for the "
-            "given video, else falls back to 'dali'. Independent of --runtime/--compile "
+            "video-reading backend for video inputs. 'dali', 'pynvvc', or 'opencv'. If "
+            "omitted (default), auto-selects 'pynvvc' when it's usable on this machine "
+            "for the given video, else 'dali' when it's installed, else 'opencv' (the "
+            "portable fallback, always available). Independent of --runtime/--compile "
             "-- this only controls video ingestion, not model execution. Ignored for "
             "CSV/image inputs."
         ),
