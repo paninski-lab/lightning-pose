@@ -97,6 +97,10 @@ _MIN_TRAIN_ITERS_PER_EPOCH = 10
 # train_prob default from config_default.yaml / config_default_multiview.yaml
 _DEFAULT_TRAIN_PROB = 0.95
 
+# learning rate recommendation: ViT backbones use a much smaller lr than convnets
+_VIT_LEARNING_RATE = 5e-5
+_CONVNET_LEARNING_RATE = 1e-3
+
 _DALI_DEFAULTS = {
     'base': {
         'train': {'sequence_length': 32},
@@ -197,6 +201,7 @@ class ConfigRecommendation:
         train_batch_size: recommended `training.train_batch_size`
         max_epochs: recommended `training.max_epochs` (and `min_epochs`)
         optimizer: `Adam` | `AdamW`
+        learning_rate: recommended `training.optimizer_params.learning_rate`
         imgaug: `dlc` | `dlc-top-down`
         losses_to_use: recommended `model.losses_to_use`
         dali_train_sequence_length: recommended unlabeled-frame batch size for semi-supervised
@@ -212,6 +217,7 @@ class ConfigRecommendation:
     train_batch_size: int
     max_epochs: int
     optimizer: str
+    learning_rate: float
     imgaug: str
     losses_to_use: list[str]
     dali_train_sequence_length: int | None = None
@@ -624,11 +630,19 @@ def recommend(
     train_batch_size = floored_batch_size
     rationale['train_batch_size'] = batch_size_rationale
 
-    optimizer = 'AdamW' if backbone.startswith('vit') else 'Adam'
+    is_vit = backbone.startswith('vit')
+    optimizer = 'AdamW' if is_vit else 'Adam'
     rationale['optimizer'] = (
         'AdamW is recommended for ViT backbones'
         if optimizer == 'AdamW'
         else 'Adam is recommended for ResNet backbones'
+    )
+
+    learning_rate = _VIT_LEARNING_RATE if is_vit else _CONVNET_LEARNING_RATE
+    rationale['learning_rate'] = (
+        f'{learning_rate} is recommended for ViT backbones'
+        if is_vit
+        else f'{learning_rate} is recommended for ResNet/ConvNet backbones'
     )
 
     return ConfigRecommendation(
@@ -639,6 +653,7 @@ def recommend(
         train_batch_size=train_batch_size,
         max_epochs=max_epochs,
         optimizer=optimizer,
+        learning_rate=learning_rate,
         imgaug=imgaug,
         losses_to_use=losses_to_use,
         dali_train_sequence_length=dali_train_sequence_length,
@@ -702,7 +717,7 @@ def build_config(rec: ConfigRecommendation, analysis: DatasetAnalysis) -> DictCo
         'rng_seed_data_pt': 0,
         'rng_seed_model_pt': 0,
         'optimizer': rec.optimizer,
-        'optimizer_params': {'learning_rate': 5e-5 if is_multiview else 1e-3},
+        'optimizer_params': {'learning_rate': rec.learning_rate},
         'lr_scheduler': 'multisteplr',
         'lr_scheduler_params': {
             'multisteplr': {'milestones': [150, 200, 250], 'gamma': 0.5},
@@ -775,7 +790,7 @@ def format_report(
     Returns:
         multi-line report string suitable for printing to the console.
     """
-    lines = ['Dataset summary', '-' * 16]
+    lines = ['', 'Dataset summary', '-' * 16]
     lines.append(f'  labeled frames:   {analysis.n_frames}')
     lines.append(f'  keypoints:        {analysis.num_keypoints}')
     lines.append(f'  image size:       {analysis.image_width}x{analysis.image_height}px')
@@ -800,6 +815,7 @@ def format_report(
         ('max_epochs', rec.max_epochs),
         ('imgaug', rec.imgaug),
         ('optimizer', rec.optimizer),
+        ('learning_rate', rec.learning_rate),
         ('losses_to_use', rec.losses_to_use if rec.losses_to_use else '[]'),
     ]
     for name, value in fields:

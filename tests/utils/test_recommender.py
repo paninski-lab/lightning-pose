@@ -376,6 +376,10 @@ class TestRecommend:
         rec = recommend(self._analysis(), gpu=None)
         assert rec.optimizer == 'AdamW'
 
+    def test_learning_rate_for_vit_backbone(self):
+        rec = recommend(self._analysis(), gpu=None)
+        assert rec.learning_rate == 5e-5
+
     def test_no_gpu_batch_size(self):
         # _NO_GPU_BATCH_SIZE=4 is floored up to the _MIN_TRAIN_BATCH_SIZE=8 minimum
         rec = recommend(self._analysis(), gpu=None)
@@ -541,6 +545,13 @@ class TestBuildConfig:
         cfg = build_config(rec, analysis)
         assert cfg.training.val_batch_size == 2 * rec.train_batch_size
         assert cfg.training.test_batch_size == 2 * rec.train_batch_size
+
+    def test_learning_rate_matches_recommendation(self):
+        analysis = self._analysis()
+        rec = recommend(analysis, gpu=None)
+        cfg = build_config(rec, analysis)
+        assert cfg.training.optimizer_params.learning_rate == rec.learning_rate
+        assert rec.learning_rate == 5e-5
 
     def test_semi_supervised_sets_dali_base_sequence_length(self):
         gpu = GpuInfo(name='A100', vram_gb=40.0)
