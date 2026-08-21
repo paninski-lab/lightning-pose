@@ -33,11 +33,11 @@ All three dispatch on ``cfg.model.model_type`` to select the right class.
 - ``utils.py`` — dataset-level utilities: train/val/test splits, frame counting,
   affine-transform undo.
 
-*Video infrastructure* — used only for semi-supervised training:
+*Video infrastructure*:
 
-- ``dali.py`` — GPU-accelerated video loading via NVIDIA DALI
-  (:class:`~lightning_pose.data.dali.PrepareDALI`,
-  :class:`~lightning_pose.data.dali.LitDaliWrapper`).
+- ``video/`` — video-reading backends for semi-supervised training and prediction (DALI,
+  PyNvVideoCodec, OpenCV); see that subpackage's docstring for the reader contract and how
+  to add a new backend.
 - ``extractor.py`` — frame extraction utilities.
 """
 

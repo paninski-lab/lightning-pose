@@ -11,9 +11,9 @@ import torch
 
 pytest.importorskip('nvidia.dali', reason='nvidia-dali not installed')
 
-from lightning_pose.data import dali as dali_module
-from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI, video_pipe
 from lightning_pose.data.datatypes import UnlabeledBatchDict
+from lightning_pose.data.video import dali as dali_module
+from lightning_pose.data.video.dali import LitDaliWrapper, PrepareDALI, video_pipe
 
 
 class TestVideoPipe:
@@ -308,7 +308,7 @@ class TestPrepareDALI:
         )
         with (
             patch.object(vid_pred_class, '_get_dali_pipe', return_value=MagicMock()),
-            patch('lightning_pose.data.dali.LitDaliWrapper') as MockWrapper,
+            patch('lightning_pose.data.video.dali.LitDaliWrapper') as MockWrapper,
         ):
             vid_pred_class()
         call_kwargs = MockWrapper.call_args.kwargs

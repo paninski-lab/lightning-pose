@@ -2,14 +2,14 @@
 
 Import warning
 --------------
-Same discipline as ``lightning_pose.data.dali``: ``pynvvideocodec`` is an unconditional
+Same discipline as ``lightning_pose.data.video.dali``: ``pynvvideocodec`` is an unconditional
 but platform-gated dependency (Linux x86_64 only), so importing this module at the top
 level of any other module could raise ``ImportError``/``ModuleNotFoundError`` on other
 platforms. Always import from this module lazily, inside the function or method body
 that uses it::
 
     def my_function(...):
-        from lightning_pose.data.pynvvc import PreparePynvvc  # lazy
+        from lightning_pose.data.video.pynvvc import PreparePynvvc  # lazy
         ...
 
 The ``PyNvVideoCodec`` package itself is additionally deferred to inside
@@ -20,13 +20,13 @@ on Linux) -- the failure only surfaces when a decoder is actually constructed.
 
 Architecture overview
 ----------------------
-Mirrors ``lightning_pose.data.dali``'s two-phase construction: ``PreparePynvvc.__init__``
+Mirrors ``lightning_pose.data.video.dali``'s two-phase construction: ``PreparePynvvc.__init__``
 validates inputs and precomputes windowing parameters; calling the instance
 (``__call__``) builds and returns a ready-to-iterate ``LitPynvvcWrapper``.
 
 Predict-only, unlike ``PrepareDALI``: this backend never runs ``random_shuffle`` or the
 ``imgaug`` augmentation pipeline, since ``litpose predict`` already runs with both off.
-Training continues to go through DALI exclusively (``lightning_pose.data.dali``).
+Training continues to go through DALI exclusively (``lightning_pose.data.video.dali``).
 
 CUDA stream synchronization
 ----------------------------
@@ -119,7 +119,7 @@ class LitPynvvcWrapper:
     ``PyNvVideoCodec.SimpleDecoder`` per view instead of a DALI pipeline.
 
     Predict-only: no ``random_shuffle``, no ``imgaug``. See
-    ``lightning_pose.data.dali.LitDaliWrapper`` for the train-time DALI path, which
+    ``lightning_pose.data.video.dali.LitDaliWrapper`` for the train-time DALI path, which
     this class does not replicate.
     """
 
@@ -312,7 +312,7 @@ class LitPynvvcWrapper:
 class PreparePynvvc:
     """Factory for PyNvVideoCodec-backed inference dataloaders.
 
-    Predict-only counterpart to ``lightning_pose.data.dali.PrepareDALI`` -- only
+    Predict-only counterpart to ``lightning_pose.data.video.dali.PrepareDALI`` -- only
     needs the "predict" x {"base", "context"} combinations, since NVDEC inference
     never shuffles or augments. Construction is split the same way as ``PrepareDALI``:
     ``__init__`` validates inputs and precomputes windowing parameters; ``__call__``

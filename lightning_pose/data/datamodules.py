@@ -319,7 +319,7 @@ class UnlabeledDataModule(BaseDataModule):
 
     def setup_unlabeled(self) -> None:
         """Sets up the unlabeled data loader."""
-        from lightning_pose.data.dali import PrepareDALI  # avoids ImportError on cpu-only installs
+        from lightning_pose.data.video.dali import PrepareDALI  # avoids cpu-only ImportError
         dali_prep = PrepareDALI(
             train_stage="train",
             model_type="context" if self.dataset.do_context else "base",

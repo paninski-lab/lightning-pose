@@ -15,6 +15,9 @@ This file contains project-specific guidelines for Claude Code when working on t
 - Use type hints for all function parameters and return values
 - Import types from typing module when needed
 - use X | Y, list[X], dict[K, V] syntax; avoid typing imports for these
+- `pandas-stubs` rejects a plain `list[str]` (or other bare list) passed as the `index=`
+  argument to `pd.DataFrame(...)`/`pd.Series(...)` under pyright — wrap it in `pd.Index(...)`.
+  See `lightning_pose/utils/cropzoom.py` for a precedent.
 
 ### Imports
 - Group imports: standard library, third-party, local

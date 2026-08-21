@@ -495,10 +495,10 @@ def predict_video(
     # free -- same rationale as the backend log line below.
     probe_video = video_file[0] if is_multiview else video_file
     if reader is None:
-        from lightning_pose.data.pynvvc import is_pynvvc_available
+        from lightning_pose.data.video.pynvvc import is_pynvvc_available
         reader = "pynvvc" if is_pynvvc_available(probe_video) else "dali"
     elif reader == "pynvvc":
-        from lightning_pose.data.pynvvc import is_pynvvc_available
+        from lightning_pose.data.video.pynvvc import is_pynvvc_available
         if not is_pynvvc_available(probe_video):
             raise RuntimeError(
                 "reader='pynvvc' was requested but PyNvVideoCodec can't decode "
@@ -509,7 +509,7 @@ def predict_video(
     logger.info(f"predict_video: using '{reader}' reader backend")
 
     if reader == "dali":
-        from lightning_pose.data.dali import PrepareDALI  # avoids ImportError on cpu-only installs
+        from lightning_pose.data.video.dali import PrepareDALI  # avoids cpu-only ImportError
         vid_pred_class = PrepareDALI(
             train_stage="predict",
             model_type=model_type,
@@ -521,7 +521,7 @@ def predict_video(
             bbox_df=bbox_df,
         )
     else:  # pynvvc
-        from lightning_pose.data.pynvvc import (
+        from lightning_pose.data.video.pynvvc import (
             PreparePynvvc,  # avoids ImportError on cpu-only installs
         )
         vid_pred_class = PreparePynvvc(

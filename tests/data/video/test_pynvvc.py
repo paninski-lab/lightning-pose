@@ -10,8 +10,8 @@ import torch
 
 import lightning_pose as lp
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
-from lightning_pose.data import pynvvc as pynvvc_module
-from lightning_pose.data.pynvvc import LitPynvvcWrapper, PreparePynvvc, is_pynvvc_available
+from lightning_pose.data.video import pynvvc as pynvvc_module
+from lightning_pose.data.video.pynvvc import LitPynvvcWrapper, PreparePynvvc, is_pynvvc_available
 
 # real toy video used to gate the real-decoder tests below -- a plain `import
 # PyNvVideoCodec` succeeds regardless of GPU generation/driver age (see
@@ -561,7 +561,7 @@ class TestPynvvcRealDecoder:
         loosely, as a backstop against a real broken decode rather than a precision claim.
         """
         pytest.importorskip('nvidia.dali', reason='nvidia-dali not installed')
-        from lightning_pose.data.dali import PrepareDALI
+        from lightning_pose.data.video.dali import PrepareDALI
 
         im_height, im_width = 256, 256
 
