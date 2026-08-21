@@ -19,7 +19,9 @@ command module must define three top-level functions:
 
 **Adding a new command**: create ``<name>.py`` here with all three functions (copy an existing
 module, e.g. ``train.py``, as a template), add it to :data:`COMMANDS` below, and add a matching
-``docs/source/cli_reference/<name>.rst`` page.
+``docs/source/cli_reference/<name>.rst`` page (with a toctree entry in that directory's
+``index.rst``). ``tests/cli/test_main.py::TestCliReferenceDocs`` fails if either is missing, so
+a forgotten doc page is caught by CI rather than relying on this docstring being read.
 """
 
 from lightning_pose.cli.commands import (
@@ -27,6 +29,7 @@ from lightning_pose.cli.commands import (
     crop,
     export,
     predict,
+    recommend,
     remap,
     run_app,
     smooth_bbox,
@@ -43,4 +46,5 @@ COMMANDS = {
     'crop': crop,
     'remap': remap,
     'run_app': run_app,
+    'recommend': recommend,
 }

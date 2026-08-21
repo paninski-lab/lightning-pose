@@ -3,10 +3,16 @@
 import logging
 import sys
 from importlib.metadata import version
+from pathlib import Path
 
 import pytest
 
+from lightning_pose.cli.commands import COMMANDS
 from lightning_pose.cli.main import _build_parser, _setup_logging, main
+
+_CLI_REFERENCE_DIR = (
+    Path(__file__).resolve().parents[2] / 'docs' / 'source' / 'cli_reference'
+)
 
 
 class TestBuildParser:
@@ -19,7 +25,7 @@ class TestBuildParser:
         )
         assert set(subparsers_action._name_parser_map.keys()) == {  # type: ignore[attr-defined]
             'train', 'predict', 'export', 'create_bbox', 'smooth_bbox', 'crop', 'remap',
-            'run_app',
+            'run_app', 'recommend',
         }
 
     def test_build_parser_has_debug_flag(self):
@@ -35,6 +41,28 @@ class TestBuildParser:
             sys.argv = ["litpose"]
             main()
         assert exc_info.value.code == 1
+
+
+class TestCliReferenceDocs:
+    """Every command in COMMANDS must have a docs/source/cli_reference/<name>.rst page,
+    listed in that directory's index.rst toctree. See the "Adding a new command" note in
+    lightning_pose/cli/commands/__init__.py.
+    """
+
+    def test_every_command_has_an_rst_page(self):
+        missing = [
+            name for name in COMMANDS if not (_CLI_REFERENCE_DIR / f'{name}.rst').is_file()
+        ]
+        assert not missing, (
+            f'missing docs/source/cli_reference/<name>.rst for: {missing}'
+        )
+
+    def test_every_command_is_in_the_toctree(self):
+        toctree = (_CLI_REFERENCE_DIR / 'index.rst').read_text()
+        missing = [name for name in COMMANDS if name not in toctree]
+        assert not missing, (
+            f'missing docs/source/cli_reference/index.rst toctree entry for: {missing}'
+        )
 
 
 class TestVersion:
