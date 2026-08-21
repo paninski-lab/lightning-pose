@@ -22,6 +22,7 @@ from omegaconf import DictConfig, ListConfig
 from lightning_pose.callbacks import JSONInferenceProgressTracker
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import count_frames
+from lightning_pose.data.video.factory import build_video_reader
 
 if TYPE_CHECKING:
     from lightning_pose.api import Model
@@ -487,91 +488,20 @@ def predict_video(
         model.config.cfg.data.image_resize_dims.width,
     ]
 
-    # Decide which reader backend to use: explicit choice, or auto-select the best
-    # backend usable on this machine for this video -- pynvvc if it's actually usable
-    # (installed + this GPU/driver + this video decode successfully), else dali if
-    # it's installed (nvidia-dali-cuda110 is platform-gated to Linux x86_64, so it's
-    # simply absent on macOS/Windows/other architectures), else opencv, an
-    # unconditional cross-platform dependency and thus the guaranteed final rung.
-    # Probed against the first view's video since is_pynvvc_available/
-    # is_opencv_available need a real file. Deliberately placed here rather than in
-    # the CLI handler, so every caller (CLI, direct Model API/notebook use) gets the
-    # same fail-fast behavior and log line for free -- same rationale as the backend
-    # log line below.
+    # Resolve the reader backend and build its loader. Probed against the first
+    # view's video since availability checks need a real file. Deliberately done
+    # here rather than in the CLI handler, so every caller (CLI, direct Model
+    # API/notebook use) gets the same fail-fast behavior and log line for free.
     probe_video = video_file[0] if is_multiview else video_file
-    if reader is None:
-        from lightning_pose.data.video.pynvvc import is_pynvvc_available
-        if is_pynvvc_available(probe_video):
-            reader = "pynvvc"
-        else:
-            try:
-                import lightning_pose.data.video.dali  # noqa: F401  probe importability
-                reader = "dali"
-            except ImportError:
-                reader = "opencv"
-    elif reader == "dali":
-        try:
-            import lightning_pose.data.video.dali  # noqa: F401  probe importability
-        except ImportError as e:
-            raise RuntimeError(
-                "reader='dali' was requested but nvidia-dali isn't installed on this "
-                "machine (it's platform-gated to Linux x86_64, so it's simply absent on "
-                "macOS/Windows/other architectures). Pass reader='pynvvc'/'opencv' or "
-                "omit reader to auto-select."
-            ) from e
-    elif reader == "pynvvc":
-        from lightning_pose.data.video.pynvvc import is_pynvvc_available
-        if not is_pynvvc_available(probe_video):
-            raise RuntimeError(
-                "reader='pynvvc' was requested but PyNvVideoCodec can't decode "
-                f"{probe_video!r} on this machine (unsupported GPU generation, driver "
-                "too old, pynvvideocodec not installed, or an unsupported video "
-                "format). Pass reader='dali'/'opencv' or omit reader to auto-select."
-            )
-    elif reader == "opencv":
-        from lightning_pose.data.video.opencv import is_opencv_available
-        if not is_opencv_available(probe_video):
-            raise RuntimeError(
-                f"reader='opencv' was requested but OpenCV can't open {probe_video!r} "
-                "(corrupt file or unsupported codec/container). Pass a different "
-                "reader or omit reader to auto-select."
-            )
-    logger.info(f"predict_video: using '{reader}' reader backend")
-
-    if reader == "dali":
-        from lightning_pose.data.video.dali import PrepareDALI  # avoids cpu-only ImportError
-        vid_pred_class = PrepareDALI(
-            train_stage="predict",
-            model_type=model_type,
-            dali_config=model.config.cfg.dali,
-            # Important: This will be a list of lists for multiview.
-            # This will trigger dali to return multiview batches to predict_step.
-            filenames=filenames,
-            resize_dims=resize_dims,
-            bbox_df=bbox_df,
-        )
-    elif reader == "pynvvc":
-        from lightning_pose.data.video.pynvvc import (
-            PreparePynvvc,  # avoids ImportError on cpu-only installs
-        )
-        vid_pred_class = PreparePynvvc(
-            model_type=model_type,
-            dali_config=model.config.cfg.dali,
-            filenames=filenames,
-            resize_dims=resize_dims,
-            bbox_df=bbox_df,
-        )
-    else:  # opencv
-        from lightning_pose.data.video.opencv import PrepareOpenCV
-        vid_pred_class = PrepareOpenCV(
-            model_type=model_type,
-            dali_config=model.config.cfg.dali,
-            filenames=filenames,
-            resize_dims=resize_dims,
-            bbox_df=bbox_df,
-        )
-    # get loader
-    predict_loader = vid_pred_class()
+    predict_loader = build_video_reader(
+        reader=reader,
+        probe_video=probe_video,
+        model_type=model_type,
+        dali_config=model.config.cfg.dali,
+        filenames=filenames,
+        resize_dims=resize_dims,
+        bbox_df=bbox_df,
+    )
 
     # initialize prediction handler class
     pred_handler = PredictionHandler(
