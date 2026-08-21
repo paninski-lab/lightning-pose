@@ -383,12 +383,16 @@ def recommend(
     is_multiview = analysis.view_names is not None
 
     model_type = 'heatmap_multiview_transformer' if is_multiview else 'heatmap'
-    rationale['model_type'] = (
-        f'{len(analysis.view_names)} views detected -> multiview transformer'
-        if is_multiview
-        else 'single view detected -> standard heatmap model '
-        '(use heatmap_mhcrnn instead if temporal context is desired)'
-    )
+    if is_multiview:
+        assert analysis.view_names is not None
+        rationale['model_type'] = (
+            f'{len(analysis.view_names)} views detected -> multiview transformer'
+        )
+    else:
+        rationale['model_type'] = (
+            'single view detected -> standard heatmap model '
+            '(use heatmap_mhcrnn instead if temporal context is desired)'
+        )
 
     backbone = 'vits_dino'
     rationale['backbone'] = 'vits_dino is a strong default across dataset sizes'
@@ -432,6 +436,7 @@ def recommend(
             'per-sample activation memory is roughly that much higher than the base model'
         )
     elif is_multiview:
+        assert analysis.view_names is not None
         num_views = len(analysis.view_names)
         full_batch_size = max(1, full_batch_size // num_views)
         batch_size_rationale += (
@@ -567,6 +572,7 @@ def build_config(rec: ConfigRecommendation, analysis: DatasetAnalysis) -> DictCo
         'columns_for_singleview_pca': None,
     }
     if is_multiview:
+        assert analysis.view_names is not None
         data['csv_file'] = [str(p) for p in analysis.csv_paths]
         data['view_names'] = list(analysis.view_names)
     else:

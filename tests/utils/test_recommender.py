@@ -1,5 +1,6 @@
 """Test the recommender module."""
 
+import dataclasses
 from pathlib import Path
 
 import pytest
@@ -210,7 +211,7 @@ class TestRecommend:
     """Test the function recommend."""
 
     def _analysis(self, **overrides) -> DatasetAnalysis:
-        defaults = dict(
+        base = DatasetAnalysis(
             dataset_path=Path('/data'),
             data_dir=Path('/data'),
             csv_paths=[Path('/data/CollectedData.csv')],
@@ -223,8 +224,7 @@ class TestRecommend:
             video_dir=Path('/data/videos'),
             has_videos=False,
         )
-        defaults.update(overrides)
-        return DatasetAnalysis(**defaults)
+        return dataclasses.replace(base, **overrides)
 
     def test_single_view_model_type(self):
         rec = recommend(self._analysis(), gpu=None)
@@ -362,7 +362,7 @@ class TestBuildConfig:
     """Test the function build_config."""
 
     def _analysis(self, **overrides) -> DatasetAnalysis:
-        defaults = dict(
+        base = DatasetAnalysis(
             dataset_path=Path('/data'),
             data_dir=Path('/data'),
             csv_paths=[Path('/data/CollectedData.csv')],
@@ -375,8 +375,7 @@ class TestBuildConfig:
             video_dir=Path('/data/videos'),
             has_videos=False,
         )
-        defaults.update(overrides)
-        return DatasetAnalysis(**defaults)
+        return dataclasses.replace(base, **overrides)
 
     def test_single_view_config_structure(self):
         analysis = self._analysis()
