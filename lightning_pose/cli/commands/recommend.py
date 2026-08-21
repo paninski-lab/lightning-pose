@@ -95,7 +95,9 @@ def handle(args: argparse.Namespace) -> None:
 
     analysis = recommender.analyze_dataset(args.dataset_path)
     gpu = recommender.get_gpu_info()
-    top_down_freely_moving = _ask_top_down_freely_moving()
+    top_down_freely_moving = (
+        _ask_top_down_freely_moving() if analysis.view_names is None else False
+    )
     rec = recommender.recommend(analysis, gpu, top_down_freely_moving=top_down_freely_moving)
 
     logger.info(recommender.format_report(rec, analysis, gpu))

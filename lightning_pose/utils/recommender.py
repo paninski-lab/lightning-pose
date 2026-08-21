@@ -16,6 +16,7 @@ from __future__ import annotations
 import copy
 import logging
 import re
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -100,6 +101,12 @@ _DEFAULT_TRAIN_PROB = 0.95
 # learning rate recommendation: ViT backbones use a much smaller lr than convnets
 _VIT_LEARNING_RATE = 5e-5
 _CONVNET_LEARNING_RATE = 1e-3
+
+# used in format_report() to bold each "field: recommendation" line (not its rationale) when
+# printing to a real terminal; left empty (no-op) when stdout is redirected/captured so piped
+# output and test assertions don't pick up raw escape codes
+_ANSI_BOLD = '\033[1m'
+_ANSI_RESET = '\033[0m'
 
 _DALI_DEFAULTS = {
     'base': {
@@ -806,6 +813,8 @@ def format_report(
         else '  gpu:              none detected'
     )
 
+    bold, reset = (_ANSI_BOLD, _ANSI_RESET) if sys.stdout.isatty() else ('', '')
+
     lines += ['', 'Recommendations', '-' * 16]
     fields = [
         ('model_type', rec.model_type),
@@ -819,10 +828,12 @@ def format_report(
         ('losses_to_use', rec.losses_to_use if rec.losses_to_use else '[]'),
     ]
     for name, value in fields:
-        lines.append(f'  {name}: {value}')
+        lines.append(f'  {bold}{name}: {value}{reset}')
         if name in rec.rationale:
             lines.append(f'    -> {rec.rationale[name]}')
     if rec.dali_train_sequence_length is not None:
-        lines.append(f'  dali_train_sequence_length: {rec.dali_train_sequence_length}')
+        lines.append(
+            f'  {bold}dali_train_sequence_length: {rec.dali_train_sequence_length}{reset}'
+        )
 
     return '\n'.join(lines)
