@@ -720,10 +720,11 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
                 Defaults to False.
             progress_file (Path, optional): Path to a file to save progress information for the
                 App. Defaults to None.
-            reader (optional): which video-reading backend to use, "dali" or "pynvvc".
-                None (default) auto-selects pynvvc if it's usable on this machine for this
-                video, else falls back to dali. Independent of the model's runtime
-                (eager/onnx) and torch.compile -- this only controls video ingestion.
+            reader (optional): which video-reading backend to use, "dali", "pynvvc", or
+                "opencv". None (default) auto-selects pynvvc if it's usable on this machine
+                for this video, else dali if it's installed, else opencv (the portable
+                fallback, always available). Independent of the model's runtime (eager/onnx)
+                and torch.compile -- this only controls video ingestion.
             bbox_file (str | Path, optional): Path to a per-frame bbox CSV (columns x, y, h, w;
                 one row per frame). When provided, each frame is cropped to its bounding box
                 before being passed to the model, and predictions are returned in the original
@@ -809,9 +810,10 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
             compute_metrics: whether to compute pixel error and loss metrics on predictions.
             generate_labeled_video: whether to save a labeled video.
             progress_file: path to a file to save progress information for the App.
-            reader: which video-reading backend to use, "dali" or "pynvvc". None (default)
-                auto-selects pynvvc if it's usable on this machine for this video, else falls
-                back to dali.
+            reader: which video-reading backend to use, "dali", "pynvvc", or "opencv". None
+                (default) auto-selects pynvvc if it's usable on this machine for this video,
+                else dali if it's installed, else opencv (the portable fallback, always
+                available).
 
         Returns:
             object containing the predictions and metrics for each view.

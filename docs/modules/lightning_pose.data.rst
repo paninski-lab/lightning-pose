@@ -9,7 +9,16 @@ lightning\_pose.data
 .. automodapi:: lightning_pose.data.cameras
    :no-inheritance-diagram:
 
-.. automodapi:: lightning_pose.data.dali
+.. automodapi:: lightning_pose.data.video.dali
+   :no-inheritance-diagram:
+
+.. automodapi:: lightning_pose.data.video.factory
+   :no-inheritance-diagram:
+
+.. automodapi:: lightning_pose.data.video.opencv
+   :no-inheritance-diagram:
+
+.. automodapi:: lightning_pose.data.video.pynvvc
    :no-inheritance-diagram:
 
 .. automodapi:: lightning_pose.data.datamodules

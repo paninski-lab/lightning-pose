@@ -32,7 +32,7 @@ _ExportRuntime = Literal["onnx", "tensorrt"]
 # Video-reading backends accepted by predict_on_video_file(_multiview)'s reader=
 # kwarg / `litpose predict --reader`. Independent of _Runtime -- reader controls
 # video ingestion, _Runtime controls model execution.
-_Reader = Literal["dali", "pynvvc"]
+_Reader = Literal["dali", "pynvvc", "opencv"]
 
 # Weight precisions supported for ONNX export, accepted by Model.export(
 # onnx_precision=...) / `litpose export --onnx-precision`. Deliberately narrower

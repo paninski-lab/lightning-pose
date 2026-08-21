@@ -8,7 +8,7 @@ platforms and break ``import lightning_pose`` entirely. Always import from this 
 inside the function or method body that uses it::
 
     def my_function(...):
-        from lightning_pose.data.dali import PrepareDALI  # lazy: avoids ImportError on cpu-only
+        from lightning_pose.data.video.dali import PrepareDALI  # lazy: avoids cpu-only ImportError
         ...
 
 Architecture overview

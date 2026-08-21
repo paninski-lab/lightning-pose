@@ -8,14 +8,16 @@
 - [ ] read COCO-style JSON label files
 - [ ] export predictions in COCO-style JSON format
 - [ ] support training across multiple datasets; see [#284](https://github.com/paninski-lab/lightning-pose/pull/284)
+- [ ] training/inference support on macOS (no semi-supervised models that require DALI)
+- [ ] training/inference support on Windows (no semi-supervised models that require DALI)
 
 ## Inference enhancements
-- [x] inference with mixed precision [#458](https://github.com/paninski-lab/lightning-pose/pull/458)
-- [x] `torch.compile()` to improve inference speed [#469](https://github.com/paninski-lab/lightning-pose/pull/469)
-- [x] [ONNX runtime](https://onnxruntime.ai/) to improve inference speed [#471](https://github.com/paninski-lab/lightning-pose/pull/471)
-- [x] [TensorRT runtime](https://docs.nvidia.com/deeplearning/tensorrt/latest/index.html) to improve inference speed [#475](https://github.com/paninski-lab/lightning-pose/pull/475)
-- [x] [pynvvideocodec](https://developer.nvidia.com/pynvvideocodec) to improve inference speed [#477](https://github.com/paninski-lab/lightning-pose/pull/477)
-- [ ] add OpenCV video reader option for inference for native Windows compatability
+- [x] inference with mixed precision ([#458](https://github.com/paninski-lab/lightning-pose/pull/458))
+- [x] `torch.compile()` to improve inference speed ([#469](https://github.com/paninski-lab/lightning-pose/pull/469))
+- [x] [ONNX runtime](https://onnxruntime.ai/) to improve inference speed ([#471](https://github.com/paninski-lab/lightning-pose/pull/471))
+- [x] [TensorRT runtime](https://docs.nvidia.com/deeplearning/tensorrt/latest/index.html) to improve inference speed ([#475](https://github.com/paninski-lab/lightning-pose/pull/475))
+- [x] [pynvvideocodec](https://developer.nvidia.com/pynvvideocodec) to improve inference speed ([#477](https://github.com/paninski-lab/lightning-pose/pull/477))
+- [x] add OpenCV video reader option for inference ([#491](https://github.com/paninski-lab/lightning-pose/pull/491))
 
 ## Losses and backbones
 - [x] incorporate transformer backbones ([#84](https://github.com/paninski-lab/lightning-pose/pull/84), [#106](https://github.com/paninski-lab/lightning-pose/pull/106))

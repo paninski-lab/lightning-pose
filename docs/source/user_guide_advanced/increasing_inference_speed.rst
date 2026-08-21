@@ -483,8 +483,9 @@ Installation
 Requires an NVIDIA GPU from the Turing generation or newer (Turing/Ampere/Ada/Hopper/Blackwell)
 and driver version 530.41.03 or newer on Linux. If PyNvVideoCodec can't decode a given video on
 the current machine (unsupported GPU generation, driver too old, package not installed, or an
-unsupported video format), ``litpose predict`` automatically falls back to DALI rather than
-erroring -- see below.
+unsupported video format), ``litpose predict`` automatically falls back to DALI (or, if DALI
+itself isn't installed -- e.g. on macOS/Windows, where ``nvidia-dali-cuda110`` isn't available --
+to OpenCV) rather than erroring -- see below.
 
 Usage
 ~~~~~
@@ -496,6 +497,7 @@ frames are read, not how the model runs on them. From the CLI:
 
     litpose predict /path/to/model_dir /path/to/video.mp4 --reader pynvvc
     litpose predict /path/to/model_dir /path/to/video.mp4 --reader dali
+    litpose predict /path/to/model_dir /path/to/video.mp4 --reader opencv
 
 Or from the API:
 
@@ -504,8 +506,11 @@ Or from the API:
     model = Model.from_dir("path/to/model_dir")
     result = model.predict_on_video_file("path/to/video.mp4", reader="pynvvc")
 
-Omitting ``--reader`` (or passing ``reader=None``) auto-selects PyNvVideoCodec when it's
-usable on the current machine for the given video, falling back to DALI otherwise -- no error,
-just a quieter/slower run. Explicitly requesting ``--reader pynvvc`` on a machine where it
-isn't usable raises a clear error instead of silently falling back, so you know your run isn't
-using the backend you asked for.
+Omitting ``--reader`` (or passing ``reader=None``) auto-selects the best backend usable on the
+current machine for the given video: PyNvVideoCodec if it's usable, else DALI if it's installed,
+else OpenCV -- no error, just a progressively slower/more-portable fallback. OpenCV decodes on
+CPU and needs no NVIDIA GPU or platform-specific package, so it's the one backend guaranteed to
+work everywhere (including macOS, Windows, and GPU-less machines), making it the last rung of the
+fallback chain rather than a speed option. Explicitly requesting a specific ``--reader`` on a
+machine where it isn't usable raises a clear error instead of silently falling back, so you know
+your run isn't using the backend you asked for.

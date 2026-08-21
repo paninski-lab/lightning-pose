@@ -298,10 +298,10 @@ def crop_and_resize_frames(
 ]:
     """Crop each frame to its per-frame bounding box and resize to a common size.
 
-    Shared by the DALI and pynvvc video-decoding backends: both hand this function a
-    full-resolution ``frames`` tensor plus one already-sliced-and-padded bbox row per
-    frame (cursor/step bookkeeping to select those rows lives in each backend's own
-    wrapper, not here — see ``LitDaliWrapper._apply_bbox_crop``).
+    Shared by all video-decoding backends: each hands this function a full-resolution ``frames``
+    tensor plus one already-sliced-and-padded bbox row per frame (cursor/step bookkeeping to select
+    those rows lives in each backend's own wrapper, not here —
+    see ``LitDaliWrapper._apply_bbox_crop``).
 
     Args:
         frames: full-resolution frames, shape (seq_len, 3, H, W).

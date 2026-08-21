@@ -22,6 +22,7 @@ from omegaconf import DictConfig, ListConfig
 from lightning_pose.callbacks import JSONInferenceProgressTracker
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import count_frames
+from lightning_pose.data.video.factory import build_video_reader
 
 if TYPE_CHECKING:
     from lightning_pose.api import Model
@@ -430,10 +431,11 @@ def predict_video(
         bbox_file: (optional) path to a bbox CSV (columns x, y, h, w; one row per frame).
             when provided, DALI delivers full-resolution frames and the wrapper crops each
             frame to the bbox before resizing to the model's input dims. single-view only.
-        reader: (optional) which video-reading backend to use: "dali" or "pynvvc".
-            None (default) auto-selects pynvvc if it's usable on this machine for this
-            video, else falls back to dali. Independent of the model's runtime
-            (eager/onnx) and --compile -- this only controls video ingestion.
+        reader: (optional) which video-reading backend to use: "dali", "pynvvc", or
+            "opencv". None (default) auto-selects pynvvc if it's usable on this machine
+            for this video, else dali if it's installed, else opencv (the portable
+            fallback, always available). Independent of the model's runtime (eager/onnx)
+            and --compile -- this only controls video ingestion.
     """
 
     is_multiview = not isinstance(video_file, str)
@@ -486,53 +488,20 @@ def predict_video(
         model.config.cfg.data.image_resize_dims.width,
     ]
 
-    # Decide which reader backend to use: explicit choice, or auto-select pynvvc if
-    # it's actually usable (installed + this GPU/driver + this video decode
-    # successfully), else fall back to dali. Probed against the first view's video
-    # since is_pynvvc_available needs a real file to construct a trial decoder.
-    # Deliberately placed here rather than in the CLI handler, so every caller (CLI,
-    # direct Model API/notebook use) gets the same fail-fast behavior and log line for
-    # free -- same rationale as the backend log line below.
+    # Resolve the reader backend and build its loader. Probed against the first
+    # view's video since availability checks need a real file. Deliberately done
+    # here rather than in the CLI handler, so every caller (CLI, direct Model
+    # API/notebook use) gets the same fail-fast behavior and log line for free.
     probe_video = video_file[0] if is_multiview else video_file
-    if reader is None:
-        from lightning_pose.data.pynvvc import is_pynvvc_available
-        reader = "pynvvc" if is_pynvvc_available(probe_video) else "dali"
-    elif reader == "pynvvc":
-        from lightning_pose.data.pynvvc import is_pynvvc_available
-        if not is_pynvvc_available(probe_video):
-            raise RuntimeError(
-                "reader='pynvvc' was requested but PyNvVideoCodec can't decode "
-                f"{probe_video!r} on this machine (unsupported GPU generation, driver "
-                "too old, pynvvideocodec not installed, or an unsupported video "
-                "format). Pass reader='dali' or omit reader to auto-select."
-            )
-    logger.info(f"predict_video: using '{reader}' reader backend")
-
-    if reader == "dali":
-        from lightning_pose.data.dali import PrepareDALI  # avoids ImportError on cpu-only installs
-        vid_pred_class = PrepareDALI(
-            train_stage="predict",
-            model_type=model_type,
-            dali_config=model.config.cfg.dali,
-            # Important: This will be a list of lists for multiview.
-            # This will trigger dali to return multiview batches to predict_step.
-            filenames=filenames,
-            resize_dims=resize_dims,
-            bbox_df=bbox_df,
-        )
-    else:  # pynvvc
-        from lightning_pose.data.pynvvc import (
-            PreparePynvvc,  # avoids ImportError on cpu-only installs
-        )
-        vid_pred_class = PreparePynvvc(
-            model_type=model_type,
-            dali_config=model.config.cfg.dali,
-            filenames=filenames,
-            resize_dims=resize_dims,
-            bbox_df=bbox_df,
-        )
-    # get loader
-    predict_loader = vid_pred_class()
+    predict_loader = build_video_reader(
+        reader=reader,
+        probe_video=probe_video,
+        model_type=model_type,
+        dali_config=model.config.cfg.dali,
+        filenames=filenames,
+        resize_dims=resize_dims,
+        bbox_df=bbox_df,
+    )
 
     # initialize prediction handler class
     pred_handler = PredictionHandler(

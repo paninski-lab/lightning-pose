@@ -1,55 +1,45 @@
-"""Data pipeline for video prediction based on PyNvVideoCodec (direct NVDEC access).
+"""Data pipeline for video prediction based on OpenCV (``cv2.VideoCapture``).
 
-Import warning
---------------
-Same discipline as ``lightning_pose.data.dali``: ``pynvvideocodec`` is an unconditional
-but platform-gated dependency (Linux x86_64 only), so importing this module at the top
-level of any other module could raise ``ImportError``/``ModuleNotFoundError`` on other
-platforms. Always import from this module lazily, inside the function or method body
-that uses it::
-
-    def my_function(...):
-        from lightning_pose.data.pynvvc import PreparePynvvc  # lazy
-        ...
-
-The ``PyNvVideoCodec`` package itself is additionally deferred to inside
-``LitPynvvcWrapper.__init__`` and ``is_pynvvc_available`` specifically, rather than
-this module's top level, since ``import PyNvVideoCodec`` succeeds regardless of GPU
-generation or driver age (Turing/Ampere/Ada/Hopper/Blackwell only, driver >= 530.41.03
-on Linux) -- the failure only surfaces when a decoder is actually constructed.
+Import discipline
+------------------
+Unlike ``dali.py``/``pynvvc.py``, ``cv2`` (``opencv-python-headless``) is an unconditional,
+cross-platform dependency already declared in ``pyproject.toml`` and already imported at module
+top level elsewhere in this package (e.g. ``lightning_pose.data.cameras``,
+``lightning_pose.utils.predictions``). So, unlike those two backends, this module imports ``cv2``
+eagerly; no lazy-import discipline is needed here (see ``lightning_pose.data.video``'s package
+docstring for when lazy imports are required).
 
 Architecture overview
 ----------------------
-Mirrors ``lightning_pose.data.dali``'s two-phase construction: ``PreparePynvvc.__init__``
-validates inputs and precomputes windowing parameters; calling the instance
-(``__call__``) builds and returns a ready-to-iterate ``LitPynvvcWrapper``.
+Mirrors ``lightning_pose.data.video.pynvvc``'s two-phase construction: ``PrepareOpenCV.__init__``
+validates inputs and precomputes windowing parameters; calling the instance (``__call__``) builds
+and returns a ready-to-iterate ``LitOpenCVWrapper``.
 
-Predict-only, unlike ``PrepareDALI``: this backend never runs ``random_shuffle`` or the
-``imgaug`` augmentation pipeline, since ``litpose predict`` already runs with both off.
-Training continues to go through DALI exclusively (``lightning_pose.data.dali``).
+Predict-only, like pynvvc: this backend never runs ``random_shuffle`` or the ``imgaug``
+augmentation pipeline, since ``litpose predict`` already runs with both off. Training continues
+to go through DALI exclusively (``lightning_pose.data.video.dali``).
 
-CUDA stream synchronization
-----------------------------
-``PyNvVideoCodec.SimpleDecoder`` writes decoded frames asynchronously on its own
-internal CUDA stream and hands them back as DLPack buffers. If a consumer (this
-module's own resize/normalize step, or eventually the model's forward pass) reads
-those buffers on a different stream before the decode is actually finished, the read
-happens on stale/partial data -- silently. No crash, no NaN, just quietly wrong
-pixels feeding a plausible-looking keypoint prediction. ``LitPynvvcWrapper.__next__``
-guards against this with an explicit ``torch.cuda.current_stream().synchronize()``
-after building each batch's frame tensors and before returning them. This is the
-"safe but not necessarily optimal" fix flagged in issue #476 -- passing an explicit
-stream handle into the decoder constructor (if supported) would avoid the sync cost
-entirely, but that needs checking against the installed PyNvVideoCodec version and is
-tracked as a follow-up, not done here.
+Sequential decode, not seek-based
+-----------------------------------
+Context (MHCRNN) models read overlapping windows: consecutive ``sequence_length``-frame windows
+advance by ``step = sequence_length - 4``, so the last 4 frames of window *i* are the same
+physical frames as the first 4 of window *i+1*. ``cv2.VideoCapture``'s ``CAP_PROP_POS_FRAMES``
+seeking is not reliably frame-exact on containers with B-frames or a variable/estimated frame
+rate -- a seek-per-window implementation risks silently misaligning that overlap: no crash, no
+shape change, just a temporally-shifted context stack feeding a plausible-but-wrong prediction.
+
+To avoid that, ``LitOpenCVWrapper`` never seeks: it opens each view's ``cv2.VideoCapture`` once
+and reads strictly forward via ``cap.read()``, caching the trailing 4 frames of each window in
+``self._tail`` to prepend to the next one. Every physical frame is decoded exactly once (aside
+from the cached tail).
 """
 
 from __future__ import annotations
 
-import logging
 import os
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
+import cv2
 import numpy as np
 import pandas as pd
 import torch
@@ -64,63 +54,45 @@ from lightning_pose.data.datatypes import (
 )
 from lightning_pose.data.utils import count_frames
 
-if TYPE_CHECKING:
-    # PyNvVideoCodec is NVIDIA's proprietary decoder package -- not on a
-    # CI-reachable index, so pyright can never resolve it here (see module
-    # docstring for the runtime lazy-import discipline this mirrors).
-    import PyNvVideoCodec as nvc  # pyright: ignore[reportMissingImports]
-
-logger = logging.getLogger(__name__)
-
 # to ignore imports for sphinx-autoapidoc
 __all__: list[str] = []
 
 
-def is_pynvvc_available(video_path: str, gpu_id: int = 0) -> bool:
-    """Best-effort check whether the pynvvc decoder backend can actually decode.
+def is_opencv_available(video_path: str) -> bool:
+    """Best-effort check whether OpenCV can open ``video_path`` for reading.
 
-    Unlike a plain ``import PyNvVideoCodec`` (which succeeds regardless of GPU
-    generation or driver age -- see module docstring), this attempts a real decoder
-    construction against ``video_path``, since NVDEC hardware-support failures only
-    surface there, not at import time. Intended to be called once per predict call
-    (e.g. by the CLI/API's auto-selection logic), not per-batch -- constructing a
-    ``SimpleDecoder`` has real setup cost.
+    Cheap relative to ``is_pynvvc_available`` -- no real decoder construction, no
+    CUDA -- since ``opencv-python-headless`` is an unconditional dependency, this only
+    needs to catch a bad/corrupt/unsupported file, not an availability question about
+    the package itself. Used to give a clear error when a user explicitly requests
+    ``--reader opencv`` against an unreadable file; not used to gate the auto-select
+    fallback chain, where opencv is the unconditional final rung (see
+    ``lightning_pose.utils.predictions.predict_video``).
 
     Args:
-        video_path: path to a real, existing video file to probe decodability with.
-        gpu_id: CUDA device index to attempt decoding on.
+        video_path: path to a real, existing video file to probe.
 
     Returns:
-        True if a decoder was constructed successfully, False on any exception
-        (unsupported GPU generation, driver too old, corrupt/unsupported container,
-        pynvvideocodec not installed, etc.) -- deliberately broad, since every
-        failure mode here should fall back to DALI rather than propagate.
+        True if ``cv2.VideoCapture`` can open the file, False otherwise.
     """
+    cap = cv2.VideoCapture(video_path)
     try:
-        # Same reason as the module-level TYPE_CHECKING import above -- not on a
-        # CI-reachable index. Also lazy at runtime to avoid ImportError on cpu-only
-        # installs.
-        import PyNvVideoCodec as nvc  # pyright: ignore[reportMissingImports]
-
-        decoder = nvc.SimpleDecoder(video_path, gpu_id=gpu_id, use_device_memory=True)
-        del decoder
-        return True
-    except Exception:
-        logger.debug("pynvvc decoder unavailable", exc_info=True)
-        return False
+        return cap.isOpened()
+    finally:
+        cap.release()
 
 
-class LitPynvvcWrapper:
-    """PyNvVideoCodec-backed iterator for Lightning Pose video prediction.
+class LitOpenCVWrapper:
+    """OpenCV-backed iterator for Lightning Pose video prediction.
 
-    Mirrors ``LitDaliWrapper``'s public shape (iterable, ``__len__``, yields typed
-    batch dicts consumable by ``trainer.predict()``) but is not a
-    ``DALIGenericIterator`` subclass -- built directly on one
-    ``PyNvVideoCodec.SimpleDecoder`` per view instead of a DALI pipeline.
+    Mirrors ``LitPynvvcWrapper``'s public shape (iterable, ``__len__``, yields typed
+    batch dicts consumable by ``trainer.predict()``) but reads sequentially from
+    ``cv2.VideoCapture`` instead of indexed random access -- see module docstring for
+    why.
 
     Predict-only: no ``random_shuffle``, no ``imgaug``. See
-    ``lightning_pose.data.dali.LitDaliWrapper`` for the train-time DALI path, which
-    this class does not replicate.
+    ``lightning_pose.data.video.dali.LitDaliWrapper`` for the train-time DALI path,
+    which this class does not replicate.
     """
 
     def __init__(
@@ -134,7 +106,6 @@ class LitPynvvcWrapper:
         num_iters: int,
         multiview: bool,
         bbox_df: pd.DataFrame | None = None,
-        gpu_id: int = 0,
     ) -> None:
         """
         Args:
@@ -152,18 +123,12 @@ class LitPynvvcWrapper:
                 ``sequence_length - 4`` for context models' overlapping windows.
             do_context: whether this is a 5-frame-context (MHCRNN-style) model.
             num_iters: total number of batches this video will produce; precomputed
-                by ``PreparePynvvc.num_iters`` so Lightning can report progress.
-            multiview: whether this is a multiview prediction (one decoder per view,
+                by ``PrepareOpenCV.num_iters`` so Lightning can report progress.
+            multiview: whether this is a multiview prediction (one capture per view,
                 read in lockstep since predict never shuffles).
             bbox_df: optional per-frame bbox DataFrame (columns x, y, h, w); single-
                 view only (enforced upstream in ``predict_video``).
-            gpu_id: CUDA device index to decode on.
         """
-        # Same reason as the module-level TYPE_CHECKING import above -- not on a
-        # CI-reachable index. Also lazy at runtime to avoid ImportError on cpu-only
-        # installs.
-        import PyNvVideoCodec as nvc  # pyright: ignore[reportMissingImports]
-
         self.resize_dims = resize_dims
         self.decode_resize_dims = decode_resize_dims
         self.sequence_length = sequence_length
@@ -172,62 +137,69 @@ class LitPynvvcWrapper:
         self.num_iters = num_iters
         self.multiview = multiview
         self.bbox_df = bbox_df
-        self.gpu_id = gpu_id
 
-        self._decoders = [
-            nvc.SimpleDecoder(
-                view_list[0],
-                gpu_id=gpu_id,
-                use_device_memory=True,
-                # planar CHW per frame, so stacking sequence_length frames gives
-                # (seq_len, C, H, W) directly -- matches DALI's FCHW output layout.
-                output_color_type=nvc.OutputColorType.RGBP,  # type: ignore[attr-defined]
-            )
-            for view_list in filenames
-        ]
-        self._total_frames = len(self._decoders[0])
+        self._caps = [cv2.VideoCapture(view_list[0]) for view_list in filenames]
+        # up to 4 frames carried over from the previous window's tail, per view --
+        # see module docstring for why this replaces seeking
+        self._tail: list[list[np.ndarray]] = [[] for _ in self._caps]
 
-        self._cursor = 0
         self._iters_done = 0
         # cursor into bbox_df; advances by the context-adjusted step per batch, same
-        # convention as LitDaliWrapper._frame_idx
+        # convention as LitDaliWrapper._frame_idx / LitPynvvcWrapper._frame_idx
         self._frame_idx = 0
 
     def __len__(self) -> int:
         """Return the number of iterations (batches) in this dataloader."""
         return self.num_iters
 
-    def __iter__(self) -> LitPynvvcWrapper:
+    def __iter__(self) -> LitOpenCVWrapper:
         return self
 
-    def _read_window(self, decoder: nvc.SimpleDecoder) -> torch.Tensor:
-        """Read ``sequence_length`` frames starting at ``self._cursor``.
+    def _read_new_frames(self, cap: cv2.VideoCapture, n: int) -> list[np.ndarray]:
+        """Read up to ``n`` frames sequentially from ``cap``; returns fewer at EOF."""
+        frames: list[np.ndarray] = []
+        for _ in range(n):
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frames.append(frame)  # HWC, BGR, uint8
+        return frames
 
-        Pads the final window by repeating the last real frame so every batch has a
-        static shape (matches DALI's ``pad_sequences=True`` / ``LastBatchPolicy.FILL``
-        behavior) -- this matters for torch.compile, which would otherwise eat a
-        recompilation stall on the last, oddly-shaped batch of every video.
+    def _next_window(self, cap_idx: int) -> torch.Tensor:
+        """Read the next ``sequence_length``-frame window for one view.
 
-        Uses ``get_batch_frames_by_index`` rather than slice indexing because
-        PyNvVideoCodec 2.1.0's ``SimpleDecoder.__getitem__`` does not support
-        ordinary Python slices whose step is omitted.
+        Prepends any tail carried over from the previous window (context models
+        only), reads just the new frames needed to fill out ``sequence_length``, pads
+        by repeating the last frame at end-of-video (matches DALI's
+        ``pad_sequences=True`` / ``LastBatchPolicy.FILL`` and ``LitPynvvcWrapper``'s
+        equivalent padding -- needed so every batch has a static shape, which matters
+        for torch.compile), and -- for context models -- caches the window's last 4
+        frames as the tail for next time.
         """
-        end = min(self._cursor + self.sequence_length, self._total_frames)
-        indices = list(range(self._cursor, end))
-        frames = list(decoder.get_batch_frames_by_index(indices)) if indices else []
+        tail = self._tail[cap_idx]
+        n_new = self.sequence_length - len(tail)
+        new_frames = self._read_new_frames(self._caps[cap_idx], n_new)
+        window = tail + new_frames
 
-        n_missing = self.sequence_length - len(frames)
-        if len(frames) == 0:
-            frames = [decoder[self._total_frames - 1]]
-            n_missing -= 1
+        n_missing = self.sequence_length - len(window)
         if n_missing > 0:
-            frames = frames + [frames[-1]] * n_missing
-        return torch.stack([torch.from_dlpack(f) for f in frames])  # (seq_len, C, H, W)
+            if not window:
+                raise RuntimeError(
+                    f"opencv reader exhausted view {cap_idx} with no frames decoded for this "
+                    "window; this indicates a mismatch between count_frames() and the actual "
+                    "decodable frame count."
+                )
+            window = window + [window[-1]] * n_missing
+
+        self._tail[cap_idx] = window[-4:] if self.do_context else []
+
+        # HWC BGR uint8 -> (seq_len, C, H, W) RGB, matching the other backends' output layout
+        frames_np = np.stack(window)  # (seq_len, H, W, C)
+        frames_bgr = torch.from_numpy(frames_np).permute(0, 3, 1, 2)  # (seq_len, C, H, W)
+        return frames_bgr[:, [2, 1, 0], :, :]  # BGR -> RGB
 
     def _resize_normalize(self, frames: torch.Tensor) -> torch.Tensor:
-        """frames: (seq_len, C, H, W), decoder output (assumed uint8 -- verify on
-        first real run; if the installed PyNvVideoCodec version returns a different
-        dtype for RGBP output this silently produces a wrong [0,1] scale).
+        """frames: (seq_len, C, H, W), uint8, RGB.
 
         Returns float, optionally resized to ``decode_resize_dims``, [0,1]-scaled,
         then ImageNet-normalized -- same order of operations as DALI's
@@ -248,15 +220,7 @@ class LitPynvvcWrapper:
             raise StopIteration
         self._iters_done += 1
 
-        per_view_frames = [self._read_window(dec) for dec in self._decoders]
-        # Synchronize each decoder's internal CUDA stream against the current stream
-        # before anything (including our own resize/normalize below) reads the
-        # tensors. See module docstring -- this is the safe-but-costly guard against
-        # silently reading a not-yet-finished decode.
-        torch.cuda.current_stream().synchronize()
-
-        self._cursor += self.step
-
+        per_view_frames = [self._next_window(i) for i in range(len(self._caps))]
         processed = [self._resize_normalize(f) for f in per_view_frames]
 
         if not self.multiview:
@@ -295,7 +259,7 @@ class LitPynvvcWrapper:
         else:
             frames = torch.stack(processed, dim=1)  # (seq_len, num_views, C, H, W)
             height, width = frames.shape[-2], frames.shape[-1]
-            num_views = len(self._decoders)
+            num_views = len(self._caps)
             bbox_per_view = torch.tensor(
                 [0, 0, height, width], device=frames.device, dtype=torch.float32,
             )
@@ -309,21 +273,20 @@ class LitPynvvcWrapper:
             )
 
 
-class PreparePynvvc:
-    """Factory for PyNvVideoCodec-backed inference dataloaders.
+class PrepareOpenCV:
+    """Factory for OpenCV-backed inference dataloaders.
 
-    Predict-only counterpart to ``lightning_pose.data.dali.PrepareDALI`` -- only
-    needs the "predict" x {"base", "context"} combinations, since NVDEC inference
-    never shuffles or augments. Construction is split the same way as ``PrepareDALI``:
-    ``__init__`` validates inputs and precomputes windowing parameters; ``__call__``
-    builds and returns a ready-to-iterate ``LitPynvvcWrapper``.
+    Predict-only counterpart to ``lightning_pose.data.video.dali.PrepareDALI`` -- only
+    needs the "predict" x {"base", "context"} combinations, since this backend never
+    shuffles or augments. Construction is split the same way as ``PrepareDALI``/
+    ``PreparePynvvc``: ``__init__`` validates inputs and precomputes windowing
+    parameters; ``__call__`` builds and returns a ready-to-iterate ``LitOpenCVWrapper``.
 
-    Sequence-length source (open design question, flag for review): reuses
-    ``dali_config["base"]["predict"]["sequence_length"]`` /
-    ``dali_config["context"]["predict"]["sequence_length"]`` (i.e. the existing
-    ``cfg.dali`` section) rather than introducing a parallel ``cfg.pynvvc`` config
-    block, since the windowing semantics are decoder-agnostic. Worth confirming this
-    is actually what's wanted rather than a separate config section.
+    Sequence-length source: reuses ``dali_config["base"]["predict"]["sequence_length"]``
+    / ``dali_config["context"]["predict"]["sequence_length"]`` (i.e. the existing
+    ``cfg.dali`` section), same precedent as ``PreparePynvvc`` -- see
+    ``lightning_pose.data.video``'s package docstring for why this parameter name is
+    kept even though it isn't DALI-specific.
     """
 
     def __init__(
@@ -332,25 +295,23 @@ class PreparePynvvc:
         filenames: list[str] | list[list[str]],
         resize_dims: list[int],
         dali_config: dict | DictConfig | ListConfig,
-        gpu_id: int = 0,
         bbox_df: pd.DataFrame | None = None,
     ) -> None:
         """
         Args:
             model_type: ``"base"`` for standard single-frame models, ``"context"``
                 for MHCRNN models that consume a temporal window.
-            filenames: for single-view, a single video path (as a length-1 list or
-                bare string); for multi-view, one video path per view.
+            filenames: for single-view, a flat list containing one video path; for
+                multi-view, one single-element list per view.
             resize_dims: ``[height, width]`` to resize frames to before feeding the
                 model. Also used as the post-crop resize target when ``bbox_df`` is
                 provided.
-            dali_config: same ``cfg.dali`` dict ``PrepareDALI`` reads from -- only
-                the ``predict.sequence_length`` values (base and context) are used.
-                See class docstring for why this reuses the DALI config section.
-            gpu_id: CUDA device index to decode on.
+            dali_config: same ``cfg.dali`` dict ``PrepareDALI``/``PreparePynvvc`` read
+                from -- only the ``predict.sequence_length`` values (base and context)
+                are used.
             bbox_df: optional DataFrame with columns ``["x", "y", "h", "w"]``, one
                 row per frame. When provided, frames are decoded at full resolution
-                and ``LitPynvvcWrapper`` crops each to its bbox before resizing.
+                and ``LitOpenCVWrapper`` crops each to its bbox before resizing.
 
         Raises:
             FileNotFoundError: if any path in ``filenames`` does not exist or is not
@@ -375,7 +336,7 @@ class PreparePynvvc:
         for view_list in filenames_2d:
             if len(view_list) != 1:
                 raise NotImplementedError(
-                    "pynvvc predict backend supports exactly one video per view "
+                    "opencv predict backend supports exactly one video per view "
                     f"(no multi-session batching); got {len(view_list)} videos for one view."
                 )
             vid = view_list[0]
@@ -388,7 +349,7 @@ class PreparePynvvc:
                 frame_count = count_frames(view_list[0])
                 if frame_count != view0_frame_count:
                     raise ValueError(
-                        "Mismatched frame counts across views; multiview pynvvc reading "
+                        "Mismatched frame counts across views; multiview opencv reading "
                         f"would desynchronize. view 0={view0_frame_count}, "
                         f"view {view_idx}={frame_count}"
                     )
@@ -396,16 +357,17 @@ class PreparePynvvc:
         self.model_type = model_type
         self.filenames = filenames_2d
         self.resize_dims = resize_dims
-        self.gpu_id = gpu_id
         self.bbox_df = bbox_df
         self.frame_count = view0_frame_count
 
         if model_type == "base":
-            self.sequence_length = dali_config["base"]["predict"]["sequence_length"]  # type: ignore[arg-type]
+            predict_cfg = dali_config["base"]["predict"]  # type: ignore[index]
+            self.sequence_length = predict_cfg["sequence_length"]
             self.step = self.sequence_length
             self.do_context = False
         elif model_type == "context":
-            self.sequence_length = dali_config["context"]["predict"]["sequence_length"]  # type: ignore[arg-type]
+            predict_cfg = dali_config["context"]["predict"]  # type: ignore[index]
+            self.sequence_length = predict_cfg["sequence_length"]
             self.step = self.sequence_length - 4
             self.do_context = True
         else:
@@ -421,9 +383,9 @@ class PreparePynvvc:
     def num_iters(self) -> int:
         """Number of dataloader iterations required to process all frames.
 
-        Mirrors the specific branch of ``PrepareDALI.num_iters`` that applies to
-        prediction (single sequence at a time, batch_size=1): for context models
-        this is the "step == sequence_length - 4" case.
+        Identical formula to ``PreparePynvvc.num_iters`` (single sequence at a time,
+        batch_size=1): for context models this is the "step == sequence_length - 4"
+        case.
         """
         if self.model_type == "base":
             return int(np.ceil(self.frame_count / self.sequence_length))
@@ -436,9 +398,9 @@ class PreparePynvvc:
             data_except_first_batch = self.frame_count - self.sequence_length
             return int(np.ceil(data_except_first_batch / self.step)) + 1
 
-    def __call__(self) -> LitPynvvcWrapper:
-        """Build and return a ready-to-iterate ``LitPynvvcWrapper``."""
-        return LitPynvvcWrapper(
+    def __call__(self) -> LitOpenCVWrapper:
+        """Build and return a ready-to-iterate ``LitOpenCVWrapper``."""
+        return LitOpenCVWrapper(
             filenames=self.filenames,
             resize_dims=self.resize_dims,
             decode_resize_dims=self._decode_resize_dims,
@@ -448,5 +410,4 @@ class PreparePynvvc:
             num_iters=self.num_iters,
             multiview=self.multiview,
             bbox_df=self.bbox_df,
-            gpu_id=self.gpu_id,
         )
