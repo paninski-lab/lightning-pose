@@ -339,8 +339,8 @@ class PreparePynvvc:
         Args:
             model_type: ``"base"`` for standard single-frame models, ``"context"``
                 for MHCRNN models that consume a temporal window.
-            filenames: for single-view, a single video path (as a length-1 list or
-                bare string); for multi-view, one video path per view.
+            filenames: for single-view, a flat list containing one video path; for
+                multi-view, one single-element list per view.
             resize_dims: ``[height, width]`` to resize frames to before feeding the
                 model. Also used as the post-crop resize target when ``bbox_df`` is
                 provided.
