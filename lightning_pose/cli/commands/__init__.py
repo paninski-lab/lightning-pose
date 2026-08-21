@@ -25,6 +25,7 @@ a forgotten doc page is caught by CI rather than relying on this docstring being
 """
 
 from lightning_pose.cli.commands import (
+    convert,
     create_bbox,
     crop,
     export,
@@ -47,4 +48,5 @@ COMMANDS = {
     'remap': remap,
     'run_app': run_app,
     'recommend': recommend,
+    'convert': convert,
 }

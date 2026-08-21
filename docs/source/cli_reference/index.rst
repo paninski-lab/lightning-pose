@@ -4,12 +4,13 @@ Lightning Pose command-line interface (CLI)
 .. toctree::
    :maxdepth: 1
 
-   train
-   recommend
-   predict
-   export
+   convert
    create_bbox
-   smooth_bbox
    crop
+   export
+   predict
+   recommend
    remap
    run_app
+   smooth_bbox
+   train
