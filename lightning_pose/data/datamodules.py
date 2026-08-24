@@ -112,11 +112,17 @@ class BaseDataModule(pl.LightningDataModule):
         train_idxs, val_idxs, test_idxs = self._split_indices()
 
         imgaug_hflip = getattr(self.dataset, 'imgaug_hflip', False)
+        imgaug_per_dataset = getattr(self.dataset, 'imgaug_transform_per_dataset', None)
         # the imgaug pipeline always contains at least one element (the final resize transform);
         # len == 1 therefore means "no augmentations" and subsets can safely share the same
-        # underlying dataset object. imgaug_hflip is checked separately because it is applied
-        # outside the pipeline in __getitem__ and must also be stripped from val/test.
-        if len(self.dataset.imgaug_transform) == 1 and not imgaug_hflip:  # type: ignore[arg-type]
+        # underlying dataset object. imgaug_hflip and imgaug_transform_per_dataset are checked
+        # separately because they are applied outside the global pipeline in __getitem__ and
+        # must also be stripped from val/test.
+        if (
+            len(self.dataset.imgaug_transform) == 1  # type: ignore[arg-type]
+            and not imgaug_hflip
+            and imgaug_per_dataset is None
+        ):
             # no augmentations in the pipeline; subsets can share same underlying dataset
             self.train_dataset = Subset(self.dataset, indices=train_idxs)
             self.val_dataset = Subset(self.dataset, indices=val_idxs)
@@ -142,6 +148,7 @@ class BaseDataModule(pl.LightningDataModule):
 
             self.val_dataset.dataset.imgaug_transform = final_transform  # type: ignore[union-attr]
             self.val_dataset.dataset.imgaug_hflip = False  # type: ignore[union-attr]
+            self.val_dataset.dataset.imgaug_transform_per_dataset = None  # type: ignore[union-attr]
             if hasattr(self.val_dataset.dataset, "dataset"):
                 # this will get triggered for multiview datasets
                 logger.debug('val: updating children datasets with resize imgaug pipeline')
@@ -151,6 +158,7 @@ class BaseDataModule(pl.LightningDataModule):
 
             self.test_dataset.dataset.imgaug_transform = final_transform  # type: ignore[union-attr]
             self.test_dataset.dataset.imgaug_hflip = False  # type: ignore[union-attr]
+            self.test_dataset.dataset.imgaug_transform_per_dataset = None  # type: ignore[union-attr]
             if hasattr(self.test_dataset.dataset, "dataset"):
                 # this will get triggered for multiview datasets
                 logger.debug('test: updating children datasets with resize imgaug pipeline')

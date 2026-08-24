@@ -22,6 +22,7 @@ model-side steps):
    subclass, add a branch in :func:`get_data_module`; otherwise no change is needed there.
 """
 
+import copy
 import warnings
 
 import imgaug.augmenters as iaa
@@ -70,6 +71,25 @@ def get_imgaug_transform(cfg: DictConfig | ListConfig) -> iaa.Sequential:
 
     """
 
+    return imgaug_transform(_imgaug_params_dict(cfg))
+
+
+def _imgaug_params_dict(cfg: DictConfig | ListConfig) -> dict:
+    """Resolve ``cfg.training.imgaug`` to a plain transform-parameters dictionary.
+
+    Shared by :func:`get_imgaug_transform` (which builds the single global pipeline) and
+    :func:`get_imgaug_transforms_per_dataset` (which builds per-dataset variants of it).
+
+    Args:
+        cfg: standard config file; see :func:`get_imgaug_transform` for the accepted
+            ``cfg.training.imgaug`` values.
+
+    Returns:
+        dictionary mapping imgaug transform names to their parameter dicts.
+
+    Raises:
+        TypeError: if ``cfg.training.imgaug`` is not a str, dict, or DictConfig.
+    """
     params = cfg.training.get('imgaug', 'default')
     if isinstance(params, str):
         # Check if user explicitly wants to use 3D augmentations for multiview models
@@ -97,7 +117,72 @@ def get_imgaug_transform(cfg: DictConfig | ListConfig) -> iaa.Sequential:
     else:
         raise TypeError(f'params is of type {type(params)}, must be str, dict, or DictConfig')
 
-    return imgaug_transform(params_dict)  # type: ignore[arg-type]
+    return params_dict  # type: ignore[return-value]
+
+
+def get_imgaug_transforms_per_dataset(
+    cfg: DictConfig | ListConfig,
+) -> dict[str, iaa.Sequential] | None:
+    """Build per-dataset variants of the imgaug pipeline with dataset-specific zoom-out bounds.
+
+    Reads ``cfg.training.imgaug_per_dataset_zoom``, a mapping from dataset name (an entry of
+    ``cfg.data.dataset_names``) to the upper bound of the CropAndPad ``percent`` range for that
+    dataset. Each listed dataset gets a copy of the base pipeline (``cfg.training.imgaug``) whose
+    CropAndPad upper bound is replaced by its own value; the lower bound, probability, and other
+    CropAndPad kwargs are inherited from the base pipeline's CropAndPad entry when present,
+    otherwise default to ``percent=(-0.15, <bound>)``, ``keep_size=True``, ``p=0.4``. Datasets
+    absent from the mapping fall back to the global pipeline at load time.
+
+    The motivation is scale-gap bridging in multi-dataset corpora: each source dataset should be
+    zoomed out only as far as needed to reach the smallest apparent scale in the corpus, rather
+    than all datasets sharing one (over-)aggressive range.
+
+    Args:
+        cfg: standard config file; relevant parameters are ``cfg.training.imgaug_per_dataset_zoom``
+            (mapping described above; absent/empty disables the feature),
+            ``cfg.training.imgaug`` (the base pipeline), and ``cfg.data.dataset_names``.
+
+    Returns:
+        mapping from dataset name to its pipeline, or None when the feature is not configured.
+
+    Raises:
+        ValueError: if the mapping is set without ``cfg.data.dataset_names``, references a name
+            missing from it, or a zoom bound does not exceed the CropAndPad lower bound.
+    """
+    zoom_cfg = cfg.training.get('imgaug_per_dataset_zoom', None)
+    if not zoom_cfg:
+        return None
+    zoom = OmegaConf.to_object(zoom_cfg) if isinstance(zoom_cfg, DictConfig) else dict(zoom_cfg)
+    dataset_names = cfg.data.get('dataset_names', None)
+    if not dataset_names:
+        raise ValueError(
+            'training.imgaug_per_dataset_zoom requires data.dataset_names to be set'
+        )
+    unknown = set(zoom) - set(dataset_names)
+    if unknown:
+        raise ValueError(
+            f'training.imgaug_per_dataset_zoom names {sorted(unknown)} not present in '
+            f'data.dataset_names {list(dataset_names)}'
+        )
+    params_dict_base = _imgaug_params_dict(cfg)
+    pipelines = {}
+    for name, bound in zoom.items():
+        params_dict = copy.deepcopy(params_dict_base)
+        entry = params_dict.get(
+            'CropAndPad', {'p': 0.4, 'kwargs': {'keep_size': True}},
+        )
+        kwargs = entry.setdefault('kwargs', {})
+        percent = kwargs.get('percent', (-0.15, None))
+        lower = float(percent[0])
+        if float(bound) <= lower:
+            raise ValueError(
+                f'imgaug_per_dataset_zoom[{name}]={bound} must exceed the CropAndPad '
+                f'lower bound {lower}'
+            )
+        kwargs['percent'] = (lower, float(bound))
+        params_dict['CropAndPad'] = entry
+        pipelines[name] = imgaug_transform(params_dict)
+    return pipelines
 
 
 def get_dataset(
@@ -133,6 +218,7 @@ def get_dataset(
     """
 
     imgaug_hflip = bool(cfg.training.get('imgaug_hflip', False))
+    imgaug_transform_per_dataset = get_imgaug_transforms_per_dataset(cfg)
 
     if cfg.model.model_type == 'regression':
         if cfg.data.get('view_names', None) and len(cfg.data.view_names) > 1:
@@ -148,12 +234,17 @@ def get_dataset(
                 bbox_path=cfg.data.get('bbox_file', None),
                 imgaug_hflip=imgaug_hflip,
                 dataset_names=cfg.data.get('dataset_names', None),
+                imgaug_transform_per_dataset=imgaug_transform_per_dataset,
             )
     elif cfg.model.model_type.find('heatmap') > -1:
         if cfg.data.get('view_names', None) and len(cfg.data.view_names) > 1:
             if imgaug_hflip:
                 raise ValueError(
                     'imgaug_hflip is not supported for multiview models'
+                )
+            if imgaug_transform_per_dataset is not None:
+                raise NotImplementedError(
+                    'imgaug_per_dataset_zoom is not supported for multiview models'
                 )
             UserWarning(
                 'No precautions regarding the size of the images were considered here, '
@@ -196,6 +287,7 @@ def get_dataset(
                 bbox_path=cfg.data.get('bbox_file', None),
                 imgaug_hflip=imgaug_hflip,
                 dataset_names=cfg.data.get('dataset_names', None),
+                imgaug_transform_per_dataset=imgaug_transform_per_dataset,
             )
 
     else:
