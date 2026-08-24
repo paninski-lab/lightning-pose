@@ -63,6 +63,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         bbox_path: str | None = None,
         imgaug_hflip: bool = False,
         dataset_names: list[str] | None = None,
+        imgaug_transform_per_dataset: dict[str, iaa.Sequential] | None = None,
     ) -> None:
         """Initialize a dataset for regression (rather than heatmap) models.
 
@@ -106,6 +107,11 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 this list — ids are never assigned from CSV appearance order). When None
                 (default), behavior is identical to stock Lightning Pose and no per-example
                 ``dataset_id`` is emitted.
+            imgaug_transform_per_dataset: optional mapping from dataset name (an entry of
+                ``dataset_names``, which must then be provided) to a dataset-specific imgaug
+                pipeline; frames from a listed dataset are augmented with their own pipeline,
+                all others fall back to ``imgaug_transform``. Stripped from validation and test
+                subsets by the data module, exactly like the global pipeline.
 
         """
         self.root_directory = Path(root_directory)
@@ -121,7 +127,23 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
                 "height": image_resize_height,
                 "width": image_resize_width,
             }))
+            if imgaug_transform_per_dataset is not None:
+                for per_dataset_transform in imgaug_transform_per_dataset.values():
+                    per_dataset_transform.add(iaa.Resize({
+                        "height": image_resize_height,
+                        "width": image_resize_width,
+                    }))
         self.imgaug_transform = imgaug_transform
+        if imgaug_transform_per_dataset is not None:
+            if dataset_names is None:
+                raise ValueError('imgaug_transform_per_dataset requires dataset_names')
+            unknown = set(imgaug_transform_per_dataset) - set(dataset_names)
+            if unknown:
+                raise ValueError(
+                    f'imgaug_transform_per_dataset names {sorted(unknown)} not present in '
+                    f'dataset_names {list(dataset_names)}'
+                )
+        self.imgaug_transform_per_dataset = imgaug_transform_per_dataset
 
         # load csv data
         if os.path.isfile(csv_path):
@@ -292,6 +314,21 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         """Return the number of labeled examples in the dataset."""
         return self.data_length
 
+    def _imgaug_transform_for(self, idx: int) -> iaa.Sequential | None:
+        """Return the imgaug pipeline for one example: its dataset's own, else the global one.
+
+        Args:
+            idx: index into the dataset.
+
+        Returns:
+            the example's source dataset's pipeline when per-dataset pipelines are configured
+            and its dataset is listed; otherwise ``self.imgaug_transform``.
+        """
+        if self.imgaug_transform_per_dataset is None or self.dataset_ids is None:
+            return self.imgaug_transform
+        name = self.dataset_names[int(self.dataset_ids[idx])]
+        return self.imgaug_transform_per_dataset.get(name, self.imgaug_transform)
+
     def __getitem__(self, idx: int) -> BaseLabeledExampleDict:
         """Return one labeled example as a dictionary.
 
@@ -304,13 +341,14 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         img_name = self.image_names[idx]
         keypoints_on_image = self.keypoints[idx]
         img_path = self.root_directory / img_name
+        imgaug_pipeline = self._imgaug_transform_for(idx)
         if not self.do_context:
             do_hflip = self.imgaug_hflip and np.random.random() < 0.5
             # read image from file and apply transformations (if any)
             # if 1 color channel, change to 3.
             image = Image.open(img_path).convert("RGB")
-            if self.imgaug_transform is not None:
-                imgs_aug, kps_aug = self.imgaug_transform(  # type: ignore[misc]
+            if imgaug_pipeline is not None:
+                imgs_aug, kps_aug = imgaug_pipeline(  # type: ignore[misc]
                     images=np.expand_dims(np.array(image), axis=0),
                     keypoints=np.expand_dims(keypoints_on_image, axis=0),
                 )  # expands add batch dim for imgaug
@@ -348,13 +386,13 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             do_hflip = self.imgaug_hflip and np.random.random() < 0.5
 
             # apply data aug pipeline
-            if self.imgaug_transform is not None:
+            if imgaug_pipeline is not None:
                 # need to apply the same transform to all context frames
                 seed = np.random.randint(low=0, high=123456)
                 transformed_images = []
                 for img in images:
-                    self.imgaug_transform.seed_(seed)
-                    img_aug, kps_aug = self.imgaug_transform(  # type: ignore[misc]
+                    imgaug_pipeline.seed_(seed)
+                    img_aug, kps_aug = imgaug_pipeline(  # type: ignore[misc]
                         images=[img], keypoints=[keypoints_on_image.numpy()]
                     )
                     transformed_images.append(img_aug[0])
@@ -444,6 +482,7 @@ class HeatmapDataset(BaseTrackingDataset):
         bbox_path: str | None = None,
         imgaug_hflip: bool = False,
         dataset_names: list[str] | None = None,
+        imgaug_transform_per_dataset: dict[str, iaa.Sequential] | None = None,
     ) -> None:
         """Initialize the Heatmap Dataset.
 
@@ -474,6 +513,8 @@ class HeatmapDataset(BaseTrackingDataset):
                 same order as csv file
             imgaug_hflip: see :class:`BaseTrackingDataset` for full documentation.
             dataset_names: see :class:`BaseTrackingDataset` for full documentation.
+            imgaug_transform_per_dataset: see :class:`BaseTrackingDataset` for full
+                documentation.
 
         """
         super().__init__(
@@ -488,6 +529,7 @@ class HeatmapDataset(BaseTrackingDataset):
             bbox_path=bbox_path,
             imgaug_hflip=imgaug_hflip,
             dataset_names=dataset_names,
+            imgaug_transform_per_dataset=imgaug_transform_per_dataset,
         )
 
         if self.height % 128 != 0 or self.height % 128 != 0:
@@ -661,6 +703,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             raise ValueError("number of names does not match with the number of files!")
         logger.info('using MultiviewHeatmapDataset')
         self.imgaug_hflip = False  # not supported for multiview; sentinel for data module
+        self.imgaug_transform_per_dataset = None  # not supported for multiview; same sentinel
         self.root_directory = root_directory
         self.csv_paths = csv_paths
         self.bbox_paths = bbox_paths or [None] * len(view_names)

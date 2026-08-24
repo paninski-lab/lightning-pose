@@ -1370,6 +1370,10 @@ def _build_datamodule_pred(cfg: DictConfig | ListConfig) -> BaseDataModule | Unl
     cfg_pred = copy.deepcopy(cfg)
     cfg_pred.training.imgaug = "default"
     cfg_pred.training.imgaug_hflip = False
+    if 'imgaug_per_dataset_zoom' in cfg_pred.training:
+        # training-only flag; must be cleared explicitly or labeled-frame prediction would
+        # run on randomly augmented images (see CLAUDE.md, dataset augmentation recipe)
+        cfg_pred.training.imgaug_per_dataset_zoom = None
     imgaug_transform_pred = get_imgaug_transform(cfg=cfg_pred)
     dataset_pred = get_dataset(
         cfg=cfg_pred,
