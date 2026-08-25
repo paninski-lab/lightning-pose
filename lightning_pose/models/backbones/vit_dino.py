@@ -96,19 +96,48 @@ class VisionEncoderDino(nn.Module):
             self.vision_encoder.embeddings.patch_size = patch_size
             self.vision_encoder.embeddings.patch_embeddings.patch_size = patch_size
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass through the vision encoder.
+    def forward(
+        self,
+        x: torch.Tensor,
+        dataset_tokens: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Forward pass through the vision encoder, optionally dataset-conditioned.
 
         Args:
             x: input tensor of shape (B, C, H, W)
+            dataset_tokens: optional per-row conditioning vectors of shape (B, D). When
+                given, each row's token is added to all of its patch embeddings before
+                the transformer (prefix cls/register tokens untouched), so the entire
+                encoder can specialize on the conditioning signal. Additive rather than
+                sequence-prepended: DINOv3 computes RoPE positions from pixel geometry,
+                so changing the sequence length would break its position handling.
 
         Returns:
             encoded features of shape (B, D, H', W')
         """
-        outputs = self.vision_encoder(
-            x,
-            output_hidden_states=False,
-        ).last_hidden_state
+        handle = None
+        if dataset_tokens is not None:
+            num_prefix_cond = 1 + getattr(self.vision_encoder.config, 'num_register_tokens', 0)
+
+            def _add_dataset_tokens(module, inputs, output):
+                # embeddings output: (B, num_prefix + num_patches, D)
+                return torch.cat(
+                    [
+                        output[:, :num_prefix_cond],
+                        output[:, num_prefix_cond:] + dataset_tokens[:, None, :].to(output.dtype),
+                    ],
+                    dim=1,
+                )
+
+            handle = self.vision_encoder.embeddings.register_forward_hook(_add_dataset_tokens)
+        try:
+            outputs = self.vision_encoder(
+                x,
+                output_hidden_states=False,
+            ).last_hidden_state
+        finally:
+            if handle is not None:
+                handle.remove()
 
         # v2/v3 each have 1 CLS token; v3 has 4 additional register tokens
         num_prefix = 1 + getattr(self.vision_encoder.config, 'num_register_tokens', 0)

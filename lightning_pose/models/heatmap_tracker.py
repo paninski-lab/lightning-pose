@@ -512,6 +512,219 @@ class MultiHeadHeatmapTracker(HeatmapTracker):
         return params
 
 
+class TokenConditionedHeatmapTracker(HeatmapTracker):
+    """Shared-head heatmap tracker conditioned on a learned per-dataset token.
+
+    The third head mode: every weight is shared (unlike per-dataset heads, so small
+    datasets never starve their own parameters), but a learned embedding per registry
+    dataset is injected into the backbone so the whole network can specialize on
+    dataset identity (unlike the plain shared head, so conflicting label conventions
+    need not fight over one output channel). The token is added to every patch
+    embedding before the transformer (see ``VisionEncoderDino.forward``); tokens are
+    zero-initialized, so at initialization the model is exactly the shared model and
+    conditioning is learned as a delta.
+
+    Requires a DINO ViT backbone (the injection point lives in its wrapper) and
+    supervised training on single-view, non-context batches carrying ``dataset_id``.
+
+    Inference modes (``self.predict_mode``, set post-construction):
+
+    - ``'oracle'`` (default): each row uses its own dataset's token, from the batch's
+      ``dataset_id`` or, for videos/external frames, from ``self.predict_dataset``.
+    - ``'mean_token'``: every row uses the mean of all learned tokens — the zero-shot
+      entry point for data from an unseen dataset.
+
+    Few-shot adaptation to a new dataset = append one token row and train only it
+    (handled by fine-tuning scripts, not here).
+    """
+
+    def __init__(
+        self,
+        dataset_names: list[str],
+        token_lr: float = 1e-2,
+        **kwargs: Any,
+    ) -> None:
+        """Initialize a token-conditioned heatmap tracker.
+
+        Args:
+            dataset_names: ordered source-dataset registry; token ``i`` belongs to
+                ``dataset_names[i]``, matching the ids parsed from image paths.
+            token_lr: learning rate for the token embedding's own optimizer group.
+                Tokens sit behind the full (initially frozen) transformer, so their
+                gradients arrive orders of magnitude weaker than the head's — the
+                standard prompt-tuning regime, cured with a much larger lr.
+            **kwargs: passed through to :class:`HeatmapTracker`.
+        """
+        super().__init__(**kwargs)
+        if not dataset_names:
+            raise ValueError('dataset_names must be a non-empty ordered registry')
+        self.dataset_names = list(dataset_names)
+        self.token_lr = float(token_lr)
+
+        # zero-init: conditioning starts as a no-op and is learned as a per-dataset
+        # delta; also makes the mean token exactly neutral at initialization
+        self.dataset_tokens = torch.nn.Embedding(
+            len(self.dataset_names), self.num_fc_input_features,
+        )
+        torch.nn.init.zeros_(self.dataset_tokens.weight)
+
+        self.predict_mode: str = 'oracle'
+        self.predict_dataset: str | None = None
+
+    def forward(self, images: torch.Tensor) -> torch.Tensor:
+        """Raise: a conditioned forward needs per-frame dataset ids.
+
+        Raises:
+            NotImplementedError: always; use :meth:`forward_conditioned`, or
+                ``predict_mode='mean_token'`` for data with no dataset identity.
+        """
+        raise NotImplementedError(
+            'TokenConditionedHeatmapTracker has no unconditioned forward; use '
+            "forward_conditioned(images, dataset_ids), or predict_mode='mean_token' "
+            'for unseen data'
+        )
+
+    def _conditioned_representations(
+        self,
+        images: Float[torch.Tensor, 'batch channels image_height image_width'],
+        tokens: Float[torch.Tensor, 'batch features'],
+    ) -> Float[torch.Tensor, 'batch features rep_height rep_width']:
+        """Backbone forward with per-row conditioning tokens (non-context, single view)."""
+        if len(images.shape) != 4:
+            raise NotImplementedError(
+                'token conditioning supports single-view, non-context batches only'
+            )
+        if not hasattr(self.backbone, 'vision_encoder'):
+            raise NotImplementedError(
+                'token conditioning requires a DINO ViT backbone '
+                '(VisionEncoderDino); got ' + type(self.backbone).__name__
+            )
+        return self.backbone(images, dataset_tokens=tokens)
+
+    def forward_conditioned(
+        self,
+        images: Float[torch.Tensor, 'batch channels image_height image_width'],
+        dataset_ids: Float[torch.Tensor, 'batch'],
+    ) -> Float[torch.Tensor, 'batch num_keypoints heatmap_height heatmap_width']:
+        """Forward pass conditioning each row on its dataset's learned token.
+
+        Args:
+            images: batch of images.
+            dataset_ids: per-row source-dataset id (index into ``dataset_names``).
+
+        Returns:
+            heatmaps in the canonical 36-keypoint space, original batch order.
+        """
+        tokens = self.dataset_tokens(dataset_ids.long())
+        representations = self._conditioned_representations(images, tokens)
+        return self.head(representations)
+
+    def forward_mean_token(
+        self,
+        images: Float[torch.Tensor, 'batch channels image_height image_width'],
+    ) -> Float[torch.Tensor, 'batch num_keypoints heatmap_height heatmap_width']:
+        """Forward pass conditioning every row on the mean of all learned tokens.
+
+        The zero-shot entry point for data whose source dataset is not in the registry.
+        """
+        mean_token = self.dataset_tokens.weight.mean(dim=0, keepdim=True)
+        tokens = mean_token.expand(images.shape[0], -1)
+        representations = self._conditioned_representations(images, tokens)
+        return self.head(representations)
+
+    def get_loss_inputs_labeled(self, batch_dict: HeatmapLabeledBatchDict) -> dict:
+        """Return predicted heatmaps and keypoints, conditioning rows by dataset id."""
+        if 'dataset_id' not in batch_dict:
+            raise ValueError(
+                'token conditioning requires dataset_id in each labeled batch; set '
+                'data.dataset_names so the dataset parses ids from image paths'
+            )
+        predicted_heatmaps = self.forward_conditioned(
+            batch_dict['images'], batch_dict['dataset_id'],
+        )
+        predicted_keypoints, confidence = self.head.run_subpixelmaxima(predicted_heatmaps)
+        predicted_keypoints = model_to_frame_batch(batch_dict, predicted_keypoints)
+        target_keypoints = model_to_frame_batch(batch_dict, batch_dict['keypoints'])
+        return {
+            'heatmaps_targ': batch_dict['heatmaps'],
+            'heatmaps_pred': predicted_heatmaps,
+            'keypoints_targ': target_keypoints,
+            'keypoints_pred': predicted_keypoints,
+            'confidences': confidence,
+        }
+
+    def predict_step(
+        self,
+        batch_dict: HeatmapLabeledBatchDict | UnlabeledBatchDict,
+        batch_idx: int,
+        return_heatmaps: bool | None = False,
+    ) -> (
+        tuple[torch.Tensor, torch.Tensor]
+        | tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+    ):
+        """Predict keypoints using the configured conditioning mode.
+
+        See the class docstring for the ``'oracle'`` / ``'mean_token'`` modes.
+        """
+        if 'images' in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
+            images = batch_dict['images']  # type: ignore[typeddict-item]
+        else:
+            images = batch_dict['frames']  # type: ignore[typeddict-item]
+
+        if self.predict_mode == 'mean_token':
+            predicted_heatmaps = self.forward_mean_token(images)
+        elif self.predict_mode == 'oracle':
+            if 'dataset_id' in batch_dict.keys():
+                dataset_ids = batch_dict['dataset_id']  # type: ignore[typeddict-item]
+            elif self.predict_dataset is not None:
+                if self.predict_dataset not in self.dataset_names:
+                    raise ValueError(
+                        f"predict_dataset '{self.predict_dataset}' is not in the "
+                        f'registry {self.dataset_names}'
+                    )
+                dataset_ids = torch.full(
+                    (images.shape[0],), self.dataset_names.index(self.predict_dataset),
+                    dtype=torch.long, device=images.device,
+                )
+            else:
+                raise ValueError(
+                    'oracle prediction needs a dataset identity: the batch carries '
+                    'none and predict_dataset is unset. For unseen data use '
+                    "predict_mode='mean_token'."
+                )
+            predicted_heatmaps = self.forward_conditioned(images, dataset_ids)
+        else:
+            raise ValueError(
+                f"predict_mode must be 'oracle' or 'mean_token', got '{self.predict_mode}'"
+            )
+
+        predicted_keypoints, confidence = self.head.run_subpixelmaxima(predicted_heatmaps)
+        predicted_keypoints = model_to_frame_batch(batch_dict, predicted_keypoints)
+        if return_heatmaps:
+            return predicted_keypoints, confidence, predicted_heatmaps
+        else:
+            return predicted_keypoints, confidence
+
+    def get_parameters(self) -> list[dict]:
+        """Backbone and head groups as usual, plus a token group with its own lr.
+
+        The unfreezing callback reads only groups 0 (backbone) and 1 (head), so the
+        extra group is safe. Tokens need their own, much larger lr: their gradient
+        arrives through the whole (initially frozen) transformer and is orders of
+        magnitude weaker than the head's — measured ~1e-4x on this backbone.
+        """
+        params = [
+            {'params': self.backbone.parameters(), 'lr': 0, 'name': 'backbone'},
+            {'params': self.head.parameters(), 'name': 'head'},
+            {
+                'params': self.dataset_tokens.parameters(),
+                'lr': self.token_lr,
+                'name': 'dataset_tokens',
+            },
+        ]
+        return params
+
+
 class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
     """Model produces heatmaps of keypoints from labeled/unlabeled images."""
 

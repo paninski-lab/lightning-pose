@@ -45,6 +45,7 @@ from lightning_pose.models.heatmap_tracker import (
     HeatmapTracker,
     MultiHeadHeatmapTracker,
     SemiSupervisedHeatmapTracker,
+    TokenConditionedHeatmapTracker,
 )
 from lightning_pose.models.heatmap_tracker_mhcrnn import (
     HeatmapTrackerMHCRNN,
