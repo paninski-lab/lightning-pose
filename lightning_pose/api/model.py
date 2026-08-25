@@ -178,12 +178,16 @@ def load_model_from_checkpoint(
     # then predicts with a randomly initialized head while looking fully loaded
     head_mode = cfg.model.get('head_mode', 'shared')
     if (
-        head_mode == 'per_dataset'
+        head_mode in ('per_dataset', 'dataset_token')
         and cfg.model.model_type == 'heatmap'
         and not semi_supervised
     ):
-        from lightning_pose.models import MultiHeadHeatmapTracker
-        ModelClass = MultiHeadHeatmapTracker
+        if head_mode == 'per_dataset':
+            from lightning_pose.models import MultiHeadHeatmapTracker
+            ModelClass = MultiHeadHeatmapTracker
+        else:
+            from lightning_pose.models import TokenConditionedHeatmapTracker
+            ModelClass = TokenConditionedHeatmapTracker
 
     try:
         checkpoint = torch.load(ckpt_file)
