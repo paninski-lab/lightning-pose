@@ -225,7 +225,11 @@ class LitOpenCVWrapper:
 
         if not self.multiview:
             frames = processed[0]
-            height, width = frames.shape[-2], frames.shape[-1]
+            # bbox reflects the true, pre-resize decoded frame size (not
+            # decode_resize_dims), so norm_to_frame correctly rescales model-space
+            # predictions back into the original video's pixel coordinates -- mirrors
+            # DALI's separate "frame_size" output, which is captured before fn.resize.
+            height, width = per_view_frames[0].shape[-2], per_view_frames[0].shape[-1]
 
             if self.bbox_df is not None:
                 assert self.resize_dims is not None  # required whenever bbox_df is set
@@ -258,12 +262,17 @@ class LitOpenCVWrapper:
 
         else:
             frames = torch.stack(processed, dim=1)  # (seq_len, num_views, C, H, W)
-            height, width = frames.shape[-2], frames.shape[-1]
             num_views = len(self._caps)
-            bbox_per_view = torch.tensor(
-                [0, 0, height, width], device=frames.device, dtype=torch.float32,
-            )
-            bbox = bbox_per_view.repeat(num_views).unsqueeze(0).repeat(frames.shape[0], 1)
+            # per-view pre-resize decoded frame size -- see single-view branch above
+            # for why this must come from per_view_frames, not the resized `frames`.
+            bbox_per_view = torch.cat([
+                torch.tensor(
+                    [0, 0, pv.shape[-2], pv.shape[-1]],
+                    device=frames.device, dtype=torch.float32,
+                )
+                for pv in per_view_frames
+            ])
+            bbox = bbox_per_view.unsqueeze(0).repeat(frames.shape[0], 1)
             transforms = torch.tensor([-1.0]).repeat(num_views, 1, 1)
             return MultiviewUnlabeledBatchDict(
                 frames=frames,
