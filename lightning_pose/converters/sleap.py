@@ -19,7 +19,7 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 
-def _decode_json_attr(raw: bytes | str) -> dict:
+def _decode_json_attr(raw: object) -> dict:
     """Decode an h5py ``json`` attribute, which may come back as ``str`` or ``bytes``.
 
     h5py returns ``numpy.bytes_`` for fixed-length HDF5 string attributes and native ``str``
