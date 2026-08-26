@@ -231,6 +231,27 @@ def load_model_from_checkpoint(
         import os
         os.unlink(fixed_ckpt_file)
 
+    # LoRA checkpoints: load_from_checkpoint builds the plain model, so the adapter tensors
+    # (lora_A/lora_B) are silently dropped by strict=False. Rebuild the adapters exactly as
+    # the model factory did, then load again so every adapter weight lands.
+    lora_cfg = cfg.model.get('lora', None)
+    has_lora_keys = any('.lora_A' in k for k in state_dict)
+    if lora_cfg:
+        from lightning_pose.models.backbones.lora import apply_lora
+        rank = int(lora_cfg.get('rank', 16))
+        apply_lora(
+            model.backbone,
+            targets=list(lora_cfg.get('targets', ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'up_proj', 'down_proj'])),
+            rank=rank,
+            alpha=float(lora_cfg.get('alpha', 2 * rank)),
+        )
+        model.load_state_dict(state_dict, strict=False)
+    elif has_lora_keys:
+        raise RuntimeError(
+            'checkpoint contains LoRA adapter weights but the config has no model.lora block; '
+            'loading it would silently drop the adapters'
+        )
+
     # strict=False is needed for old-checkpoint key remapping, but it also means a class
     # mismatch loads "successfully" with untrained parameters. Verify every parameter the
     # model expects was actually present in the checkpoint (non-persistent buffers are
