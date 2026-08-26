@@ -1,5 +1,6 @@
 """Models that produce heatmaps of keypoints from images."""
 
+import logging
 from typing import Any, Literal
 
 import torch
@@ -27,6 +28,9 @@ from lightning_pose.models.heads import HeatmapHead
 __all__: list[str] = []
 
 
+logger = logging.getLogger(__name__)
+
+
 class HeatmapTracker(BaseSupervisedTracker):
     """Base model that produces heatmaps of keypoints from images."""
 
@@ -43,6 +47,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         optimizer_params: DictConfig | ListConfig | dict | None = None,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
+        head_freeze_keypoints: list[int] | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize a heatmap-based pose estimation model with conv or transformer backbone.
@@ -58,6 +63,12 @@ class HeatmapTracker(BaseSupervisedTracker):
             lr_scheduler: how to schedule learning rate
             lr_scheduler_params: params for specific learning rate schedulers
                 multisteplr: milestones, gamma
+            head_freeze_keypoints: indices of output channels (keypoints) whose head
+                filters must not change during training. Their gradients are zeroed
+                (a bit-exact freeze under Adam); every other weight trains normally.
+                For fine-tuning a checkpoint on a dataset that labels keypoints the
+                checkpoint already knows (keep) next to ones it never trained (learn).
+                None = stock behaviour.
 
         """
 
@@ -88,6 +99,11 @@ class HeatmapTracker(BaseSupervisedTracker):
             out_channels=self.num_keypoints,
             downsample_factor=self.downsample_factor,
         )
+        self.head_freeze_keypoints = (
+            sorted(set(int(i) for i in head_freeze_keypoints)) if head_freeze_keypoints else None
+        )
+        if self.head_freeze_keypoints:
+            self._install_head_filter_freeze(self.head_freeze_keypoints)
 
         self.loss_factory = loss_factory
 
@@ -185,6 +201,46 @@ class HeatmapTracker(BaseSupervisedTracker):
             return predicted_keypoints, confidence, predicted_heatmaps
         else:
             return predicted_keypoints, confidence
+
+    def _install_head_filter_freeze(self, keypoint_idx: list[int]) -> None:
+        """Zero the gradient of selected output filters of the head's final conv layer.
+
+        The final layer of :class:`HeatmapHead` has one output channel per keypoint, so
+        freezing "keypoint i" is freezing output row i of its weight and bias. With Adam a
+        zero gradient gives a zero update (m = v = 0), so those rows stay bit-identical to
+        the loaded checkpoint while the remaining rows and the rest of the network train.
+        """
+        final = [m for m in self.head.upsampling_layers if sum(1 for _ in m.parameters())][-1]
+        out_dim = 1 if isinstance(final, torch.nn.ConvTranspose2d) else 0  # (in,out,..) vs (out,in,..)
+        if final.weight.shape[out_dim] != self.num_keypoints:
+            raise ValueError(
+                f'head final layer has {final.weight.shape[out_dim]} output channels, expected '
+                f'num_keypoints={self.num_keypoints}; cannot map keypoints to filters'
+            )
+        bad = [i for i in keypoint_idx if not 0 <= i < self.num_keypoints]
+        if bad:
+            raise ValueError(f'head_freeze_keypoints out of range: {bad}')
+        mask = torch.zeros(self.num_keypoints, dtype=torch.bool)
+        mask[keypoint_idx] = True
+        self.register_buffer('head_frozen_mask', mask, persistent=False)
+
+        def _zero_rows(grad: torch.Tensor) -> torch.Tensor:
+            grad = grad.clone()
+            if grad.dim() == 1:                      # bias: (out,)
+                grad[self.head_frozen_mask] = 0
+            elif out_dim == 1:                       # ConvTranspose2d weight: (in, out, kh, kw)
+                grad[:, self.head_frozen_mask] = 0
+            else:                                    # Conv2d weight: (out, in, kh, kw)
+                grad[self.head_frozen_mask] = 0
+            return grad
+
+        final.weight.register_hook(_zero_rows)
+        if final.bias is not None:
+            final.bias.register_hook(_zero_rows)
+        logger.info(
+            f'head filter freeze: {len(keypoint_idx)} of {self.num_keypoints} keypoint channels '
+            f'frozen, {self.num_keypoints - len(keypoint_idx)} trainable'
+        )
 
     def get_parameters(self) -> list[dict]:
         """Return per-parameter-group optimizer configuration for backbone and head.
