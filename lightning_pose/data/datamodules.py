@@ -51,6 +51,7 @@ class BaseDataModule(pl.LightningDataModule):
         train_frames: float | int | None = None,
         torch_seed: int = 42,
         sampling_temperature: float | None = None,
+        epoch_repeat: int = 1,
     ) -> None:
         """Data module splits a dataset into train, val, and test data loaders.
 
@@ -73,6 +74,10 @@ class BaseDataModule(pl.LightningDataModule):
                 mass (see :class:`~lightning_pose.data.samplers.TemperatureSampler`).
                 None or 1 keeps the stock shuffled loader; values > 1 require the
                 dataset to carry ``dataset_ids`` (i.e. ``data.dataset_names`` set).
+            epoch_repeat: number of shuffled passes over the training subset per
+                loader epoch (see :class:`~lightning_pose.data.samplers.RepeatedEpochBatchSampler`).
+                1 keeps the stock loader; >1 amortizes per-epoch overhead for few-frame
+                training and cannot be combined with ``sampling_temperature``.
 
         """
         super().__init__()
@@ -98,6 +103,11 @@ class BaseDataModule(pl.LightningDataModule):
         self.test_dataset: Subset | None = None
         self.torch_seed = torch_seed
         self.sampling_temperature = sampling_temperature
+        self.epoch_repeat = int(epoch_repeat)
+        if self.epoch_repeat < 1:
+            raise ValueError(f'epoch_repeat must be >= 1, got {epoch_repeat}')
+        if self.epoch_repeat > 1 and sampling_temperature is not None and sampling_temperature != 1:
+            raise ValueError('epoch_repeat > 1 cannot be combined with sampling_temperature > 1')
         self.train_sampler = None
         self._setup()
         self._setup_train_sampler()
@@ -335,6 +345,20 @@ class BaseDataModule(pl.LightningDataModule):
                 num_workers=self.num_workers,
                 persistent_workers=True if self.num_workers > 0 else False,
                 sampler=self.train_sampler,
+            )
+        if self.epoch_repeat > 1:
+            # few-frame training: several shuffled passes per epoch, stock batches
+            from lightning_pose.data.samplers import RepeatedEpochBatchSampler
+            return DataLoader(
+                self.train_dataset,  # type: ignore[arg-type]
+                batch_sampler=RepeatedEpochBatchSampler(
+                    n=len(self.train_dataset),  # type: ignore[arg-type]
+                    batch_size=self.train_batch_size,
+                    repeats=self.epoch_repeat,
+                    generator=torch.Generator().manual_seed(self.torch_seed),
+                ),
+                num_workers=self.num_workers,
+                persistent_workers=True if self.num_workers > 0 else False,
             )
         return DataLoader(
             self.train_dataset,  # type: ignore[arg-type]

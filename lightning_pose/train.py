@@ -75,6 +75,8 @@ def calculate_steps_per_epoch(data_module: BaseDataModule) -> int:
     assert data_module.train_dataset is not None
     train_dataset_length = len(data_module.train_dataset)
     steps_per_epoch = math.ceil(train_dataset_length / data_module.train_batch_size)
+    # RepeatedEpochBatchSampler packs several shuffled passes into one loader epoch
+    steps_per_epoch *= getattr(data_module, 'epoch_repeat', 1)
 
     # To understand why we do this, see 'max_size_cycle' in UnlabeledDataModule.
     if isinstance(data_module, UnlabeledDataModule):

@@ -169,3 +169,48 @@ class TemperatureSampler(Sampler[int]):
             )
         self._epoch = state['epoch']
         self._current = None
+
+
+class RepeatedEpochBatchSampler(Sampler[list[int]]):
+    """Concatenate ``repeats`` independent shuffled passes over a subset into one epoch.
+
+    Batch boundaries never cross a pass, so the batches are exactly those the stock
+    ``shuffle=True, drop_last=False`` loader would produce over ``repeats`` consecutive
+    epochs; only Lightning's per-epoch turnover (iterator reset, callbacks, progress bar,
+    status writes) is amortized. Intended for few-frame training, where one pass is a
+    single batch and that turnover otherwise dominates wall-clock. Step-based settings
+    (``max_steps``, ``val_check_interval``, ``unfreezing_step``, ``milestone_steps``) are
+    unaffected because the step count per pass is unchanged and ``milestone_steps`` is
+    converted through ``len(train_dataloader)``, which this sampler reports correctly.
+
+    Args:
+        n: number of examples in the training subset
+        batch_size: batch size of the stock loader being replaced
+        repeats: number of shuffled passes per epoch
+        generator: torch RNG that seeds every pass (one ``randperm`` call each)
+    """
+
+    def __init__(
+        self,
+        n: int,
+        batch_size: int,
+        repeats: int,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        if n <= 0 or batch_size <= 0 or repeats <= 0:
+            raise ValueError(
+                f'n, batch_size and repeats must be positive, got {n}, {batch_size}, {repeats}'
+            )
+        self.n = n
+        self.batch_size = batch_size
+        self.repeats = repeats
+        self.generator = generator if generator is not None else torch.Generator()
+
+    def __iter__(self):
+        for _ in range(self.repeats):
+            perm = torch.randperm(self.n, generator=self.generator).tolist()
+            for i in range(0, self.n, self.batch_size):
+                yield perm[i:i + self.batch_size]
+
+    def __len__(self) -> int:
+        return self.repeats * math.ceil(self.n / self.batch_size)
