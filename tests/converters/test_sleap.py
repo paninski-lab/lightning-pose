@@ -22,15 +22,29 @@ def _make_pkg_slp(
     keypoints=('nose', 'tail'),
     include_frames=True,
     include_labels=True,
+    json_attrs_as_bytes=False,
 ):
-    """Build a minimal single-video, single-instance .pkg.slp file for testing."""
+    """Build a minimal single-video, single-instance .pkg.slp file for testing.
+
+    Args:
+        json_attrs_as_bytes: some SLEAP export versions write ``json`` attributes using a
+            fixed-length HDF5 string dtype, which h5py reads back as ``numpy.bytes_`` rather
+            than ``str``. Set this to reproduce that shape.
+    """
+    def _set_json_attr(dataset, obj):
+        encoded = json.dumps(obj)
+        if json_attrs_as_bytes:
+            dataset.attrs.create('json', data=np.bytes_(encoded.encode('utf-8')))
+        else:
+            dataset.attrs['json'] = encoded
+
     png_bytes = io.BytesIO()
     Image.new('RGB', (2, 2)).save(png_bytes, format='PNG')
     png_array = np.frombuffer(png_bytes.getvalue(), dtype=np.uint8)
 
     with h5py.File(path, 'w') as f:
         source_video = f.create_dataset('video0/source_video', data=[0])
-        source_video.attrs['json'] = json.dumps({'backend': {'filename': video_filename}})
+        _set_json_attr(source_video, {'backend': {'filename': video_filename}})
         f.create_dataset('video0/frame_numbers', data=np.array([0], dtype='i8'))
 
         if include_frames:
@@ -57,9 +71,7 @@ def _make_pkg_slp(
             f.create_dataset('instances', data=np.array([(0, 0, 2)], dtype=instances_dtype))
 
             metadata = f.create_dataset('metadata', data=[0])
-            metadata.attrs['json'] = json.dumps(
-                {'nodes': [{'name': kp} for kp in keypoints]},
-            )
+            _set_json_attr(metadata, {'nodes': [{'name': kp} for kp in keypoints]})
 
 
 class TestExtractVideoNames:
@@ -124,6 +136,21 @@ class TestExtractLabels:
         assert df.loc[
             'labeled-data/vid1/img00000000.png', ('lightning_tracker', 'tail', 'y')
         ] == 40.0
+
+    def test_extracts_keypoints_with_bytes_json_attrs(self, tmp_path):
+        # regression test: some SLEAP export versions store the `json` attribute using a
+        # fixed-length HDF5 string dtype, which h5py reads back as numpy.bytes_ rather than
+        # str; str() on that value returns its repr (e.g. "b'{...}'") instead of decoding it
+        slp_file = tmp_path / 'project.pkg.slp'
+        _make_pkg_slp(slp_file, include_frames=False, json_attrs_as_bytes=True)
+
+        df = _extract_labels(slp_file)
+
+        assert df is not None
+        assert list(df.index) == ['labeled-data/vid1/img00000000.png']
+        assert df.loc[
+            'labeled-data/vid1/img00000000.png', ('lightning_tracker', 'nose', 'x')
+        ] == 10.0
 
     def test_no_instances_returns_none(self, tmp_path):
         slp_file = tmp_path / 'project.pkg.slp'
