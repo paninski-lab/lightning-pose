@@ -419,6 +419,14 @@ class TestLitPynvvcWrapper:
         assert batch['frames'].shape == (4, 3, 64, 64)
         assert batch['is_multiview'] is False
         assert batch['bbox'].shape == (4, 4)
+        # bbox must carry the raw pre-resize decoded frame size (frame_h=100,
+        # frame_w=120 from _make_wrapper's default), not decode_resize_dims -- else
+        # model_to_frame_batch's norm_to_frame rescale becomes a no-op and predictions
+        # never get mapped out of resized-image pixel space back into the original
+        # video's coordinates.
+        expected_bbox = torch.tensor([0, 0, 100, 120], dtype=torch.float32)
+        for i in range(4):
+            assert torch.allclose(batch['bbox'][i], expected_bbox)
 
     def test_next_bbox_crop_output_shape(self, bbox_df):
         wrapper = self._make_wrapper(
@@ -492,6 +500,10 @@ class TestLitPynvvcWrapper:
         assert batch['is_multiview'] is True
         assert batch['bbox'].shape == (4, 2 * 4)
         assert batch['transforms'].shape == (2, 1, 1)
+        # same raw-vs-resized distinction as the single-view case above, repeated per view
+        expected_bbox = torch.tensor([0, 0, 100, 120, 0, 0, 100, 120], dtype=torch.float32)
+        for i in range(4):
+            assert torch.allclose(batch['bbox'][i], expected_bbox)
 
     def test_next_calls_cuda_stream_synchronize(self):
         """Regression guard for the documented 'safe but not optimal' CUDA sync fix
