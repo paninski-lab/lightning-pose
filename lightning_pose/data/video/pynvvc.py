@@ -81,33 +81,61 @@ def is_pynvvc_available(video_path: str, gpu_id: int = 0) -> bool:
 
     Unlike a plain ``import PyNvVideoCodec`` (which succeeds regardless of GPU
     generation or driver age -- see module docstring), this attempts a real decoder
-    construction against ``video_path``, since NVDEC hardware-support failures only
-    surface there, not at import time. Intended to be called once per predict call
-    (e.g. by the CLI/API's auto-selection logic), not per-batch -- constructing a
-    ``SimpleDecoder`` has real setup cost.
+    construction *and* a single-frame decode against ``video_path``, since some
+    NVDEC hardware-support failures (e.g. a frame's macroblock count exceeding this
+    GPU's supported maximum) only surface on first decode, inside NVDEC's
+    ``HandleVideoSequence`` parser callback -- constructing a ``SimpleDecoder`` alone
+    does not trigger it. Intended to be called once per predict call (e.g. by the
+    CLI/API's auto-selection logic), not per-batch -- constructing a ``SimpleDecoder``
+    and decoding a frame has real setup cost.
 
     Args:
         video_path: path to a real, existing video file to probe decodability with.
         gpu_id: CUDA device index to attempt decoding on.
 
     Returns:
-        True if a decoder was constructed successfully, False on any exception
-        (unsupported GPU generation, driver too old, corrupt/unsupported container,
-        pynvvideocodec not installed, etc.) -- deliberately broad, since every
-        failure mode here should fall back to DALI rather than propagate.
+        True if a decoder was constructed and a frame decoded successfully, False on
+        any exception (unsupported GPU generation, driver too old, corrupt/unsupported
+        container, unsupported resolution/macroblock count, pynvvideocodec not
+        installed, etc.) -- deliberately broad, since every failure mode here should
+        fall back to DALI rather than propagate. The three failure stages below are
+        logged at different levels: package-not-installed and decoder-construction
+        failures are common/expected (e.g. on a machine with no NVDEC-capable GPU) and
+        logged at ``debug``; a decode failure after successful construction means
+        PyNvVideoCodec *is* usable on this machine in general but not for this
+        specific video, which is a more actionable, less expected situation, so it's
+        logged at ``warning`` with the underlying exception message included.
     """
     try:
         # Same reason as the module-level TYPE_CHECKING import above -- not on a
         # CI-reachable index. Also lazy at runtime to avoid ImportError on cpu-only
         # installs.
         import PyNvVideoCodec as nvc  # pyright: ignore[reportMissingImports]
-
-        decoder = nvc.SimpleDecoder(video_path, gpu_id=gpu_id, use_device_memory=True)
-        del decoder
-        return True
     except Exception:
-        logger.debug("pynvvc decoder unavailable", exc_info=True)
+        logger.debug("PyNvVideoCodec is not installed", exc_info=True)
         return False
+
+    try:
+        decoder = nvc.SimpleDecoder(video_path, gpu_id=gpu_id, use_device_memory=True)
+    except Exception:
+        logger.debug("pynvvc decoder construction failed", exc_info=True)
+        return False
+
+    try:
+        decoder.get_batch_frames_by_index([0])
+    except Exception as e:
+        logger.warning(
+            f"PyNvVideoCodec is installed and its decoder constructed successfully for "
+            f"{video_path!r}, but failed to decode a frame from it: {e}. This usually "
+            "means this GPU's NVDEC hardware decoder doesn't support this video's "
+            "resolution/macroblock count (see the 'MBCount not supported' error above, "
+            "if present), not that PyNvVideoCodec is misconfigured. Falling back to a "
+            "different video-reading backend for this video."
+        )
+        return False
+    finally:
+        del decoder
+    return True
 
 
 class LitPynvvcWrapper:

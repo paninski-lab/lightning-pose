@@ -144,8 +144,10 @@ def build_video_reader(
             raise RuntimeError(
                 "reader='pynvvc' was requested but PyNvVideoCodec can't decode "
                 f"{probe_video!r} on this machine (unsupported GPU generation, driver "
-                "too old, pynvvideocodec not installed, or an unsupported video "
-                "format). Pass reader='dali'/'opencv' or omit reader to auto-select."
+                "too old, pynvvideocodec not installed, an unsupported video format, "
+                "or this GPU's NVDEC decoder doesn't support this video's resolution -- "
+                "see the warning/debug log just above for the specific reason). Pass "
+                "reader='dali'/'opencv' or omit reader to auto-select."
             )
     elif reader == "opencv":
         from lightning_pose.data.video.opencv import is_opencv_available
