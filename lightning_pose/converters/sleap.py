@@ -19,6 +19,19 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 
+def _decode_json_attr(raw: bytes | str) -> dict:
+    """Decode an h5py ``json`` attribute, which may come back as ``str`` or ``bytes``.
+
+    h5py returns ``numpy.bytes_`` for fixed-length HDF5 string attributes and native ``str``
+    for variable-length UTF-8 ones, depending on how the writer encoded them. Calling ``str()``
+    on the former yields its Python repr (e.g. ``"b'{...}'"``), not the decoded text, so bytes
+    must be decoded explicitly rather than passed through ``str()``.
+    """
+    if isinstance(raw, bytes):
+        return json.loads(raw.decode('utf-8'))
+    return json.loads(str(raw))
+
+
 def _extract_video_names(pkg_slp_file: Path) -> dict[str, str]:
     """Map each ``video<N>`` group in a ``.pkg.slp`` file to its source video filename."""
     video_names = {}
@@ -28,7 +41,7 @@ def _extract_video_names(pkg_slp_file: Path) -> dict[str, str]:
                 source_video_path = f'{video_group_name}/source_video'
                 if source_video_path in hdf_file:
                     source_video_ds = cast(h5py.Dataset, hdf_file[source_video_path])
-                    source_video_dict = json.loads(str(source_video_ds.attrs['json']))
+                    source_video_dict = _decode_json_attr(source_video_ds.attrs['json'])
                     video_names[video_group_name] = source_video_dict['backend']['filename']
     return video_names
 
@@ -130,7 +143,7 @@ def _extract_labels(pkg_slp_file: Path) -> pd.DataFrame | None:
 
             if data:
                 metadata_ds = cast(h5py.Dataset, hdf_file['metadata'])
-                metadata_dict = json.loads(str(metadata_ds.attrs['json']))
+                metadata_dict = _decode_json_attr(metadata_ds.attrs['json'])
                 keypoints = [node['name'] for node in metadata_dict['nodes']]
                 columns = pd.MultiIndex.from_product(
                     [['lightning_tracker'], keypoints, ['x', 'y']],
