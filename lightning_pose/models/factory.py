@@ -248,6 +248,20 @@ def get_model(
 
     model = ModelClass(**common, **extra)
 
+    # LoRA on the backbone: base weights frozen, low-rank adapters trainable. Applied before
+    # checkpoint loading — LoRALinear keeps the weight/bias keys, so the trunk loads unchanged
+    # and the (zero-initialised) adapters are the only new tensors.
+    lora_cfg = cfg.model.get('lora', None)
+    if lora_cfg:
+        from lightning_pose.models.backbones.lora import apply_lora
+        apply_lora(
+            model.backbone,
+            targets=list(lora_cfg.get('targets', ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'up_proj', 'down_proj'])),
+            rank=int(lora_cfg.get('rank', 16)),
+            alpha=float(lora_cfg.get('alpha', 2 * int(lora_cfg.get('rank', 16)))),
+        )
+        model.lora_lr = float(lora_cfg['lr']) if lora_cfg.get('lr') is not None else None
+
     # fill the multi-head supporting-set mask from training-data visibility; the buffer
     # is non-persistent, so this runs at every construction (training and inference both
     # have a data module carrying the labeled dataset)

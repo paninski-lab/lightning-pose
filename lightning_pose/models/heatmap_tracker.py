@@ -249,10 +249,22 @@ class HeatmapTracker(BaseSupervisedTracker):
             List of dicts with ``"params"``, ``"name"``, and optionally ``"lr"`` keys; the
             backbone starts with learning rate 0 (frozen until unfreezing).
         """
+        from lightning_pose.models.backbones.lora import lora_parameters
+        lora = list(lora_parameters(self.backbone))
+        lora_ids = {id(p) for p in lora}
         params = [
-            {"params": self.backbone.parameters(), "lr": 0, "name": "backbone"},
+            {"params": [p for p in self.backbone.parameters() if id(p) not in lora_ids],
+             "lr": 0, "name": "backbone"},
             {"params": self.head.parameters(), "name": "head"},
         ]
+        if lora:
+            # third group: trained from step 1 at its own lr (default: the global lr); the
+            # unfreeze callback only ramps group 0, which now holds the frozen base weights
+            group = {"params": lora, "name": "lora"}
+            lora_lr = getattr(self, "lora_lr", None)
+            if lora_lr is not None:
+                group["lr"] = lora_lr
+            params.append(group)
         return params
 
 
