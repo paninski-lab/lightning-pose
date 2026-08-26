@@ -1,4 +1,5 @@
 """Test pynvvc dataloading functionality."""
+import logging
 import os
 import shutil
 import sys
@@ -31,7 +32,7 @@ requires_pynvvc = pytest.mark.skipif(
 class TestIsPynvvcAvailable:
     """Test the is_pynvvc_available function.
 
-    All three tests mock at the sys.modules level rather than relying on whatever
+    All tests mock at the sys.modules level rather than relying on whatever
     PyNvVideoCodec happens to be installed in the test environment (it IS installed on
     the T4 GPU studio but not necessarily elsewhere), so behavior is deterministic
     regardless of where these run.
@@ -49,6 +50,27 @@ class TestIsPynvvcAvailable:
         mock_nvc.SimpleDecoder.side_effect = RuntimeError('unsupported GPU generation')
         with patch.dict(sys.modules, {'PyNvVideoCodec': mock_nvc}):
             assert is_pynvvc_available('/fake/video.mp4') is False
+
+    def test_returns_false_when_decode_raises(self, caplog):
+        """Closes the gap that let an unsupported MBCount/resolution combo (a decoder
+        that constructs fine but fails on first decode, inside NVDEC's
+        HandleVideoSequence callback) slip through as 'available'. Also checks that
+        this specific case -- PyNvVideoCodec installed and generally usable, but not
+        for this video -- is logged at warning level with the underlying reason,
+        rather than swallowed at debug level like a plain not-installed/unsupported-GPU
+        failure."""
+        mock_decoder = MagicMock()
+        mock_decoder.get_batch_frames_by_index.side_effect = RuntimeError(
+            'MBCount not supported on this GPU'
+        )
+        mock_nvc = MagicMock()
+        mock_nvc.SimpleDecoder.return_value = mock_decoder
+        with patch.dict(sys.modules, {'PyNvVideoCodec': mock_nvc}):
+            with caplog.at_level(logging.WARNING):
+                assert is_pynvvc_available('/fake/video.mp4') is False
+        assert len(caplog.records) == 1
+        assert caplog.records[0].levelname == 'WARNING'
+        assert 'MBCount not supported on this GPU' in caplog.text
 
     def test_returns_false_when_package_not_installed(self):
         """sys.modules[name] = None forces the same ImportError a real missing install would."""
