@@ -429,5 +429,6 @@ def get_data_module(
             dali_config=dali_config,
             torch_seed=cfg.training.rng_seed_data_pt,
             imgaug=cfg.training.get('imgaug', 'default'),
+            epoch_repeat=cfg.training.get('epoch_repeat', 1),
         )
     return data_module

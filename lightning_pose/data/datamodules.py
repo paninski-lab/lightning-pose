@@ -426,6 +426,7 @@ class UnlabeledDataModule(BaseDataModule):
         train_frames: float | None = None,
         torch_seed: int = 42,
         imgaug: Literal["default", "dlc", "dlc-top-down"] = "default",
+        epoch_repeat: int = 1,
     ) -> None:
         """Data module that contains labeled and unlabeled data loaders.
 
@@ -463,6 +464,7 @@ class UnlabeledDataModule(BaseDataModule):
             test_probability=test_probability,
             train_frames=train_frames,
             torch_seed=torch_seed,
+            epoch_repeat=epoch_repeat,
         )
         self.video_paths_list = video_paths_list
         self.filenames = check_video_paths(self.video_paths_list, view_names=view_names)
