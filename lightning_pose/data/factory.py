@@ -127,7 +127,7 @@ def get_imgaug_transforms_per_dataset(
 
     Reads ``cfg.training.imgaug_per_dataset_zoom``, a mapping from dataset name (an entry of
     ``cfg.data.dataset_names``) to the upper bound of the CropAndPad ``percent`` range for that
-    dataset. Each listed dataset gets a copy of the base pipeline (``cfg.training.imgaug``) whose
+    dataset, or to a ``[lower, upper]`` pair that also sets the zoom-in (crop) bound. Each listed dataset gets a copy of the base pipeline (``cfg.training.imgaug``) whose
     CropAndPad upper bound is replaced by its own value; the lower bound, probability, and other
     CropAndPad kwargs are inherited from the base pipeline's CropAndPad entry when present,
     otherwise default to ``percent=(-0.15, <bound>)``, ``keep_size=True``, ``p=0.4``. Datasets
@@ -173,13 +173,20 @@ def get_imgaug_transforms_per_dataset(
         )
         kwargs = entry.setdefault('kwargs', {})
         percent = kwargs.get('percent', (-0.15, None))
-        lower = float(percent[0])
-        if float(bound) <= lower:
+        # a scalar is the zoom-out (upper) bound with the base lower bound; a [lower, upper]
+        # pair also sets the zoom-in bound (negative percent = crop = enlarge)
+        if isinstance(bound, (list, tuple)):
+            if len(bound) != 2:
+                raise ValueError(f'imgaug_per_dataset_zoom[{name}] pair must be [lower, upper]')
+            lower, upper = float(bound[0]), float(bound[1])
+        else:
+            lower, upper = float(percent[0]), float(bound)
+        if upper <= lower:
             raise ValueError(
-                f'imgaug_per_dataset_zoom[{name}]={bound} must exceed the CropAndPad '
+                f'imgaug_per_dataset_zoom[{name}]: upper bound {upper} must exceed the '
                 f'lower bound {lower}'
             )
-        kwargs['percent'] = (lower, float(bound))
+        kwargs['percent'] = (lower, upper)
         params_dict['CropAndPad'] = entry
         pipelines[name] = imgaug_transform(params_dict)
     return pipelines
