@@ -33,6 +33,7 @@ from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.losses.losses import (
+    AnchorHeatmapLoss,
     HeatmapJSLoss,
     HeatmapKLLoss,
     HeatmapMSELoss,
@@ -60,6 +61,7 @@ def get_loss_classes() -> dict[str, type[Loss]]:
     """
     return {
         RegressionMSELoss.loss_name: RegressionMSELoss,
+        AnchorHeatmapLoss.loss_name: AnchorHeatmapLoss,
         HeatmapMSELoss.loss_name: HeatmapMSELoss,
         HeatmapKLLoss.loss_name: HeatmapKLLoss,
         HeatmapJSLoss.loss_name: HeatmapJSLoss,
@@ -129,6 +131,33 @@ def get_loss_factories(
 
     else:
         loss_params_dict['supervised'][cfg.model.model_type] = {'log_weight': 0.0}
+
+    # anchor loss: distill the frozen trunk (cfg.model.checkpoint) into the channels the
+    # fine-tuning data does not label; weight is relative to the supervised heatmap loss
+    anchor_cfg = cfg.model.get('anchor', None)
+    if anchor_cfg:
+        if cfg.model.model_type.find('heatmap') < 0:
+            raise ValueError('model.anchor requires a heatmap model')
+        weight = float(anchor_cfg.get('weight', 1.0))
+        if weight <= 0:
+            raise ValueError(f'model.anchor.weight must be > 0, got {weight}')
+        names_cfg = anchor_cfg.get('keypoints', None)
+        keypoint_idx = None
+        if names_cfg:
+            names = list(data_module.dataset.keypoint_names)
+            unknown = [n for n in names_cfg if n not in names]
+            if unknown:
+                raise ValueError(f'model.anchor.keypoints not in data.keypoint_names: {unknown}')
+            keypoint_idx = [names.index(n) for n in names_cfg]
+        loss_params_dict['supervised']['anchor_heatmap'] = {
+            'log_weight': -float(np.log(weight)),
+            'keypoint_idx': keypoint_idx,
+            'mode': str(anchor_cfg.get('mode', 'unlabeled')),
+        }
+        logger.info(
+            f'anchor loss: weight {weight:g}, mode {anchor_cfg.get("mode", "unlabeled")}, '
+            f'{len(keypoint_idx) if keypoint_idx else "all"} eligible keypoints'
+        )
 
     # collect unsupervised losses and their params
     if cfg.model.losses_to_use is not None:

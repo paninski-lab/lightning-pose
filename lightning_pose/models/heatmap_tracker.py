@@ -156,13 +156,21 @@ class HeatmapTracker(BaseSupervisedTracker):
         # bounding box coords -> original image coords
         predicted_keypoints = model_to_frame_batch(batch_dict, predicted_keypoints)
         target_keypoints = model_to_frame_batch(batch_dict, batch_dict["keypoints"])
-        return {
+        out = {
             "heatmaps_targ": batch_dict["heatmaps"],
             "heatmaps_pred": predicted_heatmaps,
             "keypoints_targ": target_keypoints,
             "keypoints_pred": predicted_keypoints,
             "confidences": confidence,
         }
+        teacher = self.__dict__.get("_anchor_teacher")
+        if teacher is not None:
+            images = batch_dict["images"]
+            if next(teacher.parameters()).device != images.device:
+                teacher.to(images.device)
+            with torch.no_grad():
+                out["heatmaps_teacher"] = teacher.forward(images)
+        return out
 
     def predict_step(
         self,
