@@ -153,9 +153,11 @@ def get_loss_factories(
             'log_weight': -float(np.log(weight)),
             'keypoint_idx': keypoint_idx,
             'mode': str(anchor_cfg.get('mode', 'unlabeled')),
+            'conf_power': float(anchor_cfg.get('conf_power', 0.0)),
         }
         logger.info(
             f'anchor loss: weight {weight:g}, mode {anchor_cfg.get("mode", "unlabeled")}, '
+            f'conf_power {float(anchor_cfg.get("conf_power", 0.0)):g}, '
             f'{len(keypoint_idx) if keypoint_idx else "all"} eligible keypoints'
         )
 

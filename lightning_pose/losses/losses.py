@@ -347,6 +347,7 @@ class AnchorHeatmapLoss(Loss):
         log_weight: float = 0.0,
         keypoint_idx: list[int] | None = None,
         mode: Literal['unlabeled', 'all'] = 'unlabeled',
+        conf_power: float = 0.0,
         **kwargs: Any,
     ) -> None:
         """Initialize AnchorHeatmapLoss.
@@ -359,12 +360,16 @@ class AnchorHeatmapLoss(Loss):
                 ``None`` means every channel.
             mode: ``'unlabeled'`` anchors only channels with an empty target heatmap in the
                 frame; ``'all'`` anchors every eligible channel regardless of labels.
+            conf_power: weight each (frame, channel) term by the teacher's heatmap peak raised
+                to this power, normalized over the anchored set — channels the teacher cannot
+                see (out of view, occluded) then contribute ~nothing. ``0`` = uniform weights.
         """
         super().__init__(data_module=data_module, log_weight=log_weight)
         self.keypoint_idx = sorted(set(int(i) for i in keypoint_idx)) if keypoint_idx else None
         if mode not in ('unlabeled', 'all'):
             raise ValueError(f"anchor mode must be 'unlabeled' or 'all', got '{mode}'")
         self.mode = mode
+        self.conf_power = float(conf_power)
 
     def __call__(
         self,
@@ -392,10 +397,16 @@ class AnchorHeatmapLoss(Loss):
         if not bool(mask.any()):
             loss = heatmaps_pred.sum() * 0.0
         else:
-            elementwise = F.mse_loss(
-                heatmaps_pred[mask], heatmaps_teacher[mask].detach(), reduction='none'
-            ) * h * w
-            loss = self.reduce_loss(elementwise, method='mean')
+            teacher = heatmaps_teacher[mask].detach()
+            elementwise = F.mse_loss(heatmaps_pred[mask], teacher, reduction='none') * h * w
+            if self.conf_power > 0:
+                # per-(frame, channel) weight from the teacher's peak, normalized to mean 1
+                conf = teacher.reshape(teacher.shape[0], -1).amax(dim=-1).clamp(min=0.0)
+                wts = conf.pow(self.conf_power)
+                wts = wts / wts.mean().clamp(min=1e-8)
+                loss = (elementwise.mean(dim=(1, 2)) * wts).mean()
+            else:
+                loss = self.reduce_loss(elementwise, method='mean')
         return loss, self.log_loss(loss=loss, stage=stage)
 
 
