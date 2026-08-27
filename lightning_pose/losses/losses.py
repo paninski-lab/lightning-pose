@@ -373,25 +373,31 @@ class AnchorHeatmapLoss(Loss):
 
     def __call__(
         self,
-        heatmaps_targ: Float[torch.Tensor, 'batch num_keypoints heatmap_height heatmap_width'],
         heatmaps_pred: Float[torch.Tensor, 'batch num_keypoints heatmap_height heatmap_width'],
+        heatmaps_targ: (
+            Float[torch.Tensor, 'batch num_keypoints heatmap_height heatmap_width'] | None
+        ) = None,
         heatmaps_teacher: (
             Float[torch.Tensor, 'batch num_keypoints heatmap_height heatmap_width'] | None
         ) = None,
         stage: Literal['train', 'val', 'test'] | None = None,
         **kwargs: Any,
     ) -> tuple[Float[torch.Tensor, ''], list[dict]]:
-        """Compute the anchor loss; zero when no teacher heatmaps or no eligible channel."""
+        """Compute the anchor loss; zero when no teacher heatmaps or no eligible channel.
+
+        ``heatmaps_targ`` is ``None`` for unlabeled (video) batches: every eligible channel is
+        then anchored, which is the self-training use of the loss.
+        """
         if heatmaps_teacher is None:
             loss = heatmaps_pred.sum() * 0.0
             return loss, self.log_loss(loss=loss, stage=stage)
-        b, k, h, w = heatmaps_targ.shape
+        b, k, h, w = heatmaps_pred.shape
         mask = torch.zeros(b, k, dtype=torch.bool, device=heatmaps_pred.device)
         if self.keypoint_idx is None:
             mask[:] = True
         else:
             mask[:, self.keypoint_idx] = True
-        if self.mode == 'unlabeled':
+        if self.mode == 'unlabeled' and heatmaps_targ is not None:
             unlabeled = torch.all(heatmaps_targ.reshape(b, k, -1) == 0.0, dim=-1)
             mask = mask & unlabeled
         if not bool(mask.any()):
@@ -408,6 +414,16 @@ class AnchorHeatmapLoss(Loss):
             else:
                 loss = self.reduce_loss(elementwise, method='mean')
         return loss, self.log_loss(loss=loss, stage=stage)
+
+
+class VideoAnchorHeatmapLoss(AnchorHeatmapLoss):
+    """AnchorHeatmapLoss applied to unlabeled video batches (self-training on the target).
+
+    Same computation, separate name so the labeled-frame and video anchor terms are logged
+    and weighted independently. Selected with ``model.losses_to_use: [anchor_video]``.
+    """
+
+    loss_name = 'anchor_video'
 
 
 class HeatmapKLLoss(HeatmapLoss):

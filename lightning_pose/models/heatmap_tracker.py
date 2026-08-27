@@ -874,9 +874,17 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
         )
         # keypoints -> original image coords keypoints
         pred_keypoints = model_to_frame_batch(batch_dict, pred_keypoints)
-        return {
+        out = {
             "heatmaps_pred": pred_heatmaps,  # if augmented, augmented heatmaps
             "keypoints_pred": pred_keypoints,  # if augmented, original keypoints
             "keypoints_pred_augmented": pred_keypoints_augmented,  # match pred_heatmaps
             "confidences": confidence,
         }
+        teacher = self.__dict__.get("_anchor_teacher")
+        if teacher is not None:
+            frames = batch_dict["frames"]
+            if next(teacher.parameters()).device != frames.device:
+                teacher.to(frames.device)
+            with torch.no_grad():
+                out["heatmaps_teacher"] = teacher.forward(frames)
+        return out

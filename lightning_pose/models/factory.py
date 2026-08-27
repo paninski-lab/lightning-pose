@@ -308,7 +308,16 @@ def get_model(
             raise ValueError('model.anchor requires model.checkpoint (the teacher weights)')
         if cfg.model.model_type != 'heatmap' or cfg.model.get('head_mode', 'shared') != 'shared':
             raise ValueError('model.anchor is implemented for shared-head heatmap models only')
-        teacher = copy.deepcopy(model)
+        # the loss factories hold the data module (and, for semi-supervised models, a DALI
+        # pipeline that cannot be copied); the teacher only needs weights, so detach them
+        factories = {
+            n: model.__dict__['_modules'].pop(n)
+            for n in ('loss_factory', 'loss_factory_unsup') if n in model.__dict__['_modules']
+        }
+        try:
+            teacher = copy.deepcopy(model)
+        finally:
+            model.__dict__['_modules'].update(factories)
         teacher.eval()
         for p_ in teacher.parameters():
             p_.requires_grad_(False)

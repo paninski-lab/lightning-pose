@@ -34,6 +34,7 @@ from omegaconf import DictConfig, ListConfig, OmegaConf
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.losses.losses import (
     AnchorHeatmapLoss,
+    VideoAnchorHeatmapLoss,
     HeatmapJSLoss,
     HeatmapKLLoss,
     HeatmapMSELoss,
@@ -62,6 +63,7 @@ def get_loss_classes() -> dict[str, type[Loss]]:
     return {
         RegressionMSELoss.loss_name: RegressionMSELoss,
         AnchorHeatmapLoss.loss_name: AnchorHeatmapLoss,
+        VideoAnchorHeatmapLoss.loss_name: VideoAnchorHeatmapLoss,
         HeatmapMSELoss.loss_name: HeatmapMSELoss,
         HeatmapKLLoss.loss_name: HeatmapKLLoss,
         HeatmapJSLoss.loss_name: HeatmapJSLoss,
@@ -135,6 +137,7 @@ def get_loss_factories(
     # anchor loss: distill the frozen trunk (cfg.model.checkpoint) into the channels the
     # fine-tuning data does not label; weight is relative to the supervised heatmap loss
     anchor_cfg = cfg.model.get('anchor', None)
+    keypoint_idx = None
     if anchor_cfg:
         if cfg.model.model_type.find('heatmap') < 0:
             raise ValueError('model.anchor requires a heatmap model')
@@ -142,7 +145,6 @@ def get_loss_factories(
         if weight <= 0:
             raise ValueError(f'model.anchor.weight must be > 0, got {weight}')
         names_cfg = anchor_cfg.get('keypoints', None)
-        keypoint_idx = None
         if names_cfg:
             names = list(data_module.dataset.keypoint_names)
             unknown = [n for n in names_cfg if n not in names]
@@ -164,6 +166,20 @@ def get_loss_factories(
     # collect unsupervised losses and their params
     if cfg.model.losses_to_use is not None:
         for loss_name in cfg.model.losses_to_use:
+            if loss_name == 'anchor_video':
+                # video anchoring: the same teacher/keypoints/weighting as the supervised
+                # anchor (cfg.model.anchor), applied to every eligible channel of unlabeled frames
+                if not anchor_cfg:
+                    raise ValueError('anchor_video in losses_to_use requires model.anchor')
+                video_w = float(anchor_cfg.get('video_weight', anchor_cfg.get('weight', 1.0)))
+                loss_params_dict['unsupervised'][loss_name] = {
+                    'log_weight': -float(np.log(video_w)),
+                    'keypoint_idx': keypoint_idx,
+                    'mode': 'all',
+                    'conf_power': float(anchor_cfg.get('conf_power', 0.0)),
+                }
+                logger.info(f'anchor loss on unlabeled video: weight {video_w:g}')
+                continue
             loss_params_dict['unsupervised'][loss_name] = cfg_loss_dict[loss_name]
             loss_params_dict['unsupervised'][loss_name]['loss_name'] = loss_name
             if loss_name[:8] == 'unimodal' or loss_name[:16] == 'temporal_heatmap':
