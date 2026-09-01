@@ -233,6 +233,8 @@ def _build_onnx_forward(session: Any) -> Any:
     )
 
     def onnx_forward(images: torch.Tensor) -> torch.Tensor:
+        if cuda_available and images.is_cuda:
+            torch.cuda.synchronize(images.device)
         images = images.to(input_torch_dtype).contiguous()
         if cuda_available and images.is_cuda:
             io_binding = session.io_binding()
