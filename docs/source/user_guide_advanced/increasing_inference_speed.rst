@@ -58,7 +58,7 @@ isolated forward pass. Each bar is the mean of 10 timed repeats (1 discarded war
 the two single-view panels; the 6-view multi-view panel uses 3 timed repeats (1 discarded
 warmup run) instead. Error bars show standard error of the mean.
 
-.. figure:: /_static/predict_speed_matrix.png
+.. figure:: https://i.imgur.com/Dxj5jLb.png
    :alt: Grouped bar chart of end-to-end predict speed across models, techniques, and GPUs
 
    End-to-end ``litpose predict`` timing for ResNet50 (single-view), ViT-S (single-view), and
