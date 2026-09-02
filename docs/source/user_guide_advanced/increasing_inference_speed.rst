@@ -20,7 +20,7 @@ assuming you've already trained a model with ``litpose train``; see the
   is a one-line change and gives solid gains. ONNX Runtime requires an export step but is the
   simplest option to deploy without a full Python/PyTorch runtime. TensorRT requires the most
   setup (matching CUDA/TensorRT library versions) but wins across every model and GPU tested,
-  up to **2.93x** on the 6-view multi-view transformer on an L4 (TensorRT FP16 + DALI vs. eager
+  up to **2.88x** on the 6-view multi-view transformer on an L4 (TensorRT FP16 + DALI vs. eager
   FP32).
 - **None of these techniques change the model's predictions.** We compared final keypoint
   predictions against the eager FP32 baseline on real video frames for all three methods --
@@ -54,10 +54,11 @@ Results
 
 The figure below benchmarks every combination of model architecture, precision/runtime
 technique, video decoder, and GPU on real end-to-end ``litpose predict`` calls -- not an
-isolated forward pass. Each bar is the mean of 10 timed repeats (1 discarded warmup run);
-error bars show standard error of the mean.
+isolated forward pass. Each bar is the mean of 10 timed repeats (1 discarded warmup run) for
+the two single-view panels; the 6-view multi-view panel uses 3 timed repeats (1 discarded
+warmup run) instead. Error bars show standard error of the mean.
 
-.. figure:: https://i.imgur.com/INWfgoi.png
+.. figure:: https://i.imgur.com/Dxj5jLb.png
    :alt: Grouped bar chart of end-to-end predict speed across models, techniques, and GPUs
 
    End-to-end ``litpose predict`` timing for ResNet50 (single-view), ViT-S (single-view), and
@@ -66,14 +67,14 @@ error bars show standard error of the mean.
    L4 + PyNvVideoCodec, A100 + DALI, A100 + PyNvVideoCodec.
 
 TensorRT FP16 wins overall across every model and GPU, with the largest end-to-end gain
-(2.93x) on the 6-view multi-view transformer on L4 -- notably larger than the same technique's
+(2.88x) on the 6-view multi-view transformer on L4 -- notably larger than the same technique's
 gain on A100, since A100's much faster eager-FP32 baseline leaves less relative headroom to
 close. Decoder choice diverges sharply by model: for the single-view models, PyNvVideoCodec is
 often the *faster* decoder on A100 once any model-acceleration technique is applied (9-25%
 faster than DALI), though it trails DALI somewhat on L4. For the 6-view multi-view model, DALI
 wins outright across every technique and GPU -- confirming the multi-view PyNvVideoCodec
 slowdown documented below carries through to full end-to-end timing, and the gap is
-substantially larger on A100 (44-53% slower) than on L4 (6-19% slower).
+substantially larger on A100 (19-36% slower) than on L4 (2-14% slower).
 
 .. _caveats:
 
