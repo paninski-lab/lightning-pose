@@ -1,0 +1,85 @@
+# =============================================================================
+# Example config for run_benchmark.sh.
+#
+# Copy this file OUTSIDE the lightning-pose repo before editing it (same
+# convention as scripts/hyper-sweep/sweep_config.yaml), e.g.:
+#
+#   cp scripts/inference-timing/timing_config.yaml ~/my_timing_config.yaml
+#   # edit ~/my_timing_config.yaml to point at your own model dirs/videos
+#   bash scripts/inference-timing/run_benchmark.sh --config ~/my_timing_config.yaml
+#
+# All paths below are just placeholders -- replace them with your own.
+# =============================================================================
+
+# One entry per model/dataset you want a panel for in the final figure.
+#   - label:        short name used in filenames and plot legends
+#   - model_dir:    trained Lightning Pose model directory
+#   - dataset_dir:  dataset dir override, or null to use the model's own
+#                   config as-is (data.data_dir/data.video_dir hydra
+#                   overrides are only applied if this is set)
+#   - video_paths:  one video file path per entry. One path for
+#                   single-view models; one path per view (in the order the
+#                   model's config expects) for multiview models.
+panels:
+  - label: resnet50-singleview
+    model_dir: /path/to/models/resnet50_singleview
+    dataset_dir: null
+    video_paths:
+      - /path/to/videos/test_video.mp4
+
+  - label: vits-dinov2-multiview
+    model_dir: /path/to/models/vits_dinov2_multiview
+    dataset_dir: /path/to/dataset
+    video_paths:
+      - /path/to/videos/cam1.mp4
+      - /path/to/videos/cam2.mp4
+      - /path/to/videos/cam3.mp4
+
+# =============================================================================
+# Sweep dimensions — cartesian product of both lists
+# =============================================================================
+sweep:
+  # Precision/runtime variants to benchmark. Must be a subset of the choices
+  # hardcoded in benchmark_single_config.py's VARIANT_CHOICES.
+  variants:
+    - eager_fp32
+    - eager_fp16
+    - compile_fp16
+    - onnx_fp16
+    - tensorrt_fp16
+
+  # Video decoder backends to benchmark. "opencv" is a CPU-side fallback
+  # that works everywhere (no DALI/PyNvVideoCodec install required) but is
+  # slower; useful for a quick sanity check on a machine without GPU-decode
+  # libraries.
+  decoders:
+    - dali
+    - pynvvc
+
+# =============================================================================
+# Timing parameters
+# =============================================================================
+timing:
+  num_warmup: 1
+  num_repeats: 3
+
+# =============================================================================
+# Output
+# =============================================================================
+output:
+  # Directory where per-panel CSVs and the final plot are written. Created
+  # if it doesn't already exist. Defaults to ~/inference_timing_results if
+  # omitted.
+  dir: /path/to/inference_timing_results
+
+  # Optional: override the GPU label used in filenames/plot legends (e.g. if
+  # torch.cuda.get_device_name(0) returns something unwieldy). Leave null to
+  # auto-detect.
+  gpu_label: null
+
+# =============================================================================
+# Batch sizes passed through to model.export() for onnx/tensorrt variants
+# =============================================================================
+export:
+  max_batch_size: 8
+  opt_batch_size: 1
