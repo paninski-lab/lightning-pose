@@ -31,6 +31,7 @@ from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.losses import get_loss_factories
 from lightning_pose.models import get_model
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
+from lightning_pose.utils.device import get_accelerator
 from lightning_pose.utils.io import (
     return_absolute_data_paths,
 )
@@ -409,7 +410,7 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
     val_check_interval = cfg.training.get("val_check_interval")
 
     trainer = pl.Trainer(
-        accelerator="gpu",
+        accelerator=get_accelerator(),
         devices=cfg.training.num_gpus,
         max_epochs=max_epochs,
         min_epochs=min_epochs,

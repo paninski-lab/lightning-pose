@@ -209,6 +209,14 @@ class TestGetDataModule:
         cfg.model.losses_to_use = ['temporal']  # trigger unsupervised datamodule
         return cfg
 
+    def test_get_data_module_unsupervised_raises_without_cuda(self, cfg, heatmap_dataset, mocker):
+        """get_data_module must call require_cuda_for_semi_supervised -- unit-tested in
+        tests/utils/test_device.py -- before building an UnlabeledDataModule."""
+        cfg = self._unsupervised_multi_gpu_cfg(cfg)
+        mocker.patch('lightning_pose.utils.device.torch.cuda.is_available', return_value=False)
+        with pytest.raises(RuntimeError, match='requires an NVIDIA GPU with CUDA'):
+            get_data_module(cfg, heatmap_dataset, video_dir='/fake/videos')
+
     def test_get_data_module_num_gpus_0(self, cfg, mocker):
         cfg = self._supervised_multi_gpu_cfg(cfg)
         # when num_gpus is set to 0, i.e. from a deprecated config
@@ -238,6 +246,10 @@ class TestGetDataModule:
         self, cfg, heatmap_dataset, toy_data_dir, mocker,
     ):
         cfg = self._unsupervised_multi_gpu_cfg(cfg)
+        # UnlabeledDataModule.__init__ is mocked out below, so this test doesn't need a
+        # real CUDA device or DALI installed -- bypass require_cuda_for_semi_supervised
+        # entirely rather than mocking its internal CUDA/DALI checks.
+        mocker.patch('lightning_pose.utils.device.require_cuda_for_semi_supervised')
         mock_init = mocker.patch.object(UnlabeledDataModule, '__init__', return_value=None)
         get_data_module(cfg, heatmap_dataset, os.path.join(toy_data_dir, 'videos'))
         # train, val batch sizes should be divided by num_gpus

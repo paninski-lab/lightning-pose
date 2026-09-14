@@ -48,7 +48,6 @@ def _test_cfg(cfg):
     return cfg_tmp
 
 
-@pytest.mark.gpu
 def test_train_singleview(cfg, tmp_path):
     cfg = _test_cfg(cfg)
     cfg.model.model_type = "heatmap"
@@ -71,9 +70,7 @@ def test_train_singleview(cfg, tmp_path):
     assert (tmp_path / "video_preds" / "test_vid_pca_multiview_error.csv").is_file()
     assert (tmp_path / "video_preds" / "test_vid_pca_singleview_error.csv").is_file()
     assert (tmp_path / "video_preds" / "test_vid_temporal_norm.csv").is_file()
-    assert (
-        tmp_path / "video_preds" / "labeled_videos" / "test_vid_labeled.mp4"
-    ).is_file()
+    assert (tmp_path / "video_preds" / "labeled_videos" / "test_vid_labeled.mp4").is_file()
 
 
 @pytest.mark.skip(reason="Not yet implemented in Model class.")
@@ -127,7 +124,6 @@ def test_train_singleview_detector_outputs(cfg, tmp_path):
     assert (image_pred_dir / "predictions_pixel_error.csv").is_file()
 
 
-@pytest.mark.gpu
 def test_train_multiview(cfg_multiview, tmp_path):
     from lightning_pose.train import train
 

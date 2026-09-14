@@ -34,6 +34,7 @@ from lightning_pose.data.datasets import (
 )
 from lightning_pose.losses import get_loss_factories
 from lightning_pose.models import get_model
+from lightning_pose.utils.device import get_accelerator
 from lightning_pose.utils.io import get_videos_in_dir
 from lightning_pose.utils.predictions import PredictionHandler
 
@@ -590,7 +591,7 @@ def trainer(cfg) -> pl.Trainer:
     )
 
     trainer = pl.Trainer(
-        accelerator="gpu",
+        accelerator=get_accelerator(),
         devices=1,
         max_epochs=2,
         min_epochs=2,

@@ -46,6 +46,7 @@ from lightning_pose.models.base import (
     _apply_defaults_for_optimizer_params,
     check_if_semi_supervised,
 )
+from lightning_pose.utils.device import require_cuda_for_semi_supervised
 
 if TYPE_CHECKING:
     from lightning_pose.losses.factory import LossFactory
@@ -224,7 +225,9 @@ def get_model(
         instantiated model ready for training or inference.
 
     Raises:
-        RuntimeError: if a ViT backbone is selected with non-square image dimensions.
+        RuntimeError: if a ViT backbone is selected with non-square image dimensions, or if
+            semi-supervised losses are requested but no CUDA device is available, or the
+            ``nvidia-dali`` package isn't installed.
         NotImplementedError: if ``cfg.model.model_type`` is not a recognised value.
         ValueError: if a configured loss requires a key the model type does not produce.
     """
@@ -241,6 +244,7 @@ def get_model(
     )
 
     semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
+    require_cuda_for_semi_supervised(cfg.model.losses_to_use)
     image_h = cfg.data.image_resize_dims.height
     image_w = cfg.data.image_resize_dims.width
     if 'vit' in cfg.model.backbone:
