@@ -246,6 +246,10 @@ class TestGetDataModule:
         self, cfg, heatmap_dataset, toy_data_dir, mocker,
     ):
         cfg = self._unsupervised_multi_gpu_cfg(cfg)
+        # UnlabeledDataModule.__init__ is mocked out below, so this test doesn't need a
+        # real CUDA device or DALI installed -- bypass require_cuda_for_semi_supervised
+        # entirely rather than mocking its internal CUDA/DALI checks.
+        mocker.patch('lightning_pose.utils.device.require_cuda_for_semi_supervised')
         mock_init = mocker.patch.object(UnlabeledDataModule, '__init__', return_value=None)
         get_data_module(cfg, heatmap_dataset, os.path.join(toy_data_dir, 'videos'))
         # train, val batch sizes should be divided by num_gpus
