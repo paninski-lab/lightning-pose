@@ -44,8 +44,12 @@ class TestBuildVideoReader:
     # -- auto-select (reader=None) --
 
     def test_auto_select_picks_pynvvc_when_available(self, dali_config):
+        """pynvvc/dali are only even probed when a CUDA device is present (see
+        build_video_reader's docstring) -- torch.cuda.is_available() is patched to True
+        since this test targets that probing logic, not CUDA detection itself."""
         mock_prep = MagicMock()
         with (
+            patch('lightning_pose.data.video.factory.torch.cuda.is_available', return_value=True),
             patch('lightning_pose.data.video.pynvvc.is_pynvvc_available', return_value=True),
             patch('lightning_pose.data.video.pynvvc.PreparePynvvc', mock_prep),
         ):
@@ -55,15 +59,33 @@ class TestBuildVideoReader:
         assert mock_prep.called
 
     def test_auto_select_falls_back_to_dali_when_pynvvc_unavailable(self, dali_config):
+        """See test_auto_select_picks_pynvvc_when_available for why CUDA is patched True."""
         mock_prep = MagicMock()
         fake_module = {'lightning_pose.data.video.dali': _fake_dali_module(mock_prep)}
         with (
+            patch('lightning_pose.data.video.factory.torch.cuda.is_available', return_value=True),
             patch('lightning_pose.data.video.pynvvc.is_pynvvc_available', return_value=False),
             patch.dict(sys.modules, fake_module),
         ):
             build_video_reader(
                 None, '/fake/video.mp4', 'base', dali_config, ['/fake/video.mp4'], [64, 64], None,
             )
+        assert mock_prep.called
+
+    def test_auto_select_skips_pynvvc_and_dali_without_cuda(self, dali_config):
+        """No CUDA device -- pynvvc/dali must not even be probed, only opencv."""
+        mock_prep = MagicMock()
+        with (
+            patch('lightning_pose.data.video.factory.torch.cuda.is_available', return_value=False),
+            patch(
+                'lightning_pose.data.video.pynvvc.is_pynvvc_available',
+            ) as mock_pynvvc_available,
+            patch('lightning_pose.data.video.opencv.PrepareOpenCV', mock_prep),
+        ):
+            build_video_reader(
+                None, '/fake/video.mp4', 'base', dali_config, ['/fake/video.mp4'], [64, 64], None,
+            )
+        mock_pynvvc_available.assert_not_called()
         assert mock_prep.called
 
     def test_auto_select_falls_back_to_opencv_when_neither_available(self, dali_config):

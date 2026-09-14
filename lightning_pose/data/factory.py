@@ -236,6 +236,8 @@ def get_data_module(
     Raises:
         ValidationError: if a context model is requested but
             ``dali.context.train.batch_size < 5 * num_gpus``.
+        RuntimeError: if semi-supervised losses are requested but no CUDA device is
+            available, or the ``nvidia-dali`` package isn't installed.
     """
 
     # Old configs may have num_gpus: 0. We will remove support in a future release.
@@ -255,7 +257,10 @@ def get_data_module(
     val_batch_size = int(np.ceil(cfg.training.val_batch_size / cfg.training.num_gpus))
 
     from lightning_pose.models import check_if_semi_supervised
+    from lightning_pose.utils.device import require_cuda_for_semi_supervised
+
     semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
+    require_cuda_for_semi_supervised(cfg.model.losses_to_use)
     if not semi_supervised:
         data_module = BaseDataModule(
             dataset=dataset,
