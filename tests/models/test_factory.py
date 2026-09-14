@@ -36,6 +36,16 @@ class TestGetModel:
         loss_factories = get_loss_factories(cfg_tmp, data_module=data_module)
         return get_model(cfg_tmp, data_module=data_module, loss_factories=loss_factories)
 
+    def test_get_model_semi_supervised_raises_without_cuda(self, cfg, mocker):
+        """get_model must call require_cuda_for_semi_supervised -- unit-tested in
+        tests/utils/test_device.py -- before doing any other construction work, so
+        data_module/loss_factories are never touched when this raises."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = ['temporal']
+        mocker.patch('lightning_pose.utils.device.torch.cuda.is_available', return_value=False)
+        with pytest.raises(RuntimeError, match='requires an NVIDIA GPU with CUDA'):
+            get_model(cfg_tmp, data_module=None, loss_factories={})
+
     def test_get_model_loads_checkpoint_from_ckpt_file(self, cfg, base_dataset, tmp_path):
         """Loads weights from a .ckpt path directly into the model."""
         cfg_tmp = self._make_regression_cfg(cfg)
