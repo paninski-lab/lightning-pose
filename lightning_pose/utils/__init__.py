@@ -3,6 +3,7 @@
 **Submodules**:
 
 - ``utils.io`` — path handling and file I/O utilities.
+- ``utils.device`` — GPU-presence detection for selecting a ``pl.Trainer`` accelerator.
 - ``utils.predictions`` — inference on labeled datasets and unlabeled videos; video annotation.
 - ``utils.pca`` — :class:`~lightning_pose.utils.pca.KeypointPCA` for PCA-based
   unsupervised losses.

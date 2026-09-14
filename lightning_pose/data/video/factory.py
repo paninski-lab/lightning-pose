@@ -60,6 +60,7 @@ import logging
 from typing import TYPE_CHECKING, Literal
 
 import pandas as pd
+import torch
 from omegaconf import DictConfig, ListConfig
 
 from lightning_pose.utils.inference_types import _Reader
@@ -119,15 +120,25 @@ def build_video_reader(
             machine/video.
     """
     if reader is None:
-        from lightning_pose.data.video.pynvvc import is_pynvvc_available
-        if is_pynvvc_available(probe_video):
-            reader = "pynvvc"
-        else:
-            try:
-                import lightning_pose.data.video.dali  # noqa: F401  probe importability
-                reader = "dali"
-            except ImportError:
-                reader = "opencv"
+        # Both pynvvc and dali are CUDA-only backends: pynvvc's probe drives
+        # PyNvVideoCodec's CUDA driver bindings directly (a native fatal abort on
+        # CUDA_ERROR_NO_DEVICE, not a catchable Python exception -- see
+        # is_pynvvc_available()'s docstring), and dali's package is importable on any
+        # linux x86_64 machine per pyproject.toml regardless of whether a GPU is
+        # actually present, so building its pipeline with no CUDA device raises at
+        # construction time. Neither backend is worth even probing without a GPU to
+        # lose, so skip straight to opencv, the unconditional cross-platform fallback.
+        reader = "opencv"
+        if torch.cuda.is_available():
+            from lightning_pose.data.video.pynvvc import is_pynvvc_available
+            if is_pynvvc_available(probe_video):
+                reader = "pynvvc"
+            else:
+                try:
+                    import lightning_pose.data.video.dali  # noqa: F401  probe importability
+                    reader = "dali"
+                except ImportError:
+                    reader = "opencv"
     elif reader == "dali":
         try:
             import lightning_pose.data.video.dali  # noqa: F401  probe importability

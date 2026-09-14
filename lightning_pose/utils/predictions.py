@@ -23,6 +23,7 @@ from lightning_pose.callbacks import JSONInferenceProgressTracker
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import count_frames
 from lightning_pose.data.video.factory import build_video_reader
+from lightning_pose.utils.device import get_accelerator
 
 if TYPE_CHECKING:
     from lightning_pose.api import Model
@@ -349,7 +350,12 @@ def predict_dataset(
     """
     cfg_eff = cfg if cfg is not None else model.config.cfg
 
-    trainer = pl.Trainer(devices=1, accelerator='gpu', logger=False, precision=model.pl_precision)
+    trainer = pl.Trainer(
+        devices=1,
+        accelerator=get_accelerator(),
+        logger=False,
+        precision=model.pl_precision,
+    )
 
     labeled_preds = trainer.predict(
         model=model.model,
@@ -470,7 +476,7 @@ def predict_video(
             )
 
     trainer = pl.Trainer(
-        accelerator="gpu",
+        accelerator=get_accelerator(),
         devices=1,
         logger=False,
         precision=model.pl_precision,
