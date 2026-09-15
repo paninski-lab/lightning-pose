@@ -760,7 +760,10 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             calib_by_session = Path(self.root_directory) / 'calibrations' / f'{session_id}.toml'
             calib_fallback = Path(self.root_directory) / 'calibration.toml'
             if calib_by_session.exists():
-                calib_file = str(Path('calibrations') / f'{session_id}.toml')
+                # .as_posix() (not str()) -- calib_file is a portable identifier stored in
+                # cam_params_df and used as a dict key, not a filesystem call, so it must
+                # stay forward-slash on every OS like image_names elsewhere in this class.
+                calib_file = (Path('calibrations') / f'{session_id}.toml').as_posix()
             elif calib_fallback.exists():
                 calib_file = 'calibration.toml'
             else:

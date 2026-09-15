@@ -286,20 +286,23 @@ def parse_label_csv(
 
 def return_absolute_path(possibly_relative_path: str, n_dirs_back: int = 3) -> str:
     """Return absolute path from possibly relative path."""
-    if os.path.isabs(possibly_relative_path):
+    path = Path(possibly_relative_path)
+    if path.is_absolute():
         # absolute path already; do nothing
-        abs_path = possibly_relative_path
+        abs_path = path
     else:
         # our toy_dataset in relative path
-        cwd_split = os.getcwd().split(os.path.sep)
-        desired_path_list = cwd_split[:-n_dirs_back]
-        if desired_path_list[-1] == "multirun":
+        # pathlib (not manual os.path.sep splitting/joining) -- splitting a Windows path
+        # on the separator loses the drive letter's root marker (str.split gives 'C:', not
+        # 'C:\\'), and os.path.join then silently drops the separator after it.
+        base_dir = Path.cwd().parents[n_dirs_back - 1]
+        if base_dir.name == "multirun":
             # hydra multirun, go one dir back
-            desired_path_list = desired_path_list[:-1]
-        abs_path = os.path.join(os.path.sep, *desired_path_list, possibly_relative_path)
-    if not os.path.exists(abs_path):
+            base_dir = base_dir.parent
+        abs_path = base_dir / possibly_relative_path
+    if not abs_path.exists():
         raise OSError(f"{abs_path} is not a valid path")
-    return abs_path
+    return str(abs_path)
 
 
 def return_absolute_data_paths(

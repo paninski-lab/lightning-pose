@@ -1,5 +1,7 @@
 """Test the scripts/hyper-sweep/run_sweep.py helper functions."""
 
+from pathlib import Path
+
 
 class TestLoadConfig:
     """Test the load_config function."""
@@ -69,7 +71,11 @@ class TestMakeOutputDir:
             '/base', 'paninski-lab/mirror-mouse-fused', 'resnet50_animal_ap10k', 1, 0,
             ('temporal',),
         )
-        assert out_dir == '/base/mirror-mouse-fused/resnet50_animal_ap10k/temporal/tf1/seed0'
+        # str(Path(...)) (not a hardcoded '/'-joined string) -- make_output_dir builds a
+        # real, OS-native filesystem path via pathlib, so the expected value must too.
+        expected = Path('/base') / 'mirror-mouse-fused' / 'resnet50_animal_ap10k'
+        expected = expected / 'temporal' / 'tf1' / 'seed0'
+        assert out_dir == str(expected)
 
 
 class TestMakeWorkerCommand:
@@ -89,8 +95,9 @@ class TestMakeWorkerCommand:
         assert '--backbone=resnet50_animal_ap10k' in cmd
         assert '--losses_to_use=temporal' in cmd
         assert '--model_type=heatmap' in cmd
-        out_dir = '/base/mirror-mouse-fused/resnet50_animal_ap10k/temporal/tf1/seed0'
-        assert f'--output_dir={out_dir}' in cmd
+        expected = Path('/base') / 'mirror-mouse-fused' / 'resnet50_animal_ap10k'
+        expected = expected / 'temporal' / 'tf1' / 'seed0'
+        assert f'--output_dir={expected}' in cmd
         assert '--predict_vids' in cmd
         assert '--debug' in cmd
 

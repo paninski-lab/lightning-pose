@@ -349,7 +349,9 @@ def generate_bbox(
         crop_width=detector_cfg.get('crop_width'),
     )
     output_bbox_file.parent.mkdir(parents=True, exist_ok=True)
-    bbox_df.to_csv(output_bbox_file)
+    # lineterminator='\n' -- to_csv defaults to os.linesep, which is '\r\n' on Windows;
+    # forcing '\n' keeps output byte-identical across platforms.
+    bbox_df.to_csv(output_bbox_file, lineterminator='\n')
 
 
 def smooth_bbox(
@@ -390,7 +392,7 @@ def smooth_bbox(
         if method == 'median':
             smoothed = bbox_df.rolling(window=window, center=True, min_periods=1).median()
         smoothed = smoothed.round(0).astype(int)
-        smoothed.to_csv(output_dir / bbox_file.name)
+        smoothed.to_csv(output_dir / bbox_file.name, lineterminator='\n')
         logger.info(f'smoothed {bbox_file.name} → {output_dir / bbox_file.name}')
 
     metadata = {
@@ -486,4 +488,4 @@ def generate_cropped_csv_file(
 
     output_csv_file = Path(output_csv_file)
     output_csv_file.parent.mkdir(parents=True, exist_ok=True)
-    csv_data.to_csv(output_csv_file)
+    csv_data.to_csv(output_csv_file, lineterminator='\n')

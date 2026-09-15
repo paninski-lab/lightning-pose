@@ -16,7 +16,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v7
 
@@ -33,7 +33,12 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install ffmpeg
 
+      - name: Install ffmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg -y
+
       - name: Install dependencies (no DALI)
+        shell: bash
         run: |
           pip install -e ".[dev]" --no-deps
           python - <<'EOF'
