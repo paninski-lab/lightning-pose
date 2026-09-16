@@ -420,7 +420,12 @@ class BaseFeatureExtractor(LightningModule):
         if self.lr_scheduler not in ("multistep_lr", "multisteplr"):
             raise LrNotImplementedError(self.lr_scheduler)
         # define a scheduler that reduces the base learning rate
-        milestones = self.lr_scheduler_params.milestones
+        # saved historical configs may also contain derived epoch milestones;
+        # explicit optimizer-step milestones take precedence, including an empty list.
+        if 'milestone_steps' in self.lr_scheduler_params:
+            milestones = self.lr_scheduler_params.milestone_steps
+        else:
+            milestones = self.lr_scheduler_params.milestones
         gamma = self.lr_scheduler_params.gamma
 
         scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
@@ -455,7 +460,11 @@ class BaseFeatureExtractor(LightningModule):
 
         return {
             "optimizer": optimizer,
-            "lr_scheduler": scheduler,
+            "lr_scheduler": {
+                'scheduler': scheduler,
+                'interval': 'step' if 'milestone_steps' in self.lr_scheduler_params else 'epoch',
+                'frequency': 1,
+            },
             "monitor": "val_supervised_loss",
         }
 

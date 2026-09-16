@@ -669,7 +669,9 @@ def get_callbacks(
 
     if lr_monitor:
         # this callback should be added after UnfreezeBackbone in order to log its learning rate
-        lr_monitor_cb = LearningRateMonitor(logging_interval='epoch')
+        scheduler_params = cfg.training.lr_scheduler_params.get('multisteplr', {})
+        interval = 'step' if 'milestone_steps' in scheduler_params else 'epoch'
+        lr_monitor_cb = LearningRateMonitor(logging_interval=interval)
         callbacks.append(lr_monitor_cb)
 
     if checkpointing:

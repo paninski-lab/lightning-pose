@@ -180,8 +180,8 @@ class RepeatedEpochBatchSampler(Sampler[list[int]]):
     status writes) is amortized. Intended for few-frame training, where one pass is a
     single batch and that turnover otherwise dominates wall-clock. Step-based settings
     (``max_steps``, ``val_check_interval``, ``unfreezing_step``, ``milestone_steps``) are
-    unaffected because the step count per pass is unchanged and ``milestone_steps`` is
-    converted through ``len(train_dataloader)``, which this sampler reports correctly.
+    unaffected because they use optimizer-step counts directly, independently of
+    the number of batches grouped into each epoch.
 
     Args:
         n: number of examples in the training subset

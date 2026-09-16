@@ -1,6 +1,11 @@
 """Test functionality of base model classes."""
 
 import gc
+from pathlib import Path
+
+from lightning.pytorch import LightningModule, Trainer
+from omegaconf import OmegaConf
+from torch.utils.data import DataLoader
 
 import pytest
 import torch
@@ -301,3 +306,102 @@ def test_representation_shapes_vit(backbone):
         del model
     gc.collect()
     torch.cuda.empty_cache()
+
+
+class _ScheduleProbe(BaseFeatureExtractor):
+    """Exercise the production optimizer setup without loading a pretrained backbone."""
+
+    def __init__(self, step_based: bool = True, milestones: list[int] | None = None) -> None:
+        LightningModule.__init__(self)
+        self.weights = torch.nn.ParameterList([torch.nn.Parameter(torch.ones(1)) for _ in range(3)])
+        self.optimizer = 'Adam'
+        self.optimizer_params = OmegaConf.create({'learning_rate': 0.01})
+        self.lr_scheduler = 'multisteplr'
+        key = 'milestone_steps' if step_based else 'milestones'
+        self.lr_scheduler_params = OmegaConf.create({
+            key: [2, 4] if milestones is None else milestones, 'gamma': 0.5,
+        })
+        self.trace = []
+
+    def get_parameters(self) -> list[dict]:
+        """Keep distinct backbone, head and LoRA rates to detect group drift."""
+        return [dict(params=[p], name=name, lr=lr) for p, name, lr in zip(
+            self.weights, ['backbone', 'head', 'lora'], [0.001, 0.01, 0.0001],
+        )]
+
+    def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
+        """Record the rates used for each update, including accumulated microbatches."""
+        self.trace.append((self.global_step, [g['lr'] for g in self.optimizers().param_groups]))
+        return sum(p.square().sum() for p in self.weights)
+
+
+def _fit_schedule_probe(
+    model: _ScheduleProbe,
+    root: Path,
+    steps: int = 6,
+    accumulate: int = 1,
+    batches: int = 3,
+    checkpoint: str | None = None,
+    accelerator: str = 'cpu',
+) -> Trainer:
+    """Run actual Lightning automatic optimization across short epoch boundaries."""
+    trainer = Trainer(
+        default_root_dir=root, accelerator=accelerator, devices=1, max_steps=steps,
+        accumulate_grad_batches=accumulate, logger=False, enable_checkpointing=False,
+        enable_progress_bar=False, enable_model_summary=False, num_sanity_val_steps=0,
+    )
+    trainer.fit(model, DataLoader(torch.ones(batches, 1), batch_size=1), ckpt_path=checkpoint)
+    return trainer
+
+
+class TestOptimizerStepSchedule:
+    """Verify schedule semantics with the installed Lightning training loop."""
+
+    @pytest.mark.parametrize('accumulate,batches', [(1, 3), (2, 3), (3, 7)])
+    def test_exact_updates(self, tmp_path: Path, accumulate: int, batches: int) -> None:
+        """Decay after updates two and four regardless of epoch and microbatch counts."""
+        model = _ScheduleProbe()
+        trainer = _fit_schedule_probe(model, tmp_path, accumulate=accumulate, batches=batches)
+        assert trainer.global_step == 6
+        for step, rates in model.trace:
+            factor = 0.5 ** sum(step >= milestone for milestone in [2, 4])
+            assert rates == pytest.approx([lr * factor for lr in [0.001, 0.01, 0.0001]])
+
+    def test_resume(self, tmp_path: Path) -> None:
+        """Restored optimizer and scheduler match uninterrupted training after a decay."""
+        full = _ScheduleProbe()
+        _fit_schedule_probe(full, tmp_path / 'full')
+        partial = _ScheduleProbe()
+        trainer = _fit_schedule_probe(partial, tmp_path / 'partial', steps=3)
+        checkpoint = str(tmp_path / 'resume.ckpt')
+        trainer.save_checkpoint(checkpoint)
+        resumed = _ScheduleProbe()
+        _fit_schedule_probe(resumed, tmp_path / 'resumed', checkpoint=checkpoint)
+        assert resumed.trace == full.trace[3:]
+        for actual, expected in zip(resumed.weights, full.weights):
+            torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+    def test_legacy_epochs(self, tmp_path: Path) -> None:
+        """Explicit epoch milestones retain epoch-based behavior."""
+        model = _ScheduleProbe(step_based=False, milestones=[1])
+        _fit_schedule_probe(model, tmp_path, batches=3)
+        for step, rates in model.trace:
+            factor = 1 if step < 3 else 0.5
+            assert rates == pytest.approx([lr * factor for lr in [0.001, 0.01, 0.0001]])
+
+    def test_empty_steps_override_historical_derived_epochs(self, tmp_path: Path) -> None:
+        """An empty explicit step schedule stays constant even with a saved epoch field."""
+        model = _ScheduleProbe(milestones=[])
+        model.lr_scheduler_params.milestones = [1]
+        _fit_schedule_probe(model, tmp_path)
+        for _, rates in model.trace:
+            assert rates == pytest.approx([0.001, 0.01, 0.0001])
+
+    @pytest.mark.gpu
+    def test_cuda_accumulation(self, tmp_path: Path) -> None:
+        """Verify exact update rates in the actual CUDA Lightning loop."""
+        model = _ScheduleProbe()
+        _fit_schedule_probe(model, tmp_path, accumulate=2, accelerator='gpu')
+        for step, rates in model.trace:
+            factor = 0.5 ** sum(step >= milestone for milestone in [2, 4])
+            assert rates == pytest.approx([lr * factor for lr in [0.001, 0.01, 0.0001]])

@@ -323,16 +323,6 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
 
     steps_per_epoch = calculate_steps_per_epoch(data_module)
 
-    # convert milestone_steps to milestones if applicable (before `get_model`).
-    if (
-        "multisteplr" in cfg.training.lr_scheduler_params
-        and "milestone_steps" in cfg.training.lr_scheduler_params.multisteplr
-    ):
-        milestone_steps = cfg.training.lr_scheduler_params.multisteplr.milestone_steps
-        milestones = [math.ceil(s / steps_per_epoch) for s in milestone_steps]
-        with open_dict(cfg):
-            cfg.training.lr_scheduler_params.multisteplr.milestones = milestones
-
     # convert patch masking epochs if applicable (before `get_callbacks`)
     if "patch_mask" in cfg.training and "init_epoch" in cfg.training.patch_mask:
         init_step = math.ceil(cfg.training.patch_mask.init_epoch * steps_per_epoch)
