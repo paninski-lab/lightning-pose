@@ -321,6 +321,19 @@ class TestValidateModel:
         with pytest.warns(UserWarning, match='heatmap_multiview_transformer'):
             _mc(cfg)._validate_model()
 
+    def test_validate_model_reprojection_loss_wrong_model_type_raises(self):
+        """AssertionError (not just a warning) when a camera-dependent loss is active but
+        model_type isn't heatmap_multiview_transformer -- only that model class populates the
+        3D keys these losses need; otherwise training crashes later with a confusing TypeError
+        from deep inside LossFactory instead of a clear message."""
+        cfg = _multiview_cfg_dict()
+        cfg['model']['model_type'] = 'heatmap'
+        cfg['losses']['supervised_reprojection_heatmap_mse']['log_weight'] = 3.0
+        with pytest.raises(
+            AssertionError, match="model.model_type must be 'heatmap_multiview_transformer'"
+        ):
+            _mc(cfg)._validate_model()
+
     def test_validate_model_reprojection_loss_wrong_imgaug(self):
         cfg = _multiview_cfg_dict()
         cfg['losses']['supervised_reprojection_heatmap_mse']['log_weight'] = 3.0

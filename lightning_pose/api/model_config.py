@@ -225,12 +225,15 @@ class ModelConfig:
         """Validate a single camera-dependent multi-view loss, if active.
 
         Both ``supervised_reprojection_heatmap_mse`` and ``supervised_pairwise_projections``
-        require the same setup: a 3D-safe augmentation pipeline (``training.imgaug == "dlc"``,
-        which gets silently promoted to ``dlc-mv`` — see
-        :func:`lightning_pose.data.factory.get_imgaug_transform`), ``training.imgaug_3d`` set to
-        ``true``, and resolvable camera parameters. Without all three, the loss either never
-        gets added (see :func:`lightning_pose.losses.factory.get_loss_factories`) or is trained
-        against geometrically-inconsistent per-view augmentations.
+        require the same setup: ``model.model_type == "heatmap_multiview_transformer"`` (only
+        that class's ``get_loss_inputs_labeled`` populates the 3D/reprojected keypoints these
+        losses need -- any other model type raises a confusing ``TypeError`` from deep inside
+        :class:`~lightning_pose.losses.factory.LossFactory` instead), a 3D-safe augmentation
+        pipeline (``training.imgaug == "dlc"``, which gets silently promoted to ``dlc-mv`` —
+        see :func:`lightning_pose.data.factory.get_imgaug_transform`), ``training.imgaug_3d``
+        set to ``true``, and resolvable camera parameters. Without all of these, the loss
+        either never gets added (see :func:`lightning_pose.losses.factory.get_loss_factories`)
+        or is trained against geometrically-inconsistent per-view augmentations.
 
         Args:
             loss_name: config key under ``losses``, e.g. ``"supervised_reprojection_heatmap_mse"``.
@@ -242,6 +245,10 @@ class ModelConfig:
         if loss_cfg is None or loss_cfg.get('log_weight') is None:
             return
 
+        assert self.cfg.model.model_type == 'heatmap_multiview_transformer', (
+            f"model.model_type must be 'heatmap_multiview_transformer' when losses.{loss_name} "
+            "is active -- only that model class populates the 3D keypoints this loss requires"
+        )
         assert self.cfg.training.imgaug == 'dlc', (
             f"training.imgaug must be 'dlc' when losses.{loss_name} is active"
         )
