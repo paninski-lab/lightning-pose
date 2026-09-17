@@ -550,6 +550,27 @@ class HeatmapDataset(BaseTrackingDataset):
         return example_dict  # type: ignore[return-value]
 
 
+def has_calibration_files(root_directory: str | Path) -> bool:
+    """Check whether a project directory contains any camera calibration files.
+
+    Used both by :meth:`MultiviewHeatmapDataset._discover_cam_params_from_image_paths` (to
+    skip labeled-data folder-name parsing when there is nothing to discover) and by
+    :func:`lightning_pose.data.factory.get_dataset` (to decide, before the dataset is built,
+    whether camera params will end up available via auto-discovery).
+
+    Args:
+        root_directory: project root directory (``cfg.data.data_dir``).
+
+    Returns:
+        True if ``root_directory/calibrations/`` (a directory) or
+        ``root_directory/calibration.toml`` exists.
+    """
+    return (
+        (Path(root_directory) / 'calibrations').is_dir()
+        or (Path(root_directory) / 'calibration.toml').exists()
+    )
+
+
 class MultiviewHeatmapDataset(torch.utils.data.Dataset):
     """Heatmap dataset that aggregates one :class:`HeatmapDataset` per camera view.
 
@@ -735,6 +756,12 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             tuple of (cam_params_df, cam_params_file_to_camgroup); both None if no calibration
             files are found
         """
+        # nothing to discover if the project has no calibration files at all; skip parsing
+        # labeled-data folder names so <session>_<view> naming is only enforced when it's
+        # actually needed
+        if not has_calibration_files(self.root_directory):
+            return None, None
+
         image_names = self.dataset[self.view_names[0]].image_names
         cam_params_file_to_camgroup = {}
         calib_files = []
@@ -783,8 +810,13 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             return cam_params_df, cam_params_file_to_camgroup
 
         if cam_params_file_to_camgroup and not all_found:
-            logger.warning(
-                'calibration file not found for some frames; disabling 3D for entire dataset'
+            raise ValueError(
+                'calibration file not found for some, but not all, sessions in this dataset. '
+                'Partial calibration coverage is always treated as an error, since some '
+                'calibration files existing usually means calibration was intended for the '
+                'whole dataset. Ensure every session referenced by the dataset has a '
+                'corresponding calibrations/<session>.toml (or a calibration.toml fallback at '
+                'the project root), or remove calibration entirely if it is not needed.'
             )
         return None, None
 

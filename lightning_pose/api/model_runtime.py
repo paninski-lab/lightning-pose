@@ -118,7 +118,7 @@ def load_model_from_checkpoint(
     if not data_module and not skip_data_module:
         delete_extras = True
         data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
-        imgaug_transform = get_imgaug_transform(cfg=cfg)
+        imgaug_transform = get_imgaug_transform(cfg=cfg, data_dir=data_dir)
         dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
         data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
     if not data_module:

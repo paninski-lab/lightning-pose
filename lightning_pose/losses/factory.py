@@ -114,7 +114,11 @@ def get_loss_factories(
     if cfg.model.model_type.find('heatmap') > -1:
         loss_name = 'heatmap_' + cfg.model.heatmap_loss_type
         loss_params_dict['supervised'][loss_name] = {'log_weight': 0.0}
-        if cfg.model.model_type.find('multiview') > -1 and cfg.data.get('camera_params_file'):
+        # check the dataset's resolved camera params, not cfg.data.camera_params_file directly --
+        # the dataset may have auto-discovered a calibration.toml even when camera_params_file
+        # is unset (see MultiviewHeatmapDataset._discover_cam_params_from_image_paths)
+        has_cam_params = getattr(data_module.dataset, 'cam_params_df', None) is not None
+        if cfg.model.model_type.find('multiview') > -1 and has_cam_params:
 
             log_weight_sp = cfg.losses.get(
                 'supervised_pairwise_projections', {}

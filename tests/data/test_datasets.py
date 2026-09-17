@@ -1078,8 +1078,9 @@ class TestDiscoverCamParamsFromImagePaths:
         assert cam_params_df is None
         assert cam_params_file_to_camgroup is None
 
-    def test_discover_mixed_calibration_disables_3d(self, fake_ds, tmp_path, caplog):
-        """Returns (None, None) and logs a warning when only some frames have calibration."""
+    def test_discover_mixed_calibration_raises(self, fake_ds, tmp_path):
+        """ValueError raised when only some sessions have calibration -- partial coverage is
+        always treated as a data error, never silently disabled with just a warning."""
         # Arrange: session0 has a toml, session1 does not
         calib_dir = tmp_path / 'calibrations'
         calib_dir.mkdir()
@@ -1089,18 +1090,9 @@ class TestDiscoverCamParamsFromImagePaths:
             'labeled-data/session1_top/img0001.png',
         ]
 
-        # Act
-        with caplog.at_level(logging.WARNING, logger='lightning_pose'):
-            cam_params_df, cam_params_file_to_camgroup = self._discover(fake_ds)
-
-        # Assert
-        assert cam_params_df is None
-        assert cam_params_file_to_camgroup is None
-        assert any(
-            'calibration file not found' in r.message
-            for r in caplog.records
-            if r.levelno == logging.WARNING
-        )
+        # Act / Assert
+        with pytest.raises(ValueError, match='calibration file not found for some'):
+            self._discover(fake_ds)
 
     def test_discover_multi_session(self, fake_ds, tmp_path):
         """Each session is mapped to its own calibration file."""
@@ -1128,23 +1120,38 @@ class TestDiscoverCamParamsFromImagePaths:
         assert 'calibrations/sessionB.toml' in cam_params_file_to_camgroup
         assert fake_ds._load_camgroup.call_count == 2
 
-    def test_discover_path_without_labeled_data_raises(self, fake_ds):
+    def test_discover_path_without_labeled_data_raises(self, fake_ds, tmp_path):
         """ValueError raised when image path doesn't contain labeled-data/."""
         # Arrange
+        (tmp_path / 'calibration.toml').write_text('')
         fake_ds.dataset['top'].image_names = ['some/other/path/img0000.png']
 
         # Act / Assert
         with pytest.raises(ValueError, match='labeled-data'):
             self._discover(fake_ds)
 
-    def test_discover_folder_without_underscore_raises(self, fake_ds):
+    def test_discover_folder_without_underscore_raises(self, fake_ds, tmp_path):
         """ValueError raised when folder name has no underscore separating session and view."""
         # Arrange
+        (tmp_path / 'calibration.toml').write_text('')
         fake_ds.dataset['top'].image_names = ['labeled-data/sessiononly/img0000.png']
 
         # Act / Assert
         with pytest.raises(ValueError, match='expected pattern'):
             self._discover(fake_ds)
+
+    def test_discover_no_calibration_skips_folder_name_parsing(self, fake_ds):
+        """No calibration files at all: returns (None, None) without parsing folder names,
+        even if a folder name would otherwise fail the <session>_<view> pattern check."""
+        # Arrange
+        fake_ds.dataset['top'].image_names = ['labeled-data/sessiononly/img0000.png']
+
+        # Act
+        cam_params_df, cam_params_file_to_camgroup = self._discover(fake_ds)
+
+        # Assert
+        assert cam_params_df is None
+        assert cam_params_file_to_camgroup is None
 
     def test_discover_do_context_raises_when_calibration_found(self, fake_ds, tmp_path):
         """AssertionError raised when do_context=True and a calibration file is found."""

@@ -16,7 +16,11 @@ from lightning_pose.data import (
     get_imgaug_transform,
 )
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
-from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
+from lightning_pose.data.datasets import (
+    BaseTrackingDataset,
+    HeatmapDataset,
+    MultiviewHeatmapDataset,
+)
 
 
 class TestGetImgaugTransform:
@@ -33,7 +37,7 @@ class TestGetImgaugTransform:
 
         # default pipeline: resize only
         cfg_tmp.training.imgaug = 'default'
-        pipe = get_imgaug_transform(cfg_tmp)
+        pipe = get_imgaug_transform(cfg_tmp, data_dir=cfg_tmp.data.data_dir)
         im_0, kps_0 = pipe(  # type: ignore[misc]
             images=np.expand_dims(np.array(image), axis=0),
             keypoints=np.expand_dims(keypoints_on_image, axis=0),
@@ -57,13 +61,13 @@ class TestGetImgaugTransform:
         cfg_tmp = copy.deepcopy(cfg)
         cfg_tmp.training.imgaug = 'null'
         with pytest.raises(NotImplementedError):
-            get_imgaug_transform(cfg_tmp)
+            get_imgaug_transform(cfg_tmp, data_dir=cfg_tmp.data.data_dir)
 
     def test_get_imgaug_transform_dlc(self, cfg):
         cfg_tmp = copy.deepcopy(cfg)
 
         cfg_tmp.training.imgaug = 'dlc'
-        pipe = get_imgaug_transform(cfg_tmp)
+        pipe = get_imgaug_transform(cfg_tmp, data_dir=cfg_tmp.data.data_dir)
         pipe_str = pipe.__str__()
         assert pipe_str.find('Resize') == -1
         assert pipe_str.find('Fliplr') == -1
@@ -84,7 +88,7 @@ class TestGetImgaugTransform:
         cfg_tmp = copy.deepcopy(cfg)
 
         cfg_tmp.training.imgaug = 'dlc-lr'
-        pipe = get_imgaug_transform(cfg_tmp)
+        pipe = get_imgaug_transform(cfg_tmp, data_dir=cfg_tmp.data.data_dir)
         pipe_str = pipe.__str__()
         assert pipe_str.find('Resize') == -1
         assert pipe_str.find('Fliplr') == -1
@@ -106,7 +110,7 @@ class TestGetImgaugTransform:
         cfg_tmp = copy.deepcopy(cfg)
 
         cfg_tmp.training.imgaug = 'dlc-top-down'
-        pipe = get_imgaug_transform(cfg_tmp)
+        pipe = get_imgaug_transform(cfg_tmp, data_dir=cfg_tmp.data.data_dir)
         pipe_str = pipe.__str__()
         assert pipe_str.find('Resize') == -1
         assert pipe_str.find('Fliplr') == -1
@@ -128,7 +132,7 @@ class TestGetImgaugTransform:
         cfg_tmp = copy.deepcopy(cfg)
 
         cfg_tmp.training.imgaug = 'dlc-mv'
-        pipe = get_imgaug_transform(cfg_tmp)
+        pipe = get_imgaug_transform(cfg_tmp, data_dir=cfg_tmp.data.data_dir)
         pipe_str = pipe.__str__()
         assert pipe_str.find('Resize') == -1
         assert pipe_str.find('Fliplr') == -1
@@ -144,6 +148,36 @@ class TestGetImgaugTransform:
         assert pipe_str.find('Emboss') != -1
         assert pipe_str.find('CropAndPad') == -1
 
+    def test_get_imgaug_transform_promotes_to_dlc_mv_with_auto_discovered_camera_params(
+        self, cfg_multiview, mocker,
+    ):
+        """'dlc' is promoted to 'dlc-mv' when camera params are auto-discovered from a
+        calibration.toml, even though cfg.data.camera_params_file is unset (regression test:
+        previously this promotion only checked cfg.data.camera_params_file directly and missed
+        auto-discovered calibration, silently applying 2D-inconsistent augmentations per view)."""
+        cfg_tmp = copy.deepcopy(cfg_multiview)
+        cfg_tmp.model.model_type = 'heatmap_multiview_transformer'
+        assert not cfg_tmp.data.get('camera_params_file')
+        mocker.patch('lightning_pose.data.factory.has_calibration_files', return_value=True)
+        pipe = get_imgaug_transform(cfg_tmp, data_dir=cfg_tmp.data.data_dir)
+        pipe_str = pipe.__str__()
+        # dlc-mv excludes these 2D geometric transforms; plain dlc includes them
+        assert pipe_str.find('Affine') == -1
+        assert pipe_str.find('ElasticTransformation') == -1
+        assert pipe_str.find('CropAndPad') == -1
+
+    def test_get_imgaug_transform_no_promotion_without_camera_params(
+        self, cfg_multiview, mocker,
+    ):
+        """'dlc' stays 'dlc' (no promotion to 'dlc-mv') when no camera params are available."""
+        cfg_tmp = copy.deepcopy(cfg_multiview)
+        cfg_tmp.model.model_type = 'heatmap_multiview_transformer'
+        mocker.patch('lightning_pose.data.factory.has_calibration_files', return_value=False)
+        pipe = get_imgaug_transform(cfg_tmp, data_dir=cfg_tmp.data.data_dir)
+        pipe_str = pipe.__str__()
+        assert pipe_str.find('Affine') != -1
+        assert pipe_str.find('ElasticTransformation') != -1
+
     def test_get_imgaug_transform_custom(self, cfg):
         cfg_tmp = copy.deepcopy(cfg)
 
@@ -155,14 +189,14 @@ class TestGetImgaugTransform:
                 'p': 1.0, 'kwargs': {'mul': (0.5, 1.5), 'add': (-5, 5)},
             },
         }
-        pipe = get_imgaug_transform(cfg_tmp)
+        pipe = get_imgaug_transform(cfg_tmp, data_dir=cfg_tmp.data.data_dir)
         assert pipe.__str__().find('ShearX') == -1
         assert pipe.__str__().find('Jigsaw') != -1
         assert pipe.__str__().find('MultiplyAndAddToBrightness') != -1
 
         # make sure lists are turned into tuples
         cfg_tmp.training.imgaug = {'Affine': {'p': 1.0, 'kwargs': {'rotate': [-30, 30]}}}
-        pipe = get_imgaug_transform(cfg_tmp)
+        pipe = get_imgaug_transform(cfg_tmp, data_dir=cfg_tmp.data.data_dir)
         assert pipe.__str__().find('Uniform') != -1  # uniform rotation in (-30, 30)
         assert pipe.__str__().find('Choice') == -1  # categorical rotation from [-30, 30]
 
@@ -170,12 +204,12 @@ class TestGetImgaugTransform:
         cfg_tmp.training.imgaug = {
             'Resize': {'p': 1.0, 'args': ({'height': 256, 'width': 256},), 'kwargs': {}},
         }
-        pipe = get_imgaug_transform(cfg_tmp)
+        pipe = get_imgaug_transform(cfg_tmp, data_dir=cfg_tmp.data.data_dir)
         assert pipe.__str__().find('Resize') != -1
 
         # allow no p, args, kwargs
         cfg_tmp.training.imgaug = {'FastSnowyLandscape': {}}
-        pipe = get_imgaug_transform(cfg_tmp)
+        pipe = get_imgaug_transform(cfg_tmp, data_dir=cfg_tmp.data.data_dir)
         assert pipe.__str__().find('FastSnowyLandscape') != -1
 
     def test_get_imgaug_transform_raises_for_unknown_augmentation(self, cfg):
@@ -184,7 +218,7 @@ class TestGetImgaugTransform:
             'ResizeD': {'p': 1.0, 'args': ({'height': 256, 'width': 256},), 'kwargs': {}},
         }
         with pytest.raises(AttributeError):
-            get_imgaug_transform(cfg_tmp)
+            get_imgaug_transform(cfg_tmp, data_dir=cfg_tmp.data.data_dir)
 
 
 class TestGetDataModule:
@@ -393,3 +427,30 @@ class TestGetDataset:
         cfg_tmp.model.model_type = 'invalid_type'
         with pytest.raises(NotImplementedError):
             get_dataset(cfg_tmp, data_dir=toy_data_dir, imgaug_transform=imgaug_transform)
+
+    def test_multiview_resize_true_without_camera_params(
+        self, cfg_multiview, imgaug_transform, toy_mdata_dir, mocker,
+    ):
+        """resize=True when imgaug is active and no camera params are available (config or
+        auto-discovered)."""
+        cfg_tmp = copy.deepcopy(cfg_multiview)
+        cfg_tmp.model.model_type = 'heatmap'
+        mock_init = mocker.patch.object(MultiviewHeatmapDataset, '__init__', return_value=None)
+        mocker.patch('lightning_pose.data.factory.has_calibration_files', return_value=False)
+        get_dataset(cfg_tmp, data_dir=toy_mdata_dir, imgaug_transform=imgaug_transform)
+        assert mock_init.call_args.kwargs.get('resize') is True
+
+    def test_multiview_resize_false_with_auto_discovered_camera_params(
+        self, cfg_multiview, imgaug_transform, toy_mdata_dir, mocker,
+    ):
+        """resize=False when imgaug is active and camera params are auto-discovered from a
+        calibration.toml, even though cfg.data.camera_params_file is unset (regression test:
+        previously this branch only checked cfg.data.camera_params_file directly and missed
+        auto-discovered calibration)."""
+        cfg_tmp = copy.deepcopy(cfg_multiview)
+        cfg_tmp.model.model_type = 'heatmap'
+        assert not cfg_tmp.data.get('camera_params_file')
+        mock_init = mocker.patch.object(MultiviewHeatmapDataset, '__init__', return_value=None)
+        mocker.patch('lightning_pose.data.factory.has_calibration_files', return_value=True)
+        get_dataset(cfg_tmp, data_dir=toy_mdata_dir, imgaug_transform=imgaug_transform)
+        assert mock_init.call_args.kwargs.get('resize') is False

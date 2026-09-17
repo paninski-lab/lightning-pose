@@ -8,6 +8,7 @@ from typing import get_args
 
 from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 
+from lightning_pose.data.datasets import has_calibration_files
 from lightning_pose.models import ALLOWED_MODEL_TYPES
 from lightning_pose.utils.io import (
     check_video_paths,
@@ -220,14 +221,60 @@ class ModelConfig:
 
         self._validate_steps_vs_epochs()
 
+    def _validate_camera_dependent_loss(self, loss_name: str) -> None:
+        """Validate a single camera-dependent multi-view loss, if active.
+
+        Both ``supervised_reprojection_heatmap_mse`` and ``supervised_pairwise_projections``
+        require the same setup: ``model.model_type == "heatmap_multiview_transformer"`` (only
+        that class's ``get_loss_inputs_labeled`` populates the 3D/reprojected keypoints these
+        losses need -- any other model type raises a confusing ``TypeError`` from deep inside
+        :class:`~lightning_pose.losses.factory.LossFactory` instead), a 3D-safe augmentation
+        pipeline (``training.imgaug == "dlc"``, which gets silently promoted to ``dlc-mv`` —
+        see :func:`lightning_pose.data.factory.get_imgaug_transform`), ``training.imgaug_3d``
+        set to ``true``, and resolvable camera parameters. Without all of these, the loss
+        either never gets added (see :func:`lightning_pose.losses.factory.get_loss_factories`)
+        or is trained against geometrically-inconsistent per-view augmentations.
+
+        Args:
+            loss_name: config key under ``losses``, e.g. ``"supervised_reprojection_heatmap_mse"``.
+
+        Raises:
+            AssertionError: if the loss is active and any requirement is not met.
+        """
+        loss_cfg = self.cfg.losses.get(loss_name)
+        if loss_cfg is None or loss_cfg.get('log_weight') is None:
+            return
+
+        assert self.cfg.model.model_type == 'heatmap_multiview_transformer', (
+            f"model.model_type must be 'heatmap_multiview_transformer' when losses.{loss_name} "
+            "is active -- only that model class populates the 3D keypoints this loss requires"
+        )
+        assert self.cfg.training.imgaug == 'dlc', (
+            f"training.imgaug must be 'dlc' when losses.{loss_name} is active"
+        )
+        assert self.cfg.training.get('imgaug_3d') is True, (
+            f"training.imgaug_3d must be true when losses.{loss_name} is active"
+        )
+        has_cam_params = bool(
+            self.cfg.data.get('camera_params_file')
+            or has_calibration_files(self.cfg.data.data_dir)
+        )
+        assert has_cam_params, (
+            f"losses.{loss_name} is active but no camera parameters were found: set "
+            "data.camera_params_file, or provide a calibration.toml (or "
+            "calibrations/<session>.toml) at data.data_dir for auto-discovery. Without "
+            "camera parameters this loss is silently never added at train time."
+        )
+
     def _validate_model(self) -> None:
         """Validate the ``model`` config section.
 
         Checks:
         - ``model_type`` is a recognised value.
         - Multi-view models use ``heatmap_multiview_transformer``.
-        - When ``losses.supervised_reprojection_heatmap_mse`` is active, ``training.imgaug``
-          must be ``"dlc"`` and ``training.imgaug_3d`` must be ``true``.
+        - When ``losses.supervised_reprojection_heatmap_mse`` or
+          ``losses.supervised_pairwise_projections`` is active, see
+          :meth:`_validate_camera_dependent_loss`.
 
         Raises:
             AssertionError: if any check fails.
@@ -251,16 +298,8 @@ class ModelConfig:
                     stacklevel=2,
                 )
 
-            reprojection = self.cfg.losses.get('supervised_reprojection_heatmap_mse')
-            if reprojection is not None and reprojection.get('log_weight') is not None:
-                assert self.cfg.training.imgaug == 'dlc', (
-                    "training.imgaug must be 'dlc' when "
-                    "losses.supervised_reprojection_heatmap_mse is active"
-                )
-                assert self.cfg.training.get('imgaug_3d') is True, (
-                    "training.imgaug_3d must be true when "
-                    "losses.supervised_reprojection_heatmap_mse is active"
-                )
+            self._validate_camera_dependent_loss('supervised_reprojection_heatmap_mse')
+            self._validate_camera_dependent_loss('supervised_pairwise_projections')
 
     def _validate_losses(self) -> None:
         """Validate the ``losses`` config section.

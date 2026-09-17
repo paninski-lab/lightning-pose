@@ -19,9 +19,11 @@ specified in the configuration file:
 
 The backbone can be any of the available backbones that start with the string "vit"
 (see options :ref:`here <config_file_model>`),
-indicating Vision Transformer, with the exception of ``vitb_sam``.
+indicating Vision Transformer, with the exception of the SAM/SAM2 backbones
+(``vitb_sam``, ``vitb_sam2``, ``vits_sam2``, ``vitt_sam2``), which are architecturally
+incompatible with the multiview cross-attention block.
 The "heatmap_multiview_transformer" will then use the specified backbone to process all camera
-view simultaneously.
+views simultaneously.
 
 
 Patch masking
@@ -78,13 +80,27 @@ For each view, we then estimate the affine transformation from the original to a
 and apply this transformation to the original image.
 
 To enable 3D augmentations, add the ``imgaug_3d`` field to the ``training`` section of your configuration
-file and set it to `true`:
+file and set it to `true`, and set ``imgaug`` to ``dlc``:
 
 .. code-block:: yaml
 
     training:
         imgaug: dlc
         imgaug_3d: true
+
+Although the ``dlc`` preset normally includes per-view geometric transforms (rotation, crop,
+elastic transform) that would break 3D consistency, Lightning Pose automatically substitutes a
+3D-safe variant, ``dlc-mv``, whenever it detects a multi-view model with usable camera
+parameters. You do not need to (and should not) set ``imgaug: dlc-mv`` yourself — keep
+``imgaug: dlc`` in the config and let this substitution happen automatically.
+
+This substitution, and the 3D loss and augmentations described here, all require camera
+parameters to actually be available via the files
+``calibration.toml``/``calibrations/<session>.toml`` at the project root (see
+the :ref:`camera calibration section <camera_calibration>`). If you enable
+``supervised_reprojection_heatmap_mse`` without either of these in place, training will fail
+at startup with an error like ``no camera parameters were found``; if you see this, check your
+calibration file setup.
 
 To compute the 3D reprojection loss, we:
 

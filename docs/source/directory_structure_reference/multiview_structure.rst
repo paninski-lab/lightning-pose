@@ -146,10 +146,7 @@ the path structure ``labeled-data/<session>_<view>/<filename>.ext``; the session
 extracted by stripping the last ``_<view>`` suffix from the subfolder name (e.g.,
 ``labeled-data/session0_view0/frame00001.png`` → session ``session0``). The CLI then
 looks for ``calibrations/<session>.toml`` first, then falls back to ``calibration.toml``
-at the project root. The config field ``camera_params_file`` can be set to a
-``calibrations.csv`` to override auto-discovery with explicit per-frame calibration
-control.
-The App does not use this, instead it maps from Session to Calibration using the directory structure.
+at the project root.
 
 .. _bbox_req:
 
