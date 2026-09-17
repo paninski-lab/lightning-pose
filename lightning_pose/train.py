@@ -289,6 +289,9 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
+    if cfg.training.get('imgaug_seed') is not None:
+        import imgaug
+        imgaug.seed(int(cfg.training.imgaug_seed))
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
