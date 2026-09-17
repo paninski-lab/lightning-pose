@@ -550,6 +550,27 @@ class HeatmapDataset(BaseTrackingDataset):
         return example_dict  # type: ignore[return-value]
 
 
+def has_calibration_files(root_directory: str | Path) -> bool:
+    """Check whether a project directory contains any camera calibration files.
+
+    Used both by :meth:`MultiviewHeatmapDataset._discover_cam_params_from_image_paths` (to
+    skip labeled-data folder-name parsing when there is nothing to discover) and by
+    :func:`lightning_pose.data.factory.get_dataset` (to decide, before the dataset is built,
+    whether camera params will end up available via auto-discovery).
+
+    Args:
+        root_directory: project root directory (``cfg.data.data_dir``).
+
+    Returns:
+        True if ``root_directory/calibrations/`` (a directory) or
+        ``root_directory/calibration.toml`` exists.
+    """
+    return (
+        (Path(root_directory) / 'calibrations').is_dir()
+        or (Path(root_directory) / 'calibration.toml').exists()
+    )
+
+
 class MultiviewHeatmapDataset(torch.utils.data.Dataset):
     """Heatmap dataset that aggregates one :class:`HeatmapDataset` per camera view.
 
@@ -738,9 +759,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         # nothing to discover if the project has no calibration files at all; skip parsing
         # labeled-data folder names so <session>_<view> naming is only enforced when it's
         # actually needed
-        calibrations_dir = Path(self.root_directory) / 'calibrations'
-        calibration_fallback = Path(self.root_directory) / 'calibration.toml'
-        if not calibrations_dir.is_dir() and not calibration_fallback.exists():
+        if not has_calibration_files(self.root_directory):
             return None, None
 
         image_names = self.dataset[self.view_names[0]].image_names

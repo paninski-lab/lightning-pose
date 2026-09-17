@@ -38,6 +38,7 @@ from lightning_pose.data.datasets import (
     BaseTrackingDataset,
     HeatmapDataset,
     MultiviewHeatmapDataset,
+    has_calibration_files,
 )
 
 # to ignore imports for sphinx-autoapidoc
@@ -158,10 +159,12 @@ def get_dataset(
                 'No precautions regarding the size of the images were considered here, '
                 'images will be resized accordingly to configs!'
             )
-            if (
-                cfg.training.imgaug in ['default', 'none']
-                or not cfg.data.get('camera_params_file')
-            ):
+            # camera params may come from an explicit camera_params_file, or be auto-discovered
+            # from a calibration.toml/calibrations/ dir at data_dir (see has_calibration_files)
+            has_cam_params = bool(
+                cfg.data.get('camera_params_file') or has_calibration_files(data_dir)
+            )
+            if cfg.training.imgaug in ['default', 'none'] or not has_cam_params:
                 # we are either
                 # 1. running inference on un-augmented data, and need to make sure to resize
                 # 2. using a multiview model w/o camera params, and need to take care of resizing

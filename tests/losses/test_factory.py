@@ -2,6 +2,7 @@
 
 import copy
 
+import pandas as pd
 import pytest
 import torch
 
@@ -90,43 +91,63 @@ class TestGetLossFactories:
             get_loss_factories(cfg_tmp, data_module=base_data_module)
 
     def test_get_loss_factories_multiview_with_camera_params_no_optional_losses(
-        self, cfg_multiview, multiview_heatmap_data_module, tmp_path,
+        self, cfg_multiview, multiview_heatmap_data_module,
     ):
-        """multiview model with camera_params_file but no optional losses only adds heatmap."""
+        """multiview model with camera params but no optional losses only adds heatmap."""
         cfg_tmp = copy.deepcopy(cfg_multiview)
         cfg_tmp.model.model_type = 'heatmap_multiview_transformer'
         cfg_tmp.model.losses_to_use = []
-        cfg_tmp.data.camera_params_file = str(tmp_path / 'camera_params.yaml')
+        # simulate resolved camera params on the dataset (explicit camera_params_file or
+        # auto-discovered calibration.toml both populate this the same way)
+        multiview_heatmap_data_module.dataset.cam_params_df = pd.DataFrame({'file': ['x']})
         factories = get_loss_factories(cfg_tmp, data_module=multiview_heatmap_data_module)
         supervised_keys = set(factories['supervised'].loss_instance_dict.keys())
         assert 'supervised_pairwise_projections' not in supervised_keys
         assert 'supervised_reprojection_heatmap_mse' not in supervised_keys
 
     def test_get_loss_factories_multiview_supervised_pairwise_projections(
-        self, cfg_multiview, multiview_heatmap_data_module, tmp_path,
+        self, cfg_multiview, multiview_heatmap_data_module,
     ):
         """supervised_pairwise_projections is added when log_weight is set and camera_params."""
         cfg_tmp = copy.deepcopy(cfg_multiview)
         cfg_tmp.model.model_type = 'heatmap_multiview_transformer'
         cfg_tmp.model.losses_to_use = []
-        cfg_tmp.data.camera_params_file = str(tmp_path / 'camera_params.yaml')
         cfg_tmp.losses.supervised_pairwise_projections = {'log_weight': 0.0}
+        multiview_heatmap_data_module.dataset.cam_params_df = pd.DataFrame({'file': ['x']})
         factories = get_loss_factories(cfg_tmp, data_module=multiview_heatmap_data_module)
         assert 'supervised_pairwise_projections' in factories['supervised'].loss_instance_dict
 
     def test_get_loss_factories_multiview_supervised_reprojection_heatmap_mse(
-        self, cfg_multiview, multiview_heatmap_data_module, tmp_path,
+        self, cfg_multiview, multiview_heatmap_data_module,
     ):
         """supervised_reprojection_heatmap_mse added when log_weight is set and camera_params."""
         cfg_tmp = copy.deepcopy(cfg_multiview)
         cfg_tmp.model.model_type = 'heatmap_multiview_transformer'
         cfg_tmp.model.losses_to_use = []
-        cfg_tmp.data.camera_params_file = str(tmp_path / 'camera_params.yaml')
         cfg_tmp.losses.supervised_reprojection_heatmap_mse = {'log_weight': 0.0}
+        multiview_heatmap_data_module.dataset.cam_params_df = pd.DataFrame({'file': ['x']})
         factories = get_loss_factories(cfg_tmp, data_module=multiview_heatmap_data_module)
         assert (
             'supervised_reprojection_heatmap_mse' in factories['supervised'].loss_instance_dict
         )
+
+    def test_get_loss_factories_multiview_no_camera_params_skips_optional_losses(
+        self, cfg_multiview, multiview_heatmap_data_module,
+    ):
+        """Optional camera-dependent losses are skipped when the dataset has no camera params,
+        even if their log_weight is configured (regression test: previously this was gated on
+        cfg.data.camera_params_file, which misses calibration auto-discovered from a
+        calibration.toml at the data directory)."""
+        cfg_tmp = copy.deepcopy(cfg_multiview)
+        cfg_tmp.model.model_type = 'heatmap_multiview_transformer'
+        cfg_tmp.model.losses_to_use = []
+        cfg_tmp.losses.supervised_pairwise_projections = {'log_weight': 0.0}
+        cfg_tmp.losses.supervised_reprojection_heatmap_mse = {'log_weight': 0.0}
+        assert multiview_heatmap_data_module.dataset.cam_params_df is None
+        factories = get_loss_factories(cfg_tmp, data_module=multiview_heatmap_data_module)
+        supervised_keys = set(factories['supervised'].loss_instance_dict.keys())
+        assert 'supervised_pairwise_projections' not in supervised_keys
+        assert 'supervised_reprojection_heatmap_mse' not in supervised_keys
 
 
 class TestLossFactory:

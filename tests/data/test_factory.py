@@ -16,7 +16,11 @@ from lightning_pose.data import (
     get_imgaug_transform,
 )
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
-from lightning_pose.data.datasets import BaseTrackingDataset, HeatmapDataset
+from lightning_pose.data.datasets import (
+    BaseTrackingDataset,
+    HeatmapDataset,
+    MultiviewHeatmapDataset,
+)
 
 
 class TestGetImgaugTransform:
@@ -393,3 +397,30 @@ class TestGetDataset:
         cfg_tmp.model.model_type = 'invalid_type'
         with pytest.raises(NotImplementedError):
             get_dataset(cfg_tmp, data_dir=toy_data_dir, imgaug_transform=imgaug_transform)
+
+    def test_multiview_resize_true_without_camera_params(
+        self, cfg_multiview, imgaug_transform, toy_mdata_dir, mocker,
+    ):
+        """resize=True when imgaug is active and no camera params are available (config or
+        auto-discovered)."""
+        cfg_tmp = copy.deepcopy(cfg_multiview)
+        cfg_tmp.model.model_type = 'heatmap'
+        mock_init = mocker.patch.object(MultiviewHeatmapDataset, '__init__', return_value=None)
+        mocker.patch('lightning_pose.data.factory.has_calibration_files', return_value=False)
+        get_dataset(cfg_tmp, data_dir=toy_mdata_dir, imgaug_transform=imgaug_transform)
+        assert mock_init.call_args.kwargs.get('resize') is True
+
+    def test_multiview_resize_false_with_auto_discovered_camera_params(
+        self, cfg_multiview, imgaug_transform, toy_mdata_dir, mocker,
+    ):
+        """resize=False when imgaug is active and camera params are auto-discovered from a
+        calibration.toml, even though cfg.data.camera_params_file is unset (regression test:
+        previously this branch only checked cfg.data.camera_params_file directly and missed
+        auto-discovered calibration)."""
+        cfg_tmp = copy.deepcopy(cfg_multiview)
+        cfg_tmp.model.model_type = 'heatmap'
+        assert not cfg_tmp.data.get('camera_params_file')
+        mock_init = mocker.patch.object(MultiviewHeatmapDataset, '__init__', return_value=None)
+        mocker.patch('lightning_pose.data.factory.has_calibration_files', return_value=True)
+        get_dataset(cfg_tmp, data_dir=toy_mdata_dir, imgaug_transform=imgaug_transform)
+        assert mock_init.call_args.kwargs.get('resize') is False
