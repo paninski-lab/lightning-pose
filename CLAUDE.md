@@ -288,6 +288,57 @@ Three dataset classes, with a clear inheritance structure; see module docstring.
    `predict_on_label_csv` and `predict_on_label_csv_multiview`, which wrap their
    `OmegaConf.merge(self.cfg, cfg_overrides)` calls the same way).
 
+### Multiview camera parameter resolution
+
+Camera calibration for multiview models can come from two sources. Any code that gates
+behavior on "are camera params available" **must check the resolved state, not the raw
+`cfg.data.camera_params_file` value** — checking the config flag alone misses auto-discovery
+and has caused multiple silent bugs in the past (loss silently not added, wrong augmentation
+pipeline, wrong 3D-augmentation branch, training data silently corrupted with no error).
+
+**Two sources**:
+1. Explicit CSV override: `cfg.data.camera_params_file` →
+   `MultiviewHeatmapDataset._load_cam_params_from_csv`. Being phased out in favor of
+   auto-discovery — removed from user-facing docs; do not document or recommend this path, and
+   do not add new features that depend on it.
+2. Auto-discovery: `MultiviewHeatmapDataset._discover_cam_params_from_image_paths`, triggered
+   whenever `camera_params_file` is unset. Parses the session from the
+   `labeled-data/<session>_<view>/` folder name (everything before the last `_`), then looks
+   for `calibrations/<session>.toml`, falling back to `calibration.toml` at `root_directory`.
+
+**`has_calibration_files(root_directory)`** (`data/datasets.py`) is the pre-dataset-construction
+check: `True` if `calibrations/` or `calibration.toml` exists at the project root. It has two
+uses: (a) short-circuiting `_discover_cam_params_from_image_paths` so a `labeled-data/` folder
+name that doesn't match `<session>_<view>` only raises when discovery is actually needed (i.e.
+some calibration exists to discover), and (b) letting `data/factory.py` code decide "will camera
+params resolve" before the dataset exists, without duplicating the discovery logic.
+
+Once the dataset is constructed, the authoritative source of truth is
+`dataset.cam_params_df is not None` (equivalently `cam_params_file_to_camgroup`) — populated by
+either source, so downstream code never needs to know which one supplied it.
+
+**Call sites that check resolved state instead of `cfg.data.camera_params_file` directly** (all
+already fixed; new code touching this area must follow the same pattern):
+- `data/factory.py::get_imgaug_transform` — promotes `training.imgaug: dlc` to the 3D-safe
+  `dlc-mv` preset only when camera params resolve; checks `has_calibration_files(data_dir)`.
+- `data/factory.py::get_dataset` — the `resize` flag (controls whether 3D augmentation runs
+  during training vs. plain triangulation in `MultiviewHeatmapDataset.__getitem__`) checks
+  `has_calibration_files(data_dir)`.
+- `losses/factory.py::get_loss_factories` — gates `supervised_pairwise_projections` /
+  `supervised_reprojection_heatmap_mse` on `data_module.dataset.cam_params_df is not None`.
+- `api/model_config.py::ModelConfig._validate_model` — asserts camera params actually resolve
+  whenever `supervised_reprojection_heatmap_mse` is configured with a `log_weight`, so a
+  missing/broken calibration file fails loudly at validation instead of silently never adding
+  the loss at train time.
+
+**`imgaug: dlc` → `dlc-mv` substitution is transient, never written back to `cfg`**: the saved
+config always stores the literal string `'dlc'`, never `'dlc-mv'` — the swap happens inside
+`get_imgaug_transform` on every call, using the config's `training.imgaug` value plus whichever
+camera-param check above. Consequently `ModelConfig._validate_model` requires
+`training.imgaug == 'dlc'` exactly when the reprojection loss is active; setting
+`imgaug: dlc-mv` directly in a config will fail that validation even though it looks like the
+"more correct" explicit choice — always configure `dlc` and let the substitution happen.
+
 ### DALI Pipeline (`lightning_pose/data/dali.py`)
 
 **`PrepareDALI`** — two-phase construction:
