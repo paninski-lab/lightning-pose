@@ -50,45 +50,14 @@ Example TOML calibration file:
 
 The number of camera sections must match the number of views specified in your configuration file.
 
-Calibrations index file (optional override)
--------------------------------------------
+Automatic calibration discovery
+--------------------------------
 
-By default, the CLI automatically discovers calibration files from image paths without
-any additional configuration. The session identifier is extracted from the frame's path:
-frames are expected to live under ``labeled-data/<session>_<view>/``, and the session is
-everything before the last ``_`` in that subfolder name. For example,
+The CLI automatically discovers calibration files from image paths without any additional
+configuration. The session identifier is extracted from the frame's path: frames are
+expected to live under ``labeled-data/<session>_<view>/``, and the session is everything
+before the last ``_`` in that subfolder name. For example,
 ``labeled-data/session0_view0/frame00001.png`` yields session ``session0``.
 
 Given the session, it looks for ``calibrations/<session>.toml`` first, then falls back to
-``calibration.toml`` at the project root. No ``camera_params_file`` config entry is needed
-for this to work.
-
-If you need per-frame control over which calibration file is used — for example, when
-frames from the same session use different calibrations — you can supply a
-``calibrations.csv`` that maps each labeled image to its calibration file explicitly.
-This file must have exactly two columns:
-
-* **First column** (no header): The relative path to each labeled image, **without view-specific subdirectories**. This should match the image paths that appear in your labeled data CSV files, but with any view-specific path components removed.
-
-* **Second column** (``file`` header): The relative path to the TOML calibration file for that session.
-
-Example ``calibrations.csv`` format:
-
-.. code-block::
-
-    ,file
-    labeled-data/session0/img00000005.png,calibrations/session0.toml
-    labeled-data/session0/img00000010.png,calibrations/session0.toml
-    labeled-data/session0/img00000230.png,calibrations/session0.toml
-    labeled-data/session1/img00000151.png,calibrations/session1.toml
-    labeled-data/session1/img00000201.png,calibrations/session1.toml
-
-Note that the first column uses the session name (e.g., ``session0``) rather than the
-view-specific directory names (e.g., ``session0_view0``, ``session0_view1``).
-
-To use this CSV instead of auto-discovery, point to it in your configuration file:
-
-.. code-block:: yaml
-
-    data:
-      camera_params_file: /path/to/project/calibrations.csv
+``calibration.toml`` at the project root.
