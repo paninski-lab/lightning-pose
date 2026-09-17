@@ -292,8 +292,11 @@ class HeatmapTrackerMultiviewTransformer(BaseSupervisedTracker):
                 else:
                     keypoints_pred_2d_reprojected = None
 
-            except Exception as e:
-                logger.error(f'error in 3D projection: {e}')
+            except Exception:
+                # logger.exception (not .error) includes the traceback -- this is the only
+                # place the root cause of a 3D-projection failure is recorded; downstream loss
+                # calls only see None and raise a generic error pointing back here
+                logger.exception('error in 3D projection; disabling 3D outputs for this batch')
                 keypoints_pred_3d = None
                 keypoints_targ_3d = None
                 keypoints_pred_2d_reprojected = None

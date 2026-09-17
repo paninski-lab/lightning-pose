@@ -379,6 +379,52 @@ class TestValidateModel:
         cfg['training']['imgaug_3d'] = False
         _mc(cfg)._validate_model()
 
+    def test_validate_model_pairwise_projections_wrong_imgaug(self):
+        """supervised_pairwise_projections gets the same validation as the reprojection loss."""
+        cfg = _multiview_cfg_dict()
+        del cfg['losses']['supervised_reprojection_heatmap_mse']
+        cfg['losses']['supervised_pairwise_projections'] = {'log_weight': 3.0}
+        cfg['training']['imgaug'] = 'default'
+        with pytest.raises(AssertionError, match="training.imgaug must be 'dlc'"):
+            _mc(cfg)._validate_model()
+
+    def test_validate_model_pairwise_projections_imgaug_3d_false(self):
+        cfg = _multiview_cfg_dict()
+        del cfg['losses']['supervised_reprojection_heatmap_mse']
+        cfg['losses']['supervised_pairwise_projections'] = {'log_weight': 3.0}
+        cfg['training']['imgaug_3d'] = False
+        with pytest.raises(AssertionError, match='imgaug_3d must be true'):
+            _mc(cfg)._validate_model()
+
+    def test_validate_model_pairwise_projections_no_camera_params_raises(self, tmp_path):
+        cfg = _multiview_cfg_dict()
+        del cfg['losses']['supervised_reprojection_heatmap_mse']
+        cfg['losses']['supervised_pairwise_projections'] = {'log_weight': 3.0}
+        cfg['data']['data_dir'] = str(tmp_path)
+        with pytest.raises(AssertionError, match='no camera parameters were found'):
+            _mc(cfg)._validate_model()
+
+    def test_validate_model_pairwise_projections_auto_discovered_calibration_passes(
+        self, tmp_path,
+    ):
+        cfg = _multiview_cfg_dict()
+        del cfg['losses']['supervised_reprojection_heatmap_mse']
+        cfg['losses']['supervised_pairwise_projections'] = {'log_weight': 3.0}
+        cfg['data']['data_dir'] = str(tmp_path)
+        (tmp_path / 'calibration.toml').write_text('')
+        _mc(cfg)._validate_model()
+
+    def test_validate_model_both_camera_dependent_losses_validated_independently(
+        self, tmp_path,
+    ):
+        """Both losses active: a failure in either one's requirements is caught."""
+        cfg = _multiview_cfg_dict()
+        cfg['losses']['supervised_reprojection_heatmap_mse']['log_weight'] = 3.0
+        cfg['losses']['supervised_pairwise_projections'] = {'log_weight': 3.0}
+        cfg['data']['data_dir'] = str(tmp_path)
+        with pytest.raises(AssertionError, match='no camera parameters were found'):
+            _mc(cfg)._validate_model()
+
 
 # ---------------------------------------------------------------------------
 # _validate_losses

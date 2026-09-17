@@ -810,8 +810,13 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             return cam_params_df, cam_params_file_to_camgroup
 
         if cam_params_file_to_camgroup and not all_found:
-            logger.warning(
-                'calibration file not found for some frames; disabling 3D for entire dataset'
+            raise ValueError(
+                'calibration file not found for some, but not all, sessions in this dataset. '
+                'Partial calibration coverage is always treated as an error, since some '
+                'calibration files existing usually means calibration was intended for the '
+                'whole dataset. Ensure every session referenced by the dataset has a '
+                'corresponding calibrations/<session>.toml (or a calibration.toml fallback at '
+                'the project root), or remove calibration entirely if it is not needed.'
             )
         return None, None
 

@@ -1109,9 +1109,11 @@ class PairwiseProjectionsLoss(Loss):
         # check if 3D keypoints are available
         if keypoints_targ_3d is None or keypoints_pred_3d is None:
             raise ValueError(
-                f"3D keypoints not available for {stage} stage. "
-                "Camera params file is required but not found;"
-                "Turn off supervised_pairwise_projections loss to avoid this error."
+                f"3D keypoints not available for {stage} stage. Either no camera parameters "
+                "were resolved for this dataset (see data.camera_params_file / calibration.toml "
+                "auto-discovery), or 3D projection failed at runtime for this batch -- check the "
+                "logs above for an 'error in 3D projection' entry with the root cause. To "
+                "disable this loss, set losses.supervised_pairwise_projections.log_weight: null."
             )
 
         elementwise_loss = self.compute_loss(
@@ -1237,9 +1239,12 @@ class ReprojectionHeatmapLoss(Loss):
         # check if reprojected keypoints are available
         if keypoints_pred_2d_reprojected is None:
             raise ValueError(
-                f"Reprojected keypoints not available for {stage} stage. "
-                "Camera params file is required but not found;"
-                "Turn off supervised_reprojection_heatmap loss to avoid this error."
+                f"Reprojected keypoints not available for {stage} stage. Either no camera "
+                "parameters were resolved for this dataset (see data.camera_params_file / "
+                "calibration.toml auto-discovery), or 3D projection failed at runtime for this "
+                "batch -- check the logs above for an 'error in 3D projection' entry with the "
+                "root cause. To disable this loss, set "
+                "losses.supervised_reprojection_heatmap_mse.log_weight: null."
             )
 
         # create heatmaps from 2d reprojections

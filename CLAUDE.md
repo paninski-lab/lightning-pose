@@ -305,6 +305,10 @@ pipeline, wrong 3D-augmentation branch, training data silently corrupted with no
    whenever `camera_params_file` is unset. Parses the session from the
    `labeled-data/<session>_<view>/` folder name (everything before the last `_`), then looks
    for `calibrations/<session>.toml`, falling back to `calibration.toml` at `root_directory`.
+   **Partial coverage always raises**: if some sessions resolve a calibration file and others
+   don't, this is treated as a data error (`ValueError`), never a warning — unlike "no
+   calibration anywhere" (a legitimate, silent "3D not wanted" state), partial coverage has no
+   legitimate use case and almost always means a session's calibration file is missing/misnamed.
 
 **`has_calibration_files(root_directory)`** (`data/datasets.py`) is the pre-dataset-construction
 check: `True` if `calibrations/` or `calibration.toml` exists at the project root. It has two
@@ -326,10 +330,12 @@ already fixed; new code touching this area must follow the same pattern):
   `has_calibration_files(data_dir)`.
 - `losses/factory.py::get_loss_factories` — gates `supervised_pairwise_projections` /
   `supervised_reprojection_heatmap_mse` on `data_module.dataset.cam_params_df is not None`.
-- `api/model_config.py::ModelConfig._validate_model` — asserts camera params actually resolve
-  whenever `supervised_reprojection_heatmap_mse` is configured with a `log_weight`, so a
-  missing/broken calibration file fails loudly at validation instead of silently never adding
-  the loss at train time.
+- `api/model_config.py::ModelConfig._validate_model` (via the shared
+  `_validate_camera_dependent_loss` helper) — asserts camera params actually resolve whenever
+  either `supervised_reprojection_heatmap_mse` or `supervised_pairwise_projections` is
+  configured with a `log_weight`, so a missing/broken calibration file fails loudly at
+  validation instead of silently never adding the loss at train time. Adding a third
+  camera-dependent loss should reuse this helper rather than duplicating its checks.
 
 **`imgaug: dlc` → `dlc-mv` substitution is transient, never written back to `cfg`**: the saved
 config always stores the literal string `'dlc'`, never `'dlc-mv'` — the swap happens inside
