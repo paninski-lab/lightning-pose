@@ -460,6 +460,22 @@ def test_extract_session_name_from_video():
     assert session_name == "mouse_session_2023_135"
 
 
+def test_extract_session_name_from_video_warns_on_non_underscore_separator(caplog):
+    """View name found but not as a '_<view>' suffix (e.g. hyphen-separated): a warning is
+    logged since the returned session name still contains the view name."""
+    view_names = ["right", "left"]
+
+    with caplog.at_level(logging.WARNING, logger="lightning_pose"):
+        session_name = extract_session_name_from_video("recording-right.mp4", view_names)
+
+    assert session_name == "recording-right"
+    assert any(
+        "not as a '_right' suffix" in r.message
+        for r in caplog.records
+        if r.levelno == logging.WARNING
+    )
+
+
 def test_find_video_files_for_views(toy_data_dir, tmpdir):
     # Create test directory with video files
     test_dir = os.path.join(str(tmpdir), "test_videos")

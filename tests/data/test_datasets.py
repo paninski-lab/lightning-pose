@@ -1128,23 +1128,38 @@ class TestDiscoverCamParamsFromImagePaths:
         assert 'calibrations/sessionB.toml' in cam_params_file_to_camgroup
         assert fake_ds._load_camgroup.call_count == 2
 
-    def test_discover_path_without_labeled_data_raises(self, fake_ds):
+    def test_discover_path_without_labeled_data_raises(self, fake_ds, tmp_path):
         """ValueError raised when image path doesn't contain labeled-data/."""
         # Arrange
+        (tmp_path / 'calibration.toml').write_text('')
         fake_ds.dataset['top'].image_names = ['some/other/path/img0000.png']
 
         # Act / Assert
         with pytest.raises(ValueError, match='labeled-data'):
             self._discover(fake_ds)
 
-    def test_discover_folder_without_underscore_raises(self, fake_ds):
+    def test_discover_folder_without_underscore_raises(self, fake_ds, tmp_path):
         """ValueError raised when folder name has no underscore separating session and view."""
         # Arrange
+        (tmp_path / 'calibration.toml').write_text('')
         fake_ds.dataset['top'].image_names = ['labeled-data/sessiononly/img0000.png']
 
         # Act / Assert
         with pytest.raises(ValueError, match='expected pattern'):
             self._discover(fake_ds)
+
+    def test_discover_no_calibration_skips_folder_name_parsing(self, fake_ds):
+        """No calibration files at all: returns (None, None) without parsing folder names,
+        even if a folder name would otherwise fail the <session>_<view> pattern check."""
+        # Arrange
+        fake_ds.dataset['top'].image_names = ['labeled-data/sessiononly/img0000.png']
+
+        # Act
+        cam_params_df, cam_params_file_to_camgroup = self._discover(fake_ds)
+
+        # Assert
+        assert cam_params_df is None
+        assert cam_params_file_to_camgroup is None
 
     def test_discover_do_context_raises_when_calibration_found(self, fake_ds, tmp_path):
         """AssertionError raised when do_context=True and a calibration file is found."""

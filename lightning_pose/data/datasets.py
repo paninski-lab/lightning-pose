@@ -735,6 +735,14 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
             tuple of (cam_params_df, cam_params_file_to_camgroup); both None if no calibration
             files are found
         """
+        # nothing to discover if the project has no calibration files at all; skip parsing
+        # labeled-data folder names so <session>_<view> naming is only enforced when it's
+        # actually needed
+        calibrations_dir = Path(self.root_directory) / 'calibrations'
+        calibration_fallback = Path(self.root_directory) / 'calibration.toml'
+        if not calibrations_dir.is_dir() and not calibration_fallback.exists():
+            return None, None
+
         image_names = self.dataset[self.view_names[0]].image_names
         cam_params_file_to_camgroup = {}
         calib_files = []

@@ -578,6 +578,16 @@ def extract_session_name_from_video(video_filename: str, view_names: list[str]) 
         if view_name in name_without_ext:
             # Remove the underscore and view name
             session_name = name_without_ext.replace(f"_{view_name}", "")
+            if session_name == name_without_ext:
+                # view name was found but not in the expected "_<view>" form (e.g. a hyphen or
+                # no separator was used instead); the session name below still contains the view
+                # name, so this video likely won't be grouped with its other views
+                logger.warning(
+                    f"video filename '{video_filename}' contains view name '{view_name}' but "
+                    f"not as a '_{view_name}' suffix; expected the pattern "
+                    f"'<session>_{view_name}'. This video may not be grouped correctly with "
+                    "its other views for multiview prediction."
+                )
             return session_name
 
     # If no view name found, return the original name
