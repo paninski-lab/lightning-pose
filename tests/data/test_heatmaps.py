@@ -55,7 +55,7 @@ class TestGenerateHeatmaps:
         cfg_tmp.model.model_type = 'heatmap'
         cfg_tmp.training.uniform_heatmaps_for_nan_keypoints = True
 
-        imgaug_transform = get_imgaug_transform(cfg_tmp)
+        imgaug_transform = get_imgaug_transform(cfg_tmp, data_dir=toy_data_dir)
         heatmap_dataset = get_dataset(
             cfg_tmp,
             data_dir=toy_data_dir,
@@ -106,7 +106,7 @@ class TestGenerateHeatmaps:
         cfg_tmp.data.image_resize_dims.width = img_shape[1]
 
         # build dataset with these new image dimensions
-        imgaug_transform = get_imgaug_transform(cfg_tmp)
+        imgaug_transform = get_imgaug_transform(cfg_tmp, data_dir=toy_data_dir)
         dataset = get_dataset(
             cfg_tmp,
             data_dir=toy_data_dir,

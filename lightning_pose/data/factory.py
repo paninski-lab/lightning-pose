@@ -23,6 +23,7 @@ model-side steps):
 """
 
 import warnings
+from pathlib import Path
 
 import imgaug.augmenters as iaa
 import numpy as np
@@ -45,7 +46,7 @@ from lightning_pose.data.datasets import (
 __all__: list[str] = []
 
 
-def get_imgaug_transform(cfg: DictConfig | ListConfig) -> iaa.Sequential:
+def get_imgaug_transform(cfg: DictConfig | ListConfig, data_dir: str | Path) -> iaa.Sequential:
     """Create simple and flexible data transform pipeline that augments images and keypoints.
 
     Args:
@@ -64,7 +65,9 @@ def get_imgaug_transform(cfg: DictConfig | ListConfig) -> iaa.Sequential:
             - "cfg.training.imgaug_3d":
                 boolean flag to control 3D-compatible augmentations for multiview models;
                 set to False to disable automatic "dlc-mv" enforcement;
-                set to True to enable 3D augmentations for when camera params file exist.
+                set to True to enable 3D augmentations for when camera params exist.
+        data_dir: root directory that camera calibration files are resolved relative to (used
+            to check for auto-discoverable calibration files; see ``has_calibration_files``).
 
     Returns:
         imgaug pipeline
@@ -76,12 +79,18 @@ def get_imgaug_transform(cfg: DictConfig | ListConfig) -> iaa.Sequential:
         # Check if user explicitly wants to use 3D augmentations for multiview models
         imagug_3d = cfg.training.get('imgaug_3d', None)
 
+        # camera params may come from an explicit camera_params_file, or be auto-discovered
+        # from a calibration.toml/calibrations/ dir at data_dir (see has_calibration_files)
+        has_cam_params = bool(
+            cfg.data.get('camera_params_file') or has_calibration_files(data_dir)
+        )
+
         # enforce "dlc-mv" imgaug pipeline for multiview models (no 2D geometric transforms)
         # only if explicitly requested or if no preference is set and camera params exist
         if (
             params not in ['default', 'none']
             and cfg.model.model_type.find('multiview') > -1
-            and cfg.data.get('camera_params_file')
+            and has_cam_params
             and (imagug_3d is True or imagug_3d is None)
         ):
             params = 'dlc-mv'

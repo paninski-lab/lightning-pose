@@ -335,6 +335,35 @@ class TestValidateModel:
         with pytest.raises(AssertionError, match='imgaug_3d must be true'):
             _mc(cfg)._validate_model()
 
+    def test_validate_model_reprojection_loss_no_camera_params_raises(self, tmp_path):
+        """AssertionError raised when the loss is active but no camera params can resolve
+        (neither camera_params_file nor an auto-discoverable calibration.toml/calibrations/
+        dir exist) -- otherwise the loss would silently never get added at train time."""
+        cfg = _multiview_cfg_dict()
+        cfg['losses']['supervised_reprojection_heatmap_mse']['log_weight'] = 3.0
+        cfg['data']['data_dir'] = str(tmp_path)
+        with pytest.raises(AssertionError, match='no camera parameters were found'):
+            _mc(cfg)._validate_model()
+
+    def test_validate_model_reprojection_loss_camera_params_file_passes(self, tmp_path):
+        """No error when data.camera_params_file is set, even without a calibration.toml."""
+        cfg = _multiview_cfg_dict()
+        cfg['losses']['supervised_reprojection_heatmap_mse']['log_weight'] = 3.0
+        cfg['data']['data_dir'] = str(tmp_path)
+        cfg['data']['camera_params_file'] = str(tmp_path / 'camera_params.csv')
+        _mc(cfg)._validate_model()
+
+    def test_validate_model_reprojection_loss_auto_discovered_calibration_passes(
+        self, tmp_path,
+    ):
+        """No error when camera_params_file is unset but a calibration.toml is auto-discovered
+        at data.data_dir."""
+        cfg = _multiview_cfg_dict()
+        cfg['losses']['supervised_reprojection_heatmap_mse']['log_weight'] = 3.0
+        cfg['data']['data_dir'] = str(tmp_path)
+        (tmp_path / 'calibration.toml').write_text('')
+        _mc(cfg)._validate_model()
+
     def test_validate_model_reprojection_loss_null_log_weight_skips_augmentation_check(self):
         # log_weight=None means the loss is inactive; augmentation check should not fire.
         cfg = _multiview_cfg_dict()

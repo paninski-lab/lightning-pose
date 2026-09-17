@@ -210,7 +210,7 @@ def create_multiview_dataset_if_not_exists() -> None:
 @pytest.fixture
 def imgaug_transform(cfg) -> iaa.Sequential:
     """Create basic resizing transform."""
-    return get_imgaug_transform(cfg)
+    return get_imgaug_transform(cfg, data_dir=cfg.data.data_dir)
 
 
 @pytest.fixture

@@ -8,6 +8,7 @@ from typing import get_args
 
 from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 
+from lightning_pose.data.datasets import has_calibration_files
 from lightning_pose.models import ALLOWED_MODEL_TYPES
 from lightning_pose.utils.io import (
     check_video_paths,
@@ -227,7 +228,11 @@ class ModelConfig:
         - ``model_type`` is a recognised value.
         - Multi-view models use ``heatmap_multiview_transformer``.
         - When ``losses.supervised_reprojection_heatmap_mse`` is active, ``training.imgaug``
-          must be ``"dlc"`` and ``training.imgaug_3d`` must be ``true``.
+          must be ``"dlc"`` and ``training.imgaug_3d`` must be ``true``, and camera parameters
+          must actually be resolvable (via ``data.camera_params_file`` or an auto-discoverable
+          ``calibration.toml``/``calibrations/`` dir at ``data.data_dir``) — otherwise the loss
+          silently never gets added at train time (see
+          :func:`lightning_pose.losses.factory.get_loss_factories`).
 
         Raises:
             AssertionError: if any check fails.
@@ -260,6 +265,17 @@ class ModelConfig:
                 assert self.cfg.training.get('imgaug_3d') is True, (
                     "training.imgaug_3d must be true when "
                     "losses.supervised_reprojection_heatmap_mse is active"
+                )
+                has_cam_params = bool(
+                    self.cfg.data.get('camera_params_file')
+                    or has_calibration_files(self.cfg.data.data_dir)
+                )
+                assert has_cam_params, (
+                    "losses.supervised_reprojection_heatmap_mse is active but no camera "
+                    "parameters were found: set data.camera_params_file, or provide a "
+                    "calibration.toml (or calibrations/<session>.toml) at data.data_dir "
+                    "for auto-discovery. Without camera parameters this loss is silently "
+                    "never added at train time."
                 )
 
     def _validate_losses(self) -> None:

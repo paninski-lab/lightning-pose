@@ -309,7 +309,7 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
     # ----------------------------------------------------------------------------------
 
     # imgaug transform
-    imgaug_transform = get_imgaug_transform(cfg=cfg)
+    imgaug_transform = get_imgaug_transform(cfg=cfg, data_dir=data_dir)
 
     # dataset
     dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)

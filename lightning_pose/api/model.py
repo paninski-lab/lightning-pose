@@ -907,7 +907,7 @@ def _build_datamodule_pred(cfg: DictConfig | ListConfig) -> BaseDataModule | Unl
     with open_dict(cfg_pred.training):
         cfg_pred.training.imgaug = "default"
         cfg_pred.training.imgaug_hflip = False
-    imgaug_transform_pred = get_imgaug_transform(cfg=cfg_pred)
+    imgaug_transform_pred = get_imgaug_transform(cfg=cfg_pred, data_dir=cfg_pred.data.data_dir)
     dataset_pred = get_dataset(
         cfg=cfg_pred,
         data_dir=cfg_pred.data.data_dir,
