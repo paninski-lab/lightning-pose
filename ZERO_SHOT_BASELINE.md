@@ -1,6 +1,8 @@
 # Consolidated studio research baseline — 2026-09-17
 
-Active integration branch: research/zero-shot-baseline. The original super_mouse_paper branch
+Active branch: post_sub_lp (paired with mouse-pose post_sub_mm). Renamed from
+research/zero-shot-baseline on 2026-09-18 without changing the baseline code.
+The original super_mouse_paper branch
 and all historical experiment checkouts remain available.
 
 Integrated: optimizer-step scheduling fix (source0a1e8ab, cherry-picked as73b169d), preserving
