@@ -682,6 +682,18 @@ def get_callbacks(
         )
         callbacks.append(ckpt_best_callback)
 
+        # Additional best-checkpoints on other logged validation metrics, e.g.
+        # ``training.ckpt_monitors_extra: [val_supervised_loss_T]`` keeps the step that is best
+        # under the temperature-weighted validation loss alongside the pooled-loss best.
+        # Filenames end in ``-best-<monitor>.ckpt``, which ``ckpt_path_from_base_path`` does
+        # not treat as the canonical ``-best.ckpt``, so evaluation and inference are unchanged.
+        for monitor in cfg.training.get('ckpt_monitors_extra', None) or []:
+            callbacks.append(ModelCheckpoint(
+                monitor=str(monitor),
+                mode='min',
+                filename='{epoch}-{step}-best-' + str(monitor).replace('/', '_'),
+            ))
+
     if ckpt_every_n_epochs:
         ckpt_callback = ModelCheckpoint(
             monitor=None,

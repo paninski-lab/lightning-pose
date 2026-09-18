@@ -497,8 +497,14 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         ),
         stage: Literal["train", "val", "test"] | None = None,
         anneal_weight: torch.Tensor | None = None,
-    ) -> Float[torch.Tensor, ""]:
-        """Compute and log the losses on a batch of labeled data."""
+        return_inputs: bool = False,
+    ) -> Float[torch.Tensor, ""] | tuple[Float[torch.Tensor, ""], dict]:
+        """Compute and log the losses on a batch of labeled data.
+
+        With ``return_inputs`` the loss-input dict (targets, predictions, confidences) is
+        returned alongside the loss so callers can compute further metrics on the same
+        forward pass.
+        """
 
         # forward pass; collected true and predicted heatmaps, keypoints
         data_dict = self.get_loss_inputs_labeled(batch_dict=batch_dict)
@@ -526,6 +532,8 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
                     prog_bar=log_dict.get('prog_bar', False),
                     sync_dist=True)
 
+        if return_inputs:
+            return loss, data_dict
         return loss
 
     def training_step(
@@ -565,8 +573,76 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         ),
         batch_idx: int,
     ) -> None:
-        """Base validation step, a wrapper around the `evaluate_labeled` method."""
-        self.evaluate_labeled(batch_dict, "val")
+        """Base validation step, a wrapper around the `evaluate_labeled` method.
+
+        Besides the pooled ``val_supervised_loss`` / ``val_supervised_rmse``, multi-dataset
+        batches (carrying ``dataset_id``) accumulate the same two metrics per source dataset;
+        ``on_validation_epoch_end`` logs them and two re-weighted aggregates.
+        """
+        loss, data_dict = self.evaluate_labeled(batch_dict, "val", return_inputs=True)
+        dataset_ids = batch_dict.get("dataset_id") if isinstance(batch_dict, dict) else None
+        if dataset_ids is None:
+            return
+        assert self.loss_factory is not None
+        batch_size = int(dataset_ids.shape[0])
+        for dataset_id in torch.unique(dataset_ids).tolist():
+            mask = dataset_ids == dataset_id
+            sliced = {
+                k: v[mask] if torch.is_tensor(v) and v.ndim > 0 and v.shape[0] == batch_size else v
+                for k, v in data_dict.items()
+            }
+            loss_d, _ = self.loss_factory(stage=None, **sliced)
+            rmse_d, _ = self.rmse_loss(stage=None, **sliced)
+            n = int(mask.sum())
+            acc = self._val_per_dataset.setdefault(int(dataset_id), [0.0, 0.0, 0])
+            acc[0] += float(loss_d.detach()) * n
+            acc[1] += float(rmse_d.detach()) * n
+            acc[2] += n
+
+    def on_validation_epoch_start(self) -> None:
+        # per dataset id: [sum loss * n, sum rmse * n, n]
+        self._val_per_dataset: dict[int, list[float]] = {}
+
+    def on_validation_epoch_end(self) -> None:
+        """Log per-dataset validation metrics and two re-weighted aggregates.
+
+        ``val_supervised_loss/<dataset>`` and ``val_supervised_rmse/<dataset>`` are the
+        per-source means. ``val_supervised_loss_T`` weights them by the training sampler's
+        frame-draw probabilities ``q_d`` (the mixture the model is actually optimized on;
+        equal to the pooled loss when no temperature sampler is installed), and
+        ``val_supervised_loss_uniform`` gives every dataset the same weight. Either can be
+        used as a checkpoint monitor via ``training.ckpt_monitors_extra``.
+        """
+        acc = getattr(self, "_val_per_dataset", None)
+        if not acc:
+            return
+        datamodule = getattr(self.trainer, "datamodule", None)
+        dataset = getattr(datamodule, "dataset", None)
+        names = list(getattr(dataset, "dataset_names", None) or [])
+        sampler = getattr(datamodule, "train_sampler", None)
+        q_d = getattr(sampler, "q_d", None)
+
+        ids = sorted(acc)
+        loss_d = {d: acc[d][0] / acc[d][2] for d in ids}
+        rmse_d = {d: acc[d][1] / acc[d][2] for d in ids}
+        n_d = {d: acc[d][2] for d in ids}
+        for d in ids:
+            name = names[d] if d < len(names) else f"dataset{d}"
+            self.log(f"val_supervised_loss/{name}", loss_d[d], sync_dist=True)
+            self.log(f"val_supervised_rmse/{name}", rmse_d[d], sync_dist=True)
+
+        if q_d is not None:
+            w = {d: float(q_d[d]) for d in ids}
+        else:
+            total = sum(n_d.values())
+            w = {d: n_d[d] / total for d in ids}
+        w_sum = sum(w.values()) or 1.0
+        loss_T = sum(w[d] * loss_d[d] for d in ids) / w_sum
+        rmse_T = sum(w[d] * rmse_d[d] for d in ids) / w_sum
+        self.log("val_supervised_loss_T", loss_T, sync_dist=True)
+        self.log("val_supervised_rmse_T", rmse_T, sync_dist=True)
+        self.log("val_supervised_loss_uniform", sum(loss_d.values()) / len(ids), sync_dist=True)
+        self.log("val_supervised_rmse_uniform", sum(rmse_d.values()) / len(ids), sync_dist=True)
 
     def test_step(
         self,
@@ -628,6 +704,8 @@ class SemiSupervisedTrackerMixin(BaseSupervisedTracker if TYPE_CHECKING else obj
                     prog_bar=log_dict.get('prog_bar', False),
                     sync_dist=True)
 
+        if return_inputs:
+            return loss, data_dict
         return loss
 
     def training_step(
