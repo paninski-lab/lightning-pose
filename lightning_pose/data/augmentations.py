@@ -73,7 +73,10 @@ def imgaug_transform(params_dict: dict | DictConfig) -> iaa.Sequential:
     data_transform = []
 
     for transform_str, args in params_dict.items():
-        transform = getattr(iaa, str(transform_str))
+        if str(transform_str) == 'Downscale':
+            transform = downscale
+        else:
+            transform = getattr(iaa, str(transform_str))
         apply_prob = args.get("p", 0.5)
         transform_args = args.get("args", ())
         transform_kwargs = args.get("kwargs", {})
@@ -104,6 +107,59 @@ def imgaug_transform(params_dict: dict | DictConfig) -> iaa.Sequential:
             data_transform.append(transform(*transform_args, **transform_kwargs))
 
     return iaa.Sequential(data_transform)
+
+
+def downscale(
+    scale: tuple[float, float] = (0.3, 1.0),
+    interpolation: str = 'area',
+) -> iaa.Lambda:
+    """Resolution augmentation: shrink each image by a random factor and stretch it back.
+
+    Each image is resized by a factor sampled uniformly from ``scale`` and then resized back to
+    its original height and width, so the geometry (and therefore every keypoint and heatmap) is
+    unchanged while fine detail is lost, as when a small source frame is enlarged by a zoom-in
+    crop. Motivation: in a multi-dataset corpus the same body part is supervised at very
+    different native resolutions; without this, "sharp and large" and "blurred and large" are
+    distinguishable appearances and a channel can bind to one of them (the facemap pupil
+    problem, 2026-09-20). Not an imgaug built-in, hence built from ``iaa.Lambda``; the config
+    key is ``Downscale`` (``p``, ``kwargs: {scale: [lo, hi]}``), handled by
+    :func:`imgaug_transform`.
+
+    Args:
+        scale: (lower, upper) bounds of the shrink factor, sampled per image; 1.0 = unchanged.
+        interpolation: OpenCV interpolation used for the shrink ('area' or 'linear'); the
+            stretch back always uses linear interpolation.
+
+    Returns:
+        an imgaug augmenter that only touches images.
+
+    """
+    import cv2
+    import numpy as np
+
+    lo, hi = float(scale[0]), float(scale[1])
+    if not 0.0 < lo <= hi <= 1.0:
+        raise ValueError(f'Downscale scale must satisfy 0 < lower <= upper <= 1, got {scale}')
+    shrink_interp = cv2.INTER_AREA if interpolation == 'area' else cv2.INTER_LINEAR
+
+    def func_images(images, random_state, parents, hooks):
+        out = []
+        for image in images:
+            s = float(random_state.uniform(lo, hi))
+            h, w = image.shape[:2]
+            hs, ws = max(int(round(h * s)), 2), max(int(round(w * s)), 2)
+            if hs >= h and ws >= w:
+                out.append(image)
+                continue
+            small = cv2.resize(image, (ws, hs), interpolation=shrink_interp)
+            back = cv2.resize(small, (w, h), interpolation=cv2.INTER_LINEAR)
+            if back.ndim == 2 and image.ndim == 3:
+                back = back[..., None]
+            out.append(np.ascontiguousarray(back, dtype=image.dtype))
+        return out
+
+    # keypoints, heatmaps, bounding boxes are geometrically unchanged: leave them untouched
+    return iaa.Lambda(func_images=func_images, name='Downscale')
 
 
 def expand_imgaug_str_to_dict(params: str) -> dict[str, Any]:

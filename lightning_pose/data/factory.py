@@ -113,7 +113,9 @@ def _imgaug_params_dict(cfg: DictConfig | ListConfig) -> dict:
         else:
             params_dict = params.copy()
         for transform, _val in params_dict.items():
-            assert getattr(iaa, str(transform)), f'{transform} is not a valid imgaug transform'
+            # 'Downscale' is this repo's own augmenter (lightning_pose.data.augmentations.downscale)
+            assert str(transform) == 'Downscale' or getattr(iaa, str(transform)), \
+                f'{transform} is not a valid imgaug transform'
     else:
         raise TypeError(f'params is of type {type(params)}, must be str, dict, or DictConfig')
 
