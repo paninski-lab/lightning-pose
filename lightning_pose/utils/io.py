@@ -229,7 +229,8 @@ def parse_label_csv(
 
     Raises:
         FileNotFoundError: if ``csv_file`` does not exist
-        ValueError: if any visibility value is outside ``{0, 1, 2}``
+        ValueError: if any visibility value is outside ``{0, 1, 2}``, or if any keypoint has
+            exactly one of its x, y coordinates missing (NaN)
     """
     if header_rows is None:
         header_rows = [0, 1, 2]
@@ -270,6 +271,23 @@ def parse_label_csv(
         raw = torch.tensor(csv_data.to_numpy(), dtype=torch.float32)
         keypoints = raw.reshape(raw.shape[0], -1, 2)
         visibility = None
+
+    # a keypoint is either fully labeled or fully missing; exactly one NaN coordinate is
+    # a labeling/export error that would otherwise surface as a shape error mid-training
+    nan_xy = torch.isnan(keypoints)
+    idx_half_nan = nan_xy[:, :, 0] != nan_xy[:, :, 1]
+    if idx_half_nan.any():
+        examples = []
+        for idx_img, idx_kp in idx_half_nan.nonzero()[:5].tolist():
+            missing = 'x' if nan_xy[idx_img, idx_kp, 0] else 'y'
+            examples.append(
+                f'{image_names[idx_img]} / {keypoint_names[idx_kp]} ({missing} is NaN)'
+            )
+        raise ValueError(
+            f'{csv_file} contains {int(idx_half_nan.sum())} keypoint(s) with only one of x, y '
+            'missing; both coordinates must be present or both must be NaN. '
+            f'First offending entries: {"; ".join(examples)}'
+        )
 
     return LabeledData(
         keypoint_names=keypoint_names,
