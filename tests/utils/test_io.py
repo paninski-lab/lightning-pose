@@ -715,6 +715,41 @@ class TestParseLabelCsv:
         with pytest.raises(ValueError, match='invalid values'):
             parse_label_csv(str(p))
 
+    @pytest.mark.parametrize('row', ['50.0,,30.0,40.0', ',60.0,30.0,40.0'])
+    def test_parse_label_csv_half_nan_keypoint_raises(self, tmp_path, row):
+        """ValueError names the file, image and keypoint when only one of x, y is NaN."""
+        content = (
+            'scorer,scorer,scorer,scorer,scorer\n'
+            'bodyparts,kp1,kp1,kp2,kp2\n'
+            'coords,x,y,x,y\n'
+            f'labeled-data/img01.png,{row}\n'
+        )
+        p = tmp_path / 'half_nan.csv'
+        p.write_text(content)
+        from lightning_pose.utils.io import parse_label_csv
+        with pytest.raises(ValueError, match=r'img01\.png / kp1'):
+            parse_label_csv(str(p))
+
+    def test_parse_label_csv_half_nan_keypoint_with_visibility_raises(self, tmp_path):
+        """The half-NaN check also applies to CSVs with a visible column."""
+        content = (
+            'scorer,scorer,scorer,scorer\n'
+            'bodyparts,kp1,kp1,kp1\n'
+            'coords,x,y,visible\n'
+            'labeled-data/img01.png,10.0,,2\n'
+        )
+        p = tmp_path / 'half_nan_vis.csv'
+        p.write_text(content)
+        from lightning_pose.utils.io import parse_label_csv
+        with pytest.raises(ValueError, match='only one of x, y'):
+            parse_label_csv(str(p))
+
+    def test_parse_label_csv_full_nan_keypoint_ok(self, standard_csv):
+        """A keypoint with both coordinates NaN is valid (unlabeled)."""
+        from lightning_pose.utils.io import parse_label_csv
+        result = parse_label_csv(str(standard_csv))
+        assert torch.isnan(result.keypoints[1, 1]).all()
+
     def test_parse_label_csv_single_read(self, standard_csv, monkeypatch):
         """The CSV file is read exactly once."""
         import pandas as pd
