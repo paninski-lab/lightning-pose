@@ -391,6 +391,7 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
         early_stopping=cfg.training.get("early_stopping", False),
         lr_monitor=True,
         ckpt_every_n_epochs=cfg.training.get("ckpt_every_n_epochs", None),
+        ckpt_every_n_steps=cfg.training.get("ckpt_every_n_steps", None),
         status_file=status_file,
     )
 

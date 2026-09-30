@@ -631,6 +631,7 @@ def get_callbacks(
     checkpointing: bool = True,
     lr_monitor: bool = True,
     ckpt_every_n_epochs: int | None = None,
+    ckpt_every_n_steps: int | None = None,
     backbone_unfreeze: bool = True,
     status_file: Path | None = None,
 ) -> list:
@@ -642,6 +643,9 @@ def get_callbacks(
         checkpointing: if True, add a ``ModelCheckpoint`` callback that saves the best model.
         lr_monitor: if True, add a ``LearningRateMonitor`` callback.
         ckpt_every_n_epochs: if not None, also save a checkpoint every this many epochs.
+        ckpt_every_n_steps: if not None, also keep a checkpoint every this many optimizer steps
+            (``*-periodic.ckpt``; never treated as the canonical ``-best.ckpt``), e.g. to score
+            zero-shot transfer along training.
         backbone_unfreeze: if True, add the ``UnfreezeBackbone`` callback.
         status_file: if not None, add a ``JSONTrainingProgressTracker`` callback writing to this
             path.
@@ -701,6 +705,14 @@ def get_callbacks(
             save_top_k=-1,
         )
         callbacks.append(ckpt_callback)
+
+    if ckpt_every_n_steps:
+        callbacks.append(ModelCheckpoint(
+            monitor=None,
+            every_n_train_steps=int(ckpt_every_n_steps),
+            save_top_k=-1,
+            filename='{epoch}-{step}-periodic',
+        ))
 
     # we need this callback for both supervised and unsupervised losses
     has_supervised_loss = any(
