@@ -48,6 +48,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
         head_freeze_keypoints: list[int] | None = None,
+        head_hidden_channels: int | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize a heatmap-based pose estimation model with conv or transformer backbone.
@@ -69,6 +70,8 @@ class HeatmapTracker(BaseSupervisedTracker):
                 For fine-tuning a checkpoint on a dataset that labels keypoints the
                 checkpoint already knows (keep) next to ones it never trained (learn).
                 None = stock behaviour.
+            head_hidden_channels: None = stock linear head; an int makes the head nonlinear
+                (see ``HeatmapHead(hidden_channels=...)``).
 
         """
 
@@ -98,6 +101,7 @@ class HeatmapTracker(BaseSupervisedTracker):
             in_channels=self.num_fc_input_features,
             out_channels=self.num_keypoints,
             downsample_factor=self.downsample_factor,
+            hidden_channels=head_hidden_channels,
         )
         self.head_freeze_keypoints = (
             sorted(set(int(i) for i in head_freeze_keypoints)) if head_freeze_keypoints else None

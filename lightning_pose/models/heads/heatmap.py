@@ -71,16 +71,30 @@ def make_upsampling_layers(
     return nn.Sequential(*upsampling_layers)
 
 
+class LayerNorm2d(nn.Module):
+    """LayerNorm over the channel dimension at every pixel of a (B, C, H, W) map (ConvNeXt style)."""
+
+    def __init__(self, num_channels: int, eps: float = 1e-6) -> None:
+        super().__init__()
+        self.norm = nn.LayerNorm(num_channels, eps=eps)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.norm(x.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+
+
 def initialize_upsampling_layers(layers: nn.Sequential) -> None:
-    """Intialize the Conv2DTranspose upsampling layers."""
+    """Intialize the Conv2DTranspose upsampling layers (and the optional nonlinear readout)."""
     for index, layer in enumerate(layers):
         if index > 0:  # we ignore the PixelShuffle
-            if isinstance(layer, nn.ConvTranspose2d):
+            if isinstance(layer, (nn.ConvTranspose2d, nn.Conv2d)):
                 torch.nn.init.xavier_uniform_(layer.weight, gain=0.01)
                 torch.nn.init.zeros_(layer.bias)  # type: ignore[arg-type]
             elif isinstance(layer, nn.BatchNorm2d):
                 torch.nn.init.constant_(layer.weight, 1.0)
                 torch.nn.init.constant_(layer.bias, 0.0)
+            elif isinstance(layer, LayerNorm2d):
+                torch.nn.init.constant_(layer.norm.weight, 1.0)
+                torch.nn.init.constant_(layer.norm.bias, 0.0)
 
 
 def upsample(
@@ -161,6 +175,7 @@ class HeatmapHead(nn.Module):
         deconv_out_channels: int | None = None,
         downsample_factor: int = 2,
         final_softmax: bool = True,
+        hidden_channels: int | None = None,
     ) -> None:
         """
 
@@ -173,6 +188,9 @@ class HeatmapHead(nn.Module):
             downsample_factor: make heatmaps smaller than input frames by this factor; subpixel
                 operations are performed for increased precision
             final_softmax: pass final heatmaps through a 2D softmax with temperature 1.0
+            hidden_channels: None = stock linear head. An int H makes the head nonlinear: the
+                last ConvTranspose2d outputs H channels, then LayerNorm over channels -> ReLU ->
+                Conv2d 1x1 (H -> out_channels), i.e. a per-pixel MLP readout before the softmax.
 
         """
         super().__init__()
@@ -192,12 +210,27 @@ class HeatmapHead(nn.Module):
         stride = BACKBONE_STRIDES.get(self.backbone_arch, 32)
         n_layers = int(math.log2(stride)) - self.downsample_factor - 1
 
-        self.upsampling_layers = make_upsampling_layers(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            int_channels=deconv_out_channels or out_channels,
-            n_layers=n_layers,
-        )
+        self.hidden_channels = hidden_channels
+        if hidden_channels is None:
+            self.upsampling_layers = make_upsampling_layers(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                int_channels=deconv_out_channels or out_channels,
+                n_layers=n_layers,
+            )
+        else:
+            layers = make_upsampling_layers(
+                in_channels=in_channels,
+                out_channels=int(hidden_channels),
+                int_channels=deconv_out_channels or int(hidden_channels),
+                n_layers=n_layers,
+            )
+            self.upsampling_layers = nn.Sequential(
+                *layers,
+                LayerNorm2d(int(hidden_channels)),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(int(hidden_channels), out_channels, kernel_size=1),
+            )
         initialize_upsampling_layers(self.upsampling_layers)
 
     def forward(

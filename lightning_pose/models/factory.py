@@ -188,6 +188,12 @@ def get_model(
             downsample_factor=cfg.data.get('downsample_factor', 2),
             backbone_checkpoint=cfg.model.get('backbone_checkpoint'),
         )
+        # nonlinear head (per-pixel MLP readout); None = stock linear head
+        if cfg.model.get('head_hidden_channels', None):
+            if cfg.model.get('head_mode', 'shared') != 'shared':
+                raise ValueError('model.head_hidden_channels is implemented for head_mode=shared only')
+            extra['head_hidden_channels'] = int(cfg.model.head_hidden_channels)
+            logger.info(f'nonlinear head: ConvT -> {int(cfg.model.head_hidden_channels)} -> LayerNorm -> ReLU -> Conv1x1')
         freeze_names = cfg.model.get('head_freeze_keypoints')
         if freeze_names:
             if cfg.model.get('head_mode', 'shared') != 'shared':
