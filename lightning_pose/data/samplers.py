@@ -58,6 +58,10 @@ class TemperatureSampler(Sampler[int]):
             loader instead (this class refuses it to keep the equivalence exact).
         seed: base seed; epoch ``e`` draws with generator seed ``seed * 100_003 + e``
             so runs and restarts reproduce the same sequence.
+        frames_override: optional per-dataset frame count used ONLY in the supervision mass
+            ``m_d = n_d * kbar_d`` (NaN = use the real count). The dataset keeps all its frames
+            but gets the share it would have with that many frames, e.g. to separate "fewer
+            distinct frames" from "smaller share of training".
     """
 
     def __init__(
@@ -66,6 +70,7 @@ class TemperatureSampler(Sampler[int]):
         kbar: torch.Tensor,
         temperature: float,
         seed: int = 42,
+        frames_override: torch.Tensor | None = None,
     ) -> None:
         if temperature <= 1:
             raise ValueError(
@@ -94,7 +99,12 @@ class TemperatureSampler(Sampler[int]):
             )
 
         # p_d ∝ m_d^(1/T) over present datasets; T=inf → uniform supervision share
-        m_d = n_d * kbar
+        n_mass = n_d.clone()
+        if frames_override is not None:
+            fo = frames_override.double()
+            use = ~torch.isnan(fo) & present
+            n_mass[use] = fo[use]
+        m_d = n_mass * kbar
         p_d = torch.zeros_like(m_d)
         if math.isinf(self.temperature):
             p_d[present] = 1.0
@@ -123,7 +133,9 @@ class TemperatureSampler(Sampler[int]):
         )
         logger.info(
             f'TemperatureSampler T={self.temperature}: q_d={ [round(v, 4) for v in q_d.tolist()] }, '
-            f'expected epoch length ~{expected_len:.0f} of {self.num_frames} train frames'
+            f'p_d={ [round(v, 4) for v in p_d.tolist()] }, '
+            + (f'frames_override={ frames_override.tolist() }, ' if frames_override is not None else '')
+            + f'expected epoch length ~{expected_len:.0f} of {self.num_frames} train frames'
         )
 
         self._current: list[int] = self._materialize(self._epoch)

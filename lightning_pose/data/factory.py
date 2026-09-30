@@ -376,6 +376,7 @@ def get_data_module(
             torch_seed=cfg.training.rng_seed_data_pt,
             sampling_temperature=sampling_temperature,
             epoch_repeat=cfg.training.get('epoch_repeat', 1),
+            sampler_frames_override=cfg.training.get('sampler_frames_override', None),
         )
     else:
         if sampling_temperature is not None and sampling_temperature != 1:
