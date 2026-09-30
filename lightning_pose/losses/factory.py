@@ -103,6 +103,11 @@ def get_loss_factories(
     if cfg.model.model_type.find('heatmap') > -1:
         loss_name = 'heatmap_' + cfg.model.heatmap_loss_type
         loss_params_dict['supervised'][loss_name] = {'log_weight': 0.0}
+        # training-only weight of absent (visible=1) keypoints; 1.0 = standard loss
+        absent_weight = float(cfg.model.get('heatmap_absent_weight', 1.0))
+        if absent_weight != 1.0:
+            loss_params_dict['supervised'][loss_name]['absent_weight'] = absent_weight
+            logger.info(f'heatmap loss: absent (visible=1) keypoints weighted {absent_weight:g} in training')
         if cfg.model.model_type.find('multiview') > -1 and cfg.data.get('camera_params_file'):
 
             log_weight_sp = cfg.losses.get(

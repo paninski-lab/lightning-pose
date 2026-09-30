@@ -206,6 +206,7 @@ class HeatmapLoss(Loss):
         self,
         data_module: BaseDataModule | UnlabeledDataModule | None = None,
         log_weight: float = 0.0,
+        absent_weight: float = 1.0,
         **kwargs: Any,
     ) -> None:
         """Initialize HeatmapLoss.
@@ -214,9 +215,16 @@ class HeatmapLoss(Loss):
             data_module: data module providing access to datasets; passed to the parent class.
             log_weight: final weight in front of the loss term in the objective function is
                 computed as ``1.0 / (2.0 * exp(log_weight))``.
+            absent_weight: training-only weight of keypoints labeled absent (visible=1, uniform
+                target heatmap) relative to visible ones (weight 1). Terms are not renormalised,
+                so visible keypoints keep their exact gradient; validation/test losses are
+                unweighted. 1.0 = standard loss.
 
         """
         super().__init__(data_module=data_module, log_weight=log_weight)
+        if absent_weight < 0:
+            raise ValueError(f'absent_weight must be >= 0, got {absent_weight}')
+        self.absent_weight = float(absent_weight)
 
     def remove_nans(
         self,
@@ -276,7 +284,16 @@ class HeatmapLoss(Loss):
         elementwise_loss = self.compute_loss(
             targets=clean_targets, predictions=clean_predictions
         )
-        scalar_loss = self.reduce_loss(elementwise_loss, method="mean")
+        if self.absent_weight != 1.0 and stage == "train" and clean_targets.shape[0] > 0:
+            # absent keypoints (visible=1) carry a uniform target: constant over all pixels
+            flat = clean_targets.reshape(clean_targets.shape[0], -1)
+            absent = (flat.amax(dim=-1) - flat.amin(dim=-1)) <= 1e-12
+            weights = torch.ones(flat.shape[0], device=flat.device, dtype=elementwise_loss.dtype)
+            weights[absent] = self.absent_weight
+            per_term = elementwise_loss.reshape(elementwise_loss.shape[0], -1).mean(dim=-1)
+            scalar_loss = (per_term * weights).mean()   # == mean over all elements when weights == 1
+        else:
+            scalar_loss = self.reduce_loss(elementwise_loss, method="mean")
         logs = self.log_loss(loss=scalar_loss, stage=stage)
 
         return scalar_loss, logs
@@ -301,7 +318,7 @@ class HeatmapMSELoss(HeatmapLoss):
                 computed as ``1.0 / (2.0 * exp(log_weight))``.
 
         """
-        super().__init__(data_module=data_module, log_weight=log_weight)
+        super().__init__(data_module=data_module, log_weight=log_weight, **kwargs)
 
     def compute_loss(
         self,
