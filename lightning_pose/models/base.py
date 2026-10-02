@@ -704,8 +704,6 @@ class SemiSupervisedTrackerMixin(BaseSupervisedTracker if TYPE_CHECKING else obj
                     prog_bar=log_dict.get('prog_bar', False),
                     sync_dist=True)
 
-        if return_inputs:
-            return loss, data_dict
         return loss
 
     def training_step(

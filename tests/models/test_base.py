@@ -16,6 +16,7 @@ from lightning_pose.models.base import (
     BaseFeatureExtractor,
     LrNotImplementedError,
     OptimizerNotImplementedError,
+    SemiSupervisedTrackerMixin,
 )
 
 
@@ -405,3 +406,21 @@ class TestOptimizerStepSchedule:
         for step, rates in model.trace:
             factor = 0.5 ** sum(step >= milestone for milestone in [2, 4])
             assert rates == pytest.approx([lr * factor for lr in [0.001, 0.01, 0.0001]])
+
+
+class TestEvaluateUnlabeled:
+    """Test the method SemiSupervisedTrackerMixin.evaluate_unlabeled."""
+
+    def test_evaluate_unlabeled_returns_loss(self):
+        # regression: a stray `if return_inputs:` (undefined here) raised NameError on every
+        # semi-supervised training step (anchor_video, temporal, pca losses), 2026-09-18 to 10-02
+        from unittest.mock import MagicMock
+
+        model = MagicMock()
+        model.get_loss_inputs_unlabeled.return_value = {'heatmaps_pred': torch.zeros(1)}
+        model.loss_factory_unsup.return_value = (torch.tensor(0.5), [])
+
+        loss = SemiSupervisedTrackerMixin.evaluate_unlabeled(model, batch_dict={}, stage=None)
+
+        assert loss == torch.tensor(0.5)
+        model.loss_factory_unsup.assert_called_once()
