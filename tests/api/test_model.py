@@ -9,8 +9,16 @@ import pandas as pd
 import pytest
 import torch
 
+from omegaconf import OmegaConf
+
 from lightning_pose.api import Model
-from lightning_pose.api.model import _build_datamodule_pred, _Precision
+from lightning_pose.api.model import (
+    _build_datamodule_pred,
+    _Precision,
+    load_model_from_checkpoint,
+)
+from lightning_pose.models import get_model
+from lightning_pose.models.heads.heatmap import BlockLayerNorm2d, LayerNorm2d, MaskedConv2d
 from tests.fetch_test_data import fetch_test_data_if_needed
 
 
@@ -382,6 +390,128 @@ class TestBuildDatamodulePred:
         _build_datamodule_pred(cfg_copy)
         assert cfg_copy.training.imgaug == 'dlc'
         assert cfg_copy.training.imgaug_hflip is True
+
+
+# toy-config (mirror-mouse-example) keypoints in three groups
+_TOY_HEAD_GROUPS = {
+    'paw': [
+        'paw1LH_top', 'paw2LF_top', 'paw3RF_top', 'paw4RH_top',
+        'paw1LH_bot', 'paw2LF_bot', 'paw3RF_bot', 'paw4RH_bot',
+    ],
+    'tail': ['tailBase_top', 'tailMid_top', 'tailBase_bot', 'tailMid_bot'],
+    'other': ['nose_top', 'obs_top', 'nose_bot', 'obsHigh_bot', 'obsLow_bot'],
+}
+
+
+class TestLoadModelFromCheckpoint:
+    """Test load_model_from_checkpoint (the reload path of Model.from_dir / predictions)."""
+
+    @staticmethod
+    def _cfg(cfg, **model_keys):
+        """Supervised resnet18 heatmap cfg (no download) with extra ``model`` keys."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        cfg_tmp.model.model_type = 'heatmap'
+        cfg_tmp.model.backbone = 'resnet18'
+        cfg_tmp.model.backbone_pretrained = False
+        for key, value in model_keys.items():
+            cfg_tmp.model[key] = value
+        return cfg_tmp
+
+    @staticmethod
+    def _trained_like(cfg_tmp):
+        """Build from cfg, then move the head away from its initialization (as training would)
+        so that a reload can only match by reading the checkpoint."""
+        model = get_model(
+            cfg_tmp, data_module=None, loss_factories={'supervised': None, 'unsupervised': None},
+        )
+        with torch.no_grad():
+            for param in model.head.parameters():
+                param.add_(torch.randn_like(param))
+            if isinstance(model.head.upsampling_layers[-1], MaskedConv2d):
+                model.head.upsampling_layers[-1].zero_masked_weights()
+        return model.eval()
+
+    @staticmethod
+    def _save(model, path, drop_hparams=()):
+        """Write a Lightning checkpoint (weights + hyperparameters) without training."""
+        import lightning.pytorch as pl
+        trainer = pl.Trainer(
+            accelerator='cpu', devices=1, logger=False, enable_checkpointing=False,
+            enable_progress_bar=False, enable_model_summary=False,
+        )
+        trainer.strategy.connect(model)
+        trainer.save_checkpoint(path, weights_only=True)
+        if drop_hparams:
+            checkpoint = torch.load(path, weights_only=False)
+            for key in drop_hparams:
+                del checkpoint['hyper_parameters'][key]
+            torch.save(checkpoint, path)
+
+    @staticmethod
+    def _assert_same_model(model, loaded):
+        state, state_loaded = model.state_dict(), loaded.state_dict()
+        assert list(state) == list(state_loaded)
+        assert all(torch.equal(state[k], state_loaded[k]) for k in state)
+        images = torch.randn(2, 3, 128, 128)
+        with torch.no_grad():
+            assert torch.equal(model(images), loaded(images))
+
+    def test_load_model_from_checkpoint_head_groups_round_trip(self, cfg, tmp_path):
+        cfg_tmp = self._cfg(
+            cfg, head_hidden_channels=16, head_shared_channels=4,
+            head_groups=copy.deepcopy(_TOY_HEAD_GROUPS),
+        )
+        model = self._trained_like(cfg_tmp)
+        ckpt = str(tmp_path / 'grouped.ckpt')
+        self._save(model, ckpt)
+
+        loaded = load_model_from_checkpoint(cfg_tmp, ckpt, eval=True, skip_data_module=True)
+
+        # the head (including its non-persistent mask) is rebuilt from the hyperparameters
+        assert loaded.head.groups == model.head.groups
+        assert loaded.head.shared_channels == 4
+        assert isinstance(loaded.head.upsampling_layers[-3], BlockLayerNorm2d)
+        assert loaded.head.upsampling_layers[-3].block_sizes == [4, 4, 4, 4]
+        assert isinstance(loaded.head.upsampling_layers[-1], MaskedConv2d)
+        assert torch.equal(
+            loaded.head.upsampling_layers[-1].mask, model.head.upsampling_layers[-1].mask,
+        )
+        self._assert_same_model(model, loaded)
+
+    def test_load_model_from_checkpoint_via_model_from_dir(self, cfg, tmp_path):
+        cfg_tmp = self._cfg(
+            cfg, head_hidden_channels=16, head_groups=copy.deepcopy(_TOY_HEAD_GROUPS),
+            head_shared_channels=1,
+        )
+        model = self._trained_like(cfg_tmp)
+        ckpt_dir = tmp_path / 'tb_logs' / cfg_tmp.model.model_name / 'version_0' / 'checkpoints'
+        ckpt_dir.mkdir(parents=True)
+        self._save(model, str(ckpt_dir / 'epoch=0-step=1-best.ckpt'))
+        OmegaConf.save(cfg_tmp, tmp_path / 'config.yaml')
+
+        api_model = Model.from_dir(tmp_path)
+        api_model._load()
+
+        assert api_model.model.head.groups == model.head.groups
+        assert api_model.model.head.upsampling_layers[-3].block_sizes == [1, 5, 5, 5]
+        self._assert_same_model(model, api_model.model)
+
+    def test_load_model_from_checkpoint_old_checkpoint_without_head_group_keys(
+        self, cfg, tmp_path,
+    ):
+        cfg_tmp = self._cfg(cfg, head_hidden_channels=16)
+        model = self._trained_like(cfg_tmp)
+        ckpt = str(tmp_path / 'old.ckpt')
+        # a checkpoint saved before head groups existed has neither hyperparameter
+        self._save(model, ckpt, drop_hparams=('head_groups', 'head_shared_channels'))
+
+        loaded = load_model_from_checkpoint(cfg_tmp, ckpt, eval=True, skip_data_module=True)
+
+        assert loaded.head.groups is None
+        assert type(loaded.head.upsampling_layers[-3]) is LayerNorm2d
+        assert type(loaded.head.upsampling_layers[-1]) is torch.nn.Conv2d
+        self._assert_same_model(model, loaded)
 
 
 def _torch_compile_supported() -> bool:

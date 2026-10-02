@@ -49,6 +49,8 @@ class HeatmapTracker(BaseSupervisedTracker):
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
         head_hidden_channels: int | None = None,
+        head_groups: list[int] | None = None,
+        head_shared_channels: int = 0,
         **kwargs: Any,
     ) -> None:
         """Initialize a heatmap-based pose estimation model with conv or transformer backbone.
@@ -66,6 +68,12 @@ class HeatmapTracker(BaseSupervisedTracker):
                 multisteplr: milestones, gamma
             head_hidden_channels: None = stock linear head; an int makes the head nonlinear
                 (see ``HeatmapHead(hidden_channels=...)``).
+            head_groups: None = every keypoint reads every hidden channel; a list gives each
+                keypoint's group index and routes the nonlinear head's hidden channels by group
+                (see ``HeatmapHead(groups=...)``). Saved in the hyperparameters, so checkpoints
+                reload into the grouped head.
+            head_shared_channels: hidden channels read by every keypoint when ``head_groups``
+                is set (see ``HeatmapHead(shared_channels=...)``).
 
         """
 
@@ -96,6 +104,8 @@ class HeatmapTracker(BaseSupervisedTracker):
             out_channels=self.num_keypoints,
             downsample_factor=self.downsample_factor,
             hidden_channels=head_hidden_channels,
+            groups=head_groups,
+            shared_channels=head_shared_channels,
         )
 
         self.loss_factory = loss_factory
@@ -310,7 +320,16 @@ class MultiHeadHeatmapTracker(HeatmapTracker):
                 ``dataset_names[i]``, matching the ids parsed from image paths.
             **kwargs: passed through to :class:`HeatmapTracker`; ``head_hidden_channels``
                 makes every per-dataset head nonlinear, as it does the shared head.
+
+        Raises:
+            ValueError: if ``dataset_names`` is empty, or ``head_groups`` /
+                ``head_shared_channels`` are set (grouped heads are shared-head only).
         """
+        if kwargs.get('head_groups') is not None or kwargs.get('head_shared_channels'):
+            raise ValueError(
+                'head_groups / head_shared_channels are implemented for the shared head only, '
+                'not per-dataset heads'
+            )
         super().__init__(**kwargs)
         if not dataset_names:
             raise ValueError('dataset_names must be a non-empty ordered registry')

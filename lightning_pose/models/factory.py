@@ -29,7 +29,8 @@ import glob
 import logging
 import os
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Literal
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Literal
 
 import torch
 from omegaconf import DictConfig, ListConfig
@@ -135,6 +136,94 @@ def get_model_class(
     return ModelClass
 
 
+def resolve_head_groups(
+    head_groups: Mapping[str, Any] | None,
+    keypoint_names: list[str],
+    hidden_channels: int | None,
+    shared_channels: int | None = None,
+    head_mode: str = 'shared',
+) -> list[int] | None:
+    """Validate ``model.head_groups`` and convert it to one group index per keypoint.
+
+    Args:
+        head_groups: ``model.head_groups``, a mapping group name -> list of canonical keypoint
+            names that must partition ``keypoint_names``; group ``i`` is the mapping's ``i``-th
+            entry (its hidden-channel block comes ``i``-th after the shared block). None
+            disables grouping.
+        keypoint_names: ``data.keypoint_names``, in model output order.
+        hidden_channels: ``model.head_hidden_channels`` (H); grouping needs the nonlinear head.
+        shared_channels: ``model.head_shared_channels`` (S, default 0): the first S hidden
+            channels are read by every keypoint, the other H - S split equally across groups.
+        head_mode: ``model.head_mode``; grouping is implemented for the shared head only.
+
+    Returns:
+        group index of every keypoint (in ``keypoint_names`` order), or None without
+        ``head_groups``.
+
+    Raises:
+        ValueError: if ``head_shared_channels`` is given without ``head_groups``; or, with
+            ``head_groups``: the head mode is not shared, there is no nonlinear head, the
+            mapping is empty or has an empty group, a name is unknown, a keypoint is in two
+            groups or in none, S is outside [0, H), or H - S does not split equally.
+    """
+    if head_groups is None:
+        if shared_channels is not None:
+            raise ValueError('model.head_shared_channels requires model.head_groups')
+        return None
+    if head_mode != 'shared':
+        raise ValueError(
+            f'model.head_groups is implemented for the shared head only (model.head_mode='
+            f'shared), got model.head_mode={head_mode}'
+        )
+    if not hidden_channels:
+        raise ValueError(
+            'model.head_groups requires model.head_hidden_channels (a nonlinear head)'
+        )
+    if not isinstance(head_groups, Mapping) or not head_groups:
+        raise ValueError(
+            'model.head_groups must be a non-empty mapping group name -> list of keypoint names'
+        )
+
+    idx_by_name = {name: idx for idx, name in enumerate(keypoint_names)}
+    group_of: dict[str, str] = {}
+    for group, names in head_groups.items():
+        if isinstance(names, str) or not names:
+            raise ValueError(
+                f"model.head_groups: group '{group}' must be a non-empty list of keypoint names"
+            )
+        for name in names:
+            if name not in idx_by_name:
+                raise ValueError(
+                    f"model.head_groups: unknown keypoint '{name}' in group '{group}' (not in "
+                    'data.keypoint_names)'
+                )
+            if name in group_of:
+                raise ValueError(
+                    f"model.head_groups: keypoint '{name}' is in group '{group_of[name]}' and in "
+                    f"group '{group}'"
+                )
+            group_of[name] = str(group)
+    ungrouped = [name for name in keypoint_names if name not in group_of]
+    if ungrouped:
+        raise ValueError(f'model.head_groups: keypoints in no group: {ungrouped}')
+
+    hidden = int(hidden_channels)
+    shared = int(shared_channels or 0)
+    num_groups = len(head_groups)
+    if not 0 <= shared < hidden:
+        raise ValueError(
+            f'model.head_shared_channels must be in [0, model.head_hidden_channels = {hidden}), '
+            f'got {shared}'
+        )
+    if (hidden - shared) % num_groups:
+        raise ValueError(
+            f'model.head_hidden_channels - model.head_shared_channels = {hidden - shared} does '
+            f'not split equally into {num_groups} model.head_groups'
+        )
+    names_group = [str(group) for group in head_groups]
+    return [names_group.index(group_of[name]) for name in keypoint_names]
+
+
 def get_model(
     cfg: DictConfig | ListConfig,
     data_module: BaseDataModule | UnlabeledDataModule | None,
@@ -191,6 +280,14 @@ def get_model(
 
     backbone_pretrained = cfg.model.get('backbone_pretrained', True)
     head_mode = cfg.model.get('head_mode', 'shared')
+    if cfg.model.model_type != 'heatmap' and (
+        cfg.model.get('head_groups', None) is not None
+        or cfg.model.get('head_shared_channels', None) is not None
+    ):
+        raise ValueError(
+            'model.head_groups / model.head_shared_channels are implemented for '
+            f'model.model_type=heatmap only, got {cfg.model.model_type}'
+        )
     ModelClass = get_model_class(cfg.model.model_type, semi_supervised, head_mode=head_mode)
 
     # args shared by every model type
@@ -223,6 +320,29 @@ def get_model(
         if cfg.model.get('head_hidden_channels', None):
             extra['head_hidden_channels'] = int(cfg.model.head_hidden_channels)
             logger.info(f'nonlinear head: ConvT -> {int(cfg.model.head_hidden_channels)} -> LayerNorm -> ReLU -> Conv1x1')
+        # keypoint-group head: hidden channels routed by keypoint group (shared block + one
+        # block per group); converted to one group index per keypoint for the constructor
+        head_groups = resolve_head_groups(
+            head_groups=cfg.model.get('head_groups', None),
+            keypoint_names=list(cfg.data.get('keypoint_names', None) or []),
+            hidden_channels=cfg.model.get('head_hidden_channels', None),
+            shared_channels=cfg.model.get('head_shared_channels', None),
+            head_mode=head_mode,
+        )
+        if head_groups is not None:
+            hidden = int(cfg.model.head_hidden_channels)
+            shared = int(cfg.model.get('head_shared_channels', None) or 0)
+            names_group = [str(group) for group in cfg.model.head_groups]
+            extra['head_groups'] = head_groups
+            extra['head_shared_channels'] = shared
+            sizes = ', '.join(
+                f'{name}={head_groups.count(idx)}' for idx, name in enumerate(names_group)
+            )
+            logger.info(
+                f'head groups ({len(names_group)}): {sizes} keypoints; '
+                f'{(hidden - shared) // len(names_group)} hidden channels per group block, '
+                f'{shared} shared channels (H = {hidden})'
+            )
         if cfg.model.get('head_freeze_keypoints') and data_module is not None:
             raise ValueError(REMOVED_HEAD_FREEZE)
         if head_mode == 'per_dataset':

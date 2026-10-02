@@ -252,6 +252,49 @@ def test_semisupervised_multiview_heatmap_multiview(
     )
 
 
+# keypoint-group head: CPU tests on a small resnet18 (no pretrained weights)
+
+
+class TestHeatmapTracker:
+    """Test HeatmapTracker construction with keypoint-group heads."""
+
+    @staticmethod
+    def _tracker(**kwargs):
+        from lightning_pose.models import HeatmapTracker
+        return HeatmapTracker(
+            num_keypoints=3, backbone='resnet18', pretrained=False, image_size=64, **kwargs,
+        )
+
+    def test_heatmap_tracker_head_groups_in_hparams(self):
+        model = self._tracker(
+            head_hidden_channels=8, head_groups=[0, 1, 1], head_shared_channels=2,
+        )
+
+        assert model.hparams['head_groups'] == [0, 1, 1]
+        assert model.hparams['head_shared_channels'] == 2
+        assert model.head.groups == [0, 1, 1] and model.head.shared_channels == 2
+        assert model(torch.randn(2, 3, 64, 64)).shape == (2, 3, 16, 16)
+
+    def test_heatmap_tracker_defaults_without_head_groups(self):
+        model = self._tracker(head_hidden_channels=8)
+
+        assert model.hparams['head_groups'] is None
+        assert model.hparams['head_shared_channels'] == 0
+        assert model.head.groups is None
+
+    def test_heatmap_tracker_head_groups_gradient_isolation(self):
+        torch.manual_seed(0)
+        model = self._tracker(head_hidden_channels=8, head_groups=[0, 1, 1])
+        convt = model.head.upsampling_layers[-4]
+        target = torch.rand(2, 16, 16)
+
+        (model(torch.randn(2, 3, 64, 64))[:, 0] * target).sum().backward()
+
+        # keypoint 0 (group 0, channels 0-3) trains only its block of the last ConvT
+        assert convt.weight.grad[:, :4].abs().sum() > 0
+        assert torch.all(convt.weight.grad[:, 4:] == 0)
+
+
 # per-dataset heads: CPU tests on a small resnet18 (no pretrained weights)
 
 
@@ -407,6 +450,12 @@ class TestMultiHeadHeatmapTracker:
         assert not lora_ids & {id(p) for p in groups['backbone']['params']}
         head_ids = {id(p) for p in model.heads.parameters()}
         assert {id(p) for p in groups['head']['params']} == head_ids
+
+    def test_multihead_head_groups_raise(self):
+        with pytest.raises(ValueError, match='shared head only'):
+            _multihead(head_hidden_channels=8, head_groups=[0, 1, 1])
+        with pytest.raises(ValueError, match='shared head only'):
+            _multihead(head_hidden_channels=8, head_shared_channels=2)
 
     def test_multihead_parameter_groups(self):
         model = _multihead()
