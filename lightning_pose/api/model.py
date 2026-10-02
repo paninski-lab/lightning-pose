@@ -168,21 +168,14 @@ def load_model_from_checkpoint(
         loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
 
     semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
+    # head_mode must select the class here too: otherwise load_from_checkpoint builds a shared
+    # HeatmapTracker for a per-dataset-head checkpoint and strict=False silently drops every
+    # heads.* weight (the missing-keys check below would then refuse the checkpoint)
     ModelClass = get_model_class(
         model_type=cfg.model.model_type,
         semi_supervised=semi_supervised,
+        head_mode=cfg.model.get('head_mode', 'shared'),
     )
-    # get_model_class dispatches on (model_type, semi_supervised) only; multi-head
-    # models need their own class here, otherwise load_from_checkpoint builds a shared
-    # HeatmapTracker and strict=False silently drops every heads.* weight — the model
-    # then predicts with a randomly initialized head while looking fully loaded
-    head_mode = cfg.model.get('head_mode', 'shared')
-    if head_mode == 'dataset_token':
-        from lightning_pose.models.factory import REMOVED_DATASET_TOKEN
-        raise ValueError(REMOVED_DATASET_TOKEN)
-    if head_mode == 'per_dataset' and cfg.model.model_type == 'heatmap' and not semi_supervised:
-        from lightning_pose.models import MultiHeadHeatmapTracker
-        ModelClass = MultiHeadHeatmapTracker
 
     try:
         checkpoint = torch.load(ckpt_file)
@@ -232,14 +225,8 @@ def load_model_from_checkpoint(
     lora_cfg = cfg.model.get('lora', None)
     has_lora_keys = any('.lora_A' in k for k in state_dict)
     if lora_cfg:
-        from lightning_pose.models.backbones.lora import apply_lora
-        rank = int(lora_cfg.get('rank', 16))
-        apply_lora(
-            model.backbone,
-            targets=list(lora_cfg.get('targets', ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'up_proj', 'down_proj'])),
-            rank=rank,
-            alpha=float(lora_cfg.get('alpha', 2 * rank)),
-        )
+        from lightning_pose.models.backbones.lora import apply_lora_from_config
+        apply_lora_from_config(model.backbone, lora_cfg)
         model.load_state_dict(state_dict, strict=False)
     elif has_lora_keys:
         raise RuntimeError(
@@ -263,14 +250,10 @@ def load_model_from_checkpoint(
     # training data; without a data module it stays all-True, which breaks blind mode
     from lightning_pose.models import MultiHeadHeatmapTracker as _MultiHead
     if isinstance(model, _MultiHead):
-        if data_module is not None and getattr(data_module.dataset, 'visibility', None) is not None:
-            model.set_head_keypoint_mask(
-                visibility=data_module.dataset.visibility,
-                dataset_ids=data_module.dataset.dataset_ids,
-                keypoint_names=data_module.dataset.keypoint_names,
-                hflip=bool(cfg.training.get('imgaug_hflip', False)),
-            )
-        else:
+        mask_set = data_module is not None and model.set_head_keypoint_mask_from_dataset(
+            data_module.dataset, hflip=bool(cfg.training.get('imgaug_hflip', False)),
+        )
+        if not mask_set:
             logger.warning(
                 'multi-head model loaded without a data module: head_keypoint_mask stays '
                 'all-True, so blind-mode combination would let unsupported heads vote'

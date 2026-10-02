@@ -65,6 +65,7 @@ REMOVED_DATASET_TOKEN = (
 def get_model_class(
     model_type: ALLOWED_MODEL_TYPES,
     semi_supervised: bool,
+    head_mode: str = 'shared',
 ) -> type[ALLOWED_MODELS]:
     """Return the model class for the given model type and supervision mode.
 
@@ -72,14 +73,31 @@ def get_model_class(
         model_type: one of ``'regression'``, ``'heatmap'``, ``'heatmap_mhcrnn'``,
             ``'heatmap_multiview_transformer'``.
         semi_supervised: True to return the semi-supervised variant.
+        head_mode: ``model.head_mode``; ``'per_dataset'`` selects
+            :class:`MultiHeadHeatmapTracker` for supervised heatmap models (other model
+            types ignore it).
 
     Returns:
         model class (not an instance).
 
     Raises:
-        NotImplementedError: if ``model_type`` is not recognised.
+        NotImplementedError: if ``model_type`` is not recognised, or per-dataset heads are
+            combined with unsupervised losses.
+        ValueError: if ``head_mode`` is not ``'shared'`` or ``'per_dataset'``.
 
     """
+    if head_mode == 'dataset_token':
+        raise ValueError(REMOVED_DATASET_TOKEN)
+    if head_mode not in ('shared', 'per_dataset'):
+        raise ValueError(f"model.head_mode must be 'shared' or 'per_dataset', got '{head_mode}'")
+    if head_mode == 'per_dataset' and model_type == 'heatmap':
+        if semi_supervised:
+            raise NotImplementedError(
+                f'model.head_mode={head_mode} is not supported with unsupervised '
+                'losses: unlabeled video frames carry no dataset id'
+            )
+        from lightning_pose.models import MultiHeadHeatmapTracker
+        return MultiHeadHeatmapTracker
     if not semi_supervised:
         if model_type == 'regression':
             from lightning_pose.models import RegressionTracker as ModelClass
@@ -166,7 +184,8 @@ def get_model(
             raise RuntimeError('ViT model requires resized height and width to be equal')
 
     backbone_pretrained = cfg.model.get('backbone_pretrained', True)
-    ModelClass = get_model_class(cfg.model.model_type, semi_supervised)
+    head_mode = cfg.model.get('head_mode', 'shared')
+    ModelClass = get_model_class(cfg.model.model_type, semi_supervised, head_mode=head_mode)
 
     # args shared by every model type
     common = dict(
@@ -196,13 +215,13 @@ def get_model(
         )
         # nonlinear head (per-pixel MLP readout); None = stock linear head
         if cfg.model.get('head_hidden_channels', None):
-            if cfg.model.get('head_mode', 'shared') != 'shared':
+            if head_mode != 'shared':
                 raise ValueError('model.head_hidden_channels is implemented for head_mode=shared only')
             extra['head_hidden_channels'] = int(cfg.model.head_hidden_channels)
             logger.info(f'nonlinear head: ConvT -> {int(cfg.model.head_hidden_channels)} -> LayerNorm -> ReLU -> Conv1x1')
         freeze_names = cfg.model.get('head_freeze_keypoints')
         if freeze_names:
-            if cfg.model.get('head_mode', 'shared') != 'shared':
+            if head_mode != 'shared':
                 raise ValueError('model.head_freeze_keypoints requires head_mode=shared')
             if data_module is None:
                 logger.info('head_freeze_keypoints given without a data module (inference); ignored')
@@ -214,27 +233,13 @@ def get_model(
                         f'model.head_freeze_keypoints not in data.keypoint_names: {unknown}'
                     )
                 extra['head_freeze_keypoints'] = [names.index(n) for n in freeze_names]
-        head_mode = cfg.model.get('head_mode', 'shared')
-        if head_mode == 'dataset_token':
-            raise ValueError(REMOVED_DATASET_TOKEN)
-        if head_mode not in ('shared', 'per_dataset'):
-            raise ValueError(
-                f"model.head_mode must be 'shared' or 'per_dataset', got '{head_mode}'"
-            )
         if head_mode == 'per_dataset':
-            if semi_supervised:
-                raise NotImplementedError(
-                    f'model.head_mode={head_mode} is not supported with unsupervised '
-                    'losses: unlabeled video frames carry no dataset id'
-                )
             dataset_names = cfg.data.get('dataset_names', None)
             if not dataset_names:
                 raise ValueError(
                     f'model.head_mode={head_mode} requires data.dataset_names so '
                     'batches carry per-example dataset ids'
                 )
-            from lightning_pose.models import MultiHeadHeatmapTracker
-            ModelClass = MultiHeadHeatmapTracker
             extra['dataset_names'] = list(dataset_names)
     elif cfg.model.model_type == 'heatmap_mhcrnn':
         extra = dict(
@@ -262,27 +267,17 @@ def get_model(
     # and the (zero-initialised) adapters are the only new tensors.
     lora_cfg = cfg.model.get('lora', None)
     if lora_cfg:
-        from lightning_pose.models.backbones.lora import apply_lora
-        apply_lora(
-            model.backbone,
-            targets=list(lora_cfg.get('targets', ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'up_proj', 'down_proj'])),
-            rank=int(lora_cfg.get('rank', 16)),
-            alpha=float(lora_cfg.get('alpha', 2 * int(lora_cfg.get('rank', 16)))),
-        )
+        from lightning_pose.models.backbones.lora import apply_lora_from_config
+        apply_lora_from_config(model.backbone, lora_cfg)
         model.lora_lr = float(lora_cfg['lr']) if lora_cfg.get('lr') is not None else None
 
     # fill the multi-head supporting-set mask from training-data visibility; the buffer
     # is non-persistent, so this runs at every construction (training and inference both
     # have a data module carrying the labeled dataset)
-    if cfg.model.get('head_mode', 'shared') == 'per_dataset' and data_module is not None:
-        dataset = data_module.dataset
-        if getattr(dataset, 'visibility', None) is not None and dataset.dataset_ids is not None:
-            model.set_head_keypoint_mask(
-                visibility=dataset.visibility,
-                dataset_ids=dataset.dataset_ids,
-                keypoint_names=dataset.keypoint_names,
-                hflip=bool(cfg.training.get('imgaug_hflip', False)),
-            )
+    if head_mode == 'per_dataset' and data_module is not None:
+        model.set_head_keypoint_mask_from_dataset(
+            data_module.dataset, hflip=bool(cfg.training.get('imgaug_hflip', False)),
+        )
         model.blind_gamma = float(cfg.model.get('blind_gamma', 2.0))
         model.blind_conf_floor = float(cfg.model.get('blind_conf_floor', 0.0))
 
@@ -314,7 +309,7 @@ def get_model(
     if anchor_cfg and data_module is not None:
         if not cfg.model.get('checkpoint', None):
             raise ValueError('model.anchor requires model.checkpoint (the teacher weights)')
-        if cfg.model.model_type != 'heatmap' or cfg.model.get('head_mode', 'shared') != 'shared':
+        if cfg.model.model_type != 'heatmap' or head_mode != 'shared':
             raise ValueError('model.anchor is implemented for shared-head heatmap models only')
         # the loss factories hold the data module (and, for semi-supervised models, a DALI
         # pipeline that cannot be copied); the teacher only needs weights, so detach them

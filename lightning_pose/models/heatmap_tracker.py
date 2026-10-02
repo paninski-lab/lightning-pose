@@ -1,6 +1,7 @@
 """Models that produce heatmaps of keypoints from images."""
 
 import logging
+from collections.abc import Iterator
 from typing import Any, Literal
 
 import torch
@@ -154,9 +155,9 @@ class HeatmapTracker(BaseSupervisedTracker):
     ) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
         # images -> heatmaps
-        predicted_heatmaps = self.forward(batch_dict["images"])
+        predicted_heatmaps = self._heatmaps_labeled(batch_dict)
         # heatmaps -> keypoints
-        predicted_keypoints, confidence = self.head.run_subpixelmaxima(predicted_heatmaps)
+        predicted_keypoints, confidence = self._run_subpixelmaxima(predicted_heatmaps)
         # bounding box coords -> original image coords
         predicted_keypoints = model_to_frame_batch(batch_dict, predicted_keypoints)
         target_keypoints = model_to_frame_batch(batch_dict, batch_dict["keypoints"])
@@ -167,14 +168,52 @@ class HeatmapTracker(BaseSupervisedTracker):
             "keypoints_pred": predicted_keypoints,
             "confidences": confidence,
         }
-        teacher = self.__dict__.get("_anchor_teacher")
-        if teacher is not None:
-            images = batch_dict["images"]
-            if next(teacher.parameters()).device != images.device:
-                teacher.to(images.device)
-            with torch.no_grad():
-                out["heatmaps_teacher"] = teacher.forward(images)
+        heatmaps_teacher = self._teacher_heatmaps(batch_dict["images"])
+        if heatmaps_teacher is not None:
+            out["heatmaps_teacher"] = heatmaps_teacher
         return out
+
+    def _heatmaps_labeled(
+        self,
+        batch_dict: HeatmapLabeledBatchDict | MultiviewHeatmapLabeledBatchDict,
+    ) -> torch.Tensor:
+        """Heatmaps of a labeled training batch (per-dataset heads route by dataset id)."""
+        return self.forward(batch_dict["images"])
+
+    def _heatmaps_predict(
+        self,
+        batch_dict: (
+            HeatmapLabeledBatchDict
+            | MultiviewHeatmapLabeledBatchDict
+            | UnlabeledBatchDict
+            | MultiviewUnlabeledBatchDict
+        ),
+        images: torch.Tensor,
+    ) -> torch.Tensor:
+        """Heatmaps for prediction (per-dataset heads resolve the dataset id here)."""
+        return self.forward(images)
+
+    def _run_subpixelmaxima(self, heatmaps: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Heatmaps -> (keypoints, confidences) with the model's head."""
+        return self.head.run_subpixelmaxima(heatmaps)
+
+    def _head_parameters(self) -> Iterator[torch.nn.Parameter]:
+        """Parameters of the head(s): the optimizer's 'head' group."""
+        return self.head.parameters()
+
+    def _teacher_heatmaps(self, images: torch.Tensor) -> torch.Tensor | None:
+        """Heatmaps of the frozen anchor teacher (``model.anchor``), or None without one.
+
+        The teacher is kept outside the module tree (see ``models/factory.py``), so it is moved
+        to the input's device lazily here.
+        """
+        teacher = self.__dict__.get("_anchor_teacher")
+        if teacher is None:
+            return None
+        if next(teacher.parameters()).device != images.device:
+            teacher.to(images.device)
+        with torch.no_grad():
+            return teacher.forward(images)
 
     def predict_step(
         self,
@@ -204,9 +243,9 @@ class HeatmapTracker(BaseSupervisedTracker):
             # unlabeled dali video dataloaders
             images = batch_dict["frames"]  # type: ignore[typeddict-item]
         # images -> heatmaps
-        predicted_heatmaps = self.forward(images)
+        predicted_heatmaps = self._heatmaps_predict(batch_dict, images)
         # heatmaps -> keypoints
-        predicted_keypoints, confidence = self.head.run_subpixelmaxima(predicted_heatmaps)
+        predicted_keypoints, confidence = self._run_subpixelmaxima(predicted_heatmaps)
         # bounding box coords -> original image coords
         predicted_keypoints = model_to_frame_batch(batch_dict, predicted_keypoints)
         if return_heatmaps:
@@ -267,7 +306,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         params = [
             {"params": [p for p in self.backbone.parameters() if id(p) not in lora_ids],
              "lr": 0, "name": "backbone"},
-            {"params": self.head.parameters(), "name": "head"},
+            {"params": self._head_parameters(), "name": "head"},
         ]
         if lora:
             # third group: trained from step 1 at its own lr (default: the global lr); the
@@ -293,9 +332,13 @@ class MultiHeadHeatmapTracker(HeatmapTracker):
     are dropped by the loss) and remain at initialization; they must be masked out of
     evaluation rather than read as predictions.
 
-    Supervised training and labeled-frame prediction only. Prediction on unlabeled
-    video (no per-frame dataset id) and dataset-blind head combination are not
-    implemented here.
+    Training is supervised only (unlabeled video frames carry no dataset id). Prediction
+    has two modes (``predict_mode``): ``'oracle'`` routes each row through its dataset's
+    head (dataset id from the batch, or ``predict_dataset`` for videos), ``'blind'``
+    combines the supporting heads without dataset identity (:meth:`forward_blind`).
+    Everything else — loss inputs, LoRA and optimizer groups, logging — is inherited from
+    :class:`HeatmapTracker` through its ``_heatmaps_labeled`` / ``_heatmaps_predict`` /
+    ``_run_subpixelmaxima`` / ``_head_parameters`` hooks.
     """
 
     def __init__(
@@ -425,12 +468,35 @@ class MultiHeadHeatmapTracker(HeatmapTracker):
                 if partner in idx_by_name:
                     mask[:, idx_by_name[partner]] |= direct[:, i]
         self.head_keypoint_mask.copy_(mask)
-        logger_counts = mask.sum(dim=1).tolist()
-        import logging
-        logging.getLogger(__name__).info(
+        counts = mask.sum(dim=1).tolist()
+        logger.info(
             f'head_keypoint_mask set: trainable keypoints per head = '
-            f'{dict(zip(self.dataset_names, logger_counts))}'
+            f'{dict(zip(self.dataset_names, counts, strict=True))}'
         )
+
+    def set_head_keypoint_mask_from_dataset(self, dataset: Any, hflip: bool) -> bool:
+        """Fill the supporting-set mask from a labeled dataset's visibility and dataset ids.
+
+        Args:
+            dataset: the data module's labeled dataset (``visibility``, ``dataset_ids``,
+                ``keypoint_names``).
+            hflip: True when horizontal-flip augmentation is active.
+
+        Returns:
+            True if the mask was set; False when the dataset carries no visibility or no
+            dataset ids (the mask then stays all-True).
+        """
+        if getattr(dataset, 'visibility', None) is None:
+            return False
+        if getattr(dataset, 'dataset_ids', None) is None:
+            return False
+        self.set_head_keypoint_mask(
+            visibility=dataset.visibility,
+            dataset_ids=dataset.dataset_ids,
+            keypoint_names=dataset.keypoint_names,
+            hflip=hflip,
+        )
+        return True
 
     def forward_blind(
         self,
@@ -492,28 +558,48 @@ class MultiHeadHeatmapTracker(HeatmapTracker):
 
         return combined_coords.reshape(coords.shape[1], -1), combined_conf, spread
 
-    def get_loss_inputs_labeled(self, batch_dict: HeatmapLabeledBatchDict) -> dict:
-        """Return predicted heatmaps and keypoints, routing rows by dataset id."""
+    def _heatmaps_labeled(self, batch_dict: HeatmapLabeledBatchDict) -> torch.Tensor:
+        """Route each labeled row through its dataset's head."""
         if 'dataset_id' not in batch_dict:
             raise ValueError(
                 'per-dataset heads require dataset_id in each labeled batch; set '
                 'data.dataset_names so the dataset parses ids from image paths'
             )
-        predicted_heatmaps = self.forward_routed(
-            batch_dict['images'], batch_dict['dataset_id'],
-        )
-        # all heads share downsample factor and softmax temperature, so head 0's
-        # subpixel refinement applies to the scattered tensor as a whole
-        predicted_keypoints, confidence = self.heads[0].run_subpixelmaxima(predicted_heatmaps)
-        predicted_keypoints = model_to_frame_batch(batch_dict, predicted_keypoints)
-        target_keypoints = model_to_frame_batch(batch_dict, batch_dict['keypoints'])
-        return {
-            'heatmaps_targ': batch_dict['heatmaps'],
-            'heatmaps_pred': predicted_heatmaps,
-            'keypoints_targ': target_keypoints,
-            'keypoints_pred': predicted_keypoints,
-            'confidences': confidence,
-        }
+        return self.forward_routed(batch_dict['images'], batch_dict['dataset_id'])
+
+    def _heatmaps_predict(
+        self,
+        batch_dict: HeatmapLabeledBatchDict | UnlabeledBatchDict,
+        images: torch.Tensor,
+    ) -> torch.Tensor:
+        """Oracle prediction: route rows by the batch's dataset id, else ``predict_dataset``."""
+        if 'dataset_id' in batch_dict.keys():
+            dataset_ids = batch_dict['dataset_id']  # type: ignore[typeddict-item]
+        elif self.predict_dataset is not None:
+            if self.predict_dataset not in self.dataset_names:
+                raise ValueError(
+                    f"predict_dataset '{self.predict_dataset}' is not in the registry "
+                    f'{self.dataset_names}'
+                )
+            dataset_ids = torch.full(
+                (images.shape[0],), self.dataset_names.index(self.predict_dataset),
+                dtype=torch.long, device=images.device,
+            )
+        else:
+            raise ValueError(
+                'oracle prediction needs a dataset identity: the batch carries none and '
+                'predict_dataset is unset. For unseen data use predict_mode="blind".'
+            )
+        return self.forward_routed(images, dataset_ids)
+
+    def _run_subpixelmaxima(self, heatmaps: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """All heads share downsample factor and softmax temperature, so head 0's subpixel
+        refinement applies to the routed (scattered) heatmaps as a whole."""
+        return self.heads[0].run_subpixelmaxima(heatmaps)
+
+    def _head_parameters(self) -> Iterator[torch.nn.Parameter]:
+        """Every per-dataset head in the single 'head' group (callbacks unfreeze group 1)."""
+        return self.heads.parameters()
 
     def predict_step(
         self,
@@ -535,12 +621,11 @@ class MultiHeadHeatmapTracker(HeatmapTracker):
           :meth:`forward_blind`. This is also the zero-shot path for unseen datasets.
           Heatmaps cannot be returned in this mode (combination is in coordinate space).
         """
-        if 'images' in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
-            images = batch_dict['images']  # type: ignore[typeddict-item]
-        else:
-            images = batch_dict['frames']  # type: ignore[typeddict-item]
-
         if self.predict_mode == 'blind':
+            if 'images' in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
+                images = batch_dict['images']  # type: ignore[typeddict-item]
+            else:
+                images = batch_dict['frames']  # type: ignore[typeddict-item]
             predicted_keypoints, confidence, _spread = self.forward_blind(images)
             predicted_keypoints = model_to_frame_batch(batch_dict, predicted_keypoints)
             if return_heatmaps:
@@ -549,47 +634,11 @@ class MultiHeadHeatmapTracker(HeatmapTracker):
                     'heatmap tensor to return'
                 )
             return predicted_keypoints, confidence
-
         if self.predict_mode != 'oracle':
-            raise ValueError(f"predict_mode must be 'oracle' or 'blind', got '{self.predict_mode}'")
-
-        if 'dataset_id' in batch_dict.keys():
-            dataset_ids = batch_dict['dataset_id']  # type: ignore[typeddict-item]
-        elif self.predict_dataset is not None:
-            if self.predict_dataset not in self.dataset_names:
-                raise ValueError(
-                    f"predict_dataset '{self.predict_dataset}' is not in the registry "
-                    f'{self.dataset_names}'
-                )
-            dataset_ids = torch.full(
-                (images.shape[0],), self.dataset_names.index(self.predict_dataset),
-                dtype=torch.long, device=images.device,
-            )
-        else:
             raise ValueError(
-                'oracle prediction needs a dataset identity: the batch carries none and '
-                'predict_dataset is unset. For unseen data use predict_mode="blind".'
+                f"predict_mode must be 'oracle' or 'blind', got '{self.predict_mode}'"
             )
-
-        predicted_heatmaps = self.forward_routed(images, dataset_ids)
-        predicted_keypoints, confidence = self.heads[0].run_subpixelmaxima(predicted_heatmaps)
-        predicted_keypoints = model_to_frame_batch(batch_dict, predicted_keypoints)
-        if return_heatmaps:
-            return predicted_keypoints, confidence, predicted_heatmaps
-        else:
-            return predicted_keypoints, confidence
-
-    def get_parameters(self) -> list[dict]:
-        """Keep the two-group layout (0=backbone, 1=head) with every head in group 1.
-
-        Callbacks treat parameter group 0 as backbone and group 1 as head for
-        unfreezing, so all per-dataset heads share the single 'head' group.
-        """
-        params = [
-            {'params': self.backbone.parameters(), 'lr': 0, 'name': 'backbone'},
-            {'params': self.heads.parameters(), 'name': 'head'},
-        ]
-        return params
+        return super().predict_step(batch_dict, batch_idx, return_heatmaps=return_heatmaps)
 
 
 class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
@@ -671,11 +720,7 @@ class SemiSupervisedHeatmapTracker(SemiSupervisedTrackerMixin, HeatmapTracker):
             "keypoints_pred_augmented": pred_keypoints_augmented,  # match pred_heatmaps
             "confidences": confidence,
         }
-        teacher = self.__dict__.get("_anchor_teacher")
-        if teacher is not None:
-            frames = batch_dict["frames"]
-            if next(teacher.parameters()).device != frames.device:
-                teacher.to(frames.device)
-            with torch.no_grad():
-                out["heatmaps_teacher"] = teacher.forward(frames)
+        heatmaps_teacher = self._teacher_heatmaps(batch_dict["frames"])
+        if heatmaps_teacher is not None:
+            out["heatmaps_teacher"] = heatmaps_teacher
         return out

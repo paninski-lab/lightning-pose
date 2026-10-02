@@ -178,3 +178,36 @@ class TestGetModelClass:
             NotImplementedError, match='invalid model_type for a semi-supervised',
         ):
             get_model_class('unknown_type', semi_supervised=True)  # type: ignore[arg-type]
+
+
+class TestGetModelClassHeadMode:
+    """Test the head_mode argument of get_model_class."""
+
+    def test_get_model_class_head_mode_per_dataset(self):
+        """per_dataset selects MultiHeadHeatmapTracker for supervised heatmap models."""
+        from lightning_pose.models import MultiHeadHeatmapTracker
+        assert (
+            get_model_class('heatmap', semi_supervised=False, head_mode='per_dataset')
+            is MultiHeadHeatmapTracker
+        )
+
+    def test_get_model_class_head_mode_shared_default(self):
+        """shared (the default) keeps the stock class."""
+        from lightning_pose.models import HeatmapTracker
+        model_class = get_model_class('heatmap', semi_supervised=False, head_mode='shared')
+        assert model_class is HeatmapTracker
+
+    def test_get_model_class_head_mode_per_dataset_semi_supervised_raises(self):
+        """Per-dataset heads cannot train on unlabeled video (no dataset id)."""
+        with pytest.raises(NotImplementedError, match='carry no dataset id'):
+            get_model_class('heatmap', semi_supervised=True, head_mode='per_dataset')
+
+    def test_get_model_class_head_mode_dataset_token_removed(self):
+        """The removed dataset-token mode fails loudly and names the tag that keeps it."""
+        with pytest.raises(ValueError, match='pre-cleanup-2026-10-02'):
+            get_model_class('heatmap', semi_supervised=False, head_mode='dataset_token')
+
+    def test_get_model_class_head_mode_unknown_raises(self):
+        """Any other head_mode is rejected."""
+        with pytest.raises(ValueError, match="'shared' or 'per_dataset'"):
+            get_model_class('heatmap', semi_supervised=False, head_mode='bogus')

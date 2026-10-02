@@ -9,6 +9,7 @@ until training moves ``B``. No external dependency.
 
 import logging
 import math
+from typing import Any
 
 import torch
 from torch import nn
@@ -81,6 +82,32 @@ def apply_lora(
     logger.info(f'LoRA: wrapped {n} linear layers (rank {rank}, alpha {alpha}); '
                 f'{n_lora / 1e6:.2f} M trainable adapter params')
     return n
+
+
+LORA_TARGETS_DEFAULT = ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'up_proj', 'down_proj']
+
+
+def apply_lora_from_config(module: nn.Module, lora_cfg: Any) -> int:
+    """Apply LoRA with the settings of a ``model.lora`` config block.
+
+    The one place that reads the block's layout, so training (``models/factory.py``) and
+    checkpoint reloading (``api/model.py``) always rebuild identical adapters.
+
+    Args:
+        module: root module to walk (e.g. the backbone).
+        lora_cfg: ``model.lora`` (``targets`` default: the six projections of
+            :data:`LORA_TARGETS_DEFAULT`; ``rank`` default 16; ``alpha`` default ``2 * rank``).
+
+    Returns:
+        number of layers wrapped.
+    """
+    rank = int(lora_cfg.get('rank', 16))
+    return apply_lora(
+        module,
+        targets=list(lora_cfg.get('targets', LORA_TARGETS_DEFAULT)),
+        rank=rank,
+        alpha=float(lora_cfg.get('alpha', 2 * rank)),
+    )
 
 
 def lora_parameters(module: nn.Module):
