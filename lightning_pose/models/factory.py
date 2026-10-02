@@ -215,8 +215,6 @@ def get_model(
         )
         # nonlinear head (per-pixel MLP readout); None = stock linear head
         if cfg.model.get('head_hidden_channels', None):
-            if head_mode != 'shared':
-                raise ValueError('model.head_hidden_channels is implemented for head_mode=shared only')
             extra['head_hidden_channels'] = int(cfg.model.head_hidden_channels)
             logger.info(f'nonlinear head: ConvT -> {int(cfg.model.head_hidden_channels)} -> LayerNorm -> ReLU -> Conv1x1')
         freeze_names = cfg.model.get('head_freeze_keypoints')

@@ -349,6 +349,12 @@ class TestMultiHeadHeatmapTracker:
         assert not model.set_head_keypoint_mask_from_dataset(_Dataset(), hflip=False)
         assert bool(model.head_keypoint_mask.all())
 
+    def test_multihead_nonlinear_heads(self):
+        model = _multihead(head_hidden_channels=8)
+
+        assert all(head.hidden_channels == 8 for head in model.heads)
+        assert model.forward_routed(torch.randn(2, 3, 64, 64), torch.tensor([0, 1])).shape[1] == 3
+
     def test_multihead_parameter_groups(self):
         model = _multihead()
 

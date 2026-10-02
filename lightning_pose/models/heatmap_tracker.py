@@ -351,7 +351,8 @@ class MultiHeadHeatmapTracker(HeatmapTracker):
         Args:
             dataset_names: ordered source-dataset registry; head ``i`` belongs to
                 ``dataset_names[i]``, matching the ids parsed from image paths.
-            **kwargs: passed through to :class:`HeatmapTracker`.
+            **kwargs: passed through to :class:`HeatmapTracker`; ``head_hidden_channels``
+                makes every per-dataset head nonlinear, as it does the shared head.
         """
         super().__init__(**kwargs)
         if not dataset_names:
@@ -389,6 +390,7 @@ class MultiHeadHeatmapTracker(HeatmapTracker):
                 in_channels=self.num_fc_input_features,
                 out_channels=self.num_keypoints,
                 downsample_factor=self.downsample_factor,
+                hidden_channels=kwargs.get('head_hidden_channels'),
             )
             for _ in self.dataset_names
         ])
