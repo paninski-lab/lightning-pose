@@ -610,8 +610,8 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
         per-source means. ``val_supervised_loss_T`` weights them by the training sampler's
         frame-draw probabilities ``q_d`` (the mixture the model is actually optimized on;
         equal to the pooled loss when no temperature sampler is installed), and
-        ``val_supervised_loss_uniform`` gives every dataset the same weight. Either can be
-        used as a checkpoint monitor via ``training.ckpt_monitors_extra``.
+        ``val_supervised_loss_uniform`` gives every dataset the same weight. All are logged
+        only; the canonical best checkpoint is still selected on ``val_supervised_loss``.
         """
         acc = getattr(self, "_val_per_dataset", None)
         if not acc:
