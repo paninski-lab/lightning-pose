@@ -252,7 +252,7 @@ def test_semisupervised_multiview_heatmap_multiview(
     )
 
 
-# ── per-dataset heads (CPU) ───────────────────────────────────────────────────
+# per-dataset heads: CPU tests on a small resnet18 (no pretrained weights)
 
 
 def _multihead(**kwargs):
@@ -354,6 +354,59 @@ class TestMultiHeadHeatmapTracker:
 
         assert all(head.hidden_channels == 8 for head in model.heads)
         assert model.forward_routed(torch.randn(2, 3, 64, 64), torch.tensor([0, 1])).shape[1] == 3
+
+    def test_multihead_predict_step_oracle_routes_by_dataset_id(self):
+        model = _multihead().eval()
+        images = torch.randn(3, 3, 64, 64)
+        batch = {
+            'images': images,
+            'dataset_id': torch.tensor([1, 0, 1]),
+            'bbox': torch.tensor([[0.0, 0.0, 64.0, 64.0]]).repeat(3, 1),
+        }
+
+        with torch.no_grad():
+            keypoints, confidence = model.predict_step(batch, 0)
+            reps = model.get_representations(images)
+            for row, i in enumerate([1, 0, 1]):
+                kp_i, conf_i = model.heads[i].run_subpixelmaxima(model.heads[i](reps[row:row + 1]))
+                assert torch.allclose(keypoints[row], kp_i[0], atol=1e-5)
+                assert torch.allclose(confidence[row], conf_i[0], atol=1e-6)
+
+    def test_multihead_loss_inputs_labeled(self):
+        model = _multihead().eval()
+        batch = {
+            'images': torch.randn(2, 3, 64, 64),
+            'dataset_id': torch.tensor([0, 1]),
+            'bbox': torch.tensor([[0.0, 0.0, 64.0, 64.0]]).repeat(2, 1),
+            'heatmaps': torch.zeros(2, 3, 32, 32),
+            'keypoints': torch.zeros(2, 6),
+        }
+
+        with torch.no_grad():
+            out = model.get_loss_inputs_labeled(batch)
+
+        assert set(out) == {
+            'heatmaps_targ', 'heatmaps_pred', 'keypoints_targ', 'keypoints_pred', 'confidences',
+        }
+        assert out['heatmaps_pred'].shape[:2] == (2, 3)
+        assert out['keypoints_pred'].shape == (2, 6)
+
+    def test_multihead_lora_gets_its_own_group(self):
+        from lightning_pose.models.backbones.lora import LoRALinear
+
+        model = _multihead()
+        model.backbone.add_module('adapter', LoRALinear(torch.nn.Linear(4, 4), rank=2, alpha=4))
+        model.lora_lr = 2e-4
+
+        groups = {g['name']: g for g in model.get_parameters()}
+
+        lora_ids = {id(model.backbone.adapter.lora_A), id(model.backbone.adapter.lora_B)}
+        assert list(groups) == ['backbone', 'head', 'lora']
+        assert {id(p) for p in groups['lora']['params']} == lora_ids
+        assert groups['lora']['lr'] == 2e-4
+        assert not lora_ids & {id(p) for p in groups['backbone']['params']}
+        head_ids = {id(p) for p in model.heads.parameters()}
+        assert {id(p) for p in groups['head']['params']} == head_ids
 
     def test_multihead_parameter_groups(self):
         model = _multihead()

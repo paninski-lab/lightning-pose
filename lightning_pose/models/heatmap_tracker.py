@@ -185,6 +185,20 @@ class HeatmapTracker(BaseSupervisedTracker):
         """Heatmaps -> (keypoints, confidences) with the model's head."""
         return self.head.run_subpixelmaxima(heatmaps)
 
+    @staticmethod
+    def _batch_images(
+        batch_dict: (
+            HeatmapLabeledBatchDict
+            | MultiviewHeatmapLabeledBatchDict
+            | UnlabeledBatchDict
+            | MultiviewUnlabeledBatchDict
+        ),
+    ) -> torch.Tensor:
+        """Images of a prediction batch: labeled loaders give 'images', DALI video 'frames'."""
+        if "images" in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
+            return batch_dict["images"]  # type: ignore[typeddict-item]
+        return batch_dict["frames"]  # type: ignore[typeddict-item]
+
     def _head_parameters(self) -> Iterator[torch.nn.Parameter]:
         """Parameters of the head(s): the optimizer's 'head' group."""
         return self.head.parameters()
@@ -224,12 +238,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         > predictions = trainer.predict(model, data_loader)
 
         """
-        if "images" in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
-            # labeled image dataloaders
-            images = batch_dict["images"]  # type: ignore[typeddict-item]
-        else:
-            # unlabeled dali video dataloaders
-            images = batch_dict["frames"]  # type: ignore[typeddict-item]
+        images = self._batch_images(batch_dict)
         # images -> heatmaps
         predicted_heatmaps = self._heatmaps_predict(batch_dict, images)
         # heatmaps -> keypoints
@@ -543,8 +552,11 @@ class MultiHeadHeatmapTracker(HeatmapTracker):
         return self.forward_routed(images, dataset_ids)
 
     def _run_subpixelmaxima(self, heatmaps: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """All heads share downsample factor and softmax temperature, so head 0's subpixel
-        refinement applies to the routed (scattered) heatmaps as a whole."""
+        """Heatmaps -> (keypoints, confidences) for routed heatmaps, using head 0.
+
+        All heads share downsample factor and softmax temperature, so head 0's subpixel
+        refinement applies to the routed (scattered) heatmaps as a whole.
+        """
         return self.heads[0].run_subpixelmaxima(heatmaps)
 
     def _head_parameters(self) -> Iterator[torch.nn.Parameter]:
@@ -572,11 +584,9 @@ class MultiHeadHeatmapTracker(HeatmapTracker):
           Heatmaps cannot be returned in this mode (combination is in coordinate space).
         """
         if self.predict_mode == 'blind':
-            if 'images' in batch_dict.keys():  # can't do isinstance(o, c) on TypedDicts
-                images = batch_dict['images']  # type: ignore[typeddict-item]
-            else:
-                images = batch_dict['frames']  # type: ignore[typeddict-item]
-            predicted_keypoints, confidence, _spread = self.forward_blind(images)
+            predicted_keypoints, confidence, _spread = self.forward_blind(
+                self._batch_images(batch_dict),
+            )
             predicted_keypoints = model_to_frame_batch(batch_dict, predicted_keypoints)
             if return_heatmaps:
                 raise NotImplementedError(

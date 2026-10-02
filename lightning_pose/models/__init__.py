@@ -29,7 +29,7 @@ unsupervised losses on unlabeled video frames.
   :class:`~lightning_pose.models.base.BaseSupervisedTracker`,
   :class:`~lightning_pose.models.base.SemiSupervisedTrackerMixin`.
 - ``factory.py`` — :func:`get_model` (full construction from config) and
-  :func:`get_model_class` (pure ``(model_type, semi_supervised) → class`` dispatch);
+  :func:`get_model_class` (pure ``(model_type, semi_supervised, head_mode) → class`` dispatch);
   :data:`ALLOWED_MODEL_TYPES` Literal defined here.
 - ``backbones/`` — backbone wrappers and :func:`~lightning_pose.models.backbones.build_backbone`;
   see ``backbones/__init__.py`` for the type hierarchy and how to add a new backbone.

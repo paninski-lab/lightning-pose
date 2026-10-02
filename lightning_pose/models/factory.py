@@ -3,7 +3,8 @@
 Public entry points:
 
 - :func:`get_model_class` — pure dispatch: returns the model *class* for a given
-  ``(model_type, semi_supervised)`` pair without instantiating anything.
+  ``(model_type, semi_supervised, head_mode)`` without instantiating anything; the single
+  place that maps ``model.head_mode`` to a class (used by construction and by reload).
 - :func:`get_model` — full construction: resolves optimizer/scheduler defaults,
   instantiates the appropriate model class, and optionally loads weights from a
   checkpoint.

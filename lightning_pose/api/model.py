@@ -255,8 +255,9 @@ def load_model_from_checkpoint(
         )
         if not mask_set:
             logger.warning(
-                'multi-head model loaded without a data module: head_keypoint_mask stays '
-                'all-True, so blind-mode combination would let unsupported heads vote'
+                'multi-head model loaded without training visibility / dataset ids (no data '
+                'module, or its dataset carries none): head_keypoint_mask stays all-True, so '
+                'blind-mode combination would let unsupported heads vote'
             )
 
     if eval:

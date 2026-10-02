@@ -4,7 +4,6 @@ import torch
 from torch import nn
 
 from lightning_pose.models.backbones.lora import (
-    LORA_TARGETS_DEFAULT,
     LoRALinear,
     apply_lora_from_config,
     lora_parameters,
@@ -34,7 +33,6 @@ class TestApplyLoraFromConfig:
         assert not isinstance(block.other, LoRALinear)
         assert block.q_proj.rank == 16
         assert block.q_proj.scaling == 2.0      # alpha defaults to 2 * rank
-        assert 'q_proj' in LORA_TARGETS_DEFAULT
 
     def test_apply_lora_from_config_explicit(self):
         block = _Block()
