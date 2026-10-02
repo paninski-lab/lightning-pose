@@ -56,6 +56,12 @@ ALLOWED_MODEL_TYPES = Literal[
 __all__: list[str] = []
 
 
+REMOVED_DATASET_TOKEN = (
+    'model.head_mode=dataset_token was removed on 2026-10-02 (closed experiment, no surviving '
+    'checkpoints); the code is at tag pre-cleanup-2026-10-02'
+)
+
+
 def get_model_class(
     model_type: ALLOWED_MODEL_TYPES,
     semi_supervised: bool,
@@ -209,12 +215,13 @@ def get_model(
                     )
                 extra['head_freeze_keypoints'] = [names.index(n) for n in freeze_names]
         head_mode = cfg.model.get('head_mode', 'shared')
-        if head_mode not in ('shared', 'per_dataset', 'dataset_token'):
+        if head_mode == 'dataset_token':
+            raise ValueError(REMOVED_DATASET_TOKEN)
+        if head_mode not in ('shared', 'per_dataset'):
             raise ValueError(
-                f"model.head_mode must be 'shared', 'per_dataset', or 'dataset_token', "
-                f"got '{head_mode}'"
+                f"model.head_mode must be 'shared' or 'per_dataset', got '{head_mode}'"
             )
-        if head_mode in ('per_dataset', 'dataset_token'):
+        if head_mode == 'per_dataset':
             if semi_supervised:
                 raise NotImplementedError(
                     f'model.head_mode={head_mode} is not supported with unsupervised '
@@ -226,13 +233,8 @@ def get_model(
                     f'model.head_mode={head_mode} requires data.dataset_names so '
                     'batches carry per-example dataset ids'
                 )
-            if head_mode == 'per_dataset':
-                from lightning_pose.models import MultiHeadHeatmapTracker
-                ModelClass = MultiHeadHeatmapTracker
-            else:
-                from lightning_pose.models import TokenConditionedHeatmapTracker
-                ModelClass = TokenConditionedHeatmapTracker
-                extra['token_lr'] = float(cfg.model.get('token_lr', 1e-2))
+            from lightning_pose.models import MultiHeadHeatmapTracker
+            ModelClass = MultiHeadHeatmapTracker
             extra['dataset_names'] = list(dataset_names)
     elif cfg.model.model_type == 'heatmap_mhcrnn':
         extra = dict(
