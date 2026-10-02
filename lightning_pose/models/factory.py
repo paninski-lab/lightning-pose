@@ -56,6 +56,11 @@ ALLOWED_MODEL_TYPES = Literal[
 __all__: list[str] = []
 
 
+REMOVED_HEAD_FREEZE = (
+    'model.head_freeze_keypoints was removed on 2026-10-02 (few-shot ablation with no effect, '
+    'superseded by model.anchor; no surviving checkpoints); the code is at tag '
+    'pre-cleanup-2026-10-02'
+)
 REMOVED_DATASET_TOKEN = (
     'model.head_mode=dataset_token was removed on 2026-10-02 (closed experiment, no surviving '
     'checkpoints); the code is at tag pre-cleanup-2026-10-02'
@@ -217,20 +222,8 @@ def get_model(
         if cfg.model.get('head_hidden_channels', None):
             extra['head_hidden_channels'] = int(cfg.model.head_hidden_channels)
             logger.info(f'nonlinear head: ConvT -> {int(cfg.model.head_hidden_channels)} -> LayerNorm -> ReLU -> Conv1x1')
-        freeze_names = cfg.model.get('head_freeze_keypoints')
-        if freeze_names:
-            if head_mode != 'shared':
-                raise ValueError('model.head_freeze_keypoints requires head_mode=shared')
-            if data_module is None:
-                logger.info('head_freeze_keypoints given without a data module (inference); ignored')
-            else:
-                names = list(data_module.dataset.keypoint_names)
-                unknown = [n for n in freeze_names if n not in names]
-                if unknown:
-                    raise ValueError(
-                        f'model.head_freeze_keypoints not in data.keypoint_names: {unknown}'
-                    )
-                extra['head_freeze_keypoints'] = [names.index(n) for n in freeze_names]
+        if cfg.model.get('head_freeze_keypoints') and data_module is not None:
+            raise ValueError(REMOVED_HEAD_FREEZE)
         if head_mode == 'per_dataset':
             dataset_names = cfg.data.get('dataset_names', None)
             if not dataset_names:

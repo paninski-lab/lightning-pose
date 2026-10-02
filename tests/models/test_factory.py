@@ -113,6 +113,22 @@ class TestGetModel:
                 assert torch.allclose(loaded.state_dict()[k], v), f'backbone mismatch at {k}'
 
 
+class TestGetModelRemovedOptions:
+    """Removed config options fail loudly instead of training something else."""
+
+    def test_get_model_head_freeze_removed(self, cfg, base_dataset):
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        cfg_tmp.model.backbone = 'resnet18'
+        cfg_tmp.model.backbone_pretrained = False
+        cfg_tmp.model.head_freeze_keypoints = [cfg_tmp.data.keypoint_names[0]]
+        data_module = get_data_module(cfg_tmp, dataset=base_dataset, video_dir=None)
+        loss_factories = get_loss_factories(cfg_tmp, data_module=data_module)
+
+        with pytest.raises(ValueError, match='head_freeze_keypoints was removed'):
+            get_model(cfg_tmp, data_module=data_module, loss_factories=loss_factories)
+
+
 class TestGetModelClass:
     """Test the get_model_class function."""
 
