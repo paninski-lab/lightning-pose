@@ -737,6 +737,16 @@ class TestGetCallbacks:
         assert LearningRateMonitor in types
         assert ModelCheckpoint in types
 
+    def test_get_callbacks_removed_ckpt_monitors_extra_warns(self, cfg, caplog):
+        """The removed key only warns: still one best checkpoint, training unaffected."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        cfg_tmp.training.ckpt_monitors_extra = ['val_supervised_loss_T']
+        with caplog.at_level('WARNING', logger='lightning_pose.callbacks'):
+            callbacks = get_callbacks(cfg_tmp)
+        assert sum(isinstance(cb, ModelCheckpoint) for cb in callbacks) == 1
+        assert 'ckpt_monitors_extra is no longer supported' in caplog.text
+
     def test_get_callbacks_with_early_stopping(self, cfg):
         """early_stopping=True adds an EarlyStopping callback."""
         cfg_tmp = copy.deepcopy(cfg)

@@ -685,6 +685,13 @@ def get_callbacks(
             filename='{epoch}-{step}-best',
         )
         callbacks.append(ckpt_best_callback)
+        if cfg.training.get('ckpt_monitors_extra', None):
+            # removed 2026-10-02; v7/v8 run configs still carry it. Training is unaffected, only
+            # the extra *-best-<monitor>.ckpt files are no longer written.
+            logger.warning(
+                'training.ckpt_monitors_extra is no longer supported (removed 2026-10-02, code at '
+                'tag pre-cleanup-2026-10-02): only the canonical *-best.ckpt is kept'
+            )
 
     if ckpt_every_n_epochs:
         ckpt_callback = ModelCheckpoint(
