@@ -51,6 +51,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         head_hidden_channels: int | None = None,
         head_groups: list[int] | None = None,
         head_shared_channels: int = 0,
+        head_group_fan_in_gain: bool = False,
         **kwargs: Any,
     ) -> None:
         """Initialize a heatmap-based pose estimation model with conv or transformer backbone.
@@ -74,6 +75,8 @@ class HeatmapTracker(BaseSupervisedTracker):
                 reload into the grouped head.
             head_shared_channels: hidden channels read by every keypoint when ``head_groups``
                 is set (see ``HeatmapHead(shared_channels=...)``).
+            head_group_fan_in_gain: with ``head_groups``, scale each keypoint's readout row by
+                hidden channels / channels it reads (see ``HeatmapHead(group_fan_in_gain=...)``).
 
         """
 
@@ -106,6 +109,7 @@ class HeatmapTracker(BaseSupervisedTracker):
             hidden_channels=head_hidden_channels,
             groups=head_groups,
             shared_channels=head_shared_channels,
+            group_fan_in_gain=head_group_fan_in_gain,
         )
 
         self.loss_factory = loss_factory

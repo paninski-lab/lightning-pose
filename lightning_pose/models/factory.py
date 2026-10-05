@@ -335,6 +335,9 @@ def get_model(
             names_group = [str(group) for group in cfg.model.head_groups]
             extra['head_groups'] = head_groups
             extra['head_shared_channels'] = shared
+            # readout row gain H / (channels the keypoint reads): restores the ungrouped head's
+            # per-step learning speed under Adam (diag 2026-10-05, _diag-headgrp-10-05)
+            extra['head_group_fan_in_gain'] = bool(cfg.model.get('head_group_fan_in_gain', False))
             sizes = ', '.join(
                 f'{name}={head_groups.count(idx)}' for idx, name in enumerate(names_group)
             )
@@ -343,6 +346,8 @@ def get_model(
                 f'{(hidden - shared) // len(names_group)} hidden channels per group block, '
                 f'{shared} shared channels (H = {hidden})'
             )
+        elif cfg.model.get('head_group_fan_in_gain', False):
+            raise ValueError('model.head_group_fan_in_gain requires model.head_groups')
         if cfg.model.get('head_freeze_keypoints') and data_module is not None:
             raise ValueError(REMOVED_HEAD_FREEZE)
         if head_mode == 'per_dataset':

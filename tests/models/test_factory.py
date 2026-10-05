@@ -393,6 +393,23 @@ class TestGetModelHeadGroups:
             expected = state_plain[key] * mask if key == key_readout else state_plain[key]
             assert torch.equal(state_grouped[key], expected), key
 
+    def test_get_model_head_group_fan_in_gain(self, cfg):
+        model = _build_without_data(_head_groups_cfg(
+            cfg, head_hidden_channels=16, head_groups=copy.deepcopy(TOY_HEAD_GROUPS),
+            head_shared_channels=4, head_group_fan_in_gain=True,
+        ))
+
+        assert model.hparams['head_group_fan_in_gain'] is True
+        assert torch.equal(
+            model.head.upsampling_layers[-1].gain.flatten(),
+            torch.full((model.num_keypoints,), 16 / 8),
+        )
+
+    def test_get_model_head_group_fan_in_gain_without_groups_raises(self, cfg):
+        cfg_tmp = _head_groups_cfg(cfg, head_hidden_channels=16, head_group_fan_in_gain=True)
+        with pytest.raises(ValueError, match='head_group_fan_in_gain requires model.head_groups'):
+            _build_without_data(cfg_tmp)
+
     def test_get_model_head_groups_per_dataset_raises(self, cfg):
         cfg_tmp = _head_groups_cfg(
             cfg, head_hidden_channels=16, head_groups=copy.deepcopy(TOY_HEAD_GROUPS),

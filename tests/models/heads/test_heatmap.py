@@ -554,6 +554,62 @@ class TestHeatmapHead:
             self._grouped(shared_channels=5)
 
 
+    def test_heatmap_head_group_fan_in_gain_values(self):
+        head = self._grouped(group_fan_in_gain=True)   # rows read 4 shared + 4 own of 16
+
+        gain = head.upsampling_layers[-1].gain.flatten()
+
+        assert torch.equal(gain, torch.full((5,), 2.0))
+
+    def test_heatmap_head_group_fan_in_gain_keeps_initial_output(self):
+        torch.manual_seed(5)
+        plain = self._grouped()
+        torch.manual_seed(5)
+        gained = self._grouped(group_fan_in_gain=True)
+        x = torch.randn(2, 64, 4, 4)
+
+        assert torch.allclose(plain(x), gained(x), atol=1e-6)
+
+    def test_heatmap_head_group_fan_in_gain_speeds_up_readout(self):
+        x, target = torch.randn(2, 64, 4, 4), torch.rand(2, 5, 32, 32)
+        deltas = {}
+        for gain in (False, True):
+            torch.manual_seed(6)
+            head = self._grouped(group_fan_in_gain=gain)
+            readout = head.upsampling_layers[-1]
+            before = (readout.weight * readout.mask * readout.gain).detach().clone()
+            optimizer = torch.optim.Adam(head.parameters(), lr=1e-3)
+            optimizer.zero_grad()
+            (head(x) * target).sum().backward()
+            optimizer.step()
+            after = readout.weight * readout.mask * readout.gain
+            deltas[gain] = (after - before).detach()[readout.mask.expand_as(after) == 1].abs()
+
+        # Adam's first step moves each raw weight by ~lr: the effective step scales with the gain
+        assert torch.allclose(deltas[True], 2.0 * deltas[False], rtol=1e-3)
+
+    def test_heatmap_head_group_fan_in_gain_off_by_default(self):
+        head = self._grouped()
+
+        gain = head.upsampling_layers[-1].gain
+
+        assert torch.equal(gain, torch.ones_like(gain))
+
+    def test_heatmap_head_group_fan_in_gain_state_dict_round_trip(self):
+        torch.manual_seed(7)
+        head = self._grouped(group_fan_in_gain=True)
+        buffer = io.BytesIO()
+        torch.save(head.state_dict(), buffer)
+        buffer.seek(0)
+        torch.manual_seed(8)
+        loaded = self._grouped(group_fan_in_gain=True)
+        loaded.load_state_dict(torch.load(buffer))
+        x = torch.randn(2, 64, 4, 4)
+
+        assert not any(key.endswith('.gain') for key in head.state_dict())   # non-persistent
+        assert torch.equal(head(x), loaded(x))
+
+
 class TestBlockLayerNorm2d:
     """Test the BlockLayerNorm2d module."""
 

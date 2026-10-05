@@ -131,6 +131,12 @@ class MaskedConv2d(nn.Conv2d):
     checkpoints), so the state dict has the same keys and shapes as a plain ``nn.Conv2d``. Masked
     weights receive zero gradient; call :meth:`zero_masked_weights` after initialization so
     checkpoints hold exact zeros there.
+
+    With ``fan_in_gain`` every output row is also multiplied by ``in_channels / active inputs``
+    (a fixed non-persistent buffer). Adam moves every weight by about lr per step, so a row that
+    reads 64 of 256 inputs changes its output ~4x slower than an unmasked row; the gain restores
+    the unmasked head's per-step change. The stored weight is then the effective weight divided
+    by the gain.
     """
 
     def __init__(
@@ -139,6 +145,7 @@ class MaskedConv2d(nn.Conv2d):
         out_channels: int,
         mask: torch.Tensor,
         kernel_size: int = 1,
+        fan_in_gain: bool = False,
     ) -> None:
         """Initialize the masked convolution.
 
@@ -148,6 +155,7 @@ class MaskedConv2d(nn.Conv2d):
             mask: (out_channels, in_channels) 0/1 tensor; ``mask[o, i] = 1`` lets output ``o``
                 read input ``i``.
             kernel_size: convolution kernel size (the mask is broadcast over it).
+            fan_in_gain: multiply each output row by ``in_channels / mask[o].sum()``.
 
         Raises:
             ValueError: if ``mask`` does not have shape (out_channels, in_channels).
@@ -161,15 +169,26 @@ class MaskedConv2d(nn.Conv2d):
         self.register_buffer(
             'mask', mask.to(self.weight.dtype)[:, :, None, None], persistent=False,
         )
+        gain = (
+            in_channels / mask.sum(dim=1).clamp(min=1) if fan_in_gain
+            else torch.ones(out_channels)
+        )
+        self.register_buffer(
+            'gain', gain.to(self.weight.dtype)[:, None, None, None], persistent=False,
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Convolve with the masked weight."""
-        return self._conv_forward(x, self.weight * self.mask, self.bias)
+        """Convolve with the masked (and gained) weight."""
+        return self._conv_forward(x, self.weight * self.mask * self.gain, self.bias)
 
     @torch.no_grad()
     def zero_masked_weights(self) -> None:
-        """Set the masked-out weight entries to exactly zero (in place)."""
-        self.weight.mul_(self.mask)
+        """Zero the masked-out weight entries and divide by the gain (in place).
+
+        After the division the effective weight ``weight * mask * gain`` equals the drawn
+        initialization, so the gain changes the learning rate of the readout, not its init.
+        """
+        self.weight.mul_(self.mask).div_(self.gain)
 
 
 def make_group_mask(
@@ -316,6 +335,7 @@ class HeatmapHead(nn.Module):
         hidden_channels: int | None = None,
         groups: list[int] | None = None,
         shared_channels: int = 0,
+        group_fan_in_gain: bool = False,
     ) -> None:
         """
 
@@ -341,6 +361,9 @@ class HeatmapHead(nn.Module):
                 shared block of the last ConvTranspose2d. Layer layout, state-dict keys and
                 shapes equal the ungrouped nonlinear head's.
             shared_channels: number of hidden channels read by every keypoint (with ``groups``).
+            group_fan_in_gain: with ``groups``, scale each keypoint's readout row by
+                ``hidden_channels / channels it reads`` (see :class:`MaskedConv2d`), so a grouped
+                keypoint learns as fast per step as in the ungrouped head.
 
         Raises:
             ValueError: if ``groups`` is given without ``hidden_channels`` or has the wrong
@@ -400,7 +423,10 @@ class HeatmapHead(nn.Module):
                     self.groups, int(hidden_channels), self.shared_channels,
                 )
                 norm = BlockLayerNorm2d(int(hidden_channels), block_sizes)
-                readout = MaskedConv2d(int(hidden_channels), out_channels, mask=mask)
+                readout = MaskedConv2d(
+                    int(hidden_channels), out_channels, mask=mask,
+                    fan_in_gain=group_fan_in_gain,
+                )
             self.upsampling_layers = nn.Sequential(
                 *layers,
                 norm,
