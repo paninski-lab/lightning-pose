@@ -4,6 +4,7 @@ import copy
 
 import pytest
 import torch
+from omegaconf import open_dict
 
 from lightning_pose.losses import get_loss_classes, get_loss_factories
 from lightning_pose.losses.factory import LossFactory
@@ -64,6 +65,43 @@ class TestGetLossFactories:
         cfg_tmp.model.losses_to_use = ['temporal']
         factories = get_loss_factories(cfg_tmp, data_module=base_data_module)
         assert 'temporal' in factories['unsupervised'].loss_instance_dict
+
+    def test_get_loss_factories_anchor_video_keypoints(self, cfg, base_data_module):
+        """model.anchor.video_keypoints restricts the video anchor to those channels only."""
+        names = list(base_data_module.dataset.keypoint_names)
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.model_type = 'heatmap'
+        cfg_tmp.model.losses_to_use = ['anchor_video']
+        with open_dict(cfg_tmp):
+            cfg_tmp.model.anchor = {'weight': 1.0, 'keypoints': names[:3],
+                                    'video_keypoints': [names[2]]}
+        factories = get_loss_factories(cfg_tmp, data_module=base_data_module)
+        supervised = factories['supervised'].loss_instance_dict
+        unsupervised = factories['unsupervised'].loss_instance_dict
+        assert supervised['anchor_heatmap'].keypoint_idx == [0, 1, 2]
+        assert unsupervised['anchor_video'].keypoint_idx == [2]
+
+    def test_get_loss_factories_anchor_video_default_keypoints(self, cfg, base_data_module):
+        """Without video_keypoints the video anchor uses the supervised anchor's channels."""
+        names = list(base_data_module.dataset.keypoint_names)
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.model_type = 'heatmap'
+        cfg_tmp.model.losses_to_use = ['anchor_video']
+        with open_dict(cfg_tmp):
+            cfg_tmp.model.anchor = {'weight': 1.0, 'keypoints': names[:3]}
+        factories = get_loss_factories(cfg_tmp, data_module=base_data_module)
+        unsupervised = factories['unsupervised'].loss_instance_dict
+        assert unsupervised['anchor_video'].keypoint_idx == [0, 1, 2]
+
+    def test_get_loss_factories_anchor_video_unknown_keypoint_raises(self, cfg, base_data_module):
+        """An unknown name in model.anchor.video_keypoints raises a ValueError."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.model_type = 'heatmap'
+        cfg_tmp.model.losses_to_use = ['anchor_video']
+        with open_dict(cfg_tmp):
+            cfg_tmp.model.anchor = {'weight': 1.0, 'video_keypoints': ['not_a_keypoint']}
+        with pytest.raises(ValueError, match='video_keypoints'):
+            get_loss_factories(cfg_tmp, data_module=base_data_module)
 
     def test_get_loss_factories_pca_singleview(self, cfg, heatmap_data_module):
         """pca_singleview in losses_to_use populates the unsupervised factory."""

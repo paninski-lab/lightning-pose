@@ -177,13 +177,32 @@ def get_loss_factories(
                 if not anchor_cfg:
                     raise ValueError('anchor_video in losses_to_use requires model.anchor')
                 video_w = float(anchor_cfg.get('video_weight', anchor_cfg.get('weight', 1.0)))
+                # model.anchor.video_keypoints: restrict the video anchor to these channels
+                # (e.g. the keypoints the fine-tuning lab does not label, so the video protects
+                # inherited keypoints without pulling the labelled ones back to the teacher);
+                # default: the same channels as the supervised anchor
+                video_idx = keypoint_idx
+                video_names = anchor_cfg.get('video_keypoints', None)
+                if video_names is not None:
+                    names = list(data_module.dataset.keypoint_names)
+                    unknown = [n for n in video_names if n not in names]
+                    if unknown:
+                        raise ValueError(
+                            f'model.anchor.video_keypoints not in data.keypoint_names: {unknown}'
+                        )
+                    if len(video_names) == 0:
+                        raise ValueError('model.anchor.video_keypoints is empty')
+                    video_idx = [names.index(n) for n in video_names]
                 loss_params_dict['unsupervised'][loss_name] = {
                     'log_weight': -float(np.log(video_w)),
-                    'keypoint_idx': keypoint_idx,
+                    'keypoint_idx': video_idx,
                     'mode': 'all',
                     'conf_power': float(anchor_cfg.get('conf_power', 0.0)),
                 }
-                logger.info(f'anchor loss on unlabeled video: weight {video_w:g}')
+                logger.info(
+                    f'anchor loss on unlabeled video: weight {video_w:g}, '
+                    f'{len(video_idx) if video_idx else "all"} keypoints'
+                )
                 continue
             loss_params_dict['unsupervised'][loss_name] = cfg_loss_dict[loss_name]
             loss_params_dict['unsupervised'][loss_name]['loss_name'] = loss_name
