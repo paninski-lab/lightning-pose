@@ -14,6 +14,7 @@ from lightning_pose.callbacks import (
     JSONTrainingProgressTracker,
     PatchMasker,
     PatchMasking,
+    ResumeCheckpoint,
     UnfreezeBackbone,
     get_callbacks,
 )
@@ -847,20 +848,47 @@ class TestUnfreezeBackboneState:
 class TestGetCallbacksResume:
     """Test the rolling resume checkpoint of get_callbacks."""
 
-    def test_get_callbacks_resume_checkpoint(self, cfg, tmp_path):
+    def test_get_callbacks_resume_checkpoint_after_best(self, cfg, tmp_path):
         callbacks = get_callbacks(cfg, resume_every_n_steps=250, resume_dir=tmp_path / 'resume')
-        resume = [c for c in callbacks if isinstance(c, ModelCheckpoint)
-                  and c.dirpath == str(tmp_path / 'resume')]
-        assert len(resume) == 1
-        assert resume[0].filename == 'resume'
-        assert resume[0]._every_n_train_steps == 250
-        assert resume[0].monitor is None and resume[0].save_top_k == 1
+        resume = [i for i, c in enumerate(callbacks) if isinstance(c, ResumeCheckpoint)]
+        best = [i for i, c in enumerate(callbacks)
+                if isinstance(c, ModelCheckpoint) and c.monitor == 'val_supervised_loss']
+        assert len(resume) == 1 and len(best) == 1
+        assert resume[0] > best[0]          # must run after the best-model checkpoint
+        cb = callbacks[resume[0]]
+        assert cb.path == tmp_path / 'resume' / 'resume.ckpt' and cb.every_n_steps == 250
 
     def test_get_callbacks_no_resume_by_default(self, cfg):
-        callbacks = get_callbacks(cfg)
-        assert not any(isinstance(c, ModelCheckpoint) and c.filename == 'resume'
-                       for c in callbacks)
+        assert not any(isinstance(c, ResumeCheckpoint) for c in get_callbacks(cfg))
 
     def test_get_callbacks_resume_needs_dir(self, cfg):
         with pytest.raises(ValueError, match='resume_dir'):
             get_callbacks(cfg, resume_every_n_steps=250)
+
+
+class TestResumeCheckpoint:
+    """Test the ResumeCheckpoint callback."""
+
+    @staticmethod
+    def _trainer(step: int, sanity: bool = False) -> MagicMock:
+        trainer = MagicMock(global_step=step, sanity_checking=sanity, is_global_zero=True)
+        trainer.save_checkpoint.side_effect = lambda path: Path(path).write_text(f'step {step}')
+        return trainer
+
+    def test_resume_checkpoint_saves_after_validation(self, tmp_path):
+        cb = ResumeCheckpoint(tmp_path / 'resume' / 'resume.ckpt', every_n_steps=500)
+        cb.on_validation_end(self._trainer(250), MagicMock())
+        assert (tmp_path / 'resume' / 'resume.ckpt').read_text() == 'step 250'
+        assert not (tmp_path / 'resume' / 'resume.ckpt.tmp').exists()
+
+    def test_resume_checkpoint_respects_interval(self, tmp_path):
+        path = tmp_path / 'resume.ckpt'
+        cb = ResumeCheckpoint(path, every_n_steps=500)
+        for step in (250, 500, 750, 1000):
+            cb.on_validation_end(self._trainer(step), MagicMock())
+        assert path.read_text() == 'step 750'   # saved at 250 and 750 (>= 500 steps apart)
+
+    def test_resume_checkpoint_skips_sanity_check(self, tmp_path):
+        cb = ResumeCheckpoint(tmp_path / 'resume.ckpt', every_n_steps=1)
+        cb.on_validation_end(self._trainer(0, sanity=True), MagicMock())
+        assert not (tmp_path / 'resume.ckpt').exists()

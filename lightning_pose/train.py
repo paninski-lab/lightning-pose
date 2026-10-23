@@ -84,6 +84,28 @@ def calculate_steps_per_epoch(data_module: BaseDataModule) -> int:
     return steps_per_epoch
 
 
+def _keep_only_best_checkpoint(trainer: pl.Trainer) -> None:
+    """Delete stray ``*-best.ckpt`` files a resumed run can leave next to the real best one.
+
+    A run interrupted between saving a new best checkpoint and its next rolling resume checkpoint
+    resumes with the earlier best-model state, so the newer best file is no longer tracked.
+
+    Args:
+        trainer: the trainer after ``fit``.
+    """
+    from lightning.pytorch.callbacks import ModelCheckpoint
+
+    best = next((c for c in trainer.callbacks if isinstance(c, ModelCheckpoint)
+                 and c.monitor == 'val_supervised_loss'), None)
+    if best is None or not best.best_model_path or not Path(best.best_model_path).exists():
+        return
+    keep = Path(best.best_model_path).resolve()
+    for ckpt in keep.parent.glob('*-best.ckpt'):
+        if ckpt.resolve() != keep:
+            logger.info(f'removing stray best checkpoint {ckpt.name} (best: {keep.name})')
+            ckpt.unlink()
+
+
 def train(
     cfg: DictConfig | ListConfig,
     model_dir: str | Path | None = None,
@@ -458,5 +480,6 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
     # training finished: the rolling resume checkpoint is no longer needed (only -best is kept)
     if resume_every:
         shutil.rmtree(resume_dir, ignore_errors=True)
+        _keep_only_best_checkpoint(trainer)
 
     return Model.from_dir(hydra_output_directory)

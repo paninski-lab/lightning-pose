@@ -12,6 +12,7 @@ import torch
 from lightning import LightningModule, Trainer
 from lightning.pytorch.callbacks import (
     Callback,
+    Checkpoint,
     EarlyStopping,
     LearningRateMonitor,
     ModelCheckpoint,
@@ -29,6 +30,7 @@ __all__ = [
     "AnnealWeight",
     "UnfreezeBackbone",
     "PatchMasking",
+    "ResumeCheckpoint",
     "get_callbacks",
 ]
 
@@ -204,6 +206,44 @@ class UnfreezeBackbone(Callback):
             if next_lr == upsampling_lr:
                 self._warmed_up = True
             return next_lr
+
+
+class ResumeCheckpoint(Checkpoint):
+    """Rolling full checkpoint an interrupted run resumes from (training.resume_every_n_steps).
+
+    Saved at the end of a validation run, at most every ``every_n_steps`` optimizer steps. As a
+    :class:`~lightning.pytorch.callbacks.Checkpoint` it runs after the other callbacks and after
+    the best-model ``ModelCheckpoint`` listed before it (Lightning keeps checkpoint callbacks last,
+    in list order), so the saved best-model state matches the ``-best.ckpt`` files on disk. (A
+    ``ModelCheckpoint`` with ``every_n_train_steps`` saves before that step's validation, and a run
+    resumed from it can then point at a best checkpoint that no longer exists.) The file is written
+    to a temporary name and renamed, so an interruption mid-write keeps the previous one.
+    """
+
+    def __init__(self, path: Path, every_n_steps: int) -> None:
+        """
+        Args:
+            path: the checkpoint file (``<output_dir>/resume/resume.ckpt``).
+            every_n_steps: minimum number of optimizer steps between two saves.
+        """
+        self.path = Path(path)
+        self.every_n_steps = int(every_n_steps)
+        self._last_step: int | None = None
+
+    def on_validation_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        """Save the rolling checkpoint after a validation run, if enough steps have passed."""
+        if trainer.sanity_checking:
+            return
+        step = trainer.global_step
+        if self._last_step is not None and step - self._last_step < self.every_n_steps:
+            return
+        tmp = self.path.with_name(f'{self.path.name}.tmp')
+        if trainer.is_global_zero:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+        trainer.save_checkpoint(tmp)
+        if trainer.is_global_zero:
+            os.replace(tmp, self.path)
+        self._last_step = step
 
 
 class PatchMasking(Callback):
@@ -710,6 +750,17 @@ def get_callbacks(
             filename='{epoch}-{step}-best',
         )
         callbacks.append(ckpt_best_callback)
+
+    if resume_every_n_steps:
+        # after the best-model checkpoint, whose on_validation_end must run first
+        # (see ResumeCheckpoint)
+        if resume_dir is None:
+            raise ValueError('resume_every_n_steps needs resume_dir')
+        callbacks.append(ResumeCheckpoint(
+            Path(resume_dir) / f'{RESUME_CKPT_STEM}.ckpt', every_n_steps=int(resume_every_n_steps),
+        ))
+
+    if checkpointing:
         if cfg.training.get('ckpt_monitors_extra', None):
             # removed 2026-10-02; v7/v8 run configs still carry it. Training is unaffected, only
             # the extra *-best-<monitor>.ckpt files are no longer written.
@@ -725,18 +776,6 @@ def get_callbacks(
             save_top_k=-1,
         )
         callbacks.append(ckpt_callback)
-
-    if resume_every_n_steps:
-        if resume_dir is None:
-            raise ValueError('resume_every_n_steps needs resume_dir')
-        callbacks.append(ModelCheckpoint(
-            dirpath=str(resume_dir),
-            filename=RESUME_CKPT_STEM,
-            monitor=None,
-            save_top_k=1,
-            every_n_train_steps=int(resume_every_n_steps),
-            enable_version_counter=False,
-        ))
 
     if ckpt_every_n_steps:
         callbacks.append(ModelCheckpoint(
