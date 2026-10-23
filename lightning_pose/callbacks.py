@@ -20,6 +20,10 @@ from omegaconf import DictConfig, ListConfig
 
 logger = logging.getLogger(__name__)
 
+# file stem of the rolling checkpoint an interrupted run resumes from
+# (training.resume_every_n_steps)
+RESUME_CKPT_STEM = 'resume'
+
 # to ignore imports for sphix-autoapidoc
 __all__ = [
     "AnnealWeight",
@@ -138,6 +142,20 @@ class UnfreezeBackbone(Callback):
         optimizer.param_groups[0]["lr"] = self._get_backbone_lr(
             pl_module.global_step, pl_module.current_epoch, head_lr
         )
+
+    def state_dict(self) -> dict:
+        """Warm-up state saved in checkpoints, so a resumed run does not re-run the warm-up."""
+        return {'warmed_up': self._warmed_up, 'initial_lr': getattr(self, '_initial_lr', None)}
+
+    def load_state_dict(self, state_dict: dict) -> None:
+        """Restore the warm-up state of a resumed run.
+
+        Args:
+            state_dict: output of :meth:`state_dict`.
+        """
+        self._warmed_up = bool(state_dict.get('warmed_up', False))
+        if state_dict.get('initial_lr') is not None:
+            self._initial_lr = float(state_dict['initial_lr'])
 
     def _get_backbone_lr(
         self, current_step: int | None, current_epoch: int, upsampling_lr: float
@@ -634,6 +652,8 @@ def get_callbacks(
     ckpt_every_n_steps: int | None = None,
     backbone_unfreeze: bool = True,
     status_file: Path | None = None,
+    resume_every_n_steps: int | None = None,
+    resume_dir: Path | None = None,
 ) -> list:
     """Build and return the list of training callbacks based on the config.
 
@@ -649,6 +669,11 @@ def get_callbacks(
         backbone_unfreeze: if True, add the ``UnfreezeBackbone`` callback.
         status_file: if not None, add a ``JSONTrainingProgressTracker`` callback writing to this
             path.
+        resume_every_n_steps: if not None, keep one rolling full checkpoint (``resume.ckpt`` in
+            ``resume_dir``, overwritten every this many optimizer steps) that an interrupted run
+            resumes from (``training.resume_every_n_steps``; see
+            :func:`lightning_pose.train.train`).
+        resume_dir: directory of the rolling checkpoint; required with ``resume_every_n_steps``.
 
     Returns:
         List of callback objects ready to pass to a ``pl.Trainer``.
@@ -700,6 +725,18 @@ def get_callbacks(
             save_top_k=-1,
         )
         callbacks.append(ckpt_callback)
+
+    if resume_every_n_steps:
+        if resume_dir is None:
+            raise ValueError('resume_every_n_steps needs resume_dir')
+        callbacks.append(ModelCheckpoint(
+            dirpath=str(resume_dir),
+            filename=RESUME_CKPT_STEM,
+            monitor=None,
+            save_top_k=1,
+            every_n_train_steps=int(resume_every_n_steps),
+            enable_version_counter=False,
+        ))
 
     if ckpt_every_n_steps:
         callbacks.append(ModelCheckpoint(

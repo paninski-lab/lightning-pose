@@ -21,7 +21,7 @@ from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 
 import lightning_pose
 from lightning_pose.api import Model, ModelConfig
-from lightning_pose.callbacks import get_callbacks
+from lightning_pose.callbacks import RESUME_CKPT_STEM, get_callbacks
 from lightning_pose.data import (
     get_data_module,
     get_dataset,
@@ -376,8 +376,22 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
     # Set up and run training
     # ----------------------------------------------------------------------------------
 
-    # logger
-    logger_tb = TensorBoardLogger("tb_logs", name=cfg.model.model_name)
+    # resumable training (training.resume_every_n_steps, off by default): one rolling full
+    # checkpoint in <output_dir>/resume/, overwritten every N steps; a run started again in the
+    # same output directory continues from it, and it is deleted once training finishes
+    resume_every = cfg.training.get('resume_every_n_steps', None)
+    resume_dir = Path(hydra_output_directory) / 'resume'
+    resume_ckpt = resume_dir / f'{RESUME_CKPT_STEM}.ckpt'
+    ckpt_path = None
+    if resume_every and resume_ckpt.exists():
+        ckpt_path = str(resume_ckpt)
+        logger.info(f'resuming training from {resume_ckpt}')
+
+    # logger; a resumable run always logs to version_0, so a resumed run keeps writing (and keeps
+    # its best checkpoint) in the same folder
+    logger_tb = TensorBoardLogger(
+        "tb_logs", name=cfg.model.model_name, version=0 if resume_every else None,
+    )
     # Log hydra config to tensorboard as helpful metadata.
     for key, value in cfg.items():
         logger_tb.experiment.add_text(
@@ -393,6 +407,8 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
         ckpt_every_n_epochs=cfg.training.get("ckpt_every_n_epochs", None),
         ckpt_every_n_steps=cfg.training.get("ckpt_every_n_steps", None),
         status_file=status_file,
+        resume_every_n_steps=resume_every,
+        resume_dir=resume_dir,
     )
 
     # set up trainer
@@ -432,11 +448,15 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
     )
 
     # train model!
-    trainer.fit(model=model, datamodule=data_module)
+    trainer.fit(model=model, datamodule=data_module, ckpt_path=ckpt_path)
 
     # When devices > 0, lightning creates a process per device.
     # Kill processes other than the main process, otherwise they all go forward.
     if not trainer.is_global_zero:
         sys.exit(0)
+
+    # training finished: the rolling resume checkpoint is no longer needed (only -best is kept)
+    if resume_every:
+        shutil.rmtree(resume_dir, ignore_errors=True)
 
     return Model.from_dir(hydra_output_directory)

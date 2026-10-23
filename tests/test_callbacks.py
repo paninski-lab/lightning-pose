@@ -813,3 +813,54 @@ class TestGetCallbacks:
         callbacks = get_callbacks(cfg_tmp)
         types = [type(cb) for cb in callbacks]
         assert PatchMasking in types
+
+
+class TestUnfreezeBackboneState:
+    """Test UnfreezeBackbone.state_dict / load_state_dict (resumed runs)."""
+
+    def test_unfreeze_backbone_state_resumes_mid_warm_up(self):
+        original = UnfreezeBackbone(unfreeze_step=10, initial_ratio=0.1, warm_up_ratio=1.5)
+        original._get_backbone_lr(10, 0, 1e-3)               # thaw at step 10
+        original._get_backbone_lr(11, 0, 1e-3)
+        resumed = UnfreezeBackbone(unfreeze_step=10, initial_ratio=0.1, warm_up_ratio=1.5)
+        resumed.load_state_dict(copy.deepcopy(original.state_dict()))
+        # a resumed run continues the warm-up instead of failing for lack of _initial_lr
+        assert resumed._get_backbone_lr(12, 0, 1e-3) == original._get_backbone_lr(12, 0, 1e-3)
+
+    def test_unfreeze_backbone_state_resumes_warmed_up(self):
+        original = UnfreezeBackbone(unfreeze_step=10, initial_ratio=0.1, warm_up_ratio=1.5)
+        original._get_backbone_lr(10, 0, 1e-3)
+        original._get_backbone_lr(30, 0, 1e-3)
+        assert original._warmed_up
+        resumed = UnfreezeBackbone(unfreeze_step=10)
+        resumed.load_state_dict(original.state_dict())
+        assert resumed._warmed_up
+
+    def test_unfreeze_backbone_state_before_unfreezing(self):
+        state = UnfreezeBackbone(unfreeze_step=10).state_dict()
+        assert state == {'warmed_up': False, 'initial_lr': None}
+        resumed = UnfreezeBackbone(unfreeze_step=10)
+        resumed.load_state_dict(state)
+        assert resumed._get_backbone_lr(5, 0, 1e-3) == 0.0
+
+
+class TestGetCallbacksResume:
+    """Test the rolling resume checkpoint of get_callbacks."""
+
+    def test_get_callbacks_resume_checkpoint(self, cfg, tmp_path):
+        callbacks = get_callbacks(cfg, resume_every_n_steps=250, resume_dir=tmp_path / 'resume')
+        resume = [c for c in callbacks if isinstance(c, ModelCheckpoint)
+                  and c.dirpath == str(tmp_path / 'resume')]
+        assert len(resume) == 1
+        assert resume[0].filename == 'resume'
+        assert resume[0]._every_n_train_steps == 250
+        assert resume[0].monitor is None and resume[0].save_top_k == 1
+
+    def test_get_callbacks_no_resume_by_default(self, cfg):
+        callbacks = get_callbacks(cfg)
+        assert not any(isinstance(c, ModelCheckpoint) and c.filename == 'resume'
+                       for c in callbacks)
+
+    def test_get_callbacks_resume_needs_dir(self, cfg):
+        with pytest.raises(ValueError, match='resume_dir'):
+            get_callbacks(cfg, resume_every_n_steps=250)
