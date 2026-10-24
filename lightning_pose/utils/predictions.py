@@ -398,6 +398,49 @@ def predict_dataset(
     return labeled_preds_df
 
 
+def _load_bbox_dfs(
+    video_file: str | list[str],
+    bbox_file: str | Path | list[str] | list[Path],
+) -> pd.DataFrame | list[pd.DataFrame]:
+    """Load bbox CSVs and check that each has one row per frame of its video.
+
+    Args:
+        video_file: a video path, or a list of per-view video paths for multiview.
+        bbox_file: a bbox CSV path, or a list of per-view bbox CSV paths (same order as
+            ``video_file``) for multiview.
+
+    Returns:
+        a DataFrame for single-view, or a list of DataFrames (one per view) for multiview.
+
+    Raises:
+        ValueError: if the form of ``bbox_file`` does not match ``video_file``, or if a bbox
+            CSV's row count differs from its video's frame count.
+    """
+    if isinstance(video_file, str):
+        if isinstance(bbox_file, list):
+            raise ValueError('bbox_file must be a single path for single-view prediction')
+        video_files, bbox_files = [video_file], [bbox_file]
+    else:
+        if not isinstance(bbox_file, list) or len(bbox_file) != len(video_file):
+            raise ValueError(
+                f'multiview prediction requires a list of {len(video_file)} bbox files '
+                '(one per view, in the same order as the videos)'
+            )
+        video_files, bbox_files = video_file, bbox_file
+
+    bbox_dfs = []
+    for video, bbox in zip(video_files, bbox_files, strict=True):
+        bbox_df = pd.read_csv(bbox, index_col=0)
+        frame_count = count_frames(video)
+        if len(bbox_df) != frame_count:
+            raise ValueError(
+                f'{Path(bbox).name} has {len(bbox_df)} rows but {Path(video).name} has '
+                f'{frame_count} frames'
+            )
+        bbox_dfs.append(bbox_df)
+    return bbox_dfs[0] if isinstance(video_file, str) else bbox_dfs
+
+
 @overload
 def predict_video(
     video_file: str,
@@ -416,6 +459,7 @@ def predict_video(
     output_pred_file: list[str] | None = None,
     progress_file: Path | None = None,
     reader: _Reader | None = None,
+    bbox_file: list[str] | list[Path] | None = None,
 ) -> list[pd.DataFrame]: ...
 
 
@@ -425,7 +469,7 @@ def predict_video(
     output_pred_file: str | list[str] | None = None,
     progress_file: Path | None = None,
     reader: _Reader | None = None,
-    bbox_file: str | Path | None = None,
+    bbox_file: str | Path | list[str] | list[Path] | None = None,
 ) -> pd.DataFrame | list[pd.DataFrame]:
     """
     Args:
@@ -435,8 +479,10 @@ def predict_video(
         output_pred_file: (optional) File to save predictions in.
             For multiview, a list of files (1-1 correspondance to cfg.data.view_names).
         bbox_file: (optional) path to a bbox CSV (columns x, y, h, w; one row per frame).
-            when provided, DALI delivers full-resolution frames and the wrapper crops each
-            frame to the bbox before resizing to the model's input dims. single-view only.
+            when provided, full-resolution frames are delivered and the wrapper crops each
+            frame to the bbox before resizing to the model's input dims. For multiview, a
+            list of bbox CSVs (1-1 correspondence with ``video_file``, i.e. with
+            cfg.data.view_names).
         reader: (optional) which video-reading backend to use: "dali", "pynvvc", or
             "opencv". None (default) auto-selects pynvvc if it's usable on this machine
             for this video, else dali if it's installed, else opencv (the portable
@@ -463,17 +509,9 @@ def predict_video(
                 view_name in Path(single_video_file).stem
             ), "expected video_file to correspond 1-1 with cfg.data.view_name"
 
-    bbox_df: pd.DataFrame | None = None
+    bbox_df: pd.DataFrame | list[pd.DataFrame] | None = None
     if bbox_file is not None:
-        if is_multiview:
-            raise ValueError('bbox_file is not supported for multiview prediction')
-        assert isinstance(video_file, str)
-        bbox_df = pd.read_csv(bbox_file, index_col=0)
-        frame_count = count_frames(video_file)
-        if len(bbox_df) != frame_count:
-            raise ValueError(
-                f'bbox_file has {len(bbox_df)} rows but video has {frame_count} frames'
-            )
+        bbox_df = _load_bbox_dfs(video_file, bbox_file)
 
     trainer = pl.Trainer(
         accelerator=get_accelerator(),

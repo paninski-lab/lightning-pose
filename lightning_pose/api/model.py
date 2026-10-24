@@ -798,6 +798,7 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
         generate_labeled_video: bool = False,
         progress_file: Path | None = None,
         reader: _Reader | None = None,
+        bbox_file_per_view: list[str] | list[Path] | None = None,
     ) -> MultiviewPredictionResult:
         """Version of ``predict_on_video_file`` that accesses multiple camera views of each frame.
 
@@ -813,10 +814,20 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
             reader: which video-reading backend to use, "dali", "pynvvc", or "opencv". None
                 (default) auto-selects pynvvc if it's usable on this machine for this video,
                 else dali if it's installed, else opencv (the portable fallback, always
-                available).
+                available). Multiview bbox cropping currently requires (and defaults to)
+                "dali".
+            bbox_file_per_view: optional list of per-frame bbox CSVs (columns x, y, h, w; one
+                row per frame), in the same order as ``video_file_per_view``. When provided,
+                each view's frames are cropped to that view's bboxes before being passed to
+                the model, and predictions are returned in the original coordinate space.
 
         Returns:
             object containing the predictions and metrics for each view.
+
+        Raises:
+            ValueError: if the model is not multiview, the number of video or bbox files does
+                not match the number of views, or a bbox CSV's row count differs from its
+                video's frame count.
         """
         if not self.config.is_multi_view():
             raise ValueError('predict_on_video_file_multiview requires a multi-view model')
@@ -830,6 +841,16 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
             )
 
         video_file_per_view = [Path(f) for f in video_file_per_view]
+        if bbox_file_per_view is not None and len(bbox_file_per_view) != len(view_names):
+            raise ValueError(
+                f'expected {len(view_names)} bbox files (one per view), '
+                f'got {len(bbox_file_per_view)}'
+            )
+        # pair each bbox file with its video before the videos are put in view order
+        video_to_bbox_file = (
+            dict(zip(video_file_per_view, map(Path, bbox_file_per_view), strict=True))
+            if bbox_file_per_view is not None else None
+        )
 
         if output_dir == self.__class__.UNSPECIFIED:
             output_dir = self.video_preds_dir()
@@ -859,6 +880,10 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
             output_pred_file=prediction_csv_file_list,
             progress_file=progress_file,
             reader=reader,
+            bbox_file=(
+                [str(video_to_bbox_file[v]) for v in video_file_per_view]
+                if video_to_bbox_file is not None else None
+            ),
         )
         if generate_labeled_video:
             for video_file, preds_df in zip(video_file_per_view, df_list, strict=True):

@@ -152,18 +152,77 @@ class TestPredictVideoBboxFile:
         call_kwargs = mock_dali.call_args.kwargs
         assert call_kwargs['bbox_df'] is None
 
-    def test_raises_when_bbox_file_given_for_multiview(self, tmp_path, mock_model, bbox_csv):
-        """ValueError is raised when bbox_file is provided alongside a multiview video list."""
+    def test_multiview_bbox_files_loaded_per_view(self, tmp_path, mock_model, bbox_csv):
+        """Multiview bbox_file list is loaded into a list of DataFrames, one per view."""
+        bbox_file, _ = bbox_csv
+        mock_model.config.cfg.data.view_names = ['view0', 'view1']
+        mock_reader = MagicMock()
+
+        with (
+            patch('lightning_pose.utils.predictions.count_frames', return_value=3),
+            patch('lightning_pose.utils.predictions.build_video_reader', mock_reader),
+            patch('lightning_pose.utils.predictions.pl.Trainer'),
+            patch('lightning_pose.utils.predictions.PredictionHandler'),
+        ):
+            predict_video(
+                video_file=[str(tmp_path / 'view0.mp4'), str(tmp_path / 'view1.mp4')],
+                model=mock_model,
+                bbox_file=[bbox_file, bbox_file],
+            )
+
+        bbox_df = mock_reader.call_args.kwargs['bbox_df']
+        assert isinstance(bbox_df, list)
+        assert len(bbox_df) == 2
+        assert all(len(df) == 3 for df in bbox_df)
+
+    def test_raises_when_multiview_bbox_file_not_a_list(self, tmp_path, mock_model, bbox_csv):
+        """ValueError is raised when a single bbox path is given for multiview videos."""
         bbox_file, _ = bbox_csv
         mock_model.config.cfg.data.view_names = ['view0', 'view1']
 
         video_files = [str(tmp_path / 'view0.mp4'), str(tmp_path / 'view1.mp4')]
-        with pytest.raises(ValueError, match='bbox_file is not supported for multiview'):
+        with pytest.raises(ValueError, match='list of 2 bbox files'):
             predict_video(
                 video_file=video_files,  # type: ignore[arg-type]
                 model=mock_model,
                 bbox_file=bbox_file,
             )
+
+    def test_raises_when_multiview_bbox_file_wrong_length(self, tmp_path, mock_model, bbox_csv):
+        """ValueError is raised when the number of bbox files differs from the view count."""
+        bbox_file, _ = bbox_csv
+        mock_model.config.cfg.data.view_names = ['view0', 'view1']
+
+        video_files = [str(tmp_path / 'view0.mp4'), str(tmp_path / 'view1.mp4')]
+        with pytest.raises(ValueError, match='list of 2 bbox files'):
+            predict_video(
+                video_file=video_files,  # type: ignore[arg-type]
+                model=mock_model,
+                bbox_file=[bbox_file],  # type: ignore[arg-type]
+            )
+
+    def test_raises_when_singleview_bbox_file_is_a_list(self, tmp_path, mock_model, bbox_csv):
+        """ValueError is raised when a list of bbox paths is given for a single video."""
+        bbox_file, _ = bbox_csv
+        with pytest.raises(ValueError, match='single path'):
+            predict_video(
+                video_file=str(tmp_path / 'vid.mp4'),
+                model=mock_model,
+                bbox_file=[bbox_file],  # type: ignore[arg-type]
+            )
+
+    def test_raises_on_multiview_frame_count_mismatch(self, tmp_path, mock_model, bbox_csv):
+        """ValueError names the view whose bbox row count differs from its frame count."""
+        bbox_file, _ = bbox_csv  # 3 rows
+        mock_model.config.cfg.data.view_names = ['view0', 'view1']
+
+        with patch('lightning_pose.utils.predictions.count_frames', return_value=10):
+            with pytest.raises(ValueError, match='has 3 rows but view0.mp4 has 10 frames'):
+                predict_video(
+                    video_file=[str(tmp_path / 'view0.mp4'), str(tmp_path / 'view1.mp4')],
+                    model=mock_model,
+                    bbox_file=[bbox_file, bbox_file],
+                )
 
     def test_raises_on_frame_count_mismatch(self, tmp_path, mock_model, bbox_csv):
         """ValueError is raised when bbox_file row count doesn't match video frame count."""
@@ -171,7 +230,7 @@ class TestPredictVideoBboxFile:
 
         with patch('lightning_pose.utils.predictions.count_frames', return_value=10):
             with pytest.raises(
-                ValueError, match='bbox_file has 3 rows but video has 10 frames',
+                ValueError, match='bbox.csv has 3 rows but vid.mp4 has 10 frames',
             ):
                 predict_video(
                     video_file=str(tmp_path / 'vid.mp4'),
