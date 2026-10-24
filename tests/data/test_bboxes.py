@@ -14,6 +14,7 @@ from lightning_pose.data.bboxes import (
     model_to_norm,
     norm_to_frame,
     norm_to_model,
+    slice_bbox_rows,
 )
 
 
@@ -692,3 +693,24 @@ class TestCropAndResizeFrames:
         })
         cropped, _ = crop_and_resize_frames(frames, bbox_rows, [24, 24])
         assert cropped.shape == (2, 3, 24, 24)
+
+
+class TestSliceBboxRows:
+    """Test the function slice_bbox_rows."""
+
+    @pytest.fixture
+    def bbox_df(self):
+        return pd.DataFrame({'x': range(5), 'y': range(5), 'h': [10] * 5, 'w': [10] * 5})
+
+    def test_slice_bbox_rows_full_batch(self, bbox_df):
+        rows = slice_bbox_rows(bbox_df, idx_start=1, seq_len=3)
+        assert list(rows['x']) == [1, 2, 3]
+
+    def test_slice_bbox_rows_pads_with_last_row(self, bbox_df):
+        rows = slice_bbox_rows(bbox_df, idx_start=3, seq_len=4)
+        assert len(rows) == 4
+        assert list(rows['x']) == [3, 4, 4, 4]
+
+    def test_slice_bbox_rows_past_end_repeats_last_row(self, bbox_df):
+        rows = slice_bbox_rows(bbox_df, idx_start=10, seq_len=2)
+        assert list(rows['x']) == [4, 4]

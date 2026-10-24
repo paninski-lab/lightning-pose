@@ -288,6 +288,24 @@ def model_to_frame_batch(
     return model_keypoints_.reshape((-1, num_targets))
 
 
+def slice_bbox_rows(bbox_df: pd.DataFrame, idx_start: int, seq_len: int) -> pd.DataFrame:
+    """Select the bbox rows for one batch, padding a short final batch with the last row.
+
+    Args:
+        bbox_df: DataFrame with columns ``["x", "y", "h", "w"]``, one row per video frame.
+        idx_start: index of the first frame in the batch.
+        seq_len: number of frames in the batch.
+
+    Returns:
+        DataFrame with exactly ``seq_len`` rows, ready for :func:`crop_and_resize_frames`.
+    """
+    rows = bbox_df.iloc[idx_start:idx_start + seq_len]
+    if len(rows) < seq_len:
+        last_row = bbox_df.iloc[[-1]]
+        rows = pd.concat([rows] + [last_row] * (seq_len - len(rows)), ignore_index=True)
+    return rows
+
+
 def crop_and_resize_frames(
     frames: Float[torch.Tensor, "seq_len rgb h w"],
     bbox_rows: pd.DataFrame,
@@ -301,7 +319,7 @@ def crop_and_resize_frames(
     Shared by all video-decoding backends: each hands this function a full-resolution ``frames``
     tensor plus one already-sliced-and-padded bbox row per frame (cursor/step bookkeeping to select
     those rows lives in each backend's own wrapper, not here —
-    see ``LitDaliWrapper._apply_bbox_crop``).
+    see ``LitDaliWrapper._dali_output_to_tensors``).
 
     Args:
         frames: full-resolution frames, shape (seq_len, 3, H, W).
