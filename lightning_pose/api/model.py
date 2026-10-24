@@ -728,7 +728,8 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
             bbox_file (str | Path, optional): Path to a per-frame bbox CSV (columns x, y, h, w;
                 one row per frame). When provided, each frame is cropped to its bounding box
                 before being passed to the model, and predictions are returned in the original
-                coordinate space. Single-view only. Defaults to None.
+                coordinate space. Single-view only; for multiview models use
+                ``predict_on_video_file_multiview(bbox_file_per_view=...)``. Defaults to None.
 
         Returns:
             PredictionResult: A PredictionResult object containing the predictions and metrics.

@@ -22,7 +22,11 @@ Architecture overview
 ----------------------
 Mirrors ``lightning_pose.data.video.dali``'s two-phase construction: ``PreparePynvvc.__init__``
 validates inputs and precomputes windowing parameters; calling the instance
-(``__call__``) builds and returns a ready-to-iterate ``LitPynvvcWrapper``.
+(``__call__``) builds and returns a ready-to-iterate ``LitPynvvcWrapper``. Both classes subclass
+``PreparePredictBase``/``LitPredictWrapperBase`` in ``lightning_pose.data.video.utils``, which
+hold everything that is not specific to NVDEC (validation, windowing, ``num_iters``,
+normalization, per-view bbox cropping, batch assembly); this module implements only decoding
+and the CUDA synchronization below.
 
 Predict-only, unlike ``PrepareDALI``: this backend never runs ``random_shuffle`` or the
 ``imgaug`` augmentation pipeline, since ``litpose predict`` already runs with both off.
@@ -35,9 +39,10 @@ internal CUDA stream and hands them back as DLPack buffers. If a consumer (this
 module's own resize/normalize step, or eventually the model's forward pass) reads
 those buffers on a different stream before the decode is actually finished, the read
 happens on stale/partial data -- silently. No crash, no NaN, just quietly wrong
-pixels feeding a plausible-looking keypoint prediction. ``LitPynvvcWrapper.__next__``
+pixels feeding a plausible-looking keypoint prediction. ``LitPynvvcWrapper._read_views``
 guards against this with an explicit ``torch.cuda.current_stream().synchronize()``
-after building each batch's frame tensors and before returning them. This is the
+after building each batch's frame tensors and before they are handed to the shared
+normalization/cropping code in ``LitPredictWrapperBase.__next__``. This is the
 "safe but not necessarily optimal" fix flagged in issue #476 -- passing an explicit
 stream handle into the decoder constructor (if supported) would avoid the sync cost
 entirely, but that needs checking against the installed PyNvVideoCodec version and is

@@ -34,7 +34,9 @@ Bbox-crop mode (``bbox_df`` supplied to ``PrepareDALI``):
     The ``bbox`` field of each batch contains the actual crop coordinates, so downstream
     code can remap predictions back to the original coordinate space. For multiview, one
     bbox DataFrame per view is supplied and each view is cropped independently, so views may
-    have different native resolutions.
+    have different native resolutions. The crop and batch assembly use the helpers shared with
+    the other readers (``lightning_pose.data.bboxes.crop_views``,
+    ``lightning_pose.data.video.utils.build_batch_dict``).
 """
 
 import os

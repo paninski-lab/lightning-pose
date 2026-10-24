@@ -24,6 +24,15 @@ dimensions; handle both single-view and multi-view):
 
 - :func:`frame_to_model_batch` — frame → model  (called before loss computation)
 - :func:`model_to_frame_batch` — model → frame  (called after inference)
+
+Video-reader helpers (used by all three readers in ``lightning_pose.data.video`` to crop
+per-frame bboxes out of full-resolution frames before inference):
+
+- :func:`as_bbox_df_list`     — normalize a reader's ``bbox_df`` to one DataFrame per view
+- :func:`slice_bbox_rows`     — select (and pad) the bbox rows for one batch
+- :func:`crop_and_resize_frames` — crop + resize one view's frames to its bboxes
+- :func:`crop_views`          — apply the above to every view of a batch independently
+- :func:`full_frame_bbox`     — default bbox covering the whole decoded frame
 """
 
 import pandas as pd
@@ -317,9 +326,10 @@ def crop_and_resize_frames(
     """Crop each frame to its per-frame bounding box and resize to a common size.
 
     Shared by all video-decoding backends: each hands this function a full-resolution ``frames``
-    tensor plus one already-sliced-and-padded bbox row per frame (cursor/step bookkeeping to select
-    those rows lives in each backend's own wrapper, not here —
-    see ``LitDaliWrapper._dali_output_to_tensors``).
+    tensor plus one already-sliced-and-padded bbox row per frame. Row selection is done by
+    :func:`slice_bbox_rows` (via :func:`crop_views`); the cursor/step bookkeeping that decides
+    where a batch starts lives in each reader's wrapper, not here (see
+    ``LitDaliWrapper._dali_output_to_tensors`` and ``LitPredictWrapperBase.__next__``).
 
     Args:
         frames: full-resolution frames, shape (seq_len, 3, H, W).

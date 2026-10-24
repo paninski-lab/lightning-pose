@@ -367,15 +367,28 @@ frame. The index column is ignored on read.
 - Videos: `{video_stem}_bbox.csv` (one file per video)
 - Labeled frames: `bbox.csv`
 
-**Two prediction modes** (selected by whether `bbox_df` is passed to `PrepareDALI`):
-- *Standard*: DALI resizes frames on GPU before passing them to the model. `resize_dims` is set.
-- *Bbox-crop*: DALI delivers full-resolution frames; `LitDaliWrapper._apply_bbox_crop` crops and
-  resizes each frame in PyTorch using per-frame rows from `bbox_df`. `resize_dims=None` in the
-  pipe dict for bbox predict entries.
+**Two prediction modes** (selected by whether `bbox_df` is passed to the video reader):
+- *Standard*: frames are resized to `resize_dims` before being passed to the model.
+- *Bbox-crop*: the reader delivers full-resolution frames, then each view is cropped and resized
+  in PyTorch (`crop_views` in `lightning_pose/data/bboxes.py`) using per-frame rows from
+  `bbox_df`. `resize_dims=None` in the DALI pipe dict for bbox predict entries; the pynvvc and
+  opencv readers set `decode_resize_dims=None`.
+
+**Multiview**: `bbox_df` is a `list[pd.DataFrame]`, one per view in `view_names` order, and each
+view is cropped independently, so views may have different native resolutions. The CLI looks up
+one `{video_stem}_bbox.csv` per view video. Models receive `bbox` of shape `(seq_len, 4 * V)`.
+
+**All three readers** (`data/video/{dali,pynvvc,opencv}.py`) share the cropping, normalization
+and batch-assembly code: `crop_views`/`as_bbox_df_list`/`full_frame_bbox` in `data/bboxes.py` and
+`build_batch_dict`/`normalize_frames` in `data/video/utils.py`. The prediction-only readers
+(pynvvc, opencv) subclass `PreparePredictBase`/`LitPredictWrapperBase` from that module and
+implement only decoding.
 
 **Data flow**: `litpose predict --bbox_dir` → `_predict_multi_type` →
 `model.predict_on_video_file(bbox_file=...)` → `predict_video(bbox_file=...)` →
-`PrepareDALI(bbox_df=...)` → `LitDaliWrapper._apply_bbox_crop`.
+`build_video_reader(bbox_df=...)` → `Prepare{DALI,Pynvvc,OpenCV}` → wrapper
+(`LitDaliWrapper._dali_output_to_tensors` / `LitPredictWrapperBase.__next__`) → `crop_views`.
+The multiview path is the same via `predict_on_video_file_multiview(bbox_file_per_view=...)`.
 
 ### Per-keypoint visibility (`lightning_pose/data/`)
 

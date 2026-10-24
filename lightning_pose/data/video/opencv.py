@@ -13,7 +13,10 @@ Architecture overview
 ----------------------
 Mirrors ``lightning_pose.data.video.pynvvc``'s two-phase construction: ``PrepareOpenCV.__init__``
 validates inputs and precomputes windowing parameters; calling the instance (``__call__``) builds
-and returns a ready-to-iterate ``LitOpenCVWrapper``.
+and returns a ready-to-iterate ``LitOpenCVWrapper``. Both classes subclass
+``PreparePredictBase``/``LitPredictWrapperBase`` in ``lightning_pose.data.video.utils``, which
+hold everything that is not specific to OpenCV (validation, windowing, ``num_iters``,
+normalization, per-view bbox cropping, batch assembly); this module implements only decoding.
 
 Predict-only, like pynvvc: this backend never runs ``random_shuffle`` or the ``imgaug``
 augmentation pipeline, since ``litpose predict`` already runs with both off. Training continues
