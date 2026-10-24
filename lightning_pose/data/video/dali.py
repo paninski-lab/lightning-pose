@@ -63,6 +63,7 @@ from lightning_pose.data.datatypes import (
     UnlabeledBatchDict,
 )
 from lightning_pose.data.utils import count_frames
+from lightning_pose.data.video.utils import build_batch_dict
 
 # to ignore imports for sphinx-autoapidoc
 __all__: list[str] = []
@@ -337,19 +338,7 @@ class LitDaliWrapper(DALIGenericIterator):
             # frames; _frame_idx must advance by the same amount to stay in sync with the reader
             self._frame_idx += seq_len - 4 if self.do_context else seq_len
 
-        if not is_multiview:
-            return UnlabeledBatchDict(
-                frames=frames_list[0], transforms=transforms, bbox=bbox_list[0],
-                is_multiview=False,
-            )
-        return MultiviewUnlabeledBatchDict(
-            # final shape: ("seq_len", "num_views", "RGB":3, "image_height", "image_width")
-            frames=torch.stack(frames_list, dim=1),
-            transforms=transforms,
-            # final shape: ("seq_len", "num_views * xyhw")
-            bbox=torch.cat(bbox_list, dim=1),
-            is_multiview=True,
-        )
+        return build_batch_dict(frames_list, bbox_list, transforms, is_multiview)
 
     def __next__(self) -> UnlabeledBatchDict | MultiviewUnlabeledBatchDict:
         """Fetch the next batch, applying per-frame bbox crop+resize when configured."""

@@ -9,7 +9,9 @@ Adding a new video reader
 -------------------------
 
 Every backend module (``dali.py``, ``pynvvc.py``, ``opencv.py``, ...) implements the
-same contract. To add one:
+same contract. A prediction-only backend can subclass ``PreparePredictBase`` and
+``LitPredictWrapperBase`` from ``utils.py`` and implement only decoding (see ``opencv.py``).
+To add one:
 
 1. **Two-phase prepare class**: ``Prepare<Name>.__init__(model_type, filenames,
    resize_dims, dali_config, bbox_df=None, ...)`` validates inputs and precomputes

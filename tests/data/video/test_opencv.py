@@ -9,7 +9,7 @@ import torch
 
 import lightning_pose as lp
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
-from lightning_pose.data.video import opencv as opencv_module
+from lightning_pose.data.video import utils as video_utils_module
 from lightning_pose.data.video.opencv import (
     LitOpenCVWrapper,
     PrepareOpenCV,
@@ -88,7 +88,7 @@ class TestPrepareOpenCV:
         vid_copy = str(tmp_path / 'view1.mp4')
         shutil.copy(vid, vid_copy)
         monkeypatch.setattr(
-            opencv_module, 'count_frames', lambda p: {vid: 100, vid_copy: 90}[p],
+            video_utils_module, 'count_frames', lambda p: {vid: 100, vid_copy: 90}[p],
         )
         with pytest.raises(ValueError, match='frame counts across views'):
             PrepareOpenCV(
@@ -108,7 +108,7 @@ class TestPrepareOpenCV:
             )
 
     def test_num_iters_base(self, cfg, video_list, monkeypatch):
-        monkeypatch.setattr(opencv_module, 'count_frames', lambda p: 100)
+        monkeypatch.setattr(video_utils_module, 'count_frames', lambda p: 100)
         cfg.dali.base.predict.sequence_length = 16
         prep = PrepareOpenCV(
             model_type='base',
@@ -119,7 +119,7 @@ class TestPrepareOpenCV:
         assert prep.num_iters == 7  # ceil(100 / 16) = 7
 
     def test_num_iters_context(self, cfg, video_list, monkeypatch):
-        monkeypatch.setattr(opencv_module, 'count_frames', lambda p: 100)
+        monkeypatch.setattr(video_utils_module, 'count_frames', lambda p: 100)
         cfg.dali.context.predict.sequence_length = 9
         prep = PrepareOpenCV(
             model_type='context',
@@ -131,7 +131,7 @@ class TestPrepareOpenCV:
         assert prep.num_iters == 20
 
     def test_context_num_iters_raises_on_invalid_step(self, cfg, video_list, monkeypatch):
-        monkeypatch.setattr(opencv_module, 'count_frames', lambda p: 100)
+        monkeypatch.setattr(video_utils_module, 'count_frames', lambda p: 100)
         cfg.dali.context.predict.sequence_length = 4  # step = 4 - 4 = 0
         prep = PrepareOpenCV(
             model_type='context',

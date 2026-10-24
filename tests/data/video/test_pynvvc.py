@@ -11,7 +11,7 @@ import torch
 
 import lightning_pose as lp
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
-from lightning_pose.data.video import pynvvc as pynvvc_module
+from lightning_pose.data.video import utils as video_utils_module
 from lightning_pose.data.video.pynvvc import LitPynvvcWrapper, PreparePynvvc, is_pynvvc_available
 
 # real toy video used to gate the real-decoder tests below -- a plain `import
@@ -129,7 +129,7 @@ class TestPreparePynvvc:
         vid_copy = str(tmp_path / 'view1.mp4')
         shutil.copy(vid, vid_copy)
         monkeypatch.setattr(
-            pynvvc_module, 'count_frames', lambda p: {vid: 100, vid_copy: 90}[p],
+            video_utils_module, 'count_frames', lambda p: {vid: 100, vid_copy: 90}[p],
         )
         with pytest.raises(ValueError, match='frame counts across views'):
             PreparePynvvc(
@@ -149,7 +149,7 @@ class TestPreparePynvvc:
             )
 
     def test_num_iters_base(self, cfg, video_list, monkeypatch):
-        monkeypatch.setattr(pynvvc_module, 'count_frames', lambda p: 100)
+        monkeypatch.setattr(video_utils_module, 'count_frames', lambda p: 100)
         cfg.dali.base.predict.sequence_length = 16
         prep = PreparePynvvc(
             model_type='base',
@@ -160,7 +160,7 @@ class TestPreparePynvvc:
         assert prep.num_iters == 7  # ceil(100 / 16) = 7
 
     def test_num_iters_context(self, cfg, video_list, monkeypatch):
-        monkeypatch.setattr(pynvvc_module, 'count_frames', lambda p: 100)
+        monkeypatch.setattr(video_utils_module, 'count_frames', lambda p: 100)
         cfg.dali.context.predict.sequence_length = 9
         prep = PreparePynvvc(
             model_type='context',
@@ -172,7 +172,7 @@ class TestPreparePynvvc:
         assert prep.num_iters == 20
 
     def test_context_num_iters_raises_on_invalid_step(self, cfg, video_list, monkeypatch):
-        monkeypatch.setattr(pynvvc_module, 'count_frames', lambda p: 100)
+        monkeypatch.setattr(video_utils_module, 'count_frames', lambda p: 100)
         cfg.dali.context.predict.sequence_length = 4  # step = 4 - 4 = 0
         prep = PreparePynvvc(
             model_type='context',
@@ -206,7 +206,7 @@ class TestPreparePynvvc:
     def test_call_builds_wrapper_with_correct_params(self, cfg, video_list, monkeypatch):
         """Integration check: PreparePynvvc() actually produces a correctly-configured
         LitPynvvcWrapper, with the real PyNvVideoCodec import mocked out."""
-        monkeypatch.setattr(pynvvc_module, 'count_frames', lambda p: 100)
+        monkeypatch.setattr(video_utils_module, 'count_frames', lambda p: 100)
         prep = PreparePynvvc(
             model_type='base',
             filenames=video_list,
@@ -241,7 +241,7 @@ class TestPreparePynvvc:
         index (not real decoded pixels), so cross-view content equality actually
         proves matching windows, not just matching shape.
         """
-        monkeypatch.setattr(pynvvc_module, 'count_frames', lambda p: 100)
+        monkeypatch.setattr(video_utils_module, 'count_frames', lambda p: 100)
         num_views = 3
         vid = video_list[0]
         filenames = [[vid]] * num_views

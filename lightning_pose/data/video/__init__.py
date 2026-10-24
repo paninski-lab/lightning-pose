@@ -26,6 +26,12 @@ Backends
   ``opencv-python-headless``, an unconditional cross-platform dependency -- works on any
   platform/hardware, including macOS, Windows, and GPU-less machines. Slower than DALI/pynvvc on
   a supported NVIDIA box; the guaranteed fallback everywhere else. Prediction only.
+- ``utils.py`` -- :class:`~lightning_pose.data.video.utils.PreparePredictBase` /
+  :class:`~lightning_pose.data.video.utils.LitPredictWrapperBase`, the validation, windowing,
+  normalization, bbox-crop and batch-assembly logic shared by the two prediction-only backends
+  (``pynvvc.py`` and ``opencv.py`` implement only decoding); also the batch-assembly and
+  normalization helper functions that ``dali.py`` reuses. Imports neither DALI nor
+  PyNvVideoCodec.
 - ``factory.py`` -- :func:`~lightning_pose.data.video.factory.build_video_reader`, the reader-
   selection dispatch used by ``predict_video``. See its docstring for the fallback chain and
   the recipe for adding a new backend.
