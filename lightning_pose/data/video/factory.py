@@ -110,8 +110,7 @@ def build_video_reader(
             ``Prepare<Name>`` class for the exact shape).
         resize_dims: ``[height, width]`` the model expects as input.
         bbox_df: optional per-frame bbox DataFrame; for multiview, a list with one
-            DataFrame per view (same order as ``filenames``). Multiview bbox cropping is
-            currently only implemented by the ``"dali"`` reader.
+            DataFrame per view (same order as ``filenames``).
 
     Returns:
         A ready-to-iterate loader (``LitDaliWrapper``, ``LitPynvvcWrapper``, or
@@ -119,19 +118,8 @@ def build_video_reader(
 
     Raises:
         RuntimeError: if an explicit ``reader`` is requested but isn't usable on this
-            machine/video, or if multiview ``bbox_df`` is passed with a reader other than
-            ``"dali"``.
+            machine/video.
     """
-    # multiview bbox cropping is only implemented in the dali reader so far; route to it
-    # rather than letting auto-select pick a backend that cannot crop multiview batches
-    if bbox_df is not None and isinstance(filenames[0], list):
-        if reader is None:
-            reader = "dali"
-        elif reader != "dali":
-            raise RuntimeError(
-                f"reader={reader!r} does not support bbox cropping for multiview models; "
-                "pass reader='dali' or omit reader."
-            )
     if reader is None:
         # Both pynvvc and dali are CUDA-only backends: pynvvc's probe drives
         # PyNvVideoCodec's CUDA driver bindings directly (a native fatal abort on

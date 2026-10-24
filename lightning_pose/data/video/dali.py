@@ -57,7 +57,7 @@ except ImportError as e:
     ) from e
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
-from lightning_pose.data.bboxes import crop_and_resize_frames, slice_bbox_rows
+from lightning_pose.data.bboxes import as_bbox_df_list, crop_views, full_frame_bbox
 from lightning_pose.data.datatypes import (
     MultiviewUnlabeledBatchDict,
     UnlabeledBatchDict,
@@ -281,25 +281,6 @@ class LitDaliWrapper(DALIGenericIterator):
             return int(frame_size[0, 1]), int(frame_size[0, 2])
         return int(frame_size[0, 2]), int(frame_size[0, 3])  # order is seq_len,C,H,W
 
-    def _bbox_dfs_per_view(self, num_views: int) -> list[pd.DataFrame] | None:
-        """Return ``self.bbox_df`` as a list with one DataFrame per view.
-
-        Args:
-            num_views: number of views in the current batch (1 for single-view).
-
-        Returns:
-            list of per-view bbox DataFrames, or None when no bbox cropping is configured.
-
-        Raises:
-            ValueError: if the number of bbox DataFrames does not match ``num_views``.
-        """
-        if self.bbox_df is None:
-            return None
-        bbox_dfs = [self.bbox_df] if isinstance(self.bbox_df, pd.DataFrame) else self.bbox_df
-        if len(bbox_dfs) != num_views:
-            raise ValueError(f'expected {num_views} bbox DataFrame(s), got {len(bbox_dfs)}')
-        return bbox_dfs
-
     def _dali_output_to_tensors(
         self, batch: list
     ) -> UnlabeledBatchDict | MultiviewUnlabeledBatchDict:
@@ -341,28 +322,20 @@ class LitDaliWrapper(DALIGenericIterator):
             transforms = output['transforms'][0]
 
         seq_len = frames_list[0].shape[0]
-        bbox_dfs = self._bbox_dfs_per_view(len(frames_list))
+        bbox_dfs = as_bbox_df_list(self.bbox_df, len(frames_list))
         if bbox_dfs is None:
             bbox_list = [
-                torch.tensor(
-                    [0, 0, height, width], dtype=torch.float32, device=frames_list[0].device,
-                ).repeat(seq_len, 1)
+                full_frame_bbox(height, width, seq_len, frames_list[0].device)
                 for height, width in frame_sizes
             ]
         else:
             assert self.resize_dims is not None  # required when bbox_df set, see __init__
+            frames_list, bbox_list = crop_views(
+                frames_list, bbox_dfs, self._frame_idx, self.resize_dims,
+            )
             # context-model DALI reader uses step=seq_len-4 so consecutive windows overlap by 4
             # frames; _frame_idx must advance by the same amount to stay in sync with the reader
-            step = seq_len - 4 if self.do_context else seq_len
-            cropped_list = []
-            bbox_list = []
-            for frames, bbox_df in zip(frames_list, bbox_dfs, strict=True):
-                rows = slice_bbox_rows(bbox_df, self._frame_idx, seq_len)
-                cropped, bboxes = crop_and_resize_frames(frames, rows, self.resize_dims)
-                cropped_list.append(cropped)
-                bbox_list.append(bboxes)
-            frames_list = cropped_list
-            self._frame_idx += step
+            self._frame_idx += seq_len - 4 if self.do_context else seq_len
 
         if not is_multiview:
             return UnlabeledBatchDict(

@@ -57,7 +57,7 @@ import torch.nn.functional as F
 from omegaconf import DictConfig, ListConfig
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
-from lightning_pose.data.bboxes import crop_and_resize_frames
+from lightning_pose.data.bboxes import as_bbox_df_list, crop_views, full_frame_bbox
 from lightning_pose.data.datatypes import (
     MultiviewUnlabeledBatchDict,
     UnlabeledBatchDict,
@@ -161,7 +161,7 @@ class LitPynvvcWrapper:
         do_context: bool,
         num_iters: int,
         multiview: bool,
-        bbox_df: pd.DataFrame | None = None,
+        bbox_df: pd.DataFrame | list[pd.DataFrame] | None = None,
         gpu_id: int = 0,
     ) -> None:
         """
@@ -183,8 +183,8 @@ class LitPynvvcWrapper:
                 by ``PreparePynvvc.num_iters`` so Lightning can report progress.
             multiview: whether this is a multiview prediction (one decoder per view,
                 read in lockstep since predict never shuffles).
-            bbox_df: optional per-frame bbox DataFrame (columns x, y, h, w); single-
-                view only (enforced upstream in ``predict_video``).
+            bbox_df: optional per-frame bbox DataFrame (columns x, y, h, w); for multiview,
+                a list with one DataFrame per view, in the same order as ``filenames``.
             gpu_id: CUDA device index to decode on.
         """
         # Same reason as the module-level TYPE_CHECKING import above -- not on a
@@ -286,64 +286,39 @@ class LitPynvvcWrapper:
         self._cursor += self.step
 
         processed = [self._resize_normalize(f) for f in per_view_frames]
+        seq_len = self.sequence_length
+
+        # bbox reflects the true, pre-resize decoded frame size (not decode_resize_dims), so
+        # norm_to_frame correctly rescales model-space predictions back into the original
+        # video's pixel coordinates -- mirrors DALI's separate "frame_size" output, which is
+        # captured before fn.resize.
+        bbox_dfs = as_bbox_df_list(self.bbox_df, len(processed))
+        if bbox_dfs is None:
+            bbox_list = [
+                full_frame_bbox(pv.shape[-2], pv.shape[-1], seq_len, pv.device)
+                for pv in per_view_frames
+            ]
+        else:
+            assert self.resize_dims is not None  # required whenever bbox_df is set
+            # views are cropped independently, so they may have different native resolutions
+            processed, bbox_list = crop_views(
+                processed, bbox_dfs, self._frame_idx, self.resize_dims,
+            )
+            self._frame_idx += seq_len - 4 if self.do_context else seq_len
 
         if not self.multiview:
-            frames = processed[0]
-            # bbox reflects the true, pre-resize decoded frame size (not
-            # decode_resize_dims), so norm_to_frame correctly rescales model-space
-            # predictions back into the original video's pixel coordinates -- mirrors
-            # DALI's separate "frame_size" output, which is captured before fn.resize.
-            height, width = per_view_frames[0].shape[-2], per_view_frames[0].shape[-1]
-
-            if self.bbox_df is not None:
-                assert self.resize_dims is not None  # required whenever bbox_df is set
-                step = self.sequence_length - 4 if self.do_context else self.sequence_length
-                rows = self.bbox_df.iloc[self._frame_idx:self._frame_idx + self.sequence_length]
-                if len(rows) < self.sequence_length:
-                    last_row = self.bbox_df.iloc[[-1]]
-                    rows = pd.concat(
-                        [rows] + [last_row] * (self.sequence_length - len(rows)),
-                        ignore_index=True,
-                    )
-                cropped_frames, bboxes = crop_and_resize_frames(frames, rows, self.resize_dims)
-                self._frame_idx += step
-                return UnlabeledBatchDict(
-                    frames=cropped_frames,
-                    transforms=torch.tensor([-1.0]),
-                    bbox=bboxes,
-                    is_multiview=False,
-                )
-
-            bbox = torch.tensor(
-                [0, 0, height, width], device=frames.device, dtype=torch.float32,
-            ).repeat(frames.shape[0], 1)
             return UnlabeledBatchDict(
-                frames=frames,
+                frames=processed[0],
                 transforms=torch.tensor([-1.0]),
-                bbox=bbox,
+                bbox=bbox_list[0],
                 is_multiview=False,
             )
-
-        else:
-            frames = torch.stack(processed, dim=1)  # (seq_len, num_views, C, H, W)
-            num_views = len(self._decoders)
-            # per-view pre-resize decoded frame size -- see single-view branch above
-            # for why this must come from per_view_frames, not the resized `frames`.
-            bbox_per_view = torch.cat([
-                torch.tensor(
-                    [0, 0, pv.shape[-2], pv.shape[-1]],
-                    device=frames.device, dtype=torch.float32,
-                )
-                for pv in per_view_frames
-            ])
-            bbox = bbox_per_view.unsqueeze(0).repeat(frames.shape[0], 1)
-            transforms = torch.tensor([-1.0]).repeat(num_views, 1, 1)
-            return MultiviewUnlabeledBatchDict(
-                frames=frames,
-                transforms=transforms,
-                bbox=bbox,
-                is_multiview=True,
-            )
+        return MultiviewUnlabeledBatchDict(
+            frames=torch.stack(processed, dim=1),  # (seq_len, num_views, C, H, W)
+            transforms=torch.tensor([-1.0]).repeat(len(processed), 1, 1),
+            bbox=torch.cat(bbox_list, dim=1),  # (seq_len, num_views * xyhw)
+            is_multiview=True,
+        )
 
 
 class PreparePynvvc:
@@ -370,7 +345,7 @@ class PreparePynvvc:
         resize_dims: list[int],
         dali_config: dict | DictConfig | ListConfig,
         gpu_id: int = 0,
-        bbox_df: pd.DataFrame | None = None,
+        bbox_df: pd.DataFrame | list[pd.DataFrame] | None = None,
     ) -> None:
         """
         Args:
@@ -386,8 +361,9 @@ class PreparePynvvc:
                 See class docstring for why this reuses the DALI config section.
             gpu_id: CUDA device index to decode on.
             bbox_df: optional DataFrame with columns ``["x", "y", "h", "w"]``, one
-                row per frame. When provided, frames are decoded at full resolution
-                and ``LitPynvvcWrapper`` crops each to its bbox before resizing.
+                row per frame (for multiview, a list with one such DataFrame per view,
+                in the same order as ``filenames``). When provided, frames are decoded at
+                full resolution and ``LitPynvvcWrapper`` crops each to its bbox before resizing.
 
         Raises:
             FileNotFoundError: if any path in ``filenames`` does not exist or is not
@@ -395,7 +371,8 @@ class PreparePynvvc:
             NotImplementedError: if any view supplies more than one video (multi-
                 session batching is a DALI-train-only concept, not needed here).
             ValueError: for multiview inputs, if views have differing frame counts
-                (which would desynchronize the per-view sequential reads), or for an
+                (which would desynchronize the per-view sequential reads), if the number
+                of ``bbox_df`` DataFrames does not match the number of views, or for an
                 unknown ``model_type``.
         """
         if isinstance(filenames, list) and isinstance(filenames[0], list):
@@ -434,6 +411,8 @@ class PreparePynvvc:
         self.filenames = filenames_2d
         self.resize_dims = resize_dims
         self.gpu_id = gpu_id
+        # fail early on a bbox_df/view count mismatch, before any decoder is allocated
+        as_bbox_df_list(bbox_df, len(filenames_2d))
         self.bbox_df = bbox_df
         self.frame_count = view0_frame_count
 
