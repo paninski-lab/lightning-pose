@@ -11,7 +11,6 @@ import torch
 
 pytest.importorskip('nvidia.dali', reason='nvidia-dali not installed')
 
-from lightning_pose.data.datatypes import UnlabeledBatchDict
 from lightning_pose.data.video import dali as dali_module
 from lightning_pose.data.video.dali import LitDaliWrapper, PrepareDALI, video_pipe
 
@@ -279,6 +278,19 @@ class TestPrepareDALI:
         assert vid_pred_class._pipe_dict['predict']['base']['resize_dims'] is None
         assert vid_pred_class._pipe_dict['predict']['context']['resize_dims'] is None
 
+    def test_bbox_df_count_must_match_num_views(self, cfg, video_list):
+        """Passing more bbox DataFrames than views raises a ValueError."""
+        bbox_df = pd.DataFrame({'x': [0], 'y': [0], 'h': [100], 'w': [100]})
+        with pytest.raises(ValueError, match='one bbox DataFrame per view'):
+            PrepareDALI(
+                train_stage='predict',
+                model_type='base',
+                filenames=video_list,
+                dali_config=cfg.dali,
+                resize_dims=[128, 128],
+                bbox_df=[bbox_df, bbox_df],
+            )
+
     def test_bbox_df_preserves_train_pipe_resize_dims(self, cfg, video_list):
         """When bbox_df is provided, train pipe resize_dims is unchanged."""
         resize_dims = [128, 128]
@@ -331,8 +343,8 @@ class TestLitDaliWrapper:
 
     def _make_wrapper(
         self,
-        bbox_df: pd.DataFrame,
-        resize_dims: list[int],
+        bbox_df: pd.DataFrame | list[pd.DataFrame] | None,
+        resize_dims: list[int] | None,
         do_context: bool = False,
         frame_idx: int = 0,
     ) -> LitDaliWrapper:
@@ -344,42 +356,73 @@ class TestLitDaliWrapper:
         wrapper._frame_idx = frame_idx
         return wrapper
 
-    def _make_batch(self, seq_len: int, h: int = 100, w: int = 120) -> UnlabeledBatchDict:
-        """Create a fake single-view UnlabeledBatchDict with random frames."""
-        return UnlabeledBatchDict(
-            frames=torch.rand(seq_len, 3, h, w),
-            transforms=torch.zeros(seq_len, 1),
-            bbox=torch.zeros(seq_len, 4),
-            is_multiview=False,
-        )
+    @staticmethod
+    def _frame_size(seq_len: int, h: int, w: int) -> torch.Tensor:
+        """DALI ``frame_size`` output (order seq_len,C,H,W) for one view."""
+        return torch.tensor([[seq_len, 3, h, w]])
+
+    def _make_batch(
+        self, seq_len: int, h: int = 100, w: int = 120, transforms: torch.Tensor | None = None,
+    ) -> list[dict]:
+        """Create a fake raw single-view DALI output with random frames."""
+        if transforms is None:
+            transforms = torch.zeros(seq_len, 1)
+        return [{
+            'frames': torch.rand(1, seq_len, 3, h, w),
+            'transforms': transforms.unsqueeze(0),
+            'frame_size': self._frame_size(seq_len, h, w),
+        }]
+
+    def _make_batch_multiview(self, seq_len: int, sizes: list[tuple[int, int]]) -> list[dict]:
+        """Create a fake raw multiview DALI output; ``sizes`` is (h, w) of each view."""
+        batch = {}
+        for idx, (h, w) in enumerate(sizes):
+            batch[f'frames_{idx}'] = torch.rand(1, seq_len, 3, h, w)
+        for idx in range(len(sizes)):
+            batch[f'transforms_{idx}'] = torch.zeros(1)
+        for idx, (h, w) in enumerate(sizes):
+            batch[f'frame_size_{idx}'] = self._frame_size(seq_len, h, w)
+        return [batch]
 
     def test_output_frames_shape(self, bbox_df):
         """Cropped+resized frames have shape (seq_len, 3, *resize_dims)."""
-        resize_dims = [64, 64]
-        wrapper = self._make_wrapper(bbox_df, resize_dims)
-        batch = self._make_batch(seq_len=4)
-        result = wrapper._apply_bbox_crop(batch)
+        wrapper = self._make_wrapper(bbox_df, [64, 64])
+        result = wrapper._dali_output_to_tensors(self._make_batch(seq_len=4))
         assert result['frames'].shape == (4, 3, 64, 64)
+        assert not result['is_multiview']
 
     def test_bbox_tensor_values(self, bbox_df):
         """Output bbox tensor contains [x, y, h, w] values from bbox_df."""
-        wrapper = self._make_wrapper(bbox_df, resize_dims=[64, 64])
-        batch = self._make_batch(seq_len=3)
-        result = wrapper._apply_bbox_crop(batch)
+        wrapper = self._make_wrapper(bbox_df, [64, 64])
+        result = wrapper._dali_output_to_tensors(self._make_batch(seq_len=3))
         expected = torch.tensor([10, 20, 50, 60], dtype=torch.float32)
         for i in range(3):
             assert torch.allclose(result['bbox'][i], expected)
 
+    def test_no_bbox_df_uses_full_frame_bbox(self):
+        """Without bbox_df the bbox is the full decoded frame [0, 0, H, W]."""
+        wrapper = self._make_wrapper(None, None)
+        result = wrapper._dali_output_to_tensors(self._make_batch(seq_len=2, h=100, w=120))
+        assert result['frames'].shape == (2, 3, 100, 120)
+        expected = torch.tensor([0, 0, 100, 120], dtype=torch.float32).repeat(2, 1)
+        assert torch.allclose(result['bbox'], expected)
+        assert wrapper._frame_idx == 0
+
+    def test_frame_size_hwc_order(self):
+        """frame_size with channels last (seq_len,H,W,C) is parsed as (height, width)."""
+        frame_size = torch.tensor([[2, 100, 120, 3]])
+        assert LitDaliWrapper._frame_size_hw(frame_size) == (100, 120)
+
     def test_advances_frame_idx_base(self, bbox_df):
         """_frame_idx advances by seq_len for a base (non-context) model."""
-        wrapper = self._make_wrapper(bbox_df, resize_dims=[64, 64], do_context=False)
-        wrapper._apply_bbox_crop(self._make_batch(seq_len=4))
+        wrapper = self._make_wrapper(bbox_df, [64, 64], do_context=False)
+        wrapper._dali_output_to_tensors(self._make_batch(seq_len=4))
         assert wrapper._frame_idx == 4
 
     def test_advances_frame_idx_context(self, bbox_df):
         """_frame_idx advances by seq_len - 4 for a context model."""
-        wrapper = self._make_wrapper(bbox_df, resize_dims=[64, 64], do_context=True)
-        wrapper._apply_bbox_crop(self._make_batch(seq_len=5))
+        wrapper = self._make_wrapper(bbox_df, [64, 64], do_context=True)
+        wrapper._dali_output_to_tensors(self._make_batch(seq_len=5))
         assert wrapper._frame_idx == 1  # step = seq_len - 4 = 1
 
     def test_pads_last_partial_batch(self):
@@ -390,24 +433,19 @@ class TestLitDaliWrapper:
             'h': [50, 60],
             'w': [50, 60],
         })
-        wrapper = self._make_wrapper(two_row_df, resize_dims=[64, 64], frame_idx=1)
-        result = wrapper._apply_bbox_crop(self._make_batch(seq_len=4))
+        wrapper = self._make_wrapper(two_row_df, [64, 64], frame_idx=1)
+        result = wrapper._dali_output_to_tensors(self._make_batch(seq_len=4))
         assert result['bbox'].shape == (4, 4)
         expected_last = torch.tensor([20, 20, 60, 60], dtype=torch.float32)
         for i in range(4):
             assert torch.allclose(result['bbox'][i], expected_last)
 
     def test_transforms_preserved(self, bbox_df):
-        """The transforms field from the original batch dict is passed through unchanged."""
-        wrapper = self._make_wrapper(bbox_df, resize_dims=[64, 64])
+        """The transforms field from the raw DALI output is passed through unchanged."""
+        wrapper = self._make_wrapper(bbox_df, [64, 64])
         transforms = torch.tensor([[1.0], [2.0], [3.0]])
-        batch = UnlabeledBatchDict(
-            frames=torch.rand(3, 3, 100, 120),
-            transforms=transforms,
-            bbox=torch.zeros(3, 4),
-            is_multiview=False,
-        )
-        result = wrapper._apply_bbox_crop(batch)
+        batch = self._make_batch(seq_len=3, transforms=transforms)
+        result = wrapper._dali_output_to_tensors(batch)
         assert torch.equal(result['transforms'], transforms)
 
     def test_negative_xy_clamped(self):
@@ -418,13 +456,59 @@ class TestLitDaliWrapper:
         counts from the end of the tensor, producing an empty crop.
         """
         neg_df = pd.DataFrame({'x': [-10], 'y': [-5], 'h': [50], 'w': [60]})
-        wrapper = self._make_wrapper(neg_df, resize_dims=[64, 64])
+        wrapper = self._make_wrapper(neg_df, [64, 64])
         # frame 100 tall x 120 wide
-        batch = self._make_batch(seq_len=1, h=100, w=120)
-        result = wrapper._apply_bbox_crop(batch)
+        result = wrapper._dali_output_to_tensors(self._make_batch(seq_len=1, h=100, w=120))
 
         # frame must be cropped+resized without error
         assert result['frames'].shape == (1, 3, 64, 64)
         # clamped: x1=0, y1=0, x2=min(120,-10+60)=50, y2=min(100,-5+50)=45 → [0,0,45,50]
         expected_bbox = torch.tensor([0.0, 0.0, 45.0, 50.0])
         assert torch.allclose(result['bbox'][0], expected_bbox)
+
+    def test_bbox_df_list_for_single_view(self, bbox_df):
+        """A one-element list of DataFrames behaves like a bare DataFrame for single-view."""
+        wrapper = self._make_wrapper([bbox_df], [64, 64])
+        result = wrapper._dali_output_to_tensors(self._make_batch(seq_len=3))
+        assert result['frames'].shape == (3, 3, 64, 64)
+        assert result['bbox'].shape == (3, 4)
+
+    def test_multiview_no_bbox_df(self):
+        """Multiview without bbox_df stacks views and uses each view's full-frame bbox."""
+        wrapper = self._make_wrapper(None, None)
+        batch = self._make_batch_multiview(seq_len=2, sizes=[(100, 120), (100, 120)])
+        result = wrapper._dali_output_to_tensors(batch)
+        assert result['is_multiview']
+        assert result['frames'].shape == (2, 2, 3, 100, 120)
+        assert result['transforms'].shape[0] == 2
+        expected = torch.tensor([0, 0, 100, 120, 0, 0, 100, 120], dtype=torch.float32)
+        assert torch.allclose(result['bbox'], expected.repeat(2, 1))
+
+    def test_multiview_bbox_differing_view_sizes(self):
+        """Views with different native resolutions are cropped independently, then stacked."""
+        df_a = pd.DataFrame({'x': [10] * 4, 'y': [20] * 4, 'h': [50] * 4, 'w': [60] * 4})
+        df_b = pd.DataFrame({'x': [5] * 4, 'y': [6] * 4, 'h': [30] * 4, 'w': [40] * 4})
+        wrapper = self._make_wrapper([df_a, df_b], [64, 64])
+        batch = self._make_batch_multiview(seq_len=3, sizes=[(100, 120), (200, 300)])
+        result = wrapper._dali_output_to_tensors(batch)
+
+        assert result['is_multiview']
+        assert result['frames'].shape == (3, 2, 3, 64, 64)
+        assert result['bbox'].shape == (3, 8)
+        expected = torch.tensor([10, 20, 50, 60, 5, 6, 30, 40], dtype=torch.float32)
+        assert torch.allclose(result['bbox'], expected.repeat(3, 1))
+
+    def test_multiview_bbox_advances_frame_idx_once(self):
+        """_frame_idx advances once per batch, not once per view."""
+        df = pd.DataFrame({'x': [0] * 10, 'y': [0] * 10, 'h': [50] * 10, 'w': [50] * 10})
+        wrapper = self._make_wrapper([df, df], [64, 64])
+        batch = self._make_batch_multiview(seq_len=4, sizes=[(100, 120), (100, 120)])
+        wrapper._dali_output_to_tensors(batch)
+        assert wrapper._frame_idx == 4
+
+    def test_multiview_bbox_df_count_mismatch_raises(self, bbox_df):
+        """A bare DataFrame (one view's worth) for a two-view batch raises."""
+        wrapper = self._make_wrapper(bbox_df, [64, 64])
+        batch = self._make_batch_multiview(seq_len=2, sizes=[(100, 120), (100, 120)])
+        with pytest.raises(ValueError, match='expected 2 bbox DataFrame'):
+            wrapper._dali_output_to_tensors(batch)

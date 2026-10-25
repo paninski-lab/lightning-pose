@@ -120,7 +120,8 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
             "directory containing bbox CSV files produced by ``litpose create_bbox`` or a "
             "compatible external source. For CSV inputs, looks for ``bbox.csv`` inside this "
             "directory. For video inputs, looks for ``<video_stem>_bbox.csv`` inside this "
-            "directory. When provided, each frame is cropped to its bounding box before "
+            "directory; for multiview models, one ``<video_stem>_bbox.csv`` per view video. "
+            "When provided, each frame is cropped to its bounding box before "
             "being passed to the model, and predictions are saved in the original coordinate "
             "space."
         ),
@@ -235,6 +236,7 @@ def handle(args: argparse.Namespace) -> None:
         _predict_multi_type_multi_view(
             model, input_paths, args.skip_viz, not args.overwrite,
             progress_file=args.progress_file, reader=args.reader,
+            bbox_dir=args.bbox_dir,
         )
     else:
         for p in input_paths:
@@ -320,6 +322,7 @@ def _predict_multi_type_multi_view(
     skip_existing: bool,
     progress_file: Path | None = None,
     reader: _Reader | None = None,
+    bbox_dir: Path | None = None,
 ) -> None:
     """Run multi-view prediction on a list of paths (videos or directories).
 
@@ -329,6 +332,9 @@ def _predict_multi_type_multi_view(
         skip_viz: if True, skip generating labeled visualization outputs.
         skip_existing: if True, skip sessions for which output CSVs already exist.
         progress_file: optional path to write prediction progress as JSON.
+        reader: optional video-reading backend; None auto-selects.
+        bbox_dir: optional directory containing a ``<video_stem>_bbox.csv`` for every view's
+            video. When provided, each view is cropped to its bboxes before inference.
     """
     # delay this import because it's slow
     from lightning_pose.utils.io import (
@@ -362,11 +368,21 @@ def _predict_multi_type_multi_view(
                 logger.info(f'skipping {session_name} (prediction file already exists)')
                 continue
 
+            bbox_file_per_view = None
+            if bbox_dir is not None:
+                bbox_file_per_view = [
+                    bbox_dir / f'{Path(video).stem}_bbox.csv' for video in video_file_per_view
+                ]
+                missing = [f for f in bbox_file_per_view if not f.exists()]
+                if missing:
+                    raise FileNotFoundError(f'bbox file(s) not found: {missing}')
+
             model.predict_on_video_file_multiview(
                 video_file_per_view,
                 generate_labeled_video=not skip_viz,
                 progress_file=progress_file,
                 reader=reader,
+                bbox_file_per_view=bbox_file_per_view,
             )
     # if we have a list of directories, we process the videos in each separately
     elif all(path.is_dir() for path in paths):
@@ -379,7 +395,7 @@ def _predict_multi_type_multi_view(
 
                 _predict_multi_type_multi_view(
                     model, video_files, skip_viz, skip_existing,
-                    progress_file=progress_file, reader=reader,
+                    progress_file=progress_file, reader=reader, bbox_dir=bbox_dir,
                 )
             else:
                 logger.info(f'skipping {path}: no videos found')

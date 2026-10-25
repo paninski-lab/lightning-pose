@@ -262,6 +262,30 @@ Prediction on videos
 For detailed command-line options, see :ref:`Create bbox <cli-create-bbox>`,
 :ref:`Smooth bbox <cli-smooth-bbox>`, :ref:`Crop <cli-crop>`, and :ref:`Remap <cli-remap>`.
 
+Multiview models
+================
+
+``litpose predict --bbox_dir`` also works with multiview models. Each view is cropped to its
+own bounding boxes, so the views may have different resolutions. The bbox directory must contain
+one ``<video_stem>_bbox.csv`` for *every view's video* (e.g. ``session_viewA_bbox.csv`` and
+``session_viewB_bbox.csv`` for ``session_viewA.mp4`` and ``session_viewB.mp4``), each with one row
+per frame of its video. Predictions are saved in each view's original coordinate space.
+
+.. code-block:: console
+
+    litpose predict $MODEL_DIR/$POSE_MODEL data/videos/ --bbox_dir data/bboxes
+
+The same is available from the Python API with
+``Model.predict_on_video_file_multiview(videos, bbox_file_per_view=bbox_files)``, where
+``bbox_files`` is in the same order as ``videos``.
+
+.. note::
+
+   Predicting with bounding boxes decodes full-resolution frames (cropping happens after
+   decoding), so memory use grows with the video resolution, the number of views, and the batch
+   size. If inference runs out of GPU memory, lower the batch size with
+   ``litpose predict --batch_size``.
+
 Limitations
 ===========
 

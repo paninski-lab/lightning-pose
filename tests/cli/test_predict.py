@@ -5,7 +5,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from lightning_pose.cli.commands.predict import _predict_multi_type, get_parser, handle
+from lightning_pose.cli.commands.predict import (
+    _predict_multi_type,
+    _predict_multi_type_multi_view,
+    get_parser,
+    handle,
+)
 
 
 class TestGetParser:
@@ -262,6 +267,74 @@ class TestPredictMultiType:
             mock_model, video_dir, skip_viz=True, skip_existing=False, bbox_dir=bbox_dir,
         )
         mock_model.predict_on_video_file.assert_called_once()
+
+
+class TestPredictMultiTypeMultiView:
+    """Test _predict_multi_type_multi_view bbox threading."""
+
+    @pytest.fixture
+    def mock_model(self, tmp_path):
+        """Mock multiview Model with real paths for output dirs."""
+        model = MagicMock()
+        model.video_preds_dir.return_value = tmp_path / 'video_preds'
+        model.config.cfg.data.view_names = ['view0', 'view1']
+        return model
+
+    def _make_videos(self, tmp_path) -> list:
+        return [tmp_path / 'sess_view0.mp4', tmp_path / 'sess_view1.mp4']
+
+    def test_passes_bbox_files_per_view(self, tmp_path, mock_model):
+        """bbox_dir yields one <video_stem>_bbox.csv per view, in the video order."""
+        bbox_dir = tmp_path / 'bboxes'
+        bbox_dir.mkdir()
+        videos = self._make_videos(tmp_path)
+        for video in videos:
+            (bbox_dir / f'{video.stem}_bbox.csv').touch()
+
+        _predict_multi_type_multi_view(
+            mock_model, videos, skip_viz=True, skip_existing=False, bbox_dir=bbox_dir,
+        )
+
+        mock_model.predict_on_video_file_multiview.assert_called_once()
+        call_kwargs = mock_model.predict_on_video_file_multiview.call_args.kwargs
+        assert call_kwargs['bbox_file_per_view'] == [
+            bbox_dir / 'sess_view0_bbox.csv', bbox_dir / 'sess_view1_bbox.csv',
+        ]
+
+    def test_passes_none_without_bbox_dir(self, tmp_path, mock_model):
+        """Without bbox_dir, bbox_file_per_view is None."""
+        _predict_multi_type_multi_view(
+            mock_model, self._make_videos(tmp_path), skip_viz=True, skip_existing=False,
+        )
+        call_kwargs = mock_model.predict_on_video_file_multiview.call_args.kwargs
+        assert call_kwargs['bbox_file_per_view'] is None
+
+    def test_missing_bbox_file_raises(self, tmp_path, mock_model):
+        """A view without a bbox CSV in bbox_dir raises FileNotFoundError before inference."""
+        bbox_dir = tmp_path / 'bboxes'
+        bbox_dir.mkdir()
+        with pytest.raises(FileNotFoundError, match='bbox file'):
+            _predict_multi_type_multi_view(
+                mock_model, self._make_videos(tmp_path), skip_viz=True, skip_existing=False,
+                bbox_dir=bbox_dir,
+            )
+        mock_model.predict_on_video_file_multiview.assert_not_called()
+
+    def test_directory_input_threads_bbox_dir(self, tmp_path, mock_model):
+        """A directory of videos passes bbox_dir through the recursive call."""
+        video_dir = tmp_path / 'videos'
+        video_dir.mkdir()
+        bbox_dir = tmp_path / 'bboxes'
+        bbox_dir.mkdir()
+        for name in ['sess_view0', 'sess_view1']:
+            (video_dir / f'{name}.mp4').touch()
+            (bbox_dir / f'{name}_bbox.csv').touch()
+
+        _predict_multi_type_multi_view(
+            mock_model, [video_dir], skip_viz=True, skip_existing=False, bbox_dir=bbox_dir,
+        )
+        call_kwargs = mock_model.predict_on_video_file_multiview.call_args.kwargs
+        assert len(call_kwargs['bbox_file_per_view']) == 2
 
 
 class TestHandle:

@@ -216,8 +216,8 @@ class TestGenerateBbox:
             output_bbox_file=output_bbox_file,
         )
         bbox_df = pd.read_csv(output_bbox_file, index_col=0)
-        assert (bbox_df['h'] == crop_size).all()
-        assert (bbox_df['w'] == crop_size).all()
+        assert bool((bbox_df['h'] == crop_size).all())
+        assert bool((bbox_df['w'] == crop_size).all())
 
     def test_generate_bbox_creates_parent_dirs(self, setup):
         """generate_bbox creates missing parent directories."""
@@ -299,8 +299,8 @@ class TestCropLabeledFrames:
             output_csv_file=tmp_model_dir / 'cropped_images' / 'cropped_labels.csv',
         )
         bbox_df = pd.read_csv(bbox_file, index_col=0)
-        assert (bbox_df['h'] == crop_size).all()
-        assert (bbox_df['w'] == crop_size).all()
+        assert bool((bbox_df['h'] == crop_size).all())
+        assert bool((bbox_df['w'] == crop_size).all())
 
 
 class TestCropVideo:
@@ -364,8 +364,8 @@ class TestCropVideo:
                 output_file=tmp_model_dir / 'cropped_videos' / video_path.name,
             )
             bbox_df = pd.read_csv(bbox_file, index_col=0)
-            assert (bbox_df['h'] == crop_size).all()
-            assert (bbox_df['w'] == crop_size).all()
+            assert bool((bbox_df['h'] == crop_size).all())
+            assert bool((bbox_df['w'] == crop_size).all())
 
 
 class TestCropVideoBboxValidation:

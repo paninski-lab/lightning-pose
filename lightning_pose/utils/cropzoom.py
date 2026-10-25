@@ -280,12 +280,10 @@ def _crop_video_moviepy(video_file: Path, bbox_df: pd.DataFrame, output_file: Pa
             f'to fill the gap.'
         )
 
-    h = bbox_df["h"].median()
-    w = bbox_df["w"].median()
-
-    # Convert to nearest even integer
-    h = round(h / 2) * 2
-    w = round(w / 2) * 2
+    # convert to nearest even integer; np.nanmedian on the raw array because pandas 3 types
+    # Series.median() as Series | Any, which pyright rejects as a size
+    h = round(float(np.nanmedian(bbox_df["h"].to_numpy())) / 2) * 2
+    w = round(float(np.nanmedian(bbox_df["w"].to_numpy())) / 2) * 2
 
     def crop_frame(get_frame: Any, t: float) -> np.ndarray:
         """Crop a single video frame at time ``t`` to the bounding box for that frame."""

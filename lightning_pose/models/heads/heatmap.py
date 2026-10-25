@@ -123,7 +123,11 @@ def run_subpixelmaxima(
     for _ in range(downsample_factor):
         heatmaps = upsample(heatmaps)
     # find soft argmax
-    softmaxes = spatial_softmax2d(heatmaps, temperature=temperature)
+    # apply the temperature ourselves rather than via spatial_softmax2d's `temperature` argument:
+    # kornia < 0.9 multiplies the input by it (higher = sharper) but kornia >= 0.9 divides
+    softmaxes = spatial_softmax2d(
+        heatmaps * temperature.to(device=heatmaps.device, dtype=heatmaps.dtype),
+    )
     preds = spatial_expectation2d(softmaxes, normalized_coordinates=False)
     # compute confidences as softmax value pooled around prediction
     confidences = evaluate_heatmaps_at_location(heatmaps=softmaxes, locs=preds)

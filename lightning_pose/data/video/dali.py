@@ -29,10 +29,14 @@ Standard mode (no ``bbox_df``):
 
 Bbox-crop mode (``bbox_df`` supplied to ``PrepareDALI``):
     DALI delivers full-resolution frames (``resize_dims=None`` in the predict pipe) so that
-    ``LitDaliWrapper._apply_bbox_crop`` can crop each frame to its per-frame bounding box
-    and resize to the original ``resize_dims`` using ``torch.nn.functional.interpolate``.
+    ``LitDaliWrapper._dali_output_to_tensors`` can crop each frame to its per-frame bounding
+    box and resize to the original ``resize_dims`` using ``torch.nn.functional.interpolate``.
     The ``bbox`` field of each batch contains the actual crop coordinates, so downstream
-    code can remap predictions back to the original coordinate space.
+    code can remap predictions back to the original coordinate space. For multiview, one
+    bbox DataFrame per view is supplied and each view is cropped independently, so views may
+    have different native resolutions. The crop and batch assembly use the helpers shared with
+    the other readers (``lightning_pose.data.bboxes.crop_views``,
+    ``lightning_pose.data.video.utils.build_batch_dict``).
 """
 
 import os
@@ -55,12 +59,13 @@ except ImportError as e:
     ) from e
 
 from lightning_pose.data import _IMAGENET_MEAN, _IMAGENET_STD
-from lightning_pose.data.bboxes import crop_and_resize_frames
+from lightning_pose.data.bboxes import as_bbox_df_list, crop_views, full_frame_bbox
 from lightning_pose.data.datatypes import (
     MultiviewUnlabeledBatchDict,
     UnlabeledBatchDict,
 )
 from lightning_pose.data.utils import count_frames
+from lightning_pose.data.video.utils import build_batch_dict
 
 # to ignore imports for sphinx-autoapidoc
 __all__: list[str] = []
@@ -206,7 +211,7 @@ class LitDaliWrapper(DALIGenericIterator):
     to the model's input dimensions before being returned.
 
     ``_frame_idx`` tracks the iterator's position in the video (by frame number) so that
-    ``_apply_bbox_crop`` reads the correct rows from ``bbox_df``.  It advances by
+    ``_dali_output_to_tensors`` reads the correct rows from ``bbox_df``.  It advances by
     ``seq_len`` for base models (non-overlapping windows) and by ``seq_len - 4`` for
     context models, because the DALI reader for context prediction uses a step of
     ``seq_len - 4`` so that consecutive 5-frame windows overlap by 4 frames.
@@ -214,7 +219,7 @@ class LitDaliWrapper(DALIGenericIterator):
     Testing without a GPU
     +++++++++++++++++++++
     This class can be instantiated without a real DALI pipeline or GPU for unit tests
-    that only exercise the PyTorch post-processing logic (e.g. ``_apply_bbox_crop``)::
+    that only exercise the PyTorch post-processing logic (e.g. ``_dali_output_to_tensors``)::
 
         wrapper = object.__new__(LitDaliWrapper)
         wrapper.do_context = False
@@ -229,7 +234,7 @@ class LitDaliWrapper(DALIGenericIterator):
         eval_mode: Literal["train", "predict"],
         num_iters: int = 1,
         do_context: bool = False,
-        bbox_df: pd.DataFrame | None = None,
+        bbox_df: pd.DataFrame | list[pd.DataFrame] | None = None,
         resize_dims: list[int] | None = None,
         **kwargs: Any,
     ) -> None:
@@ -241,7 +246,8 @@ class LitDaliWrapper(DALIGenericIterator):
                 should be fixed by lightning/dali teams)
             do_context: whether model/loader use 5-frame context or not
             bbox_df: optional DataFrame with columns ``["x", "y", "h", "w"]``, one row per
-                frame. When provided, each batch's frames are cropped per-frame and resized
+                frame (or, for multiview, a list with one such DataFrame per view, in view
+                order). When provided, each batch's frames are cropped per-frame and resized
                 to ``resize_dims`` before being returned, and the ``bbox`` field of the
                 batch dict is populated with the actual bbox coordinates.
             resize_dims: target ``[height, width]`` for post-crop resize; required when
@@ -264,10 +270,29 @@ class LitDaliWrapper(DALIGenericIterator):
         return self.num_iters
 
     @staticmethod
+    def _frame_size_hw(frame_size: torch.Tensor) -> tuple[int, int]:
+        """Extract (height, width) of the decoded frames from DALI's ``frame_size`` output.
+
+        Args:
+            frame_size: DALI ``frame_size`` output for one view, shape (1, 4) with either
+                ``seq_len,H,W,C`` or ``seq_len,C,H,W`` ordering.
+
+        Returns:
+            Tuple of (height, width) in pixels.
+        """
+        if frame_size[0, -1] == 3:  # order is seq_len,H,W,C
+            return int(frame_size[0, 1]), int(frame_size[0, 2])
+        return int(frame_size[0, 2]), int(frame_size[0, 3])  # order is seq_len,C,H,W
+
     def _dali_output_to_tensors(
-        batch: list
+        self, batch: list
     ) -> UnlabeledBatchDict | MultiviewUnlabeledBatchDict:
         """Convert a raw DALI batch output to a typed batch dictionary.
+
+        When ``self.bbox_df`` is set, each view is cropped to its per-frame bbox and resized
+        to ``self.resize_dims`` independently, so views may have different native resolutions.
+        Otherwise DALI has already resized the frames, and the ``bbox`` field spans the full
+        decoded frame (x=0, y=0, h=H, w=W) of each view.
 
         Args:
             batch: raw output list from DALI's ``DALIGenericIterator.__next__``.
@@ -277,107 +302,50 @@ class LitDaliWrapper(DALIGenericIterator):
             ``MultiviewUnlabeledBatchDict`` for multi-view pipelines.
         """
         # always batch_size=1
+        output = batch[0]
+        is_multiview = len(output.keys()) != 3
 
-        if len(batch[0].keys()) == 3:  # single view pipeline
-
-            # shape (sequence_length, 3, H, W)
-            frames = batch[0]["frames"][0, :, :, :, :]
-            # shape (1,) or (2, 3)
-            transforms = batch[0]["transforms"][0]
-            # get frame size
-            if batch[0]["frame_size"][0, -1] == 3:  # order is seq_len,H,W,C
-                height = batch[0]["frame_size"][0, 1]
-                width = batch[0]["frame_size"][0, 2]
-            else:  # order is seq_len,C,H,W
-                height = batch[0]["frame_size"][0, 2]
-                width = batch[0]["frame_size"][0, 3]
-            bbox = torch.tensor([0, 0, height, width], device=frames.device).repeat(
-                (frames.shape[0], 1))
-
-            return UnlabeledBatchDict(
-                frames=frames, transforms=transforms, bbox=bbox, is_multiview=False,
-            )
-
-        else:  # multiview pipeline
-
-            # final shape: ("seq_len", "num_views", "RGB":3, "image_height", "image_width")
-            frames = torch.stack(
-                [batch[0][key][0, :, :, :, :] for key in batch[0].keys() if
-                 "transforms" not in key and "frame_size" not in key],
-                dim=1,
-            )
-
+        # per-view lists of frames (each of shape (seq_len, 3, H, W)) and decoded frame sizes
+        if is_multiview:
+            frames_list = [
+                output[key][0] for key in output.keys()
+                if 'transforms' not in key and 'frame_size' not in key
+            ]
+            frame_sizes = [
+                self._frame_size_hw(output[key]) for key in output.keys() if 'frame_size' in key
+            ]
             # final shape: ("num_views", "h":2, "w":3)
             transforms = torch.stack(
-                [batch[0][key] for key in batch[0].keys() if "transforms" in key],
-                dim=0,
+                [output[key] for key in output.keys() if 'transforms' in key], dim=0,
             )
+        else:
+            frames_list = [output['frames'][0]]
+            frame_sizes = [self._frame_size_hw(output['frame_size'])]
+            # shape (1,) or (2, 3)
+            transforms = output['transforms'][0]
 
-            # final shape: ("seq_len", "num_views * xyhw")
-            bbox = torch.cat([
-                torch.tensor([
-                    0,
-                    0,
-                    batch[0][key][0, 1],
-                    batch[0][key][0, 2],
-                ],
-                    device=frames.device
-                ) for key in batch[0].keys() if "frame_size" in key
-            ], dim=0).repeat(frames.shape[0], 1)
-
-            return MultiviewUnlabeledBatchDict(
-                frames=frames, transforms=transforms, bbox=bbox, is_multiview=True,
+        seq_len = frames_list[0].shape[0]
+        bbox_dfs = as_bbox_df_list(self.bbox_df, len(frames_list))
+        if bbox_dfs is None:
+            bbox_list = [
+                full_frame_bbox(height, width, seq_len, frames_list[0].device)
+                for height, width in frame_sizes
+            ]
+        else:
+            assert self.resize_dims is not None  # required when bbox_df set, see __init__
+            frames_list, bbox_list = crop_views(
+                frames_list, bbox_dfs, self._frame_idx, self.resize_dims,
             )
+            # context-model DALI reader uses step=seq_len-4 so consecutive windows overlap by 4
+            # frames; _frame_idx must advance by the same amount to stay in sync with the reader
+            self._frame_idx += seq_len - 4 if self.do_context else seq_len
 
-    def _apply_bbox_crop(self, batch_dict: UnlabeledBatchDict) -> UnlabeledBatchDict:
-        """Crop frames to per-frame bboxes and resize to the model's input dimensions.
-
-        Called only in bbox-crop mode (when ``bbox_df`` is not None). DALI has already
-        delivered full-resolution frames; this method crops each frame individually,
-        resizes to ``self.resize_dims``, and advances ``_frame_idx`` by the same step
-        that the DALI reader used, so the two cursors stay in sync.
-
-        Args:
-            batch_dict: single-view unlabeled batch with full-resolution frames from DALI.
-
-        Returns:
-            new ``UnlabeledBatchDict`` with cropped+resized frames and the actual bbox
-            coordinates in the ``bbox`` field (shape ``(seq_len, 4)``, order x y h w).
-        """
-        assert self.bbox_df is not None  # guarded by caller; assertion narrows type
-        frames = batch_dict['frames']  # (seq_len, 3, H, W)
-        seq_len = frames.shape[0]
-        # context-model DALI reader uses step=seq_len-4 so consecutive windows overlap by 4
-        # frames; _frame_idx must advance by the same amount to stay in sync with the reader
-        step = seq_len - 4 if self.do_context else seq_len
-
-        # slice bbox rows for this batch; pad last partial batch with the final row
-        rows = self.bbox_df.iloc[self._frame_idx:self._frame_idx + seq_len]
-        if len(rows) < seq_len:
-            last_row = self.bbox_df.iloc[[-1]]
-            rows = pd.concat(
-                [rows] + [last_row] * (seq_len - len(rows)),
-                ignore_index=True,
-            )
-
-        assert self.resize_dims is not None  # required when bbox_df set, see docstring
-        cropped_frames, bboxes = crop_and_resize_frames(frames, rows, self.resize_dims)
-        self._frame_idx += step
-
-        return UnlabeledBatchDict(
-            frames=cropped_frames,
-            transforms=batch_dict['transforms'],
-            bbox=bboxes,
-            is_multiview=False,
-        )
+        return build_batch_dict(frames_list, bbox_list, transforms, is_multiview)
 
     def __next__(self) -> UnlabeledBatchDict | MultiviewUnlabeledBatchDict:
         """Fetch the next batch, applying per-frame bbox crop+resize when configured."""
         batch = super().__next__()
-        batch_dict = self._dali_output_to_tensors(batch=batch)
-        if self.bbox_df is not None and not batch_dict['is_multiview']:
-            return self._apply_bbox_crop(batch_dict)  # type: ignore[arg-type]
-        return batch_dict
+        return self._dali_output_to_tensors(batch=batch)
 
 
 class PrepareDALI:
@@ -405,7 +373,7 @@ class PrepareDALI:
         dali_config: dict | DictConfig | ListConfig | None = None,
         imgaug: str | None = "default",
         num_threads: int = 1,
-        bbox_df: pd.DataFrame | None = None,
+        bbox_df: pd.DataFrame | list[pd.DataFrame] | None = None,
     ) -> None:
         """Initialize DALI pipelines and dataloaders for training or prediction.
 
@@ -422,15 +390,17 @@ class PrepareDALI:
                 ``"dlc"``); pass ``"default"`` for resize-only or ``None`` to disable.
             num_threads: number of CPU threads used by DALI pipelines.
             bbox_df: optional DataFrame with columns ``["x", "y", "h", "w"]``, one row per
-                frame. When provided, the predict pipeline loads full-resolution frames
-                (DALI resize is disabled) and ``LitDaliWrapper`` crops each frame to its
-                bbox before resizing to ``resize_dims``.
+                frame; for multiview, a list with one such DataFrame per view, in the same
+                order as ``filenames``. When provided, the predict pipeline loads
+                full-resolution frames (DALI resize is disabled) and ``LitDaliWrapper``
+                crops each frame to its bbox before resizing to ``resize_dims``.
 
         Raises:
             FileNotFoundError: if any path in ``filenames`` does not exist or is not a file.
             ValueError: for multiview inputs, if views have differing numbers of sessions or if a
                 session has differing frame counts across views (which would desynchronize the
-                per-view readers).
+                per-view readers); if the number of ``bbox_df`` DataFrames does not match the
+                number of views.
         """
         # determine if we have a multiview pipeline
         if isinstance(filenames, list) and isinstance(filenames[0], list):
@@ -448,6 +418,14 @@ class PrepareDALI:
             for vid in view_list:
                 if not os.path.exists(vid) or not os.path.isfile(vid):
                     raise FileNotFoundError(f"{vid} is not a video file!")
+
+        if bbox_df is not None:
+            num_bbox_dfs = 1 if isinstance(bbox_df, pd.DataFrame) else len(bbox_df)
+            if num_bbox_dfs != len(filenames_2d):
+                raise ValueError(
+                    f'got {num_bbox_dfs} bbox DataFrame(s) for {len(filenames_2d)} view(s); '
+                    'multiview requires a list with one bbox DataFrame per view'
+                )
 
         # frame counts of view 0, per session; reused below for `self.frame_count`
         view0_frame_counts = list(map(count_frames, filenames_2d[0]))
@@ -549,7 +527,7 @@ class PrepareDALI:
 
         When ``bbox_df`` is set, predict entries have ``resize_dims`` forced to ``None``
         so DALI delivers full-resolution frames.  The per-frame resize happens in PyTorch
-        inside ``LitDaliWrapper._apply_bbox_crop`` after cropping, using the original
+        inside ``LitDaliWrapper._dali_output_to_tensors`` after cropping, using the original
         ``resize_dims`` stored on the wrapper.
         """
         assert self.dali_config is not None

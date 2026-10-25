@@ -24,6 +24,15 @@ dimensions; handle both single-view and multi-view):
 
 - :func:`frame_to_model_batch` — frame → model  (called before loss computation)
 - :func:`model_to_frame_batch` — model → frame  (called after inference)
+
+Video-reader helpers (used by all three readers in ``lightning_pose.data.video`` to crop
+per-frame bboxes out of full-resolution frames before inference):
+
+- :func:`as_bbox_df_list`     — normalize a reader's ``bbox_df`` to one DataFrame per view
+- :func:`slice_bbox_rows`     — select (and pad) the bbox rows for one batch
+- :func:`crop_and_resize_frames` — crop + resize one view's frames to its bboxes
+- :func:`crop_views`          — apply the above to every view of a batch independently
+- :func:`full_frame_bbox`     — default bbox covering the whole decoded frame
 """
 
 import pandas as pd
@@ -288,6 +297,24 @@ def model_to_frame_batch(
     return model_keypoints_.reshape((-1, num_targets))
 
 
+def slice_bbox_rows(bbox_df: pd.DataFrame, idx_start: int, seq_len: int) -> pd.DataFrame:
+    """Select the bbox rows for one batch, padding a short final batch with the last row.
+
+    Args:
+        bbox_df: DataFrame with columns ``["x", "y", "h", "w"]``, one row per video frame.
+        idx_start: index of the first frame in the batch.
+        seq_len: number of frames in the batch.
+
+    Returns:
+        DataFrame with exactly ``seq_len`` rows, ready for :func:`crop_and_resize_frames`.
+    """
+    rows = bbox_df.iloc[idx_start:idx_start + seq_len]
+    if len(rows) < seq_len:
+        last_row = bbox_df.iloc[[-1]]
+        rows = pd.concat([rows] + [last_row] * (seq_len - len(rows)), ignore_index=True)
+    return rows
+
+
 def crop_and_resize_frames(
     frames: Float[torch.Tensor, "seq_len rgb h w"],
     bbox_rows: pd.DataFrame,
@@ -299,9 +326,10 @@ def crop_and_resize_frames(
     """Crop each frame to its per-frame bounding box and resize to a common size.
 
     Shared by all video-decoding backends: each hands this function a full-resolution ``frames``
-    tensor plus one already-sliced-and-padded bbox row per frame (cursor/step bookkeeping to select
-    those rows lives in each backend's own wrapper, not here —
-    see ``LitDaliWrapper._apply_bbox_crop``).
+    tensor plus one already-sliced-and-padded bbox row per frame. Row selection is done by
+    :func:`slice_bbox_rows` (via :func:`crop_views`); the cursor/step bookkeeping that decides
+    where a batch starts lives in each reader's wrapper, not here (see
+    ``LitDaliWrapper._dali_output_to_tensors`` and ``LitPredictWrapperBase.__next__``).
 
     Args:
         frames: full-resolution frames, shape (seq_len, 3, H, W).
@@ -341,3 +369,83 @@ def crop_and_resize_frames(
             )
         )
     return torch.stack(cropped_frames), torch.stack(bboxes)
+
+
+def as_bbox_df_list(
+    bbox_df: pd.DataFrame | list[pd.DataFrame] | None,
+    num_views: int,
+) -> list[pd.DataFrame] | None:
+    """Normalize a video reader's ``bbox_df`` to a list with one DataFrame per view.
+
+    Args:
+        bbox_df: a single DataFrame (single-view), a list with one DataFrame per view
+            (multiview), or None when no bbox cropping is configured.
+        num_views: number of views in the batch being built (1 for single-view).
+
+    Returns:
+        list of per-view bbox DataFrames, or None if ``bbox_df`` is None.
+
+    Raises:
+        ValueError: if the number of DataFrames does not match ``num_views``.
+    """
+    if bbox_df is None:
+        return None
+    bbox_dfs = [bbox_df] if isinstance(bbox_df, pd.DataFrame) else list(bbox_df)
+    if len(bbox_dfs) != num_views:
+        raise ValueError(f'expected {num_views} bbox DataFrame(s), got {len(bbox_dfs)}')
+    return bbox_dfs
+
+
+def full_frame_bbox(
+    height: int,
+    width: int,
+    seq_len: int,
+    device: torch.device | str,
+) -> Float[torch.Tensor, "seq_len xyhw"]:
+    """Bbox covering an entire decoded frame (x=0, y=0, h=height, w=width), per frame.
+
+    Args:
+        height: height of the decoded (pre-resize) frame in pixels.
+        width: width of the decoded (pre-resize) frame in pixels.
+        seq_len: number of frames in the batch.
+        device: device to create the tensor on.
+
+    Returns:
+        float32 tensor of shape (seq_len, 4) in [x, y, h, w] order.
+    """
+    return torch.tensor([0, 0, height, width], dtype=torch.float32, device=device).repeat(
+        seq_len, 1,
+    )
+
+
+def crop_views(
+    frames_list: list[torch.Tensor],
+    bbox_dfs: list[pd.DataFrame],
+    idx_start: int,
+    resize_dims: list[int],
+) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
+    """Crop and resize each view of a batch to its own per-frame bboxes.
+
+    Views are processed independently, so they may have different native resolutions; after
+    the crop+resize every view has shape ``resize_dims`` and the results can be stacked.
+
+    Args:
+        frames_list: full-resolution frames, one tensor of shape (seq_len, 3, H, W) per view.
+        bbox_dfs: one bbox DataFrame per view (columns ``["x", "y", "h", "w"]``, one row per
+            video frame), in the same order as ``frames_list``.
+        idx_start: video frame index of the first frame in this batch.
+        resize_dims: target ``[height, width]`` to resize each crop to.
+
+    Returns:
+        Tuple of (cropped+resized frames per view, actual bbox coordinates used per view); each
+        frames tensor has shape (seq_len, 3, *resize_dims) and each bbox tensor (seq_len, 4).
+    """
+    seq_len = frames_list[0].shape[0]
+    cropped_list = []
+    bbox_list = []
+    for frames, bbox_df in zip(frames_list, bbox_dfs, strict=True):
+        rows = slice_bbox_rows(bbox_df, idx_start, seq_len)
+        cropped, bboxes = crop_and_resize_frames(frames, rows, resize_dims)
+        cropped_list.append(cropped)
+        bbox_list.append(bboxes)
+    return cropped_list, bbox_list

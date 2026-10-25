@@ -5,15 +5,19 @@ import pytest
 import torch
 
 from lightning_pose.data.bboxes import (
+    as_bbox_df_list,
     crop_and_resize_frames,
+    crop_views,
     frame_to_model,
     frame_to_model_batch,
     frame_to_norm,
+    full_frame_bbox,
     model_to_frame,
     model_to_frame_batch,
     model_to_norm,
     norm_to_frame,
     norm_to_model,
+    slice_bbox_rows,
 )
 
 
@@ -692,3 +696,78 @@ class TestCropAndResizeFrames:
         })
         cropped, _ = crop_and_resize_frames(frames, bbox_rows, [24, 24])
         assert cropped.shape == (2, 3, 24, 24)
+
+
+class TestSliceBboxRows:
+    """Test the function slice_bbox_rows."""
+
+    @pytest.fixture
+    def bbox_df(self):
+        return pd.DataFrame({'x': range(5), 'y': range(5), 'h': [10] * 5, 'w': [10] * 5})
+
+    def test_slice_bbox_rows_full_batch(self, bbox_df):
+        rows = slice_bbox_rows(bbox_df, idx_start=1, seq_len=3)
+        assert list(rows['x']) == [1, 2, 3]
+
+    def test_slice_bbox_rows_pads_with_last_row(self, bbox_df):
+        rows = slice_bbox_rows(bbox_df, idx_start=3, seq_len=4)
+        assert len(rows) == 4
+        assert list(rows['x']) == [3, 4, 4, 4]
+
+    def test_slice_bbox_rows_past_end_repeats_last_row(self, bbox_df):
+        rows = slice_bbox_rows(bbox_df, idx_start=10, seq_len=2)
+        assert list(rows['x']) == [4, 4]
+
+
+class TestAsBboxDfList:
+    """Test the function as_bbox_df_list."""
+
+    @pytest.fixture
+    def bbox_df(self):
+        return pd.DataFrame({'x': [0], 'y': [0], 'h': [10], 'w': [10]})
+
+    def test_as_bbox_df_list_none(self):
+        assert as_bbox_df_list(None, num_views=2) is None
+
+    def test_as_bbox_df_list_wraps_single_dataframe(self, bbox_df):
+        result = as_bbox_df_list(bbox_df, num_views=1)
+        assert result is not None
+        assert len(result) == 1
+        assert result[0] is bbox_df
+
+    def test_as_bbox_df_list_passes_list_through(self, bbox_df):
+        result = as_bbox_df_list([bbox_df, bbox_df], num_views=2)
+        assert result is not None
+        assert len(result) == 2
+
+    def test_as_bbox_df_list_count_mismatch_raises(self, bbox_df):
+        with pytest.raises(ValueError, match='expected 2 bbox DataFrame'):
+            as_bbox_df_list(bbox_df, num_views=2)
+
+
+class TestFullFrameBbox:
+    """Test the function full_frame_bbox."""
+
+    def test_full_frame_bbox_values_and_shape(self):
+        bbox = full_frame_bbox(100, 120, seq_len=3, device='cpu')
+        assert bbox.shape == (3, 4)
+        assert bbox.dtype == torch.float32
+        assert torch.equal(bbox[0], torch.tensor([0.0, 0.0, 100.0, 120.0]))
+
+
+class TestCropViews:
+    """Test the function crop_views."""
+
+    def test_crop_views_differing_view_sizes(self):
+        df_a = pd.DataFrame({'x': [10] * 4, 'y': [20] * 4, 'h': [50] * 4, 'w': [60] * 4})
+        df_b = pd.DataFrame({'x': [5] * 4, 'y': [6] * 4, 'h': [30] * 4, 'w': [40] * 4})
+        frames_list = [torch.rand(3, 3, 100, 120), torch.rand(3, 3, 200, 300)]
+        cropped, bboxes = crop_views(frames_list, [df_a, df_b], idx_start=0, resize_dims=[64, 64])
+        assert [c.shape for c in cropped] == [(3, 3, 64, 64)] * 2
+        assert torch.equal(bboxes[0][0], torch.tensor([10.0, 20.0, 50.0, 60.0]))
+        assert torch.equal(bboxes[1][0], torch.tensor([5.0, 6.0, 30.0, 40.0]))
+
+    def test_crop_views_uses_idx_start(self):
+        df = pd.DataFrame({'x': range(6), 'y': [0] * 6, 'h': [10] * 6, 'w': [10] * 6})
+        _, bboxes = crop_views([torch.rand(2, 3, 50, 50)], [df], idx_start=3, resize_dims=[8, 8])
+        assert bboxes[0][:, 0].tolist() == [3.0, 4.0]

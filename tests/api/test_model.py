@@ -159,6 +159,48 @@ class TestPredictOnVideoFile:
         assert (model.labeled_videos_dir() / "test_vid_top_labeled.mp4").is_file()
         assert (model.labeled_videos_dir() / "test_vid_bot_labeled.mp4").is_file()
 
+    def test_predict_on_video_file_multiview_bbox_files_in_view_order(self, tmp_path):
+        """bbox files stay paired with their videos when the videos are given out of order."""
+        cfg = OmegaConf.create({'data': {'view_names': ['top', 'bot']}})
+        config = MagicMock()
+        config.is_multi_view.return_value = True
+        config.cfg = cfg
+        model = Model(tmp_path, config)
+        videos = [tmp_path / 'a_bot.mp4', tmp_path / 'a_top.mp4']
+        bbox_files = [tmp_path / 'a_bot_bbox.csv', tmp_path / 'a_top_bbox.csv']
+
+        with (
+            patch.object(model, '_load'),
+            patch(
+                'lightning_pose.api.model.predict_video',
+                return_value=[pd.DataFrame(), pd.DataFrame()],
+            ) as mock_pv,
+            patch('lightning_pose.api.model._build_datamodule_pred'),
+        ):
+            model.predict_on_video_file_multiview(
+                videos,
+                output_dir=tmp_path / 'out',
+                compute_metrics=False,
+                bbox_file_per_view=bbox_files,
+            )
+
+        kwargs = mock_pv.call_args.kwargs
+        assert kwargs['video_file'] == [str(videos[1]), str(videos[0])]
+        assert kwargs['bbox_file'] == [str(bbox_files[1]), str(bbox_files[0])]
+
+    def test_predict_on_video_file_multiview_wrong_bbox_count(self, tmp_path):
+        """Raises ValueError when the number of bbox files doesn't match the view count."""
+        config = MagicMock()
+        config.is_multi_view.return_value = True
+        config.cfg = OmegaConf.create({'data': {'view_names': ['top', 'bot']}})
+        model = Model(tmp_path, config)
+        with patch.object(model, '_load'):
+            with pytest.raises(ValueError, match='expected.*bbox files'):
+                model.predict_on_video_file_multiview(
+                    [tmp_path / 'a_top.mp4', tmp_path / 'a_bot.mp4'],
+                    bbox_file_per_view=[tmp_path / 'one.csv'],
+                )
+
 
 class TestPredictFrame:
     """Test the predict_frame method."""

@@ -9,7 +9,9 @@ Adding a new video reader
 -------------------------
 
 Every backend module (``dali.py``, ``pynvvc.py``, ``opencv.py``, ...) implements the
-same contract. To add one:
+same contract. A prediction-only backend can subclass ``PreparePredictBase`` and
+``LitPredictWrapperBase`` from ``utils.py`` and implement only decoding (see ``opencv.py``).
+To add one:
 
 1. **Two-phase prepare class**: ``Prepare<Name>.__init__(model_type, filenames,
    resize_dims, dali_config, bbox_df=None, ...)`` validates inputs and precomputes
@@ -83,7 +85,7 @@ def build_video_reader(
     dali_config: dict | DictConfig | ListConfig,
     filenames: list[str] | list[list[str]],
     resize_dims: list[int],
-    bbox_df: pd.DataFrame | None,
+    bbox_df: pd.DataFrame | list[pd.DataFrame] | None,
 ) -> LitDaliWrapper | LitPynvvcWrapper | LitOpenCVWrapper:
     """Resolve which video-reading backend to use and build its dataloader.
 
@@ -109,7 +111,8 @@ def build_video_reader(
             multiview, one single-element list per view (see each backend's
             ``Prepare<Name>`` class for the exact shape).
         resize_dims: ``[height, width]`` the model expects as input.
-        bbox_df: optional per-frame bbox DataFrame; single-view only.
+        bbox_df: optional per-frame bbox DataFrame; for multiview, a list with one
+            DataFrame per view (same order as ``filenames``).
 
     Returns:
         A ready-to-iterate loader (``LitDaliWrapper``, ``LitPynvvcWrapper``, or

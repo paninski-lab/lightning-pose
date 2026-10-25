@@ -94,7 +94,9 @@ class VisionEncoderDino(nn.Module):
             self._resize_patch_embedding_weights()
             self.vision_encoder.config.patch_size = patch_size
             self.vision_encoder.embeddings.patch_size = patch_size
-            self.vision_encoder.embeddings.patch_embeddings.patch_size = patch_size
+            # patch_embeddings.patch_size is an (h, w) tuple in HF (unpacked in position-embedding
+            # interpolation by recent transformers versions), unlike embeddings.patch_size
+            self.vision_encoder.embeddings.patch_embeddings.patch_size = (patch_size, patch_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the vision encoder.

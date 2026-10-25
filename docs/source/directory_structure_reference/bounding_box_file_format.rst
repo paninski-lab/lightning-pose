@@ -33,7 +33,8 @@ column is ignored.
    misalign every row after the first gap — ``litpose crop`` will raise a
    ``ValueError`` if the row count does not match the frame count.
 
-File naming: ``<video_stem>_bbox.csv`` in the bbox directory.
+File naming: ``<video_stem>_bbox.csv`` in the bbox directory. For multiview models, each
+view's video has its own file (``<view_video_stem>_bbox.csv``).
 
 .. code-block::
 
