@@ -339,7 +339,7 @@ class TestLitPynvvcWrapper:
         sequence_length: int = 4,
         do_context: bool = False,
         multiview: bool = False,
-        bbox_df: pd.DataFrame | None = None,
+        bbox_df: pd.DataFrame | list[pd.DataFrame] | None = None,
         frame_idx: int = 0,
         num_views: int = 1,
         frame_h: int = 100,
