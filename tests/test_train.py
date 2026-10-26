@@ -10,7 +10,12 @@ import torch
 from omegaconf import OmegaConf, open_dict
 
 from lightning_pose.data import get_data_module
-from lightning_pose.train import _evaluate_on_training_dataset, calculate_steps_per_epoch, train
+from lightning_pose.train import (
+    _evaluate_on_training_dataset,
+    _keep_only_best_checkpoint,
+    calculate_steps_per_epoch,
+    train,
+)
 
 
 # TODO: Replace with contextlib.chdir in python 3.11.
@@ -406,3 +411,43 @@ class TestCalculateStepsPerEpoch:
         )
         n_batches = calculate_steps_per_epoch(base_data_module_combined)
         assert n_batches == 25  # ceil (49 / 2)
+
+
+class TestKeepOnlyBestCheckpoint:
+    """Test the function _keep_only_best_checkpoint."""
+
+    @staticmethod
+    def _trainer(best_path: Path | str) -> MagicMock:
+        from lightning.pytorch.callbacks import ModelCheckpoint
+
+        callback = ModelCheckpoint(monitor='val_supervised_loss')
+        callback.best_model_path = str(best_path)
+        trainer = MagicMock()
+        trainer.callbacks = [callback]
+        return trainer
+
+    def test_keep_only_best_checkpoint_removes_strays(self, tmp_path):
+        best = tmp_path / 'epoch=9-step=100-best.ckpt'
+        stray = tmp_path / 'epoch=4-step=50-best.ckpt'
+        best.write_text('b')
+        stray.write_text('s')
+        _keep_only_best_checkpoint(self._trainer(best))
+        assert sorted(f.name for f in tmp_path.iterdir()) == [best.name]
+
+    def test_keep_only_best_checkpoint_renames_versioned_best(self, tmp_path):
+        # a resumed run re-saved the same step: Lightning wrote -best-v1, the -best twin is stale
+        best = tmp_path / 'epoch=9-step=100-best-v1.ckpt'
+        twin = tmp_path / 'epoch=9-step=100-best.ckpt'
+        best.write_text('new')
+        twin.write_text('old')
+        trainer = self._trainer(best)
+        _keep_only_best_checkpoint(trainer)
+        assert sorted(f.name for f in tmp_path.iterdir()) == ['epoch=9-step=100-best.ckpt']
+        assert twin.read_text() == 'new'
+        assert trainer.callbacks[0].best_model_path == str(twin.resolve())
+
+    def test_keep_only_best_checkpoint_no_best(self, tmp_path):
+        stray = tmp_path / 'epoch=4-step=50-best.ckpt'
+        stray.write_text('s')
+        _keep_only_best_checkpoint(self._trainer(''))
+        assert stray.exists()

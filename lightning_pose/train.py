@@ -85,10 +85,12 @@ def calculate_steps_per_epoch(data_module: BaseDataModule) -> int:
 
 
 def _keep_only_best_checkpoint(trainer: pl.Trainer) -> None:
-    """Delete stray ``*-best.ckpt`` files a resumed run can leave next to the real best one.
+    """Delete stray ``*-best*.ckpt`` files a resumed run can leave next to the real best one.
 
     A run interrupted between saving a new best checkpoint and its next rolling resume checkpoint
-    resumes with the earlier best-model state, so the newer best file is no longer tracked.
+    resumes with the earlier best-model state, so the newer best file is no longer tracked. If the
+    resumed run saves the same step again, Lightning names it ``*-best-v1.ckpt``; once the strays
+    are gone the kept file gets back its plain ``*-best.ckpt`` name, which loaders look for.
 
     Args:
         trainer: the trainer after ``fit``.
@@ -100,10 +102,15 @@ def _keep_only_best_checkpoint(trainer: pl.Trainer) -> None:
     if best is None or not best.best_model_path or not Path(best.best_model_path).exists():
         return
     keep = Path(best.best_model_path).resolve()
-    for ckpt in keep.parent.glob('*-best.ckpt'):
+    for ckpt in keep.parent.glob('*-best*.ckpt'):
         if ckpt.resolve() != keep:
             logger.info(f'removing stray best checkpoint {ckpt.name} (best: {keep.name})')
             ckpt.unlink()
+    plain = keep.with_name(re.sub(r'-best-v\d+\.ckpt$', '-best.ckpt', keep.name))
+    if plain != keep and not plain.exists():
+        logger.info(f'renaming best checkpoint {keep.name} -> {plain.name}')
+        keep.rename(plain)
+        best.best_model_path = str(plain)
 
 
 def train(
