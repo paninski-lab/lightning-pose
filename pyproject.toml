@@ -35,7 +35,7 @@ dependencies = [
     "h5py",
     "hydra-core",
     "imaug",
-    "kornia",
+    "kornia (<0.9)",  # 0.9 divides by spatial_softmax2d temperature instead of multiplying
     "lightning (~=2.5.0)",
     "pytorch-lightning (~=2.5.0)",
     "matplotlib",
