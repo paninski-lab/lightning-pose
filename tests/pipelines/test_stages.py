@@ -75,24 +75,75 @@ class TestKeypointBboxStageCall:
         assert out[1].tolist() != out[0].tolist()
         assert stage.num_fallback == 1
 
-    def test_low_confidence_triggers_fallback(self):
-        kp = _kp([[0, 0], [10, 10]], [[50, 50], [60, 60]])
-        conf = torch.tensor([[0.9, 0.9], [0.9, 0.1]])
-        stage = KeypointBboxStage(['a', 'b'], crop_ratio=1.0, confidence_thresh=0.5)
-        out = stage(kp, conf, 100, 100)
-        assert out[1].tolist() == out[0].tolist()
-
-    def test_confidence_ignored_without_thresh(self):
+    def test_confidence_ignored_by_default(self):
+        # like `create_bbox`: even zero-confidence keypoints define the box
         kp = _kp([[0, 0], [10, 10]])
-        stage = KeypointBboxStage(['a', 'b'], crop_ratio=1.0, confidence_thresh=None)
-        stage(kp, torch.zeros(1, 2), 100, 100)
+        stage = KeypointBboxStage(['a', 'b'], crop_ratio=1.0)
+        out = stage(kp, torch.zeros(1, 2), 100, 100)
+        assert stage.num_fallback == 0
+        assert out.tolist() == [[0.0, 0.0, 10.0, 10.0]]
+
+    def test_low_confidence_anchor_is_dropped_from_centre_and_size(self):
+        # 'c' (far away, low confidence) must not affect the box built from 'a' and 'b'
+        kp = _kp([[0, 0], [10, 10], [1000, 1000]])
+        conf = torch.tensor([[0.9, 0.9, 0.1]])
+        stage = KeypointBboxStage(NAMES, crop_ratio=1.0, confidence_thresh=0.5)
+        out = stage(kp, conf, 100, 100)
+        assert out.tolist() == [[0.0, 0.0, 10.0, 10.0]]
         assert stage.num_fallback == 0
 
-    def test_default_confidence_thresh_is_half(self):
-        kp = _kp([[0, 0], [10, 10]], [[50, 50], [60, 60]])
-        stage = KeypointBboxStage(['a', 'b'], crop_ratio=1.0)
-        out = stage(kp, torch.tensor([[0.9, 0.9], [0.9, 0.49]]), 100, 100)
+    def test_without_threshold_low_confidence_anchor_still_counts(self):
+        kp = _kp([[0, 0], [10, 10], [1000, 1000]])
+        conf = torch.tensor([[0.9, 0.9, 0.1]])
+        out = KeypointBboxStage(NAMES, crop_ratio=1.0)(kp, conf, 100, 100)
+        assert out[0, 2].item() == 1000.0
+
+    def test_fewer_than_two_confident_anchors_reuses_previous_bbox(self):
+        kp = _kp([[0, 0], [10, 10], [20, 20]], [[50, 50], [60, 60], [70, 70]])
+        conf = torch.tensor([[0.9, 0.9, 0.9], [0.9, 0.1, 0.1]])
+        stage = KeypointBboxStage(NAMES, crop_ratio=1.0, confidence_thresh=0.5)
+        out = stage(kp, conf, 100, 100)
         assert out[1].tolist() == out[0].tolist()
+        assert stage.num_fallback == 1
+
+    def test_exactly_two_confident_anchors_is_enough(self):
+        kp = _kp([[0, 0], [10, 10], [20, 20]], [[50, 50], [60, 60], [70, 70]])
+        conf = torch.tensor([[0.9, 0.9, 0.9], [0.9, 0.9, 0.1]])
+        stage = KeypointBboxStage(NAMES, crop_ratio=1.0, confidence_thresh=0.5)
+        out = stage(kp, conf, 100, 100)
+        assert out[1].tolist() == [50.0, 50.0, 10.0, 10.0]
+        assert stage.num_fallback == 0
+
+    def test_threshold_boundary_is_inclusive(self):
+        kp = _kp([[0, 0], [10, 10]], [[50, 50], [60, 60]])
+        conf = torch.tensor([[0.9, 0.9], [0.9, 0.5]])
+        stage = KeypointBboxStage(['a', 'b'], crop_ratio=1.0, confidence_thresh=0.5)
+        out = stage(kp, conf, 100, 100)
+        assert out[1].tolist() == [50.0, 50.0, 10.0, 10.0]
+        assert stage.num_fallback == 0
+
+    def test_non_finite_anchor_is_dropped_not_fatal(self):
+        kp = _kp([[0, 0], [10, 10], [np.nan, np.nan]])
+        stage = KeypointBboxStage(NAMES, crop_ratio=1.0)
+        out = stage(kp, torch.ones(1, 3), 100, 100)
+        assert out.tolist() == [[0.0, 0.0, 10.0, 10.0]]
+        assert stage.num_fallback == 0
+
+    def test_single_anchor_config_does_not_always_fall_back(self):
+        # the 2-anchor minimum is capped by the number of anchors configured
+        kp = _kp([[100, 80], [0, 0]])
+        stage = KeypointBboxStage(['a', 'b'], ['a'], crop_height=20, crop_width=20)
+        out = stage(kp, torch.ones(1, 2), 200, 200)
+        assert out.tolist() == [[90.0, 70.0, 20.0, 20.0]]
+        assert stage.num_fallback == 0
+
+    def test_fixed_size_uses_centroid_of_confident_anchors(self):
+        kp = _kp([[0, 0], [20, 20], [1000, 1000]])
+        conf = torch.tensor([[0.9, 0.9, 0.1]])
+        stage = KeypointBboxStage(
+            NAMES, crop_height=10, crop_width=10, confidence_thresh=0.5,
+        )
+        assert stage(kp, conf, 100, 100).tolist() == [[5.0, 5.0, 10.0, 10.0]]
 
     def test_reset_clears_state(self):
         stage = KeypointBboxStage(['a', 'b'], crop_ratio=1.0)

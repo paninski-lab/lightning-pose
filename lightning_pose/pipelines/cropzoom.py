@@ -86,7 +86,7 @@ class CropZoomPipeline(Pipeline):
         crop_ratio: float | None = None,
         crop_height: int | None = None,
         crop_width: int | None = None,
-        confidence_thresh: float | None = 0.5,
+        confidence_thresh: float = 0.0,
         precision: _Precision = 'fp32',
     ) -> CropZoomPipeline:
         """Build a pipeline from two model directories.
@@ -98,8 +98,9 @@ class CropZoomPipeline(Pipeline):
             crop_ratio: scale factor applied to the anchor-keypoint span.
             crop_height: fixed box height; given together with ``crop_width``.
             crop_width: fixed box width; given together with ``crop_height``.
-            confidence_thresh: detector confidence below which a frame reuses the previous box;
-                None disables the check. Defaults to 0.5.
+            confidence_thresh: anchor keypoints with detector confidence below this are dropped
+                from the box computation; frames left with fewer than 2 anchors reuse the
+                previous box. The default of 0 keeps every anchor, as ``create_bbox`` does.
             precision: inference precision applied to both models.
 
         Returns:

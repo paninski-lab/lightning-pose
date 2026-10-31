@@ -803,3 +803,30 @@ class TestKeypointsToBboxes:
             keypoints_to_bboxes(kp)
         with pytest.raises(ValueError, match='not both'):
             keypoints_to_bboxes(kp, crop_ratio=1.0, crop_height=4, crop_width=4)
+
+    def test_keypoints_to_bboxes_mask_ignores_masked_keypoints(self):
+        kp = torch.tensor([[[0.0, 0.0], [10.0, 4.0], [1000.0, 1000.0]]])
+        mask = torch.tensor([[True, True, False]])
+        out = keypoints_to_bboxes(kp, crop_ratio=1.0, mask=mask)
+        assert out.tolist() == keypoints_to_bboxes(kp[:, :2], crop_ratio=1.0).tolist()
+
+    def test_keypoints_to_bboxes_mask_ignores_non_finite_masked_keypoints(self):
+        kp = torch.tensor([[[0.0, 0.0], [10.0, 4.0], [float('nan'), float('inf')]]])
+        mask = torch.tensor([[True, True, False]])
+        out = keypoints_to_bboxes(kp, crop_ratio=1.0, mask=mask)
+        assert out.tolist() == [[0, -3, 10, 10]]
+
+    def test_keypoints_to_bboxes_all_true_mask_matches_no_mask(self):
+        kp = torch.tensor([[[0.0, 0.0], [10.0, 4.0]], [[20.0, 20.0], [40.0, 30.0]]])
+        mask = torch.ones(2, 2, dtype=torch.bool)
+        assert (
+            keypoints_to_bboxes(kp, crop_ratio=2.0, mask=mask).tolist()
+            == keypoints_to_bboxes(kp, crop_ratio=2.0).tolist()
+        )
+
+    def test_keypoints_to_bboxes_mask_is_per_frame(self):
+        kp = torch.tensor([[[0.0, 0.0], [10.0, 10.0], [100.0, 100.0]]]).repeat(2, 1, 1)
+        mask = torch.tensor([[True, True, False], [True, True, True]])
+        out = keypoints_to_bboxes(kp, crop_ratio=1.0, mask=mask)
+        assert out[0, 2:].tolist() == [10, 10]
+        assert out[1, 2:].tolist() == [100, 100]

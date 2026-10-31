@@ -281,10 +281,16 @@ Prediction on videos
 
       **Cons**
 
-      - Bounding boxes are **not smoothed**. A frame whose detector confidence for any anchor
-        keypoint is below ``--detector_confidence_thresh`` (default 0.5) reuses the previous
-        frame's box (the full frame, if there is no previous box). If you want smoothing,
-        use the multi-command workflows above.
+      - Bounding boxes are **not smoothed**. If you want smoothing, use the multi-command
+        workflows above.
+      - Detector confidence is **ignored by default**: every anchor keypoint's predicted
+        position is used, however low its confidence. This reproduces ``litpose create_bbox``,
+        so the same detector gives the same boxes whether you run one command or several.
+        To treat low-confidence keypoints as missing (for example, a beak that is hidden when
+        the bird faces away from the camera), set ``--detector_confidence_thresh``. Anchor
+        keypoints below the threshold are then dropped, and the box is centred on and sized
+        from the remaining ones. A frame left with fewer than 2 usable anchor keypoints
+        reuses the previous frame's box (the full frame, if there is no previous box).
       - Full-resolution frames are held in memory while they are cropped, and both models
         are loaded at once. If inference runs out of GPU memory, lower ``--batch_size``
         (default 16 for this command).

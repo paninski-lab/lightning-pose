@@ -306,7 +306,7 @@ class TestHandleCropzoom:
         assert kwargs['pose_estimator_dir'] == tmp_path / 'pose'
         assert kwargs['crop_ratio'] == 2.0
         assert kwargs['anchor_keypoints'] == []
-        assert kwargs['confidence_thresh'] == 0.5
+        assert kwargs['confidence_thresh'] == 0.0  # confidence ignored, as in create_bbox
         assert kwargs['precision'] == 'bf16'
 
     def test_from_dirs_gets_user_values(self, tmp_path, mock_pipeline_cls):

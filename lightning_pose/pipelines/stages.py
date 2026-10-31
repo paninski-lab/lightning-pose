@@ -16,17 +16,24 @@ logger = logging.getLogger(__name__)
 # to ignore imports for sphinx-autoapidoc
 __all__: list[str] = []
 
+# a box needs at least this many usable anchor keypoints (a single point has no span); frames
+# with fewer fall back to the previous frame's box. Capped by the number of anchors configured.
+MIN_ANCHORS = 2
+
 
 class KeypointBboxStage:
     """Turns detector keypoints into per-frame bounding boxes, in original-frame coordinates.
 
-    The box is centred on the mean of the anchor keypoints and sized exactly as in the offline
-    ``litpose create_bbox`` flow (``crop_ratio`` or fixed ``crop_height``/``crop_width``).
+    The box is centred on the mean of the usable anchor keypoints and sized exactly as in the
+    offline ``litpose create_bbox`` flow (``crop_ratio`` or fixed ``crop_height``/``crop_width``).
 
-    Frames with no usable detection (any anchor keypoint non-finite or, if
-    ``confidence_thresh`` is set, below the threshold) reuse the previous frame's box; if no
-    box has been produced yet in the current video, they get the full-frame box. There is no
-    temporal smoothing. Call :meth:`reset` between videos.
+    An anchor keypoint is usable in a frame if its coordinates are finite and its confidence is
+    at least ``confidence_thresh``; unusable anchors are dropped, and the centre and size are
+    computed from the rest. With the default threshold of 0 every finite anchor is used,
+    however low its detector confidence, which reproduces ``create_bbox``. A frame with fewer
+    than ``MIN_ANCHORS`` usable anchors reuses the previous frame's box; if no box has been
+    produced yet in the current video, it gets the full-frame box. There is no temporal
+    smoothing. Call :meth:`reset` between videos.
 
     Attributes:
         num_fallback: number of frames since the last :meth:`reset` that used a fallback box.
@@ -39,7 +46,7 @@ class KeypointBboxStage:
         crop_ratio: float | None = None,
         crop_height: int | None = None,
         crop_width: int | None = None,
-        confidence_thresh: float | None = 0.5,
+        confidence_thresh: float = 0.0,
     ) -> None:
         """Initialize the stage.
 
@@ -50,9 +57,9 @@ class KeypointBboxStage:
             crop_ratio: scale factor applied to the anchor-keypoint span to get the box size.
             crop_height: fixed box height in pixels; must be given together with ``crop_width``.
             crop_width: fixed box width in pixels; must be given together with ``crop_height``.
-            confidence_thresh: if set, a frame is treated as missing when any anchor keypoint
-                has confidence below this value. If None, only non-finite coordinates count.
-                Defaults to 0.5.
+            confidence_thresh: anchor keypoints with detector confidence below this value are
+                dropped from the box computation. The default of 0 keeps every finite anchor,
+                as ``create_bbox`` does.
 
         Raises:
             ValueError: if an anchor keypoint is not in ``keypoint_names``, or the size
@@ -83,6 +90,7 @@ class KeypointBboxStage:
         self.crop_height = crop_height
         self.crop_width = crop_width
         self.confidence_thresh = confidence_thresh
+        self._min_anchors = min(MIN_ANCHORS, len(self.idx_anchor))
         self._bbox_prev: torch.Tensor | None = None
         self._num_fallback: torch.Tensor | None = None
 
@@ -120,18 +128,19 @@ class KeypointBboxStage:
         """
         device = keypoints.device
         kp = keypoints[:, self.idx_anchor].float()
-        is_valid = torch.isfinite(kp).all(dim=2).all(dim=1)  # (batch,)
-        if self.confidence_thresh is not None:
-            conf = confidence[:, self.idx_anchor].float()
-            is_valid = is_valid & (conf >= self.confidence_thresh).all(dim=1)
+        is_usable = torch.isfinite(kp).all(dim=2)  # (batch, anchors)
+        if self.confidence_thresh > 0:
+            is_usable = is_usable & (confidence[:, self.idx_anchor] >= self.confidence_thresh)
+        is_valid = is_usable.sum(dim=1) >= self._min_anchors  # (batch,)
 
-        # compute a box for every frame (invalid ones from zeros, overwritten below) so no
-        # boolean indexing, and hence no device sync, is needed
+        # compute a box for every frame so no boolean indexing, and hence no device sync, is
+        # needed; invalid frames use dummy zero keypoints (overwritten below)
         bboxes = keypoints_to_bboxes(
             torch.where(is_valid[:, None, None], kp, torch.zeros_like(kp)),
             crop_ratio=self.crop_ratio,
             crop_height=self.crop_height,
             crop_width=self.crop_width,
+            mask=is_usable | ~is_valid[:, None],
         ).float()
 
         # forward-fill invalid frames from the most recent valid frame in this batch, else

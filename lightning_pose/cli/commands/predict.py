@@ -214,8 +214,10 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
         type=float,
         default=None,
         help=(
-            "a frame whose detector confidence is below this value for any anchor keypoint "
-            "reuses the previous frame's box. 0 disables the check. Default: 0.5."
+            "anchor keypoints whose detector confidence is below this value are dropped when "
+            "computing the box; a frame left with fewer than 2 anchors reuses the previous "
+            "frame's box. Default: 0, which uses every anchor keypoint regardless of "
+            "confidence, as `litpose create_bbox` does."
         ),
     )
 
@@ -368,7 +370,7 @@ def _predict_cropzoom(args: argparse.Namespace) -> None:
         detector_dir=args.detector,
         pose_estimator_dir=args.model_dir,
         anchor_keypoints=anchor_keypoints,
-        confidence_thresh=0.5 if thresh is None else thresh,
+        confidence_thresh=0.0 if thresh is None else thresh,
         precision=args.precision,
         **sizing,
     )
