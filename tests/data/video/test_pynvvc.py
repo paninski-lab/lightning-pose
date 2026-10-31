@@ -203,6 +203,28 @@ class TestPreparePynvvc:
         )
         assert prep._decode_resize_dims == [256, 256]
 
+    def test_bbox_df_requires_resize_dims(self, cfg, video_list):
+        """bbox cropping needs a post-crop resize target; fail before any decoder exists."""
+        bbox_df = pd.DataFrame({'x': [0], 'y': [0], 'h': [10], 'w': [10]})
+        with pytest.raises(ValueError, match='resize_dims is required when bbox_df'):
+            PreparePynvvc(
+                model_type='base',
+                filenames=video_list,
+                resize_dims=None,
+                dali_config=cfg.dali,
+                bbox_df=bbox_df,
+            )
+
+    def test_no_resize_dims_without_bbox_df_decodes_full_resolution(self, cfg, video_list):
+        """resize_dims=None with no bbox_df is the full-resolution passthrough mode."""
+        prep = PreparePynvvc(
+            model_type='base',
+            filenames=video_list,
+            resize_dims=None,
+            dali_config=cfg.dali,
+        )
+        assert prep._decode_resize_dims is None
+
     def test_call_builds_wrapper_with_correct_params(self, cfg, video_list, monkeypatch):
         """Integration check: PreparePynvvc() actually produces a correctly-configured
         LitPynvvcWrapper, with the real PyNvVideoCodec import mocked out."""

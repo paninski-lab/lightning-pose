@@ -113,7 +113,7 @@ class PreparePredictBase(ABC):
         self,
         model_type: Literal['base', 'context'],
         filenames: list[str] | list[list[str]],
-        resize_dims: list[int],
+        resize_dims: list[int] | None,
         dali_config: dict | DictConfig | ListConfig,
         bbox_df: pd.DataFrame | list[pd.DataFrame] | None = None,
     ) -> None:
@@ -125,7 +125,7 @@ class PreparePredictBase(ABC):
                 multi-view, one single-element list per view.
             resize_dims: ``[height, width]`` to resize frames to before feeding the
                 model. Also used as the post-crop resize target when ``bbox_df`` is
-                provided.
+                provided. ``None`` (without ``bbox_df``) delivers full-resolution frames.
             dali_config: the ``cfg.dali`` dict; only the ``predict.sequence_length`` values
                 (base and context) are used.
             bbox_df: optional DataFrame with columns ``["x", "y", "h", "w"]``, one row per
@@ -140,9 +140,11 @@ class PreparePredictBase(ABC):
                 session batching is a DALI-train-only concept, not needed here).
             ValueError: for multiview inputs, if views have differing frame counts
                 (which would desynchronize the per-view sequential reads), if the number
-                of ``bbox_df`` DataFrames does not match the number of views, or for an
-                unknown ``model_type``.
+                of ``bbox_df`` DataFrames does not match the number of views, if
+                ``bbox_df`` is set without ``resize_dims``, or for an unknown ``model_type``.
         """
+        if bbox_df is not None and resize_dims is None:
+            raise ValueError('resize_dims is required when bbox_df is provided.')
         if isinstance(filenames, list) and isinstance(filenames[0], list):
             self.multiview = True
         else:
@@ -238,7 +240,7 @@ class LitPredictWrapperBase(ABC):
 
     def __init__(
         self,
-        resize_dims: list[int],
+        resize_dims: list[int] | None,
         decode_resize_dims: list[int] | None,
         sequence_length: int,
         step: int,

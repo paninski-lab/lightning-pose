@@ -91,7 +91,7 @@ class LitOpenCVWrapper(LitPredictWrapperBase):
     def __init__(
         self,
         filenames: list[list[str]],
-        resize_dims: list[int],
+        resize_dims: list[int] | None,
         decode_resize_dims: list[int] | None,
         sequence_length: int,
         step: int,

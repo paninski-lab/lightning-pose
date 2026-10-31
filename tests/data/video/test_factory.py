@@ -181,3 +181,17 @@ class TestBuildVideoReader:
         assert call_kwargs['filenames'] == ['/fake/video.mp4']
         assert call_kwargs['resize_dims'] == [128, 128]
         assert call_kwargs['bbox_df'] is bbox_df
+
+    def test_forwards_none_resize_dims_for_full_resolution_passthrough(self, dali_config):
+        mock_prep = MagicMock()
+        with (
+            patch('lightning_pose.data.video.opencv.is_opencv_available', return_value=True),
+            patch('lightning_pose.data.video.opencv.PrepareOpenCV', mock_prep),
+        ):
+            build_video_reader(
+                'opencv', '/fake/video.mp4', 'base', dali_config,
+                ['/fake/video.mp4'], None, None,
+            )
+        call_kwargs = mock_prep.call_args.kwargs
+        assert call_kwargs['resize_dims'] is None
+        assert call_kwargs['bbox_df'] is None

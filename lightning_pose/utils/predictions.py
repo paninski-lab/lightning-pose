@@ -31,6 +31,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# rgb color of the bbox rectangle drawn on labeled videos
+BBOX_COLOR = (0, 255, 0)
+
 # to ignore imports for sphinx-autoapidoc
 __all__ = [
     "predict_dataset",
@@ -640,6 +643,7 @@ def _create_labeled_video(
     fps: float | None = None,
     output_video_path: str = "movie.mp4",
     start_time: float = 0.0,
+    bbox_arr: np.ndarray | None = None,
 ) -> None:
     """Helper function for creating annotated videos.
 
@@ -653,6 +657,8 @@ def _create_labeled_video(
         fps: None to default to fps of original video
         output_video_path: video file name
         start_time: time (in seconds) of video start
+        bbox_arr: shape (T, 4) with columns x, y, h, w in pixels of the (full-resolution) frame;
+            if given, each frame's bbox is drawn as a green rectangle
     """
 
     if mask_array is None:
@@ -724,6 +730,17 @@ def _create_labeled_video(
                         color=colors[bpindex].tolist(),
                         thickness=-1,
                     )
+            if bbox_arr is not None and index < len(bbox_arr):
+                x_box, y_box, h_box, w_box = (
+                    int(np.round(upsample_factor * v)) for v in bbox_arr[index]
+                )
+                cv2.rectangle(
+                    frame,
+                    (x_box, y_box),
+                    (x_box + w_box, y_box + h_box),
+                    BBOX_COLOR,
+                    thickness=2,
+                )
         # ----------------
         # timestamps
         # ----------------
@@ -774,6 +791,7 @@ def generate_labeled_video(
     output_mp4_file: str,
     confidence_thresh_for_vid: float,
     colormap: str,
+    bbox_df: pd.DataFrame | None = None,
 ) -> None:
     """Overlay keypoint markers on a video and write the result to disk.
 
@@ -784,6 +802,9 @@ def generate_labeled_video(
         output_mp4_file: path where the labeled video will be saved.
         confidence_thresh_for_vid: keypoints with confidence below this value are not plotted.
         colormap: matplotlib colormap name used to colour each keypoint.
+        bbox_df: optional per-frame bboxes (columns x, y, h, w; one row per frame, in the
+            coordinates of ``video_file``); when given, the bbox is drawn on each frame in
+            bright green.
     """
     os.makedirs(os.path.dirname(output_mp4_file), exist_ok=True)
     # transform df to numpy array
@@ -800,4 +821,5 @@ def generate_labeled_video(
         mask_array=mask_array,
         output_video_path=output_mp4_file,
         colormap=colormap,
+        bbox_arr=bbox_df[['x', 'y', 'h', 'w']].to_numpy() if bbox_df is not None else None,
     )

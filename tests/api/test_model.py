@@ -139,6 +139,32 @@ class TestPredictOnVideoFile:
 
         assert mock_pv.call_args.kwargs['bbox_file'] == bbox_file
 
+    @pytest.mark.parametrize('with_bbox_file', [True, False])
+    def test_predict_on_video_file_labeled_video_bbox_overlay(self, tmp_path, with_bbox_file):
+        """The labeled video gets the bbox_file contents as bbox_df, or None without one."""
+        model = Model(tmp_path, MagicMock())
+        bbox_df = pd.DataFrame({'x': [1, 2], 'y': [3, 4], 'h': [5, 6], 'w': [7, 8]})
+        bbox_file = tmp_path / 'vid_bbox.csv'
+        bbox_df.to_csv(bbox_file)
+
+        with (
+            patch.object(model, '_load'),
+            patch('lightning_pose.api.model.predict_video', return_value=pd.DataFrame()),
+            patch('lightning_pose.api.model.generate_labeled_video_fn') as mock_fn,
+        ):
+            model.predict_on_video_file(
+                video_file=tmp_path / 'vid.mp4',
+                compute_metrics=False,
+                generate_labeled_video=True,
+                bbox_file=bbox_file if with_bbox_file else None,
+            )
+
+        passed = mock_fn.call_args.kwargs['bbox_df']
+        if with_bbox_file:
+            pd.testing.assert_frame_equal(passed, bbox_df)
+        else:
+            assert passed is None
+
     @pytest.mark.gpu
     def test_predict_on_video_file_multiview(self, tmp_path, request, toy_mdata_dir):
         """predict_on_video_file_multiview writes predictions and labeled videos for all views."""

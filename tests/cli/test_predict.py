@@ -1,6 +1,7 @@
 """Test the predict CLI command argument parsing."""
 
 import argparse
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -206,6 +207,193 @@ class TestPredictParser:
         assert args.batch_size == 8
 
 
+class TestCropzoomParser:
+    """Test the cropzoom-pipeline arguments of the predict subcommand."""
+
+    def _model_dir(self, tmp_path, name='model'):
+        path = tmp_path / name
+        path.mkdir()
+        return path
+
+    def test_detector_default_is_none(self, parser, tmp_path):
+        args = parser.parse_args(['predict', str(self._model_dir(tmp_path)), 'video.mp4'])
+        assert args.detector is None
+        assert args.crop_ratio is None
+        assert args.crop_size is None
+        assert args.anchor_keypoints == ''
+        assert args.detector_confidence_thresh is None
+
+    def test_detector_arg(self, parser, tmp_path):
+        model_dir = self._model_dir(tmp_path)
+        detector_dir = self._model_dir(tmp_path, 'detector')
+        args = parser.parse_args(
+            ['predict', str(model_dir), 'video.mp4', '--detector', str(detector_dir)]
+        )
+        assert args.detector == detector_dir
+        assert args.model_dir == model_dir
+
+    def test_missing_detector_dir_exits(self, parser, tmp_path):
+        with pytest.raises(SystemExit):
+            parser.parse_args(
+                [
+                    'predict', str(self._model_dir(tmp_path)), 'video.mp4',
+                    '--detector', str(tmp_path / 'missing'),
+                ]
+            )
+
+    def test_sizing_and_threshold_args(self, parser, tmp_path):
+        detector_dir = self._model_dir(tmp_path, 'detector')
+        args = parser.parse_args(
+            [
+                'predict', str(self._model_dir(tmp_path)), 'video.mp4',
+                '--detector', str(detector_dir),
+                '--crop_ratio', '1.5', '--anchor_keypoints', 'a,b',
+                '--detector_confidence_thresh', '0.2',
+            ]
+        )
+        assert args.crop_ratio == 1.5
+        assert args.anchor_keypoints == 'a,b'
+        assert args.detector_confidence_thresh == 0.2
+
+
+class TestHandleCropzoom:
+    """Test handle() and _predict_cropzoom for the --detector pipeline path."""
+
+    def _make_args(self, tmp_path, input_path=None, **overrides):
+        args = argparse.Namespace(
+            model_dir=tmp_path / 'pose',
+            detector=tmp_path / 'detector',
+            input_path=[input_path or tmp_path / 'vid.mp4'],
+            skip_viz=False,
+            overwrite=False,
+            overrides=None,
+            progress_file=None,
+            bbox_dir=None,
+            precision='fp32',
+            compile=False,
+            runtime='eager',
+            onnx_precision=None,
+            reader=None,
+            batch_size=None,
+            crop_ratio=None,
+            crop_size=None,
+            anchor_keypoints='',
+            detector_confidence_thresh=None,
+        )
+        for key, value in overrides.items():
+            setattr(args, key, value)
+        return args
+
+    @pytest.fixture
+    def mock_pipeline_cls(self, tmp_path):
+        """Patched CropZoomPipeline whose pose estimator writes to tmp_path / video_preds."""
+        with patch('lightning_pose.pipelines.CropZoomPipeline') as cls:
+            cls.from_dirs.return_value.pose_estimator.video_preds_dir.return_value = (
+                tmp_path / 'video_preds'
+            )
+            yield cls
+
+    def test_detector_dispatches_to_pipeline_not_model(self, tmp_path, mock_pipeline_cls):
+        with patch('lightning_pose.api.Model') as MockModel:
+            handle(self._make_args(tmp_path))
+        MockModel.from_dir2.assert_not_called()
+        mock_pipeline_cls.from_dirs.assert_called_once()
+
+    def test_from_dirs_gets_defaults(self, tmp_path, mock_pipeline_cls):
+        handle(self._make_args(tmp_path, precision='bf16'))
+        kwargs = mock_pipeline_cls.from_dirs.call_args.kwargs
+        assert kwargs['detector_dir'] == tmp_path / 'detector'
+        assert kwargs['pose_estimator_dir'] == tmp_path / 'pose'
+        assert kwargs['crop_ratio'] == 2.0
+        assert kwargs['anchor_keypoints'] == []
+        assert kwargs['confidence_thresh'] == 0.0  # confidence ignored, as in create_bbox
+        assert kwargs['precision'] == 'bf16'
+
+    def test_from_dirs_gets_user_values(self, tmp_path, mock_pipeline_cls):
+        args = self._make_args(
+            tmp_path, crop_size=200, anchor_keypoints='a,b', detector_confidence_thresh=0.0,
+        )
+        handle(args)
+        kwargs = mock_pipeline_cls.from_dirs.call_args.kwargs
+        assert kwargs['crop_height'] == kwargs['crop_width'] == 200
+        assert 'crop_ratio' not in kwargs
+        assert kwargs['anchor_keypoints'] == ['a', 'b']
+        assert kwargs['confidence_thresh'] == 0.0
+
+    def test_predicts_each_video_into_pose_video_preds(self, tmp_path, mock_pipeline_cls):
+        video_dir = tmp_path / 'videos'
+        video_dir.mkdir()
+        for name in ['b.mp4', 'a.mp4', 'notes.txt']:
+            (video_dir / name).touch()
+        handle(self._make_args(tmp_path, input_path=video_dir, reader='opencv'))
+        calls = mock_pipeline_cls.from_dirs.return_value.predict_on_video_file.call_args_list
+        assert [c.args[0].name for c in calls] == ['a.mp4', 'b.mp4']
+        assert calls[0].args[1] == tmp_path / 'video_preds'
+        assert calls[0].kwargs['reader'] == 'opencv'
+        assert calls[0].kwargs['generate_labeled_video'] is True
+        assert 'batch_size' not in calls[0].kwargs  # pipeline default applies
+
+    def test_skip_viz_disables_labeled_video(self, tmp_path, mock_pipeline_cls):
+        handle(self._make_args(tmp_path, skip_viz=True))
+        call = mock_pipeline_cls.from_dirs.return_value.predict_on_video_file.call_args
+        assert call.kwargs['generate_labeled_video'] is False
+
+    def test_batch_size_forwarded_when_given(self, tmp_path, mock_pipeline_cls):
+        handle(self._make_args(tmp_path, batch_size=4))
+        call = mock_pipeline_cls.from_dirs.return_value.predict_on_video_file.call_args
+        assert call.kwargs['batch_size'] == 4
+
+    def test_skips_existing_predictions_unless_overwrite(self, tmp_path, mock_pipeline_cls):
+        (tmp_path / 'video_preds').mkdir()
+        (tmp_path / 'video_preds' / 'vid.csv').touch()
+        pipeline = mock_pipeline_cls.from_dirs.return_value
+        handle(self._make_args(tmp_path))
+        pipeline.predict_on_video_file.assert_not_called()
+        handle(self._make_args(tmp_path, overwrite=True))
+        pipeline.predict_on_video_file.assert_called_once()
+
+    def test_csv_input_raises(self, tmp_path, mock_pipeline_cls):
+        with pytest.raises(NotImplementedError, match='only supports video'):
+            handle(self._make_args(tmp_path, input_path=tmp_path / 'labels.csv'))
+
+    @pytest.mark.parametrize(
+        'override,flag',
+        [
+            ({'bbox_dir': Path('bboxes')}, '--bbox_dir'),
+            ({'overrides': ['a=1']}, '--overrides'),
+            ({'compile': True}, '--compile'),
+            ({'runtime': 'onnx'}, '--runtime'),
+        ],
+    )
+    def test_incompatible_options_raise_before_loading_models(
+        self, tmp_path, mock_pipeline_cls, override, flag,
+    ):
+        with pytest.raises(ValueError, match=flag):
+            handle(self._make_args(tmp_path, **override))
+        mock_pipeline_cls.from_dirs.assert_not_called()
+
+    def test_invalid_sizing_raises_before_loading_models(self, tmp_path, mock_pipeline_cls):
+        with pytest.raises(ValueError, match='mutually exclusive'):
+            handle(self._make_args(tmp_path, crop_ratio=2.0, crop_size=100))
+        mock_pipeline_cls.from_dirs.assert_not_called()
+
+    @pytest.mark.parametrize(
+        'override,flag',
+        [
+            ({'crop_ratio': 2.0}, '--crop_ratio'),
+            ({'crop_size': 100}, '--crop_size'),
+            ({'anchor_keypoints': 'a'}, '--anchor_keypoints'),
+            ({'detector_confidence_thresh': 0.5}, '--detector_confidence_thresh'),
+        ],
+    )
+    def test_cropzoom_only_options_without_detector_raise(self, tmp_path, override, flag):
+        args = self._make_args(tmp_path, detector=None, **override)
+        with patch('lightning_pose.api.Model') as MockModel:
+            with pytest.raises(ValueError, match=f'{flag}.*--detector'):
+                handle(args)
+        MockModel.from_dir2.assert_not_called()
+
+
 class TestPredictMultiType:
     """Test _predict_multi_type bbox threading."""
 
@@ -362,6 +550,11 @@ class TestHandle:
             onnx_precision=None,
             reader=None,
             batch_size=None,
+            detector=None,
+            crop_ratio=None,
+            crop_size=None,
+            anchor_keypoints='',
+            detector_confidence_thresh=None,
         )
 
     def test_handle_threads_bbox_dir_to_predict_multi_type(self, tmp_path, mock_model):

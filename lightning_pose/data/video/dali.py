@@ -21,8 +21,8 @@ pipe for the requested combination and returns a ready-to-iterate ``LitDaliWrapp
 ``LitDaliWrapper`` extends ``DALIGenericIterator`` and converts raw DALI output into typed
 ``UnlabeledBatchDict`` or ``MultiviewUnlabeledBatchDict`` instances on every ``__next__``.
 
-Two prediction modes
---------------------
+Three prediction modes
+----------------------
 Standard mode (no ``bbox_df``):
     DALI resizes frames to ``resize_dims`` on the GPU. The ``bbox`` field of each returned
     batch covers the full frame (x=0, y=0, h=H, w=W).
@@ -37,6 +37,11 @@ Bbox-crop mode (``bbox_df`` supplied to ``PrepareDALI``):
     have different native resolutions. The crop and batch assembly use the helpers shared with
     the other readers (``lightning_pose.data.bboxes.crop_views``,
     ``lightning_pose.data.video.utils.build_batch_dict``).
+
+Full-resolution passthrough (``resize_dims=None`` and no ``bbox_df``):
+    DALI delivers normalized full-resolution frames and the ``bbox`` field covers the full
+    frame; no resizing or cropping happens in the reader. Used by callers that resize and crop
+    themselves (``lightning_pose.pipelines.CropZoomPipeline``).
 """
 
 import os
@@ -369,7 +374,7 @@ class PrepareDALI:
         train_stage: Literal["predict", "train"],
         model_type: Literal["base", "context"],
         filenames: list[str] | list[list[str]],
-        resize_dims: list[int],
+        resize_dims: list[int] | None,
         dali_config: dict | DictConfig | ListConfig | None = None,
         imgaug: str | None = "default",
         num_threads: int = 1,
@@ -419,6 +424,8 @@ class PrepareDALI:
                 if not os.path.exists(vid) or not os.path.isfile(vid):
                     raise FileNotFoundError(f"{vid} is not a video file!")
 
+        if bbox_df is not None and resize_dims is None:
+            raise ValueError('resize_dims is required when bbox_df is provided.')
         if bbox_df is not None:
             num_bbox_dfs = 1 if isinstance(bbox_df, pd.DataFrame) else len(bbox_df)
             if num_bbox_dfs != len(filenames_2d):

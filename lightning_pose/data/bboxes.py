@@ -33,12 +33,17 @@ per-frame bboxes out of full-resolution frames before inference):
 - :func:`crop_and_resize_frames` — crop + resize one view's frames to its bboxes
 - :func:`crop_views`          — apply the above to every view of a batch independently
 - :func:`full_frame_bbox`     — default bbox covering the whole decoded frame
+
+Bbox construction:
+
+- :func:`keypoints_to_bboxes`      — keypoints -> per-frame bboxes, on whatever device the
+  keypoints live on (used by the offline ``create_bbox`` flow and the in-memory pipelines)
 """
 
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from jaxtyping import Float
+from jaxtyping import Bool, Float, Int
 
 from lightning_pose.data.datatypes import (
     HeatmapLabeledBatchDict,
@@ -449,3 +454,71 @@ def crop_views(
         cropped_list.append(cropped)
         bbox_list.append(bboxes)
     return cropped_list, bbox_list
+
+
+def keypoints_to_bboxes(
+    keypoints: Float[torch.Tensor, 'frames num_keypoints xy'],
+    crop_ratio: float | None = None,
+    crop_height: int | None = None,
+    crop_width: int | None = None,
+    mask: Bool[torch.Tensor, 'frames num_keypoints'] | None = None,
+) -> Int[torch.Tensor, 'frames xyhw']:
+    """Compute per-frame bounding boxes from keypoint positions.
+
+    Exactly one of ``crop_ratio`` or the pair ``(crop_height, crop_width)`` must be provided.
+    The box is centred on the per-frame mean of the keypoints; its size is the keypoint span
+    scaled by ``crop_ratio`` (rounded up to an even number of pixels, as many video players
+    dislike odd dimensions), or the fixed size. All operations stay on the device of
+    ``keypoints``. Keypoints that take part in the computation are assumed finite: non-finite
+    values give meaningless boxes, so callers must exclude them with ``mask``.
+
+    Args:
+        keypoints: keypoints in (x, y) order.
+        crop_ratio: scale factor applied to the keypoint span to determine bbox size.
+        crop_height: fixed bbox height in pixels; must be provided together with ``crop_width``.
+        crop_width: fixed bbox width in pixels; must be provided together with ``crop_height``.
+        mask: optional boolean tensor, True for the keypoints that take part in the computation
+            of each frame; masked-out keypoints (which may be non-finite) are ignored for both
+            the centre and the size. Every frame must have at least one True entry. None uses
+            all keypoints.
+
+    Returns:
+        int64 tensor of shape (frames, 4) in ``[x, y, h, w]`` order (top-left corner and size).
+
+    Raises:
+        ValueError: if both ``crop_ratio`` and ``crop_height``/``crop_width`` are provided, or
+            if neither is provided.
+    """
+    fixed_size_mode = crop_height is not None and crop_width is not None
+    if fixed_size_mode and crop_ratio is not None:
+        raise ValueError('provide either crop_ratio or (crop_height, crop_width), not both.')
+    if not fixed_size_mode and crop_ratio is None:
+        raise ValueError('one of crop_ratio or (crop_height, crop_width) must be provided.')
+
+    if mask is None:
+        span_max, span_min = keypoints.amax(dim=1), keypoints.amin(dim=1)  # (frames, xy)
+        centroids = keypoints.mean(dim=1)
+    else:
+        is_used = mask[..., None]
+        span_max = torch.where(is_used, keypoints, -torch.inf).amax(dim=1)
+        span_min = torch.where(is_used, keypoints, torch.inf).amin(dim=1)
+        centroids = torch.where(is_used, keypoints, 0.0).sum(dim=1) / mask.sum(dim=1, keepdim=True)
+
+    num_frames = keypoints.shape[0]
+    if fixed_size_mode:
+        assert crop_height is not None and crop_width is not None
+        crop_height += crop_height % 2
+        crop_width += crop_width % 2
+        bbox_sizes = torch.tensor(
+            [crop_height, crop_width], dtype=torch.int64, device=keypoints.device,
+        ).repeat(num_frames, 1)
+    else:
+        assert crop_ratio is not None
+        span = span_max - span_min  # (frames, xy)
+        size = torch.ceil(span.amax(dim=1) * crop_ratio).to(torch.int64)
+        size = torch.where(size % 2 == 0, size, size + 1)
+        bbox_sizes = size.unsqueeze(1).repeat(1, 2)  # square box: h == w
+
+    # float -> int64 truncates toward zero, matching the original numpy implementation
+    bbox_toplefts = (centroids - torch.div(bbox_sizes, 2, rounding_mode='floor')).to(torch.int64)
+    return torch.cat([bbox_toplefts, bbox_sizes], dim=1)

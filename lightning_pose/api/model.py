@@ -775,6 +775,7 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
                 output_mp4_file=labeled_mp4_file,
                 confidence_thresh_for_vid=self.cfg.eval.confidence_thresh_for_vid,
                 colormap=self.cfg.eval.get("colormap", "cool"),
+                bbox_df=pd.read_csv(bbox_file, index_col=0) if bbox_file is not None else None,
             )
 
         if compute_metrics:
