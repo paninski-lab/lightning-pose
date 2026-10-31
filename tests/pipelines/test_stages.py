@@ -84,9 +84,15 @@ class TestKeypointBboxStageCall:
 
     def test_confidence_ignored_without_thresh(self):
         kp = _kp([[0, 0], [10, 10]])
-        stage = KeypointBboxStage(['a', 'b'], crop_ratio=1.0)
+        stage = KeypointBboxStage(['a', 'b'], crop_ratio=1.0, confidence_thresh=None)
         stage(kp, torch.zeros(1, 2), 100, 100)
         assert stage.num_fallback == 0
+
+    def test_default_confidence_thresh_is_half(self):
+        kp = _kp([[0, 0], [10, 10]], [[50, 50], [60, 60]])
+        stage = KeypointBboxStage(['a', 'b'], crop_ratio=1.0)
+        out = stage(kp, torch.tensor([[0.9, 0.9], [0.9, 0.49]]), 100, 100)
+        assert out[1].tolist() == out[0].tolist()
 
     def test_reset_clears_state(self):
         stage = KeypointBboxStage(['a', 'b'], crop_ratio=1.0)

@@ -9,111 +9,25 @@ from typing import Any
 import cv2
 import numpy as np
 import pandas as pd
+import torch
 import tqdm
 from moviepy import VideoFileClip
 from omegaconf import DictConfig
 from PIL import Image
 
+from lightning_pose.data.bboxes import keypoints_to_bboxes
 from lightning_pose.utils import io
 
 logger = logging.getLogger(__name__)
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
-    "compute_bbox_array",
     "generate_bbox",
     "smooth_bbox",
     "crop_video",
     "crop_labeled_frames",
     "generate_cropped_csv_file",
 ]
-
-
-def _calculate_bbox_size(keypoints_per_frame: np.ndarray, crop_ratio: float = 1.0) -> np.ndarray:
-    """Computes bounding box size for each frame.
-
-    Args:
-        keypoints_per_frame: numpy array, shape (frames, keypoints, 2).
-        crop_ratio: ratio to multiply the max x/y span by to determine bbox size.
-
-    Returns:
-        numpy array of shape (frames, 2) containing bbox height and width per frame.
-    """
-    # Extract x and y coordinates
-    x_coords = keypoints_per_frame[:, :, 0]  # All rows, all columns, first element (x)
-    y_coords = keypoints_per_frame[:, :, 1]  # All rows, all columns, second element (y)
-    max_x_diff_per_frame = np.max(x_coords, axis=1) - np.min(x_coords, axis=1)
-    max_y_diff_per_frame = np.max(y_coords, axis=1) - np.min(y_coords, axis=1)
-
-    # Max of x_diff and y_diff for each frame. Shape of (frames,).
-    max_bbox_size_per_frame = np.max([max_x_diff_per_frame, max_y_diff_per_frame], axis=0)
-
-    # Scale by crop_ratio, and take ceiling.
-    bbox_size_per_frame = np.ceil(max_bbox_size_per_frame * crop_ratio).astype(int)
-
-    # Many video players don't like odd dimensions.
-    # Make sure the bbox has even dimensions.
-    bbox_size_per_frame = np.where(
-        bbox_size_per_frame % 2 == 0, bbox_size_per_frame, bbox_size_per_frame + 1
-    )
-
-    # Change shape from (frames,) to (frames, 2), aka (frame, h|w)
-    bbox_sizes = np.column_stack((bbox_size_per_frame, bbox_size_per_frame))
-
-    return bbox_sizes
-
-
-def compute_bbox_array(
-    keypoints_per_frame: np.ndarray,
-    crop_ratio: float | None = None,
-    crop_height: int | None = None,
-    crop_width: int | None = None,
-) -> np.ndarray:
-    """Compute per-frame bounding boxes from keypoint positions.
-
-    Array-level core shared by the offline :func:`_compute_bbox_df` and the in-memory
-    ``CropZoomPipeline``. Exactly one of ``crop_ratio`` or the pair
-    ``(crop_height, crop_width)`` must be provided. The box is centred on the per-frame mean of
-    the keypoints; its size is the keypoint span scaled by ``crop_ratio``, or the fixed size.
-    Keypoints are assumed finite: non-finite values give meaningless boxes, so callers must
-    mask or replace them first.
-
-    Args:
-        keypoints_per_frame: numpy array, shape (frames, keypoints, 2), in (x, y) order.
-        crop_ratio: scale factor applied to the keypoint span to determine bbox size.
-        crop_height: fixed bbox height in pixels; must be provided together with ``crop_width``.
-        crop_width: fixed bbox width in pixels; must be provided together with ``crop_height``.
-
-    Returns:
-        int64 array of shape (frames, 4) in ``[x, y, h, w]`` order (top-left corner and size).
-
-    Raises:
-        ValueError: if both ``crop_ratio`` and ``crop_height``/``crop_width`` are provided, or
-            if neither is provided.
-    """
-    fixed_size_mode = crop_height is not None and crop_width is not None
-    if fixed_size_mode and crop_ratio is not None:
-        raise ValueError('provide either crop_ratio or (crop_height, crop_width), not both.')
-    if not fixed_size_mode and crop_ratio is None:
-        raise ValueError('one of crop_ratio or (crop_height, crop_width) must be provided.')
-
-    if fixed_size_mode:
-        assert crop_height is not None and crop_width is not None
-        # round up to even dimensions for video-player compatibility
-        crop_height += crop_height % 2
-        crop_width += crop_width % 2
-        bbox_sizes = np.tile([crop_height, crop_width], (len(keypoints_per_frame), 1))
-    else:
-        assert crop_ratio is not None
-        bbox_sizes = _calculate_bbox_size(keypoints_per_frame, crop_ratio=crop_ratio)
-    centroids = keypoints_per_frame.mean(axis=1)
-
-    # Shape: (frames, x|y)
-    bbox_toplefts = centroids - bbox_sizes // 2
-    bbox_toplefts = np.int64(bbox_toplefts)
-
-    # Shape: (frames, x|y) -> (frames, x|y|h|w)
-    return np.concatenate([bbox_toplefts, bbox_sizes], axis=1)
 
 
 def _compute_bbox_df(
@@ -167,12 +81,12 @@ def _compute_bbox_df(
     # Shape: (frames, keypoints, x|y)
     keypoints_per_frame = pred_df.loc[:, coord_mask].to_numpy().reshape(pred_df.shape[0], -1, 2)
 
-    bboxes = compute_bbox_array(
-        keypoints_per_frame,
+    bboxes = keypoints_to_bboxes(
+        torch.from_numpy(keypoints_per_frame),
         crop_ratio=crop_ratio,
         crop_height=crop_height,
         crop_width=crop_width,
-    )
+    ).numpy()
 
     index = pred_df.index
 

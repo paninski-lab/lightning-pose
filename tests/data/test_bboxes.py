@@ -12,6 +12,7 @@ from lightning_pose.data.bboxes import (
     frame_to_model_batch,
     frame_to_norm,
     full_frame_bbox,
+    keypoints_to_bboxes,
     model_to_frame,
     model_to_frame_batch,
     model_to_norm,
@@ -771,3 +772,34 @@ class TestCropViews:
         df = pd.DataFrame({'x': range(6), 'y': [0] * 6, 'h': [10] * 6, 'w': [10] * 6})
         _, bboxes = crop_views([torch.rand(2, 3, 50, 50)], [df], idx_start=3, resize_dims=[8, 8])
         assert bboxes[0][:, 0].tolist() == [3.0, 4.0]
+
+
+class TestKeypointsToBboxes:
+    """Test the function keypoints_to_bboxes."""
+
+    def test_keypoints_to_bboxes_crop_ratio(self):
+        kp = torch.tensor([[[0.0, 0.0], [10.0, 4.0]]])
+        out = keypoints_to_bboxes(kp, crop_ratio=1.0)
+        assert out.dtype == torch.int64
+        assert out.tolist() == [[0, -3, 10, 10]]
+
+    def test_keypoints_to_bboxes_size_rounded_up_to_even(self):
+        kp = torch.tensor([[[0.0, 0.0], [9.0, 3.0]]])
+        assert keypoints_to_bboxes(kp, crop_ratio=1.0)[0, 2:].tolist() == [10, 10]
+
+    def test_keypoints_to_bboxes_fixed_size_rounds_to_even(self):
+        kp = torch.tensor([[[10.0, 10.0], [10.0, 10.0]]])
+        out = keypoints_to_bboxes(kp, crop_height=7, crop_width=7)
+        assert out.tolist() == [[6, 6, 8, 8]]
+
+    def test_keypoints_to_bboxes_batch(self):
+        kp = torch.tensor([[[0.0, 0.0], [10.0, 10.0]], [[20.0, 20.0], [40.0, 30.0]]])
+        out = keypoints_to_bboxes(kp, crop_ratio=2.0)
+        assert out.tolist() == [[-5, -5, 20, 20], [10, 5, 40, 40]]
+
+    def test_keypoints_to_bboxes_requires_one_size_spec(self):
+        kp = torch.zeros(1, 2, 2)
+        with pytest.raises(ValueError, match='one of crop_ratio'):
+            keypoints_to_bboxes(kp)
+        with pytest.raises(ValueError, match='not both'):
+            keypoints_to_bboxes(kp, crop_ratio=1.0, crop_height=4, crop_width=4)
