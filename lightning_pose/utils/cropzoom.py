@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
+    "compute_bbox_array",
     "generate_bbox",
     "smooth_bbox",
     "crop_video",
@@ -62,6 +63,59 @@ def _calculate_bbox_size(keypoints_per_frame: np.ndarray, crop_ratio: float = 1.
     return bbox_sizes
 
 
+def compute_bbox_array(
+    keypoints_per_frame: np.ndarray,
+    crop_ratio: float | None = None,
+    crop_height: int | None = None,
+    crop_width: int | None = None,
+) -> np.ndarray:
+    """Compute per-frame bounding boxes from keypoint positions.
+
+    Array-level core shared by the offline :func:`_compute_bbox_df` and the in-memory
+    ``CropZoomPipeline``. Exactly one of ``crop_ratio`` or the pair
+    ``(crop_height, crop_width)`` must be provided. The box is centred on the per-frame mean of
+    the keypoints; its size is the keypoint span scaled by ``crop_ratio``, or the fixed size.
+    Keypoints are assumed finite: non-finite values give meaningless boxes, so callers must
+    mask or replace them first.
+
+    Args:
+        keypoints_per_frame: numpy array, shape (frames, keypoints, 2), in (x, y) order.
+        crop_ratio: scale factor applied to the keypoint span to determine bbox size.
+        crop_height: fixed bbox height in pixels; must be provided together with ``crop_width``.
+        crop_width: fixed bbox width in pixels; must be provided together with ``crop_height``.
+
+    Returns:
+        int64 array of shape (frames, 4) in ``[x, y, h, w]`` order (top-left corner and size).
+
+    Raises:
+        ValueError: if both ``crop_ratio`` and ``crop_height``/``crop_width`` are provided, or
+            if neither is provided.
+    """
+    fixed_size_mode = crop_height is not None and crop_width is not None
+    if fixed_size_mode and crop_ratio is not None:
+        raise ValueError('provide either crop_ratio or (crop_height, crop_width), not both.')
+    if not fixed_size_mode and crop_ratio is None:
+        raise ValueError('one of crop_ratio or (crop_height, crop_width) must be provided.')
+
+    if fixed_size_mode:
+        assert crop_height is not None and crop_width is not None
+        # round up to even dimensions for video-player compatibility
+        crop_height += crop_height % 2
+        crop_width += crop_width % 2
+        bbox_sizes = np.tile([crop_height, crop_width], (len(keypoints_per_frame), 1))
+    else:
+        assert crop_ratio is not None
+        bbox_sizes = _calculate_bbox_size(keypoints_per_frame, crop_ratio=crop_ratio)
+    centroids = keypoints_per_frame.mean(axis=1)
+
+    # Shape: (frames, x|y)
+    bbox_toplefts = centroids - bbox_sizes // 2
+    bbox_toplefts = np.int64(bbox_toplefts)
+
+    # Shape: (frames, x|y) -> (frames, x|y|h|w)
+    return np.concatenate([bbox_toplefts, bbox_sizes], axis=1)
+
+
 def _compute_bbox_df(
     pred_df: pd.DataFrame,
     anchor_keypoints: list[str],
@@ -97,12 +151,6 @@ def _compute_bbox_df(
         ValueError: if both ``crop_ratio`` and ``crop_height``/``crop_width`` are provided, or
             if neither is provided.
     """
-    fixed_size_mode = crop_height is not None and crop_width is not None
-    if fixed_size_mode and crop_ratio is not None:
-        raise ValueError('provide either crop_ratio or (crop_height, crop_width), not both.')
-    if not fixed_size_mode and crop_ratio is None:
-        raise ValueError('one of crop_ratio or (crop_height, crop_width) must be provided.')
-
     # Get x,y columns for anchor_keypoints (or all keypoints if anchor_keypoints is empty)
     coord_mask = pred_df.columns.get_level_values("coords").isin(["x", "y"])
     if len(anchor_keypoints) > 0:
@@ -119,24 +167,12 @@ def _compute_bbox_df(
     # Shape: (frames, keypoints, x|y)
     keypoints_per_frame = pred_df.loc[:, coord_mask].to_numpy().reshape(pred_df.shape[0], -1, 2)
 
-    if fixed_size_mode:
-        assert crop_height is not None and crop_width is not None
-        # round up to even dimensions for video-player compatibility
-        crop_height += crop_height % 2
-        crop_width += crop_width % 2
-        bbox_sizes = np.tile([crop_height, crop_width], (len(pred_df), 1))
-        centroids = keypoints_per_frame.mean(axis=1)
-    else:
-        assert crop_ratio is not None
-        bbox_sizes = _calculate_bbox_size(keypoints_per_frame, crop_ratio=crop_ratio)
-        centroids = keypoints_per_frame.mean(axis=1)
-
-    # Shape: (frames, x|y)
-    bbox_toplefts = centroids - bbox_sizes // 2
-    bbox_toplefts = np.int64(bbox_toplefts)
-
-    # Shape: (frames, x|y) -> (frames, x|y|h|w)
-    bboxes = np.concatenate([bbox_toplefts, bbox_sizes], axis=1)
+    bboxes = compute_bbox_array(
+        keypoints_per_frame,
+        crop_ratio=crop_ratio,
+        crop_height=crop_height,
+        crop_width=crop_width,
+    )
 
     index = pred_df.index
 

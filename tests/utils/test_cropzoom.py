@@ -14,6 +14,7 @@ from PIL import Image
 from lightning_pose.utils.cropzoom import (
     _compute_bbox_df,
     _crop_image,
+    compute_bbox_array,
     crop_labeled_frames,
     crop_video,
     generate_bbox,
@@ -476,3 +477,25 @@ class TestSmoothBbox:
         output_dir = tmp_path / 'smooth'
         with pytest.raises(ValueError, match=r'no \*_bbox\.csv files found'):
             smooth_bbox(input_dir, output_dir, method='median', window=5)
+
+
+class TestComputeBboxArray:
+    """Test the compute_bbox_array function."""
+
+    def test_crop_ratio(self):
+        kp = np.array([[[0.0, 0.0], [10.0, 4.0]]])
+        out = compute_bbox_array(kp, crop_ratio=1.0)
+        assert out.dtype == np.int64
+        assert out.tolist() == [[0, -3, 10, 10]]
+
+    def test_fixed_size_rounds_to_even(self):
+        kp = np.array([[[10.0, 10.0], [10.0, 10.0]]])
+        out = compute_bbox_array(kp, crop_height=7, crop_width=7)
+        assert out.tolist() == [[6, 6, 8, 8]]
+
+    def test_requires_one_size_spec(self):
+        kp = np.zeros((1, 2, 2))
+        with pytest.raises(ValueError):
+            compute_bbox_array(kp)
+        with pytest.raises(ValueError):
+            compute_bbox_array(kp, crop_ratio=1.0, crop_height=4, crop_width=4)
