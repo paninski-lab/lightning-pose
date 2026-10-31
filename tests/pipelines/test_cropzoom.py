@@ -186,6 +186,7 @@ class TestPredictOnVideoFile:
             tmp_path / 'b' / 'labeled_videos' / 'video_labeled.mp4'
         )
         assert kwargs['preds_df'] is result.predictions
+        assert kwargs['bbox_df'] is result.bboxes
         assert kwargs['confidence_thresh_for_vid'] == 0.3
         assert kwargs['colormap'] == 'viridis'
 

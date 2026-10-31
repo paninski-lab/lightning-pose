@@ -311,5 +311,6 @@ class CropZoomPipeline(Pipeline):
                 output_mp4_file=str(labeled_dir / f'{video_file.stem}_labeled.mp4'),
                 confidence_thresh_for_vid=self.pose_estimator.cfg.eval.confidence_thresh_for_vid,
                 colormap=self.pose_estimator.cfg.eval.get('colormap', 'cool'),
+                bbox_df=bbox_df,
             )
         return PipelineResult(predictions=preds_df, bboxes=bbox_df)
