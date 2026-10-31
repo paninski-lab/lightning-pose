@@ -14,6 +14,7 @@ from omegaconf import OmegaConf
 import lightning_pose.utils.cropzoom as cz
 from lightning_pose.api import Model
 from lightning_pose.pipelines import CropZoomPipeline, KeypointBboxStage
+from lightning_pose.utils.inference_types import _Reader
 from tests.pipelines.conftest import (
     FRAME_HEIGHT,
     FRAME_WIDTH,
@@ -194,7 +195,7 @@ CROP_RATIO = 2.0
 BATCH_SIZE = 8
 
 
-def _run_pipeline(model_dir: Path, clip: Path, out: Path, reader: str):
+def _run_pipeline(model_dir: Path, clip: Path, out: Path, reader: _Reader):
     """Run CropZoomPipeline with the same checkpoint as detector and pose estimator."""
     pipeline = CropZoomPipeline.from_dirs(
         detector_dir=model_dir,
@@ -207,7 +208,7 @@ def _run_pipeline(model_dir: Path, clip: Path, out: Path, reader: str):
     )
 
 
-def _run_two_step(model_dir: Path, clip: Path, out: Path, reader: str):
+def _run_two_step(model_dir: Path, clip: Path, out: Path, reader: _Reader):
     """The multi-command flow: predict -> create_bbox -> predict --bbox_dir.
 
     Returns:
@@ -267,7 +268,7 @@ class TestCropZoomPipelineToyModel:
         assert (out / f'{toy_clip.stem}.csv').is_file()
         assert (out / f'{toy_clip.stem}_bbox.csv').is_file()
         assert np.isfinite(result.predictions.to_numpy()).all()
-        assert (result.bboxes[['h', 'w']] > 0).all(axis=None)
+        assert (result.bboxes[['h', 'w']].to_numpy() > 0).all()
 
 
 def _skip_unless_reader_usable(reader: str, video: Path) -> None:
@@ -311,7 +312,7 @@ class TestCropZoomPipelineToyModelGpu:
         assert (out / f'{toy_clip.stem}_bbox.csv').is_file()
         assert len(result.predictions) == len(result.bboxes) == NUM_CLIP_FRAMES
         assert np.isfinite(result.predictions.to_numpy()).all()
-        assert (result.bboxes[['h', 'w']] > 0).all(axis=None)
+        assert (result.bboxes[['h', 'w']].to_numpy() > 0).all()
 
         # the pipeline leaves the GPU as it found it: weights back on CPU, no leaked tensors
         for model in (pipeline.detector, pipeline.pose_estimator):
