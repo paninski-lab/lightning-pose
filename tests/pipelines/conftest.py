@@ -95,7 +95,7 @@ def video_file(tmp_path: Path) -> Path:
     """A small synthetic mp4 with ``NUM_FRAMES`` frames."""
     path = tmp_path / 'video.mp4'
     writer = cv2.VideoWriter(
-        str(path), cv2.VideoWriter_fourcc(*'mp4v'), 10.0, (FRAME_WIDTH, FRAME_HEIGHT),
+        str(path), cv2.VideoWriter.fourcc(*'mp4v'), 10.0, (FRAME_WIDTH, FRAME_HEIGHT),
     )
     if not writer.isOpened():
         pytest.skip('cv2 cannot write mp4 on this machine')
