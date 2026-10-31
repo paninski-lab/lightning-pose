@@ -133,11 +133,11 @@ def load_model_from_checkpoint(
     )
 
     try:
-        checkpoint = torch.load(ckpt_file)
+        checkpoint = torch.load(ckpt_file, map_location='cpu')
     except Exception as e:
         logger.warning(f'failed to load checkpoint with default settings: {e}')
         logger.warning('attempting to load with weights_only=False...')
-        checkpoint = torch.load(ckpt_file, weights_only=False)
+        checkpoint = torch.load(ckpt_file, map_location='cpu', weights_only=False)
     state_dict = checkpoint.get('state_dict', checkpoint)
 
     # fix state dict key mismatch for upsampling layers in old checkpoints

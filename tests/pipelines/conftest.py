@@ -1,21 +1,28 @@
 """Fixtures for the pipeline tests: a synthetic video and CPU-only fake models."""
 
+import subprocess
+from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import cv2
+import imageio_ffmpeg
 import numpy as np
 import pytest
 import torch
 from omegaconf import OmegaConf
 
+import lightning_pose as lp
 from lightning_pose.data.bboxes import model_to_frame_batch
+from lightning_pose.data.utils import count_frames
+from tests.fetch_test_data import fetch_test_data_if_needed
 
 NUM_FRAMES = 20
 FRAME_HEIGHT = 64
 FRAME_WIDTH = 96
 RESIZE_DETECTOR = (32, 48)  # (height, width): half the frame size
 RESIZE_POSE = (16, 16)
+NUM_CLIP_FRAMES = 20  # toy-model clip; with batch_size 8 the last batch is padded
 
 
 class FakeNet:
@@ -97,3 +104,39 @@ def video_file(tmp_path: Path) -> Path:
         writer.write(rng.integers(0, 255, (FRAME_HEIGHT, FRAME_WIDTH, 3), dtype=np.uint8))
     writer.release()
     return path
+
+
+@pytest.fixture(scope='module')
+def toy_model_dir() -> Generator[Path, None, None]:
+    """The small trained mirror-mouse checkpoint shared with ``tests/api``.
+
+    Used read-only (every test passes explicit output dirs), so it is not copied; the
+    teardown fails the run if anything was written into it, since ``tests/api`` asserts that
+    this directory has no prediction outputs.
+    """
+    api_test_dir = Path(__file__).parent.parent / 'api'
+    fetch_test_data_if_needed(api_test_dir, 'test_model_mirror_mouse')
+    model_dir = api_test_dir / 'test_model_mirror_mouse'
+    yield model_dir
+    stray = [d for d in ('video_preds', 'image_preds') if (model_dir / d).exists()]
+    assert not stray, f'tests wrote {stray} into the shared model dir {model_dir}'
+
+
+@pytest.fixture(scope='module')
+def toy_clip(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """First ``NUM_CLIP_FRAMES`` frames of the toy video, re-encoded as H.264.
+
+    H.264 (not cv2's mp4v) so the GPU decoders (DALI, PyNvVideoCodec) can read it.
+    """
+    src = lp.LP_ROOT_PATH / 'data' / 'mirror-mouse-example' / 'videos' / 'test_vid.mp4'
+    dst = tmp_path_factory.mktemp('toy_clip') / 'toy_clip.mp4'
+    subprocess.run(
+        [
+            imageio_ffmpeg.get_ffmpeg_exe(), '-y', '-loglevel', 'error', '-i', str(src),
+            '-frames:v', str(NUM_CLIP_FRAMES), '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+            str(dst),
+        ],
+        check=True,
+    )
+    assert count_frames(str(dst)) == NUM_CLIP_FRAMES
+    return dst
